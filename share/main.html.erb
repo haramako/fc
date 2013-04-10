@@ -1,0 +1,87 @@
+<html>
+<head><title>hoge</title></head>
+<body>
+<style>
+table { border-collapse: collapse; }
+th { border: solid 1px #888; background-color: #ddd; }
+td { border: solid 1px #888; }
+.block { margin-left: 40px; }
+h1 { border-bottom: solid 1px #00f; }
+h2 { margin-bottom: 4px; border-bottom: solid 1px #aaf; }
+h3 { margin-bottom: 4px; }
+.code { font-family: 'Osaka-等幅', 'Osaka-Mono', monospace; border: solid 1px #ddd; margin-top: 4px; }
+.content { margin-left: 200px; float: left; }
+.left_bar { width: 200px; position: fixed; overflow: hidden; }
+
+del.differ { background-color: #aaf; }
+ins.differ { background-color: #faa; }
+
+</style>
+
+<div class="left_bar">
+  <%- mods.each do |k,mod| -%>
+    <h3><%=mod.id%></h3>
+      <ul>
+      <%- mod.lambdas.each do |lmd| -%>
+        <li><a href="#<%= lmd.id %>"><%= lmd.id %></a></li>
+      <%- end -%>
+      </ul>
+    </li>
+  <%- end -%>
+</div>
+
+<div class="content">
+  
+  <%- mods.each do |k,mod| -%>
+    <a name="module" ></a><h1>module <%= mod.id %></h1>
+    <%- mod.lambdas.each do |lmd| -%>
+      <a name="<%=lmd.id%>"></a>
+      <h2>function <%= lmd.id %></h2>
+
+      <h3>variables</h3>
+      <table>
+        <tr><th>id</th><th>type</th><th>address</th><th>value</th><th>opt</th><th>kind</th></tr>
+        <%- lmd.vars.each do |v| -%>
+          <tr>
+            <td><%= v.id %></td>
+            <td><%= v.type %></td>
+            <td><%= v.address %></td>
+            <td><%= v.val %></td>
+            <td><%= v.opt %></td>
+            <td><%= v.kind %></td>
+          </tr>
+        <%- end -%>
+      </table>
+
+      <% unless lmd.blobs.empty? %>
+      <h3>blobs</h3>
+      <pre class="code">
+        <%- lmd.blobs.each do |v| -%>
+<%= v.id %>: <%=h( if v.base_string then '"'+v.base_string+'"' else v.val end )%>
+        <%- end -%></pre>
+      <% end %>
+      
+      <h3>ast</h3>
+      <pre class="code"><%= PP.pp(lmd.ast,'') %></pre>
+      
+      <h3>code</h3>
+      <pre class="code">
+      <%- lmd.ops.each_with_index do |op,i| -%>
+<font color='#aaa'><%= '%04d:' % i %></font><% if op then %><%=" %-6s %s"%[op[0], CGI.escapeHTML(op[1..-1].join(", "))] %><% end %>
+      <%- end -%></pre>
+
+      <h3>asm</h3>
+      <pre class="code">
+	  <%- if lmd.asm -%>  
+        <%- lmd.asm.each_with_index do |op,i| -%>
+<%= CGI.escapeHTML(op) %>
+        <%- end -%>
+	  <% end %></pre>
+	
+    <%- end -%>
+  <%- end -%>
+
+</div>
+
+</body>
+</html>

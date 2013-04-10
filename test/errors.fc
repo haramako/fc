@@ -1,0 +1,31 @@
+//@can't init global variable
+var a:int = 1;
+
+//@parse error
+hoge fuga
+
+//@not compatible
+const a:int = [1];
+
+//@not compatible
+function hoge():void
+{
+	var a:int = [1];
+}
+
+//@cannot define const without value
+function hoge():void
+{
+	const a:int;
+}
+
+//@not found
+use unknown;
+
+//@can't return
+function hoge():void { return 1; }
+
+//@can't assemble
+function hoge():void {
+	asm( "INVALID ASM" );
+}

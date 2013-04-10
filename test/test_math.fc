@@ -1,0 +1,54 @@
+use stdio;
+use unittest;
+use math;
+
+function test_sin():void
+{
+  print( 'test_sin:' );
+  assert_equal( sin(  0),   0, 'sin(0)' );
+  assert_equal( sin( 63), 127, 'sin(63)' );
+  assert_equal( sin( 64), 127, 'sin(64)' );
+  assert_equal( sin(127),   0, 'sin(127)' );
+  assert_equal( sin(128),   0, 'sin(128)' );
+  assert_equal( sin(191),-127, 'sin(191)' );
+  assert_equal( sin(192),-127, 'sin(192)' );
+  assert_equal( sin(255),   0, 'sin(255)' );
+  puts('');
+}
+
+function test_cos():void
+{
+  print( 'test_cos:' );
+  assert_equal( cos(  0), 127, 'cos(0)' );
+  assert_equal( cos( 63),   0, 'cos(63)' );
+  assert_equal( cos( 64),   0, 'cos(64)' );
+  assert_equal( cos(127),-127, 'cos(127)' );
+  assert_equal( cos(128),-127, 'cos(128)' );
+  assert_equal( cos(191),   0, 'cos(191)' );
+  assert_equal( cos(192),   0, 'cos(192)' );
+  assert_equal( cos(255), 127, 'cos(255)' );
+  puts('');
+}
+
+function test_atan():void
+{
+  print( 'test_atan:' );
+  assert_equal( atan( 0, 1),   0, 'atan(0)');
+  assert_equal( atan( 1, 1),  32, 'atan(32)');
+  assert_equal( atan( 1, 0),  63, 'atan(63)');
+  assert_equal( atan( 1,-1),  96, 'atan(96)');
+  assert_equal( atan( 0,-1), 128, 'atan(128)');
+  assert_equal( atan(-1,-1), 160, 'atan(160)');
+  assert_equal( atan(-1, 0), 193, 'atan(193)');
+  assert_equal( atan(-1, 1), 224, 'atan(224)');
+  puts( '' );
+}
+
+function main():void
+{
+  test_sin();
+  test_cos();
+  test_atan();
+
+  exit(0);
+}

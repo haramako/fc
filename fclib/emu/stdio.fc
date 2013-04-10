@@ -1,0 +1,38 @@
+/*
+ * コマンドラインエミュレータ用の定義ファイル
+ */
+options( bank: -1 );
+
+var EMU_ADDR    :int*  options (address:0x1000);
+var EMU_DATA    :int16 options (address:0x1000);
+var EMU_PRINT   :int   options (address:0x1002);
+var EMU_EXIT    :int   options (address:0x1003);
+
+function print_int16( n:int16 ):void
+{
+  EMU_DATA = n;
+  EMU_PRINT = 2;
+}
+
+function print( str:int* ):void
+{
+  EMU_ADDR = str;
+  EMU_PRINT = 1;
+}
+
+function puts( str:int* ):void
+{
+	printf( str, "\n");
+}
+
+function exit( code:int ):void
+{
+  EMU_EXIT = code;
+}
+
+function init():void {}
+
+function interrupt():void {}
+function interrupt_irq():void {}
+
+include macro ( "stdio.rb" );

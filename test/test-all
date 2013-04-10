@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby -Ku
+# coding: utf-8
+
+require 'pp'
+require 'json'
+require 'tempfile'
+require 'simplecov'
+
+SimpleCov.root '..'
+SimpleCov.command_name 'test-all'
+SimpleCov.start
+
+require_relative '../lib/fc/nes'
+require_relative '../lib/fc/compiler'
+
+FC = 'bin/fc'
+EMU = 'bin/emu6502'
+err = false
+compiler = Fc::Compiler.new
+
+size_prev = JSON.parse( File.read('size_prev.txt') )
+size_cur = Hash.new
+
+if ARGV.empty?
+  files = Dir.glob 'test_*.fc'
+else
+  files = ARGV
+end
+
+#
+# unittest
+#
+
+debug_info_tested = false
+files.each do |file|
+  puts "testing #{file}"
+
+  begin
+    compiler.compile( file, { run: true, debug_info: !debug_info_tested } )
+    debug_info_tested = true
+  rescue Fc::CompileError => e
+    raise e
+  end
+  
+  nes = parse_nes( 'a.nes' )
+  size_cur[file] = nes[:prog_size]
+end
+
+File.write( 'size_cur.txt', JSON.dump( size_cur ) )
+
+
+# サイズの比較
+size_cur.each_key do |file|
+  if size_prev[file] and size_cur[file] >= size_prev[file] * 1.1 # 1.1倍は適当
+    puts "warning: code size increased, %s %d->%d"%[file, size_prev[file], size_cur[file]]
+  end
+end
+
+#
+# エラーが起こるソースのテスト
+#
+
+puts 'testing error on invalid sources'
+
+common = <<EOT
+function interrupt():void{}
+function main():void{}
+EOT
+
+txt = File.read( File.dirname(__FILE__) + '/errors.fc' )
+srcs = txt.split(/^\/\/@/m)[1..-1]
+srcs.each do |src|
+
+  expected_err, src = src.split(/\n/,2)
+
+  f = Tempfile.new 'temp'
+  f.write src+"\n"+common
+  f.close
+
+  begin
+    compiler.compile f.path
+  rescue Fc::CompileError => e
+    unless /#{expected_err}/ === e.message
+      puts e
+      puts e.backtrace.join("\n")
+      err = true
+    end
+    print '.'
+  end
+end
+puts
+
+
+exit(1) if err

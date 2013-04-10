@@ -1,0 +1,11 @@
+a.asm
+*.lst
+*.nes
+*.html
+darius.asm
+parser.output
+coverage
+.DS_Store
+darius*.zip
+darius
+miku

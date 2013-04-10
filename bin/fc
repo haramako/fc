@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby -Ku
+# coding: utf-8
+
+#
+#
+#
+
+require 'pp'
+require 'optparse'
+
+# コマンドライン引数の解釈
+o = Hash.new
+$coverage = false
+
+opt = OptionParser.new( "NES Compiler\nUsage: fc [options] <src.fc> ...\nOptions:\n" )
+opt.on( '-h', '--help' ){ puts opt; exit }
+opt.on( '-o:', 'output file' ){|v| o[:out] = v }
+opt.on( '-e', 'run by interpreter' ){ o[:run] = true }
+opt.on( '-S', 'output asm file' ){|v| o[:asm] = true }
+opt.on( '-d', '--debug', 'show debug info' ){|v| o[:debug_info] = true }
+opt.on( '-t:', '--target', 'target platform ( nes, emu )' ){|v| o[:target] = v }
+opt.on( '--coverage', 'enable coverage' ){|v| $coverage = v }
+opt.parse!
+
+require_relative '../lib/fc/compiler'
+com = Fc::Compiler.new
+com.compile ARGV[0], o

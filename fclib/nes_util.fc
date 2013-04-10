@@ -1,0 +1,72 @@
+var ppu_ctrl1_bak:int = 0b10000000;
+var ppu_ctrl2_bak:int = 0b00011110;
+var ppu_scroll1:int = 0;
+var ppu_scroll2:int = 0;
+
+function ppu_init(ctrl1:int,ctrl2:int):void
+{
+  ppu_ctrl1_bak = ctrl1;
+  ppu_ctrl2_bak = ctrl2;
+}
+
+function ppu_scroll(s1:int, s2:int):void
+{
+  ppu_scroll1 = s1;
+  ppu_scroll2 = s2;
+}
+
+function ppu_lock():void
+{
+  PPU_CTRL1 = 0b00000000;
+  PPU_CTRL2 = 0b00000000;
+}
+
+function ppu_unlock():void
+{
+  PPU_SCROLL = ppu_scroll1;
+  PPU_SCROLL = ppu_scroll2;
+  PPU_CTRL1 = ppu_ctrl1_bak;
+  PPU_CTRL2 = ppu_ctrl2_bak;
+}
+
+function ppu_put( addr:int*, size:int ):void
+{
+  var i:int = 0;
+  while( i < size ){
+    PPU_DATA = addr[i];
+    i += 1;
+  }
+}
+
+function ppu_fill( size:int, num:int ):void
+{
+  var i:int = 0;
+  while( i < size ){
+    PPU_DATA = num;
+    i += 1;
+  }
+}
+
+function ppu_print( str:int* ):void
+{
+  var i:int = 0;
+  var c:int;
+  while( c = str[i] ){
+    PPU_DATA = c;
+    i += 1;
+  }
+}
+
+function interrupt():void
+{
+  vsync_flag = 0;
+}
+
+function wait_vsync():void
+{
+  PPU_SCROLL = ppu_scroll1;
+  PPU_SCROLL = ppu_scroll2;
+  SPRITE_DMA = 7;
+  vsync_flag = 1;
+  while( vsync_flag ){}
+}

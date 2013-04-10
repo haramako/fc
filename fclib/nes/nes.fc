@@ -1,0 +1,19 @@
+/** PPUレジスタ */
+
+var PPU_CTRL1   :int options (address:0x2000);
+var PPU_CTRL2   :int options (address:0x2001);
+var PPU_STAT    :int options (address:0x2002);
+var PPU_SPR_ADDR:int options (address:0x2003);
+var PPU_SPR_DATA:int options (address:0x2004);
+var PPU_SCROLL  :int options (address:0x2005);
+var PPU_ADDR    :int options (address:0x2006);
+var PPU_DATA    :int options (address:0x2007);
+var SPRITE_DMA  :int options (address:0x4014);
+
+var PAD_CTRL    :int options (address:0x4016);
+var PAD_DATA    :int options (address:0x4017);
+
+var APU_DMC     :int options( address: 0x4010 );
+var APU_INTERRUPT:int options( address: 0x4017 );
+
+

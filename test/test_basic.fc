@@ -1,0 +1,96 @@
+use stdio;
+use unittest;
+
+include( "character.chr" );
+include( "test_basic.asm" );
+
+var i1:int;
+const CONST = 2;
+var a1:int[4];
+var a2:int[CONST];
+const a3:int[] = [1,2];
+const s1 = "hoge";
+const c = 1 + 0x01 + 0b01;
+
+// test guess_type
+const UINT = 1;
+const SINT = -1;
+const UINT16 = 256;
+const SINT16 = -255;
+const ARRAY = [0];
+
+// NESの制限によるエラーをテスト、主にコンパイル時エラーになる
+function test_nesasm_limit():void
+{
+	// 長い識別子がエラーになる( NESASMの１行制限のため )
+	var toooooooooooooooooooooooooooooooooooooooo_long_id: int = 0;
+	toooooooooooooooooooooooooooooooooooooooo_long_id = toooooooooooooooooooooooooooooooooooooooo_long_id + 1;
+	// 長い文字列がエラーになる( NESASMの１行80文字制限のため )
+	var i:int* = "toooooooooooooooooooooooooooooooooooooooooooooooooo_long_string";
+}
+
+function add(a:int, b:int):int
+{
+	return a+b;
+}
+
+function fib(n:int):int
+{
+	if( n <= 1 ){
+		return 1;
+	}else{
+		return fib(n-1)+fib(n-2);
+	}
+}
+
+function test_function():void
+{
+	print('test_function:');
+	
+	assert_equal( add(3,5), 8, "add()");
+	
+	assert_equal( fib( 1),   1, "fib(1)");
+	assert_equal( fib( 3),   3, "fib(3)");
+	assert_equal( fib(11), 144, "fib(11)");
+	puts('');
+}
+
+function test_misc():void
+{
+	print('test_misc:');
+
+	// loop
+	var i = 1;
+	var n = 0;
+	loop() {
+		n = 1;
+		if( i ){ break; }
+		assert_true( 0, 'loop break' );
+	}
+	assert_equal( n, 1, 'loop' );
+
+	// asm
+	asm( "lda #0" );
+
+	// cast
+	var x:uint16;
+	x = -1;
+	assert_equal( x, -1, 'cast' );
+	
+	puts('');
+
+	// return void
+	return;
+}
+
+function main():void
+{
+	init();
+	
+	test_nesasm_limit();
+	test_function();
+	test_misc();
+	
+	exit(0);
+
+}

@@ -1,0 +1,44 @@
+/*
+ * NES用の定義ファイル
+ */
+
+options( bank: -1 );
+
+use nes;
+include( "stdio.asm" );
+
+var vsync_flag:int;
+var ppu_addr:int16;
+var print_addr:int16;
+
+function print_int16( n:int16 ):void;
+function wait_vsync():void;
+function print( str:int* ):void;
+function ppu_put( addr:int16, data:int*, size:int ):void;
+
+function puts( str:int* ):void
+{
+	printf(str, "\n");
+}
+
+function exit( code:int ):void
+{
+	printf('exit(', code, ")\n" );
+	PPU_CTRL1 = 0b11001000;
+	while(1){
+		wait_vsync();
+		PPU_SCROLL = 0;
+		PPU_SCROLL = 0;
+		PPU_CTRL1 = 0b11001000;
+		PPU_CTRL2 = 0b00001010;
+	}
+}
+
+function init():void
+{
+	const pallet = [15,61,16,48, 0,17,33,49, 0,18,34,50, 0,19,35,51];
+	ppu_put( 0x3f00, pallet, 16);
+	print_addr = 0x2000;
+}
+
+include macro ( "stdio.rb" );

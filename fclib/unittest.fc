@@ -1,0 +1,23 @@
+options( bank: 1 );
+
+use stdio;
+
+function assert_true( a:int, message:int* ):void
+{
+  if( !a ){
+	  printf( "\nERROR: ", message, "  expects true but false\n" );
+	  exit(1);
+  }else{
+	  print('.');
+  }
+}
+
+function assert_equal( a:int16, b:int16, message:int* ):void
+{
+  if( a != b ){
+	  printf( "\nERROR: ", message,"  expects ", b , "  but ", a, "\n" );
+	  exit(1);
+  }else{
+	  print('.');
+  }
+}
