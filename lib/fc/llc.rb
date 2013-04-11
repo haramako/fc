@@ -270,7 +270,6 @@ module Fc
 
         when :index
           raise CompileError.new("2byte index not supported") if op[3].type != Type[:int] and op[3].type != Type[:sint8]
-          # raise if op[2].kind != :var
           if op[2].type.kind == :array
             r.concat load_y_idx(op[3],op[2])
             r << "sty reg+0"
@@ -302,18 +301,6 @@ module Fc
           r << store_a( op[1], 0 )
           r << "lda #HIGH(#{to_asm(op[2])})"
           r << store_a( op[1], 1 )
-
-        when :deref
-          r << load_a( op[2], 0 )
-          r << "sta reg+0"
-          r << load_a( op[2], 1 )
-          r << "sta reg+1"
-          r << "ldy #0"
-          op[1].type.size.times do |i|
-            r << "lda [reg],y"
-            r << store_a( op[1], i )
-            r << "iny"
-          end
 
         when :pget
           r << "lda #{byte(op[2],0)}"
@@ -438,7 +425,14 @@ module Fc
       if Value === v or CastedValue === v
         case v.kind
         when :var, :arg, :result, :temp
-          "S+#{v.address},x"
+          case v.location
+          when :frame then "S+#{v.address},x"
+          when :reg then "L+#{v.address}"
+          else 
+            # :nocov:
+            raise "invalid location #{v.location} of #{v}"
+            # :nocov:
+          end
         when :symbol, :const, :array_literal
           '.'+mangle(v.id)
         when :global_symbol
@@ -633,6 +627,7 @@ module Fc
         size = 0
         lmd.vars.each do |var|
           if var.on_stack?
+            var.location = :frame
             var.address = size
             size += var.type.size
           end

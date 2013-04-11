@@ -2,16 +2,16 @@
 
 module Fc
 
-  def self.allocate_register( lmd )
+  def self.calc_live_range( lmd )
     # ラベルの収集
-    labels = Hash.new
+    labels = Hash.new # labels[ラベル] = op番号
     lmd.ops.each_with_index do |op,i|
       labels[op[1]] = i if op[0] == :label
     end
 
     # 変数の定義・仕様、制御フローグラフの集計
-    vars = Hash.new {|h,k| h[k] = [[],[]] }
-    flow = []
+    use_define = Hash.new {|h,k| h[k] = [[],[]] } # 変数ごとの use/define を記録する
+    flow = [] # flow[ジャンプ元op番号] = [ジャンプ先のop番号, ... ]
     lmd.ops.each_with_index do |op,i|
       uses = []
       defines = []
@@ -28,7 +28,10 @@ module Fc
       when :call
         defines << op[1]
         uses.concat op[2..-1]
-      when :load, :uminus, :not, :sign_extension, :ref, :deref
+      when :load, :uminus, :not, :sign_extension
+        defines << op[1]
+        uses << op[2]
+      when :ref
         defines << op[1]
         uses << op[2]
       when :add, :sub, :and, :or, :xor, :mul, :div, :mod, :eq, :lt, :index, :pget
@@ -45,77 +48,80 @@ module Fc
       flow << node
 
       defines.each do |v|
-        vars[v][0] << i if v and v.on_stack?
+        use_define[v][0] << i if v and v.on_stack?
       end
 
       uses.each do |v|
-        next if Lambda === v
-        vars[v][1] << i if v and v.on_stack?
+        use_define[v][1] << i if v and v.on_stack?
       end
     end
 
     # 引数は、最初に定義されているものとする
-    vars.each do |v,info|
-      if v.kind == :arg
-        info[0] << 0
-      end
-    end
-    # puts '*'*20+lmd.to_s+'*'*20
-    # pp flow, vars
-
-    # 帰り値、引数のアドレスは先に割り当てる
-    frame_size = lmd.type.base.size
-    # pp lmd.vars
-    lmd.result.address = 0 if lmd.result
-    lmd.args.each do |arg|
-      arg.address = frame_size
-      frame_size += arg.type.size
+    use_define.each do |v,info|
+      info[0] << 0 if v.kind == :arg
     end
 
-    # サイズ１と２のやつだけ割り当てる
-    1.upto(2) do |size|
-      fit_vars = Hash.new
-      vars.each do |v,info|
-        if v.type.size == size
-          fit_vars[v.id] = info
-        end
-      end
-      allocator = Allocator.new flow, fit_vars
-      # pp [size, flow, fit_vars ]
-      # pp [size, allocator.regs]
-      # 各ジスタのアドレスを割り当てる
-      allocator.regs.each do |reg|
-        address = nil
-        # 引数が含まれる場合は,すでに割り当てられている
-        reg[:vars].each do |id|
-          arg = lmd.args.find{|arg| arg.id == id }
-          address = arg.address if arg
-        end
-        # アドレスを算出する
-        unless address
-          address = frame_size
-          frame_size += size
-        end
-        # 割り当てる
-        reg[:vars].each do |id|
-          lmd.vars.find{ |v| v.id == id }.address = address
-        end
-      end
+    # live range を求める
+    lrc = LiveRangeCalculator.new( flow )
+    use_define.each do |v,info|
+      v.live_range = lrc.calc_live_range( info )
+    end
+    
+  end
+
+  # 
+  # 変数の address, location, unuse が設定される
+  def self.allocate_register( lmd )
+    calc_live_range( lmd )
+
+    # ref(&演算子)を受けた変数を集める
+    refered = Hash.new # 変数がrefを受けたかどうか(refされるならメモリは独立で確保しなくてはいけないため)
+    lmd.ops.each do |op|
+      refered[op[2]] = true if op[0] == :ref
     end
 
-    # サイズ３以上は全部割り当てる
-    vars.each do |v,info|
-      if v.type.size > 2
-        # TODO: 未実装
-        #:nocov:
-        raise
-        #:nocov:
+    # live range を求め、{callをまたぐ|refを受ける|引数}だったら、フレームスタック上に確保する
+    frame_size = lmd.type.base.size # 帰り値分を予約しておく
+    register_vars = Hash.new # レジスタに割り当てる変数, register_vars[変数:Value] = liverange:Range
+    lmd.vars.each do |v|
+      beyond_call = false
+      if v.live_range
+        ((v.live_range.min+1)..(v.live_range.max-1)).each do |i|
+          beyond_call = true if lmd.ops[i] and lmd.ops[i][0] == :call
+        end
+      end
+      
+      if v.kind == :result
+        # 返り値
+        lmd.result.location = :frame
+        lmd.result.address = 0 
+      elsif beyond_call or v.kind == :arg or refered[v]
+        # 引数か、関数をまたいでいるなら、フレームに割り当てる
+        v.address = frame_size
+        v.location = :frame
+        frame_size += v.type.size
+      elsif v.live_range
+        # それ以外の使われてる変数は、レジスターメモリに割り当てる
+        register_vars[v] = { live_range: v.live_range }
+      else
+        # 未使用フラグをたてる
+        v.location = :none
+        v.unuse = true
       end
     end
 
-    # 未使用フラグをたてる
-    vars.each do |v,info|
-      v.unuse = true unless v.address
+    # 各ジスタのアドレスを割り当てる
+    reg_size = 0
+    allocator = Allocator.new register_vars
+    allocator.regs.each do |reg|
+      # アドレスを算出する
+      raise CompileError.new("frame size over on #{lmd}") if reg_size > 16
+      # 割り当てる
+      reg[:vars].each do |v|
+        v.location = :reg
+        v.address = reg_size
+      end
+      reg_size += 2
     end
 
     lmd.frame_size = frame_size
@@ -126,20 +132,12 @@ module Fc
   ######################################################################
   class Allocator
 
-    attr_reader :vars, :regs
+    attr_reader :regs
 
-    def initialize( flow, vars )
-      # live range を求める
-      lrc = LiveRangeCalculator.new( flow )
-      @vars = Hash.new
-      vars.each do |id,var|
-        lr = lrc.calc_live_range( vars[id] )
-        @vars[id] = { live_range: lrc.calc_live_range( vars[id] ) } if lr
-      end
-
+    def initialize( vars )
       # レジスタの割り当て
       @regs = []
-      @vars.each do |id,var|
+      vars.each do |id,var|
         found = false
         @regs.each do |reg|
           unless overlap?( reg[:live_range], var[:live_range] )
@@ -189,6 +187,8 @@ module Fc
 
     end
 
+    # live range を計算する
+    # 全く使われていない場合、nilを返す
     def calc_live_range( var )
       lives = @flow.map { |i| live = Hash.new }
       var[0].each { |i| lives[i][:define] = true }

@@ -145,7 +145,7 @@ module Fc
         # 帰り値の追加
         if @lmd.type.base.kind != :void
           @lmd.result = Value.new( :result, :'$result', @lmd.type.base, nil, nil )
-          add_var @lmd.result
+          @lmd.vars.unshift @lmd.result
         end
 
         # 引数の追加

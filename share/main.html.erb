@@ -20,7 +20,7 @@ ins.differ { background-color: #faa; }
 
 <div class="left_bar">
   <%- mods.each do |k,mod| -%>
-    <h3><%=mod.id%></h3>
+    <h3><a href="#<%= mod.id %>"><%=mod.id%></a></h3>
       <ul>
       <%- mod.lambdas.each do |lmd| -%>
         <li><a href="#<%= lmd.id %>"><%= lmd.id %></a></li>
@@ -33,7 +33,25 @@ ins.differ { background-color: #faa; }
 <div class="content">
   
   <%- mods.each do |k,mod| -%>
+  
+    <a name="<%=mod.id%>"></a>
     <a name="module" ></a><h1>module <%= mod.id %></h1>
+    
+    <h3>variables</h3>
+    <table>
+      <tr><th>id</th><th>type</th><th>address</th><th>value</th><th>opt</th><th>kind</th></tr>
+      <%- mod.vars.each do |v| -%>
+        <tr>
+          <td><%= v.id %></td>
+          <td><%= v.type %></td>
+          <td><%= v.location %> <%= v.address %></td>
+          <td><%=h v.val %></td>
+          <td><%= v.opt %></td>
+          <td><%= v.kind %></td>
+        </tr>
+      <%- end -%>
+    </table>
+    
     <%- mod.lambdas.each do |lmd| -%>
       <a name="<%=lmd.id%>"></a>
       <h2>function <%= lmd.id %></h2>
@@ -45,8 +63,8 @@ ins.differ { background-color: #faa; }
           <tr>
             <td><%= v.id %></td>
             <td><%= v.type %></td>
-            <td><%= v.address %></td>
-            <td><%= v.val %></td>
+            <td><%= v.location %> <%= v.address %></td>
+            <td><%=h v.val %></td>
             <td><%= v.opt %></td>
             <td><%= v.kind %></td>
           </tr>

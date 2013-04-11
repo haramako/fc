@@ -149,16 +149,15 @@ module Fc
     attr_reader :kind # 種類
     attr_reader :type # Type
     attr_reader :id   # 変数名
-    attr_reader :val  # 定数の場合はその値( Fixnumか配列 )
+    attr_reader :val  # 定数の場合はその値( Fixnum or Array or Lambda or Proc(マクロ) )
     attr_reader :opt  # オプション
     attr_accessor :base_string # 元の値が文字列だった場合、その文字列
 
     # 以下は、アセンブラで使用
     attr_accessor :address # アドレス
-    attr_accessor :lr # 生存期間([from,to]という２要素の配列)
-    attr_accessor :nonlocal # クロージャから参照されているかどうか
-    attr_accessor :reg # 格納場所( :mem, :none, :a, :carry, :not_carry, :zero, :not_zero, :negative, :not_negative のいずれか )
+    attr_accessor :location # 格納場所( :frame, :reg(実際はゼロページメモリ), :mem, :none, :a, :carry, :not_carry, :zero, :not_zero, :negative, :not_negative のいずれか )
     attr_accessor :unuse # 未使用かどうか
+    attr_accessor :live_range
 
     def initialize( kind, id, type, val, opt )
       raise CompileError.new("invalid type, #{type}") unless Type === type
