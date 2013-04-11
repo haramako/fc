@@ -405,7 +405,8 @@ module Fc
 
     def load_a( v, n )
       if Value === v and v.location == :a
-        ''
+        raise if n != 0
+        nil
       else
         return "lda #{byte(v,n)}"
       end
@@ -413,7 +414,8 @@ module Fc
 
     def store_a( v, n )
       if Value === v and v.location == :a
-        ''
+        raise if n != 0
+        nil
       else
         return  "sta #{byte(v,n)}"
       end

@@ -1,0 +1,25 @@
+use stdio;
+use unittest;
+
+include( "character.chr" );
+
+function test_a_alloc():void
+{
+	print('test_misc:');
+	var i1 = 1;
+	var i2 = 2;
+	var i3 = 3;
+	assert_equal( i1 + i2 - i3, 0, "add/sub" );
+	assert_equal( i1 - i2 + i3, 2, "sub/add" );
+	assert_true( (i1 + i2) == 3, "add/==" );
+	assert_true( (i1 + i2) >= 3, "add/>=" );
+	assert_true( (i1 + i2) <= 3, "add/<=" );
+	puts("\n");
+}
+
+function main():void
+{
+	test_a_alloc();
+	exit(0);
+
+}
