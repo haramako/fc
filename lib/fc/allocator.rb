@@ -110,6 +110,8 @@ module Fc
       end
     end
 
+    allocate_a( lmd, register_vars )
+
     # 各ジスタのアドレスを割り当てる
     reg_size = 0
     allocator = Allocator.new register_vars
@@ -125,6 +127,36 @@ module Fc
     end
 
     lmd.frame_size = frame_size
+  end
+
+  # Aジスタを割り当てられるなら割り当てる
+  def self.allocate_a( lmd, register_vars )
+    a_vars = [] # Aレジスタを割り当てる変数
+    register_vars.each do |v,info|
+      next unless v.type.size == 1
+      if v.live_range.max-v.live_range.min == 1
+        # Aレジスタを割り当てられる組み合わせでなければスルー
+        op = lmd.ops[v.live_range.min]
+        next unless op[1] == v
+        next unless [:load, :add, :sub, :and, :or, :xor, :mul, :div, :mod, :uminus, :eq, :lt, :pget].include?( op[0] )
+
+        next_op = lmd.ops[v.live_range.min+1]
+        if next_op[2] == v
+          next unless [:if, :return, :load, :sign_extension, :add, 
+              :and, :or, :xor, :eq, :pget].include?( next_op[0] ) 
+        elsif next_op[1] == v
+          next unless [:sub].include?( next_op[0] ) 
+        else
+          next
+        end
+
+        a_vars << v
+      end
+    end
+    a_vars.each do |v|
+      v.location = :a
+      register_vars.delete(v)
+    end
   end
 
   ######################################################################

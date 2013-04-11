@@ -109,7 +109,6 @@ module Fc
         dout 3, op.inspect
         next unless op
         r << "; #{'%04d'%[op_no]}: #{op.inspect}"
-        a = op.map{|x| if Value === x then to_asm(x) else x end } # アセンブラ表記に直したop, Value以外はそのまま
         case op[0]
 
         when :label
@@ -168,7 +167,7 @@ module Fc
 
         when :sign_extension
           pls_label, end_label = new_labels(2)
-          # TODO: サイズ1->2の場合のみ実装。いまは、２種類しかないからいいけど
+          # TODO: サイズ1->2以上の場合を実装すること、いまはそれしかないから十分だけど
           r << load_a(op[2],0)
           r << store_a(op[1],0)
           r << "bpl #{pls_label}"
@@ -274,12 +273,12 @@ module Fc
             r.concat load_y_idx(op[3],op[2])
             r << "sty reg+0"
             r << "clc"
-            r << "lda #LOW(#{a[2]})"
+            r << "lda #LOW(#{to_asm(op[2])})"
             r << "adc reg+0"
-            r << "sta 0+#{a[1]}"
-            r << "lda #HIGH(#{a[2]})"
+            r << "sta 0+#{to_asm(op[1])}"
+            r << "lda #HIGH(#{to_asm(op[2])})"
             r << "adc #0"
-            r << "sta 1+#{a[1]}"
+            r << "sta 1+#{to_asm(op[1])}"
           elsif op[2].type.kind == :pointer
             r.concat load_y_idx(op[3],op[2])
             r << "sty reg+0"
@@ -330,7 +329,7 @@ module Fc
           raise if op[2].type.kind != :array
           r.concat load_y_idx(op[3],op[2])
           op[1].type.size.times do |i|
-            r << "lda #{a[2]}+#{i},y"
+            r << "lda #{to_asm(op[2])}+#{i},y"
             r << store_a(op[1],i)
           end
 
@@ -340,7 +339,7 @@ module Fc
           r.concat load_y_idx(op[2],op[1])
           op[3].type.size.times do |i|
             r << load_a( op[3],i)
-            r << "sta #{a[1]}+#{i},y"
+            r << "sta #{to_asm(op[1])}+#{i},y"
           end
 
         else
@@ -405,11 +404,19 @@ module Fc
     end
 
     def load_a( v, n )
-      return "lda #{byte(v,n)}"
+      if Value === v and v.location == :a
+        ''
+      else
+        return "lda #{byte(v,n)}"
+      end
     end
 
     def store_a( v, n )
-      return  "sta #{byte(v,n)}"
+      if Value === v and v.location == :a
+        ''
+      else
+        return  "sta #{byte(v,n)}"
+      end
     end
 
     def new_label
