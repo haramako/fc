@@ -110,6 +110,7 @@ module Fc
       end
     end
 
+    allocate_cond( lmd, register_vars )
     allocate_a( lmd, register_vars )
 
     # 各ジスタのアドレスを割り当てる
@@ -142,15 +143,69 @@ module Fc
                      :mul, :div, :mod, :uminus, :eq, :lt, :pget].include?( op[0] )
 
         next_op = lmd.ops[v.live_range.min+1]
-        next unless next_op[2] == v
-        next unless [:if, :return, :load, :sign_extension, :add, 
-                     :and, :or, :xor, :eq, :lt, :pget, :sub].include?( next_op[0] ) 
+        case next_op[0]
+        when :load, :sign_extension, :add, :and, :or, :xor, :eq, :lt, :pget, :sub
+          next unless next_op[2] == v
+        when :if, :return
+          next unless next_op[1] == v
+        else next
+        end
 
         a_vars << v
       end
     end
     a_vars.each do |v|
       v.location = :a
+      register_vars.delete(v)
+    end
+  end
+
+  # コンディションレジスタを割り当てられるなら割り当てる
+  def self.allocate_cond( lmd, register_vars )
+    cond_vars = [] # コンディションレジスタを割り当てる変数
+    register_vars.each do |v,info|
+      next unless v.type.size == 1
+      if v.live_range.max-v.live_range.min == 1
+        # Aレジスタを割り当てられる組み合わせでなければスルー
+        op = lmd.ops[v.live_range.min]
+        next unless op[1] == v
+        next unless [:eq, :lt, :not].include?( op[0] )
+
+        next_op = lmd.ops[v.live_range.min+1]
+        case next_op[0]
+        when :'if'
+          next unless next_op[1] == v
+        when :'not'
+          next unless next_op[2] == v
+        else next
+        end
+
+        case op[0]
+        when :eq 
+          v.location = :cond
+          v.cond_positive = true
+          v.cond_reg = :zero
+        when :lt
+          v.location = :cond
+          v.cond_positive = true
+          if op[2].type.signed or op[2].type.signed
+            next if op[2].type.size > 1 or op[3].type.size > 1 # サイズ2以上の符号付き比較はフラグが特定できない
+            v.cond_reg = :negative
+          else
+            v.cond_reg = :carry
+          end
+        when :'not'
+          next unless op[2].location == :cond
+          v.location = :cond
+          v.cond_reg = op[2].cond_reg
+          v.cond_positive = !op[2].cond_positive
+        else raise
+        end
+        cond_vars << v
+      end
+    end
+    cond_vars.each do |v|
+      #v.location = :a
       register_vars.delete(v)
     end
   end

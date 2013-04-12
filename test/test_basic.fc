@@ -46,7 +46,7 @@ function fib(n:int):int
 function test_function():void
 {
 	print('test_function:');
-	
+
 	assert_equal( add(3,5), 8, "add()");
 	
 	assert_equal( fib( 1),   1, "fib(1)");
@@ -86,6 +86,17 @@ function test_misc():void
 function main():void
 {
 	init();
+	var a:sint8 = 0;
+	if( a == 0 ){
+		puts( "a==0" );
+	}else{
+		puts( "false" );
+	}
+	if( a < 2 ){
+		puts( "a<2" );
+	}else{
+		puts( "false" );
+	}
 	
 	test_nesasm_limit();
 	test_function();

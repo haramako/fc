@@ -20,6 +20,7 @@ function test_for():void
 
 function test_switch():void
 {
+	/*
 	print('test_switch:');
 	var i:int;
 	var sum = 0;
@@ -35,6 +36,7 @@ function test_switch():void
 	}
 	assert_equal( 20+1+2+3+10+20, sum, "switch" );
 	puts('');
+	*/
 }
 
 function main():void

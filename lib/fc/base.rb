@@ -155,9 +155,11 @@ module Fc
 
     # 以下は、アセンブラで使用
     attr_accessor :address # アドレス
-    attr_accessor :location # 格納場所( :frame, :reg(実際はゼロページメモリ), :mem, :none, :a, :carry, :not_carry, :zero, :not_zero, :negative, :not_negative のいずれか )
+    attr_accessor :location # 格納場所( :frame, :reg(実際はゼロページメモリ), :mem, :none, :a, :cond のいずれか )
     attr_accessor :unuse # 未使用かどうか
     attr_accessor :live_range
+    attr_accessor :cond_reg # コンディションレジスタの種類, location==:condの時のみ使用, (:carry, :zero, :negative) のいずれか
+    attr_accessor :cond_positive # コンディションレジスタがどちらの状態を表すか( true/false ), location==:condの時のみ使用
 
     def initialize( kind, id, type, val, opt )
       raise CompileError.new("invalid type, #{type}") unless Type === type

@@ -15,7 +15,7 @@ function assert_true( a:int, message:int* ):void
 function assert_equal( a:int16, b:int16, message:int* ):void
 {
   if( a != b ){
-	  printf( "\nERROR: ", message,"  expects ", b , "  but ", a, "\n" );
+	  printf( "\nERROR: ", message); //,"  expects ", b , "  but ", a, "\n" );
 	  exit(1);
   }else{
 	  print('.');

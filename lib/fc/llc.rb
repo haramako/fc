@@ -115,13 +115,26 @@ module Fc
           r << op[1] + ':'
 
         when :if
-          then_label = new_label
-          op[1].type.size.times do |i|
-            r << load_a( op[1],i)
-            r << "bne #{then_label}"
+          if op[1].location == :cond
+            # コンディションレジスタの場合
+            asm_op = nil
+            case op[1].cond_reg
+            when :zero then asm_op = ( op[1].cond_positive ? 'bne' : 'beq' )
+            when :carry then asm_op = ( op[1].cond_positive ? 'bcs' : 'bcc' )
+            when :negative then asm_op = ( op[1].cond_positive ? 'bpl' : 'bmi' )
+            else raise
+            end
+            r << "#{asm_op} #{op[2]}"
+          else
+            then_label = new_label
+            # コンディションレジスタでない場合
+            op[1].type.size.times do |i|
+              r << load_a( op[1],i)
+              r << "bne #{then_label}"
+            end
+            r << "jmp #{op[2]}"
+            r << "#{then_label}:"
           end
-          r << "jmp #{op[2]}"
-          r << "#{then_label}:"
 
         when :jump
           r << "jmp #{op[1]}"
@@ -216,53 +229,72 @@ module Fc
 
         when :eq
           false_label, end_label = new_labels(2)
-          [ op[2].type.size, op[3].type.size ].max.times do |i|
+          size = [ op[2].type.size, op[3].type.size ].max
+          size.times do |i|
             r << load_a( op[2],i)
             r << "cmp #{byte(op[3],i)}" 
             r << "bne #{false_label}"
           end
-          # falseのとき
-          r << "lda #1"
-          r << store_a(op[1],0)
-          r << "jmp #{end_label}"
-          # trueのとき
-          r << "#{false_label}:"
-          r << "lda #0"
-          r << store_a(op[1],0)
-          r << "#{end_label}:"
+          if op[1].location == :cond
+            r.pop # 最後のbneを消す
+            r << "#{false_label}:" if size != 1
+          else
+            # falseのとき
+            r << "lda #1"
+            r << store_a(op[1],0)
+            r << "jmp #{end_label}"
+            # trueのとき
+            r << "#{false_label}:"
+            r << "lda #0"
+            r << store_a(op[1],0)
+            r << "#{end_label}:"
+          end
 
         when :lt
           true_label, end_label = new_labels(2)
-          ([op[2].type.size,op[3].type.size].max-1).downto(0) do |i|
+          size = [op[2].type.size, op[3].type.size].max
+          signed = op[2].type.signed or op[2].type.signed
+          (size-1).downto(0) do |i|
             r << load_a( op[2],i)
-            r << "cmp #{byte(op[3],i)}" 
-            r << "bcc #{true_label}"
+            r << "cmp #{byte(op[3],i)}"
+            if signed and i == size-1
+              r << "bmi #{true_label}"
+            else
+              r << "bcc #{true_label}"
+            end
           end
-          # falseのとき
-          r << "lda #0"
-          r << store_a(op[1],0)
-          r << "jmp #{end_label}"
-          # trueのとき
-          r << "#{true_label}:"
-          r << "lda #1"
-          r << store_a(op[1],0)
-          r << "#{end_label}:"
+          if op[1].location == :cond
+            r.pop # 最後のbccを消す
+            r << "#{true_label}:" if size != 1
+          else
+            # falseのとき
+            r << "lda #0"
+            r << store_a(op[1],0)
+            r << "jmp #{end_label}"
+            # trueのとき
+            r << "#{true_label}:"
+            r << "lda #1"
+            r << store_a(op[1],0)
+            r << "#{end_label}:"
+          end
 
         when :'not'
-          true_label, end_label = new_labels(2)
-          op[2].type.size.times do |i|
-            r << load_a( op[2],i)
-            r << "beq #{true_label}"
+          if op[1].location != :cond
+            true_label, end_label = new_labels(2)
+            op[2].type.size.times do |i|
+              r << load_a( op[2],i)
+              r << "beq #{true_label}"
+            end
+            # falseのとき
+            r << "lda #0"
+            r << store_a(op[1],0)
+            r << "jmp #{end_label}"
+            # trueのとき
+            r << "#{true_label}:"
+            r << "lda #1"
+            r << store_a(op[1],0)
+            r << "#{end_label}:"
           end
-          # falseのとき
-          r << "lda #0"
-          r << store_a(op[1],0)
-          r << "jmp #{end_label}"
-          # trueのとき
-          r << "#{true_label}:"
-          r << "lda #1"
-          r << store_a(op[1],0)
-          r << "#{end_label}:"
 
         when :asm
           r << op[1]
@@ -353,11 +385,12 @@ module Fc
         r.concat emit_blob( blob )
       end
 
-      # 空の行を削除
-      r.delete(nil)
+      
+      r.flatten! # まとめた行を展開
+      r.delete(nil) # 空の行を削除
       # ラベル行,コメント行以外はインデントする
       r = r.map do |line|
-        if line.index(':') and line[0] != ';'
+        if line =~ /\A[._a-zA-Z0-9]+:/
           line
         else
           "\t"+line
@@ -404,11 +437,38 @@ module Fc
     end
 
     def load_a( v, n )
-      if Value === v and v.location == :a
+      if Value === v and v.location == :cond
+        raise if n != 0
+        case v.cond_reg
+        when :zero
+          true_label, end_label = new_labels(2)
+          ["#{ v.cond_positive ? 'beq' : 'bne' } #{true_label}",
+           "lda #0",
+           "jmp #{end_label}",
+           "#{true_label}:",
+           "lda #1",
+           "#{end_label}:"]
+        when :carry
+          if v.cond_positive
+            ["lda #0", "rol a", "eor #1"]
+          else
+            ["lda #0", "rol a"]
+          end
+        when :negative
+          true_label, end_label = new_labels(2)
+          ["#{ v.cond_positive ? 'bmi' : 'bpl' } #{true_label}",
+           "lda #0",
+           "jmp #{end_label}",
+           "#{true_label}:",
+           "lda #1",
+           "#{end_label}:"]
+        else raise
+        end
+      elsif Value === v and v.location == :a
         raise if n != 0
         nil
       else
-        return "lda #{byte(v,n)}"
+        "lda #{byte(v,n)}"
       end
     end
 
@@ -417,7 +477,7 @@ module Fc
         raise if n != 0
         nil
       else
-        return  "sta #{byte(v,n)}"
+        "sta #{byte(v,n)}"
       end
     end
 
