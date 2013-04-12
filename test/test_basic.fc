@@ -86,17 +86,6 @@ function test_misc():void
 function main():void
 {
 	init();
-	var a:sint8 = 0;
-	if( a == 0 ){
-		puts( "a==0" );
-	}else{
-		puts( "false" );
-	}
-	if( a < 2 ){
-		puts( "a<2" );
-	}else{
-		puts( "false" );
-	}
 	
 	test_nesasm_limit();
 	test_function();

@@ -390,15 +390,16 @@ module Fc
       r.delete(nil) # 空の行を削除
       # ラベル行,コメント行以外はインデントする
       r = r.map do |line|
-        if line =~ /\A[._a-zA-Z0-9]+:/
+        if line =~ /\A[._\w][_\w\d]+:/
           line
         else
           "\t"+line
         end
       end
 
-      lmd.asm = r
+      r = extend_jump(r)
 
+      lmd.asm = r
       r
     end
 
@@ -756,6 +757,51 @@ module Fc
         end
       end
       ops
+    end
+
+    # ブランチ命令のジャンプ先が+-127より遠いかもしれない場合は、２段階ジャンプを可能にする
+    # asm: アセンブリ(文字列の配列)
+    def extend_jump( asm )
+      op_size = {"call"=>10}
+      branch_ops = { 'bcc'=>'bcs', 'bcs'=>'bcc', 'beq'=>'bne', 'bne'=>'beq', 'bmi'=>'bpl', 'bpl'=>'bmi'}
+      ['brk','clc','cld','clv','dex','dey','inx','iny','nop','pha','php','pla','plp','rti','rts',
+      'sec','sec','sed','sei','tax','tay','tsx','txa','txs','tya'].each {|op| op_size[op] = 1 }
+      ['adc','and','asl','cmp','cpx','cpy','dec','eor','inc','jmp','jsr',
+       'lda','ldx','ldy','lsr','ora','rol','ror','sbc','sta','stx','sty'].each {|op| op_size[op] = 3 }
+      ['bcc','bcs','beq','bit','bmi','bne','bpl','bvc','bvs'].each {|op| op_size[op] = 5 } #分割して増えるかもしれない
+
+      # 各ラベルのアドレス候補を求める
+      addrs = []
+      labels = Hash.new
+      n = 0
+      asm.each do |line|
+        addrs << n
+        if line =~/\A([._\w][_\w\d]+):/
+          labels[$1] = n
+        elsif line =~ /\A\s+(\w+)/
+          if size = op_size[$1]
+            n += size
+          else
+            n += 10 # 知らない命令は、とりえあず10byteとする
+          end
+        end
+      end
+
+      # 書き換えが必要なジャンプを書き換える
+      asm.each_with_index do |line,i|
+        addr = addrs[i]
+        if line =~ /\A\s+(\w+)\s+([._\w][_\w\d]+)/
+          if branch_ops[$1]
+            jump_to = labels[$2]
+            if (jump_to - addr).abs >= 127
+              label = new_label
+              asm[i] = ["\t#{branch_ops[$1]} #{label}", "\tjmp #{$2}", "#{label}:"]
+            end
+          end
+        end
+      end
+
+      asm.flatten
     end
 
   end
