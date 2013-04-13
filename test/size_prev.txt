@@ -1,1 +1,1 @@
-{"test_basic.fc":2782,"test_cast.fc":2188,"test_math.fc":5335,"test_op.fc":7735,"test_stat.fc":2495,"test_var.fc":3955}
+{"test_alloc.fc":2266,"test_basic.fc":2724,"test_cast.fc":2137,"test_math.fc":4956,"test_op.fc":8436,"test_stat.fc":2955,"test_var.fc":3782}

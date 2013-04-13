@@ -1,4 +1,3 @@
-use stdio;
 use unittest;
 
 include( "character.chr" );
@@ -45,20 +44,15 @@ function fib(n:int):int
 
 function test_function():void
 {
-	print('test_function:');
-
 	assert_equal( add(3,5), 8, "add()");
 	
 	assert_equal( fib( 1),   1, "fib(1)");
 	assert_equal( fib( 3),   3, "fib(3)");
 	assert_equal( fib(11), 144, "fib(11)");
-	puts('');
 }
 
 function test_misc():void
 {
-	print('test_misc:');
-
 	// loop
 	var i = 1;
 	var n = 0;
@@ -77,20 +71,11 @@ function test_misc():void
 	x = -1;
 	assert_equal( x, -1, 'cast' );
 	
-	puts('');
-
 	// return void
 	return;
 }
 
 function main():void
 {
-	init();
-	
-	test_nesasm_limit();
-	test_function();
-	test_misc();
-	
-	exit(0);
-
+	unittest_run_tests();
 }

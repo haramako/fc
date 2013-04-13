@@ -1,11 +1,9 @@
-use stdio;
 use unittest;
 
 include( "character.chr" );
 
 function test_a_alloc():void
 {
-	print('test_misc:');
 	var i1 = 1;
 	var i2 = 2;
 	var i3 = 3;
@@ -14,12 +12,9 @@ function test_a_alloc():void
 	assert_true( (i1 + i2) == 3, "add/==" );
 	assert_true( (i1 + i2) >= 3, "add/>=" );
 	assert_true( (i1 + i2) <= 3, "add/<=" );
-	puts("\n");
 }
 
 function main():void
 {
-	test_a_alloc();
-	exit(0);
-
+	unittest_run_tests();
 }

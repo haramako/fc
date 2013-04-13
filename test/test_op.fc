@@ -1,11 +1,9 @@
-use stdio;
 use unittest;
 
 include( "character.chr" );
 
 function test_const_op():void
 {
-	print('test_const_op:');
 	assert_equal( 1, 1, 'num');
 	assert_equal( (18%((2*((10+10)-5))/3)), 8, '+,-,*,/,%');
 	assert_true(  (1 < 2), "<");
@@ -18,13 +16,10 @@ function test_const_op():void
 	assert_true( !(2 >= 3), "!,>=");
 	assert_true( 2 == 2, "==");
 	assert_true( 2 != 3, "!=");
-	puts('');
 }
 
 function test_int_op():void
 {
-	print('test_int_op:');
-
 	var i1 = 1;
 	var i2 = 2;
 	var i3 = 3;
@@ -59,15 +54,11 @@ function test_int_op():void
 	assert_equal( i10*16, 160, '*const' );
 	assert_equal( i10/4, 2, '/const' );
 	assert_equal( i10%8, 2, '%const' );
-  
-	puts('');
 }
 
 
 function test_int8_op():void
 {
-	print('test_int8_op:');
-
 	var i1:sint8 = -1;
 	var i2:sint8 = -2;
 	var i3:sint8 = 3;
@@ -114,14 +105,10 @@ function test_int8_op():void
 	assert_equal( m10*16, 96, '*const' );
 	assert_equal( m10/4, -3, '/const' );
 	assert_equal( m10%8, 6, '%const' );
-  
-	puts('');
 }
 
 function test_int16_op():void
 {
-	print('test_int16_op:');
-
 	var i1:int16 = 1;
 	var i2:int16 = 2;
 	var i3:int16 = 3;
@@ -154,14 +141,10 @@ function test_int16_op():void
 	assert_equal( i10*16, 160, '*const' );
 	assert_equal( i10/4, 2, '/const' );
 	assert_equal( i10%8, 2, '%const' );
-  
-	puts('');
 }
 
 function test_int8x16_op():void
 {
-	print('test_int8x16_op:');
-
 	var i1:int = 1;
 	var i2:int = 2;
 	var i3:int = 3;
@@ -183,13 +166,10 @@ function test_int8x16_op():void
 	assert_true( !(w2 >= i3), "!,>=");
 	assert_true( w2 == i2, "==");
 	assert_true( w2 != i3, "!=");
-	puts('');
 }
 
 function test_logical_op():void
 {
-	print('test_logical_op:');
-	
 	var T = 1;
 	var F = 0;
 	assert_true(    T && T , "T&&T");
@@ -200,7 +180,6 @@ function test_logical_op():void
 	assert_true(    T || F , "T||F");
 	assert_true(    F || T , "F||T");
 	assert_true(  !(F || F), "F||F");
-	puts('');
 }
 
 var x:int;
@@ -208,8 +187,6 @@ var w:int16;
 
 function test_pointer_op():void
 {
-	print('test_pointer_op:');
-	
 	var px = &x;
 	x = 99;
 	assert_equal( *px, 99, "&x" );
@@ -221,21 +198,9 @@ function test_pointer_op():void
 	assert_equal( *pw, 9999, "&w" );
 	*pw = 9998;
 	assert_equal( w, 9998, "*pw" );
-
-	puts('');
 }
 
 function main():void
 {
-	init();
-	
-	test_const_op();
-	test_int_op();
-	test_int8_op();
-	test_int16_op();
-	test_int8x16_op();
-	test_logical_op();
-	test_pointer_op();
-	
-	exit(0);
+	unittest_run_tests();
 }

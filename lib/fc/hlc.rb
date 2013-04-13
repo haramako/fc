@@ -281,33 +281,27 @@ module Fc
         cond = rval(ast[1])
         emit :if, cond, else_label
         emit :label, then_label
-        compile_block(ast[2])
+        in_scope { compile_block(ast[2]) }
         emit :jump, end_label
         emit :label, else_label
         if ast[3]
-          compile_block(ast[3])
+          in_scope { compile_block(ast[3]) }
         end
         emit :label, end_label
 
       when :loop
-        begin_label, end_label = new_labels('begin', 'end')
-        @loops << [begin_label, end_label]
-        emit :label, begin_label
-        compile_block ast[1]
-        emit :jump, begin_label
-        emit :label, end_label
-        @loops.pop
+        in_scope do
+          begin_label, end_label = new_labels('begin', 'end')
+          @loops << [begin_label, end_label]
+          emit :label, begin_label
+          compile_block ast[1]
+          emit :jump, begin_label
+          emit :label, end_label
+          @loops.pop
+        end
         
       when :'while'
-        begin_label, end_label = new_labels('begin', 'end')
-        @loops << [begin_label, end_label]
-        emit :label, begin_label
-        cond = rval(ast[1])
-        emit :if, cond, end_label
-        compile_block ast[2]
-        emit :jump, begin_label
-        emit :label, end_label
-        @loops.pop
+        compile_statement( [:loop, [[:if, ast[1], ast[2], [[:break]] ]]] )
 
       when :for
         compile_block( [[:exp, [:load, ast[1], ast[2]]],

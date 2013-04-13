@@ -1,4 +1,3 @@
-use stdio;
 use unittest;
 
 include( "character.chr" );
@@ -7,8 +6,6 @@ const a1 = [0,1,2,3];
 
 function test_cast():void
 {
-	print('test_cast:');
-	
 	var w:uint16 = 65535;
 	assert_equal( <int>w, 255, 'as int' );
 	
@@ -20,14 +17,9 @@ function test_cast():void
 	i = <uint16*>a1;
 	
 	printf( i, "\n" );
-	puts('');
 }
 
 function main():void
 {
-	init();
-	
-	test_cast();
-
-	exit(0);
+	unittest_run_tests();
 }
