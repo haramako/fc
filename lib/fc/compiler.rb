@@ -32,7 +32,7 @@ module Fc
 
 
       # 中間コードをアセンブラにコンパイルする
-      llc = Fc::Llc.new
+      llc = Fc::Llc.new( opt )
       llc.prog_bank_count = prog_bank_count
       llc.compile( mod )
 

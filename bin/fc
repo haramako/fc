@@ -19,8 +19,14 @@ opt.on( '-e', 'run by interpreter' ){ o[:run] = true }
 opt.on( '-S', 'output asm file' ){|v| o[:asm] = true }
 opt.on( '-d', '--debug', 'show debug info' ){|v| o[:debug_info] = true }
 opt.on( '-t:', '--target', 'target platform ( nes, emu )' ){|v| o[:target] = v }
+opt.on( '-O:', 'optimize level (0-2)' ){|v| o[:optimize_level] = v.to_i }
 opt.on( '--coverage', 'enable coverage' ){|v| $coverage = v }
 opt.parse!
+
+if ARGV.size == 0
+  puts opt
+  exit
+end
 
 require_relative '../lib/fc/compiler'
 com = Fc::Compiler.new

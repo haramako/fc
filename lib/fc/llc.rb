@@ -10,7 +10,8 @@ module Fc
     attr_reader :asm, :char_banks, :prog_banks
     attr_accessor :prog_bank_count
 
-    def initialize
+    def initialize( opt = {} )
+      @opt = { optimize_level: 2 }.merge( opt )
       @debug = DEBUG_LEVEL
       @module = nil
       @label_count = 0
@@ -94,7 +95,9 @@ module Fc
       # block.optimized_ops = ops
       alloc_register( lmd )
       ops = lmd.ops
-      ops = optimize_pointer( lmd, ops ) if true
+      if @opt[:optimize_level] > 0
+        ops = optimize_pointer( lmd, ops )
+      end
       lmd.ops = ops
 
       r = []
@@ -688,7 +691,7 @@ module Fc
     ############################################
     def alloc_register( lmd )
 
-      if true
+      if @opt[:optimize_level] > 0
         Fc.allocate_register( lmd )
         delete_unuse( lmd )
       else
@@ -725,6 +728,7 @@ module Fc
     # オプティマイザ
     ############################################
 
+    # index->pget, index->psetの組み合わせを合成できるなら合成する
     def optimize_pointer( lmd, ops )
 
       ops = ops.clone
