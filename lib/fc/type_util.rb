@@ -30,6 +30,10 @@ module Fc
       elsif a.kind == :array and b.kind == :array and a.base == b.base and a.length == nil
         # 配列の長さを省略した場合
         return b
+      elsif a.kind == :array and b.kind == :array and a.base == b.base and a.length != b.length
+        return Type[[:pointer, a.base]]
+      else
+        return nil
       end
     end
 

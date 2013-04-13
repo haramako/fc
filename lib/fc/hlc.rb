@@ -106,14 +106,16 @@ module Fc
     ############################################
 
     def compile_module( filename )
+      path = Fc.find_module(filename)
+      return @modules[path] if @modules[path]
+
       dout 1, "compiling module #{filename}"
       old_module, @module = @module, Module.new( @global_scope )
 
-      @path = Fc.find_module(filename)
       @module.id = filename
-      @modules[@path] = @module
-      src = File.read( @path )
-      ast, pos_info = Parser.new(src,@path).parse
+      @modules[path] = @module
+      src = File.read( path )
+      ast, pos_info = Parser.new(src,path).parse
       @pos_info.merge! pos_info
 
       attach_scope( @module.scope ) do
@@ -212,7 +214,7 @@ module Fc
 
       when :include
         must_in_module
-        _, filename, opt_ident = ast
+        _, filename, opt_ident, options = ast
         unless opt_ident
           opt_ident = case File.extname(filename)
                       when '.asm' then :asm
@@ -222,6 +224,8 @@ module Fc
                       end
         end
         case opt_ident
+        when :header
+          @module.include_headers << Fc::find_module( filename )
         when :asm
           @module.include_asms << Fc::find_module( filename )
         when :macro

@@ -26,7 +26,7 @@ module Fc
         @prog_banks[i] = [nil,[]]
       end
       @modules = mods
-      @modules.each do |k,mod|
+      @modules.each do |id,mod|
         compile_module( mod )
       end
     end
@@ -70,11 +70,9 @@ module Fc
         end
       end
 
-      # lambdaのコンパイル
-      mod.lambdas.each do |lmd|
-        next if lmd.opt[:extern]
-        @prog_banks[bank][1] << compile_lambda( lmd )
-        @prog_banks[bank][1] << ''
+      # include header(.asm)の処理
+      mod.include_headers.each do |file|
+        @asm << "\t.include \"#{file}\""
       end
 
       # include(.asm)の処理
@@ -85,6 +83,13 @@ module Fc
       # include(.chr)の処理
       mod.include_chrs.each do |file|
         @char_banks << "\t.incbin \"#{file}\""
+      end
+
+      # lambdaのコンパイル
+      mod.lambdas.each do |lmd|
+        next if lmd.opt[:extern]
+        @prog_banks[bank][1] << compile_lambda( lmd )
+        @prog_banks[bank][1] << ''
       end
 
     end

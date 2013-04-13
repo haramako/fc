@@ -336,6 +336,7 @@ module Fc
   ######################################################################
   class Module
     attr_reader :vars, :lambdas, :options, :include_chrs, :modules, :blobs, :include_asms, :scope
+    attr_reader :include_headers
     attr_accessor :id
 
     def initialize( global_scope )
@@ -345,6 +346,7 @@ module Fc
       @includes = []
       @include_chrs = []
       @include_asms = []
+      @include_headers = []
       @modules = Hash.new
       @blobs = []
       @scope = Scope.new( global_scope )

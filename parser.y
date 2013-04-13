@@ -14,7 +14,7 @@ class Fc::Parser
     left '||'
     right '=' '+=' '-='
   preclow
-  expect 1 /* if-else-else has 1 shift/reduce conflict,  */
+  expect 0
 rule
 
 /****************************************************/
@@ -47,7 +47,7 @@ statement: 'var' var_decl_list ';'               { result = [:var, val[1]] }
                                                  { result = [:function, val[1], val[3], val[6], val[7], val[8]] }
          | options ';'                           { result = [:options, val[0]] }
          | 'use' IDENT ';'              { result = [:use, val[1] ] }
-         | 'include' opt_ident '(' STRING ')' opt_options ';'  { result = [:include, val[3], val[1] ] }
+         | 'include' opt_ident '(' STRING ')' opt_options ';'  { result = [:include, val[3], val[1], val[5] ] }
 
 opt_ident: | IDENT
 
