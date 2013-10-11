@@ -70,6 +70,8 @@ else_block:
      | 'else' block { result = val[1] }
      | 'elsif' '(' exp ')' block else_block { result = [[:if, val[2], val[4], val[5]]] }
 
+/****************************************************/
+/* expression */
 opt_exp: | exp
 
 exp: '(' exp ')'            { result = val[1] }
@@ -93,6 +95,8 @@ exp: '(' exp ')'            { result = val[1] }
    | exp '>'  exp           { result = [:gt, val[0], val[2]] }
    | exp '<=' exp           { result = [:le, val[0], val[2]] }
    | exp '>=' exp           { result = [:ge, val[0], val[2]] }
+   | exp '<<' exp           { result = [:shift_left, val[0], val[2]] }
+   | exp '>>' exp           { result = [:shift_right, val[0], val[2]] }
    | '<' type_decl '>' exp  { result = [:cast, val[3], val[1]] }
    | '!' exp = UMINUS       { result = [:not, val[1]] }
    | '-' exp = UMINUS       { result = [:uminus, val[1]] }

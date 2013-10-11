@@ -1,0 +1,27 @@
+options( bank: -1 );
+
+use nes;
+
+var pad_a:int;
+var pad_b:int;
+var pad_select:int;
+var pad_start:int;
+var pad_up:int;
+var pad_down:int;
+var pad_left:int;
+var pad_right:int;
+
+function pad_update():void
+{
+	PAD_CTRL = 1;
+	PAD_CTRL = 0;
+	pad_a = PAD_CTRL % 2;
+	pad_b = PAD_CTRL % 2;
+	pad_select = PAD_CTRL % 2;
+	pad_start = PAD_CTRL % 2;
+	pad_up = PAD_CTRL % 2;
+	pad_down = PAD_CTRL % 2;
+	pad_left = PAD_CTRL % 2;
+	pad_right = PAD_CTRL % 2;
+}
+

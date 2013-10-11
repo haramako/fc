@@ -182,6 +182,26 @@ function test_logical_op():void
 	assert_true(  !(F || F), "F||F");
 }
 
+function test_shift_op():void
+{
+	var i0 = 0;
+	var i1 = 1;
+	var i2 = 2;
+	var i7 = 7;
+	var i20 = 20;
+	assert_equal( 1 << 2, 4, "<<" );
+	assert_equal( i1 << 2, 4, "<<" );
+	assert_equal( i1 << i0, 1, "<<" );
+	assert_equal( i1 << i2, 4, "<<" );
+	assert_equal( i1 << i7, 128, "<<" );
+	
+	assert_equal( 20 >> 2, 5, ">>");
+	assert_equal( i20 >> 2, 5, ">>");
+	assert_equal( i20 >> i0, 20, "<<" );
+	assert_equal( i20 >> i2, 5, ">>");
+	assert_equal( 0xff >> i7, 1, ">>" );
+}
+
 var x:int;
 var w:int16;
 

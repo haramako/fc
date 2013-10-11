@@ -226,6 +226,35 @@ module Fc
         when :mul, :div, :mod
           r.concat mul_div_mod( op )
 
+        when :shift_left, :shift_right
+          rotate = (op[0] == :shift_left) ? 'rol' : 'ror'
+          if Numeric === op[3].val
+            # 定数の場合
+            r << load_a(op[2],0)
+            op[3].val.times do
+              r << "clc"
+              r << "#{rotate} a"
+            end
+            r << store_a(op[1],0)
+          else
+            # 定数でない場合
+            # TODO: もうちょっと整理して効率よくできるはず
+            raise if op[1].type.size != 1
+            loop_label, end_label = new_labels(2)
+            r << load_a(op[3],0)
+            r << "tay"
+            r << load_a(op[2],0)
+            r << "#{loop_label}:"
+            r << "cpy #0"
+            r << "beq #{end_label}"
+            r << "clc"
+            r << "#{rotate} a"
+            r << "dey"
+            r << "jmp #{loop_label}"
+            r << "#{end_label}:"
+            r << store_a(op[1],0)
+          end
+
         when :uminus
           raise if op[1].type.kind != :int
           op[1].type.size.times do |i|

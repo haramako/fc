@@ -411,7 +411,7 @@ module Fc
           @module.lambdas << lmd
           r = Value.new( :global_const, nil, lmd.type, lmd, nil )
         when :add, :sub, :mul, :div, :mod, :eq, :ne, :lt, :gt, :le, :ge, :rsh, :lsh, 
-          :and, :or, :xor, :land, :lor, :not, :uminus
+          :and, :or, :xor, :land, :lor, :not, :uminus, :shift_left, :shift_right
           ast[1] = const_eval( ast[1] )
           ast[2] = const_eval( ast[2] ) if ast[2]
           if (Value === ast[1] and ast[1].const? and Numeric === ast[1].val) and
@@ -437,6 +437,8 @@ module Fc
             when :lor then n = (v1!=0 || v2!=0 )
             when :not then n = (v1==0)
             when :uminus then n = -v1
+            when :shift_left then n = v1 << v2
+            when :shift_right then n = v1 >> v2
             else
               #:nocov:
               raise
@@ -531,7 +533,7 @@ module Fc
           r = new_tmp( left.type )
           emit ast[0], r, left
 
-        when :add, :sub, :mul, :div, :mod, :and, :or, :xor
+        when :add, :sub, :mul, :div, :mod, :and, :or, :xor, :shift_left, :shift_right
           left = rval(ast[1])
           right = rval(ast[2])
           type, left, right = make_compatible( left, right )

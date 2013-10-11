@@ -1,10 +1,17 @@
 # -*- coding: utf-8 -*-
+require 'rbconfig'
 require_relative 'hlc'
 require_relative 'llc'
 require_relative 'nes'
 
 module Fc
   class Compiler
+
+    if /mswin(?!ce)|mingw|cygwin|bccwin/ === RbConfig::CONFIG['target_os']
+      NESASM = FC_HOME + 'bin/nesasm.exe'
+    else
+      NESASM = 'nesasm'
+    end
 
     def initialize
     end
@@ -95,7 +102,7 @@ module Fc
       return if opt[:asm]
 
       # nesasmでアセンブルする
-      result = `nesasm -s -autozp -m -l3 #{base+'.asm'}`
+      result = `#{NESASM} -s -autozp -m -l3 #{base+'.asm'}`
       if /error/ === result
         raise CompileError.new( "*** can't assemble #{base.to_s+'.asm'} ***\n" + result )
       end

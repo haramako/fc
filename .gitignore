@@ -9,3 +9,5 @@ coverage
 darius*.zip
 darius
 miku
+.ruby-version
+sample

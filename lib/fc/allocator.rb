@@ -34,7 +34,7 @@ module Fc
       when :ref
         defines << op[1]
         uses << op[2]
-      when :add, :sub, :and, :or, :xor, :mul, :div, :mod, :eq, :lt, :index, :pget
+      when :add, :sub, :and, :or, :xor, :mul, :div, :mod, :eq, :lt, :shift_left, :shift_right, :index, :pget
         defines << op[1]
         uses << op[2] << op[3]
       when :pset

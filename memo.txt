@@ -1,5 +1,8 @@
 **TODO
 
+* pointerのインデックスがうまく動かない？ index_p{set|get}がだめっぽい
+* Bug: int16 + int8 が動かん
+* <<, >> 演算子
 *ポインタ演算の追加
 *sizeof()の実装
 *グローバル変数の初期化
@@ -8,6 +11,7 @@
 *';'省略
 *'('省略
 *インライン関数
+*goto文
 
 *クロージャの追加
 *include/optionsの整理(fc,asm,chr, rb(マクロ) )

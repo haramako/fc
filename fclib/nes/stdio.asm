@@ -63,12 +63,12 @@ _print:
 		rts
 
 _print_int16:
-		lda S+0,x
-		sta reg+4
-		jsr _print_int8
 		lda S+1,x
 		sta reg+4
-		jsr _print_int8
+		call _print_int8, #2
+		lda S+0,x
+		sta reg+4
+		call _print_int8, #2
 		rts
 		
 _print_int8:
