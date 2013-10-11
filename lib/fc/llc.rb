@@ -619,7 +619,7 @@ module Fc
         raise
         #:nocov:
       end
-      v.val.each_slice(16) do |slice|
+      v.val.each_slice(8) do |slice|
         slice.map! do |e|
           if Numeric === e.val then e.val else to_asm(e) end
         end
