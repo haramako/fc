@@ -5,4 +5,5 @@ include( "memory.asm" );
 function memset(p:int*, c:int, size:int):void;
 function memzero(p:int*, size:int):void;
 function memcpy(from:int*, to:int*, size:int):void;
+function memcmp(p1:int*, p2:int*, size:int):int;
 
