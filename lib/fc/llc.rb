@@ -170,9 +170,9 @@ module Fc
             # 関数ポインタから呼ぶ
             end_label = new_label
             r << load_a( op[2], 0 )
-            r << "sta reg+0"
+            r << "sta <reg+0"
             r << load_a( op[2], 1 )
-            r << "sta reg+1"
+            r << "sta <reg+1"
             r << "call jsr_reg, ##{lmd.frame_size}"
           end
           # 帰り値を格納する
@@ -340,24 +340,24 @@ module Fc
           raise CompileError.new("2byte index not supported") if op[3].type != Type[:int] and op[3].type != Type[:sint8]
           if op[2].type.kind == :array
             r.concat load_y_idx(op[3],op[2])
-            r << "sty reg+0"
+            r << "sty <reg+0"
             r << "clc"
             r << "lda #LOW(#{to_asm(op[2])})"
-            r << "adc reg+0"
-            r << "sta 0+#{to_asm(op[1])}"
+            r << "adc <reg+0"
+            r << store_a(op[1],0)
             r << "lda #HIGH(#{to_asm(op[2])})"
             r << "adc #0"
-            r << "sta 1+#{to_asm(op[1])}"
+            r << store_a(op[1],1)
           elsif op[2].type.kind == :pointer
             r.concat load_y_idx(op[3],op[2])
-            r << "sty reg+0"
+            r << "sty <reg+0"
             r << "clc"
-            r << "lda #{byte(op[2],0)}"
-            r << "adc reg+0"
-            r << "sta #{byte(op[1],0)}"
-            r << "lda #{byte(op[2],1)}"
+            r << load_a(op[2],0)
+            r << "adc <reg+0"
+            r << store_a(op[1],0)
+            r << load_a(op[2],1)
             r << "adc #0"
-            r << "sta #{byte(op[1],1)}"
+            r << store_a(op[1],1)
           else
             #:nocov:
             raise
@@ -372,9 +372,9 @@ module Fc
 
         when :pget
           r << "lda #{byte(op[2],0)}"
-          r << "sta reg+0"
+          r << "sta <reg+0"
           r << "lda #{byte(op[2],1)}"
-          r << "sta reg+1"
+          r << "sta <reg+1"
           op[1].type.size.times do |i|
             r << "ldy ##{i}"
             r << "lda [reg],y"
@@ -383,9 +383,9 @@ module Fc
 
         when :pset
           r << "lda #{byte(op[1],0)}"
-          r << "sta reg+0"
+          r << "sta <reg+0"
           r << "lda #{byte(op[1],1)}"
-          r << "sta reg+1"
+          r << "sta <reg+1"
           op[1].type.base.size.times do |i|
             r << load_a( op[2],i)
             r << "ldy ##{i}"
@@ -534,7 +534,7 @@ module Fc
         when :var, :arg, :result, :temp
           case v.location
           when :frame then "S+#{v.address},x"
-          when :reg then "L+#{v.address}"
+          when :reg then "<L+#{v.address}"
           else 
             # :nocov:
             raise "invalid location #{v.location} of #{v}"
@@ -595,7 +595,12 @@ module Fc
         end
       else
         if n < v.type.size
-          "#{n}+#{to_asm(v)}"
+          _a = to_asm(v)
+          if _a[0] == '<'
+            "<#{n}+#{_a[1..-1]}" # zeropage
+          else
+            "#{n}+#{_a}" # not zeropage
+          end
         else
           "#0" # 符号拡張は、:sign_extension オペレータで行うので、存在しないbyteは0扱い
         end
@@ -699,9 +704,9 @@ module Fc
         # 定数でない場合
         op[1].type.size.times do |i|
           r << load_a(op[2],i)
-          r << "sta reg+0+#{i}"
+          r << "sta <reg+0+#{i}"
           r << load_a(op[3],i)
-          r << "sta reg+2+#{i}"
+          r << "sta <reg+2+#{i}"
         end
         if op[1].type.size == 1
           if op[1].type.signed
@@ -713,7 +718,7 @@ module Fc
           r << "jsr __#{op[0]}_16"
         end
         op[1].type.size.times do |i|
-          r << "lda reg+4+#{i}"
+          r << "lda <reg+4+#{i}"
           r << store_a(op[1],i)
         end
       end

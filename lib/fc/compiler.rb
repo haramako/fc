@@ -102,7 +102,7 @@ module Fc
       return if opt[:asm]
 
       # nesasmでアセンブルする
-      result = `#{NESASM} -s -autozp -m -l3 #{base+'.asm'}`
+      result = `#{NESASM} -s -l3 -m #{base+'.asm'}` # -autozp では、なぜか失敗するのでなしにしている・・・
       if /error/ === result
         raise CompileError.new( "*** can't assemble #{base.to_s+'.asm'} ***\n" + result )
       end
