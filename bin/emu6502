@@ -464,10 +464,10 @@ function execute() {
       if( regA ) regP &= 0xfd; else regP |= 0x02;
       if( regA & 0x80 ) regP |= 0x80; else regP &= 0x7f;
       break;
-    case 0x35:                            // AND INDX
-      zp = popByte();
-      value = memReadByte(zp) + (memReadByte(zp+1)<<8) + regX;
-      regA &= memReadByte(value);
+    case 0x35:                            // AND ZPX ( AND INDX だったのを修正 )
+      addr = popByte() + regX;
+      value = memReadByte(addr);
+      regA &= value;
       if( regA ) regP &= 0xfd; else regP |= 0x02;
       if( regA & 0x80 ) regP |= 0x80; else regP &= 0x7f;
       break;
@@ -694,7 +694,7 @@ function execute() {
     case 0x75:                           // ADC ZPX
       addr = (popByte() + regX) & 0xff;
       value = memReadByte( addr );
-      regP = (regP&0xfe) | (value&1);
+      // regP = (regP&0xfe) | (value&1); // いらない行を削除
       testADC( value );
       break;
     case 0x76:                           // ROR ZPX
@@ -1093,7 +1093,7 @@ function execute() {
     case 0xf5:                         // SBC ZPX
       addr = (popByte() + regX)&0xff;
       value = memReadByte( addr );
-      regP = (regP&0xfe)|(value&1);
+      // regP = (regP&0xfe)|(value&1); // いらない行を削除
       testSBC( value );
       break;
     case 0xf6:                         // INC ZPX

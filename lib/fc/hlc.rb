@@ -458,7 +458,7 @@ module Fc
         when :cast
           ast[1] = const_eval( ast[1] )
           ast[2] = type_eval( ast[2] )
-          r = Value.new( :literal, nil, ast[2], ast[1].val, nil ) if Value === ast[1]
+          r = Value.new( :literal, nil, ast[2], ast[1].val, nil ) if Value === ast[1] and ast[1].const? and Numeric === ast[1].val
         when :ref, :deref
           ast[1] = const_eval( ast[1] )
         else
