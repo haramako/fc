@@ -455,7 +455,11 @@ module Fc
           1.upto(ast.size-1) do |i|
             ast[i] = const_eval( ast[i] )
           end
-        when :cast, :ref, :deref
+        when :cast
+          ast[1] = const_eval( ast[1] )
+          ast[2] = type_eval( ast[2] )
+          r = Value.new( :literal, nil, ast[2], ast[1].val, nil ) if Value === ast[1]
+        when :ref, :deref
           ast[1] = const_eval( ast[1] )
         else
           #:nocov:

@@ -159,7 +159,7 @@ module Fc
             # raise "can't convert from #{from} to #{to}" if from.type != to
             to.size.times do |i|
               r << load_a(from,i)
-              r << "sta S+#{lmd.frame_size}+#{size},x"
+              r << "sta <S+#{lmd.frame_size}+#{size},x"
               size += 1
             end
           end
@@ -178,7 +178,7 @@ module Fc
           # 帰り値を格納する
           if op[1]
             op[1].type.size.times do |i|
-              r << "lda #{i}+S+#{lmd.frame_size},x"
+              r << "lda <#{i}+S+#{lmd.frame_size},x"
               r << store_a(op[1],i);
             end
           end
@@ -337,31 +337,59 @@ module Fc
           r << op[1]
 
         when :index
-          raise CompileError.new("2byte index not supported") if op[3].type != Type[:int] and op[3].type != Type[:sint8]
-          if op[2].type.kind == :array
-            r.concat load_y_idx(op[3],op[2])
-            r << "sty <reg+0"
-            r << "clc"
-            r << "lda #LOW(#{to_asm(op[2])})"
-            r << "adc <reg+0"
-            r << store_a(op[1],0)
-            r << "lda #HIGH(#{to_asm(op[2])})"
-            r << "adc #0"
-            r << store_a(op[1],1)
-          elsif op[2].type.kind == :pointer
-            r.concat load_y_idx(op[3],op[2])
-            r << "sty <reg+0"
-            r << "clc"
-            r << load_a(op[2],0)
-            r << "adc <reg+0"
-            r << store_a(op[1],0)
-            r << load_a(op[2],1)
-            r << "adc #0"
-            r << store_a(op[1],1)
+          # raise CompileError.new("2byte index not supported") if op[3].type != Type[:int] and op[3].type != Type[:sint8]
+          if op[3].type.size == 1
+            # インデックスのサイズが１
+            if op[2].type.kind == :array
+              r.concat load_y_idx(op[3],op[2])
+              r << "sty <reg+0"
+              r << "clc"
+              r << "lda #LOW(#{to_asm(op[2])})"
+              r << "adc <reg+0"
+              r << store_a(op[1],0)
+              r << "lda #HIGH(#{to_asm(op[2])})"
+              r << "adc #0"
+              r << store_a(op[1],1)
+            elsif op[2].type.kind == :pointer
+              r.concat load_y_idx(op[3],op[2])
+              r << "sty <reg+0"
+              r << "clc"
+              r << load_a(op[2],0)
+              r << "adc <reg+0"
+              r << store_a(op[1],0)
+              r << load_a(op[2],1)
+              r << "adc #0"
+              r << store_a(op[1],1)
+            else
+              #:nocov:
+              raise
+              #:nocov:
+            end
           else
-            #:nocov:
-            raise
-            #:nocov:
+            # インデックスのサイズが２
+            # TODO: ちゃんとする、テスト作る
+            if op[2].type.kind == :array
+              r << load_a(op[3],0)
+              r << "sta <reg+0"
+              r << load_a(op[3],1)
+              r << "sta <reg+1"
+
+              if op[2].type.base.size == 2 
+                r << "clc"
+                r << "rol <reg+0"
+                r << "rol <reg+1"
+              end
+
+              r << "lda <reg+0"
+              r << "clc"
+              r << "adc #LOW(#{to_asm(op[2])})"
+              r << store_a(op[1],0)
+              r << "lda <reg+1"
+              r << "adc #HIGH(#{to_asm(op[2])})"
+              r << store_a(op[1],1)
+            elsif
+              raise
+            end
           end
 
         when :ref
@@ -533,7 +561,7 @@ module Fc
         case v.kind
         when :var, :arg, :result, :temp
           case v.location
-          when :frame then "S+#{v.address},x"
+          when :frame then "<S+#{v.address},x"
           when :reg then "<L+#{v.address}"
           else 
             # :nocov:
@@ -783,7 +811,8 @@ module Fc
           when :pget 
             if op[1] == next_op[2] and # 同じ変数を連続で使っていて
                 ( op[2].kind == :global_symbol or op[2].kind == :global_var ) and
-                op[1].kind == :temp # その変数をそこでしか使っていない
+                op[1].kind == :temp and # その変数をそこでしか使っていない
+                op[3].type.size == 1 # インデックスのサイズが1byte
               # puts "replace #{op}, #{next_op}"
               ops[i] = [:index_pget, next_op[1], op[2], op[3]]
               ops[i+1] = nil
@@ -791,7 +820,8 @@ module Fc
           when :pset
             if op[1] == next_op[1] and # 同じ変数を連続で使っていて
                 ( op[2].kind == :global_symbol or op[2].kind == :global_var ) and
-                op[1].kind == :temp # その変数をそこでしか使っていない
+                op[1].kind == :temp and # その変数をそこでしか使っていない
+                op[3].type.size == 1 # インデックスのサイズが1byte
               # puts "replace #{op}, #{next_op}"
               ops[i] = [:index_pset, op[2], op[3], next_op[2]]
               ops[i+1] = nil
