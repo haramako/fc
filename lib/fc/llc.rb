@@ -290,7 +290,7 @@ module Fc
         when :lt
           true_label, end_label = new_labels(2)
           size = [op[2].type.size, op[3].type.size].max
-          signed = op[2].type.signed or op[2].type.signed
+          signed = op[2].type.signed or op[3].type.signed
           (size-1).downto(0) do |i|
             r << load_a( op[2],i)
             r << "cmp #{byte(op[3],i)}"

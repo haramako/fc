@@ -188,7 +188,7 @@ module Fc
         when :lt
           v.location = :cond
           v.cond_positive = true
-          if op[2].type.signed or op[2].type.signed
+          if op[2].type.signed or op[3].type.signed
             next if op[2].type.size > 1 or op[3].type.size > 1 # サイズ2以上の符号付き比較はフラグが特定できない
             v.cond_reg = :negative
           else

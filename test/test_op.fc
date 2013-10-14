@@ -91,6 +91,11 @@ function test_int8_op():void
 	assert_equal( i3 ^ i2, -3, '^' );
   
 	assert_true(  (i2 < i1), "<");
+	assert_true(  (i2 < -1), "<");
+	assert_true(  (i2 > -16), "<");
+	assert_true(  (i2 <  1), "<");
+	assert_true( !(i2 >  1), ">");
+	assert_true(  (i3 > 1), "<");
 	assert_true( !(i2 < i2), "!,<");
 	assert_true(  (i1 > i2), ">");
 	assert_true( !(i2 > i2), "!,>");
