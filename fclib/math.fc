@@ -55,3 +55,14 @@ function rand():int
   rand_idx += 1;
   return rand_table[rand_idx];
 }
+
+function sign(i:sint):int
+{
+	if( i < 0 ){
+		return -1;
+	}elsif( i > 0 ){
+		return 1;
+	}else{
+		return 0;
+	}
+}
