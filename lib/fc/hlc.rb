@@ -395,7 +395,7 @@ module Fc
           type = val.map(&:type).inject { |a,b| type = TypeUtil.compatible_type(a,b) }
           r = Value.new( :array_literal, :"$#{tmp_count}", Type[[:array,val.size,type]], val, nil )
         when :incbin
-          data = File.read( Fc.find_module( ast[1] ) )
+          data = IO.binread( Fc.find_module( ast[1] ) )
           r = const_eval([:array, data.unpack('C*') ])
         when :lambda
           _, type, block, opt = *ast
