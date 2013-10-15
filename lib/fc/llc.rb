@@ -227,12 +227,17 @@ module Fc
           r.concat mul_div_mod( op )
 
         when :shift_left, :shift_right
+          signed = op[2].type.signed
           rotate = (op[0] == :shift_left) ? 'rol' : 'ror'
           if Numeric === op[3].val
             # 定数の場合
             r << load_a(op[2],0)
             op[3].val.times do
-              r << "clc"
+              if signed
+                r << "cmp #128"
+              else
+                r << "clc"
+              end
               r << "#{rotate} a"
             end
             r << store_a(op[1],0)
@@ -247,7 +252,11 @@ module Fc
             r << "#{loop_label}:"
             r << "cpy #0"
             r << "beq #{end_label}"
-            r << "clc"
+            if signed
+              r << "cmp #128"
+            else
+              r << "clc"
+            end
             r << "#{rotate} a"
             r << "dey"
             r << "jmp #{loop_label}"
@@ -652,7 +661,7 @@ module Fc
         raise
         #:nocov:
       end
-      v.val.each_slice(8) do |slice|
+      v.val.each_slice(4) do |slice|
         slice.map! do |e|
           if Numeric === e.val then e.val else to_asm(e) end
         end
