@@ -402,10 +402,19 @@ module Fc
           end
 
         when :ref
-          r << "lda #LOW(#{to_asm(op[2])})"
-          r << store_a( op[1], 0 )
-          r << "lda #HIGH(#{to_asm(op[2])})"
-          r << store_a( op[1], 1 )
+          if op[2].location == :frame
+            r << "txa"
+            r << "clc"
+            r << "adc #LOW(S+#{op[2].address})"
+            r << store_a( op[1], 0 )
+            r << "lda #0"
+            r << store_a( op[1], 1 )
+          else
+            r << "lda #LOW(#{to_asm(op[2])})"
+            r << store_a( op[1], 0 )
+            r << "lda #HIGH(#{to_asm(op[2])})"
+            r << store_a( op[1], 1 )
+          end
 
         when :pget
           r << "lda #{byte(op[2],0)}"

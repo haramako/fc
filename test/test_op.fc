@@ -207,22 +207,34 @@ function test_shift_op():void
 	assert_equal( 0xff >> i7, 1, ">>" );
 }
 
-var x:int;
-var w:int16;
+var gi:int;
+var gw:int16;
 
 function test_pointer_op():void
 {
-	var px = &x;
-	x = 99;
-	assert_equal( *px, 99, "&x" );
-	*px = 98;
-	assert_equal( x, 98, "*px" );
+	var pgi = &gi;
+	gi = 99;
+	assert_equal( *pgi, 99, "&x" );
+	*pgi = 98;
+	assert_equal( gi, 98, "*px" );
 
-	var pw = &w;
-	w = 9999;
-	assert_equal( *pw, 9999, "&w" );
-	*pw = 9998;
-	assert_equal( w, 9998, "*pw" );
+	var pgw = &gw;
+	gw = 9999;
+	assert_equal( *pgw, 9999, "&w" );
+	*pgw = 9998;
+	assert_equal( gw, 9998, "*pw" );
+
+	var i = 99;
+	var pi:int* = &i;
+	assert_equal( *pi, 99, "&pi" );
+	i = 98;
+	assert_equal( *pi, 98, "*pi" );
+
+	var w:int16 = 9999;
+	var pw:int16* = &w;
+	assert_equal( *pw, 9999, "&pi" );
+	w = 9998;
+	assert_equal( *pw, 9998, "*pi" );
 }
 
 function main():void
