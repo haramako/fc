@@ -1,0 +1,17 @@
+use unittest;
+use memory;
+
+include( "character.chr" );
+
+var str:int[12];
+
+function test_strcpy():void
+{
+	var n = strcpy( str, "ABCDE" );
+	assert_equal( n, 5, "strcpy" );
+}
+
+function main():void
+{
+	unittest_run_tests();
+}

@@ -540,7 +540,15 @@ module Fc
         when :add, :sub, :mul, :div, :mod, :and, :or, :xor, :shift_left, :shift_right
           left = rval(ast[1])
           right = rval(ast[2])
-          type, left, right = make_compatible( left, right )
+          begin
+            type, left, right = make_compatible( left, right )
+          rescue CompileError => err
+            if [:add,:sub].include?(ast[0]) and left.type.kind == :pointer and right.type.kind == :int
+              type = left.type
+            else
+              raise
+            end
+          end
           r = new_tmp( type )
           emit ast[0], r, left, right
 

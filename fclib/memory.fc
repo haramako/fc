@@ -7,3 +7,21 @@ function memzero(p:int*, size:int):void;
 function memcpy(from:int*, to:int*, size:int):void;
 function memcmp(p1:int*, p2:int*, size:int):int;
 
+function strlen(str:int*):int
+{
+	var n = 0;
+	while( str[n] ){ n += 1; }
+	return n;
+}
+
+function strcpy(to:int*, str:int*):int
+{
+	var i = 0;
+	while(1){
+		var c = str[i];
+		to[i] = c;
+		if( !c ){ return i; }
+		i+=1;
+	}
+}
+
