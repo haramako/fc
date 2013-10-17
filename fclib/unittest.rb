@@ -1,5 +1,5 @@
 defmacro :unittest_run_tests do |args|
-  r = [[:exp, [:call, :init, []]]]
+  r = [:block, [:exp, [:call, :init, []]]]
   @scope.id_list.each do |id|
     if id.to_s.match /^test_/
       r << [:exp, [:call, :print, ["#{id}:"]]]

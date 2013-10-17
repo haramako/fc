@@ -594,7 +594,13 @@ module Fc
             # マクロの実行
             ast[2].map!{ |x| rval(x) }
             x = self.instance_exec( ast[2], ast[3], &lmd.val )
-            compile_block( x ) if x 
+            if x
+              if x[0] == :block
+                compile_block(x[1..-1]) 
+              else
+                r = rval(x) 
+              end
+            end
           else
             # 普通の関数コール
             if lmd.type.base != Type[:void]
