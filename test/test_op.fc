@@ -207,6 +207,27 @@ function test_shift_op():void
 	assert_equal( 0xff >> i7, 1, ">>" );
 }
 
+function test_shift_op16():void
+{
+	var i0:int16 = 0;
+	var i1:int16 = 1;
+	var i2:int16 = 2;
+	var i7:int16 = 7;
+	var i20:int16 = 20;
+	assert_equal( 1 << 2, 4, "<<" );
+	assert_equal( i1 << 2, 4, "<<" );
+	assert_equal( i2 << 7, 256, "<<" );
+	/* assert_equal( i1 << i0, 1, "<<" ); */
+	/* assert_equal( i1 << i2, 4, "<<" ); */
+	/* assert_equal( i1 << i7, 128, "<<" ); */
+	
+	assert_equal( 20 >> 2, 5, ">>");
+	assert_equal( i20 >> 2, 5, ">>w");
+	/* assert_equal( i20 >> i0, 20, "<<" ); */
+	/* assert_equal( i20 >> i2, 5, ">>"); */
+	/* assert_equal( 0xff >> i7, 1, ">>" ); */
+}
+
 var gi:int;
 var gw:int16;
 

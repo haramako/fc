@@ -231,16 +231,50 @@ module Fc
           rotate = (op[0] == :shift_left) ? 'rol' : 'ror'
           if Numeric === op[3].val
             # 定数の場合
-            r << load_a(op[2],0)
-            op[3].val.times do
-              if signed
-                r << "cmp #128"
-              else
-                r << "clc"
+            if op[1].type.size == 1
+              # サイズが1
+              r << load_a(op[2],0)
+              op[3].val.times do
+                if signed
+                  r << "cmp #128"
+                else
+                  r << "clc"
+                end
+                r << "#{rotate} a"
               end
-              r << "#{rotate} a"
+              r << store_a(op[1],0)
+            else
+              # サイズが２以上
+              r << load( op[1], op[2] )
+              op[3].val.times do
+                if op[0] == :shift_left
+                  # 左シフト
+                  op[1].type.size.times do |i|
+                    r << load_a(op[1],i)
+                    if i == 0
+                      r << "clc"
+                    else
+                    end
+                    r << "rol a"
+                    r << store_a(op[1],i)
+                  end
+                else
+                  # 右シフト
+                  (op[1].type.size-1).downto(0) do |i|
+                    r << load_a(op[1],i)
+                    if i == op[1].type.size-1
+                      if signed
+                        r << "cmp #128"
+                      else
+                        r << "clc"
+                      end
+                    end
+                    r << "ror a"
+                    r << store_a(op[1],i)
+                  end
+                end
+              end
             end
-            r << store_a(op[1],0)
           else
             # 定数でない場合
             # TODO: もうちょっと整理して効率よくできるはず
@@ -549,8 +583,11 @@ module Fc
         else raise
         end
       elsif Value === v and v.location == :a
-        raise if n != 0
-        nil
+        if n != 0
+          "lda #0"
+        else
+          nil
+        end
       else
         "lda #{byte(v,n)}"
       end

@@ -10,6 +10,18 @@ var pad_up:int;
 var pad_down:int;
 var pad_left:int;
 var pad_right:int;
+var pad_cur:int;
+var pad_prev:int;
+var pad_pushed:int;
+
+const PAD_A = 1 << 7;
+const PAD_B = 1 << 6;
+const PAD_SELECT = 1 << 5;
+const PAD_START = 1 << 4;
+const PAD_UP = 1 << 3;
+const PAD_DOWN = 1 << 2;
+const PAD_LEFT = 1 << 1;
+const PAD_RIGHT = 1 << 0;
 
 function pad_update():void
 {
@@ -23,5 +35,16 @@ function pad_update():void
 	pad_down = PAD_CTRL % 2;
 	pad_left = PAD_CTRL % 2;
 	pad_right = PAD_CTRL % 2;
+	
+	pad_prev = pad_cur;
+	pad_cur = pad_cur << 1 | pad_a;
+	pad_cur = pad_cur << 1 | pad_b;
+	pad_cur = pad_cur << 1 | pad_select;
+	pad_cur = pad_cur << 1 | pad_start;
+	pad_cur = pad_cur << 1 | pad_up;
+	pad_cur = pad_cur << 1 | pad_down;
+	pad_cur = pad_cur << 1 | pad_left;
+	pad_cur = pad_cur << 1 | pad_right;
+	pad_pushed = (pad_prev ^ 255) & pad_cur;
 }
 
