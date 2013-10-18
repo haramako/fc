@@ -5,7 +5,7 @@ require 'delegate'
 
 module Fc
 
-  DEBUG_LEVEL = 1
+  DEBUG_LEVEL = 0
 
   FC_HOME = Pathname(File.dirname( __FILE__ )) + '../..'
   LIB_PATH = [Pathname('.'), FC_HOME+'fclib' ]
