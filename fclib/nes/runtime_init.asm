@@ -13,7 +13,7 @@ runtime_init:
 	;; See: http://wiki.nesdev.com/w/index.php/PPU_power_up_state#Best_practice
 	ldx #4
 .loop:
-	bit _PPU_STAT
+	bit _nes_PPU_STAT
 	bpl .loop
 	dex
 	bne .loop

@@ -5,7 +5,7 @@ require 'delegate'
 
 module Fc
 
-  DEBUG_LEVEL = 0
+  DEBUG_LEVEL = 1
 
   FC_HOME = Pathname(File.dirname( __FILE__ )) + '../..'
   LIB_PATH = [Pathname('.'), FC_HOME+'fclib' ]
@@ -315,8 +315,8 @@ module Fc
       nil
     end
 
-    def find!( id )
-      find(id) or raise CompileError.new( "#{id} not found" )
+    def find!( id, with_private = true )
+      find(id, with_private) or raise CompileError.new( "#{id} not found" )
     end
 
     def declare( val )

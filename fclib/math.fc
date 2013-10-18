@@ -66,3 +66,9 @@ function sign(i:sint):int
 		return 0;
 	}
 }
+
+function abs(i:sint):int
+{
+	if( i >= 128 ){ return -i; }else{ return i; }
+}
+

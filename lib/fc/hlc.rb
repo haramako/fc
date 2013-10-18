@@ -272,7 +272,8 @@ module Fc
           @scope.use m.scope
         else
           id = as || id
-          add_var Value.new( :global_const, id, Type[:module], m, {} )
+          var = add_var Value.new( :global_const, id, Type[:module], m, {} )
+          var.public = true
         end
           
 
