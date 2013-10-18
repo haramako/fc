@@ -36,6 +36,19 @@ module Fc
 
     def compile( filename )
       compile_module( filename )
+      
+      # 関数はあとからコンパイル
+      @modules.each do |name,mod|
+        @module = mod
+        attach_scope( @module.scope ) do
+          dout 1, "compiling functions in #{name}"
+          @module.lambdas.each do |lmd|
+            dout 1, "compiling function #{lmd.id}"
+            compile_lambda( lmd )
+          end
+        end
+      end
+        
     rescue CompileError
       $!.filename ||= @cur_filename
       $!.line_no ||= @cur_line_no 
@@ -73,11 +86,18 @@ module Fc
     end
 
     def defmacro( name, &block )
-      add_var Value.new( :global_const, name, Type[:macro], block, {} )
+      var = add_var Value.new( :global_const, name, Type[:macro], block, {} )
+      var.public = true
+      var
     end
 
     # 変数/定数を追加する
     def add_var( var )
+      if [:global_var, :global_const].include?(var.kind) and var.type != Type[:macro] and var.type != Type[:module]
+        var.long_id = "#{@module.id}.#{var.id}".to_sym
+      else
+        var.long_id = var.id
+      end
       if @lmd
         @lmd.vars << var
       elsif @module
@@ -112,7 +132,7 @@ module Fc
       dout 1, "compiling module #{filename}"
       old_module, @module = @module, Module.new( @global_scope )
 
-      @module.id = filename
+      @module.id = File.basename(filename,'.fc')
       @modules[path] = @module
       src = File.read( path )
       ast, pos_info = Parser.new(src,path).parse
@@ -122,10 +142,10 @@ module Fc
 
         compile_block( ast )
 
-        @module.lambdas.each do |lmd|
-          dout 1, "compiling function #{lmd.id}"
-          compile_lambda( lmd )
-        end
+        # @module.lambdas.each do |lmd|
+        #   dout 1, "compiling function #{lmd.id}"
+        #   compile_lambda( lmd )
+        # end
 
         dout 1, "finished module #{filename}"
 
@@ -244,15 +264,22 @@ module Fc
 
       when :use
         must_in_module
-        _, id = ast
+        _, id, as, from = ast
         m = compile_module( "#{id}.fc" )
         @module.modules[id] = m
-        add_var Value.new( :global_const, id, Type[:module], m, {} )
-        @scope.use m.scope
+        raise if as and from
+        if from == '*'
+          @scope.use m.scope
+        else
+          id = as || id
+          add_var Value.new( :global_const, id, Type[:module], m, {} )
+        end
+          
 
       when :function
-        _, id, args, base_type, opt, block = ast
-        compile_statement [:const, [[id, nil, [:lambda, [:lambda, args, base_type], block, {id: id}]] ]]
+        _, pub, id, args, base_type, opt, block = ast
+        compile_statement [:const, [[id, nil, [:lambda, [:lambda, args, base_type], 
+                                               block, {id: id}.merge(opt||{})]] ], pub]
 
       when :var
         ast[1].each do |v|
@@ -263,6 +290,7 @@ module Fc
           type = TypeUtil.guess_type( type, init ) unless type
           TypeUtil.compatible_type( type, init.type ) if type and init
           var = add_var Value.new( (@lmd ? :var : :global_var), id, type, nil, opt )
+          var.public = true if (ast[2] || @module.current_scope) == :public 
           emit :load, var, init if init
         end
 
@@ -276,8 +304,9 @@ module Fc
             new_val = add_var Value.new( (@lmd ? :symbol : :global_symbol ), id, type, val.val, opt )
             add_blob new_val
           else
-            add_var Value.new( (@lmd ? :const : :global_const ), id, type, val.val, opt )
+            new_val = add_var Value.new( (@lmd ? :const : :global_const ), id, type, val.val, opt )
           end
+          new_val.public = true if (ast[2] || @module.current_scope) == :public
         end
 
       when :'if'
@@ -358,6 +387,13 @@ module Fc
         compile_block( default )
         emit :label, end_label
 
+        # TODO: 一時的に、public/privateの切り替えを可能にしている。そのうち消すこと
+      when :public
+        @module.current_scope = :public
+
+      when :private
+        @module.current_scope = :private
+
       else
         #:nocov:
         raise "unknow op #{ast}"
@@ -394,9 +430,11 @@ module Fc
           val = ast[1].map{|v| const_eval(v) }
           type = val.map(&:type).inject { |a,b| type = TypeUtil.compatible_type(a,b) }
           r = Value.new( :array_literal, :"$#{tmp_count}", Type[[:array,val.size,type]], val, nil )
+
         when :incbin
           data = IO.binread( Fc.find_module( ast[1] ) )
           r = const_eval([:array, data.unpack('C*') ])
+
         when :lambda
           _, type, block, opt = *ast
           opt ||= {}
@@ -405,11 +443,25 @@ module Fc
           args = type[1].map { |arg| [arg[0], Type[arg[1]]] }
           arg_types = args.map { |arg| arg[1] }
           base_type = Type[ base_type ]
-          id = opt[:id] || "$lambda#{tmp_count}".intern
+          if opt[:symbol]
+            id = opt[:symbol].intern
+          elsif opt[:id] == :main
+            id = :main
+          elsif opt[:id]
+            id = "#{@module.id}.#{opt[:id]}".intern
+          else
+            id = "$lambda#{tmp_count}".intern
+          end
           opt[:extern] = true unless block
           lmd = Lambda.new( id, args, base_type, opt, block )
           @module.lambdas << lmd
           r = Value.new( :global_const, nil, lmd.type, lmd, nil )
+
+        when :dot
+          left, lv = const_eval(ast[1])
+          raise unless Module === left.val
+          r = left.val.scope.find!(ast[2])
+
         when :add, :sub, :mul, :div, :mod, :eq, :ne, :lt, :gt, :le, :ge, :rsh, :lsh, 
           :and, :or, :xor, :land, :lor, :not, :uminus, :shift_left, :shift_right
           ast[1] = const_eval( ast[1] )

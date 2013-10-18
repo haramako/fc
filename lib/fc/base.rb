@@ -149,6 +149,7 @@ module Fc
     attr_reader :kind # 種類
     attr_reader :type # Type
     attr_reader :id   # 変数名
+    attr_accessor :long_id   # 変数名(モジュール名を含む)
     attr_reader :val  # 定数の場合はその値( Fixnum or Array or Lambda or Proc(マクロ) )
     attr_reader :opt  # オプション
     attr_accessor :base_string # 元の値が文字列だった場合、その文字列
@@ -160,6 +161,7 @@ module Fc
     attr_accessor :live_range
     attr_accessor :cond_reg # コンディションレジスタの種類, location==:condの時のみ使用, (:carry, :zero, :negative) のいずれか
     attr_accessor :cond_positive # コンディションレジスタがどちらの状態を表すか( true/false ), location==:condの時のみ使用
+    attr_accessor :public # public かどうか
 
     def initialize( kind, id, type, val, opt )
       raise CompileError.new("invalid type, #{type}") unless Type === type
@@ -174,6 +176,8 @@ module Fc
       @type = type
       @val = val
       @opt = opt || Hash.new
+      @public = false
+      @long_id = id
     end
 
     def self.new_int( n )
@@ -289,17 +293,24 @@ module Fc
       @parent = parent
       @declares = Hash.new
       @uses = []
+      @finding = false
     end
 
-    def find( id )
-      if @declares[id]
-        return @declares[id]
-      else
-        @uses.each do |scope|
-          var = scope.find( id )
-          return var if var
+    def find( id, with_private = true )
+      return nil if @finding
+      begin
+        @finding = true
+        if @declares[id] and (with_private or @declares[id].public)
+          return @declares[id]
+        else
+          @uses.each do |scope|
+            var = scope.find( id, false )
+            return var if var
+          end
+          return @parent.find(id, with_private) if parent
         end
-        return @parent.find(id) if parent
+      ensure
+        @finding = false
       end
       nil
     end
@@ -318,7 +329,7 @@ module Fc
     end
 
     def id_list
-      r = @declares.keys + @uses.map{|x| x.id_list}.flatten 
+      r = @declares.keys # + @uses.map{|x| x.id_list}.flatten 
       r += @parent.id_list if @parent
       r.flatten
     end
@@ -338,6 +349,7 @@ module Fc
     attr_reader :vars, :lambdas, :options, :include_chrs, :modules, :blobs, :include_asms, :scope
     attr_reader :include_headers
     attr_accessor :id
+    attr_accessor :current_scope
 
     def initialize( global_scope )
       @vars = []
@@ -350,6 +362,7 @@ module Fc
       @modules = Hash.new
       @blobs = []
       @scope = Scope.new( global_scope )
+      @current_scope = :public
     end
 
   end

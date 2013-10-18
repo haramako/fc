@@ -1,4 +1,4 @@
-use unittest;
+use * from unittest;
 
 include( "character.chr" );
 

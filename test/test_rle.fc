@@ -1,6 +1,6 @@
-use unittest;
+use * from unittest;
 use rle;
-use memory;
+use mem;
 
 include( "character.chr" );
 
@@ -11,13 +11,13 @@ var dest:int[128];
 
 function test_rle():void
 {
-	var len = rle_unpack(dest, src);
+	var len = rle.unpack(dest, src);
 	assert_equal( len, 8, "len" );
-	assert_true( memcmp( dest, [1,1,1,1, 2,3,4, 5], len) == 0, "check" );
+	assert_true( mem.compare( dest, [1,1,1,1, 2,3,4, 5], len) == 0, "check" );
 	
-	len = rle_unpack(dest, src2);
+	len = rle.unpack(dest, src2);
 	assert_equal( len, 8, "len" );
-	assert_true( memcmp( dest, "aaabbccd", len) == 0, "check" );
+	assert_true( mem.compare( dest, "aaabbccd", len) == 0, "check" );
 }
 
 function main():void

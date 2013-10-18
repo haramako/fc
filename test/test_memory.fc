@@ -1,5 +1,5 @@
-use unittest;
-use memory;
+use * from unittest;
+use mem;
 
 include( "character.chr" );
 
@@ -7,7 +7,7 @@ var str:int[12];
 
 function test_strcpy():void
 {
-	var n = strcpy( str, "ABCDE" );
+	var n = mem.strcpy( str, "ABCDE" );
 	assert_equal( n, 5, "strcpy" );
 }
 

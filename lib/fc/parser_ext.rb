@@ -35,7 +35,7 @@ module Fc
         r = [:NUMBER, @scanner[0].to_i]
       elsif @scanner.scan(/\w+/)
         # 識別子/キーワード
-        if /^(include|function|const|var|options|if|else|elsif|loop|while|for|return|break|continue|incbin|switch|case|default|use|as)$/ === @scanner[0]
+        if /^(include|function|const|var|options|if|else|elsif|loop|while|for|return|break|continue|incbin|switch|case|default|use|as|from|public|private)$/ === @scanner[0]
           r = [@scanner[0], @scanner[0]]
         else
           r = [:IDENT, @scanner[0].to_sym ]

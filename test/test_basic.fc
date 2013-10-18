@@ -1,7 +1,9 @@
-use unittest;
+use * from unittest;
 
 include( "character.chr" );
 include( "test_basic.asm" );
+
+public var hoge:int;
 
 var i1:int;
 const CONST = 2;

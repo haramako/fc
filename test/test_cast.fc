@@ -1,4 +1,5 @@
-use unittest;
+use * from unittest;
+use stdio;
 
 include( "character.chr" );
 
@@ -16,7 +17,7 @@ function test_cast():void
 	var i:uint16*;
 	i = <uint16*>a1;
 	
-	printf( i, "\n" );
+	assert_equal( i[0], a1[0], "as uint*" );
 }
 
 function main():void

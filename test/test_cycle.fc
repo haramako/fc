@@ -1,0 +1,15 @@
+use * from unittest;
+use cycle_use;
+
+var cycle_var:int;
+
+function test_cycle_use():void
+{
+	cycle_var = cycle_use.CYCLE_CONST;
+	assert_equal( cycle_use.hoge(), 99, "cycle use");
+}
+
+function main():void
+{
+	unittest_run_tests();
+}

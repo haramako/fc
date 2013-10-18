@@ -1,0 +1,8 @@
+use test_cycle as tc;
+
+public const CYCLE_CONST = 99;
+
+public function hoge():int
+{
+	return tc.cycle_var;
+}

@@ -1,4 +1,4 @@
-;; function memcpy(from:int*, to:int*, size:int):void
+;; function memcpy(_to:int*, _from:int*, size:int):void
 ;; {
 ;;   var i = 0;
 ;;   while( i < size ){
@@ -7,7 +7,7 @@
 ;;   }
 ;; }
 ;;; USING Y
-_memcpy:
+_mem_copy:
 		lda S+0,x
 		sta reg+0
 		lda S+1,x
@@ -20,8 +20,8 @@ _memcpy:
 		sta reg+4
         ldy #0
 .loop:
-        lda [reg],y
-        sta [reg+2],y
+        lda [reg+2],y
+        sta [reg],y
         iny
         cpy reg+4
         bne .loop
@@ -36,7 +36,7 @@ _memcpy:
 ;;   }
 ;; }
 ;;; USING Y
-_memset:
+_mem_set:
 		lda S+0,x
 		sta reg+0
 		lda S+1,x
@@ -53,7 +53,7 @@ _memset:
         rts
 
 ;;; USING Y
-_memzero:
+_mem_zero:
 		lda S+0,x
 		sta reg+0
 		lda S+1,x
@@ -70,7 +70,7 @@ _memzero:
         rts
 
 ;;; USING Y
-_memcmp:
+_mem_compare:
 	lda S+1,x
 	sta reg+0
 	lda S+2,x

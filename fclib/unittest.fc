@@ -3,22 +3,22 @@ options( bank: 1 );
 use stdio;
 include( "unittest.rb" );
 
-function assert_true( a:int, message:int* ):void
+public function assert_true( a:int, message:int* ):void
 {
   if( !a ){
-	  printf( "\nERROR: ", message, "  expects true but false\n" );
-	  exit(1);
+	  stdio.printf( "\nERROR: ", message, "  expects true but false\n" );
+	  stdio.exit(1);
   }else{
-	  print('.');
+	  stdio.print('.');
   }
 }
 
-function assert_equal( a:int16, b:int16, message:int* ):void
+public function assert_equal( a:int16, b:int16, message:int* ):void
 {
   if( a != b ){
-	  printf( "\nERROR: ", message,"  expects ", b , "  but ", a, "\n" );
-	  exit(1);
+	  stdio.printf( "\nERROR: ", message,"  expects ", b , "  but ", a, "\n" );
+	  stdio.exit(1);
   }else{
-	  print('.');
+	  stdio.print('.');
   }
 }

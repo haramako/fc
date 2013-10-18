@@ -624,11 +624,11 @@ module Fc
             # :nocov:
           end
         when :symbol, :const, :array_literal
-          '.'+mangle(v.id)
+          '.'+mangle(v.long_id)
         when :global_symbol
-          mangle(v.id)
+          mangle(v.long_id)
         when :global_const, :global_var
-          mangle v.id
+          mangle(v.long_id)
         when :literal
           "##{v.val}"
         else
@@ -649,7 +649,7 @@ module Fc
 
     # 名前をアセンブラ用の表現に変更する
     def mangle(str)
-      '_'+str.to_s.gsub(/\$/){'_D'}
+      '_'+str.to_s.gsub(/\$/){'_D'}.gsub(/\./){'_'}
     end
 
     # 値からn番目のbyteを取得する

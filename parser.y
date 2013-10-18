@@ -32,8 +32,8 @@ statement_list: statement_list statement_i { result = val[0] + [val[1]] }
               
 statement_i: statement { info(val[0]) }
 
-statement: 'var' var_decl_list ';'               { result = [:var, val[1]] }
-         | 'const' var_decl_list ';'             { result = [:const, val[1]] }
+statement: opt_scope 'var' var_decl_list ';'               { result = [:var, val[2], val[0]] }
+         | opt_scope 'const' var_decl_list ';'             { result = [:const, val[2], val[0]] }
          | 'if' '(' exp ')' block else_block     { result = [:if, val[2], val[4], val[5]] }
          | 'loop' '(' ')' block                  { result = [:loop, val[3]] }
          | 'while' '(' exp ')' block             { result = [:while, val[2], val[4]] }
@@ -43,11 +43,24 @@ statement: 'var' var_decl_list ';'               { result = [:var, val[1]] }
          | 'return' opt_exp ';'                   { result = [:return, val[1]] }
          | 'switch' '(' exp ')' '{' switch_block opt_default_block'}' { result = [:switch, val[2], val[5], val[6]] }
          |  exp ';' { result = [:exp, val[0]] }
-         | 'function' IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
-                                                 { result = [:function, val[1], val[3], val[6], val[7], val[8]] }
+         | opt_scope 'function' IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
+                                        { result = [:function, val[0], val[2], val[4], val[7], val[8], val[9] ] }
          | options ';'                           { result = [:options, val[0]] }
-         | 'use' IDENT ';'              { result = [:use, val[1] ] }
+         | 'use' opt_from IDENT opt_as ';'              { result = [:use, val[2], val[3], val[1] ] }
          | 'include' opt_ident '(' STRING ')' opt_options ';'  { result = [:include, val[3], val[1], val[5] ] }
+         | 'public' ':' { result = [:public] }
+         | 'private' ':' { result = [:private] }
+
+opt_scope: | 'public' { result = :public }
+
+opt_from:
+        | id_list 'from' { result = val[0] }
+        | '*' 'from' { result = val[0] }
+
+id_list: id { result = [val[0]] }
+       | id id_list { result = [val[0]] + val[1] }
+
+opt_as: | 'as' IDENT { result = val[1] }
 
 opt_ident: | IDENT
 

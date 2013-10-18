@@ -1,11 +1,11 @@
 options( bank: -1 );
 
-include( "memory.asm" );
+include( "mem.asm" );
 
-function memset(p:int*, c:int, size:int):void;
-function memzero(p:int*, size:int):void;
-function memcpy(from:int*, to:int*, size:int):void;
-function memcmp(p1:int*, p2:int*, size:int):int;
+function set(p:int*, c:int, size:int):void;
+function zero(p:int*, size:int):void;
+function copy(_to:int*, _from:int*, size:int):void;
+function compare(p1:int*, p2:int*, size:int):int;
 
 function strlen(str:int*):int
 {
