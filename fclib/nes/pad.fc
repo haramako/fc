@@ -37,14 +37,14 @@ function update():void
 	right = nes.PAD_CTRL % 2;
 	
 	prev = cur;
-	cur = cur << 1 | a;
-	cur = cur << 1 | b;
-	cur = cur << 1 | select;
-	cur = cur << 1 | start;
-	cur = cur << 1 | up;
-	cur = cur << 1 | down;
-	cur = cur << 1 | left;
-	cur = cur << 1 | right;
+	cur = (cur << 1) | a;
+	cur = (cur << 1) | b;
+	cur = (cur << 1) | select;
+	cur = (cur << 1) | start;
+	cur = (cur << 1) | up;
+	cur = (cur << 1) | down;
+	cur = (cur << 1) | left;
+	cur = (cur << 1) | right;
 	pushed = (prev ^ 255) & cur;
 }
 
