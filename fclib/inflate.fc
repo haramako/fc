@@ -1,0 +1,4 @@
+options( bank: -1);
+include("inflate.asm");
+
+public function unpack(dest:int*, src:int*):int16;

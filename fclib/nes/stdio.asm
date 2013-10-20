@@ -1,9 +1,9 @@
 
-_ppu_put:
+_stdio_ppu_put:
 		lda S+1,x
-		sta _PPU_ADDR
+		sta _nes_PPU_ADDR
 		lda S+0,x
-		sta _PPU_ADDR
+		sta _nes_PPU_ADDR
 		
 		lda S+2,x		; reg[2,3] = addr
 		sta reg+0
@@ -14,18 +14,18 @@ _ppu_put:
 		ldy #0
 .loop:
 		lda [reg],y
-		sta _PPU_DATA
+		sta _nes_PPU_DATA
 		iny
 		cpy reg+2
 		bne .loop
 .end:
 		rts
 		
-_print:
-		lda _print_addr+1
-		sta _PPU_ADDR
-		lda _print_addr+0
-		sta _PPU_ADDR
+_stdio_print:
+		lda _stdio_print_addr+1
+		sta _nes_PPU_ADDR
+		lda _stdio_print_addr+0
+		sta _nes_PPU_ADDR
 		
 		lda S+0,x
 		sta reg+0
@@ -40,38 +40,38 @@ _print:
 		cmp #10
 		bne .not_lf
 		
-		lda _print_addr+0
+		lda _stdio_print_addr+0
 		and #%11100000
 		clc
 		adc #32
-		sta _print_addr+0
+		sta _stdio_print_addr+0
 		lda #0
-		adc _print_addr+1
-		sta _print_addr+1
-		sta _PPU_ADDR
-		lda _print_addr+0
-		sta _PPU_ADDR
+		adc _stdio_print_addr+1
+		sta _stdio_print_addr+1
+		sta _nes_PPU_ADDR
+		lda _stdio_print_addr+0
+		sta _nes_PPU_ADDR
 		jmp .loop
 		
 .not_lf:		
-		sta _PPU_DATA
-		inc _print_addr+0		; print_addr[0,1] += y
+		sta _nes_PPU_DATA
+		inc _stdio_print_addr+0		; print_addr[0,1] += y
 		bne .loop
-		inc _print_addr+1
+		inc _stdio_print_addr+1
 		jmp .loop
 .end:
 		rts
 
-_print_int16:
+_stdio_print_int16:
 		lda S+1,x
 		sta reg+4
-		call _print_int8, #2
+		call _stdio_print_int8, #2
 		lda S+0,x
 		sta reg+4
-		call _print_int8, #2
+		call _stdio_print_int8, #2
 		rts
 		
-_print_int8:
+_stdio_print_int8:
 		lda reg+4
 		ror a
 		ror a
@@ -95,7 +95,7 @@ _print_int8:
 		sta S+0,x
 		lda #HIGH(reg+5)
 		sta S+1,x
-		jsr _print
+		jsr _stdio_print
 		
 		rts
 .char:
@@ -103,17 +103,17 @@ _print_int8:
 		
 _interrupt:
 		lda #1
-		sta _vsync_flag
+		sta _stdio_vsync_flag
 		rts
 	
 _interrupt_irq:
 	rts
 		
-_wait_vsync:
+_stdio_wait_vsync:
 		lda #0
-		sta _vsync_flag
+		sta _stdio_vsync_flag
 .loop:
-		lda _vsync_flag
+		lda _stdio_vsync_flag
 		beq .loop
 		rts
 		

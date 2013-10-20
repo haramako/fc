@@ -1,0 +1,32 @@
+use * from unittest;
+use mem;
+use stdio;
+use mmc3;
+
+use inflate;
+
+include( "character.chr" );
+
+const src = incbin("data.dfl");
+const src2 = incbin("data.dfl2");
+const src_plain = incbin("data.bin");
+
+var buf:int[256];
+
+function test_inflate():void
+{
+	var size:int = inflate.unpack(buf, src);
+	//assert_equal( size, src_plain[0], "unpack size 1" );
+	//assert_equal( mem.compare(buf, src_plain, src_plain[0]), 0, "unpack data 1" );
+
+	size = inflate.unpack(buf, src2);
+	assert_equal( size, src_plain[0], "unpack size 2" );
+	assert_equal( mem.compare(buf, src_plain, src_plain[0]), 0, "unpack data 2" );
+}
+
+function main():void
+{
+	mmc3.RAM_PROTECT = 0b10000000;
+	mmc3.IRQ_DISABLE = 0;
+	unittest_run_tests();
+}

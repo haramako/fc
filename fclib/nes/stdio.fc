@@ -4,7 +4,7 @@
 
 options( bank: -1 );
 
-use nes;
+use * from nes;
 include( "stdio.asm" );
 
 var vsync_flag:int;
