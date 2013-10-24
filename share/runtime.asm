@@ -11,6 +11,7 @@
 	.exportzp reg
 	.exportzp S
 
+	.export start
 	.export jsr_reg
 	.export __mul_8
 	.export __mul_8t16
@@ -22,9 +23,9 @@
 	.export __mod_16
 	
 .segment "VECTORS"
-	.word _interrupt
-	.word _main
-	.word _interrupt_irq
+	.word interrupt
+	.word start
+	.word interrupt_irq
 	
 .segment "ZEROPAGE"
 	
@@ -65,7 +66,7 @@ start:
 	ldx #255						; initialize stack and frame
 	txs
 	ldx #0
-	
+
 	jsr _main
     jmp *
 

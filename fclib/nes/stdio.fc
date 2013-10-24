@@ -36,9 +36,13 @@ function exit( code:int ):void
 
 function init():void
 {
+	vsync_flag = 0xfd;
 	const pallet = [15,61,16,48, 0,17,33,49, 0,18,34,50, 0,19,35,51];
 	ppu_put( 0x3f00, pallet, 16);
 	print_addr = 0x2000;
 }
+
+public function interrupt():void options(symbol:'interrupt');
+public function interrupt_irq():void options(symbol:'interrupt_irq');
 
 include macro ( "stdio.rb" );

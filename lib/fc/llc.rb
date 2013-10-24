@@ -38,7 +38,6 @@ module Fc
       asm = []
       asm << "\t.setcpu \"6502\""
       asm << "\t.include \"#{FC_HOME}/share/macro.inc\""
-      asm << ".code"
       asm << "__#{mod.id.upcase}__ = 1"
 
       inc << ".ifndef __#{mod.id.upcase}__"
@@ -56,6 +55,7 @@ module Fc
       end
 
       # モジュール変数のコンパイル
+      asm << ".segment \"BSS\""
       mod.vars.each do |v|
         case v.kind
         when :global_var
@@ -77,6 +77,7 @@ module Fc
         end
       end
 
+      asm << ".segment \"CODE\""
 
       # include header(.asm)の処理
       mod.include_headers.each do |file|
@@ -88,17 +89,18 @@ module Fc
         asm << "\t.include \"#{file}\""
       end
 
-      # include(.chr)の処理
-      mod.include_chrs.each do |file|
-        # @char_banks << "\t.incbin \"#{file}\""
-      end
-
       # lambdaのコンパイル
       mod.lambdas.each do |lmd|
         inc << "\t.import #{to_asm(lmd)}"
         asm << "\t.export #{to_asm(lmd)}"
         next if lmd.opt[:extern]
         asm << compile_lambda( lmd )
+      end
+
+      # include(.chr)の処理
+      mod.include_chrs.each do |file|
+        asm << ".segment \"CHARS\""
+        asm << "\t.incbin \"#{file}\""
       end
 
       inc << ".endif"

@@ -1,7 +1,9 @@
 use * from unittest;
-use cycle_use;
 
+use cycle_use;
 var cycle_var:int;
+
+include( "character.chr" );
 
 function test_cycle_use():void
 {

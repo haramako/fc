@@ -65,7 +65,7 @@ module Fc
       mods.each do |path,mod|
         #.oファイルの作成
         objs << BUILD_PATH+('_'+mod.id.to_s+'.o')
-        sh 'ca65', '-I', BUILD_PATH, BUILD_PATH+('_'+mod.id.to_s+'.s')
+        sh 'ca65', '-l', '-I', BUILD_PATH, BUILD_PATH+('_'+mod.id.to_s+'.s')
       end
 
       if opt[:debug_info]
@@ -97,7 +97,7 @@ module Fc
 
       return if opt[:asm]
       
-      sh 'ld65', '-C', BUILD_PATH+'ld65.cfg', '-o', base+'.nes', BUILD_PATH+'base.o', BUILD_PATH+'runtime_init.o', BUILD_PATH+'runtime.o', *objs
+      sh 'ld65', '-m', base+'.map', '-C', BUILD_PATH+'ld65.cfg', '-o', base+'.nes', BUILD_PATH+'base.o', BUILD_PATH+'runtime_init.o', BUILD_PATH+'runtime.o', *objs
 
       if opt[:run]
         emu = Fc::FC_HOME + 'bin/emu6502'
@@ -109,7 +109,7 @@ module Fc
     end
 
     def ca65( path )
-      sh 'ca65', '-I', BUILD_PATH, '-o', BUILD_PATH+path.basename.sub_ext('.o'), path
+      sh 'ca65', '-l', '-I', BUILD_PATH, '-o', BUILD_PATH+path.basename.sub_ext('.o'), path
     end
 
     def sh( *args )

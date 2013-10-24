@@ -1,4 +1,5 @@
 a.asm
+a.map
 *.lst
 *.nes
 *.html

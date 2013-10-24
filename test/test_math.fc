@@ -1,6 +1,8 @@
 use * from unittest;
 use * from math;
 
+include( "character.chr" );
+
 function test_sin():void
 {
 	assert_equal( sin(  0),   0, 'sin(0)' );
