@@ -1,4 +1,6 @@
 ;;; http://codebase64.org/doku.php?id=base:rle_pack_unpack
+
+.segment "CODE"
 	
 src		= reg+0		; borrow cc65's temp pointers
 dest	= reg+2

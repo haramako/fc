@@ -1,5 +1,3 @@
-options( bank: 1 );
-
 use stdio;
 include( "unittest.rb" );
 

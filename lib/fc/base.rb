@@ -9,6 +9,7 @@ module Fc
 
   FC_HOME = Pathname(File.dirname( __FILE__ )) + '../..'
   LIB_PATH = [Pathname('.'), FC_HOME+'fclib' ]
+  BUILD_PATH = Pathname.new(".fc-build/")
 
   # share以下のファイルを検索する
   def self.find_share( path )
@@ -87,7 +88,7 @@ module Fc
       case @kind
       when :void
         @str = "void"
-      when :int, :void, :bool
+      when :int, :bool
         @str = "#{signed ? 's' : 'u' }#{@kind}#{size*8}"
       when :module
         @str = "module"
@@ -117,6 +118,41 @@ module Fc
       type = new( ast_or_type )
       @@cache[type.to_s] = type unless @@cache[type.to_s]
       @@cache[type.to_s]
+    end
+
+    def to_json
+      case @kind
+      when :void, :int, :bool
+        @str.to_s
+      when :array
+        ['array', @base.to_json, @length]
+      when :pointer
+        ['pointer', @base.to_json]
+      when :lambda
+        ['lambda', @args.map(&:to_json), @base.to_json]
+      else
+        raise
+      end
+    end
+
+    def self.from_json( json )
+      case json
+      when String
+        Type[ json.to_sym ]
+      when Array
+        case json[0]
+        when 'array'
+          Type[ [json[0].to_sym, json[2], from_json(json[1])] ]
+        when 'pointer'
+          Type[ [json[0].to_sym, from_json(json[1])] ]
+        when 'lambda'
+          Type[ [json[0].to_sym, json[1].map{|v| from_json(v) }, from_json(json[2])] ]
+        else 
+          raise
+        end
+      else
+        raise
+      end
     end
 
   end
@@ -153,6 +189,7 @@ module Fc
     attr_reader :val  # 定数の場合はその値( Fixnum or Array or Lambda or Proc(マクロ) )
     attr_reader :opt  # オプション
     attr_accessor :base_string # 元の値が文字列だった場合、その文字列
+    attr_accessor :from_fcm
 
     # 以下は、アセンブラで使用
     attr_accessor :address # アドレス
@@ -178,6 +215,7 @@ module Fc
       @opt = opt || Hash.new
       @public = false
       @long_id = id
+      @from_fcm = false
     end
 
     def self.new_int( n )
@@ -221,6 +259,18 @@ module Fc
       else
         inspect
       end
+    end
+
+    def to_json
+      r = [@id.to_s, @kind.to_s, @type.to_json]
+      r << @val if Fixnum === @val
+      r
+    end
+
+    def self.from_json( json )
+      v = Value.new( json[1].to_sym, json[0].to_sym, Type.from_json(json[2]), json[3], nil )
+      v.from_fcm = true
+      v
     end
 
   end
@@ -329,9 +379,15 @@ module Fc
     end
 
     def id_list
-      r = @declares.keys # + @uses.map{|x| x.id_list}.flatten 
-      r += @parent.id_list if @parent
-      r.flatten
+      return [] if @finding
+      begin
+        @finding = true
+        r = @declares.keys + @uses.map{|x| x.id_list}.flatten 
+        r += @parent.id_list if @parent
+        r.flatten
+      ensure
+        @finding = false
+      end
     end
 
     def inspect
@@ -351,6 +407,8 @@ module Fc
     attr_accessor :id
     attr_accessor :current_scope
     attr_accessor :path
+    attr_accessor :from_fcm
+    attr_accessor :depends
 
     def initialize( global_scope )
       @vars = []
@@ -364,6 +422,25 @@ module Fc
       @blobs = []
       @scope = Scope.new( global_scope )
       @current_scope = :public
+      @from_fcm = false
+      @depends = []
+    end
+
+    def to_json
+      {
+        'id'=> @id.to_s,
+        'modules'=> @modules.keys.map(&:to_s),
+        'depends' => @depends,
+        'vars'=> @vars.select{|v| not [:module,:macro].include?(v.type.kind) }.map(&:to_json)
+      }
+    end
+
+    def from_json( json )
+      @id = json['id'].to_sym
+      @modules = Hash[ json['modules'].map{|m| [m.to_sym, nil] } ]
+      @vars = json['vars'].map { |v| Value.from_json(v) }
+      @depends = json['depends']
+      self
     end
 
   end

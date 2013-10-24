@@ -4,14 +4,13 @@
 	.import _main
 	.import runtime_init
 
-	.exportzp FC_LOCAL
-	.exportzp FC_REG
-	.exportzp FC_STACK
-	.exportzp L 					; TODO: そのうち消すこと
-	.exportzp reg
-	.exportzp S
+	.importzp L
+	.importzp reg
+	.importzp S
 
 	.export start
+	.export interrupt
+	.export interrupt_irq
 	.export jsr_reg
 	.export __mul_8
 	.export __mul_8t16
@@ -22,27 +21,9 @@
 	.export __mod_8
 	.export __mod_16
 	
-.segment "VECTORS"
-	.word interrupt
-	.word start
-	.word interrupt_irq
-	
-.segment "ZEROPAGE"
-	
-FC_LOCAL: .res $10
-FC_REG: .res $10
+.segment "FC_RUNTIME"
 
-FC_STACK = $80
-	
-.segment "SRAM"
-
-.segment "CODE"
-
-	L = FC_LOCAL
-	reg = FC_REG
-	S = FC_STACK
-
-start:
+.proc start
 	sei
 	cld
 
@@ -69,8 +50,9 @@ start:
 
 	jsr _main
     jmp *
+.endproc
 
-interrupt:
+.proc interrupt
     pha
     txa
     pha
@@ -83,9 +65,10 @@ interrupt:
     tax
     pla
     rti
+.endproc
 
 ;;; use 17 cycle before subroutine
-interrupt_irq:
+.proc interrupt_irq
     pha
     txa
     pha
@@ -98,14 +81,16 @@ interrupt_irq:
     tax
     pla
     rti
+.endproc
 	
 ;;; 間接関数呼び出し
-jsr_reg:
+.proc jsr_reg
 	jmp (<reg)
+.endproc
 
 ;;; 掛け算用のテーブル
 ;;; LOW(x*x/4)  | x < 256
-__mul_tbl_l0:
+.proc __mul_tbl_l0
 	.byte 0,0,1,2,4,6,9,12,16,20,25,30,36,42,49,56
 	.byte 64,72,81,90,100,110,121,132,144,156,169,182,196,210,225,240
 	.byte 0,16,33,50,68,86,105,124,144,164,185,206,228,250,17,40
@@ -122,8 +107,10 @@ __mul_tbl_l0:
 	.byte 64,168,17,122,228,78,185,36,144,252,105,214,68,178,33,144
 	.byte 0,112,225,82,196,54,169,28,144,4,121,238,100,218,81,200
 	.byte 64,184,49,170,36,158,25,148,16,140,9,134,4,130,1,128
+.endproc
+	
 ;;; LOW(x*x/4)  | x >= 256
-__mul_tbl_l1:
+.proc __mul_tbl_l1
 	.byte 0,128,1,130,4,134,9,140,16,148,25,158,36,170,49,184
 	.byte 64,200,81,218,100,238,121,4,144,28,169,54,196,82,225,112
 	.byte 0,144,33,178,68,214,105,252,144,36,185,78,228,122,17,168
@@ -140,8 +127,10 @@ __mul_tbl_l1:
 	.byte 64,40,17,250,228,206,185,164,144,124,105,86,68,50,33,16
 	.byte 0,240,225,210,196,182,169,156,144,132,121,110,100,90,81,72
 	.byte 64,56,49,42,36,30,25,20,16,12,9,6,4,2,1,0
+.endproc
+	
 ;;; HIGH(x*x/4)  | x < 256
-__mul_tbl_h0:
+.proc __mul_tbl_h0
 	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.byte 1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2
@@ -158,8 +147,10 @@ __mul_tbl_h0:
 	.byte 42,42,43,43,43,44,44,45,45,45,46,46,47,47,48,48
 	.byte 49,49,49,50,50,51,51,52,52,53,53,53,54,54,55,55
 	.byte 56,56,57,57,58,58,59,59,60,60,61,61,62,62,63,63
+.endproc
+	
 ;;; HIGH(x*x/4)  | x >= 256
-__mul_tbl_h1:
+.proc __mul_tbl_h1
 	.byte 64,64,65,65,66,66,67,67,68,68,69,69,70,70,71,71
 	.byte 72,72,73,73,74,74,75,76,76,77,77,78,78,79,79,80
 	.byte 81,81,82,82,83,83,84,84,85,86,86,87,87,88,89,89
@@ -176,6 +167,7 @@ __mul_tbl_h1:
 	.byte 210,211,212,212,213,214,215,216,217,218,219,220,221,222,223,224
 	.byte 225,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239
 	.byte 240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255
+.endproc
 		
 ;;; uint8xuint8=>uint8の掛け算
 ;;; reg4 = reg0 * reg2
@@ -184,7 +176,7 @@ __mul_tbl_h1:
 ;;; a*b = f(a+b) - f(a-b)  | f(x): x*x/4
 ;;; 
 ;;; USING: reg[0,2,4,6,7]
-__mul_8:
+.proc __mul_8
         lda reg+0             ; reg6 = (reg0-reg2)^2/4
         sec
         sbc reg+2
@@ -211,12 +203,13 @@ __mul_8:
         sbc reg+6
         sta reg+4
         rts
+.endproc
 
 ;;; uint8xuint8=>uint16の掛け算
 ;;; reg(4,6) = reg0 * reg2
 ;;; USING: reg[0,2,4,6,7]
 ;;; TODO: 中途半端な実装(ほぼ未実装)
-__mul_8t16:
+.proc __mul_8t16
         lda reg+0             ; reg6 = (reg0-reg2)^2/4
         sec
         sbc reg+2
@@ -243,17 +236,19 @@ __mul_8t16:
         sbc reg+6
         sta reg+4
         rts
+.endproc
         
 ;;; int16xint16=>int16 の掛け算
 ;;;  reg(4,5) = reg(0,1) * reg(2,3)
 ;;; TODO: 未実装
-__mul_16:
+.proc __mul_16
         rts
+.endproc
         
 ;;; uint8/uint8=>int8 の割り算
 ;;;  reg4 = reg0 / reg2 ( 余り=reg5)
 ;;; USING: reg[0,2,4,5]
-__div_8:
+.proc __div_8
         ldy #8
         lda #0
         sta reg+5
@@ -271,11 +266,12 @@ __div_8:
         dey
         bne @loop
         rts
+.endproc
 
 ;;; sint8/sint8=>sint8 の割り算
 ;;;  reg4 = reg0 / reg2 ( 余り=reg5)
 ;;; USING: reg[0,2,4,5,6,7]
-__div_8s:
+.proc __div_8s
 		lda #0
 		sta reg+6				; reg6 = 0
 		sta reg+7				; reg7 = 0
@@ -326,12 +322,13 @@ __div_8s:
 		sta reg+5
 @else2:
 		rts
+.endproc
         
 ;;; int16/int16=>int16 の割り算 
 ;;;  reg(4,5) = reg(0,1) / reg(2,3) ( 余り=reg(6,7))
 ;;; USING: y, reg[0..8]
 ;;; TODO: たぶん動いてない
-__div_16:
+.proc __div_16
 	txa
 	pha
 	ldy #16
@@ -362,15 +359,18 @@ __div_16:
 	pla
 	tax
 	rts
+.endproc
 	
 ;;; int8%int8=>int8 の割り算の余り
 ;;;  reg4 = reg0 % reg2
 ;;; USING: reg[0,2,4,5,6,7]
-__mod_8:
+.proc __mod_8
         jsr __div_8
         lda reg+5
         sta reg+4
         rts
+.endproc
         
-__mod_16:
+.proc __mod_16
         rts						; 未実装
+.endproc

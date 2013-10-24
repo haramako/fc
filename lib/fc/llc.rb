@@ -13,16 +13,6 @@ module Fc
     def initialize( opt = {} )
       @opt = { optimize_level: 2 }.merge( opt )
       @debug = DEBUG_LEVEL
-      @module = nil
-      @label_count = 0
-      @asm = []
-    end
-
-    def compile( mods )
-      @modules = mods
-      @modules.each do |id,mod|
-        r = compile_module( mod )
-      end
     end
 
     def dout( level, *args )
@@ -33,15 +23,18 @@ module Fc
       #:nocov:
     end
 
-    def compile_module( mod )
+    def compile( mod )
+      @label_count = 0
+      @code_segment = mod.id.to_s
+
       inc = []
       asm = []
       asm << "\t.setcpu \"6502\""
       asm << "\t.include \"#{FC_HOME}/share/macro.inc\""
-      asm << "__#{mod.id.upcase}__ = 1"
+      asm << "__MODULE_#{mod.id.upcase}__ = 1"
 
-      inc << ".ifndef __#{mod.id.upcase}__"
-      inc << "__#{mod.id.upcase}__ = 1"
+      inc << ".ifndef __MODULE_#{mod.id.upcase}__"
+      inc << "__MODULE_#{mod.id.upcase}__ = 1"
 
       # 
       mod.modules.each do |_,m|
@@ -63,9 +56,7 @@ module Fc
             inc << "#{to_asm(v)} = #{v.opt[:address]}"
             asm << "#{to_asm(v)} = #{v.opt[:address]}"
           else
-            inc << ".ifndef #{to_asm(v)}"
             inc << "\t.import #{to_asm(v)}"
-            inc << ".endif"
             asm << "\t.export #{to_asm(v)}"
             asm << "#{to_asm(v)}: .res #{v.type.size}"
           end
@@ -76,8 +67,6 @@ module Fc
           end
         end
       end
-
-      asm << ".segment \"CODE\""
 
       # include header(.asm)の処理
       mod.include_headers.each do |file|
@@ -125,7 +114,8 @@ module Fc
       r << ";;; function #{lmd.id}" 
       r << ";;;============================="
 
-      r << "#{to_asm(lmd)}:" 
+      r << ".segment \"#{@code_segment}\""
+      r << ".proc #{to_asm(lmd)}" 
 
       ops.each_with_index do |op,op_no| # op=オペランド
         dout 3, op.inspect
@@ -180,6 +170,8 @@ module Fc
           if Lambda === op[2].val
             # 関数を直に呼ぶ
             r << "call #{to_asm(op[2].val.id)}, ##{lmd.frame_size}"
+          elsif op[2].from_fcm
+            r << "call #{to_asm(op[2])}, ##{lmd.frame_size}"
           else
             # 関数ポインタから呼ぶ
             end_label = new_label
@@ -521,12 +513,14 @@ module Fc
       r.delete(nil) # 空の行を削除
       # ラベル行,コメント行以外はインデントする
       r = r.map do |line|
-        if line =~ /\A[.@_\w][_\w\d]+:/
+        if line =~ /\A([.@_\w][_\w\d]+:|\.segment|\.proc)/
           line
         else
           "\t"+line
         end
       end
+
+      r << '.endproc'
 
       r = extend_jump(r)
 

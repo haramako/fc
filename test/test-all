@@ -36,7 +36,7 @@ files.each do |file|
   puts "testing #{file}"
 
   begin
-    compiler.compile( file, { run: true, debug_info: !debug_info_tested } )
+    compiler.build( file, { run: true, debug_info: !debug_info_tested } )
     debug_info_tested = true
   rescue Fc::CompileError => e
     raise e
@@ -78,7 +78,7 @@ srcs.each do |src|
     f.close
 
     begin
-      compiler.compile f.path
+      compiler.build f.path
     rescue Fc::CompileError => e
       unless /#{expected_err}/ === e.message
         puts e

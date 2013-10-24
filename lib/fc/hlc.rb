@@ -3,6 +3,7 @@
 require 'pp'
 require 'strscan'
 require 'erb'
+require 'json'
 require_relative 'base'
 require_relative 'parser'
 require_relative 'type_util'
@@ -39,6 +40,7 @@ module Fc
       
       # 関数はあとからコンパイル
       @modules.each do |name,mod|
+        next if mod.from_fcm
         @module = mod
         attach_scope( @module.scope ) do
           dout 1, "compiling functions in #{name}"
@@ -133,24 +135,52 @@ module Fc
       old_module, @module = @module, Module.new( @global_scope )
       @module.path = path
 
-      @module.id = File.basename(filename,'.fc')
-      @modules[path] = @module
-      src = File.read( path )
-      ast, pos_info = Parser.new(src,path).parse
-      @pos_info.merge! pos_info
+      fcm_path = BUILD_PATH+path.basename.sub_ext('.fcm')
+      if false && fcm_path.exist? && fcm_path.mtime > path.mtime # fcmはとりあえず使わない
+        # .fcmが新しいなら、それを使う
+        dout 1, "load from #{fcm_path}"
+        @module.from_json( JSON.parse( IO.read( fcm_path ) ) )
+        @module.from_fcm = true
+        attach_scope @module.scope do
+          @module.modules.each do |k,_|
+            mod = compile_module( "#{k}.fc" )
+            @module.modules[k] = mod
+            add_var Value.new( :global_const, k.to_sym, Type[:module], mod, nil )
+          end
+          @module.vars.each do |var|
+            var.public = true
+            if [:global_var, :global_const].include?(var.kind) and var.type != Type[:macro] and var.type != Type[:module]
+              var.long_id = "#{@module.id}.#{var.id}".to_sym
+            else
+              var.long_id = var.id
+            end
+            if var.type != Type[:macro] and var.type != Type[:module]
+              @scope.declare var
+            end
+          end
+          @module.depends.clone.each do |dep|
+            if /\.rb$/ === dep
+              compile_statement( [:include, dep, nil, nil] )
+            end
+          end
+        end
+        @modules[path] = @module
+      else
+        # .fcmがないか古いのでコンパイルしなおす
+        @module.id = File.basename(filename,'.fc')
+        @modules[path] = @module
+        src = File.read( path )
+        ast, pos_info = Parser.new(src,path).parse
+        @pos_info.merge! pos_info
 
-      attach_scope( @module.scope ) do
+        attach_scope( @module.scope ) do
+          compile_block( ast )
+          dout 1, "finished module #{filename}"
+        end
 
-        compile_block( ast )
-
-        # @module.lambdas.each do |lmd|
-        #   dout 1, "compiling function #{lmd.id}"
-        #   compile_lambda( lmd )
-        # end
-
-        dout 1, "finished module #{filename}"
-
+        IO.write( fcm_path, JSON.dump( @module.to_json ) ) # .fcm の書き込み
       end
+
       new_module = @module
       @module = old_module
       new_module
@@ -262,6 +292,7 @@ module Fc
           raise CompileError.new("invalid keyword #{opt_ident}")
           #:nocov:
         end
+        @module.depends << filename
 
       when :use
         must_in_module
@@ -276,7 +307,6 @@ module Fc
           var = add_var Value.new( :global_const, id, Type[:module], m, {} )
           var.public = true
         end
-          
 
       when :function
         _, pub, id, args, base_type, opt, block = ast

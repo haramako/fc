@@ -1,3 +1,5 @@
+.segment "CODE"
+	
 ;; function memcpy(_to:int*, _from:int*, size:int):void
 ;; {
 ;;   var i = 0;

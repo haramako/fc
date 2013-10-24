@@ -30,4 +30,4 @@ end
 
 require_relative '../lib/fc/compiler'
 com = Fc::Compiler.new
-com.compile ARGV[0], o
+com.build ARGV[0], o
