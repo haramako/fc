@@ -16,18 +16,12 @@ module Fc
       @module = nil
       @label_count = 0
       @asm = []
-      @prog_banks = [] # プログラムバンクごとのアセンブラ
-      @char_banks = [] # キャラクタバンクごとのアセンブラ
-      @prog_bank_count = nil
     end
 
     def compile( mods )
-      @prog_bank_count.times do |i|
-        @prog_banks[i] = [nil,[]]
-      end
       @modules = mods
       @modules.each do |id,mod|
-        compile_module( mod )
+        r = compile_module( mod )
       end
     end
 
@@ -40,18 +34,25 @@ module Fc
     end
 
     def compile_module( mod )
-      bank = mod.options[:bank].to_i
-      if bank < 0
-        bank = @prog_bank_count + bank
-      end
-      @bank = bank
+      inc = []
+      asm = []
+      asm << "\t.setcpu \"6502\""
+      asm << "\t.include \"#{FC_HOME}/share/macro.inc\""
+      asm << ".code"
+      asm << "__#{mod.id.upcase}__ = 1"
 
-      org = mod.options[:org]
-      @prog_banks[bank][0] = org if org
+      inc << ".ifndef __#{mod.id.upcase}__"
+      inc << "__#{mod.id.upcase}__ = 1"
+
+      # 
+      mod.modules.each do |_,m|
+        inc << "\t.include \"_#{m.id}.inc\""
+        asm << "\t.include \"_#{m.id}.inc\""
+      end
 
       # モジュール定数のコンパイル
       mod.blobs.each do |blob|
-        @prog_banks[bank][1].concat emit_blob(blob)
+        asm << emit_blob(blob)
       end
 
       # モジュール変数のコンパイル
@@ -59,39 +60,50 @@ module Fc
         case v.kind
         when :global_var
           if v.opt[:address]
-            @asm << "#{to_asm(v)} = #{v.opt[:address]}"
+            inc << "#{to_asm(v)} = #{v.opt[:address]}"
+            asm << "#{to_asm(v)} = #{v.opt[:address]}"
           else
-            @asm << "#{to_asm(v)}: .ds  #{v.type.size}"
+            inc << ".ifndef #{to_asm(v)}"
+            inc << "\t.import #{to_asm(v)}"
+            inc << ".endif"
+            asm << "\t.export #{to_asm(v)}"
+            asm << "#{to_asm(v)}: .res #{v.type.size}"
           end
         when :global_const
           if Numeric === v.val
-            @asm << "#{to_asm(v)} = #{v.val}"
+            inc << "#{to_asm(v)} = #{v.val}"
+            asm << "#{to_asm(v)} = #{v.val}"
           end
         end
       end
 
+
       # include header(.asm)の処理
       mod.include_headers.each do |file|
-        @asm << "\t.include \"#{file}\""
+        asm << "\t.include \"#{file}\""
       end
 
       # include(.asm)の処理
       mod.include_asms.each do |file|
-        @prog_banks[bank][1] << "\t.include \"#{file}\""
+        asm << "\t.include \"#{file}\""
       end
 
       # include(.chr)の処理
       mod.include_chrs.each do |file|
-        @char_banks << "\t.incbin \"#{file}\""
+        # @char_banks << "\t.incbin \"#{file}\""
       end
 
       # lambdaのコンパイル
       mod.lambdas.each do |lmd|
+        inc << "\t.import #{to_asm(lmd)}"
+        asm << "\t.export #{to_asm(lmd)}"
         next if lmd.opt[:extern]
-        @prog_banks[bank][1] << compile_lambda( lmd )
-        @prog_banks[bank][1] << ''
+        asm << compile_lambda( lmd )
       end
 
+      inc << ".endif"
+
+      [asm,inc]
     end
 
     def compile_lambda( lmd )
@@ -387,10 +399,10 @@ module Fc
               r.concat load_y_idx(op[3],op[2])
               r << "sty <reg+0"
               r << "clc"
-              r << "lda #LOW(#{to_asm(op[2])})"
+              r << "lda #.LOBYTE(#{to_asm(op[2])})"
               r << "adc <reg+0"
               r << store_a(op[1],0)
-              r << "lda #HIGH(#{to_asm(op[2])})"
+              r << "lda #.HIBYTE(#{to_asm(op[2])})"
               r << "adc #0"
               r << store_a(op[1],1)
             elsif op[2].type.kind == :pointer
@@ -425,10 +437,10 @@ module Fc
 
               r << "lda <reg+0"
               r << "clc"
-              r << "adc #LOW(#{to_asm(op[2])})"
+              r << "adc #.LOBYTE(#{to_asm(op[2])})"
               r << store_a(op[1],0)
               r << "lda <reg+1"
-              r << "adc #HIGH(#{to_asm(op[2])})"
+              r << "adc #.HIBYTE(#{to_asm(op[2])})"
               r << store_a(op[1],1)
             elsif
               raise
@@ -439,14 +451,14 @@ module Fc
           if op[2].location == :frame
             r << "txa"
             r << "clc"
-            r << "adc #LOW(S+#{op[2].address})"
+            r << "adc #.LOBYTE(S+#{op[2].address})"
             r << store_a( op[1], 0 )
             r << "lda #0"
             r << store_a( op[1], 1 )
           else
-            r << "lda #LOW(#{to_asm(op[2])})"
+            r << "lda #.LOBYTE(#{to_asm(op[2])})"
             r << store_a( op[1], 0 )
-            r << "lda #HIGH(#{to_asm(op[2])})"
+            r << "lda #.HIBYTE(#{to_asm(op[2])})"
             r << store_a( op[1], 1 )
           end
 
@@ -457,7 +469,7 @@ module Fc
           r << "sta <reg+1"
           op[1].type.size.times do |i|
             r << "ldy ##{i}"
-            r << "lda [reg],y"
+            r << "lda (reg),y"
             r << store_a(op[1],i)
           end
 
@@ -469,7 +481,7 @@ module Fc
           op[1].type.base.size.times do |i|
             r << load_a( op[2],i)
             r << "ldy ##{i}"
-            r << "sta [reg],y"
+            r << "sta (reg),y"
           end
 
           # 最適化後のオペレータ
@@ -507,7 +519,7 @@ module Fc
       r.delete(nil) # 空の行を削除
       # ラベル行,コメント行以外はインデントする
       r = r.map do |line|
-        if line =~ /\A[._\w][_\w\d]+:/
+        if line =~ /\A[.@_\w][_\w\d]+:/
           line
         else
           "\t"+line
@@ -537,9 +549,9 @@ module Fc
       if to.type.kind == :pointer and from.type.kind == :array 
         raise "can't convert from #{from} to #{to}" unless from.type.base == to.type.base
         # 配列からポインタに変換
-        r << "lda #LOW(#{to_asm(from)})"
+        r << "lda #.LOBYTE(#{to_asm(from)})"
         r << "sta #{byte(to,0)}"
-        r << "lda #HIGH(#{to_asm(from)})"
+        r << "lda #.HIBYTE(#{to_asm(from)})"
         r << "sta #{byte(to,1)}"
       else
         # 通常の代入
@@ -604,7 +616,7 @@ module Fc
 
     def new_label
       @label_count += 1
-      "._#{@label_count}"
+      "@#{@label_count}"
     end
 
     def new_labels( n )
@@ -624,7 +636,7 @@ module Fc
             # :nocov:
           end
         when :symbol, :const, :array_literal
-          '.'+mangle(v.long_id)
+          '@'+mangle(v.long_id)
         when :global_symbol
           mangle(v.long_id)
         when :global_const, :global_var
@@ -656,8 +668,8 @@ module Fc
     def byte( v, n )
       if PointeredArray === v
         case n
-        when 0 then "#LOW(#{to_asm(v.from)})"
-        when 1 then "#HIGH(#{to_asm(v.from)})"
+        when 0 then "#.LOBYTE(#{to_asm(v.from)})"
+        when 1 then "#.HIBYTE(#{to_asm(v.from)})"
         else 
           #:nocov:
           raise
@@ -668,8 +680,8 @@ module Fc
           "##{(v.val >> (n*8)) % 256}"
         else
           case n
-          when 0; "#LOW(#{to_asm(v.val)})"
-          when 1; "#HIGH(#{to_asm(v.val)})"
+          when 0; "#.LOBYTE(#{to_asm(v.val)})"
+          when 1; "#.HIBYTE(#{to_asm(v.val)})"
           else
             #:nocov:
             raise
@@ -695,13 +707,13 @@ module Fc
       r = []
       base_string = ( v.base_string ? (' ; '+v.base_string.inspect) : '' )
       if v.kind == :symbol or v.kind == :array_literal
-        r << ".#{to_asm(v.id)}:" + base_string
+        r << "@#{to_asm(v.id)}:" + base_string
       else
         r << "#{to_asm(v.id)}:" + base_string
       end
       case v.type.base.size
-      when 1; op = '.db'
-      when 2; op = '.dw'
+      when 1; op = '.byte'
+      when 2; op = '.word'
       else
         #:nocov:
         raise
@@ -904,7 +916,7 @@ module Fc
       n = 0
       asm.each do |line|
         addrs << n
-        if line =~/\A([._\w][_\w\d]+):/
+        if line =~/\A([@._\w][_\w\d]+):/
           labels[$1] = n
         elsif line =~ /\A\s+(\w+)/
           if size = op_size[$1]
@@ -918,7 +930,7 @@ module Fc
       # 書き換えが必要なジャンプを書き換える
       asm.each_with_index do |line,i|
         addr = addrs[i]
-        if line =~ /\A\s+(\w+)\s+([._\w][_\w\d]+)/
+        if line =~ /\A\s+(\w+)\s+([@._\w][_\w\d]+)/
           if branch_ops[$1]
             jump_to = labels[$2]
             if (jump_to - addr).abs >= 127

@@ -350,6 +350,7 @@ module Fc
     attr_reader :include_headers
     attr_accessor :id
     attr_accessor :current_scope
+    attr_accessor :path
 
     def initialize( global_scope )
       @vars = []

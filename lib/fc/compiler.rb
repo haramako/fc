@@ -1,10 +1,22 @@
 # -*- coding: utf-8 -*-
 require 'rbconfig'
+require 'fileutils'
+require 'open3'
 require_relative 'hlc'
 require_relative 'llc'
 require_relative 'nes'
 
 module Fc
+
+  class CommandError < RuntimeError
+    attr_reader :command, :result
+    def initialize( message, command, result )
+      super message
+      @command = command
+      @result = result
+    end
+  end
+
   class Compiler
 
     if /mswin(?!ce)|mingw|cygwin|bccwin/ === RbConfig::CONFIG['target_os']
@@ -12,6 +24,8 @@ module Fc
     else
       NESASM = 'nesasm'
     end
+
+    BUILD_PATH = Pathname.new(".fc-build/")
 
     def initialize
     end
@@ -25,7 +39,7 @@ module Fc
       # ソースコードを中間コードにコンパイル
       hlc = Fc::Hlc.new
       hlc.compile( src_filename )
-      mod = hlc.modules
+      mods = hlc.modules
       prog_bank_count = hlc.options[:bank_count] || 2
 
       if opt[:debug_info]
@@ -39,24 +53,26 @@ module Fc
 
 
       # 中間コードをアセンブラにコンパイルする
+      FileUtils.mkdir_p( BUILD_PATH )
       llc = Fc::Llc.new( opt )
-      llc.prog_bank_count = prog_bank_count
-      llc.compile( mod )
+      mods.each do |path,mod|
+        asm, inc = llc.compile_module( mod )
+        IO.write( BUILD_PATH+("_#{mod.id}.inc"), inc.join("\n") )
+        IO.write( BUILD_PATH+("_#{mod.id}.s"), asm.join("\n") )
+      end
+
+      objs = []
+      mods.each do |path,mod|
+        #.oファイルの作成
+        objs << BUILD_PATH+('_'+mod.id.to_s+'.o')
+        sh 'ca65', '-I', BUILD_PATH, BUILD_PATH+('_'+mod.id.to_s+'.s')
+      end
 
       if opt[:debug_info]
         open( base+'.html', 'w' ) do |f|
           f.write Fc::HtmlOutput.new.module_to_html( hlc.modules )
         end
       end
-
-      # バンクの情報の補完
-      prog_bank_count.times do |i|
-        default = if i < prog_bank_count - 2 then 0x8000+(i%2)*0x2000 else 0xc000+(i+2-prog_bank_count)*0x2000 end
-        llc.prog_banks[i][0] = default unless llc.prog_banks[i][0]
-      end
-      # 最後のバンクにランタイムのコードを追加
-      llc.prog_banks[prog_bank_count-1][1] << File.read( Fc.find_share('runtime.asm') )
-      llc.prog_banks[prog_bank_count-1][1] << File.read( Fc.find_module('runtime_init.asm') )
 
       case hlc.options[:mapper]
       when nil, "MMC0"
@@ -67,55 +83,45 @@ module Fc
         inesmap = hlc.options[:mapper]
       end
 
-      # オプションのアセンブラa
-      options = { inesprg: (prog_bank_count+1)/2, ineschr: llc.char_banks.size, inesmir: 1, inesmap: inesmap }
-      opt_asm = options.map{|k,v| "\t.#{k} #{v}" }
-
-      # 各キャラクターバンクのコードを作成
-      chr_asm = []
-      llc.char_banks.each_with_index do |bank,i|
-        chr_asm << "\t.bank #{prog_bank_count+i}"
-        chr_asm << "\t.org $0000"
-        chr_asm << bank
-      end
-
-      # 各プログラムバンクのコードを作成
-      code_asm = ["\t.org $300"] + llc.asm
-      llc.prog_banks.each_with_index do |bank,i|
-        code_asm << "\t.bank #{i}"
-        code_asm << "\t.org $%04X"%bank[0]
-        code_asm.concat bank[1]
-      end
-
-      opt_asm = opt_asm.join("\n")
-      chr_asm = chr_asm.join("\n")
-      code_asm = code_asm.join("\n")
-
-      # アセンブラを生成する
-      template = File.read( Fc.find_share('base.asm') ) 
+      # オプションのアセンブラ
+      options = { inesprg: 2, ineschr: 1, inesmir: 1, inesmap: inesmap }
+      template = IO.read( Fc.find_share('base.asm.erb') ) 
       str = ERB.new(template,nil,'-').result(binding)
+      IO.write( BUILD_PATH+'base.s', str )
+      ca65 BUILD_PATH+'base.s'
+      ca65 FC_HOME+'share/runtime.asm'
+      ca65 FC_HOME+'fclib'+opt[:target]+'runtime_init.asm'
 
-      open( base+'.asm', 'w' ) do |f|
-        f.write str
-      end
+      cfg = IO.read( FC_HOME+'share/ld65.cfg' )
+      IO.write( BUILD_PATH+'ld65.cfg', cfg )
 
       return if opt[:asm]
-
-      # nesasmでアセンブルする
-      result = `#{NESASM} -s -l3 -m #{base+'.asm'}` # -autozp では、なぜか失敗するのでなしにしている・・・
-      if /error/ === result
-        raise CompileError.new( "*** can't assemble #{base.to_s+'.asm'} ***\n" + result )
-      end
-      puts result if opt[:debug_info]
-
-      # size = parse_nes( base+'.nes' )[:prog_size]
-      # puts "code=#{size}, var=#{llc.address-0x200}, zeropage=#{llc.address_zeropage-0x10}"
+      
+      sh 'ld65', '-C', BUILD_PATH+'ld65.cfg', '-o', base+'.nes', BUILD_PATH+'base.o', BUILD_PATH+'runtime_init.o', BUILD_PATH+'runtime.o', *objs
 
       if opt[:run]
         emu = Fc::FC_HOME + 'bin/emu6502'
         result = `#{emu} #{base}.nes`
         print result
       end
+    rescue CommandError => err
+      raise Fc::CompileError.new( err.message + "\n" + err.result )
     end
+
+    def ca65( path )
+      sh 'ca65', '-I', BUILD_PATH, '-o', BUILD_PATH+path.basename.sub_ext('.o'), path
+    end
+
+    def sh( *args )
+      command = args.map(&:to_s)
+      Open3.popen2e( *command ) do |i, oe, th|
+        v = th.value
+        if v != 0
+          raise CommandError.new( "#{args[0]} returns #{v}", command, oe.read )
+        end
+      end
+    end
+
   end
+
 end

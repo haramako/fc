@@ -25,7 +25,7 @@ use unknown;
 //@can't return
 function hoge():void { return 1; }
 
-//@can't assemble
+//@Unexpected trailing garbage characters
 function hoge():void {
 	asm( "INVALID ASM" );
 }

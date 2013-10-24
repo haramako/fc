@@ -24,7 +24,7 @@ def parse_nes( file )
     bank_size = nil
     (mem.size-7).downto(0) do |i|
       bank_size = i
-      break if mem[i] != 255
+      break if mem[i] != 0
     end
     prog_size += bank_size
   end

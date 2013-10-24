@@ -9,25 +9,25 @@ x_backup = reg+7
 
 ; read a byte and increment source pointer
 rle_read:
-	lda [src],y
+	lda (src),y
 	inc src
-	bne .else
+	bne @else
 	inc src + 1
-.else:
+@else:
 	rts
 
 
 ; write a byte and increment destination pointer
 rle_store:
-	sta [dest],y
+	sta (dest),y
 	inc dest
-	bne .else1
+	bne @else1
 	inc dest + 1
-.else1:
+@else1:
 	inc destlen
-	bne .else2
+	bne @else2
 	inc destlen + 1
-.else2:
+@else2:
 	rts
 
 ; cc65 interface to rle_unpack
@@ -58,22 +58,22 @@ rle_unpack:
 	jsr rle_read		; read the first byte
 	sta lastbyte		; save as last byte
 	jsr rle_store		; store
-.unpack:
+@unpack:
 	jsr rle_read		; read next byte
 	cmp lastbyte		; same as last one?
-	beq .rle		; yes, unpack
+	beq @rle		; yes, unpack
 	sta lastbyte		; save as last byte
 	jsr rle_store		; store
-	jmp .unpack		; next
-.rle:
+	jmp @unpack		; next
+@rle:
 	jsr rle_read		; read byte count
 	tax
-	beq .end		; 0 = end of stream
+	beq @end		; 0 = end of stream
 	lda lastbyte
-.read:
+@read:
 	jsr rle_store		; store X bytes
 	dex
-	bne .read
-	beq .unpack		; next
-.end:
+	bne @read
+	beq @unpack		; next
+@end:
 	rts

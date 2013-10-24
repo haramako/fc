@@ -73,19 +73,20 @@ srcs.each do |src|
 
   expected_err, src = src.split(/\n/,2)
 
-  f = Tempfile.new 'temp'
-  f.write src+"\n"+common
-  f.close
+  open( Dir.tmpdir+'/fail_test.fc', 'w' ) do |f|
+    f.write src+"\n"+common
+    f.close
 
-  begin
-    compiler.compile f.path
-  rescue Fc::CompileError => e
-    unless /#{expected_err}/ === e.message
-      puts e
-      puts e.backtrace.join("\n")
-      err = true
+    begin
+      compiler.compile f.path
+    rescue Fc::CompileError => e
+      unless /#{expected_err}/ === e.message
+        puts e
+        puts e.backtrace.join("\n")
+        err = true
+      end
+      print '.'
     end
-    print '.'
   end
 end
 puts

@@ -131,6 +131,7 @@ module Fc
 
       dout 1, "compiling module #{filename}"
       old_module, @module = @module, Module.new( @global_scope )
+      @module.path = path
 
       @module.id = File.basename(filename,'.fc')
       @modules[path] = @module
@@ -730,7 +731,7 @@ module Fc
     end
 
     def new_labels( *names )
-      r = names.map { |n| '.'+n+'_'+tmp_count.to_s }
+      r = names.map { |n| '@'+n+'_'+tmp_count.to_s }
     end
 
     def new_tmp( type )
