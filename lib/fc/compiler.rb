@@ -114,7 +114,8 @@ module Fc
 
       # オプションのアセンブラ
       inesprg = (hlc.options[:bank_count] || 4 ) / 2
-      options = { inesprg: inesprg, ineschr: 1, inesmir: 1, inesmap: inesmap }
+      ineschr = (hlc.options[:char_banks] || 1 )
+      options = { inesprg: inesprg, ineschr: ineschr, inesmir: 1, inesmap: inesmap }
       template = IO.read( Fc.find_share('base.asm.erb') ) 
       str = ERB.new(template,nil,'-').result(binding)
       IO.write( BUILD_PATH+'base.s', str )
@@ -136,6 +137,9 @@ module Fc
       segs = hlc.modules.map do |name,m| 
         bank = m.options[:bank] || 0
         bank = banks.size + bank if bank < 0
+        if m.options[:org]
+          banks[bank][:org] = m.options[:org]
+        end
         {name: m.id.to_s, bank: bank}
       end
       cfg = ERB.new(IO.read( FC_HOME+'share/ld65.cfg' ),nil,'-').result(binding)

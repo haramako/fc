@@ -44,6 +44,10 @@ module Fc
 
       # モジュール定数のコンパイル
       mod.blobs.each do |blob|
+        if blob.kind == :global_symbol
+          inc << "\t.import #{to_asm(blob.id)}"
+          asm << "\t.export #{to_asm(blob.id)}"
+        end
         asm << emit_blob(blob)
       end
 
@@ -78,6 +82,7 @@ module Fc
         asm << "\t.include \"#{file}\""
       end
 
+      asm << ".segment \"#{@code_segment}\""
       # lambdaのコンパイル
       mod.lambdas.each do |lmd|
         inc << "\t.import #{to_asm(lmd)}"
@@ -702,6 +707,7 @@ module Fc
     def emit_blob( v )
       r = []
       base_string = ( v.base_string ? (' ; '+v.base_string.inspect) : '' )
+      r << ".segment \"#{@code_segment}\""
       if v.kind == :symbol or v.kind == :array_literal
         r << "@#{to_asm(v.id)}:" + base_string
       else

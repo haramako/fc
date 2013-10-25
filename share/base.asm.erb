@@ -40,8 +40,8 @@
     .byte   $4e,$45,$53,$1a ; "NES"^Z
     .byte   <%=options[:inesprg]%>       ; ines prg  - Specifies the number of 16k prg banks.
     .byte   <%=options[:ineschr]%>       ; ines chr  - Specifies the number of 8k chr banks.
-    .byte   <%=options[:inesmir]%>   ; ines mir  - Specifies VRAM mirroring of the banks.
-    .byte   <%=options[:inesmap]%>   ; ines map  - Specifies the NES mapper used.
+    .byte   <%= options[:inesmir] | ((options[:inesmap] & 15) << 4) %>   ; ines mir  - Specifies VRAM mirroring of the banks.
+    .byte   <%=(options[:inesmap] >> 4 )%>   ; ines map  - Specifies the NES mapper used.
     .byte   0,0,0,0,0,0,0,0 ; 8 zeroes
 
 .segment "FC_ZEROPAGE": zeropage
