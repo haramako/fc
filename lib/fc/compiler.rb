@@ -45,6 +45,7 @@ module Fc
       opt = {out:'a.nes', target:'emu'}.merge(opt)
       opt[:out] = Pathname.new(opt[:out])
       opt[:html] = opt[:out].sub_ext('.html')
+      @target = opt[:target]
 
       FileUtils.mkdir_p( BUILD_PATH )
       hlc = compile( filename, opt )
@@ -165,15 +166,13 @@ module Fc
       cfg = ERB.new(IO.read( FC_HOME+'share/ld65.cfg' ),nil,'-').result(binding)
       IO.write( BUILD_PATH+'ld65.cfg', cfg )
 
-      puts opt[:out]
-
       sh( LD65, '-m', opt[:out].sub_ext('.map'), '-o', opt[:out], '-C', BUILD_PATH+'ld65.cfg', 
           BUILD_PATH+'base.o', BUILD_PATH+'runtime_init.o', BUILD_PATH+'runtime.o', *objs )
 
     end
 
     def ca65( path )
-      sh CA65, '-I', FC_HOME+'share', '-I', BUILD_PATH, '-I', '.', '-I', FC_HOME+'fclib', '-o', BUILD_PATH+path.basename.sub_ext('.o'), path
+      sh CA65, '-o', BUILD_PATH+path.basename.sub_ext('.o'), '-I', FC_HOME+'share', '-I', BUILD_PATH, '-I', FC_HOME+'fclib', '-I', FC_HOME+'fclib'+@target, path
     end
 
     def sh( *args )

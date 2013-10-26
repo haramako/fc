@@ -44,7 +44,7 @@ module Fc
 
       # include(.asm)の処理
       mod.include_asms.each do |file|
-        asm << "\t.include \"#{file.basename}\""
+        asm << "\t.include \"#{file}\""
       end
 
       mod.defs.each do |sym, kind, type, val|

@@ -3,6 +3,9 @@ a.map
 *.lst
 *.nes
 *.html
+*.o
+*.s
+_*.inc
 darius.asm
 parser.output
 coverage
@@ -12,4 +15,3 @@ darius
 miku
 .ruby-version
 sample
-.fc-build

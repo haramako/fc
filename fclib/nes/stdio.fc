@@ -42,7 +42,7 @@ function init():void
 	print_addr = 0x2000;
 }
 
-public function interrupt():void options(symbol:'interrupt');
-public function interrupt_irq():void options(symbol:'interrupt_irq');
+public function interrupt():void options(symbol:'_interrupt');
+public function interrupt_irq():void options(symbol:'_interrupt_irq');
 
 include macro ( "stdio.rb" );

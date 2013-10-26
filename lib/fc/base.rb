@@ -9,7 +9,7 @@ module Fc
 
   FC_HOME = Pathname(File.dirname( __FILE__ )) + '../..'
   LIB_PATH = [Pathname('.'), FC_HOME+'fclib' ]
-  BUILD_PATH = Pathname.new(".fc-build/")
+  BUILD_PATH = Pathname.new(".")
 
   # share以下のファイルを検索する
   def self.find_share( path )

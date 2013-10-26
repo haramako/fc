@@ -284,10 +284,8 @@ module Fc
                       end
         end
         case opt_ident
-        when :header
-          @module.include_headers << Fc::find_module( filename )
         when :asm
-          @module.include_asms << Fc::find_module( filename )
+          @module.include_asms << Pathname.new( filename )
         when :macro
           path = Fc::find_module( filename )
           src = File.read( path )
