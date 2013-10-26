@@ -1,5 +1,8 @@
 **TODO
 
+* public属性は、scopeにいれる
+* const属性は、typeにいれる
+* indexなどのsize倍する処理を、分割する
 * マクロの構成を考える
 * Value.kind の整理
  * 宣言(declare)と定義(define)の分離

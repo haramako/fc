@@ -51,16 +51,29 @@ module Fc
       compile2( hlc, opt )
       objs = assemble( hlc, opt )
 
+      make_runtime opt[:target]
+      exit if opt[:compile_only]
+
+      make_base hlc
+
       link hlc, objs, opt
 
-      # 実行する
-      if opt[:run]
-        emu = Fc::FC_HOME + 'bin/emu6502'
-        result = `#{emu} #{opt[:out]}`
-        print result
-      end
+      execute opt[:out] if opt[:run]
+
     rescue CommandError => err
       raise Fc::CompileError.new( err.message + "\n" + err.command.to_s + "\n" + err.result )
+    end
+
+    def compile_only( filename, opt = Hash.new )
+      opt[:compile_only] = true
+      build( filename, opt )
+    end
+
+    def execute( filename )
+      # 実行する
+      emu = Fc::FC_HOME + 'bin/emu6502'
+      result = `#{emu} #{filename}`
+      print result
     end
 
     # ソースコードを中間コードにコンパイル
@@ -100,9 +113,12 @@ module Fc
       objs
     end
 
-    # リンクする
-    def link( hlc, objs, opt )
+    def make_runtime( target )
+      ca65 FC_HOME+'share/runtime.asm'
+      ca65 FC_HOME+'fclib'+target+'runtime_init.asm'
+    end
 
+    def make_base( hlc )
       case hlc.options[:mapper]
       when nil, "MMC0"
         inesmap = 0
@@ -120,8 +136,12 @@ module Fc
       str = ERB.new(template,nil,'-').result(binding)
       IO.write( BUILD_PATH+'base.s', str )
       ca65 BUILD_PATH+'base.s'
-      ca65 FC_HOME+'share/runtime.asm'
-      ca65 FC_HOME+'fclib'+opt[:target]+'runtime_init.asm'
+    end
+
+    # リンクする
+    def link( hlc, objs, opt )
+
+      ineschr = (hlc.options[:char_banks] || 1 )
 
       if hlc.options[:bank_count]
         bank_num = hlc.options[:bank_count]

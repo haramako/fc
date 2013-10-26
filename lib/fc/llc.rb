@@ -42,6 +42,11 @@ module Fc
         asm << "\t.include \"_#{m.id}.inc\""
       end
 
+      # include(.asm)の処理
+      mod.include_asms.each do |file|
+        asm << "\t.include \"#{file}\""
+      end
+
       mod.defs.each do |sym, kind, type, val|
         case kind
         when :equ
@@ -54,6 +59,8 @@ module Fc
           asm << ".segment \"BSS\""
           asm << "#{mangle(sym)}: .res #{type.size}"
         when :block
+          inc << "\t.import #{mangle(sym)}"
+          asm << "\t.export #{mangle(sym)}"
           asm << ".segment \"#{@code_segment}\""
           asm << emit_block(sym,type,val)
         when :code
@@ -69,11 +76,6 @@ module Fc
 
       # include header(.asm)の処理
       mod.include_headers.each do |file|
-        asm << "\t.include \"#{file}\""
-      end
-
-      # include(.asm)の処理
-      mod.include_asms.each do |file|
         asm << "\t.include \"#{file}\""
       end
 
@@ -615,7 +617,7 @@ module Fc
 
     def to_asm( v )
       if Value === v or CastedValue === v
-        case v.kind2
+        case v.kind
         when :local
           case v.location
           when :frame then "<S+#{v.address},x"
@@ -636,10 +638,8 @@ module Fc
           #:nocov:
         end
       elsif Symbol === v
-        mangle v
-      elsif Lambda === v
         raise
-        mangle v.id
+        mangle v
       else
         #:nocov:
         raise "invalid v = #{v}"
@@ -664,26 +664,26 @@ module Fc
           #:nocov:
         end
       elsif v.kind == :literal
-        if Numeric === v.val
+        case v.val
+        when Numeric
           "##{(v.val >> (n*8)) % 256}"
-        else
+        when Symbol
           case n
-          when 0; "#.LOBYTE(#{to_asm(v.val)})"
-          when 1; "#.HIBYTE(#{to_asm(v.val)})"
+          when 0; "#.LOBYTE(#{mangle(v.val)})"
+          when 1; "#.HIBYTE(#{mangle(v.val)})"
           else
             #:nocov:
             raise
             #:nocov:
           end
+        else
+          #:nocov:
+          raise
+          #:nocov:
         end
       else
         if n < v.type.size
-          _a = to_asm(v)
-          if _a[0] == '<'
-            "<#{n}+#{_a[1..-1]}" # zeropage
-          else
-            "#{n}+#{_a}" # not zeropage
-          end
+          "#{n}+#{to_asm(v)}"
         else
           "#0" # 符号拡張は、:sign_extension オペレータで行うので、存在しないbyteは0扱い
         end
@@ -816,7 +816,7 @@ module Fc
         #:nocov:
         size = 0
         lmd.vars.each do |var|
-          if var.on_stack?
+          if var.kind == :local
             var.location = :frame
             var.address = size
             size += var.type.size
@@ -860,8 +860,8 @@ module Fc
           case next_op[0]
           when :pget 
             if op[1] == next_op[2] and # 同じ変数を連続で使っていて
-                op[2].kind2 == :symbol and # 単純なシンボルで
-                op[1].kind == :temp and # その変数をそこでしか使っていない
+                op[2].kind == :global and # 単純なシンボルで
+                op[1].opt[:local_type] == :temp and # その変数をそこでしか使っていない
                 op[3].type.size == 1 # インデックスのサイズが1byte
               # puts "replace #{op}, #{next_op}"
               ops[i] = [:index_pget, next_op[1], op[2], op[3]]
@@ -869,8 +869,8 @@ module Fc
             end
           when :pset
             if op[1] == next_op[1] and # 同じ変数を連続で使っていて
-                op[2].kind2 == :symbol and # 単純なシンボルで
-                op[1].kind == :temp and # その変数をそこでしか使っていない
+                op[2].kind == :global and # 単純なシンボルで
+                op[1].opt[:local_type] == :temp and # その変数をそこでしか使っていない
                 op[3].type.size == 1 # インデックスのサイズが1byte
               # puts "replace #{op}, #{next_op}"
               ops[i] = [:index_pset, op[2], op[3], next_op[2]]

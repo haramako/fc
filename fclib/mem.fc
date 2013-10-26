@@ -4,7 +4,7 @@ include( "mem.asm" );
 
 function set(p:int*, c:int, size:int):void;
 function zero(p:int*, size:int):void;
-function copy(_to:int*, _from:int*, size:int):void;
+function copy(_to:int*, _from:int*, size:int16):void;
 function compare(p1:int*, p2:int*, size:int):int;
 
 function strlen(str:int*):int

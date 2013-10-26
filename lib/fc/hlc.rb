@@ -277,6 +277,7 @@ module Fc
         unless opt_ident
           opt_ident = case File.extname(filename)
                       when '.asm' then :asm
+                      when '.inc' then :asm
                       when '.chr' then :chr
                       when '.rb' then :macro
                       else raise
@@ -519,8 +520,8 @@ module Fc
           :and, :or, :xor, :land, :lor, :not, :uminus, :shift_left, :shift_right
           ast[1] = const_eval( ast[1] )
           ast[2] = const_eval( ast[2] ) if ast[2]
-          if (Value === ast[1] and ast[1].const? and Numeric === ast[1].val) and
-              (ast[2].nil? or ( Value === ast[2] and ast[2].const? and Numeric === ast[2].val) )
+          if (Value === ast[1] and ast[1].kind == :literal and Numeric === ast[1].val) and
+              (ast[2].nil? or ( Value === ast[2] and ast[2].kind == :literal and Numeric === ast[2].val) )
             v1 = ast[1].val
             v2 = ast[2].val if ast[2]
             case ast[0]
@@ -563,7 +564,7 @@ module Fc
         when :cast
           ast[1] = const_eval( ast[1] )
           ast[2] = type_eval( ast[2] )
-          r = Value.new( :literal, nil, ast[2], ast[1].val, nil ) if Value === ast[1] and ast[1].const? and Numeric === ast[1].val
+          r = Value.new( :literal, nil, ast[2], ast[1].val, nil ) if Value === ast[1] and ast[1].kind == :literal and Numeric === ast[1].val
         when :ref, :deref
           ast[1] = const_eval( ast[1] )
         else
@@ -709,7 +710,7 @@ module Fc
           lmd = rval( ast[1] )
           if lmd.type.kind == :macro
             # マクロの実行
-            ast[2].map!{ |x| rval(x) }
+            # ast[2].map!{ |x| rval(x) } # TODO: マクロ前に評価するか考える
             x = self.instance_exec( ast[2], ast[3], &lmd.val )
             if x
               if x[0] == :block
@@ -801,7 +802,7 @@ module Fc
         return v if type == v.type
         return v if type.size <= v.type.size
         return v unless v.type.signed
-        return v if v.const?
+        return v if v.kind == :literal
         new_v = new_tmp( type )
         emit :sign_extension, new_v, v
         new_v

@@ -1,4 +1,5 @@
 use * from unittest;
+use mem;
 
 include( "character.chr" );
 include( "test_basic.asm" );
@@ -72,6 +73,9 @@ function test_misc():void
 	var x:uint16;
 	x = -1;
 	assert_equal( x, -1, 'cast' );
+
+	assert_true( mem.compare("ho\nge", """ho
+ge""",6) == 0, "here string");
 	
 	// return void
 	return;

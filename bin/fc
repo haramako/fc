@@ -34,6 +34,8 @@ com = ARGV.shift
 case com
 when 'build', 'b'
   compiler.build ARGV[0], o
+when 'compile', 'c'
+  compiler.compile_only ARGV[0], o
 else
   puts opt
   exit

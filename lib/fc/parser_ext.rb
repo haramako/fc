@@ -40,6 +40,18 @@ module Fc
         else
           r = [:IDENT, @scanner[0].to_sym ]
         end
+        # """文字列
+      elsif @scanner.scan(/"""(.*?)"""/m)
+        str = @scanner[1]
+        str = str.gsub(/\\n|\\x../) do |s|
+          case s
+          when '\n'
+            "\n"
+          when /\\x/
+            s[2..-1].to_i(16).chr
+          end
+        end
+        r = [:STRING, str]
       elsif @scanner.scan(/"([^\\"]|\\.)*"/)
         # ""文字列
         str = @scanner[0][1..-2]

@@ -20,12 +20,32 @@ _mem_copy:
 	sta reg+3
 	lda S+4,x
 	sta reg+4
+	lda S+5,x
+	sta reg+5
+
+;;; 256byteごとのコピー
+	beq @end
+@loop:
+	ldy #0
+:	lda (reg+2),y
+	sta (reg),y
+	iny
+	bne :-
+	inc reg+3
+	inc reg+1
+	dec reg+5
+	bne @loop
+@end:	
+	
+
+;;; 残りのコピー
     ldy #0
 :	lda (reg+2),y
     sta (reg),y
     iny
     cpy reg+4
     bne :-
+
     rts
         
 ;; function memset(p:int*, c:int, size:int):void

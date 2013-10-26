@@ -4,6 +4,27 @@ use mem;
 include( "character.chr" );
 
 var str:int[12];
+var buf1:int[512];
+var buf2:int[512];
+
+function test_copy():void
+{
+	buf1[0] = 1;
+	buf1[1] = 2;
+	buf1[255] = 3;
+	buf1[256] = 4;
+	buf1[257] = 5;
+	buf1[511] = 6;
+	mem.copy( buf2, buf1, 2 );
+	assert_equal( mem.compare( buf1, buf2, 2 ), 0, "copy");
+	
+	mem.copy( buf2, buf1, 512 );
+	assert_equal( buf2[255], 3, "copy");
+	assert_equal( buf2[256], 4, "copy");
+	assert_equal( buf2[257], 5, "copy");
+	assert_equal( buf2[511], 6, "copy");
+	//assert_equal( mem.compare( buf1, buf2, 512 ), 1, "copy");
+}
 
 function test_strcpy():void
 {

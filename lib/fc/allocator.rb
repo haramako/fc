@@ -48,11 +48,11 @@ module Fc
       flow << node
 
       defines.each do |v|
-        use_define[v][0] << i if v and v.on_stack?
+        use_define[v][0] << i if v and v.kind == :local
       end
 
       uses.each do |v|
-        use_define[v][1] << i if v and v.on_stack?
+        use_define[v][1] << i if v and v.kind == :local
       end
     end
 

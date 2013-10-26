@@ -190,12 +190,11 @@ module Fc
     attr_reader :kind # 種類
     attr_reader :type # Type
     attr_reader :id   # 変数名
-    attr_reader :val  # 値 type==literal or literal_array の場合のみは Fixnum,Symbol, Arrayのいずれか
+    attr_reader :val  # 値 type==literal or literal_array の場合のみ (Fixnum or Symbol orArray)
     attr_reader :opt  # オプション 
                       # local_type:[:arg or :result or :temp or nil]
     attr_accessor :base_string # 元の値が文字列だった場合、その文字列
-    
-    attr_accessor :symbol
+    attr_accessor :public # public かどうか
 
     # 以下は、アセンブラで使用
     attr_accessor :address # アドレス
@@ -204,7 +203,6 @@ module Fc
     attr_accessor :live_range
     attr_accessor :cond_reg # コンディションレジスタの種類, location==:condの時のみ使用, (:carry, :zero, :negative) のいずれか
     attr_accessor :cond_positive # コンディションレジスタがどちらの状態を表すか( true/false ), location==:condの時のみ使用
-    attr_accessor :public # public かどうか
 
     def initialize( kind, id, type, val, opt )
       raise CompileError.new("invalid type, #{type}") unless type.is_a? Type
@@ -223,22 +221,6 @@ module Fc
       @from_fcm = false
     end
 
-    def kind2
-      @kind
-      # case @kind
-      # when :arg, :result, :var, :temp
-      #   :local
-      # when :global_var, :global_symbol, :symbol
-      #   :global
-      # when :global_const, :literal, :const
-      #   :literal
-      # when :array_literal
-      #   :array_literal
-      # when :module
-      #   :module
-      # end
-    end
-
     def self.new_int( n )
       if n >= 256
         type = Type[:int16]
@@ -253,21 +235,9 @@ module Fc
     end
 
     def assignable?
-      [:local, :global].include?( @kind )
+      @kind == :local or @kind == :global
     end
     
-    def const?
-      [:literal, :symbol].include?( @kind )
-    end
-
-    def symbol
-      @symbol || @val
-    end
-    
-    def on_stack?
-      (@kind == :local)
-    end
-
     def inspect
       if @id
         "{#{id}:#{type}}"
@@ -346,12 +316,8 @@ module Fc
       false
     end
 
-    def const?
-      false
-    end
-
-    def on_stack?
-      false
+    def kind
+      @from.kind
     end
 
   end
