@@ -30,7 +30,7 @@ module Fc
       inc = []
       asm = []
       asm << "\t.setcpu \"6502\""
-      asm << "\t.include \"#{FC_HOME}/share/macro.inc\""
+      asm << "\t.include \"macro.inc\""
       asm << "__MODULE_#{mod.id.upcase}__ = 1"
 
       inc << ".ifndef __MODULE_#{mod.id.upcase}__"
@@ -44,7 +44,7 @@ module Fc
 
       # include(.asm)の処理
       mod.include_asms.each do |file|
-        asm << "\t.include \"#{file}\""
+        asm << "\t.include \"#{file.basename}\""
       end
 
       mod.defs.each do |sym, kind, type, val|

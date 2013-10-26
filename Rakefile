@@ -2,9 +2,9 @@
 task :default => 'lib/fc/parser.rb'
 
 task :test => :default do
-	sh 'rm -rf coverage'
+	FileUtils.rm_rf ['coverage']
 	sh 'rspec test/fc/test_*.rb'
-	sh 'cd test ; ./test-all'
+	Dir.chdir('test'){ sh 'ruby test-all' }
 end
 
 task :clean do

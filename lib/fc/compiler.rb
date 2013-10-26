@@ -72,7 +72,7 @@ module Fc
     def execute( filename )
       # 実行する
       emu = Fc::FC_HOME + 'bin/emu6502'
-      result = `#{emu} #{filename}`
+      result = `node #{emu} #{filename}`
       print result
     end
 
@@ -171,7 +171,7 @@ module Fc
     end
 
     def ca65( path )
-      sh CA65, '-l', '-I', BUILD_PATH, '-o', BUILD_PATH+path.basename.sub_ext('.o'), path
+      sh CA65, '-I', FC_HOME+'share', '-I', BUILD_PATH, '-I', '.', '-I', FC_HOME+'fclib', '-o', BUILD_PATH+path.basename.sub_ext('.o'), path
     end
 
     def sh( *args )
