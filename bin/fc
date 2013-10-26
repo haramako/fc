@@ -12,7 +12,7 @@ require 'optparse'
 o = Hash.new
 $coverage = false
 
-opt = OptionParser.new( "NES Compiler\nUsage: fc [options] <src.fc> ...\nOptions:\n" )
+opt = OptionParser.new( "NES Compiler\nUsage: fc <command> [options] <src.fc> ...\nOptions:\n" )
 opt.on( '-h', '--help' ){ puts opt; exit }
 opt.on( '-o:', 'output file' ){|v| o[:out] = v }
 opt.on( '-e', 'run by interpreter' ){ o[:run] = true }
@@ -29,5 +29,12 @@ if ARGV.size == 0
 end
 
 require_relative '../lib/fc/compiler'
-com = Fc::Compiler.new
-com.build ARGV[0], o
+compiler = Fc::Compiler.new
+com = ARGV.shift
+case com
+when 'build', 'b'
+  compiler.build ARGV[0], o
+else
+  puts opt
+  exit
+end

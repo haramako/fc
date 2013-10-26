@@ -32,7 +32,7 @@ public function exit( code:int ):void
 
 public function init():void {}
 
-public function interrupt():void options(symbol:'interrupt'){} 
-public function interrupt_irq():void options(symbol:'interrupt_irq'){}
+public function interrupt():void options(symbol:'_interrupt'){} 
+public function interrupt_irq():void options(symbol:'_interrupt_irq'){}
 
 include macro ( "stdio.rb" );

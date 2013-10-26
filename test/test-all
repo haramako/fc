@@ -63,7 +63,8 @@ end
 puts 'testing error on invalid sources'
 
 common = <<EOT
-function interrupt():void{}
+function interrupt():void options(symbol:"_interrupt"){}
+function interrupt_irq():void options(symbol:"_interrupt_irq"){}
 function main():void{}
 EOT
 

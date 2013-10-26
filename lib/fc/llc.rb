@@ -42,33 +42,28 @@ module Fc
         asm << "\t.include \"_#{m.id}.inc\""
       end
 
-      # モジュール定数のコンパイル
-      mod.blobs.each do |blob|
-        if blob.kind == :global_symbol
-          inc << "\t.import #{to_asm(blob.id)}"
-          asm << "\t.export #{to_asm(blob.id)}"
-        end
-        asm << emit_blob(blob)
-      end
-
-      # モジュール変数のコンパイル
-      asm << ".segment \"BSS\""
-      mod.vars.each do |v|
-        case v.kind
-        when :global_var
-          if v.opt[:address]
-            inc << "#{to_asm(v)} = #{v.opt[:address]}"
-            asm << "#{to_asm(v)} = #{v.opt[:address]}"
-          else
-            inc << "\t.import #{to_asm(v)}"
-            asm << "\t.export #{to_asm(v)}"
-            asm << "#{to_asm(v)}: .res #{v.type.size}"
-          end
-        when :global_const
-          if Numeric === v.val
-            inc << "#{to_asm(v)} = #{v.val}"
-            asm << "#{to_asm(v)} = #{v.val}"
-          end
+      mod.defs.each do |sym, kind, type, val|
+        case kind
+        when :equ
+          val = mangle(val) if Symbol === val
+          inc << "#{mangle(sym)} = #{val}"
+          asm << "#{mangle(sym)} = #{val}"
+        when :bss
+          inc << "\t.import #{mangle(sym)}"
+          asm << "\t.export #{mangle(sym)}"
+          asm << ".segment \"BSS\""
+          asm << "#{mangle(sym)}: .res #{type.size}"
+        when :block
+          asm << ".segment \"#{@code_segment}\""
+          asm << emit_block(sym,type,val)
+        when :code
+          inc << "\t.import #{mangle(sym)}"
+          asm << "\t.export #{mangle(sym)}"
+          lmd = val
+          next if lmd.opt[:extern]
+          asm << compile_lambda( sym, lmd )
+        else
+          raise
         end
       end
 
@@ -82,15 +77,6 @@ module Fc
         asm << "\t.include \"#{file}\""
       end
 
-      asm << ".segment \"#{@code_segment}\""
-      # lambdaのコンパイル
-      mod.lambdas.each do |lmd|
-        inc << "\t.import #{to_asm(lmd)}"
-        asm << "\t.export #{to_asm(lmd)}"
-        next if lmd.opt[:extern]
-        asm << compile_lambda( lmd )
-      end
-
       # include(.chr)の処理
       mod.include_chrs.each do |file|
         asm << ".segment \"CHARS\""
@@ -102,7 +88,7 @@ module Fc
       [asm,inc]
     end
 
-    def compile_lambda( lmd )
+    def compile_lambda( sym, lmd )
       # block.optimized_ops = Marshal.load(Marshal.dump(ops))
       # ops = optimize( block, ops )
       # block.optimized_ops = ops
@@ -120,7 +106,7 @@ module Fc
       r << ";;;============================="
 
       r << ".segment \"#{@code_segment}\""
-      r << ".proc #{to_asm(lmd)}" 
+      r << ".proc #{mangle(sym)}" 
 
       ops.each_with_index do |op,op_no| # op=オペランド
         dout 3, op.inspect
@@ -172,11 +158,9 @@ module Fc
               size += 1
             end
           end
-          if Lambda === op[2].val
+          if op[2].const?
             # 関数を直に呼ぶ
-            r << "call #{to_asm(op[2].val.id)}, ##{lmd.frame_size}"
-          elsif op[2].from_fcm
-            r << "call #{to_asm(op[2])}, ##{lmd.frame_size}"
+            r << "call #{mangle(op[2].symbol)}, ##{lmd.frame_size}"
           else
             # 関数ポインタから呼ぶ
             end_label = new_label
@@ -509,8 +493,13 @@ module Fc
         end
       end
 
-      lmd.blobs.each do |blob|
-        r.concat emit_blob( blob )
+      lmd.defs.each do |sym, kind, type, val|
+        case kind
+        when :block
+          r.concat emit_block( sym, type, val )
+        else
+          raise
+        end
       end
 
       
@@ -626,8 +615,8 @@ module Fc
 
     def to_asm( v )
       if Value === v or CastedValue === v
-        case v.kind
-        when :var, :arg, :result, :temp
+        case v.kind2
+        when :local
           case v.location
           when :frame then "<S+#{v.address},x"
           when :reg then "<L+#{v.address}"
@@ -636,12 +625,8 @@ module Fc
             raise "invalid location #{v.location} of #{v}"
             # :nocov:
           end
-        when :symbol, :const, :array_literal
-          '@'+mangle(v.long_id)
-        when :global_symbol
-          mangle(v.long_id)
-        when :global_const, :global_var
-          mangle(v.long_id)
+        when :global
+          mangle(v.symbol)
         when :literal
           "##{v.val}"
         else
@@ -652,6 +637,7 @@ module Fc
       elsif Symbol === v
         mangle v
       elsif Lambda === v
+        raise
         mangle v.id
       else
         #:nocov:
@@ -662,7 +648,7 @@ module Fc
 
     # 名前をアセンブラ用の表現に変更する
     def mangle(str)
-      '_'+str.to_s.gsub(/\$/){'_D'}.gsub(/\./){'_'}
+      str.to_s.gsub(/\$/){'_D'}
     end
 
     # 値からn番目のbyteを取得する
@@ -681,8 +667,8 @@ module Fc
           "##{(v.val >> (n*8)) % 256}"
         else
           case n
-          when 0; "#.LOBYTE(#{to_asm(v.val)})"
-          when 1; "#.HIBYTE(#{to_asm(v.val)})"
+          when 0; "#.LOBYTE(#{to_asm(v.symbol)})"
+          when 1; "#.HIBYTE(#{to_asm(v.symbol)})"
           else
             #:nocov:
             raise
@@ -704,16 +690,10 @@ module Fc
     end
 
     # v を .db/.dw に変換する
-    def emit_blob( v )
+    def emit_block( sym, type, val )
       r = []
-      base_string = ( v.base_string ? (' ; '+v.base_string.inspect) : '' )
-      r << ".segment \"#{@code_segment}\""
-      if v.kind == :symbol or v.kind == :array_literal
-        r << "@#{to_asm(v.id)}:" + base_string
-      else
-        r << "#{to_asm(v.id)}:" + base_string
-      end
-      case v.type.base.size
+      r << "#{mangle(sym)}:"
+      case type.base.size
       when 1; op = '.byte'
       when 2; op = '.word'
       else
@@ -721,9 +701,9 @@ module Fc
         raise
         #:nocov:
       end
-      v.val.each_slice(4) do |slice|
+      val.each_slice(16) do |slice|
         slice.map! do |e|
-          if Numeric === e.val then e.val else to_asm(e) end
+          if Numeric === e.val or Symbol === e.val then e.val else to_asm(e) end
         end
         r << "\t#{op} #{slice.join(',')}"
       end
@@ -879,7 +859,7 @@ module Fc
           case next_op[0]
           when :pget 
             if op[1] == next_op[2] and # 同じ変数を連続で使っていて
-                ( op[2].kind == :global_symbol or op[2].kind == :global_var ) and
+                op[2].kind2 == :symbol and # 単純なシンボルで
                 op[1].kind == :temp and # その変数をそこでしか使っていない
                 op[3].type.size == 1 # インデックスのサイズが1byte
               # puts "replace #{op}, #{next_op}"
@@ -888,7 +868,7 @@ module Fc
             end
           when :pset
             if op[1] == next_op[1] and # 同じ変数を連続で使っていて
-                ( op[2].kind == :global_symbol or op[2].kind == :global_var ) and
+                op[2].kind2 == :symbol and # 単純なシンボルで
                 op[1].kind == :temp and # その変数をそこでしか使っていない
                 op[3].type.size == 1 # インデックスのサイズが1byte
               # puts "replace #{op}, #{next_op}"

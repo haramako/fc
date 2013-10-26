@@ -58,7 +58,7 @@ module Fc
 
     # 引数は、最初に定義されているものとする
     use_define.each do |v,info|
-      info[0] << 0 if v.kind == :arg
+      info[0] << 0 if v.opt[:local_type] == :arg
     end
 
     # live range を求める
@@ -91,11 +91,11 @@ module Fc
         end
       end
       
-      if v.kind == :result
+      if v.opt[:local_type] == :result
         # 返り値
         lmd.result.location = :frame
         lmd.result.address = 0 
-      elsif beyond_call or v.kind == :arg or refered[v]
+      elsif beyond_call or v.opt[:local_type] == :arg or refered[v]
         # 引数か、関数をまたいでいるなら、フレームに割り当てる
         v.address = frame_size
         v.location = :frame

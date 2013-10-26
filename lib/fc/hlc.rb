@@ -88,24 +88,34 @@ module Fc
     end
 
     def defmacro( name, &block )
-      var = add_var Value.new( :global_const, name, Type[:macro], block, {} )
+      var = add_var Value.new( :global, name, Type[:macro], block, {} )
       var.public = true
       var
     end
 
     # 変数/定数を追加する
     def add_var( var )
-      if [:global_var, :global_const].include?(var.kind) and var.type != Type[:macro] and var.type != Type[:module]
-        var.long_id = "#{@module.id}.#{var.id}".to_sym
-      else
-        var.long_id = var.id
-      end
       if @lmd
-        @lmd.vars << var
+        @lmd.vars << var 
       elsif @module
         @module.vars << var
       end
       @scope.declare( var )
+    end
+
+    def add_def( id, kind, type, val = nil)
+      if @lmd
+        symbol = id
+        @lmd.defs << [symbol, kind, type, val] unless @lmd.defs.find{|d| d[0] == symbol}
+      else
+        symbol = "_#{@module.id}_#{id}".to_sym
+        @module.defs << [symbol, kind, type, val] unless @module.defs.find{|d| d[0] == symbol}
+      end
+      symbol
+    end
+
+    def add_def_module( symbol, kind, type, val = nil)
+      @module.defs << [symbol, kind, type, val] unless @module.defs.find{|d| d[0] == symbol}
     end
 
     # 新しいスコープを作成し、その中でyieldする
@@ -129,7 +139,8 @@ module Fc
 
     def compile_module( filename )
       path = Fc.find_module(filename)
-      return @modules[path] if @modules[path]
+      id = File.basename(filename,'.fc').to_sym
+      return @modules[id] if @modules[id]
 
       dout 1, "compiling module #{filename}"
       old_module, @module = @module, Module.new( @global_scope )
@@ -145,15 +156,10 @@ module Fc
           @module.modules.each do |k,_|
             mod = compile_module( "#{k}.fc" )
             @module.modules[k] = mod
-            add_var Value.new( :global_const, k.to_sym, Type[:module], mod, nil )
+            add_var Value.new( :module, k.to_sym, Type[:module], mod, nil )
           end
           @module.vars.each do |var|
             var.public = true
-            if [:global_var, :global_const].include?(var.kind) and var.type != Type[:macro] and var.type != Type[:module]
-              var.long_id = "#{@module.id}.#{var.id}".to_sym
-            else
-              var.long_id = var.id
-            end
             if var.type != Type[:macro] and var.type != Type[:module]
               @scope.declare var
             end
@@ -167,8 +173,8 @@ module Fc
         @modules[path] = @module
       else
         # .fcmがないか古いのでコンパイルしなおす
-        @module.id = File.basename(filename,'.fc')
-        @modules[path] = @module
+        @module.id = id
+        @modules[@module.id] = @module
         src = File.read( path )
         ast, pos_info = Parser.new(src,path).parse
         @pos_info.merge! pos_info
@@ -178,7 +184,9 @@ module Fc
           dout 1, "finished module #{filename}"
         end
 
-        IO.write( fcm_path, JSON.dump( @module.to_json ) ) # .fcm の書き込み
+        # pp @module.id, @module.defs, @module.vars.map{|v| [v.id, v.symbol]}
+
+        # IO.write( fcm_path, JSON.dump( @module.to_json ) ) # .fcm の書き込み
       end
 
       new_module = @module
@@ -197,13 +205,13 @@ module Fc
 
         # 帰り値の追加
         if @lmd.type.base.kind != :void
-          @lmd.result = Value.new( :result, :'$result', @lmd.type.base, nil, nil )
+          @lmd.result = Value.new( :local, :'$result', @lmd.type.base, nil, {local_type: :result} )
           @lmd.vars.unshift @lmd.result
         end
 
         # 引数の追加
         @lmd.args.map! do |id,type|
-          add_var Value.new( :arg, id, type, nil, nil )
+          add_var Value.new( :local, id, type, nil, {local_type: :arg} )
         end
 
         ast = Marshal.load( Marshal.dump( lmd.ast ) ) # deep copy ast
@@ -304,7 +312,7 @@ module Fc
           @scope.use m.scope
         else
           id = as || id
-          var = add_var Value.new( :global_const, id, Type[:module], m, {} )
+          var = add_var Value.new( :global, id, Type[:module], m, {} )
           var.public = true
         end
 
@@ -321,7 +329,15 @@ module Fc
           type = type_eval(type)
           type = TypeUtil.guess_type( type, init ) unless type
           TypeUtil.compatible_type( type, init.type ) if type and init
-          var = add_var Value.new( (@lmd ? :var : :global_var), id, type, nil, opt )
+          var = add_var Value.new( (@lmd ? :local : :global), id, type, nil, opt )
+          unless @lmd
+            if var.opt[:address]
+              symbol = add_def( id, :equ, type, var.opt[:address] )
+            else
+              symbol = add_def( id, :bss, type )
+            end
+            var.symbol = symbol
+          end
           var.public = true if (ast[2] || @module.current_scope) == :public 
           emit :load, var, init if init
         end
@@ -333,10 +349,15 @@ module Fc
           val = const_eval(val) if val
           type = TypeUtil.guess_type(type_eval(type),val)
           if Array === val.val
-            new_val = add_var Value.new( (@lmd ? :symbol : :global_symbol ), id, type, val.val, opt )
-            add_blob new_val
+            symbol = add_def( id, :block, type, val.val )
+            new_val = add_var Value.new( :global, id, type, val.val, opt )
+            new_val.symbol = symbol
           else
-            new_val = add_var Value.new( (@lmd ? :const : :global_const ), id, type, val.val, opt )
+            new_val = add_var Value.new( :literal, id, type, val.val, opt )
+            unless @lmd
+              symbol = add_def( id, :equ, type, val.val ) 
+              new_val.symbol = symbol
+            end
           end
           new_val.public = true if (ast[2] || @module.current_scope) == :public
         end
@@ -476,18 +497,20 @@ module Fc
           arg_types = args.map { |arg| arg[1] }
           base_type = Type[ base_type ]
           if opt[:symbol]
-            id = opt[:symbol].intern
+            id = opt[:symbol]
           elsif opt[:id] == :main
-            id = :main
+            id = :_main
           elsif opt[:id]
-            id = "#{@module.id}.#{opt[:id]}".intern
+            id = "_#{@module.id}_#{opt[:id]}".to_sym
           else
-            id = "$lambda#{tmp_count}".intern
+            id = "$#{tmp_count}".to_sym
           end
           opt[:extern] = true unless block
           lmd = Lambda.new( id, args, base_type, opt, block )
           @module.lambdas << lmd
-          r = Value.new( :global_const, nil, lmd.type, lmd, nil )
+          add_def_module(id, :code, lmd.type, lmd)
+          r = Value.new( :global, nil, lmd.type, id, nil )
+          r.symbol = id
 
         when :dot
           left, lv = const_eval(ast[1])
@@ -593,8 +616,13 @@ module Fc
       case ast
 
       when Value
-        add_blob ast if ast.kind == :array_literal # 文字列/配列リテラルの場合は、blobを作成する
-        r = ast
+        if ast.kind == :array_literal
+          symbol = add_def("_#{tmp_count}".to_sym, :block, ast.type, ast.val)
+          r = Value.new( :global, "$#{tmp_count}", ast.type, symbol, nil )
+          r.symbol = symbol
+        else
+          r = ast
+        end
 
       when Array
         case ast[0]
@@ -765,15 +793,7 @@ module Fc
     end
 
     def new_tmp( type )
-      add_var Value.new(:temp, "$#{tmp_count}".intern, type, nil,nil )
-    end
-
-    def add_blob( val )
-      if @lmd
-        @lmd.blobs << val unless @lmd.blobs.find{|x| x == val }
-      else
-        @module.blobs << val unless @module.blobs.find{|x| x == val }
-      end
+      add_var Value.new(:local, "$#{tmp_count}".to_sym, type, nil, {local_type: :temp} )
     end
 
     # キャストする

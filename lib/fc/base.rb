@@ -174,6 +174,11 @@ module Fc
   # グローバル定数2 function f():void x    f    f      global_symbol f
   # リテラル        1                 x    -    1      literal       #1
   #
+  # 新kind
+  # スタック変数 FC_STACK,x
+  # シンボル hoge
+  # 数値
+  #
   # シンボルをもつか、値をもつか
   # アセンブラでシンボルを使うか、スタックを使うか
   # 定数か変数か
@@ -190,6 +195,8 @@ module Fc
     attr_reader :opt  # オプション
     attr_accessor :base_string # 元の値が文字列だった場合、その文字列
     attr_accessor :from_fcm
+    
+    attr_accessor :symbol
 
     # 以下は、アセンブラで使用
     attr_accessor :address # アドレス
@@ -201,9 +208,8 @@ module Fc
     attr_accessor :public # public かどうか
 
     def initialize( kind, id, type, val, opt )
-      raise CompileError.new("invalid type, #{type}") unless Type === type
-      unless [:arg, :result, :var, :temp, :const, :symbol, 
-              :global_var, :global_const, :global_symbol, :literal, :array_literal ].include?( kind )
+      raise CompileError.new("invalid type, #{type}") unless type.is_a? Type
+      unless [:local, :global, :literal, :array_literal, :module].include?( kind )
         #:nocov:
         raise "invalid kind, #{kind}" 
         #:nocov:
@@ -216,6 +222,22 @@ module Fc
       @public = false
       @long_id = id
       @from_fcm = false
+    end
+
+    def kind2
+      @kind
+      # case @kind
+      # when :arg, :result, :var, :temp
+      #   :local
+      # when :global_var, :global_symbol, :symbol
+      #   :global
+      # when :global_const, :literal, :const
+      #   :literal
+      # when :array_literal
+      #   :array_literal
+      # when :module
+      #   :module
+      # end
     end
 
     def self.new_int( n )
@@ -232,15 +254,15 @@ module Fc
     end
 
     def assignable?
-      [:arg, :result, :var, :global_var].include?( @kind )
+      [:local, :global].include?( @kind )
     end
     
     def const?
-      [:const, :global_const, :literal, :global_symbol ].include?( @kind )
+      [:literal, :symbol].include?( @kind )
     end
     
     def on_stack?
-      [:var, :temp, :arg, :result].include?( @kind )
+      (@kind == :local)
     end
 
     def inspect
@@ -402,13 +424,14 @@ module Fc
   # モジュール
   ######################################################################
   class Module
-    attr_reader :vars, :lambdas, :options, :include_chrs, :modules, :blobs, :include_asms, :scope
+    attr_reader :vars, :lambdas, :options, :include_chrs, :modules, :include_asms, :scope
     attr_reader :include_headers
     attr_accessor :id
     attr_accessor :current_scope
     attr_accessor :path
     attr_accessor :from_fcm
     attr_accessor :depends
+    attr_reader :defs
 
     def initialize( global_scope )
       @vars = []
@@ -419,11 +442,11 @@ module Fc
       @include_asms = []
       @include_headers = []
       @modules = Hash.new
-      @blobs = []
       @scope = Scope.new( global_scope )
       @current_scope = :public
       @from_fcm = false
       @depends = []
+      @defs = []
     end
 
     def to_json
@@ -449,7 +472,7 @@ module Fc
   # 関数
   ######################################################################
   class Lambda
-    attr_reader :args, :type, :opt, :ast, :vars, :blobs
+    attr_reader :args, :type, :opt, :ast, :vars, :defs
     attr_accessor :id, :asm, :frame_size, :bank, :ops, :result
 
     def initialize( id, args, base_type, opt, ast )
@@ -461,8 +484,8 @@ module Fc
       @ops = []
       @vars = []
       @bank = 0
-      @blobs = []
       @result = nil
+      @defs = []
     end
 
     def to_s
