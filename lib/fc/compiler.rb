@@ -20,11 +20,9 @@ module Fc
   class Compiler
 
     if /mswin(?!ce)|mingw|cygwin|bccwin/ === RbConfig::CONFIG['target_os']
-      NESASM = FC_HOME + 'bin/nesasm.exe'
-      CA65 = FC_HOME + 'bin/ca65'
-      LD65 = FC_HOME + 'bin/ld65'
+      CA65 = 'ca65'
+      LD65 = 'ld65'
     else
-      NESASM = 'nesasm'
       CA65 = 'ca65'
       LD65 = 'ld65'
     end
