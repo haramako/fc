@@ -190,11 +190,10 @@ module Fc
     attr_reader :kind # 種類
     attr_reader :type # Type
     attr_reader :id   # 変数名
-    attr_accessor :long_id   # 変数名(モジュール名を含む)
-    attr_reader :val  # 定数の場合はその値( Fixnum or Array or Lambda or Proc(マクロ) )
-    attr_reader :opt  # オプション
+    attr_reader :val  # 値 type==literal or literal_array の場合のみは Fixnum,Symbol, Arrayのいずれか
+    attr_reader :opt  # オプション 
+                      # local_type:[:arg or :result or :temp or nil]
     attr_accessor :base_string # 元の値が文字列だった場合、その文字列
-    attr_accessor :from_fcm
     
     attr_accessor :symbol
 
@@ -260,6 +259,10 @@ module Fc
     def const?
       [:literal, :symbol].include?( @kind )
     end
+
+    def symbol
+      @symbol || @val
+    end
     
     def on_stack?
       (@kind == :local)
@@ -300,13 +303,12 @@ module Fc
   # c++でいうところの reintepret_cast<> を表す
   class CastedValue < Delegator
 
-    attr_reader :from, :type, :offset, :val
+    attr_reader :from, :type, :offset
 
     def initialize( from, type, offset )
       @from = from
       @type = type
       @offset = offset
-      @val = nil
     end
 
     def to_s

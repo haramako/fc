@@ -158,9 +158,9 @@ module Fc
               size += 1
             end
           end
-          if op[2].const?
+          if op[2].kind == :literal
             # 関数を直に呼ぶ
-            r << "call #{mangle(op[2].symbol)}, ##{lmd.frame_size}"
+            r << "call #{mangle(op[2].val)}, ##{lmd.frame_size}"
           else
             # 関数ポインタから呼ぶ
             end_label = new_label
@@ -626,7 +626,8 @@ module Fc
             # :nocov:
           end
         when :global
-          mangle(v.symbol)
+          raise "invalid #{v}, #{v.val}" unless v.val
+          mangle(v.val)
         when :literal
           "##{v.val}"
         else
@@ -662,13 +663,13 @@ module Fc
           raise
           #:nocov:
         end
-      elsif v.val
+      elsif v.kind == :literal
         if Numeric === v.val
           "##{(v.val >> (n*8)) % 256}"
         else
           case n
-          when 0; "#.LOBYTE(#{to_asm(v.symbol)})"
-          when 1; "#.HIBYTE(#{to_asm(v.symbol)})"
+          when 0; "#.LOBYTE(#{to_asm(v.val)})"
+          when 1; "#.HIBYTE(#{to_asm(v.val)})"
           else
             #:nocov:
             raise

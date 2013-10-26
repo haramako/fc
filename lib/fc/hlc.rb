@@ -184,7 +184,7 @@ module Fc
           dout 1, "finished module #{filename}"
         end
 
-        # pp @module.id, @module.defs, @module.vars.map{|v| [v.id, v.symbol]}
+        # pp @module.id, @module.defs, @module.vars.map{|v| [v.id, v.val]}
 
         # IO.write( fcm_path, JSON.dump( @module.to_json ) ) # .fcm の書き込み
       end
@@ -324,20 +324,21 @@ module Fc
       when :var
         ast[1].each do |v|
           id, type, init, opt = v
+          opt ||= {}
           init = init && rval( v[2] )
           raise CompileError.new("can't init global variable") if init and !@lmd
           type = type_eval(type)
           type = TypeUtil.guess_type( type, init ) unless type
           TypeUtil.compatible_type( type, init.type ) if type and init
-          var = add_var Value.new( (@lmd ? :local : :global), id, type, nil, opt )
+          val = nil
           unless @lmd
-            if var.opt[:address]
-              symbol = add_def( id, :equ, type, var.opt[:address] )
+            if opt[:address]
+              val = add_def( id, :equ, type, opt[:address] )
             else
-              symbol = add_def( id, :bss, type )
+              val = add_def( id, :bss, type )
             end
-            var.symbol = symbol
           end
+          var = add_var Value.new( (@lmd ? :local : :global), id, type, val, opt )
           var.public = true if (ast[2] || @module.current_scope) == :public 
           emit :load, var, init if init
         end
@@ -350,13 +351,11 @@ module Fc
           type = TypeUtil.guess_type(type_eval(type),val)
           if Array === val.val
             symbol = add_def( id, :block, type, val.val )
-            new_val = add_var Value.new( :global, id, type, val.val, opt )
-            new_val.symbol = symbol
+            new_val = add_var Value.new( :global, id, type, symbol, opt )
           else
             new_val = add_var Value.new( :literal, id, type, val.val, opt )
             unless @lmd
               symbol = add_def( id, :equ, type, val.val ) 
-              new_val.symbol = symbol
             end
           end
           new_val.public = true if (ast[2] || @module.current_scope) == :public
@@ -509,8 +508,7 @@ module Fc
           lmd = Lambda.new( id, args, base_type, opt, block )
           @module.lambdas << lmd
           add_def_module(id, :code, lmd.type, lmd)
-          r = Value.new( :global, nil, lmd.type, id, nil )
-          r.symbol = id
+          r = Value.new( :literal, nil, lmd.type, id, nil )
 
         when :dot
           left, lv = const_eval(ast[1])
@@ -619,7 +617,6 @@ module Fc
         if ast.kind == :array_literal
           symbol = add_def("_#{tmp_count}".to_sym, :block, ast.type, ast.val)
           r = Value.new( :global, "$#{tmp_count}", ast.type, symbol, nil )
-          r.symbol = symbol
         else
           r = ast
         end
