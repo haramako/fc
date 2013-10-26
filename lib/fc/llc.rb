@@ -695,8 +695,8 @@ module Fc
       r = []
       r << "#{mangle(sym)}:"
       case type.base.size
-      when 1; op = '.byte'
-      when 2; op = '.word'
+      when 1; op = '.byte'; limit = 2**8
+      when 2; op = '.word'; limit = 2**16
       else
         #:nocov:
         raise
@@ -704,7 +704,11 @@ module Fc
       end
       val.each_slice(16) do |slice|
         slice.map! do |e|
-          if Numeric === e.val or Symbol === e.val then e.val else to_asm(e) end
+          case e.val
+          when Numeric; e.val % limit
+          when Symbol; e.val
+          else to_asm(e)
+          end
         end
         r << "\t#{op} #{slice.join(',')}"
       end

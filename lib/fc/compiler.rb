@@ -165,7 +165,9 @@ module Fc
       cfg = ERB.new(IO.read( FC_HOME+'share/ld65.cfg' ),nil,'-').result(binding)
       IO.write( BUILD_PATH+'ld65.cfg', cfg )
 
-      sh( LD65, '-m', opt[:out].sub_ext('.map'), '-C', BUILD_PATH+'ld65.cfg', '-o', opt[:out], 
+      puts opt[:out]
+
+      sh( LD65, '-m', opt[:out].sub_ext('.map'), '-o', opt[:out], '-C', BUILD_PATH+'ld65.cfg', 
           BUILD_PATH+'base.o', BUILD_PATH+'runtime_init.o', BUILD_PATH+'runtime.o', *objs )
 
     end

@@ -1,7 +1,7 @@
 # coding: utf-8
 
 def parse_nes( file )
-  data = open( file, 'r:ASCII-8BIT' ){|f|f.read}
+  data = IO.binread(file)
 
   # ヘッダの解析
   head, _1a, prog_count, chr_count, ctrl1, ctrl2, _00, _00, pal_ntsc, _00x5 = data.unpack( 'A3C8A5' )
