@@ -7,4 +7,4 @@ group :test, :development do
   gem 'simplecov'
 end
 
-
+gemspec
