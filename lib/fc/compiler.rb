@@ -5,6 +5,7 @@ require 'open3'
 require_relative 'hlc'
 require_relative 'llc'
 require_relative 'nes'
+require_relative 'compat'
 
 module Fc
 

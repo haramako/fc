@@ -158,39 +158,15 @@ module Fc
   end
 
   ######################################################################
-  # 変数、定数など識別子で区別されるもの
-  #
-  # 区別したいのは以下のもの
-  #                 例                代入 id   val    kind          asm
-  # 引数            (arg:int)         o    arg  -      arg           __STACK__+0,x
-  # 帰り値          return 0;         o    $result -   result        __STACK__-N,x
-  # ローカル変数    var i:int;        o    i    -      var           __STACK__+N,x
-  # テンポラリ変数                    x    $0   -      temp          __STACK__+N,x
-  # ローカル定数    const c = 1;      x    c    1      const         #1
-  # ローカル定数2   const c = [1,2]   x    c    [1,2]  symbol        .c
-  # 文字列リテラル  "hoge"            x    $0   [1,2]  symbol        .a0 ( int[]の定数として保持 )
-  # グローバル変数  var i:int;        o    i    -      global_var    i
-  # グローバル定数  const c = 1;      x    c    1      global_const  c
-  # グローバル定数2 function f():void x    f    f      global_symbol f
-  # リテラル        1                 x    -    1      literal       #1
-  #
-  # 新kind
-  # スタック変数 FC_STACK,x
-  # シンボル hoge
-  # 数値
-  #
-  # シンボルをもつか、値をもつか
-  # アセンブラでシンボルを使うか、スタックを使うか
-  # 定数か変数か
-  # 代入可能か？
+  # 変数、定数など
   #
   ######################################################################
   class Value
     
-    attr_reader :kind # 種類
+    attr_reader :kind # 種類(:local, :global, :literal, :array_literal, :module のいずれか)
     attr_reader :type # Type
     attr_reader :id   # 変数名
-    attr_reader :val  # 値 type==literal or literal_array の場合のみ (Fixnum or Symbol orArray)
+    attr_reader :val  # 値 type==literal or literal_array の場合のみ (Fixnum or Symbol or Array)
     attr_reader :opt  # オプション 
                       # local_type:[:arg or :result or :temp or nil]
     attr_accessor :base_string # 元の値が文字列だった場合、その文字列
