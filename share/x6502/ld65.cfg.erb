@@ -1,0 +1,23 @@
+# memory config for ld65
+
+MEMORY {
+  ZP: start = $00, size = $80, type = rw, define = yes;
+  ZP_STACK: start = $80, size = $80, type = rw, define = yes;
+  SRAM: start = $0200, size = $0500, type = rw, define = yes;
+  ROMV: start = $1000, size = 3, type =rw, define = yes;
+  ROM: start = $1003, size = $DFFD, file = %O, fill = no, define = yes;
+}
+
+SEGMENTS {
+  CODE: load = ROM, type = ro, define = yes;
+  FC_RUNTIME: load = ROM, type = ro, define = yes;
+  VECTORS: load = ROMV, type = rw;
+  BSS: load = SRAM, type= bss, define = yes;
+  ZEROPAGE: load = ZP, type = zp;
+  FC_ZEROPAGE: load = ZP, type = zp;
+  FC_STACK: load = ZP_STACK, type = zp;
+  <%- segs.each do |seg| -%>
+  <%= seg[:name] %>: load = ROM, type = ro;
+  <%- end -%>
+  CHARS: load = ROM, type = rw, optional = yes;
+}

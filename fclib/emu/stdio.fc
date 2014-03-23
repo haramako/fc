@@ -3,10 +3,10 @@
  */
 options( bank: -1 );
 
-public var EMU_ADDR    :int*  options (address:0x1000);
-public var EMU_DATA    :int16 options (address:0x1000);
-public var EMU_PRINT   :int   options (address:0x1002);
-public var EMU_EXIT    :int   options (address:0x1003);
+public var EMU_ADDR    :int*  options (address:0xfff0);
+public var EMU_DATA    :int16 options (address:0xfff2);
+public var EMU_PRINT   :int   options (address:0xFFFE);
+public var EMU_EXIT    :int   options (address:0xFFFF);
 
 public function print_int16( n:int16 ):void
 {

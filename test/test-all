@@ -42,8 +42,7 @@ files.each do |file|
     raise e
   end
   
-  nes = parse_nes( 'a.nes' )
-  size_cur[file] = nes[:prog_size]
+  size_cur[file] = File.size(file)
 end
 
 File.write( 'size_cur.txt', JSON.dump( size_cur ) )

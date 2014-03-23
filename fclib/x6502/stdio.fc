@@ -1,0 +1,56 @@
+/*
+ * コマンドラインエミュレータ用の定義ファイル
+ */
+options( bank: -1 );
+
+public var EMU_PRINT        :int   options (address:0xff00);
+public var EMU_VTERM_ENABLE :int   options (address:0xff02);
+
+var buf:int[4];
+
+public function print_int16( n:int16 ):void
+{
+	var i:sint = 3;
+	while( i >= 0 ){
+		var x:int = n & 15;
+		if( x >= 10 ){
+			buf[i] = 0x37 + x;
+		}else{
+			buf[i] = 0x30 + x;
+		}
+		n = n >> 4;
+		i -= 1;
+	}
+	for( i, 0, 4 ){
+		EMU_PRINT = buf[i];
+	}
+}
+
+public function print( str:int* ):void
+{
+	var i = 0;
+	while( str[i] ){
+		EMU_PRINT = str[i];
+		i += 1;
+	}
+}
+
+public function puts( str:int* ):void
+{
+	printf( str, "\n");
+}
+
+public function exit( code:int ):void
+{
+	asm(".byte $ff");
+}
+
+public function init():void
+{
+	EMU_VTERM_ENABLE = 0x02;
+}
+
+public function interrupt():void options(symbol:'_interrupt'){} 
+public function interrupt_irq():void options(symbol:'_interrupt_irq'){}
+
+include macro ( "stdio.rb" );

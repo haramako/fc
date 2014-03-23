@@ -1,0 +1,25 @@
+	.exportzp FC_LOCAL
+	.exportzp FC_REG
+	.exportzp FC_STACK
+	.exportzp L 					; TODO: そのうち消すこと
+	.exportzp reg
+	.exportzp S
+	.import interrupt
+	.import start
+	.import interrupt_irq
+	
+.segment "FC_ZEROPAGE": zeropage
+	
+FC_LOCAL: .res $10
+FC_REG: .res $10
+
+.segment "FC_STACK": zeropage
+	
+FC_STACK: .res $80
+
+	L = FC_LOCAL
+	reg = FC_REG
+	S = FC_STACK
+	
+.segment "VECTORS"
+	jmp start

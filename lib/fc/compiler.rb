@@ -40,11 +40,20 @@ module Fc
       #:nocov:
     end
 
+    def find_share( filename )
+      dir = FC_HOME + 'share'
+      return dir + @target + filename if File.exists? dir + @target + filename
+      return dir + filename if File.exists? dir + filename
+      raise "file '#{filename}' not found in share directories"
+    end
+
     def build( filename, opt = Hash.new )
-      opt = {out:'a.nes', target:'emu'}.merge(opt)
+      opt = {out:'a.bin', target:'emu'}.merge(opt)
+      @target = opt[:target]
+      opt[:out] = 'a.nes' if @target == 'nes'
       opt[:out] = Pathname.new(opt[:out])
       opt[:html] = opt[:out].sub_ext('.html')
-      @target = opt[:target]
+        
 
       FileUtils.mkdir_p( BUILD_PATH )
       hlc = compile( filename, opt )
@@ -71,9 +80,14 @@ module Fc
 
     def execute( filename )
       # 実行する
-      emu = Fc::FC_HOME + 'bin/emu6502'
-      result = `node #{emu} #{filename}`
-      print result
+      case @target
+      when 'emu'
+        emu = Fc::FC_HOME + 'bin/emu6502'
+        result = `node #{emu} #{filename}`
+        print result
+      when 'x6502'
+        system "x6502 #{filename}"
+      end
     end
 
     # ソースコードを中間コードにコンパイル
@@ -114,7 +128,7 @@ module Fc
     end
 
     def make_runtime( target )
-      ca65 FC_HOME+'share/runtime.asm'
+      ca65 find_share('runtime.asm')
       ca65 FC_HOME+'fclib'+target+'runtime_init.asm'
     end
 
@@ -132,7 +146,7 @@ module Fc
       inesprg = (hlc.options[:bank_count] || 4 ) / 2
       ineschr = (hlc.options[:char_banks] || 1 )
       options = { inesprg: inesprg, ineschr: ineschr, inesmir: 1, inesmap: inesmap }
-      template = IO.read( Fc.find_share('base.asm.erb') ) 
+      template = IO.read( find_share('base.asm.erb') ) 
       str = ERB.new(template,nil,'-').result(binding)
       IO.write( BUILD_PATH+'base.s', str )
       ca65 BUILD_PATH+'base.s'
@@ -162,7 +176,8 @@ module Fc
         end
         {name: m.id.to_s, bank: bank}
       end
-      cfg = ERB.new(IO.read( FC_HOME+'share/ld65.cfg' ),nil,'-').result(binding)
+      
+      cfg = ERB.new(IO.read( find_share('ld65.cfg.erb') ),nil,'-').result(binding)
       IO.write( BUILD_PATH+'ld65.cfg', cfg )
 
       sh( LD65, '-m', opt[:out].sub_ext('.map'), '-o', opt[:out], '-C', BUILD_PATH+'ld65.cfg', 
@@ -171,7 +186,9 @@ module Fc
     end
 
     def ca65( path )
-      sh CA65, '-o', BUILD_PATH+path.basename.sub_ext('.o'), '-I', FC_HOME+'share', '-I', BUILD_PATH, '-I', FC_HOME+'fclib', '-I', FC_HOME+'fclib'+@target, path
+      sh( CA65, '-o', BUILD_PATH+path.basename.sub_ext('.o'),
+          '-I', FC_HOME+'share', '-I', BUILD_PATH, '-I', FC_HOME+'fclib',
+          '-I', FC_HOME+'fclib'+@target, path )
     end
 
     def sh( *args )

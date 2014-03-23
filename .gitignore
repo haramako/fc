@@ -16,20 +16,12 @@ test/tmp
 test/version_tmp
 tmp
 
-a.asm
-a.map
 *.lst
 *.nes
 *.html
-*.o
-*.s
 _*.inc
-darius.asm
 parser.output
 coverage
 .DS_Store
-darius*.zip
-darius
-miku
-.ruby-version
-sample
+.fc-build
+a.*
