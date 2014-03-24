@@ -35,6 +35,8 @@ module Fc
 
       inc << ".ifndef __MODULE_#{mod.id.upcase}__"
       inc << "__MODULE_#{mod.id.upcase}__ = 1"
+      
+      asm << ".segment \"#{@code_segment}\"" # dummy
 
       # 
       mod.modules.each do |_,m|
@@ -113,7 +115,7 @@ module Fc
       ops.each_with_index do |op,op_no| # op=オペランド
         dout 3, op.inspect
         next unless op
-        r << "; #{'%04d'%[op_no]}: #{op.inspect}"
+        r << "; #{'%04d'%[op_no]}: #{op.inspect[0,120]}"
         case op[0]
 
         when :label

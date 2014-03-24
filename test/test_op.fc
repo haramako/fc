@@ -261,4 +261,5 @@ function test_pointer_op():void
 function main():void
 {
 	unittest_run_tests();
+	stdio.exit(1);
 }

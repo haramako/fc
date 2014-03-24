@@ -43,7 +43,7 @@
 	sta $700,x
 	inx
 	bne @loop
-		
+	
 	ldx #255						; initialize stack and frame
 	txs
 	ldx #0

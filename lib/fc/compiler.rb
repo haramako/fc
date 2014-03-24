@@ -2,10 +2,17 @@
 require 'rbconfig'
 require 'fileutils'
 require 'open3'
-require_relative 'hlc'
-require_relative 'llc'
-require_relative 'nes'
-require_relative 'compat'
+require 'fc/hlc'
+require 'fc/llc'
+require 'r6502'
+
+class R6502::Cpu
+  def step_silent
+    instr, mode = instr_mode( mem.get(pc) )
+    arg = decode_arg( mode, mem.get(pc+1), mem.get(pc+2) )
+    method( instr ).call( arg, mode )
+  end
+end
 
 module Fc
 
@@ -48,9 +55,15 @@ module Fc
     end
 
     def build( filename, opt = Hash.new )
-      opt = {out:'a.bin', target:'emu'}.merge(opt)
+      opt = {target:'emu'}.merge(opt)
+      if opt[:out].nil?
+        if opt[:target] == 'nes'
+          opt[:out] = 'a.nes'
+        else
+          opt[:out] = 'a.bin'
+        end
+      end
       @target = opt[:target]
-      opt[:out] = 'a.nes' if @target == 'nes'
       opt[:out] = Pathname.new(opt[:out])
       opt[:html] = opt[:out].sub_ext('.html')
         
@@ -82,9 +95,39 @@ module Fc
       # 実行する
       case @target
       when 'emu'
-        emu = Fc::FC_HOME + 'bin/emu6502'
-        result = `node #{emu} #{filename}`
-        print result
+        require 'r6502'
+        start_addr = 0x1000
+        mem = R6502::Memory.new
+        IO.binread(filename).each_byte.with_index do |b,i|
+          mem.set start_addr+i, b
+        end
+        cpu = R6502::Cpu.new(mem)
+        cpu.pc = start_addr
+        mem.set 0xffff, 255
+        mem.set 0xfffe, 255
+        while mem.get(0xffff) == 255
+          cpu.step_silent
+          if mem.get(0xfffe) != 255
+            if mem.get(0xfffe) == 1
+              addr = mem.get(0xfff0) + (mem.get(0xfff1) << 8)
+              str = ''
+              while mem.get(addr) != 0
+                str += mem.get(addr).chr
+                addr += 1
+              end
+              print str
+            else
+              num = mem.get(0xfff2) + (mem.get(0xfff3) << 8)
+              print num
+            end
+            mem.set 0xfffe, 255
+          end
+        end
+        result = mem.get(0xffff)
+        
+        # emu = Fc::FC_HOME + 'bin/emu6502'
+        # result = `node #{emu} #{filename}`
+        # print result
       when 'x6502'
         system "x6502 #{filename}"
       end

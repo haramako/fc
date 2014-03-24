@@ -1,17 +1,17 @@
 #!/usr/bin/env ruby -Ku
 # coding: utf-8
 
+$LOAD_PATH << '../lib'
 require 'pp'
 require 'json'
 require 'tempfile'
 require 'simplecov'
+require 'fc'
 
 SimpleCov.root '..'
 SimpleCov.command_name 'test-all'
 SimpleCov.start
 
-require_relative '../lib/fc/nes'
-require_relative '../lib/fc/compiler'
 
 FC = 'bin/fc'
 EMU = 'bin/emu6502'
