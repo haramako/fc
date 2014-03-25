@@ -5,6 +5,9 @@ rvm:
   - ruby-head
 before_install:
 before_script:
+  - sudo apt-get install curl
+  - curl -o cc65.deb http://debian.trikaliotis.net/cc65/cc65_2.13.9-svn5804-1_i386.deb
+  - sudo dpkg --install cc65.deb
 script:
   - bundle exec rake test
 notifications:
