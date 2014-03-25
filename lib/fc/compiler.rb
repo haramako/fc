@@ -230,7 +230,7 @@ module Fc
 
     def ca65( path )
       sh( CA65, '-o', BUILD_PATH+path.basename.sub_ext('.o'),
-          '-I', FC_HOME+'share', '-I', BUILD_PATH, '-I', FC_HOME+'fclib',
+          '-I', FC_HOME+'share', '-I', BUILD_PATH, '-I', FC_HOME+'fclib', '-I', '.',
           '-I', FC_HOME+'fclib'+@target, path )
     end
 
