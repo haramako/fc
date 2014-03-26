@@ -66,6 +66,7 @@ module Fc
       @target = opt[:target]
       opt[:out] = Pathname.new(opt[:out])
       opt[:html] = opt[:out].sub_ext('.html')
+      opt[:stdout] ||= STDOUT
         
 
       FileUtils.mkdir_p( BUILD_PATH )
@@ -80,7 +81,7 @@ module Fc
 
       link hlc, objs, opt
 
-      execute opt[:out] if opt[:run]
+      execute opt[:out], opt[:stdout] if opt[:run]
 
     rescue CommandError => err
       raise Fc::CompileError.new( err.message + "\n" + err.command.to_s + "\n" + err.result )
@@ -91,7 +92,7 @@ module Fc
       build( filename, opt )
     end
 
-    def execute( filename )
+    def execute( filename, out )
       # 実行する
       case @target
       when 'emu'
@@ -115,10 +116,10 @@ module Fc
                 str += mem.get(addr).chr
                 addr += 1
               end
-              print str
+              out.print str
             else
               num = mem.get(0xfff2) + (mem.get(0xfff3) << 8)
-              print num
+              out.print num
             end
             mem.set 0xfffe, 255
           end

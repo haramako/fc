@@ -7,6 +7,7 @@ require 'json'
 require 'tempfile'
 require 'simplecov'
 require 'fc'
+require 'stringio'
 
 SimpleCov.root '..'
 SimpleCov.command_name 'test-all'
@@ -36,11 +37,20 @@ files.each do |file|
   puts "testing #{file}"
 
   begin
-    compiler.build( file, { run: true, debug_info: !debug_info_tested } )
-    debug_info_tested = true
+    StringIO.open do |out|
+      result = compiler.build( file, { run: true, stdout: out, debug_info: !debug_info_tested } )
+      debug_info_tested = true
+      if result != 0
+        err = true
+        puts out.string
+      end
+    end
   rescue Fc::CompileError => e
-    raise e
+    err = true
+    puts e.backtrace[0] + ': ' + e.message
+    puts e.backtrace[1..-1]
   end
+  # puts result
   
   size_cur[file] = File.size(file)
 end
