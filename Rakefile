@@ -14,7 +14,7 @@ end
 
 file 'lib/fc/parser.rb' => 'parser.y' do
   begin
-    sh 'raccc -O parser.output parser.y -o lib/fc/parser.rb'
+    sh 'racc -O parser.output parser.y -o lib/fc/parser.rb'
   rescue
     puts 'WARNING: racc failed'
   end

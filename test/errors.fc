@@ -29,3 +29,15 @@ function hoge():void { return 1; }
 function hoge():void {
 	asm( "INVALID ASM" );
 }
+
+//@div by 0
+function hoge():void {
+	var i1 = 1;
+	var i = i1 / 0;
+}
+
+//@div by 0
+function hoge():void {
+	var i1 = 1;
+	var i = i1 % 0;
+}

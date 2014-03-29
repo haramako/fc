@@ -731,7 +731,15 @@ module Fc
     def mul_div_mod( op )
       r = []
       op3val = op[3].val
-      if Numeric === op3val and [0,1,2,4,8,16,32,64,128].include?(op3val) and op[1].type.size == 1
+      if Numeric === op3val and op3val == 0
+        # 0の場合
+        case op[0]
+        when :mul
+          r << load(op[1], Value.new_int(0))
+        when :div, :mod
+          raise CompileError.new( "div by 0" )
+        end
+      elsif Numeric === op3val and [1,2,4,8,16,32,64,128].include?(op3val) and op[1].type.size == 1
         # 定数(1byte)の場合の最適化
         n = Math.log(op3val,2).to_i
         r << load_a( op[2], 0 )
@@ -755,7 +763,7 @@ module Fc
           r << "and ##{op3val-1}"
         end
         r << store_a( op[1], 0 )
-      elsif Numeric === op3val and [0,1,2,4,8,16,32,64,128].include?(op3val) and op[1].type.size > 1
+      elsif Numeric === op3val and [1,2,4,8,16,32,64,128].include?(op3val) and op[1].type.size > 1
         # 定数(2byte以上)の場合の最適化
         n = Math.log(op3val,2).to_i
         size = op[1].type.size
