@@ -109,7 +109,11 @@ module Fc
       r << ";;; function #{lmd.id}" 
       r << ";;;============================="
 
-      r << ".segment \"#{@code_segment}\""
+      if lmd.opt[:segment]
+        r << ".segment \"#{lmd.opt[:segment]}\""
+      else
+        r << ".segment \"#{@code_segment}\""
+      end
       r << ".proc #{mangle(sym)}" 
 
       ops.each_with_index do |op,op_no| # op=オペランド

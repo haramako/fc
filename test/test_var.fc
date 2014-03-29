@@ -77,6 +77,16 @@ function test_escape(): void
 	assert_equal( <uint>STR[1], 0xff, "escape x" );
 }
 
+function segmented_function():int options(segment:"CODE")
+{
+	return 1;
+}
+
+function test_segment_option(): void
+{
+	assert_equal( segmented_function(), 1, "segmented function" );
+}
+
 function main():void
 {
 	unittest_run_tests();

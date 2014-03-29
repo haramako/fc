@@ -26,6 +26,7 @@ function test_int_op():void
 	var i5 = 5;
 	var i10 = 10;
 
+	assert_equal( i1*0, 0, '*0');
 	assert_equal( i1, i1, 'num');
 	assert_equal( i2*i3, 6, '2*3');
 	assert_equal( i5*i5, 25, '+,-,*,/,%');

@@ -67,7 +67,7 @@
     rti
 .endproc
 
-;;; use 17 cycle before subroutine
+;;; use 19 cycle (include jsr) before subroutine
 .proc interrupt_irq
     pha
     txa
