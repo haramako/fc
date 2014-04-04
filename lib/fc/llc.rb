@@ -140,7 +140,7 @@ module Fc
             # コンディションレジスタでない場合
             then_label = new_label
             op[1].type.size.times do |i|
-              r << load_a( op[1],i)
+              r << load_a(op[1],i)
               if i == op[1].type.size-1
                 r << "beq #{op[2]}"
               else
@@ -171,15 +171,14 @@ module Fc
           end
           if op[2].kind == :literal
             # 関数を直に呼ぶ
-            r << "call #{mangle(op[2].val)}, ##{lmd.frame_size}"
+            r << call_subroutine(mangle(op[2].val), lmd.frame_size)
           else
             # 関数ポインタから呼ぶ
-            end_label = new_label
             r << load_a( op[2], 0 )
             r << "sta <reg+0"
             r << load_a( op[2], 1 )
             r << "sta <reg+1"
-            r << "call jsr_reg, ##{lmd.frame_size}"
+            r << call_subroutine('jsr_reg', lmd.frame_size)
           end
           # 帰り値を格納する
           if op[1]
@@ -612,6 +611,20 @@ module Fc
         nil
       else
         "sta #{byte(v,n)}"
+      end
+    end
+
+    # call subroutine.
+    # add stack pointer ( X register ) before jsr.
+    def call_subroutine( addr, frame_size )
+      if frame_size <= 4
+        r = []
+        frame_size.times { r << "inx" }
+        r << "jsr #{addr}"
+        frame_size.times { r << "dex" }
+        r
+      else
+        "call #{addr}, ##{frame_size}"
       end
     end
 

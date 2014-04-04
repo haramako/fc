@@ -16,7 +16,6 @@
 	
 ;;; call subroutine
 ;;; use 25 cycle
-;;; TODO: フレームサイズがが4以下のときは、inx/dexを使って小さくする
 .macro call addr, frame_size
 	txa
 	pha

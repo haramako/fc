@@ -1,1 +1,1 @@
-{"test_alloc.fc":2179,"test_basic.fc":3014,"test_cast.fc":2151,"test_cycle.fc":1970,"test_math.fc":4719,"test_memory.fc":2909,"test_op.fc":9252,"test_rle.fc":2683,"test_stat.fc":2817,"test_var.fc":3624}
+{"test_alloc.fc":2108,"test_basic.fc":2808,"test_cast.fc":2066,"test_cycle.fc":1893,"test_math.fc":4222,"test_memory.fc":2738,"test_op.fc":8839,"test_rle.fc":2584,"test_stat.fc":2785,"test_var.fc":3235}
