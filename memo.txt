@@ -1,5 +1,6 @@
 **TODO
 
+* fastcall(スタックを使わない呼び出し規約）を追加する
 * public属性は、scopeにいれる
 * const属性は、typeにいれる
 * indexなどのsize倍する処理を、分割する

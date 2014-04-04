@@ -137,13 +137,16 @@ module Fc
             end
             r << "#{asm_op} #{op[2]}"
           else
-            then_label = new_label
             # コンディションレジスタでない場合
+            then_label = new_label
             op[1].type.size.times do |i|
               r << load_a( op[1],i)
-              r << "bne #{then_label}"
+              if i == op[1].type.size-1
+                r << "beq #{op[2]}"
+              else
+                r << "bne #{then_label}"
+              end
             end
-            r << "jmp #{op[2]}"
             r << "#{then_label}:"
           end
 

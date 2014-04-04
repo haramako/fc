@@ -52,7 +52,7 @@ files.each do |file|
   end
   # puts result
   
-  size_cur[file] = File.size(file)
+  size_cur[file] = File.size("a.bin")
 end
 
 File.write( 'size_cur.txt', JSON.dump( size_cur ) )

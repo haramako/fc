@@ -4,8 +4,9 @@ MEMORY {
   ZP: start = $00, size = $80, type = rw, define = yes;
   ZP_STACK: start = $80, size = $80, type = rw, define = yes;
   SRAM: start = $0200, size = $0500, type = rw, define = yes;
-  ROMV: start = $1000, size = 3, type =rw, define = yes;
+  ROMV: start = $1000, size = 3, type = rw, define = yes;
   ROM: start = $1003, size = $DFFD, file = %O, fill = no, define = yes;
+  CHARS: start = $0000, size = $10000, type = rw, fill = no, define = yes;
 }
 
 SEGMENTS {
@@ -19,5 +20,5 @@ SEGMENTS {
   <%- segs.each do |seg| -%>
   <%= seg[:name] %>: load = ROM, type = ro;
   <%- end -%>
-  CHARS: load = ROM, type = rw, optional = yes;
+  CHARS: load = CHARS, type = bss, optional = yes;
 }
