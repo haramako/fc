@@ -81,6 +81,12 @@ module Fc
 
       link hlc, objs, opt
 
+      if opt[:debug_info]
+        output = HtmlOutput.new
+        html = output.module_to_html( hlc.modules )
+        IO.write opt[:html], html
+      end
+      
       execute opt[:out], opt[:stdout] if opt[:run]
 
     rescue CommandError => err

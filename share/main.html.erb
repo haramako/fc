@@ -71,14 +71,6 @@ ins.differ { background-color: #faa; }
         <%- end -%>
       </table>
 
-      <% unless lmd.blobs.empty? %>
-      <h3>blobs</h3>
-      <pre class="code">
-        <%- lmd.blobs.each do |v| -%>
-<%= v.id %>: <%=h( if v.base_string then '"'+v.base_string+'"' else v.val end )%>
-        <%- end -%></pre>
-      <% end %>
-      
       <h3>ast</h3>
       <pre class="code"><%= PP.pp(lmd.ast,'') %></pre>
       
