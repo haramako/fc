@@ -114,7 +114,9 @@ module Fc
       else
         r << ".segment \"#{@code_segment}\""
       end
-      r << ".proc #{mangle(sym)}" 
+      r << ".proc #{mangle(sym)}"
+
+      push_arg_size = 0
 
       ops.each_with_index do |op,op_no| # op=オペランド
         dout 3, op.inspect
@@ -157,29 +159,32 @@ module Fc
           r.concat load( lmd.result, op[1] ) if op[1]
           r << "rts"
 
-        when :call
-          size = op[2].type.base.size
-          op[3..-1].each_with_index do |from,i|
-            to = op[2].type.args[i]
-            # 通常の代入
-            # raise "can't convert from #{from} to #{to}" if from.type != to
-            to.size.times do |i|
-              r << load_a(from,i)
-              r << "sta <S+#{lmd.frame_size}+#{size},x"
-              size += 1
-            end
+        when :push_result
+          push_arg_size += op[1].size
+
+        when :push_arg
+          op[1].size.times do |i|
+            r << load_a(op[2],i)
+            r << "sta <S+#{lmd.frame_size+push_arg_size},x"
+            push_arg_size += 1
           end
+
+        when :call
+          push_arg_size -= op[2].type.args.inject(0){|m,x| m+x.size}
+          push_arg_size -= op[2].type.base.size
+
           if op[2].kind == :literal
             # 関数を直に呼ぶ
-            r << call_subroutine(mangle(op[2].val), lmd.frame_size)
+            r << call_subroutine(mangle(op[2].val), lmd.frame_size+push_arg_size)
           else
             # 関数ポインタから呼ぶ
             r << load_a( op[2], 0 )
             r << "sta <reg+0"
             r << load_a( op[2], 1 )
             r << "sta <reg+1"
-            r << call_subroutine('jsr_reg', lmd.frame_size)
+            r << call_subroutine('jsr_reg', lmd.frame_size+push_arg_size)
           end
+          
           # 帰り値を格納する
           if op[1]
             op[1].type.size.times do |i|
@@ -594,7 +599,7 @@ module Fc
            "#{end_label}:"]
         else raise
         end
-      elsif Value === v and v.location == :a
+      elsif (Value === v or CastedValue === v) and v.location == :a
         if n != 0
           "lda #0"
         else

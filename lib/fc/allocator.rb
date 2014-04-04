@@ -17,7 +17,8 @@ module Fc
       defines = []
       node = []
       case op[0]
-      when :label, :asm
+      when :label, :asm, :push_result
+        # DO NOTHING
       when :'if'
         uses << op[1]
         node << labels[op[2]]
@@ -25,13 +26,9 @@ module Fc
         node << labels[op[1]]
       when :return
         uses << op[1]
-      when :call
-        defines << op[1]
-        uses.concat op[2..-1]
-      when :load, :uminus, :not, :sign_extension
-        defines << op[1]
+      when :push_arg
         uses << op[2]
-      when :ref
+      when :load, :uminus, :not, :sign_extension, :ref, :call
         defines << op[1]
         uses << op[2]
       when :add, :sub, :and, :or, :xor, :mul, :div, :mod, :eq, :lt, :shift_left, :shift_right, :index, :pget
@@ -144,7 +141,7 @@ module Fc
 
         next_op = lmd.ops[v.live_range.min+1]
         case next_op[0]
-        when :load, :sign_extension, :add, :and, :or, :xor, :eq, :lt, :pget, :sub
+        when :load, :sign_extension, :add, :and, :or, :xor, :eq, :lt, :pget, :sub, :push_arg
           next unless next_op[2] == v
         when :if, :return
           next unless next_op[1] == v

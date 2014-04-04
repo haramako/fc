@@ -725,14 +725,14 @@ module Fc
               r = nil
             end
             raise CompileError.new("#{lmd} has #{lmd.type.args.size} but #{ast[2].size}") if ast[2].size != lmd.type.args.size
-            args = []
+            emit :push_result, lmd.type.base
             ast[2].each_with_index do |arg,i|
               v = rval(arg)
               TypeUtil.compatible_type( lmd.type.args[i], v.type )
               v = cast( v, lmd.type.args[i] )
-              args << v
+              emit :push_arg, lmd.type.args[i], v
             end
-            emit :call, r, lmd, *args
+            emit :call, r, lmd
           end
 
         when :ref # &演算子

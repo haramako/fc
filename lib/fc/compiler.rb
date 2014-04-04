@@ -71,6 +71,9 @@ module Fc
 
       FileUtils.mkdir_p( BUILD_PATH )
       hlc = compile( filename, opt )
+      
+      output_html hlc, opt[:html] if opt[:debug_info]
+      
       compile2( hlc, opt )
       objs = assemble( hlc, opt )
 
@@ -81,16 +84,17 @@ module Fc
 
       link hlc, objs, opt
 
-      if opt[:debug_info]
-        output = HtmlOutput.new
-        html = output.module_to_html( hlc.modules )
-        IO.write opt[:html], html
-      end
+      output_html hlc, opt[:html] if opt[:debug_info]
       
       execute opt[:out], opt[:stdout] if opt[:run]
 
     rescue CommandError => err
       raise Fc::CompileError.new( err.message + "\n" + err.command.to_s + "\n" + err.result )
+    end
+
+    def output_html( hlc, filename )
+      html = HtmlOutput.new.module_to_html( hlc.modules )
+      IO.write filename, html
     end
 
     def compile_only( filename, opt = Hash.new )
