@@ -39,12 +39,15 @@ _mem_copy:
 	
 
 ;;; 残りのコピー
+	lda reg+4
+	beq @end2
     ldy #0
 :	lda (reg+2),y
     sta (reg),y
     iny
     cpy reg+4
     bne :-
+@end2:
 
     rts
         

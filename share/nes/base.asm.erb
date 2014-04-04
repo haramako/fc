@@ -1,6 +1,7 @@
 	.exportzp FC_LOCAL
 	.exportzp FC_REG
 	.exportzp FC_STACK
+	.exportzp FC_FASTCALL_REG
 	.exportzp L 					; TODO: そのうち消すこと
 	.exportzp reg
 	.exportzp S
@@ -48,6 +49,7 @@
 	
 FC_LOCAL: .res $10
 FC_REG: .res $10
+FC_FASTCALL_REG: .res $10
 
 .segment "FC_STACK": zeropage
 	

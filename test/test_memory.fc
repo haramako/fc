@@ -23,7 +23,10 @@ function test_copy():void
 	assert_equal( buf2[256], 4, "copy");
 	assert_equal( buf2[257], 5, "copy");
 	assert_equal( buf2[511], 6, "copy");
-	//assert_equal( mem.compare( buf1, buf2, 512 ), 1, "copy");
+	assert_equal( mem.compare( buf1, buf2, 256 ), 0, "compare == 0");
+
+	buf2[255] = 0;
+	assert_equal( mem.compare( buf1, buf2, 256 ), 1, "comapre == 1");
 }
 
 function test_strcpy():void
