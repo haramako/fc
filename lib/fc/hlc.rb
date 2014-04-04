@@ -25,6 +25,7 @@ module Fc
       @global_scope = Scope.new # グローバルスコープ
       @scope = @global_scope # 現在のスコープ
       @loops = [] # ループの脱出用ラベル( [ continueラベル、breakラベル ] の配列 )
+      @fastcalling = false # fastcall中かどうか、fastcallの引数を積んでいる途中でfastcallはできないようにするため
 
       defmacro :asm do |args|
         args.each do |line|
@@ -705,6 +706,7 @@ module Fc
           emit :label, end_label
 
         when :call
+
           lmd = rval( ast[1] )
           if lmd.type.kind == :macro
             # マクロの実行
@@ -725,14 +727,29 @@ module Fc
               r = nil
             end
             raise CompileError.new("#{lmd} has #{lmd.type.args.size} but #{ast[2].size}") if ast[2].size != lmd.type.args.size
-            emit :push_result, lmd.type.base
-            ast[2].each_with_index do |arg,i|
-              v = rval(arg)
-              TypeUtil.compatible_type( lmd.type.args[i], v.type )
-              v = cast( v, lmd.type.args[i] )
-              emit :push_arg, lmd.type.args[i], v
+            if lmd.type.fastcall?
+              raise CompileError.new("cannot call function from fastcall") if @lmd.type.fastcall?
+              raise CompileError.new("cannot fastcall in fastcalling") if @fast_calling
+              @fast_calling = true
+              emit :push_fastcall_result, lmd.type.base
+              ast[2].each_with_index do |arg,i|
+                v = rval(arg)
+                TypeUtil.compatible_type( lmd.type.args[i], v.type )
+                v = cast( v, lmd.type.args[i] )
+                emit :push_fastcall_arg, lmd.type.args[i], v
+              end
+              emit :fastcall, r, lmd
+              @fast_calling = false
+            else
+              emit :push_result, lmd.type.base
+              ast[2].each_with_index do |arg,i|
+                v = rval(arg)
+                TypeUtil.compatible_type( lmd.type.args[i], v.type )
+                v = cast( v, lmd.type.args[i] )
+                emit :push_arg, lmd.type.args[i], v
+              end
+              emit :call, r, lmd
             end
-            emit :call, r, lmd
           end
 
         when :ref # &演算子

@@ -41,3 +41,9 @@ function hoge():void {
 	var i1 = 1;
 	var i = i1 % 0;
 }
+
+//@cannot call function from fastcall
+function hoge():void options(fastcall:true){
+	hoge();
+}
+

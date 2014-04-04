@@ -17,7 +17,7 @@ module Fc
       defines = []
       node = []
       case op[0]
-      when :label, :asm, :push_result
+      when :label, :asm, :push_result, :push_fastcall_result
         # DO NOTHING
       when :'if'
         uses << op[1]
@@ -26,9 +26,9 @@ module Fc
         node << labels[op[1]]
       when :return
         uses << op[1]
-      when :push_arg
+      when :push_arg, :push_fastcall_arg
         uses << op[2]
-      when :load, :uminus, :not, :sign_extension, :ref, :call
+      when :load, :uminus, :not, :sign_extension, :ref, :call, :fastcall
         defines << op[1]
         uses << op[2]
       when :add, :sub, :and, :or, :xor, :mul, :div, :mod, :eq, :lt, :shift_left, :shift_right, :index, :pget
@@ -84,18 +84,18 @@ module Fc
       beyond_call = false
       if v.live_range
         ((v.live_range.min+1)..(v.live_range.max-1)).each do |i|
-          beyond_call = true if lmd.ops[i] and lmd.ops[i][0] == :call
+          beyond_call = true if lmd.ops[i] and lmd.ops[i][0] == :call and not lmd.ops[i][2].type.fastcall?
         end
       end
       
       if v.opt[:local_type] == :result
         # 返り値
-        lmd.result.location = :frame
+        lmd.result.location = lmd.type.fastcall? ? :fastcall_reg : :frame
         lmd.result.address = 0 
       elsif beyond_call or v.opt[:local_type] == :arg or refered[v]
         # 引数か、関数をまたいでいるなら、フレームに割り当てる
         v.address = frame_size
-        v.location = :frame
+        v.location = lmd.type.fastcall? ? :fastcall_reg : :frame
         frame_size += v.type.size
       elsif v.live_range
         # それ以外の使われてる変数は、レジスターメモリに割り当てる
@@ -118,8 +118,14 @@ module Fc
       raise CompileError.new("frame size over on #{lmd}") if reg_size > 16
       # 割り当てる
       reg[:vars].each do |v|
-        v.location = :reg
-        v.address = reg_size
+        if lmd.type.fastcall?
+          raise CompileError.new("frame size over on #{lmd}") if frame_size + reg_size > 16
+          v.location = :fastcall_reg
+          v.address = frame_size + reg_size
+        else
+          v.location = :reg
+          v.address = reg_size
+        end
       end
       reg_size += 2
     end

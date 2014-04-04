@@ -2,6 +2,7 @@
 	.importzp S
 	.importzp L
 	.importzp reg
+	.importzp FC_FASTCALL_REG
 
 	.import jsr_reg
 	.import __mul_8

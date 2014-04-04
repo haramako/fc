@@ -81,6 +81,17 @@ ge""",6) == 0, "here string");
 	return;
 }
 
+function add_fastcall(a:int, b:int):int options(fastcall:true)
+{
+	return a + b;
+}
+
+function test_fastcall():void
+{
+	assert_equal(add_fastcall(1,2), 3, "add_fastcall");
+}
+
+
 function main():void
 {
 	unittest_run_tests();

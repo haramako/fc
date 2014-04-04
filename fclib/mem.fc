@@ -7,14 +7,14 @@ function zero(p:int*, size:int):void;
 function copy(_to:int*, _from:int*, size:int16):void;
 function compare(p1:int*, p2:int*, size:int):int;
 
-function strlen(str:int*):int
+function strlen(str:int*):int options(fastcall:true)
 {
 	var n = 0;
 	while( str[n] ){ n += 1; }
 	return n;
 }
 
-function strcpy(to:int*, str:int*):int
+function strcpy(to:int*, str:int*):int options(fastcall:true)
 {
 	var i = 0;
 	while(1){

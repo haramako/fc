@@ -117,6 +117,7 @@ module Fc
       r << ".proc #{mangle(sym)}"
 
       push_arg_size = 0
+      push_fastcall_arg_size = 0
 
       ops.each_with_index do |op,op_no| # op=オペランド
         dout 3, op.inspect
@@ -193,6 +194,39 @@ module Fc
             end
           end
 
+        when :push_fastcall_result
+          push_fastcall_arg_size += op[1].size
+          
+        when :push_fastcall_arg
+          op[1].size.times do |i|
+            r << load_a(op[2],i)
+            r << "sta <FC_FASTCALL_REG+#{push_fastcall_arg_size}"
+            push_fastcall_arg_size += 1
+          end
+          
+        when :fastcall
+          push_fastcall_arg_size = 0
+
+          if op[2].kind == :literal
+            # 関数を直に呼ぶ
+            r << "jsr #{mangle(op[2].val)}"
+          else
+            # 関数ポインタから呼ぶ
+            r << load_a( op[2], 0 )
+            r << "sta <reg+0"
+            r << load_a( op[2], 1 )
+            r << "sta <reg+1"
+            r << "jsr jsr_reg"
+          end
+          
+          # 帰り値を格納する
+          if op[1]
+            op[1].type.size.times do |i|
+              r << "lda <#{i}+FC_FASTCALL_REG"
+              r << store_a(op[1],i);
+            end
+          end
+          
         when :load
           r.concat load( op[1], op[2] )
 
@@ -649,6 +683,7 @@ module Fc
           case v.location
           when :frame then "<S+#{v.address},x"
           when :reg then "<L+#{v.address}"
+          when :fastcall_reg then "<FC_FASTCALL_REG+#{v.address}"
           else 
             # :nocov:
             raise "invalid location #{v.location} of #{v}"

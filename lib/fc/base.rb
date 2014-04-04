@@ -81,6 +81,7 @@ module Fc
           @kind = :lambda
           @base = Type[ ast[2] ]
           @args = ast[1].map{|t| Type[t] }
+          @fastcall = !!ast[3]
           @size = 2
         end
       end
@@ -99,12 +100,16 @@ module Fc
       when :array
         @str = "#{@base}[#{@length||''}]"
       when :lambda
-        @str = "#{@base}(#{args.join(",")})"
+        @str = "#{@fastcall ?'fastcall ':''}#{@base}(#{args.join(",")})"
       else
         #:nocov:
         raise "invalid type declaration #{ast}"
         #:nocov:
       end
+    end
+
+    def fastcall?
+      @fastcall
     end
 
     def to_s
@@ -422,8 +427,8 @@ module Fc
     def initialize( id, args, base_type, opt, ast )
       @id = id
       @args = args
-      @type = Type[[:lambda, args.map{|arg|arg[1]}, base_type]]
       @opt = opt || Hash.new
+      @type = Type[[:lambda, args.map{|arg|arg[1]}, base_type, @opt[:fastcall]]]
       @ast = ast
       @ops = []
       @vars = []
