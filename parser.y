@@ -1,5 +1,10 @@
 class Fc::Parser
   prechigh
+
+    /* omit 'if else else' shift/reduce comflict */
+    nonassoc 'else' 'elsif' 
+    nonassoc NO_ELSE
+
     left '.' '(' '['
     nonassoc UMINUS
     left '*' '/' '%'
@@ -32,24 +37,26 @@ statement_list: statement_list statement_i { result = val[0] + [val[1]] }
               
 statement_i: statement { info(val[0]) }
 
-statement: opt_scope 'var' var_decl_list ';'               { result = [:var, val[2], val[0]] }
-         | opt_scope 'const' var_decl_list ';'             { result = [:const, val[2], val[0]] }
-         | 'if' '(' exp ')' block else_block     { result = [:if, val[2], val[4], val[5]] }
-         | 'loop' '(' ')' block                  { result = [:loop, val[3]] }
-         | 'while' '(' exp ')' block             { result = [:while, val[2], val[4]] }
+statement: opt_scope 'var' var_decl_list ';'     { result = [:var, val[2], val[0]] }
+         | opt_scope 'const' var_decl_list ';'   { result = [:const, val[2], val[0]] }
+         | 'if' '(' exp ')' statement else_block { result = [:if, val[2], val[4], val[5]] }
+         | 'loop' '(' ')' statement              { result = [:loop, val[3]] }
+         | 'while' '(' exp ')' statement         { result = [:while, val[2], val[4]] }
          | 'for' '(' IDENT ',' exp ',' exp ')' block { result = [:for, val[2], val[4], val[6], val[8]] }
          | 'break' ';'                           { result = [:break] }
          | 'continue' ';'                        { result = [:continue] }
-         | 'return' opt_exp ';'                   { result = [:return, val[1]] }
+         | 'return' opt_exp ';'                  { result = [:return, val[1]] }
          | 'switch' '(' exp ')' '{' switch_block opt_default_block'}' { result = [:switch, val[2], val[5], val[6]] }
-         |  exp ';' { result = [:exp, val[0]] }
+         | exp ';'                               { result = [:exp, val[0]] }
          | opt_scope 'function' IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
                                         { result = [:function, val[0], val[2], val[4], val[7], val[8], val[9] ] }
          | options ';'                           { result = [:options, val[0]] }
-         | 'use' opt_from IDENT opt_as ';'              { result = [:use, val[2], val[3], val[1] ] }
+         | 'use' opt_from IDENT opt_as ';'       { result = [:use, val[2], val[3], val[1] ] }
          | 'include' opt_ident '(' STRING ')' opt_options ';'  { result = [:include, val[3], val[1], val[5] ] }
-         | 'public' ':' { result = [:public] }
-         | 'private' ':' { result = [:private] }
+         | 'public' ':'                          { result = [:public] }
+         | 'private' ':'                         { result = [:private] }
+         | block                                 { result = [:block, val[0]] }
+         | ';'                                   { result = [:blank] }
 
 opt_scope: | 'public' { result = :public }
 
@@ -79,9 +86,9 @@ block: '{' opt_statement_list '}' { result = val[1] }
 
 opt_block: | block
          
-else_block:
-     | 'else' block { result = val[1] }
-     | 'elsif' '(' exp ')' block else_block { result = [[:if, val[2], val[4], val[5]]] }
+else_block: = NO_ELSE
+     | 'else' statement { result = val[1] }
+     | 'elsif' '(' exp ')' statement else_block { result = [:if, val[2], val[4], val[5]] }
 
 /****************************************************/
 /* expression */
@@ -113,6 +120,7 @@ exp: '(' exp ')'            { result = val[1] }
    | '<' type_decl '>' exp  { result = [:cast, val[3], val[1]] }
    | '!' exp = UMINUS       { result = [:not, val[1]] }
    | '-' exp = UMINUS       { result = [:uminus, val[1]] }
+   | '+' exp = UMINUS       { result = val[1] }
    | '*' exp = UMINUS       { result = [:deref, val[1]] }
    | '&' exp = UMINUS       { result = [:ref, val[1]] }
    | exp '(' exp_list ')' opt_block { result = [:call, val[0], val[2], val[4]] }

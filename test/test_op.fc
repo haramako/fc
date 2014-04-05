@@ -55,6 +55,10 @@ function test_int_op():void
 	assert_equal( i10*16, 160, '*const' );
 	assert_equal( i10/4, 2, '/const' );
 	assert_equal( i10%8, 2, '%const' );
+	
+	assert_equal( +1, 1, '+1');
+	assert_equal( +i1, 1, '+i1');
+	assert_equal( -i1, 255, '-i1');
 }
 
 

@@ -259,6 +259,12 @@ module Fc
 
       case ast[0]
 
+      when :block
+        compile_block(ast[1])
+
+      when :blank
+        # DO NOTHING
+        
       when :options
         must_in_module
         ast[1].each do |k,e| 
@@ -366,11 +372,11 @@ module Fc
         cond = rval(ast[1])
         emit :if, cond, else_label
         emit :label, then_label
-        in_scope { compile_block(ast[2]) }
+        in_scope { compile_statement(ast[2]) }
         emit :jump, end_label
         emit :label, else_label
         if ast[3]
-          in_scope { compile_block(ast[3]) }
+          in_scope { compile_statement(ast[3]) }
         end
         emit :label, end_label
 
@@ -379,20 +385,20 @@ module Fc
           begin_label, end_label = new_labels('begin', 'end')
           @loops << [begin_label, end_label]
           emit :label, begin_label
-          compile_block ast[1]
+          compile_statement ast[1]
           emit :jump, begin_label
           emit :label, end_label
           @loops.pop
         end
         
       when :'while'
-        compile_statement( [:loop, [[:if, ast[1], ast[2], [[:break]] ]]] )
+        compile_statement( [:loop, [:if, ast[1], ast[2], [:break] ]] )
 
       when :for
         compile_block( [[:exp, [:load, ast[1], ast[2]]],
                         [:while, 
                          [:lt, ast[1], ast[3]],
-                         ast[4] + [[:exp, [:load, ast[1], [:add, ast[1], 1] ]]]
+                         [:block, ast[4] + [[:exp, [:load, ast[1], [:add, ast[1], 1] ]]]]
                         ] ] )
 
       when :break
