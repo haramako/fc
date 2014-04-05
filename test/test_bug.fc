@@ -1,0 +1,16 @@
+use * from unittest;
+use math;
+include( "character.chr" );
+
+function hoge(p:int*):void {}
+
+// bug: lib/fc/llc.rb:689:in `to_asm': invalid location none of {$7} (RuntimeError)
+function test_pointer_access():void
+{
+	math.sin(10); // must be a fastcall function
+}
+
+function main():void
+{
+	unittest_run_tests();
+}
