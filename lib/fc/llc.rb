@@ -909,7 +909,7 @@ module Fc
         case op[0]
         when :pget, :load
           lmd.ops[i] = nil if op[1] and op[1].unuse
-        when :call
+        when :call, :fastcall
           lmd.ops[i][1] = nil if op[1] and op[1].unuse
         end
       end

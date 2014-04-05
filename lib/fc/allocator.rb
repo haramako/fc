@@ -237,7 +237,6 @@ module Fc
           @regs << { live_range: var[:live_range], vars: [id] }
         end
       end
-      # pp @regs, @vars
     end
 
     private

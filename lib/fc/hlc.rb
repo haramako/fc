@@ -727,8 +727,9 @@ module Fc
               r = nil
             end
             raise CompileError.new("#{lmd} has #{lmd.type.args.size} but #{ast[2].size}") if ast[2].size != lmd.type.args.size
+            raise CompileError.new("cannot call function from fastcall") if @lmd.type.fastcall?
+            
             if lmd.type.fastcall?
-              raise CompileError.new("cannot call function from fastcall") if @lmd.type.fastcall?
               raise CompileError.new("cannot fastcall in fastcalling") if @fast_calling
               @fast_calling = true
               emit :push_fastcall_result, lmd.type.base
