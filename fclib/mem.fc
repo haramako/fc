@@ -2,7 +2,7 @@ options( bank: -1 );
 
 include( "mem.asm" );
 
-function set(p:int*, c:int, size:int):void;
+function set(p:int*, c:int, size:int):void options(fastcall:true);
 function zero(p:int*, size:int):void;
 function copy(_to:int*, _from:int*, size:int16):void;
 function compare(p1:int*, p2:int*, size:int):int;

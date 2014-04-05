@@ -35,6 +35,18 @@ function test_strcpy():void
 	assert_equal( n, 5, "strcpy" );
 }
 
+function test_set():void
+{
+	mem.set(buf1,0,8);
+	assert_equal(buf1[0],0,"[0]=0");
+	assert_equal(buf1[7],0,"[7]=0");
+	
+	mem.set(buf1,1,7);
+	assert_equal(buf1[0],1,"[0]=1");
+	assert_equal(buf1[6],1,"[6]=1");
+	assert_equal(buf1[7],0,"[7]=0");
+}
+
 function main():void
 {
 	unittest_run_tests();

@@ -61,19 +61,13 @@ _mem_copy:
 ;; }
 ;;; USING Y
 _mem_set:
-	lda S+0,x
-	sta reg+0
-	lda S+1,x
-	sta reg+1
-	lda S+2,x
-	sta reg+2
-    ldy #0
-:	lda S+2,x
-    sta (reg+0),y
-    iny
-    cpy reg+2
-    bne :-
-    rts
+    ldy FC_FASTCALL_REG+3
+	beq :++
+	lda FC_FASTCALL_REG+2
+:	dey
+	sta (FC_FASTCALL_REG+0),y
+	bne :-
+:	rts
 
 ;;; USING Y
 _mem_zero:
