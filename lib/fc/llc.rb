@@ -58,7 +58,11 @@ module Fc
         when :bss
           inc << "\t.import #{mangle(sym)}"
           asm << "\t.export #{mangle(sym)}"
-          asm << ".segment \"BSS\""
+          if val[:segment]
+            asm << ".segment \"#{val[:segment]}\""
+          else
+            asm << ".segment \"BSS\""
+          end
           asm << "#{mangle(sym)}: .res #{type.size}"
         when :block
           inc << "\t.import #{mangle(sym)}"

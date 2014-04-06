@@ -341,7 +341,7 @@ module Fc
             if opt[:address]
               val = add_def( id, :equ, type, opt[:address] )
             else
-              val = add_def( id, :bss, type )
+              val = add_def( id, :bss, type, {segment: opt[:segment]} )
             end
           end
           var = add_var Value.new( (@lmd ? :local : :global), id, type, val, opt )
