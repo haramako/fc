@@ -1,5 +1,8 @@
 **TODO
 
+* |= などを実装
+* intを返す関数でreturnを書かないと挙動がおかしい？(do_debug_selectで発生)
+* ~(not) を追加
 * fastcall(スタックを使わない呼び出し規約）を追加する
 * public属性は、scopeにいれる
 * const属性は、typeにいれる

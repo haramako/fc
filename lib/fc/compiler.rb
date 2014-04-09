@@ -119,7 +119,8 @@ module Fc
         while mem.get(0xffff) == 255
           cpu.step_silent
           if mem.get(0xfffe) != 255
-            if mem.get(0xfffe) == 1
+            case mem.get(0xfffe)
+            when 1
               addr = mem.get(0xfff0) + (mem.get(0xfff1) << 8)
               str = ''
               while mem.get(addr) != 0
@@ -127,9 +128,12 @@ module Fc
                 addr += 1
               end
               out.print str
-            else
+            when 2
               num = mem.get(0xfff2) + (mem.get(0xfff3) << 8)
               out.print num
+            when 3
+              num = mem.get(0xfff2) + (mem.get(0xfff3) << 8)
+              out.print num, " "
             end
             mem.set 0xfffe, 255
           end

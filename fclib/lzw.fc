@@ -1,0 +1,13 @@
+use mem;
+
+var addr:int* options(address:0x7e);
+var bpos:int options(address:0x7d);
+var cur:int options(address:0x7c);
+
+function read_bit(n:int):int16 options(fastcall:true);
+function read_vln():int8 options(fastcall:true);
+function read_vln16():int16 options(fastcall:true);
+function unpack(dest:int*, src:int*):int16;
+
+include("lzw.asm");
+
