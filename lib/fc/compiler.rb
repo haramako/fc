@@ -76,6 +76,7 @@ module Fc
       
       compile2( hlc, opt )
       objs = assemble( hlc, opt )
+      output_html hlc, opt[:html] if opt[:debug_info]
 
       make_runtime opt[:target]
       exit if opt[:compile_only]
@@ -84,7 +85,6 @@ module Fc
 
       link hlc, objs, opt
 
-      output_html hlc, opt[:html] if opt[:debug_info]
       
       execute opt[:out], opt[:stdout] if opt[:run]
 

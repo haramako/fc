@@ -729,6 +729,12 @@ module Fc
           raise
           #:nocov:
         end
+      elsif CastedValue === v
+        if n < v.type.size and n < v.__getobj__.type.size
+          "#{n}+#{to_asm(v)}"
+        else
+          "#0" # 符号拡張は、:sign_extension オペレータで行うので、存在しないbyteは0扱い
+        end
       elsif v.kind == :literal
         case v.val
         when Numeric
