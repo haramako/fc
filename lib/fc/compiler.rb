@@ -49,8 +49,8 @@ module Fc
 
     def find_share( filename )
       dir = FC_HOME + 'share'
-      return dir + @target + filename if File.exists? dir + @target + filename
-      return dir + filename if File.exists? dir + filename
+      return dir + @target + filename if File.exist? dir + @target + filename
+      return dir + filename if File.exist? dir + filename
       raise "file '#{filename}' not found in share directories"
     end
 

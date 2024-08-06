@@ -19,7 +19,7 @@ module Fc
   # fclib以下のファイルを検索する
   def self.find_module( file )
     LIB_PATH.each do |path|
-      return path + file if File.exists?( path + file )
+      return path + file if File.exist?( path + file )
     end
     raise CompileError.new( "file #{file} not found" );
   end

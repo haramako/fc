@@ -176,7 +176,7 @@ module Fc
         # .fcmがないか古いのでコンパイルしなおす
         @module.id = id
         @modules[@module.id] = @module
-        src = File.read( path )
+        src = File.read( path, encoding: 'utf-8' )
         ast, pos_info = Parser.new(src,path).parse
         @pos_info.merge! pos_info
 
