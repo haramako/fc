@@ -862,7 +862,7 @@ module Fc
     def module_to_html( mods )
       path = Fc.find_share('main.html.erb')
       @template_main ||= File.read( path )
-      erb = ERB.new(@template_main,nil,'-')
+      erb = ERB.new(@template_main,trim_mode:'-')
       erb.filename = path.to_s
       erb.result(binding)
     end

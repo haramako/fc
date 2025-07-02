@@ -1,5 +1,4 @@
 require "fc/version"
-require 'backports'
 
 require 'fc/base'
 require 'fc/allocator'

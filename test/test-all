@@ -6,13 +6,13 @@ require 'pp'
 require 'json'
 require 'tempfile'
 require 'simplecov'
-require 'fc'
 require 'stringio'
 
 SimpleCov.root '..'
 SimpleCov.command_name 'test-all'
 SimpleCov.start
 
+require 'fc'
 
 FC = 'bin/fc'
 EMU = 'bin/emu6502'

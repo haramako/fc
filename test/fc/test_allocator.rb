@@ -10,9 +10,9 @@ describe LiveRangeCalculator, 'should calc live range' do
   end
 
   it 'should calc live range' do
-    @lrc.calc_live_range( [[0,3],[1,4]] ).should eq (0..4) # a
-    @lrc.calc_live_range( [[1  ],[3  ]] ).should eq (1..3) # b
-    @lrc.calc_live_range( [[3  ],[3,5]] ).should eq (0..5) # c
+    expect(@lrc.calc_live_range( [[0,3],[1,4]] )).to eq (0..4) # a
+    expect(@lrc.calc_live_range( [[1  ],[3  ]] )).to eq (1..3) # b
+    expect(@lrc.calc_live_range( [[3  ],[3,5]] )).to eq (0..5) # c
   end
 
 end
@@ -34,7 +34,7 @@ describe Allocator do
                             { a: [[0,3],[1,4]],
                               b: [[1  ],[3  ]],
                               c: [[3  ],[3,5]] } ) )
-    @alloc.regs.size.should be 3
+    expect(@alloc.regs.size).to be 3
   end
 
   it 'should allocate 3 registers' do
@@ -44,7 +44,7 @@ describe Allocator do
                               c: [[3  ],[3,5]],
                               d: [[0  ],[0  ]],
                             } ) )
-    @alloc.regs.size.should be 3
+    expect(@alloc.regs.size).to be 3
   end
 
 end

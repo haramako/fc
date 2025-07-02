@@ -33,15 +33,21 @@ end
 require_relative '../lib/fc/compiler'
 compiler = Fc::Compiler.new
 com = ARGV.shift
-case com
-when 'run'
-  o[:run] = true
-  compiler.build ARGV[0], o
-when 'build', 'b'
-  compiler.build ARGV[0], o
-when 'compile', 'c'
-  compiler.compile_only ARGV[0], o
-else
-  puts opt
-  exit
+begin
+  case com
+  when 'run'
+    o[:run] = true
+    compiler.build ARGV[0], o
+  when 'build', 'b'
+    compiler.build ARGV[0], o
+  when 'compile', 'c'
+    compiler.compile_only ARGV[0], o
+  else
+    puts opt
+    exit
+  end
+rescue Fc::CompileError => err
+  raise if o[:debug_info]
+  puts "#{err.filename}:#{err.line_no}: #{err}"
+  exit 1
 end

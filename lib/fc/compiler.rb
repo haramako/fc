@@ -205,7 +205,7 @@ module Fc
       ineschr = (hlc.options[:char_banks] || 1 )
       options = { inesprg: inesprg, ineschr: ineschr, inesmir: 1, inesmap: inesmap }
       template = IO.read( find_share('base.asm.erb') ) 
-      str = ERB.new(template,nil,'-').result(binding)
+      str = ERB.new(template,trim_mode:'-').result(binding)
       IO.write( BUILD_PATH+'base.s', str )
       ca65 BUILD_PATH+'base.s'
     end
@@ -235,7 +235,7 @@ module Fc
         {name: m.id.to_s, bank: bank}
       end
       
-      cfg = ERB.new(IO.read( find_share('ld65.cfg.erb') ),nil,'-').result(binding)
+      cfg = ERB.new(IO.read( find_share('ld65.cfg.erb') ),trim_mode:'-').result(binding)
       IO.write( BUILD_PATH+'ld65.cfg', cfg )
 
       sh( LD65, '-m', opt[:out].sub_ext('.map'), '-o', opt[:out], '-C', BUILD_PATH+'ld65.cfg', 
