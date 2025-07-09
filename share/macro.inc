@@ -6,6 +6,7 @@
 
 	.import jsr_reg
 	.import __mul_8
+	.import __mul_8s
 	.import __mul_8t16
 	.import __mul_16
 	.import __div_8

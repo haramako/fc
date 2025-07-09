@@ -13,6 +13,7 @@
 	.export interrupt_irq
 	.export jsr_reg
 	.export __mul_8
+	.export __mul_8s
 	.export __mul_8t16
 	.export __mul_16
 	.export __div_8
@@ -204,6 +205,9 @@
         sta reg+4
         rts
 .endproc
+
+__mul_8s = __mul_8
+
 
 ;;; uint8xuint8=>uint16の掛け算
 ;;; reg(4,6) = reg0 * reg2

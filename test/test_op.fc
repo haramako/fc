@@ -82,14 +82,14 @@ function test_int8_op():void
 	assert_equal( i10/m3, -4, '-10/-3');
 	assert_equal( m10/m3, 3, '-10/-3');
 	assert_equal( i10/i2, -5, '+,-,*,/,%');
-	/*
+	
 	assert_equal( i5*i5, 25, '+,-,*,/,%');
-	assert_equal( i5*60, 44, '+,-,*,/,%');
+	assert_equal( i5*60, -44, '+,-,*,/,%');
 	assert_equal( i10/i3, 3, '/');
-	assert_equal( 255/i10, 25, '/');
-	assert_equal( 255%i10, 5, '%');
-	assert_equal( (18%((i2*((i10+i10)-i5))/i3)), 8, '+,-,*,/,%');
-	*/
+	assert_equal( 255/i10, -1, '/');
+	//assert_equal( 255%i10, 5, '%');
+	//assert_equal( (18%((i2*((i10+i10)-i5))/i3)), 8, '+,-,*,/,%');
+	
 
 	assert_equal( i3 & i2, 2, '&' );
 	assert_equal( i1 | i2, -1, '|' );
