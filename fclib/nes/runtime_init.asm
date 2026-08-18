@@ -1,7 +1,7 @@
 	.export runtime_init
 	.include "_nes.s"
 
-.segment "CODE"
+.segment "FC_RUNTIME"
 	
 runtime_init:
 
