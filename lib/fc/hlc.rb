@@ -352,16 +352,24 @@ module Fc
       when :const
         ast[1].each do |v|
           id, type, val, opt = v
-          raise CompileError.new("cannot define const without value #{v[0]}") unless val
-          val = const_eval(val) if val
-          type = TypeUtil.guess_type(type_eval(type),val)
-          if Array === val.val
-            symbol = add_def( id, :block, type, val.val )
-            new_val = add_var Value.new( :global, id, type, symbol, opt )
+          if val
+            val = const_eval(val)
+            type = TypeUtil.guess_type(type_eval(type),val)
+            if Array === val.val
+              symbol = add_def( id, :block, type, val.val )
+              new_val = add_var Value.new( :global, id, type, symbol, opt )
+            else
+              new_val = add_var Value.new( :literal, id, type, val.val, opt )
+              unless @lmd
+                symbol = add_def( id, :equ, type, val.val ) 
+              end
+            end
           else
-            new_val = add_var Value.new( :literal, id, type, val.val, opt )
-            unless @lmd
-              symbol = add_def( id, :equ, type, val.val ) 
+            if opt && opt[:address].is_a?(String)
+              type = type_eval(type)
+              new_val = add_var Value.new( :global, id, type, opt[:address], opt )
+            else
+              raise CompileError.new("cannot define const without value #{v[0]}")
             end
           end
           new_val.public = true if (ast[2] || @module.current_scope) == :public

@@ -1,0 +1,19 @@
+use * from unittest;
+use mem;
+
+include( "character.chr" );
+
+//const asm_symbol:int options(address: 0x0123);
+const base_data:int[] = [1,2,3];
+const asm_symbol:int[] options(address: "_test_option_base_data");
+
+function test_address():void
+{
+	assert_equal( base_data[1], 2, 'base_data');
+	assert_equal( asm_symbol[1], 2, 'asm_symbol');
+}
+
+function main():void
+{
+	unittest_run_tests();
+}
