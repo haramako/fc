@@ -11,7 +11,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 6 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 7 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
@@ -21,7 +21,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 | 3 | HLC (AST→IR) | ✅ 完了 | 2026-08-28 |
 | 4 | レジスタ割付 | ✅ 完了 | 2026-08-28 |
 | 5 | LLC (IR→asm) | ✅ 完了 | 2026-08-28 |
-| 6 | ドライバ・テンプレート | ⬜ 未着手 | - |
+| 6 | ドライバ・テンプレート | ✅ 完了 | 2026-08-28 |
 | 7 | 6502エミュレータ | ⬜ 未着手 | - |
 | 8 | テスト移行 | ⬜ 未着手 | - |
 | 9 | 切替 | ⬜ 未着手 | - |
@@ -298,17 +298,17 @@ go test ./internal/fc -run TestGoldenAsm
 
 ---
 
-### Phase 6 — ドライバ・テンプレート  ⬜ 未着手  (1〜2日)
+### Phase 6 — ドライバ・テンプレート  ✅ 完了 2026-08-28
 
-- [ ] `base.asm.erb` → `text/template`（nes / emu）
-- [ ] `ld65.cfg.erb` → `text/template`（nes / emu）
-- [ ] バンク／セグメント計算（`bank_count` / `char_banks` / `mapper` / `org`）
-- [ ] `find_share` / `find_module` のパス解決
-- [ ] ca65 / ld65 の `os/exec` 起動とエラーハンドリング（`CommandError` 相当）
-- [ ] `make_runtime` / `make_base` / `link`
-- [ ] `fclib` + `share` を `embed.FS` で単一バイナリに同梱
-- [ ] CLI (`cmd/fcc`) のオプション互換（`-o` `-e` `-S` `-d` `-t` `-O`、サブコマンド `build`/`b`/`compile`/`c`/`run`）
-- [ ] `-t x6502` を明示的なエラーにする（スコープ外）
+- [x] `base.asm.erb` 相当（nes / emu）— テンプレートが小さく静的なため text/template ではなく直接文字列生成で1:1再現（アセンブラは空白・コメント非依存なので binary golden で検証される）
+- [x] `ld65.cfg.erb` 相当（nes / emu）
+- [x] バンク／セグメント計算（`bank_count` / `char_banks` / `mapper` / `org`）
+- [x] `find_share` / `find_module` のパス解決
+- [x] ca65 / ld65 の `os/exec` 起動とエラーハンドリング（`CommandError` 相当）
+- [x] `make_runtime` / `make_base` / `link`
+- [x] `fclib` + `share` を `embed.FS` で同梱（ルート `embedfs.go`。FC_HOME が見つからない場合は一時ディレクトリへ展開 — ca65/ld65 が実ファイルを要求するため）
+- [x] CLI (`cmd/fcc`) のオプション互換（`-o` `-e` `-S` `-d` `-t` `-O`、サブコマンド `build`/`b`/`compile`/`c`/`run`。FC_HOME は env → exe位置 → cwd上方探索 → embed展開 の順で解決）
+- [x] `-t x6502` を明示的なエラーにする（スコープ外）
 
 **合格条件**:
 
@@ -316,7 +316,7 @@ go test ./internal/fc -run TestGoldenAsm
 go test ./internal/fc -run TestGoldenBinary
 ```
 
-全 `test_*.fc` で `a.bin` が golden とバイト一致。加えて Phase 0 で生成した NES ビルド golden（`*_nes`）の `a.nes` もバイト一致（emu テストだけでは `share/nes` テンプレ・`bank_count` / `char_banks` / `mapper` の経路を通らない）。
+→ **達成**（14件バイト一致: a.bin ×13 + a.nes ×1。CLI の build/compile/x6502拒否も動作確認済み）
 
 ---
 
@@ -410,6 +410,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 6 完了**。driver.go (Build パイプライン/ca65/ld65/テンプレート/リンク)、embedfs.go (fclib+share の embed)、cmd/fcc (bin/fcc 互換CLI)。TestGoldenBinary 14件バイト一致。
 - 2026-08-28: **Phase 5 完了**。llc.go (全op/emit_block/optimize_pointer/extend_jump)。初回差分は1箇所のみ: `:lt` の `signed = op[2].type.signed or op[3].type.signed` が Ruby の `or` 優先順位で op[2] しか効かないバグ — 再現して 14件全一致。
 - 2026-08-28: **Phase 4 完了**。allocator.go (calc_live_range/allocate_register/allocate_a/allocate_cond/Allocator/delete_unuse)。初回の失敗は pget の op[3] 範囲外のみ、修正後 TestGoldenAllocIR 14件全一致 + TestAllocatorUnit グリーン。
 - 2026-08-28: **Phase 3 完了**。hlc.go/macros.go/irdump.go を実装、TestGoldenIR 14件が初回実行で全一致(採番・マクロ展開・const_eval破壊的書き換え・スコープ順序すべて一致)。Phase 1 でASTを厳密に合わせたことが効いた。

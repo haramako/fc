@@ -210,7 +210,46 @@ func TestGoldenAsm(t *testing.T) {
 
 // Phase 6: リンク済みバイナリ(a.bin/a.nes)のバイト一致
 func TestGoldenBinary(t *testing.T) {
-	t.Skip("Phase 6 で実装")
+	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "bin", "*"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("golden bin が見つからない: %v", err)
+	}
+	for _, m := range matches {
+		base := filepath.Base(m)
+		name := strings.TrimSuffix(base, filepath.Ext(base))
+		t.Run(name, func(t *testing.T) {
+			srcName, target := goldenKeyInfo(name)
+			t.Chdir(filepath.Join(absRepoRoot, "test"))
+			compiler := NewCompiler(absRepoRoot)
+			code, berr := compiler.Build(srcName+".fc", &BuildOptions{Target: target})
+			if berr != nil {
+				t.Fatalf("ビルド失敗: %v", berr)
+			}
+			if code != 0 {
+				t.Fatalf("ビルド結果コード: %d", code)
+			}
+			outName := "a.bin"
+			if target == "nes" {
+				outName = "a.nes"
+			}
+			got, err := os.ReadFile(outName)
+			if err != nil {
+				t.Fatalf("出力読み込み失敗: %v", err)
+			}
+			want, err := os.ReadFile(m)
+			if err != nil {
+				t.Fatalf("golden読み込み失敗: %v", err)
+			}
+			if len(got) != len(want) {
+				t.Fatalf("サイズ不一致: got %d want %d", len(got), len(want))
+			}
+			for i := range got {
+				if got[i] != want[i] {
+					t.Fatalf("バイト不一致: offset 0x%04x got %02x want %02x", i, got[i], want[i])
+				}
+			}
+		})
+	}
 }
 
 // Phase 7: エミュレータ実行の stdout / 終了コード一致
