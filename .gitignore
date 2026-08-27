@@ -26,3 +26,4 @@ coverage
 .DS_Store
 .fc-build
 a.*
+y.output
