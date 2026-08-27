@@ -11,13 +11,13 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 2 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 3 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
 | 0 | 基盤整備・差分ハーネス | ✅ 完了 | 2026-08-28 |
 | 1 | レキサ + パーサ | ✅ 完了 | 2026-08-28 |
-| 2 | 基盤データ構造 | ⬜ 未着手 | - |
+| 2 | 基盤データ構造 | ✅ 完了 | 2026-08-28 |
 | 3 | HLC (AST→IR) | ⬜ 未着手 | - |
 | 4 | レジスタ割付 | ⬜ 未着手 | - |
 | 5 | LLC (IR→asm) | ⬜ 未着手 | - |
@@ -202,14 +202,14 @@ go test ./internal/fc -run TestGoldenAST
 
 ---
 
-### Phase 2 — 基盤データ構造  ⬜ 未着手  (1〜2日)
+### Phase 2 — 基盤データ構造  ✅ 完了 2026-08-28
 
-- [ ] `Type`（インターンキャッシュ、`to_s`、`BASIC_TYPES`、pointer/array/lambda/fastcall）
-- [ ] `Value` / `CastedValue` / `PointeredArray`
-- [ ] `Scope`（`use` による横断検索、再帰防止フラグ相当、`find!` / `id_list`）
-- [ ] `Module` / `Lambda`
-- [ ] `CompileError`（filename / line_no 付与）
-- [ ] `test/fc/test_base.rb` を Go test へ移植
+- [x] `Type`（インターンキャッシュ、`to_s`、`BASIC_TYPES`、pointer/array/lambda/fastcall。長さ省略配列の length/size nil は -1 で表現）
+- [x] `Value` / `CastedValue` / `PointeredArray`（Delegator の委譲は `UnderlyingValue` / `ValKind` 等の明示ヘルパで再現。`new_int` の「-128 が sint16」境界も再現）
+- [x] `Scope`（`use` による横断検索、`@finding` 再帰防止、`find!` / `id_list`）
+- [x] `Module` / `Lambda`
+- [x] `CompileError`（filename / line_no 付与）… Phase 1 で実装済み
+- [x] `test/fc/test_base.rb` を Go test へ移植（TestType 8例 + TestValue/TestScope を追加）
 
 **合格条件**:
 
@@ -217,7 +217,7 @@ go test ./internal/fc -run TestGoldenAST
 go test ./internal/fc -run "TestType|TestValue|TestScope"
 ```
 
-移植した examples 相当がすべて通ること。
+→ **達成**
 （`test_allocator.rb` の移植は Phase 4 へ。対象の `LiveRangeCalculator` / `Allocator` が Phase 4 で実装されるため、ここでは移植できない）
 
 ---
@@ -412,6 +412,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 2 完了**。Type/Value/Scope/Module/Lambda/TypeUtil を移植、test_base.rb 移植 + TestValue/TestScope 追加、全グリーン。教訓: PowerShell 5.1 の `Get-Content`/`Set-Content` で UTF-8 ファイルを処理すると文字化けする(計画書を一度破壊して前コミットから復元した)。**ファイル編集は必ず Edit ツールを使うこと**。
 - 2026-08-28: **Phase 1 完了**。レキサ(parser_ext.rbの癖含め1:1)・goyaccパーサ(競合ゼロ)・動的AST(`[]any`/`Sym`/`OMap`、型付きASTから方針変更)・S式ダンパー実装。AST golden 25ファイル全一致(.pos含む)。唯一の初回差分はソースのCRLF起因で、Ruby `File.read` テキストモード相当の CRLF→LF 変換(`ReadSource`)を入れて解決。
 - 2026-08-28: **Phase 0 完了**。`ruby-frozen` タグ付与。ダンプは bin/fcc 改造ではなく `tools/dumper.rb` のモンキーパッチ方式に変更（Ruby版は完全無変更で凍結、計画の該当箇所を更新）。golden 全生成（ast 25ファイル / ir・allocir・asm・bin・stdout ×13テスト / NESビルド1本）、2回生成でバイト一致を確認。`go build ./... && go test ./...` グリーン。`.gitignore` の `doc/` 除外を解除し `*.nes` に golden 用の負パターンを追加。オラクル(test-all)グリーンも確認済み。
 - 2026-08-28: 計画レビュー反映。gen_golden の対象を `test_*.fc` に修正（`errors.fc` / `cycle_use.fc` 除外）、fclib AST golden と NES ビルド golden を追加、`--dump-ast` の出力タイミングを「parse 直後・コンパイル前」に確定、ダンプ正規形は inspect 非依存と明文化、`test_allocator.rb` 移植を Phase 2→4 に移動、キーワード数を 23 に訂正、レキサ数値 `-?` の到達不能を注記、errors.fc の「例外なし=素通り」挙動を Phase 8 に注記。Phase 0 見積りを 1日に変更。

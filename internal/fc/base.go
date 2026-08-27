@@ -3,6 +3,11 @@
 // AST は Ruby と同様の動的構造 ([]any / Sym / int / string / *OMap / nil) で表現する。
 package fc
 
+import (
+	"fmt"
+	"strconv"
+)
+
 // Sym は Ruby の Symbol に相当する。
 type Sym string
 
@@ -77,6 +82,29 @@ type CompileError struct {
 }
 
 func (e *CompileError) Error() string { return e.Msg }
+
+// ToS は Ruby の to_s 相当 (エラーメッセージや文字列化で使用)。
+func ToS(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case Sym:
+		return string(x)
+	case string:
+		return x
+	case int:
+		return strconv.Itoa(x)
+	case bool:
+		if x {
+			return "true"
+		}
+		return "false"
+	case interface{ String() string }:
+		return x.String()
+	default:
+		return fmt.Sprintf("%v", x)
+	}
+}
 
 // cons は Ruby の `ary + [x...]` 相当 (新しいスライスを作る)。
 func cons(a []any, xs ...any) []any {
