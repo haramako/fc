@@ -75,12 +75,52 @@ func NewCastedValue(from any, typ *Type, offset int) *CastedValue {
 
 // PointeredArray は配列からポインタへ自動変換された値。
 type PointeredArray struct {
-	From *Value
+	From any // *Value (または CastedValue)
 	Type *Type
 }
 
-func NewPointeredArray(from *Value) *PointeredArray {
-	return &PointeredArray{From: from, Type: TypeOf([]any{Sym("pointer"), from.Type.Base})}
+func NewPointeredArray(from any) *PointeredArray {
+	return &PointeredArray{From: from, Type: TypeOf([]any{Sym("pointer"), ValType(from).Base})}
+}
+
+// ---------------------------------------------------------------
+// Ruby の to_s / inspect 相当 (エラーメッセージで使用)
+// ---------------------------------------------------------------
+
+// Inspect は Value#inspect 相当。
+func (v *Value) Inspect() string {
+	if v.Id != nil {
+		return fmt.Sprintf("{%s:%s}", ToS(v.Id), v.Type)
+	} else if v.BaseString != nil {
+		return `{"` + v.BaseString.(string) + `"}`
+	}
+	return fmt.Sprintf("{%s}", ToS(v.Val))
+}
+
+// String は Value#to_s 相当。
+func (v *Value) String() string {
+	if v.Id != nil {
+		return fmt.Sprintf("{%s}", ToS(v.Id))
+	}
+	return v.Inspect()
+}
+
+// String は CastedValue#to_s 相当。
+func (c *CastedValue) String() string {
+	if c.Offset == 0 {
+		return fmt.Sprintf("<%s>%s", c.Type, valToS(c.From))
+	}
+	return fmt.Sprintf("<%s+%d>%s", c.Type, c.Offset, valToS(c.From))
+}
+
+// String は PointeredArray#to_s 相当。
+func (p *PointeredArray) String() string {
+	return valToS(p.From) + "#p"
+}
+
+// valToS は ops の要素になりうる値の to_s。
+func valToS(v any) string {
+	return ToS(v)
 }
 
 // ---------------------------------------------------------------
@@ -113,7 +153,7 @@ func ValKind(v any) Sym {
 	case *CastedValue:
 		return ValKind(x.From)
 	case *PointeredArray:
-		return x.From.Kind
+		return ValKind(x.From)
 	}
 	panic(fmt.Sprintf("ValKind: invalid value %T", v))
 }

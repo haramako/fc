@@ -66,7 +66,41 @@ func SexpStr(x any) string {
 }
 
 // Canon は OMap のキー正規形 (構造的等値の判定に使う)。
-func Canon(x any) string { return SexpStr(x) }
+// 純粋なASTは構造で、Value等のオブジェクトは同一性(ポインタ)でキー化する
+// (Ruby の Hash キー等値と同じ挙動: Array は構造、その他オブジェクトは identity)。
+func Canon(x any) string {
+	switch v := x.(type) {
+	case nil, bool, int, Sym, string:
+		return SexpStr(x)
+	case []any:
+		var b strings.Builder
+		b.WriteByte('(')
+		for i, e := range v {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(Canon(e))
+		}
+		b.WriteByte(')')
+		return b.String()
+	case *OMap:
+		var b strings.Builder
+		b.WriteByte('{')
+		for i, e := range v.Entries() {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(Canon(e.Key))
+			b.WriteByte(' ')
+			b.WriteString(Canon(e.Val))
+		}
+		b.WriteByte('}')
+		return b.String()
+	default:
+		// Value / Type / Lambda など: 同一性でキー化
+		return fmt.Sprintf("#<%T:%p>", x, x)
+	}
+}
 
 // PrettySexp は dumper.rb の pretty_sexp と同一の整形を行う。
 // compact形式が80文字を超える配列は要素ごとに改行してインデントする。

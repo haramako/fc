@@ -11,14 +11,14 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 3 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 4 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
 | 0 | 基盤整備・差分ハーネス | ✅ 完了 | 2026-08-28 |
 | 1 | レキサ + パーサ | ✅ 完了 | 2026-08-28 |
 | 2 | 基盤データ構造 | ✅ 完了 | 2026-08-28 |
-| 3 | HLC (AST→IR) | ⬜ 未着手 | - |
+| 3 | HLC (AST→IR) | ✅ 完了 | 2026-08-28 |
 | 4 | レジスタ割付 | ⬜ 未着手 | - |
 | 5 | LLC (IR→asm) | ⬜ 未着手 | - |
 | 6 | ドライバ・テンプレート | ⬜ 未着手 | - |
@@ -222,24 +222,22 @@ go test ./internal/fc -run "TestType|TestValue|TestScope"
 
 ---
 
-### Phase 3 — HLC (AST→IR)  ⬜ 未着手  (4〜6日 / 最難関)
+### Phase 3 — HLC (AST→IR)  ✅ 完了 2026-08-28
 
-- [ ] `type_eval`
-- [ ] `const_eval`（**AST破壊的書き換えの挙動を明示的に再現すること**）
-- [ ] `rval` / `lval`
-- [ ] `compile_statement`（var/const/if/loop/while/for/break/continue/return/switch/exp/function/options/use/include/public/private/block/blank）
-- [ ] `compile_module` / `compile_lambda` / `compile_block`
-- [ ] スコープ操作（`in_scope` / `attach_scope` / `add_var` / `add_def` / `add_def_module`）
-- [ ] 一時変数の採番（`tmp_count`）とラベル採番（`new_label` / `new_labels`）— **Ruby版と同じ番号になること**
-- [ ] `cast` / `make_compatible` / `TypeUtil`
-- [ ] include分岐（`.asm` / `.inc` / `.chr` / `.rb`）
-- [ ] マクロ機構: ファイル名キーでGo組み込みマクロ群に解決する仕組み
-- [ ] マクロ `times`（`fclib/stdmacro.rb` 相当）
-- [ ] マクロ `printf`（`fclib/stdio.rb` 相当）
-- [ ] マクロ `cos`（`fclib/math.rb` 相当）
-- [ ] マクロ `unittest_run_tests`（`fclib/unittest.rb` 相当。`@scope.id_list` の順序に依存するため要注意）
-- [ ] `asm` 組み込みマクロ（`hlc.rb:30` の `defmacro :asm`）
-- [ ] `--dump-ir` をGo側に実装
+- [x] `type_eval`
+- [x] `const_eval`（AST破壊的書き換え・Ruby整数演算(floor除算/剰余)・`unpack('c*')`の符号付きバイトまで再現）
+- [x] `rval` / `lval`（`+=`の部分木共有、`:deref`エラーの未代入`left`参照(空文字列)などの癖も再現）
+- [x] `compile_statement`（全19種）
+- [x] `compile_module` / `compile_lambda` / `compile_block`（コンパイル中のlambda追加を拾うindexループ）
+- [x] スコープ操作（`in_scope` / `attach_scope` / `add_var` / `add_def` / `add_def_module`）
+- [x] 一時変数・ラベル採番 — 全golden一致で番号一致を確認
+- [x] `cast` / `make_compatible` / `TypeUtil`
+- [x] include分岐（`.asm` / `.inc` / `.chr` / `.rb`）
+- [x] マクロ機構（`macros.go`: ファイル名キー → Go組み込みマクロ登録）
+- [x] マクロ `times`（現行Ruby版では展開結果が不正で未使用の死にマクロ。同じ構造を返す形で1:1移植）
+- [x] マクロ `printf` / `cos` / `unittest_run_tests`（`@scope.id_list` 順序も一致）
+- [x] `asm` 組み込みマクロ
+- [x] IR正規形ダンプ（`DumpIR` / `irdump.go`）をGo側に実装
 
 **合格条件**:
 
@@ -247,7 +245,7 @@ go test ./internal/fc -run "TestType|TestValue|TestScope"
 go test ./internal/fc -run TestGoldenIR
 ```
 
-全 `.fc` で IR 差分ゼロ。
+全 `.fc` で IR 差分ゼロ。→ **達成**（14件: emu 13 + nes 1、初回実行で全一致）
 
 ---
 
@@ -412,6 +410,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 3 完了**。hlc.go/macros.go/irdump.go を実装、TestGoldenIR 14件が初回実行で全一致(採番・マクロ展開・const_eval破壊的書き換え・スコープ順序すべて一致)。Phase 1 でASTを厳密に合わせたことが効いた。
 - 2026-08-28: **Phase 2 完了**。Type/Value/Scope/Module/Lambda/TypeUtil を移植、test_base.rb 移植 + TestValue/TestScope 追加、全グリーン。教訓: PowerShell 5.1 の `Get-Content`/`Set-Content` で UTF-8 ファイルを処理すると文字化けする(計画書を一度破壊して前コミットから復元した)。**ファイル編集は必ず Edit ツールを使うこと**。
 - 2026-08-28: **Phase 1 完了**。レキサ(parser_ext.rbの癖含め1:1)・goyaccパーサ(競合ゼロ)・動的AST(`[]any`/`Sym`/`OMap`、型付きASTから方針変更)・S式ダンパー実装。AST golden 25ファイル全一致(.pos含む)。唯一の初回差分はソースのCRLF起因で、Ruby `File.read` テキストモード相当の CRLF→LF 変換(`ReadSource`)を入れて解決。
 - 2026-08-28: **Phase 0 完了**。`ruby-frozen` タグ付与。ダンプは bin/fcc 改造ではなく `tools/dumper.rb` のモンキーパッチ方式に変更（Ruby版は完全無変更で凍結、計画の該当箇所を更新）。golden 全生成（ast 25ファイル / ir・allocir・asm・bin・stdout ×13テスト / NESビルド1本）、2回生成でバイト一致を確認。`go build ./... && go test ./...` グリーン。`.gitignore` の `doc/` 除外を解除し `*.nes` に golden 用の負パターンを追加。オラクル(test-all)グリーンも確認済み。

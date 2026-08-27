@@ -14,6 +14,14 @@ import (
 const goldenRoot = "../../testdata/golden"
 const repoRoot = "../.."
 
+// t.Chdir を使うサブテストがあるため、パスは絶対化しておく
+var absGoldenRoot, absRepoRoot string
+
+func init() {
+	absGoldenRoot, _ = filepath.Abs(goldenRoot)
+	absRepoRoot, _ = filepath.Abs(repoRoot)
+}
+
 // テキストgoldenの比較 (git の autocrlf を考慮して CRLF は LF に正規化する)
 func normalizeText(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
@@ -21,11 +29,30 @@ func normalizeText(s string) string {
 
 func readGolden(t *testing.T, rel string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(goldenRoot, rel))
+	b, err := os.ReadFile(filepath.Join(absGoldenRoot, rel))
 	if err != nil {
 		t.Fatalf("golden読み込み失敗: %v", err)
 	}
 	return normalizeText(string(b))
+}
+
+// compileForGolden は test/ ディレクトリで指定テストをHLCコンパイルする。
+func compileForGolden(t *testing.T, srcName, target string) *Hlc {
+	t.Helper()
+	t.Chdir(filepath.Join(absRepoRoot, "test"))
+	hlc := NewHlc([]string{".", "../fclib", "../fclib/" + target})
+	if err := hlc.Compile(srcName + ".fc"); err != nil {
+		t.Fatalf("コンパイル失敗: %v", err)
+	}
+	return hlc
+}
+
+// goldenKey は golden のキー名 (test_basic / test_basic_nes) からソース名とターゲットを得る。
+func goldenKeyInfo(name string) (srcName, target string) {
+	if strings.HasSuffix(name, "_nes") {
+		return strings.TrimSuffix(name, "_nes"), "nes"
+	}
+	return name, "emu"
 }
 
 // 差分の最初の行を報告する
@@ -87,7 +114,18 @@ func TestGoldenAST(t *testing.T) {
 
 // Phase 3: 全テストの HLC 出力(IR)一致
 func TestGoldenIR(t *testing.T) {
-	t.Skip("Phase 3 で実装")
+	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "ir", "*.ir"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("golden ir が見つからない: %v", err)
+	}
+	for _, m := range matches {
+		name := strings.TrimSuffix(filepath.Base(m), ".ir")
+		t.Run(name, func(t *testing.T) {
+			srcName, target := goldenKeyInfo(name)
+			hlc := compileForGolden(t, srcName, target)
+			compareText(t, name+".ir", DumpIR(hlc), readGolden(t, "ir/"+name+".ir"))
+		})
+	}
 }
 
 // Phase 4: レジスタ割付+delete_unuse 後のIR一致
