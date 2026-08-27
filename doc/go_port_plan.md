@@ -11,7 +11,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 4 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 5 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
@@ -19,7 +19,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 | 1 | レキサ + パーサ | ✅ 完了 | 2026-08-28 |
 | 2 | 基盤データ構造 | ✅ 完了 | 2026-08-28 |
 | 3 | HLC (AST→IR) | ✅ 完了 | 2026-08-28 |
-| 4 | レジスタ割付 | ⬜ 未着手 | - |
+| 4 | レジスタ割付 | ✅ 完了 | 2026-08-28 |
 | 5 | LLC (IR→asm) | ⬜ 未着手 | - |
 | 6 | ドライバ・テンプレート | ⬜ 未着手 | - |
 | 7 | 6502エミュレータ | ⬜ 未着手 | - |
@@ -249,17 +249,17 @@ go test ./internal/fc -run TestGoldenIR
 
 ---
 
-### Phase 4 — レジスタ割付  ⬜ 未着手  (2日)
+### Phase 4 — レジスタ割付  ✅ 完了 2026-08-28
 
-- [ ] `calc_live_range`
-- [ ] `LiveRangeCalculator`
-- [ ] `Allocator`（重なり判定 / 結合）
-- [ ] `allocate_register`（ZP割付）
-- [ ] `allocate_a`（Aレジスタ）
-- [ ] `allocate_cond`（条件レジスタ carry/zero/negative）
-- [ ] `delete_unuse`
-- [ ] `--dump-alloc-ir` をGo側に実装
-- [ ] `test/fc/test_allocator.rb` を Go test へ移植（`TestAllocatorUnit`。Phase 2 から移動）
+- [x] `calc_live_range`（use_define は挿入順保持、CastedValue は Delegator 合流を `UnderlyingValue` で再現、`pget` の `op[3]`=nil も再現）
+- [x] `LiveRangeCalculator`
+- [x] `Allocator`(重なり判定 / 結合)
+- [x] `allocate_register`（ZP割付、fastcall_reg、frame size over 検査）
+- [x] `allocate_a`
+- [x] `allocate_cond`（carry/zero/negative。`:lt`符号付きサイズ2の `next` が location=:cond を残したままにする癖も再現）
+- [x] `delete_unuse`
+- [x] alloc-IR正規形ダンプ（`DumpAllocLambda`）をGo側に実装
+- [x] `test/fc/test_allocator.rb` を Go test へ移植（`TestAllocatorUnit`）
 
 **合格条件**:
 
@@ -267,7 +267,7 @@ go test ./internal/fc -run TestGoldenIR
 go test ./internal/fc -run "TestGoldenAllocIR|TestAllocatorUnit"
 ```
 
-全 `.fc` で割付後IR差分ゼロ（`location` / `address` / `cond_reg` / `cond_positive` を含む）。
+全 `.fc` で割付後IR差分ゼロ（`location` / `address` / `cond_reg` / `cond_positive` を含む）。→ **達成**（14件全一致）
 
 ---
 
@@ -410,6 +410,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 4 完了**。allocator.go (calc_live_range/allocate_register/allocate_a/allocate_cond/Allocator/delete_unuse)。初回の失敗は pget の op[3] 範囲外のみ、修正後 TestGoldenAllocIR 14件全一致 + TestAllocatorUnit グリーン。
 - 2026-08-28: **Phase 3 完了**。hlc.go/macros.go/irdump.go を実装、TestGoldenIR 14件が初回実行で全一致(採番・マクロ展開・const_eval破壊的書き換え・スコープ順序すべて一致)。Phase 1 でASTを厳密に合わせたことが効いた。
 - 2026-08-28: **Phase 2 完了**。Type/Value/Scope/Module/Lambda/TypeUtil を移植、test_base.rb 移植 + TestValue/TestScope 追加、全グリーン。教訓: PowerShell 5.1 の `Get-Content`/`Set-Content` で UTF-8 ファイルを処理すると文字化けする(計画書を一度破壊して前コミットから復元した)。**ファイル編集は必ず Edit ツールを使うこと**。
 - 2026-08-28: **Phase 1 完了**。レキサ(parser_ext.rbの癖含め1:1)・goyaccパーサ(競合ゼロ)・動的AST(`[]any`/`Sym`/`OMap`、型付きASTから方針変更)・S式ダンパー実装。AST golden 25ファイル全一致(.pos含む)。唯一の初回差分はソースのCRLF起因で、Ruby `File.read` テキストモード相当の CRLF→LF 変換(`ReadSource`)を入れて解決。

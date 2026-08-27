@@ -128,9 +128,42 @@ func TestGoldenIR(t *testing.T) {
 	}
 }
 
+// allocLambdas は LLC と同じ順序 (モジュール順 × defs内のcode順、extern除外) で
+// 割付+delete_unuse を実行し、ダンプを返す。
+func allocLambdas(hlc *Hlc) string {
+	var b strings.Builder
+	for _, me := range hlc.Modules.Entries() {
+		mod := me.Val.(*Module)
+		for _, d := range mod.Defs {
+			if d.Kind != "code" {
+				continue
+			}
+			lmd := d.Val.(*Lambda)
+			if truthy(lmd.Opt.GetOr(Sym("extern"))) {
+				continue
+			}
+			AllocateRegister(lmd)
+			DeleteUnuse(lmd)
+			b.WriteString(DumpAllocLambda(mod.Id, d.Sym, lmd))
+		}
+	}
+	return b.String()
+}
+
 // Phase 4: レジスタ割付+delete_unuse 後のIR一致
 func TestGoldenAllocIR(t *testing.T) {
-	t.Skip("Phase 4 で実装")
+	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "allocir", "*.air"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("golden allocir が見つからない: %v", err)
+	}
+	for _, m := range matches {
+		name := strings.TrimSuffix(filepath.Base(m), ".air")
+		t.Run(name, func(t *testing.T) {
+			srcName, target := goldenKeyInfo(name)
+			hlc := compileForGolden(t, srcName, target)
+			compareText(t, name+".air", allocLambdas(hlc), readGolden(t, "allocir/"+name+".air"))
+		})
+	}
 }
 
 // Phase 5: 正規化済みアセンブラ(.s/.inc)一致
