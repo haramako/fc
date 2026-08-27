@@ -11,7 +11,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 5 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 6 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
@@ -20,7 +20,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 | 2 | 基盤データ構造 | ✅ 完了 | 2026-08-28 |
 | 3 | HLC (AST→IR) | ✅ 完了 | 2026-08-28 |
 | 4 | レジスタ割付 | ✅ 完了 | 2026-08-28 |
-| 5 | LLC (IR→asm) | ⬜ 未着手 | - |
+| 5 | LLC (IR→asm) | ✅ 完了 | 2026-08-28 |
 | 6 | ドライバ・テンプレート | ⬜ 未着手 | - |
 | 7 | 6502エミュレータ | ⬜ 未着手 | - |
 | 8 | テスト移行 | ⬜ 未着手 | - |
@@ -271,22 +271,22 @@ go test ./internal/fc -run "TestGoldenAllocIR|TestAllocatorUnit"
 
 ---
 
-### Phase 5 — LLC (IR→asm)  ⬜ 未着手  (3〜4日)
+### Phase 5 — LLC (IR→asm)  ✅ 完了 2026-08-28
 
-- [ ] opディスパッチ骨格（`compile` / `compile_lambda`）
-- [ ] `label` / `jump` / `if` / `return`
-- [ ] `load` / `load_a` / `store_a` / `to_asm` / `byte` / `mangle`
-- [ ] `push_arg` / `push_result` / `call` / `call_subroutine`
-- [ ] `fastcall` / `push_fastcall_arg` / `push_fastcall_result`
-- [ ] 算術・論理（`add` `sub` `and` `or` `xor` `shift_left` `shift_right` `uminus` `not`）
-- [ ] `mul_div_mod`（`mul` / `div` / `mod`）
-- [ ] 比較（`eq` / `lt`）と `sign_extension`
-- [ ] ポインタ・配列（`ref` / `pget` / `pset` / `index` / `index_pget` / `index_pset`）
-- [ ] `asm` インライン埋め込み
-- [ ] `emit_block`（`code` / `bss` / `equ` / `block` / `frame` / `global` / `local` / `literal` / `reg` / `fastcall_reg`）
-- [ ] `optimize_pointer`（`-O1` 以上）
-- [ ] `extend_jump`（分岐距離 ±128 超えの変換）
-- [ ] `.inc` ファイルの生成
+- [x] opディスパッチ骨格（`Compile` / `CompileLambda`、行のflatten/nil削除/インデント規則も1:1）
+- [x] `label` / `jump` / `if` / `return`
+- [x] `load` / `load_a` / `store_a` / `to_asm` / `byte` / `mangle`
+- [x] `push_arg` / `push_result` / `call` / `call_subroutine`
+- [x] `fastcall` / `push_fastcall_arg` / `push_fastcall_result`
+- [x] 算術・論理（`add` `sub` `and` `or` `xor` `shift_left` `shift_right` `uminus` `not`）
+- [x] `mul_div_mod`（2の累乗最適化・符号付きdiv含む）
+- [x] 比較（`eq` / `lt`）と `sign_extension`。**`:lt` の `signed = a or b` が Ruby の優先順位により op[2] しか見ないバグも忠実に再現**（唯一の初回差分だった）
+- [x] ポインタ・配列（`ref` / `pget` / `pset` / `index` / `index_pget` / `index_pset`）
+- [x] `asm` インライン埋め込み
+- [x] `emit_block` と defs出力（`equ` / `bss` / `block` / `code`）
+- [x] `optimize_pointer`（`-O1` 以上）
+- [x] `extend_jump`（サイズ表・正規表現を1:1移植）
+- [x] `.inc` ファイルの生成
 
 **合格条件**:
 
@@ -294,7 +294,7 @@ go test ./internal/fc -run "TestGoldenAllocIR|TestAllocatorUnit"
 go test ./internal/fc -run TestGoldenAsm
 ```
 
-全 `.fc` で、IRコメント行（`^\s*; \d{4}:`）を除去した `.s` と `.inc` が golden と完全一致。
+全 `.fc` で、IRコメント行（`^\s*; \d{4}:`）を除去した `.s` と `.inc` が golden と完全一致。→ **達成**（14件全一致）
 
 ---
 
@@ -410,6 +410,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 5 完了**。llc.go (全op/emit_block/optimize_pointer/extend_jump)。初回差分は1箇所のみ: `:lt` の `signed = op[2].type.signed or op[3].type.signed` が Ruby の `or` 優先順位で op[2] しか効かないバグ — 再現して 14件全一致。
 - 2026-08-28: **Phase 4 完了**。allocator.go (calc_live_range/allocate_register/allocate_a/allocate_cond/Allocator/delete_unuse)。初回の失敗は pget の op[3] 範囲外のみ、修正後 TestGoldenAllocIR 14件全一致 + TestAllocatorUnit グリーン。
 - 2026-08-28: **Phase 3 完了**。hlc.go/macros.go/irdump.go を実装、TestGoldenIR 14件が初回実行で全一致(採番・マクロ展開・const_eval破壊的書き換え・スコープ順序すべて一致)。Phase 1 でASTを厳密に合わせたことが効いた。
 - 2026-08-28: **Phase 2 完了**。Type/Value/Scope/Module/Lambda/TypeUtil を移植、test_base.rb 移植 + TestValue/TestScope 追加、全グリーン。教訓: PowerShell 5.1 の `Get-Content`/`Set-Content` で UTF-8 ファイルを処理すると文字化けする(計画書を一度破壊して前コミットから復元した)。**ファイル編集は必ず Edit ツールを使うこと**。

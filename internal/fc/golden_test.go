@@ -3,6 +3,7 @@ package fc
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -166,9 +167,45 @@ func TestGoldenAllocIR(t *testing.T) {
 	}
 }
 
+var reIRComment = regexp.MustCompile(`^\s*; \d{4}:`)
+
+// normalizeAsm は IRコメント行を除去する (dumper.rb の normalize_asm 相当 + 末尾改行)。
+func normalizeAsm(lines []string) string {
+	var out []string
+	for _, line := range lines {
+		if reIRComment.MatchString(line) {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n") + "\n"
+}
+
 // Phase 5: 正規化済みアセンブラ(.s/.inc)一致
 func TestGoldenAsm(t *testing.T) {
-	t.Skip("Phase 5 で実装")
+	dirs, err := os.ReadDir(filepath.Join(absGoldenRoot, "asm"))
+	if err != nil || len(dirs) == 0 {
+		t.Fatalf("golden asm が見つからない: %v", err)
+	}
+	for _, d := range dirs {
+		if !d.IsDir() {
+			continue
+		}
+		name := d.Name()
+		t.Run(name, func(t *testing.T) {
+			srcName, target := goldenKeyInfo(name)
+			hlc := compileForGolden(t, srcName, target)
+			llc := NewLlc(2)
+			for _, me := range hlc.Modules.Entries() {
+				mod := me.Val.(*Module)
+				asm, inc := llc.Compile(mod)
+				compareText(t, name+"/"+ToS(mod.Id)+".s", normalizeAsm(asm),
+					readGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".s"))
+				compareText(t, name+"/"+ToS(mod.Id)+".inc", normalizeAsm(inc),
+					readGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".inc"))
+			}
+		})
+	}
 }
 
 // Phase 6: リンク済みバイナリ(a.bin/a.nes)のバイト一致

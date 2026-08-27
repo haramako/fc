@@ -207,3 +207,25 @@ func ValLocation(v any) Sym {
 	}
 	panic(fmt.Sprintf("ValLocation: invalid value %T", v))
 }
+
+// ValAddress は v.address (CastedValue は from に委譲)。
+func ValAddress(v any) any {
+	switch x := v.(type) {
+	case *Value:
+		return x.Address
+	case *CastedValue:
+		return ValAddress(x.From)
+	}
+	panic(fmt.Sprintf("ValAddress: invalid value %T", v))
+}
+
+// ValOpt は v.opt (CastedValue は from に委譲)。
+func ValOpt(v any) *OMap {
+	switch x := v.(type) {
+	case *Value:
+		return x.Opt
+	case *CastedValue:
+		return ValOpt(x.From)
+	}
+	panic(fmt.Sprintf("ValOpt: invalid value %T", v))
+}
