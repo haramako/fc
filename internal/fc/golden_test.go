@@ -254,5 +254,26 @@ func TestGoldenBinary(t *testing.T) {
 
 // Phase 7: エミュレータ実行の stdout / 終了コード一致
 func TestGoldenStdout(t *testing.T) {
-	t.Skip("Phase 7 で実装")
+	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "stdout", "*.txt"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("golden stdout が見つからない: %v", err)
+	}
+	for _, m := range matches {
+		name := strings.TrimSuffix(filepath.Base(m), ".txt")
+		t.Run(name, func(t *testing.T) {
+			srcName, target := goldenKeyInfo(name)
+			t.Chdir(filepath.Join(absRepoRoot, "test"))
+			compiler := NewCompiler(absRepoRoot)
+			var out strings.Builder
+			code, berr := compiler.Build(srcName+".fc", &BuildOptions{Target: target, Run: true, Stdout: &out})
+			if berr != nil {
+				t.Fatalf("ビルド失敗: %v", berr)
+			}
+			compareText(t, name+".txt", out.String(), readGolden(t, "stdout/"+name+".txt"))
+			wantExit := strings.TrimSpace(readGolden(t, "stdout/"+name+".exit"))
+			if ToS(code) != wantExit {
+				t.Errorf("終了コード不一致: got %d want %s", code, wantExit)
+			}
+		})
+	}
 }

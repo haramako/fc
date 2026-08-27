@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/haramako/fc/internal/r6502"
 )
 
 const BuildPath = ".fc-build"
@@ -382,7 +384,47 @@ func (c *Compiler) sh(name string, args ...string) {
 	}
 }
 
-// execute はビルド済みバイナリをエミュレータで実行する (Phase 7 で実装)。
+// execute はビルド済みバイナリをエミュレータで実行する (Compiler#execute 相当)。
+// ホスト呼び出し規約 ($fff0〜$ffff): 1=print / 2=print_int / 3=print_int_sp、
+// $ffff が 255 以外になったら終了 (その値が終了コード)。
 func (c *Compiler) execute(filename string, out io.Writer) (int, error) {
-	return 0, &CompileError{Msg: "emulator not implemented yet (Phase 7)"}
+	if c.target != "emu" {
+		return 0, nil // x6502 はスコープ外、nes は実行不可
+	}
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return 0, err
+	}
+	const startAddr = 0x1000
+	mem := r6502.NewMemory()
+	for i, b := range data {
+		mem.Set(startAddr+i, int(b))
+	}
+	cpu := r6502.NewCpu(mem)
+	cpu.Pc = startAddr
+	mem.Set(0xffff, 255)
+	mem.Set(0xfffe, 255)
+	for mem.Get(0xffff) == 255 {
+		cpu.StepSilent()
+		if mem.Get(0xfffe) != 255 {
+			switch mem.Get(0xfffe) {
+			case 1:
+				addr := mem.Get(0xfff0) + (mem.Get(0xfff1) << 8)
+				var sb []byte
+				for mem.Get(addr) != 0 {
+					sb = append(sb, byte(mem.Get(addr)))
+					addr++
+				}
+				fmt.Fprint(out, string(sb))
+			case 2:
+				num := mem.Get(0xfff2) + (mem.Get(0xfff3) << 8)
+				fmt.Fprint(out, num)
+			case 3:
+				num := mem.Get(0xfff2) + (mem.Get(0xfff3) << 8)
+				fmt.Fprint(out, num, " ")
+			}
+			mem.Set(0xfffe, 255)
+		}
+	}
+	return mem.Get(0xffff), nil
 }

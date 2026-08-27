@@ -11,7 +11,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 7 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 8 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
@@ -22,7 +22,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 | 4 | レジスタ割付 | ✅ 完了 | 2026-08-28 |
 | 5 | LLC (IR→asm) | ✅ 完了 | 2026-08-28 |
 | 6 | ドライバ・テンプレート | ✅ 完了 | 2026-08-28 |
-| 7 | 6502エミュレータ | ⬜ 未着手 | - |
+| 7 | 6502エミュレータ | ✅ 完了 | 2026-08-28 |
 | 8 | テスト移行 | ⬜ 未着手 | - |
 | 9 | 切替 | ⬜ 未着手 | - |
 
@@ -320,13 +320,12 @@ go test ./internal/fc -run TestGoldenBinary
 
 ---
 
-### Phase 7 — 6502エミュレータ  ⬜ 未着手  (2〜3日)
+### Phase 7 — 6502エミュレータ  ✅ 完了 2026-08-28
 
-- [ ] `memory.go`
-- [ ] `opcode_table.go` / `instr_table.go`
-- [ ] `cpu_instructions.go`（全命令）
-- [ ] `cpu_execution.go`（`step_silent` 相当）
-- [ ] emuターゲットのホスト呼び出し規約（`$fff0`〜`$ffff`: print / print_int / print_int_sp / exit）
+- [x] `internal/r6502` パッケージ（Memory / Cpu / 命令テーブル / 全命令 / StepSilent）を1ファイルに集約
+- [x] Ruby版の実機と異なる癖も再現（`zpx` のページクロス非マスク、`indx` の二重参照、`indy` の `0xff & (sec+1)` 優先順位）
+- [x] emuターゲットのホスト呼び出し規約（`$fff0`〜`$ffff`: print / print_int / print_int_sp / exit）を `Compiler#execute` に移植
+- [x] `opcode_table.rb` / `assembler.rb` は移植対象外（r6502自身のアセンブラ用で、fcからは未使用）
 
 **合格条件**:
 
@@ -334,7 +333,7 @@ go test ./internal/fc -run TestGoldenBinary
 go test ./internal/fc -run TestGoldenStdout
 ```
 
-全 `test_*.fc` の実行 stdout と終了コードが golden と一致。
+全 `test_*.fc` の実行 stdout と終了コードが golden と一致。→ **達成**（13件、初回実行で全一致）
 
 ---
 
@@ -410,6 +409,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 7 完了**。internal/r6502 (lib/r6502 の厳密移植、zpx非マスク等の癖含む) + Compiler#execute のホスト呼び出し。TestGoldenStdout 13件が初回実行で全一致。
 - 2026-08-28: **Phase 6 完了**。driver.go (Build パイプライン/ca65/ld65/テンプレート/リンク)、embedfs.go (fclib+share の embed)、cmd/fcc (bin/fcc 互換CLI)。TestGoldenBinary 14件バイト一致。
 - 2026-08-28: **Phase 5 完了**。llc.go (全op/emit_block/optimize_pointer/extend_jump)。初回差分は1箇所のみ: `:lt` の `signed = op[2].type.signed or op[3].type.signed` が Ruby の `or` 優先順位で op[2] しか効かないバグ — 再現して 14件全一致。
 - 2026-08-28: **Phase 4 完了**。allocator.go (calc_live_range/allocate_register/allocate_a/allocate_cond/Allocator/delete_unuse)。初回の失敗は pget の op[3] 範囲外のみ、修正後 TestGoldenAllocIR 14件全一致 + TestAllocatorUnit グリーン。
