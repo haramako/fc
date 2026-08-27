@@ -7,7 +7,8 @@ module Fc
 
   DEBUG_LEVEL = 0
 
-  FC_HOME = Pathname(File.dirname( __FILE__ )) + '../..'
+  # Go移植 Phase 9 で Ruby版を ruby/ へ退避したため、リポジトリルートは1段上になった
+  FC_HOME = Pathname(File.dirname( __FILE__ )) + '../../..'
   LIB_PATH = [Pathname('.'), FC_HOME+'fclib' ]
   BUILD_PATH = Pathname.new(".fc-build")
 

@@ -4,8 +4,8 @@
 # lib/ (Ruby版=オラクル) は一切変更せず、モンキーパッチでフックする。
 # 出力形式の仕様は doc/go_port_dump_format.md を参照。Go版はこの形式に合わせる。
 #
-require_relative '../lib/fc/hlc'
-require_relative '../lib/fc/llc'
+require_relative '../ruby/lib/fc/hlc'
+require_relative '../ruby/lib/fc/llc'
 
 module GoldenDump
 

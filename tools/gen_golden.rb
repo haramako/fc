@@ -20,7 +20,7 @@ require 'stringio'
 require 'pathname'
 
 ROOT = Pathname(File.expand_path('../..', __FILE__))
-$LOAD_PATH << (ROOT + 'lib').to_s
+$LOAD_PATH << (ROOT + 'ruby/lib').to_s
 
 require 'fc/compiler'
 require_relative 'dumper'

@@ -11,7 +11,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 9 (未着手)**
+最終更新: 2026-08-28 / **全フェーズ完了 🎉**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
@@ -24,11 +24,11 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 | 6 | ドライバ・テンプレート | ✅ 完了 | 2026-08-28 |
 | 7 | 6502エミュレータ | ✅ 完了 | 2026-08-28 |
 | 8 | テスト移行 | ✅ 完了 | 2026-08-28 |
-| 9 | 切替 | ⬜ 未着手 | - |
+| 9 | 切替 | ✅ 完了 | 2026-08-28 |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: Phase 0 の最初の未チェック項目から。
+**次にやること**: なし（移植完了）。今後の改善は厳密クローン制約を外して別途行う。golden 再生成が必要な場合は `ruby tools/gen_golden.rb`。
 
 ---
 
@@ -88,18 +88,18 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 **注意: `bundle exec` は壊れている**（shim が ruby を見つけられない）。検証は素の `ruby` / `rspec` を直接使うこと。
 
-動作確認済みのオラクル実行コマンド:
+動作確認済みのオラクル実行コマンド（Phase 9 の退避後のパス）:
 
 ```bash
-cd test && ruby ../bin/fcc build test_basic.fc
+cd test && ruby ../ruby/bin/fcc build test_basic.fc
 ```
 
 ```bash
-cd test && ruby ../bin/fcc run test_basic.fc
+cd test && ruby ../ruby/bin/fcc run test_basic.fc
 ```
 
 ```bash
-rspec test/fc/test_base.rb test/fc/test_allocator.rb
+rspec ruby/test/fc/test_base.rb ruby/test/fc/test_allocator.rb
 ```
 
 ---
@@ -355,14 +355,15 @@ go build ./... && go test ./...
 
 ---
 
-### Phase 9 — 切替  ⬜ 未着手  (1日)
+### Phase 9 — 切替  ✅ 完了 2026-08-28
 
-- [ ] README / `doc/` 更新（Go版の使い方、ビルド手順）
-- [ ] `GOOS`/`GOARCH` マトリクスでのリリースビルド確認
-- [ ] Ruby版を `ruby/` に退避（`lib/` `bin/fcc` `Gemfile` `Rakefile` `fc.gemspec` `parser.y`）
-- [ ] `.travis.yml` を削除（死んでいるため）
-- [ ] `.gitignore` の整理
-- [ ] `master` へマージ
+- [x] README 更新（Go版の使い方・ビルド手順・リポジトリ構成）
+- [x] `GOOS`/`GOARCH` マトリクスでのリリースビルド確認（linux/darwin/windows × amd64/arm64 の6通り全てOK）
+- [x] Ruby版を `ruby/` に退避（`lib/` `bin/` `Gemfile` `Rakefile` `fc.gemspec` `parser.y` `test/fc/`）。**退避に伴う唯一の変更**: `ruby/lib/fc/base.rb` の `FC_HOME` を1段深く (`../../..`) 修正（オリジナルはタグ `ruby-frozen` に保存）。`test/test-all` と `tools/` のパス参照も更新
+- [x] 退避後もオラクルが機能することを検証: `test-all` グリーン、`rspec` 10 examples グリーン、**golden 再生成で差分ゼロ**
+- [x] `.travis.yml` を削除
+- [x] `.gitignore` の整理（ruby gem 雛形時代の死にエントリを削除）
+- [x] `master` へマージ
 
 **合格条件**:
 
@@ -370,7 +371,7 @@ go build ./... && go test ./...
 go build ./... && go test ./... && go vet ./...
 ```
 
-Go版単体で全テストが通り、配布可能なバイナリが生成できること。
+Go版単体で全テストが通り、配布可能なバイナリが生成できること。→ **達成**
 
 ---
 
@@ -407,6 +408,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 9 完了・全フェーズ完了**。README刷新、6通りのクロスビルド確認、Ruby版を ruby/ へ退避 (FC_HOME を1段修正、test-all/tools のパス更新)。退避後も test-all・rspec・golden再生成の全てがグリーン(golden差分ゼロ)。.travis.yml 削除、.gitignore 整理、master へマージ。**計画開始から1日で全9フェーズ完了** — Phase 0 の差分ハーネスを厳密にした投資が全フェーズの一発一致(初回差分は延べ4件のみ: CRLF、pget op[3]、lt の or バグ、opt nil 短絡)につながった。
 - 2026-08-28: **Phase 8 完了**。TestErrorsFC (errors.fc 全11断片、厳格モードでグリーン)。parse error 文言は goyacc→racc 互換変換で対応。const文の opt nil 短絡評価の移植ミスを1件修正。go build/test 全グリーン。
 - 2026-08-28: **Phase 7 完了**。internal/r6502 (lib/r6502 の厳密移植、zpx非マスク等の癖含む) + Compiler#execute のホスト呼び出し。TestGoldenStdout 13件が初回実行で全一致。
 - 2026-08-28: **Phase 6 完了**。driver.go (Build パイプライン/ca65/ld65/テンプレート/リンク)、embedfs.go (fclib+share の embed)、cmd/fcc (bin/fcc 互換CLI)。TestGoldenBinary 14件バイト一致。

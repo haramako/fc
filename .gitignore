@@ -2,19 +2,10 @@
 *.gem
 *.rbc
 .bundle
-.config
-.yardoc
 Gemfile.lock
-InstalledFiles
-_yardoc
-coverage
-lib/bundler/man
 pkg
-rdoc
-spec/reports
-test/tmp
-test/version_tmp
 tmp
+coverage
 
 *.lst
 *.nes
@@ -22,7 +13,6 @@ tmp
 *.html
 _*.inc
 parser.output
-coverage
 .DS_Store
 .fc-build
 a.*
