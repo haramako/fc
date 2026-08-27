@@ -459,7 +459,11 @@ func (h *Hlc) compileStatement(stmt any) {
 					}
 				}
 			} else {
-				if addr, ok := opt.GetOr(Sym("address")).(string); opt != nil && ok {
+				addr, addrOk := "", false
+				if opt != nil {
+					addr, addrOk = opt.GetOr(Sym("address")).(string)
+				}
+				if addrOk {
 					typ := h.typeEval(typAst)
 					newVal = h.addVar(NewValue("global", id, typ, addr, opt))
 				} else {

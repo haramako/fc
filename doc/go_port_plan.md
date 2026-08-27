@@ -11,7 +11,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 8 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 9 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
@@ -23,7 +23,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 | 5 | LLC (IR→asm) | ✅ 完了 | 2026-08-28 |
 | 6 | ドライバ・テンプレート | ✅ 完了 | 2026-08-28 |
 | 7 | 6502エミュレータ | ✅ 完了 | 2026-08-28 |
-| 8 | テスト移行 | ⬜ 未着手 | - |
+| 8 | テスト移行 | ✅ 完了 | 2026-08-28 |
 | 9 | 切替 | ⬜ 未着手 | - |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
@@ -337,15 +337,13 @@ go test ./internal/fc -run TestGoldenStdout
 
 ---
 
-### Phase 8 — テスト移行  ⬜ 未着手  (1〜2日)
+### Phase 8 — テスト移行  ✅ 完了 2026-08-28
 
-- [ ] `test/test-all` 相当を Go test として再実装
-- [ ] 全 `test_*.fc` のコンパイル＋実行＋終了コード検証
-- [ ] `test/errors.fc` の期待エラー正規表現テスト（`//@` 区切りのパース、共通ソース `interrupt`/`main` の付加を含む）
-- [ ] **エラーメッセージ文言がRuby版と完全一致することを確認**（`errors.fc` が正規表現で照合するため）
-- [ ] 注意: 現行 `test-all` は errors.fc の各断片で**例外が出なかった場合を失敗にしていない**（`rescue` のみで else 無し、`test/test-all:90`）。まず同挙動で移植してグリーンを確認し、その後「コンパイルが通ってしまったら失敗」に厳格化する。厳格化で落ちる断片が見つかったら、Ruby版の実挙動を作業ログに記録して仕様として扱う
-- [ ] 注意: `test-all` は先頭1ファイルのみ `debug_info: true` でビルドする（HtmlOutput 経路）。`-d` はスコープ外のため Go 版では再現不要
-- [ ] 全 golden テストを1コマンドで回せるようにする
+- [x] `test/test-all` 相当を Go test として再実装（全 `test_*.fc` のコンパイル＋実行＋終了コード検証は `TestGoldenStdout` が担う）
+- [x] `test/errors.fc` の期待エラー正規表現テスト（`TestErrorsFC`: `//@` 区切りパース + 共通ソース付加。**厳格化済み**: 全11断片で「コンパイルが通ったら失敗」にしてもグリーン）
+- [x] エラーメッセージ文言の一致確認（11断片すべて正規表現一致。parse error は goyacc の "syntax error" を racc 互換の "parse error" に変換して対応。ca65エラー経由の断片も CommandError→CompileError のメッセージ合成で一致）
+- [x] `test-all` の debug_info 先頭1ファイル挙動は `-d` スコープ外につき再現不要（確認済み）
+- [x] 全 golden テストは `go test ./...` 1コマンドで実行できる
 
 **合格条件**:
 
@@ -353,7 +351,7 @@ go test ./internal/fc -run TestGoldenStdout
 go build ./... && go test ./...
 ```
 
-すべてグリーン。
+すべてグリーン。→ **達成**
 
 ---
 
@@ -409,6 +407,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 8 完了**。TestErrorsFC (errors.fc 全11断片、厳格モードでグリーン)。parse error 文言は goyacc→racc 互換変換で対応。const文の opt nil 短絡評価の移植ミスを1件修正。go build/test 全グリーン。
 - 2026-08-28: **Phase 7 完了**。internal/r6502 (lib/r6502 の厳密移植、zpx非マスク等の癖含む) + Compiler#execute のホスト呼び出し。TestGoldenStdout 13件が初回実行で全一致。
 - 2026-08-28: **Phase 6 完了**。driver.go (Build パイプライン/ca65/ld65/テンプレート/リンク)、embedfs.go (fclib+share の embed)、cmd/fcc (bin/fcc 互換CLI)。TestGoldenBinary 14件バイト一致。
 - 2026-08-28: **Phase 5 完了**。llc.go (全op/emit_block/optimize_pointer/extend_jump)。初回差分は1箇所のみ: `:lt` の `signed = op[2].type.signed or op[3].type.signed` が Ruby の `or` 優先順位で op[2] しか効かないバグ — 再現して 14件全一致。

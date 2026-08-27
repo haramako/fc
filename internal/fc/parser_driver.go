@@ -5,7 +5,10 @@ package fc
 
 //go:generate goyacc -o parser.go -p fc parser.y
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type parserLexer struct {
 	lex     *Lexer
@@ -28,7 +31,9 @@ func (p *parserLexer) Lex(lval *fcSymType) int {
 
 func (p *parserLexer) Error(s string) {
 	if p.err == nil {
-		p.err = &CompileError{Msg: s, Filename: p.lex.filename, LineNo: p.lex.lineNo}
+		// racc は "parse error on value ..." 形式 (errors.fc が /parse error/ で照合する)
+		msg := strings.Replace(s, "syntax error", "parse error", 1)
+		p.err = &CompileError{Msg: msg, Filename: p.lex.filename, LineNo: p.lex.lineNo}
 	}
 }
 

@@ -39,6 +39,9 @@ func (m *OMap) Set(k, v any) {
 }
 
 func (m *OMap) Get(k any) (any, bool) {
+	if m == nil {
+		return nil, false
+	}
 	if i, ok := m.index[Canon(k)]; ok {
 		return m.entries[i].Val, true
 	}
