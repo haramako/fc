@@ -1,0 +1,19 @@
+(:use :unittest nil "*")
+(:use :stdio nil nil)
+(:include "character.chr" nil nil)
+(:const ((:a1 nil (:array (0 1 2 3)) nil)) nil)
+(:function
+ nil
+ :test_cast
+ ()
+ :void
+ nil
+ ((:var ((:w :uint16 65535 nil)) nil)
+  (:exp (:call :assert_equal ((:cast :w :int) 255 "as int") nil))
+  (:var ((:a (:pointer :uint8) :a1 nil)) nil)
+  (:var ((:a2 (:pointer :uint16) (:cast :a (:pointer :uint16)) nil)) nil)
+  (:exp (:call :assert_equal ((:index :a2 0) 256 "[] as uint16") nil))
+  (:var ((:i (:pointer :uint16) nil nil)) nil)
+  (:exp (:load :i (:cast :a1 (:pointer :uint16))))
+  (:exp (:call :assert_equal ((:index :i 0) (:index :a1 0) "as uint*") nil))))
+(:function nil :main () :void nil ((:exp (:call :unittest_run_tests () nil))))

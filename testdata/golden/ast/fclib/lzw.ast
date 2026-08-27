@@ -1,0 +1,15 @@
+(:use :mem nil nil)
+(:var ((:addr (:pointer :int) nil {:address 126})) nil)
+(:var ((:bpos :int nil {:address 125})) nil)
+(:var ((:cur :int nil {:address 124})) nil)
+(:function nil :read_bit ((:n :int nil nil)) :int16 {:fastcall :true} nil)
+(:function nil :read_vln () :int8 {:fastcall :true} nil)
+(:function nil :read_vln16 () :int16 {:fastcall :true} nil)
+(:function
+ nil
+ :unpack
+ ((:dest (:pointer :int) nil nil) (:src (:pointer :int) nil nil))
+ :int16
+ nil
+ nil)
+(:include "lzw.asm" nil nil)

@@ -1,0 +1,105 @@
+(:use :unittest nil "*")
+(:use :mem nil nil)
+(:include "character.chr" nil nil)
+(:include "test_basic.asm" nil nil)
+(:var ((:hoge :int nil nil)) :public)
+(:var ((:i1 :int nil nil)) nil)
+(:const ((:CONST nil 2 nil)) nil)
+(:var ((:a1 (:array 4 :int) nil nil)) nil)
+(:var ((:a2 (:array :CONST :int) nil nil)) nil)
+(:const ((:a3 (:array nil :int) (:array (1 2)) nil)) nil)
+(:const ((:s1 nil "hoge" nil)) nil)
+(:const ((:c nil (:add (:add 1 1) 1) nil)) nil)
+(:const ((:UINT nil 1 nil)) nil)
+(:const ((:SINT nil (:uminus 1) nil)) nil)
+(:const ((:UINT16 nil 256 nil)) nil)
+(:const ((:SINT16 nil (:uminus 255) nil)) nil)
+(:const ((:ARRAY nil (:array (0)) nil)) nil)
+(:function
+ nil
+ :test_nesasm_limit
+ ()
+ :void
+ nil
+ ((:var ((:toooooooooooooooooooooooooooooooooooooooo_long_id :int 0 nil)) nil)
+  (:exp
+   (:load
+    :toooooooooooooooooooooooooooooooooooooooo_long_id
+    (:add :toooooooooooooooooooooooooooooooooooooooo_long_id 1)))
+  (:var
+   (
+    (:i
+     (:pointer :int)
+     "toooooooooooooooooooooooooooooooooooooooooooooooooo_long_string"
+     nil))
+   nil)))
+(:function
+ nil
+ :add
+ ((:a :int nil nil) (:b :int nil nil))
+ :int
+ nil
+ ((:return (:add :a :b))))
+(:function
+ nil
+ :fib
+ ((:n :int nil nil))
+ :int
+ nil
+ (
+  (:if
+   (:le :n 1)
+   (:block ((:return 1)))
+   (:block
+    ((:return (:add (:call :fib ((:sub :n 1)) nil) (:call :fib ((:sub :n 2)) nil))))))))
+(:function
+ nil
+ :test_function
+ ()
+ :void
+ nil
+ ((:exp (:call :assert_equal ((:call :add (3 5) nil) 8 "add()") nil))
+  (:exp (:call :assert_equal ((:call :fib (1) nil) 1 "fib(1)") nil))
+  (:exp (:call :assert_equal ((:call :fib (3) nil) 3 "fib(3)") nil))
+  (:exp (:call :assert_equal ((:call :fib (11) nil) 144 "fib(11)") nil))))
+(:function
+ nil
+ :test_misc
+ ()
+ :void
+ nil
+ ((:var ((:i nil 1 nil)) nil)
+  (:var ((:n nil 0 nil)) nil)
+  (:loop
+   (:block
+    ((:exp (:load :n 1))
+     (:if :i (:block ((:break))) nil)
+     (:exp (:call :assert_true (0 "loop break") nil)))))
+  (:exp (:call :assert_equal (:n 1 "loop") nil))
+  (:exp (:call :asm ("lda #0") nil))
+  (:var ((:x :uint16 nil nil)) nil)
+  (:exp (:load :x (:uminus 1)))
+  (:exp (:call :assert_equal (:x (:uminus 1) "cast") nil))
+  (:exp
+   (:call
+    :assert_true
+    ((:eq (:call (:dot :mem :compare) ("ho\nge" "ho\nge" 6) nil) 0) "here string")
+    nil))
+  (:return nil)))
+(:function
+ nil
+ :add_fastcall
+ ((:a :int nil nil) (:b :int nil nil))
+ :int
+ {:fastcall :true}
+ ((:return (:add :a :b))))
+(:function
+ nil
+ :test_fastcall
+ ()
+ :void
+ nil
+ (
+  (:exp
+   (:call :assert_equal ((:call :add_fastcall (1 2) nil) 3 "add_fastcall") nil))))
+(:function nil :main () :void nil ((:exp (:call :unittest_run_tests () nil))))

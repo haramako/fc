@@ -1,0 +1,62 @@
+(:use :unittest nil "*")
+(:use :mem nil nil)
+(:include "character.chr" nil nil)
+(:var ((:str (:array 12 :int) nil nil)) nil)
+(:var ((:buf1 (:array 512 :int) nil nil)) nil)
+(:var ((:buf2 (:array 512 :int) nil nil)) nil)
+(:function
+ nil
+ :test_copy
+ ()
+ :void
+ nil
+ ((:exp (:load (:index :buf1 0) 1))
+  (:exp (:load (:index :buf1 1) 2))
+  (:exp (:load (:index :buf1 255) 3))
+  (:exp (:load (:index :buf1 256) 4))
+  (:exp (:load (:index :buf1 257) 5))
+  (:exp (:load (:index :buf1 511) 6))
+  (:exp (:call (:dot :mem :copy) (:buf2 :buf1 2) nil))
+  (:exp
+   (:call
+    :assert_equal
+    ((:call (:dot :mem :compare) (:buf1 :buf2 2) nil) 0 "copy")
+    nil))
+  (:exp (:call (:dot :mem :copy) (:buf2 :buf1 512) nil))
+  (:exp (:call :assert_equal ((:index :buf2 255) 3 "copy") nil))
+  (:exp (:call :assert_equal ((:index :buf2 256) 4 "copy") nil))
+  (:exp (:call :assert_equal ((:index :buf2 257) 5 "copy") nil))
+  (:exp (:call :assert_equal ((:index :buf2 511) 6 "copy") nil))
+  (:exp
+   (:call
+    :assert_equal
+    ((:call (:dot :mem :compare) (:buf1 :buf2 256) nil) 0 "compare == 0")
+    nil))
+  (:exp (:load (:index :buf2 255) 0))
+  (:exp
+   (:call
+    :assert_equal
+    ((:call (:dot :mem :compare) (:buf1 :buf2 256) nil) 1 "comapre == 1")
+    nil))))
+(:function
+ nil
+ :test_strcpy
+ ()
+ :void
+ nil
+ ((:var ((:n nil (:call (:dot :mem :strcpy) (:str "ABCDE") nil) nil)) nil)
+  (:exp (:call :assert_equal (:n 5 "strcpy") nil))))
+(:function
+ nil
+ :test_set
+ ()
+ :void
+ nil
+ ((:exp (:call (:dot :mem :set) (:buf1 0 8) nil))
+  (:exp (:call :assert_equal ((:index :buf1 0) 0 "[0]=0") nil))
+  (:exp (:call :assert_equal ((:index :buf1 7) 0 "[7]=0") nil))
+  (:exp (:call (:dot :mem :set) (:buf1 1 7) nil))
+  (:exp (:call :assert_equal ((:index :buf1 0) 1 "[0]=1") nil))
+  (:exp (:call :assert_equal ((:index :buf1 6) 1 "[6]=1") nil))
+  (:exp (:call :assert_equal ((:index :buf1 7) 0 "[7]=0") nil))))
+(:function nil :main () :void nil ((:exp (:call :unittest_run_tests () nil))))

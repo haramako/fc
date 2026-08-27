@@ -1,0 +1,38 @@
+(:use :stdio nil nil)
+(:include "unittest.rb" nil nil)
+(:function
+ :public
+ :assert_true
+ ((:a :int nil nil) (:message (:pointer :int) nil nil))
+ :void
+ nil
+ (
+  (:if
+   (:not :a)
+   (:block
+    (
+     (:exp
+      (:call
+       (:dot :stdio :printf)
+       ("\nERROR: " :message "  expects true but false\n")
+       nil))
+     (:exp (:call (:dot :stdio :exit) (1) nil))))
+   (:block ((:exp (:call (:dot :stdio :print) (".") nil)))))))
+(:function
+ :public
+ :assert_equal
+ ((:a :int16 nil nil) (:b :int16 nil nil) (:message (:pointer :int) nil nil))
+ :void
+ nil
+ (
+  (:if
+   (:ne :a :b)
+   (:block
+    (
+     (:exp
+      (:call
+       (:dot :stdio :printf)
+       ("\nERROR: " :message "  expects " :b "  but " :a "\n")
+       nil))
+     (:exp (:call (:dot :stdio :exit) (1) nil))))
+   (:block ((:exp (:call (:dot :stdio :print) (".") nil)))))))

@@ -1,0 +1,17 @@
+(:use :unittest nil "*")
+(:include "character.chr" nil nil)
+(:function
+ nil
+ :test_a_alloc
+ ()
+ :void
+ nil
+ ((:var ((:i1 nil 1 nil)) nil)
+  (:var ((:i2 nil 2 nil)) nil)
+  (:var ((:i3 nil 3 nil)) nil)
+  (:exp (:call :assert_equal ((:sub (:add :i1 :i2) :i3) 0 "add/sub") nil))
+  (:exp (:call :assert_equal ((:add (:sub :i1 :i2) :i3) 2 "sub/add") nil))
+  (:exp (:call :assert_true ((:eq (:add :i1 :i2) 3) "add/==") nil))
+  (:exp (:call :assert_true ((:ge (:add :i1 :i2) 3) "add/>=") nil))
+  (:exp (:call :assert_true ((:le (:add :i1 :i2) 3) "add/<=") nil))))
+(:function nil :main () :void nil ((:exp (:call :unittest_run_tests () nil))))

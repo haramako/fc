@@ -1,0 +1,58 @@
+(:use :unittest nil "*")
+(:use :math nil "*")
+(:include "character.chr" nil nil)
+(:function
+ nil
+ :test_sin
+ ()
+ :void
+ nil
+ ((:exp (:call :assert_equal ((:call :sin (0) nil) 0 "sin(0)") nil))
+  (:exp (:call :assert_equal ((:call :sin (63) nil) 127 "sin(63)") nil))
+  (:exp (:call :assert_equal ((:call :sin (64) nil) 127 "sin(64)") nil))
+  (:exp (:call :assert_equal ((:call :sin (127) nil) 0 "sin(127)") nil))
+  (:exp (:call :assert_equal ((:call :sin (128) nil) 0 "sin(128)") nil))
+  (:exp
+   (:call :assert_equal ((:call :sin (191) nil) (:uminus 127) "sin(191)") nil))
+  (:exp
+   (:call :assert_equal ((:call :sin (192) nil) (:uminus 127) "sin(192)") nil))
+  (:exp (:call :assert_equal ((:call :sin (255) nil) 0 "sin(255)") nil))))
+(:function
+ nil
+ :test_cos
+ ()
+ :void
+ nil
+ ((:exp (:call :assert_equal ((:call :cos (0) nil) 127 "cos(0)") nil))
+  (:exp (:call :assert_equal ((:call :cos (63) nil) 0 "cos(63)") nil))
+  (:exp (:call :assert_equal ((:call :cos (64) nil) 0 "cos(64)") nil))
+  (:exp
+   (:call :assert_equal ((:call :cos (127) nil) (:uminus 127) "cos(127)") nil))
+  (:exp
+   (:call :assert_equal ((:call :cos (128) nil) (:uminus 127) "cos(128)") nil))
+  (:exp (:call :assert_equal ((:call :cos (191) nil) 0 "cos(191)") nil))
+  (:exp (:call :assert_equal ((:call :cos (192) nil) 0 "cos(192)") nil))
+  (:exp (:call :assert_equal ((:call :cos (255) nil) 127 "cos(255)") nil))))
+(:function
+ nil
+ :test_atan
+ ()
+ :void
+ nil
+ ((:exp (:call :assert_equal ((:call :atan (0 1) nil) 0 "atan(0)") nil))
+  (:exp (:call :assert_equal ((:call :atan (1 1) nil) 32 "atan(32)") nil))
+  (:exp (:call :assert_equal ((:call :atan (1 0) nil) 63 "atan(63)") nil))
+  (:exp
+   (:call :assert_equal ((:call :atan (1 (:uminus 1)) nil) 96 "atan(96)") nil))
+  (:exp
+   (:call :assert_equal ((:call :atan (0 (:uminus 1)) nil) 128 "atan(128)") nil))
+  (:exp
+   (:call
+    :assert_equal
+    ((:call :atan ((:uminus 1) (:uminus 1)) nil) 160 "atan(160)")
+    nil))
+  (:exp
+   (:call :assert_equal ((:call :atan ((:uminus 1) 0) nil) 193 "atan(193)") nil))
+  (:exp
+   (:call :assert_equal ((:call :atan ((:uminus 1) 1) nil) 224 "atan(224)") nil))))
+(:function nil :main () :void nil ((:exp (:call :unittest_run_tests () nil))))

@@ -18,6 +18,7 @@ tmp
 
 *.lst
 *.nes
+!testdata/golden/**/*.nes
 *.html
 _*.inc
 parser.output

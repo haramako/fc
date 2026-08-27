@@ -11,11 +11,11 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 ## 進捗サマリ
 
-最終更新: 2026-08-28 / 現在のフェーズ: **Phase 0 (未着手)**
+最終更新: 2026-08-28 / 現在のフェーズ: **Phase 1 (未着手)**
 
 | Phase | 内容 | 状態 | 完了日 |
 |---|---|---|---|
-| 0 | 基盤整備・差分ハーネス | ⬜ 未着手 | - |
+| 0 | 基盤整備・差分ハーネス | ✅ 完了 | 2026-08-28 |
 | 1 | レキサ + パーサ | ⬜ 未着手 | - |
 | 2 | 基盤データ構造 | ⬜ 未着手 | - |
 | 3 | HLC (AST→IR) | ⬜ 未着手 | - |
@@ -39,7 +39,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 1. **合格条件を満たすまで次のフェーズに進まない。** 各フェーズ末尾の検証コマンドが通ることが唯一の判定基準。「たぶん動く」で先へ進まない。
 2. **フェーズ完了時に必ず**: チェックボックスを `[x]` に、進捗サマリの状態を ✅ と完了日に、作業ログに1行追記 → その上でコミット。
 3. **コミット**: `agent/golang` に直接。フェーズ完了ごとに1コミット。メッセージは `go-port: Phase N <内容>`。`master` へのマージは Phase 9 でまとめて行う。
-4. **Ruby版は凍結**。唯一の例外は Phase 0 の `--dump-ast` / `--dump-ir` 追加のみ。それ以外で `lib/` `bin/fcc` `fclib/` `share/` を変更してはならない（変更するとオラクルが壊れる）。
+4. **Ruby版は完全凍結（例外なし）**。`lib/` `bin/fcc` `fclib/` `share/` を変更してはならない（変更するとオラクルが壊れる）。ダンプは `tools/dumper.rb` がモンキーパッチで取得するため、Ruby版本体の変更は不要になった。タグ `ruby-frozen` が凍結時点。
 5. **生成物はコミットしない**: `.fc-build/` `a.*` `coverage/`（すべて `.gitignore` 済み）。`testdata/golden/` は**コミットする**。
 6. **詰まったときの手順**:
    1. Ruby版の該当箇所を読み直して挙動を正確に再現する（Ruby版が仕様書）
@@ -57,7 +57,7 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 | Rubyマクロ機構 | **Go組み込みマクロに固定**。`printf`/`times`/`cos`/`unittest_run_tests` をGoネイティブ実装し、`include("stdio.rb")` 等をファイル名キーでそのGo実装に解決する。fclib の `.fc` ソースは無変更。 |
 | 忠実度 | **厳密クローン優先**。設計改善・最適化の見直しは移植完了後に別途。 |
 | asm比較 | **IRコメント行を除外して比較**。`^\s*; \d{4}:` に一致する行を両者から除去してから比較する。それ以外の行（`;;;===` 等の構造コメント含む）は完全一致させる。Go版は独自形式のIRコメントを出してよい。 |
-| オラクルのダンプ | **`bin/fcc` に `--dump-ast` / `--dump-ir` を追加**（Ruby凍結の唯一の例外。`lib/fc/hlc.rb` へのフック追加を含む）。 |
+| オラクルのダンプ | **`tools/dumper.rb` のモンキーパッチで取得**（Ruby版本体は完全無変更）。ASTはパース直後の生AST、IRはHLC完了直後、alloc-IRは割付+delete_unuse直後(optimize_pointer前)。正規形は `doc/go_port_dump_format.md`（正典は dumper.rb 実装）。 |
 | Goコード配置 | **リポジトリ直下**。`go.mod` は `C:\Work\fc` 直下、module path は `github.com/haramako/fc`。`fclib/` `share/` を `embed` で直接取り込む。 |
 | コメント言語 | **日本語**（既存Rubyコード踏襲）。Ruby版のコメントはそのまま移植する。 |
 | 依存方針 | 実行時は標準ライブラリのみ。goyacc は生成専用で、生成された `parser.go` はコミットする。 |
@@ -153,22 +153,20 @@ testdata/golden/
 
 ## フェーズ詳細
 
-### Phase 0 — 基盤整備・差分ハーネス  ⬜ 未着手  (1日)
+### Phase 0 — 基盤整備・差分ハーネス  ✅ 完了 2026-08-28
 
 主作業は Ruby 側の正規形ダンパー（AST/IR/割付後IR）の実装。ここの仕様が曖昧だと以降全フェーズの判定が揺れるため、時間をかけてよい。
 
-- [ ] `go mod init github.com/haramako/fc` とパッケージディレクトリの雛形作成
-- [ ] Ruby版を移植開始時点のタグ（`ruby-frozen`）で凍結
-- [ ] `bin/fcc` に `--dump-ast` を追加（`lib/fc/hlc.rb:180` の `Parser.new(src,path).parse` **直後、コンパイル開始前**の生ASTを出力する。`const_eval` が AST を破壊的に書き換えるため、コンパイル後のダンプは Phase 1 の合格判定に使えない。`pos_info` の行番号も併せて出力し、Phase 1 の時点で行番号バグを捕捉できるようにする）
-- [ ] `bin/fcc` に `--dump-ir` を追加（各 `Lambda#ops` を正規形で出力）
-- [ ] `bin/fcc` に `--dump-alloc-ir` を追加（レジスタ割付後の `ops` を出力）
-- [ ] ダンプ正規形の仕様化: AST/IR/割付後IR のダンプは Ruby の `inspect` に**依存しない**独自の正規形（S式 or JSON）を Ruby 側ダンパーとして定義し、Go はそれに合わせる。文字列は一意にエスケープしたバイト列として出力する（`\xNN` 由来のバイナリを含むため）
-- [ ] `tools/gen_golden.rb` 作成: `test/test_*.fc` 全件（= `test-all` と同じ glob。`errors.fc` はコンパイル失敗が正の Phase 8 専用素材、`cycle_use.fc` は `test_cycle.fc` から use されるモジュールなので、どちらも単体生成しない）について ast / ir / allocir / asm / bin / stdout を `testdata/golden/` に生成
-- [ ] gen_golden.rb: AST golden は追加で `fclib/**/*.fc`（`fclib/x6502/` はスコープ外につき除外）も生成する（Phase 1 の合格条件が参照）
-- [ ] gen_golden.rb: NES ターゲット経路のビルド golden を最低1本生成する（候補: `test_basic.fc` を `-t nes` でビルドし asm / bin を `*_nes` として保存。ビルドが通らなければ最小の NES 用ソースを `test/` に新設）。`test-all` は emu のみのため、これがないと `share/nes` テンプレと `fclib/nes/` が Phase 9 まで未検証になる。stdout golden は不要（r6502 で NES は実行できない）
-- [ ] asm 正規化関数を決定（`^\s*; \d{4}:` の行を除去）し、Ruby側・Go側で共有する仕様として明文化
-- [ ] `internal/fc/golden_test.go` の骨格作成（各フェーズ用のサブテストを空実装で用意）
-- [ ] golden 一式を生成してコミット
+- [x] `go mod init github.com/haramako/fc` とパッケージディレクトリの雛形作成（`cmd/fcc/main.go` スタブ含む）
+- [x] Ruby版を移植開始時点のタグ（`ruby-frozen` = 8358b15）で凍結
+- [x] `tools/dumper.rb` 作成: モンキーパッチによる AST / IR / alloc-IR ダンパー（Ruby版本体は無変更）。ASTは `Parser#parse` 直後の生AST + `pos_info` 行番号（`const_eval` の破壊的書き換えの影響を受けない）。IRは `Hlc#compile` 完了直後。alloc-IRは `Llc#alloc_register`（=割付+delete_unuse）直後・optimize_pointer 前
+- [x] ダンプ正規形の仕様化: Ruby の `inspect` に依存しない独自S式。文字列はバイト単位エスケープ。`doc/go_port_dump_format.md` に明文化（正典は dumper.rb）
+- [x] `tools/gen_golden.rb` 作成: `test/test_*.fc` 全件（`errors.fc` は Phase 8 専用素材、`cycle_use.fc` はモジュールなので除外）について ast / ir / allocir / asm / bin / stdout を `testdata/golden/` に生成
+- [x] AST golden は追加で `test/cycle_use.fc` と `fclib/**/*.fc`（`fclib/x6502/` はスコープ外につき除外）も生成
+- [x] NES ターゲット経路の golden: `test_basic.fc -t nes` のビルドが通ることを確認し、asm / bin を `test_basic_nes` として保存（実行はしない）
+- [x] asm 正規化関数（`^\s*; \d{4}:` の行を除去）を dumper.rb / 仕様書に明文化
+- [x] `internal/fc/golden_test.go` の骨格作成（各フェーズ用サブテストを Skip で用意）
+- [x] golden 一式を生成してコミット。**2回生成してバイト一致（ld65バイナリ含め決定的）を確認済み**
 
 **合格条件（このコマンドが通ること）**:
 
@@ -413,5 +411,6 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-28: **Phase 0 完了**。`ruby-frozen` タグ付与。ダンプは bin/fcc 改造ではなく `tools/dumper.rb` のモンキーパッチ方式に変更（Ruby版は完全無変更で凍結、計画の該当箇所を更新）。golden 全生成（ast 25ファイル / ir・allocir・asm・bin・stdout ×13テスト / NESビルド1本）、2回生成でバイト一致を確認。`go build ./... && go test ./...` グリーン。`.gitignore` の `doc/` 除外を解除し `*.nes` に golden 用の負パターンを追加。オラクル(test-all)グリーンも確認済み。
 - 2026-08-28: 計画レビュー反映。gen_golden の対象を `test_*.fc` に修正（`errors.fc` / `cycle_use.fc` 除外）、fclib AST golden と NES ビルド golden を追加、`--dump-ast` の出力タイミングを「parse 直後・コンパイル前」に確定、ダンプ正規形は inspect 非依存と明文化、`test_allocator.rb` 移植を Phase 2→4 に移動、キーワード数を 23 に訂正、レキサ数値 `-?` の到達不能を注記、errors.fc の「例外なし=素通り」挙動を Phase 8 に注記。Phase 0 見積りを 1日に変更。
 - 2026-08-28: 計画策定。方針決定（Go組み込みマクロ / 厳密クローン / asmはIRコメント行除外で比較 / リポジトリ直下 / 日本語コメント / 完全自律 / CIなし）。スコープ外を確定（x6502, デバッグHTML, サイズ退行検出, .fcm, emu6502）。環境確認済み（Go 1.24.5, goyacc, Ruby 3.3.7, cc65, bundle exec は破損）。未着手。

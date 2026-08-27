@@ -1,0 +1,107 @@
+(:use :unittest nil "*")
+(:include "character.chr" nil nil)
+(:var ((:array (:array 10 :int) nil nil)) nil)
+(:const ((:CONST (:array nil :int) (:array (0 1 2 3 4 5 6 7 8 9)) nil)) nil)
+(:const
+ ((:add2 nil (:lambda (:lambda ((:a :int)) :int) ((:return (:add :a 2)))) nil))
+ nil)
+(:function
+ nil
+ :test_const
+ ()
+ :void
+ nil
+ ((:const ((:INT :int 1 nil)) nil)
+  (:const ((:UINT nil (:uminus 2) nil)) nil)
+  (:const ((:INT16 :int 65535 nil)) nil)
+  (:const ((:UINT16 nil (:uminus 65536) nil)) nil)
+  (:const ((:ARRAY nil (:array (1 2 3)) nil)) nil)
+  (:const ((:STRING nil "hoge" nil)) nil)
+  (:exp (:call :assert_equal (:INT 1 "const") nil))
+  (:exp (:call :assert_equal (:UINT (:uminus 2) "const2") nil))
+  (:exp (:call :assert_equal (:INT16 65535 "const") nil))
+  (:exp (:call :assert_equal (:UINT16 (:uminus 65536) "const2") nil))
+  (:exp (:call :assert_equal ((:index :ARRAY 2) 3 "const[]") nil))
+  (:exp (:call :assert_equal ((:index :STRING 4) 0 "string[]") nil))))
+(:function
+ nil
+ :test_pointer
+ ()
+ :void
+ nil
+ ((:exp (:call :assert_equal ((:index :CONST 1) 1 "const[]") nil))
+  (:exp (:load (:index :array 1) 1))
+  (:exp (:call :assert_equal ((:index :array 1) 1 "array[]") nil))
+  (:var ((:i nil 2 nil)) nil)
+  (:exp (:call :assert_equal ((:index :CONST :i) 2 "const[i]") nil))
+  (:exp (:load (:index :array :i) 2))
+  (:exp (:call :assert_equal ((:index :array :i) 2 "array[i]") nil))))
+(:function
+ nil
+ :test_array
+ ()
+ :void
+ nil
+ ((:var ((:i nil 0 nil)) nil)
+  (:exp (:load (:index :array :i) (:add :i 1)))
+  (:exp (:load :i (:add :i 1)))
+  (:exp (:load (:index :array :i) (:add :i 1)))
+  (:exp (:load :i (:add :i 1)))
+  (:exp (:load (:index :array :i) (:add :i 1)))
+  (:exp (:call :assert_equal ((:index :array 0) 1 "a[0]") nil))
+  (:exp (:call :assert_equal ((:index :array 1) 2 "a[1]") nil))
+  (:exp (:call :assert_equal ((:index :array 2) 3 "a[2]") nil))))
+(:function nil :add1 ((:a :int nil nil)) :int nil ((:return (:add :a 1))))
+(:function nil :mul2 ((:a :int nil nil)) :int nil ((:return (:mul :a 2))))
+(:const
+ ((:FUNC_TABLE (:array nil (:lambda (:int) :int)) (:array (:add1 :mul2)) nil))
+ nil)
+(:function
+ nil
+ :test_func_pointer
+ ()
+ :void
+ nil
+ ((:var ((:f (:lambda (:int) :int) :add1 nil)) nil)
+  (:exp (:call :assert_equal ((:call :f (10) nil) 11 "f()") nil))
+  (:exp
+   (:call
+    :assert_equal
+    ((:call (:index :FUNC_TABLE 0) (10) nil) 11 "FUNC_TABLE[0]()")
+    nil))
+  (:exp
+   (:call
+    :assert_equal
+    ((:call (:index :FUNC_TABLE 1) (10) nil) 20 "FUNC_TABLE[1]()")
+    nil))
+  (:exp (:call :assert_equal ((:call :add2 (1) nil) 3 "lambda") nil))
+  (:exp
+   (:call
+    :assert_equal
+    ((:call (:lambda (:lambda ((:a :int)) :int) ((:return (:add :a 2)))) (1) nil)
+     3
+     "lambda literal")
+    nil))))
+(:function
+ nil
+ :test_escape
+ ()
+ :void
+ nil
+ ((:const ((:STR nil "\n\xFF" nil)) nil)
+  (:exp (:call :assert_equal ((:index :STR 0) 10 "escape n") nil))
+  (:exp (:call :assert_equal ((:cast (:index :STR 1) :uint) 255 "escape x") nil))))
+(:function nil :segmented_function () :int {:segment "CODE"} ((:return 1)))
+(:function
+ nil
+ :test_segment_option
+ ()
+ :void
+ nil
+ (
+  (:exp
+   (:call
+    :assert_equal
+    ((:call :segmented_function () nil) 1 "segmented function")
+    nil))))
+(:function nil :main () :void nil ((:exp (:call :unittest_run_tests () nil))))

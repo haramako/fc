@@ -1,0 +1,9 @@
+(:options {:bank (:uminus 1)})
+(:include "rle.asm" nil nil)
+(:function
+ nil
+ :unpack
+ ((:dest (:pointer :int) nil nil) (:src (:pointer :int) nil nil))
+ :int16
+ nil
+ nil)

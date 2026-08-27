@@ -1,0 +1,79 @@
+(:var ((:ppu_ctrl1_bak :int 128 nil)) nil)
+(:var ((:ppu_ctrl2_bak :int 30 nil)) nil)
+(:var ((:ppu_scroll1 :int 0 nil)) nil)
+(:var ((:ppu_scroll2 :int 0 nil)) nil)
+(:function
+ nil
+ :ppu_init
+ ((:ctrl1 :int nil nil) (:ctrl2 :int nil nil))
+ :void
+ nil
+ ((:exp (:load :ppu_ctrl1_bak :ctrl1)) (:exp (:load :ppu_ctrl2_bak :ctrl2))))
+(:function
+ nil
+ :ppu_scroll
+ ((:s1 :int nil nil) (:s2 :int nil nil))
+ :void
+ nil
+ ((:exp (:load :ppu_scroll1 :s1)) (:exp (:load :ppu_scroll2 :s2))))
+(:function
+ nil
+ :ppu_lock
+ ()
+ :void
+ nil
+ ((:exp (:load :PPU_CTRL1 0)) (:exp (:load :PPU_CTRL2 0))))
+(:function
+ nil
+ :ppu_unlock
+ ()
+ :void
+ nil
+ ((:exp (:load :PPU_SCROLL :ppu_scroll1))
+  (:exp (:load :PPU_SCROLL :ppu_scroll2))
+  (:exp (:load :PPU_CTRL1 :ppu_ctrl1_bak))
+  (:exp (:load :PPU_CTRL2 :ppu_ctrl2_bak))))
+(:function
+ nil
+ :ppu_put
+ ((:addr (:pointer :int) nil nil) (:size :int nil nil))
+ :void
+ nil
+ ((:var ((:i :int 0 nil)) nil)
+  (:while
+   (:lt :i :size)
+   (:block
+    ((:exp (:load :PPU_DATA (:index :addr :i))) (:exp (:load :i (:add :i 1))))))))
+(:function
+ nil
+ :ppu_fill
+ ((:size :int nil nil) (:num :int nil nil))
+ :void
+ nil
+ ((:var ((:i :int 0 nil)) nil)
+  (:while
+   (:lt :i :size)
+   (:block ((:exp (:load :PPU_DATA :num)) (:exp (:load :i (:add :i 1))))))))
+(:function
+ nil
+ :ppu_print
+ ((:str (:pointer :int) nil nil))
+ :void
+ nil
+ ((:var ((:i :int 0 nil)) nil)
+  (:var ((:c :int nil nil)) nil)
+  (:while
+   (:load :c (:index :str :i))
+   (:block ((:exp (:load :PPU_DATA :c)) (:exp (:load :i (:add :i 1))))))))
+(:function nil :interrupt () :void nil ((:exp (:load :vsync_flag 0))))
+(:function
+ nil
+ :wait_vsync
+ ()
+ :void
+ nil
+ ((:exp (:load :PPU_SCROLL :ppu_scroll1))
+  (:exp (:load :PPU_SCROLL :ppu_scroll2))
+  (:exp (:load :SPRITE_DMA 7))
+  (:exp (:load :vsync_flag 1))
+  (:while :vsync_flag (:block ()))))

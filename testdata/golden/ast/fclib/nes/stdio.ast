@@ -1,0 +1,54 @@
+(:options {:bank (:uminus 1)})
+(:use :nes nil "*")
+(:include "stdio.asm" nil nil)
+(:var ((:vsync_flag :int nil nil)) nil)
+(:var ((:ppu_addr :int16 nil nil)) nil)
+(:var ((:print_addr :int16 nil nil)) nil)
+(:function nil :print_int16 ((:n :int16 nil nil)) :void nil nil)
+(:function nil :wait_vsync () :void nil nil)
+(:function nil :print ((:str (:pointer :int) nil nil)) :void nil nil)
+(:function
+ nil
+ :ppu_put
+ ((:addr :int16 nil nil) (:data (:pointer :int) nil nil) (:size :int nil nil))
+ :void
+ nil
+ nil)
+(:function
+ nil
+ :puts
+ ((:str (:pointer :int) nil nil))
+ :void
+ nil
+ ((:exp (:call :printf (:str "\n") nil))))
+(:function
+ nil
+ :exit
+ ((:code :int nil nil))
+ :void
+ nil
+ ((:exp (:call :printf ("exit(" :code ")\n") nil))
+  (:exp (:load :PPU_CTRL1 200))
+  (:while
+   1
+   (:block
+    ((:exp (:call :wait_vsync () nil))
+     (:exp (:load :PPU_SCROLL 0))
+     (:exp (:load :PPU_SCROLL 0))
+     (:exp (:load :PPU_CTRL1 200))
+     (:exp (:load :PPU_CTRL2 10)))))))
+(:function
+ nil
+ :init
+ ()
+ :void
+ nil
+ ((:exp (:load :vsync_flag 253))
+  (:const
+   ((:pallet nil (:array (15 61 16 48 0 17 33 49 0 18 34 50 0 19 35 51)) nil))
+   nil)
+  (:exp (:call :ppu_put (16128 :pallet 16) nil))
+  (:exp (:load :print_addr 8192))))
+(:function :public :interrupt () :void {:symbol "_interrupt"} nil)
+(:function :public :interrupt_irq () :void {:symbol "_interrupt_irq"} nil)
+(:include "stdio.rb" :macro nil)
