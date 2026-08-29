@@ -49,8 +49,34 @@ VRAMに画面が作られる」というゆるい基準。
 保存する（castle はタイトルロゴ、miku は背景が描画されることを目視確認できる。
 スプライト・スクロールは描画しない）。
 
-既知の制限: タイミングは概算のため、ゲーム進行（castle のタイトルでスタート押下後の
-遷移など）までは保証しない。起動と定常ループの確認が目的。
+`TestPlayCastle` はさらに実際にプレイする: タイトルで A 決定 → フィールドで
+右移動+ジャンプ → 画面切り替えをスクリーンショット差分で検出する。
+
+## MesenCE による高精度テスト (任意)
+
+実機精度の検証には [MesenCE](https://github.com/nesdev-org/MesenCE) を使う:
+
+```bash
+go test ./internal/nes -run TestMesenPlayCastle -v
+```
+
+`TestMesenPlayCastle` は examples/castle をビルドし、ld65 マップから
+`_my_x` / `_bg_cur_area` のアドレスを取り、自動プレイの Lua スクリプトを生成して
+`Mesen --testrunner` (ヘッドレス) で実行、**エリア変数の変化2回**を成功条件として
+終了コードで判定する。
+
+導入: MesenCE の Windows zip を `C:\Applications\MesenCE` に展開する
+（別の場所なら環境変数 `FC_MESEN` に Mesen.exe のパスを設定）。見つからなければ Skip。
+初回セットアップの注意（テストが自動処理するものも含む）:
+
+- ダウンロードした exe は `Unblock-File` が必要（SmartScreen のダイアログ待ちで
+  無音のままハングする）
+- `settings.json` が無いと初回起動ダイアログで止まる。さらに **`Nes.Port1.Type` に
+  コントローラを設定しないと入力注入が効かない**（テストが無ければ自動生成する）
+- testrunner の Lua では `io`/`os` は使えない（結果は emu.stop の終了コードで返す）
+
+internal/nes のスモークの既知の制限: タイミングは概算のため精密な検証には
+向かない（そちらは MesenCE 側で行う）。起動と進行の高速な常時確認が目的。
 
 ## 生成物リソースの方針（fs_data.bin 等）
 
