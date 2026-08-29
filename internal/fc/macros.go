@@ -4,13 +4,17 @@ package fc
 // include("stdio.rb") 等はファイル名キーでここに解決される (確定方針参照)。
 // 各登録関数は Ruby ファイルの instance_eval 時の動作 (トップレベルの @scope.find 等) を再現する。
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 var macroFiles = map[string]func(h *Hlc){
 	"stdmacro.rb": registerStdmacro,
 	"stdio.rb":    registerStdio,
 	"math.rb":     registerMath,
 	"unittest.rb": registerUnittest,
+	"macro.rb":    registerCastleMacros,
 }
 
 // fclib/stdmacro.rb
@@ -59,6 +63,56 @@ func registerMath(h *Hlc) {
 	h.defmacro("cos", func(h *Hlc, args []any, block any) any {
 		return []any{Sym("call"), sin, []any{[]any{Sym("add"), args[0], 64}}, nil}
 	})
+}
+
+// castle プロジェクトの src/macro.rb (テキスト変換マクロ _T / _M / VERSION_STR)。
+// Ruby版と同じく、フォント文字表 (../tmp/font/*.chr.txt) は登録時に、
+// ../VERSION はマクロ実行時に、カレントディレクトリ相対で読む。
+func registerCastleMacros(h *Hlc) {
+	readText := func(path string) string {
+		b, err := ReadSource(path)
+		if err != nil {
+			panic(&CompileError{Msg: err.Error()})
+		}
+		return string(b)
+	}
+	conv := NewTextConverter(readText("../tmp/font/text.chr.txt"))
+	miscConv := NewTextConverter(readText("../tmp/font/misc_text.chr.txt"))
+
+	textArray := func(codes []int) any {
+		elems := make([]any, len(codes))
+		for i, c := range codes {
+			elems[i] = c
+		}
+		return []any{Sym("array"), elems}
+	}
+
+	h.defmacro("_T", func(h *Hlc, args []any, block any) any {
+		text := conv.Conv(args[0].(*Value).BaseString.(string))
+		return textArray(append(text, 0))
+	})
+
+	h.defmacro("_M", func(h *Hlc, args []any, block any) any {
+		text := miscConv.Conv(args[0].(*Value).BaseString.(string))
+		return textArray(append(text, 0))
+	})
+
+	h.defmacro("VERSION_STR", func(h *Hlc, args []any, block any) any {
+		version := rubyChomp(readText("../VERSION"))
+		text := miscConv.Conv("VERSION " + version)
+		return textArray(append(text, 0))
+	})
+}
+
+// rubyChomp は String#chomp 相当 (末尾の改行1つを除去)。
+func rubyChomp(s string) string {
+	if strings.HasSuffix(s, "\r\n") {
+		return s[:len(s)-2]
+	}
+	if strings.HasSuffix(s, "\n") || strings.HasSuffix(s, "\r") {
+		return s[:len(s)-1]
+	}
+	return s
 }
 
 // fclib/unittest.rb

@@ -363,7 +363,7 @@ go build ./... && go test ./...
 - [x] 退避後もオラクルが機能することを検証: `test-all` グリーン、`rspec` 10 examples グリーン、**golden 再生成で差分ゼロ**
 - [x] `.travis.yml` を削除
 - [x] `.gitignore` の整理（ruby gem 雛形時代の死にエントリを削除）
-- [x] `master` へマージ
+- [x] `master` へマージ → **2026-08-29 に一旦取り消し**（安定するまで agent/golang を維持する方針に変更。master は 8358b15 に戻した。安定確認後に再マージする）
 
 **合格条件**:
 
@@ -408,6 +408,7 @@ Ruby版が唯一の仕様書であるため、各フェーズの境界に**機�
 
 セッションをまたいだ際の引き継ぎメモをここに追記する。
 
+- 2026-08-29: **castle プロジェクト対応**。実プロジェクト C:\Work\castle の `src/macro.rb`（NesTools::TextConverter を使う `_T`/`_M`/`VERSION_STR` テキスト変換マクロ）を Go 組み込みマクロに移植（`textconv.go` + macros.go の `macro.rb` キー）。tr 対応表がソース15:宛先14でずれている Ruby の潜在バグも忠実に再現。検証: Go fcc で castle をフルビルドし、**Ruby 版ビルドと ROM がバイト一致**（全モジュールの .s/.inc も一致）。チェックイン済み castle.nes との差分は現行ソースとの鮮度差。また、ユーザー要望により master へのマージを一旦取り消し（master=8358b15、安定後に再マージ）。
 - 2026-08-28: **Phase 9 完了・全フェーズ完了**。README刷新、6通りのクロスビルド確認、Ruby版を ruby/ へ退避 (FC_HOME を1段修正、test-all/tools のパス更新)。退避後も test-all・rspec・golden再生成の全てがグリーン(golden差分ゼロ)。.travis.yml 削除、.gitignore 整理、master へマージ。**計画開始から1日で全9フェーズ完了** — Phase 0 の差分ハーネスを厳密にした投資が全フェーズの一発一致(初回差分は延べ4件のみ: CRLF、pget op[3]、lt の or バグ、opt nil 短絡)につながった。
 - 2026-08-28: **Phase 8 完了**。TestErrorsFC (errors.fc 全11断片、厳格モードでグリーン)。parse error 文言は goyacc→racc 互換変換で対応。const文の opt nil 短絡評価の移植ミスを1件修正。go build/test 全グリーン。
 - 2026-08-28: **Phase 7 完了**。internal/r6502 (lib/r6502 の厳密移植、zpx非マスク等の癖含む) + Compiler#execute のホスト呼び出し。TestGoldenStdout 13件が初回実行で全一致。
