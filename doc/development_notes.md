@@ -49,6 +49,10 @@ go test ./...                                    # 全部 (golden + examples + N
 
 - golden の再生成: `ruby tools/gen_golden.rb`（Ruby オラクル使用。正規形仕様は
   [go_port_dump_format.md](go_port_dump_format.md)）
+- **fc ソースのテスト（`test/test_*.fc` の assert 群）は TestGoldenStdout が
+  コンパイル→実行して stdout・終了コードごと検証する**（assert 失敗 = exit 1 + ERROR 出力
+  で必ず不一致になる）。テスト .fc を新規追加したら golden 再生成が必要
+  （進化計画 R0 の `-update` 方式移行後は `go test -update` だけになる予定）
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は
   [../examples/README.md](../examples/README.md)）
 - 内蔵NESランナーのスクリーンショット: `FC_NES_SNAPSHOT_DIR=<dir> go test ./internal/nes`
