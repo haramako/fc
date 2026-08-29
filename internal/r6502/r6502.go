@@ -3,6 +3,13 @@
 // Ruby 版の演算子優先順位どおりに再現している。
 package r6502
 
+// Bus はCPUから見えるメモリ空間。Memory のほか、NESのメモリマップ実装
+// (internal/nes) などを差し込める。
+type Bus interface {
+	Get(addr int) int
+	Set(addr, val int)
+}
+
 // Memory は R6502::Memory 相当 (疎なメモリ、未設定は0)。
 type Memory struct {
 	m map[int]int
@@ -188,7 +195,7 @@ var instrTable = map[int]instrMode{
 
 // Cpu は R6502::Cpu 相当。
 type Cpu struct {
-	Mem *Memory
+	Mem Bus
 	Pc  int
 	S   int
 	X   int
@@ -196,12 +203,20 @@ type Cpu struct {
 	A   int
 	// フラグ (0/1)
 	C, Z, I, D, B, V, N int
+
+	// Accurate を true にすると、Ruby版の再現である誤った挙動
+	// (zpx/zpy のページクロス非マスク、indx の二重参照) を実機準拠に直す。
+	// emu ターゲットの golden テストは false のまま使う。
+	Accurate bool
+
+	// Cycles は概算の消費サイクル数 (フレームタイミング用。正確ではない)。
+	Cycles int64
 }
 
-func NewCpu(mem *Memory) *Cpu {
+func NewCpu(mem Bus) *Cpu {
 	return &Cpu{
 		Mem: mem,
-		Pc:  mem.GetWord(0xfffc),
+		Pc:  mem.Get(0xfffc) + (mem.Get(0xfffd) << 8),
 		S:   0xff,
 	}
 }
@@ -226,8 +241,14 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 	case Zp:
 		return secWord
 	case Zpx:
+		if c.Accurate {
+			return 0xff & (secWord + c.X)
+		}
 		return secWord + c.X // マスクなし (Ruby版と同じ)
 	case Zpy:
+		if c.Accurate {
+			return 0xff & (secWord + c.Y)
+		}
 		return secWord + c.Y
 	case Rel:
 		if secWord <= 127 {
@@ -245,9 +266,12 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 		hb := c.Mem.Get((thdWord << 8) + secWord + 1)
 		return (hb << 8) + lb
 	case Indx:
-		// Ruby版は最後にもう一度 mem.get する (実機と異なる挙動の再現)
 		lb := c.Mem.Get(0xff & (c.X + secWord))
 		hb := c.Mem.Get(0xff & (c.X + secWord + 1))
+		if c.Accurate {
+			return (hb << 8) + lb
+		}
+		// Ruby版は最後にもう一度 mem.get する (実機と異なる挙動の再現)
 		return c.Mem.Get((hb << 8) + lb)
 	case Indy:
 		lb := c.Mem.Get(0xff & secWord)
@@ -273,7 +297,82 @@ func (c *Cpu) incPcByMode(mode Mode) {
 func (c *Cpu) StepSilent() {
 	instr, mode := InstrMode(c.Mem.Get(c.Pc))
 	arg := c.decodeArg(mode, c.Mem.Get(c.Pc+1), c.Mem.Get(c.Pc+2))
+	c.Cycles += approxCycles(instr, mode)
 	c.exec(instr, arg, mode)
+}
+
+// approxCycles は命令の概算サイクル数 (ページクロス・分岐成立ペナルティは無視)。
+func approxCycles(instr Instr, mode Mode) int64 {
+	switch instr {
+	case BRK:
+		return 7
+	case JSR, RTS, RTI:
+		return 6
+	case PHA, PHP:
+		return 3
+	case PLA, PLP:
+		return 4
+	case JMP:
+		if mode == Ind {
+			return 5
+		}
+		return 3
+	case ASL, LSR, ROL, ROR, INC, DEC:
+		if mode == Acc {
+			return 2
+		}
+		switch mode {
+		case Zp:
+			return 5
+		case Zpx, Abs:
+			return 6
+		default:
+			return 7
+		}
+	}
+	switch mode {
+	case Imp, Acc, Imm, Rel:
+		return 2
+	case Zp:
+		return 3
+	case Zpx, Zpy, Abs, Absx, Absy:
+		return 4
+	case Indx:
+		return 6
+	case Indy:
+		return 5
+	}
+	return 2
+}
+
+// NMI は NMI 割り込みを発生させる (実機準拠。NESランナー用)。
+func (c *Cpu) NMI() {
+	c.interrupt(0xfffa)
+}
+
+// IRQ は IRQ 割り込みを発生させる (Iフラグは呼び出し側で確認すること)。
+func (c *Cpu) IRQ() {
+	c.interrupt(0xfffe)
+}
+
+func (c *Cpu) interrupt(vector int) {
+	c.Mem.Set(0x0100+(0xff&c.S), (c.Pc>>8)&0xff)
+	c.S--
+	c.Mem.Set(0x0100+(0xff&c.S), c.Pc&0xff)
+	c.S--
+	val := c.N             // bit 7
+	val = (val << 1) + c.V // bit 6
+	val = (val << 1) + 1   // bit 5
+	val = (val << 1) + 0   // bit 4 (B=0: 割り込み)
+	val = (val << 1) + c.D // bit 3
+	val = (val << 1) + c.I // bit 2
+	val = (val << 1) + c.Z // bit 1
+	val = (val << 1) + c.C // bit 0
+	c.Mem.Set(0x0100+(0xff&c.S), val)
+	c.S--
+	c.I = 1
+	c.Cycles += 7
+	c.Pc = c.Mem.Get(vector) + (c.Mem.Get(vector+1) << 8)
 }
 
 func b2i(b bool) int {
@@ -726,9 +825,11 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		// bit 5
 		c.V = 0x1 & (flags >> 6)
 		c.N = 0x1 & (flags >> 7)
-		hi := m.Get(0x0100 + c.S + 1)
-		c.S += 1
+		// 注: Ruby版は hi/lo を逆順に取り出すバグがあった (fc の emuターゲットでは
+		// rti は一度も実行されないため露見しない)。実機準拠 (flags→lo→hi) に修正。
 		lo := m.Get(0x0100 + c.S + 1)
+		c.S += 1
+		hi := m.Get(0x0100 + c.S + 1)
 		c.S += 1
 		c.Pc = 0xffff & ((hi << 8) + lo)
 
