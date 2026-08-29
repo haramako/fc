@@ -450,10 +450,14 @@ func (m *Machine) runFrame() {
 // スクリーンショット (BGのみの静的レンダリング)
 // ---------------------------------------------------------------
 
-// Screenshot は現在の nametable / パレット / CHRバンクから背景画面を描画する。
-// スクロール・スプライトは無視する (大雑把な確認用)。
+// Screenshot は現在の nametable / OAM / パレット / CHRバンクから画面を描画する。
+// スクロールは無視する (大雑把な確認用)。スプライトは 8x8 / 8x16・反転・
+// BG背面プライオリティに対応。
 func (m *Machine) Screenshot() *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, 256, 240))
+	var bgOpaque [256 * 240]bool
+
+	// 背景
 	ntBase := 0x2000 + 0x400*int(m.ctrl&3)
 	patBase := 0
 	if m.ctrl&0x10 != 0 {
@@ -476,9 +480,74 @@ func (m *Machine) Screenshot() *image.RGBA {
 						col = m.palette[0]
 					} else {
 						col = m.palette[palGroup*4+ci]
+						bgOpaque[(ty*8+py)*256+tx*8+px] = true
 					}
 					img.Set(tx*8+px, ty*8+py, nesPalette[col&0x3f])
 				}
+			}
+		}
+	}
+
+	// スプライト (若い番号ほど手前なので 63→0 の順に描く)
+	sprH := 8
+	if m.ctrl&0x20 != 0 {
+		sprH = 16
+	}
+	for i := 63; i >= 0; i-- {
+		sy := int(m.oam[i*4+0]) + 1
+		tile := int(m.oam[i*4+1])
+		attr := m.oam[i*4+2]
+		sx := int(m.oam[i*4+3])
+		if sy >= 0xf0 {
+			continue // 画面外
+		}
+		palGroup := int(attr & 3)
+		behindBg := attr&0x20 != 0
+		flipH := attr&0x40 != 0
+		flipV := attr&0x80 != 0
+
+		var base int
+		if sprH == 16 {
+			base = (tile&1)*0x1000 + (tile&^1)*16
+		} else {
+			if m.ctrl&0x08 != 0 {
+				base = 0x1000 + tile*16
+			} else {
+				base = tile * 16
+			}
+		}
+		for py := 0; py < sprH; py++ {
+			row := py
+			if flipV {
+				row = sprH - 1 - py
+			}
+			// 8x16 は下半分が次のタイル
+			var addr int
+			if sprH == 16 && row >= 8 {
+				addr = base + 16 + (row - 8)
+			} else {
+				addr = base + row
+			}
+			lo := m.chrAt(addr)
+			hi := m.chrAt(addr + 8)
+			for px := 0; px < 8; px++ {
+				bit := uint(7 - px)
+				if flipH {
+					bit = uint(px)
+				}
+				ci := int((lo>>bit)&1 | ((hi>>bit)&1)<<1)
+				if ci == 0 {
+					continue // 透明
+				}
+				x, y := sx+px, sy+py
+				if x >= 256 || y >= 240 {
+					continue
+				}
+				if behindBg && bgOpaque[y*256+x] {
+					continue
+				}
+				col := m.palette[0x10+palGroup*4+ci]
+				img.Set(x, y, nesPalette[col&0x3f])
 			}
 		}
 	}
