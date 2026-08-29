@@ -89,6 +89,81 @@ func TestSmokeMiku(t *testing.T) {
 	snapshot(t, m, "miku-300")
 }
 
+// diffRatio は2枚の画面の異なるピクセルの割合 (0.0〜1.0)。
+func diffRatio(a, b *image.RGBA) float64 {
+	diff := 0
+	total := 0
+	for i := 0; i < len(a.Pix); i += 4 {
+		total++
+		if a.Pix[i] != b.Pix[i] || a.Pix[i+1] != b.Pix[i+1] || a.Pix[i+2] != b.Pix[i+2] {
+			diff++
+		}
+	}
+	return float64(diff) / float64(total)
+}
+
+// TestPlayCastle は castle を実際に「プレイ」する:
+// タイトルで A → 待ち → フィールドで右移動しつつ、たまに A(ジャンプ)を1秒押す、
+// を繰り返し、画面(エリア)が切り替わることを確認する。
+func TestPlayCastle(t *testing.T) {
+	m := loadExample(t, "castle")
+
+	// タイトル表示まで
+	if err := m.RunFrames(180); err != nil {
+		t.Fatal(err)
+	}
+	title := m.Screenshot()
+
+	// A で「はじめる」を決定
+	m.SetButtons(ButtonA)
+	if err := m.RunFrames(10); err != nil {
+		t.Fatal(err)
+	}
+	m.SetButtons(0)
+
+	// ジングル(30f) + フェード(40f) + フィールドロード待ち
+	if err := m.RunFrames(300); err != nil {
+		t.Fatal(err)
+	}
+	field := m.Screenshot()
+	snapshot(t, m, "castle-play-field")
+	if r := diffRatio(title, field); r < 0.2 {
+		t.Fatalf("タイトルから画面が変わっていない (差分 %.1f%%) — ゲームが始まっていない", r*100)
+	}
+	t.Logf("フィールド到達 (タイトルとの差分 %.1f%%)", diffRatio(title, field)*100)
+
+	// 右移動 + たまに A(ジャンプ)を1秒。画面切り替え(大きな画面変化)を数える
+	prev := field
+	transitions := 0
+	for cycle := 0; cycle < 25 && transitions < 2; cycle++ {
+		m.SetButtons(ButtonRight)
+		if err := m.RunFrames(60); err != nil {
+			t.Fatal(err)
+		}
+		m.SetButtons(ButtonRight | ButtonA) // ジャンプを1秒
+		if err := m.RunFrames(60); err != nil {
+			t.Fatal(err)
+		}
+		m.SetButtons(ButtonRight)
+		if err := m.RunFrames(60); err != nil {
+			t.Fatal(err)
+		}
+		cur := m.Screenshot()
+		r := diffRatio(prev, cur)
+		if r > 0.25 {
+			transitions++
+			t.Logf("画面切り替え検出 #%d (cycle %d, 差分 %.1f%%)", transitions, cycle, r*100)
+			snapshot(t, m, fmt.Sprintf("castle-play-area%d", transitions))
+		}
+		prev = cur
+	}
+	m.SetButtons(0)
+	if transitions == 0 {
+		t.Errorf("画面切り替えが検出できなかった (右移動+ジャンプで進行していない可能性)")
+	}
+	t.Logf("プレイ結果: frames=%d 画面切り替え=%d回", m.Stats.Frames, transitions)
+}
+
 func TestSmokeCastle(t *testing.T) {
 	m := loadExample(t, "castle")
 	if err := m.RunFrames(180); err != nil {
