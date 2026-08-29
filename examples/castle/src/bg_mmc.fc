@@ -1,0 +1,470 @@
+use my;
+use sound;
+
+// 水門によるエリア変更テーブル
+const WG_AREA_NUM = 15;
+const WG_AREA = [10+ 9*16, 0+0*16,
+				 11+ 9*16, 0+1*16,
+				 11+ 10*16, 0+2*16,
+				 11+ 11*16, 0+3*16,
+				 11+ 12*16, 1+0*16,
+				 11+ 13*16, 3+0*16,
+				 11+ 14*16, 1+1*16,
+				 12+ 14*16, 1+2*16,
+				 13+ 14*16, 1+3*16,
+				 14+ 14*16, 2+0*16,
+				 15+ 14*16, 2+1*16,
+				 10+ 14*16, 2+2*16,
+				 9+ 14*16, 8+0*16,
+				 8+ 14*16, 8+1*16,
+				 7+ 14*16, 9+0*16
+				 ];
+
+const MG_AREA_NUM = 7;
+const MG_AREA = [ 4+ 15*16, 11+15*16,
+				  5+ 15*16, 12+15*16,
+				  6+ 15*16, 13+15*16,
+				  7+ 15*16, 14+15*16,
+				  8+ 15*16, 15+15*16,
+				  9+ 15*16, 10+ 0*16,
+				 10+ 15*16, 11+ 0*16
+				 ];
+				
+const AG_AREA_NUM = 2;
+const AG_AREA = [ 5+  9*16, 15+ 2*16,
+				  5+ 10*16, 15+ 3*16
+				 ];
+
+private:
+use * from bg;
+use boxelev;
+use bg_data;
+
+public function _fetch_area(area:int, dir:int):void
+{
+	var old_area_flags = area_flags;
+	cur_area = area;
+
+	// 水門によるエリア切り替え
+	if( my.flags[my.FLAG_WATERGATE] ){
+		var i:int;
+		for( i, 0, WG_AREA_NUM ){
+			var idx = i * 2;
+			if( area == WG_AREA[idx] ){
+				area = WG_AREA[idx+1];
+				break;
+			}
+		}
+	}
+
+	// マグマゲートによる切り替え
+	if( my.flags[my.FLAG_MAGMAGATE] ){
+		var i:int;
+		for( i, 0, MG_AREA_NUM ){
+			var idx = i * 2;
+			if( area == MG_AREA[idx] ){
+				area = MG_AREA[idx+1];
+				break;
+			}
+		}
+	}
+
+	// 錨生成器による切り替え
+	if( my.flags[my.FLAG_ANCHOR_GENERATOR] ){
+		var i:int;
+		for( i, 0, AG_AREA_NUM ){
+			var idx = i * 2;
+			if( area == AG_AREA[idx] ){
+				area = AG_AREA[idx+1];
+				break;
+			}
+		}
+	}
+
+	if( my.flags[my.FLAG_SUNGATE] == 7 ){
+		if( area == (7 + 10*16)){
+			area = 15 + 9*16;
+		}
+	}
+
+	var area_y = area / 16;
+	var area_x = area % 16;
+	// 太陽神殿の壁明け
+	if( area == (9+11*16)){
+        if( dir == DIR_DOWN ){
+            my.flags[my.FLAG_REVEAL_TEMPLE_OF_SUN] = 1;
+			sound.crossfade_jingle(sound.BGM_RIDDLE_SOLVED, 60);
+        }
+        if( my.flags[my.FLAG_REVEAL_TEMPLE_OF_SUN] ){
+            area = (15+0*16);
+        }
+	}
+	
+	fs.copy( data_buf, fs.TILE_BASE+area );
+	var len = lzw.unpack( data, data_buf );
+	if( len != 16*15 ){ asm( ".byte 2" ); } // length check
+
+	fs.copy( data_buf, fs.ENEMY_BASE+area );
+	area_slot[0] = data_buf[0];
+	area_slot[1] = data_buf[1];
+	area_type = data_buf[2];
+	area_subtext = data_buf[3];
+	area_water_y = data_buf[4]; // fish用の水の高さ指定
+	area_flags = data_buf[5];
+	enemy_num = data_buf[6];
+	mem.copy( enemy, &data_buf[7], enemy_num*7 );
+
+	// BGパレット、タイルデータの切り替え
+	if( area_type ){
+		var area_type_16: uint16 = area_type;
+		fs.copy( &tile_pal[32], fs.TILE_PAL_BASE+area_type );
+		mem.copy( &tile_type[32], &TILE_TYPE[area_type_16*32], 32 );
+		mem.copy( &bg.pallet[4], &PAL_SET[(area_type-1)*16+4], 12 );
+		mmc3.set_cbank(1, CBANK_BG+(area_type-1)*2);
+	}
+
+	// スプライトパレット、バンクの切り替え
+	var i:int;
+	for(i,0,2){
+		var slot = area_slot[i];
+		var palset = bg_data.PALSET_OF_TYPE[slot];
+		var palset_pos = palset * 4;
+		var pal_pos = 24+i*4;
+		mem.copy( &pallet[pal_pos], &SPRITE_PALETTE[palset_pos], 4 );
+	}
+
+	// 橋スイッチによる切り替え
+	if( area_type == 7 ){
+		for(i, 0, 16*15){
+			if( data[i] >= 56 && data[i] <= 58 ){
+				var t = (data[i] - 56 + 1);
+				if( t != my.flags[my.FLAG_COLORSWITCH] ){
+					data[i] = data[i] + 3;
+				}
+			}
+		}
+	}
+	
+	// 矢印やドアによる空白マスの設定
+	blank_cell = 0;
+	blank_cell_by_door = 0;
+	if( area_type == 2 || area_type == 5 ){ 
+		blank_cell = 15; // ブランクセルを空に
+		blank_cell_by_door = 0;
+	} 
+	if( area_type == 9 ){
+		blank_cell = 63; // ブランクセルを水に
+		blank_cell_by_door = 63;
+	}
+
+	before_scroll(area_flags, old_area_flags);
+	boxelev.on_fetch_area();
+
+	my.watch_in_area = 0;
+}
+
+
+public function _scroll(dir:int):void
+{
+	var old_area = cur_area;
+	var old_area_flags = area_flags;
+	var new_area = cur_area + DIR_VY[dir]*MAP_WIDTH + DIR_VX[dir];
+
+	//before_scroll(area_flags, old_area_flags);
+	
+	switch(dir){
+	case DIR_UP:
+		scroll_up();
+	case DIR_DOWN:
+		scroll_down();
+	case DIR_LEFT:
+		scroll_left();
+	case DIR_RIGHT:
+		scroll_right();
+	}
+	
+	after_scroll(area_flags, old_area_flags);
+}
+
+function before_scroll(new_area_flags:int, old_area_flags:int):void
+{
+	var candle_area = new_area_flags & 1;
+	if( candle_area && !my.items[fs.ITEM_ID_LAMP] ){
+		light_down(); 
+		in_dark = 1;
+	}
+}
+
+function after_scroll(new_area_flags:int, old_area_flags:int):void
+{
+	var candle_area = old_area_flags & 1;
+	if( candle_area && !my.items[fs.ITEM_ID_LAMP] ){
+		light_up();
+		in_dark = 0;
+	}
+}
+
+function light_down():void
+{
+	var buf = ppu.alloc(16);
+	var i:int;
+	for( i, 0, 4 ){
+		mem.copy( buf, pallet, 16 );
+		if( i >= 1 ){
+			pal_down(buf, 4, 1);
+			pal_down(buf+4, 12, i+1);
+		}else{
+			pal_down(buf, 16, i+1);
+		}
+		ppu.put( VRAM_PALETTE, buf, 16, 0 );
+		var j:int;
+		for( j, 0, 4 ){	ppu.wait_vsync_with_flag(2); }
+	}
+}
+
+function light_up():void
+{
+	var buf = ppu.alloc(16);
+	var i:int;
+	for( i, 0, 4 ){
+		mem.copy( buf, pallet, 16 );
+		if( i < 1 ){
+			bg.pal_down(buf, 4, 1);
+			bg.pal_down(buf+4, 12, 3-i);
+		}else{
+			bg.pal_down(buf, 16, 3-i);
+		}
+		ppu.put( VRAM_PALETTE, buf, 16, 0 );
+		var j:int;
+		for( j, 0, 4 ){	ppu.wait_vsync_with_flag(2); }
+	}
+}
+
+function scroll_left():void
+{
+	var x = 15;
+	cur_area -= 1;
+	_fetch_area(cur_area, DIR_LEFT);
+	if( !in_dark ){
+		ppu.put( VRAM_PALETTE+4, &bg.pallet[4], 12, 0 );
+		ppu.wait_vsync_with_flag(2);
+	}
+	mmc3.MIRROR = 1; // horizontal
+	loop(){
+		draw_map_vertical(x);
+
+		var i:int;
+		for(i, 0, 2){
+			my.x += (116+GIFF_TABLE[x])/16;
+			my.draw();
+			ppu.scroll1 = x*16+8-i*8;
+			if( i == 1 ){ ppu.put( 0x23c0 + x/2, &pal[x/2], 8, ppu.ATTRIBUTE ); }
+			ppu.wait_vsync();
+		}
+		
+		if( x == 0 ){ break; }
+		x -= 1;
+	}
+}
+
+function scroll_right():void
+{
+	var x = 0;
+	cur_area += 1;
+	_fetch_area(cur_area, DIR_RIGHT);
+	if( !in_dark ){
+		ppu.put( VRAM_PALETTE+4, &bg.pallet[4], 12, 0 );
+		ppu.wait_vsync_with_flag(2);
+	}
+	mmc3.MIRROR = 1; // horizontal
+	loop(){
+		draw_map_vertical(x);
+
+		var i:int;
+		for(i, 0, 2){
+			my.x -= (116+GIFF_TABLE[x])/16;
+			my.draw();
+			ppu.scroll1 = x*16+i*8+8;
+			if( i == 1 ){ ppu.put( 0x23c0 + x/2, &pal[x/2], 8, ppu.ATTRIBUTE ); }
+			ppu.wait_vsync();
+		}
+		
+		if( x == 15 ){ break; }
+		x += 1;
+	}
+}
+
+function scroll_up():void
+{
+	var bi = boxelev.box_idx; // fetch_areaで変更されるのでそれより前に取得
+	if( !boxelev.box_scrollable ){
+		bi = -1;
+	}
+
+	var y = 14;
+	cur_area -= MAP_WIDTH;
+	_fetch_area(cur_area, DIR_UP);
+	if( !in_dark ){
+		ppu.put( VRAM_PALETTE+4, &bg.pallet[4], 12, 0 );
+		ppu.wait_vsync_with_flag(2);
+	}
+	mmc3.MIRROR = 0; // vertical
+
+
+	var speed = 116; // スクロール速度、箱エレベータがあるときは少し大きくなる
+	if( bi != -1 ){
+		speed = 108;
+	}
+
+	loop(){
+		draw_map_horizontal(y);
+
+		var i:int;
+		for(i, 0, 2){
+			var scroll_y = (speed+GIFF_TABLE[y])/16;
+			my.y += scroll_y;
+			my.draw();
+			if( bi != -1 ){
+				// エレベーターに乗っていたら、エレベーターを描画
+				boxelev.box_y[bi] += scroll_y;
+				draw_box_elevator(boxelev.box_x[bi], boxelev.box_y[bi]);
+			}
+			ppu.scroll2 = y*16+8-i*8;
+			if( ppu.scroll2 == 240 ){ ppu.scroll2 = 0; }
+			ppu.wait_vsync();
+		}
+		
+		if( y == 0 ){ break; }
+		y -= 1;
+	}
+
+	// エレベーターのエリア移動
+	if( bi != -1 ){
+		var y = boxelev.box_y[bi];
+		boxelev.box_y[bi] = boxelev.box_py[bi] = my.on_y = y;
+		boxelev.box_area[bi] -= 16;
+	}
+}
+
+function scroll_down():void
+{
+	var bi = boxelev.box_idx; // fetch_areaで変更されるのでそれより前に取得
+	if( !boxelev.box_scrollable ){
+		bi = -1;
+	}
+
+	var y = 0;
+	cur_area += MAP_WIDTH;
+	_fetch_area(cur_area, DIR_DOWN);
+	if( !in_dark ){
+		ppu.put( VRAM_PALETTE+4, &bg.pallet[4], 12, 0 );
+		ppu.wait_vsync_with_flag(2);
+	}
+	mmc3.MIRROR = 0; // vertical
+
+
+	var speed = 116; // スクロール速度、箱エレベータがあるときは少し大きくなる
+	if( bi != -1 ){
+		speed = 108;
+	}
+
+	loop(){
+		draw_map_horizontal(y);
+
+		var i:int;
+		for(i, 0, 2){
+			var scroll_y = (speed+GIFF_TABLE[y])/16;
+			my.y -= scroll_y;
+			my.draw();
+			if( bi != -1 ){
+				// エレベーターに乗っていたら、エレベーターを描画
+				boxelev.box_y[bi] -= scroll_y;
+				draw_box_elevator(boxelev.box_x[bi], boxelev.box_y[bi]);
+			}
+			ppu.scroll2 = y*16+i*8+8;
+			if( ppu.scroll2 == 240 ){ ppu.scroll2 = 0; }
+			ppu.wait_vsync();
+		}
+		
+		if( y == 14 ){ break; }
+		y += 1;
+	}
+
+	// エレベーターのエリア移動
+	if( bi != -1 ){
+		var y = boxelev.box_y[bi];
+		boxelev.box_y[bi] = boxelev.box_py[bi] = my.on_y = y;
+		boxelev.box_area[bi] += 16;
+	}
+}
+
+function draw_box_elevator(x:int,y:int):void
+{
+	gr_sprite2( x-8, y-8, 68, 0);
+	gr_sprite2( x+8, y-8, 68, 64);
+	gr_sprite2( x-8, y+8, 100, 0);
+	gr_sprite2( x+8, y+8, 100, 64);
+}
+
+function draw_map_vertical(x:int):void
+{
+	var addr:int16 = 0x2000 + x*2;
+	var y:int;
+	for( y, 0, 15 ){
+		var n = data[y*16+x];
+		if( n < 32 && BLANK_CELL[n] ){ n = blank_cell; }
+		var ni = n * 4;
+		var idx = buf_idx+y*2;
+		buf[idx] = ni;
+		buf[idx+1] = ni+1;
+		buf[idx+30] = ni+2;
+		buf[idx+31] = ni+3;
+		set_pal(x,y,tile_pal[n]);
+	}
+	ppu.put( addr, &buf[buf_idx], 30, ppu.VERTICAL);
+	ppu.put( addr+1, &buf[buf_idx+30], 30, ppu.VERTICAL);
+	// gr_add( 0x23c0 + x/2, &bg_pal[x/2], 8, PPU_ATTRIBUTE ); // 間に合わないので外に出す
+	buf_idx += 60;
+}
+
+function draw_map_horizontal(y:int):void
+{
+	var y16:int16 = y;
+	var addr:int16 = 0x2000 + y16*64;
+	var x:int;
+	for( x, 0, 16 ){
+		var n = data[y*16+x];
+		if( n < 32 && BLANK_CELL[n] ){ n = blank_cell; }
+		var ni = n * 4;
+		var idx = buf_idx+x*2;
+		buf[idx] = ni;
+		buf[idx+1] = ni+2;
+		buf[idx+32] = ni+1;
+		buf[idx+33] = ni+3;
+		set_pal(x,y,tile_pal[n]);
+	}
+	ppu.put( addr, &buf[buf_idx], 64, ppu.HORIZONTAL);
+	var pal_addr = (y/2)*8;
+	ppu.put( 0x23c0 + pal_addr, &pal[pal_addr], 8, ppu.HORIZONTAL );
+	buf_idx += 64;
+}
+
+public function _colorswitch_redraw_area():void
+{
+	var y = 14;
+	bg.redraw_colorswitch(bg.cur_area);
+	//bg.fetch_area(bg.cur_area);
+	
+	loop(){
+		draw_map_horizontal(y);
+
+		ppu.scroll2 = math.rand() % 4; // 振動
+		
+		ppu.wait_vsync_with_flag(2);
+		
+		if( y == 0 ){ break; }
+		y -= 1;
+	}
+	
+	ppu.scroll2 = 0;
+}

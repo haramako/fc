@@ -1,0 +1,68 @@
+include( "main.asm" );
+
+use * from common;
+use game;
+use en;
+use my;
+use sound;
+use title;
+use savedata;
+use ending;
+
+include('../res/images/bg_common.chr');
+include('../res/images/bg.chr');
+include('../res/images/sprite.chr');
+include('../tmp/font/text.chr');
+include('../res/images/item.chr');
+include('../tmp/font/misc_text.chr');
+include('../res/images/title.chr');
+include('../res/images/sys_sprite.chr');
+include('../res/images/menu.chr');
+include('../res/images/my.chr');
+include('../res/images/minimap.chr');
+include('../tmp/font/ending_text.chr');
+include('../tmp/font/memory_text.chr');
+include('../tmp/font/item_text.chr');
+
+function main():void
+{
+	ppu.lock();
+	mmc3.init();
+
+	nes.APU_INTERRUPT = 0x40; // disable APU IRQ
+	mmc3.MIRROR = 1; // horizontal
+	mmc3.RAM_PROTECT = 0b10000000;
+	
+	savedata.init();
+	savedata.load();
+
+	ppu.init();
+	bg.init();
+	en.init();
+	my.init();
+
+	// play music
+	sound.init();
+	ppu.on_vsync = sound.main_nsd;
+	ppu.on_wait_vsync = ->void(){ 
+		bg.buf_idx = 0; 
+		sound.process_frame();
+	};
+
+	asm( "cli" );
+
+	// エンディングテスト
+	if( 0 ){
+		mmc3.set_pbank(0, PBANK_ENDING);
+		mmc3.set_pbank(1, PBANK_ENDING);
+		ending.start(1);
+	}
+
+	if( !debug_on(DEBUG_FLAG_TITLE_SKIP) ){
+		var old_pbank = mmc3.set_pbank(1, PBANK_TITLE);
+		title.start();
+		mmc3.set_pbank(1, old_pbank);
+	}
+	
+	game.start();
+}

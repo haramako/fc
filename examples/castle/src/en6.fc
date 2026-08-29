@@ -1,0 +1,748 @@
+use my;
+use * from en;
+use sound;
+use game;
+use event;
+use en;
+
+private:
+
+/*********************************************
+ * ゴースト2
+ * p1: 追いかけ距離
+***************************************/
+
+public function ghost2_new(i : int) : void
+{
+	if (p1[i] == 0)
+	{
+		p1[i] = 30;
+	}
+	p3[i] = 0;
+	p4[i] = 0;
+}
+
+public function ghost2_process(i : int) : void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var stat = p3[i];
+	var wait = p4[i];
+	var angle = p5[i];
+
+	var dir = 0;
+	if ((angle - 64) < 128)
+	{
+		dir = 64;
+	}
+
+    var spr = SPR_SLOT[slot] + SPR_GHOST2;
+    var anim2 = ((anim / 8) % 2) * 4;
+    var show = anim % 2;
+    var pal = PAL_SLOT[slot];
+    var flag = dir | pal;
+
+	switch (stat)
+	{
+	case 0:
+        // 移動
+        if( wait % 8 == 0 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+        }
+        wait += 1;
+        if( anim % 3 > 0 ){
+            x += (math.cos(angle) / 16 + giff) / 16;
+            y += (math.sin(angle) / 16 + giff) / 16;
+        }
+
+		if (check_over2(i,64)){
+            wait = 0;
+            stat = 1;
+		}
+
+	    if (show){
+		    gr_sprite2(x, y, spr + anim2, flag);
+        }
+	case 1:
+        // 待機
+        wait += 1;
+		if( wait <= 60 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+		}
+        if( wait >= 100 ){
+            stat = 2;
+            wait = 0;
+        }
+	    if (show){
+            var dx = math.cos(angle) / 8;
+            var dy = math.sin(angle) / 8;
+		    ppu.sprite(x + dx - 4, y + dy - 4, spr + 4*4, flag);
+		    gr_sprite2(x + anim/2%4, y, spr + anim2, flag);
+        }
+	case 2:
+        // 移動
+        wait += 1;
+
+        x += (math.cos(angle) / 4 + giff) / 16;
+        y += (math.sin(angle) / 4 + giff) / 16;
+
+		if (wait >= 60){
+            wait = 0;
+            stat = 3;
+		}
+
+        if( check_outside(x,y) ){
+            wait = 0;
+            stat = 3;
+        }
+
+    	check_hit(i, 16);
+
+	    if (1 || show){
+		    gr_sprite2(x-8, y-8, spr + 2*4, pal);
+		    gr_sprite2(x+8, y-8, spr + 2*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+		    gr_sprite2(x-8, y+8, spr + 3*4, pal);
+		    gr_sprite2(x+8, y+8, spr + 3*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+        }
+    case 3:
+        // クールタイム
+        wait += 1;
+        if( wait >= 100 ){
+            stat = 0;
+            wait = 0;
+        }
+	    if (show){
+		    gr_sprite2(x, y, spr + anim2, flag);
+        }
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p3[i] = stat;
+	p4[i] = wait;
+	p5[i] = angle;
+}
+
+/*********************************************
+ * ゴースト3
+ * p1: 追いかけ距離
+***************************************/
+
+public function ghost3_new(i : int) : void
+{
+	if (p1[i] == 0)
+	{
+		p1[i] = 30;
+	}
+	p3[i] = 0;
+	p4[i] = 0;
+}
+
+public function ghost3_process(i : int) : void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var stat = p3[i];
+	var wait = p4[i];
+	var angle = p5[i];
+
+	var dir = 0;
+	if ((angle - 64) < 128)
+	{
+		dir = 64;
+	}
+
+    var spr = SPR_SLOT[slot] + SPR_GHOST2;
+    var anim2 = ((anim / 8) % 2) * 4;
+    var show = anim % 2;
+    var pal = PAL_SLOT[slot];
+    var flag = dir | pal;
+
+	switch (stat)
+	{
+	case 0:
+        // 移動
+        if( wait % 8 == 0 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+        }
+        wait += 1;
+        if( anim % 3 > 0 ){
+            x += (math.cos(angle) / 8 + giff) / 16;
+            y += (math.sin(angle) / 8 + giff) / 16;
+        }
+
+		if (check_over2(i,80)){
+			var found = 0;
+			var dx:sint = my.x/2 - x/2;
+			var dy:sint = my.y/2 - y/2;
+			if( math.abs(dy) <= 4){
+				found = 1;
+				if( dx > 0 ){
+					angle = 0;
+				}else{
+					angle = 128;
+				}
+			}
+			if( 0 && math.abs(dx) <= 4){
+				found = 1;
+				if( dy > 0 ){
+					angle = 64;
+				}else{
+					angle = 192;
+				}
+			}
+			if( found ){
+            	wait = 0;
+            	stat = 1;
+			}
+		}
+
+	    if (show){
+		    gr_sprite2(x, y, spr + anim2, flag);
+        }
+	case 1:
+        // 待機
+        wait += 1;
+		if( wait <= 95 ){
+			//angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+		}
+        if( wait >= 60 ){
+            stat = 2;
+            wait = 0;
+        }
+	    if (show){
+            var dx = math.cos(angle) / 8;
+            var dy = math.sin(angle) / 8;
+		    ppu.sprite(x + dx - 4, y + dy - 4, spr + 4*4, flag);
+		    gr_sprite2(x + anim/2%4, y, spr + anim2, flag);
+        }
+	case 2:
+        // 移動
+        wait += 1;
+
+        x += (math.cos(angle) / 4 + giff) / 16;
+        y += (math.sin(angle) / 4 + giff) / 16;
+
+		if (wait >= 60){
+            wait = 0;
+            stat = 3;
+		}
+
+        if( check_outside(x,y) ){
+            wait = 0;
+            stat = 3;
+        }
+
+    	check_hit(i, 16);
+
+	    if (1 || show){
+		    gr_sprite2(x-8, y-8, spr + 2*4, pal);
+		    gr_sprite2(x+8, y-8, spr + 2*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+		    gr_sprite2(x-8, y+8, spr + 3*4, pal);
+		    gr_sprite2(x+8, y+8, spr + 3*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+        }
+    case 3:
+        // クールタイム
+        wait += 1;
+        if( wait >= 50 ){
+            stat = 0;
+            wait = 0;
+        }
+	    if (show){
+		    gr_sprite2(x, y, spr + anim2, flag);
+        }
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p3[i] = stat;
+	p4[i] = wait;
+	p5[i] = angle;
+}
+
+/*********************************************
+ * ゴースト4
+ * p1: 追いかけ距離
+ * p3: 状態
+ * p4: wait
+ * p5: 移動方向
+ * p7: 保存されたX
+ * p8: 保存されたY
+***************************************/
+
+public function ghost4_new(i : int) : void
+{
+	if (p1[i] == 0)
+	{
+		p1[i] = 30;
+	}
+	p3[i] = 0;
+	p4[i] = 120;
+}
+
+public function ghost4_process(i : int) : void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var stat = p3[i];
+	var wait = p4[i];
+	var angle = p5[i];
+
+	var dir = 0;
+	if ((angle - 64) < 128)
+	{
+		dir = 64;
+	}
+
+    var spr = SPR_SLOT[slot] + SPR_GHOST2;
+    var anim2 = ((anim / 8) % 2) * 4;
+    var show = anim % 2;
+    var pal = PAL_SLOT[slot];
+    var flag = dir | pal;
+
+	switch (stat)
+	{
+	case 0:
+		// クールダウン
+		wait -= 1;
+
+	    if (show & wait < 60){
+			ppu.sprite(x, y, spr + 5*4 + anim2/2, flag);
+        }
+
+		if( wait == 0 ){
+			stat = 1;
+			wait = 0;
+		}
+
+	case 1:
+        // 移動
+        if( wait % 8 == 0 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+        }
+        wait += 1;
+
+        if( anim % 3 > 0 ){
+            x += (math.cos(angle) / 16 + giff) / 16;
+            y += (math.sin(angle) / 16 + giff) / 16;
+        }
+
+		if (check_over2(i,60)){
+            wait = 0;
+            stat = 2;
+		}
+
+	    if (show){
+		    gr_sprite2(x, y, spr + anim2, flag);
+        }
+	case 2:
+        // 強襲準備
+		wait += 1;
+
+	    if (show){
+			var dx = wait / 4;
+			gr_sprite2(x-dx, y-dx, spr + 2*4, pal);
+			gr_sprite2(x+dx, y-dx, spr + 2*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+			var a = anim/8%2;
+			gr_sprite2(x-dx, y+dx, spr + 3*4 + a*4, pal);
+			gr_sprite2(x+dx, y+dx, spr + 3*4 + a*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+        }
+
+        if( wait >= 30 ){
+            stat = 3;
+            wait = 0;
+        }
+	case 3:
+        // 強襲
+        wait += 1;
+
+        if( wait % 8 == 0 ){
+			var a2 = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+			var a_diff:sint = a2 -angle;
+			if( a_diff > 0 ){
+				angle += 8;
+			}else{
+				angle -= 8;
+			}
+        }
+		x += (math.cos(angle) / 8 + giff) / 16;
+		y += (math.sin(angle) / 8 + giff) / 16;
+
+		if (wait >= 200 | check_outside(x,y)){
+            stat = 4;
+            wait = 0;
+			p7[i] = x;
+			p8[i] = y;
+		}
+
+		if( wait <= 192 ){
+	    	check_hit(i, 14);
+		}
+
+		var n = anim * 4;
+		var a = anim/8%2;
+		gr_sprite2(x-8, y-7 + math.sin(n)/64, spr + 2*4, pal);
+		gr_sprite2(x+8, y-7 + math.sin(n+64)/64, spr + 2*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+		gr_sprite2(x-8, y+6+math.sin(n+128)/64, spr + 3*4 + a*4, pal);
+		gr_sprite2(x+8, y+6+math.sin(n+192)/64, spr + 3*4 + a*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+    case 4:
+        // はじける
+        wait += 1;
+
+		x += (math.cos(angle) / 8 + giff) / 16;
+		y += (math.sin(angle) / 8 + giff) / 16;
+
+	    if (wait < 32 && show){
+			var dx = 8 + wait/2;
+			if( dx < 12 ) gr_sprite2(x-dx, y-dx, spr + 2*4, pal);
+			if( dx < 24 ) gr_sprite2(x+dx, y-dx, spr + 2*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+			var a = anim/8%2;
+			if( dx < 32 ) gr_sprite2(x-dx, y+dx, spr + 3*4 + a*4, pal);
+			if( dx < 18 ) gr_sprite2(x+dx, y+dx, spr + 3*4 + a*4, pal | ppu.SPRITE_FLAG_FLIP_X);
+        }
+
+        if( wait >= 32 ){
+            stat = 0;
+            wait = 120;
+			x = p7[i];
+			y = p8[i];
+        }
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p3[i] = stat;
+	p4[i] = wait;
+	p5[i] = angle;
+}
+
+/*********************************************
+ * 転がる岩の生成器
+ * p1: 方向
+ * p2: 周期
+ * p3: 初期ウェイト
+ * p4: ウェイト
+ ***************************************/
+
+
+public function rolling_stone_new(i:int):void
+{
+	if( p2[i] == 0 ) p2[i] = 120;
+	if( p3[i] == 0 ) p3[i] = p2[i];
+    p4[i] = p3[i];
+}
+
+public function rolling_stone_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var wait = p4[i];
+
+    wait -= 1;
+    if( wait == 0 ){
+        wait = p2[i];
+        var n = new();
+        if( n != -1 ){
+            type[n] = TYPE_ROLLING_STONE_ROCK;
+            pslot[n] = slot;
+            px[n] = x;
+            py[n] = y;
+            p1[n] = dir;
+            setup(n);
+        }
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p4[i] = wait;
+}
+
+/*********************************************
+ * 転がる岩
+ * p1: 方向
+ * p4: 状態
+ * p5: vy
+ * p6: 最初の壁に当たらない時間
+ */
+public function rolling_stone_rock_new(i:int):void
+{
+	p4[i] = 0;
+	p5[i] = 0;
+	p6[i] = 20;
+}
+
+const ROLLING_STONE_ROCK_ANIM = [0,4,0,4];
+const ROLLING_STONE_ROCK_FLIP = [0,0,ppu.SPRITE_FLAG_FLIP_X | ppu.SPRITE_FLAG_FLIP_Y, ppu.SPRITE_FLAG_FLIP_X | ppu.SPRITE_FLAG_FLIP_Y];
+
+public function rolling_stone_rock_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+	var dir = p1[i];
+	var stat = p4[i];
+	var vy:sint = p5[i];
+	var start_wait = p6[i];
+
+    var spr = SPR_SLOT[slot] + SPR_ROLLING_STONE;
+    var pal = PAL_SLOT[slot];
+
+	var side_cell:int;
+	var side_cell_type:int;
+	var ground_cell_type:int;
+
+    switch(stat){
+    case 0:
+		// 落ちる
+		if( start_wait > 0 ) start_wait -= 1;
+
+		vy += 2;
+
+		x += (DIR_VX[dir]*4 + giff) / 16;
+		y += (vy + giff) / 16;
+
+		side_cell = bg.cell(x + DIR_VX[dir] * 8, y);
+		side_cell_type = bg.tile_type[side_cell];
+		ground_cell_type = bg.cell_type(x, y + 8);
+
+		if( (start_wait == 0) && ((side_cell_type & bg.TYPE_WALL) != 0) ){
+			//var cx = (x + DIR_VX[dir] * 8) / 16;
+			//x = cx * 16 - DIR_VX[dir] * 8;
+			dir = 4 - dir;
+		}elsif( (ground_cell_type & bg.TYPE_WALL) != 0 ){
+			y = (y + 8)/16*16 - 8;
+			vy = -vy / 4;
+			if( vy > -4){
+				stat = 1;
+			}
+		}
+	case 1:
+		// ゴロゴロ
+		x += (DIR_VX[dir]*12 + giff) / 16;
+
+		side_cell = bg.cell(x + DIR_VX[dir] * 8, y);
+		side_cell_type = bg.tile_type[side_cell];
+		ground_cell_type = bg.cell_type(x, y + 8);
+
+		if( side_cell == 48 || side_cell == 51 /* 止まる岩 */){
+			stat = 2;
+		}elsif( (side_cell_type & bg.TYPE_WALL) != 0 ){
+			dir = 4 - dir;
+		}elsif((ground_cell_type & bg.TYPE_WALL) == 0){
+			stat = 0;
+			vy = 0;
+		}
+
+    case 2:
+		// 固まる
+		var cx = x / 16;
+		var cy = y / 16;
+	    bg.put2(cx, cy, 51, 1/*パレット*/);
+		type[i] = 0;
+		return;
+	}
+
+	if ( x < 8 || x >= 248 || y < 8 || y >= 232 ){
+		type[i] = 0;
+	}
+
+	check_hit(i,8);
+
+	var anim = anim/8%4;
+	gr_sprite2(x, y, spr + ROLLING_STONE_ROCK_ANIM[anim], pal | ROLLING_STONE_ROCK_FLIP[anim]);
+
+    px[i] = x;
+    py[i] = y;
+	p1[i] = dir;
+	p4[i] = stat;
+	p5[i] = vy;
+	p6[i] = start_wait;
+}
+
+/*********************************************
+ * 滝
+ * p1: 幅
+ * p2: 高さ
+ * p3: 
+ * p4: 状態
+ * p5: ウェイト
+ ***************************************/
+
+
+public function waterfall_new(i:int):void
+{
+	p4[i] = 0;
+	p5[i] = 0;
+}
+
+public function waterfall_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var width = p1[i];
+	var height = p2[i];
+	var has_bubble = p3[i];
+
+	var stat = p4[i];
+	var wait = p5[i];
+
+	if( has_bubble && wait % 32 == 0 ){
+		var dx = math.rand() % (width * 16);
+		var dy = math.rand() % (height * 16);
+		create_bubble(x + dx, y + dy);
+	}
+
+	var mx:sint = <sint>(my.x/2) - <sint>(x/2-4);
+	var mmy:sint = my.y/2 - (y/2 - 4);
+
+	if( (mx > <sint>0) && (mx< (<sint>(width*8))) && (mmy > <sint>0) && (mmy < <sint>(height*8)) ){
+		if( anim % 16 == 0 && !has_bubble ){
+			create_splash(my.x, my.y);
+		}
+		if( mx > <sint>(width*4) ){
+			if( my.state == my.STATE_STAND ){
+				my.x += anim % 4;
+			}else{
+				my.vx += 4;
+			}
+		}else{
+			if( my.state == my.STATE_STAND ){
+				my.x -= anim % 4;
+			}else{
+				my.vx -= 4;
+			}
+		}
+	}
+
+
+	wait += 1;
+
+	p4[i] = stat;
+	p5[i] = wait;
+}
+
+function create_bubble(x:int, y:int):void
+{
+	var bi = en.new();
+	if( bi != -1 ){
+		en.type[bi] = en.TYPE_WATERFALL_BUBBLE;
+		en.px[bi] = x;
+		en.py[bi] = y;
+		en.p1[bi] = math.rand()%8 - 4;
+		en.p2[bi] = 8;
+	}
+}
+
+function create_splash(x:int, y:int):void
+{
+	var bi = en.new();
+	if( bi != -1 ){
+		en.type[bi] = en.TYPE_SPLASH;
+		en.px[bi] = x;
+		en.py[bi] = y;
+		en.p1[bi] = 8;
+	}
+}
+
+/*********************************************
+ * 滝の泡
+ *********************************************/
+public function waterfall_bubble_new(i : int) : void { }
+
+public function waterfall_bubble_process(i : int) : void
+{
+	var x = px[i];
+	var y = py[i];
+	var vx:sint = p1[i];
+	var vy:sint = p2[i];
+
+	vy -= anim % 2;
+	x = x + (vx + giff) / 16 + math.rand() / 128 * 2 - 1;
+	y = y + (vy + giff) / 16;
+
+	ppu.sprite(x - 4, y - 8, SPR_BUBBLE, 1);
+
+	if (py[i] < 16 || (bg.cell_type(x, y - 8) & bg.TYPE_WATER) == 0)
+	{
+		type[i] = 0;
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = vx;
+	p2[i] = vy;
+}
+
+/*********************************************
+ * 滝の水しぶき
+ *********************************************/
+public function waterfall_splash_new(i : int) : void { }
+
+public function waterfall_splash_process(i : int) : void
+{
+	var x = px[i];
+	var y = py[i];
+
+	if( anim % 4 == 0 ){
+		var ei = en.new();
+		if( ei != -1 ){
+			en.type[ei] = en.TYPE_WATERFALL_SPLASH2;
+			en.pslot[ei] = pslot[i];
+			en.px[ei] = x - 8 + math.rand() % 32;
+			en.py[ei] = y + 4 + math.rand() % 8;
+			en.p1[ei] = math.rand() % 16 - 8;
+			en.p2[ei] = -16 - math.rand() % 8;
+			en.p3[ei] = 16 + math.rand() % 8;
+		}
+	}
+}
+
+/*********************************************
+ * 滝の水しぶき
+ *********************************************/
+public function waterfall_splash2_new(i : int) : void { }
+
+public function waterfall_splash2_process(i : int) : void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var vx:sint = p1[i];
+	var vy:sint = p2[i];
+	var wait = p3[i];
+
+    var spr = SPR_SLOT[slot] + SPR_WATERFALL_SPLASH;
+    var pal = PAL_SLOT[slot];
+
+	vy += 1;
+	x = x + (vx + giff) / 16;
+	y = y + (vy + giff) / 16;
+
+	if( wait < 8 ){
+		spr += 4;
+	}
+
+	var flip = 0;
+	if( i % 2 == 0 ){
+		flip = ppu.SPRITE_FLAG_FLIP_X;
+	}
+
+	gr_sprite2(x, y, spr, pal | flip);
+
+	wait -= 1;
+	if( wait == 0 ){
+		type[i] = 0;
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = vx;
+	p2[i] = vy;
+	p3[i] = wait;
+}

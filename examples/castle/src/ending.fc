@@ -1,0 +1,527 @@
+use * from common;
+use mem;
+use sound;
+use my;
+
+include("ending_irq.asm");
+
+function irq_setup():void;
+
+var irq_scroll:int;
+
+function start(is_trial:int):void
+{
+    sound.stop_bgm();
+
+	ppu.lock();
+	ppu.irq_setup = irq_setup;
+
+	mmc3.set_cbank( 0, CBANK_BG_COMMON );
+	mmc3.set_cbank( 1, CBANK_BG );
+	mmc3.set_cbank( 2, CBANK_SPRITE+0 );
+	mmc3.set_cbank( 3, CBANK_SPRITE+0 );
+	mmc3.set_cbank( 4, CBANK_SPRITE+2 );
+	mmc3.set_cbank( 5, CBANK_SPRITE+3 );
+    ppu.cbank2 = CBANK_MY;
+	
+	ppu.ctrl1_bak = 0b10100010;
+	ppu.ctrl2_bak = 0b00011110;
+	ppu.scroll1 = 0;
+	ppu.scroll2 = 0;
+	mmc3.MIRROR = 1; // horizontal
+
+    ppu.clear_out_sprite();
+	
+	// パレットの初期化
+	mem.copy( bg.pallet, PAL_SET, 16 );
+	mem.copy( &bg.pallet[16], bg.SPRITE_PALETTE, 16 );
+	ppu.put_in_lock( 0x3f00, bg.pallet, 32 );
+
+	ppu.fill_in_lock( 0x2800, 0x400, 0 );
+    
+
+    move_area_locked(31);    
+
+    mmc3.set_cbank( 0, CBANK_ENDING_TEXT+0);
+    mmc3.set_cbank( 1, CBANK_ENDING_TEXT+2);
+	ppu.ctrl1_bak = 0b10100010;
+	ppu.ctrl2_bak = 0b00011110;
+
+    init_my();
+    init_light();
+    init_text();
+    init_endcall();
+    init_sequence();
+    scroll_enable = 1;
+
+	ppu.unlock();
+
+    if( is_trial ){
+        sound.play_bgm(sound.BGM_TITLE);
+        sequence_idx = 30; // トライアル開始点
+    }else{
+        sound.play_bgm(sound.BGM_ENDING);
+    }
+
+    var time: uint16 = 0;
+    var scroll_x:int = 0;
+
+    while(1){
+        anim += 1;
+		giff = GIFF_TABLE[anim%16];
+        time += 1;
+
+        process_light();
+        process_my();
+        process_sequence();
+        process_text();
+        process_endcall();
+
+        if( scroll_enable ){
+            if( anim%4 == 0 ){
+                scroll_x += 1;
+            }
+            irq_scroll = scroll_x;
+        }
+        ppu.wait_vsync();
+    }
+
+}
+
+var scroll_enable:int;
+
+//===============================
+// シーケンス制御
+//===============================
+
+const SEQ_TEXT = 1;
+const SEQ_LIGHTUP = 2;
+const SEQ_MY = 3;
+const SEQ_ENDCALL = 4;
+
+const SEQUENCE = [
+
+    // フェードイン
+    5, SEQ_LIGHTUP, 0,
+
+    // スタッフロール前語り
+    8, SEQ_TEXT, 0,
+    10, SEQ_TEXT, 1,
+    10, SEQ_TEXT, 2,
+
+    // スタッフロール
+    10, SEQ_TEXT, 3,
+    10, SEQ_TEXT, 4,
+    10, SEQ_TEXT, 5,
+    10, SEQ_TEXT, 6,
+    10, SEQ_TEXT, 7,
+
+    5, SEQ_MY, 1, // マーリンが現れる
+    6, SEQ_TEXT, 10,
+    5, SEQ_TEXT, 11,
+    1, SEQ_MY, 4, // ゆびぱっちん
+    10, SEQ_TEXT, 12, // 大赤字
+
+    // スタッフロール後語り
+    10, SEQ_TEXT, 13,
+    10, SEQ_TEXT, 14,
+    10, SEQ_TEXT, 15,
+
+    8, SEQ_MY, 10, // マーリンが去る
+    2, SEQ_TEXT, 9,
+    10, SEQ_TEXT, 16,
+
+    20, SEQ_ENDCALL, 0, // エンドコール（フェードアウト, END表示）
+    255, 0, 255, // 終了マーク
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+
+    // [30]トライアル開始点
+    5, SEQ_LIGHTUP, 0,
+    10, SEQ_TEXT, 20,
+
+    // スタッフロール
+    10, SEQ_TEXT, 3,
+    10, SEQ_TEXT, 4,
+    10, SEQ_TEXT, 5,
+    10, SEQ_TEXT, 6,
+    10, SEQ_TEXT, 21,
+
+    20, SEQ_ENDCALL, 0, // エンドコール（フェードアウト, END表示）
+
+    255, 0, 255 // 終了マーク
+];
+
+var sequence_count:int;
+var sequence_sec:uint;
+var sequence_idx:int;
+
+function init_sequence():void
+{
+    sequence_count = 0;
+    sequence_sec = 0;
+    sequence_idx = 0;
+}
+
+function process_sequence():void 
+{
+    sequence_count+=1;
+    if( sequence_count < 60 ){
+        return;
+    }
+
+    sequence_sec+=1;
+    sequence_count = 0;
+
+    var idx = sequence_idx*3;
+    var seq_sec = SEQUENCE[idx];
+    if( sequence_sec == seq_sec && endcall_stat == 0){
+        var seq_id = SEQUENCE[idx+1];
+        var seq_param = SEQUENCE[idx+2];
+        switch( seq_id )
+        {
+            case SEQ_LIGHTUP:
+                light_stat = 1;
+            case SEQ_TEXT:
+                load_text(seq_param);
+            case SEQ_MY:
+                my_stat = seq_param;
+            case SEQ_ENDCALL:
+                endcall_stat = 1;
+        }
+        sequence_idx += 1;
+        sequence_sec = 0;
+    }
+
+}
+
+//===============================
+// プレイヤーキャラ
+//===============================
+
+var my_stat:int;
+var my_x:int;
+var my_y:int;
+var my_anim:int;
+var my_x2:int;
+var my_y2:int;
+var my_anim2:int;
+var my_flip2:int;
+var my_wait:uint;
+
+function init_my():void
+{
+    my_stat = 0;
+    my_x = 32;
+    my_y = 200;
+    my_anim = -1;
+    my_x2 = 255;
+    my_y2 = 200;
+    my_anim2 = -1;
+    my_flip2 = 0;
+    my_wait = 0;
+}
+
+function process_my():void
+{
+    const ANIM = [1,2,3,3,2,1,0,0];
+
+    switch( my_stat ){
+    case 0:
+        my_anim = ANIM[anim/8%8];
+    case 1:
+        // 前方から本体が現れる
+        my_anim = ANIM[anim/8%8];
+        my_wait += 1;
+        if( anim%4 == 0 ){
+            my_x2 -= 1;
+        }
+        my_flip2 = 1;
+        my_anim2 = 0;
+        if( my_wait > 200 ){
+            my_stat = 2;
+            my_wait = 0;
+            scroll_enable = 0;
+        }
+    case 2:
+        // 少し進んで止まる
+        my_anim = ANIM[anim/8%8];
+        my_x += giff/8;
+        my_wait += 1;
+        if( my_wait > 32 ){
+            my_stat = 3;
+            my_wait = 0;
+            scroll_enable = 0;
+        }
+    case 3:
+        // 停止中（セリフ待ち）
+        my_anim = 0;
+    case 4:
+        // 指パッチン、明転
+        my_anim = -1;
+        my_wait += 1;
+        var light = 4-my_wait/4;
+        light_unup(light);
+        if( light <= 0 ){
+            my_stat = 5;
+            my_wait = 0;
+        }
+    case 5:
+        // 待ち状態
+        my_anim2 = 0;
+
+    case 10:
+        // マーリン去る
+        my_anim2 = ANIM[anim/8%8];
+        my_flip2 = 0;
+        my_x2 += giff/8;
+        if( my_x2 >= 254 ){
+            my_stat = 11;
+            my_wait = 0;
+        }
+    case 11:
+        // マーリン消える、待ち状態
+        my_anim = -1;
+        my_anim2 = -1;
+    }
+
+    if( my_anim != -1 ){
+        gr_sprite2( my_x, my_y, my_anim*4, 0);
+    }
+
+    if( my_anim2 != -1 ){
+        gr_sprite2( my_x2, my_y2, my_anim2*4, my_flip2 * ppu.SPRITE_FLAG_FLIP_X);
+    }
+}
+
+//===============================
+// テキスト
+//===============================
+var text_stat:int;
+var text_buf:int*;
+var text_idx:int;
+
+function init_text():void
+{
+    text_stat = 0;
+    text_buf = &bg.data_buf[0];
+}
+
+function load_text(n:int):void
+{
+    text_stat = 1;
+    text_idx = n;
+}
+
+function process_text():void
+{
+    var addr:uint16;
+    switch( text_stat){
+    case 0:
+        return;
+    case 1:
+        var buf = ppu.alloc(128);
+        mem.zero( text_buf, 256 );
+        var size = fs.copy( buf, fs.ENDING_TEXT+text_idx );
+        buf[size] = 0;
+        text_print_width( text_buf, buf, 32 );
+        text_stat = 2;
+    case 2:
+        addr = ppu.pos(4,2)+0x800;
+        ppu.put( addr, text_buf, 64, 0 );
+        text_stat = 3;
+    case 3:
+        addr = ppu.pos(4,4)+0x800;
+        ppu.put( addr, text_buf+64, 64, 0 );
+        text_stat = 4;
+    case 4:
+        addr = ppu.pos(4,6)+0x800;
+        ppu.put( addr, text_buf+128, 64, 0 );
+        text_stat = 5;
+    case 5:
+        addr = ppu.pos(4,8)+0x800;
+        ppu.put( addr, text_buf+192, 64, 0 );
+        text_stat = 0;
+    }
+}
+
+//===============================
+// ライトアップ処理
+//===============================
+
+var light_stat:int;
+var light_pow:int;
+var light_wait:int;
+
+function init_light():void
+{
+    light_stat = 0;
+    light_pow = 4;
+    light_wait = 0;
+}
+
+function process_light():void 
+{
+    if( !light_stat ) return;
+
+    if( light_pow > 0 ){
+        light_wait += 1;
+        if( light_wait > 30 ){
+            light_wait = 0;
+            light_pow -= 1;
+            light_unup(light_pow);
+        }
+    }
+}
+
+function light_unup(i:int):void
+{
+	var buf = ppu.alloc(32);
+    mem.copy( buf, bg.pallet, 32 );
+    bg.pal_up(buf, 32, i);
+    ppu.put( VRAM_PALETTE, buf, 32, 0 );
+}
+
+//===============================
+// エンドコール処理
+//===============================
+
+var endcall_stat:int;
+var endcall_pow:int;
+var endcall_wait:int;
+
+function init_endcall():void
+{
+    endcall_stat = 0;
+    endcall_pow = 0;
+    endcall_wait = 0;
+}
+
+function process_endcall():void 
+{
+    switch(endcall_stat){
+    case 1:
+        // フェードアウト
+        endcall_wait += 1;
+        if( endcall_wait > 60 ){
+            endcall_wait = 0;
+            endcall_pow += 1;
+            light_down(endcall_pow);
+
+            if( endcall_pow >= 4 ){
+                endcall_stat = 2;
+                endcall_wait = 0;
+            }
+        }
+    case 2:
+        // 再描画
+        draw_endcall();
+        my_stat = 11; // 主人公を消す
+        endcall_stat = 3;
+    case 3:
+        // フェードイン
+        endcall_wait += 1;
+        if( endcall_wait > 60 ){
+            endcall_wait = 0;
+            endcall_pow -= 1;
+            light_down(endcall_pow);
+
+            if( endcall_pow <= 0 ){
+                endcall_stat = 4;
+                endcall_wait = 0;
+            }
+        }
+    case 4:
+        // 待ち
+        endcall_wait = 0;
+    }
+
+}
+
+function light_down(i:int):void
+{
+	var buf = ppu.alloc(32);
+    mem.copy( buf, bg.pallet, 32 );
+    bg.pal_down(buf, 32, i);
+    ppu.put( VRAM_PALETTE, buf, 32, 0 );
+}
+
+
+function draw_endcall():void
+{
+	ppu.irq_setup = ppu.null_func;
+    ppu.wait_vsync();
+    
+	ppu.lock();
+
+	ppu.ctrl1_bak = 0b10100010;
+	ppu.ctrl2_bak = 0b00011110;
+	ppu.scroll1 = 0;
+	ppu.scroll2 = 0;
+	mmc3.MIRROR = 1; // horizontal
+
+    mmc3.set_cbank( 0, CBANK_ENDING_TEXT+0);
+    mmc3.set_cbank( 1, CBANK_ENDING_TEXT+2);
+	ppu.ctrl1_bak = 0b10100010;
+	ppu.ctrl2_bak = 0b00011110;
+
+	ppu.fill_in_lock( 0x2800, 0x400, 0 );
+
+    var buf = ppu.alloc(128);
+    mem.zero( text_buf, 256 );
+    var size = fs.copy( buf, fs.ENDING_TEXT+17 );
+    buf[size] = 0;
+    text_print_width( text_buf, buf, 32 );
+
+    ppu.put_in_lock(ppu.pos(23,24)+0x800, text_buf, 64);
+    
+	ppu.unlock();
+}
+
+//===============================
+// その他
+//===============================
+
+function move_area_locked(area:int):void
+{
+	bg.fetch_area(area, DIR_NONE);
+
+	bg.update_palette(1);
+	bg.draw_screen();
+
+	var buf = ppu.alloc(32);
+	mem.copy( buf, bg.pallet, 32 );
+	bg.pal_up(buf, 32, 4);
+	ppu.put_in_lock( VRAM_PALETTE, buf, 32 );
+}
+
+function text_print_width(p:int*, str:int*, width:int):int
+{
+	var i = 0;
+	var pi = 0;
+	while(1){
+		var c = str[i];
+		if( c == 0 ){ break; }
+		if( c == 3 || c == 4){
+			p[pi] = c;
+		}elsif( c == 2){
+			p += width*2;
+			pi = 0;
+		}else{
+			p[pi+32] = c;
+			pi += 1;
+			if( pi >= width){
+				p += width*2;
+				pi = 0;
+			}
+		}
+		i += 1;
+	}
+	return 0;
+}

@@ -1,0 +1,75 @@
+use * from graphics_tbl;
+
+// 常駐スプライト
+const SPR_BOXELEV_SWITCH = 64 + 2*4;
+const SPR_WATCH_KEEPER = 64 + 13*4;
+const SPR_MEMORY_FLASH = 64 + 3*4;
+
+// タッチイベント
+const SPR_EVENT_CHEST_STAND = 0*4;
+const SPR_EVENT_CHEST_OPEN = 8*4;
+const SPR_EVENT_CHEST_COIN_OPEN = 11*4;
+
+// 
+const SPR_BUBBLE = 20*4+2;
+const SPR_SPLASH = 21*4;
+const SPR_ELEVATOR = 64;
+const SPR_CHEST = 64 + 8*4;
+const SPR_BLOCK = 64 + 12*4;
+const SPR_CHEST_COIN = 64 + 10*4 + 2;
+const SPR_PORTAL = 40;
+const SPR_SAVE = 18 * 4;
+const SPR_DROP = 26 * 4;
+const SPR_SWITCH = 30*4;
+
+const SPR_WOW = 64 + 6*4;
+const SPR_GHOST = 6*4;
+const SPR_FROG = 8*4;
+const SPR_LAMP = 12*4;
+const SPR_CHECKPOINT = 4*4;
+
+const SPR_BIRD = 12*4;
+const SPR_FISH = 0*4;
+const SPR_COLORSWITCH = 0*4;
+const SPR_JUMPMAN = 8*4;
+
+const SPR_BAMBOO = 0*4;
+const SPR_BAMBOO_EFFECT = 3*4;
+const SPR_JELLYFISH = 0*4;
+const SPR_CANNON = 10*4;
+
+const SPR_PROMINENCE = 8*4;
+const SPR_SKELTON = 0*4;
+const SPR_SKELTON_BONE = 4*4;
+const SPR_SUNGATE = 12*4;
+const SPR_ANCHOR_CHAIN = 15*4;
+const SPR_MUMMY = 0*4;
+const SPR_STATUE = 5*4;
+const SPR_STATUE_FIRE = 6*4;
+const SPR_MARCHANT = 4*4;
+const SPR_BOUNDER = 12*4;
+
+const SPR_COOKIEBAR = 8*4;
+const SPR_ZIGZAG = 10*4;
+const SPR_LIVIATHAN_EYE = 0*4;
+const SPR_LIVIATHAN_ARM = 4*4;
+const SPR_WATERGATE = 12*4;
+const SPR_KNIGHT = 8*4;
+const SPR_STEAM = 0*4;
+const SPR_SONIC = 8*4;
+const SPR_SONIC_BULLET = SPR_SONIC + 3*4;
+const SPR_GHOST2 = 0*4;
+const SPR_ANCHOR_SWITCH = 7*4;
+const SPR_ROLLING_STONE = 8*4;
+
+// slot 12
+const SPR_WATERFALL_SPLASH = 12*4;
+const SPR_SNAKE = 0*4;
+const SPR_WATER_JET = 0*4;
+
+const SPR_BIRD_NEST = 8*4;
+
+// slot 13
+const SPR_SOUL_GATE = 0*4;
+const SPR_SOUL_GATE_SYMBOL = 0*4;
+const SPR_SOUL_GATE_PORTAL = 8*4;

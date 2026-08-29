@@ -1,0 +1,24 @@
+options( bank:-1 );
+
+use * from common;
+use mem;
+use * from fs_config;
+
+const BASE = 0xa000;
+const BANK_SIZE = 0x2000;
+
+function copy( to:int*, idx:int16 ):int
+{
+	var old_bank = mmc3.set_pbank(1,PBANK_FS);
+	var offset = FILE_ADDR[idx];
+	var bank:int = offset / BANK_SIZE;
+	var addr = <int*>(BASE+(offset & (BANK_SIZE-1)));
+	var size = FILE_SIZE[idx];
+	
+	mmc3.set_pbank(1,(PBANK_FS+1)+bank);
+	mem.copy( to, addr, size );
+	
+	mmc3.set_pbank(1,old_bank);
+	return size;
+}
+

@@ -1,0 +1,72 @@
+use * from common;
+use mem;
+use my;
+
+const IDX_VERSION = 0;
+const IDX_DEBUG_MODE = 1;
+const IDX_DEBUG_FLAG = 2;
+const IDX_LAST_CHECKPOINT = 3;
+const IDX_COIN_NUM = 4;
+var exists:int;
+var data:int[512] options(segment:"BSS_SAVEDATA");
+
+public function init():void
+{
+	if( data[0] != data[IDX_VERSION] ) clear();
+}
+
+public function clear():void
+{
+	mem.zero(data, 512);
+}
+
+public function save():void
+{
+	data[IDX_VERSION] = SAVE_DATA_VERSION;
+	data[IDX_DEBUG_MODE] = debug_mode;
+	data[IDX_DEBUG_FLAG] = debug_flag;
+	data[IDX_LAST_CHECKPOINT] = my.last_checkpoint;
+	mem.copy( &data[16], my.items, my.ITEM_MAX);
+	mem.copy( &data[80], my.flags, my.FLAG_MAX);
+	mem.copy( &data[112], my.map_flag, my.MAP_FLAG_MAX);
+	mem.copy( &data[184], my.subtext_flags, my.SUBTEXT_FLAG_MAX/8);
+	mem.copy( &data[186], my.memory_flags, my.MEMORY_FLAG_MAX/8);
+	mem.copy( &data[202], my.memory_read_flags, my.MEMORY_FLAG_MAX/8);
+	mem.copy( &data[218], my.checkpoint_flags, my.CHECKPOINT_FLAG_MAX);
+	save_coins();
+}
+
+public function save_coins():void
+{
+	data[IDX_COIN_NUM] = my.coin_num;
+	data[16+ITEM_ID_COIN] = my.items[ITEM_ID_COIN];
+	mem.copy( &data[176], my.map_coin, my.MAP_COIN_MAX/8);
+}
+
+public function load():void
+{
+	exists = data[IDX_VERSION];
+	debug_mode = data[IDX_DEBUG_MODE];
+	debug_flag = data[IDX_DEBUG_FLAG];
+	my.last_checkpoint = data[IDX_LAST_CHECKPOINT];
+	my.coin_num = data[IDX_COIN_NUM];
+	mem.copy( my.items, &data[16], my.ITEM_MAX);
+	mem.copy( my.flags, &data[80], my.FLAG_MAX);
+	mem.copy( my.map_flag, &data[112], my.MAP_FLAG_MAX);
+	mem.copy( my.map_coin, &data[176], my.MAP_COIN_MAX/8);
+	mem.copy( my.subtext_flags, &data[184], my.SUBTEXT_FLAG_MAX/8);
+	mem.copy( my.memory_flags, &data[186], my.MEMORY_FLAG_MAX/8);
+	mem.copy( my.memory_read_flags, &data[202], my.MEMORY_FLAG_MAX/8);
+	mem.copy( my.checkpoint_flags, &data[218], my.CHECKPOINT_FLAG_MAX);
+}
+
+public function clear_debug():void
+{
+	mem.zero(my.flags, my.FLAG_MAX);
+	mem.zero(my.map_flag, my.MAP_FLAG_MAX);
+	mem.zero(my.map_coin, my.MAP_COIN_MAX/8);
+	mem.zero(my.subtext_flags, my.SUBTEXT_FLAG_MAX/8);
+	mem.zero(my.memory_flags, my.MEMORY_FLAG_MAX/8);
+	mem.zero(my.memory_read_flags, my.MEMORY_FLAG_MAX/8);
+	mem.zero(my.checkpoint_flags, my.CHECKPOINT_FLAG_MAX);
+}

@@ -1,0 +1,77 @@
+options( mapper: "MMC3" );
+options( bank: -1 );
+
+//
+//
+// See: http://wiki.nesdev.com/w/index.php/Nintendo_MMC3
+
+var BANK_SELECT:int options( address: 0x8000 );
+var BANK_DATA  :int options( address: 0x8001 );
+var MIRROR     :int options( address: 0xA000 );
+var RAM_PROTECT:int options( address: 0xA001 );
+var IRQ_LATCH  :int options( address: 0xC000 );
+var IRQ_RELOAD :int options( address: 0xC001 );
+var IRQ_DISABLE:int options( address: 0xE000 );
+var IRQ_ENABLE :int options( address: 0xE001 );
+var cbank_bak:int[6];
+var pbank_bak:int[2];
+
+
+/**
+ * 初期化する.
+ */
+function init():void
+{
+	set_cbank( 0, 0 );
+	set_cbank( 1, 2 );
+	set_cbank( 2, 0 );
+	set_cbank( 3, 1 );
+	set_cbank( 4, 2 );
+	set_cbank( 5, 3 );
+	set_pbank( 0, 0 );
+	set_pbank( 1, 1 );
+	MIRROR = 0;
+	IRQ_DISABLE = 0;
+}
+
+/**
+ * VROMのバンク切り替えを行う.
+ *
+ * pos:
+ *   0: 0x0000-0x07FF ( 2KB )
+ *   1: 0x0800-0x0FFF ( 2KB )
+ *   2: 0x1000-0x13FF ( 1KB )
+ *   3: 0x1400-0x17FF ( 1KB )
+ *   4: 0x1800-0x1BFF ( 1KB )
+ *   5: 0x1C00-0x1FFF ( 1KB )
+ * bank: 1KB bank
+ */
+function set_cbank( pos:int, bank:int ):int
+{
+	var old = cbank_bak[pos];
+	asm("sei");
+	BANK_SELECT = pos;
+	BANK_DATA = bank;
+	cbank_bak[pos] = bank;
+	asm("cli");
+	return old;
+}
+
+/**
+ * ROMのバンク切り替えを行う.
+ *
+ * pos: 
+ *   0: 0x8000-0x9FFF ( 8KB )
+ *   1: 0xA000-0xBFFF ( 8KB )
+ * bank: 8KB bank
+ */
+function set_pbank( pos:int, bank:int ):int
+{
+	var old = pbank_bak[pos];
+	asm("sei");
+	BANK_SELECT = pos+6;
+	BANK_DATA = bank;
+	pbank_bak[pos] = bank;
+	asm("cli");
+	return old;
+}

@@ -1,0 +1,387 @@
+options( bank:0 );
+
+use * from common;
+use menu;
+use en;
+use my;
+use debug_menu;
+use event;
+use mem;
+use savedata;
+use boxelev;
+use sound;
+use subtext;
+
+private:
+use en3;
+// const PALLET:int[] = incbin("../res/images/character.chr.dat");
+
+include("game_irq.asm");
+
+function irq_setup():void;
+
+function init_area_enemy():void
+{
+	var old_pbank = mmc3.set_pbank(1, PBANK_EN);
+	anim = 0;
+	en.clear();
+	
+	var n = 0;
+	for( n, 0, bg.enemy_num ){
+		var idx = n*7;
+		var type = bg.enemy[idx];
+		var i = en.new();
+		if( type & 128 ){
+			en.type[i] = en.TYPE_PORTAL;
+			en.p4[i] = type & 127;
+		}else{
+			en.type[i] = type;
+		}
+		en.px[i] = bg.enemy[idx+1] * 16 + 8;
+		en.py[i] = bg.enemy[idx+2] * 16 + 8;
+		en.p1[i] = bg.enemy[idx+3];
+		en.p2[i] = bg.enemy[idx+4];
+		en.p3[i] = bg.enemy[idx+5];
+		en.pslot[i] = bg.enemy[idx+6];
+		en.setup(i);
+	}
+	mmc3.set_pbank(1, old_pbank);
+}
+
+function start(): void
+{
+	ppu.lock();
+
+	mmc3.set_cbank( 0, CBANK_BG_COMMON );
+	mmc3.set_cbank( 1, CBANK_BG );
+	mmc3.set_cbank( 2, CBANK_SPRITE+0 );
+	mmc3.set_cbank( 3, CBANK_SPRITE+0 );
+	mmc3.set_cbank( 4, CBANK_SPRITE+2 );
+	mmc3.set_cbank( 5, CBANK_SPRITE+3 );
+	
+	ppu.ctrl1_bak = 0b10100000;
+	ppu.ctrl2_bak = 0b00011110;
+	ppu.scroll1 = 0;
+	ppu.scroll2 = 0;
+	
+	// パレットの初期化
+	mem.copy( bg.pallet, PAL_SET, 16 );
+	mem.copy( &bg.pallet[16], bg.SPRITE_PALETTE, 16 );
+	ppu.put_in_lock( 0x3f00, bg.pallet, 32 );
+	
+	move_checkpoint_with_flag(my.last_checkpoint, 1);
+	my.set_map( bg.cur_area%16, bg.cur_area/16 );
+
+	ppu.fill_in_lock( 0x3f00, 32, 13);
+
+	ppu.unlock();
+
+	light_undown();
+	
+	anim = 0;
+
+	var mv = 0;
+	while( 1 ){
+
+		anim += 1;
+		giff = GIFF_TABLE[anim%16];
+
+		pad.update();
+		boxelev.process();
+		en.process();
+		var old_pbank = mmc3.set_pbank(1, PBANK_MY);
+		my.process();
+		my.draw();
+		mmc3.set_pbank(1, old_pbank);
+
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+		// nes.PPU_CTRL2 = 0b00011111; // コメントアウトで処理時間をビジュアライズする
+		ppu.wait_vsync();
+
+		// 死亡
+		if( my.state == my.STATE_DIE ){
+			if( !bg.in_dark ){
+				var i:int;
+				for( i, 0, 4 ){
+					var buf = ppu.alloc(32);
+					mem.copy( buf, bg.pallet, 32 );
+					bg.pal_down(buf, 32, i);
+					ppu.put( VRAM_PALETTE, buf, 32, 0 );
+					var j:int;
+					for( j, 0, 10 ){ ppu.wait_vsync_with_flag(2); }
+				}
+			}
+			bg.in_dark = 0;
+
+			if( debug_on(DEBUG_FLAG_AUTO_SAVE) ){
+				move_to_last();
+			}elsif( my.watch_in_area && my.items[ITEM_ID_WATCH] && !my.watch_used)
+			{
+				my.watch_used = 1;
+				my.items[ITEM_ID_BROKEN_WATCH] = 1;
+				move_to_last();
+			}else{
+				savedata.load();
+				ppu.lock();
+				move_checkpoint_with_flag(my.last_checkpoint, 1);
+				ppu.fill_in_lock( VRAM_PALETTE, 32, 13 );
+				ppu.unlock();
+				light_undown();
+			}
+		}
+
+		// スクロール
+		var scroll_dir = -1;
+		if( my.x < 8 ){
+			scroll_dir = DIR_LEFT;
+		}elsif( my.x >= 248 ){
+			scroll_dir = DIR_RIGHT;
+		}elsif( my.y >= 232 || (my.state == my.STATE_ON_ELEVATOR && my.y > 228)){
+			scroll_dir = DIR_DOWN;
+		}elsif( my.y < 8 ){
+			if( my.state == my.STATE_LADDER || my.state == my.STATE_FREE_MOVE || my.prev_in_water || boxelev.box_scrollable){
+				scroll_dir = DIR_UP;
+			}else{
+				my.y = 8;
+			}
+		}
+		if( scroll_dir != -1 ){
+			asm("sei");
+			ppu.irq_setup = ppu.null_func;
+			subtext.subtext_stat = 0;
+			asm("cli");
+
+			bg.scroll( scroll_dir );
+			set_last();
+			init_area_enemy();
+			update_area_bgm();
+			bg.update_palette(0);
+			my.set_map( bg.cur_area%16, bg.cur_area/16 );
+			subtext.subtext_shown = 0;
+
+			if( my.items[ITEM_ID_BELL] && near_by_checkpoint(bg.cur_area) ){
+				sound.play_se(sound.SE_CHECKPOINT_BELL, 10);
+			}
+
+			if( bg.cur_area == 7*16+15 /*　歌姫 */){
+				sound.crossfade_jingle(sound.BGM_SONG, 400);
+			}
+		}
+
+		if( bg.cur_area == 0+15*16){
+			if( anim % 2 == 0 ){
+				var buf = ppu.alloc(4);
+				mem.set(buf,0x0F, 4);
+				ppu.put( 0x3f00+4, buf, 4, 0 );
+			}else{
+				ppu.put( 0x3f00+4, &bg.pallet[4], 4, 0 );
+			}
+		}
+
+		old_pbank = mmc3.set_pbank(1, PBANK_SUBTEXT);
+		subtext.process_subtext();
+		mmc3.set_pbank(1, old_pbank);
+
+		// イベント
+		if( game_event ){
+			old_pbank = mmc3.set_pbank(1, PBANK_EVENT);
+			event.run_event();
+			mmc3.set_pbank(1, old_pbank);
+		}
+		
+		// メニュー
+		if( (pad.pushed & pad.START) && debug_mode ){
+			var old_bank = mmc3.set_pbank( 1, PBANK_DEBUG_MENU );
+			debug_menu.start();
+			mmc3.set_pbank( 1, old_bank );
+		}elsif( (pad.pushed & pad.SELECT) && (my.state != my.STATE_DYING)){
+			var old_bank = mmc3.set_pbank(1, PBANK_MENU);
+			menu.start();
+			mmc3.set_pbank( 1, old_bank );
+		}
+	}
+  
+}
+
+function light_down():void
+{
+	var buf = ppu.alloc(32);
+	var i:int;
+	for( i, 0, 4 ){
+		mem.copy( buf, bg.pallet, 32 );
+		bg.pal_down(buf, 32, i+1);
+		ppu.put( VRAM_PALETTE, buf, 32, 0 );
+		var j:int;
+		for( j, 0, 10 ){ ppu.wait_vsync_with_flag(2); }
+	}
+}
+
+function light_undown():void
+{
+	var buf = ppu.alloc(32);
+	var i:int;
+	for( i, 0, 4 ){
+		mem.copy( buf, bg.pallet, 32 );
+		bg.pal_down(buf, 32, 3-i);
+		ppu.put( VRAM_PALETTE, buf, 32, 0 );
+		var j:int;
+		for( j, 0, 10 ){ ppu.wait_vsync_with_flag(2); }
+	}
+}
+
+const BGM_BY_AREA:int[] = [
+	0,
+	sound.BGM_GROUND,
+	sound.BGM_GROUND,
+	sound.BGM_GROUND,
+	sound.BGM_GROUND,
+	sound.BGM_GROUND,
+	sound.BGM_UNDERGROUND,
+	sound.BGM_TEMPLE_OF_SUN,
+	sound.BGM_UNDERGROUND,
+	sound.BGM_UNDERGROUND,
+	sound.BGM_UNDERGROUND,
+	sound.BGM_UNDERGROUND,
+	sound.BGM_UNDERGROUND
+];
+
+// BGMを更新する	
+function update_area_bgm():void 
+{
+	var bgm_idx = BGM_BY_AREA[bg.area_type];
+
+	if( sound.cur_bgm_idx == 0 && bgm_idx == 0 ){
+		bgm_idx = sound.BGM_GROUND;
+	}
+
+	if( bgm_idx != 0 && sound.cur_bgm_idx != bgm_idx ){
+		sound.crossfade_bgm(bgm_idx, 4);
+	}
+}
+
+
+// 触ったことのないチェックポイントが、4方向の画面にあるかどうか
+function near_by_checkpoint(area:int):int
+{
+	var i:int;
+	for( i, 0, MAP_CHECKPOINT_NUM ){
+		if( my.checkpoint_flags[i] == 0 && i != 0){
+			var cp = MAP_CHECKPOINT[i];
+			var cp_area = MAP_CHECKPOINT_DATA[cp];
+			var cp_x = cp_area%16;
+			var cp_y = cp_area/16;
+			var area_x = area%16;
+			var area_y = area/16;
+			if( area_y == cp_y && math.abs(cp_x-area_x) <= 1 ){
+				return 1;
+			}
+			if( area_x == cp_x && math.abs(cp_y-area_y) <= 1 ){
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+var last_area:int;
+var last_x:int;
+var last_y:int;
+var last_switch:int;
+var last_has_anchor:int;
+
+function set_last():void
+{
+	last_area = bg.cur_area;
+	last_x = my.x;
+	last_y = my.y;
+	last_switch = my.flags[my.FLAG_COLORSWITCH];
+	last_has_anchor = my.has_anchor;
+}
+
+function move_to_last():void
+{
+	my.flags[my.FLAG_COLORSWITCH] = last_switch; // 橋スイッチを戻す
+	my.has_anchor = last_has_anchor | debug_on(DEBUG_FLAG_AUTO_ANCHOR); // 錨を戻す
+	move_area(last_area);
+	my.state = my.STATE_STAND;
+	my.x = last_x;
+	my.y = last_y;
+	my.vx = 0;
+	my.vy = 0;
+	my.anchor_area = 0;
+}
+
+function move_area(area:int):void
+{
+	move_area_with_flag(area,0);
+}
+
+function move_area_with_flag(area:int, in_lock:int):void
+{
+	bg.fetch_area(area, DIR_NONE);
+	init_area_enemy();
+	update_area_bgm();
+	bg.update_palette(0);
+	if( !in_lock ){
+		ppu.lock();
+	}
+	ppu.put_in_lock( VRAM_PALETTE, bg.pallet, 16 );
+	bg.draw_screen();
+	if( !in_lock ){
+		ppu.unlock();
+	}
+}
+
+function move_checkpoint(i:int):void
+{
+	move_checkpoint_with_flag(i, 0);
+}
+
+function move_checkpoint_with_flag(i:int, in_lock:int):void
+{
+	var cp = &MAP_CHECKPOINT_DATA[MAP_CHECKPOINT[i]];
+	my.state = my.STATE_STAND;
+	my.x = cp[1]+8;
+	my.y = cp[2]+8;
+	my.vx = 0;
+	my.vy = 0;
+	my.flags[my.FLAG_COLORSWITCH] = 0; // 橋スイッチのリセット
+	my.has_anchor = debug_on(DEBUG_FLAG_AUTO_ANCHOR);
+	my.watch_used = 0;
+
+	// 箱エレベーターの設置
+	boxelev.init();
+
+	var area = cp[0];
+	move_area_with_flag( area, in_lock );
+	set_last();
+}
+
+public function text_print(p:int*, str:int*):int
+{
+	var i = 0;
+	var pi = 0;
+	while(1){
+		var c = str[i];
+		if( c == 0 ){ break; }
+		if( c == 3 || c == 4){
+			p[pi] = c;
+		}else{
+			p[pi+32] = c;
+			pi += 1;
+		}
+		i += 1;
+	}
+	return 0;
+}
+
+function text_print_num(p:int*, n:int):int
+{
+	var i:int;
+	for(i,0,3){
+		var c = 5 /* "0" */ + n % 10;
+		n = n / 10;
+		p[2-i] = c;
+	}
+	return i;
+}

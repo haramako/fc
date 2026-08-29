@@ -1,0 +1,327 @@
+options(bank:-2);
+
+use * from common;
+use lzw;
+use game;
+use my;
+use mem;
+use en;
+use en_vtbl;
+
+var data:int[256] options(segment:"BSS_EX");
+var enemy:int[256] options(segment:"BSS_EX");
+var data_buf:int[2048] options(segment:"BSS_EX");
+var enemy_num:int;
+
+public var buf_idx:int;
+var buf:int[256] options(segment:"BSS_EX");
+var pal:int[64] options(segment:"BSS_EX");
+var blank_cell:int; // 空白のセル番号(空と黒を使い分けるため)
+var blank_cell_by_door:int; // ドアが空白に置き換えるセル番号(水と黒を使い分けるため)
+
+var pallet:int[32];
+
+var cur_area:int;
+var area_slot:int[2];
+
+var tile_pal:int[64] options(segment:"BSS_EX");
+var in_dark:int;
+var area_type:int;
+var area_water_y:int; // 水面の高さ（fishの動きに影響)
+var area_subtext:int; // 現在のエリアのエリア名表示ID
+var area_flags:int; // エリアのビットフラグ(1:キャンドル)
+
+var tile_type:int[64] options(segment:"BSS_EX");
+var _padding_for_align:int[64] options(segment:"BSS_EX"); // 256byte alignのため
+
+const SPRITE_PALETTE:int[] = incbin("../res/images/sprite.nespal");
+
+const TYPE_WALL = 1 << 0;
+const TYPE_FLOOR = 1 << 1;
+const TYPE_SPIKE = 1 << 2;
+const TYPE_EWALL = 1 << 3;
+const TYPE_STOP = TYPE_WALL | TYPE_EWALL | TYPE_FLOOR;
+const TYPE_LADDER = 1 << 4;
+const TYPE_WATER = 1 << 5;
+const TYPE_SPIKE_GROUND = 1 << 6; // 下とげ
+
+// 1 WALL  : 壁
+// 2 FLOOR : 床( 上半分だけの壁 )
+// 4 SPIKE : とげ
+// 8 EWALL : 自分は通れるが、敵が通れない
+// 1 LADDER: はしご
+// 2 WATER : 水
+// 4
+// 8
+const TILE_TYPE:int[] =
+	[   
+		// 0: 共通
+		0,   0,   4,   4,   0,   0,   0,   0,
+	    0,   1,   3,0x13,0x10,   0,   0,   0,
+	    0,   1,   1,   0,0x44,   4,   4,   4,
+	 0x20,0x20,0x20,0x20,   0,   1,   8,   0,
+
+		// 1: 上層
+		0,   1,   0,   3,   0,   0,   1,   0,
+		1,   1,   1,   0,   0,   1,   3,   0,
+		3,   3,   3,   0,   0,   0,   0,   1,
+		1,   3,   0,   0,   0,   0,   0,   0,
+
+		// 2: 外構
+		1,   1,   1,   3,   0,   0,   1,   0,
+		1,   1,   1,   0,   0,   0,   0,   0,
+		0,   0,   0,   0,   0,   0,   0,   1,
+		0,   0,   0,   0,   0,   0,   0,   0,
+
+		// 3: 溶鉱炉
+		1,   1,   1,   3,   1,   0,   1,   0,
+		1,   1,   1,   3,   4,   4,   4,   0,
+		3,   0,   3,   0,   1,   1,   1,   0,
+		0,   0,   0,   0,   0,   0,   0,   0,
+
+		// 4: 下層
+		1,   1,   1,   3,   0,   0,   1,   0,
+		1,   1,   1,   3,   0,   0,   0,   0,
+		1,   1,   0,   0,   0,   0,   0,   0,
+		0,   0,   1,   3,   1,   3,   0,   0,
+
+		// 5: 天空回廊
+		0,   0,   0,   0,   0,   0,   1,   0,
+		0,   0,   0,   3,   0,   0,   0,   8,
+		1,   1,   1,   3,0x44,   4,   4,   4,
+		1,   3,   0,   0,   0,   0,   1,   0,
+
+		// 6: 地下水路
+		1,   1,   1,   3,   4,   1,   1,   1,
+		1,   1,   1,0x23,   1,   1,   0,0x20,
+		1,   1,   1,   0,   1,   0,0x20,0x20,
+		1,   1,   1,   0,   1,   0,   0,0x20,
+
+		// 7: 太陽神殿
+		1,   1,   1,   1,   1,   0,   1,   0,
+		1,   1,   1,   1,   0,   0,   0,   0,
+		1,   3,   1,   1,   0,   0,   0,   0,
+		1,   1,   1,   0,   0,   0,   0,   0,
+	
+		// 8: 溶岩
+		1,   1,   1,   3,   3,   0,   1,   0,
+		1,   1,   1,   0,   1,   0,   0,   0,
+		0,   1,   1,   0,   1,   0,   0,   0,
+		4,   0,   0,   0,   0,   0,   0,   0,
+	
+		// 9: 海底
+		1,   1,   0,   3,   4,   1,   1,   1,
+		1,   1,   0,   0,   1,   1,0x20,0x20,
+		0,   0,0x24,0x24,0x24,   0,0x20,0x20,
+		0,   0,0x24,0x24,0x24,0x24,   0,0x20,
+
+		// 10: 金剛宮
+		1,   1,   1,   3,   0,   1,   1,   0,
+		1,   1,   1,   0,   0,   0,   0,   0,
+		1,   1,   0,   0,   0,   0,   0,   0,
+		4,   0,   0,   0,   0,   0,   0,   0,
+
+		// 11: ゴミ捨て場
+		1,   1,   1,   3,   0,   0,   1,   0,
+		1,   1,   1,   0,   0,   0,   0,   0,
+		1,   1,   0,   0,   0,   0,   0,   0,
+		4,   0,   0,   0,   0,   0,   1,   0,
+
+		// 12: 王の間
+		1,   3,   1,   0,   0,   0,   1,   0,
+		1,   0,   1,   0,   0,   0,   0,   0,
+		0,   0,   0,   0,   0,   0,   0,   0,
+		4,   0,   0,   0,   0,   0,   1,   0
+	];
+
+const BLANK_CELL = [ 0,0,0,0,1,1,1,1,
+					 0,0,0,0,0,0,0,0,
+					 0,0,0,0,0,0,0,0,
+					 0,0,0,0,0,0,1,0];
+
+const TILE_UP_ARROW = 4;
+const TILE_RIGHT_ARROW = 5;
+const TILE_DOWN_ARROW = 6;
+const TILE_LEFT_ARROW = 7;
+const TILE_MOVABLE_BLOCK = 29;
+
+private:
+
+use * from bg_mmc;
+
+public function init():void
+{
+	cur_area = 0;
+	buf_idx = 0;
+	in_dark = 0;
+	fs.copy( tile_pal, fs.TILE_PAL_BASE+0 );
+	fs.copy( &tile_pal[32], fs.TILE_PAL_BASE+1 );
+	mem.copy( tile_type, TILE_TYPE, 64 );
+}
+
+public function cell(x:int, y:int):int options(fastcall:true)
+{
+	return data[(y/16)*16 + x/16];
+}
+
+public function cell_type(x:int, y:int):int options(fastcall:true)
+{
+	return tile_type[data[(y/16)*16 + x/16]];
+}
+
+public function cell_type_by_cell(x:int, y:int):int options(fastcall:true)
+{
+	return tile_type[data[y*16 + x]];
+}
+
+/**
+ * 矢印ブロックの方向を取得する
+ * 矢印いなら0~3の方向を返す, 矢印でない場合は-1を返す
+ */
+public function get_cell_dir(x:int, y:int):int
+{
+    var c = bg.cell(x, y);
+    if (c >= 4 && c < 8)
+    {
+        return c - 4;
+    }
+    return -1;
+}
+
+public function set_pal(x:int, y:int, _pal:int):int options(fastcall:true)
+{
+	var pal_addr:int8 = (y/2)*8 + x/2;
+	var pos = (((y%2)*2) | (x%2))*2;
+	var mask:int = (0b00000011 << pos) ^ 0xff;
+	pal[pal_addr] = (pal[pal_addr] & mask) | (_pal << pos);
+	return pal_addr;
+}
+
+public function put2(x:int, y:int, n:int, pal:int):void
+{
+	data[y*16+x] = n;
+	put(x,y,n,pal);
+}
+
+public function put(x:int, y:int, n:int, _pal:int):void
+{
+	var y16:int16 = y;
+	var addr:int16 = 0x2000 + y16*64 + x*2;
+	if( n < 32 && BLANK_CELL[n] ){ n = blank_cell; }
+	var ni = n * 4;
+	buf[buf_idx+0] = ni;
+	buf[buf_idx+1] = ni+2;
+	buf[buf_idx+2] = ni+1;
+	buf[buf_idx+3] = ni+3;
+	ppu.put( addr, &buf[buf_idx], 2, 0 );
+	ppu.put( addr+32, &buf[buf_idx+2], 2, 0 );
+	buf_idx += 4;
+	
+	var pal_addr = set_pal(x,y,_pal);
+	ppu.put( 0x23c0 + pal_addr, &pal[pal_addr], 1, 0 );
+
+
+}
+
+function draw_screen():void
+{
+	var ax:int, ay:int;
+	for(ax, 0, 16){
+		for(ay, 0, 15){
+			var cell:int = data[ay*16+ax];
+			put_in_lock(ax, ay, cell);
+		}
+	}
+}
+
+function fetch_area(area:int, dir:int):void{
+	var old_pbank = mmc3.set_pbank(1, PBANK_BG_MMC);
+	_fetch_area(area,dir);
+	mmc3.set_pbank(1, old_pbank);
+}
+
+public function redraw_colorswitch(area:int):void
+{
+	var i:int;
+	for(i, 0, 16*15){
+		if( data[i] >= 56 && data[i] < 62 ){
+			var t = (data[i] - 56) % 3;
+			if( (t + 1) == my.flags[my.FLAG_COLORSWITCH] ){
+				data[i] = 56 + t;
+			}else{
+				data[i] = 59 + t;
+			}
+		}
+	}
+}
+
+public function scroll(dir:int):void {
+	ppu.wait_vsync_with_flag(2);
+	var old_pbank = mmc3.set_pbank(1, PBANK_BG_MMC);
+	_scroll(dir);
+	mmc3.set_pbank(1, old_pbank);
+}
+
+public function update_palette(in_ppu_lock:int):void
+{
+	var old_pbank = mmc3.set_pbank(1, PBANK_EN);
+	if( in_ppu_lock ){
+		ppu.put_in_lock( 0x3f00+16, &pallet[16], 16);
+	}else{
+		ppu.put( 0x3f00+16, &pallet[16], 16, 0 );
+	}
+	mmc3.set_cbank(4+0, CBANK_ENEMY + en_vtbl.CBANK_OF_TYPE[area_slot[0]]);
+	mmc3.set_cbank(4+1, CBANK_ENEMY + en_vtbl.CBANK_OF_TYPE[area_slot[1]]);
+	mmc3.set_pbank(1, old_pbank);
+}
+
+public function pal_down(pal:int*, size:int, pow:int):void options(fastcall:true)
+{
+	var i:int;
+	var n = pow*16;
+	for( i, 0, size ){
+		var c = pal[i];
+		if( c != 0x0f ){
+			c = c - n;
+			if( c > 64 || c == 0x0D ){ c = 0x0F; }
+			pal[i] = c;
+		}
+	}
+}
+
+public function pal_up(pal:int*, size:int, pow:int):void options(fastcall:true)
+{
+	var i:int;
+	var n = pow*16;
+	for( i, 0, size ){
+		var c = pal[i];
+		if( c == 0x0F && n > 0 ){ c = 0x0D; } // 黒0Fは、グラデーションのため、使ってはいけない黒0Dをベースにライトアップする
+		c = c + n;
+		if( c > 64 ){ c = 0x30; }
+		pal[i] = c;
+	}
+}
+
+function put_in_lock(x:int, y:int, n:int):void
+{
+	var y16:int16 = y;
+	var addr:int16 = 0x2000 + y16*64 + x*2;
+	if( n < 32 && BLANK_CELL[n] ){ n = blank_cell; }
+	var ni = n * 4;
+	buf[0] = ni;
+	buf[1] = ni+2;
+	buf[2] = ni+1;
+	buf[3] = ni+3;
+	ppu.put_in_lock( addr, buf, 2 );
+	ppu.put_in_lock( addr+32, &buf[2], 2 );
+
+	var pal_addr = set_pal(x,y,tile_pal[n]);
+	ppu.put_in_lock( 0x23c0 + pal_addr, &pal[pal_addr], 1 );
+}
+
+// 橋の切り替えの画面の更新
+public function colorswitch_redraw_area():void{
+	var old_pbank = mmc3.set_pbank(1, PBANK_BG_MMC);
+	_colorswitch_redraw_area();
+	mmc3.set_pbank(1, old_pbank);
+}

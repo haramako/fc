@@ -1,0 +1,328 @@
+options ( bank: 1 );
+use * from math;
+use * from common;
+use ppu;
+
+include("en.asm");
+
+public const MAX = 16;
+var type:int[MAX];
+var x_:int[MAX];
+var y_:int[MAX];
+var p1_:int[MAX];
+var p2_:int[MAX];
+var p3_:int[MAX];
+var p4_:int[MAX];
+var wait:int;
+var now:int;
+
+public const BUL_MAX = 32;
+var bul_type:int[BUL_MAX];
+var bul_x:int[BUL_MAX]; // フリーリストのnextとしても使用
+var bul_y:int[BUL_MAX];
+var bul_vx:sint8[BUL_MAX];
+var bul_vy:sint8[BUL_MAX];
+var bul_idx:int;
+var bul_free:int; // フリーリストの先頭
+
+/*********************************************
+ * 敵関係のルーチン
+ *********************************************/
+
+/** 初期化する */
+function init():void
+{
+	var i:int;
+	bul_free = 0;
+	for( i, 0, BUL_MAX ){
+		bul_x[i] = i+1;
+	}
+}
+
+function process():void
+{
+	var i:int;
+	// 敵の出現
+	if( wait == 0 ){
+		if( rand() % 8 == 0 ){
+			billy_new();
+		}else{
+			en_1_new();
+		}
+		wait = 30+rand()/4;
+	}else{
+		wait -= 1;
+	}
+
+	for( i, 0, MAX ){
+		var type = type[i];
+		PROCESS[type](i);
+	}
+}
+
+function new():int
+{
+	var i:int;
+	for( i, 0, MAX ){
+		if( !type[i] ){ return i; }
+	}
+	return 255;
+}
+
+// 敵の弾の処理
+//function bul_process():void;
+
+/**
+ * 新しい敵の弾を生成して、そのインデックスを返す.
+ * 取得できなかった場合は、255を返す
+ */
+function bul_new():int
+{
+	if( bul_free >= BUL_MAX ){ return 255; }
+	var n = bul_free;
+	bul_free = bul_x[bul_free];
+	return n;
+}
+
+/**
+ * 角度を指定して玉を打つ
+ */
+function bul_new_angle( x:int, y:int, angle:int, speed:int ):void
+{
+	var n = bul_new();
+	if( n == 255 ){ return; }
+	bul_type[n] = 1;
+	bul_x[n] = x;
+	bul_y[n] = y;
+	bul_vx[n] = cos(angle)/speed;
+	bul_vy[n] = -sin(angle)/speed;
+}
+
+/**
+ * 角度を指定して玉を打つ
+ */
+function bul_nway( x:int, y:int, angle:int, speed:int, way:int, spread:int ):void
+{
+	var i:int;
+	angle = angle - (way*spread)/2;
+	for( i, 0, way ){
+		var n = bul_new();
+		if( n == 255 ){ return; }
+		bul_type[n] = 1;
+		bul_x[n] = x;
+		bul_y[n] = y;
+		bul_vx[n] = cos(angle)/speed;
+		bul_vy[n] = -sin(angle)/speed;
+		angle += spread;
+	}
+}
+
+/** 敵と自機の弾の当たり判定を行う */
+function check_hit(i:int):int
+{
+	var j:int;
+	for( j, 0, MY_BUL_MAX ){
+		if( my_bul_type[j] == 1 && x_[i] + 12 - my_bul_x[j] < 24 && y_[i] + 12 - my_bul_y[j] < 24 ){
+			my_bul_type[j] = 2;
+			my_bul_vx[j] = 0;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+function bul_process():void;
+
+/*********************************************
+ * ダミー
+ *********************************************/
+function none_process(i:int):void {}
+
+/*********************************************
+ * 敵１
+ *********************************************/
+const SPR_ENEMY = 0xc0;
+
+function en_1_new():int
+{
+	var i = new();
+	if( i != 255 ){
+		type[i] = 1;
+		x_[i] = rand()/2 + 64;
+		y_[i] = 16;
+		p1_[i] = 0;
+		p2_[i] = 0;
+		p4_[i] = 4;
+	}
+	return i;
+}
+
+function en_1_process(i:int):void
+{
+	var pal:int = 1;
+
+	// 自機の弾との当たり判定
+	if( check_hit(i) ){
+		p4_[i] -= 1;
+		pal = 0;
+		if( p4_[i] == 0 ){
+			type[i] = 0;
+			return;
+		}
+	}
+
+	switch( p1_[i] ){
+	case 0:
+		y_[i] += 2;
+		p2_[i] += 1;
+		if( p2_[i] == 40 ){
+			p1_[i] = 1;
+			p2_[i] = 0;
+			p3_[i] = atan( -(my_y/16 - y_[i]/16), my_x/16 - x_[i]/16 );
+		}
+	case 1:
+		p2_[i] += 1;
+		// 弾を打つ
+		if( p2_[i] % 32 == 0 ){
+			var angle = atan( -(my_y/16 - y_[i]/16), my_x/16 - x_[i]/16 );
+			// bul_new_angle( x[i], y[i], angle, 6 );
+			var x1 = p2_[i] / 32 % 2;
+			bul_nway( x_[i], y_[i], angle, 6, 3+x1, 12 );
+		}
+		if( p2_[i] == 120 ){
+			p1_[i] = 2;
+		}
+	case 2:
+		x_[i] -= cos(p3_[i])/32;
+		y_[i] += sin(p3_[i])/32;
+		if( outside( x_[i], y_[i] ) ){
+			type[i] = 0;
+			return;
+		}
+	}
+
+	// 表示
+	put_sprite2x2( x_[i]-8, y_[i]-8, SPR_ENEMY, pal );
+
+}
+
+/*********************************************
+ * ビリー・ヘリントン
+ *********************************************/
+
+const SPR_BILLY = 0;
+
+const BILLY_NORMAL:int[] = [0x80, 0x81, 0x82, 0x83,
+							0x90, 0x91, 0x92, 0x93,
+							0xA0, 0xA1, 0xa2, 0xa3,
+							0xb0, 0xb1, 0xb2, 0xb3 ];
+
+const BILLY_SMOKE:int[] = [0x84, 0x85, 0x86, 0x87,
+						   0x94, 0x95, 0x96, 0x97,
+						   0xa4, 0xa5, 0xa6, 0xa7,
+						   0xb4, 0xb5, 0xb6, 0xb7 ];
+
+const BANG:int[] = [0x88, 0x89, 0x98, 0x99,
+					0x8a, 0x8b, 0x9a, 0x9b,
+					0x8c, 0x8d, 0x9c, 0x9d,
+					0x8e, 0x8f, 0x9e, 0x9f,
+					0x00, 0x00, 0x00, 0x00 ];
+
+function billy_new():int
+{
+	var i = new();
+	if( i != 255 ){
+		var cy = (ppu.scroll2 / 8 + 4)%30;
+		var cx = rand() % 24 + 4;
+		
+		type[i] = 2;
+		x_[i] = cx * 8;
+		p1_[i] = 0;
+		p2_[i] = cy; // スクロール上の位置
+		p4_[i] = 0;
+	}
+	return i;
+}
+
+function billy_process(i:int):void
+{
+	// 画面上の位置を計算
+	var y = p2_[i] * 8;
+	if( y > ppu.scroll2 ){
+		y = y - ppu.scroll2;
+	}else{
+		y = 240 + y - ppu.scroll2;
+	}
+	y_[i] = y;
+	
+	// 自機の弾との当たり判定
+	var p1 = p1_[i];
+	if( p1 != 255 && check_hit(i) ){
+		p4_[i] -= 1;
+		if( p4_[i] == 0 ){
+			p1_[i] = 255;
+			return;
+		}
+	}
+
+	var p4 = p4_[i];
+	var cx = x_[i]/8;
+	var cy = p2_[i];
+	if( p1 == 0 ){
+		if( p4 % 4 == 0 ){
+			gr_print( cx-2,cy, &BILLY_SMOKE[(p4/4%4)*4], 4, 1 );
+		}
+		if( p4 % 16 == 0 ){
+			p4 = p4 / 16;
+			if( p4 < 3 ){
+				gr_print( cx-2,cy-1-p4, BILLY_NORMAL, 4, p4+1 );
+			}else{
+				gr_print( cx-2,cy-3, BILLY_NORMAL, 4, 4 );
+				p1_[i] = 2;
+				p4_[i] = 16;
+			}
+		}
+		p4_[i] += 1;
+	}elsif( p1 == 255 ){
+		// 死亡時
+		if( p4 % 4 == 0 ){
+			p4 = p4 / 4;
+			if( p4 < 13 ){
+				bang( cx-1,cy-2, p4 );
+				bang( cx  ,cy-3, p4-2 );
+				bang( cx  ,cy-1, p4-4 );
+				bang( cx-2,cy-3, p4-6 );
+				bang( cx-2,cy-1, p4-8 );
+			}else{
+				// 削除
+				type[i] = 0;
+			}
+		}
+		p4_[i] += 1;
+	}
+	
+	if( outside( 120/*適当*/, y ) ){
+		type[i] = 0;
+		return;
+	}
+
+}
+
+function bang( cx:int, cy:int, n:int):void
+{
+	if( n < 5 ){
+		gr_print( cx, cy, &BANG[n*4], 2, 2 );
+	}
+}
+
+function gr_print( cx:int, cy:int, data:int8*, width:int, height:int ):void
+{
+	var y:int;
+	var i = 0;
+	for( y, 0, height ){
+		ppu.put( ppu.pos( cx, cy+y), &data[i], width, 0 );
+		i += width;
+	}
+}
+
+const PROCESS: void(int)[] = [none_process, en_1_process, billy_process];

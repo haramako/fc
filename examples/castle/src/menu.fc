@@ -1,0 +1,654 @@
+options(bank:2, org:0xa000);
+
+use * from common;
+use mem;
+use my;
+use game;
+use event;
+use ppu;
+
+include( "menu.asm" );
+
+private:
+
+use bg;
+
+const SCENE_ITEM = 0;
+const SCENE_MEMORY = 1;
+const SCENE_MAP = 2;
+const SCENE_MAX = 3;
+
+const ITEM_LIST = incbin('../tmp/item_list.bin');
+const MEMORY_LIST = incbin('../tmp/memory_list.bin');
+
+
+var scene:int;
+
+public function start():void
+{
+	ppu.clear_out_sprite(); // 主人公のスプライトが一瞬表示されてしまう問題対策で、事前にクリアする
+	ppu.wait_vsync();
+
+	ppu.lock();
+	var old_ppu_ctrl1 = ppu.ctrl1_bak;
+	var old_cbank0 = mmc3.cbank_bak[0];
+	var old_cbank1 = mmc3.cbank_bak[1];
+	var old_cbank2 = ppu.cbank2;
+	ppu.cbank2 = CBANK_SYS_SPRITE;
+	mmc3.MIRROR = 0; // vertical
+	ppu.ctrl1_bak = 0b10100001;
+
+	ppu.fill_in_lock( 0x2400, 4*32, 0 );
+	ppu.put_in_lock( 0x2400+32*2+4, _T("アイテム　　記憶　　　地図　"), 14 );
+
+	SCENE_INIT_FUNC[scene]();
+	ppu.unlock();
+
+	loop(){
+		anim += 1;
+		pad.update();
+		if( pad.pushed & (pad.B|pad.SELECT) ){ break; }
+		if( pad.pushed & pad.LEFT ){
+			ppu.lock();
+			scene = (scene+2)%SCENE_MAX;
+			SCENE_INIT_FUNC[scene]();
+			ppu.unlock();
+		}elsif( pad.pushed & pad.RIGHT ){
+			ppu.lock();
+			scene = (scene+1)%SCENE_MAX;
+			SCENE_INIT_FUNC[scene]();
+			ppu.unlock();
+		}elsif( pad.pushed & pad.A ){
+			var r = SCENE_PROCESS_FUNC[scene]();
+			if( r ){ break; }
+		}
+		ppu.sprite( 28 + scene * 40     , 11, SPR_CURSOR  , 1 );
+		ppu.sprite( 28 + scene * 40 + 32, 11, SPR_CURSOR+2, 1 );
+		SCENE_DRAW_FUNC[scene]();
+		ppu.wait_vsync();
+	}
+
+	ppu.irq_setup = ppu.null_func;
+	ppu.wait_vsync();
+	ppu.lock();
+	mmc3.set_cbank(0,old_cbank0);
+	mmc3.set_cbank(1,old_cbank1);
+	ppu.cbank2 = old_cbank2;
+	ppu.ctrl1_bak = old_ppu_ctrl1;
+	if( bg.in_dark ){
+		// 暗闇時のパレット作成
+		var buf = ppu.alloc(16);
+		mem.copy( buf, bg.pallet, 16 );
+		bg.pal_down(buf+4, 12, 3);
+		ppu.put_in_lock( 0x3f00, buf, 16 );
+	}else{
+		ppu.put_in_lock( 0x3f00, bg.pallet, 16 );
+	}
+	ppu.unlock();
+	ppu.wait_vsync();
+}
+
+function irq_setup():void;
+
+/*********************************************
+ * アイテム画面
+ *********************************************/
+
+var item_idx:int;
+var item_x:int;
+var item_y:int;
+var item_prev:int;
+
+const ITEM_MAX = 48; // my.ITEM_MAXと違い、表示上のアイテムの上限
+
+function item_init():void
+{
+	ppu.irq_setup = irq_setup;
+
+	mmc3.set_cbank(0,CBANK_ITEM);
+	mmc3.set_cbank(1,CBANK_ITEM+2);
+
+	mem.zero(bg.buf, 32);
+
+	item_x = 0;
+	item_y = 0;
+	item_prev = -1;
+	
+	ppu.put_in_lock( 0x3f00, ITEM_PAL, 16 );
+	ppu.fill_in_lock( 0x2400+4*32, 0x400-4*32, 0 );
+
+	var i:int;
+	for( i, 0, ITEM_MAX ){
+		put_item(i);
+	}
+
+	if( my.items[ITEM_ID_COIN]){
+		put_item_inner(0, 4, ITEM_ID_COIN);
+	}
+
+}
+
+function item_draw():void
+{
+	draw_coin();
+}
+
+function item_process():int
+{
+	loop(){
+		pad.update();
+		if( pad.pushed & pad.B ){ return 0; }
+		if( pad.pushed & pad.SELECT ){ return 1; }
+		if( pad.pushed & pad.UP ) item_y += 3;
+		if( pad.pushed & pad.DOWN ) item_y += 1;
+		if( pad.pushed & pad.RIGHT ) item_x += 1;
+		if( pad.pushed & pad.LEFT ) item_x += 11;
+		if( item_y >= 4 ) item_y -= 4;
+		if( item_x >= 12 ) item_x -= 12;
+		item_idx = item_y * 12 + item_x;
+
+		if( item_prev != item_idx ){
+			if( item_idx < ITEM_MAX ){
+				var item_id = ITEM_LIST[item_idx];
+				if( item_id == ITEM_ID_WATCH && my.watch_used) item_id = ITEM_ID_BROKEN_WATCH;
+				if( item_id != -1 && my.items[item_id] ){
+					// アイテム説明の描画
+					ppu.wait_vsync_with_flag(2);
+					var buf = ppu.alloc(64);
+					var buf2 = ppu.alloc(64);
+					mem.zero( buf2, 64 );
+					var size = fs.copy( buf, fs.ITEM_DESC_NAME_BASE+item_id );
+					buf[size] = 0;
+					text_print( buf2, buf );
+					var addr = ppu.pos(4,16)+0x400;
+					ppu.put( addr, buf2, 64, 0 );
+					ppu.wait_vsync_with_flag(2);
+
+					buf = ppu.alloc(64);
+					buf2 = ppu.alloc(128);
+					mem.zero( buf2, 128 );
+					size = fs.copy( buf, fs.ITEM_DESC_BASE+item_id );
+					buf[size] = 0;
+					text_print_width( buf2, buf, 32 );
+					addr = ppu.pos(8,18)+0x400;
+					ppu.put( addr, buf2, 64, 0 );
+					ppu.wait_vsync_with_flag(2);
+					ppu.put( addr+64, buf2+64, 64, 0 );
+					ppu.wait_vsync_with_flag(2);
+				}else{
+					// 空のアイテム説明の描画
+					ppu.wait_vsync_with_flag(2);
+					var buf = ppu.alloc(64);
+					mem.zero(buf, 64);
+					var addr = ppu.pos(4,16)+0x400;
+					ppu.put( addr, buf, 64, 0 );
+					ppu.wait_vsync_with_flag(2);
+
+					buf = ppu.alloc(64);
+					mem.zero(buf, 64);
+					ppu.put( addr+64, buf, 64, 0 );
+					ppu.wait_vsync_with_flag(2);
+
+					buf = ppu.alloc(64);
+					mem.zero(buf, 64);
+					ppu.put( addr+128, buf, 64, 0 );
+					ppu.wait_vsync_with_flag(2);
+				}
+			}
+			item_prev = item_idx;
+		}
+		
+		if( debug_mode && (pad.pushed & pad.A)){
+			var item_id = ITEM_LIST[item_idx];
+			if( item_id == ITEM_ID_WATCH && my.watch_used) item_id = ITEM_ID_BROKEN_WATCH;
+			if( item_id != -1 ){
+				my.items[item_id] = !my.items[item_id];
+				ppu.lock();
+				put_item(item_idx);
+				ppu.unlock();
+			}
+		}elsif( pad.pushed & pad.A ){
+			// あいくちの特殊処理
+			var item_id = ITEM_LIST[item_idx];
+			if( item_id == ITEM_ID_DAGGER && my.items[item_id]){
+				my.state = my.STATE_DYING;
+				my.wait = 0;
+			}
+		}
+		
+		gr_sprite2( item_x*16+40, item_y*16+40, SPR_CURSOR, 0 );
+		draw_coin();
+
+		ppu.wait_vsync();
+	}
+}
+
+function put_item(i:int):void{
+	var y:int16 = i/12;
+	var x = i%12;
+	var item_id = ITEM_LIST[i];
+	if( item_id == ITEM_ID_WATCH && my.watch_used) item_id = ITEM_ID_BROKEN_WATCH;
+	put_item_inner(x, y, item_id);
+}
+
+function put_item_inner(x:int, y:int16, item_id:int):void
+{
+	var addr:int16 = 0x2400+32*4+4 + (y<<6) + x*2;
+	var buf = ppu.alloc(4);
+	var item_id_x = (item_id + 2) % 8;
+	var item_id_y = (item_id + 2) / 8;
+	var c = item_id_y * 32 + item_id_x * 2;
+	var pal = ITEM_TILEPAL[2+item_id];
+	if( item_id == -1 )
+	{
+		c = 0;
+		pal = 0;
+	}elsif( !my.items[item_id] ){
+		c = 2;
+		pal = 2;
+	}
+	buf[0] = c+0;
+	buf[1] = c+1;
+	buf[2] = c+16;
+	buf[3] = c+17;
+
+	var item_addr = (y/2)*8+x/2;
+	var item_shift = (x%2)|(y%2*2);
+	var pal_mask:uint;
+	switch(item_shift){
+		case 0:
+			pal_mask = 255 - (3 << 0);
+		case 1:
+			pal = pal << 2;
+			pal_mask = 255 - (3 << 2);
+		case 2:
+			pal = pal << 4;
+			pal_mask = 255 - (3 << 4);
+		case 3:
+			pal = pal << 6;
+			pal_mask = 255 - (3 << 6);
+	}
+	bg.buf[item_addr] = bg.buf[item_addr] & pal_mask | pal;
+	
+	ppu.put_in_lock( addr, buf, 2 );
+	ppu.put_in_lock( addr+32, buf+2, 2 );
+	ppu.put_in_lock( 0x27c0+9+item_addr, &bg.buf[item_addr], 1 );
+}
+
+function draw_coin():void {
+	if( my.items[ITEM_ID_COIN] == 0 ) return;
+	var buf = ppu.alloc(64);
+	mem.zero( buf, 64 );
+	var cur = buf;
+	text_print_num( cur, my.coin_num );
+	cur[0] = 10; // "x"
+	var i:int;
+	var x = 8*6;
+	var y = 8*12+4;
+	for(i,0,3){
+		ppu.sprite(x,y,SPR_SYS_NUM + cur[i]*2,0);
+		x += 8;
+	}
+}
+
+function text_print_num(p:int*, n:int):int
+{
+	var i:int;
+	for(i,0,3){
+		var c = 0 /* "0" */ + n % 10;
+		n = n / 10;
+		p[2-i] = c;
+	}
+	return i;
+}
+
+function text_print(p:int*, str:int*):int options(segment:"game")
+{
+	var i = 0;
+	var pi = 0;
+	while(1){
+		var c = str[i];
+		if( c == 0 ){ break; }
+		if( c == 3 || c == 4){
+			p[pi] = c;
+		}else{
+			p[pi+32] = c;
+			pi += 1;
+		}
+		i += 1;
+	}
+	return 0;
+}
+
+function text_print_width(p:int*, str:int*, width:int):int options(segment:"game")
+{
+	var i:uint8 = 0;
+	var pi:uint8 = 0;
+	while(1){
+		var c = str[i];
+		if( c == 0 ){ break; }
+		if( c == 3 || c == 4){
+			p[pi] = c;
+		}elsif( c == 2){
+			p += width*2;
+			pi = 0;
+		}else{
+			p[pi+32] = c;
+			pi += 1;
+			if( pi >= width){
+				p += width*2;
+				pi = 0;
+			}
+		}
+		i += 1;
+	}
+	return 0;
+}
+
+/*********************************************
+ * 記憶画面
+ *********************************************/
+var memory_x:int;
+var memory_y:int;
+var memory_idx:int;
+var memory_prev:int;
+
+const MEMORY_MAX = 48;
+
+function memory_init():void
+{
+	ppu.irq_setup = irq_setup;
+	mmc3.set_cbank(0,CBANK_MENU);
+	mmc3.set_cbank(1,CBANK_TEXT);
+
+	ppu.put_in_lock( 0x3f00, ITEM_PAL, 16 );
+	ppu.fill_in_lock( 0x2400+4*32, 0x400-4*32, 0 );
+
+	var data_buf = &bg.data_buf[0];
+	var buf = data_buf;
+	data_buf += 256;
+	mem.zero(buf, 255);
+
+	var i:int;
+	for(i,0,MEMORY_MAX){
+		var x = i % 12;
+		var y = i / 12;
+		var idx = x+4+y*32;
+		var id = MEMORY_LIST[i];
+		if( my.has_memory(id) ){
+			if( my.is_memory_read(id) ){
+				buf[idx] = 4;
+			}else{
+				buf[idx] = 5;
+			}
+		}else{
+			buf[idx] = 2;
+		}
+	}
+
+	var addr = ppu.pos(4,6)+0x400;
+	ppu.put_in_lock( addr, buf, 128);
+}
+
+function memory_process():int
+{
+	memory_prev = -1;
+	if( !my.items[ITEM_ID_SPECTACLES] ){ return 0; }
+
+	loop(){
+		pad.update();
+		if( pad.pushed & pad.B ){ return 0; }
+		if( pad.pushed & pad.SELECT ){ return 1; }
+		if( pad.pushed & pad.UP ) memory_y += 3;
+		if( pad.pushed & pad.DOWN ) memory_y += 1;
+		if( pad.pushed & pad.RIGHT ) memory_x += 1;
+		if( pad.pushed & pad.LEFT ) memory_x += 11;
+		if( memory_y >= 4 ) memory_y -= 4;
+		if( memory_x >= 12 ) memory_x -= 12;
+		memory_idx = memory_y * 12 + memory_x;
+
+		if( memory_prev != memory_idx ){
+			if( memory_idx < MEMORY_MAX ){
+				var id = MEMORY_LIST[memory_idx];
+				if( id != -1 ){
+					if( my.has_memory(id)){
+						my.set_memory_read(id);
+					}
+				}
+				//ppu.lock();
+				//memory_init();
+				//ppu.unlock();
+				if( my.has_memory(id) ){
+					memory_put(id);
+				}else{
+					memory_put(0);
+				}
+			}
+			memory_prev = memory_idx;
+		}
+		
+		if( debug_mode && (pad.pushed & pad.A)){
+			var id = MEMORY_LIST[memory_idx];
+			if( id != -1 ){
+				if( my.has_memory(id) ){
+					my.clear_memory(id);
+				}else{
+					my.set_memory(id);
+				}
+			}
+			ppu.lock();
+			memory_init();
+			ppu.unlock();
+		}
+
+		ppu.sprite( memory_x*8+64, memory_y*8+48, SPR_MINI_CURSOR, 0 );
+
+		ppu.wait_vsync();
+	}
+
+	return 0;
+}
+
+function memory_draw():void
+{
+}
+
+function memory_put(id:int):void
+{
+	// 記憶のかけらの描画
+	if( id == -1 ){
+		id = 0;
+	}
+	var data = &bg.data_buf[0];
+	var buf = &bg.data_buf[256];
+	var size = fs.copy(data, fs.MEMORIES_BASE+id);
+	data[size] = 0;
+	mem.zero(buf, 256);
+	text_print_width(buf, data, 32);
+
+	var addr = ppu.pos(4,12)+0x400;
+	ppu.put( addr, buf, 64, 0);
+	ppu.wait_vsync_with_flag(2);
+
+	addr += 64;
+	buf += 64;
+	ppu.put( addr, buf, 64, 0);
+	ppu.wait_vsync_with_flag(2);
+
+	addr += 64;
+	buf += 64;
+	ppu.put( addr, buf, 64, 0);
+	ppu.wait_vsync_with_flag(2);
+
+	addr += 64;
+	buf += 64;
+	ppu.put( addr, buf, 64, 0);
+}
+
+function memory_show(id:int):void 
+{
+	var data_buf = &bg.data_buf[0];
+	var data = data_buf;
+	data_buf += 256;
+	fs.copy(data, fs.MEMORIES_BASE+id);
+	var buf = data_buf;
+	data_buf += 256;
+	mem.zero(buf, 128);
+	text_print_width(buf, data, 32);
+	var addr = ppu.pos(4,12)+0x400;
+	ppu.put_in_lock( addr, buf, 128);
+}
+
+/*********************************************
+ * ミニマップ画面
+ *********************************************/
+var map_x:int;
+var map_y:int;
+
+function map_init():void
+{
+	ppu.irq_setup = irq_setup;
+
+	mmc3.set_cbank(0,CBANK_MINIMAP);
+	mmc3.set_cbank(1,CBANK_MINIMAP+2);
+
+	ppu.put_in_lock( 0x3f00, bg.pallet, 16 );
+	ppu.fill_in_lock( 0x2400+4*32, 0x400-4*32, 0 );
+	
+	if( !my.items[ITEM_ID_MAP] ){ return; }
+
+	// タイルのコピー
+	var buf:int* = bg.data_buf;
+	buf += 2048-16*18; // bgが使ってる領域と被らないようにずらす
+	fs.copy(buf, fs.MINIMAP_BG);
+	
+	var x:int;
+	var y:int;
+	var cur_buf = buf;
+	var addr:int16 = 0x2400+8*32+8;
+	for( y, 0, 18 ){
+		if( y >= 1 && y < 17){
+			for( x, 0, 16 ){
+				var m = my.get_map(x,y-1);
+				if( !m ){
+					cur_buf[x] = 0;
+				}
+			}
+        }
+		ppu.put_in_lock( addr, cur_buf, 16 );
+		cur_buf += 16;
+		addr += 32;
+	}
+
+	// 属性のコピー
+	fs.copy(buf, fs.MINIMAP_ATTR);
+	addr = 0x27C0+2*8+2;
+	for( y, 0, 7 ){
+		ppu.put_in_lock( addr, buf, 4 );
+		buf += 4;
+		addr += 8;
+	}
+
+	// パレットのコピー
+	fs.copy(buf, fs.MINIMAP_PALSET);
+	ppu.put_in_lock( VRAM_PALETTE, buf, 16 );
+}
+
+function map_process():int
+{
+	if( !my.items[ITEM_ID_MAP] ){ return 0; }
+	
+	var ax = bg.cur_area % 16;
+	var ay = bg.cur_area / 16;
+	loop(){
+		anim += 1;
+		pad.update();
+		if( pad.pushed & pad.B ){ return 0; }
+		if( pad.pushed & pad.SELECT ){ return 1; }
+		
+		if( pad.pushed & pad.UP ){ ay = (ay+15)%16; }
+		if( pad.pushed & pad.DOWN ){ ay = (ay+1)%16; }
+		if( pad.pushed & pad.LEFT ){ ax = (ax+15)%16; }
+		if( pad.pushed & pad.RIGHT ){ ax = (ax+1)%16; }
+
+		if( my.items[ITEM_ID_WING] && (pad.pushed & pad.A) && my.get_map(ax,ay) ){
+			// 羽で飛ぶ
+			var i:int;
+			for( i, 0, MAP_CHECKPOINT_NUM ){
+				var cp = MAP_CHECKPOINT[i];
+				var area = ay*16 + ax;
+				if( MAP_CHECKPOINT_DATA[cp] == area ){
+					game_event = event.ID_MOVE_CHECKPOINT;
+					game_event_p1 = i;
+					return 1;
+				}
+			}
+		}
+
+		// フリージャンプモードで飛ぶ
+		if( debug_on(DEBUG_FLAG_FREEJUMP) && (pad.pushed & pad.A) ){
+			var area = ay*16 + ax;
+			game_event = event.ID_MOVE_AREA;
+			game_event_p1 = area;
+			return 1;
+		}
+
+		ppu.sprite( ax*8 + 64, ay*8 + 72, SPR_MAP_FLAG+2, 1 );
+		map_draw();
+		ppu.wait_vsync();
+	}
+}
+
+function map_draw():void
+{
+	if( !my.items[ITEM_ID_MAP] ){ return; }
+
+	var ax:int;
+	var ay:int;
+
+	if( anim/16%2 == 0 ){
+		ax = bg.cur_area % 16;
+		ay = bg.cur_area / 16;
+		ppu.sprite( ax*8 + 64, ay*8 + 72, SPR_MAP_FLAG+4, 0 );
+	}
+
+	var i:int;
+	if( my.items[ITEM_ID_PEN]){
+		for( i, 1, MAP_CHECKPOINT_NUM ){
+			var cp = MAP_CHECKPOINT[i];
+			var area = MAP_CHECKPOINT_DATA[cp];
+			var checked = my.checkpoint_flags[i];
+			ax = area % 16;
+			ay = area / 16;
+			if( checked && my.get_map(ax,ay) ){
+				ppu.sprite( ax*8 + 64, ay*8 + 72, SPR_MAP_FLAG, 1 );
+			}
+		}
+	}
+
+	var has_compass = my.items[ITEM_ID_COMPASS];
+	var has_ouija_board = my.items[ITEM_ID_OUIJA_BOARD];
+	for( i, 1, MAP_CHEST_NUM ){
+		var area = MAP_CHEST_AREA[i];
+		var item_id = MAP_CHEST_ITEM_ID[i];
+		var checked = my.items[item_id];
+		ax = area % 16;
+		ay = area / 16;
+		if( !checked && my.get_map(ax,ay) ){
+			if( item_id >= 12 && item_id <= 17 ){
+				if( has_ouija_board ){
+					ppu.sprite( ax*8 + 64, ay*8 + 72, SPR_MAP_FLAG+6, 1 );
+				}
+			}else{
+				if( has_compass ){
+					ppu.sprite( ax*8 + 64, ay*8 + 72, SPR_MAP_FLAG+6, 0 );
+				}
+			}
+		}
+	}
+}
+
+const SCENE_DRAW_FUNC = [item_draw, memory_draw, map_draw];
+const SCENE_INIT_FUNC = [item_init, memory_init, map_init];
+const SCENE_PROCESS_FUNC = [item_process, memory_process, map_process];
+

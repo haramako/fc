@@ -1,0 +1,7 @@
+public const SPR_SLIME = 0;
+public const SPR_GAS = 56;
+public const SPR_TIMEGATE = 0;
+public const SPR_SPIDER = 24;
+public const SPR_TIMEGATE_DIAMOND = 16;
+public const SPR_TIMEGATE_WASTE = 32;
+public const SPR_TRIAL_ENDING = 24;

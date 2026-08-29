@@ -1,0 +1,343 @@
+options( bank: -1 );
+private:
+use * from common;
+use sound;
+use mem;
+use my;
+use savedata;
+use ppu;
+
+include("title.asm");
+
+const SCENE_FINISH = 0;
+const SCENE_TITLE = 1;
+const SCENE_CREDIT = 2;
+const SCENE_SECRET_COMMAND = 3;
+const SCENE_CLEAR_SAVEDATA = 4;
+const SCENE_TEXT_VIWER = 5;
+
+var text_viwer_id:int16;
+
+public function start():void
+{
+	ppu.ctrl1_bak = 0b10100000;
+	ppu.ctrl2_bak = 0b00011110;
+	ppu.scroll1 = 0;
+	ppu.scroll2 = 0;
+	
+	var next_scene = 1;
+	loop(){
+		switch(next_scene){
+		case SCENE_FINISH: break;
+		case SCENE_TITLE: next_scene = do_title();
+		case SCENE_CREDIT: next_scene = do_credit();
+		case SCENE_SECRET_COMMAND: next_scene = do_secret_command();
+		case SCENE_CLEAR_SAVEDATA: next_scene = do_clear_savedata();
+		case SCENE_TEXT_VIWER: next_scene = do_text_viewer();
+		}
+	}
+	
+	ppu.irq_setup = ppu.null_func;
+	ppu.wait_vsync();
+}
+
+const TITLE_PALETTE:int[] = incbin("../res/images/title.nespal");
+const TITLE_BG:int[] = incbin("../res/images/title.bg");
+const TITLE_TILEPAL:int[] = incbin("../res/images/title.tilepal");
+
+public function do_title():int
+{
+	ppu.lock();
+	ppu.irq_setup = irq_setup;
+	
+	ppu.put_in_lock( 0x3f00, &TITLE_PALETTE[0], 16 );
+	ppu.put_in_lock( 0x3f10, &TITLE_PALETTE[0], 16 );
+	
+	mmc3.set_cbank( 0, CBANK_TITLE+0 );
+	//mmc3.set_cbank( 1, CBANK_TITLE+2 );
+	ppu.cbank2 = CBANK_SYS_SPRITE;
+
+	ppu.fill_in_lock(0x2000, 256*4, 0);
+
+	ppu.put_in_lock(0x2000, &TITLE_BG[0], 256);
+	ppu.put_in_lock(0x2100, &TITLE_BG[256], 256);
+	ppu.put_in_lock(0x23C0, &TITLE_TILEPAL[0], 32);
+	
+	put_text_in_lock( ppu.pos(10,26), VERSION_STR() );
+	if( debug_mode ) put_text_in_lock( ppu.pos(11,24), _M("DEBUG MODE") );
+	if( savedata.exists ){
+		put_text_in_lock( ppu.pos(13,16),_M("つづける") );
+	}else{
+		put_text_in_lock( ppu.pos(13,16),_M("はじめる") );
+	}
+	put_text_in_lock( ppu.pos(13,18), _M("データの消去") );
+	put_text_in_lock( ppu.pos(13,20), _M("クレジット") );
+
+	ppu.unlock();
+
+	sound.play_bgm(sound.BGM_TITLE);
+
+	var cursor = 0;
+	const command = [pad.UP, pad.UP, pad.DOWN, pad.DOWN, pad.LEFT, pad.RIGHT, pad.LEFT, pad.RIGHT,
+					 pad.SELECT, pad.START, 0 ];
+	var command_idx = 0;
+
+	while(1){
+		pad.update();
+		if( pad.pushed & pad.UP && cursor > 0 ){ cursor = cursor - 1; }
+		if( pad.pushed & pad.DOWN && cursor < 2 ){ cursor = cursor + 1; }
+
+		// 秘密のコマンド入力
+		if( pad.pushed ){
+			if( pad.pushed == command[command_idx] ){
+				command_idx += 1;
+				if( command[command_idx] == 0 ) return SCENE_SECRET_COMMAND;
+			}else{
+				command_idx = 0;
+			}
+		}
+		
+		if( pad.pushed & pad.A ){
+			switch( cursor ){
+			case 0:
+				sound.play_bgm(sound.BGM_GAME_START);
+				var i:int;
+				for(i,0,30){ ppu.wait_vsync_with_flag(2); }
+				light_down();
+				return SCENE_FINISH;
+			case 1:	return SCENE_CLEAR_SAVEDATA;
+			case 2: 
+				credit_page = 0;
+				return SCENE_CREDIT;
+			}
+		}
+
+		ppu.sprite( 11*8, cursor*16+(17*8), SPR_ARROW, 0 );
+		ppu.wait_vsync();
+	}
+}
+
+function light_down():void
+{
+	var buf = ppu.alloc(32);
+	var i:int;
+	for( i, 0, 4 ){
+		mem.copy( buf, TITLE_PALETTE, 16 );
+		mem.copy( buf+16, TITLE_PALETTE, 16 );
+		bg.pal_down(buf, 32, i+1);
+		ppu.put( VRAM_PALETTE, buf, 32, 0 );
+		var j:int;
+		for( j, 0, 10 ){ ppu.wait_vsync_with_flag(2); }
+	}
+}
+
+function put_text_in_lock(addr:int16, s:int*):void
+{
+	mem.set( ppu.gr_buf, 0, 64 );
+	text_print( ppu.gr_buf, s );
+	ppu.put_in_lock( addr, ppu.gr_buf, 64 );
+}
+
+function put_text_in_lock2(addr:int16, s:int*, col:int, row:int):int*
+{
+	while( row > 0 && *s != 0 ){
+		s += text_print2( ppu.gr_buf, s, col );
+		ppu.put_in_lock( addr   ,  ppu.gr_buf     , col );
+		ppu.put_in_lock( addr+32, &ppu.gr_buf[col], col );
+		addr += 64;
+		row -= 1;
+	}
+	return s;
+}
+
+function text_print(p:int*, str:int*):int
+{
+	var i = 0;
+	var pi = 0;
+	while(1){
+		var c = str[i];
+		if( c == 0 ){ break; }
+		if( c == 3 || c == 4){
+			p[pi] = c;
+		}else{
+			p[pi+32] = c;
+			pi += 1;
+		}
+		i += 1;
+	}
+	return 0;
+}
+
+function text_print2(p:int*, str:int*, size:int):int
+{
+	mem.zero(p, size*2);
+	var i = 0;
+	var pi = 0;
+	while(pi < size){
+		var c = str[i];
+		switch( c ){
+		case 0: return i;
+		case 2: return i+1;
+		case 3, 4: p[pi] = c;
+		default:
+			p[pi+size] = c;
+			pi += 1;
+		}
+		i += 1;
+	}
+	return i;
+}
+
+function do_text_viewer():int
+{
+	ppu.lock();
+	mmc3.set_cbank( 0, CBANK_MISC_TEXT );
+	mmc3.set_cbank( 1, CBANK_MISC_TEXT+2 );
+	ppu.put_in_lock( 0x3f00, PAL_SET, 16 );
+
+	//fs.copy( bg.data_buf, fs.TEXT_MISAKI_FONT_LICENSE );
+	//fs.copy( bg.data_buf, fs.TEXT_NSD_LICENSE );
+	fs.copy( bg.data_buf, text_viwer_id );
+	var s = &bg.data_buf[0];
+	s = feed_page( s );
+	
+	ppu.unlock();
+	
+	loop(){
+		pad.update();
+		if( pad.pushed & pad.A ){
+			if( *s == 0 ) break;
+			ppu.lock();
+			s = feed_page(s);
+			ppu.unlock();
+		}else if( pad.pushed & pad.B){
+			break;
+		}
+		ppu.wait_vsync();
+	}
+	
+	return SCENE_CREDIT;
+}
+
+function feed_page(s:int*):int*
+{
+	ppu.fill_in_lock(0x2000, 256*4, 0);
+	return put_text_in_lock2( ppu.pos(3, 4), s, 26, 10 );
+}
+
+const CREDIT_CUR_MAX = [3,2];
+const CREDIT_CUR_Y_BASE = [0, 3];
+const CREDIT_CUR_Y = [4,7,10,2,3];
+var credit_page:int;
+
+function do_credit():int
+{
+	ppu.irq_setup = ppu.null_func;
+	ppu.wait_vsync_with_flag(2);
+	
+	ppu.lock();
+	mmc3.set_cbank( 0, CBANK_MISC_TEXT );
+	mmc3.set_cbank( 1, CBANK_MISC_TEXT+2 );
+	ppu.put_in_lock( 0x3f00, PAL_SET, 16 );
+	create_draw_page(credit_page);
+	ppu.unlock();
+	
+	var cur = 0;
+	var cur_prev = -1;
+	loop(){
+		pad.update();
+		if( pad.pushed & pad.LEFT || pad.pushed & pad.RIGHT )
+		{
+			credit_page = (credit_page+1)%2;
+			cur = 0;
+			cur_prev = -1;
+			ppu.lock();
+			create_draw_page(credit_page);
+			ppu.unlock();
+		}
+
+		var cur_max = CREDIT_CUR_MAX[credit_page];
+		if( pad.pushed & pad.UP ) cur = (cur+cur_max-1)%cur_max;
+		if( pad.pushed & pad.DOWN ) cur = (cur+1)%cur_max;
+		if( pad.pushed & pad.B ) break;
+		if( pad.pushed & pad.A ){
+			if( credit_page = 1 ){
+				switch( cur ){
+				case 0:
+					text_viwer_id = fs.TEXT_NSD_LICENSE;
+					return SCENE_TEXT_VIWER;
+				case 1:
+					text_viwer_id = fs.TEXT_MISAKI_FONT_LICENSE;
+					return SCENE_TEXT_VIWER;
+				}
+			}
+		}
+		
+		var cur_idx_base = CREDIT_CUR_Y_BASE[credit_page];
+		var cur_y = CREDIT_CUR_Y[cur_idx_base+cur];
+
+		if( cur_prev != cur ){
+			var buf = ppu.alloc(64);
+			var buf2 = ppu.alloc(64);
+			fs.copy( buf, fs.TEXT_CREDIT_INFO+cur_idx_base+cur );
+			buf += text_print2(buf2, buf, 32);
+			var addr = ppu.pos(2,24);
+			ppu.put( addr, buf2, 64, 0 );
+			ppu.wait_vsync();
+			text_print2(buf2, buf, 32);
+			ppu.put( addr+64, buf2, 64, 0 );
+			cur_prev = cur;
+		}
+		
+		ppu.sprite( 16, cur_y*16+8, SPR_ARROW, 0 );
+		ppu.wait_vsync();
+	}
+	
+	return SCENE_TITLE;
+}
+
+function create_draw_page(page:int):void
+{
+	ppu.fill_in_lock(0x2000, 256*4, 0);
+
+	fs.copy( bg.data_buf, fs.TEXT_CREDIT_0+page );
+	put_text_in_lock2( ppu.pos(4, 2), bg.data_buf, 26, 13 );
+}
+
+function do_secret_command():int
+{
+	debug_mode = 1;
+	savedata.save();
+	return SCENE_TITLE;
+}
+
+function do_clear_savedata():int
+{
+	ppu.lock();
+
+	ppu.irq_setup = ppu.null_func;
+	mmc3.set_cbank( 0, CBANK_MISC_TEXT );
+	mmc3.set_cbank( 1, CBANK_MISC_TEXT+2 );
+
+	ppu.fill_in_lock(0x2000, 256*4, 0);
+	ppu.put_in_lock( 0x3f00, PAL_SET, 16 );
+	put_text_in_lock( ppu.pos(4,10), _M("データを消去しますが、本当によろしいですか？") );
+	put_text_in_lock( ppu.pos(4,12), _M("スタートとセレクトを同時に押すとデータを消去します。") );
+	put_text_in_lock( ppu.pos(4,14), _M("また、Ｂボタンでタイトルに戻ります。") );
+	ppu.unlock();
+
+	loop(){
+		pad.update();
+		if( pad.cur == (pad.SELECT|pad.START) ){
+			savedata.clear();
+			savedata.load();
+			break;
+		}
+		if( pad.pushed & (pad.A|pad.B) ) break;
+		ppu.wait_vsync();
+	}
+	
+	return SCENE_TITLE;
+}
+
+function irq_setup():void;

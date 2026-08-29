@@ -1,0 +1,733 @@
+use bg;
+
+private:
+
+use * from my;
+
+public function process():void
+{
+	// 水の中の処理
+	var bi:int;
+	var in_water = get_cell_type_with_blank_cell(x,y) & bg.TYPE_WATER;
+	if( prev_in_water ^ in_water ){
+		// 水に飛び込んだ飛沫を表示
+		sound.play_se(sound.SE_WATER_SPLASH, 0);
+		create_splash(x, (y+8)/16*16+8);
+	}
+	if( in_water && anim % 64 == 0){
+		// 水中で泡を出す
+		create_bubble(x,y);
+	}
+	prev_in_water = in_water;
+
+	var hit:int;
+	switch( state ){
+	case STATE_STAND, STATE_ON_ENEMY, STATE_ON_ELEVATOR:
+		// 地上
+		my_anim += 1;
+		
+		// 左右移動
+		if( pad.cur & pad.RIGHT ){ vx += 4; dir = 0; }
+		if( pad.cur & pad.LEFT ){ vx -= 4; dir = 1; }
+		if( !(pad.cur & (pad.RIGHT|pad.LEFT)) ){ vx = 0; my_anim = 0; }
+		if( has_anchor && !items[ITEM_ID_PIRATE_FLAG]){
+			if( vx < -12 ){ vx = -12; }
+			if( vx > 12 ){ vx = 12; }
+		}else{
+			if( vx < -16 ){ vx = -16; }
+			if( vx > 16 ){ vx = 16; }
+		}
+
+		var evx = 0, evy = 0;
+		if( state == STATE_ON_ENEMY ){
+			// 敵に乗ってる
+			var ei = on_idx;
+			evx = en.px[ei] - on_x;
+			evy = en.py[ei] - on_y;
+			on_x = en.px[ei];
+			on_y = en.py[ei];
+		}elsif( state == STATE_ON_ELEVATOR ){
+			// エレベーターに乗ってる
+			var ei = on_idx;
+			evx = boxelev.box_px[ei] - on_x;
+			evy = boxelev.box_py[ei] - on_y;
+			on_x = boxelev.box_px[ei];
+			on_y = boxelev.box_py[ei];
+		}else{
+			var idx = check_on_box_elevator();
+			if( idx != -1 ){
+				// エレベーターに乗った!
+				state = STATE_ON_ELEVATOR;
+				on_idx = idx;
+				vy = 0;
+				on_x = boxelev.box_px[idx];
+				on_y = boxelev.box_py[idx];
+			}
+		}
+		
+		x += (vx+giff)/16 + evx;
+		y += evy;
+
+		// グローブで押す
+		do_grobe();
+
+		hit = check_block();
+
+		if( (pad.cur & pad.UP) && get_cell_type(x,y) & bg.TYPE_LADDER && math.abs(x%16-8) <= 4 ){
+			// はしごに登り始める
+			vx = 0;
+			state = STATE_LADDER;
+		}elsif( (pad.cur & pad.DOWN) && get_cell_type(x,y+8) & bg.TYPE_LADDER && math.abs(x%16-8) <= 4 ){
+			// はしごに下り始める
+			state = STATE_LADDER;
+			vx = 0;
+			y += 8;
+		}elsif( pad.pushed & jump_mask ){
+			// ジャンプした！
+			y -= 1;
+			if( has_anchor ){
+				if( in_water ){
+					// 錨あり水中ジャンプ
+					vy = -18;
+					jump_pow = 8;
+				}else{
+					// 錨あり地上ジャンプ
+					vy = -24;
+					jump_pow = 0;
+				}
+			}else{
+				// 通常ジャンプ
+				vy = -36;
+				jump_pow = 10;
+			}
+			state = STATE_JUMP;
+			sound.play_se( sound.SE_JUMP,1);
+		}
+		
+		if( state == STATE_STAND ){
+			// 地上にいる
+			if( (hit & en.DIR_MASK_DOWN) == 0){
+				// 床から落ちた
+				y += 2;
+				state = STATE_JUMP;
+			}
+		}elsif( state == STATE_ON_ENEMY ){
+			// 敵に乗ってる
+			if( check_on_enemy() != on_idx ){
+				y += 1;
+				state = STATE_JUMP;
+			}
+		}elsif( state == STATE_ON_ELEVATOR ){
+			// 敵に乗ってる
+			if( check_on_box_elevator() != on_idx ){
+				y += 1;
+				state = STATE_JUMP;
+			}
+		}
+
+		// タッチイベントの処理
+		if( <uint16>touch_event_func != 0 ){
+			if( anim % 2 == 0 ){
+				ppu.sprite(touch_event_x-4, touch_event_y-(4+16), SPR_B_BUTTON, 0);
+			}
+			if( pad.pushed & pad.B ){
+				state = STATE_TOUCH_EVENT;
+				touch_event_func_activated = touch_event_func;
+				touch_event_stat = 0;
+			}else{
+				touch_event_func = <int()>0;
+			}
+		}elsif( has_anchor ){
+			if( pad.pushed & pad.B){
+				anchor_throw();
+			}
+		}
+
+		if( in_water && !has_anchor){
+			state = STATE_SWIM;
+			swim_keep_velocity = 0;
+		}
+	
+	case STATE_DAMAGE: // 吹っ飛び中
+		my_anim += 1;
+		x += (vx+giff)/16;
+		vy += 2;
+		y += vy / 16;
+		hit = check_block();
+		if( vy < 0 ){
+			//上昇中
+			if( hit & DIR_MASK_UP ){
+				// 頭をぶつけた
+				vy = 0;
+				jump_pow = 0;
+			}
+		}else{
+			// 下降中
+			if( vy > 64 ){ vy = 64; }
+			if( hit & DIR_MASK_DOWN ){
+				// 着地
+				vy = 0;
+				state = STATE_STAND;
+				anim_stat = 0;
+			}
+		}
+		
+	case STATE_JUMP: // ジャンプ中
+		my_anim += 1;
+		
+		// 空中にいる
+		var vvx = 1;
+		if( jump_pow ){ vvx = 4; }
+		if( pad.cur & pad.RIGHT ){ vx += vvx; dir = 0; }
+		if( pad.cur & pad.LEFT ){ vx -= vvx; dir = 1; }
+		if( !(pad.cur & (pad.LEFT|pad.RIGHT)) ){ vx -= math.sign(vx); }
+		if( has_anchor ){
+			if( vx > 12 ){ vx = 12; }
+			if( vx < -12 ){ vx = -12; }
+		}else{
+			if( vx > 16 ){ vx = 16; }
+			if( vx < -16 ){ vx = -16; }
+		}
+		x += (vx+giff)/16;
+		
+		vy += 2;
+		if( in_water ){ vy -= 1; }
+		y += vy / 16;
+
+		hit = check_block();
+		hit = check_block_box_elevator(hit);
+
+		// 長押しで上昇維持する処理
+		if( jump_pow ){
+			jump_pow -= 1;
+			if( pad.cur & jump_mask || jump_autokeep){
+				vy -= 1;
+			}else{
+				if( in_water ){
+					vy += 10;
+				}else{
+					vy += 22;
+				}
+				jump_pow = 0;
+			}
+		}
+		if( vy < 0 ){
+			//上昇中
+			if( hit & DIR_MASK_UP ){
+				// 頭をぶつけた
+				vy = 0;
+				jump_pow = 0;
+			}
+		}else{
+			// 下降中
+			if( vy > 64 ){ vy = 64; }
+			if( in_water && vy > 32 ){ vy = 32; } // 水の中の制限
+			
+			if( hit & DIR_MASK_DOWN ){
+				// 着地
+				vy = 0;
+				jump_autokeep = 0;
+				state = STATE_STAND;
+				anim_stat = 0;
+			}else{
+				var idx = check_on_enemy();
+				if( idx != -1 ){
+					// 敵に乗った!
+					jump_autokeep = 0;
+					state = STATE_ON_ENEMY;
+					on_idx = idx;
+					vy = 0;
+					on_x = en.px[idx];
+					on_y = en.py[idx];
+				}
+				idx = check_on_box_elevator();
+				if( idx != -1 ){
+					// エレベーターに乗った!
+					jump_autokeep = 0;
+					state = STATE_ON_ELEVATOR;
+					on_idx = idx;
+					vy = 0;
+					on_x = boxelev.box_px[idx];
+					on_y = boxelev.box_py[idx];
+				}
+			}
+		}
+		
+		if( items[ITEM_ID_CRAW] ){
+			if( (pad.cur & pad.UP) && get_cell_type(x,y) & bg.TYPE_LADDER && math.abs(x%16-8) <= 2 ){
+				// はしごに登り始める
+				vx = 0;
+				jump_autokeep = 0;
+				state = STATE_LADDER;
+			}
+		}
+		
+		if( has_anchor && pad.pushed & pad.B){
+			anchor_throw();
+		}
+
+		if( in_water && !has_anchor){
+			if( vy > 28 ){
+				vy = 28;
+			}
+			jump_autokeep = 0;
+			state = STATE_SWIM;
+			swim_keep_velocity = 0;
+		}
+
+	case STATE_LADDER: // はしご
+		vy = 0;
+		x = (x/16)*16+8;
+		if( pad.cur & pad.UP ){
+			// 登る
+			my_anim += 1;
+			if( get_cell_type(x,y-4) != bg.TYPE_WALL ){
+				if( get_cell_type(x,y) & bg.TYPE_LADDER ){
+					y -= 1;
+				}else{
+					y -= 8;
+					state = STATE_STAND;
+					anim_stat = 0;
+				}
+			}
+		}elsif( pad.cur & pad.DOWN ){
+			// 降りる
+			my_anim += 1;
+			if( !(get_cell_type(x,y+7) & bg.TYPE_LADDER) ){
+				y -= 1;
+				state = STATE_STAND;
+				anim_stat = 0;
+			}else{
+				y += 1;
+			}
+		}elsif( (pad.cur & (pad.LEFT|pad.RIGHT)) && !get_cell(x,y) ){
+			state = STATE_JUMP;
+		}
+		
+	case STATE_SWIM: // 泳ぎ
+		my_anim += 1;
+		
+		// 空中にいる
+		if( pad.cur & pad.RIGHT ){ vx += 1; dir = 0; }
+		if( pad.cur & pad.LEFT ){ vx -= 1; dir = 1; }
+		if( !(pad.cur & (pad.LEFT|pad.RIGHT)) ){ vx -= math.sign(vx); }
+		if( vx > 16 ){ vx = 16; }
+		if( vx < -16 ){ vx = -16; }
+		x += (vx+giff)/16;
+		
+		if( !in_water ){
+			vy = 0;
+			swim_keep_velocity = 0;
+		}else{
+			if( swim_keep_velocity ){
+				if( vy < -32 ){
+					vy = -32;
+				}
+			}else{
+				var jump = pad.cur & jump_mask;
+				if( jump ){ 
+					vy -= 1; 
+					if( vy < -24 ){
+						vy = -24;
+					}
+				}else{
+					if( vy < -12 ){
+						vy = -12;
+					}
+				}
+			}
+			vy -= 1;
+			y += (vy+giff) / 16;
+		}
+
+		hit = check_block();
+		hit = check_block_box_elevator(hit);
+		if( hit & en.DIR_MASK_UP ){
+			vy = 0;
+			swim_keep_velocity = 0;
+		}
+
+		if( !in_water ){
+			if( pad.cur & jump_mask ){
+				// ジャンプした！
+				y -= 1;
+				vy = -24;
+				jump_pow = 10;
+				state = STATE_JUMP;
+				sound.play_se(sound.SE_JUMP,1);
+			}
+		}
+
+		in_water_surface = get_cell_kind(x,y+8) == 24 /* 水面 */;
+
+		if( in_water_surface && anim % 32 == 0){
+			create_splash(x,y+8);
+		}
+
+	case STATE_TOUCH_EVENT:
+		var finished = touch_event_func_activated();
+		if( finished ){
+			state = STATE_STAND;
+			touch_event_func = <int()>0;
+		}
+	case STATE_DYING:
+		if( state_free_move ){
+			state = STATE_FREE_MOVE;
+			return;
+		}
+		if( wait == 0 ){
+			sound.play_se(sound.SE_DEAD,20);
+		}
+		if( has_anchor ){
+			anchor_throw();
+		}
+		wait += 1;
+		if( wait > 32*3 ){ state = STATE_DIE; }
+
+	case STATE_DIE:
+		state = STATE_DIE;
+
+	case STATE_FREE_MOVE:
+		// デバッグ用自動移動
+		my_anim += 1;
+		
+		// 左右移動
+		if( pad.cur & pad.RIGHT ){ x += 2; }
+		if( pad.cur & pad.LEFT ){ x -= 2; }
+		if( pad.cur & pad.DOWN ){ y += 2; }
+		if( pad.cur & pad.UP ){ y -= 2; }
+
+		if( pad.pushed & pad.B ){ 
+			state_free_move_transparent = !state_free_move_transparent;
+		}
+
+		if( pad.pushed & pad.A ){ 
+			state = STATE_STAND;
+			state_free_move = 0;
+			state_free_move_transparent = 0;
+		}
+	}
+
+	// 錨
+	if( !has_anchor && bg.cur_area == anchor_area ){
+		process_anchor();
+	}
+
+	// 刺
+	if( state != STATE_DYING && state != STATE_DIE ){
+		var c = get_cell_type(x,y);
+		if( c & bg.TYPE_SPIKE ){
+			state = STATE_DYING;
+			wait = 0;
+		}
+
+		// 下とげの判定
+		var ck_left = get_cell_type(x-4,y-4);
+		var ck_right = get_cell_type(x+4,y-4);
+		if( (ck_left & bg.TYPE_SPIKE_GROUND) || (ck_right & bg.TYPE_SPIKE_GROUND)){
+			state = STATE_DYING;
+			wait = 0;
+		}
+	}
+}
+
+function get_cell(x:int, y:int):int options(fastcall:true)
+{
+	if( y >= 240 ){ return 0; }
+	var c = bg.tile_type[bg.data[(y/16)*16 + x/16]];
+	if( c & bg.TYPE_WALL ){
+		if( c & bg.TYPE_FLOOR ){
+			return (y % 16 < 8);
+		}else{
+			return 1;
+		}
+	}else{
+		return 0;
+	}
+}
+
+function get_cell_type(x:int, y:int):int options(fastcall:true)
+{
+	return bg.tile_type[bg.data[(y/16)*16 + x/16]];
+}
+
+function get_cell_type_with_blank_cell(x:int, y:int):int options(fastcall:true)
+{
+	var cell = bg.data[(y/16)*16 + x/16];
+	if( cell < 32 && bg.BLANK_CELL[cell] ){ cell = bg.blank_cell; }
+	return bg.tile_type[cell];
+}
+
+
+function get_cell_kind(x:int, y:int):int options(fastcall:true)
+{
+	return bg.data[(y/16)*16 + x/16];
+}
+
+function check_on_enemy():int
+{
+	var i:int;
+	for( i, 0, en.cur_max ){
+		var et = en.type[i];
+		if( et ){
+			switch( en.type[i] ){
+			case en.TYPE_ELEVATOR:
+				if( check_on_elevator(i) ){
+					return i;
+				}
+			case en.TYPE_SLIME:
+				if( items[ITEM_ID_SANDAL] && math.abs(x-en.px[i])<15 && y>=(en.py[i]-13) && y < (en.py[i]-2) ){
+					y = en.py[i] - 11;
+					return i;
+				}
+			case en.TYPE_FROG:
+				if( items[ITEM_ID_BOOTS] && math.abs(x-en.px[i])<14 && y>=(en.py[i]-12) && y < (en.py[i]-2) ){
+					y = en.py[i] - 10;
+					return i;
+				}
+			case en.TYPE_SWITCH:
+				if( math.abs(x-en.px[i])<14 && y>=(en.py[i]-16) && y < (en.py[i]-10) ){
+					y = en.py[i] - 16;
+					return i;
+				}
+			case en.TYPE_COLORSWITCH:
+				if( math.abs(x-en.px[i])<10 && y>=(en.py[i]-6) && y < (en.py[i]-2) ){
+					y = en.py[i] - 6;
+					return i;
+				}
+			}
+		}
+	}
+	return -1;
+}
+
+function check_on_elevator(i:int):int
+{
+	var size:int;
+	if( en.p3[i] == 1 ){ size = 14; }else{ size = 20; }
+	if( math.abs(x-en.px[i])<size && y>=(en.py[i]-18) && y < (en.py[i]-10) ){
+		y = en.py[i] - 16;
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
+function check_on_box_elevator():int{
+	var i = boxelev.box_idx;
+	if( i == -1 || boxelev.box_area[i] != bg.cur_area){
+		return -1;
+	}
+
+	if( math.abs(x-boxelev.box_x[i])<20 && y>=(boxelev.box_y[i]+2) && y < (boxelev.box_y[i]+14) ){
+		y = boxelev.box_py[i] + 4;
+		return i;
+	}elsif( math.abs(x-boxelev.box_x[i])<20 && y>=(boxelev.box_y[i]-24) && y < (boxelev.box_y[i]-18) ){
+		y = boxelev.box_py[i] - 22;
+		return i;
+	}else{
+		return -1;
+	}
+}
+
+function do_grobe():void
+{
+	var anim_pushing = 0;
+	var pushing = 0;
+	var dir:int;
+	if( vx > 0 ){ 
+		dir = DIR_RIGHT;
+	}else{
+ 		dir = DIR_LEFT;
+	}
+
+	var bx = x + DIR_VX[dir]*9;
+	var cell = bg.cell(bx,y);
+	if( vx != 0 && cell == bg.TILE_MOVABLE_BLOCK){
+		anim_pushing = 1;
+		if( items[ITEM_ID_GROBE] ){
+			var upper_cell = bg.cell(bx, y - 16);
+			var next_cell_type = bg.cell_type(bx + DIR_VX[dir] * 16, y);
+			var cx:int = (<int>bx) / 16;
+			var outside = (cx <= 0) || (cx >= 15);
+			if( !outside && (upper_cell != bg.TILE_MOVABLE_BLOCK) && ((next_cell_type & bg.TYPE_WALL) == 0)){
+				pushing = 1;
+			}
+		}
+	}
+
+	if( pushing ){
+		grobe_progress += 1;
+		var push_wait = 30;
+		if( items[ITEM_ID_POWER_BOTTLE] ) push_wait = 10;
+		if( grobe_progress >= push_wait ){
+			var i = en.new();
+			if( i != -1 ){
+				en.type[i] = en.TYPE_BLOCK;
+				en.px[i] = bx/16*16+8;
+				en.py[i] = y/16*16+8;
+				en.p1[i] = dir;
+				en.p2[i] = 0;
+				en.p3[i] = 0;
+				en.p4[i] = 0;
+				// en.setup(i); //en.setup()がバンクの関係で使えない
+				vx = 0;
+				
+				sound.play_se(sound.SE_PUSH_ROCK,0);
+			}
+		}
+	}else{
+		grobe_progress = 0;
+	}
+
+	if( anim_pushing ){
+		anim_stat = ANIM_STAT_PUSH;
+	 }elsif( anim_stat == ANIM_STAT_PUSH){
+		anim_stat = 0;
+	}
+}
+
+function check_block_box_elevator(r:int):int
+{
+	if( vy > 0){
+		return r;
+	}
+	if( boxelev.box_idx == -1){
+		return r;
+	}
+	var i = boxelev.box_idx;
+	if( math.abs(x-boxelev.box_x[i])<20 && y>=(boxelev.box_y[i]-12) && y < (boxelev.box_y[i]-6) ){
+		return r | en.DIR_MASK_UP;
+	}
+	return r;
+}
+
+
+function check_block():int
+{
+	var r = 0;
+	
+	// 下方向
+	if( get_cell(x+4,y+8) || get_cell(x-4,y+8) ){
+		y = (y+8)/16*16 - 8;
+		r = en.DIR_MASK_DOWN;
+	}
+
+	// 上方向
+	var i:int;
+	var head_y = y - 5;
+	var mod16 = head_y % 16;
+	for( i, 0, 2 ){
+		var c = bg.cell_type(x-4+i*8,head_y);
+		if( c == bg.TYPE_WALL ){
+			y = head_y/16*16 + (16 + 5);
+			r = r | en.DIR_MASK_UP;
+		}elsif( (c & bg.TYPE_FLOOR) && mod16 < 8 ){
+			y = head_y/16*16 + (8 + 5);
+			r = r | en.DIR_MASK_UP;
+		}
+	}
+	
+	// 右方向
+	if( get_cell(x+5,y+6) || get_cell(x+5,y+1) || get_cell(x+5,y-4) ){
+		x = (x+6)/16*16 - 6;
+		r = r | en.DIR_MASK_RIGHT;
+	}
+
+	// 左方向
+	if( get_cell(x-5,y+6) || get_cell(x-5,y+1) || get_cell(x-5,y-4) ){
+		x = (x-5)/16*16 + 16 + 5;
+		r = r | en.DIR_MASK_LEFT;
+	}
+	
+	return r;
+}
+
+function create_splash(x:int, y:int):void
+{
+	var bi = en.new();
+	en.type[bi] = en.TYPE_SPLASH;
+	en.px[bi] = x;
+	en.py[bi] = y;
+	en.p1[bi] = 8;
+}
+
+function create_bubble(x:int, y:int):void
+{
+	var bi = en.new();
+	en.type[bi] = en.TYPE_BUBBLE;
+	en.px[bi] = x;
+	en.py[bi] = y;
+}
+
+function anchor_throw():void
+{
+	anchor_area = bg.cur_area;
+	anchor_x = x;
+	anchor_y = y-8;
+	anchor_wait = 0;
+	if( dir == 0 ){
+		anchor_vx = 8;
+	}else{
+		anchor_vx = -8;
+	}
+	anchor_vy = -16;
+	has_anchor = 0;
+}
+
+/**
+ * 地面に落ちてる錨の処理.
+ */
+function process_anchor() : void
+{
+	var vx = (anchor_vx+giff)/16;
+	var vy = (anchor_vy+giff)/16;
+	anchor_x += vx;
+	anchor_y += vy;
+	var ct = bg.cell_type(anchor_x-4,anchor_y+8);
+	var ct2 = bg.cell_type(anchor_x+4,anchor_y+8);
+	if( ct & bg.TYPE_WALL != 0 || ct2 & bg.TYPE_WALL != 0){
+		anchor_vy = 0;
+		anchor_vx = 0;
+		anchor_x -= vx;
+		anchor_y -= vy;
+	}else{
+		anchor_vy += 2;
+	}
+	if( anchor_vy > 32){
+		anchor_vy = 32;
+	}
+
+	if( anchor_vy > -2 && anchor_wait > 20 ){
+		if( check_over(anchor_x, anchor_y, 12) ){
+			touch_event_func = anchor_event;
+			touch_event_x = anchor_x;
+			touch_event_y = anchor_y;
+		}
+	}else{
+		anchor_wait += 1;
+	}
+
+    gr_sprite2(anchor_x, anchor_y, 108, 0);
+
+	if( anchor_y > 240 ){
+		anchor_vy = 0;
+		anchor_vx = 0;
+		anchor_y = 16;
+		anchor_area = bg.cur_area + 16;
+		if( anchor_area == 3 + 13*16 /*タコエリア*/){
+			anchor_x = 7 * 16 + 8;
+			anchor_y = 6 * 16 + 8;
+		}
+	}
+}
+
+function check_over(_x:int, _y:int, size:int):int
+{
+	if( math.abs(_x - x) < size && math.abs(_y - y) < size && state != STATE_DYING && state != STATE_DIE ){
+		return 1;
+	}else{
+		return 0;
+	}
+}
+

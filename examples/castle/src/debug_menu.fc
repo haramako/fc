@@ -1,0 +1,350 @@
+options( bank: -1 );
+
+use * from common;
+use mem;
+use my;
+use game;
+use event;
+use savedata;
+use menu;
+use boxelev;
+use ending;
+use sound;
+
+var last_checkpoint:int;
+
+var num:int;
+var items:int*[16];
+var cur:int;
+var title:int*;
+
+function init():void
+{
+}
+
+function begin(name:int*):void
+{
+	title = name;
+	num = 0;
+	cur = 0;
+}
+
+function add(item:int*):void
+{
+	items[num] = item;
+	num += 1;
+}
+
+const VRAM:int16 = 0x2400;
+const SEL_NUM_MAX = 10;
+
+var page:int;
+var page_num:int;
+var sel_num:int;
+
+function select():int
+{
+	ppu.clear_out_sprite();
+
+	select_change_page(0);
+
+	while(1){
+		pad.update();
+		
+		if( (pad.pushed & pad.UP) ){ cur = (cur + sel_num - 1) % sel_num; }
+		if( (pad.pushed & pad.DOWN) ){ cur = (cur + 1) % sel_num; }
+		if( (pad.pushed & pad.LEFT) ){ select_change_page((page + page_num - 1) % page_num); }
+		if( (pad.pushed & pad.RIGHT) ){ select_change_page((page + 1) % page_num); }
+		if( (pad.pushed & pad.A) ){ return page * SEL_NUM_MAX + cur; }
+		if( (pad.pushed & pad.B) ){ return -1; }
+
+		ppu.sprite( 3*8-2, 6*8+cur*16, SPR_ARROW, 1);
+		ppu.wait_vsync();
+	}
+}
+
+function select_change_page(new_page:int):void
+{
+	page = new_page;
+	page_num = 1 + (num-1) / SEL_NUM_MAX;
+	sel_num = num - page * SEL_NUM_MAX;
+	if( sel_num > SEL_NUM_MAX ) sel_num = SEL_NUM_MAX;
+	cur = 0; 
+	select_draw();
+}
+
+function select_draw():void
+{
+	ppu.lock();
+
+	mmc3.MIRROR = 0; // vertical
+	ppu.ctrl1_bak = 0b10100001;
+	ppu.ctrl2_bak = 0b00011110;
+	ppu.scroll1 = 0;
+	ppu.scroll2 = 0;
+	ppu.fill_in_lock( VRAM, 0x0400, 0 );
+
+	var buf = ppu.alloc(64);
+	
+	mem.zero(buf, 64);
+	menu.text_print(buf, title);
+	ppu.put_in_lock(0x400 + ppu.pos(2, 2), buf, 64);
+	
+	var sel_base = page * SEL_NUM_MAX;
+	var i:int;
+	for(i, 0, sel_num){
+		mem.zero(buf, 64);
+		menu.text_print(buf, items[sel_base+i]);
+		ppu.put_in_lock(0x400 + ppu.pos(4, i * 2 + 5), buf, 64);
+	}
+	ppu.unlock();
+}
+
+function start():void
+{
+	var old0 = mmc3.set_cbank(0,fs.CBANK_TEXT+0);
+	var old1 = mmc3.set_cbank(1,fs.CBANK_TEXT+2);
+	var old_cbank2 = ppu.cbank2;
+	ppu.cbank2 = CBANK_SYS_SPRITE;
+	
+	while(1){
+		begin( _T("めにゅー") );
+		add( _T("ちぇっくぽいんと") );
+		add( _T("でばっぐせってい") );
+		add( _T("ふらぐへんこう") );
+		add( _T("いかりふよ") );
+		add( _T("ふりーいどう") );
+		add( _T("こいん") );
+		add( _T("えんでぃんぐ") );
+		switch( select() ){
+		case 0:
+			if( do_flag() ){ break; }
+		case 1:
+			do_debug_setting();
+		case 2:
+			do_flag_select();
+		case 3:
+			my.has_anchor = 1;
+			my.state = my.STATE_STAND;
+		case 4:
+			my.state = my.STATE_FREE_MOVE;
+			my.state_free_move = 1;
+			break;
+		case 5:
+			do_coin();
+		case 6:
+			mmc3.set_pbank(0, PBANK_ENDING);
+			ending.start(0);
+		case -1:
+			break;
+		}
+	}
+	
+	ppu.lock();
+	ppu.ctrl1_bak = 0b10100000;
+	ppu.ctrl2_bak = 0b00011110;
+	ppu.scroll1 = 0;
+	ppu.scroll2 = 0;
+	mmc3.set_cbank(0,old0);
+	mmc3.set_cbank(1,old1);
+	ppu.cbank2 = old_cbank2;
+	ppu.unlock();
+	ppu.wait_vsync();
+}
+
+function do_flag():int
+{
+	begin(_T("ちぇっくぽいんとをせんたく"));
+	var i:int;
+	for( i, 0, MAP_CHECKPOINT_NUM ){
+		add( &MAP_CHECKPOINT_DATA[MAP_CHECKPOINT[i]+3] );
+	}
+	cur = last_checkpoint;
+	
+	var n = select();
+	if( n == -1 ){ return 0; }
+
+	game.game_event = event.ID_MOVE_CHECKPOINT;
+	game.game_event_p1 = n;
+
+	return 1;
+}
+
+function do_debug_flag_change(mask:int, title:int*):void
+{
+	var flag = debug_flag & mask;
+	flag = do_select(flag, title);
+	if( flag ){
+		debug_flag = debug_flag | mask;
+	}else{
+		debug_flag = debug_flag & (-1-mask);
+	}
+	savedata.save();
+}
+
+function do_select(init:int,title:int*):int
+{
+	begin(title);
+	add( _T("OFF") );
+	add( _T("ON") );
+	if( init ) init = 1;
+	cur = init;
+	var result = select();
+	if( result == -1 ){
+		return init;
+	}else{
+		return result;
+	}
+}
+
+function do_select2(init:int,title:int*):int
+{
+	begin(title);
+	add( _T("OFF") );
+	add( _T("ON") );
+	if( init ) init = 1;
+	cur = init;
+	return select();
+}
+
+function do_flag_select():void
+{
+	while(1){
+		begin( _T("ふらぐへんこう") );
+		add( _T("すいもん") );
+		add( _T("まぐまげーと") );
+		add( _T("いかりせいせいき") );
+		add( _T("たいようしんでんかべ") );
+		add( _T("からーすいっち") );
+		add( _T("たいようしんでんげーと") );
+		add( _T("まっぷおーぷん") );
+		add( _T("えれべーたりせっと") );
+		add( _T("たましいのげーと") );
+		add( _T("ぜんしょうきょ") );
+		switch( select() ){
+		case 0:
+			do_flag_change(my.FLAG_WATERGATE, _T("すいもん") );
+		case 1:
+			do_flag_change(my.FLAG_MAGMAGATE, _T("まぐまげーと") );
+		case 2:
+			do_flag_change(my.FLAG_ANCHOR_GENERATOR, _T("いかりせいせいき") );
+		case 3:
+			do_flag_change(my.FLAG_REVEAL_TEMPLE_OF_SUN, _T("たいようしんでんかべ") );
+		case 4:
+			do_color_switch_select();
+		case 5:
+			do_flag_change(my.FLAG_SUNGATE, _T("たいようしんでんげーと") );
+		case 6:
+			mem.set(my.map_flag, 255, my.MAP_FLAG_MAX);
+			mem.set(my.checkpoint_flags, 255, my.CHECKPOINT_FLAG_MAX);
+			savedata.save();
+		case 7:
+			boxelev.init();
+		case 8:
+			do_flag_change(my.FLAG_SOUL_GATE, _T("たましいのげーと") );
+		case 9:
+			savedata.clear_debug();
+			savedata.save();
+		case -1:
+			break;
+		}
+	}
+}
+
+function do_flag_change(flag_id:int, title:int*):void
+{
+	var n = do_select2(my.flags[flag_id], title);
+	if( n != -1 ){
+		my.flags[flag_id] = n;
+	}
+	savedata.save();
+}
+
+function do_color_switch_select():void
+{
+	begin( _T("ふらぐへんこう") );
+	add( _T("なし") );
+	add( _T("あか") );
+	add( _T("みどり") );
+	add( _T("あお") );
+	var n = select();
+	if( n != -1 ){
+		my.flags[my.FLAG_COLORSWITCH] = n;
+	}
+	savedata.save();
+}
+
+function do_debug_setting():void
+{
+	while(1){
+		begin( _T("でばっぐせってい") );
+		add( _T("でばっぐもーどOFF") );
+		add( _T("たいとるすきっぷ") );
+		add( _T("おーとせーぶ") );
+		add( _T("ふりーじゃんぷ") );
+		add( _T("うえじゃんぷ") );
+		add( _T("すたーとじいかり") );
+		add( _T("おんがくなし") );
+		switch( select() ){
+		case 0:
+			debug_mode = 0;
+			savedata.save();
+		case 1:
+			do_debug_flag_change(DEBUG_FLAG_TITLE_SKIP, _T("たいとるすきっぷ") );
+		case 2:
+			do_debug_flag_change(DEBUG_FLAG_AUTO_SAVE, _T("おーとせーぶ") );
+		case 3:
+			do_debug_flag_change(DEBUG_FLAG_FREEJUMP, _T("ふりーじゃんぷ") );
+		case 4:
+			do_debug_flag_change(DEBUG_FLAG_UP_JUMP, _T("うえじゃんぷ") );
+			if( debug_flag & DEBUG_FLAG_UP_JUMP){
+				my.jump_mask = pad.A | pad.UP;
+			}else{
+				my.jump_mask = pad.A;
+			}
+		case 5:
+			do_debug_flag_change(DEBUG_FLAG_AUTO_ANCHOR, _T("すたーとじいかり") );
+		case 6:
+			do_debug_flag_change(DEBUG_FLAG_NO_BGM, _T("おんがくなし") );
+			if( debug_on(DEBUG_FLAG_NO_BGM) ){
+				sound.stop_bgm();
+			}
+		case -1:
+			break;
+		}
+	}
+}
+
+function do_coin():void
+{
+	var old_cur = 0;
+	while(1){
+		var buf = ppu.alloc(16);
+		mem.copy(buf, _T("こいん"), 4);
+		buf[3] = 1;
+		game.text_print_num(&buf[4], my.coin_num);
+		buf[7] = 0;
+
+		begin(buf);
+
+		cur = old_cur;
+		add( _T("ふやす") );
+		add( _T("へらす") );
+		switch( select() ){
+		case 0:
+			my.coin_num += 1;
+			old_cur = 0;
+			if( my.coin_num > 0 ){
+				my.items[ITEM_ID_COIN] = 1;
+			}
+		case 1:
+			my.coin_num -= 1;
+			old_cur = 1;
+			if( my.coin_num == 0 ){
+				my.items[ITEM_ID_COIN] = 0;
+			}
+		case -1:
+			break;
+		}
+	}
+}

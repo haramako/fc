@@ -1,0 +1,194 @@
+options( bank: 1 );
+
+use * from common;
+use my;
+use event;
+use mem;
+
+use * from en_vtbl; 
+
+public const MAX = 16;
+public var type:int[MAX] options(segment:"BSS_EX");
+public var px:int[MAX] options(segment:"BSS_EX");
+public var py:int[MAX] options(segment:"BSS_EX");
+public var pslot:int[MAX] options(segment:"BSS_EX");
+public var p1:int[MAX] options(segment:"BSS_EX");
+public var p2:int[MAX] options(segment:"BSS_EX");
+public var p3:int[MAX] options(segment:"BSS_EX");
+public var p4:int[MAX] options(segment:"BSS_EX");
+public var p5:int[MAX] options(segment:"BSS_EX");
+public var p6:int[MAX] options(segment:"BSS_EX");
+public var p7:int[MAX] options(segment:"BSS_EX");
+public var p8:int[MAX] options(segment:"BSS_EX");
+public var cur_max:int;
+public var temp:int[16] options(segment:"BSS_EX"); // en.process_*()内部などで使えるテンポラリ
+
+/*********************************************
+ * 敵関係のルーチン
+ *********************************************/
+
+/** 初期化する */
+public function init():void
+{
+}
+
+public function clear():void options(segment:"common")
+{
+	var i:int;
+	for( i, 0, MAX ){
+		type[i] = 0;
+	}
+	cur_max = 0;
+}
+
+public function process():void
+{
+	var old_pbank = mmc3.pbank_bak[0];
+	var i:int;
+	for( i, 0, cur_max ){
+		var t = type[i];
+		mmc3.set_pbank(0, EN_BANKS[t]);
+		PROCESS[t](i);
+	}
+	mmc3.set_pbank(0,old_pbank);
+}
+
+public function new():int options(segment:"common", fastcall:true)
+{
+	var i:int;
+	for( i, 0, MAX ){
+		if( !type[i] ){ 
+			if( i >= cur_max ){
+				cur_max = i+1;
+			}
+			return i; 
+		}
+	}
+	return 255;
+}
+
+public function setup(i:int):void
+{
+	var t = type[i];
+	var old_pbank = mmc3.set_pbank(0, EN_BANKS[t]);
+	NEW_FUNC[t](i);
+	mmc3.set_pbank(0, old_pbank);
+}
+
+private:
+
+public function check_block(px:int*, py:int*):int
+{
+	const size = 8;
+	var x = *px;
+	var y = *py;
+	var r = 0;
+
+	// 下方向
+	if( bg.cell_type(x+4,y+(size-1)) & bg.TYPE_WALL || bg.cell_type(x-4,y+(size-1)) & bg.TYPE_WALL ){
+		*py = (y+size)/16*16 - size;
+		r = DIR_MASK_DOWN;
+	}
+
+	// 右方向
+	if( bg.cell_type(x+(size-1),y) & bg.TYPE_WALL ){
+		*px = (x+size)/16*16 - size;
+		r = r | DIR_MASK_RIGHT;
+	}elsif( x >= 240 ){
+		*px = 239;
+		r = r | DIR_MASK_RIGHT;
+	}
+
+	// 左方向
+	if( bg.cell_type(x-size,y) & bg.TYPE_WALL ){
+		*px = (x-size)/16*16 + 16 + size;
+		r = r | DIR_MASK_LEFT;
+	}elsif( x < 16 ){
+		*px = 16;
+		r = r | DIR_MASK_LEFT;
+	}
+	
+	// 上方向
+	if( bg.cell_type(x+4,y-size) & bg.TYPE_WALL || bg.cell_type(x-4,y-size) & bg.TYPE_WALL ){
+		*py = (y-size)/16*16 + 16 + size;
+		r = r | DIR_MASK_UP;
+	}
+	
+	return r;
+}
+
+public function check_outside(x:int, y:int):int options(fastcall:true)
+{
+	return ( x < 16 || x >= 240 || y < 16 || y >= 240 );
+}
+
+public function check_over(i:int, size:int):int
+{
+	if( math.abs(px[i] - my.x) < size && math.abs(py[i] - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE ){
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
+public function check_over2(i:int, size:int):int
+{
+	if( math.abs(px[i]/2 - my.x/2) < size/2 && math.abs(py[i]/2 - my.y/2) < size/2 && my.state != my.STATE_DYING && my.state != my.STATE_DIE ){
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
+public function check_hit(i:int, size:int):void
+{
+	if( math.abs(px[i] - my.x) < size && math.abs(py[i] - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE ){
+		my.state = my.STATE_DYING;
+		my.wait = 0;
+	}
+}
+
+public function check_hit2(i:int, size:int, dx:sint, dy:sint):void
+{
+	if( math.abs(px[i] + dx - my.x) < size && math.abs(py[i] + dy - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE ){
+		my.state = my.STATE_DYING;
+		my.wait = 0;
+	}
+}
+
+public function check_hit_rect(x1:int, y1:int, x2:int, y2:int):void
+{
+	if( x1 > x2 ){
+		var tmp = x1;
+		x1 = x2;
+		x2 = tmp;
+	}
+	if( y1 > y2 ){
+		var tmp = y1;
+		y1 = y2;
+		y2 = tmp;
+	}
+	if( x1 < my.x && x2 >= my.x && y1 < my.y && y2 >= my.y && my.state != my.STATE_DYING && my.state != my.STATE_DIE ){
+		my.state = my.STATE_DYING;
+		my.wait = 0;
+	}
+}
+
+public function check_over_rect(x1:int, y1:int, x2:int, y2:int):int
+{
+	if( x1 > x2 ){
+		var tmp = x1;
+		x1 = x2;
+		x2 = tmp;
+	}
+	if( y1 > y2 ){
+		var tmp = y1;
+		y1 = y2;
+		y2 = tmp;
+	}
+	if( x1 < my.x && x2 >= my.x && y1 < my.y && y2 >= my.y && my.state != my.STATE_DYING && my.state != my.STATE_DIE ){
+		return 1;
+	}else{
+		return 0;
+	}
+}

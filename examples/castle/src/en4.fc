@@ -1,0 +1,866 @@
+use my;
+use * from en;
+use boxelev;
+use sound;
+use game;
+use event;
+
+private:
+use * from resource;
+
+/*********************************************
+ * バウンドするボール
+ *********************************************/
+public function bounder_new(i:int):void
+{
+    if( p2[i] == 0 ){ p2[i] = 32; }
+    if( p3[i] == 0 ){ p3[i] = 32; }
+    p4[i] = 1;
+    p5[i] = 1;
+}
+
+public function bounder_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var speed = p2[i];
+    var pow = p3[i];
+    var state = p4[i];
+    var t:sint = p5[i];
+    var anim = 0;
+
+
+    switch( state ){
+    case 0:
+        // stand
+        if( t ){
+            t -= 1;
+        }else{
+            sound.play_se(sound.SE_SHOOT, 0);
+            state = 1;
+            t = -pow;
+        }
+    case 1:
+        // jump
+        y += (t+giff)/16;
+        var vx = (speed/4+giff)/16;
+        if( dir == 1 ){ x += vx; }else{ x -= vx; }
+        t += 1;
+        var hit = check_block(&x,&y);
+        if( hit & (DIR_MASK_RIGHT | DIR_MASK_LEFT) ){ dir = 4 - dir; }
+        if( hit & DIR_MASK_DOWN ){
+            state = 0;
+            t = 1;
+        }
+        if( hit & DIR_MASK_UP ){ t = 0; }
+        
+        if( check_outside(x,y) ){
+            type[i] = 0;
+            return;
+        }
+    }
+    
+    gr_sprite2( x, y, SPR_SLOT[slot] + SPR_BOUNDER +state*4, DIR_FLIP_XY[dir]|PAL_SLOT[slot]);
+    
+    px[i] = x;
+    py[i] = y;
+    p1[i] = dir;
+    p4[i] = state;
+    p5[i] = t;
+    
+    check_hit(i,8);
+}
+ 
+/*********************************************
+ * プロミネンス
+ * p1: 出てくるまでの時間()
+ * p2: 速度
+ * p2: 死ぬまでに進むマス
+ * p4: 移動ウェイト
+ * p5: 方向
+ * p6: 状態
+ * p7: 次に進む方向
+ *********************************************/
+
+public function prominence_new(i:int):void
+{
+    if( p1[i] == 0) p1[i] = 60;
+    if( p2[i] == 0) p1[i] = 16;
+	p4[i] = p1[i];
+	p5[i] = DIR_UP;
+    p6[i] = 0;
+    p8[i] = 0;
+}
+
+public function prominence_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+    var speed = p2[i];
+    var life = p3[i];
+    var wait = p4[i];
+    var dir = p5[i];
+    var stat = p6[i];
+    var next_dir = p7[i];
+    var frame_wait = p8[i];
+
+    switch(stat){
+    case 0: // 待機中
+        wait -= 1;
+        if( !wait ){
+            stat = 1;
+            wait = 0;
+            next_dir = -1;
+            sound.play_se(sound.SE_OPEN_DOOR, 10);
+        }
+
+    case 1: // 移動中
+        if( next_dir == -1){
+            var dx: sint = x/2 - my.x/2;
+            var dy: sint = y/2 - my.y/2;
+            switch(dir){
+            case DIR_UP, DIR_DOWN:
+                if( math.abs(dy) < 4 || y <= 16 || y >= 224){
+                    if( dx < 0 ){
+                        next_dir = DIR_RIGHT;
+                    }else{
+                        next_dir = DIR_LEFT;
+                    }
+                }
+            case DIR_RIGHT, DIR_LEFT:
+                if( math.abs(dx) < 4 || x <= 16 || x >= 240){
+                    if( dy < 0 ){
+                        next_dir = DIR_DOWN;
+                    }else{
+                        next_dir = DIR_UP;
+                    }
+                }
+            }
+        }
+
+        frame_wait += speed;
+        while(frame_wait>=16){
+            frame_wait -= 16;
+
+            x += DIR_VX[dir];
+            y += DIR_VY[dir];
+            wait += 1;
+
+            if( wait >= 16 ){
+                wait = 0;
+                prominence_draw_cell(x/16, y/16);
+                if( next_dir != -1){
+                    dir = next_dir;
+                    next_dir = -1;
+                }
+                if( life != 0 ){
+                    life -= 1;
+                    if( life <= 0 ){
+                        stat = 2;
+                        wait = 0;
+                    }
+                }
+            }
+        }
+
+    	gr_sprite2(x + math.rand() % 4 - 2, y + math.rand() % 4 - 2, SPR_SLOT[slot] + SPR_PROMINENCE + (anim / 4) % 2 * 4, PAL_SLOT[slot] + anim % 2);
+
+        check_hit(i, 8);
+
+    case 2:
+        var limit = 0;
+        loop(){
+            wait += 1;
+            if( wait >= 16*15 ){
+                type[i] = 0;
+                return;
+            }
+            var cx = wait % 16;
+            var cy = wait / 16;
+            var c = bg.data[wait];
+            if( c == 2 ){
+                bg.put2(cx, cy, 32, 2/*パレット*/);
+                limit += 1;
+                if( limit >= 1 ){
+                    break;
+                }
+            }
+        }
+    }
+
+	px[i] = x;
+	py[i] = y;
+	p3[i] = life;
+	p4[i] = wait;
+	p5[i] = dir;
+    p6[i] = stat;
+    p7[i] = next_dir;
+    p8[i] = frame_wait;
+}
+
+function prominence_draw_cell(cx:int, cy:int):void
+{
+    bg.put2(cx, cy, 2, 1/*パレット*/);
+}
+
+/*********************************************
+ * スケルトン
+ * p1: 向き
+ * p5: 状態
+ * p6: カウンター
+ *********************************************/
+
+public function skelton_new(i:int):void
+{
+    p5[i] = 0;
+    p6[i] = 0;
+}
+
+public function skelton_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var stat = p5[i];
+    var wait = p6[i];
+    var dx:sint;
+    
+    var nx:uint = x+DIR_VX[dir]*8;
+    var is_hole = (bg.cell_type(nx,y+16) & bg.TYPE_WALL) == 0;
+    var is_wall = nx < 16 || nx > 240 || (bg.cell_type(nx,y-8) & (bg.TYPE_STOP|bg.TYPE_WALL));
+    
+    var spr = SPR_SLOT[slot] + SPR_SKELTON;
+    var pal = PAL_SLOT[slot];
+
+    switch(stat){
+    case 0:
+        // 歩き
+
+        // 地面の上
+        if( is_hole || is_wall ){
+            dir = 4-dir;
+        }else{
+            var dx:sint = (giff+16)/16;
+            if( dir == DIR_LEFT ){ dx = -dx; }
+            x += dx;
+        }
+
+        if( wait == 0 ){
+            if(math.abs(x/2-my.x/2) < 40 ){
+                stat = 1;
+                wait = 0;
+            }
+        }else{
+            wait -= 1;
+        }
+
+        gr_sprite2( x, y, spr+(anim/8)%2*4, DIR_FLIP_XY[dir] | pal);
+
+    case 1:
+        if( wait > 10 ){
+            // 地面の上
+            if( is_hole || is_wall ){
+                dir = 4-dir;
+            }else{
+                var dx:sint = (giff+8)/16;
+                if( dir == DIR_LEFT ){ dx = -dx; }
+                x += dx;
+            }
+        }
+
+        // 投げる
+        if( wait > 10 && wait % 16 == 0 ){
+            var ni = new();
+            if( ni != -1 ){
+                type[ni] = TYPE_SKELTON_BONE;
+                pslot[ni] = slot;
+                px[ni] = x;
+                py[ni] = y;
+                p1[ni] = DIR_VX[dir] * 8 + math.rand()/32 - 4;
+                p2[ni] = -16 - math.rand()/16;
+                p3[ni] = 0;
+            }
+        }
+
+        wait += 1;
+        if( wait >= 120 ){
+            stat = 0;
+            wait = 120;
+        }
+        gr_sprite2( x, y, spr+2*4+(anim/16)%2*4, DIR_FLIP_XY[dir] | pal);
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = dir;
+    p5[i] = stat;
+    p6[i] = wait;
+
+    check_hit(i,10);
+}
+
+/*********************************************
+ * スケルトンの骨
+ * p2: vx
+ * p3: vy
+ *********************************************/
+
+const skelton_bone_anims = [0, 4, 4];
+const skelton_bone_flags = [0, 0, 64];
+
+public function skelton_bone_new(i:int):void 
+{
+
+}
+
+public function skelton_bone_process(i:int):void 
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var vx:sint = p1[i];
+    var vy:sint = p2[i];
+    var local_anim = p3[i];
+
+    vy += anim % 2;
+
+    x += (vx+giff)/16;
+    y += (vy+giff)/16;
+
+    if( anim % 4 == 0 ){}
+    var a = (anim /4)% 3;
+    
+    gr_sprite2( x, y, SPR_SLOT[slot] + SPR_SKELTON_BONE + skelton_bone_anims[a], skelton_bone_flags[a] | PAL_SLOT[slot]);
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = vx;
+    p2[i] = vy;
+
+    check_hit(i,4);
+
+    if( check_outside(x,y) ){
+        type[i] = 0;
+        return;
+    }
+
+}
+
+/*********************************************
+ * 太陽神殿のゲート
+ *********************************************/
+
+public function sungate_new(i:int):void
+{
+    p4[i] = 0;
+}
+
+public function sungate_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var stat = p4[i];
+    var flag = my.flags[my.FLAG_SUNGATE];
+    var item_flag = sungate_flag_from_item();
+
+    if( stat == 0 && flag != item_flag ){
+        if( check_over(i,16) )
+        {
+            my.touch_event_func = sungate_event;
+            my.touch_event_p1 = i;
+            my.touch_event_x = x+8;
+            my.touch_event_y = y;
+        }
+    }
+
+    draw_sungate(slot, flag);
+
+    p4[i] = stat;
+}
+
+function draw_sungate(slot:int, flag:int):void
+{
+	if( anim % 2 == 0 ){
+        var spr = SPR_SLOT[slot] + SPR_SUNGATE;
+        var pal = PAL_SLOT[slot];
+		if( flag & 1 ) gr_sprite2( 9*16+8, 2*16+8, spr    , pal);
+		if( flag & 2 ) gr_sprite2( 7*16+8, 5*16+8, spr+1*4, pal);
+		if( flag & 4 ) gr_sprite2(11*16+8, 5*16+8, spr+2*4, pal);
+	}
+}
+
+function sungate_event():int options(segment:my)
+{
+    game.game_event = event.ID_SUNGATE;
+    p4[my.touch_event_p1] = 1;
+    return 1;
+}
+
+function sungate_flag_from_item():int
+{
+    var flag = 0;
+
+	if( my.items[ITEM_ID_KEY_SUN]){
+		flag = flag | 1;
+	}
+	if( my.items[ITEM_ID_KEY_MOON]){
+		flag = flag | 2;
+	}
+	if( my.items[ITEM_ID_KEY_STAR]){
+		flag = flag | 4;
+	}
+    return flag;
+}
+
+
+/*********************************************
+ * 錨生成器スイッチ
+ *********************************************/
+
+public function anchor_switch_new(i:int):void
+{
+    p4[i] = 0;
+}
+
+public function anchor_switch_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var stat = p4[i];
+    var flag = my.flags[my.FLAG_ANCHOR_GENERATOR];
+    var spr = SPR_SLOT[slot] + SPR_ANCHOR_SWITCH;
+    var pal = PAL_SLOT[slot];
+
+    if( !flag && stat == 0 ){
+        if( check_over(i,16) )
+        {
+            my.touch_event_func = anchro_switch_event;
+            my.touch_event_p1 = i;
+            my.touch_event_x = x;
+            my.touch_event_y = y;
+        }
+    }
+
+    gr_sprite2(x,y,spr,pal);
+
+    p4[i] = stat;
+}
+
+function anchro_switch_event():int options(segment:my)
+{
+    game.game_event = event.ID_ANCHOR_SWITCH;
+    p4[my.touch_event_p1] = 1;
+    return 1;
+}
+
+/*********************************************
+ * 錨生成器の鎖
+ *********************************************/
+
+public function anchor_chain_new(i:int):void
+{
+}
+
+public function anchor_chain_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+
+    var n:int;
+    for(n,0,6){
+        gr_sprite2(x,y+16*n,SPR_SLOT[slot] + SPR_ANCHOR_CHAIN, PAL_SLOT[slot]|ppu.SPRITE_FLAG_HIDE);
+    }
+}
+
+
+/*********************************************
+ * クモ
+ * p4: 状態(0:待ち、1:気づいた, 2:降りる, 3:移動)
+ * p5: ウェイト
+ * p6: 時計回り方向なら0, 反時計回り方向なら1
+ *********************************************/
+
+public function spider_new(i:int):void
+{
+    p4[i] = 0;
+    p5[i] = 0;
+}
+
+public function spider_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var foot_cell_idx = p3[i];
+    var stat = p4[i];
+    var wait = p5[i];
+    var reverse = p6[i];
+    var vy = p7[i];
+    var dir = p8[i];
+
+    var spr = SPR_SLOT[slot] + SPR_SPIDER;
+    var pal = PAL_SLOT[slot];
+
+    switch(stat){
+        case 0: // 待ち
+            gr_sprite2(x,y-2,spr, pal | ppu.SPRITE_FLAG_HIDE);
+            if( math.abs(my.x/2-x/2) < 8 && my.y > y ){
+                stat = 1;
+                wait = 0;
+            }
+        case 1: // 気づいた
+            wait += 1;
+            if( wait > 20 ){
+                stat = 2;
+                wait = 0;
+                vy = 8;
+            }
+            gr_sprite2(x,y,spr, pal | ppu.SPRITE_FLAG_HIDE);
+
+        case 2: // 落ちる
+            vy += 1;
+            y += (vy + giff)/16;
+            gr_sprite2(x,y,spr+1*4, pal);
+
+            if( bg.cell_type(x,y+8) & bg.TYPE_WALL != 0){
+                stat = 3;
+                wait = 0;
+                foot_cell_idx = x/16 + (y+8)/16 * 16;
+                y = (y+8) / 16 * 16 - 8;
+                if( my.x > x){
+                    reverse = 1;
+                    dir = 1;
+                }else{
+                    reverse = 0;
+                    dir = 3;
+                }
+            }
+
+        case 3: // 着地
+            wait += 1;
+            if( wait > 10 ){
+                stat = 4;
+                wait = 0;
+            }
+            gr_sprite2(x,y,spr+2*4, pal |  DIR_FLIP[dir]);
+        case 4: // 歩く
+            spider_walk(&foot_cell_idx,&dir,<sint*>&wait,reverse);
+            
+            if( dir == -1 ){
+                //落ちる
+                stat = 2;
+                vy = 0;
+                wait = 0;
+            }else{
+                // 通常
+                var cx = foot_cell_idx % 16;
+                var cy = foot_cell_idx / 16;
+                var upper_dir = (dir + GROUND_SIDE[reverse] + 2) % 4;
+
+                x = cx * 16 + 8 + DIR_VX[upper_dir]*15 + DIR_VX[dir] * wait;
+                y = cy * 16 + 8 + DIR_VY[upper_dir]*15 + DIR_VY[dir] * wait;
+            }
+
+
+            if( x < 8 || x >= 248 || y < 8 || y >= 240 ){
+                type[i] = 0;
+            }
+
+            if( (dir & 1) != 0 ){
+                gr_sprite2(x,y,spr+2*4+anim/4%4*4, pal | SPIDER_DIR_FLIP_XY[(reverse*4)|dir]);
+            }else{
+                gr_sprite2(x,y,spr+6*4+anim/4%4*4, pal | SPIDER_DIR_FLIP_XY[(reverse*4)|dir]);
+            }
+    }
+
+    if( stat != 0 ){
+       check_hit(i,8);
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p4[i] = stat;
+    p5[i] = wait;
+    p6[i] = reverse;
+    p7[i] = vy;
+    p8[i] = dir;
+    p3[i] = foot_cell_idx;
+}
+
+const SPIDER_DIR_FLIP_XY = [128,128,64,64, 192,0,0,192]; // [reverse*4+dir]
+
+const GROUND_SIDE = [3,1]; // 地面側の方向のdirとの差分
+
+const DIR_CELL_OFFSET = [-16, 1, 16, -1];
+
+/**
+ * spiderの移動先を計算する.
+ * 
+ * 下記の２点を調べて、曲がるか直進するかを選択する
+ * →２　　　
+ * □１
+ *
+ * □: foot, 1: next_upper, 2: next_foot
+ */
+function spider_walk(p_foot_cell_idx:int*, p_dir:int*, p_wait:sint*,reverse:int):void 
+{
+    var dir = *p_dir;
+    var foot_cell_idx = *p_foot_cell_idx;
+    var wait = *p_wait;
+    wait += 1;
+    *p_wait = wait;
+
+    var upper_dir = (dir+GROUND_SIDE[reverse]+2) % 4;
+
+    if( wait == 12 ){
+        // 壁に突き当たって曲がるか調べる
+        var next_upper_idx = foot_cell_idx+DIR_CELL_OFFSET[dir]+DIR_CELL_OFFSET[upper_dir];
+        var next_upper_cell = bg.tile_type[bg.data[next_upper_idx]];
+
+        if ((next_upper_cell & bg.TYPE_WALL) != 0 ){
+            // 壁に突き当たって曲がる
+            *p_wait = 2;
+            *p_dir = upper_dir;
+            *p_foot_cell_idx = next_upper_idx;
+        }
+    }elsif( wait == 16 ){
+        // 地面に沿って曲がるか、そのまま直進か調べる
+        var next_foot_idx = foot_cell_idx+DIR_CELL_OFFSET[dir];
+        var next_foot_cell = bg.tile_type[bg.data[next_foot_idx]];
+
+        if ((next_foot_cell & bg.TYPE_WALL) == 0 ){
+            // 地面に沿って曲がる
+            var ground_dir = (dir+GROUND_SIDE[reverse]) % 4;
+            *p_wait = -8;
+            *p_dir = ground_dir;
+        }else{
+            // そのまま直進
+            *p_wait = 0;
+            *p_foot_cell_idx = next_foot_idx;
+        }
+    }else{
+        // なにもなし
+        var foot_cell = bg.tile_type[bg.data[foot_cell_idx]];
+        var cur_cell_idx = foot_cell_idx+DIR_CELL_OFFSET[upper_dir];
+        var cur_cell = bg.tile_type[bg.data[cur_cell_idx]];
+
+        if ((foot_cell & bg.TYPE_WALL) == 0 ){
+            // 地面を失って落ちる
+            *p_dir = -1;
+        }elsif( (cur_cell & bg.TYPE_WALL) != 0){
+            // 壁に埋まって止まる
+            *p_wait -= 1;
+        }
+    }
+}
+
+/*********************************************
+ * ミイラ
+ * p1: 方向
+ * p2: スピード(1/16)
+ * p4: 状態
+ * p5: ウェイト
+ *********************************************/
+
+public function mummy_new(i:int):void
+{
+    if( p2[i] == 0 ) p2[i] = 8;
+    p4[i] = 0;
+    p5[i] = 0;
+}
+
+public function mummy_process(i : int) : void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var speed = p2[i];
+    var stat = p4[i];
+    var wait = p5[i];
+
+    var ground_cell:int;
+    var vy:int;
+
+    var spr = SPR_SLOT[slot] + SPR_MUMMY;
+    var pal = PAL_SLOT[slot];
+
+    switch(stat){
+    case 0: // 左右
+        var vx = (speed+giff)/16;
+        if( dir == DIR_LEFT ){
+            vx = -vx;
+        }
+        x += vx;
+
+        // 方向転換
+        var cell = bg.cell_type(x+DIR_VX[dir]*8,y);
+        ground_cell = bg.cell_type(x+DIR_VX[dir]*8,y+16);
+        if( (cell & bg.TYPE_WALL) != 0 || (ground_cell & bg.TYPE_WALL) == 0 || check_outside(x,y)){
+            dir = 4 - dir;
+        }
+
+        // 梯子探し
+        wait += 1;
+        if( wait > 16 && math.abs(x % 16 - 8) < 4 ){
+            var under_cell = bg.cell_type(x,y+16);
+            var cur_cell = bg.cell_type(x,y);
+            if( ((under_cell & bg.TYPE_LADDER) != 0) && (my.y > y) ){
+                // 下のはしご
+                stat = 1;
+                x = x / 16 * 16 + 8;
+                y += 8;
+                wait = 0;
+            }elsif( ((cur_cell & bg.TYPE_LADDER) != 0) && (my.y < y) ){
+                // 上のはしご
+                stat = 2;
+                x = x / 16 * 16 + 8;
+                wait = 0;
+            }
+        }
+
+	    gr_sprite2(x, y, spr + (anim / 8) % 2 * 4, pal | DIR_FLIP_XY[dir]);
+
+    case 1:
+        //下り
+        wait += 1;
+        vy = (speed+giff)/16;
+        y += vy;
+        ground_cell = bg.cell_type(x+DIR_VX[dir],y+8);
+        if( wait > 16 && (ground_cell & bg.TYPE_WALL) != 0 ){
+            stat = 0;
+            y = y / 16 * 16 + 8;
+            wait = 0;
+            if( my.x > x ){
+                dir = DIR_RIGHT;
+            }else{
+                dir = DIR_LEFT;
+            }
+        }
+
+        if( check_outside(x,y) ){
+            stat = 2;
+        }
+	    gr_sprite2(x, y, spr + 2 * 4 + (anim / 8) % 2 * 4, pal);
+    case 2:
+        // 上り
+        wait += 1;
+        vy = (speed+giff)/16;
+        y -= vy;
+        ground_cell = bg.cell_type(x+DIR_VX[dir],y+16);
+        if( wait > 32 && (ground_cell & bg.TYPE_WALL) != 0 ){
+            stat = 0;
+            y = y / 16 * 16 + 8;
+            wait = 0;
+            if( my.x > x ){
+                dir = DIR_RIGHT;
+            }else{
+                dir = DIR_LEFT;
+            }
+        }
+
+        if( check_outside(x,y) ){
+            stat = 1;
+        }
+	    gr_sprite2(x, y, spr + 2 * 4 + (anim / 8) % 2 * 4, pal);
+    }
+
+
+	check_hit(i, 10);
+
+    /*
+	if (check_outside(x, y))
+	{
+		type[i] = 0;
+	}
+    */
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = dir;
+    p4[i] = stat;
+    p5[i] = wait;
+}
+
+
+/*********************************************
+ * 商人
+ * p1: 方向
+ * p2: 商人の種類
+ *********************************************/
+
+// event.fc空のコピーなので同期するのを忘れずに
+const MARCHANT_ITEM_IDS = [
+	ITEM_ID_GAS_MASK, ITEM_ID_COMPASS, ITEM_ID_WATCH,
+	ITEM_ID_SECURITY_CARD, ITEM_ID_LAMP, ITEM_ID_OMAMORI,
+	ITEM_ID_WING, -1, -1
+];
+
+const MARCHANT_MEMORY_ID = [50,51,52];
+
+public function marchant_new(i:int):void
+{
+    p4[i] = 0;
+
+    var kind = p2[i];
+    if( marchant_sold_out(kind) ){
+        // 売り切れた場合、記憶のかけらに変わる
+        type[i] = en.TYPE_MEMORY;
+        p1[i] = MARCHANT_MEMORY_ID[kind];
+        p2[i] = 0;
+        p3[i] = 0;
+        return;
+    }
+}
+
+public function marchant_process(i : int) : void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var kind = p2[i];
+
+    // そろばんがないと隠れる商人
+    if( kind == 2 && !my.items[ITEM_ID_ABACUS] ){
+        en.type[i] = 0;
+        return;
+    }
+
+    if( check_over(i,12) ){
+        my.touch_event_func = marchant_event;
+        my.touch_event_p1 = p2[i];
+        my.touch_event_x = x;
+        my.touch_event_y = y;
+    }
+
+    gr_sprite2(x, y, SPR_SLOT[slot] + SPR_MARCHANT, PAL_SLOT[slot]);
+}
+
+function marchant_sold_out(kind:int):int 
+{
+    var idx_base = kind * 3;
+    var i:int;
+    for(i,0,3){
+        var item_id = MARCHANT_ITEM_IDS[idx_base+i];
+        if( item_id != -1 ){
+            if( !my.items[item_id]){
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+function marchant_event():int options(segment:my)
+{
+    game_event = event.ID_MARCHANT;
+    game_event_p1 = my.touch_event_p1;
+    return 1;
+}

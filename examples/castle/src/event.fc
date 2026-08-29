@@ -1,0 +1,690 @@
+options( bank: -1 );
+private:
+
+use * from common;
+use * from graphics;
+use sound;
+use mem;
+use menu;
+use my;
+use en_vtbl;
+use en;
+use ending;
+use event2;
+
+include("event.asm");
+
+const ID_GET_ITEM = 1;
+const ID_MOVE_AREA = 2;
+const ID_MOVE_CHECKPOINT = 3;
+const ID_OPEN_MAGMAGATE = 4;
+const ID_CLOSE_MAGMAGATE = 5;
+const ID_SUNGATE = 6;
+const ID_ANCHOR_SWITCH = 7;
+const ID_MARCHANT = 8;
+const ID_MEMORY = 9;
+const ID_BIRD_NEST = 10;
+const ID_SOUL_GATE = 11;
+const ID_GAME_CLEAR = 12;
+const ID_OPEN_WATERGATE = 13;
+const ID_TRIAL_ENDING = 14;
+
+private:
+use game;
+use * from resource;
+
+function irq_setup():void;
+
+function ppu_clear():void
+{
+	mem.set( bg.data_buf, 0, 64 );
+	var i:int;
+	for( i, 0, 4 ){
+		var addr = ppu.pos(0,i*2)+0x400;
+		ppu.put( addr, bg.data_buf, 64, 0 );
+		ppu.wait_vsync_with_flag(2);
+	}
+	ppu.put( 0x27c0, bg.data_buf, 64, 0 );
+	ppu.wait_vsync_with_flag(2);
+}
+
+function run_get_item():void
+{
+	mmc3.MIRROR = 0; // vertical
+	ppu_clear();
+	var str = ppu.alloc(32), tail = str;
+	tail += mem.strcpy( tail, _T("「") );
+	tail += fs.copy( tail, fs.ITEM_NAME_BASE+game_event_p1 );
+	tail += mem.strcpy( tail, _T("」を手に入れた") );
+	var buf = ppu.alloc(64);
+	mem.zero(buf, 64);
+	menu.text_print( buf, str );
+	var addr = ppu.pos(6,2)+0x400;
+	ppu.put( addr, buf, 64, 0 );
+	ppu.wait_vsync_with_flag(2);
+		
+	ppu.irq_setup = irq_setup;
+
+	if(game_event_p1 >= 12 && game_event_p1 <= 17){
+		sound.crossfade_jingle(sound.BGM_OPEN_GREAT_CHEST, 60);
+	}else{
+		sound.crossfade_jingle(sound.BGM_OPEN_CHEST, 60);
+	}
+
+	while(!sound.jingle_finished){
+		ppu.wait_vsync_with_flag(2);
+	}
+
+	ppu.irq_setup = ppu.null_func;
+	ppu.wait_vsync_with_flag(2);
+
+}
+
+public function run_event():void
+{
+	var old_pbank:int;
+	switch( game_event ){
+	case ID_GET_ITEM:
+		run_get_item();
+	case ID_MOVE_AREA:
+		game.move_area(game_event_p1);
+	case ID_MOVE_CHECKPOINT:
+		game.move_checkpoint(game_event_p1);
+	case ID_OPEN_MAGMAGATE:
+		open_magmagate();
+	case ID_CLOSE_MAGMAGATE:
+		close_magmagate();
+	case ID_SUNGATE:
+		run_sungate();
+	case ID_ANCHOR_SWITCH:
+		run_anchor_switch();
+	case ID_MARCHANT:
+		run_marchant();
+	case ID_MEMORY:
+		run_memory(game_event_p1);
+	case ID_BIRD_NEST:
+		run_bird_nest(game_event_p1);
+	case ID_SOUL_GATE:
+		run_soul_gate();
+	case ID_GAME_CLEAR:
+		run_game_clear(0);
+	case ID_OPEN_WATERGATE:
+		old_pbank = mmc3.set_pbank(0, PBANK_EVENT2);
+		event2.run_open_watergate();
+		mmc3.set_pbank(0, old_pbank);
+	case ID_TRIAL_ENDING:
+		run_game_clear(1);
+	}
+	game_event = 0;
+}
+
+//=================================================
+// マグマゲート
+//=================================================
+function open_magmagate():void
+{
+	var i:int;
+	var j:int;
+	for( i, 0, 180 ){
+		ppu.scroll2 = math.rand() % [2,4,8,8,4,2][i/30];
+		ppu.wait_vsync_with_flag(2);
+		anim += 1;
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+	}
+	ppu.scroll2 = 0;
+	ppu.wait_vsync_with_flag(2);
+	my.flags[my.FLAG_MAGMAGATE] = 1;
+}
+
+function close_magmagate():void
+{
+	var i:int;
+	var j:int;
+	for( i, 0, 180 ){
+		ppu.scroll2 = math.rand() % [2,4,8,8,4,2][i/30];
+		ppu.wait_vsync_with_flag(2);
+		anim += 1;
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+	}
+	ppu.scroll2 = 0;
+	ppu.wait_vsync_with_flag(2);
+}
+
+//=================================================
+// 太陽神殿のゲート
+//=================================================
+public function run_sungate():void
+{
+    var flag = my.flags[my.FLAG_SUNGATE];
+
+	if( ((flag & 1) == 0) && my.items[ITEM_ID_KEY_SUN] != 0){
+		sungate_set(flag,0);
+		flag = flag | 1;
+	}
+	if( ((flag & 2) == 0) && my.items[ITEM_ID_KEY_MOON] != 0){
+		sungate_set(flag,1);
+		flag = flag | 2;
+	}
+	if( ((flag & 4) == 0) && my.items[ITEM_ID_KEY_STAR] != 0){
+		sungate_set(flag,2);
+		flag = flag | 4;
+	}
+
+	if( flag == 7 ){
+		sungate_open_gate();
+	}
+
+	my.flags[my.FLAG_SUNGATE] = flag;
+
+	ppu.scroll2 = 0;
+	ppu.wait_vsync_with_flag(2);
+}
+
+function sungate_set(flag:int, key_idx:int):void
+{
+	var i:int;
+	for( i, 0, 60 ){
+		ppu.scroll2 = math.rand() % 4;
+		my.draw();
+		draw_sungate(flag);
+		draw_key(key_idx, i/2 - 30);
+		ppu.wait_vsync();
+		anim += 1;
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+	}
+}
+
+function draw_sungate(flag:int):void
+{
+	if( anim % 2 == 0 ){
+		var spr = SPR_SLOT[1] + SPR_SUNGATE;
+		var pal = PAL_SLOT[1];
+		if( flag & 1 ) gr_sprite2(9*16+8, 2*16+8, spr    , pal);
+		if( flag & 2 ) gr_sprite2(7*16+8, 5*16+8, spr+1*4, pal);
+		if( flag & 4 ) gr_sprite2(11*16+8, 5*16+8, spr+2*4, pal);
+	}
+}
+
+function draw_key(idx:int, y:int):void
+{
+	var spr = SPR_SLOT[1] + SPR_SUNGATE;
+	var pal = PAL_SLOT[1];
+	if( idx == 0 ) gr_sprite2(9*16+8, 2*16+8 + y, spr    , pal);
+	if( idx == 1 ) gr_sprite2(7*16+8, 5*16+8 + y, spr+1*4, pal);
+	if( idx == 2 ) gr_sprite2(11*16+8, 5*16+8 + y, spr+2*4, pal);
+}
+
+function sungate_open_gate():void
+{
+	var i:int;
+	var n = 0;
+	for( i, 0, 60 ){
+		ppu.scroll2 = math.rand() % 4;
+		my.draw();
+		if( i>20 && i % 4 == 0 ){
+			if( n < 8 ){
+				var buf = ppu.alloc(4);
+				mem.zero(buf,4);
+				var addr = ppu.pos(0,21-n);
+				ppu.put(addr,buf,4,0);
+			}
+			n += 1;
+		}
+
+		draw_sungate(7);
+		ppu.wait_vsync();
+		anim += 1;
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+	}
+
+	var x:int;
+	var y:int;
+	for(x,0,2){
+		for(y,0,4){
+			bg.put2(x,7+y,0,0);
+		}
+	}
+}
+
+//=================================================
+// 錨生成器
+//=================================================
+function run_anchor_switch():void
+{
+	var i:int;
+	var y:sint = 72;
+
+	for(i,0,16){
+		var buf = ppu.alloc(6);
+		mem.set(buf,255,6);
+		var addr = ppu.pos(18,i);
+		ppu.put(addr,buf,6,0);
+
+		draw_anchor_generater(152,y);
+		my.draw();
+		ppu.wait_vsync();
+	}
+
+	var stat = 0;
+	var wait = 0;
+	while(stat < 3){
+		switch(stat){
+			case 0:
+				wait += 1;
+				if( wait > 60 ){
+					stat = 1;
+					wait = 0;
+				}
+			case 1:
+				if( anim % 2 == 0){
+					wait += 1;
+					y -= 1;
+					if( wait > 144 ){
+						stat = 2;
+						wait = 0;
+					}
+				}
+			case 2:
+				wait += 1;
+				if( wait > 60 ){
+					stat = 3;
+				}
+		}
+		ppu.scroll2 = math.rand() % 4;
+		my.draw();
+		draw_anchor_generater(152,y);
+		ppu.wait_vsync();
+		anim += 1;
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+	}
+	ppu.scroll2 = 0;
+
+	my.flags[my.FLAG_ANCHOR_GENERATOR] = 1;
+}
+
+const SPR_ANCHOR_GATE = SPR_SLOT_A + 10*4;
+
+const anchor_x = [ 0,16,32, 0,32, 0,32, 0,16,32];
+const anchor_y = [ 0, 0, 0,16,16,32,32,48,48,48];
+const anchor_p = [ 0, 4, 8,16,16,16,16,12,12,12];
+
+function draw_anchor_generater(x:int, y:sint):void
+{
+	var i:int;
+	for(i,0,10){
+		var px: int = x + anchor_x[i];
+		var py: sint = y + anchor_y[i];
+		if( py >= 0 ){
+			gr_sprite2(px,py, SPR_ANCHOR_GATE+ anchor_p[i], PAL_SLOT_A);
+		}
+	}
+
+	while(y>=0){
+		gr_sprite2(x+16,y-16, SPR_ANCHOR_GATE+20, PAL_SLOT_A);
+		y-=16;
+	}
+
+	gr_sprite2(5*16-8,9*16-8, 128+SPR_ANCHOR_SWITCH, PAL_SLOT_A);
+}
+
+//=================================================
+// 商人
+//=================================================
+public function run_marchant():void
+{
+	ppu.lock();
+	var old_ppu_ctrl1 = ppu.ctrl1_bak;
+	var old_cbank0 = mmc3.set_cbank(0,CBANK_TEXT+0);
+	var old_cbank1 = mmc3.set_cbank(1,CBANK_TEXT+2);
+	var old_cbank2 = ppu.cbank2;
+	ppu.cbank2 = CBANK_SYS_SPRITE;
+	mmc3.MIRROR = 0; // vertical
+	ppu.ctrl1_bak = 0b10100001;
+	ppu.irq_setup = ppu.null_func;
+
+	run_marchant_main();
+
+	ppu.irq_setup = ppu.null_func;
+	ppu.wait_vsync();
+	ppu.lock();
+	mmc3.set_cbank(0,old_cbank0);
+	mmc3.set_cbank(1,old_cbank1);
+	ppu.cbank2 = old_cbank2;
+	ppu.ctrl1_bak = old_ppu_ctrl1;
+	ppu.put_in_lock( 0x3f00, bg.pallet, 16 );
+	ppu.unlock();
+	ppu.wait_vsync();
+}
+
+function put_text(x:int, y:int, buf: int*, text:uint8*):void
+{
+	mem.zero(buf,64);
+	game.text_print(buf, text);
+	var addr = ppu.pos(x,y) + 0x400;
+	ppu.put_in_lock( addr, buf, 64);
+}
+
+const ITEM_IDS = [
+	ITEM_ID_GAS_MASK, ITEM_ID_COMPASS, ITEM_ID_WATCH,
+	ITEM_ID_SECURITY_CARD, ITEM_ID_LAMP, ITEM_ID_OMAMORI,
+	ITEM_ID_WING, -1, -1
+];
+const ITEM_PRICES = [
+	4,3,6,
+	3,5,5,
+	14,0,0
+];
+
+var marchant_message: int*;
+
+public function run_marchant_main():void
+{
+	ppu.put_in_lock( 0x3f00, ITEM_PAL, 16 );
+
+	marchant_message = bg.buf;
+	mem.copy(marchant_message, _T("なにか買ってくかい？"), 16);
+
+	marchant_draw_items();
+
+	ppu.unlock();
+
+
+	var idx_base = game_event_p1 * 3;
+	var idx = 0;
+	loop(){
+		pad.update();
+		if( pad.pushed & pad.B){
+			break;
+		}
+
+		if( pad.pushed & pad.A){
+			var item_id = ITEM_IDS[idx_base+idx];
+			var price = ITEM_PRICES[idx_base+idx];
+			var wait = 0;
+			ppu.lock();
+			if( my.items[item_id] != 0){
+				mem.copy(marchant_message, _T("うりきれだよ"), 16);
+				marchant_draw_items();
+			}elsif(my.coin_num < price){
+				mem.copy(marchant_message, _T("おかねがたりないよ"), 16);
+				marchant_draw_items();
+			}else{
+				my.items[item_id] = 1;
+				my.coin_num -= price;
+				mem.copy(marchant_message, _T("ありがとよ"), 16);
+				marchant_draw_items();
+
+				sound.play_se(sound.SE_COIN, 20);
+			}
+			ppu.unlock();
+			if( wait ){
+				var i:int;
+				for(i,0,20){ ppu.wait_vsync(); }
+			}
+		}
+
+		if( pad.pushed & pad.B){
+			break;
+		}
+
+		if( pad.pushed & pad.DOWN ) idx = (idx + 1)%3;
+		if( pad.pushed & pad.UP ) idx = (idx + 2)%3;
+
+		ppu.sprite(7*8, 7*8+idx*16, SPR_ARROW, 0);
+
+		ppu.wait_vsync();
+	}
+}
+
+function marchant_draw_items():void
+{
+	ppu.fill_in_lock( 0x2400, 0x400, 0 );
+
+	ppu.clear_out_sprite();
+
+	var buf = ppu.alloc(64);
+	var line = ppu.alloc(64);
+
+	put_text(4,4, buf, marchant_message);
+
+	put_text(16,14, buf, _T("しょじきん"));
+	game.text_print_num(line, my.coin_num);
+	line[3] = _T("G")[0];
+	line[4] = 0;
+	ppu.put_in_lock(ppu.pos(22, 15)+0x400, line, 4);
+
+	var idx_base = game_event_p1 * 3;
+	var i:int;
+	for(i,0,3){
+		var item_id = ITEM_IDS[idx_base+i];
+		if( item_id < 0 || my.items[item_id] ){
+			put_text(8,6+i*2, buf, _T("ーーうりきれーー"));
+		}else{
+			var size = fs.copy( line, fs.ITEM_NAME_BASE+item_id );
+			line[size] = 0;
+			put_text(8,6+i*2, buf, line);
+
+			game.text_print_num(line, ITEM_PRICES[idx_base+i]);
+			line[3] = _T("G")[0];
+			line[4] = 0;
+			ppu.put_in_lock(ppu.pos(18, 7+i*2)+0x400, line, 4);
+		}
+	}
+}
+
+//=================================================
+// 記憶のかけら
+//=================================================
+public function run_memory(memory_id:int):void
+{
+	ppu.lock();
+	var old_ppu_ctrl1 = ppu.ctrl1_bak;
+	var old_cbank0 = mmc3.set_cbank(0,CBANK_MEMORY_TEXT+0);
+	var old_cbank1 = mmc3.set_cbank(1,CBANK_MEMORY_TEXT+2);
+	var old_cbank2 = ppu.cbank2;
+	ppu.cbank2 = CBANK_SYS_SPRITE;
+	mmc3.MIRROR = 0; // vertical
+	ppu.ctrl1_bak = 0b10100001;
+	ppu.irq_setup = ppu.null_func;
+
+	my.clear_sprites();
+
+	ppu.put_in_lock( 0x3f00, ITEM_PAL, 16 );
+	ppu.fill_in_lock( 0x2400, 0x400, 0 );
+
+	my.set_memory(memory_id);
+	memory_draw(memory_id);
+
+	ppu.unlock();
+
+	run_memory_main();
+
+	ppu.irq_setup = ppu.null_func;
+	ppu.wait_vsync();
+	ppu.lock();
+	mmc3.set_cbank(0,old_cbank0);
+	mmc3.set_cbank(1,old_cbank1);
+	ppu.cbank2 = old_cbank2;
+	ppu.ctrl1_bak = old_ppu_ctrl1;
+	ppu.put_in_lock( 0x3f00, bg.pallet, 16 );
+	ppu.unlock();
+	ppu.wait_vsync();
+}
+
+function run_memory_main():void
+{
+	loop(){
+		pad.update();
+		if( pad.pushed & pad.A){
+			break;
+		}
+		ppu.wait_vsync();
+	}
+}
+
+function memory_draw(id:int):void 
+{
+	var data_buf = &bg.data_buf[0];
+	var data = data_buf;
+	data_buf += 256;
+	fs.copy(data, fs.MEMORIES_BASE+id);
+	var buf = data_buf;
+	data_buf += 256;
+	mem.zero(buf, 255);
+	menu.text_print_width(buf, data, 32);
+	var addr = ppu.pos(4,8)+0x400;
+	ppu.put_in_lock( addr, buf, 255);
+}
+
+//=================================================
+// 鳥の巣ワープ
+//=================================================
+const BIRD_NEST_MOVE_TO_AREA:int[] = [
+    7*16+12,
+    3*16+2
+];
+
+const BIRD_NEST_X:int[] = [
+    4*16+8,
+    9*16+8
+];
+
+const BIRD_NEST_Y:int[] = [
+    7*16+8,
+    8*16+8
+];
+
+public function run_bird_nest(nest_id:int):void
+{
+	var j:int;
+
+	light_down();
+
+	ppu.wait_vsync_with_flag(2);
+
+	ppu.lock();
+	my.x = BIRD_NEST_X[nest_id];
+	my.y = BIRD_NEST_Y[nest_id];
+	move_area_locked(BIRD_NEST_MOVE_TO_AREA[nest_id]);
+	ppu.unlock();
+
+	for( j, 0, 20 ){ ppu.wait_vsync_with_flag(2); }
+
+	sound.crossfade_jingle(sound.BGM_BIGBIRD, 60);
+
+	for( j, 0, 255 ){ ppu.wait_vsync_with_flag(2); }
+
+	light_undown();
+}
+
+function light_down():void
+{
+	var buf = ppu.alloc(32);
+	var i:int;
+	for( i, 0, 4 ){
+		mem.copy( buf, bg.pallet, 32 );
+		bg.pal_down(buf, 32, i+1);
+		ppu.put( VRAM_PALETTE, buf, 32, 0 );
+		var j:int;
+		for( j, 0, 10 ){ ppu.wait_vsync_with_flag(2); }
+	}
+}
+
+function light_undown():void
+{
+	var buf = ppu.alloc(32);
+	var i:int;
+	for( i, 0, 4 ){
+		mem.copy( buf, bg.pallet, 32 );
+		bg.pal_down(buf, 32, 3-i);
+		ppu.put( VRAM_PALETTE, buf, 32, 0 );
+		var j:int;
+		for( j, 0, 10 ){ ppu.wait_vsync_with_flag(2); }
+	}
+}
+
+function move_area_locked(area:int):void
+{
+	bg.fetch_area(area, DIR_NONE);
+	game.init_area_enemy();
+
+	bg.update_palette(1);
+	bg.draw_screen();
+
+	var buf = ppu.alloc(32);
+	mem.copy( buf, bg.pallet, 32 );
+	bg.pal_down(buf, 32, 4);
+	ppu.put_in_lock( VRAM_PALETTE, buf, 32 );
+	my.draw();
+}
+
+//=================================================
+// 太陽神殿のゲート
+//=================================================
+public function run_soul_gate():void
+{
+	var changed = 0;
+    var flag = my.flags[my.FLAG_SOUL_GATE];
+
+    var i:int;
+	for(i,0,6){
+		var mask = 1<<i;
+		if( ((flag & mask) == 0) && my.items[ITEM_ID_ORB1+i] != 0){
+			flag = flag | mask;
+			changed = 1;
+		}
+	}
+
+	if( (flag & 0b1000000) == 0 ){
+		flag = flag | 0b1000000;
+		changed = 1;
+	}
+
+	my.flags[my.FLAG_SOUL_GATE] = flag;
+
+
+	// ゴゴゴゴ
+	if( changed ){
+		for( i, 0, 120 ){
+			ppu.scroll2 = math.rand() % 4;
+			my.draw();
+
+			ppu.wait_vsync();
+			anim += 1;
+		}
+	}
+
+	ppu.scroll2 = 0;
+	ppu.wait_vsync_with_flag(2);
+}
+
+//=================================================
+// ゲームクリア
+//=================================================
+function run_game_clear(is_trial:int):void
+{
+	var j:int;
+
+	light_up();
+
+	ppu.wait_vsync_with_flag(2);
+
+	for( j, 0, 100 ){ ppu.wait_vsync_with_flag(2); }
+
+	mmc3.set_pbank(0, PBANK_ENDING);
+	ending.start(is_trial);
+}
+
+function light_up():void
+{
+	var buf = ppu.alloc(32);
+	var i:int;
+	for( i, 0, 5 ){
+		mem.copy( buf, bg.pallet, 32 );
+		bg.pal_up(buf, 32, i);
+		ppu.put( VRAM_PALETTE, buf, 32, 0 );
+		var j:int;
+		for( j, 0, 20 ){ ppu.wait_vsync_with_flag(2); }
+	}
+
+}

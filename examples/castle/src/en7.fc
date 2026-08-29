@@ -1,0 +1,950 @@
+use my;
+use * from en;
+use boxelev;
+use sound;
+use game;
+use event;
+use bg;
+
+private:
+
+/*********************************************
+ * プロミネンス
+ * p1: 出てくるまでの時間()
+ * p2: 速度
+ * p3: 方向
+ * p4: 移動ウェイト
+ * p5: 方向
+ * p6: 状態
+ * p8: １歩ごとのウェイト
+ *********************************************/
+
+public function snake_new(i:int):void
+{
+    if( p1[i] == 0) p1[i] = 60;
+    if( p2[i] == 0) p1[i] = 16;
+	p4[i] = p1[i];
+    p6[i] = 0;
+    p8[i] = 0;
+}
+
+public function snake_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+    var speed = p2[i];
+    var dir = p3[i];
+    var wait = p4[i];
+    var stat = p6[i];
+    var next_dir = p7[i];
+    var frame_wait = p8[i];
+
+    switch(stat){
+    case 0: // 待機中
+        if( !my.items[ITEM_ID_FLUTE]){
+            return;
+        }
+        wait -= 1;
+        if( !wait ){
+            stat = 1;
+            wait = 0;
+        }
+
+    case 1: // 移動中
+        frame_wait += speed;
+        while(frame_wait>=16){
+            frame_wait -= 16;
+
+            x += DIR_VX[dir];
+            y += DIR_VY[dir];
+            wait += 1;
+
+            if( wait >= 16 ){
+                var cell = bg.cell(x,y);
+                if( (cell >= bg.TILE_UP_ARROW) && (cell <= bg.TILE_LEFT_ARROW)){
+                    dir = cell - bg.TILE_UP_ARROW;
+                }
+
+                wait = 0;
+                snake_draw_cell(x/16, y/16);
+
+                if( x < 8 || x >= 248 || y < 8 || y >= 232 ){
+                    type[i] = 0;
+                    return;
+                }
+            }
+        }
+
+        var spr = SPR_SLOT[slot] + SPR_SNAKE;
+        var pal = PAL_SLOT[slot];
+        var spr2 = (dir & 1) * (2*4);
+    	gr_sprite2(x, y, spr + spr2 + (anim / 8) % 2 * 4, pal | DIR_FLIP_XY[dir]);
+
+        check_hit(i, 8);
+    }
+
+	px[i] = x;
+	py[i] = y;
+	p3[i] = dir;
+	p4[i] = wait;
+    p6[i] = stat;
+    p8[i] = frame_wait;
+}
+
+function snake_draw_cell(cx:int, cy:int):void
+{
+    bg.put2(cx, cy, 9/*ブロック*/, 0/*パレット*/);
+}
+
+/*********************************************
+ * 記憶のかけら
+ * p1: 記憶のかけらID
+ * p4: 表示X
+ * p5: 表示Y
+ * p6: タイマー
+ *********************************************/
+
+public function memory_new(i:int):void
+{
+	p2[i] = 0;
+    p3[i] = 0;
+}
+
+public function memory_process(i:int):void
+{
+	var x = px[i];
+	var y = py[i];
+	var stat = p2[i];
+	var wait = p3[i];
+    var px = p4[i];
+    var py = p5[i];
+
+    if( !my.items[ITEM_ID_SPECTACLES]){
+        return;
+    }
+
+    var is_new = my.has_memory(p1[i]) > 0;
+
+	switch (stat)
+	{
+	case 0:
+		// タッチ判定
+		if (math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12)
+		{
+			my.touch_event_func = memory_event;
+			my.touch_event_p1 = i;
+			my.touch_event_x = x;
+			my.touch_event_y = y + 8;
+		}
+	case 1:
+		// セーブ演出
+        game.game_event = event.ID_MEMORY;
+        game.game_event_p1 = p1[i];
+        stat = 0;
+	}
+
+    if( wait == 0 ){
+        wait = math.rand() % 8 + 1;
+        px = math.rand() % 16 - 8;
+        py = math.rand() % 8 - 8;
+    }else{
+        if( anim%4 == 0 ){
+            wait -= 1;
+            if( wait > 1 ){
+                py -= 2;
+                ppu.null_func();
+                ppu.sprite(x+px, y+py, SPR_MEMORY_FLASH, 1-is_new);
+            }
+        }
+    }
+
+	p2[i] = stat;
+	p3[i] = wait;
+    p4[i] = px;
+    p5[i] = py;
+}
+
+function memory_event():int options(segment:my)
+{
+    p2[my.touch_event_p1] = 1;
+	return 1;
+}
+
+
+/*********************************************
+ * 水流
+ * p1: 方向
+ * p2: 周期
+ * p4: 状態
+ * p5: wait
+ * p6: wait2
+ *********************************************/
+
+const STEAM_DIR_SPR = [8,0,8,0];
+const STEAM_DIR_FLIP = [128,64,128,64];
+
+public function water_jet_new(i:int):void
+{
+    p4[i] = 0;
+    p5[i] = p2[i];
+}
+
+public function water_jet_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var stat = p4[i];
+    var wait = p5[i];
+
+    var spr = SPR_SLOT[slot] + SPR_WATER_JET;
+    var pal = PAL_SLOT[slot];
+
+    switch(stat){
+    case 0:
+        if( wait <= 0 ){
+            stat = 1;
+            wait = 0;
+        }
+        wait -= 1;
+    case 1:
+        wait += 1;
+        if( wait % 2 == 0){
+            var a = (wait / 8) % 2 * 4;
+            var v = (wait / 2) % 8 - 6;
+            gr_sprite2(x + DIR_VX[dir] * v, y + DIR_VY[dir] * v, spr + STEAM_DIR_SPR[dir] + a, pal | DIR_FLIP_XY[dir]);
+        }
+        if( wait >= 80 ){
+            stat = 2;
+            wait = 0;
+            p6[i] = 32;
+            p7[i] = 0;
+            p8[i] = 16;
+        }
+    case 2:
+        wait += 1;
+        p6[i] = water_jet_process_bubble(x,y, p6[i], dir, 0);
+        p7[i] = water_jet_process_bubble(x,y, p7[i], dir, 1);
+        p8[i] = water_jet_process_bubble(x,y, p8[i], dir, 2);
+
+        var dx = DIR_VX[dir];
+        var dy = DIR_VY[dir];
+        var flag = pal | DIR_FLIP_XY[dir];
+        var flag_flip: int = STEAM_DIR_FLIP[(dir+1)%4];
+
+        var a = (wait / 4) % 2 * 4;
+        var v = wait % 8 * 6;
+        gr_sprite2(x + dx * v, y + dy * v, spr + STEAM_DIR_SPR[dir] + a, pal | DIR_FLIP_XY[dir]);
+
+        var len:sint = wait * 2;
+        if( wait > 24 ) len = 48;
+        if( dir % 2 == 0 ){
+            // 上下
+            if( check_over_rect(x-14, y-dy*4, x+14, y + dy*len) ){
+                if( my.state == my.STATE_STAND ){
+                    my.state = my.STATE_JUMP;
+                }
+                if( dir == DIR_UP ){
+                    my.vy -= 2;
+                    my.swim_keep_velocity = 1;
+                    if( my.vy < -32 ) my.vy = -32;
+                    if( my.vy > -16 ) my.vy = -16;
+                }else{
+                    my.vy += 2;
+                    if( my.vy > 32 ) my.vy = 32;
+                    if( my.vy < 16 ) my.vy = 16;
+                }
+            }
+        }else{
+            // 左右
+            if( check_over_rect(x-dx*4,y-14, x + dx * 40, y+14) ){
+                if( my.state == my.STATE_STAND ){
+                    my.state = my.STATE_JUMP;
+                    my.y -= 2;
+                }
+                if( dir == DIR_LEFT ){
+                    my.vx -= 2;
+                    my.x -= 1;
+                    my.vy -= 1;
+                    if( my.vx < -32 ) my.vx = -32;
+                    if( my.vx > -16 ) my.vx = -16;
+                }else{
+                    my.vx += 2;
+                    my.x += 1;
+                    my.vy -= 1;
+                    if( my.vx > 32 ) my.vx = 32;
+                    if( my.vx < 16 ) my.vx = 16;
+                }
+            }
+        }
+
+        if( wait >= 180 ){
+            stat = 0;
+            wait = 100;
+        }
+    }
+
+    p1[i] = dir;
+    p4[i] = stat;
+    p5[i] = wait;
+}
+
+function water_jet_process_bubble(x:int, y:int, i:int, dir:int, idx:int):int 
+{
+    if( i <= 32 ){
+        return i+1;
+    }elsif( i <= 48){
+        var d:sint;
+        if( i <= 40 ){
+            d = (i - 32)*4;
+        }else{
+            d = 32 + (i - 40) * 2;
+        }
+        var n = anim+i*4+idx*64;
+        var dy:sint = math.sin(n) / 16;
+        var dx:sint = math.cos(n) / 16;
+	    ppu.sprite(x - 4 + DIR_VX[dir] * d + dx, y - 8 + DIR_VY[dir] * d + dy, SPR_BUBBLE, 1);
+        return i+1;
+    }else{
+        return 24 + <int>math.rand()/32;
+    }
+}
+
+
+/*********************************************
+ * 記憶のかけら
+ * p1: BOXエレベーターID
+ * p2: どちらによぶか(0:上に呼ぶ, 1:下に呼ぶ)
+ * p4: stat
+ *********************************************/
+
+public function boxelev_switch_new(i:int):void
+{
+	p4[i] = 0;
+    p6[i] = 0;
+}
+
+public function boxelev_switch_process(i:int):void
+{
+	var x = px[i];
+	var y = py[i];
+    var box_id = p1[i];
+    var box_pos = p2[i];
+	var stat = p4[i];
+	var wait = p5[i];
+    //var on = p6[i];
+
+    var on:int;
+    if( box_pos == 0){
+        on = (boxelev.box_stat[box_id] != 0);
+    }else{
+        on = (boxelev.box_stat[box_id] != 3);
+    }
+
+	switch (stat)
+	{
+	case 0:
+		// タッチ判定
+		if (my.items[ITEM_ID_SECURITY_CARD] && !on && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12)
+		{
+			my.touch_event_func = boxelev_switch_event;
+			my.touch_event_p1 = i;
+			my.touch_event_x = x;
+			my.touch_event_y = y;
+		}
+	case 1:
+		// セーブ演出
+        stat = 0;
+        if( box_pos == 0){
+            boxelev.box_stat[box_id] = 2;
+            boxelev.box_area[box_id] = bg.cur_area + 16;
+            boxelev.box_y[box_id] = 128;
+        }else{
+            boxelev.box_stat[box_id] = 5;
+            boxelev.box_area[box_id] = bg.cur_area - 16;
+            boxelev.box_y[box_id] = 128;
+        }
+        boxelev.box_active[box_id] = 1;
+        boxelev.box_running = 1;
+	}
+
+    ppu.null_func();
+	ppu.sprite(x-4, y-8, SPR_BOXELEV_SWITCH + on*2, 1);
+
+	p4[i] = stat;
+	p5[i] = wait;
+    p6[i] = on;
+}
+
+function boxelev_switch_event():int options(segment:my)
+{
+    p4[my.touch_event_p1] = 1;
+    p6[my.touch_event_p1] = 1 - p6[my.touch_event_p1];
+	return 1;
+}
+
+/*********************************************
+ * 鳥の巣
+ * p1: ID(0:入口、1:塔のふもと)
+ *********************************************/
+
+public function bird_nest_new(i:int):void
+{
+	p4[i] = 0;
+    p6[i] = 0;
+}
+
+public function bird_nest_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+    var nest_id = p1[i];
+	var stat = p4[i];
+
+	switch (stat)
+	{
+	case 0:
+		// タッチ判定
+		if (my.items[ITEM_ID_EGG] && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12)
+		{
+			my.touch_event_func = boxelev_switch_event;
+			my.touch_event_p1 = i;
+			my.touch_event_x = x;
+			my.touch_event_y = y;
+		}
+	case 1:
+		// 演出
+        stat = 0;
+        game_event = event.ID_BIRD_NEST;
+        game_event_p1 = nest_id;
+	}
+
+    var spr = SPR_SLOT[slot] + SPR_SNAKE;
+    var pal = PAL_SLOT[slot];
+	gr_sprite2(x-8, y, spr+SPR_BIRD_NEST, pal);
+	gr_sprite2(x+8, y, spr+SPR_BIRD_NEST+4, pal);
+
+	p4[i] = stat;
+}
+
+function bird_nest_event():int options(segment:my)
+{
+    p4[my.touch_event_p1] = 1;
+    p6[my.touch_event_p1] = 1 - p6[my.touch_event_p1];
+	return 1;
+}
+
+/*********************************************
+ * 錫杖で開くゲート
+ *********************************************/
+
+public function staff_gate_new(i : int) : void
+{
+	p2[i] = my.items[ITEM_ID_STAFF];
+	p3[i] = 1;
+}
+
+public function staff_gate_process(i : int) : void
+{
+	var x = px[i];
+	var y = py[i];
+	var flag_num = p1[i];
+	var old_flag = p2[i];
+	var flag = my.items[ITEM_ID_STAFF];
+
+	if (p3[i])
+	{
+		staff_gate_redraw(px[i], py[i], p2[i]);
+		p3[i] = 0;
+	}
+
+	if (old_flag != flag)
+	{
+		sound.play_se(sound.SE_OPEN_DOOR, 10);
+		staff_gate_redraw(x, y, flag);
+		p2[i] = flag;
+	}
+}
+
+function staff_gate_redraw(x : int, y : int, flag : int) : void
+{
+	if (flag)
+	{
+		bg.put2(x / 16, y / 16, bg.blank_cell_by_door, bg.tile_pal[bg.blank_cell_by_door]);
+		bg.put2(x / 16, y / 16 + 1, bg.blank_cell_by_door, bg.tile_pal[bg.blank_cell_by_door]);
+	}
+	else
+	{
+		bg.put2(x / 16, y / 16, 38, 0);
+		bg.put2(x / 16, y / 16 + 1, 38, 0);
+	}
+}
+
+/*********************************************
+ * クリア判定の魂の門
+ * p4: 状態
+ *********************************************/
+
+var soul_gate_flag:int;
+var soul_gate_idx:int[6]; // ソウルゲートのインデックス
+var soul_gate_portal_idx:int;
+
+public function soul_gate_new(i:int):void
+{
+    p4[i] = 0;
+    soul_gate_flag = 0;
+}
+
+public function soul_gate_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var stat = p4[i];
+
+    if( stat == 0 ){
+        if( check_over(i,16) )
+        {
+            my.touch_event_func = soul_gate_event;
+            my.touch_event_p1 = i;
+            my.touch_event_x = x;
+            my.touch_event_y = y;
+        }
+    }
+
+}
+
+function soul_gate_event():int options(segment:my)
+{
+    game.game_event = event.ID_SOUL_GATE;
+    p4[my.touch_event_p1] = 1;
+    return 1;
+}
+
+/*********************************************
+ * クリア判定の魂の門のポータル部分
+ * p4: 状態
+ *********************************************/
+
+public function soul_gate_portal_new(i:int):void
+{
+	mmc3.set_cbank(4+1, CBANK_ENEMY + 13);
+}
+
+public function soul_gate_portal_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var spr = SPR_SLOT[slot] + SPR_SOUL_GATE_PORTAL;
+    var pal = PAL_SLOT[slot];
+    var stat = p4[i];
+
+    if( stat == 0 ){
+        p4[i] = (my.flags[my.FLAG_SOUL_GATE] & 0b1000000) != 0;
+        return;
+    }
+
+
+    if( check_over(i,16) )
+    {
+        game.game_event = event.ID_GAME_CLEAR;
+    }
+
+    if( anim % 16 == 0 ){
+        var ei = en.new();
+        if( ei != -1 ){
+            en.type[ei] = en.TYPE_SOUL_GATE_FLASH;
+            en.pslot[ei] = pslot[i];
+            en.px[ei] = x;
+            en.py[ei] = y;
+            en.p4[ei] = 100 + math.rand()%16;
+            en.p5[ei] = math.rand();
+            en.p6[ei] = 0;
+        }
+    }
+
+    p1[i] += 1;
+	gr_sprite2(x, y, spr+p1[i]/2%4*4, pal);
+
+    p4[i] = stat;
+}
+
+/*********************************************
+ * クリア判定の魂の門の光
+ * p4: 状態
+ * p5: 回転
+ * p4: ウェイト
+ *********************************************/
+
+public function soul_gate_flash_new(i:int):void
+{
+    soul_gate_flag = 0;
+}
+
+public function soul_gate_flash_process(i:int):void
+{
+    var x = px[i];
+    var y = py[i];
+    var spr = SPR_SLOT[0] + SPR_SOUL_GATE_PORTAL+4*4;
+    var pal = PAL_SLOT[0];
+    var stat = p4[i];
+    var angle = p5[i];
+    var wait = p6[i];
+
+    stat -= 1;
+    if( stat == 0 ){
+        type[i] = 0;
+        return;
+    }
+
+    angle += 4;
+    wait += 1;
+    if( (anim+i) % 2 == 0 ){
+        var dx = math.cos(angle)/16 * (stat/16);
+        var dy = math.sin(angle)/16 * (stat/16);
+        ppu.null_func();
+	    ppu.sprite(x + dx - 4, y + dy - 8, spr+wait/8%4*2, pal);
+    }
+
+    p4[i] = stat;
+    p5[i] = angle;
+    p6[i] = wait;
+}
+
+
+/*********************************************
+ * クリア判定の魂の門の魂演出
+ * p1: 魂の種類(0~5)
+ * p4: 状態
+ * p5: ウェイト
+ *********************************************/
+public function soul_gate_symbol_new(i:int):void
+{
+    p4[i] = 0;
+    p5[i] = 0;
+    soul_gate_portal_idx = i;
+}
+
+public function soul_gate_symbol_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var id = p1[i];
+    var stat = p4[i];
+    var wait = p5[i];
+    var spr = SPR_SLOT[0] + SPR_SOUL_GATE_SYMBOL;
+    var pal = PAL_SLOT[0];
+
+    if( stat == 0 ){
+        p4[i] = (my.flags[my.FLAG_SOUL_GATE] & (1<<id)) != 0;
+        return;
+    }
+
+    if( check_over(i,16) )
+    {
+        my.touch_event_func = soul_gate_symbol_event;
+        my.touch_event_p1 = id;
+        my.touch_event_x = x;
+        my.touch_event_y = y;
+    }
+
+	mmc3.set_cbank(4+1, CBANK_ENEMY + 13);
+
+    wait += 1;
+    if( anim % 2 == 0 ){
+	    gr_sprite2(x, y, spr + anim/8%4*4, pal);
+    }
+
+    p4[i] = stat;
+    p5[i] = wait;
+}
+
+function soul_gate_symbol_event():int options(segment:my)
+{
+    game.game_event = event.ID_MEMORY;
+    game.game_event_p1 = 100 + my.touch_event_p1;
+    return 1;
+}
+
+/*********************************************
+ * 懐中時計の監視オブジェクト
+ * p4: 状態(0:未使用, 1:使用済み)
+ *********************************************/
+public function watch_keeper_new(i:int):void
+{
+    p4[i] = 0;
+    my.watch_in_area = 1;
+}
+
+public function watch_keeper_process(i:int):void
+{
+    var x = px[i];
+    var y = py[i];
+
+    if( my.watch_used ){
+	    ppu.sprite(x-8, y-8, SPR_WATCH_KEEPER  , 1);
+	    ppu.sprite(x+2, y-5, SPR_WATCH_KEEPER+2, 1);    
+    }else{
+	    ppu.sprite(x-8, y-8, SPR_WATCH_KEEPER  , 1);
+	    ppu.sprite(x  , y-8, SPR_WATCH_KEEPER+2, 1);    
+    }
+}
+
+/*********************************************
+ * マグマを消す滝
+ * p4: ウェイト
+ *********************************************/
+public function magma_waterfall_new(i:int):void
+{
+    p4[i] = 0;
+}
+
+public function magma_waterfall_process(i:int):void
+{
+    var x = px[i];
+    var y = py[i];
+    var wait = p4[i];
+
+    if( !my.flags[my.FLAG_WATERGATE] && !(my.flags[my.FLAG_COLORSWITCH] & 1) /*赤*/)
+    {
+        wait += 1;
+        if( anim % 8 == 0 ){
+            var ei = en.new();
+            if( ei != -1 ){
+                en.type[ei] = en.TYPE_MAGMA_WATERSPLASH;
+                en.pslot[ei] = pslot[i];
+                en.px[ei] = x - math.rand() % 8;
+                en.py[ei] = y - 8 + math.rand() % 16;
+                en.p4[ei] = -12 - math.rand() % 8;
+                en.p5[ei] = 16 + math.rand() % 16;
+            }
+        }
+    }
+
+    p4[i] = wait;
+}
+
+/*********************************************
+ * マグマを消す滝（水しぶき）
+ * p4: vx
+ * p5: vy
+ * p6: カウンター
+ *********************************************/
+public function magma_watersplash_new(i:int):void
+{
+}
+
+public function magma_watersplash_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var vx:sint = p4[i];
+    var vy:sint = p5[i];
+    var wait = p6[i];
+    var spr = SPR_SLOT[slot] + SPR_WATERFALL_SPLASH;
+    var pal = PAL_SLOT[slot];
+
+    x += (vx + giff)/16;
+    y += (vy + giff)/16;
+
+    vy += 1;
+    wait += 1;
+
+	var flip = 0;
+	if( wait/4%2 == 0 ){
+		flip = ppu.SPRITE_FLAG_FLIP_X;
+	}
+    var a = wait/8%2*4;
+    gr_sprite2(x, y, spr + a, pal|flip);
+
+    if( y >= 240 ){
+        type[i] = 0;
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p4[i] = vx;
+    p5[i] = vy;
+    p6[i] = wait;
+}
+
+/*********************************************
+ * 時間で閉じるゲート
+ * p1: 向き
+ * p2: 長さ
+ * p3: ウェイト(秒)
+ * p4: カウンター
+ * p5: 状態
+ * p6: 種類(0:下層,1:金剛宮,2:廃棄場)
+ *********************************************/
+
+public function timegate_new(i:int):void
+{
+    p4[i] = 0;
+    p5[i] = 0;
+    p6[i] = 0;
+    p7[i] = SPR_TIMEGATE;
+}
+
+public function timegate_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var len = p2[i];
+    var wait = p3[i];
+    var count = p4[i];
+    var stat = p5[i];
+    var kind = p6[i];
+    var spr_base = p7[i];
+    var dx = 0;
+    var dy = 0;
+    var a:int;
+    var flag:int;
+
+    switch( stat ){
+    case 0:
+
+        a = dir % 4;
+        flag = ppu.SPRITE_FLAG_HIDE;
+        count += 1;
+        if( count >= 6 ){
+            wait -= 1;
+            count = 0;
+        }
+
+        if( wait == 0 ){
+            stat = 1;
+            count = 0;
+        }elsif( wait <= 5 ){
+            dx = (anim % 2) * DIR_VX[dir];
+            dy = (anim % 2) * DIR_VY[dir];
+        }
+    case 1:
+        a = anim / 4 % 4;
+        flag = 0;
+        count += 1;
+        if( count % 8 == 0 ){
+            var ddx:int8 = x + DIR_VX[dir]*8;
+            var ddy:int8 = y + DIR_VY[dir]*8;
+            timegate_draw(kind, ddx/8, ddy/8, dir);
+        }
+
+        if( count / 16 >= len){
+            type[i] = 0;
+        }
+        x -= DIR_VX[dir];
+        y -= DIR_VY[dir];
+
+        if( check_over(i,8) ){
+            my.x -= DIR_VX[dir]*2;
+            my.y -= DIR_VY[dir]*2;
+            if( bg.cell_type(my.x, my.y) && bg.TYPE_WALL ){
+                my.state = my.STATE_DYING;
+                my.wait = 0;
+            }
+        }
+    }
+
+    var spr = SPR_SLOT[slot] + spr_base;
+    var pal = PAL_SLOT[slot];
+    var dir2 = (dir+2)%4;
+    if( DIR_VX[dir] == 0 ){
+        // 縦
+        gr_sprite2( x+dx, y+dy+DIR_VY[dir]*8, spr + a * 4, flag | pal);
+    }else{
+        // 横
+        gr_sprite2( x+dx+DIR_VX[dir]*8, y+dy, spr + a * 4, flag | pal);
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p3[i] = wait;
+    p4[i] = count;
+    p5[i] = stat;
+}
+
+const TIMEGATE_PAL = [1,1,2];
+const TIMEGATE_PAT_HORIZONTAL = [196,197,198,199];
+const TIMEGATE_PAT_VERTICAL = [192,194,193,195];
+
+function timegate_draw(kind:int, x:int, y:int, dir:int):void
+{
+    var y16: int16;
+    var odd: int;
+    var addr:int16;
+    var buf = ppu.alloc(2);
+    var y2:int;
+    var x2:int;
+    var pal_addr:uint16;
+    if( dir % 2 ){
+        // 水平
+        odd = x % 2;
+        y16 = y-1;
+        addr = 0x2000 + y16*32 + x;
+        mem.copy(buf, &TIMEGATE_PAT_HORIZONTAL[odd*2], 4);
+        ppu.put(addr, buf, 2, ppu.VERTICAL);
+
+        y2 = y/2;
+        x2 = x/2;
+        bg.data[y2*16+x2] = 48; /* ツタ */
+
+        pal_addr = bg.set_pal(x2,y2,TIMEGATE_PAL[kind]);
+        ppu.put( 0x23c0 + pal_addr, &bg.pal[pal_addr], 1, 0 );
+    }else{
+        // 垂直
+        odd = y % 2;
+        y16 = y;
+        x = x-1;
+        addr = 0x2000 + y16*32 + x;
+        mem.copy(buf, &TIMEGATE_PAT_VERTICAL[odd*2], 4);
+        ppu.put(addr, buf, 2, ppu.HORIZONTAL);
+
+        y2 = y/2;
+        x2 = x/2;
+        bg.data[y2*16+x2] = 48; /* ツタ */
+
+        pal_addr = bg.set_pal(x2,y2,TIMEGATE_PAL[kind]);
+        ppu.put( 0x23c0 + pal_addr, &bg.pal[pal_addr], 1, 0 );
+    }
+}
+
+
+/*********************************************
+ * 時間で閉じるゲート（金剛宮）
+ *********************************************/
+
+public function timegate_diamond_new(i:int):void
+{
+    timegate_new(i);
+    p6[i] = 1;
+    p7[i] = SPR_TIMEGATE_DIAMOND;
+}
+
+public function timegate_diamond_process(i:int):void
+{
+    timegate_process(i);
+}
+
+/*********************************************
+ * 時間で閉じるゲート（廃棄場）
+ *********************************************/
+
+public function timegate_waste_new(i:int):void
+{
+    timegate_new(i);
+    p6[i] = 2;
+    p7[i] = SPR_TIMEGATE_WASTE;
+}
+
+public function timegate_waste_process(i:int):void
+{
+    timegate_process(i);
+}

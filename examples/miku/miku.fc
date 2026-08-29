@@ -1,0 +1,175 @@
+options( bank_count: 4 );
+options( char_banks: 1 );
+options( bank:-1 );
+
+use pad;
+use ppu;
+use * from nes;
+use * from math;
+
+use * from common;
+use en;
+
+include('miku.chr');
+
+const SPR_MIKU = 0x80;
+const SPR_MIKU_BANG = 0x88;
+const SPR_NEGI = 0xa0;
+const SPR_EN_BUL = 0xe0;
+
+function my_process():void
+{
+	var i:int;
+	// 自機の移動
+	if( my_stat == 0 ){
+		pad.update();
+		if( pad.cur & pad.UP ){ my_y -= 2; }
+		if( pad.cur & pad.DOWN ){ my_y += 2; }
+		if( pad.cur & pad.LEFT ){ my_x -= 2; }
+		if( pad.cur & pad.RIGHT ){ my_x += 2; }
+
+		if( my_x < 16 ){ my_x = 16; }
+		if( my_x > 240 ){ my_x = 240; }
+		if( my_y < 32 ){ my_y = 32; }
+		if( my_y > 216 ){ my_y = 216; }
+
+		// 死亡!
+		if( my_bang ){
+			// wait(80);
+			my_stat = 1;
+			my_muteki = 1;
+			my_wait = 64;
+			my_bang = 0;
+			for( i, 0, MY_BUL_MAX ){
+				my_bul_type[i] = 3;
+				my_bul_vx[i] =  (cos(i*32+my_wait)/2+2)/4;
+				my_bul_vy[i] = -(sin(i*32+my_wait)/2+2)/4;
+				my_bul_x[i] = my_x;
+				my_bul_y[i] = my_y;
+			}
+		}
+
+		// 弾を打つ
+		if( my_wait == 0 ){
+			if( pad.cur & pad.A ){
+				var n:int;
+				for( n, 0, MY_BUL_MAX ){
+					if( my_bul_type[n] == 0 ){
+						my_bul_type[n] = 1;
+						my_bul_x[n] = my_x;
+						my_bul_y[n] = my_y-8;
+						my_bul_idx = ( my_bul_idx + 1 ) % MY_BUL_MAX;
+						my_wait = 4;
+						break;
+					}
+				}
+			}
+		}else{
+			my_wait -= 1;
+		}
+
+		if( my_muteki_count ){
+			my_muteki_count -= (giff+1)/4;
+			if( my_muteki_count == 0 ){ my_muteki = 0; }
+		}
+
+		put_sprite2x2( my_x-8, my_y-8, SPR_MIKU+anim*2, my_muteki_count % 2 );
+
+	}else{
+		if( my_wait ){
+			my_wait -= 1;
+		}else{
+			for( i, 0, MY_BUL_MAX ){
+				my_bul_type[i] = 0;
+			}
+			my_stat = 0;
+			my_wait = 0;
+			my_muteki_count = 60;
+		}
+	}
+}
+
+// 自機の弾の処理
+function my_bul_process():void
+{
+	var i = 0;
+	for( i, 0, MY_BUL_MAX ){
+		switch( my_bul_type[i] ){
+		case 1:
+			// 通常時
+			if( my_bul_y[i] > 8 ){
+				var cx = (my_bul_x[i]-4) / 8;
+				var cy = (my_bul_y[i]+16) / 8;
+				my_bul_y[i] -= 6;
+				ppu.sprite( my_bul_x[i]-4, my_bul_y[i]-4, SPR_NEGI+anim, 0 );
+				ppu.sprite( my_bul_x[i]-4, my_bul_y[i]+4, SPR_NEGI+anim+16, 0 );
+			}else{
+				my_bul_type[i] = 0;
+			}
+		case 2:
+			// 弾の消滅エフェクト
+			if( my_bul_vx[i] >= 8 ){
+				my_bul_type[i] = 0;
+			}else{
+				ppu.sprite( my_bul_x[i]-4, my_bul_y[i]-4, SPR_MIKU_BANG+(my_bul_vx[i]/2), 0 );
+			}
+			my_bul_vx[i] += 1;
+		case 3:
+			// 死亡時の爆発
+			my_bul_x[i] += (my_bul_vx[i]+giff16)/16;
+			my_bul_y[i] += (my_bul_vy[i]+giff16)/16;
+			ppu.sprite( my_bul_x[i]-4, my_bul_y[i]-4, SPR_MIKU_BANG+(anim_count/2)%4, 0 );
+		}
+	}
+}
+
+function main(): void
+{
+	ppu.lock();
+	
+	ppu.init();
+	ppu.ctrl1_bak = 0b10001000;
+	ppu.ctrl2_bak = 0b00011110;
+	ppu.scroll1 = 0;
+	ppu.scroll2 = 0;
+
+	// パレットの初期化
+	ppu.put_in_lock( 0x3f00, PALLET, 32 );
+
+	// パレットテーブルの初期化
+	ppu.fill_in_lock( 0x23c0, 64, 0 );
+	
+	my_x = 128;
+	my_y = 180;
+	en.init();
+	
+	ppu.unlock();
+	
+	asm( "cli" );
+
+	while( 1 ){
+		var scroll = giff16/8;
+		if( scroll ){
+			ppu.scroll2 -= scroll;
+			if( ppu.scroll2 >= 240 ){ ppu.scroll2 -= 16; }
+			if( (ppu.scroll2 % 8) == 0 ){
+				var cy:int = ppu.scroll2 / 8;
+				ppu.put( ppu.pos( 0, cy ), "                                    ", 32, 0);
+				ppu.put( ppu.pos( rand()/8, cy ), "w", 1, 0);
+			}
+		}
+		
+		anim_count += 1;
+		anim = anim_count / 8 % 4;
+		giff16 = GIFF_TABLE[anim_count%16];
+		giff = giff16/4;
+
+		en.bul_process();
+		my_process();
+		en.process();
+		my_bul_process();
+    
+		ppu.wait_vsync();
+	}
+  
+}

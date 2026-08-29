@@ -1,0 +1,183 @@
+private:
+
+use mmc3;
+use * from common;
+
+include( "../nsd/include/nsd.inc" );
+include("sound.asm");
+
+// 0x00d0..0x00ff, 0x6500..0x67ff までは、NSDが使用する
+
+public const BGM_GAME_START = 0;
+public const BGM_RIDDLE_SOLVED = 1;
+public const BGM_BIGBIRD = 2;
+public const BGM_SONG = 3;
+public const BGM_OPEN_CHEST = 4;
+public const BGM_OPEN_GREAT_CHEST = 5;
+public const BGM_TITLE = 6;
+public const BGM_GROUND = 7;
+public const BGM_UNDERGROUND = 8;
+public const BGM_TEMPLE_OF_SUN = 9;
+public const BGM_ENDING = 10;
+
+public const SE_JUMP = 0;
+public const SE_COIN = 1;
+public const SE_WATER_SPLASH = 2;
+public const SE_CHECKPOINT_BELL = 3;
+public const SE_DEAD = 4;
+public const SE_OPEN_DOOR = 5;
+public const SE_SHOOT = 6;
+public const SE_PUSH_ROCK = 7;
+public const SE_HIT = 8;
+public const SE_SAVEPOINT = 9;
+public const SE_ROCK_CRASHED = 10;
+public const SE_LAVA_FIXED = 11;
+public const SE_PUSH_BUTTON = 12;
+
+var nsd_flag:int;
+var jingle_wait:int;
+public var jingle_finished:int;
+
+var next_bgm_idx:int; // 0:待機中, 1:再生中, 2: フェードアウト中
+public var cur_bgm_idx:int;
+var bgm_stat:int;
+var bgm_fade_wait:int; // フェードのウェイトカウンタ
+var bgm_fade_speed:int; // フェードの速さ
+var bgm_fade_count:int; // 現在のフェードカウント
+var bgm_change_wait:int;
+
+var cur_se_priority:int;
+
+const NSD_BUF_SIZE = 343;
+var nsd_buf:int[NSD_BUF_SIZE];
+
+
+public const bgm_table:int*[] options (address: "_sound_bgm_table");
+public const se_table:int*[] options (address: "_sound_se_table");
+
+function init():void
+{
+	nsd_init();
+	cur_bgm_idx = 0;
+	next_bgm_idx = 0;
+	bgm_stat = 0;
+	cur_se_priority = 0;
+}
+
+function main_nsd():void;
+
+public function process_frame():void
+{
+	switch(bgm_stat){
+	//case 0:
+		// DO NOTHING
+	//case 1:
+		// 再生中
+	case 2:
+		// フェードアウト
+		bgm_fade_wait += 1;
+		if( bgm_fade_wait >= bgm_fade_speed ){
+			bgm_fade_wait = 0;
+			bgm_fade_count -= 1;
+			if( bgm_fade_count <= 0 ){
+				play_bgm(next_bgm_idx);
+				cur_bgm_idx = next_bgm_idx;
+				set_master_volume(15);
+				bgm_stat = 1;
+			}else{
+				set_master_volume(bgm_fade_count);
+			}
+		}
+	case 3:
+	    // jingle再生準備
+		if(1){
+			jingle_finished = 0;
+			nsd_save(&nsd_buf[0]);
+
+			play_bgm(next_bgm_idx);
+			set_master_volume(15);
+			bgm_stat = 4;
+		}
+	case 4:
+	    // jingle再生中
+		var finished = bgm_finished();
+		if( finished ){
+			bgm_stat = 5;
+			bgm_fade_count = 0;
+		}
+	case 5:
+		// ジングルの余韻
+		bgm_fade_count += 1;
+		if( bgm_fade_count >= jingle_wait){
+			nsd_load(&nsd_buf[0]);
+			nsd_resume_bgm();
+			set_master_volume(0);
+			bgm_fade_wait = 0;
+			bgm_fade_speed = 1;
+			bgm_fade_count = 0;
+			bgm_stat = 6;
+		}
+	case 6:
+		// フェードイン
+		bgm_fade_wait += 1;
+		if( bgm_fade_wait >= bgm_fade_speed ){
+			bgm_fade_wait = 0;
+			bgm_fade_count += 1;
+			set_master_volume(bgm_fade_count);
+			if( bgm_fade_count >= 15){
+				jingle_finished = 1;
+				bgm_stat = 1;
+			}
+		}
+	}
+
+	if( nsd_flag & 2 ){
+		cur_se_priority = 0;
+	}
+}
+
+public function crossfade_bgm(idx:int, wait:int):void 
+{
+	next_bgm_idx = idx;
+	bgm_stat = 2;
+	bgm_fade_wait = 0;
+	bgm_fade_speed = wait;
+	bgm_fade_count = 15;
+}
+
+public function crossfade_jingle(idx:int, wait: int16):void
+{
+	next_bgm_idx = idx;
+	bgm_stat = 3;
+	bgm_fade_wait = 0;
+	bgm_fade_speed = 2;
+	bgm_fade_count = 15;
+	jingle_wait = wait;
+}
+
+// 音を鳴らす
+// priority
+//  0: 消えてもいい音（発射音, 水音, ...）
+//  1: ジャンプ
+// 10: 優先度が高い音（ドアが開く音, ...)
+// 20: 絶対に優先したい音(死亡音, コイン, ...)
+public function play_se(idx:int, priority:int):void 
+{
+	if( cur_se_priority > priority ) return;
+	nsd_play_se(idx);
+	cur_se_priority = priority;
+}
+
+
+
+public function bgm_finished():int options (fastcall:true);
+public function nsd_init():void;
+public function play_bgm(idx:int):void;
+public function stop_bgm():void;
+public function nsd_play_se(idx:int):void;
+public function stop_se():void;
+public function set_master_volume(p:int):void;
+public function nsd_load(buff:int*):void options (fastcall:true);
+public function nsd_save(buff:int*):void options (fastcall:true);
+public function nsd_resume_bgm():void options (fastcall:true);
+

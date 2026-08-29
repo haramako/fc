@@ -1,0 +1,236 @@
+options( bank:0 );
+
+use * from common;
+use bg;
+use en;
+use my;
+use * from boxelev_data;
+
+var box_area:int[MAX];
+var box_active:int[MAX];
+var box_stat:int[MAX];
+var box_x:int[MAX];
+var box_y:int[MAX];
+var box_px:int[MAX];
+var box_py:int[MAX];
+var box_counter:int[MAX];
+var box_over:int[MAX];
+
+var box_running:int; // 一つ以上の箱エレベーターがアクティブかどうか
+var box_idx:int; // 現在スクリーン内にある箱エレベーター
+var box_scrollable:int; // スクリーン内の箱エレベーターがいまスクロール可能な状態かどうか
+
+private:
+
+
+public function init():void options(segment:'game')
+{
+	var old_pbank = mmc3.set_pbank(1, PBANK_BOXELEV);
+	_init();
+	mmc3.set_pbank(1, old_pbank);
+}
+
+function _init():void
+{
+	var i:int;
+	for(i,0,MAX){
+		box_x[i] = BOX_INIT_X[i];
+		if( BOX_INIT_POS[i] == 0 ){
+			box_area[i] = BOX_TOP_AREA[i];
+			box_y[i] = BOX_TOP_Y[i];
+			box_stat[i] = 3;
+		}else{
+			box_area[i] = BOX_BOTTOM_AREA[i];
+			box_y[i] = BOX_BOTTOM_Y[i];
+			box_stat[i] = 0;
+		}
+	}
+}
+
+/** 
+ * fetch_area時の処理.
+ * 画面内に箱エレベーターがあるか、アクティブな箱エレベーターがあるかを確認する
+ */
+public function on_fetch_area():void options(segment:'common') // endingからも呼ばれるため、commonセグメントにする
+{
+	box_running = 0;
+	box_idx = -1;
+	var i:int;
+	for(i,0,MAX){
+		if( box_area[i] == bg.cur_area ){
+			// 画面内にある
+			box_running = 1;
+			box_idx = i;
+		}elsif( box_active[i] ){
+			// 動いている
+			box_running = 1;
+		}
+	}
+}
+
+public function process():void options(segment:'game')
+{
+	var old_pbank = mmc3.set_pbank(1, PBANK_BOXELEV);
+	_process();
+	mmc3.set_pbank(1, old_pbank);
+}
+
+function _process():void
+{
+	if( !box_running ){ return; }
+
+	var i:int;
+	for(i,0,MAX){
+		var idx = box_idx == i;
+		if( idx || box_active[i] ){
+			process_one(i);
+		}
+	}
+}
+
+/**
+ * 箱エレベーターの1フレーム分の処理
+ */
+function process_one(i:int):void
+{
+	var stat = box_stat[i];
+	var counter = box_counter[i];
+	var area = box_area[i];
+	var speed = BOX_SPEED[i];
+	var y = box_y[i];
+	var x = box_x[i];
+	box_px[i] = x;
+	box_py[i] = y;
+
+	switch(stat){
+	case 1: // 下で待機中
+		counter += 1;
+		if( counter > 120){
+			if( my.items[ITEM_ID_SECURITY_CARD] ){
+				stat = 2;
+				counter = 0;
+			}else{
+				stat = 0;
+				counter = 0;
+			}
+		}
+	case 2: // 上に移動中
+		if( speed <= anim % 2){
+			y -= 1;
+		}
+		if( area == BOX_TOP_AREA[i] ){
+			if( y <= BOX_TOP_Y[i] ){
+				y = BOX_TOP_Y[i];
+				stat = 3;
+				box_active[i] = 0;
+			}
+		}else{
+			if( y < 1 ){
+				y = 248;
+				area = area - 16;
+			}
+		}
+	case 4: // 上で待機中
+		counter += 1;
+		if( counter > 120){
+			if( my.items[ITEM_ID_SECURITY_CARD] ){
+				stat = 5;
+				counter = 0;
+			}else{
+				stat = 3;
+				counter = 0;
+			}
+		}
+	case 5: // 下に移動中
+		if( speed <= anim % 2){
+			y += 1;
+		}
+		if( area == BOX_BOTTOM_AREA[i] ){
+			if( y >= BOX_BOTTOM_Y[i] ){
+				y = BOX_BOTTOM_Y[i];
+				stat = 0;
+				box_active[i] = 0;
+			}
+		}else{
+			if( y > 254 ){
+				y = 32;
+				area = area + 16;
+			}
+		}
+	}
+	box_stat[i] = stat;
+	box_counter[i] = counter;
+	box_area[i] = area;
+	box_y[i] = y;
+	box_x[i] = x;
+
+	process_inscreen(i);
+}
+
+function process_inscreen(i:int):void
+{
+	var stat = box_stat[i];
+	var x = box_x[i];
+	var y = box_y[i];
+
+	if( box_area[i] != bg.cur_area ){
+		return;
+	}
+
+	box_idx = i;
+	var over = check_over(x,y,20);
+	var over_in_frame = !box_over[i] && over;
+	box_over[i] = over;
+
+	//var n = (speed+giff)/16;
+	var vibe = 0;
+	switch(stat){
+	case 0:
+		if( over_in_frame ){
+			box_active[i] = 1;
+			stat = 1;
+		}
+	case 1:
+		vibe = 1;
+	case 3:
+		if( over_in_frame ){
+			box_active[i] = 1;
+			stat = 4;
+		}
+	case 4:
+		vibe = 1;
+	}
+	
+	var dy = 0;
+	if( vibe ){
+		dy = (anim / 2) % 2;
+	}
+	draw_box_elevator(x,y+dy);
+
+	if( math.abs(x-my.x) < 48 && math.abs(y-my.y) < 48 ){
+		box_scrollable = 1;
+	}else{
+		box_scrollable = 0;
+	}
+	
+	box_stat[i] = stat;
+	box_x[i] = x;
+	box_y[i] = y;
+}
+
+public function check_over(x:int, y:int, size:int):int
+{
+	if( math.abs(x - my.x) < size && math.abs(y - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE ){
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
+function draw_box_elevator(x:int,y:int):void
+{
+	gr_sprite2( x-8, y-8, 68, 0);
+	gr_sprite2( x+8, y-8, 68, 64);
+	gr_sprite2( x-8, y+8, 100, 0);
+	gr_sprite2( x+8, y+8, 100, 64);
+}

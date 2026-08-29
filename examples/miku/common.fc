@@ -1,0 +1,43 @@
+use ppu;
+
+var anim:int;
+var anim_count:int;
+var giff:int8;
+var giff16:int8;
+
+var my_stat:int;
+var my_muteki:int;
+var my_muteki_count:int;
+var my_bang:int;
+var my_x:int;
+var my_y:int;
+var my_bang_count:int;
+var my_wait:int;
+
+const MY_BUL_MAX = 8;
+var my_bul_type:int[MY_BUL_MAX];
+var my_bul_x:int[MY_BUL_MAX];
+var my_bul_y:int[MY_BUL_MAX];
+var my_bul_vx:sint8[MY_BUL_MAX];
+var my_bul_vy:sint8[MY_BUL_MAX];
+var my_bul_idx:int;
+
+var dout:int options ( address:0x20 );
+
+const PALLET:int[32] = [0x0f,0x27,0x38,0x30, 0x0f,0x11,0x12,0x13, 0x0f,0x11,0x12,0x13, 0x0f,0x11,0x12,0x13,
+                        0x19,0x0b,0x2b,0x30, 0x0f,0x04,0x26,0x36, 0x0f,0x11,0x12,0x13, 0x0f,0x11,0x12,0x13];
+
+const GIFF_TABLE = [0,8,4,12, 2,10,6,14, 1,9,5,13, 3,11,7,15];
+
+function outside(x:int,y:int):int
+{
+	return ( x < 8 || x > 240 || y < 8 || y > 240 );
+}
+
+function put_sprite2x2( x:int, y:int, pat:int, mode:int ):void
+{
+	ppu.sprite(x  ,y  ,pat   ,mode);
+	ppu.sprite(x+8,y  ,pat+ 1,mode);
+	ppu.sprite(x  ,y+8,pat+16,mode);
+	ppu.sprite(x+8,y+8,pat+17,mode);
+}

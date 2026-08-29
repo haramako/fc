@@ -1,0 +1,124 @@
+use * from en;
+use * from graphics;
+use ppu;
+use my;
+use savedata;
+
+private:
+
+/*********************************************
+ * スライム
+ * p4: アニメーションウェイト
+ * p5: アニメーションカウンター
+ *********************************************/
+
+public function slime_new(i : int) : void
+{
+	p4[i] = 0;
+	p5[i] = 0;
+}
+
+public function slime_process(i : int) : void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir : sint = p1[i];
+	var vy = p3[i];
+	var anim_wait = p4[i];
+	var anim_counter = p5[i];
+	var spr = SPR_SLOT[slot] + SPR_SLIME;
+	var pal = PAL_SLOT[slot];
+    var dir2 = 2-dir;
+
+	if (bg.cell(x, y - 7) == 6 /*下矢印*/)
+	{
+		// 下矢印に吸い込まれる
+		if (giff < 4)
+		{
+			if (y % 16 == 6)
+			{
+				type[i] = 0;
+				return;
+			}
+			else
+			{
+				y += 1;
+			}
+		}
+
+		gr_sprite2(x, y, spr + 3*4 + anim/8%2 * 4, pal | ppu.SPRITE_FLAG_HIDE | DIR_FLIP_XY[dir2]);
+	}
+	elsif(bg.cell_type(x - 5, y + 8) & bg.TYPE_WALL || bg.cell_type(x + 5, y + 8) & bg.TYPE_WALL)
+	{
+		// 地面の上
+		var nx : uint = x + dir * 8;
+		if (nx < 16 || nx > 240 || bg.cell_type(nx, y - 8) & bg.TYPE_STOP)
+		{
+			dir = -dir;
+		}
+		else
+		{
+			if ((anim % 32) < 16)
+			{
+				if (giff < 10)
+				{
+					x += dir;
+				}
+			}
+			else
+			{
+				if (giff < 6)
+				{
+					x += dir;
+				}
+			}
+		}
+		vy = 0;
+
+		anim_wait += 1;
+		if( anim_wait >= 6 ){
+			anim_wait = 0;
+			anim_counter += 1;
+		}
+
+		var dir2 = 2-dir;
+		
+		var a = SLIME_ANIM[anim_counter % 8];
+		gr_sprite2(x + SLIME_DX[a] * DIR_VX[dir2], y, spr + SPR_SLIME + a * 4, pal | DIR_FLIP_XY[dir2]);
+	}
+	else
+	{
+		// 落ちる
+		vy += anim % 2;
+		if (vy > 12)
+		{
+			vy = 12;
+		}
+		y = y + (vy + giff) / 16;
+
+		gr_sprite2(x, y, spr + 3*4 + anim/8%2 * 4, pal | DIR_FLIP_XY[dir2]);
+        
+        anim_counter = 0;
+        anim_wait = 0;
+	}
+
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = dir;
+	p3[i] = vy;
+	p4[i] = anim_wait;
+	p5[i] = anim_counter;
+
+	check_hit(i, 10);
+
+	if (check_outside(x, y))
+	{
+		type[i] = 0;
+	}
+}
+
+const SLIME_DX = [-2,2,4,2,1,0,-2,-4];
+const SLIME_ANIM = [0,1,2,2,2,3,3,0];
+

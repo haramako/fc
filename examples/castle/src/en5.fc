@@ -1,0 +1,759 @@
+use my;
+use * from en;
+use boxelev;
+use sound;
+use game;
+use event;
+
+private:
+
+/*********************************************
+ * クッキーバー
+ * p1: 初期角度( 0〜255, 右から時計回り )
+ * p2: 回転速度( 正で右回転、負で左回転。単位=1/256[円周/frame])
+ * p3: 回転の大きさ(3=標準で小さい値ほど大きな円を描く)
+ *********************************************/
+
+public function cookiebar_new(i:int):void
+{
+	if (p3[i] == 0)
+	{
+		p3[i] = 6;
+	}
+	p4[i] = px[i];
+	p5[i] = py[i];
+}
+
+
+public function cookiebar_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var angle = p1[i];
+	var speed = p2[i];
+	var size = p3[i];
+
+    if( anim % 2 == 0 ){
+	    angle += speed;
+    }
+
+    var rx = math.cos(angle) / 8;
+    var ry = math.sin(angle) / 8;
+    var sx: int;
+    var sy: int;
+    var n:int;
+    var spr = SPR_SLOT[slot] + SPR_COOKIEBAR;
+    var pal = PAL_SLOT[slot];
+    for(n,1,size){
+        sx = x + rx * n / 2;
+        sy = y + ry * n / 2;
+	    ppu.sprite(sx-4, sy-4, spr + (anim / 4) % 2 * 2, pal + anim % 2);
+        cookiebar_checkhit(sx,sy);
+    }
+
+	p1[i] = angle;
+}
+
+function cookiebar_checkhit(x:int, y:int):void
+{
+    if( math.abs(x - my.x) < 4 && math.abs(y - my.y) < 4 && my.state != my.STATE_DYING && my.state != my.STATE_DIE){
+        my.state = my.STATE_DYING;
+        my.wait = 0;
+    }
+}
+
+/*********************************************
+ * ジグザグ
+ * p1: 方向(0:右上, 1:右下, 2:左下, 3:左上)
+ * p2: speed(1/16ピクセル/Frame)
+ * p5: wait
+ * p6: count(0~16でループ、0: 上下方向の判定, 8: 左右方向の判定)
+ *********************************************/
+
+public function zigzag_new(i:int):void
+{
+    py[i] = py[i] - 8;
+    if( p2[i] == 0 ) p2[i] = 16;
+    p6[i] = 0;
+}
+
+const ZIGZAG_VX = [1,1,-1,-1];
+const ZIGZAG_VY = [-1,1,1,-1];
+const ZIGZAG_BOUND_Y = [1,0,3,2];
+const ZIGZAG_BOUND_X = [3,2,1,0];
+
+public function zigzag_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir = p1[i];
+    var speed = p2[i];
+    var wait = p5[i];
+    var count = p6[i];
+
+    wait += speed;
+    while(wait >= 16){
+        wait -= 16;
+
+        if( count == 0 ){
+            var dy = ZIGZAG_VY[dir];
+            var cell = bg.cell_type(x,y+dy*8);
+            if( (cell & bg.TYPE_WALL) != 0 || y >= 223 || y <= 16){
+                dir = ZIGZAG_BOUND_Y[dir];
+            }
+        }elsif( count == 8 ){
+            var dx = ZIGZAG_VX[dir];
+            var cell = bg.cell_type(x+dx*8,y);
+            if( (cell & bg.TYPE_WALL) != 0 || x >= 240 || x <= 16){
+                dir = ZIGZAG_BOUND_X[dir];
+            }
+        }
+        count = (count + 1) % 16;
+
+        x += ZIGZAG_VX[dir];
+        y += ZIGZAG_VY[dir];
+    }
+
+    gr_sprite2(x + math.rand() % 4 - 2, y + math.rand() % 4 - 2, SPR_SLOT[slot] + SPR_ZIGZAG + (anim / 4) % 2 * 4, PAL_SLOT[slot]);
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = dir;
+    p5[i] = wait;
+    p6[i] = count;
+
+    check_hit(i,8);
+}
+
+/*********************************************
+ * リヴァイアサンの目
+ *********************************************/
+
+public function leviathan_eye_new(i:int):void
+{
+    p4[i] = math.rand();
+}
+
+public function leviathan_eye_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+    var count = p4[i];
+
+    count += 1;
+
+    var pat = SPR_SLOT[slot] + SPR_LIVIATHAN_EYE;
+    if( count < 8 ){
+        pat += 8;
+    }elsif( count / 16 % 2 == 0 ){
+        pat += 4;
+    }
+    gr_sprite2(x, y, pat, PAL_SLOT[slot]);
+
+
+	px[i] = x;
+	py[i] = y;
+    p4[i] = count;
+
+}
+
+/*********************************************
+ * リヴァイアサンの腕
+ *********************************************/
+
+public function leviathan_arm_new(i:int):void
+{
+    p4[i] = 0;
+    p6[i] = math.rand();
+}
+
+public function leviathan_arm_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+    var arm_expand = p4[i];
+    var count = p6[i];
+
+    if( arm_expand < 32 && math.rand() < 60 ){
+        arm_expand += 1;
+    }
+
+    count += math.rand() % 4;
+    leviathan_arm_draw(slot, x-4,y+8,arm_expand,count);
+
+	px[i] = x;
+	py[i] = y;
+    p4[i] = arm_expand;
+    p6[i] = count;
+}
+
+function leviathan_arm_draw(slot:int, x:int, y:int, arm_expand:int, count:int):void
+{
+    var spr = SPR_SLOT[slot] + SPR_LIVIATHAN_ARM;
+    var dx1 = math.sin(count*2) / 64;
+    var p1 = PAL_SLOT[slot];
+    if( dx1 < 0 ) p1 = PAL_SLOT_A | ppu.SPRITE_FLAG_FLIP_X;
+    var a1 = (count+4) / 16 % 2 * 2;
+    var vy = arm_expand;
+    if( arm_expand > 16 ){
+        vy = 16;
+    }
+    ppu.sprite(x + dx1      , y - vy, spr + a1, p1);
+    if( arm_expand > 16 ){
+        var dx2 = math.sin(count*4+32) / 32;
+        var p2 = PAL_SLOT[slot];
+        if( dx2 < 0 ) p2 = PAL_SLOT_A | ppu.SPRITE_FLAG_FLIP_X;
+        var a2 = count / 8 % 2 * 2;
+        ppu.sprite(x + dx1 + dx2, y - arm_expand, spr + a2, p2);
+    }
+}
+
+/*********************************************
+ * ナイト
+ * p2: ジャンプの高さ
+ * p4: vy
+ * p5: 状態
+ * p6: ジャンプできるまでのウェイト[F]
+ * p7: vx
+ *********************************************/
+
+// 0~4: 幅２ジャンプ上から, 5: 幅１同高さ, 6: 幅3同高さ
+const KNIGHT_JUMP_VY = [-25,-19,-16,-10,-8,-12,-16];
+const KNIGHT_JUMP_VX = [12,12,12,12,12,10,16];
+
+public function knight_new(i:int):void
+{
+    if( p1[i] == 0 ) p1[i] = DIR_RIGHT;
+    if( p2[i] == 0 ) p2[i] = 16;
+    p4[i] = 0;
+    p5[i] = 0;
+    p6[i] = 0;
+    p6[i] = 0;
+    p7[i] = 0;
+}
+ 
+public function knight_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var speed = p2[i];
+    var vy:sint = p4[i];
+    var stat = p5[i];
+    var wait = p6[i];
+    var vx = p7[i];
+    var dx:sint = (giff+speed)/16 * DIR_VX[dir];
+    var ground_cell:int;
+    var spr_anim = (anim/16)%2*4;
+    
+    var spr = SPR_SLOT[slot] + SPR_KNIGHT;
+    var pal = PAL_SLOT[slot];
+
+    switch(stat){
+    case 0:
+        var jump_to: sint = -1;
+        // 歩き
+        if( wait > 0 ){
+            wait -= 1;
+        }
+
+        if( wait == 0 ){
+            var need_jump = (bg.cell_type(x+DIR_VX[dir]*8,y+16) & bg.TYPE_WALL) == 0;
+            if( need_jump ){
+                jump_to = knight_search(x+DIR_VX[dir],y,DIR_VX[dir],0);
+            }else{
+                var cell = bg.cell(x+DIR_VX[dir]*8,y);
+                var force_jump = 0;
+                switch( cell ){
+                    case 4: // 上矢印
+                        force_jump = 1;
+                    case 5: // 右矢印
+                        force_jump = dir == DIR_RIGHT;
+                    case 7: // 左矢印
+                        force_jump = dir == DIR_LEFT;
+                }
+                if( force_jump ){
+                    jump_to = knight_search(x+DIR_VX[dir]*8,y,DIR_VX[dir],1);
+                }
+            }
+        }
+
+        // 梯子探し
+        if( wait == 0){
+            if( math.abs(x % 16 - 8) < 2 ){
+                var under_cell = bg.cell_type(x,y+16);
+                var cur_cell = bg.cell_type(x,y);
+                if( ((under_cell & bg.TYPE_LADDER) != 0) && (my.y > y + 16) ){
+                    // 下のはしご
+                    stat = 3;
+                    x = x / 16 * 16 + 8;
+                    y += 8;
+                    wait = 0;
+                }elsif( ((cur_cell & bg.TYPE_LADDER) != 0) && (my.y < y - 32) ){
+                    // 上のはしご
+                    stat = 4;
+                    x = x / 16 * 16 + 8;
+                    wait = 0;
+                }
+            }
+        }
+
+        // 地面の上
+        if( jump_to != -1 ){
+            stat = 1;
+            vy = KNIGHT_JUMP_VY[jump_to];
+            vx = KNIGHT_JUMP_VX[jump_to];
+        }elsif( bg.cell_type(x-5,y+8) & bg.TYPE_WALL || bg.cell_type(x+5,y+8) & bg.TYPE_WALL){
+            var nx:uint = x + DIR_VX[dir]*8;
+            if( nx < 16 || nx > 240 || bg.cell_type(nx,y-8) & bg.TYPE_STOP ){
+                dir = 4-dir;
+            }else{
+                x += dx;
+            }
+            vy = 0;
+        }else{
+            // 落ちる
+            stat = 2;
+        }
+
+        gr_sprite2( x, y, spr+spr_anim, DIR_FLIP_XY[dir] | pal);
+
+    case 1:
+        // Jump
+        dx = (giff+vx)/16 * DIR_VX[dir];
+        x += dx;
+
+        vy += anim % 2;
+        //if( vy > 12 ){ vy = 12; }
+        y = y + (vy+giff)/16;
+        if( (vy > -1) && (bg.cell_type(x,y+8) & bg.TYPE_WALL ) ){
+            stat = 0;
+            vy = 0;
+            wait = 10;
+            y = (y / 16) * 16 + 8;
+        }
+        gr_sprite2( x, y, spr+spr_anim, DIR_FLIP_XY[dir] | pal);
+
+    case 2:
+        // 落下
+        vy += anim % 2;
+        if( vy > 24 ){ vy = 24; }
+        y = y + (vy+giff)/16;
+
+        if( bg.cell_type(x-5,y+8) & bg.TYPE_WALL || bg.cell_type(x+5,y+8) & bg.TYPE_WALL)
+        {
+            stat = 0;
+        }
+        gr_sprite2( x, y, spr+spr_anim, DIR_FLIP_XY[dir] | pal);
+
+    case 3:
+        // 下りはしご
+        wait += 1;
+        vy = (speed+giff)/16;
+        y += vy;
+        ground_cell = bg.cell_type(x+DIR_VX[dir],y+8);
+        if( wait > 16 && (ground_cell & bg.TYPE_WALL) != 0 ){
+            stat = 0;
+            y = y / 16 * 16 + 8;
+            wait = 10;
+            if( my.x > x ){
+                dir = DIR_RIGHT;
+            }else{
+                dir = DIR_LEFT;
+            }
+        }
+
+        if( check_outside(x,y) ){
+            stat = 4;
+        }
+
+	    gr_sprite2(x, y, spr + 2 * 4 + (anim / 8) % 2 * 4, pal);
+    case 4:
+        // 上りはしご
+        wait += 1;
+        vy = (speed+giff)/16;
+        y -= vy;
+        ground_cell = bg.cell_type(x+DIR_VX[dir],y+16);
+        if( wait > 32 && (ground_cell & bg.TYPE_WALL) != 0 ){
+            stat = 0;
+            y = y / 16 * 16 + 8;
+            wait = 10;
+            if( my.x > x ){
+                dir = DIR_RIGHT;
+            }else{
+                dir = DIR_LEFT;
+            }
+        }
+
+        if( check_outside(x,y) ){
+            stat = 3;
+        }
+	    gr_sprite2(x, y, spr + 2 * 4 + (anim / 8) % 2 * 4, pal);
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = dir;
+    p4[i] = vy;
+    p5[i] = stat;
+    p6[i] = wait;
+    p7[i] = vx;
+
+    check_hit(i,10);
+
+    //if( check_outside(x,y) ){ type[i] = 0; }
+}
+
+
+function knight_search(x:int, y:int, dir:sint, no_horizontal:int):int 
+{
+	var horizontal_type: int;
+	//return 4;
+	var i = 0;
+	var cx = x / 16;
+	var cy = y / 16;
+	var dir2:sint = dir * 2;
+	if( cx+dir2 <= 0 ) return -1;
+	if( cx+dir2 >= 15 ) return -1;
+
+	mem.zero(&temp[0],7);
+
+	for(i,0,5){
+		if( i == 2 ){
+			// 水平ジャンプ
+			if( !no_horizontal){
+				if( knight_check(cx+dir,cy) ){
+					temp[5] = 1; // １マス
+				}elsif( knight_check(cx+dir2,cy) ){
+					temp[2] = 1; // ２マス
+				}elsif( knight_check(cx+dir+dir2,cy) ){
+					temp[6] = 1; // ３マス
+				}
+			}
+		}else{
+			if( knight_check(cx+dir2,cy+i-2) ){
+				var inc = 1;
+				// 自分の方向の優先度を上げる
+				if( i < 2 ){
+					// 上方向
+					if( my.y < y ){
+						inc = 3;
+					}
+				}elsif( i > 2 ){
+					// 下方向
+					if( my.y > y ){
+						inc = 3;
+					}
+				}
+				temp[i] = inc;
+			}
+		}
+	}
+
+	var total = 0;
+	for(i,0,7){
+		total += temp[i];
+	}
+
+	if( total <= 0 ) return -1;
+
+	var n:sint = math.rand() % total;
+	for(i,0,7){
+		n -= temp[i];
+		if(n < 0) return i;
+	}
+
+	return -1;
+}
+
+function knight_check(cx:int, cy:int):int{
+	if( cy <= 0 || cy >= 15 ) return 0;
+	var to = bg.cell_type_by_cell(cx,cy) & bg.TYPE_WALL;
+	var ground = bg.cell_type_by_cell(cx,cy+1) & bg.TYPE_WALL;
+	return !to && ground;
+}
+ 
+/*********************************************
+ * スチーム
+ * p1: 方向
+ * p2: 初期周期
+ * p4: 状態
+ * p5: ウェイト
+ *********************************************/
+
+const STEAM_DIR_SPR = [8,0,8,0];
+const STEAM_DIR_FLIP = [128,64,128,64];
+
+public function steam_new(i:int):void
+{
+    p4[i] = 0;
+    p5[i] = p2[i];
+}
+
+public function steam_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var stat = p4[i];
+    var wait = p5[i];
+
+    var spr = SPR_SLOT[slot] + SPR_STEAM;
+    var pal = PAL_SLOT[slot];
+
+    switch(stat){
+    case 0:
+        if( wait <= 0 ){
+            stat = 1;
+            wait = 0;
+        }
+        wait -= 1;
+    case 1:
+        wait += 1;
+        if( wait % 2 == 0){
+            var a = (wait / 8) % 2 * 4;
+            var v = (wait / 2) % 8 - 6;
+            gr_sprite2(x + DIR_VX[dir] * v, y + DIR_VY[dir] * v, spr + STEAM_DIR_SPR[dir] + a, pal | ppu.SPRITE_FLAG_HIDE | DIR_FLIP_XY[dir]);
+        }
+        if( wait >= 40 ){
+            stat = 2;
+            wait = 0;
+        }
+    case 2:
+        wait += 1;
+        if( wait % 2 == 0){
+            var dx = DIR_VX[dir];
+            var dy = DIR_VY[dir];
+            var flag = pal | DIR_FLIP_XY[dir];
+            var flag_flip: int = STEAM_DIR_FLIP[(dir+1)%4];
+
+            if( wait > 0 && wait < 52){
+                var z = (wait + 0 ) / 8 % 2;
+                gr_sprite2(x,  y, spr + 4 + STEAM_DIR_SPR[dir],flag | flag_flip * z );
+            }
+            if( wait > 8 && wait < 56){
+                var z = (wait + 3 ) / 8 % 2;
+                gr_sprite2(x + dx * 16, y + dy * 16, spr + 16 + STEAM_DIR_SPR[dir], flag | flag_flip * z);
+            }
+            if( wait > 16 ){
+                var z = (wait + 6 ) / 8 % 2;
+                gr_sprite2(x + dx * 32, y + dy * 32, spr + 16 + STEAM_DIR_SPR[dir] + 4, flag | flag_flip * z);
+            }
+
+            var hit:int;
+            if( wait > 8 && dir % 2 == 0 ){
+                // 上下
+                hit = check_over_rect(x-6,y-dy*4,x+6, y + dy * 40);
+            }else{
+                // 左右
+                hit = check_over_rect(x-dx*4,y-6, x + dx * 40, y+6);
+            }
+
+            if( hit ){
+                if( my.items[ITEM_ID_HELMET]){
+                    my.state = my.STATE_DAMAGE;
+                    my.vy = -16;
+                    my.vx = (my.dir*2-1) * 16;
+                    my.jump_pow = 0;
+                }else{
+                    my.state = my.STATE_DYING;
+                    my.wait = 0;
+                }
+
+            }
+        }
+
+        if( wait >= 60 ){
+            stat = 0;
+            wait = 60;
+        }
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = dir;
+    p4[i] = stat;
+    p5[i] = wait;
+}
+
+/*********************************************
+ * ハリネズミ
+ * p1: 方向
+ * p2: 速度
+ *********************************************/
+
+public function sonic_new(i:int):void
+{
+    p5[i] = 0;
+    p6[i] = 0;
+}
+
+public function sonic_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var dir = p1[i];
+    var stat = p5[i];
+    var wait = p6[i];
+    var dx:sint;
+    
+    var nx:uint = x+DIR_VX[dir]*8;
+    var is_hole = (bg.cell_type(nx,y+16) & bg.TYPE_WALL) == 0;
+    var is_wall = nx < 16 || nx > 240 || (bg.cell_type(nx,y-8) & (bg.TYPE_STOP|bg.TYPE_WALL));
+
+    var spr = SPR_SLOT[slot] + SPR_SONIC;
+    var pal = PAL_SLOT[slot];
+    
+    switch(stat){
+    case 0:
+        // 歩き
+
+        // 地面の上
+        if( is_hole || is_wall ){
+            dir = 4-dir;
+        }else{
+            var dx:sint = (giff+16)/16;
+            if( dir == DIR_LEFT ){ dx = -dx; }
+            x += dx;
+        }
+
+        if( wait == 0 ){
+            if(math.abs(y/2-my.y/2) < 8 ){
+                if( my.x > x ){
+                    dir = DIR_RIGHT;
+                }else{
+                    dir = DIR_LEFT;
+                }
+                stat = 1;
+                wait = 0;
+            }
+        }else{
+            wait -= 1;
+        }
+
+        gr_sprite2( x, y, spr+(anim/8)%2*4, DIR_FLIP_XY[dir] | pal);
+
+    case 1:
+        // 弾うち準備
+        wait += 1;
+        if( wait >= 20 ){
+            stat = 2;
+            wait = 0;
+        }
+        gr_sprite2( x, y, spr+2*4, DIR_FLIP_XY[dir] | pal);
+    case 2:
+        // 弾うち
+        if( wait > 10 && wait % 32 == 0 ){
+            var ni = new();
+            if( ni != -1 ){
+                type[ni] = TYPE_SONIC_BULLET;
+                pslot[ni] = slot;
+                px[ni] = x;
+                py[ni] = y;
+                p1[ni] = DIR_VX[dir] * 24;
+                p2[ni] = 0;
+                p3[ni] = 0;
+                p4[ni] = 0;
+            }
+        }
+
+        wait += 1;
+        if( wait >= 120 ){
+            stat = 0;
+            wait = 120;
+        }
+        gr_sprite2( x, y, spr+2*4, DIR_FLIP_XY[dir] | pal);
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = dir;
+    p5[i] = stat;
+    p6[i] = wait;
+
+    check_hit(i,10);
+}
+
+/*********************************************
+ * ハリネズミの針
+ *********************************************/
+
+const sonic_bullet_anims = [4, 6, 6];
+const sonic_bullet_flags = [0, 0, 64];
+
+public function sonic_bullet_new(i:int):void
+{
+}
+
+// ローカルレジスタの使用を削減するためのダミー関数
+function reduce_local_register():void {}
+
+public function sonic_bullet_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var vx:sint = p1[i];
+    var vy:sint = p2[i];
+    var stat = p4[i];
+
+    var dir = 1;
+    if( vx < 0 ) dir = 3;
+
+    x += (vx+giff)/16;
+    var a = (anim /4)% 3;
+    var flag:int;
+
+    var spr = SPR_SLOT[slot] + SPR_SONIC_BULLET;
+    var pal = PAL_SLOT[slot];
+
+    switch( stat ){
+    case 0:
+        // 直進中
+        flag = DIR_FLIP_XY[dir] | pal;
+        reduce_local_register();
+        ppu.sprite( x-4, y-8, spr, flag);
+        var is_wall = (bg.cell_type(x+DIR_VX[dir]*4,y) & bg.TYPE_WALL) != 0;
+        if( is_wall ){
+            stat = 1;
+            var vvx = -DIR_VX[dir];
+            vx = (math.rand() / 16 -4) * vvx;
+            vy = -(math.rand() / 16);
+        }
+
+        if( check_outside(x,y) ){
+            type[i] = 0;
+            return;
+        }
+    case 1:
+        // 跳ね返ったあと
+        vy += anim % 2;
+        y += (vy+giff)/16;
+        spr = spr + sonic_bullet_anims[a];
+        flag = sonic_bullet_flags[a] | pal;
+        ppu.sprite( x-4, y-4, spr, flag);
+
+        if( y >= 240 ){
+            type[i] = 0;
+            return;
+        }
+
+    }
+   
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = vx;
+    p2[i] = vy;
+    p4[i] = stat;
+
+    check_hit(i,4);
+}
+

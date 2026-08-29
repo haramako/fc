@@ -1,0 +1,680 @@
+use my;
+use * from en;
+use boxelev;
+use sound;
+
+/*********************************************
+ * 鳥
+ *********************************************/
+
+function bird_new(i:int):void
+{
+	if( p2[i] == 0 ){ p2[i] = 16; }
+	p4[i] = px[i];
+	p5[i] = py[i];
+	p6[i] = 0;
+}
+
+function bird_process(i:int):void
+{
+	var slot = pslot[i];
+	var x:int, y:int, dx:int, dy:int;
+	var orig_x = p4[i];
+	var orig_y = p5[i];
+	var dir = p1[i];
+	var speed = p2[i];
+	var time = p6[i];
+
+	if( time < 128 ){
+		var t = time * 2;
+		dx = (math.cos(t)/4) - 32;
+		dy = -(math.sin(t)/4);
+	}else{
+		var t = time * 2;
+		dx = -(math.cos(t)/4) + 32;
+		dy = -(math.sin(t)/4);
+	}
+	switch( dir ){
+	case 0:
+		x = orig_x + dx;
+		y = orig_y + dy;
+	case 1:
+		x = orig_x - dx;
+		y = orig_y - dy;
+	case 2:
+		x = orig_x + dy;
+		y = orig_y + dx;
+	case 3:
+		x = orig_x - dy;
+		y = orig_y - dx;
+	}
+	time += (giff+speed)/16;
+
+	var a = (anim/8) % 2;
+	var d = py[i];
+	if( px[i] > x ){
+		d = 0;
+	}elsif( px[i] < x ){
+		d = 64;
+	}
+			
+	if( p3[i] == 1 && my.items[ITEM_ID_EYE] ){
+		if( anim % 2 ) gr_sprite2( x, y, 176+a*4, PAL_SLOT[slot]|d);
+		if( time > 128 ){ type[i] = 0; return; }
+	}else{
+		gr_sprite2( x, y, SPR_SLOT[slot] + SPR_BIRD + a*4, PAL_SLOT[slot]|d);
+	}
+	
+	px[i] = x;
+	py[i] = y;
+	p6[i] = time;
+
+	if( math.abs(x - my.x) < 8 && math.abs(y - my.y) < 8 && my.state != my.STATE_DYING && my.state != my.STATE_DIE && my.state != my.STATE_DAMAGE){
+		my.state = my.STATE_DAMAGE;
+		my.vy = -16;
+		my.vx = (my.dir*2-1) * 16;
+		my.jump_pow = 0;
+	}
+	// check_hit(i,10);
+
+	py[i] = d;
+	
+	//if( check_outside(x,y) ){ type[i] = 0; }
+}
+
+/*********************************************
+ * 石像
+ *********************************************/
+
+function statue_new(i:int):void
+{
+	if( p2[i] == 0 ){ p2[i] = 120; }
+}
+
+function statue_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir = p1[i];
+	var time = p2[i];
+	var wait = p3[i];
+	var spr = SPR_SLOT[slot] + SPR_STATUE;
+	var pal = PAL_SLOT[slot];
+
+	if( wait < (time-20) ){
+	}elsif( wait < time ){
+		gr_sprite2(x+DIR_VX[dir]*8, y, spr+4+anim/2%2*4, pal);
+	}else{
+		var fire = new();
+		type[fire] = TYPE_STATUE_FIRE;
+		pslot[fire] = slot;
+		px[fire] = x + DIR_VX[dir]*8;
+		py[fire] = y;
+		p1[fire] = dir;
+		setup(fire);
+		wait = 0;
+		sound.play_se(sound.SE_SHOOT,0);
+	}
+	wait += 1;
+
+	gr_sprite2(x, y, spr, DIR_FLIP_XY[dir]|pal);
+	
+	p3[i] = wait;
+}
+
+/*********************************************
+ * 石像の弾
+ *********************************************/
+
+function statue_fire_new(i:int):void
+{
+}
+
+function statue_fire_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir = p1[i];
+	var spr = SPR_SLOT[slot] + SPR_STATUE_FIRE;
+	var pal = PAL_SLOT[slot];
+	
+	x += DIR_VX[dir]*2;
+	if( bg.cell_type(x,y) & bg.TYPE_WALL ){
+		type[i] = 0;
+		return;
+	}
+
+	gr_sprite2(x, y, spr, anim/2%2);
+	
+	px[i] = x;
+	check_hit(i, 8);
+	if( check_outside(x,y) ){ type[i] = 0; }
+}
+
+/*********************************************
+ * 魚
+ *********************************************/
+
+function fish_new(i:int):void
+{
+	if( p2[i] == 0 ) p2[i] = 8;
+	p3[i] = 0;
+	p5[i] = 60+math.rand()/8;
+	p6[i] = py[i];
+	p7[i] = 60;
+}
+
+function fish_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir = p1[i];
+	var speed = p2[i];
+	var stat = p3[i];
+	var count:sint8 = p5[i];
+	var wait = p7[i];
+	var disp = 0;
+	var pat:int;
+	var vx:int;
+
+	const ANIM_SWIM = [2,3,4,4,3,2,1,0,0,1];
+	
+	if( x > 240 ){
+		dir = DIR_LEFT;
+	}else if(x < 16){
+		dir = DIR_RIGHT;
+	}
+	if( dir == DIR_LEFT ){
+		x -= (<sint8>giff+speed)/16;
+	}else{
+		x += (<sint8>giff+speed)/16;
+	}
+
+	switch(stat){
+	case 0:
+		count -= 1;
+		if( count == 0 ){
+			count = 0;
+			stat = 1;
+			vx = 0;
+		}
+		
+	case 1: // 気付いた！
+		count += 1;
+		vx = math.sin(count*8)/32;
+		vx = (<uint8>vx) * (<uint8>DIR_VX[dir]);
+		x = px[i];
+		y -= (giff+4)/16;
+		if( count > 32 ){ stat = 2; count = 0;}
+	case 2: // 上へ
+		y -= (giff+speed*2)/16;
+		if( y < bg.area_water_y ){
+			stat = 3;
+			count = -16-speed;
+			splash(x,bg.area_water_y-8);
+		}
+	case 3: // 水から出た
+		count += anim%2;
+		y += (giff+count)/16;
+		if( y > bg.area_water_y ){
+			splash(x,bg.area_water_y-8);
+			stat = 4;
+			count = 16;
+		}
+	case 4: // 再び潜る
+		y += (giff+count)/16;
+		if( y >= p6[i] ){
+			y = p6[i];
+			wait = 60;
+			count = 0;
+			stat = 0;
+			count = 30+math.rand()/8;
+		}
+	}
+
+	var dir_flag = [0,0,0,64][dir];
+	var spr = SPR_SLOT[slot] + SPR_FISH;
+	var pal = PAL_SLOT[slot];
+	var flag = dir_flag|pal;
+	switch( stat ){
+	case 0:
+		gr_sprite2(x, y, spr + anim/8%2*4, flag);
+	case 1:
+		gr_sprite2(px[i]+vx, y, spr + 2*4 + count/8*4, flag);
+	case 2:
+		gr_sprite2(x, y, spr + 8*4, flag);
+	case 3:
+		var pa:int;
+		if( count < -8 ){
+			pa = 0;
+		}else if( count < 8 ){
+			pa = anim/8%2*4;
+		}else{
+			pa = 8;
+		}
+		gr_sprite2(x, y, spr + 8*4 + pa, flag);
+	case 4:
+		gr_sprite2(x, y, spr + 10*4, flag);
+	}
+
+	check_hit(i,8);
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = dir;
+	p3[i] = stat;
+	p5[i] = count;
+	p7[i] = wait;
+}
+
+function splash(x:int, y:int):void
+{
+	var i = new();
+	type[i] = TYPE_SPLASH;
+	px[i] = x;
+	py[i] = y;
+	p1[i] = 8;
+}
+
+/*********************************************
+ * 死んだ魚
+ *********************************************/
+
+function dead_fish_new(i:int):void
+{
+	p4[i] = 0;
+}
+
+function dead_fish_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var stat = p4[i];
+	var wait = p5[i];
+
+	switch( stat ){
+		case 0:
+			if( math.rand() <= 1 ){
+				stat = 1;
+				wait = 0;
+			}
+			gr_sprite2(x, y, SPR_SLOT[slot] + SPR_FISH + 11*4, PAL_SLOT[slot]);
+		case 1:
+			wait += 8;
+			if( wait >= 128){
+				stat = 0;
+			}
+			
+			var dy = math.sin(wait) / 16;
+			gr_sprite2(x, y-dy, SPR_SLOT[slot] + SPR_FISH + 9*4 + anim / 4 % 2 * 4, PAL_SLOT[slot]);
+	}
+
+
+	p4[i] = stat;
+	p5[i] = wait;
+}
+
+/*********************************************
+ * 水門
+ * p4: stat
+ *********************************************/
+
+function watergate_new(i:int):void
+{
+	p2[i] = py[i];
+	p3[i] = 0;
+	p4[i] = 0;
+    p6[i] = 0;
+}
+
+public function watergate_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+    var box_id = p1[i];
+    var box_pos = p2[i];
+	var stat = p4[i];
+	var wait = p5[i];
+	var spr = SPR_SLOT[slot]+SPR_WATERGATE;
+	var pal = PAL_SLOT[slot];
+
+	// タッチ判定
+	if (my.items[ITEM_ID_KEY] && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12)
+	{
+		my.touch_event_func = watergate_event;
+		my.touch_event_p1 = i;
+		my.touch_event_x = x;
+		my.touch_event_y = y;
+	}
+
+    ppu.null_func();
+	gr_sprite2(x, y, spr, pal);
+
+	p4[i] = stat;
+	p5[i] = wait;
+}
+
+function watergate_event():int options(segment:my)
+{
+	game_event = event.ID_OPEN_WATERGATE;
+	game_event_p1 = my.touch_event_p1;
+	return 1;
+}
+
+/*********************************************
+ * 色スイッチ
+ *********************************************/
+
+function colorswitch_new(i:int):void
+{
+	p2[i] = py[i];
+	if( my.flags[my.FLAG_COLORSWITCH] == p1[i] + 1 ){
+		py[i] = py[i] + 4;
+	}
+}
+
+function colorswitch_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var flag_num = p1[i];
+
+	var enemy_on = colorswitch_check_enemy_on(i);
+
+	if( (my.state == my.STATE_ON_ENEMY && my.on_idx == i) || enemy_on ){
+		if( y < p2[i]+4 ){
+			y += 1;
+		}else{
+			if( my.flags[my.FLAG_COLORSWITCH] != flag_num + 1){
+				my.flags[my.FLAG_COLORSWITCH] = flag_num + 1;
+				sound.play_se(sound.SE_PUSH_BUTTON, 10);
+				bg.colorswitch_redraw_area();
+				if( bg.cur_area == 7 + 14 * 16 /* マグマゲートのエリア */ && my.flags[my.FLAG_WATERGATE] == 0){
+					switch(flag_num){
+					case 0: // 赤
+						game.game_event = event.ID_CLOSE_MAGMAGATE;
+					case 1: // 緑
+						game.game_event = event.ID_OPEN_MAGMAGATE;
+					}
+				}
+			}
+		}
+	}else{
+		if( my.flags[my.FLAG_COLORSWITCH] != flag_num + 1){
+			if( y > p2[i] ){
+				y -= 1;
+			}
+		}
+	}
+	
+	var spr = SPR_SLOT[slot]+SPR_COLORSWITCH;
+	ppu.sprite( x-8, y-8, spr+flag_num*4, 0|32|PAL_SLOT[slot]);
+	ppu.sprite( x  , y-8, spr+flag_num*4, 64|32|PAL_SLOT[slot]);
+	
+	px[i] = x;
+	py[i] = y;
+}
+
+function colorswitch_check_enemy_on(me:int):int
+{
+	var x = px[me];
+	var y = py[me];
+	
+	var i:int;
+	for( i, 0, cur_max ){
+		var et = type[i];
+		if( (et == TYPE_SLIME || et == TYPE_FROG || et == TYPE_BOUNDER) && i != me ){
+			if( math.abs(x-px[i])<8 && math.abs(y-py[i]) <8 ){
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+/*********************************************
+ * ジャンプマン
+ * p2: ジャンプの高さ
+ * p4: vy
+ * p5: 状態
+ * p6: ジャンプできるまでのウェイト[F]
+ * p7: vx
+ *********************************************/
+
+ function jumpman_new(i:int):void
+ {
+	p5[i] = 0;
+	p6[i] = 0;
+ }
+ 
+ function jumpman_process(i:int):void
+ {
+	var slot = pslot[i];
+	 var x = px[i];
+	 var y = py[i];
+	 var dir:sint = p1[i];
+	 var vy:sint = p4[i];
+	 var stat = p5[i];
+	 var jump_wait = p6[i];
+	 var vx = p7[i];
+	 var back_flag = 0;
+	 var dx:sint = (giff+8)/16;
+	 if( dir < 0 ){ dx = -dx; }
+	 
+	 var cell = 0;//bg.cell(x-dir*4,y-7);
+	 switch(stat){
+		case 0:
+			var jump_to: sint = -1;
+			// 歩き
+			if( jump_wait > 0 ){
+				jump_wait -= 1;
+			}
+
+			if( jump_wait == 0 ){
+				var need_jump = (bg.cell_type(x+dir*8,y+16) & bg.TYPE_WALL) == 0;
+				if( need_jump ){
+					jump_to = jumpman_search(x+dir*8,y,dir,0);
+				}else{
+					var cell = bg.cell(x+dir*8,y);
+					var force_jump = 0;
+					switch( cell ){
+						case 4: // 上矢印
+							force_jump = 1;
+						case 5: // 右矢印
+							force_jump = dir == 1;
+						case 7: // 左矢印
+							force_jump = dir == -1;
+					}
+					if( force_jump ){
+						jump_to = jumpman_search(x+dir*8,y,dir,1);
+					}
+				}
+			}
+
+			// 地面の上
+			if( jump_to != -1 ){
+				stat = 1;
+				vy = JUMPMAN_JUMP_VY[jump_to];
+				vx = JUMPMAN_JUMP_VX[jump_to];
+			}elsif( bg.cell_type(x-5,y+8) & bg.TYPE_WALL || bg.cell_type(x+5,y+8) & bg.TYPE_WALL){
+				var nx:uint = x+dir*8;
+				if( nx < 16 || nx > 240 || bg.cell_type(nx,y-8) & bg.TYPE_STOP ){
+					dir = -dir;
+				}else{
+					x += dx;
+				}
+				vy = 0;
+			}else{
+				// 落ちる
+				stat = 2;
+			}
+
+		case 1:
+			// Jump
+			dx = (giff+vx)/16;
+			if( dir < 0 ){ dx = -dx; }
+			x += dx;
+
+			vy += anim % 2;
+			//if( vy > 12 ){ vy = 12; }
+			y = y + (vy+giff)/16;
+			if( (vy > -1) && (bg.cell_type(x,y+8) & bg.TYPE_WALL ) ){
+				stat = 0;
+				vy = 0;
+				jump_wait = 10;
+				y = (y / 16) * 16 + 8;
+			}
+		case 2:
+			// 落下
+			vy += anim % 2;
+			if( vy > 24 ){ vy = 24; }
+			y = y + (vy+giff)/16;
+
+			if( bg.cell_type(x-5,y+8) & bg.TYPE_WALL || bg.cell_type(x+5,y+8) & bg.TYPE_WALL)
+			{
+				stat = 0;
+			}
+	 }
+
+ 
+	 var flip:uint = (1-dir)/2;
+	 var spr = SPR_SLOT[slot] + SPR_JUMPMAN;
+	 var pal = PAL_SLOT[slot];
+	 gr_sprite2( x, y, spr+(anim/16)%2*4, 64*flip | back_flag | pal);
+	 var pdx:sint = dir*8;
+	 if( dir < 0 ){ pdx -= 8; }
+	 ppu.sprite( x+pdx, y-8, spr+8, 64*flip | back_flag | pal);
+ 
+	 px[i] = x;
+	 py[i] = y;
+	 p1[i] = dir;
+	 p4[i] = vy;
+	 p5[i] = stat;
+	 p6[i] = jump_wait;
+	 p7[i] = vx;
+ 
+	 check_hit(i,10);
+	 var ddx = dir * 16;
+	 check_hit2(i,4,ddx,0);
+	 
+	 if( check_outside(x,y) ){ type[i] = 0; }
+ }
+
+
+function jumpman_search(x:int, y:int, dir:sint, no_horizontal:int):int {
+	var horizontal_type: int;
+	//return 4;
+	var i = 0;
+	var cx = x / 16;
+	var cy = y / 16;
+	var dir2:sint = dir * 2;
+	if( cx+dir2 <= 0 ) return -1;
+	if( cx+dir2 >= 15 ) return -1;
+
+	mem.zero(&temp[0],7);
+
+	for(i,0,5){
+		if( i == 2 ){
+			// 水平ジャンプ
+			if( !no_horizontal){
+				if( jumpman_check(cx+dir,cy) ){
+					temp[5] = 1; // １マス
+				}elsif( jumpman_check(cx+dir2,cy) ){
+					temp[2] = 1; // ２マス
+				}elsif( jumpman_check(cx+dir+dir2,cy) ){
+					temp[6] = 1; // ３マス
+				}
+			}
+		}else{
+			if( jumpman_check(cx+dir2,cy+i-2) ){
+				var inc = 1;
+				// 自分の方向の優先度を上げる
+				if( i < 2 ){
+					// 上方向
+					if( my.y < y ){
+						inc = 3;
+					}
+				}elsif( i > 2 ){
+					// 下方向
+					if( my.y > y ){
+						inc = 3;
+					}
+				}
+				temp[i] = inc;
+			}
+		}
+	}
+
+	var total = 0;
+	for(i,0,7){
+		total += temp[i];
+	}
+
+	if( total <= 0 ) return -1;
+
+	var n:sint = math.rand() % total;
+	for(i,0,7){
+		n -= temp[i];
+		if(n < 0) return i;
+	}
+
+	return -1;
+}
+
+// 0~4: 幅２ジャンプ上から, 5: 幅１同高さ, 6: 幅3同高さ
+const JUMPMAN_JUMP_VY = [-25,-19,-16,-10,-8,-12,-16];
+const JUMPMAN_JUMP_VX = [12,12,12,12,12,10,16];
+
+function jumpman_check(cx:int, cy:int):int{
+	if( cy <= 0 || cy >= 15 ) return 0;
+	var to = bg.cell_type_by_cell(cx,cy) & bg.TYPE_WALL;
+	var ground = bg.cell_type_by_cell(cx,cy+1) & bg.TYPE_WALL;
+	return !to && ground;
+}
+ 
+/*********************************************
+ * トライアルのエンディングポイント
+ *********************************************/
+
+function trial_ending_new(i : int) : void
+{
+	p4[i] = 0;
+}
+
+function trial_ending_process(i : int) : void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var noslot = p2[i];
+	var nosave = p3[i];
+	var stat = p4[i];
+	var wait = p5[i];
+
+	// タッチ判定
+	if (!nosave && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12)
+	{
+		my.touch_event_func = trial_ending_event;
+		my.touch_event_p1 = i;
+		my.touch_event_x = x;
+		my.touch_event_y = y-16;
+	}
+
+	gr_sprite2(x, y-12 + math.sin(anim) / 32, SPR_SLOT[slot] + SPR_TRIAL_ENDING, PAL_SLOT[slot] );
+	gr_sprite2(x, y   , SPR_SLOT[slot] + SPR_TRIAL_ENDING + 4, PAL_SLOT[slot] );
+
+	p4[i] = stat;
+	p5[i] = wait;
+}
+
+function trial_ending_event():int options(segment:my)
+{
+	game.game_event = event.ID_TRIAL_ENDING;
+	return 1;
+}

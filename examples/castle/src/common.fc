@@ -1,0 +1,137 @@
+options(bank:-1);
+
+include( "macro.rb" );
+
+const DEBUG = 0;
+var debug_mode:int;
+var debug_flag:int;
+const DEBUG_FLAG_TITLE_SKIP = 1<<0;
+const DEBUG_FLAG_AUTO_SAVE = 1<<1;
+const DEBUG_FLAG_FREEJUMP = 1<<2;
+const DEBUG_FLAG_UP_JUMP = 1<<3;
+const DEBUG_FLAG_AUTO_ANCHOR = 1<<4;
+const DEBUG_FLAG_NO_BGM = 1<<5;
+
+public function debug_on(mask:int):int options(fastcall:true)
+{
+	return debug_mode && debug_flag & mask;
+}
+
+const ITEM_PAL = incbin("../res/images/item.nespal");
+const ITEM_TILEPAL = incbin("../res/images/item.tilepal");
+
+const SAVE_DATA_VERSION = 11;
+
+const SPR_ARROW = 0*4;
+const SPR_CURSOR = 1*4;
+const SPR_MAP_FLAG = 2*4;
+const SPR_SYS_NUM = 8*4;
+const SPR_MINI_CURSOR = 2*4+2;
+
+public const SPR_SLOT_A = 128;
+public const SPR_SLOT_B = 192;
+public const SPR_SLOT = [128,192];
+public const PAL_SLOT_A = 2;
+public const PAL_SLOT_B = 3;
+public const PAL_SLOT = [2,3];
+
+const CBANK_BG_COMMON = 0;
+const CBANK_BG = 8;
+const CBANK_SPRITE = 38;
+const CBANK_COMMON_SPRITE = 38;
+const CBANK_ENEMY = CBANK_SPRITE+1;
+const CBANK_TEXT = CBANK_SPRITE+16;
+const CBANK_ITEM = CBANK_SPRITE+20;
+const CBANK_MISC_TEXT = CBANK_SPRITE+24;
+const CBANK_TITLE = CBANK_SPRITE+28;
+const CBANK_SYS_SPRITE = CBANK_SPRITE+30;
+const CBANK_MENU = CBANK_SPRITE+32;
+const CBANK_MY = 74;
+const CBANK_MINIMAP = 82;
+const CBANK_ENDING_TEXT = 84;
+const CBANK_MEMORY_TEXT = 88;
+const CBANK_ITEM_TEXT = 92;
+
+const PBANK_MENU = 13;
+const PBANK_EN = 1;
+const PBANK_DEBUG_MENU = 2;
+const PBANK_EN1 = 3;
+const PBANK_EN2 = 4;
+const PBANK_MY  = 5;
+const PBANK_TITLE = 6;
+const PBANK_EN3 = 7;
+const PBANK_BG_MMC = 8;
+const PBANK_EN4 = 9;
+const PBANK_EVENT = 10;
+const PBANK_EN5 = 11;
+const PBANK_EN6 = 12;
+const PBANK_EN7 = 15;
+const PBANK_BOXELEV = 14;
+const PBANK_MY_PROCESS = 16;
+const PBANK_ENDING = 17;
+const PBANK_SUBTEXT = 18;
+const PBANK_EVENT2 = 19;
+const PBANK_SOUND_DATA = 20;
+const PBANK_EN8 = 22;
+const PBANK_FS = 23;
+
+const VRAM_PALETTE = 0x3f00;
+
+const BIT_MASK: int[] = [1,2,4,8,16,32,64,128];
+
+const GIFF_TABLE = [0,8,4,12, 2,10,6,14, 1,9,5,13, 3,11,7,15];
+var anim:int;
+var giff:int;
+
+var game_event:int;
+var game_event_p1:int;
+
+var scroll_x:int options(address: 0x68);
+
+function gr_sprite2(x:int, y:int, pat:int, flag:int):void
+{
+	if( flag & (1<<6) ){
+		ppu.sprite( x, y-8, pat, flag );
+		ppu.sprite( x-8, y-8, pat+2, flag );
+	}else{
+		ppu.sprite( x, y-8, pat+2, flag );
+		ppu.sprite( x-8, y-8, pat, flag );
+	}
+}
+
+function gr_sprite2_idx(x:int, y:int, pat:int, flag:int, idx:int):void
+{
+	if( flag & (1<<6) ){
+		ppu.sprite_idx( x, y-8, pat, flag, idx );
+		ppu.sprite_idx( x-8, y-8, pat+2, flag, idx+4 );
+	}else{
+		ppu.sprite_idx( x, y-8, pat+2, flag, idx );
+		ppu.sprite_idx( x-8, y-8, pat, flag, idx+4 );
+	}
+}
+
+const DIR_VX:sint[] = [0,1,0,-1];
+const DIR_VY:sint[] = [-1,0,1,0];
+const DIR_FLIP = [0,0,0,1];
+const DIR_FLIP_XY = [0,0,128,64];
+const DIR_NONE = -1;
+const DIR_UP = 0;
+const DIR_RIGHT = 1;
+const DIR_DOWN = 2;
+const DIR_LEFT = 3;
+const DIR_MASK_UP = 1 << DIR_UP;
+const DIR_MASK_RIGHT = 1 << DIR_RIGHT;
+const DIR_MASK_DOWN = 1 << DIR_DOWN;
+const DIR_MASK_LEFT = 1 << DIR_LEFT;
+
+const JUMP_SE = [0x00, 0x41, 0x4b, 0x55, 0x60, 0x6a, 0x74, 0x7f, 0x09, 0xc8,
+				 0x01, 0x02, 0x04, 0x00, 0x12, 0xf1, 0xff, 0xa7, 0x0c, 0x00];
+
+use nes;
+use ppu;
+use fs;
+use bg;
+use pad;
+use mmc3;
+use math;
+use * from resource;

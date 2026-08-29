@@ -1,0 +1,112 @@
+private:
+
+use * from common;
+use my;
+use bg;
+use mem;
+use game;
+
+public var subtext_stat: int;
+var subtext_id: int;
+var subtext_count: int;
+var subtext_height: int;
+var subtext_irq_temp: int;
+var subtext_irq_scroll: int;
+public var subtext_shown:int;
+
+function get_subtext_flag(i:int):int
+{
+	return my.subtext_flags[i/8] & (1<<(i%8));
+}
+
+function set_subtext_flag(i:int):void
+{
+	my.subtext_flags[i/8] = my.subtext_flags[i/8] | (1<<(i%8));
+}
+
+function show_subtext(id:int):void 
+{
+	subtext_stat = 1;
+	subtext_count = 0;
+	subtext_id = id;
+}
+
+function check_subtext():void
+{
+    if( !subtext_shown && my.y >= 56){
+        if( bg.area_subtext != 0 ){
+            var flag = get_subtext_flag(bg.area_subtext);
+            if( !flag ){
+                set_subtext_flag(bg.area_subtext);
+                show_subtext(bg.area_subtext);
+            }
+        }
+        subtext_shown = 1;
+    }
+}
+
+public function process_subtext():void
+{
+    check_subtext();
+    if( !subtext_stat )
+    {
+        return;
+    }
+
+	subtext_count += 1;
+
+	var buf: int*;
+	var pos: int16;
+
+	switch(subtext_stat){
+		case 1:
+			switch(subtext_count){
+			case 1:
+				buf = ppu.alloc(64);
+				mem.zero(buf, 64);
+				ppu.put(0x2c00, buf, 64, 0);
+			case 2:
+				buf = ppu.alloc(64);
+				mem.zero(buf, 64);
+				ppu.put(0x2c40, buf, 64, 0);
+			case 3:
+				buf = ppu.alloc(64);
+				mem.zero(buf, 64);
+				ppu.put(0x2c80, buf, 64, 0);
+			case 4:
+				buf = ppu.alloc(64);
+				mem.zero(buf, 64);
+				ppu.put(0x2fc0, buf, 64, 0);
+			case 5:
+				buf = ppu.alloc(64);
+				var size = fs.copy(buf, fs.AREA_NAME_BASE+subtext_id);
+				pos = ppu.pos(14,3) + 0x0c00;
+				ppu.put(pos, buf, size, 0);
+			}
+			if( subtext_count > 8 ){
+				subtext_height = 28;
+				asm("sei");
+				ppu.irq_setup = game.irq_setup;
+				asm("cli");
+				subtext_stat = 2;
+			}
+		case 2:
+			subtext_height += subtext_count % 2;
+			if( subtext_height >= 40 ){
+				subtext_stat = 3;
+				subtext_count = 0;
+			}
+		case 3:
+			if( subtext_count >= 210 ){
+				subtext_stat = 4;
+			}
+		case 4:
+			subtext_height -= subtext_count % 2;
+			if( subtext_height <= 28 ){
+				subtext_stat = 0;
+				asm("sei");
+				ppu.irq_setup = ppu.null_func;
+				asm("cli");
+			}
+	}
+}

@@ -1,0 +1,302 @@
+options( bank:0 );
+
+use * from common;
+use en;
+use math;
+use sound;
+use mem;
+
+const STATE_STAND = 0;
+const STATE_JUMP = 2;
+const STATE_LADDER = 3; // はしご
+const STATE_ON_ENEMY = 4;
+const STATE_DAMAGE = 5;
+const STATE_DYING = 6;
+const STATE_ON_ELEVATOR = 7; // 箱エレベーターに乗ってる
+const STATE_SWIM = 8; // 泳ぎ
+const STATE_TOUCH_EVENT = 9; // イベント中
+const STATE_FREE_MOVE = 10; // デバッグ用自由移動
+const STATE_DIE = 255;
+
+const SPRIDX_MY = 0;
+const SPRIDX_ANCHOR = 8;
+
+const SPR_JUMP_WALK = 0*4;
+const SPR_JUMP_UP = 4*4;
+const SPR_JUMP_DOWN = 6*4;
+const SPR_PUSH = 12*4;
+const SPR_LADDER = 14*4;
+const SPR_B_BUTTON = 20*4;
+const SPR_ANCHOR = 27*4;
+
+const SPR_ANCHOR_WALK = 0*4;
+const SPR_ANCHOR_JUMP = 2*4;
+const SPR_SWIM = 4*4;
+
+const SPR_SAVE_STAND = 8*4;
+const SPR_SAVE_TEXT = 14*4;
+
+var x:int, y:int;
+var my_anim:int;
+var vy:sint;
+var vx:sint;
+var dir:int;
+var state:int;
+var state_free_move:int; // STATE_FREE_MOVEかどうか（死んでも死なないようにするため）
+var state_free_move_transparent:int; // STATE_FREE_MOVE中に透明かどうか
+var on_idx:int;
+var on_x:int;
+var on_y:int;
+var jump_pow:int;
+var jump_autokeep:int; // 自動的にジャンプ継続するかどうか（たけのこジャンプで使われる）
+var prev_in_water:int;
+var wait:int;
+var last_checkpoint:int;
+var coin_num:int; // コインの数
+var has_anchor:int; // 錨を持ってるかどうか
+var in_water_surface:int; // 水面にいるかどうか(背面スプライトにするため)
+var anim_stat:int; // アニメーション状態
+var jump_mask:int; // ジャンプボタン
+var swim_keep_velocity:int; // 泳ぎ中に上方向の速度を制限しない(水流ジェットが利用)
+
+var anchor_area:int;
+var anchor_x:int;
+var anchor_y:int;
+var anchor_vx:sint;
+var anchor_vy:sint;
+var anchor_stat:int;
+var anchor_wait:int;
+
+var grobe_progress:int; // グローブの押している時間
+
+var touch_event_func:int(); // 予約されているタッチイベント
+var touch_event_func_activated:int(); // 現在実行中のタッチイベント
+var touch_event_x:int; // タッチイベントのマーカーの表示場所
+var touch_event_y:int; 
+var touch_event_stat:int; // タッチイベントの状態
+var touch_event_wait:int; // タッチイベントのウェイト
+var touch_event_p1:int; // タッチイベントのパラメータ
+var touch_event_p2:int; 
+
+var watch_used:int; // 懐中時計を使用済みかどうか
+var watch_in_area:int; // 懐中時計がこの画面にあるか
+
+const ITEM_MAX = 64;
+var items:int[ITEM_MAX] options(segment:"BSS_EX");
+const FLAG_MAX = 32;
+const FLAG_WATERGATE = 31;
+const FLAG_COLORSWITCH = 30;
+const FLAG_REVEAL_TEMPLE_OF_SUN = 29;
+const FLAG_MAGMAGATE = 28; // マグマを消火する
+const FLAG_ANCHOR_GENERATOR = 27; // 錨生成器
+const FLAG_SUNGATE = 26; // 太陽神殿のゲート(1:太陽, 2:月, 4:星のビットフラグ)
+const FLAG_SOUL_GATE = 25; // 魂のゲートの所持魂（6bitのビットフラグ）
+var flags:int[FLAG_MAX] options(segment:"BSS_EX");
+const MAP_FLAG_MAX = 64;
+var map_flag:int[MAP_FLAG_MAX] options(segment:"BSS_EX");
+const MAP_COIN_MAX = 64;
+var map_coin:int[MAP_COIN_MAX/8] options(segment:"BSS_EX");
+const SUBTEXT_FLAG_MAX = 16;
+var subtext_flags:int[SUBTEXT_FLAG_MAX/8] options(segment:"BSS_EX");
+const MEMORY_FLAG_MAX = 128;
+var memory_flags:int[MEMORY_FLAG_MAX/8] options(segment:"BSS_EX");
+var memory_read_flags:int[MEMORY_FLAG_MAX/8] options(segment:"BSS_EX");
+const CHECKPOINT_FLAG_MAX = 16;
+var checkpoint_flags:int[CHECKPOINT_FLAG_MAX] options(segment:"BSS_EX");
+
+const ANIM_STAT_NONE = 0;
+const ANIM_STAT_PUSH = 1;
+
+public function init():void options(segment:"game")
+{
+	anim_stat = 0;
+	if( debug_flag & DEBUG_FLAG_UP_JUMP){
+		jump_mask = pad.A | pad.UP;
+	}else{
+		jump_mask = pad.A;
+	}
+	swim_keep_velocity = 0;
+	state_free_move = 0;
+	state_free_move_transparent = 0;
+}
+
+private:
+
+use boxelev;
+use my_process;
+
+public function clear_sprites():void options(segment:"game")
+{
+	ppu.clear_sprite2_idx(SPRIDX_MY);
+	ppu.clear_sprite2_idx(SPRIDX_ANCHOR);
+}
+
+public function process():void
+{
+	var old_pbank = mmc3.set_pbank(0, PBANK_MY_PROCESS);
+	my_process.process();
+	mmc3.set_pbank(0, old_pbank);
+}
+
+public function draw():void options(segment:"game")
+{
+	if( state_free_move_transparent ){
+		clear_sprites();
+		return;
+	}
+
+	var a:int;
+	var dir_flag = 64*dir;
+	var in_water = (bg.cell(x,y) == 24);
+	if( has_anchor ){
+		// 錨を持ってる
+		switch(state){
+		case STATE_STAND, STATE_ON_ENEMY, STATE_ON_ELEVATOR, STATE_FREE_MOVE:
+			a = my_anim/8%2;
+			ppu.cbank2 = CBANK_MY+1;
+			gr_sprite2_idx( x, y, SPR_ANCHOR_WALK+a*4, dir_flag, SPRIDX_MY );
+		    gr_sprite2_idx(x, y-12, SPR_ANCHOR, 0, SPRIDX_ANCHOR);
+		case STATE_JUMP, STATE_DAMAGE:
+			a = anim/8%2;
+			ppu.cbank2 = CBANK_MY+1;
+			gr_sprite2_idx( x, y, SPR_ANCHOR_JUMP, dir_flag, SPRIDX_MY );
+		    gr_sprite2_idx(x, y-12, SPR_ANCHOR, 0, SPRIDX_ANCHOR);
+		case STATE_LADDER:
+			a = (my_anim/4)%8;
+			dir_flag = [0,0,0,0,64,64,64,64][a];
+			a = [4,0,0,4,4,0,0,4][a];
+			ppu.cbank2 = CBANK_MY;
+			gr_sprite2_idx( x, y, SPR_LADDER+a, dir_flag, SPRIDX_MY );
+		    gr_sprite2_idx(x, y-4-my_anim/2%4, SPR_ANCHOR, 0, SPRIDX_ANCHOR);
+		case STATE_DYING:
+			if( anim % 2 ){
+				ppu.cbank2 = CBANK_MY;
+				gr_sprite2_idx( x, y, 8*4+wait/32*4, dir_flag, SPRIDX_MY);
+			}else{
+				ppu.clear_sprite2_idx(SPRIDX_MY);
+			}
+		}
+
+
+	}else{
+		// 錨を持ってない
+		switch( state ){
+		case STATE_STAND, STATE_ON_ENEMY, STATE_ON_ELEVATOR, STATE_FREE_MOVE:
+			switch(anim_stat){
+			case ANIM_STAT_NONE:
+				const ANIM = [1,2,3,3,2,1,0,0];
+				a = ANIM[my_anim/4%8];
+				ppu.cbank2 = CBANK_MY;
+				gr_sprite2_idx( x, y, a*4, dir_flag, SPRIDX_MY );
+			case ANIM_STAT_PUSH:
+				ppu.cbank2 = CBANK_MY;
+				a = my_anim/16%2;
+				gr_sprite2_idx( x, y, SPR_PUSH + a*4, dir_flag, SPRIDX_MY );
+			}
+
+		case STATE_JUMP, STATE_DAMAGE:
+			a = anim/8%2*4;
+			if( in_water ) dir_flag = dir_flag|32;
+			if( vy < -8 ){
+				ppu.cbank2 = CBANK_MY;
+				gr_sprite2_idx( x, y, SPR_JUMP_UP, dir_flag, SPRIDX_MY );
+			}else if( vy < 8 ){
+				ppu.cbank2 = CBANK_MY;
+				gr_sprite2_idx( x, y, SPR_JUMP_UP+4, dir_flag, SPRIDX_MY );
+			}else{
+				ppu.cbank2 = CBANK_MY;
+				gr_sprite2_idx( x, y, SPR_JUMP_DOWN+a, dir_flag, SPRIDX_MY );
+			}
+
+		case STATE_LADDER:
+			a = (my_anim/4)%8;
+			dir_flag = [0,0,0,0,64,64,64,64][a];
+			a = [4,0,0,4,4,0,0,4][a];
+			ppu.cbank2 = CBANK_MY;
+			gr_sprite2_idx( x, y, SPR_LADDER+a, dir_flag, SPRIDX_MY );
+
+		case STATE_SWIM:
+			a = (my_anim/16)%2;
+			ppu.cbank2 = CBANK_MY+1;
+			var flag = 0;
+			var dy: sint = 0;
+			if( in_water_surface ){
+				flag = ppu.SPRITE_FLAG_HIDE;
+				dy = math.sin(anim*8) / 64;
+			}
+			gr_sprite2_idx( x, y+4+dy, SPR_SWIM+a*4, dir_flag | flag, SPRIDX_MY);
+
+		case STATE_DYING:
+			if( anim % 2 ){
+				ppu.cbank2 = CBANK_MY;
+				gr_sprite2_idx( x, y, 8*4+wait/32*4, dir_flag, SPRIDX_MY);
+			}else{
+				ppu.clear_sprite2_idx(SPRIDX_MY);
+			}
+		}
+
+		ppu.clear_sprite2_idx(SPRIDX_ANCHOR);
+	}
+}
+
+public function get_map(x:int, y:int):int options(segment:"game")
+{
+	var idx = y*2 + x/8;
+	var n = map_flag[idx];
+	var cx = 7 - x % 8;
+	return n & (1 << cx);
+}
+
+public function set_map(x:int, y:int):void options(segment:"game")
+{
+	var idx = y*2 + x/8;
+	var n = map_flag[idx];
+	var cx = 7 - x % 8;
+	map_flag[idx] = n | (1 << cx);
+}
+
+
+function create_anchor(x:int, y:int):void options(segment:"en3")
+{
+	has_anchor = 0;
+	anchor_area = bg.cur_area;
+	anchor_x = x;
+	anchor_y = y;
+	anchor_vx = 0;
+	anchor_vy = 0;
+	anchor_stat = 0;
+	anchor_wait = 0;
+}
+
+public function anchor_event():int
+{
+	has_anchor = 1;
+	state = STATE_STAND;
+	return 1;
+}
+
+public function has_memory(i:int):int options(fastcall:true, segment:"common")
+{
+	return memory_flags[i/8] & BIT_MASK[i%8];
+}
+
+public function set_memory(i:int):void options(fastcall:true, segment:"game")
+{
+	memory_flags[i/8] = memory_flags[i/8] | BIT_MASK[i%8];
+}
+
+public function clear_memory(i:int):void options(fastcall:true, segment:"game")
+{
+	memory_flags[i/8] = memory_flags[i/8] & (BIT_MASK[i%8]^0xff);
+	memory_read_flags[i/8] = memory_read_flags[i/8] & (BIT_MASK[i%8]^0xff);
+}
+
+public function is_memory_read(i:int):int options(fastcall:true, segment:"game")
+{
+	return memory_read_flags[i/8] & BIT_MASK[i%8];
+}
+
+public function set_memory_read(i:int):void options(fastcall:true, segment:"game")
+{
+	memory_read_flags[i/8] = memory_read_flags[i/8] | BIT_MASK[i%8];
+}

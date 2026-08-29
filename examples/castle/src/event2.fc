@@ -1,0 +1,76 @@
+private:
+use * from common;
+use my;
+use bg;
+
+//=================================================
+// 水門オープン
+//=================================================
+function run_open_watergate():void
+{
+	if( my.flags[my.FLAG_WATERGATE] == 0 ){
+		watergate_open();
+		my.flags[my.FLAG_WATERGATE] = 1;
+	}else{
+		watergate_close();
+		my.flags[my.FLAG_WATERGATE] = 0;
+	}
+}
+
+function watergate_open():void
+{
+	var i:int;
+	var j:int;
+	for( i, 0, 180 ){
+		ppu.scroll2 = math.rand() % [2,4,8,8,4,2][i/30];
+		ppu.wait_vsync_with_flag(2);
+		anim += 1;
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+		switch(i){
+		case 50:
+			bg.put2(9,4,0,0);
+			bg.put2(9,11,38,0);
+		case 60:
+			bg.put2(9,5,0,0);
+			bg.put2(9,12,38,0);
+		default:
+			if( i%2 == 0 && i >= 70 && i < (70+12*3) ){
+				var x = (i-70)%12/2;
+				var y = (i-70)/12;
+				bg.put2(10+x, 10+y, 0, 0 );
+				if( y < 2 ) bg.put2(10+x, 11+y, 24, 0 );
+			}
+		}
+	}
+	ppu.scroll2 = 0;
+	ppu.wait_vsync_with_flag(2);
+}
+
+function watergate_close():void
+{
+	var i:int;
+	var j:int;
+	for( i, 0, 180 ){
+		ppu.scroll2 = math.rand() % [2,4,8,8,4,2][i/30];
+		ppu.wait_vsync_with_flag(2);
+		anim += 1;
+		mmc3.set_cbank(0,CBANK_BG_COMMON+(anim/8)%4*2);
+		switch(i){
+		case 50:
+			bg.put2(9,5,38,0);
+			bg.put2(9,12,0,0);
+		case 60:
+			bg.put2(9,4,38,0);
+			bg.put2(9,11,0,0);
+		default:
+			if( i%2 == 0 && i >= 70 && i < (70+12*3) ){
+				var x = (i-70)%12/2;
+				var y = (i-70)/12;
+				if( y > 0 ) bg.put2(10+x, 13-y, 0, 0 );
+				bg.put2(10+x, 12-y, 24, 0 );
+			}
+		}
+	}
+	ppu.scroll2 = 0;
+	ppu.wait_vsync_with_flag(2);
+}

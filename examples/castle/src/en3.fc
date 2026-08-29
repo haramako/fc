@@ -1,0 +1,903 @@
+use my;
+use * from en;
+use boxelev;
+use sound;
+
+private:
+
+/*********************************************
+ * 水滴ポイント
+ *********************************************/
+
+ public function drop_portal_new(i:int):void
+ {
+     p5[i] = 0;
+ }
+ 
+ public function drop_portal_process(i:int):void
+ {
+     var x = px[i];
+     var y = py[i];
+     var freq = p3[i];
+     var rest = p5[i];
+     
+     if( anim % 64 == 0 ){
+         if( rest ){
+             rest -= 1;
+         }else{
+             var n = new();
+             if( n != -1 ){
+                 if( p1[i] == 0){
+                     type[n] = TYPE_WATER_DROP;
+                 }else{
+                     type[n] = TYPE_ACID_DROP;
+                 }
+                 px[n] = x;
+                 py[n] = y-8;
+                 p1[n] = p1[i];
+                 p2[n] = p2[i];
+                 setup(n);
+             }
+             rest = freq;
+         }
+     }
+ 
+     if( rest == 0 ){
+         //gr_sprite2(x, y, 168+anim/4%2*4, 0 );
+     }
+ 
+     p5[i] = rest;
+ }
+ 
+ /*********************************************
+ * 水滴
+ *********************************************/
+
+ public function water_drop_new(i:int):void
+ {
+	p3[i] = 0;
+	p4[i] = 0;
+ }
+ 
+ public function water_drop_process(i:int):void
+ {
+	 var x = px[i];
+	 var y = py[i];
+	 var vy = p1[i];
+	 
+	 if( p3[i] == 0 ){
+		vy += 1;
+		y += (vy+giff)/16;
+
+		var hit = (bg.cell_type(x,y+8) & bg.TYPE_WALL) || check_outside(x,y) || check_over(i,8);
+
+		if( hit ){
+			p3[i] = 1;
+			p4[i] = 0;
+		}
+
+		ppu.sprite(x-4, y, SPR_DROP, 1 );
+	}else{
+		if( anim % 2 == 0 ){
+			y -= 1;
+		}
+		if( anim % 2 == 0 ){
+			gr_sprite2(x, y+8, SPR_SPLASH, 1);
+		}
+		p4[i] += 1;
+		if( p4[i] > 4 ){
+			type[i] = 0;
+			return;
+		}
+	}
+
+	 py[i] = y;
+	 p1[i] = vy;
+ }
+ 
+
+public function acid_drop_new(i:int):void
+{
+
+}
+
+public function acid_drop_process(i:int):void
+{
+	
+}
+
+ /*********************************************
+ * タケノコ
+ *********************************************/
+
+public function bamboo_new(i:int):void
+{
+    if( p1[i] == 0 ){ p1[i] = 30; }
+    if( p2[i] == 0 ){ p2[i] = 3; }
+    p4[i] = 0;
+    p5[i] = 0;
+    p6[i] = 0;
+}
+
+public function bamboo_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var count = p4[i];
+    var stat = p5[i];
+    
+    switch(stat){
+    case 0:
+        // 待機
+        if( anim % 4 == 0 ){
+            count += 1;
+        }
+        if( count >= p1[i] ){
+            p6[i] = p2[i];
+            stat = 1;
+        }
+    case 1:
+        // 足元検査
+        if( my.state == my.STATE_STAND ){
+            var c1 = bg.cell(my.x-8,my.y+8);
+            var ct1 = bg.tile_type[c1];
+            var c2 = bg.cell(my.x+8,my.y+8);
+            var ct2 = bg.tile_type[c2];
+            var on_ground = (ct1 & bg.TYPE_WALL != 0) || (ct2 & bg.TYPE_WALL != 0); // 地面の上にいるか
+            var on_ladder = ((ct1 & bg.TYPE_LADDER) != 0) || ((ct2 & bg.TYPE_LADDER) != 0); // 梯子の上にいるか
+            var on_forbidden = 0; // 禁止マスの上にいるか
+            switch(bg.area_type){
+            case 1: // 城塞
+                on_forbidden = c1 == 55 || c2 == 55;
+            case 7: // 太陽神殿
+                on_forbidden = c1 == 50 || c2 == 50;
+            case 10: // 水晶宮
+                on_forbidden = c1 == 37 || c2 == 37;
+            }
+            px[i] = my.x;
+            py[i] = my.y + 8;
+            if( on_ground && !on_forbidden && !on_ladder){
+                count = 0;
+                stat = 2;
+            }
+        }
+    case 2:
+        // 発生
+        count += 1;
+        if( count % 8 == 0 ){
+            var n = new();
+            if( n != -1 ){
+                type[n] = TYPE_BAMBOO_EFFECT;
+                pslot[n] = slot;
+                px[n] = x;
+                py[n] = y;
+                p1[n] = math.rand()%32-16;
+                p2[n] = math.rand()%16-48;
+                p3[n] = 28;
+                setup(n);
+            }
+        }
+
+        if( count > 48 ){
+            var n = new();
+            if( n != -1 ){
+                type[n] = TYPE_BAMBOO_SPIRE;
+                pslot[n] = slot;
+                px[n] = x;
+                py[n] = y;
+                setup(n);
+            }
+
+            p6[i] -= 1;
+            if( p6[i] == 0 ){
+                count = 0;
+                stat = 0;
+            }else{
+                count = 0;
+                stat = 1;
+            }
+        }
+        //gr_sprite2(x, y, 128+anim/4%2*4, 3 );
+    }
+
+    p4[i] = count;
+    p5[i] = stat;
+}
+
+
+public function bamboo_effect_new(i:int):void
+{
+}
+
+const FLIP_ROTATE = [0, ppu.SPRITE_FLAG_FLIP_X, ppu.SPRITE_FLAG_FLIP_Y, ppu.SPRITE_FLAG_FLIP_X | ppu.SPRITE_FLAG_FLIP_Y];
+
+public function bamboo_effect_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var vx:sint = p1[i];
+    var vy:sint = p2[i];
+
+    vy += 2;
+    x += (giff+vx)/16;
+    y += (giff+vy)/16;
+    var flag = FLIP_ROTATE[anim/2%4];
+    ppu.sprite(x-4, y-4, SPR_SLOT[slot] + SPR_BAMBOO_EFFECT, PAL_SLOT[slot] | flag);
+
+    p3[i] -= 1;
+    if( p3[i] == 0 ){
+        type[i] = 0;
+        return;
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = vx;
+    p2[i] = vy;
+}
+
+ /*********************************************
+ * タケノコ
+ * p1: 状態
+ * p2: カウント
+ * p4: 伸びた高さ
+ *********************************************/
+public function bamboo_spire_new(i:int):void
+{
+    p1[i] = 0;
+    p2[i] = 0;
+    p4[i] = 0;
+}
+ 
+
+public function bamboo_spire_process(i:int):void
+{
+    var slot = pslot[i];
+    var x = px[i];
+    var y = py[i];
+    var stat = p1[i];
+    var count = p2[i];
+    var height = p4[i];
+    var spr = SPR_SLOT[slot] + SPR_BAMBOO;
+    var pal = PAL_SLOT[slot];
+
+    switch(stat){
+    case 0:
+        count += 1;
+        if( count >= 30 ){
+            stat = 1;
+            count = 0;
+        }
+    case 1:
+        count += 1;
+
+        if( height < 32 ){
+            height += 2;
+        }
+
+        bamboo_spire_draw(x, y, height, spr, pal);
+
+        if( check_over_rect(x-12,y,x+12,y-height) || check_over_rect(x-6,y,x+6,y-height-10)){
+            if( my.items[ITEM_ID_ARMOR]){
+				// タケノコジャンプ！
+				my.y -= 1;
+				my.vy = -40;
+				my.jump_pow = 30;
+                my.jump_autokeep = 1;
+				my.state = my.STATE_JUMP;
+				sound.play_se(sound.SE_JUMP, 1);
+            }else{
+                my.state = my.STATE_DYING;
+                my.wait = 0;
+            }
+        }
+
+        if( count > 24 ){
+            stat = 2;
+            count = 0;
+        }
+    case 2:
+        count += 1;
+
+        if( count >= 15 ){
+            if( anim % 4 == 0 ){
+                bamboo_spire_draw(x, y, height, spr, pal);
+            }
+        }else{
+            if( anim % 2 == 0 ){
+                bamboo_spire_draw(x, y, height, spr, pal);
+            }
+        }
+
+        if( count > 30 ){
+            type[i] = 0;
+        }
+    }
+
+    px[i] = x;
+    py[i] = y;
+    p1[i] = stat;
+    p2[i] = count;
+    p4[i] = height;
+}
+
+function bamboo_spire_draw(x:int, y:int, height:int, spr:int, pal:int):void
+{
+    var n:sint = height;
+    var pat = 2;
+    var flip = ppu.SPRITE_FLAG_FLIP_X * (anim/8%2);
+    loop(){
+        if( n >= 8 ){
+            gr_sprite2(x, y-n-8, spr + pat*4, pal | flip);
+        }else{
+            gr_sprite2(x, y-n-8, spr + pat*4, pal | ppu.SPRITE_FLAG_HIDE | flip);
+        }
+
+        if( n <= 0 ) break;
+
+        n -= 16;
+        pat -= 1;
+    }
+}
+
+/*********************************************
+ * 錨巻き取り器
+ *********************************************/
+
+public function anchor_generator_new(i : int) : void
+{
+	p4[i] = 0;
+}
+
+public function anchor_generator_process(i : int) : void
+{
+	var x = px[i];
+	var y = py[i];
+	var stat = p4[i];
+
+    switch(stat){
+    case 0:
+        if( !my.has_anchor ){
+            if( check_over(i,16) )
+            {
+                my.touch_event_func = anchro_generator_event;
+                my.touch_event_p1 = i;
+                my.touch_event_x = x;
+                my.touch_event_y = y;
+            }
+	    }
+    case 1:
+        y += 4;
+        stat = 2;
+        my.create_anchor(x,y-32);
+    case 2:
+        y = y;
+    }
+
+    gr_sprite2(x, y, SPR_SWITCH, 32);
+
+	px[i] = x;
+	py[i] = y;
+    p4[i] = stat;
+}
+
+function anchro_generator_event():int options(segment:my)
+{
+    p4[my.touch_event_p1] = 1;
+    return 1;
+}
+
+/*********************************************
+ * 魚（水中）
+ * p3: 状態
+ * p5: カウント
+ * p8: 方向
+ *********************************************/
+
+public function fish_w_new(i:int):void
+{
+	if( p2[i] == 0 ) p2[i] = 8;
+	p3[i] = 0;
+	p5[i] = 60;
+    p8[i] = 0;
+}
+
+public function fish_w_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir = p1[i];
+	var speed = p2[i];
+	var stat = p3[i];
+	var count:sint8 = p5[i];
+    var angle = p8[i];
+	var disp = 0;
+	var pat:int;
+	var vx:sint;
+    var hit:int;
+
+	const ANIM_SWIM = [2,3,4,4,3,2,1,0,0,1];
+	
+	switch(stat){
+	case 0:
+        if( dir == DIR_LEFT ){
+            x -= (<sint8>giff+speed)/16;
+        }else{
+            x += (<sint8>giff+speed)/16;
+        }
+
+		 hit = check_block(&x,&y);
+         if( hit ){
+            dir = 4 - dir;
+         }
+
+		if( count == 0 ){
+            if( check_over(i,80)){
+			    count = 0;
+			    stat = 1;
+			    vx = 0;
+    			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+            }
+		}else{
+    		count -= 1;
+        }
+		
+	case 1: // 気付いた！
+		count += 1;
+		vx = math.sin(count*8)/32;
+		vx = (<uint8>vx) * (<uint8>DIR_VX[dir]);
+		if( count > 32 ){ stat = 2; count = 0;}
+	case 2: // プレイヤーへ
+        count += 1;
+        vx = (math.cos(angle) / 4 + giff) / 16;
+    	x += vx;
+		y += (math.sin(angle) / 4 + giff) / 16;
+        if( vx > 0 ){
+            dir = DIR_RIGHT;
+        }elsif( vx < 0 ){
+            dir = DIR_LEFT;
+        }
+        check_block(&x,&y);
+        if( y <= 16 ){ y = 16; }
+        if( y >= 224){ y = 224; }
+		if( count > 60 ){
+			stat = 3;
+			count = 0;
+		}
+	case 3: // 気付いた！
+		count += 1;
+		vx = math.sin(count*8)/32;
+		vx = (<uint8>vx) * (<uint8>DIR_VX[dir]);
+		if( count > 32 ){ stat = 0; count = 60;}
+	}
+
+    var spr = SPR_SLOT[slot] + SPR_FISH;
+    var flag = DIR_FLIP_XY[dir] | PAL_SLOT[slot];
+	switch( stat ){
+	case 0:
+		gr_sprite2(x, y, spr+anim/8%2*4, flag);
+	case 1,3:
+		gr_sprite2(px[i]+vx, y, spr+2*4+count/8*4, flag);
+	case 2:
+		gr_sprite2(x, y, spr+8*4, flag);
+	}
+
+	check_hit(i,8);
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = dir;
+	p3[i] = stat;
+	p5[i] = count;
+    p8[i] = angle;
+}
+
+/*********************************************
+ * キャノン
+ * p1: 弾の速度
+ * p2: 周期
+ * p3: 周期のずれ
+ * p4: 状態
+ * p5: ウェイト
+ * p6: 弾を打つかどうか（封印があるため記憶している）
+ *********************************************/
+public function cannon_new(i:int):void
+{
+	if( p1[i] == 0 ){ p1[i] = 8; }
+	if( p2[i] == 0 ){ p2[i] = 120; }
+    p4[i] = 0;
+    p5[i] = 0;
+    p6[i] = 0;
+}
+
+public function cannon_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var speed = p1[i];
+	var time = p2[i];
+	var first_wait = p3[i];
+    var stat = p4[i];
+    var wait = p5[i];
+    var will_shoot = p6[i];
+
+	wait += 1;
+
+    switch(stat){
+    case 0:
+        // 初期ウェイト
+        if( wait >= first_wait ){
+            stat = 1;
+            wait = 0;
+        }
+
+    case 1:
+        // 周期
+        if( wait == (time-20) ){
+            will_shoot = !check_over(i,33);
+        }elsif( wait < time ){
+            if( will_shoot ){
+                gr_sprite2(x, y, SPR_SLOT[slot] + SPR_CANNON + anim/2%2*4, 0);
+            }
+        }else{
+            if( will_shoot ){
+                var angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+                var vx = math.cos(angle) / speed;
+                var vy = math.sin(angle) / speed;
+
+                var fire = new();
+                type[fire] = TYPE_CANNON_BULLET;
+                pslot[fire] = slot;
+                px[fire] = x;
+                py[fire] = y;
+                p1[fire] = vx;
+                p2[fire] = vy;
+                setup(fire);
+        		sound.play_se(sound.SE_SHOOT, 0);
+            }
+            wait = 0;
+            will_shoot = 0;
+        }
+    }
+	
+	//gr_sprite2(x, y, 136+anim/2%2*4, 0);
+
+    p4[i] = stat;
+    p5[i] = wait;
+    p6[i] = will_shoot;
+}
+
+/*********************************************
+ * キャノンの弾
+ * p1: vx
+ * p2: vy
+ *********************************************/
+public function cannon_bullet_new(i:int):void
+{
+}
+
+public function cannon_bullet_process(i:int):void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var vx: sint = p1[i];
+	var vy: sint = p2[i];
+	
+	x += (vx + giff) / 16;
+	y += (vy + giff) / 16;
+
+	gr_sprite2(x, y, SPR_SLOT[slot] + SPR_CANNON, anim/2%2);
+	
+	check_hit(i, 8);
+	if( check_outside(x,y) ){ type[i] = 0; }
+
+	px[i] = x;
+	py[i] = y;
+}
+
+/*********************************************
+ * くらげ
+ * p1: 行動の種類(0:ホーミング, 1: ウィルオーウィスプ)
+ * p4: 状態(0:移動, 1:ビリビリ待機, 2:ビリビリ, 3:クールダウン)
+ * p5: 攻撃しないウェイト
+ * p6: 角度
+ *********************************************/
+
+public function jellyfish_new(i : int) : void
+{
+    if( p1[0] == 0 ){
+	    p4[i] = 0;
+	    p5[i] = 0;
+    }else{
+        if( p2[i] == 0 ) p2[i] = 8;
+	    p4[i] = 0;
+	    p5[i] = 0;
+    }
+}
+
+public function jellyfish_process(i : int): void
+{
+    if( p1[i] == 0 ){
+        jellyfish_process_a(i);
+    }else{
+        jellyfish_process_b(i);
+    }
+}
+
+public function jellyfish_process_a(i : int) : void
+{
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var state = p4[i];
+	var wait = p5[i];
+	var angle = p6[i];
+    var dy: sint;
+    var dx: sint;
+    var spr = SPR_SLOT[slot] + SPR_JELLYFISH;
+    var pal = PAL_SLOT[slot];
+
+	switch (state)
+	{
+	case 0:
+		if (wait)
+		{
+			wait -= 1;
+		}
+        if( anim % 16 == 0 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+        }
+        if( anim % 3 == 0 ){
+            x += (math.cos(angle) / 8 + giff + 4) / 16;
+            y += (math.sin(angle) / 8 + giff + 4) / 16;
+        }
+        if( wait == 0 && check_over2(i, 48)){
+            state = 1;
+            wait = 90;
+        }
+        dy = math.sin(anim * 4) / 24;
+        gr_sprite2(x, y /*+ dy*/, spr + ((anim / 8) % 2) * 4, pal);
+	case 1:
+		if (wait)
+		{
+			wait -= 1;
+		}
+		else
+		{
+			state = 2;
+			wait = 60;
+		}
+        if( anim % 16 == 0 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+        }
+        if( anim % 4 == 0 ){
+            x += (math.cos(angle) / 8 + giff + 4) / 16;
+            y += (math.sin(angle) / 8 + giff + 4) / 16;
+        }
+        dx = (anim / 2) % 2;
+        gr_sprite2(x + dx, y, spr + 4 + ((anim / 2) % 2) * 4, pal);
+	case 2:
+		if (wait)
+		{
+			wait -= 1;
+		}
+		else
+		{
+			state = 3;
+            wait = 30;
+		}
+        dx = (anim / 2) % 2;
+        gr_sprite2(x + dx, y, spr + 3*4, pal);
+
+        if( anim % 2 == 0 ){
+            jellyfish_draw_effect(x,y,24 - wait % 16, spr, pal);
+        }
+
+        if( anim % 2 == 0 ){
+            check_hit_rect(x-32,y-24,x+32,y+24);
+            check_hit_rect(x-24,y-32,x+24,y+32);
+        }
+    case 3:
+        type[i] = 0;
+		if (wait)
+		{
+			wait -= 1;
+		}
+		else
+		{
+			state = 0;
+            wait = 60;
+		}
+        gr_sprite2(x, y, spr, pal);
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p4[i] = state;
+	p5[i] = wait;
+	p6[i] = angle;
+
+	check_hit(i, 8);
+}
+
+public function jellyfish_draw_effect(x:int, y:int, w:int, spr:int, pal:int):void
+{
+    gr_sprite2(x - w, y - w, spr + 5*4, pal);
+    gr_sprite2(x    , y - w - 4, spr + 6*4, pal);
+    gr_sprite2(x + w, y - w, spr + 5*4, pal|ppu.SPRITE_FLAG_FLIP_X);
+    gr_sprite2(x - w - 4, y    , spr +13*4, pal);
+    gr_sprite2(x + w + 4, y    , spr +13*4, pal|ppu.SPRITE_FLAG_FLIP_X);
+    gr_sprite2(x - w, y + w, spr + 5*4, pal|ppu.SPRITE_FLAG_FLIP_Y);
+    gr_sprite2(x    , y + w + 4, spr + 6*4, pal|ppu.SPRITE_FLAG_FLIP_Y);
+    gr_sprite2(x + w, y + w, spr + 5*4, pal|ppu.SPRITE_FLAG_FLIP_X|ppu.SPRITE_FLAG_FLIP_Y);
+
+}
+
+public function jellyfish_process_b(i : int) : void
+{
+    /*
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir = p2[i];
+    var state = p4[i];
+	var speed = p3[i];
+    var wait = p5[i];
+    var spr = SPR_SLOT[slot] + SPR_JELLYFISH;
+    var pal = PAL_SLOT[slot];
+
+	switch (state){
+    case 0:
+		if (wait)
+		{
+			wait -= 1;
+		}
+        var n = (speed + giff) / 16;
+        while (n)
+        {
+            var vx = DIR_VX[dir];
+            var vy = DIR_VY[dir];
+            var xbias = 0;
+            if (vx < 0)
+            {
+                xbias = -1;
+            }
+            var ybias = 0;
+            if (vy < 0)
+            {
+                ybias = -1;
+            }
+            if (y >= 240 || y < 16)
+            {
+                type[i] = 0;
+                return;
+            }
+            if (bg.cell_type(x + vx * 8 + xbias, y + vy * 8 + ybias) & bg.TYPE_STOP || check_outside(x, y))
+            {
+                dir = (2 + dir) % 4;
+            }
+            x += DIR_VX[dir];
+            y += DIR_VY[dir];
+
+            var cx = x % 16;
+            var cy = y % 16;
+            if (x % 16 == 8 && y % 16 == 8)
+            {
+                var cell_dir = bg.get_cell_dir(x, y);
+                if( cell_dir != -1){
+                    dir = cell_dir;
+                }
+            }
+
+            n -= 1;
+        }
+        if( wait == 0 && check_over(i, 32)){
+            state = 1;
+            wait = 90;
+        }
+    	gr_sprite2(x, y, spr + (anim / 4) % 2 * 4, pal);
+        px[i] = x;
+        py[i] = y;
+        p2[i] = dir;
+    	p4[i] = state;
+        p5[i] = wait;
+
+        check_hit(i, 8);
+    default:
+        jellyfish_process_sub(i);
+    }
+        */
+}
+
+function jellyfish_process_sub(i:int):void
+{
+    /*
+    var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var state = p4[i];
+	var wait = p5[i];
+	var angle = p6[i];
+    var dy: sint;
+    var dx: sint;
+    var spr = SPR_SLOT[slot] + SPR_JELLYFISH;
+    var pal = PAL_SLOT[slot];
+
+	switch (state)
+	{
+	case 0:
+		if (wait)
+		{
+			wait -= 1;
+		}
+        if( anim % 16 == 0 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+        }
+        if( anim % 2 == 0 ){
+            x += (math.cos(angle) / 8 + giff) / 16;
+            y += (math.sin(angle) / 8 + giff) / 16;
+        }
+        if( wait == 0 && check_over(i, 32)){
+            state = 1;
+            wait = 90;
+        }
+        dy = math.sin(anim * 4) / 24;
+        gr_sprite2(x, y + dy, spr + ((anim / 8) % 2) * 4, pal);
+	case 1:
+		if (wait)
+		{
+			wait -= 1;
+		}
+		else
+		{
+			state = 2;
+			wait = 60;
+		}
+        if( anim % 16 == 0 ){
+			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
+        }
+        dx = (anim / 2) % 2;
+        gr_sprite2(x + dx, y, spr, pal);
+	case 2:
+		if (wait)
+		{
+			wait -= 1;
+		}
+		else
+		{
+			state = 3;
+            wait = 60;
+		}
+        dx = (anim / 2) % 2;
+        gr_sprite2(x + dx, y, spr + 8, pal);
+        var fx:sint = math.rand() % 64 - 32;
+        var fy:sint = math.rand() % 64 - 32;
+        gr_sprite2(x + fx, y + fy, spr + 12, pal);
+    	check_hit(i, 32);
+    case 3:
+		if (wait)
+		{
+			wait -= 1;
+		}
+		else
+		{
+			state = 0;
+            wait = 60;
+		}
+        gr_sprite2(x, y, spr, pal);
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p4[i] = state;
+	p5[i] = wait;
+	p6[i] = angle;
+
+	check_hit(i, 8);
+    */
+}
