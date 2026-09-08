@@ -358,6 +358,7 @@ func (c *Compiler) ca65(path string) {
 	base := filepath.Base(path)
 	obj := filepath.Join(BuildPath, strings.TrimSuffix(base, filepath.Ext(base))+".o")
 	c.sh("ca65",
+		"-g",
 		"-o", obj,
 		"-I", filepath.Join(c.FCHome, "share"),
 		"-I", BuildPath,
