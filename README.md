@@ -58,15 +58,29 @@ ruby tools/gen_golden.rb   # ruby/ 以下の Ruby 版が必要 (ruby 3.x + racc)
 ```
 cmd/fcc/          CLI
 internal/fc/      コンパイラ本体 (レキサ/パーサ/HLC/アロケータ/LLC/ドライバ)
-internal/r6502/   6502エミュレータ
+internal/r6502/   6502エミュレータ (emuターゲット実行用)
+internal/nes/     ヘッドレスNESランナー (テスト用)
 fclib/            FC言語の標準ライブラリ
 share/            ランタイムアセンブリ・リンカ設定
 test/             FC言語のテストソース
-testdata/golden/  golden データ (Ruby版から生成)
-tools/            golden 生成ツール (Ruby)
+examples/         実プロジェクト由来の回帰テスト用サンプル (miku / castle)
+testdata/golden/  golden データ
+tools/            golden 生成・サンプル同期ツール
 ruby/             オリジナルの Ruby 実装 (凍結)
-doc/              ドキュメント (言語仕様、Go移植計画など)
+doc/              ドキュメント
 ```
+
+## ドキュメント
+
+| ファイル | 内容 |
+|---|---|
+| [doc/development_notes.md](doc/development_notes.md) | **開発時にまず読む**: 環境・ブランチ運用・テストの回し方・ハマりどころ |
+| [doc/language_reference.md](doc/language_reference.md) | FC言語の仕様 |
+| [doc/go_evolution_plan.md](doc/go_evolution_plan.md) | 今後の計画（Goらしい設計への転換・機能追加）と作業ログ |
+| [doc/go_port_plan.md](doc/go_port_plan.md) | Ruby→Go 移植の記録（アーカイブ） |
+| [doc/go_port_dump_format.md](doc/go_port_dump_format.md) | golden ダンプ正規形の仕様 |
+| [doc/optimization.md](doc/optimization.md) / [doc/register_allocation.md](doc/register_allocation.md) | 最適化・レジスタ割付の解説 |
+| [examples/README.md](examples/README.md) | サンプルの構成・同期方法・エミュレータテスト |
 
 ## License
 

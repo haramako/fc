@@ -5,8 +5,9 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 **Rubyとのバイナリレベルの互換性は捨ててよい**という前提で、
 (A) Goに即した設計への転換と (B) 機能追加を計画する。
 
-> 状態: **提案（未着手）**。着手時はこのドキュメントを go_port_plan.md と同様の
-> 進行管理ドキュメントに昇格させ、チェックボックスと作業ログを更新していく。
+> 状態: **本編(R0〜R5 / F1〜F3)は未着手**。ただし検証基盤まわりの一部
+> （実プロジェクトの取り込み・NESランナー・MesenCE統合）は 2026-08-29 に先行実装済み。
+> 末尾の「作業ログ」を参照。着手時はチェックボックスと作業ログを更新していく。
 
 ---
 
@@ -45,8 +46,11 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 - [ ] スナップショットテスト機構: `go test ./... -update` で ir/allocir/asm/bin/stdout の
       golden を **Go自身の出力から再生成**できるようにする（現 gen_golden.rb の役目を置換）
 - [ ] `testdata/golden/ast` と `.pos` は Ruby 由来のまま凍結 → R1 で typed AST に置き換える際に廃止
-- [ ] castle スモークテスト: 環境変数 `FC_CASTLE_DIR` があるときだけ動く external test
-      （`fcc compile -t nes main.fc` が通ること + 生成 .s のスナップショット比較）
+- [x] 実プロジェクト受け入れテスト → **先行実装済み (2026-08-29)**。当初案の
+      「外部ディレクトリを参照する external test」ではなく、**コンパイルに必要な資材を
+      `examples/` に取り込む**方式に変更した（外部環境に依存せず CI でも回るため）。
+      `TestExampleMiku` / `TestExampleCastle` が ROM のバイト一致まで検証する。
+      実プロジェクトとの差分確認は `tools/sync_examples.ps1`
 - [ ] ベンチマーク追加（castle フルコンパイル時間、test一式時間）— 以後の変更の性能退行検知
 - [ ] 計画ドキュメント運用の切替（本ドキュメントを進行管理に昇格、go_port_plan.md はアーカイブ）
 
@@ -233,3 +237,46 @@ R5 CI/リリース は R0 直後から並行可
 | `:lt` バグ修正等で castle の実挙動が変わる | 変更を単独コミットにし、castle 実機/エミュ確認をセットで行う |
 | 検証基盤切替時に「Rubyでしか再現できないgolden」を失う | ruby/ とタグを凍結維持。切替コミットに手順を明記 |
 | マクロ一般化の設計が肥大化 | まず castle と fclib の実需要 (テキスト変換・times系) だけを満たす最小案で始める |
+
+---
+
+## 作業ログ
+
+移植完了（`go-strict-clone` タグ）以降の記録。環境・運用の詳細は
+[development_notes.md](development_notes.md) を参照。
+
+### 2026-08-29 — 検証基盤の先行整備（本計画の一部を前倒し）
+
+計画本編（R0〜）には未着手だが、「実プロジェクトが動き続けることを自動で確認する」
+手段を先に用意した。これは R0 の目的（挙動ベースの検証への移行）の前提でもある。
+
+1. **castle 対応** — castle の `src/macro.rb`（`_T`/`_M`/`VERSION_STR` テキスト変換
+   マクロ）を Go 組み込みマクロ化（`internal/fc/textconv.go` + `macros.go`）。
+   `NesTools::TextConverter` の必要部分を移植し、`tr` 対応表がソース15:宛先14で
+   ずれている Ruby の潜在バグも再現。castle が Go 版 fcc でビルドでき、
+   **Ruby 版ビルドと ROM がバイト一致**することを確認
+2. **進化計画の策定** — 本ドキュメント。memo.txt の作者TODO・optimization.md・
+   `feature/test-frame-expand` の失敗経緯を反映
+3. **タグ `go-strict-clone`** — 厳密クローン完了・castle 動作確認済みの基準点
+   （`ruby-frozen` の対）
+4. **examples の取り込み** — fc-miku と castle の「コンパイルに必要なもの」一式を
+   `examples/` へ（どちらも**無修正**）。example 単体ビルドの ROM が実プロジェクトでの
+   ビルドと一致することを確認。ROM スナップショット回帰テストと
+   `tools/sync_examples.ps1`（差分確認 / `-Update` で再取り込み）を整備。
+   `fs_data.bin` 等の生成物は「出来合い許容」ポリシー（[../examples/README.md](../examples/README.md)）
+5. **内蔵ヘッドレスNESランナー** (`internal/nes`) — NROM/MMC3 + PPUレジスタ近似 +
+   NMI/スキャンラインIRQ近似 + BG/スプライトのスクリーンショット。
+   `TestSmoke*` に加え `TestPlayCastle`（タイトルでA → 右移動+ジャンプ → 画面遷移検出）。
+   実装中に **Ruby版 r6502 の `rti` が PC の hi/lo を逆に復元するバグ**を発見し修正
+   （emu ターゲットでは rti を通らないため露見していなかった）
+6. **MesenCE 統合** — 2.2.1 を導入し `TestMesenPlayCastle`（`--testrunner` +
+   生成Lua で自動プレイ、ld65 マップから取得した `_bg_cur_area` の変化で判定）。
+   ヘッドレス起動の罠は development_notes.md に記録
+
+結果、検証は**四段構え**になった:
+golden差分（コンパイラ出力）→ ROMバイト一致（実プロジェクト）→
+内蔵スモーク/自動プレイ（高速・依存ゼロ）→ MesenCE 自動プレイ（実機精度）。
+`go test ./...` で全部通る。
+
+**次にやること**: R0 の残り（`-update` によるスナップショット再生成機構、
+ベンチマーク、ドキュメント運用の切替）から。

@@ -64,18 +64,47 @@ func ensureMesenSettings(t *testing.T, mesenPath string) {
 	t.Logf("Mesen settings.json を作成した: %s", p)
 }
 
+// copyTree は src ディレクトリを dst へ再帰コピーする (.fc-build は除く)。
+func copyTree(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".fc-build" {
+				return filepath.SkipDir
+			}
+			return os.MkdirAll(filepath.Join(dst, rel), 0o777)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dst, rel), b, 0o666)
+	})
+	if err != nil {
+		t.Fatalf("コピーに失敗: %v", err)
+	}
+}
+
 // buildCastleWithMap は examples/castle をビルドし、ROM と ld65 マップのパスを返す。
+// examples/castle を一時ディレクトリに複製してからビルドする:
+// internal/fc の TestExampleCastle と `go test ./...` で並列に走るため、
+// リポジトリ内の .fc-build を共有すると競合する。
 func buildCastleWithMap(t *testing.T) (romPath, mapPath string) {
 	t.Helper()
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(repoRoot, "examples", "castle")
+	dir := filepath.Join(t.TempDir(), "castle")
+	copyTree(t, filepath.Join(repoRoot, "examples", "castle"), dir)
 	src := filepath.Join(dir, "src")
-	if err := os.RemoveAll(filepath.Join(src, ".fc-build")); err != nil {
-		t.Fatal(err)
-	}
 	t.Chdir(src)
 
 	compiler := fc.NewCompiler(repoRoot)

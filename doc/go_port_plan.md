@@ -28,7 +28,11 @@ Ruby版(現行)を「正解オラクル」として、**生成アセンブラの
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: なし（移植完了）。今後の改善は厳密クローン制約を外して別途行う。golden 再生成が必要な場合は `ruby tools/gen_golden.rb`。
+**次にやること**: なし（移植完了）。golden 再生成が必要な場合は `ruby tools/gen_golden.rb`。
+
+> **このドキュメントはアーカイブ**（移植の記録）。移植完了以降の作業・今後の計画は
+> [go_evolution_plan.md](go_evolution_plan.md)、環境と運用は
+> [development_notes.md](development_notes.md) を参照。
 
 ---
 

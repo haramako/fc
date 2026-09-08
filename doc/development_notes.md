@@ -56,6 +56,11 @@ go test ./...                                    # 全部 (golden + examples + N
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は
   [../examples/README.md](../examples/README.md)）
 - 内蔵NESランナーのスクリーンショット: `FC_NES_SNAPSHOT_DIR=<dir> go test ./internal/nes`
+- **注意: `go test ./...` はパッケージを並列実行する**。examples をビルドするテストを
+  新設するときは、リポジトリ内の `examples/*/src/.fc-build` を共有しないこと
+  （`internal/nes` の Mesen テストは一時ディレクトリに複製してからビルドしている。
+  共有すると片方の RemoveAll でもう片方のビルドが壊れ、単独実行では再現しない
+  フレーク不良になる）
 
 ## MesenCE の導入とハマりどころ
 
