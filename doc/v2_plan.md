@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R1 進行中（R1-a, R1-b 完了）**
+最終更新: 2026-09-12 / 状態: **R1 進行中（R1-a〜c 完了）**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
-| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | 🔄 a,b ✅ |
+| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | 🔄 a,b,c ✅ |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ⬜ |
 | R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ⬜ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R1-c（sema が型付き AST を直接読む、§4.4）。最大の山。`+=` 共有ノードのハザード（§2.2）に注意。
+**次にやること**: R1-d（型付き IR、§4.5）。ir/allocir golden の形式変更は「旧形式で差分ゼロ確認 → ダンパ差替え → `-update`」の順を厳守。
 
 ---
 
@@ -382,26 +382,48 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
     CompileError の行番号だけに影響し、テストは行番号を見ない（§2.6）
   - golden（ir/allocir/asm/bin/stdout/examples）全差分ゼロ、`go test ./...` 緑
 
-### 4.4 R1-c sema が typed AST を直接読む（2 日・最大の山）
+### 4.4 R1-c sema が typed AST を直接読む（2 日・最大の山）✅ 2026-09-12
 
-- [ ] `hlc.go` の AST を読む全関数（`compileStatement`, `compileBlock`, `constEval`, `typeEval`, `lval`, `rval`,
+- [x] `hlc.go` の AST を読む全関数（`compileStatement`, `compileBlock`, `constEval`, `typeEval`, `lval`, `rval`,
       `compileLambda`, `compileModule`、マクロ呼び出し境界）を `syntax` ノードの型 switch に書き換える
-- [ ] **`constEval` の純関数化**: AST を書き換えず、評価結果（`*Value` または「まだ評価できない式」）を返す。
+- [x] **`constEval` の純関数化**: AST を書き換えず、評価結果（`*Value` または「まだ評価できない式」）を返す。
       `deepCopyAST` 廃止。**ハザード**: §2.2 の `+=` 部分木共有 + in-place 書き換えの挙動。現行で
       2 回目の訪問が `*Value` を見ることで副作用（tmp の採番・IR の順序）が変わっている可能性がある。
       対処: `test_var` `test_stat` の ir golden が差分ゼロであることを最初に確認する。差分が出たら
       「共有ノードの評価結果をキャッシュして 2 回目は同じ `*Value` を返す」等、**現行と同じ IR になる**
       純関数的実装に調整する（正しい挙動に直すのではない）
-- [ ] `pos_info` 廃止: `Hlc.curFilename/curLineNo` を「処理中ノードの Pos」から取る。`CompileError` に Col も持たせる
+- [x] `pos_info` 廃止: `Hlc.curFilename/curLineNo` を「処理中ノードの Pos」から取る。`CompileError` に Col も持たせる
       （R2 で整理するが、ここで Pos を通しておく）
-- [ ] マクロ境界: `MacroFn` はこの時点ではまだ `[]any` を返してよいが、sema 側で typed に変換せず済むよう
+- [x] マクロ境界: `MacroFn` はこの時点ではまだ `[]any` を返してよいが、sema 側で typed に変換せず済むよう
       **R1-f を先に小さく済ませるか**、一時的に「マクロ結果 `[]any` → typed」の逆 lower を置く。推奨は
       R1-c の中で `MacroFn` の戻り値を typed ノードにしてしまうこと（マクロは 5 ファイル・100 行程度）。
       その場合 R1-f は「マクロ API を綺麗にする」だけになる
-- [ ] 旧コード削除: `internal/fc/lexer.go`, `parser.y`, `parser.go`, `parser_driver.go`, `lower.go`, `deepCopyAST`,
+- [x] 旧コード削除: `internal/fc/lexer.go`, `parser.y`, `parser.go`, `parser_driver.go`, `lower.go`, `deepCopyAST`,
       `sexp.go` の AST 関連（`Canon` は OMap が使うので R1-e まで残る）
 - 合格: **ir/allocir/asm/bin/stdout golden 全差分ゼロ**、TestErrorsFC 緑、examples ROM 一致、nes 緑。
   ベンチ再計測（§9 に記録）
+- 結果:
+  - `hlc.go` を書き直し（入力は `syntax.Stmt`/`syntax.Expr` の型 switch）。`internal/fc/cexpr.go` に sema 内部の
+    式表現 `cexpr`（constEval の入力=未評価 / 出力=評価済み）を追加。**constEval は入力を変異せず新しい木を返す**
+  - `+=` 共有ノードのハザードは `Hlc.cmemo`（未評価ノード → 評価結果のメモ、文ごとにリセット）で再現:
+    `toC(AssignExpr{AddEq})` が `load(X, add(X, rhs))` の X を同一ノードとして共有し、2 回目の評価はメモを返す。
+    tmp/label 採番順は旧実装と完全一致（ir/allocir/asm golden 差分ゼロで確認。`hlc_test.go` の
+    `TestHlcCompoundAssignEvaluatesLhsTwice` が index 2 回計算の挙動を固定）
+  - マクロ API は R1-c 内で typed 化した（`MacroFn func(h, args []*cexpr, block *syntax.Block) macroResult`、
+    結果は式 or 式文の列）。`times`（旧実装でも壊れていて未使用）は呼ばれたら CompileError。
+    → **R1-f は「API を綺麗にする」だけ**（または不要として閉じる）
+  - 型式 → `*Type` は暫定的に `typeAST()` で旧形式の型 AST に変換して `TypeOf` に渡す（最外配列長だけ定数評価、
+    内側は整数リテラルのみ、という旧挙動を保存）。R1-e で型付きコンストラクタに置換
+  - 位置情報: `pos_info` 廃止。`compileStatement` が `s.Pos()` から `curFilename/curLineNo` を更新
+    （合成ノードは位置無効なので更新しない）。CompileError の行番号は**文の開始行**
+  - 旧実装がランタイムパニック（型アサーション失敗）で落ちていた入力の一部は CompileError になった
+    （非定数の const 値 / 配列長 / switch の case 値 / マクロ引数、名前なしラムダ引数、型なし関数引数）。
+    テストされていない経路の「クラッシュ → エラー」への変更のみで、通っていたコードの意味は不変
+  - 削除: 旧 `lexer.go` `parser.y/.go` `parser_driver.go` `lower.go` と差分テスト 2 本、`deepCopyAST`、`PosInfo`、`cons`、`DumpAST` 系。
+    `at()`/`ReadSource` は base.go へ移動（`at` は旧 IR の可変長オペランド参照用。R1-d で不要になる）
+  - 追加テスト: `hlc_test.go`（`+=` の 2 回評価、定数畳み込み、while/for 脱糖、CompileError 化と位置、エラー行=開始行）
+  - golden 全差分ゼロ（ir/allocir/asm/bin/stdout/examples ROM）、`go test ./...` 緑。
+    ベンチ: Frontend 519ms → **368ms**、155MB → 115MB、3.34M → 2.04M allocs（`Canon` 経由の pos_info と deepCopy が消えた分）
 
 ### 4.5 R1-d 型付き IR（1.5 日）
 

@@ -1,10 +1,13 @@
 // Package fc は FCコンパイラの Go 実装。
-// Ruby版 (lib/fc/, タグ ruby-frozen) の厳密クローンであり、
-// AST は Ruby と同様の動的構造 ([]any / Sym / int / string / *OMap / nil) で表現する。
+// Ruby版 (lib/fc/, タグ ruby-frozen) の厳密クローンとして移植され、feature/v2 で
+// Go らしい構造へ段階的に移行中 (doc/v2_plan.md)。構文木は internal/syntax の型付きノード、
+// IR (Lambda.Ops) はまだ Ruby 由来の動的構造 ([]any / Sym / *OMap) で表現する。
 package fc
 
 import (
+	"bytes"
 	"fmt"
+	"os"
 	"strconv"
 )
 
@@ -109,10 +112,21 @@ func ToS(v any) string {
 	}
 }
 
-// cons は Ruby の `ary + [x...]` 相当 (新しいスライスを作る)。
-func cons(a []any, xs ...any) []any {
-	r := make([]any, 0, len(a)+len(xs))
-	r = append(r, a...)
-	r = append(r, xs...)
-	return r
+// at は配列の i 番目 (範囲外は nil)。旧 IR ([]any の op) の可変長オペランド参照に使う (R1-d で不要になる)。
+func at(ast []any, i int) any {
+	if i < 0 || i >= len(ast) {
+		return nil
+	}
+	return ast[i]
+}
+
+// ReadSource はソースファイルを読み込む。
+// Ruby版は File.read (テキストモード) で読むため、Windows では CRLF→LF 変換が行われる。
+// 同じ挙動になるよう常に CRLF→LF 変換する (golden は Windows で生成されている)。
+func ReadSource(path string) ([]byte, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")), nil
 }

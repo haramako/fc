@@ -7,6 +7,8 @@ package fc
 import (
 	"fmt"
 	"strings"
+
+	"github.com/haramako/fc/internal/syntax"
 )
 
 var macroFiles = map[string]func(h *Hlc){
@@ -18,22 +20,12 @@ var macroFiles = map[string]func(h *Hlc){
 }
 
 // fclib/stdmacro.rb
-// (注: 現行の Ruby 版では times の展開結果は compile_statement が解釈できない形であり、
-//  実際にはどのテストからも使われていない。1:1 移植として同じ構造を返す)
+// times(n){...} は現行の Ruby 版でも展開結果が compile_statement で解釈できない形
+// (ループ本体が文リストのまま) で、実際にはどこからも使われていない。
+// include("stdmacro.rb") 自体は受理し、呼び出されたらエラーにする (v2 で削除予定: v2_decisions.md §3)。
 func registerStdmacro(h *Hlc) {
-	h.defmacro("times", func(h *Hlc, args []any, block any) any {
-		limit := args[0]
-		v := Sym("__loops2__")
-		blockList, _ := block.([]any)
-		return []any{
-			[]any{Sym("var"), []any{[]any{v, Sym("int"), limit, NewOMap()}}},
-			[]any{Sym("loop"),
-				cons(blockList,
-					[]any{Sym("exp"), []any{Sym("load"), v, []any{Sym("sub"), v, 1}}},
-					[]any{Sym("if"), []any{Sym("not"), v}, []any{[]any{Sym("break")}}},
-				),
-			},
-		}
+	h.defmacro("times", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		panic(&CompileError{Msg: "times macro is not supported"})
 	})
 }
 
@@ -43,13 +35,15 @@ func registerStdio(h *Hlc) {
 	print := h.scope.Find(Sym("print"), true)
 	printInt16 := h.scope.Find(Sym("print_int16"), true)
 
-	h.defmacro("printf", func(h *Hlc, args []any, block any) any {
-		r := []any{Sym("block")}
+	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		r := macroResult{stmts: []*cexpr{}}
 		for _, arg := range args {
-			if CompatibleTypeOk(uint8p, ValType(arg)) != nil {
-				r = append(r, []any{Sym("exp"), []any{Sym("call"), print, []any{arg}}})
-			} else if ValType(arg).Kind == "int" {
-				r = append(r, []any{Sym("exp"), []any{Sym("call"), printInt16, []any{arg}}})
+			// 旧実装は引数が定数値でないと ValType が落ちていた。同じく定数値を要求する
+			typ := mustValue(arg).Type
+			if CompatibleTypeOk(uint8p, typ) != nil {
+				r.stmts = append(r.stmts, ccall(cv(print), arg))
+			} else if typ.Kind == "int" {
+				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
 			}
 		}
 		return r
@@ -60,8 +54,8 @@ func registerStdio(h *Hlc) {
 func registerMath(h *Hlc) {
 	sin := h.scope.Find(Sym("sin"), true)
 
-	h.defmacro("cos", func(h *Hlc, args []any, block any) any {
-		return []any{Sym("call"), sin, []any{[]any{Sym("add"), args[0], 64}}, nil}
+	h.defmacro("cos", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		return macroResult{expr: ccall(cv(sin), cop2(opAdd, args[0], cint(64)))}
 	})
 }
 
@@ -79,28 +73,33 @@ func registerCastleMacros(h *Hlc) {
 	conv := NewTextConverter(readText("../tmp/font/text.chr.txt"))
 	miscConv := NewTextConverter(readText("../tmp/font/misc_text.chr.txt"))
 
-	textArray := func(codes []int) any {
-		elems := make([]any, len(codes))
+	textArray := func(codes []int) macroResult {
+		elems := make([]*cexpr, len(codes))
 		for i, c := range codes {
-			elems[i] = c
+			elems[i] = cint(c)
 		}
-		return []any{Sym("array"), elems}
+		return macroResult{expr: carray(elems)}
+	}
+	// 引数は文字列リテラル (BaseString を持つ定数値) でなければならない
+	baseString := func(c *cexpr) string {
+		s, ok := mustValue(c).BaseString.(string)
+		if !ok {
+			panic(&CompileError{Msg: "string literal required"})
+		}
+		return s
 	}
 
-	h.defmacro("_T", func(h *Hlc, args []any, block any) any {
-		text := conv.Conv(args[0].(*Value).BaseString.(string))
-		return textArray(append(text, 0))
+	h.defmacro("_T", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		return textArray(append(conv.Conv(baseString(args[0])), 0))
 	})
 
-	h.defmacro("_M", func(h *Hlc, args []any, block any) any {
-		text := miscConv.Conv(args[0].(*Value).BaseString.(string))
-		return textArray(append(text, 0))
+	h.defmacro("_M", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		return textArray(append(miscConv.Conv(baseString(args[0])), 0))
 	})
 
-	h.defmacro("VERSION_STR", func(h *Hlc, args []any, block any) any {
+	h.defmacro("VERSION_STR", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		version := rubyChomp(readText("../VERSION"))
-		text := miscConv.Conv("VERSION " + version)
-		return textArray(append(text, 0))
+		return textArray(append(miscConv.Conv("VERSION "+version), 0))
 	})
 }
 
@@ -122,18 +121,18 @@ func registerUnittest(h *Hlc) {
 	exit := stdioMod.Scope.Find(Sym("exit"), true)
 	init := stdioMod.Scope.Find(Sym("init"), true)
 
-	h.defmacro("unittest_run_tests", func(h *Hlc, args []any, block any) any {
-		r := []any{Sym("block"), []any{Sym("exp"), []any{Sym("call"), init, []any{}}}}
+	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
 		for _, id := range h.scope.IdList() {
 			if len(id) >= 5 && id[:5] == "test_" {
-				r = append(r,
-					[]any{Sym("exp"), []any{Sym("call"), print, []any{fmt.Sprintf("%s:", id)}}},
-					[]any{Sym("exp"), []any{Sym("call"), id, []any{}}},
-					[]any{Sym("exp"), []any{Sym("call"), print, []any{"\n"}}},
+				r.stmts = append(r.stmts,
+					ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
+					ccall(cident(string(id))),
+					ccall(cv(print), cstr("\n")),
 				)
 			}
 		}
-		r = append(r, []any{Sym("exp"), []any{Sym("call"), exit, []any{0}}})
+		r.stmts = append(r.stmts, ccall(cv(exit), cint(0)))
 		return r
 	})
 }

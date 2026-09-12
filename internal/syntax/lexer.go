@@ -186,8 +186,7 @@ func (l *Lexer) Next() (Token, error) {
 		for n < len(rest) && isWord(rest[n]) {
 			n++
 		}
-		word := string(rest[:n])
-		if kind, ok := keywords[word]; ok {
+		if kind, ok := keywords[string(rest[:n])]; ok {
 			return tok(kind, n), nil
 		}
 		return tok(Identifier, n), nil

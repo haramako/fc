@@ -1,17 +1,22 @@
 package fc
 
-// lib/fc/hlc.rb の High-Level コンパイラ (FCソース → 中間コード) の厳密移植。
-// const_eval の AST破壊的書き換え、tmp_count の採番順、エラーメッセージ文言まで 1:1 で再現する。
+// HLC: 構文木 (internal/syntax) → 中間コード (Lambda.Ops)。lib/fc/hlc.rb 由来。
+//
+// R1-c (doc/v2_plan.md §4.4) で入力を型付き構文木にし、定数評価を純関数化した
+// (構文木は変異しない。評価結果は cexpr に持つ)。tmp_count の採番順・エラーメッセージ文言は
+// 旧実装と同一で、生成される IR はバイト単位で一致する。
+// IR (Lambda.Ops の [][]any、Sym opcode) はまだ旧形式で、R1-d で型付き化する。
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/haramako/fc/internal/syntax"
 )
 
 type Hlc struct {
-	PosInfo *OMap // key: ASTノード(構造的等値), val: []any{filename, line_no}
 	Modules *OMap // key: Sym(モジュールid), val: *Module
 	Options *OMap
 
@@ -27,14 +32,25 @@ type Hlc struct {
 	lmd         *Lambda
 	curFilename string
 	curLineNo   int
+
+	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
+	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
+	cmemo map[*cexpr]*cexpr
 }
 
-// MacroFn は Go組み込みマクロ (Ruby版の defmacro の Proc 相当)。
-type MacroFn func(h *Hlc, args []any, block any) any
+// MacroFn は Go 組み込みマクロ (Ruby 版 fclib/*.rb の defmacro 相当)。
+// args は評価済みの実引数、block は呼び出しの後置ブロック。
+type MacroFn func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult
+
+// macroResult はマクロの展開結果。expr (式として展開) と stmts (式文の列として展開) は排他。
+// どちらも nil なら何も展開しない (asm マクロのように副作用のみ)。
+type macroResult struct {
+	expr  *cexpr
+	stmts []*cexpr
+}
 
 func NewHlc(libPath []string) *Hlc {
 	h := &Hlc{
-		PosInfo: NewOMap(),
 		Modules: NewOMap(),
 		Options: NewOMap(),
 		LibPath: libPath,
@@ -42,11 +58,11 @@ func NewHlc(libPath []string) *Hlc {
 	h.globalScope = NewScope(nil)
 	h.scope = h.globalScope
 
-	h.defmacro(Sym("asm"), func(h *Hlc, args []any, block any) any {
+	h.defmacro(Sym("asm"), func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		for _, line := range args {
-			h.emit(Sym("asm"), line.(*Value).BaseString)
+			h.emit(Sym("asm"), mustValue(line).BaseString)
 		}
-		return nil
+		return macroResult{}
 	})
 	return h
 }
@@ -92,19 +108,12 @@ func (h *Hlc) Compile(filename string) (err error) {
 // ユーティリティ
 // ---------------------------------------------------------------
 
-// at は Ruby の ast[i] 相当 (範囲外は nil)。
-func at(ast []any, i int) any {
-	if i < 0 || i >= len(ast) {
-		return nil
-	}
-	return ast[i]
-}
-
-func (h *Hlc) updatePos(ast any) {
-	if v, ok := h.PosInfo.Get(ast); ok {
-		pair := v.([]any)
-		h.curFilename = pair[0].(string)
-		h.curLineNo = pair[1].(int)
+// updatePos は現在処理中の文の位置を記録する (CompileError に付与するため)。
+// 位置を持たない合成ノード (while/for の脱糖) では更新しない。
+func (h *Hlc) updatePos(s syntax.Stmt) {
+	if p := s.Pos(); p.IsValid() {
+		h.curFilename = h.module.Path
+		h.curLineNo = p.Line
 	}
 }
 
@@ -194,6 +203,14 @@ func joinRubyPath(p, f string) string {
 	return p + "/" + f
 }
 
+// mustValue は評価済みの値であることを要求する (マクロ引数など)。
+func mustValue(c *cexpr) *Value {
+	if c.kind != cValue {
+		panic(&CompileError{Msg: "constant value required"})
+	}
+	return c.val
+}
+
 // ---------------------------------------------------------------
 // モジュールのコンパイル
 // ---------------------------------------------------------------
@@ -215,19 +232,14 @@ func (h *Hlc) compileModule(filename string) *Module {
 	if err != nil {
 		panic(&CompileError{Msg: err.Error()})
 	}
-	ast, posInfo, perr := ParseSrc(src, path)
+	file, perr := syntax.Parse(src, path)
 	if perr != nil {
-		if ce, ok := perr.(*CompileError); ok {
-			panic(ce)
-		}
-		panic(&CompileError{Msg: perr.Error()})
-	}
-	for _, e := range posInfo.Entries() {
-		h.PosInfo.Set(e.Key, e.Val)
+		se := perr.(*syntax.Error)
+		panic(&CompileError{Msg: se.Msg, Filename: se.Filename, LineNo: se.Pos.Line})
 	}
 
 	h.attachScope(h.module.Scope, func() {
-		h.compileBlock(ast)
+		h.compileStmts(file.Stmts)
 	})
 
 	newModule := h.module
@@ -258,8 +270,9 @@ func (h *Hlc) compileLambda(lmd *Lambda) {
 			lmd.Args[i] = h.addVar(NewValue("local", pair[0], pair[1].(*Type), nil, omap1("local_type", Sym("arg"))))
 		}
 
-		ast := deepCopyAST(lmd.Ast) // deep copy ast
-		h.compileBlock(ast)
+		if lmd.Body != nil {
+			h.compileStmts(lmd.Body.Stmts)
+		}
 
 		// returnを追加する
 		last := []any(nil)
@@ -279,12 +292,9 @@ func (h *Hlc) compileLambda(lmd *Lambda) {
 // 文のコンパイル
 // ---------------------------------------------------------------
 
-func (h *Hlc) compileBlock(ast any) {
-	if ast == nil {
-		return
-	}
-	for _, stmt := range ast.([]any) {
-		h.compileStatement(stmt)
+func (h *Hlc) compileStmts(stmts []syntax.Stmt) {
+	for _, s := range stmts {
+		h.compileStatement(s)
 	}
 }
 
@@ -302,23 +312,36 @@ func omap1(k string, v any) *OMap {
 	return m
 }
 
-func (h *Hlc) compileStatement(stmt any) {
-	h.updatePos(stmt)
-	ast := stmt.([]any)
+// scopeIsPublic は宣言の可視性を決める (文に public が付いていればそれ、なければモジュールの現在値)。
+func (h *Hlc) scopeIsPublic(publicPos syntax.Pos) bool {
+	if publicPos.IsValid() {
+		return true
+	}
+	return h.module.CurrentScope == Sym("public")
+}
 
-	switch ast[0] {
+func (h *Hlc) compileStatement(s syntax.Stmt) {
+	h.updatePos(s)
+	h.cmemo = nil
 
-	case Sym("block"):
-		h.compileBlock(at(ast, 1))
+	switch s := s.(type) {
 
-	case Sym("blank"):
+	case *syntax.Block:
+		h.compileStmts(s.Stmts)
+
+	case *syntax.EmptyStmt:
 		// DO NOTHING
 
-	case Sym("options"):
+	case *syntax.OptionsStmt:
 		h.mustInModule()
-		for _, e := range at(ast, 1).(*OMap).Entries() {
+		// 重複キーは後勝ち (位置は最初のもの) なので、一度 OMap にしてから評価する
+		raw := NewOMap()
+		for _, e := range s.Options.Entries {
+			raw.Set(Sym(e.Key.Name), e.Value)
+		}
+		for _, e := range raw.Entries() {
 			var val any
-			cv := h.constEval(e.Val).(*Value)
+			cv := mustValue(h.constEval(toC(e.Val.(syntax.Expr))))
 			if cv.BaseString != nil {
 				val = cv.BaseString
 			} else {
@@ -328,257 +351,273 @@ func (h *Hlc) compileStatement(stmt any) {
 			h.module.Options.Set(e.Key, val)
 		}
 
-	case Sym("include"):
+	case *syntax.IncludeDecl:
 		h.mustInModule()
-		filename := ast[1].(string)
-		optIdent := at(ast, 2)
-		if optIdent == nil {
+		filename := s.Path.Value
+		var kind string
+		if s.Kind != nil {
+			kind = s.Kind.Name
+		} else {
 			switch filepath.Ext(filename) {
 			case ".asm", ".inc":
-				optIdent = Sym("asm")
+				kind = "asm"
 			case ".chr":
-				optIdent = Sym("chr")
+				kind = "chr"
 			case ".rb":
-				optIdent = Sym("macro")
+				kind = "macro"
 			default:
 				panic(fmt.Sprintf("unknown include extension %s", filename))
 			}
 		}
-		switch optIdent {
-		case Sym("asm"):
+		switch kind {
+		case "asm":
 			h.module.IncludeAsms = append(h.module.IncludeAsms, filename)
-		case Sym("macro"):
+		case "macro":
 			path := h.findModule(filename)
 			reg, ok := macroFiles[filename]
 			if !ok {
 				panic(&CompileError{Msg: fmt.Sprintf("macro file %s is not supported by go port", path)})
 			}
 			reg(h)
-		case Sym("chr"):
+		case "chr":
 			h.module.IncludeChrs = append(h.module.IncludeChrs, h.findModule(filename))
 		default:
-			panic(&CompileError{Msg: fmt.Sprintf("invalid keyword %s", ToS(optIdent))})
+			panic(&CompileError{Msg: fmt.Sprintf("invalid keyword %s", kind)})
 		}
 		h.module.Depends = append(h.module.Depends, filename)
 
-	case Sym("use"):
+	case *syntax.UseDecl:
 		h.mustInModule()
-		id := ast[1].(Sym)
-		as := at(ast, 2)
-		from := at(ast, 3)
+		id := Sym(s.Module.Name)
 		m := h.compileModule(string(id) + ".fc")
 		h.module.Modules.Set(id, m)
-		if as != nil && from != nil {
-			panic("use with both as and from")
-		}
-		if s, ok := from.(string); ok && s == "*" {
+		if s.FromAll {
 			h.scope.Use(m.Scope)
 		} else {
-			if as != nil {
-				id = as.(Sym)
+			if s.As != nil {
+				id = Sym(s.As.Name)
 			}
 			v := h.addVar(NewValue("global", id, TypeOf(Sym("module")), m, NewOMap()))
 			v.Public = true
 		}
 
-	case Sym("function"):
-		pub, id, args, baseType, opt, block := at(ast, 1), at(ast, 2), at(ast, 3), at(ast, 4), at(ast, 5), at(ast, 6)
+	case *syntax.FuncDecl:
+		// const <name> = <lambda> に脱糖する (旧実装と同じ)
+		id := Sym(s.Name.Name)
 		lambdaOpt := omap1("id", id)
-		if opt != nil {
-			for _, e := range opt.(*OMap).Entries() {
+		if s.Options != nil {
+			for _, e := range rawOptions(s.Options).Entries() {
 				lambdaOpt.Set(e.Key, e.Val)
 			}
 		}
-		h.compileStatement([]any{Sym("const"),
-			[]any{[]any{id, nil, []any{Sym("lambda"), []any{Sym("lambda"), args, baseType}, block, lambdaOpt}}},
-			pub})
+		params := make([]lambdaParam, len(s.Params))
+		for i, p := range s.Params {
+			if p.Type == nil {
+				panic(&CompileError{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
+			}
+			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type}
+		}
+		lam := &cexpr{kind: cLambda, lam: &lambdaLit{params: params, result: s.Result, body: s.Body, opt: lambdaOpt}, pos: s.Pos()}
+		h.compileConstSpec(id, nil, lam, nil, s.PublicPos)
 
-	case Sym("var"):
-		for _, vAny := range ast[1].([]any) {
-			v := vAny.([]any)
-			id, typAst, initAst := at(v, 0), at(v, 1), at(v, 2)
-			opt, _ := at(v, 3).(*OMap)
-			if opt == nil {
-				opt = NewOMap()
-			}
-			var init any
-			if initAst != nil {
-				init = h.rval(v[2])
-			}
-			if init != nil && h.lmd == nil {
-				panic(&CompileError{Msg: "can't init global variable"})
-			}
-			typ := h.typeEval(typAst)
-			if typ == nil {
-				typ = GuessType(nil, init)
-			}
-			if typ != nil && init != nil {
-				CompatibleType(typ, ValType(init))
-			}
-			var val any
-			if h.lmd == nil {
-				if opt.GetOr(Sym("address")) != nil {
-					val = h.addDef(id, "equ", typ, opt.GetOr(Sym("address")))
-				} else {
-					val = h.addDef(id, "bss", typ, omap1("segment", opt.GetOr(Sym("segment"))))
+	case *syntax.VarDecl:
+		if s.Const {
+			for _, sp := range s.Specs {
+				var init *cexpr
+				if sp.Init != nil {
+					init = toC(sp.Init)
 				}
+				h.compileConstSpec(Sym(sp.Name.Name), sp.Type, init, rawOptions(sp.Options), s.PublicPos)
 			}
-			kind := Sym("global")
-			if h.lmd != nil {
-				kind = "local"
-			}
-			vv := h.addVar(NewValue(kind, id, typ, val, opt))
-			sc := at(ast, 2)
-			if sc == nil {
-				sc = h.module.CurrentScope
-			}
-			if sc == Sym("public") {
-				vv.Public = true
-			}
-			if init != nil {
-				h.emit(Sym("load"), vv, init)
+		} else {
+			for _, sp := range s.Specs {
+				h.compileVarSpec(sp, s.PublicPos)
 			}
 		}
 
-	case Sym("const"):
-		for _, vAny := range ast[1].([]any) {
-			v := vAny.([]any)
-			id, typAst, valAst := at(v, 0), at(v, 1), at(v, 2)
-			opt, _ := at(v, 3).(*OMap)
-			var newVal *Value
-			if valAst != nil {
-				val := h.constEval(valAst).(*Value)
-				typ := GuessType(h.typeEval(typAst), val)
-				if _, isArr := val.Val.([]any); isArr {
-					symbol := h.addDef(id, "block", typ, val.Val)
-					newVal = h.addVar(NewValue("global", id, typ, symbol, opt))
-				} else {
-					newVal = h.addVar(NewValue("literal", id, typ, val.Val, opt))
-					if h.lmd == nil {
-						h.addDef(id, "equ", typ, val.Val)
-					}
-				}
-			} else {
-				addr, addrOk := "", false
-				if opt != nil {
-					addr, addrOk = opt.GetOr(Sym("address")).(string)
-				}
-				if addrOk {
-					typ := h.typeEval(typAst)
-					newVal = h.addVar(NewValue("global", id, typ, addr, opt))
-				} else {
-					panic(&CompileError{Msg: fmt.Sprintf("cannot define const without value %s", ToS(v[0]))})
-				}
-			}
-			sc := at(ast, 2)
-			if sc == nil {
-				sc = h.module.CurrentScope
-			}
-			if sc == Sym("public") {
-				newVal.Public = true
-			}
-		}
-
-	case Sym("if"):
+	case *syntax.IfStmt:
 		labels := h.newLabels("then", "else", "end")
 		thenLabel, elseLabel, endLabel := labels[0], labels[1], labels[2]
-		cond := h.rval(at(ast, 1))
+		cond := h.rval(toC(s.Cond))
 		h.emit(Sym("if"), cond, elseLabel)
 		h.emit(Sym("label"), thenLabel)
-		h.inScope(func() { h.compileStatement(ast[2]) })
+		h.inScope(func() { h.compileStatement(s.Then) })
 		h.emit(Sym("jump"), endLabel)
 		h.emit(Sym("label"), elseLabel)
-		if at(ast, 3) != nil {
-			h.inScope(func() { h.compileStatement(ast[3]) })
+		if s.Else != nil {
+			h.inScope(func() { h.compileStatement(s.Else) })
 		}
 		h.emit(Sym("label"), endLabel)
 
-	case Sym("loop"):
+	case *syntax.LoopStmt:
 		h.inScope(func() {
 			labels := h.newLabels("begin", "end")
 			h.loops = append(h.loops, labels)
 			h.emit(Sym("label"), labels[0])
-			h.compileStatement(ast[1])
+			h.compileStatement(s.Body)
 			h.emit(Sym("jump"), labels[0])
 			h.emit(Sym("label"), labels[1])
 			h.loops = h.loops[:len(h.loops)-1]
 		})
 
-	case Sym("while"):
-		h.compileStatement([]any{Sym("loop"), []any{Sym("if"), ast[1], ast[2], []any{Sym("break")}}})
+	case *syntax.WhileStmt:
+		// loop() { if (cond) body else break; }
+		h.compileStatement(&syntax.LoopStmt{Body: &syntax.IfStmt{Cond: s.Cond, Then: s.Body, Else: &syntax.BreakStmt{}}})
 
-	case Sym("for"):
-		h.compileBlock([]any{
-			[]any{Sym("exp"), []any{Sym("load"), ast[1], ast[2]}},
-			[]any{Sym("while"),
-				[]any{Sym("lt"), ast[1], ast[3]},
-				[]any{Sym("block"), cons(ast[4].([]any),
-					[]any{Sym("exp"), []any{Sym("load"), ast[1], []any{Sym("add"), ast[1], 1}}})},
-			}})
+	case *syntax.ForStmt:
+		// var = from; while (var < to) { body...; var = var + 1; }
+		body := make([]syntax.Stmt, 0, len(s.Body.Stmts)+1)
+		body = append(body, s.Body.Stmts...)
+		body = append(body, &syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign,
+			Rhs: &syntax.BinaryExpr{X: s.Var, Op: syntax.Plus, Y: &syntax.IntLit{Value: 1, Text: "1"}}}})
+		h.compileStmts([]syntax.Stmt{
+			&syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign, Rhs: s.From}},
+			&syntax.WhileStmt{Cond: &syntax.BinaryExpr{X: s.Var, Op: syntax.Lt, Y: s.To}, Body: &syntax.Block{Stmts: body}},
+		})
 
-	case Sym("break"):
+	case *syntax.BreakStmt:
 		if len(h.loops) == 0 {
 			panic(&CompileError{Msg: "cannot break without loop"})
 		}
 		h.emit(Sym("jump"), h.loops[len(h.loops)-1][1])
 
-	case Sym("continue"):
+	case *syntax.ContinueStmt:
 		if len(h.loops) == 0 {
 			panic(&CompileError{Msg: "cannot break without loop"})
 		}
 		h.emit(Sym("jump"), h.loops[len(h.loops)-1][0])
 
-	case Sym("return"):
+	case *syntax.ReturnStmt:
 		if h.lmd.Type.Base != TypeOf(Sym("void")) {
 			// 非void関数
-			if at(ast, 1) == nil {
+			if s.Value == nil {
 				panic(&CompileError{Msg: "can't return without value"})
 			}
-			h.emit(Sym("return"), h.rval(ast[1]))
+			h.emit(Sym("return"), h.rval(toC(s.Value)))
 		} else {
 			// void関数
-			if at(ast, 1) != nil {
+			if s.Value != nil {
 				panic(&CompileError{Msg: "can't return with value from void function"})
 			}
 			h.emit(Sym("return"))
 		}
 
-	case Sym("exp"):
-		h.lval(ast[1])
+	case *syntax.ExprStmt:
+		h.lval(toC(s.X))
 
-	case Sym("switch"):
+	case *syntax.SwitchStmt:
 		// TODO: jumptableを使った実装をいれる
-		condAst, cases, defaultBlock := at(ast, 1), at(ast, 2), at(ast, 3)
-		cond := h.rval(condAst)
+		cond := h.rval(toC(s.Tag))
 		tmp := h.newTmp(TypeOf(Sym("int")))
 		endLabel := h.newLabel("end")
-		for _, cAny := range cases.([]any) {
-			c := cAny.([]any)
+		for _, c := range s.Cases {
 			labels := h.newLabels("then", "else")
 			thenLabel, elseLabel := labels[0], labels[1]
-			for _, v := range c[0].([]any) {
-				h.emit(Sym("eq"), tmp, cond, h.constEval(v))
+			for _, v := range c.Values {
+				h.emit(Sym("eq"), tmp, cond, h.constEvalOperand(toC(v)))
 				h.emit(Sym("not"), tmp, tmp)
 				h.emit(Sym("if"), tmp, thenLabel)
 			}
 			h.emit(Sym("jump"), elseLabel)
 			h.emit(Sym("label"), thenLabel)
-			h.compileBlock(c[1])
+			h.compileStmts(c.Body)
 			h.emit(Sym("jump"), endLabel)
 			h.emit(Sym("label"), elseLabel)
 		}
-		h.compileBlock(defaultBlock)
+		if s.Default != nil {
+			h.compileStmts(s.Default.Body)
+		}
 		h.emit(Sym("label"), endLabel)
 
 		// TODO: 一時的に、public/privateの切り替えを可能にしている。そのうち消すこと
-	case Sym("public"):
-		h.module.CurrentScope = "public"
-
-	case Sym("private"):
-		h.module.CurrentScope = "private"
+	case *syntax.ScopeLabel:
+		if s.Public {
+			h.module.CurrentScope = "public"
+		} else {
+			h.module.CurrentScope = "private"
+		}
 
 	default:
-		panic(fmt.Sprintf("unknow op %v", SexpStr(stmt)))
+		panic(fmt.Sprintf("unknown statement %T", s))
+	}
+}
+
+// compileVarSpec は var 宣言の 1 変数分。
+func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
+	id := Sym(sp.Name.Name)
+	opt := rawOptions(sp.Options)
+	if opt == nil {
+		opt = NewOMap()
+	}
+	var init any
+	if sp.Init != nil {
+		init = h.rval(toC(sp.Init))
+	}
+	if init != nil && h.lmd == nil {
+		panic(&CompileError{Msg: "can't init global variable"})
+	}
+	typ := h.typeEval(sp.Type)
+	if typ == nil {
+		typ = GuessType(nil, init)
+	}
+	if typ != nil && init != nil {
+		CompatibleType(typ, ValType(init))
+	}
+	var val any
+	if h.lmd == nil {
+		if opt.GetOr(Sym("address")) != nil {
+			val = h.addDef(id, "equ", typ, opt.GetOr(Sym("address")))
+		} else {
+			val = h.addDef(id, "bss", typ, omap1("segment", opt.GetOr(Sym("segment"))))
+		}
+	}
+	kind := Sym("global")
+	if h.lmd != nil {
+		kind = "local"
+	}
+	vv := h.addVar(NewValue(kind, id, typ, val, opt))
+	if h.scopeIsPublic(publicPos) {
+		vv.Public = true
+	}
+	if init != nil {
+		h.emit(Sym("load"), vv, init)
+	}
+}
+
+// compileConstSpec は const 宣言の 1 定数分 (関数宣言の脱糖にも使う)。
+// typ / val / opt はそれぞれ省略可 (nil)。
+func (h *Hlc) compileConstSpec(id Sym, typ syntax.TypeExpr, val *cexpr, opt *OMap, publicPos syntax.Pos) {
+	var newVal *Value
+	if val != nil {
+		cv := h.constEval(val)
+		if cv.kind != cValue {
+			panic(&CompileError{Msg: fmt.Sprintf("const %s must be constant", id)})
+		}
+		v := cv.val
+		t := GuessType(h.typeEval(typ), v)
+		if _, isArr := v.Val.([]any); isArr {
+			symbol := h.addDef(id, "block", t, v.Val)
+			newVal = h.addVar(NewValue("global", id, t, symbol, opt))
+		} else {
+			newVal = h.addVar(NewValue("literal", id, t, v.Val, opt))
+			if h.lmd == nil {
+				h.addDef(id, "equ", t, v.Val)
+			}
+		}
+	} else {
+		addr, addrOk := "", false
+		if opt != nil {
+			addr, addrOk = opt.GetOr(Sym("address")).(string)
+		}
+		if addrOk {
+			t := h.typeEval(typ)
+			newVal = h.addVar(NewValue("global", id, t, addr, opt))
+		} else {
+			panic(&CompileError{Msg: fmt.Sprintf("cannot define const without value %s", id)})
+		}
+	}
+	if h.scopeIsPublic(publicPos) {
+		newVal.Public = true
 	}
 }
 
@@ -586,210 +625,221 @@ func (h *Hlc) compileStatement(stmt any) {
 // 定数式の評価
 // ---------------------------------------------------------------
 
-// constEval は const_eval 相当。
-// *Value もしくは []any(AST) を返す。ASTは破壊的に書き換えられる (Ruby版と同じ)。
-func (h *Hlc) constEval(astAny any) any {
-	var r any = astAny
+// constEval は const_eval 相当。未評価の cexpr を受け、評価済みの cexpr を返す
+// (値が確定すれば cValue、そうでなければ子が評価済みの演算ノード)。入力は変異しない。
+// 評価済みの木に再適用しても結果は変わらない。
+func (h *Hlc) constEval(c *cexpr) *cexpr {
+	if c.kind == cValue {
+		return c
+	}
+	if h.cmemo == nil {
+		h.cmemo = map[*cexpr]*cexpr{}
+	}
+	if r, ok := h.cmemo[c]; ok {
+		return r
+	}
+	r := h.constEval0(c)
+	r.pos = c.pos
+	h.cmemo[c] = r
+	return r
+}
 
-	switch ast := astAny.(type) {
+// constEvalOperand は評価結果を IR のオペランド (*Value) として取り出す。
+// 旧実装では未確定の演算ノード ([]any) がそのままオペランドになっていた箇所があり
+// (switch の case 値)、その場合はダンプ不能で落ちていた。同じく定数を要求する。
+func (h *Hlc) constEvalOperand(c *cexpr) any {
+	r := h.constEval(c)
+	if r.kind != cValue {
+		panic(&CompileError{Msg: "constant value required"})
+	}
+	return r.val
+}
 
-	case int:
-		r = NewIntValue(ast)
+func (h *Hlc) constEval0(c *cexpr) *cexpr {
+	switch c.kind {
 
-	case Sym:
-		r = h.scope.FindMust(ast, true)
+	case cInt:
+		return cv(NewIntValue(c.n))
 
-	case string:
+	case cIdent:
+		return cv(h.scope.FindMust(Sym(c.name), true))
+
+	case cStr:
 		// String#unpack('c*') は符号付きバイト
-		elems := make([]any, 0, len(ast)+1)
-		for i := 0; i < len(ast); i++ {
-			elems = append(elems, int(int8(ast[i])))
+		elems := make([]*cexpr, 0, len(c.s)+1)
+		for i := 0; i < len(c.s); i++ {
+			elems = append(elems, cint(int(int8(c.s[i]))))
 		}
-		elems = append(elems, 0)
-		rv := h.constEval([]any{Sym("array"), elems}).(*Value)
-		rv.BaseString = ast
-		r = rv
+		elems = append(elems, cint(0))
+		rv := h.constEval(carray(elems)).val
+		rv.BaseString = c.s
+		return cv(rv)
 
-	case []any:
-		switch ast[0] {
-		case Sym("array"):
-			vals := make([]any, len(ast[1].([]any)))
-			for i, v := range ast[1].([]any) {
-				vals[i] = h.constEval(v)
-			}
-			var typ *Type
-			for i, v := range vals {
-				if i == 0 {
-					typ = ValType(v)
-				} else {
-					typ = CompatibleType(typ, ValType(v))
-				}
-			}
-			r = NewValue("array_literal", Sym(fmt.Sprintf("$%d", h.tmpCount())), TypeOf([]any{Sym("array"), len(vals), typ}), vals, nil)
-
-		case Sym("incbin"):
-			data, err := os.ReadFile(h.findModule(ast[1].(string)))
-			if err != nil {
-				panic(&CompileError{Msg: err.Error()})
-			}
-			// unpack('C*') は符号なしバイト
-			elems := make([]any, len(data))
-			for i, b := range data {
-				elems[i] = int(b)
-			}
-			r = h.constEval([]any{Sym("array"), elems})
-
-		case Sym("lambda"):
-			typAst := ast[1].([]any)
-			block := at(ast, 2)
-			opt, _ := at(ast, 3).(*OMap)
-			if opt == nil {
-				opt = NewOMap()
-			}
-			if !eqAny(typAst[0], Sym("lambda")) {
-				panic(&CompileError{Msg: "must be lambda type"})
-			}
-			argAsts := typAst[1].([]any)
-			args := make([]any, len(argAsts))
-			for i, a := range argAsts {
-				pair := a.([]any)
-				args[i] = []any{pair[0], TypeOf(pair[1])}
-			}
-			baseType := TypeOf(typAst[2])
-			var id any
-			if s := opt.GetOr(Sym("symbol")); s != nil {
-				id = s
-			} else if eqAny(opt.GetOr(Sym("id")), Sym("main")) {
-				id = Sym("_main")
-			} else if opt.GetOr(Sym("id")) != nil {
-				id = Sym(fmt.Sprintf("_%s_%s", ToS(h.module.Id), ToS(opt.GetOr(Sym("id")))))
+	case cArray:
+		vals := make([]any, len(c.args))
+		for i, e := range c.args {
+			vals[i] = h.constEvalOperand(e)
+		}
+		var typ *Type
+		for i, v := range vals {
+			if i == 0 {
+				typ = ValType(v)
 			} else {
-				id = Sym(fmt.Sprintf("$%d", h.tmpCount()))
+				typ = CompatibleType(typ, ValType(v))
 			}
-			if block == nil {
-				opt.Set(Sym("extern"), true)
-			}
-			lmd := NewLambda(id, args, baseType, opt, block)
-			h.module.Lambdas = append(h.module.Lambdas, lmd)
-			h.addDefModule(id, "code", lmd.Type, lmd)
-			r = NewValue("literal", nil, lmd.Type, id, nil)
+		}
+		return cv(NewValue("array_literal", Sym(fmt.Sprintf("$%d", h.tmpCount())), TypeOf([]any{Sym("array"), len(vals), typ}), vals, nil))
 
-		case Sym("dot"):
-			left := h.constEval(ast[1]).(*Value)
-			mod, ok := left.Val.(*Module)
-			if !ok {
-				panic("dot: not a module")
-			}
-			r = mod.Scope.FindMust(ast[2].(Sym), true)
+	case cIncbin:
+		data, err := os.ReadFile(h.findModule(c.s))
+		if err != nil {
+			panic(&CompileError{Msg: err.Error()})
+		}
+		// unpack('C*') は符号なしバイト
+		elems := make([]*cexpr, len(data))
+		for i, b := range data {
+			elems[i] = cint(int(b))
+		}
+		return h.constEval(carray(elems))
 
-		case Sym("add"), Sym("sub"), Sym("mul"), Sym("div"), Sym("mod"),
-			Sym("eq"), Sym("ne"), Sym("lt"), Sym("gt"), Sym("le"), Sym("ge"),
-			Sym("rsh"), Sym("lsh"), Sym("and"), Sym("or"), Sym("xor"),
-			Sym("land"), Sym("lor"), Sym("not"), Sym("uminus"),
-			Sym("shift_left"), Sym("shift_right"):
-			ast[1] = h.constEval(ast[1])
-			if at(ast, 2) != nil {
-				ast[2] = h.constEval(ast[2])
+	case cLambda:
+		lam := c.lam
+		opt := lam.opt
+		args := make([]any, len(lam.params))
+		for i, p := range lam.params {
+			args[i] = []any{Sym(p.name), TypeOf(typeAST(p.typ))}
+		}
+		baseType := TypeOf(typeAST(lam.result))
+		var id any
+		if s := opt.GetOr(Sym("symbol")); s != nil {
+			id = s
+		} else if eqAny(opt.GetOr(Sym("id")), Sym("main")) {
+			id = Sym("_main")
+		} else if opt.GetOr(Sym("id")) != nil {
+			id = Sym(fmt.Sprintf("_%s_%s", ToS(h.module.Id), ToS(opt.GetOr(Sym("id")))))
+		} else {
+			id = Sym(fmt.Sprintf("$%d", h.tmpCount()))
+		}
+		if lam.body == nil {
+			opt.Set(Sym("extern"), true)
+		}
+		lmd := NewLambda(id, args, baseType, opt, lam.body)
+		h.module.Lambdas = append(h.module.Lambdas, lmd)
+		h.addDefModule(id, "code", lmd.Type, lmd)
+		return cv(NewValue("literal", nil, lmd.Type, id, nil))
+
+	case cDot:
+		left := h.constEval(c.args[0])
+		var mod *Module
+		if left.kind == cValue {
+			mod, _ = left.val.Val.(*Module)
+		}
+		if mod == nil {
+			panic("dot: not a module")
+		}
+		return cv(mod.Scope.FindMust(Sym(c.name), true))
+
+	case cCast:
+		x := h.constEval(c.args[0])
+		ty := c.ty // 評価済みノードの再評価では型を再計算しない
+		if ty == nil {
+			ty = h.typeEval(c.typ)
+		}
+		if x.isLiteralInt() {
+			return cv(NewValue("literal", nil, ty, x.val.Val, nil))
+		}
+		return &cexpr{kind: cCast, args: []*cexpr{x}, typ: c.typ, ty: ty}
+
+	case cOp:
+		switch c.op {
+		case opAdd, opSub, opMul, opDiv, opMod,
+			opEq, opNe, opLt, opGt, opLe, opGe,
+			opAnd, opOr, opXor, opLand, opLor, opNot, opUminus,
+			opShiftLeft, opShiftRight:
+			args := make([]*cexpr, len(c.args))
+			args[0] = h.constEval(c.args[0])
+			if len(c.args) > 1 {
+				args[1] = h.constEval(c.args[1])
 			}
-			v1v, ok1 := ast[1].(*Value)
-			lit1 := ok1 && v1v.Kind == "literal" && isInt(v1v.Val)
-			lit2 := at(ast, 2) == nil
-			var v2v *Value
-			if !lit2 {
-				var ok2 bool
-				v2v, ok2 = ast[2].(*Value)
-				lit2 = ok2 && v2v.Kind == "literal" && isInt(v2v.Val)
-			}
-			if lit1 && lit2 {
-				v1 := v1v.Val.(int)
+			if args[0].isLiteralInt() && (len(args) == 1 || args[1].isLiteralInt()) {
+				v1 := args[0].val.Val.(int)
 				v2 := 0
-				if v2v != nil {
-					v2 = v2v.Val.(int)
+				if len(args) > 1 {
+					v2 = args[1].val.Val.(int)
 				}
-				var n, bn any
-				switch ast[0] {
-				case Sym("add"):
-					n = v1 + v2
-				case Sym("sub"):
-					n = v1 - v2
-				case Sym("mul"):
-					n = v1 * v2
-				case Sym("div"):
-					n = rubyDiv(v1, v2)
-				case Sym("mod"):
-					n = rubyMod(v1, v2)
-				case Sym("eq"):
-					bn = v1 == v2
-				case Sym("ne"):
-					bn = v1 != v2
-				case Sym("lt"):
-					bn = v1 < v2
-				case Sym("gt"):
-					bn = v1 > v2
-				case Sym("le"):
-					bn = v1 <= v2
-				case Sym("ge"):
-					bn = v1 >= v2
-				case Sym("and"):
-					n = v1 & v2
-				case Sym("or"):
-					n = v1 | v2
-				case Sym("xor"):
-					n = v1 ^ v2
-				case Sym("land"):
-					bn = v1 != 0 && v2 != 0
-				case Sym("lor"):
-					bn = v1 != 0 || v2 != 0
-				case Sym("not"):
-					bn = v1 == 0
-				case Sym("uminus"):
-					n = -v1
-				case Sym("shift_left"):
-					n = rubyShl(v1, v2)
-				case Sym("shift_right"):
-					n = rubyShr(v1, v2)
-				default:
-					panic("unreachable")
-				}
-				if bn != nil {
-					if bn.(bool) {
-						n = 1
-					} else {
-						n = 0
-					}
-				}
-				r = NewIntValue(n.(int))
+				return cv(NewIntValue(foldIntOp(c.op, v1, v2)))
 			}
+			return &cexpr{kind: cOp, op: c.op, args: args}
 
-		case Sym("call"):
-			ast[1] = h.constEval(ast[1])
-			oldArgs := ast[2].([]any)
-			newArgs := make([]any, len(oldArgs))
-			for i, e := range oldArgs {
-				newArgs[i] = h.constEval(e)
+		case opCall:
+			args := make([]*cexpr, len(c.args))
+			for i, a := range c.args {
+				args[i] = h.constEval(a)
 			}
-			ast[2] = newArgs
+			return &cexpr{kind: cOp, op: opCall, args: args, block: c.block}
 
-		case Sym("load"), Sym("index"):
-			for i := 1; i < len(ast); i++ {
-				ast[i] = h.constEval(ast[i])
+		case opLoad, opIndex, opRef, opDeref:
+			args := make([]*cexpr, len(c.args))
+			for i, a := range c.args {
+				args[i] = h.constEval(a)
 			}
-
-		case Sym("cast"):
-			ast[1] = h.constEval(ast[1])
-			ast[2] = h.typeEval(ast[2])
-			if v, ok := ast[1].(*Value); ok && v.Kind == "literal" && isInt(v.Val) {
-				r = NewValue("literal", nil, ast[2].(*Type), v.Val, nil)
-			}
-
-		case Sym("ref"), Sym("deref"):
-			ast[1] = h.constEval(ast[1])
-
-		default:
-			panic(fmt.Sprintf("invalid op %s", SexpStr(ast)))
+			return &cexpr{kind: cOp, op: c.op, args: args}
 		}
 	}
-	return r
+	panic(fmt.Sprintf("invalid op %v", c.op))
+}
+
+// foldIntOp は整数リテラル同士の演算を畳み込む (Ruby の整数演算と真偽値→0/1 に準拠)。
+func foldIntOp(op cop, v1, v2 int) int {
+	b2i := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	switch op {
+	case opAdd:
+		return v1 + v2
+	case opSub:
+		return v1 - v2
+	case opMul:
+		return v1 * v2
+	case opDiv:
+		return rubyDiv(v1, v2)
+	case opMod:
+		return rubyMod(v1, v2)
+	case opEq:
+		return b2i(v1 == v2)
+	case opNe:
+		return b2i(v1 != v2)
+	case opLt:
+		return b2i(v1 < v2)
+	case opGt:
+		return b2i(v1 > v2)
+	case opLe:
+		return b2i(v1 <= v2)
+	case opGe:
+		return b2i(v1 >= v2)
+	case opAnd:
+		return v1 & v2
+	case opOr:
+		return v1 | v2
+	case opXor:
+		return v1 ^ v2
+	case opLand:
+		return b2i(v1 != 0 && v2 != 0)
+	case opLor:
+		return b2i(v1 != 0 || v2 != 0)
+	case opNot:
+		return b2i(v1 == 0)
+	case opUminus:
+		return -v1
+	case opShiftLeft:
+		return rubyShl(v1, v2)
+	case opShiftRight:
+		return rubyShr(v1, v2)
+	}
+	panic("unreachable")
 }
 
 func isInt(v any) bool {
@@ -828,18 +878,24 @@ func rubyShr(a, b int) int {
 	return a >> uint(b)
 }
 
-// typeEval は type_eval 相当。
-func (h *Hlc) typeEval(astAny any) *Type {
-	if ast, ok := astAny.([]any); ok && eqAny(ast[0], Sym("array")) {
-		var size any
-		if sv := h.constEval(at(ast, 1)); sv != nil {
-			size = sv.(*Value).Val
-		}
-		return TypeOf([]any{Sym("array"), size, ast[2]})
-	} else if astAny != nil {
-		return TypeOf(astAny)
+// typeEval は type_eval 相当。最外の配列長だけを定数評価する (内側の次元は整数リテラルのみ有効)。
+// nil (型省略) なら nil。
+func (h *Hlc) typeEval(t syntax.TypeExpr) *Type {
+	if t == nil {
+		return nil
 	}
-	return nil
+	if at, ok := t.(*syntax.ArrayType); ok {
+		var size any
+		if at.Len != nil {
+			sv := h.constEval(toC(at.Len))
+			if sv.kind != cValue {
+				panic(&CompileError{Msg: "array size must be constant"})
+			}
+			size = sv.val.Val
+		}
+		return TypeOf([]any{Sym("array"), size, typeAST(at.Elem)})
+	}
+	return TypeOf(typeAST(t))
 }
 
 // ---------------------------------------------------------------
@@ -847,8 +903,8 @@ func (h *Hlc) typeEval(astAny any) *Type {
 // ---------------------------------------------------------------
 
 // rval は右辺値として評価し、値を返す。
-func (h *Hlc) rval(ast any) any {
-	v, left := h.lval(ast)
+func (h *Hlc) rval(c *cexpr) any {
+	v, left := h.lval(c)
 	if left {
 		r := h.newTmp(ValType(v).Base)
 		h.emit(Sym("pget"), r, v)
@@ -858,27 +914,30 @@ func (h *Hlc) rval(ast any) any {
 }
 
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
-func (h *Hlc) lval(astAny any) (any, bool) {
+func (h *Hlc) lval(c *cexpr) (any, bool) {
 	leftValue := false
-	evaled := h.constEval(astAny)
+	e := h.constEval(c)
 	var r any
 
-	switch ast := evaled.(type) {
+	switch e.kind {
 
-	case *Value:
-		if ast.Kind == "array_literal" {
-			symbol := h.addDef(Sym(fmt.Sprintf("_%d", h.tmpCount())), "block", ast.Type, ast.Val)
-			r = NewValue("global", fmt.Sprintf("$%d", h.tmpCount()), ast.Type, symbol, nil)
+	case cValue:
+		if e.val.Kind == "array_literal" {
+			symbol := h.addDef(Sym(fmt.Sprintf("_%d", h.tmpCount())), "block", e.val.Type, e.val.Val)
+			r = NewValue("global", fmt.Sprintf("$%d", h.tmpCount()), e.val.Type, symbol, nil)
 		} else {
-			r = ast
+			r = e.val
 		}
 
-	case []any:
-		switch ast[0] {
+	case cCast:
+		r = NewCastedValue(h.rval(e.args[0]), e.ty, 0)
 
-		case Sym("load"):
-			left, lv := h.lval(ast[1])
-			right := h.rval(ast[2])
+	case cOp:
+		switch e.op {
+
+		case opLoad:
+			left, lv := h.lval(e.args[0])
+			right := h.rval(e.args[1])
 			if lv {
 				CompatibleType(ValType(left).Base, ValType(right))
 				right = h.cast(right, ValType(left).Base)
@@ -895,18 +954,18 @@ func (h *Hlc) lval(astAny any) (any, bool) {
 				r = left
 			}
 
-		case Sym("not"), Sym("uminus"):
-			left := h.rval(ast[1])
+		case opNot, opUminus:
+			left := h.rval(e.args[0])
 			r = h.newTmp(ValType(left))
-			h.emit(ast[0], r, left)
+			h.emit(Sym(e.op), r, left)
 
-		case Sym("add"), Sym("sub"), Sym("mul"), Sym("div"), Sym("mod"),
-			Sym("and"), Sym("or"), Sym("xor"), Sym("shift_left"), Sym("shift_right"):
-			left := h.rval(ast[1])
-			right := h.rval(ast[2])
+		case opAdd, opSub, opMul, opDiv, opMod,
+			opAnd, opOr, opXor, opShiftLeft, opShiftRight:
+			left := h.rval(e.args[0])
+			right := h.rval(e.args[1])
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
-				if (eqAny(ast[0], Sym("add")) || eqAny(ast[0], Sym("sub"))) &&
+				if (e.op == opAdd || e.op == opSub) &&
 					ValType(left).Kind == "pointer" && ValType(right).Kind == "int" {
 					typ = ValType(left)
 				} else {
@@ -916,67 +975,67 @@ func (h *Hlc) lval(astAny any) (any, bool) {
 				left, right = l2, r2
 			}
 			r = h.newTmp(typ)
-			h.emit(ast[0], r, left, right)
+			h.emit(Sym(e.op), r, left, right)
 
-		case Sym("eq"), Sym("lt"):
-			left := h.rval(ast[1])
-			right := h.rval(ast[2])
+		case opEq, opLt:
+			left := h.rval(e.args[0])
+			right := h.rval(e.args[1])
 			_, left, right = h.makeCompatible(left, right)
 			r = h.newTmp(TypeOf(Sym("int")))
-			h.emit(ast[0], r, left, right)
+			h.emit(Sym(e.op), r, left, right)
 
-		case Sym("ne"), Sym("gt"), Sym("le"), Sym("ge"):
+		case opNe, opGt, opLe, opGe:
 			// これらは、eq,lt の引数の順番とnotを組合せて合成する
-			left := ast[1]
-			right := ast[2]
-			switch ast[0] {
-			case Sym("ne"):
-				r = h.rval([]any{Sym("not"), []any{Sym("eq"), left, right}})
-			case Sym("gt"):
-				r = h.rval([]any{Sym("lt"), right, left})
-			case Sym("le"):
-				r = h.rval([]any{Sym("not"), []any{Sym("lt"), right, left}})
-			case Sym("ge"):
-				r = h.rval([]any{Sym("not"), []any{Sym("lt"), left, right}})
+			left := e.args[0]
+			right := e.args[1]
+			switch e.op {
+			case opNe:
+				r = h.rval(cop2(opNot, cop2(opEq, left, right)))
+			case opGt:
+				r = h.rval(cop2(opLt, right, left))
+			case opLe:
+				r = h.rval(cop2(opNot, cop2(opLt, right, left)))
+			case opGe:
+				r = h.rval(cop2(opNot, cop2(opLt, left, right)))
 			}
 
-		case Sym("land"):
+		case opLand:
 			endLabel := h.newLabel("end")
 			rr := h.newTmp(TypeOf(Sym("int")))
-			left := h.rval(ast[1])
+			left := h.rval(e.args[0])
 			h.emit(Sym("load"), rr, left)
 			h.emit(Sym("if"), rr, endLabel)
-			right := h.rval(ast[2])
+			right := h.rval(e.args[1])
 			h.emit(Sym("load"), rr, right)
 			h.emit(Sym("label"), endLabel)
 			r = rr
 
-		case Sym("lor"):
+		case opLor:
 			endLabel := h.newLabel("end")
 			rr := h.newTmp(TypeOf(Sym("int")))
 			r2 := h.newTmp(TypeOf(Sym("int")))
-			left := h.rval(ast[1])
+			left := h.rval(e.args[0])
 			h.emit(Sym("load"), rr, left)
 			h.emit(Sym("not"), r2, rr)
 			h.emit(Sym("if"), r2, endLabel)
-			right := h.rval(ast[2])
+			right := h.rval(e.args[1])
 			h.emit(Sym("load"), rr, right)
 			h.emit(Sym("label"), endLabel)
 			r = rr
 
-		case Sym("call"):
-			lmdV := h.rval(ast[1])
+		case opCall:
+			lmdV := h.rval(e.args[0])
+			args := e.args[1:]
 			if ValType(lmdV).Kind == "macro" {
 				// マクロの実行
 				fn := ValVal(lmdV).(MacroFn)
-				x := fn(h, ast[2].([]any), at(ast, 3))
-				if x != nil {
-					xs := x.([]any)
-					if len(xs) > 0 && eqAny(xs[0], Sym("block")) {
-						h.compileBlock(xs[1:])
-					} else {
-						r = h.rval(x)
+				x := fn(h, args, e.block)
+				if x.stmts != nil {
+					for _, st := range x.stmts {
+						h.lval(st)
 					}
+				} else if x.expr != nil {
+					r = h.rval(x.expr)
 				}
 			} else {
 				// 普通の関数コール
@@ -984,7 +1043,6 @@ func (h *Hlc) lval(astAny any) (any, bool) {
 				if lmdType.Base != TypeOf(Sym("void")) {
 					r = h.newTmp(lmdType.Base)
 				}
-				args := ast[2].([]any)
 				if len(args) != len(lmdType.Args) {
 					panic(&CompileError{Msg: fmt.Sprintf("%s has %d but %d", valToS(lmdV), len(lmdType.Args), len(args))})
 				}
@@ -1018,8 +1076,8 @@ func (h *Hlc) lval(astAny any) (any, bool) {
 				}
 			}
 
-		case Sym("ref"): // &演算子
-			left, lv := h.lval(ast[1])
+		case opRef: // &演算子
+			left, lv := h.lval(e.args[0])
 			if lv {
 				r = left
 			} else {
@@ -1030,17 +1088,17 @@ func (h *Hlc) lval(astAny any) (any, bool) {
 				h.emit(Sym("ref"), r, left)
 			}
 
-		case Sym("deref"): // *演算子
-			r = h.rval(ast[1])
+		case opDeref: // *演算子
+			r = h.rval(e.args[0])
 			if ValType(r).Kind != "pointer" {
 				// Ruby版では未代入の `left` を参照するため空文字列になる
 				panic(&CompileError{Msg: " is not pointer"})
 			}
 			leftValue = true
 
-		case Sym("index"): // []演算子
-			left := h.rval(ast[1])
-			right := h.rval(ast[2])
+		case opIndex: // []演算子
+			left := h.rval(e.args[0])
+			right := h.rval(e.args[1])
 			if ValType(left).Kind != "pointer" && ValType(left).Kind != "array" {
 				panic(&CompileError{Msg: "index must be pointer or array"})
 			}
@@ -1051,14 +1109,11 @@ func (h *Hlc) lval(astAny any) (any, bool) {
 			h.emit(Sym("index"), r, left, right)
 			leftValue = true
 
-		case Sym("cast"):
-			r = NewCastedValue(h.rval(ast[1]), TypeOf(ast[2]), 0)
-
 		default:
-			panic(fmt.Sprintf("unknown op %s", SexpStr(ast)))
+			panic(fmt.Sprintf("unknown op %s", e.op))
 		}
 	default:
-		panic(fmt.Sprintf("unknown op %v", evaled))
+		panic(fmt.Sprintf("unknown expression kind %d", e.kind))
 	}
 	return r, leftValue
 }
@@ -1129,24 +1184,4 @@ func (h *Hlc) tryMakeCompatible(a, b any) (typ *Type, ra, rb any, err *CompileEr
 	}()
 	typ, ra, rb = h.makeCompatible(a, b)
 	return
-}
-
-// deepCopyAST は Marshal.load(Marshal.dump(ast)) 相当のASTディープコピー。
-func deepCopyAST(v any) any {
-	switch x := v.(type) {
-	case []any:
-		c := make([]any, len(x))
-		for i, e := range x {
-			c[i] = deepCopyAST(e)
-		}
-		return c
-	case *OMap:
-		c := NewOMap()
-		for _, e := range x.Entries() {
-			c.Set(deepCopyAST(e.Key), deepCopyAST(e.Val))
-		}
-		return c
-	default:
-		return v
-	}
 }

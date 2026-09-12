@@ -2,6 +2,8 @@ package fc
 
 // lib/fc/base.rb の Module / Lambda の移植。
 
+import "github.com/haramako/fc/internal/syntax"
+
 // Def は Module#defs / Lambda#defs の1エントリ ( [symbol, kind, type, val] )。
 type Def struct {
 	Sym  any  // シンボル名 (Sym)
@@ -41,7 +43,7 @@ type Lambda struct {
 	Args      []any // 最初は []any{id, *Type} のペア、compile_lambda 後は *Value
 	Type      *Type
 	Opt       *OMap
-	Ast       any // 関数本体のAST ([]any) または nil (extern)
+	Body      *syntax.Block // 関数本体。nil なら extern
 	Ops       [][]any
 	Vars      []*Value
 	Bank      int
@@ -51,7 +53,7 @@ type Lambda struct {
 	FrameSize int
 }
 
-func NewLambda(id any, args []any, baseType *Type, opt *OMap, ast any) *Lambda {
+func NewLambda(id any, args []any, baseType *Type, opt *OMap, body *syntax.Block) *Lambda {
 	if opt == nil {
 		opt = NewOMap()
 	}
@@ -60,7 +62,7 @@ func NewLambda(id any, args []any, baseType *Type, opt *OMap, ast any) *Lambda {
 		argTypes[i] = a.([]any)[1]
 	}
 	typ := TypeOf([]any{Sym("lambda"), argTypes, baseType, opt.GetOr(Sym("fastcall"))})
-	return &Lambda{Id: id, Args: args, Type: typ, Opt: opt, Ast: ast, Bank: 0}
+	return &Lambda{Id: id, Args: args, Type: typ, Opt: opt, Body: body, Bank: 0}
 }
 
 // String は Ruby の "<Lambda:#{@id} #{@type}>" 相当 (エラーメッセージで使用)。
