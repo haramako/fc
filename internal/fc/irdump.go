@@ -1,6 +1,6 @@
 package fc
 
-// tools/dumper.rb の IR / alloc-IR ダンプの Go 側実装 (1:1 対応)。
+// IR / alloc-IR のダンプ (golden 比較用)。形式は移植期の tools/dumper.rb と同一。
 
 import (
 	"fmt"
@@ -64,19 +64,19 @@ func dumpValueFull(v *Value, ctx *irCtx) string {
 		ids = ToS(v.Id)
 	}
 	switch v.Kind {
-	case "literal":
+	case KindLiteral:
 		return fmt.Sprintf("{lit %s %s %s%s}", ids, dumpGval(v.Val, ctx), typeS(v.Type), bs)
-	case "array_literal":
-		elems := make([]string, len(v.Val.([]any)))
-		for i, e := range v.Val.([]any) {
+	case KindArrayLiteral:
+		elems := make([]string, len(v.Val.([]Operand)))
+		for i, e := range v.Val.([]Operand) {
 			elems[i] = dumpValue(e, ctx)
 		}
 		return fmt.Sprintf("{arr %s %s (%s)%s}", ids, typeS(v.Type), strings.Join(elems, " "), bs)
-	case "global":
+	case KindGlobal:
 		return fmt.Sprintf("{g %s %s %s%s}", ids, typeS(v.Type), dumpGval(v.Val, ctx), bs)
-	case "module":
+	case KindModule:
 		return fmt.Sprintf("{mod %s}", ids)
-	case "local":
+	case KindLocal:
 		// 他のLambdaのローカルなど、表にない場合
 		return fmt.Sprintf("{l? %s %s}", ids, typeS(v.Type))
 	default:
@@ -98,7 +98,7 @@ func dumpGval(val any, ctx *irCtx) string {
 		return "mod:" + ToS(x.Id)
 	case MacroFn:
 		return "macro"
-	case []any:
+	case []Operand:
 		elems := make([]string, len(x))
 		for i, e := range x {
 			elems[i] = dumpValue(e, ctx)
@@ -146,7 +146,7 @@ func dumpVar(v *Value, i int, ctx *irCtx, alloc bool) string {
 		ids = ToS(v.Id)
 	}
 	fmt.Fprintf(&b, "(var %d %s %s %s", i, ids, v.Kind, typeS(v.Type))
-	if v.Kind != "local" {
+	if v.Kind != KindLocal {
 		fmt.Fprintf(&b, " val=%s", dumpGval(v.Val, ctx))
 	}
 	if lt := v.Opt.GetOr(Sym("local_type")); lt != nil {
@@ -156,7 +156,7 @@ func dumpVar(v *Value, i int, ctx *irCtx, alloc bool) string {
 		b.WriteString(" pub")
 	}
 	if alloc {
-		if v.Location != "" {
+		if v.Location != LocNone {
 			fmt.Fprintf(&b, " loc=%s", v.Location)
 		} else {
 			b.WriteString(" loc=nil")
@@ -164,7 +164,7 @@ func dumpVar(v *Value, i int, ctx *irCtx, alloc bool) string {
 		if v.Address != nil {
 			fmt.Fprintf(&b, " addr=%s", ToS(v.Address))
 		}
-		if v.CondReg != "" {
+		if v.CondReg != CondNone {
 			fmt.Fprintf(&b, " cond=%s,%s", v.CondReg, ToS(v.CondPositive))
 		}
 		if v.Unuse {
@@ -190,7 +190,7 @@ func dumpDef(d *Def, ctx *irCtx) string {
 		vs = fmt.Sprintf("{lambda %s}", ToS(x.Id))
 	case *OMap:
 		vs = dumpOptS(x)
-	case []any:
+	case []Operand:
 		elems := make([]string, len(x))
 		for i, e := range x {
 			elems[i] = dumpValue(e, ctx)
@@ -202,12 +202,14 @@ func dumpDef(d *Def, ctx *irCtx) string {
 	return fmt.Sprintf("(def %s %s %s %s)", ToS(d.Sym), d.Kind, typeS(d.Type), vs)
 }
 
-func dumpOp(op []any, ctx *irCtx) string {
+// dumpOp は命令を旧 IR と同じ位置引数の並び (Op.positional) で出力する。
+func dumpOp(op *Op, ctx *irCtx) string {
 	if op == nil {
 		return "nil"
 	}
-	parts := make([]string, len(op))
-	for i, e := range op {
+	pos := op.positional()
+	parts := make([]string, len(pos))
+	for i, e := range pos {
 		parts[i] = dumpValue(e, ctx)
 	}
 	return "(" + strings.Join(parts, " ") + ")"

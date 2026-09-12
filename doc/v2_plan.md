@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R1 進行中（R1-a〜c 完了）**
+最終更新: 2026-09-12 / 状態: **R1 進行中（R1-a〜d 完了）**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
-| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | 🔄 a,b,c ✅ |
+| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | 🔄 a〜d ✅ |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ⬜ |
 | R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ⬜ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R1-d（型付き IR、§4.5）。ir/allocir golden の形式変更は「旧形式で差分ゼロ確認 → ダンパ差替え → `-update`」の順を厳守。
+**次にやること**: R1-e（Sym/OMap/Canon 全廃、types パッケージ、§4.6）。
 
 ---
 
@@ -425,9 +425,9 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
   - golden 全差分ゼロ（ir/allocir/asm/bin/stdout/examples ROM）、`go test ./...` 緑。
     ベンチ: Frontend 519ms → **368ms**、155MB → 115MB、3.34M → 2.04M allocs（`Canon` 経由の pos_info と deepCopy が消えた分）
 
-### 4.5 R1-d 型付き IR（1.5 日）
+### 4.5 R1-d 型付き IR（1.5 日）✅ 2026-09-12
 
-- [ ] `internal/ir/`: `value.go`（`Value`, `CastedValue`, `PointeredArray` を移動。`Kind`/`Location`/`CondReg` を enum に）、
+- [x] `internal/ir/`: `value.go`（`Value`, `CastedValue`, `PointeredArray` を移動。`Kind`/`Location`/`CondReg` を enum に）、
       `module.go`（`Module`, `Lambda`, `Def`。`Def.Kind` enum）、`op.go`:
       ```go
       type OpCode uint8 // Label, If, Jump, Return, PushResult, ..., IndexPset
@@ -436,12 +436,26 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
       ```
       `Lambda.Ops []Op`。`Lambda.Args` の「compile 前は `[]any{id, *Type}`、後は `*Value`」二相性を
       `Params []Param{Name, Type}` + `ArgVars []*Value` に分ける
-- [ ] `hlc.emit` を typed に、`llc.CompileLambda` の switch・`allocator.go`・`optimizePointer`・`DeleteUnuse` を
+- [x] `hlc.emit` を typed に、`llc.CompileLambda` の switch・`allocator.go`・`optimizePointer`・`DeleteUnuse` を
       `Op`/`Operand` に対応。`isSameAny`/`isSameValue`/`symIn` 等の `any` 比較ヘルパは型 switch に
-- [ ] `irdump.go` を typed IR 用に書き直す（形式は自由だが、Value の参照を `{l<index> <id>}` のように
+- [x] `irdump.go` を typed IR 用に書き直す（形式は自由だが、Value の参照を `{l<index> <id>}` のように
       **安定に**表せること。ポインタ値を出さない）。`-update` で ir/allocir golden を新形式で再生成（G3 の例外）。
       再生成直前に**旧形式で差分ゼロ**であることを確認してからダンパを差し替える（順序厳守）
 - 合格: asm/bin/stdout golden 差分ゼロ、examples ROM 一致、nes 緑。ir/allocir は新形式で再生成済み・再実行で差分ゼロ
+- 結果（計画からの差分を含む）:
+  - `internal/fc/ir.go` に `OpCode`（enum + String()）、`Op{Code, Dst, Src, Label, Type, Text}`（計画の
+    フラットな `Args []Operand` ではなく**意味ごとのフィールド**。allocator の defines/uses が `Dst`/`Src` で
+    直接書ける）、`Operand` インターフェース（`*Value`/`*CastedValue`/`*PointeredArray`）、
+    `ValueKind`/`Location`/`CondReg`/`DefKind` の enum を定義。`Lambda.Ops []*Op`
+  - **`internal/ir` パッケージへの移動は R3-a に送った**: `Value.Opt`/`Lambda.Opt`（OMap）、`Type`、`MacroFn`
+    が fc パッケージに残っているため、今分離すると循環 import になる。R1-e で OMap/Sym を消し、
+    `types` パッケージを切った後に R3-a でまとめて移す
+  - **ir/allocir golden は再生成していない（差分ゼロ）**: `Op.positional()` が旧 IR と同じ位置引数の並びを返し、
+    `dumpOp` がそれを出力するため、ダンプ形式が一致した。G3 の例外は使わなかった
+  - `Lambda.Args []any`（二相）→ `Params []Param{Name, Type}` + `Args []*Value`。配列リテラル要素は `[]Operand`
+  - `Value.Id/Val/Address`、`Def.Sym/Val`、`Lambda.Id`、各 `Opt *OMap` は `any`/OMap のまま → R1-e
+  - LLC 内部の行バッファ `asmLines`（`[]any` の flatten、Ruby Array 模倣）は IR ではないので据え置き（R3-a の codegen 移動時に整理）
+  - golden 全差分ゼロ、`go test ./...` 緑。ベンチ Frontend 368ms → 341ms
 
 ### 4.6 R1-e Sym / OMap / Canon の全廃、types パッケージ（1 日）
 

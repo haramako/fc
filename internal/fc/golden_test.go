@@ -154,7 +154,7 @@ func allocLambdas(hlc *Hlc) string {
 	for _, me := range hlc.Modules.Entries() {
 		mod := me.Val.(*Module)
 		for _, d := range mod.Defs {
-			if d.Kind != "code" {
+			if d.Kind != DefCode {
 				continue
 			}
 			lmd := d.Val.(*Lambda)

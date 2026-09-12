@@ -5,7 +5,7 @@ package fc
 // R1-c (doc/v2_plan.md §4.4) で入力を型付き構文木にし、定数評価を純関数化した
 // (構文木は変異しない。評価結果は cexpr に持つ)。tmp_count の採番順・エラーメッセージ文言は
 // 旧実装と同一で、生成される IR はバイト単位で一致する。
-// IR (Lambda.Ops の [][]any、Sym opcode) はまだ旧形式で、R1-d で型付き化する。
+// IR は ir.go の Op (opcode enum + Dst/Src/Label/Type/Text)。
 
 import (
 	"fmt"
@@ -60,7 +60,7 @@ func NewHlc(libPath []string) *Hlc {
 
 	h.defmacro(Sym("asm"), func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		for _, line := range args {
-			h.emit(Sym("asm"), mustValue(line).BaseString)
+			h.emit(&Op{Code: OpAsm, Text: mustValue(line).BaseString.(string)})
 		}
 		return macroResult{}
 	})
@@ -123,7 +123,7 @@ func (h *Hlc) tmpCount() int {
 }
 
 func (h *Hlc) defmacro(name Sym, fn MacroFn) *Value {
-	v := h.addVar(NewValue("global", name, TypeOf(Sym("macro")), fn, NewOMap()))
+	v := h.addVar(NewValue(KindGlobal, name, TypeOf(Sym("macro")), fn, NewOMap()))
 	v.Public = true
 	return v
 }
@@ -148,7 +148,7 @@ func defsFind(defs []*Def, symbol any) bool {
 	return false
 }
 
-func (h *Hlc) addDef(id any, kind Sym, typ *Type, val any) any {
+func (h *Hlc) addDef(id any, kind DefKind, typ *Type, val any) any {
 	var symbol any
 	if h.lmd != nil {
 		symbol = id
@@ -164,7 +164,7 @@ func (h *Hlc) addDef(id any, kind Sym, typ *Type, val any) any {
 	return symbol
 }
 
-func (h *Hlc) addDefModule(symbol any, kind Sym, typ *Type, val any) {
+func (h *Hlc) addDefModule(symbol any, kind DefKind, typ *Type, val any) {
 	if !defsFind(h.module.Defs, symbol) {
 		h.module.Defs = append(h.module.Defs, &Def{symbol, kind, typ, val})
 	}
@@ -260,14 +260,14 @@ func (h *Hlc) compileLambda(lmd *Lambda) {
 	h.inScope(func() {
 		// 帰り値の追加
 		if lmd.Type.Base.Kind != "void" {
-			lmd.Result = NewValue("local", Sym("$result"), lmd.Type.Base, nil, omap1("local_type", Sym("result")))
+			lmd.Result = NewValue(KindLocal, Sym("$result"), lmd.Type.Base, nil, omap1("local_type", Sym("result")))
 			lmd.Vars = append([]*Value{lmd.Result}, lmd.Vars...)
 		}
 
 		// 引数の追加
-		for i, a := range lmd.Args {
-			pair := a.([]any)
-			lmd.Args[i] = h.addVar(NewValue("local", pair[0], pair[1].(*Type), nil, omap1("local_type", Sym("arg"))))
+		lmd.Args = make([]*Value, len(lmd.Params))
+		for i, p := range lmd.Params {
+			lmd.Args[i] = h.addVar(NewValue(KindLocal, p.Name, p.Type, nil, omap1("local_type", Sym("arg"))))
 		}
 
 		if lmd.Body != nil {
@@ -275,13 +275,13 @@ func (h *Hlc) compileLambda(lmd *Lambda) {
 		}
 
 		// returnを追加する
-		last := []any(nil)
+		var last *Op
 		if len(lmd.Ops) > 0 {
 			last = lmd.Ops[len(lmd.Ops)-1]
 		}
-		if last == nil || !eqAny(last[0], Sym("return")) {
+		if last == nil || last.Code != OpReturn {
 			if lmd.Type.Base == TypeOf(Sym("void")) {
-				h.emit(Sym("return"))
+				h.emit(&Op{Code: OpReturn})
 			}
 		}
 	})
@@ -397,7 +397,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if s.As != nil {
 				id = Sym(s.As.Name)
 			}
-			v := h.addVar(NewValue("global", id, TypeOf(Sym("module")), m, NewOMap()))
+			v := h.addVar(NewValue(KindGlobal, id, TypeOf(Sym("module")), m, NewOMap()))
 			v.Public = true
 		}
 
@@ -439,24 +439,24 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		labels := h.newLabels("then", "else", "end")
 		thenLabel, elseLabel, endLabel := labels[0], labels[1], labels[2]
 		cond := h.rval(toC(s.Cond))
-		h.emit(Sym("if"), cond, elseLabel)
-		h.emit(Sym("label"), thenLabel)
+		h.emit(&Op{Code: OpIf, Src: []Operand{cond}, Label: elseLabel})
+		h.emit(&Op{Code: OpLabel, Label: thenLabel})
 		h.inScope(func() { h.compileStatement(s.Then) })
-		h.emit(Sym("jump"), endLabel)
-		h.emit(Sym("label"), elseLabel)
+		h.emit(&Op{Code: OpJump, Label: endLabel})
+		h.emit(&Op{Code: OpLabel, Label: elseLabel})
 		if s.Else != nil {
 			h.inScope(func() { h.compileStatement(s.Else) })
 		}
-		h.emit(Sym("label"), endLabel)
+		h.emit(&Op{Code: OpLabel, Label: endLabel})
 
 	case *syntax.LoopStmt:
 		h.inScope(func() {
 			labels := h.newLabels("begin", "end")
 			h.loops = append(h.loops, labels)
-			h.emit(Sym("label"), labels[0])
+			h.emit(&Op{Code: OpLabel, Label: labels[0]})
 			h.compileStatement(s.Body)
-			h.emit(Sym("jump"), labels[0])
-			h.emit(Sym("label"), labels[1])
+			h.emit(&Op{Code: OpJump, Label: labels[0]})
+			h.emit(&Op{Code: OpLabel, Label: labels[1]})
 			h.loops = h.loops[:len(h.loops)-1]
 		})
 
@@ -479,13 +479,13 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		if len(h.loops) == 0 {
 			panic(&CompileError{Msg: "cannot break without loop"})
 		}
-		h.emit(Sym("jump"), h.loops[len(h.loops)-1][1])
+		h.emit(&Op{Code: OpJump, Label: h.loops[len(h.loops)-1][1]})
 
 	case *syntax.ContinueStmt:
 		if len(h.loops) == 0 {
 			panic(&CompileError{Msg: "cannot break without loop"})
 		}
-		h.emit(Sym("jump"), h.loops[len(h.loops)-1][0])
+		h.emit(&Op{Code: OpJump, Label: h.loops[len(h.loops)-1][0]})
 
 	case *syntax.ReturnStmt:
 		if h.lmd.Type.Base != TypeOf(Sym("void")) {
@@ -493,13 +493,13 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if s.Value == nil {
 				panic(&CompileError{Msg: "can't return without value"})
 			}
-			h.emit(Sym("return"), h.rval(toC(s.Value)))
+			h.emit(&Op{Code: OpReturn, Src: []Operand{h.rval(toC(s.Value))}})
 		} else {
 			// void関数
 			if s.Value != nil {
 				panic(&CompileError{Msg: "can't return with value from void function"})
 			}
-			h.emit(Sym("return"))
+			h.emit(&Op{Code: OpReturn})
 		}
 
 	case *syntax.ExprStmt:
@@ -514,20 +514,20 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			labels := h.newLabels("then", "else")
 			thenLabel, elseLabel := labels[0], labels[1]
 			for _, v := range c.Values {
-				h.emit(Sym("eq"), tmp, cond, h.constEvalOperand(toC(v)))
-				h.emit(Sym("not"), tmp, tmp)
-				h.emit(Sym("if"), tmp, thenLabel)
+				h.emit(&Op{Code: OpEq, Dst: tmp, Src: []Operand{cond, h.constEvalOperand(toC(v))}})
+				h.emit(&Op{Code: OpNot, Dst: tmp, Src: []Operand{tmp}})
+				h.emit(&Op{Code: OpIf, Src: []Operand{tmp}, Label: thenLabel})
 			}
-			h.emit(Sym("jump"), elseLabel)
-			h.emit(Sym("label"), thenLabel)
+			h.emit(&Op{Code: OpJump, Label: elseLabel})
+			h.emit(&Op{Code: OpLabel, Label: thenLabel})
 			h.compileStmts(c.Body)
-			h.emit(Sym("jump"), endLabel)
-			h.emit(Sym("label"), elseLabel)
+			h.emit(&Op{Code: OpJump, Label: endLabel})
+			h.emit(&Op{Code: OpLabel, Label: elseLabel})
 		}
 		if s.Default != nil {
 			h.compileStmts(s.Default.Body)
 		}
-		h.emit(Sym("label"), endLabel)
+		h.emit(&Op{Code: OpLabel, Label: endLabel})
 
 		// TODO: 一時的に、public/privateの切り替えを可能にしている。そのうち消すこと
 	case *syntax.ScopeLabel:
@@ -549,7 +549,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if opt == nil {
 		opt = NewOMap()
 	}
-	var init any
+	var init Operand
 	if sp.Init != nil {
 		init = h.rval(toC(sp.Init))
 	}
@@ -566,21 +566,21 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	var val any
 	if h.lmd == nil {
 		if opt.GetOr(Sym("address")) != nil {
-			val = h.addDef(id, "equ", typ, opt.GetOr(Sym("address")))
+			val = h.addDef(id, DefEqu, typ, opt.GetOr(Sym("address")))
 		} else {
-			val = h.addDef(id, "bss", typ, omap1("segment", opt.GetOr(Sym("segment"))))
+			val = h.addDef(id, DefBss, typ, omap1("segment", opt.GetOr(Sym("segment"))))
 		}
 	}
-	kind := Sym("global")
+	kind := KindGlobal
 	if h.lmd != nil {
-		kind = "local"
+		kind = KindLocal
 	}
 	vv := h.addVar(NewValue(kind, id, typ, val, opt))
 	if h.scopeIsPublic(publicPos) {
 		vv.Public = true
 	}
 	if init != nil {
-		h.emit(Sym("load"), vv, init)
+		h.emit(&Op{Code: OpLoad, Dst: vv, Src: []Operand{init}})
 	}
 }
 
@@ -595,13 +595,13 @@ func (h *Hlc) compileConstSpec(id Sym, typ syntax.TypeExpr, val *cexpr, opt *OMa
 		}
 		v := cv.val
 		t := GuessType(h.typeEval(typ), v)
-		if _, isArr := v.Val.([]any); isArr {
-			symbol := h.addDef(id, "block", t, v.Val)
-			newVal = h.addVar(NewValue("global", id, t, symbol, opt))
+		if _, isArr := v.Val.([]Operand); isArr {
+			symbol := h.addDef(id, DefBlock, t, v.Val)
+			newVal = h.addVar(NewValue(KindGlobal, id, t, symbol, opt))
 		} else {
-			newVal = h.addVar(NewValue("literal", id, t, v.Val, opt))
+			newVal = h.addVar(NewValue(KindLiteral, id, t, v.Val, opt))
 			if h.lmd == nil {
-				h.addDef(id, "equ", t, v.Val)
+				h.addDef(id, DefEqu, t, v.Val)
 			}
 		}
 	} else {
@@ -611,7 +611,7 @@ func (h *Hlc) compileConstSpec(id Sym, typ syntax.TypeExpr, val *cexpr, opt *OMa
 		}
 		if addrOk {
 			t := h.typeEval(typ)
-			newVal = h.addVar(NewValue("global", id, t, addr, opt))
+			newVal = h.addVar(NewValue(KindGlobal, id, t, addr, opt))
 		} else {
 			panic(&CompileError{Msg: fmt.Sprintf("cannot define const without value %s", id)})
 		}
@@ -647,7 +647,7 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 // constEvalOperand は評価結果を IR のオペランド (*Value) として取り出す。
 // 旧実装では未確定の演算ノード ([]any) がそのままオペランドになっていた箇所があり
 // (switch の case 値)、その場合はダンプ不能で落ちていた。同じく定数を要求する。
-func (h *Hlc) constEvalOperand(c *cexpr) any {
+func (h *Hlc) constEvalOperand(c *cexpr) Operand {
 	r := h.constEval(c)
 	if r.kind != cValue {
 		panic(&CompileError{Msg: "constant value required"})
@@ -676,19 +676,18 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		return cv(rv)
 
 	case cArray:
-		vals := make([]any, len(c.args))
-		for i, e := range c.args {
-			vals[i] = h.constEvalOperand(e)
-		}
+		vals := make([]Operand, len(c.args))
 		var typ *Type
-		for i, v := range vals {
+		for i, e := range c.args {
+			v := h.constEvalOperand(e)
+			vals[i] = v
 			if i == 0 {
 				typ = ValType(v)
 			} else {
 				typ = CompatibleType(typ, ValType(v))
 			}
 		}
-		return cv(NewValue("array_literal", Sym(fmt.Sprintf("$%d", h.tmpCount())), TypeOf([]any{Sym("array"), len(vals), typ}), vals, nil))
+		return cv(NewValue(KindArrayLiteral, Sym(fmt.Sprintf("$%d", h.tmpCount())), TypeOf([]any{Sym("array"), len(vals), typ}), vals, nil))
 
 	case cIncbin:
 		data, err := os.ReadFile(h.findModule(c.s))
@@ -705,9 +704,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	case cLambda:
 		lam := c.lam
 		opt := lam.opt
-		args := make([]any, len(lam.params))
+		params := make([]Param, len(lam.params))
 		for i, p := range lam.params {
-			args[i] = []any{Sym(p.name), TypeOf(typeAST(p.typ))}
+			params[i] = Param{Name: Sym(p.name), Type: TypeOf(typeAST(p.typ))}
 		}
 		baseType := TypeOf(typeAST(lam.result))
 		var id any
@@ -723,10 +722,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if lam.body == nil {
 			opt.Set(Sym("extern"), true)
 		}
-		lmd := NewLambda(id, args, baseType, opt, lam.body)
+		lmd := NewLambda(id, params, baseType, opt, lam.body)
 		h.module.Lambdas = append(h.module.Lambdas, lmd)
-		h.addDefModule(id, "code", lmd.Type, lmd)
-		return cv(NewValue("literal", nil, lmd.Type, id, nil))
+		h.addDefModule(id, DefCode, lmd.Type, lmd)
+		return cv(NewValue(KindLiteral, nil, lmd.Type, id, nil))
 
 	case cDot:
 		left := h.constEval(c.args[0])
@@ -746,7 +745,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			ty = h.typeEval(c.typ)
 		}
 		if x.isLiteralInt() {
-			return cv(NewValue("literal", nil, ty, x.val.Val, nil))
+			return cv(NewValue(KindLiteral, nil, ty, x.val.Val, nil))
 		}
 		return &cexpr{kind: cCast, args: []*cexpr{x}, typ: c.typ, ty: ty}
 
@@ -903,28 +902,28 @@ func (h *Hlc) typeEval(t syntax.TypeExpr) *Type {
 // ---------------------------------------------------------------
 
 // rval は右辺値として評価し、値を返す。
-func (h *Hlc) rval(c *cexpr) any {
+func (h *Hlc) rval(c *cexpr) Operand {
 	v, left := h.lval(c)
 	if left {
 		r := h.newTmp(ValType(v).Base)
-		h.emit(Sym("pget"), r, v)
+		h.emit(&Op{Code: OpPget, Dst: r, Src: []Operand{v}})
 		return r
 	}
 	return v
 }
 
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
-func (h *Hlc) lval(c *cexpr) (any, bool) {
+func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 	leftValue := false
 	e := h.constEval(c)
-	var r any
+	var r Operand
 
 	switch e.kind {
 
 	case cValue:
-		if e.val.Kind == "array_literal" {
-			symbol := h.addDef(Sym(fmt.Sprintf("_%d", h.tmpCount())), "block", e.val.Type, e.val.Val)
-			r = NewValue("global", fmt.Sprintf("$%d", h.tmpCount()), e.val.Type, symbol, nil)
+		if e.val.Kind == KindArrayLiteral {
+			symbol := h.addDef(Sym(fmt.Sprintf("_%d", h.tmpCount())), DefBlock, e.val.Type, e.val.Val)
+			r = NewValue(KindGlobal, fmt.Sprintf("$%d", h.tmpCount()), e.val.Type, symbol, nil)
 		} else {
 			r = e.val
 		}
@@ -941,7 +940,7 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 			if lv {
 				CompatibleType(ValType(left).Base, ValType(right))
 				right = h.cast(right, ValType(left).Base)
-				h.emit(Sym("pset"), left, right)
+				h.emit(&Op{Code: OpPset, Src: []Operand{left, right}})
 				r = left
 				leftValue = true
 			} else {
@@ -950,14 +949,15 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 					panic(&CompileError{Msg: fmt.Sprintf("%s is not left value", valToS(left))})
 				}
 				right = h.cast(right, ValType(left))
-				h.emit(Sym("load"), left, right)
+				h.emit(&Op{Code: OpLoad, Dst: left, Src: []Operand{right}})
 				r = left
 			}
 
 		case opNot, opUminus:
 			left := h.rval(e.args[0])
-			r = h.newTmp(ValType(left))
-			h.emit(Sym(e.op), r, left)
+			tmp := h.newTmp(ValType(left))
+			h.emit(&Op{Code: copToOpCode[e.op], Dst: tmp, Src: []Operand{left}})
+			r = tmp
 
 		case opAdd, opSub, opMul, opDiv, opMod,
 			opAnd, opOr, opXor, opShiftLeft, opShiftRight:
@@ -974,15 +974,17 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 			} else {
 				left, right = l2, r2
 			}
-			r = h.newTmp(typ)
-			h.emit(Sym(e.op), r, left, right)
+			tmp := h.newTmp(typ)
+			h.emit(&Op{Code: copToOpCode[e.op], Dst: tmp, Src: []Operand{left, right}})
+			r = tmp
 
 		case opEq, opLt:
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
 			_, left, right = h.makeCompatible(left, right)
-			r = h.newTmp(TypeOf(Sym("int")))
-			h.emit(Sym(e.op), r, left, right)
+			tmp := h.newTmp(TypeOf(Sym("int")))
+			h.emit(&Op{Code: copToOpCode[e.op], Dst: tmp, Src: []Operand{left, right}})
+			r = tmp
 
 		case opNe, opGt, opLe, opGe:
 			// これらは、eq,lt の引数の順番とnotを組合せて合成する
@@ -1003,11 +1005,11 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 			endLabel := h.newLabel("end")
 			rr := h.newTmp(TypeOf(Sym("int")))
 			left := h.rval(e.args[0])
-			h.emit(Sym("load"), rr, left)
-			h.emit(Sym("if"), rr, endLabel)
+			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{left}})
+			h.emit(&Op{Code: OpIf, Src: []Operand{rr}, Label: endLabel})
 			right := h.rval(e.args[1])
-			h.emit(Sym("load"), rr, right)
-			h.emit(Sym("label"), endLabel)
+			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{right}})
+			h.emit(&Op{Code: OpLabel, Label: endLabel})
 			r = rr
 
 		case opLor:
@@ -1015,12 +1017,12 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 			rr := h.newTmp(TypeOf(Sym("int")))
 			r2 := h.newTmp(TypeOf(Sym("int")))
 			left := h.rval(e.args[0])
-			h.emit(Sym("load"), rr, left)
-			h.emit(Sym("not"), r2, rr)
-			h.emit(Sym("if"), r2, endLabel)
+			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{left}})
+			h.emit(&Op{Code: OpNot, Dst: r2, Src: []Operand{rr}})
+			h.emit(&Op{Code: OpIf, Src: []Operand{r2}, Label: endLabel})
 			right := h.rval(e.args[1])
-			h.emit(Sym("load"), rr, right)
-			h.emit(Sym("label"), endLabel)
+			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{right}})
+			h.emit(&Op{Code: OpLabel, Label: endLabel})
 			r = rr
 
 		case opCall:
@@ -1055,24 +1057,24 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 						panic(&CompileError{Msg: "cannot fastcall in fastcalling"})
 					}
 					h.fastCalling = true
-					h.emit(Sym("push_fastcall_result"), lmdType.Base)
+					h.emit(&Op{Code: OpPushFastcallResult, Type: lmdType.Base})
 					for i, arg := range args {
 						v := h.rval(arg)
 						CompatibleType(lmdType.Args[i], ValType(v))
 						v = h.cast(v, lmdType.Args[i])
-						h.emit(Sym("push_fastcall_arg"), lmdType.Args[i], v)
+						h.emit(&Op{Code: OpPushFastcallArg, Type: lmdType.Args[i], Src: []Operand{v}})
 					}
-					h.emit(Sym("fastcall"), r, lmdV)
+					h.emit(&Op{Code: OpFastcall, Dst: r, Src: []Operand{lmdV}})
 					h.fastCalling = false
 				} else {
-					h.emit(Sym("push_result"), lmdType.Base)
+					h.emit(&Op{Code: OpPushResult, Type: lmdType.Base})
 					for i, arg := range args {
 						v := h.rval(arg)
 						CompatibleType(lmdType.Args[i], ValType(v))
 						v = h.cast(v, lmdType.Args[i])
-						h.emit(Sym("push_arg"), lmdType.Args[i], v)
+						h.emit(&Op{Code: OpPushArg, Type: lmdType.Args[i], Src: []Operand{v}})
 					}
-					h.emit(Sym("call"), r, lmdV)
+					h.emit(&Op{Code: OpCall, Dst: r, Src: []Operand{lmdV}})
 				}
 			}
 
@@ -1084,8 +1086,9 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 				if !ValAssignable(left) {
 					panic(&CompileError{Msg: fmt.Sprintf("%s is not left value", valToS(left))})
 				}
-				r = h.newTmp(TypeOf([]any{Sym("pointer"), ValType(left)}))
-				h.emit(Sym("ref"), r, left)
+				tmp := h.newTmp(TypeOf([]any{Sym("pointer"), ValType(left)}))
+				h.emit(&Op{Code: OpRef, Dst: tmp, Src: []Operand{left}})
+				r = tmp
 			}
 
 		case opDeref: // *演算子
@@ -1105,8 +1108,9 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 			if ValType(right).Kind != "int" {
 				panic(&CompileError{Msg: "index must be int"})
 			}
-			r = h.newTmp(TypeOf([]any{Sym("pointer"), ValType(left).Base}))
-			h.emit(Sym("index"), r, left, right)
+			tmp := h.newTmp(TypeOf([]any{Sym("pointer"), ValType(left).Base}))
+			h.emit(&Op{Code: OpIndex, Dst: tmp, Src: []Operand{left, right}})
+			r = tmp
 			leftValue = true
 
 		default:
@@ -1118,7 +1122,7 @@ func (h *Hlc) lval(c *cexpr) (any, bool) {
 	return r, leftValue
 }
 
-func (h *Hlc) emit(op ...any) {
+func (h *Hlc) emit(op *Op) {
 	h.lmd.Ops = append(h.lmd.Ops, op)
 }
 
@@ -1135,11 +1139,11 @@ func (h *Hlc) newLabels(names ...string) []string {
 }
 
 func (h *Hlc) newTmp(typ *Type) *Value {
-	return h.addVar(NewValue("local", Sym(fmt.Sprintf("$%d", h.tmpCount())), typ, nil, omap1("local_type", Sym("temp"))))
+	return h.addVar(NewValue(KindLocal, Sym(fmt.Sprintf("$%d", h.tmpCount())), typ, nil, omap1("local_type", Sym("temp"))))
 }
 
 // cast は v を type にキャストする (必要ならコードも生成)。
-func (h *Hlc) cast(v any, typ *Type) any {
+func (h *Hlc) cast(v Operand, typ *Type) Operand {
 	if typ.Kind == "int" {
 		// int の変換
 		if typ == ValType(v) {
@@ -1151,11 +1155,11 @@ func (h *Hlc) cast(v any, typ *Type) any {
 		if !ValType(v).Signed {
 			return v
 		}
-		if ValKind(v) == "literal" {
+		if ValKind(v) == KindLiteral {
 			return v
 		}
 		newV := h.newTmp(typ)
-		h.emit(Sym("sign_extension"), newV, v)
+		h.emit(&Op{Code: OpSignExtension, Dst: newV, Src: []Operand{v}})
 		return newV
 	} else if typ.Kind == "pointer" && ValType(v).Kind == "array" && ValType(v).Base == typ.Base {
 		return NewPointeredArray(v)
@@ -1164,7 +1168,7 @@ func (h *Hlc) cast(v any, typ *Type) any {
 }
 
 // makeCompatible は互換型に変換する (キャストコード生成込み)。
-func (h *Hlc) makeCompatible(a, b any) (*Type, any, any) {
+func (h *Hlc) makeCompatible(a, b Operand) (*Type, Operand, Operand) {
 	typ := CompatibleType(ValType(a), ValType(b))
 	a = h.cast(a, typ)
 	b = h.cast(b, typ)
@@ -1172,7 +1176,7 @@ func (h *Hlc) makeCompatible(a, b any) (*Type, any, any) {
 }
 
 // tryMakeCompatible は makeCompatible の CompileError を捕捉するバージョン。
-func (h *Hlc) tryMakeCompatible(a, b any) (typ *Type, ra, rb any, err *CompileError) {
+func (h *Hlc) tryMakeCompatible(a, b Operand) (typ *Type, ra, rb Operand, err *CompileError) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*CompileError); ok {

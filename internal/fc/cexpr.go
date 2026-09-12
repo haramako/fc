@@ -110,7 +110,7 @@ func ccall(fn *cexpr, args ...*cexpr) *cexpr {
 
 // isLiteralInt は評価済みの整数リテラルかを返す。
 func (c *cexpr) isLiteralInt() bool {
-	return c.kind == cValue && c.val.Kind == "literal" && isInt(c.val.Val)
+	return c.kind == cValue && c.val.Kind == KindLiteral && isInt(c.val.Val)
 }
 
 // ---------------------------------------------------------------

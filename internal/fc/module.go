@@ -6,10 +6,10 @@ import "github.com/haramako/fc/internal/syntax"
 
 // Def は Module#defs / Lambda#defs の1エントリ ( [symbol, kind, type, val] )。
 type Def struct {
-	Sym  any  // シンボル名 (Sym)
-	Kind Sym  // :equ, :bss, :block, :code
+	Sym  any // シンボル名 (Sym)
+	Kind DefKind
 	Type *Type
-	Val  any // Sym / int / string / *OMap{segment:} / []any(Value列) / *Lambda / nil
+	Val  any // Sym / int / string / *OMap{segment:} / []Operand(配列要素) / *Lambda / nil
 }
 
 type Module struct {
@@ -38,13 +38,20 @@ func NewModule(globalScope *Scope) *Module {
 	}
 }
 
+// Param は関数の仮引数 (名前と型)。
+type Param struct {
+	Name Sym
+	Type *Type
+}
+
 type Lambda struct {
-	Id        any // Sym
-	Args      []any // 最初は []any{id, *Type} のペア、compile_lambda 後は *Value
+	Id        any     // Sym
+	Params    []Param // 仮引数の宣言
+	Args      []*Value // 仮引数の変数 (compileLambda で Params から作られる)
 	Type      *Type
 	Opt       *OMap
 	Body      *syntax.Block // 関数本体。nil なら extern
-	Ops       [][]any
+	Ops       []*Op // nil 要素は最適化で削除された命令
 	Vars      []*Value
 	Bank      int
 	Result    *Value
@@ -53,16 +60,16 @@ type Lambda struct {
 	FrameSize int
 }
 
-func NewLambda(id any, args []any, baseType *Type, opt *OMap, body *syntax.Block) *Lambda {
+func NewLambda(id any, params []Param, baseType *Type, opt *OMap, body *syntax.Block) *Lambda {
 	if opt == nil {
 		opt = NewOMap()
 	}
-	argTypes := make([]any, len(args))
-	for i, a := range args {
-		argTypes[i] = a.([]any)[1]
+	argTypes := make([]any, len(params))
+	for i, p := range params {
+		argTypes[i] = p.Type
 	}
 	typ := TypeOf([]any{Sym("lambda"), argTypes, baseType, opt.GetOr(Sym("fastcall"))})
-	return &Lambda{Id: id, Args: args, Type: typ, Opt: opt, Body: body, Bank: 0}
+	return &Lambda{Id: id, Params: params, Type: typ, Opt: opt, Body: body, Bank: 0}
 }
 
 // String は Ruby の "<Lambda:#{@id} #{@type}>" 相当 (エラーメッセージで使用)。

@@ -5,7 +5,7 @@ package fc
 import "fmt"
 
 // GuessType は TypeUtil.guess_type 相当。
-func GuessType(typ *Type, val any) *Type {
+func GuessType(typ *Type, val Operand) *Type {
 	if typ != nil {
 		return CompatibleType(typ, ValType(val))
 	}

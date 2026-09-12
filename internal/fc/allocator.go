@@ -1,6 +1,6 @@
 package fc
 
-// lib/fc/allocator.rb の厳密移植。
+// レジスタ割付。lib/fc/allocator.rb 由来。
 // use_define / register_vars は Ruby の Hash と同じく挿入順を保つ必要がある。
 // CastedValue は Delegator のため下位の Value と同一キーに合流する (UnderlyingValue)。
 
@@ -21,19 +21,19 @@ func CalcLiveRange(lmd *Lambda) {
 	// ラベルの収集
 	labels := map[string]int{}
 	for i, op := range lmd.Ops {
-		if op != nil && eqAny(op[0], Sym("label")) {
-			labels[op[1].(string)] = i
+		if op != nil && op.Code == OpLabel {
+			labels[op.Label] = i
 		}
 	}
 
 	// 変数の定義・使用、制御フローグラフの集計
 	var udOrder []*useDefineEntry
 	udIndex := map[*Value]*useDefineEntry{}
-	record := func(vAny any, isDefine bool, i int) {
+	record := func(vAny Operand, isDefine bool, i int) {
 		if vAny == nil {
 			return
 		}
-		if ValKind(vAny) != "local" {
+		if ValKind(vAny) != KindLocal {
 			return
 		}
 		v := UnderlyingValue(vAny)
@@ -57,31 +57,30 @@ func CalcLiveRange(lmd *Lambda) {
 
 	flow := make([][]int, 0, len(lmd.Ops))
 	for i, op := range lmd.Ops {
-		var uses, defines []any
+		var uses, defines []Operand
 		var node []int
-		switch op[0] {
-		case Sym("label"), Sym("asm"), Sym("push_result"), Sym("push_fastcall_result"):
+		switch op.Code {
+		case OpLabel, OpAsm, OpPushResult, OpPushFastcallResult:
 			// DO NOTHING
-		case Sym("if"):
-			uses = append(uses, op[1])
-			node = append(node, labels[op[2].(string)])
-		case Sym("jump"):
-			node = append(node, labels[op[1].(string)])
-		case Sym("return"):
-			uses = append(uses, at(op, 1))
-		case Sym("push_arg"), Sym("push_fastcall_arg"):
-			uses = append(uses, op[2])
-		case Sym("load"), Sym("uminus"), Sym("not"), Sym("sign_extension"), Sym("ref"), Sym("call"), Sym("fastcall"):
-			defines = append(defines, op[1])
-			uses = append(uses, op[2])
-		case Sym("add"), Sym("sub"), Sym("and"), Sym("or"), Sym("xor"),
-			Sym("mul"), Sym("div"), Sym("mod"), Sym("eq"), Sym("lt"),
-			Sym("shift_left"), Sym("shift_right"), Sym("index"), Sym("pget"):
-			// pget は op[3] が存在しない (Ruby では nil になり後段で除外される)
-			defines = append(defines, op[1])
-			uses = append(uses, at(op, 2), at(op, 3))
-		case Sym("pset"):
-			uses = append(uses, op[1], op[2])
+		case OpIf:
+			uses = append(uses, op.Src[0])
+			node = append(node, labels[op.Label])
+		case OpJump:
+			node = append(node, labels[op.Label])
+		case OpReturn:
+			uses = append(uses, op.src(0))
+		case OpPushArg, OpPushFastcallArg:
+			uses = append(uses, op.Src[0])
+		case OpLoad, OpUminus, OpNot, OpSignExtension, OpRef, OpCall, OpFastcall:
+			defines = append(defines, op.Dst)
+			uses = append(uses, op.Src[0])
+		case OpAdd, OpSub, OpAnd, OpOr, OpXor,
+			OpMul, OpDiv, OpMod, OpEq, OpLt,
+			OpShiftLeft, OpShiftRight, OpIndex, OpPget:
+			defines = append(defines, op.Dst)
+			uses = append(uses, op.Src...)
+		case OpPset:
+			uses = append(uses, op.Src[0], op.Src[1])
 		default:
 			panic(fmt.Sprintf("invalid op %v", dumpOp(op, nil)))
 		}
@@ -122,8 +121,8 @@ func AllocateRegister(lmd *Lambda) {
 	// ref(&演算子)を受けた変数を集める
 	refered := map[*Value]bool{}
 	for _, op := range lmd.Ops {
-		if op != nil && eqAny(op[0], Sym("ref")) {
-			refered[UnderlyingValue(op[2])] = true
+		if op != nil && op.Code == OpRef {
+			refered[UnderlyingValue(op.Src[0])] = true
 		}
 	}
 
@@ -136,7 +135,7 @@ func AllocateRegister(lmd *Lambda) {
 		if v.LiveRange != nil {
 			for i := v.LiveRange.Min + 1; i <= v.LiveRange.Max-1; i++ {
 				if i >= 0 && i < len(lmd.Ops) && lmd.Ops[i] != nil &&
-					eqAny(lmd.Ops[i][0], Sym("call")) && !ValType(lmd.Ops[i][2]).Fastcall() {
+					lmd.Ops[i].Code == OpCall && !ValType(lmd.Ops[i].Src[0]).Fastcall() {
 					beyondCall = true
 				}
 			}
@@ -145,18 +144,18 @@ func AllocateRegister(lmd *Lambda) {
 		if eqAny(v.Opt.GetOr(Sym("local_type")), Sym("result")) {
 			// 返り値
 			if fastcall {
-				lmd.Result.Location = "fastcall_reg"
+				lmd.Result.Location = LocFastcallReg
 			} else {
-				lmd.Result.Location = "frame"
+				lmd.Result.Location = LocFrame
 			}
 			lmd.Result.Address = 0
 		} else if beyondCall || eqAny(v.Opt.GetOr(Sym("local_type")), Sym("arg")) || refered[v] {
 			// 引数か、関数をまたいでいるなら、フレームに割り当てる
 			v.Address = frameSize
 			if fastcall {
-				v.Location = "fastcall_reg"
+				v.Location = LocFastcallReg
 			} else {
-				v.Location = "frame"
+				v.Location = LocFrame
 			}
 			frameSize += v.Type.Size
 		} else if v.LiveRange != nil {
@@ -164,7 +163,7 @@ func AllocateRegister(lmd *Lambda) {
 			registerVars = append(registerVars, &allocEntry{key: v, liveRange: v.LiveRange})
 		} else {
 			// 未使用フラグをたてる
-			v.Location = "none"
+			v.Location = LocUnused
 			v.Unuse = true
 		}
 	}
@@ -187,10 +186,10 @@ func AllocateRegister(lmd *Lambda) {
 				if frameSize+regSize > 16 {
 					panic(&CompileError{Msg: fmt.Sprintf("frame size over on %s", lmd)})
 				}
-				v.Location = "fastcall_reg"
+				v.Location = LocFastcallReg
 				v.Address = frameSize + regSize
 			} else {
-				v.Location = "reg"
+				v.Location = LocReg
 				v.Address = regSize
 			}
 		}
@@ -211,23 +210,21 @@ func allocateA(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 		if v.LiveRange.Max-v.LiveRange.Min == 1 {
 			// Aレジスタを割り当てられる組み合わせでなければスルー
 			op := lmd.Ops[v.LiveRange.Min]
-			if !isSameValue(at(op, 1), v) {
+			if !isSameValue(op.Dst, v) {
 				continue
 			}
-			if !symIn(op[0], "load", "add", "sub", "and", "or", "xor",
-				"mul", "div", "mod", "uminus", "eq", "lt", "pget") {
+			if !codeIn(op.Code, OpLoad, OpAdd, OpSub, OpAnd, OpOr, OpXor,
+				OpMul, OpDiv, OpMod, OpUminus, OpEq, OpLt, OpPget) {
 				continue
 			}
 
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
-			switch nextOp[0] {
-			case Sym("load"), Sym("sign_extension"), Sym("add"), Sym("and"), Sym("or"), Sym("xor"),
-				Sym("eq"), Sym("lt"), Sym("pget"), Sym("sub"), Sym("push_arg"):
-				if !isSameValue(at(nextOp, 2), v) {
-					continue
-				}
-			case Sym("if"), Sym("return"):
-				if !isSameValue(at(nextOp, 1), v) {
+			switch nextOp.Code {
+			case OpLoad, OpSignExtension, OpAdd, OpAnd, OpOr, OpXor,
+				OpEq, OpLt, OpPget, OpSub, OpPushArg,
+				OpIf, OpReturn:
+				// 最初の入力オペランドが v であること (旧実装の op[2] / if・return では op[1] に相当)
+				if !isSameValue(nextOp.src(0), v) {
 					continue
 				}
 			default:
@@ -238,7 +235,7 @@ func allocateA(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 		}
 	}
 	for _, v := range aVars {
-		v.Location = "a"
+		v.Location = LocA
 		registerVars = deleteEntry(registerVars, v)
 	}
 	return registerVars
@@ -254,53 +251,49 @@ func allocateCond(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 		}
 		if v.LiveRange.Max-v.LiveRange.Min == 1 {
 			op := lmd.Ops[v.LiveRange.Min]
-			if !isSameValue(at(op, 1), v) {
+			if !isSameValue(op.Dst, v) {
 				continue
 			}
-			if !symIn(op[0], "eq", "lt", "not") {
+			if !codeIn(op.Code, OpEq, OpLt, OpNot) {
 				continue
 			}
 
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
-			switch nextOp[0] {
-			case Sym("if"):
-				if !isSameValue(at(nextOp, 1), v) {
-					continue
-				}
-			case Sym("not"):
-				if !isSameValue(at(nextOp, 2), v) {
+			switch nextOp.Code {
+			case OpIf, OpNot:
+				if !isSameValue(nextOp.src(0), v) {
 					continue
 				}
 			default:
 				continue
 			}
 
-			switch op[0] {
-			case Sym("eq"):
-				v.Location = "cond"
+			switch op.Code {
+			case OpEq:
+				v.Location = LocCond
 				v.CondPositive = true
-				v.CondReg = "zero"
-			case Sym("lt"):
-				v.Location = "cond"
+				v.CondReg = CondZero
+			case OpLt:
+				v.Location = LocCond
 				v.CondPositive = true
-				if ValType(op[2]).Signed || ValType(op[3]).Signed {
-					if ValType(op[2]).Size > 1 || ValType(op[3]).Size > 1 {
+				if ValType(op.Src[0]).Signed || ValType(op.Src[1]).Signed {
+					if ValType(op.Src[0]).Size > 1 || ValType(op.Src[1]).Size > 1 {
 						// サイズ2以上の符号付き比較はフラグが特定できない。
 						// Ruby版は next の前に location/cond_positive を設定済みのまま残す
 						// (後で register_vars の割付により location は上書きされる)
 						continue
 					}
-					v.CondReg = "negative"
+					v.CondReg = CondNegative
 				} else {
-					v.CondReg = "carry"
+					v.CondReg = CondCarry
 				}
-			case Sym("not"):
-				if ValLocation(op[2]) != "cond" {
+			case OpNot:
+				if ValLocation(op.Src[0]) != LocCond {
 					continue
 				}
-				v.Location = "cond"
-				v.CondReg = UnderlyingValue(op[2]).CondReg
-				v.CondPositive = !UnderlyingValue(op[2]).CondPositive
+				v.Location = LocCond
+				v.CondReg = UnderlyingValue(op.Src[0]).CondReg
+				v.CondPositive = !UnderlyingValue(op.Src[0]).CondPositive
 			default:
 				panic("unreachable")
 			}
@@ -313,14 +306,14 @@ func allocateCond(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 	return registerVars
 }
 
-func isSameValue(opElem any, v *Value) bool {
+func isSameValue(opElem Operand, v *Value) bool {
 	// Ruby の op[1] == v (CastedValue は Delegator の == で from と比較される)
-	return UnderlyingValue(opElem) == v
+	return opElem != nil && UnderlyingValue(opElem) == v
 }
 
-func symIn(s any, names ...string) bool {
-	for _, n := range names {
-		if eqAny(s, Sym(n)) {
+func codeIn(c OpCode, codes ...OpCode) bool {
+	for _, x := range codes {
+		if c == x {
 			return true
 		}
 	}
@@ -495,14 +488,14 @@ func DeleteUnuse(lmd *Lambda) {
 		if op == nil {
 			continue
 		}
-		switch op[0] {
-		case Sym("pget"), Sym("load"):
-			if op[1] != nil && UnderlyingValue(op[1]) != nil && UnderlyingValue(op[1]).Unuse {
+		switch op.Code {
+		case OpPget, OpLoad:
+			if op.Dst != nil && UnderlyingValue(op.Dst) != nil && UnderlyingValue(op.Dst).Unuse {
 				lmd.Ops[i] = nil
 			}
-		case Sym("call"), Sym("fastcall"):
-			if op[1] != nil && UnderlyingValue(op[1]) != nil && UnderlyingValue(op[1]).Unuse {
-				lmd.Ops[i][1] = nil
+		case OpCall, OpFastcall:
+			if op.Dst != nil && UnderlyingValue(op.Dst) != nil && UnderlyingValue(op.Dst).Unuse {
+				op.Dst = nil
 			}
 		}
 	}

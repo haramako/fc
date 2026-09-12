@@ -112,14 +112,6 @@ func ToS(v any) string {
 	}
 }
 
-// at は配列の i 番目 (範囲外は nil)。旧 IR ([]any の op) の可変長オペランド参照に使う (R1-d で不要になる)。
-func at(ast []any, i int) any {
-	if i < 0 || i >= len(ast) {
-		return nil
-	}
-	return ast[i]
-}
-
 // ReadSource はソースファイルを読み込む。
 // Ruby版は File.read (テキストモード) で読むため、Windows では CRLF→LF 変換が行われる。
 // 同じ挙動になるよう常に CRLF→LF 変換する (golden は Windows で生成されている)。

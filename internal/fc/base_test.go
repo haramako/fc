@@ -80,8 +80,8 @@ func TestValue(t *testing.T) {
 func TestScope(t *testing.T) {
 	g := NewScope(nil)
 	s := NewScope(g)
-	v1 := NewValue("global", Sym("a"), TypeOf(Sym("int")), nil, nil)
-	v2 := NewValue("global", Sym("b"), TypeOf(Sym("int")), nil, nil)
+	v1 := NewValue(KindGlobal, Sym("a"), TypeOf(Sym("int")), nil, nil)
+	v2 := NewValue(KindGlobal, Sym("b"), TypeOf(Sym("int")), nil, nil)
 	v2.Public = true
 	g.Declare(v1)
 	s.Declare(v2)
@@ -98,9 +98,9 @@ func TestScope(t *testing.T) {
 
 	// use 経由は public のみ見える
 	other := NewScope(nil)
-	pub := NewValue("global", Sym("p"), TypeOf(Sym("int")), nil, nil)
+	pub := NewValue(KindGlobal, Sym("p"), TypeOf(Sym("int")), nil, nil)
 	pub.Public = true
-	priv := NewValue("global", Sym("q"), TypeOf(Sym("int")), nil, nil)
+	priv := NewValue(KindGlobal, Sym("q"), TypeOf(Sym("int")), nil, nil)
 	other.Declare(pub)
 	other.Declare(priv)
 	s.Use(other)
