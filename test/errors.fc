@@ -1,29 +1,29 @@
 //@can't init global variable
-var a:int = 1;
+var a:int = 1; //! col=1
 
 //@parse error
-hoge fuga
+hoge fuga //! col=6
 
 //@not compatible
-const a:int = [1];
+const a:int = [1]; //! col=1
 
 //@not compatible
 function hoge():void
 {
-	var a:int = [1];
+	var a:int = [1]; //! col=2
 }
 
 //@cannot define const without value
 function hoge():void
 {
-	const a:int;
+	const a:int; //! col=2
 }
 
 //@not found
-use unknown;
+use unknown; //! col=1
 
 //@can't return
-function hoge():void { return 1; }
+function hoge():void { return 1; } //! col=24
 
 //@Unexpected trailing garbage characters
 function hoge():void {
@@ -33,17 +33,17 @@ function hoge():void {
 //@div by 0
 function hoge():void {
 	var i1 = 1;
-	var i = i1 / 0;
+	var i = i1 / 0; //! col=10
 }
 
 //@div by 0
 function hoge():void {
 	var i1 = 1;
-	var i = i1 % 0;
+	var i = i1 % 0; //! col=10
 }
 
 //@cannot call function from fastcall
 function hoge():void options(fastcall:true){
-	hoge();
+	hoge(); //! col=2
 }
 

@@ -1,12 +1,11 @@
 package driver
 
-// test/test-all の「エラーが起こるソースのテスト」の移植。
-// errors.fc を //@ 区切りでパースし、各断片が期待の正規表現に一致する
-// CompileError を出すことを確認する。
+// test/errors.fc の「エラーが起こるソースのテスト」。
 //
-// 注: 現行の Ruby 版 test-all は「例外が出なかった」ケースを失敗にしていないが、
-// 全断片がエラーになることを確認済みのため、Go 版では厳格化して
-// 「コンパイルが通ってしまったら失敗」とする。
+// errors.fc は `//@<正規表現>` で始まる断片の並びで、各断片がその正規表現に一致する
+// エラーを出すこと (コンパイルが通ってしまったら失敗) を確認する。
+// エラーの期待位置は断片内のエラー行の末尾に `//!` マーカーを置いて示す
+// (列も見るなら `//! col=N`)。マーカーのない断片は「断片内を指していること」だけ検査する。
 
 import (
 	"github.com/haramako/fc/internal/diag"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -60,12 +60,17 @@ func TestErrorsFC(t *testing.T) {
 			if !re.MatchString(berr.Error()) {
 				t.Errorf("断片 %d: エラーメッセージ不一致\n expected: /%s/\n got: %s", i, expectedErr, berr.Error())
 			}
-			// CompileError は断片内 (errorsCommon より前) の位置を指していること。
+			// CompileError は断片内 (errorsCommon より前) の位置、マーカーがあればその行 (と列) を指していること。
 			// 外部コマンド (ca65) のエラーは CommandError で位置を持たない
 			if ce, ok := berr.(*diag.Error); ok {
 				fragLines := strings.Count(src, "\n") + 1
 				if !ce.Pos.IsValid() || ce.Pos.Line > fragLines || !strings.HasSuffix(ce.Pos.Filename, "fail_test.fc") {
 					t.Errorf("断片 %d: 位置が不正 %s (断片は %d 行)", i, ce.Pos, fragLines)
+				}
+				if line, col, ok := errorMarker(src); ok {
+					if ce.Pos.Line != line || (col > 0 && ce.Pos.Col != col) {
+						t.Errorf("断片 %d: 位置不一致\n expected: line %d col %d (//! マーカー)\n got: line %d col %d", i, line, col, ce.Pos.Line, ce.Pos.Col)
+					}
 				}
 			} else if _, ok := berr.(*CommandError); !ok {
 				t.Errorf("断片 %d: エラー型が不正 %T", i, berr)
@@ -74,7 +79,7 @@ func TestErrorsFC(t *testing.T) {
 	}
 }
 
-// TestLlcErrorPosition: コード生成時のエラーは関数の宣言位置を指す。
+// TestLlcErrorPosition: コード生成時のエラーは生成元の式の位置を指す (位置を持たない命令では関数の宣言位置)。
 func TestLlcErrorPosition(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.fc")
@@ -88,7 +93,23 @@ func TestLlcErrorPosition(t *testing.T) {
 	if !ok {
 		t.Fatalf("CompileError であるべき: %v", err)
 	}
-	if !strings.Contains(ce.Msg, "div by 0") || ce.Pos.Line != 3 || ce.Pos.Col != 1 {
+	// LLC で検出されるエラーは、生成元の式 (`x / 0`) の位置を指す (ir.Op.Pos)
+	if !strings.Contains(ce.Msg, "div by 0") || ce.Pos.Line != 5 || ce.Pos.Col != 7 {
 		t.Errorf("got %+v", ce)
 	}
+}
+
+var errorMarkerRe = regexp.MustCompile(`//!(?:\s*col=(\d+))?`)
+
+// errorMarker は断片内の `//!` マーカーの行 (1 始まり) と列 (指定がなければ 0) を返す。
+func errorMarker(src string) (line, col int, ok bool) {
+	for i, l := range strings.Split(src, "\n") {
+		if m := errorMarkerRe.FindStringSubmatch(l); m != nil {
+			if m[1] != "" {
+				col, _ = strconv.Atoi(m[1])
+			}
+			return i + 1, col, true
+		}
+	}
+	return 0, 0, false
 }

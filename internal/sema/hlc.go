@@ -1136,6 +1136,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 }
 
 func (h *Hlc) emit(op *ir.Op) {
+	op.Pos = h.curPos
 	h.lmd.Ops = append(h.lmd.Ops, op)
 }
 

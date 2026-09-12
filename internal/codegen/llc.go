@@ -20,6 +20,7 @@ type Llc struct {
 	labelCount    int
 	codeSegment   string
 	curLambda     *ir.Lambda // 処理中の関数 (エラー位置の補完用)
+	curOp         *ir.Op     // 処理中の命令 (エラー位置の補完用)
 	zero          *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
 }
 
@@ -70,6 +71,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*diag.Error); ok {
+				if !ce.Pos.IsValid() && l.curOp != nil && l.curOp.Pos.IsValid() {
+					ce.Pos = l.curOp.Pos
+				}
 				if !ce.Pos.IsValid() && l.curLambda != nil {
 					ce.Pos = l.curLambda.Pos
 				}
@@ -82,6 +86,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	l.labelCount = 0
 	l.codeSegment = mod.Id
 	l.curLambda = nil
+	l.curOp = nil
 
 	inc := &asmLines{}
 	asm := &asmLines{}
@@ -169,6 +174,7 @@ func anyList(ss []string) []any {
 // CompileLambda は関数1つ分のアセンブリを生成する。
 func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
+	l.curOp = nil
 	l.allocRegister(lmd)
 	ops := lmd.Ops
 	if l.OptimizeLevel > 0 {
@@ -196,6 +202,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		if op == nil {
 			continue
 		}
+		l.curOp = op
 		// IRコメント (golden比較では除去されるため、Go版独自の形式でよい)
 		cm := ir.DumpOp(op, nil)
 		if len(cm) > 120 {
@@ -1127,7 +1134,7 @@ func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
 				ir.ValKind(arr) == ir.KindGlobal && // 単純なシンボルで
 				ir.ValLocalType(op.Dst) == ir.LTTemp && // その変数をそこでしか使っていない
 				ir.ValType(idx).Size == 1 { // インデックスのサイズが1byte
-				ops[i] = &ir.Op{Code: ir.OpIndexPget, Dst: nextOp.Dst, Src: []ir.Operand{arr, idx}}
+				ops[i] = &ir.Op{Code: ir.OpIndexPget, Dst: nextOp.Dst, Src: []ir.Operand{arr, idx}, Pos: nextOp.Pos}
 				ops[i+1] = nil
 			}
 		case ir.OpPset:
@@ -1135,7 +1142,7 @@ func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
 				ir.ValKind(arr) == ir.KindGlobal &&
 				ir.ValLocalType(op.Dst) == ir.LTTemp &&
 				ir.ValType(idx).Size == 1 {
-				ops[i] = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, nextOp.Src[1]}}
+				ops[i] = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, nextOp.Src[1]}, Pos: nextOp.Pos}
 				ops[i+1] = nil
 			}
 		}

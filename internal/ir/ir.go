@@ -10,6 +10,7 @@ package ir
 import (
 	"fmt"
 
+	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
 
@@ -86,11 +87,12 @@ func (*PointeredArray) operandNode() {}
 // Op は IR の 1 命令。使うフィールドは OpCode ごとに決まっている (OpCode 定義のコメント参照)。
 type Op struct {
 	Code  OpCode
-	Dst   Operand     // 結果の格納先 (無い命令、または削除された戻り値では nil)
-	Src   []Operand   // 入力
-	Label string      // OpLabel / OpIf / OpJump の飛び先
-	Type  *types.Type // OpPushResult / OpPushArg / OpPushFastcall* の型
-	Text  string      // OpAsm のアセンブラ行
+	Dst   Operand         // 結果の格納先 (無い命令、または削除された戻り値では nil)
+	Src   []Operand       // 入力
+	Label string          // OpLabel / OpIf / OpJump の飛び先
+	Type  *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
+	Text  string          // OpAsm のアセンブラ行
+	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
 }
 
 // In は i 番目の入力 (無ければ nil)。
