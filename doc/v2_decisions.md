@@ -245,3 +245,46 @@ D は A の補助として `--syntax` を用意してもよい（宣言なしフ
 - `parser.y:85-86` の `id_list: tID` は到達不能な規則（racc 版の未定義非終端子の再現）。v2 文法では削除する
 - `doc/language_reference.md` の `use print from stdio;` は実装に存在しない。§2 の決定に合わせて書き直す
 - `fclib/stdmacro.rb` の `times` は展開結果が `compile_statement` で解釈できず、どこからも使われていない。削除候補
+
+---
+
+## 6. ドット参照の可視性・デフォルト可視性・マイグレーションの前提
+
+### 事実（2026-09-12 に計測: `mod.name` で private に届いている参照を sema に一時フックを入れて数えた）
+
+- 現行仕様: 宣言のデフォルトは **public**（`Module.CurrentPublic` の初期値 `true`、歴史的理由）。
+  `private:` / `public:` ラベルで以降のデフォルトを切り替える（sema のコメントに「そのうち消す」とある暫定機能）。
+  `private` の効果は「`use * from` の取り込み対象から外す」だけで、**`mod.name` のドット参照は private にも届く**
+- ドット参照で private に届いている箇所: **castle 38 箇所・28 シンボル・7 モジュール**
+  （menu 2 / game 6 / bg 2 / event 14 / sound 2 / my 1 / event2 1。参照側は event.fc 10、en7 5、debug_menu 4、en2 4、…）。
+  **miku 0、fclib 0、test 0**。すべて参照先モジュールが直接宣言したもので、glob 再輸出経由（S6）は 0 件
+- `stdio.init` はコンパイラ内部のマクロ `unittest_run_tests` が `ModuleInterface.Lookup` で直接参照しているだけで、
+  利用者コードからのドット参照はない（v2 では `public` にするか、組み込み化（§3）の際に解消）
+
+### 決定（2026-09-12）
+
+1. **ドット参照は public のみ**（規則 S1〜S6 に S7 として追加: `mod.name` は `mod` の public 宣言だけを見る）
+2. **宣言のデフォルトは private**。`public:` / `private:` ラベルは v2 文法から削除し、宣言ごとの `public` キーワードに統一する
+3. **マイグレーションの元は「現時点の v1 ソース」**。public/private の付け直しも含めて `fcc migrate` が行い、
+   移行のために v1 ソースを手で直すことは前提にしない。したがって:
+   - v1 モードの sema は移行期間中ずっと「デフォルト public・ラベル有効・ドットは private に届く」を保つ
+   - 可視性規則は**宣言側モジュールの文法バージョン**で決まる（v1 モジュールは default public / ドット private 可、
+     v2 モジュールは default private / ドット public のみ）。これで v1・v2 混在プログラムが動き、
+     モジュール単位の段階的移行ができる
+
+### `fcc migrate` の可視性の扱い（設計）
+
+`fcc migrate main.fc` はプログラム全体（main + `use` で届く全モジュール）を v1 sema で解決し、各宣言について
+「他モジュールから参照されているか」を集める。参照の種類は (a) `mod.name` のドット参照、(b) `use * from mod` 経由の
+非修飾参照、(c) モジュール束縛の glob 再輸出（`use X;` を glob で配っている → `public use X;`、S6）。
+
+- `--visibility=minimal`（既定案）: **他モジュールから参照されている宣言だけに `public`** を付ける。
+  未参照で v1 では public だったものは private に落ちる。参照されていないので挙動は変わらず、v2 らしい最小インターフェースになる。
+  ドットで private に届いていた 28 シンボルは (a) で拾われて `public` になる
+- `--visibility=preserve`: v1 の実効可視性（ラベルとデフォルト public）をそのまま `public` キーワードに写し、
+  さらに (a) の 28 シンボルに `public` を足す。結果はほぼ全部 `public` になるが、インターフェースは v1 と同じ
+- **fclib はライブラリ**なので利用側プログラム 1 つの参照では public 集合が決まらない。fclib は preserve で移行するか、
+  `fcc migrate --lib fclib/ main1.fc main2.fc ...` のように複数プログラムの和集合を取る。v1 で `private:` 配下だった
+  fclib の宣言（`stdio.init` など）は、それを参照する利用者がいなければ private のまま
+- 検証: 移行前後で asm が一致すること（可視性は名前解決にしか影響しないので、参照が全部通れば asm は同一になる）。
+  castle / miku / test 全体でこれを回す

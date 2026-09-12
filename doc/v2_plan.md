@@ -694,10 +694,11 @@ cmd/fcc            CLI のみ
       `options(version:2);` 案は「レキサレベルの文法はパース開始前に確定している必要がある」ため不採用。
       補助として CLI `--syntax` フラグ可。`options` の表記変更（`@` 等）は文法 v2 設計で別途。
       詳細は [v2_decisions.md](v2_decisions.md) §4
-- [ ] **ドット参照の可視性**（R3-b で判明）: 現行は `mod.name` が private にも届き、`private` は `use * from` の
-      取り込み対象から外す効果しかない。castle が `stdio.init()`（nes/stdio.fc では非 public）等で依存。
-      v2 の名前解決規則 S1〜S6（v2_decisions.md §1.1）に「ドット参照は public のみ」を入れるかはマイグレーション
-      コスト（castle で private → public に変える箇所数）を数えてから決める
+- [x] **ドット参照の可視性**（R3-b で判明）→ **決定 2026-09-12: ドット参照は public のみ（S7）、宣言のデフォルトは
+      private、`public:`/`private:` ラベルは v2 文法から削除**。計測では castle で private にドットが届いている箇所は
+      38 箇所・28 シンボル（miku/fclib/test は 0）。**マイグレーションの元は現時点の v1 ソース**で、public/private の
+      付け直しも `fcc migrate` が行う（v1 ソースの手直しは前提にしない）。可視性規則は宣言側モジュールの文法
+      バージョンで決まり、v1/v2 混在を許す。詳細は [v2_decisions.md](v2_decisions.md) §6
 - [ ] `test/errors.fc` の期待行番号の記法（R2）: ヘッダ行 `//@<regex>` は Ruby の test-all と共有なので `@N` を足せない。
       現状は Go 側で「断片内を指す」ことだけ検査。厳密な期待位置を書くなら Ruby 凍結を前提に記法を変えるか、Go 側に表を持つ
 - （実装中に追記）
