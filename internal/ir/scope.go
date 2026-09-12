@@ -11,9 +11,9 @@ import (
 type Scope struct {
 	Parent   *Scope
 	declares map[string]*Value
-	order    []string // 宣言順 (IdList の列挙順が出力に影響するため保つ)
-	uses     []*Scope
-	finding  bool // useの相互参照による無限再帰の防止フラグ
+	order    []string           // 宣言順 (IdList の列挙順が出力に影響するため保つ)
+	uses     []*ModuleInterface // `use * from mod;` で取り込んだモジュール (public のみ見える)
+	finding  bool               // useの相互参照による無限再帰の防止フラグ
 }
 
 func NewScope(parent *Scope) *Scope {
@@ -33,8 +33,8 @@ func (s *Scope) Find(id string, withPrivate bool) *Value {
 			return val
 		}
 	}
-	for _, sc := range s.uses {
-		if v := sc.Find(id, false); v != nil {
+	for _, mi := range s.uses {
+		if v := mi.LookupPublic(id); v != nil {
 			return v
 		}
 	}
@@ -61,9 +61,9 @@ func (s *Scope) Declare(val *Value) {
 	s.order = append(s.order, val.Name)
 }
 
-// Use は scope の public な宣言をこのスコープから見えるようにする (`use * from mod;`)。
-func (s *Scope) Use(scope *Scope) {
-	s.uses = append(s.uses, scope)
+// Use はモジュールの public な宣言をこのスコープから見えるようにする (`use * from mod;`)。
+func (s *Scope) Use(mi *ModuleInterface) {
+	s.uses = append(s.uses, mi)
 }
 
 // IdList はスコープから見えるIDの列挙 (自スコープの宣言順 → use 先 → 親)。
@@ -75,8 +75,8 @@ func (s *Scope) IdList() []string {
 	defer func() { s.finding = false }()
 	var r []string
 	r = append(r, s.order...)
-	for _, sc := range s.uses {
-		r = append(r, sc.IdList()...)
+	for _, mi := range s.uses {
+		r = append(r, mi.scope.IdList()...)
 	}
 	if s.Parent != nil {
 		r = append(r, s.Parent.IdList()...)

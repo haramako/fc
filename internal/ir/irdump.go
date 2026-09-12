@@ -247,8 +247,8 @@ func DumpProgram(opts Options, mods []*Module) string {
 		r = append(r, fmt.Sprintf(" (options %s)", dumpOptions(mod.Options)))
 		r = append(r, fmt.Sprintf(" (include_asms (%s))", joinEsc(mod.IncludeAsms)))
 		r = append(r, fmt.Sprintf(" (include_chrs (%s))", joinEsc(mod.IncludeChrs)))
-		keys := make([]string, 0, len(mod.Modules.List()))
-		for _, m := range mod.Modules.List() {
+		keys := make([]string, 0, len(mod.Uses))
+		for _, m := range mod.Uses {
 			keys = append(keys, m.Id)
 		}
 		r = append(r, fmt.Sprintf(" (modules (%s))", strings.Join(keys, " ")))

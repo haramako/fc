@@ -48,7 +48,7 @@ type Value struct {
 	Int    int
 	Symbol string
 	Elems  []Operand
-	Module *Module // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
+	Module *ModuleInterface // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
@@ -97,7 +97,7 @@ func NewGlobal(name string, typ *types.Type, symbol string) *Value {
 }
 
 // NewModuleValue はモジュール束縛 (`use mod;`)。
-func NewModuleValue(name string, typ *types.Type, m *Module) *Value {
+func NewModuleValue(name string, typ *types.Type, m *ModuleInterface) *Value {
 	v := newValue(KindGlobal, name, typ)
 	v.Module = m
 	return v

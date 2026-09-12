@@ -93,14 +93,14 @@ func compareGoldenBytes(t *testing.T, rel string, got []byte) {
 }
 
 // compileForGolden は test/ ディレクトリで指定テストをHLCコンパイルする。
-func compileForGolden(t *testing.T, srcName, target string) *sema.Hlc {
+func compileForGolden(t *testing.T, srcName, target string) *sema.Program {
 	t.Helper()
 	t.Chdir(filepath.Join(absRepoRoot, "test"))
-	hlc := sema.NewHlc([]string{".", "../fclib", "../fclib/" + target})
-	if err := hlc.Compile(srcName + ".fc"); err != nil {
+	prog, err := sema.Compile([]string{".", "../fclib", "../fclib/" + target}, srcName+".fc")
+	if err != nil {
 		t.Fatalf("コンパイル失敗: %v", err)
 	}
-	return hlc
+	return prog
 }
 
 // goldenKey は golden のキー名 (test_basic / test_basic_nes) からソース名とターゲットを得る。
@@ -153,7 +153,7 @@ func TestGoldenIR(t *testing.T) {
 
 // allocLambdas は LLC と同じ順序 (モジュール順 × defs内のcode順、extern除外) で
 // 割付+delete_unuse を実行し、ダンプを返す。
-func allocLambdas(hlc *sema.Hlc) string {
+func allocLambdas(hlc *sema.Program) string {
 	var b strings.Builder
 	for _, mod := range hlc.Modules.List() {
 		for _, d := range mod.Defs {
@@ -212,7 +212,7 @@ func TestGoldenAsm(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
-			llc := codegen.NewLlc(2, hlc.Types())
+			llc := codegen.NewLlc(2, hlc.Types)
 			for _, mod := range hlc.Modules.List() {
 				asm, inc, err := llc.Compile(mod)
 				if err != nil {

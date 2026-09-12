@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R3 進行中（R3-a 完了）**
+最終更新: 2026-09-12 / 状態: **R3 進行中（R3-a,b 完了）**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
 | R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | ✅ 2026-09-12 |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ✅ 2026-09-12 |
-| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | 🔄 a ✅ |
+| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | 🔄 a,b ✅ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R3-b（モジュール単位の sema、§6.2）。
+**次にやること**: R3-c（採番の決定性、§6.3）。2 コミット手順を厳守。
 
 ---
 
@@ -579,17 +579,30 @@ cmd/fcc            CLI のみ
   - `cmd/fcc` と `internal/nes` は `driver` を使う。`internal/fc` は消滅
   - 全 golden 差分ゼロ（移動のみ。`gofmt -w` による整形差分が `r6502.go`/`types.go` に入った）
 
-### 6.2 R3-b モジュール単位の sema（C4）（0.5〜1 日）
+### 6.2 R3-b モジュール単位の sema（C4）（0.5〜1 日）✅ 2026-09-12
 
-- [ ] `ir.ModuleInterface{ Id; Path; Options; Exports []*Value(public) ; Types…}`: importer が見てよいものだけ
-- [ ] `sema.CompileModule(file *syntax.File, deps Resolver) (*ir.Module, error)` を導入。`Resolver` は
+- [x] `ir.ModuleInterface{ Id; Path; Options; Exports []*Value(public) ; Types…}`: importer が見てよいものだけ
+- [x] `sema.CompileModule(file *syntax.File, deps Resolver) (*ir.Module, error)` を導入。`Resolver` は
       `use`/`include` に対して依存モジュールを**宣言済み状態**で返す（現行の「`use` に出会ったら相手のトップレベルを
       即処理、本体は全モジュール登録後」という 2 相構造と解決順序は**そのまま維持**する。`test_cycle` が相互 use を
       テストしており、順序依存の部分可視性が現行仕様であるため）
-- [ ] `Scope.uses` が相手モジュールの `Scope` を直接持つ構造を、`ModuleInterface` 経由に変える
+- [x] `Scope.uses` が相手モジュールの `Scope` を直接持つ構造を、`ModuleInterface` 経由に変える
       （列挙順・可視性は現行と同一に）
-- [ ] 駆動側（driver）が依存グラフを持ち、`sema` はモジュール横断の状態（`Modules` OMap 相当）を持たない
+- [x] 駆動側（driver）が依存グラフを持ち、`sema` はモジュール横断の状態（`Modules` OMap 相当）を持たない
 - 合格: 全 golden 差分ゼロ（特に `test_cycle`、castle）。§7 に v2 の `use` 設計で見直すべき点を書き出す
+- 結果:
+  - `sema/program.go`: `Program`（プログラム横断の状態: `Types`/`Modules`/`Options`/組み込みマクロ/tmp 連番）、
+    `Resolver` インターフェース（`Module(name)`: use 先を相 1 まで進めて返す / `File(name)`: include・incbin のパス解決）、
+    `Program.CompileModule(file, deps)`（相 1: トップレベル）、`CompileBodies(mod, deps)`（相 2: 関数本体）、
+    `Loader`（libPath ベースの Resolver 標準実装。再帰的に use 先を読む）、`sema.Compile(libPath, main)`（全部）
+  - `Hlc` はモジュール単位のコンテキストになり（`prog`, `deps`, `module`, `scope`, …）、モジュール横断の状態を持たない。
+    回復点は `recoverTo`（CompileModule / CompileBodies の両方）
+  - `ir.ModuleInterface{Id; Lookup; LookupPublic; Exports}`: importer が `use` 先に触れる唯一の窓口。
+    `Value.Module`、`Scope.uses`、`Module.Uses`（旧 `Modules *ModuleList`）はすべてこれ経由
+  - **判明した現行仕様**: `mod.name` のドット参照は **private な宣言にも届く**（旧 `Scope.FindMust(name, true)`）。
+    `use * from` だけが public に限定される。castle の `stdio.init()` 等がこれに依存しているので維持した
+    （`Lookup` = private 含む / `LookupPublic` = public のみ）。v2 の名前解決規則（v2_decisions.md §1.1）で見直す → §7
+  - 解決順序は現行のまま（`use` 到達時に相 1 を再帰、相互 use は途中状態を返す）。全 golden 差分ゼロ
 
 ### 6.3 R3-c 採番の決定性（C5）（0.5 日）— G2 の例外 (b)
 
@@ -654,6 +667,10 @@ cmd/fcc            CLI のみ
       `options(version:2);` 案は「レキサレベルの文法はパース開始前に確定している必要がある」ため不採用。
       補助として CLI `--syntax` フラグ可。`options` の表記変更（`@` 等）は文法 v2 設計で別途。
       詳細は [v2_decisions.md](v2_decisions.md) §4
+- [ ] **ドット参照の可視性**（R3-b で判明）: 現行は `mod.name` が private にも届き、`private` は `use * from` の
+      取り込み対象から外す効果しかない。castle が `stdio.init()`（nes/stdio.fc では非 public）等で依存。
+      v2 の名前解決規則 S1〜S6（v2_decisions.md §1.1）に「ドット参照は public のみ」を入れるかはマイグレーション
+      コスト（castle で private → public に変える箇所数）を数えてから決める
 - [ ] `test/errors.fc` の期待行番号の記法（R2）: ヘッダ行 `//@<regex>` は Ruby の test-all と共有なので `@N` を足せない。
       現状は Go 側で「断片内を指す」ことだけ検査。厳密な期待位置を書くなら Ruby 凍結を前提に記法を変えるか、Go 側に表を持つ
 - （実装中に追記）

@@ -26,11 +26,11 @@ func compileSrc(t *testing.T, src string) (string, error) {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
-	hlc := NewHlc([]string{".", filepath.ToSlash(filepath.Join(repoRoot, "fclib")), filepath.ToSlash(filepath.Join(repoRoot, "fclib", "emu"))})
-	if err := hlc.Compile("t.fc"); err != nil {
+	prog, err := Compile([]string{".", filepath.ToSlash(filepath.Join(repoRoot, "fclib")), filepath.ToSlash(filepath.Join(repoRoot, "fclib", "emu"))}, "t.fc")
+	if err != nil {
 		return "", err
 	}
-	return ir.DumpProgram(hlc.Options, hlc.Modules.List()), nil
+	return ir.DumpProgram(prog.Options, prog.Modules.List()), nil
 }
 
 func mustCompileSrc(t *testing.T, src string) string {

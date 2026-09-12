@@ -33,7 +33,7 @@ func registerStdmacro(h *Hlc) {
 
 // fclib/stdio.rb
 func registerStdio(h *Hlc) {
-	uint8p := h.types.PointerTo(h.types.IntType(1, false))
+	uint8p := h.prog.Types.PointerTo(h.prog.Types.IntType(1, false))
 	print := h.scope.Find("print", true)
 	printInt16 := h.scope.Find("print_int16", true)
 
@@ -42,7 +42,7 @@ func registerStdio(h *Hlc) {
 		for _, arg := range args {
 			// 旧実装は引数が定数値でないと ValType が落ちていた。同じく定数値を要求する
 			typ := mustValue(arg).Type
-			if h.types.Compatible(uint8p, typ) != nil {
+			if h.prog.Types.Compatible(uint8p, typ) != nil {
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
 			} else if typ.Kind == types.Int {
 				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
@@ -114,9 +114,9 @@ func registerUnittest(h *Hlc) {
 	if stdioMod == nil {
 		panic(&diag.Error{Msg: "stdio is not a module"})
 	}
-	print := stdioMod.Scope.Find("print", true)
-	exit := stdioMod.Scope.Find("exit", true)
-	init := stdioMod.Scope.Find("init", true)
+	print := stdioMod.Lookup("print")
+	exit := stdioMod.Lookup("exit")
+	init := stdioMod.Lookup("init")
 
 	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}

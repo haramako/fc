@@ -94,7 +94,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 
 	asm.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment)) // dummy
 
-	for _, m := range mod.Modules.List() {
+	for _, m := range mod.Uses {
 		inc.push(fmt.Sprintf("\t.include \"_%s.inc\"", m.Id))
 		asm.push(fmt.Sprintf("\t.include \"_%s.inc\"", m.Id))
 	}

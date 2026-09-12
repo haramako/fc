@@ -63,12 +63,12 @@ func BenchmarkCastleFrontend(b *testing.B) {
 		filepath.ToSlash(filepath.Join(absRepoRoot, "fclib", "nes"))}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		hlc := sema.NewHlc(libPath)
-		if err := hlc.Compile("main.fc"); err != nil {
+		prog, err := sema.Compile(libPath, "main.fc")
+		if err != nil {
 			b.Fatalf("コンパイル失敗: %v", err)
 		}
-		llc := codegen.NewLlc(2, hlc.Types())
-		for _, mod := range hlc.Modules.List() {
+		llc := codegen.NewLlc(2, prog.Types)
+		for _, mod := range prog.Modules.List() {
 			if _, _, err := llc.Compile(mod); err != nil {
 				b.Fatal(err)
 			}

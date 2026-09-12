@@ -2,16 +2,14 @@ package sema
 
 // HLC: 構文木 (internal/syntax) → 中間コード (ir.Lambda.Ops)。lib/fc/hlc.rb 由来。
 //
-// R1-c (doc/v2_plan.md §4.4) で入力を型付き構文木にし、定数評価を純関数化した
-// (構文木は変異しない。評価結果は cexpr に持つ)。tmp_count の採番順・エラーメッセージ文言は
-// 旧実装と同一で、生成される IR はバイト単位で一致する。
-// IR は ir.go の ir.Op (opcode enum + Dst/Src/Label/Type/Text)。
+// 入力は型付き構文木で、定数評価は純関数 (構文木は変異しない。評価結果は cexpr に持つ)。
+// tmp_count の採番順・エラーメッセージ文言は旧実装と同一で、生成される IR はバイト単位で一致する。
+// プログラム横断の状態と 2 相コンパイルの駆動は program.go。
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"bytes"
 	"github.com/haramako/fc/internal/diag"
@@ -20,15 +18,12 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
+// Hlc はモジュール単位の意味解析コンテキスト (HLC = High Level Compiler、lib/fc/hlc.rb 由来の名)。
+// プログラム横断の状態は prog に、依存モジュールの解決は deps に委ねる。
 type Hlc struct {
-	Modules *ir.ModuleList // 登録順 (use に出会った深さ優先順)。リンク順にもなる
-	Options ir.Options     // グローバルな options (mapper, bank_count, ...)。モジュール処理順の後勝ち
+	prog *Program
+	deps Resolver
 
-	LibPath []string // Fc::LIB_PATH 相当
-
-	types       *types.Universe
-	curTmpCount int
-	globalScope *ir.Scope
 	scope       *ir.Scope
 	loops       [][]string // [ [continueラベル, breakラベル], ... ]
 	fastCalling bool
@@ -36,8 +31,6 @@ type Hlc struct {
 	module *ir.Module
 	lmd    *ir.Lambda
 	curPos syntax.Position // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
-
-	macros map[*ir.Value]MacroFn // マクロ値 → 本体
 
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
@@ -53,61 +46,6 @@ type MacroFn func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult
 type macroResult struct {
 	expr  *cexpr
 	stmts []*cexpr
-}
-
-func NewHlc(libPath []string) *Hlc {
-	h := &Hlc{
-		Modules: ir.NewModuleList(),
-		LibPath: libPath,
-		types:   types.NewUniverse(),
-		macros:  map[*ir.Value]MacroFn{},
-	}
-	h.globalScope = ir.NewScope(nil)
-	h.scope = h.globalScope
-
-	h.defmacro("asm", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		for _, line := range args {
-			h.emit(&ir.Op{Code: ir.OpAsm, Text: mustString(line)})
-		}
-		return macroResult{}
-	})
-	return h
-}
-
-// Types は型のインターン表。
-func (h *Hlc) Types() *types.Universe { return h.types }
-
-// Compile は Hlc#compile 相当。CompileError には filename/line_no を付与する。
-func (h *Hlc) Compile(filename string) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if ce, ok := r.(*diag.Error); ok {
-				if !ce.Pos.IsValid() {
-					ce.Pos = h.curPos
-				}
-				err = ce
-				return
-			}
-			panic(r)
-		}
-	}()
-
-	h.compileModule(filename)
-
-	// 関数はあとからコンパイル
-	for _, mod := range h.Modules.List() {
-		if mod.FromFcm {
-			continue
-		}
-		h.module = mod
-		h.attachScope(mod.Scope, func() {
-			// コンパイル中にネストしたlambdaが追加されることがあるため index ループ
-			for i := 0; i < len(mod.Lambdas); i++ {
-				h.compileLambda(mod.Lambdas[i])
-			}
-		})
-	}
-	return nil
 }
 
 // ---------------------------------------------------------------
@@ -145,8 +83,8 @@ func (h *Hlc) enterExpr(pos syntax.Pos) func() {
 }
 
 func (h *Hlc) tmpCount() int {
-	h.curTmpCount++
-	return h.curTmpCount
+	h.prog.tmpCount++
+	return h.prog.tmpCount
 }
 
 func (h *Hlc) tmpName(prefix string) string {
@@ -154,9 +92,9 @@ func (h *Hlc) tmpName(prefix string) string {
 }
 
 func (h *Hlc) defmacro(name string, fn MacroFn) *ir.Value {
-	v := h.addVar(ir.NewGlobal(name, h.types.Macro(), ""))
+	v := h.addVar(ir.NewGlobal(name, h.prog.Types.Macro(), ""))
 	v.Public = true
-	h.macros[v] = fn
+	h.prog.macros[v] = fn
 	return v
 }
 
@@ -218,25 +156,6 @@ func (h *Hlc) attachScope(newScope *ir.Scope, f func()) {
 	h.scope = old
 }
 
-// findModule は Fc.find_module 相当。
-func (h *Hlc) findModule(file string) string {
-	for _, p := range h.LibPath {
-		cand := joinRubyPath(p, file)
-		if _, err := os.Stat(cand); err == nil {
-			return cand
-		}
-	}
-	panic(&diag.Error{Msg: fmt.Sprintf("file %s not found", file)})
-}
-
-// joinRubyPath は Ruby の Pathname#+ 相当 ('.' + f は f になる)。
-func joinRubyPath(p, f string) string {
-	if p == "." {
-		return f
-	}
-	return p + "/" + f
-}
-
 // mustValue は評価済みの値であることを要求する (マクロ引数など)。
 func mustValue(c *cexpr) *ir.Value {
 	if c.kind != cValue {
@@ -256,7 +175,7 @@ func mustString(c *cexpr) string {
 
 // compatible は互換型を返す (なければ CompileError)。
 func (h *Hlc) compatible(a, b *types.Type) *types.Type {
-	r := h.types.Compatible(a, b)
+	r := h.prog.Types.Compatible(a, b)
 	if r == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("not compatible type '%s' and '%s'", a, b)})
 	}
@@ -272,36 +191,26 @@ func (h *Hlc) guessType(typ *types.Type, val ir.Operand) *types.Type {
 }
 
 // ---------------------------------------------------------------
-// モジュールのコンパイル
+// 依存モジュール
 // ---------------------------------------------------------------
 
-func (h *Hlc) compileModule(filename string) *ir.Module {
-	path := h.findModule(filename)
-	id := strings.TrimSuffix(filepath.Base(filename), ".fc")
-	if m, ok := h.Modules.Get(id); ok {
-		return m
-	}
-
-	oldModule := h.module
-	h.module = ir.NewModule(id, path, h.globalScope)
-	h.Modules.Add(h.module)
-	src, err := ReadSource(path)
+// useModule は `use name` の先の外面を Resolver から得る (相 1 まで処理済み)。
+// importer が触れるのは ModuleInterface だけ (C4)。
+func (h *Hlc) useModule(name string) *ir.ModuleInterface {
+	m, err := h.deps.Module(name)
 	if err != nil {
-		panic(&diag.Error{Msg: err.Error()})
+		panic(err)
 	}
-	file, perr := syntax.Parse(src, path)
-	if perr != nil {
-		se := perr.(*syntax.Error)
-		panic(&diag.Error{Msg: se.Msg, Pos: se.Position()})
+	return m.Interface()
+}
+
+// resolveFile は include / incbin のファイル名を実パスにする。
+func (h *Hlc) resolveFile(name string) string {
+	path, err := h.deps.File(name)
+	if err != nil {
+		panic(err)
 	}
-
-	h.attachScope(h.module.Scope, func() {
-		h.compileStmts(file.Stmts)
-	})
-
-	newModule := h.module
-	h.module = oldModule
-	return newModule
+	return path
 }
 
 // ---------------------------------------------------------------
@@ -400,7 +309,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		}
 		for _, r := range raws {
 			val := optionValueOf(mustValue(h.constEval(toC(r.val))))
-			h.Options.Set(r.key, val)
+			h.prog.Options.Set(r.key, val)
 			h.module.Options.Set(r.key, val)
 		}
 
@@ -426,14 +335,14 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		case "asm":
 			h.module.IncludeAsms = append(h.module.IncludeAsms, filename)
 		case "macro":
-			path := h.findModule(filename)
+			path := h.resolveFile(filename)
 			reg, ok := macroFiles[filename]
 			if !ok {
 				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", path)})
 			}
 			reg(h)
 		case "chr":
-			h.module.IncludeChrs = append(h.module.IncludeChrs, h.findModule(filename))
+			h.module.IncludeChrs = append(h.module.IncludeChrs, h.resolveFile(filename))
 		default:
 			panic(&diag.Error{Msg: fmt.Sprintf("invalid keyword %s", kind)})
 		}
@@ -442,15 +351,15 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.UseDecl:
 		h.mustInModule()
 		id := s.Module.Name
-		m := h.compileModule(id + ".fc")
-		h.module.Modules.Add(m)
+		m := h.useModule(id)
+		h.module.AddUse(m)
 		if s.FromAll {
-			h.scope.Use(m.Scope)
+			h.scope.Use(m)
 		} else {
 			if s.As != nil {
 				id = s.As.Name
 			}
-			v := h.addVar(ir.NewModuleValue(id, h.types.Module(), m))
+			v := h.addVar(ir.NewModuleValue(id, h.prog.Types.Module(), m))
 			v.Public = true
 		}
 
@@ -556,7 +465,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.SwitchStmt:
 		// TODO: jumptableを使った実装をいれる
 		cond := h.rval(toC(s.Tag))
-		tmp := h.newTmp(h.types.IntType(1, false))
+		tmp := h.newTmp(h.prog.Types.IntType(1, false))
 		endLabel := h.newLabel("end")
 		for _, c := range s.Cases {
 			labels := h.newLabels("then", "else")
@@ -752,10 +661,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				typ = h.compatible(typ, ir.ValType(v))
 			}
 		}
-		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.types.ArrayOf(typ, len(vals)), vals))
+		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(typ, len(vals)), vals))
 
 	case cIncbin:
-		data, err := os.ReadFile(h.findModule(c.s))
+		data, err := os.ReadFile(h.resolveFile(c.s))
 		if err != nil {
 			panic(&diag.Error{Msg: err.Error()})
 		}
@@ -791,14 +700,14 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 
 	case cDot:
 		left := h.constEval(c.args[0])
-		var mod *ir.Module
+		var mod *ir.ModuleInterface
 		if left.kind == cValue {
 			mod = left.val.Module
 		}
 		if mod == nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module", c.args[0].name)})
 		}
-		return cv(mod.Scope.FindMust(c.name, true))
+		return cv(mod.LookupMust(c.name))
 
 	case cCast:
 		x := h.constEval(c.args[0])
@@ -856,13 +765,13 @@ func (h *Hlc) IntValue(n int) *ir.Value {
 	var t *types.Type
 	switch {
 	case n >= 256:
-		t = h.types.IntType(2, false)
+		t = h.prog.Types.IntType(2, false)
 	case n < -127:
-		t = h.types.IntType(2, true)
+		t = h.prog.Types.IntType(2, true)
 	case n < 0:
-		t = h.types.IntType(1, true)
+		t = h.prog.Types.IntType(1, true)
 	default:
-		t = h.types.IntType(1, false)
+		t = h.prog.Types.IntType(1, false)
 	}
 	return ir.NewIntLiteral("", t, n)
 }
@@ -874,7 +783,7 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 		argTypes[i] = p.Type
 	}
 	// 旧実装は truthy(opt[:fastcall]) で、値が何であれキーがあれば fastcall 扱い
-	typ := h.types.Func(argTypes, baseType, opts.Has("fastcall"))
+	typ := h.prog.Types.Func(argTypes, baseType, opts.Has("fastcall"))
 	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Extern: body == nil, Body: body}
 }
 
@@ -940,19 +849,19 @@ func foldIntOp(op cop, v1, v2 int) int {
 func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	switch t := t.(type) {
 	case *syntax.NamedType:
-		ty, ok := h.types.Named(t.Name.Name)
+		ty, ok := h.prog.Types.Named(t.Name.Name)
 		if !ok {
 			panic(&diag.Error{Msg: fmt.Sprintf("invalid basic type %s", t.Name.Name)})
 		}
 		return ty
 	case *syntax.PointerType:
-		return h.types.PointerTo(h.typeOf(t.Elem))
+		return h.prog.Types.PointerTo(h.typeOf(t.Elem))
 	case *syntax.ArrayType:
 		n := -1
 		if lit, ok := t.Len.(*syntax.IntLit); ok {
 			n = lit.Value
 		}
-		return h.types.ArrayOf(h.typeOf(t.Elem), n)
+		return h.prog.Types.ArrayOf(h.typeOf(t.Elem), n)
 	case *syntax.FuncType:
 		params := make([]*types.Type, len(t.Params))
 		for i, p := range t.Params {
@@ -961,7 +870,7 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 			}
 			params[i] = h.typeOf(p.Type)
 		}
-		return h.types.Func(params, h.typeOf(t.Result), false)
+		return h.prog.Types.Func(params, h.typeOf(t.Result), false)
 	}
 	panic(fmt.Sprintf("typeOf: unknown type expression %T", t))
 }
@@ -984,7 +893,7 @@ func (h *Hlc) typeEval(t syntax.TypeExpr) *types.Type {
 				n = sv.val.Int
 			}
 		}
-		return h.types.ArrayOf(h.typeOf(at.Elem), n)
+		return h.prog.Types.ArrayOf(h.typeOf(at.Elem), n)
 	}
 	return h.typeOf(t)
 }
@@ -1075,7 +984,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
 			_, left, right = h.makeCompatible(left, right)
-			tmp := h.newTmp(h.types.IntType(1, false))
+			tmp := h.newTmp(h.prog.Types.IntType(1, false))
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 
@@ -1096,7 +1005,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 		case opLand:
 			endLabel := h.newLabel("end")
-			rr := h.newTmp(h.types.IntType(1, false))
+			rr := h.newTmp(h.prog.Types.IntType(1, false))
 			left := h.rval(e.args[0])
 			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{left}})
 			h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{rr}, Label: endLabel})
@@ -1107,8 +1016,8 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 		case opLor:
 			endLabel := h.newLabel("end")
-			rr := h.newTmp(h.types.IntType(1, false))
-			r2 := h.newTmp(h.types.IntType(1, false))
+			rr := h.newTmp(h.prog.Types.IntType(1, false))
+			r2 := h.newTmp(h.prog.Types.IntType(1, false))
 			left := h.rval(e.args[0])
 			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{left}})
 			h.emit(&ir.Op{Code: ir.OpNot, Dst: r2, Src: []ir.Operand{rr}})
@@ -1123,7 +1032,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			args := e.args[1:]
 			if ir.ValType(lmdV).Kind == types.Macro {
 				// マクロの実行
-				fn := h.macros[ir.ValLiteral(lmdV)]
+				fn := h.prog.macros[ir.ValLiteral(lmdV)]
 				x := fn(h, args, e.block)
 				if x.stmts != nil {
 					for _, st := range x.stmts {
@@ -1179,7 +1088,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				if !ir.ValAssignable(left) {
 					panic(&diag.Error{Msg: fmt.Sprintf("%s is not left value", ir.OperandString(left))})
 				}
-				tmp := h.newTmp(h.types.PointerTo(ir.ValType(left)))
+				tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left)))
 				h.emit(&ir.Op{Code: ir.OpRef, Dst: tmp, Src: []ir.Operand{left}})
 				r = tmp
 			}
@@ -1201,7 +1110,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if ir.ValType(right).Kind != types.Int {
 				panic(&diag.Error{Msg: "index must be int"})
 			}
-			tmp := h.newTmp(h.types.PointerTo(ir.ValType(left).Base))
+			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))
 			h.emit(&ir.Op{Code: ir.OpIndex, Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 			leftValue = true
@@ -1255,7 +1164,7 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
 		h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: newV, Src: []ir.Operand{v}})
 		return newV
 	} else if typ.Kind == types.Pointer && ir.ValType(v).Kind == types.Array && ir.ValType(v).Base == typ.Base {
-		return ir.NewPointeredArray(v, h.types.PointerTo(ir.ValType(v).Base))
+		return ir.NewPointeredArray(v, h.prog.Types.PointerTo(ir.ValType(v).Base))
 	}
 	return v
 }

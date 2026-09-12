@@ -47,7 +47,7 @@ type BuildOptions struct {
 type Compiler struct {
 	FCHome string // fclib/ share/ を含むディレクトリ
 	target string
-	hlc    *sema.Hlc
+	prog   *sema.Program
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -113,15 +113,15 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 	}
 
 	// compile (ソースコード -> 中間コード)
-	hlc := sema.NewHlc([]string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", opt.Target))})
-	if cerr := hlc.Compile(filename); cerr != nil {
+	prog, cerr := sema.Compile(c.libPath(opt.Target), filename)
+	if cerr != nil {
 		return 0, cerr
 	}
-	c.hlc = hlc
+	c.prog = prog
 
 	// compile2 (中間コード -> アセンブラファイル)
-	llc := codegen.NewLlc(opt.OptimizeLevel, hlc.Types())
-	for _, mod := range hlc.Modules.List() {
+	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
+	for _, mod := range prog.Modules.List() {
 		if mod.FromFcm {
 			continue
 		}
@@ -139,7 +139,7 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 
 	// assemble (アセンブラ -> オブジェクトファイル)
 	var objs []string
-	for _, mod := range hlc.Modules.List() {
+	for _, mod := range prog.Modules.List() {
 		objs = append(objs, filepath.Join(BuildPath, fmt.Sprintf("_%s.o", mod.Id)))
 		if mod.FromFcm {
 			continue
@@ -162,6 +162,11 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 	return 0, nil
 }
 
+// libPath は use / include の検索パス (カレント → fclib → fclib/<target>)。
+func (c *Compiler) libPath(target string) []string {
+	return []string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target))}
+}
+
 func (c *Compiler) makeRuntime(target string) {
 	c.ca65(c.findShare("runtime.asm"))
 	c.ca65(filepath.Join(c.FCHome, "fclib", target, "runtime_init.asm"))
@@ -169,7 +174,7 @@ func (c *Compiler) makeRuntime(target string) {
 
 // makeBase は base.asm.erb 相当の base.s を生成してアセンブルする。
 func (c *Compiler) makeBase() {
-	opts := c.hlc.Options
+	opts := c.prog.Options
 	inesmap := 0
 	if m, ok := opts.Get("mapper"); ok {
 		switch m.Kind {
@@ -208,7 +213,7 @@ type bankInfo struct {
 
 // link はオブジェクトファイルをリンクする。
 func (c *Compiler) link(objs []string, opt *BuildOptions) {
-	opts := c.hlc.Options
+	opts := c.prog.Options
 
 	ineschr := 1
 	if cb, ok := opts.Int("char_banks"); ok {
@@ -234,7 +239,7 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) {
 		bank int
 	}
 	var segs []segInfo
-	for _, m := range c.hlc.Modules.List() {
+	for _, m := range c.prog.Modules.List() {
 		bank := 0
 		if b, ok := m.Options.Int("bank"); ok {
 			bank = b

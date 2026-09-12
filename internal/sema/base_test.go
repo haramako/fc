@@ -1,15 +1,17 @@
 package sema
 
-// ir.Value / Scope の基本テスト (test/fc/test_base.rb 由来。型のテストは internal/types へ移動)。
+// Value / Scope の基本テスト (test/fc/test_base.rb 由来。型のテストは internal/types へ移動)。
 
 import (
-	"github.com/haramako/fc/internal/ir"
 	"testing"
+
+	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/types"
 )
 
 func TestIntValue(t *testing.T) {
-	// ir.Value.new_int の型推定 (Ruby: n<-127 は sint16 という境界も含めて)
-	h := NewHlc(nil)
+	// Value.new_int の型推定 (Ruby: n<-127 は sint16 という境界も含めて)
+	h := &Hlc{prog: NewProgram()}
 	cases := []struct {
 		n    int
 		want string
@@ -26,8 +28,7 @@ func TestIntValue(t *testing.T) {
 }
 
 func TestScope(t *testing.T) {
-	h := NewHlc(nil)
-	u8 := h.Types().IntType(1, false)
+	u8 := types.NewUniverse().IntType(1, false)
 	g := ir.NewScope(nil)
 	s := ir.NewScope(g)
 	v1 := ir.NewGlobal("a", u8, "_a")
@@ -47,13 +48,14 @@ func TestScope(t *testing.T) {
 	}
 
 	// use 経由は public のみ見える
-	other := ir.NewScope(nil)
+	otherMod := ir.NewModule("other", "other.fc", nil)
+	other := otherMod.Scope
 	pub := ir.NewGlobal("p", u8, "_p")
 	pub.Public = true
 	priv := ir.NewGlobal("q", u8, "_q")
 	other.Declare(pub)
 	other.Declare(priv)
-	s.Use(other)
+	s.Use(otherMod.Interface())
 	if s.Find("p", true) != pub {
 		t.Error("use経由のpublicが見えない")
 	}
@@ -62,7 +64,9 @@ func TestScope(t *testing.T) {
 	}
 
 	// 相互use しても無限再帰しない
-	other.Use(s)
+	selfMod := ir.NewModule("self", "self.fc", nil)
+	selfMod.Scope = s
+	other.Use(selfMod.Interface())
 	if s.Find("nothing", true) != nil {
 		t.Error("相互useで誤検出")
 	}

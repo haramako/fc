@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
@@ -101,7 +102,7 @@ type Module struct {
 	IncludeChrs    []string
 	IncludeAsms    []string
 	IncludeHeaders []string
-	Modules        *ModuleList // use したモジュール
+	Uses           []*ModuleInterface // use したモジュール (出現順、重複なし)
 	Scope          *Scope
 	CurrentPublic  bool // public: / private: ラベルの現在値
 	FromFcm        bool
@@ -113,10 +114,64 @@ func NewModule(id, path string, globalScope *Scope) *Module {
 	return &Module{
 		Id:            id,
 		Path:          path,
-		Modules:       NewModuleList(),
 		Scope:         NewScope(globalScope),
 		CurrentPublic: true,
 	}
+}
+
+// AddUse は use したモジュールを記録する (同じモジュールは 1 回だけ)。
+func (m *Module) AddUse(mi *ModuleInterface) {
+	for _, u := range m.Uses {
+		if u.Id == mi.Id {
+			return
+		}
+	}
+	m.Uses = append(m.Uses, mi)
+}
+
+// ModuleInterface は importer から見えるモジュールの外面 (doc/v2_plan.md C4)。
+// 宣言の検索と識別だけを提供し、Lambda 本体や IR には触れさせない。
+// F-mod (分割コンパイル) ではこれをシリアライズしたものが `use` の入力になる。
+//
+// 可視性は現行の言語仕様に従う: `use * from mod;` (LookupPublic) は public だけを取り込むが、
+// `mod.name` のドット参照 (Lookup) は private にも届く (v2 の名前解決規則で見直す: v2_decisions.md §1.1)。
+type ModuleInterface struct {
+	Id    string
+	scope *Scope
+}
+
+// Interface はこのモジュールの外面を返す。
+func (m *Module) Interface() *ModuleInterface {
+	return &ModuleInterface{Id: m.Id, scope: m.Scope}
+}
+
+// Lookup はドット参照用に宣言を名前で探す (private 含む。無ければ nil)。
+func (mi *ModuleInterface) Lookup(name string) *Value {
+	return mi.scope.Find(name, true)
+}
+
+// LookupPublic は `use * from` 用に公開宣言だけを探す (無ければ nil)。
+func (mi *ModuleInterface) LookupPublic(name string) *Value {
+	return mi.scope.Find(name, false)
+}
+
+// LookupMust は Lookup と同じだが、見つからなければ diag.Error。
+func (mi *ModuleInterface) LookupMust(name string) *Value {
+	if v := mi.Lookup(name); v != nil {
+		return v
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("%s not found", name)})
+}
+
+// Exports は公開宣言の名前を宣言順に列挙する。
+func (mi *ModuleInterface) Exports() []string {
+	var r []string
+	for _, id := range mi.scope.order {
+		if mi.scope.declares[id].Public {
+			r = append(r, id)
+		}
+	}
+	return r
 }
 
 // ModuleList は登録順を保つモジュールの集合 (id で検索できる)。
