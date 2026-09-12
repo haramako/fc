@@ -15,7 +15,7 @@ __MODULE_MEM__ = 1
 .proc _mem_strlen
 	lda #0
 	sta 0+<FC_FASTCALL_REG+3
-@begin_126:
+@begin_1:
 	ldy 0+<FC_FASTCALL_REG+3
 	sty <reg+0
 	clc
@@ -31,19 +31,19 @@ __MODULE_MEM__ = 1
 	sta <reg+1
 	ldy #0
 	lda (reg),y
-	beq @else_129
+	beq @else_4
 @1:
-@then_128:
+@then_3:
 	clc
 	lda 0+<FC_FASTCALL_REG+3
 	adc #1
 	sta 0+<FC_FASTCALL_REG+3
-	jmp @end_130
-@else_129:
-	jmp @end_127
-@end_130:
-	jmp @begin_126
-@end_127:
+	jmp @end_5
+@else_4:
+	jmp @end_2
+@end_5:
+	jmp @begin_1
+@end_2:
 	lda 0+<FC_FASTCALL_REG+3
 	sta 0+<FC_FASTCALL_REG+0
 	rts
@@ -56,13 +56,13 @@ __MODULE_MEM__ = 1
 .proc _mem_strcpy
 	lda #0
 	sta 0+<FC_FASTCALL_REG+5
-@begin_134:
+@begin_9:
 	lda #1
 	bne @6
-	jmp @else_137
+	jmp @else_12
 @6:
 @2:
-@then_136:
+@then_11:
 	ldy 0+<FC_FASTCALL_REG+5
 	sty <reg+0
 	clc
@@ -105,23 +105,23 @@ __MODULE_MEM__ = 1
 	sta 0+<FC_FASTCALL_REG+9
 @4:
 	lda 0+<FC_FASTCALL_REG+9
-	beq @else_143
+	beq @else_18
 @5:
-@then_142:
+@then_17:
 	lda 0+<FC_FASTCALL_REG+5
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-	jmp @end_144
-@else_143:
-@end_144:
+	jmp @end_19
+@else_18:
+@end_19:
 	clc
 	lda 0+<FC_FASTCALL_REG+5
 	adc #1
 	sta 0+<FC_FASTCALL_REG+5
-	jmp @end_138
-@else_137:
-	jmp @end_135
-@end_138:
-	jmp @begin_134
-@end_135:
+	jmp @end_13
+@else_12:
+	jmp @end_10
+@end_13:
+	jmp @begin_9
+@end_10:
 .endproc

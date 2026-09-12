@@ -32,9 +32,9 @@ _stdio_print_addr: .res 2
 	jsr _stdio_print
 	dex
 	dex
-	lda #.LOBYTE(_124)
+	lda #.LOBYTE(_2)
 	sta <S+2,x
-	lda #.HIBYTE(_124)
+	lda #.HIBYTE(_2)
 	sta <S+3,x
 	inx
 	inx
@@ -42,7 +42,7 @@ _stdio_print_addr: .res 2
 	dex
 	dex
 	rts
-_124:
+_2:
 		.byte 10,0
 .endproc
 	.export _stdio_exit
@@ -51,9 +51,9 @@ _124:
 	;;;=============================
 .segment "stdio"
 .proc _stdio_exit
-	lda #.LOBYTE(_128)
+	lda #.LOBYTE(_6)
 	sta <S+1,x
-	lda #.HIBYTE(_128)
+	lda #.HIBYTE(_6)
 	sta <S+2,x
 	inx
 	jsr _stdio_print
@@ -65,20 +65,20 @@ _124:
 	inx
 	jsr _stdio_print_int16
 	dex
-	lda #.LOBYTE(_130)
+	lda #.LOBYTE(_8)
 	sta <S+1,x
-	lda #.HIBYTE(_130)
+	lda #.HIBYTE(_8)
 	sta <S+2,x
 	inx
 	jsr _stdio_print
 	dex
 	lda #200
 	sta 0+_nes_PPU_CTRL1
-@begin_132:
+@begin_10:
 	lda #1
-	beq @else_135
+	beq @else_13
 @1:
-@then_134:
+@then_12:
 	inx
 	jsr _stdio_wait_vsync
 	dex
@@ -90,16 +90,16 @@ _124:
 	sta 0+_nes_PPU_CTRL1
 	lda #10
 	sta 0+_nes_PPU_CTRL2
-	jmp @end_136
-@else_135:
-	jmp @end_133
-@end_136:
-	jmp @begin_132
-@end_133:
+	jmp @end_14
+@else_13:
+	jmp @end_11
+@end_14:
+	jmp @begin_10
+@end_11:
 	rts
-_128:
+_6:
 		.byte 101,120,105,116,40,0
-_130:
+_8:
 		.byte 41,10,0
 .endproc
 	.export _stdio_init

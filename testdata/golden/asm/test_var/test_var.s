@@ -10,19 +10,19 @@ _test_var_array: .res 10
 .segment "test_var"
 _test_var_CONST:
 	.byte 0,1,2,3,4,5,6,7,8,9
-	.export _D2
+	.export _test_var__D2
 	;;;=============================
-	;;; function $2
+	;;; function _test_var_$2
 	;;;=============================
 .segment "test_var"
-.proc _D2
+.proc _test_var__D2
 	clc
 	lda 0+<S+1,x
 	adc #2
 	sta 0+<S+0,x
 	rts
 .endproc
-_test_var_add2 = _D2
+_test_var_add2 = _test_var__D2
 	.export _test_var_test_const
 	;;;=============================
 	;;; function _test_var_test_const
@@ -460,7 +460,7 @@ _test_var_FUNC_TABLE:
 	jsr _unittest_assert_equal
 	lda #1
 	sta <S+1,x
-	jsr _D2
+	jsr _test_var__D2
 	lda <0+S+0,x
 	sta 0+<L+0
 	lda 0+<L+0
@@ -478,7 +478,7 @@ _test_var_FUNC_TABLE:
 	jsr _unittest_assert_equal
 	lda #1
 	sta <S+1,x
-	jsr _D96
+	jsr _test_var__D96
 	lda <0+S+0,x
 	sta 0+<L+0
 	lda 0+<L+0
@@ -699,12 +699,12 @@ _151:
 		.byte 10,0
 .endproc
 _test_var_main = _main
-	.export _D96
+	.export _test_var__D96
 	;;;=============================
-	;;; function $96
+	;;; function _test_var_$96
 	;;;=============================
 .segment "test_var"
-.proc _D96
+.proc _test_var__D96
 	clc
 	lda 0+<S+1,x
 	adc #2

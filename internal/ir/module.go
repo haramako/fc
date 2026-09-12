@@ -105,6 +105,7 @@ type Module struct {
 	Uses           []*ModuleInterface // use したモジュール (出現順、重複なし)
 	Scope          *Scope
 	CurrentPublic  bool // public: / private: ラベルの現在値
+	Seq            int  // コンパイラ生成名 (一時変数 $N、ラベル @x_N、無名関数) の連番。モジュール内で閉じる (C5)
 	FromFcm        bool
 	Depends        []string
 	Defs           []*Def

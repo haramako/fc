@@ -19,12 +19,12 @@ __MODULE_UNITTEST__ = 1
 	sta 0+<L+0
 @2:
 	lda 0+<L+0
-	beq @else_12
+	beq @else_2
 @3:
-@then_11:
-	lda #.LOBYTE(_17)
+@then_1:
+	lda #.LOBYTE(_7)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_17)
+	lda #.HIBYTE(_7)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda 0+<S+1,x
@@ -32,29 +32,29 @@ __MODULE_UNITTEST__ = 1
 	lda 1+<S+1,x
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	lda #.LOBYTE(_19)
+	lda #.LOBYTE(_9)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_19)
+	lda #.HIBYTE(_9)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #1
 	sta <FC_FASTCALL_REG+0
 	jsr _stdio_exit
-	jmp @end_13
-@else_12:
-	lda #.LOBYTE(_22)
+	jmp @end_3
+@else_2:
+	lda #.LOBYTE(_12)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_22)
+	lda #.HIBYTE(_12)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-@end_13:
+@end_3:
 	rts
-_17:
+_7:
 		.byte 10,69,82,82,79,82,58,32,0
-_19:
+_9:
 		.byte 32,32,101,120,112,101,99,116,115,32,116,114,117,101,32,98
 		.byte 117,116,32,102,97,108,115,101,10,0
-_22:
+_12:
 		.byte 46,0
 .endproc
 	.export _unittest_assert_equal
@@ -69,11 +69,11 @@ _22:
 	lda 1+<S+0,x
 	cmp 1+<S+2,x
 @4:
-	beq @else_25
-@then_24:
-	lda #.LOBYTE(_33)
+	beq @else_15
+@then_14:
+	lda #.LOBYTE(_23)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_33)
+	lda #.HIBYTE(_23)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda 0+<S+4,x
@@ -81,9 +81,9 @@ _22:
 	lda 1+<S+4,x
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	lda #.LOBYTE(_35)
+	lda #.LOBYTE(_25)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_35)
+	lda #.HIBYTE(_25)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda 0+<S+2,x
@@ -91,9 +91,9 @@ _22:
 	lda 1+<S+2,x
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print_int16
-	lda #.LOBYTE(_37)
+	lda #.LOBYTE(_27)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_37)
+	lda #.HIBYTE(_27)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda 0+<S+0,x
@@ -101,31 +101,31 @@ _22:
 	lda 1+<S+0,x
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print_int16
-	lda #.LOBYTE(_39)
+	lda #.LOBYTE(_29)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_39)
+	lda #.HIBYTE(_29)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #1
 	sta <FC_FASTCALL_REG+0
 	jsr _stdio_exit
-	jmp @end_26
-@else_25:
-	lda #.LOBYTE(_42)
+	jmp @end_16
+@else_15:
+	lda #.LOBYTE(_32)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_42)
+	lda #.HIBYTE(_32)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-@end_26:
+@end_16:
 	rts
-_33:
+_23:
 		.byte 10,69,82,82,79,82,58,32,0
-_35:
+_25:
 		.byte 32,32,101,120,112,101,99,116,115,32,0
-_37:
+_27:
 		.byte 32,32,98,117,116,32,0
-_39:
+_29:
 		.byte 10,0
-_42:
+_32:
 		.byte 46,0
 .endproc

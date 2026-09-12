@@ -82,9 +82,11 @@ func (h *Hlc) enterExpr(pos syntax.Pos) func() {
 	}
 }
 
+// tmpCount はモジュール内の連番を進めて返す。
+// モジュール単位で閉じているので、モジュールを単独で再コンパイルしても同じ名前になる (C5)。
 func (h *Hlc) tmpCount() int {
-	h.prog.tmpCount++
-	return h.prog.tmpCount
+	h.module.Seq++
+	return h.module.Seq
 }
 
 func (h *Hlc) tmpName(prefix string) string {
@@ -690,7 +692,8 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		} else if lam.name != "" {
 			id = fmt.Sprintf("_%s_%s", h.module.Id, lam.name)
 		} else {
-			id = h.tmpName("$")
+			// 無名関数。連番がモジュール単位になったので、リンク時の衝突を避けるためモジュール名で修飾する
+			id = fmt.Sprintf("_%s_%s", h.module.Id, h.tmpName("$"))
 		}
 		lmd := h.newLambda(id, lam.name, params, baseType, lam.options, lam.body)
 		lmd.Pos = syntax.At(h.module.Path, c.pos)

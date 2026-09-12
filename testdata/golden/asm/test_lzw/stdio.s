@@ -45,13 +45,13 @@ _stdio_EMU_EXIT = 65535
 	lda 1+<S+0,x
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	lda #.LOBYTE(_148)
+	lda #.LOBYTE(_2)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_148)
+	lda #.HIBYTE(_2)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	rts
-_148:
+_2:
 		.byte 10,0
 .endproc
 	.export _stdio_exit

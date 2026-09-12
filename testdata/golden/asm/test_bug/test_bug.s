@@ -30,25 +30,25 @@ __MODULE_TEST_BUG__ = 1
 .segment "test_bug"
 .proc _main
 	jsr _stdio_init
-	lda #.LOBYTE(_6)
+	lda #.LOBYTE(_3)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_6)
+	lda #.HIBYTE(_3)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_bug_test_pointer_access
-	lda #.LOBYTE(_9)
+	lda #.LOBYTE(_6)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_9)
+	lda #.HIBYTE(_6)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #0
 	sta <FC_FASTCALL_REG+0
 	jsr _stdio_exit
 	rts
-_6:
+_3:
 		.byte 116,101,115,116,95,112,111,105,110,116,101,114,95,97,99,99
 		.byte 101,115,115,58,0
-_9:
+_6:
 		.byte 10,0
 .endproc
 _test_bug_main = _main

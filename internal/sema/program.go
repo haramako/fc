@@ -30,8 +30,6 @@ type Program struct {
 
 	global *ir.Scope             // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros map[*ir.Value]MacroFn // マクロ値 → 本体
-	// tmp/label の連番。旧実装と同じくプログラム全体で 1 本 (R3-c でモジュール単位にする)
-	tmpCount int
 }
 
 // NewProgram は空のプログラム状態を作り、組み込みマクロを登録する。

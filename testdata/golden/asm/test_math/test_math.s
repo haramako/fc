@@ -32,9 +32,9 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_7)
+	lda #.LOBYTE(_4)
 	sta <S+4,x
-	lda #.HIBYTE(_7)
+	lda #.HIBYTE(_4)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #63
@@ -59,9 +59,9 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_12)
+	lda #.LOBYTE(_9)
 	sta <S+4,x
-	lda #.HIBYTE(_12)
+	lda #.HIBYTE(_9)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #64
@@ -86,9 +86,9 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_17)
+	lda #.LOBYTE(_14)
 	sta <S+4,x
-	lda #.HIBYTE(_17)
+	lda #.HIBYTE(_14)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #127
@@ -113,9 +113,9 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_22)
+	lda #.LOBYTE(_19)
 	sta <S+4,x
-	lda #.HIBYTE(_22)
+	lda #.HIBYTE(_19)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #128
@@ -140,9 +140,9 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_27)
+	lda #.LOBYTE(_24)
 	sta <S+4,x
-	lda #.HIBYTE(_27)
+	lda #.HIBYTE(_24)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #191
@@ -167,9 +167,9 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #255
 	sta <S+3,x
-	lda #.LOBYTE(_32)
+	lda #.LOBYTE(_29)
 	sta <S+4,x
-	lda #.HIBYTE(_32)
+	lda #.HIBYTE(_29)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #192
@@ -194,9 +194,9 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #255
 	sta <S+3,x
-	lda #.LOBYTE(_37)
+	lda #.LOBYTE(_34)
 	sta <S+4,x
-	lda #.HIBYTE(_37)
+	lda #.HIBYTE(_34)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #255
@@ -221,27 +221,27 @@ __MODULE_TEST_MATH__ = 1
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_42)
+	lda #.LOBYTE(_39)
 	sta <S+4,x
-	lda #.HIBYTE(_42)
+	lda #.HIBYTE(_39)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	rts
-_7:
+_4:
 		.byte 115,105,110,40,48,41,0
-_12:
+_9:
 		.byte 115,105,110,40,54,51,41,0
-_17:
+_14:
 		.byte 115,105,110,40,54,52,41,0
-_22:
+_19:
 		.byte 115,105,110,40,49,50,55,41,0
-_27:
+_24:
 		.byte 115,105,110,40,49,50,56,41,0
-_32:
+_29:
 		.byte 115,105,110,40,49,57,49,41,0
-_37:
+_34:
 		.byte 115,105,110,40,49,57,50,41,0
-_42:
+_39:
 		.byte 115,105,110,40,50,53,53,41,0
 .endproc
 	.export _test_math_test_cos
@@ -272,9 +272,9 @@ _42:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_47)
+	lda #.LOBYTE(_44)
 	sta <S+4,x
-	lda #.HIBYTE(_47)
+	lda #.HIBYTE(_44)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #127
@@ -299,9 +299,9 @@ _42:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_52)
+	lda #.LOBYTE(_49)
 	sta <S+4,x
-	lda #.HIBYTE(_52)
+	lda #.HIBYTE(_49)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #128
@@ -326,9 +326,9 @@ _42:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_57)
+	lda #.LOBYTE(_54)
 	sta <S+4,x
-	lda #.HIBYTE(_57)
+	lda #.HIBYTE(_54)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #191
@@ -353,9 +353,9 @@ _42:
 	sta <S+2,x
 	lda #255
 	sta <S+3,x
-	lda #.LOBYTE(_62)
+	lda #.LOBYTE(_59)
 	sta <S+4,x
-	lda #.HIBYTE(_62)
+	lda #.HIBYTE(_59)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #192
@@ -380,9 +380,9 @@ _42:
 	sta <S+2,x
 	lda #255
 	sta <S+3,x
-	lda #.LOBYTE(_67)
+	lda #.LOBYTE(_64)
 	sta <S+4,x
-	lda #.HIBYTE(_67)
+	lda #.HIBYTE(_64)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #255
@@ -407,9 +407,9 @@ _42:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_72)
+	lda #.LOBYTE(_69)
 	sta <S+4,x
-	lda #.HIBYTE(_72)
+	lda #.HIBYTE(_69)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #0
@@ -434,9 +434,9 @@ _42:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_77)
+	lda #.LOBYTE(_74)
 	sta <S+4,x
-	lda #.HIBYTE(_77)
+	lda #.HIBYTE(_74)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #63
@@ -461,27 +461,27 @@ _42:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_82)
+	lda #.LOBYTE(_79)
 	sta <S+4,x
-	lda #.HIBYTE(_82)
+	lda #.HIBYTE(_79)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	rts
-_47:
+_44:
 		.byte 99,111,115,40,48,41,0
-_52:
+_49:
 		.byte 99,111,115,40,54,51,41,0
-_57:
+_54:
 		.byte 99,111,115,40,54,52,41,0
-_62:
+_59:
 		.byte 99,111,115,40,49,50,55,41,0
-_67:
+_64:
 		.byte 99,111,115,40,49,50,56,41,0
-_72:
+_69:
 		.byte 99,111,115,40,49,57,49,41,0
-_77:
+_74:
 		.byte 99,111,115,40,49,57,50,41,0
-_82:
+_79:
 		.byte 99,111,115,40,50,53,53,41,0
 .endproc
 	.export _test_math_test_atan
@@ -505,9 +505,9 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_86)
+	lda #.LOBYTE(_83)
 	sta <S+4,x
-	lda #.HIBYTE(_86)
+	lda #.HIBYTE(_83)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #1
@@ -525,9 +525,9 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_90)
+	lda #.LOBYTE(_87)
 	sta <S+4,x
-	lda #.HIBYTE(_90)
+	lda #.HIBYTE(_87)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #1
@@ -545,9 +545,9 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_94)
+	lda #.LOBYTE(_91)
 	sta <S+4,x
-	lda #.HIBYTE(_94)
+	lda #.HIBYTE(_91)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #1
@@ -565,9 +565,9 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_98)
+	lda #.LOBYTE(_95)
 	sta <S+4,x
-	lda #.HIBYTE(_98)
+	lda #.HIBYTE(_95)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #0
@@ -585,9 +585,9 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_102)
+	lda #.LOBYTE(_99)
 	sta <S+4,x
-	lda #.HIBYTE(_102)
+	lda #.HIBYTE(_99)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #255
@@ -605,9 +605,9 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_106)
+	lda #.LOBYTE(_103)
 	sta <S+4,x
-	lda #.HIBYTE(_106)
+	lda #.HIBYTE(_103)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #255
@@ -625,9 +625,9 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_110)
+	lda #.LOBYTE(_107)
 	sta <S+4,x
-	lda #.HIBYTE(_110)
+	lda #.HIBYTE(_107)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #255
@@ -645,27 +645,27 @@ _82:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_114)
+	lda #.LOBYTE(_111)
 	sta <S+4,x
-	lda #.HIBYTE(_114)
+	lda #.HIBYTE(_111)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	rts
-_86:
+_83:
 		.byte 97,116,97,110,40,48,41,0
-_90:
+_87:
 		.byte 97,116,97,110,40,51,50,41,0
-_94:
+_91:
 		.byte 97,116,97,110,40,54,51,41,0
-_98:
+_95:
 		.byte 97,116,97,110,40,57,54,41,0
-_102:
+_99:
 		.byte 97,116,97,110,40,49,50,56,41,0
-_106:
+_103:
 		.byte 97,116,97,110,40,49,54,48,41,0
-_110:
+_107:
 		.byte 97,116,97,110,40,49,57,51,41,0
-_114:
+_111:
 		.byte 97,116,97,110,40,50,50,52,41,0
 .endproc
 	.export _main
@@ -675,54 +675,54 @@ _114:
 .segment "test_math"
 .proc _main
 	jsr _stdio_init
+	lda #.LOBYTE(_114)
+	sta <FC_FASTCALL_REG+0
+	lda #.HIBYTE(_114)
+	sta <FC_FASTCALL_REG+1
+	jsr _stdio_print
+	jsr _test_math_test_sin
 	lda #.LOBYTE(_117)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_117)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	jsr _test_math_test_sin
 	lda #.LOBYTE(_120)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_120)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
+	jsr _test_math_test_cos
 	lda #.LOBYTE(_123)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_123)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	jsr _test_math_test_cos
 	lda #.LOBYTE(_126)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_126)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
+	jsr _test_math_test_atan
 	lda #.LOBYTE(_129)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_129)
-	sta <FC_FASTCALL_REG+1
-	jsr _stdio_print
-	jsr _test_math_test_atan
-	lda #.LOBYTE(_132)
-	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_132)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #0
 	sta <FC_FASTCALL_REG+0
 	jsr _stdio_exit
 	rts
-_117:
+_114:
 		.byte 116,101,115,116,95,115,105,110,58,0
+_117:
+		.byte 10,0
 _120:
-		.byte 10,0
-_123:
 		.byte 116,101,115,116,95,99,111,115,58,0
-_126:
+_123:
 		.byte 10,0
-_129:
+_126:
 		.byte 116,101,115,116,95,97,116,97,110,58,0
-_132:
+_129:
 		.byte 10,0
 .endproc
 _test_math_main = _main
