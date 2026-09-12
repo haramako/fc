@@ -12,7 +12,12 @@ Go移植後の fc を開発するときに知っておくべきこと。
   （R0〜R3）と、その後の文法 v2 / フォーマッタ / モジュール単位コンパイル。
   作業指示書は [v2_plan.md](v2_plan.md)。厳密クローンの基準点は `agent/golang` に残る
 - タグ:
-  - `ruby-frozen` — 移植前の Ruby 版オリジナル
+  - `ruby-frozen` — 移植前の Ruby 版オリジナル。**Ruby 資産は 2026-09-12 にリポジトリから削除**した
+    （`ruby/`, `test/test-all`, `tools/gen_golden.rb`, `tools/dumper.rb`, `misc/table.rb`）。
+    Go ソースのコメントにある `lib/fc/llc.rb:689` のような出典は `git show ruby-frozen:ruby/lib/fc/llc.rb` で読む。
+    `fclib/*.rb` と `examples/castle/src/macro.rb` は `.fc` 側の `include("x.rb")` が参照する名前なので残している
+    （Go は中身を読まず、ファイル名で組み込み実装に解決する。v2 の表記に置き換える際に削除: v2_decisions.md §3）。
+    `fclib/math.fc` / `share/runtime.asm` の sin/atan/rand/乗算テーブルは `misc/table.rb` の生成物（タグから参照可）
   - `go-strict-clone` — 厳密クローン完了・castle 動作確認済みの基準点
 - **push 注意**: origin は公開の github.com/haramako/fc。
   `examples/castle` は製品コード（ゲームテキスト・リソース含む）なので、
@@ -24,10 +29,8 @@ Go移植後の fc を開発するときに知っておくべきこと。
 |---|---|
 | Go | 1.24.5 windows/amd64 |
 | cc65 | `C:\Applications\cc65-snapshot-win32\bin\` (PATH 通過済み) |
-| Ruby | 3.3.7 x64-mingw-ucrt（オラクル用。`ruby/` 以下に凍結） |
 | MesenCE | 2.2.1 を `C:\Applications\MesenCE\Mesen.exe` に導入済み |
 
-- **`bundle exec` は壊れている**（shim が ruby を見つけられない）。素の `ruby` / `rspec` を使う
 - castle 実プロジェクト側で Go 版を使うには `$env:FCC="C:\Work\fc\fcc.exe"`（Rakefile が FCC 環境変数を見る）
 
 ## PowerShell 5.1 のエンコーディング罠
@@ -51,8 +54,7 @@ go test ./...                                    # 全部 (golden + examples + N
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
 
 - golden の再生成（feature/v2 以降）: **`go test ./internal/driver -run 'TestGolden|TestExample' -update`**。
-  Go 自身の出力で上書きする（Ruby オラクルの `tools/gen_golden.rb` は凍結。形式は
-  [go_port_dump_format.md](go_port_dump_format.md)）。**意図しない差分を `-update` で消さない**
+  Go 自身の出力で上書きする（形式は [go_port_dump_format.md](go_port_dump_format.md)）。**意図しない差分を `-update` で消さない**
   （運用ルールは [v2_plan.md](v2_plan.md) §0.1 G2）。ast golden は廃止済み
 - golden は `.gitattributes` で `eol=lf` に固定してあり、`-update` 後に `git status` がクリーンなら
   出力が完全一致している

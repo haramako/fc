@@ -39,7 +39,7 @@
 | G2 | **asm/bin golden は差分ゼロ** | 差分が出たら移行ミスとみなし原因を特定して戻す。`-update` で上書きして通すのは禁止。例外は (a) R0-3 の初回再生成、(b) R3-c のラベル正規化導入時、の 2 回のみ |
 | G3 | ir/allocir golden は **R1-d（型付き IR 導入）のコミットで形式を変えて再生成**する。それまでは差分ゼロを維持 | R1-c（sema 書き換え）の合格判定に ir golden を使うため、先に消さない |
 | G4 | ast golden（`testdata/golden/ast/`、`.pos` 含む）は **R0-2 で削除** | Ruby の S 式構造に紐付いており、型付き AST 後は意味を持たない |
-| G5 | **Ruby 資産に触らない**: `ruby/`, `tools/dumper.rb`, `tools/gen_golden.rb`, `test/test-all`, タグ `ruby-frozen` / `go-strict-clone` | R0-4 で「役目終了」の注記を**先頭コメントに追加する**のみ可 |
+| G5 | ~~Ruby 資産に触らない~~ → **2026-09-12 に Ruby 資産を削除**（`ruby/`, `tools/dumper.rb`, `tools/gen_golden.rb`, `test/test-all`, `misc/table.rb`）。タグ `ruby-frozen` / `go-strict-clone` は維持 | Ruby との共有を理由にした制約（errors.fc の記法など）は以後考慮しない |
 | G6 | **CLI の外部挙動を維持**: `fcc build/compile/run` のサブコマンドとフラグ、終了コード、出力先 `.fc-build/_<mod>.s` `.inc` `.o` `base.o` `runtime*.o` `ld65.cfg`、stdout の内容 | castle 実プロジェクトの Rakefile が `fcc compile -t nes main.fc` → `ca65 data.asm` → 独自 `ld65.cfg` の手順で `.fc-build/` を直接参照する |
 | G7 | **新規コードは Go らしく書く**: `any` + 型アサーションのデータ構造を新設しない、`Sym`/`OMap`/`Canon` を新規コードで使わない、エラーは `error` 値、パッケージレベルの可変状態を増やさない、公開識別子に doc comment | 移行期間中の「新旧の境界」にだけ `any` を許す（R1-b の lower.go 等）。境界は削除予定であることをコメントに明記 |
 | G8 | **テストの並列安全**: リポジトリ内の `examples/*/.fc-build` を複数テストで共有しない（一時ディレクトリに複製してビルド） | `go test ./...` はパッケージ並列。development_notes.md 参照 |
@@ -699,8 +699,9 @@ cmd/fcc            CLI のみ
       38 箇所・28 シンボル（miku/fclib/test は 0）。**マイグレーションの元は現時点の v1 ソース**で、public/private の
       付け直しも `fcc migrate` が行う（v1 ソースの手直しは前提にしない）。可視性規則は宣言側モジュールの文法
       バージョンで決まり、v1/v2 混在を許す。詳細は [v2_decisions.md](v2_decisions.md) §6
-- [ ] `test/errors.fc` の期待行番号の記法（R2）: ヘッダ行 `//@<regex>` は Ruby の test-all と共有なので `@N` を足せない。
-      現状は Go 側で「断片内を指す」ことだけ検査。厳密な期待位置を書くなら Ruby 凍結を前提に記法を変えるか、Go 側に表を持つ
+- [x] `test/errors.fc` の期待行番号の記法（R2）→ **決定 2026-09-12: 案 C、断片内のエラー行末に `//!` マーカーを置く**
+      （Ruby 資産は削除したので共有の制約はなくなったが、断片の追加・並べ替えに強いマーカー方式を採用）。
+      マーカーのない断片は従来どおり「断片内を指す」ことだけ検査
 - （実装中に追記）
 
 ---

@@ -3,8 +3,8 @@
 NES(ファミコン)用のコンパイラです。C風の独自言語 (FC言語) を ca65 アセンブリにコンパイルし、
 ld65 でリンクして NES ROM (.nes) または実験用バイナリ (emu ターゲット) を生成します。
 
-本体は Go で実装されています (元の Ruby 実装からの移植。オリジナルは `ruby/` 以下と
-タグ `ruby-frozen` に保存されています)。
+本体は Go で実装されています (元の Ruby 実装からの移植。Ruby 版は削除済みで、
+タグ `ruby-frozen` から参照できます: `git show ruby-frozen:ruby/lib/fc/hlc.rb` など)。
 
 ## 必要なもの
 
@@ -73,8 +73,7 @@ share/            ランタイムアセンブリ・リンカ設定
 test/             FC言語のテストソース
 examples/         実プロジェクト由来の回帰テスト用サンプル (miku / castle)
 testdata/golden/  golden データ
-tools/            golden 生成・サンプル同期ツール
-ruby/             オリジナルの Ruby 実装 (凍結)
+tools/            サンプル同期ツール
 doc/              ドキュメント
 ```
 

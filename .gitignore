@@ -1,11 +1,5 @@
 /.vscode
-*.gem
-*.rbc
-.bundle
-Gemfile.lock
-ruby/pkg
 tmp
-coverage
 
 *.lst
 *.nes
