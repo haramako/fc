@@ -56,7 +56,8 @@ go test ./internal/driver -run 'TestGolden|TestExample' -update
 ## リポジトリ構成
 
 ```
-cmd/fcc/          CLI
+cmd/fcc/          CLI (pkg/fc の薄い皮)
+pkg/fc/           ライブラリとしての公開 API (New / Build / Options / Result / Error)
 internal/syntax/  字句解析・構文解析・構文木 (他の internal に依存しない)
 internal/types/   型とインターン
 internal/diag/    診断 (エラー) 型

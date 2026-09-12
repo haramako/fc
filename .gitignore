@@ -3,7 +3,7 @@
 *.rbc
 .bundle
 Gemfile.lock
-pkg
+ruby/pkg
 tmp
 coverage
 

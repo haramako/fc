@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R3 進行中（R3-a〜d 完了）**
+最終更新: 2026-09-12 / 状態: **R0〜R3 完了**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
 | R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | ✅ 2026-09-12 |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ✅ 2026-09-12 |
-| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | 🔄 a〜d ✅ |
+| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ✅ 2026-09-12 |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R3-e（公開 API と CLI、§6.5）。
+**次にやること**: 本計画は完了。次は F-fmt（フォーマッタ・文法バージョン機構、go_evolution_plan.md Part B）。着手前に §7 の未決事項（ドット参照の可視性、errors.fc の記法）を決めるとよい。
 
 ---
 
@@ -644,16 +644,25 @@ cmd/fcc            CLI のみ
     `go test -race` 緑。driver パッケージのテスト時間 18s → **11s**
   - CLI の既定動作（cwd でビルド、`.fc-build` を cwd に作成）と miku ROM のバイト一致を手動確認
 
-### 6.5 R3-e 公開 API と CLI（0.5 日）
+### 6.5 R3-e 公開 API と CLI（0.5 日）✅ 2026-09-12
 
-- [ ] `pkg/fc`（または `internal/driver` を直接）: `type Compiler`, `func New(opts) *Compiler`,
+- [x] `pkg/fc`（または `internal/driver` を直接）: `type Compiler`, `func New(opts) *Compiler`,
       `func (c *Compiler) Build(ctx, src string, opt BuildOptions) (*Result, error)`。`Result` に生成物パス、
       マップ、診断（`[]sema.Error`）
-- [ ] `cmd/fcc/main.go` をこの API の薄い皮に。`resolveFCHome` は driver へ
-- [ ] 未使用フラグ `-S`（Ruby 版でも実質未使用）は**残す**（G6。機能するかは問わないが受理はする）
+- [x] `cmd/fcc/main.go` をこの API の薄い皮に。`resolveFCHome` は driver へ
+- [x] 未使用フラグ `-S`（Ruby 版でも実質未使用）は**残す**（G6。機能するかは問わないが受理はする）
 - 合格: 全テスト緑、`fcc build/compile/run` の手動確認（examples/miku と castle の手順を 1 回ずつ）。R3 を ✅ に
 
 ---
+- 結果:
+  - `pkg/fc`: `New()`（FC_HOME 解決。同梱データ展開時は `Close()` で削除）/ `NewWithHome(home)` / `Build(ctx, src, Options) (*Result, error)`、
+    `Options{Target, Out, Run, OptimizeLevel, CompileOnly, Dir, BuildDir, Stdout}`、`Result{ExitCode, Out, MapFile, Objects, BuildDir}`、
+    `Error`（= diag.Error、`errors.As` で取れる）、`CommandError`。`pkg/fc/fc_test.go`（miku ROM 一致・エラー位置・emu 実行）
+  - `driver.BuildContext(ctx, ...)`: ctx のキャンセルは ca65/ld65 に伝わる（`exec.CommandContext`）。`Build` は互換ラッパ
+  - `driver.ResolveFCHome()`（旧 main.go の `resolveFCHome`）。`cmd/fcc/main.go` は `pkg/fc` の薄い皮（約 90 行）
+  - `-S` `-d` は受理のみ（従来から出力に影響しなかった）。`BuildOptions` の未使用フィールド `Asm`/`DebugInfo` は削除
+  - 手動確認: `fcc build/compile/run`、引数なし・不明コマンドで usage、エラー出力、miku ROM 一致、
+    **castle の Rakefile 手順（compile → ca65 data.asm → 独自 ld65.cfg）で ROM 一致**
 
 ## 7. 未決事項（ユーザー判断待ち・エージェントは追記のみ）
 
@@ -725,6 +734,14 @@ cmd/fcc            CLI のみ
   - R3-c のラベル採番変更は「正規化を先に入れてから切り替える」2 コミット手順に
   - ir/allocir golden は削除ではなく R1-d で新形式に再生成する方針に（レジスタ割付の回帰検知を残す）
 - 基準値: `go test ./...` 約 75 秒（fc 20s, nes 16s）。`go vet` クリーン
+
+### 2026-09-12 — R2 / R3 完了（計画完了）
+
+- R2 76a14c2、R3-a 4d5cb62、R3-b c895c19、R3-c 03a2dbc + 656bc52、R3-d 4ff026d、R3-e (本コミット)
+- 最終状態: パッケージ `syntax / types / diag / ir / sema / regalloc / codegen / driver` + 公開 API `pkg/fc`。
+  `Sym`/`OMap`/`[]any` の IR・AST は消滅。golden は asm（ラベル正規化比較）/ bin / stdout / examples ROM / ir / allocir
+- castle・miku の ROM は R0 時点とバイト一致
+- **ベンチ最終値**: Frontend 519ms → **322ms**（-38%）、155MB → 108MB、3.34M → 1.80M allocs。Compile 5.10s → 4.87s（大半は ca65 起動）
 
 ### 2026-09-12 — R1 完了
 

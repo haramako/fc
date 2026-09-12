@@ -1,10 +1,10 @@
 package driver
 
-// lib/fc/compiler.rb の Compiler (パイプライン統括・ca65/ld65起動・リンク) の移植。
-// ERBテンプレートは text/template ではなく直接文字列生成で 1:1 に再現している
-// (テンプレートが小さく静的なため)。
+// パイプライン統括 (ソース → sema → codegen → ca65 → ld65 → emu 実行)。lib/fc/compiler.rb 由来。
+// base.asm / ld65.cfg のテンプレートは小さく静的なので text/template を使わず文字列生成している。
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -38,8 +38,6 @@ type BuildOptions struct {
 	Target        string // emu / nes (デフォルト emu)
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
-	Asm           bool   // -S (Ruby版でも実質未使用)
-	DebugInfo     bool   // -d (Go版はデバッグログのみ)
 	OptimizeLevel int    // -O (デフォルト 2)
 	CompileOnly   bool
 	Stdout        io.Writer
@@ -51,8 +49,18 @@ type BuildOptions struct {
 	BuildDir string
 }
 
+// Result はビルドの結果。
+type Result struct {
+	ExitCode int      // Run 指定時のプログラムの終了コード (それ以外は 0)
+	Out      string   // 出力ファイル (CompileOnly なら "")
+	MapFile  string   // ld65 のマップファイル (CompileOnly なら "")
+	Objects  []string // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
+	BuildDir string   // 中間生成物ディレクトリ
+}
+
 type Compiler struct {
 	FCHome   string // fclib/ share/ を含むディレクトリ
+	ctx      context.Context
 	target   string
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
@@ -80,8 +88,18 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// Build は Compiler#build 相当。Run 指定時は実行結果 (終了コード) を返す。
-func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err error) {
+// Build はソースをビルドする。Run 指定時は実行結果 (終了コード) を返す。
+func (c *Compiler) Build(filename string, opt *BuildOptions) (int, error) {
+	r, err := c.BuildContext(context.Background(), filename, opt)
+	if err != nil {
+		return 0, err
+	}
+	return r.ExitCode, nil
+}
+
+// BuildContext はソースをビルドし、生成物の情報を返す。ctx のキャンセルは外部コマンド (ca65 / ld65) に伝わる。
+// エラーは *diag.Error (コンパイルエラー) または *CommandError (外部コマンドの失敗)。
+func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *BuildOptions) (result *Result, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*CommandError); ok {
@@ -95,12 +113,13 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 			panic(r)
 		}
 	}()
+	c.ctx = ctx
 
 	if opt.Target == "" {
 		opt.Target = "emu"
 	}
 	if opt.Target == "x6502" {
-		return 0, &diag.Error{Msg: "target x6502 is not supported by go port"}
+		return nil, &diag.Error{Msg: "target x6502 is not supported by go port"}
 	}
 	if opt.Out == "" {
 		if opt.Target == "nes" {
@@ -126,13 +145,14 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 	}
 
 	if err := os.MkdirAll(c.buildDir, 0o777); err != nil {
-		return 0, err
+		return nil, err
 	}
+	result = &Result{BuildDir: c.buildDir}
 
 	// compile (ソースコード -> 中間コード)
 	prog, cerr := sema.Compile(opt.Dir, c.libPath(opt.Target), filename)
 	if cerr != nil {
-		return 0, cerr
+		return nil, cerr
 	}
 	c.prog = prog
 
@@ -144,13 +164,13 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 		}
 		asm, inc, lerr := llc.Compile(mod)
 		if lerr != nil {
-			return 0, lerr
+			return nil, lerr
 		}
 		if err := os.WriteFile(filepath.Join(c.buildDir, fmt.Sprintf("_%s.inc", mod.Id)), []byte(strings.Join(inc, "\n")), 0o666); err != nil {
-			return 0, err
+			return nil, err
 		}
 		if err := os.WriteFile(filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)), []byte(strings.Join(asm, "\n")), 0o666); err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
 
@@ -164,19 +184,25 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 		c.ca65(filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
 
+	result.Objects = objs
 	c.makeRuntime(opt.Target)
 	if opt.CompileOnly {
-		return 0, nil
+		return result, nil
 	}
 
 	c.makeBase()
 
-	c.link(objs, opt)
+	result.Out = opt.Out
+	result.MapFile = c.link(objs, opt)
 
 	if opt.Run {
-		return c.execute(opt.Out, opt.Stdout)
+		code, err := c.execute(opt.Out, opt.Stdout)
+		if err != nil {
+			return nil, err
+		}
+		result.ExitCode = code
 	}
-	return 0, nil
+	return result, nil
 }
 
 // libPath は use / include の検索パス (カレント → fclib → fclib/<target>)。
@@ -228,8 +254,8 @@ type bankInfo struct {
 	size, org int
 }
 
-// link はオブジェクトファイルをリンクする。
-func (c *Compiler) link(objs []string, opt *BuildOptions) {
+// link はオブジェクトファイルをリンクし、マップファイルのパスを返す。
+func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 	opts := c.prog.Options
 
 	ineschr := 1
@@ -332,6 +358,7 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) {
 		filepath.Join(c.buildDir, "base.o"), filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
 	args = append(args, objs...)
 	c.sh("ld65", args...)
+	return mapFile
 }
 
 // baseAsmTemplate は share/<target>/base.asm.erb 相当。
@@ -404,7 +431,11 @@ func (c *Compiler) ca65(path string) {
 
 // sh は外部コマンドを実行する (失敗時は CommandError を panic)。
 func (c *Compiler) sh(name string, args ...string) {
-	cmd := exec.Command(name, args...)
+	ctx := c.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		code := -1
