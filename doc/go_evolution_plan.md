@@ -152,9 +152,13 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
 2026-09-12 追加。文法を変更したいという要件から逆算した、R3 完了後の最初の仕事。
 前提は v2_plan.md の C1（ロスレス構文木）・C2（文法バージョン中立な AST）・C3（syntax/sema 分離）。
 
-- [ ] `internal/syntax/printer.go`: AST → ソース。コメント・空行の保持。`fcc fmt`（gofmt 相当、`-w`/`-d`）
-- [ ] フォーマッタのテスト: 冪等性 `fmt(fmt(x)) == fmt(x)`、往復 `parse(fmt(x)) ≡ parse(x)`（Pos を除く構造比較）、
-      コーパス全体（test/fclib/examples）で実施。これが廃止した ast golden の後継
+- [x] `internal/syntax/printer.go`: AST → ソース。コメント・空行の保持。`fcc fmt`（gofmt 相当、`-l`/`-w`/`-d`）✅ 2026-09-12。
+      公開 API は `fc.Format`。スタイルは既存コードの多数派に合わせた（タブ、関数の `{` は次行、制御文は `if (c) {`、
+      `case` は `switch` と同じインデント、`name:type`、配列/引数の改行位置は元ソースを保持、空行は 1 行まで）
+- [x] フォーマッタのテスト: 冪等性 `fmt(fmt(x)) == fmt(x)`、往復 `parse(fmt(x)) ≡ parse(x)`（Pos を除く構造比較）、
+      コメント全保持、コーパス全体（test/fclib/examples = 53 ファイル）で実施（`syntax.TestFormatCorpus`）。
+      これが廃止した ast golden の後継。加えて整形後の castle/miku をビルドして asm/ROM が一致することを手で確認済み
+      （往復同値から従う性質なので自動テストにはしていない）
 - [ ] 文法バージョン宣言: **ファイル先頭行 `#fc 2`**（決定 2026-09-12、v2_decisions.md §4）。宣言なし = v1。パーサはバージョンでディスパッチ、
       **AST は共通**。goyacc は v1/v2 で文法ファイルを分けるか、スーパーセット + バージョンゲートかを
       文法差分の大きさで決める

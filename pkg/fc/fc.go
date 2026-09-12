@@ -11,10 +11,12 @@ package fc
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
+	"github.com/haramako/fc/internal/syntax"
 )
 
 // ターゲットプラットフォーム。
@@ -93,4 +95,18 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		Jobs:          opt.Jobs,
 		Stdout:        opt.Stdout,
 	})
+}
+
+// Format は fc ソースを正規形に整形する (fcc fmt)。構文エラーは *Error で返す。
+// CRLF は LF に正規化される。
+func Format(src []byte, filename string) ([]byte, error) {
+	out, err := syntax.Format(src, filename)
+	if err != nil {
+		var se *syntax.Error
+		if errors.As(err, &se) {
+			return nil, &diag.Error{Msg: se.Msg, Pos: se.Position()}
+		}
+		return nil, err
+	}
+	return out, nil
 }

@@ -1,7 +1,7 @@
 // fcc は FC コンパイラの CLI (Ruby 版 bin/fcc 互換)。
 //
 //	Usage: fcc <command> [options] <src.fc> ...
-//	  command: build(b) / compile(c) / run
+//	  command: build(b) / compile(c) / run / fmt
 package main
 
 import (
@@ -16,6 +16,11 @@ import (
 
 const usage = `NES Compiler
 Usage: fcc <command> [options] <src.fc> ...
+Commands:
+    build, b         build ROM / binary
+    compile, c       compile to object files only
+    run              build and run by emulator
+    fmt              format source files (see fcc fmt -h)
 Options:
     -h, --help       show this message
     -o FILE          output file
@@ -38,6 +43,9 @@ func run() int {
 		return 0
 	}
 	com := args[0]
+	if com == "fmt" {
+		return runFmt(args[1:])
+	}
 	fs := flag.NewFlagSet("fcc", flag.ExitOnError)
 	fs.Usage = func() { fmt.Print(usage) }
 	out := fs.String("o", "", "output file")

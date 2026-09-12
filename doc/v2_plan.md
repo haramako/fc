@@ -737,6 +737,19 @@ cmd/fcc            CLI のみ
   - ir/allocir golden は削除ではなく R1-d で新形式に再生成する方針に（レジスタ割付の回帰検知を残す）
 - 基準値: `go test ./...` 約 75 秒（fc 20s, nes 16s）。`go vet` クリーン
 
+### 2026-09-12 — 計画完了後: errors.fc マーカー・Ruby 資産削除・F-fmt 着手
+
+- **errors.fc の `//!` マーカー**（§7 決定）: 断片内のエラー行末に `//!`（列も見るなら `//! col=N`）。
+  付随して `ir.Op.Pos`（emit 時の文/式の位置）を追加し、LLC の回復点が処理中の命令の位置を使うようにした
+  （`div by 0` が関数行ではなく `i1 / 0` の位置を指す）。`TestLlcErrorPosition` の期待を更新
+- **Ruby 資産を削除**（G5 更新）。参照はタグ `ruby-frozen`
+- **F-fmt の前半**: `syntax.Format` / `syntax.Print`（printer.go）、`fc.Format`、`fcc fmt -l/-w/-d`。
+  テスト: スタイルのピン留め `TestFormatStyle`、コーパス 53 ファイルの冪等性・往復・コメント保持 `TestFormatCorpus`。
+  整形後の castle（41 モジュール）の asm/inc と miku の ROM が原本と一致することを確認。
+  **残り**: `#fc 2` プラグマとパーサのバージョンディスパッチ、文法 v2 の設計、`fcc migrate`
+- 見つけた別件: castle を `fcc build -t nes`（独自 ld65.cfg を使わず）でリンクしようとすると `driver.link` が
+  `bank` の範囲外で panic する（castle は `compile` + 独自リンクが正規手順なので実害なし。エラーにすべき）
+
 ### 2026-09-12 — 計画完了後: ca65 の並列アセンブル（F-mod の一部を前倒し）
 
 - `driver.assembleAll`: 各モジュールの `.s` と runtime 2 本を `Jobs`（既定 CPU 数）並列で ca65 に渡す。

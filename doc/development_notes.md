@@ -53,6 +53,9 @@ go test ./...                                    # 全部 (golden + examples + N
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
 
+- **`fcc fmt`**（2026-09-12〜）: `fcc fmt -l <files>` で未整形のファイルを列挙、`-w` で上書き、`-d` で差分。
+  正規形は [internal/syntax/printer.go](../internal/syntax/printer.go) 先頭のコメントと `TestFormatStyle` が定義。
+  **リポジトリ内の .fc はまだ整形していない**（castle は製品コードなので一括整形はオーナー判断。整形しても asm は変わらない）
 - golden の再生成（feature/v2 以降）: **`go test ./internal/driver -run 'TestGolden|TestExample' -update`**。
   Go 自身の出力で上書きする（形式は [go_port_dump_format.md](go_port_dump_format.md)）。**意図しない差分を `-update` で消さない**
   （運用ルールは [v2_plan.md](v2_plan.md) §0.1 G2）。ast golden は廃止済み
