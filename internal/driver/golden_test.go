@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -69,6 +70,48 @@ func compareGolden(t *testing.T, rel, got string) {
 		return
 	}
 	compareText(t, rel, got, readGolden(t, rel))
+}
+
+// compareGoldenAsm はアセンブラ golden を、コンパイラ生成のラベル番号を正規化してから比較する。
+// (-update 時は生の出力を書く。ラベル番号そのものは比較対象ではなく、構造が同じかを見る)
+func compareGoldenAsm(t *testing.T, rel, got string) {
+	t.Helper()
+	if *update {
+		writeGolden(t, rel, []byte(normalizeText(got)))
+		return
+	}
+	compareText(t, rel, normalizeLabels(got), normalizeLabels(readGolden(t, rel)))
+}
+
+// コンパイラが連番で生成する識別子:
+//
+//	@<name>_<N>  HLC のラベル (then/else/end/begin)
+//	@<N>         LLC のラベル
+//	_D<N>        無名関数 ($N) のマングル名
+//	_<N> / __<N> 配列リテラルのデータブロック (関数内は _<N>、モジュールレベルは _<mod>__<N>)
+var reGenLabel = regexp.MustCompile(`@[a-z]+_\d+|@\d+|_D\d+|__\d+\b|(?:^|[^\w])_\d+\b`)
+
+// normalizeLabels は連番識別子を出現順の通し番号に置き換える (採番方式の変更を吸収する: doc/v2_plan.md R3-c)。
+func normalizeLabels(s string) string {
+	seen := map[string]int{}
+	return reGenLabel.ReplaceAllStringFunc(s, func(m string) string {
+		// (?:^|[^\w]) の先行文字を保つ
+		prefix := ""
+		if m[0] != '@' && m[0] != '_' {
+			prefix, m = m[:1], m[1:]
+		}
+		n, ok := seen[m]
+		if !ok {
+			n = len(seen) + 1
+			seen[m] = n
+		}
+		// 種別ごとの接頭辞を残し、数字だけを通し番号に
+		i := len(m)
+		for i > 0 && m[i-1] >= '0' && m[i-1] <= '9' {
+			i--
+		}
+		return prefix + m[:i] + "N" + strconv.Itoa(n)
+	})
 }
 
 // compareGoldenBytes はバイナリ golden と比較する。-update 時は got で上書きする。
@@ -218,8 +261,8 @@ func TestGoldenAsm(t *testing.T) {
 				if err != nil {
 					t.Fatalf("コード生成失敗: %v", err)
 				}
-				compareGolden(t, "asm/"+name+"/"+mod.Id+".s", normalizeAsm(asm))
-				compareGolden(t, "asm/"+name+"/"+mod.Id+".inc", normalizeAsm(inc))
+				compareGoldenAsm(t, "asm/"+name+"/"+mod.Id+".s", normalizeAsm(asm))
+				compareGoldenAsm(t, "asm/"+name+"/"+mod.Id+".inc", normalizeAsm(inc))
 			}
 		})
 	}
@@ -278,5 +321,24 @@ func TestGoldenStdout(t *testing.T) {
 			compareGolden(t, "stdout/"+name+".txt", out.String())
 			compareGolden(t, "stdout/"+name+".exit", fmt.Sprintf("%d\n", code))
 		})
+	}
+}
+
+func TestNormalizeLabels(t *testing.T) {
+	in := "@then_9:\n\tbne @12\n\tjsr _D96\n_88:\n_test_basic__6 = 1\n\tlda #.LOBYTE(_88)\n\tjmp @end_11\n"
+	want := "@then_N1:\n\tbne @N2\n\tjsr _DN3\n_N4:\n_test_basic__N5 = 1\n\tlda #.LOBYTE(_N4)\n\tjmp @end_N6\n"
+	if got := normalizeLabels(in); got != want {
+		t.Errorf("normalizeLabels:\n got:  %q\n want: %q", got, want)
+	}
+	// 番号だけが違う 2 つは同一視される
+	a := normalizeLabels("@then_9:\n\tbne @then_9\n\tjmp @end_11\n")
+	b := normalizeLabels("@then_3:\n\tbne @then_3\n\tjmp @end_4\n")
+	if a != b {
+		t.Errorf("番号違いが同一視されない: %q vs %q", a, b)
+	}
+	// 構造が違えば区別される
+	c := normalizeLabels("@then_3:\n\tbne @end_4\n\tjmp @end_4\n")
+	if a == c {
+		t.Error("構造違いが同一視された")
 	}
 }
