@@ -62,6 +62,8 @@ go test ./...                                    # 全部 (golden + examples + N
   `-update` で生成する
 - 性能退行の検知: `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
   （基準値は v2_plan.md の作業ログ）
+- ca65 は既定で CPU 数だけ並列に走る。ca65 のエラー調査などで逐次にしたいときは `fc.Options.Jobs = 1`
+  （CLI にはフラグ無し）
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は
   [../examples/README.md](../examples/README.md)）
 - 内蔵NESランナーのスクリーンショット: `FC_NES_SNAPSHOT_DIR=<dir> go test ./internal/nes`

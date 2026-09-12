@@ -735,6 +735,14 @@ cmd/fcc            CLI のみ
   - ir/allocir golden は削除ではなく R1-d で新形式に再生成する方針に（レジスタ割付の回帰検知を残す）
 - 基準値: `go test ./...` 約 75 秒（fc 20s, nes 16s）。`go vet` クリーン
 
+### 2026-09-12 — 計画完了後: ca65 の並列アセンブル（F-mod の一部を前倒し）
+
+- `driver.assembleAll`: 各モジュールの `.s` と runtime 2 本を `Jobs`（既定 CPU 数）並列で ca65 に渡す。
+  `.inc` は事前に全部書き出し済み、`objs` の並び（リンク順）は不変、失敗時は sources 順で最初のエラーを返し残りは ctx でキャンセル。
+  `BuildOptions.Jobs` / `fc.Options.Jobs`（1 で逐次）
+- castle `fcc compile -t nes main.fc`: **4.4 s → 1.2 s**（Go 側 0.3 s + ca65 0.9 s）。`go test ./...` も 11 s → 7.5 s（driver）
+- golden・ROM は不変（アセンブルの順序は出力に影響しない）。`go test -race` 緑
+
 ### 2026-09-12 — R2 / R3 完了（計画完了）
 
 - R2 76a14c2、R3-a 4d5cb62、R3-b c895c19、R3-c 03a2dbc + 656bc52、R3-d 4ff026d、R3-e (本コミット)

@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
@@ -47,6 +49,9 @@ type BuildOptions struct {
 	// CLI はどちらも既定のままなので外部挙動は従来どおり (doc/v2_plan.md G6)。
 	Dir      string
 	BuildDir string
+
+	// Jobs は ca65 を同時に走らせる数。0 なら CPU 数。1 で逐次。
+	Jobs int
 }
 
 // Result はビルドの結果。
@@ -61,6 +66,7 @@ type Result struct {
 type Compiler struct {
 	FCHome   string // fclib/ share/ を含むディレクトリ
 	ctx      context.Context
+	jobs     int // ca65 の並列数
 	target   string
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
@@ -143,6 +149,10 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if c.buildDir == "" {
 		c.buildDir = filepath.Join(c.dir, DefaultBuildDirName)
 	}
+	c.jobs = opt.Jobs
+	if c.jobs <= 0 {
+		c.jobs = runtime.NumCPU()
+	}
 
 	if err := os.MkdirAll(c.buildDir, 0o777); err != nil {
 		return nil, err
@@ -174,18 +184,21 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		}
 	}
 
-	// assemble (アセンブラ -> オブジェクトファイル)
-	var objs []string
+	// assemble (アセンブラ -> オブジェクトファイル)。各 .s は独立なので並列にアセンブルする
+	// (.inc は上で全部書き終えている)。objs の並び = リンク順はモジュール順のまま
+	var objs, sources []string
 	for _, mod := range prog.Modules.List() {
 		objs = append(objs, filepath.Join(c.buildDir, fmt.Sprintf("_%s.o", mod.Id)))
 		if mod.FromFcm {
 			continue
 		}
-		c.ca65(filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
+		sources = append(sources, filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
-
+	sources = append(sources, c.findShare("runtime.asm"), filepath.Join(c.FCHome, "fclib", opt.Target, "runtime_init.asm"))
+	if err := c.assembleAll(sources); err != nil {
+		return nil, err
+	}
 	result.Objects = objs
-	c.makeRuntime(opt.Target)
 	if opt.CompileOnly {
 		return result, nil
 	}
@@ -208,11 +221,6 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 // libPath は use / include の検索パス (カレント → fclib → fclib/<target>)。
 func (c *Compiler) libPath(target string) []string {
 	return []string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target))}
-}
-
-func (c *Compiler) makeRuntime(target string) {
-	c.ca65(c.findShare("runtime.asm"))
-	c.ca65(filepath.Join(c.FCHome, "fclib", target, "runtime_init.asm"))
 }
 
 // makeBase は base.asm.erb 相当の base.s を生成してアセンブルする。
@@ -409,8 +417,45 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\tjmp start\n"
 }
 
-// ca65 はアセンブルを実行する。
+// assembleAll は複数の .s を c.jobs 並列でアセンブルする。
+// 失敗したら最初 (sources 順) のエラーを返し、残りは ctx のキャンセルで止める。
+func (c *Compiler) assembleAll(sources []string) error {
+	ctx, cancel := context.WithCancel(c.ctxOrBackground())
+	defer cancel()
+	errs := make([]error, len(sources))
+	sem := make(chan struct{}, c.jobs)
+	var wg sync.WaitGroup
+	for i, src := range sources {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, src string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
+			if err := c.run(ctx, "ca65", c.ca65Args(src)...); err != nil {
+				errs[i] = err
+				cancel()
+			}
+		}(i, src)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ca65 はアセンブルを実行する (逐次。失敗は CommandError を panic)。
 func (c *Compiler) ca65(path string) {
+	c.sh("ca65", c.ca65Args(path)...)
+}
+
+// ca65Args はアセンブルのコマンド引数を作る。
+func (c *Compiler) ca65Args(path string) []string {
 	base := filepath.Base(path)
 	obj := filepath.Join(c.buildDir, strings.TrimSuffix(base, filepath.Ext(base))+".o")
 	args := []string{
@@ -426,15 +471,25 @@ func (c *Compiler) ca65(path string) {
 		// .incbin は -I でなく --bin-include-dir で探す (既定は作業ディレクトリ)
 		args = append(args, "--bin-include-dir", c.dir)
 	}
-	c.sh("ca65", append(args, path)...)
+	return append(args, path)
+}
+
+func (c *Compiler) ctxOrBackground() context.Context {
+	if c.ctx == nil {
+		return context.Background()
+	}
+	return c.ctx
 }
 
 // sh は外部コマンドを実行する (失敗時は CommandError を panic)。
 func (c *Compiler) sh(name string, args ...string) {
-	ctx := c.ctx
-	if ctx == nil {
-		ctx = context.Background()
+	if err := c.run(c.ctxOrBackground(), name, args...); err != nil {
+		panic(err)
 	}
+}
+
+// run は外部コマンドを実行し、失敗なら *CommandError を返す。
+func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -442,12 +497,13 @@ func (c *Compiler) sh(name string, args ...string) {
 		if cmd.ProcessState != nil {
 			code = cmd.ProcessState.ExitCode()
 		}
-		panic(&CommandError{
+		return &CommandError{
 			Msg:     fmt.Sprintf("%s returns %d", name, code),
 			Command: append([]string{name}, args...),
 			Result:  string(out),
-		})
+		}
 	}
+	return nil
 }
 
 // execute はビルド済みバイナリをエミュレータで実行する (Compiler#execute 相当)。

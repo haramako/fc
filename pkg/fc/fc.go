@@ -36,6 +36,9 @@ type Options struct {
 	Dir      string
 	BuildDir string
 
+	// Jobs はアセンブラ (ca65) の並列数。0 なら CPU 数。
+	Jobs int
+
 	// Stdout は Run 時のプログラム出力先 (既定 os.Stdout)。
 	Stdout io.Writer
 }
@@ -87,6 +90,7 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		CompileOnly:   opt.CompileOnly,
 		Dir:           opt.Dir,
 		BuildDir:      opt.BuildDir,
+		Jobs:          opt.Jobs,
 		Stdout:        opt.Stdout,
 	})
 }
