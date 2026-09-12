@@ -76,7 +76,7 @@ func run() int {
 		code, err := compiler.Build(src, opt)
 		if err != nil {
 			if ce, ok := err.(*fc.CompileError); ok {
-				fmt.Printf("%s:%d: %s\n", ce.Filename, ce.LineNo, ce.Msg)
+				fmt.Printf("%s: error: %s\n", ce.Pos, ce.Msg)
 				return 1
 			}
 			fmt.Println(err)

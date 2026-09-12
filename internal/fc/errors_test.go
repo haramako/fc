@@ -57,6 +57,16 @@ func TestErrorsFC(t *testing.T) {
 			if !re.MatchString(berr.Error()) {
 				t.Errorf("断片 %d: エラーメッセージ不一致\n expected: /%s/\n got: %s", i, expectedErr, berr.Error())
 			}
+			// CompileError は断片内 (errorsCommon より前) の位置を指していること。
+			// 外部コマンド (ca65) のエラーは CommandError で位置を持たない
+			if ce, ok := berr.(*CompileError); ok {
+				fragLines := strings.Count(src, "\n") + 1
+				if !ce.Pos.IsValid() || ce.Pos.Line > fragLines || !strings.HasSuffix(ce.Pos.Filename, "fail_test.fc") {
+					t.Errorf("断片 %d: 位置が不正 %s (断片は %d 行)", i, ce.Pos, fragLines)
+				}
+			} else if _, ok := berr.(*CommandError); !ok {
+				t.Errorf("断片 %d: エラー型が不正 %T", i, berr)
+			}
 		})
 	}
 }

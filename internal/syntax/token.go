@@ -19,6 +19,32 @@ func (p Pos) IsValid() bool { return p.Line > 0 }
 // String は "line:col" 形式。
 func (p Pos) String() string { return fmt.Sprintf("%d:%d", p.Line, p.Col) }
 
+// Position はファイル名付きの位置。診断メッセージの `file:line:col` に使う。
+type Position struct {
+	Filename string
+	Line     int // 1 始まり。0 なら位置不明
+	Col      int // 1 始まり。0 なら列不明
+}
+
+// IsValid は行が分かっているかを返す。
+func (p Position) IsValid() bool { return p.Line > 0 }
+
+// String は "file:line:col" (列不明なら "file:line"、行不明なら "file")。
+func (p Position) String() string {
+	switch {
+	case p.Line <= 0:
+		return p.Filename
+	case p.Col <= 0:
+		return fmt.Sprintf("%s:%d", p.Filename, p.Line)
+	}
+	return fmt.Sprintf("%s:%d:%d", p.Filename, p.Line, p.Col)
+}
+
+// At は filename とソース内位置 p からファイル名付き位置を作る。
+func At(filename string, p Pos) Position {
+	return Position{Filename: filename, Line: p.Line, Col: p.Col}
+}
+
 // Kind はトークンの種別。
 type Kind int
 
@@ -162,3 +188,6 @@ type Error struct {
 func (e *Error) Error() string {
 	return e.Msg
 }
+
+// Position はエラーのファイル名付き位置。
+func (e *Error) Position() Position { return At(e.Filename, e.Pos) }

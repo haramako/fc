@@ -122,20 +122,59 @@ func TestHlcErrors(t *testing.T) {
 		if !strings.Contains(ce.Msg, c.want) {
 			t.Errorf("%q: メッセージ %q に %q が無い", c.src, ce.Msg, c.want)
 		}
-		if ce.LineNo == 0 || ce.Filename == "" {
+		if !ce.Pos.IsValid() || ce.Pos.Col == 0 || ce.Pos.Filename == "" {
 			t.Errorf("%q: 位置情報が無い: %+v", c.src, ce)
 		}
 	}
 }
 
-// TestHlcErrorLineIsStatementStart: エラー行は文の開始行 (複数行にまたがる文でも)。
-func TestHlcErrorLineIsStatementStart(t *testing.T) {
-	_, err := compileSrc(t, "function main():void\n{\n  var a:int;\n  a = 1 +\n      hoge;\n}\n")
+// TestHlcErrorPosition: エラー位置は原因となった式 (識別子など) の file:line:col を指す。
+// 式に位置が無い場合 (合成ノード) は文の開始位置にフォールバックする。
+func TestHlcErrorPosition(t *testing.T) {
+	cases := []struct {
+		src       string
+		line, col int
+	}{
+		// 未定義識別子: その識別子の位置 (5 行 7 列)
+		{"function main():void\n{\n  var a:int;\n  a = 1 +\n      hoge;\n}\n", 5, 7},
+		// 型不一致: 代入式の位置 (`a = p` の a)
+		{"function main():void\n{\n  var a:int; var p:int*;\n  a = p;\n}\n", 4, 3},
+		// 文レベルのエラー: 文の先頭
+		{"function main():void\n{\n  break;\n}\n", 3, 3},
+		// 式の評価後に文レベルで検出されるエラー (var の初期化禁止): 文の先頭
+		{"var a:int = 1;\nfunction main():void {}\n", 1, 1},
+	}
+	for _, c := range cases {
+		_, err := compileSrc(t, c.src)
+		ce, ok := err.(*CompileError)
+		if !ok {
+			t.Fatalf("%q: CompileError であるべき: %v", c.src, err)
+		}
+		if ce.Pos.Line != c.line || ce.Pos.Col != c.col {
+			t.Errorf("%q: 位置 %d:%d, want %d:%d (%s)", c.src, ce.Pos.Line, ce.Pos.Col, c.line, c.col, ce.Msg)
+		}
+		if !strings.HasSuffix(ce.Pos.Filename, "t.fc") {
+			t.Errorf("ファイル名: %s", ce.Pos.Filename)
+		}
+	}
+}
+
+// TestLlcErrorPosition: コード生成時のエラーは関数の宣言位置を指す。
+func TestLlcErrorPosition(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	src := "var x:int;\n\nfunction main():void\n{\n  x = x / 0;\n}\n"
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	compiler := NewCompiler(absRepoRoot)
+	_, err := compiler.Build("t.fc", &BuildOptions{Target: "emu", CompileOnly: true})
 	ce, ok := err.(*CompileError)
 	if !ok {
 		t.Fatalf("CompileError であるべき: %v", err)
 	}
-	if ce.LineNo != 4 {
-		t.Errorf("行番号 = %d, want 4", ce.LineNo)
+	if !strings.Contains(ce.Msg, "div by 0") || ce.Pos.Line != 3 || ce.Pos.Col != 1 {
+		t.Errorf("got %+v", ce)
 	}
 }

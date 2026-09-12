@@ -210,7 +210,10 @@ func TestGoldenAsm(t *testing.T) {
 			hlc := compileForGolden(t, srcName, target)
 			llc := NewLlc(2, hlc.Types())
 			for _, mod := range hlc.Modules.List() {
-				asm, inc := llc.Compile(mod)
+				asm, inc, err := llc.Compile(mod)
+				if err != nil {
+					t.Fatalf("コード生成失敗: %v", err)
+				}
 				compareGolden(t, "asm/"+name+"/"+mod.Id+".s", normalizeAsm(asm))
 				compareGolden(t, "asm/"+name+"/"+mod.Id+".inc", normalizeAsm(inc))
 			}

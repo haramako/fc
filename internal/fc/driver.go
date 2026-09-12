@@ -17,14 +17,17 @@ import (
 
 const BuildPath = ".fc-build"
 
-// CommandError は外部コマンドの失敗 (Fc::CommandError 相当)。
+// CommandError は外部コマンド (ca65 / ld65) の失敗。
 type CommandError struct {
 	Msg     string
 	Command []string
-	Result  string
+	Result  string // コマンドの出力
 }
 
-func (e *CommandError) Error() string { return e.Msg }
+// Error はメッセージ・コマンド行・出力をまとめて返す (アセンブラのエラー行がそのまま読めるように)。
+func (e *CommandError) Error() string {
+	return e.Msg + "\n" + strings.Join(e.Command, " ") + "\n" + e.Result
+}
 
 type BuildOptions struct {
 	Target        string // emu / nes (デフォルト emu)
@@ -69,7 +72,7 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*CommandError); ok {
-				err = &CompileError{Msg: ce.Msg + "\n" + strings.Join(ce.Command, " ") + "\n" + ce.Result}
+				err = ce
 				return
 			}
 			if ce, ok := r.(*CompileError); ok {
@@ -118,7 +121,10 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 		if mod.FromFcm {
 			continue
 		}
-		asm, inc := llc.Compile(mod)
+		asm, inc, lerr := llc.Compile(mod)
+		if lerr != nil {
+			return 0, lerr
+		}
 		if err := os.WriteFile(filepath.Join(BuildPath, fmt.Sprintf("_%s.inc", mod.Id)), []byte(strings.Join(inc, "\n")), 0o666); err != nil {
 			return 0, err
 		}

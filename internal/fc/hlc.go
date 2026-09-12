@@ -30,10 +30,9 @@ type Hlc struct {
 	loops       [][]string // [ [continueラベル, breakラベル], ... ]
 	fastCalling bool
 
-	module      *Module
-	lmd         *Lambda
-	curFilename string
-	curLineNo   int
+	module *Module
+	lmd    *Lambda
+	curPos syntax.Position // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
 
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
@@ -77,11 +76,8 @@ func (h *Hlc) Compile(filename string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*CompileError); ok {
-				if ce.Filename == "" {
-					ce.Filename = h.curFilename
-				}
-				if ce.LineNo == 0 {
-					ce.LineNo = h.curLineNo
+				if !ce.Pos.IsValid() {
+					ce.Pos = h.curPos
 				}
 				err = ce
 				return
@@ -116,8 +112,29 @@ func (h *Hlc) Compile(filename string) (err error) {
 // 位置を持たない合成ノード (while/for の脱糖) では更新しない。
 func (h *Hlc) updatePos(s syntax.Stmt) {
 	if p := s.Pos(); p.IsValid() {
-		h.curFilename = h.module.Path
-		h.curLineNo = p.Line
+		h.curPos = syntax.At(h.module.Path, p)
+	}
+}
+
+// enterExpr は式の評価中だけ現在位置をその式に移す。返り値を defer で呼んで元に戻す。
+// 位置を持たない式 (マクロ展開や合成ノード) では何もしない。
+// 評価中に位置のない CompileError が panic で通過したら、そのときの位置を付けてから伝搬させる
+// (巻き戻し中に位置が親へ戻ってしまい、最終的に文頭しか指せなくなるのを防ぐ)。
+func (h *Hlc) enterExpr(pos syntax.Pos) func() {
+	if !pos.IsValid() {
+		return func() {}
+	}
+	old := h.curPos
+	h.curPos = syntax.At(h.module.Path, pos)
+	return func() {
+		if r := recover(); r != nil {
+			if ce, ok := r.(*CompileError); ok && !ce.Pos.IsValid() {
+				ce.Pos = h.curPos
+			}
+			h.curPos = old
+			panic(r)
+		}
+		h.curPos = old
 	}
 }
 
@@ -268,7 +285,7 @@ func (h *Hlc) compileModule(filename string) *Module {
 	file, perr := syntax.Parse(src, path)
 	if perr != nil {
 		se := perr.(*syntax.Error)
-		panic(&CompileError{Msg: se.Msg, Filename: se.Filename, LineNo: se.Pos.Line})
+		panic(&CompileError{Msg: se.Msg, Pos: se.Position()})
 	}
 
 	h.attachScope(h.module.Scope, func() {
@@ -333,7 +350,7 @@ func (h *Hlc) compileStmts(stmts []syntax.Stmt) {
 
 func (h *Hlc) mustInModule() {
 	if h.lmd != nil {
-		panic("not in module")
+		panic(&CompileError{Msg: "must be at module level (not inside a function)"})
 	}
 }
 
@@ -395,7 +412,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			case ".rb":
 				kind = "macro"
 			default:
-				panic(fmt.Sprintf("unknown include extension %s", filename))
+				panic(&CompileError{Msg: fmt.Sprintf("unknown include extension %s", filename)})
 			}
 		}
 		switch kind {
@@ -679,6 +696,7 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 	if r, ok := h.cmemo[c]; ok {
 		return r
 	}
+	defer h.enterExpr(c.pos)()
 	r := h.constEval0(c)
 	r.pos = c.pos
 	h.cmemo[c] = r
@@ -759,6 +777,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			id = h.tmpName("$")
 		}
 		lmd := h.newLambda(id, lam.name, params, baseType, lam.options, lam.body)
+		lmd.Pos = syntax.At(h.module.Path, c.pos)
 		h.module.Lambdas = append(h.module.Lambdas, lmd)
 		h.addDefModule(&Def{Sym: id, Kind: DefCode, Type: lmd.Type, Lambda: lmd})
 		return cv(NewSymbolLiteral("", lmd.Type, id))
@@ -770,7 +789,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			mod = left.val.Module
 		}
 		if mod == nil {
-			panic("dot: not a module")
+			panic(&CompileError{Msg: fmt.Sprintf("%s is not a module", c.args[0].name)})
 		}
 		return cv(mod.Scope.FindMust(c.name, true))
 
@@ -994,6 +1013,7 @@ func (h *Hlc) rval(c *cexpr) Operand {
 
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
 func (h *Hlc) lval(c *cexpr) (Operand, bool) {
+	defer h.enterExpr(c.pos)()
 	leftValue := false
 	e := h.constEval(c)
 	var r Operand

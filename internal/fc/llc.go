@@ -16,7 +16,8 @@ type Llc struct {
 	OptimizeLevel int
 	labelCount    int
 	codeSegment   string
-	zero          *Value // 定数 0 (mul の 0 倍の最適化用)
+	curLambda     *Lambda // 処理中の関数 (エラー位置の補完用)
+	zero          *Value  // 定数 0 (mul の 0 倍の最適化用)
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
@@ -61,9 +62,23 @@ func (a *asmLines) flatten() []string {
 }
 
 // Compile はモジュールをアセンブラに変換する。(asm, inc) の行リストを返す。
-func (l *Llc) Compile(mod *Module) ([]string, []string) {
+// コード生成中の CompileError は処理中の関数の宣言位置を補完して返す (回復点)。
+func (l *Llc) Compile(mod *Module) (asmOut, incOut []string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if ce, ok := r.(*CompileError); ok {
+				if !ce.Pos.IsValid() && l.curLambda != nil {
+					ce.Pos = l.curLambda.Pos
+				}
+				err = ce
+				return
+			}
+			panic(r)
+		}
+	}()
 	l.labelCount = 0
 	l.codeSegment = mod.Id
+	l.curLambda = nil
 
 	inc := &asmLines{}
 	asm := &asmLines{}
@@ -137,7 +152,7 @@ func (l *Llc) Compile(mod *Module) ([]string, []string) {
 
 	inc.push(".endif")
 
-	return asm.flatten(), inc.flatten()
+	return asm.flatten(), inc.flatten(), nil
 }
 
 func anyList(ss []string) []any {
@@ -150,6 +165,7 @@ func anyList(ss []string) []any {
 
 // CompileLambda は関数1つ分のアセンブリを生成する。
 func (l *Llc) CompileLambda(sym string, lmd *Lambda) []string {
+	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
 	l.allocRegister(lmd)
 	ops := lmd.Ops
 	if l.OptimizeLevel > 0 {
@@ -398,7 +414,7 @@ func (l *Llc) CompileLambda(sym string, lmd *Lambda) []string {
 				// 定数でない場合
 				// TODO: もうちょっと整理して効率よくできるはず
 				if ValType(op.Dst).Size != 1 {
-					panic("shift with non-const count and size != 1")
+					panic(&CompileError{Msg: "shift of 2-byte value by non-constant count is not supported"})
 				}
 				labels := l.newLabels(2)
 				loopLabel, endLabel := labels[0], labels[1]
@@ -422,7 +438,7 @@ func (l *Llc) CompileLambda(sym string, lmd *Lambda) []string {
 
 		case OpUminus:
 			if ValType(op.Dst).Kind != types.Int {
-				panic("uminus with non-int")
+				panic(&CompileError{Msg: fmt.Sprintf("cannot negate non-integer type %s", ValType(op.Dst))})
 			}
 			for i := 0; i < ValType(op.Dst).Size; i++ {
 				if i == 0 {

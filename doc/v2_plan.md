@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R1 完了、R2 着手前**
+最終更新: 2026-09-12 / 状態: **R2 完了、R3 着手前**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
 | R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | ✅ 2026-09-12 |
-| R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ⬜ |
+| R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ✅ 2026-09-12 |
 | R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ⬜ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R2（エラー処理の近代化、§5）。
+**次にやること**: R3-a（パッケージ分割、§6.1）。
 
 ---
 
@@ -507,24 +507,42 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
 
 ---
 
-## 5. R2 — エラー処理の近代化（1 日）
+## 5. R2 — エラー処理の近代化（1 日）✅ 2026-09-12
 
-- [ ] `internal/syntax/pos.go`（または `token.go`）: `Position{Filename string; Line, Col int}` と `String()`（`file:line:col`）
-- [ ] `CompileError` → `sema.Error{Pos syntax.Position; Msg string}`（`Error()` は **`Msg` のみ**を返し続ける —
+- [x] `internal/syntax/pos.go`（または `token.go`）: `Position{Filename string; Line, Col int}` と `String()`（`file:line:col`）
+- [x] `CompileError` → `sema.Error{Pos syntax.Position; Msg string}`（`Error()` は **`Msg` のみ**を返し続ける —
       TestErrorsFC の正規表現は `Msg` を想定。位置は `Pos` フィールドで提供し、整形は CLI の責務）
-- [ ] panic/recover の棚卸し: `panic(&CompileError{...})` 全箇所を列挙。方針は「内部は panic 継続可、ただし
+- [x] panic/recover の棚卸し: `panic(&CompileError{...})` 全箇所を列挙。方針は「内部は panic 継続可、ただし
       **回復点は `sema.CompileModule`（R3-b で導入、暫定は `Hlc.Compile`）の 1 箇所**」。`parse` の `lexPanic` は
       `syntax.Parse` が error で返すようにして廃止
-- [ ] 全エラーに Pos が付くことを保証: `sema` 内でノードを処理する入口で「現在位置」を設定し、panic 時に付与。
+- [x] 全エラーに Pos が付くことを保証: `sema` 内でノードを処理する入口で「現在位置」を設定し、panic 時に付与。
       位置が取れないエラー（ファイル読み込み等）は `Position{Filename}` のみ
-- [ ] CLI 出力: `main.go` の `%s:%d: %s` を `%s:%d:%d: error: %s` に（列を追加。ここは golden 対象外）
-- [ ] `errors_test.go` を拡張: 各断片について **Pos.Line が断片内の該当行を指す**ことも検査する
+- [x] CLI 出力: `main.go` の `%s:%d: %s` を `%s:%d:%d: error: %s` に（列を追加。ここは golden 対象外）
+- [x] `errors_test.go` を拡張: 各断片について **Pos.Line が断片内の該当行を指す**ことも検査する
       （collapse バグが直っているので正しい行になるはず。ただし断片中のどの行が「正しい」かは断片ごとに
       人手で決める必要がある → まず `Line > 0` であることのみ検査し、厳密な期待行は `errors.fc` に
       `//@` 行のオプション記法で書けるようにする: 例 `//@can't init global variable @2`）
 - 合格: 全 golden 差分ゼロ、TestErrorsFC（拡張後）緑
 
 ---
+- 結果:
+  - `syntax.Position{Filename, Line, Col}`（`String()` = `file:line:col`）、`syntax.At(filename, pos)`、`(*syntax.Error).Position()`
+  - `CompileError{Msg, Pos syntax.Position}`。`Error()` は Msg のみ（TestErrorsFC の正規表現は不変）。規約は base.go のコメントに明文化:
+    内部は panic 可、**回復点は `Hlc.Compile` と `Llc.Compile` の 2 箇所**（コード生成時のエラーは関数宣言位置 `Lambda.Pos` を補完）、
+    文字列 panic は内部不変条件違反
+  - 位置の粒度: 文の先頭（`updatePos`）に加え、式の評価中は `enterExpr` でその式の位置に移る。
+    **巻き戻し中に位置が親へ戻る問題**があったので、enterExpr の復帰処理で `recover()` し、位置の無い CompileError に
+    その時点の位置を付けて re-panic する（例: `a = 1 +
+ hoge;` → `5:7`、文レベルの検出は文頭）
+  - `CommandError`（ca65/ld65 失敗）は CompileError に化けさせず、そのまま error として返す。`Error()` にコマンド行と出力を含める
+    （errors.fc の `Unexpected trailing garbage characters` はこの出力で照合される）
+  - ユーザー起因だった文字列 panic を CompileError に: モジュール外専用文の関数内使用、未知の include 拡張子、`x.y` の x が非モジュール、
+    2 バイト値の非定数シフト、非整数の単項マイナス
+  - CLI: `file:line:col: error: msg`（旧 `file:line: msg`）
+  - errors.fc は無変更（Ruby の test-all と共有のフィクスチャ。§7 参照）。TestErrorsFC は各断片について「位置が断片内
+    （付加した共通部より前）を指す」ことを検査。`hlc_test.go` に `TestHlcErrorPosition`（式位置/文頭位置の 4 例）と
+    `TestLlcErrorPosition`（div by 0 → 関数宣言位置）を追加
+  - 複数エラー報告・文言改善は計画どおり R4 以降（§8）
 
 ## 6. R3 — パッケージ構成・API・決定性・並列化（2〜3 日）
 
@@ -625,6 +643,8 @@ cmd/fcc            CLI のみ
       `options(version:2);` 案は「レキサレベルの文法はパース開始前に確定している必要がある」ため不採用。
       補助として CLI `--syntax` フラグ可。`options` の表記変更（`@` 等）は文法 v2 設計で別途。
       詳細は [v2_decisions.md](v2_decisions.md) §4
+- [ ] `test/errors.fc` の期待行番号の記法（R2）: ヘッダ行 `//@<regex>` は Ruby の test-all と共有なので `@N` を足せない。
+      現状は Go 側で「断片内を指す」ことだけ検査。厳密な期待位置を書くなら Ruby 凍結を前提に記法を変えるか、Go 側に表を持つ
 - （実装中に追記）
 
 ---

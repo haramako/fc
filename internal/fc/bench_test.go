@@ -67,7 +67,9 @@ func BenchmarkCastleFrontend(b *testing.B) {
 		}
 		llc := NewLlc(2, hlc.Types())
 		for _, mod := range hlc.Modules.List() {
-			llc.Compile(mod)
+			if _, _, err := llc.Compile(mod); err != nil {
+				b.Fatal(err)
+			}
 		}
 	}
 }
