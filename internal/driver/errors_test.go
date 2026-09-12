@@ -41,14 +41,15 @@ func TestErrorsFC(t *testing.T) {
 			src = parts[1]
 		}
 		t.Run(regexp.MustCompile(`\W+`).ReplaceAllString(expectedErr, "_"), func(t *testing.T) {
-			t.Chdir(filepath.Join(absRepoRoot, "test"))
+			t.Parallel()
 			tmp := t.TempDir()
 			path := filepath.Join(tmp, "fail_test.fc")
 			if err := os.WriteFile(path, []byte(src+"\n"+errorsCommon), 0o666); err != nil {
 				t.Fatal(err)
 			}
 			compiler := NewCompiler(absRepoRoot)
-			_, berr := compiler.Build(path, &BuildOptions{})
+			// 断片は一時ディレクトリ、use/include の検索は test/ 基準 (旧 test-all と同じ)
+			_, berr := compiler.Build(path, &BuildOptions{Dir: testDir(), BuildDir: filepath.Join(tmp, "build"), Out: filepath.Join(tmp, "a.bin")})
 			if berr == nil {
 				t.Fatalf("断片 %d: エラーになるべきコンパイルが成功した", i)
 			}
@@ -81,9 +82,8 @@ func TestLlcErrorPosition(t *testing.T) {
 	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir)
 	compiler := NewCompiler(absRepoRoot)
-	_, err := compiler.Build("t.fc", &BuildOptions{Target: "emu", CompileOnly: true})
+	_, err := compiler.Build("t.fc", &BuildOptions{Target: "emu", CompileOnly: true, Dir: dir})
 	ce, ok := err.(*diag.Error)
 	if !ok {
 		t.Fatalf("CompileError であるべき: %v", err)

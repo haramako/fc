@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R3 進行中（R3-a〜c 完了）**
+最終更新: 2026-09-12 / 状態: **R3 進行中（R3-a〜d 完了）**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
 | R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | ✅ 2026-09-12 |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ✅ 2026-09-12 |
-| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | 🔄 a〜c ✅ |
+| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | 🔄 a〜d ✅ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R3-d（作業ディレクトリ非依存とテスト並列化、§6.4）。
+**次にやること**: R3-e（公開 API と CLI、§6.5）。
 
 ---
 
@@ -624,14 +624,25 @@ cmd/fcc            CLI のみ
     正規化後の asm 差分は test_var のこの修飾のみ（castle の main.fc の無名関数は ROM 一致で確認）。
     bin / stdout / examples ROM はバイト一致。asm/ir/allocir golden を `-update`（68 ファイル、3158 行 = 連番の付け替え）
 
-### 6.4 R3-d 作業ディレクトリ非依存とテスト並列化（C7）（0.5 日）
+### 6.4 R3-d 作業ディレクトリ非依存とテスト並列化（C7）（0.5 日）✅ 2026-09-12
 
-- [ ] `driver.BuildOptions` に `Dir`（ソースの基準ディレクトリ）、`BuildDir`（既定 `<Dir>/.fc-build`）、
+- [x] `driver.BuildOptions` に `Dir`（ソースの基準ディレクトリ）、`BuildDir`（既定 `<Dir>/.fc-build`）、
       `Stdout/Stderr io.Writer` を追加。`include`/`use` の相対パス解決は `Dir` 基準に。
       **CLI の既定値は現行どおり**（cwd と `.fc-build`）で G6 を守る
-- [ ] テストから `t.Chdir` を除去し、`t.Parallel()` を解禁（golden の各サブテスト、errors 断片）。
+- [x] テストから `t.Chdir` を除去し、`t.Parallel()` を解禁（golden の各サブテスト、errors 断片）。
       examples テストは一時ディレクトリ複製方式（G8）のまま並列化
 - 合格: `go test ./internal/fc -race` 緑（`-race` は R3-d 以降常用）、テスト時間を §9 に記録
+- 結果:
+  - `BuildOptions.Dir`（ソース基準ディレクトリ）/ `BuildDir`（既定 `<Dir>/.fc-build`）。既定値は従来どおり (G6)。
+    `Stdout` は既存、`Stderr` は現状出力が無いので追加せず
+  - `sema.Loader` が `baseDir` を持ち、libPath の相対エントリを baseDir 基準で探す。**生成物に埋め込む参照
+    （`.incbin "character.chr"` やエラー位置のファイル名）は libPath からの相対形のまま**なので asm golden は不変。
+    `Resolver.File` は (ref, abs) を返す。castle マクロの `../tmp/font/*` も検索パス経由で読む
+  - ca65 には `-I <Dir>` と（Dir が `.` 以外なら）`--bin-include-dir <Dir>` を渡す（`.incbin` は `-I` を見ない）
+  - テスト: `t.Chdir` を全廃し、golden/examples/errors の各サブテストを `t.Parallel()`。中間生成物・出力は
+    `t.TempDir()` に置くのでリポジトリ内に `.fc-build`/`a.bin` が作られなくなった（castle は ld65 の手順上ツリーごと複製）。
+    `go test -race` 緑。driver パッケージのテスト時間 18s → **11s**
+  - CLI の既定動作（cwd でビルド、`.fc-build` を cwd に作成）と miku ROM のバイト一致を手動確認
 
 ### 6.5 R3-e 公開 API と CLI（0.5 日）
 

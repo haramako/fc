@@ -38,16 +38,12 @@ func compareROM(t *testing.T, gotPath, goldenRel string) {
 // TestExampleMiku は examples/miku (fc-miku 由来) のフルビルド。
 // fc 標準のドライバのみで ROM まで生成する構成。
 func TestExampleMiku(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(absRepoRoot, "examples", "miku")
-	if err := os.RemoveAll(filepath.Join(dir, BuildPath)); err != nil {
-		t.Fatal(err)
-	}
-	t.Chdir(dir)
-
 	tmp := t.TempDir()
 	rom := filepath.Join(tmp, "miku.nes")
 	compiler := NewCompiler(absRepoRoot)
-	code, err := compiler.Build("miku.fc", &BuildOptions{Target: "nes", Out: rom})
+	code, err := compiler.Build("miku.fc", &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(tmp, "build")})
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}
@@ -62,15 +58,14 @@ func TestExampleMiku(t *testing.T) {
 //
 //	fcc compile -t nes main.fc → ca65 data.asm → ld65 (プロジェクト独自の ld65.cfg)
 func TestExampleCastle(t *testing.T) {
-	dir := filepath.Join(absRepoRoot, "examples", "castle")
+	t.Parallel()
+	// castle は .fc-build/ を ld65 の入力に使う実プロジェクト手順をなぞるので、ツリーごと一時ディレクトリに複製する
+	dir := filepath.Join(t.TempDir(), "castle")
+	copyDir(t, filepath.Join(absRepoRoot, "examples", "castle"), dir)
 	src := filepath.Join(dir, "src")
-	if err := os.RemoveAll(filepath.Join(src, BuildPath)); err != nil {
-		t.Fatal(err)
-	}
-	t.Chdir(src)
 
 	compiler := NewCompiler(absRepoRoot)
-	code, err := compiler.Build("main.fc", &BuildOptions{Target: "nes", CompileOnly: true})
+	code, err := compiler.Build("main.fc", &BuildOptions{Target: "nes", CompileOnly: true, Dir: src})
 	if err != nil {
 		t.Fatalf("コンパイル失敗: %v", err)
 	}
@@ -81,7 +76,7 @@ func TestExampleCastle(t *testing.T) {
 	runTool(t, src, "ca65", "data.asm", "-o", ".fc-build/data.o")
 
 	// リンク (実プロジェクトの Rakefile と同じ引数構成。obj はソート順 = Dir.glob 相当)
-	objs, err := filepath.Glob(filepath.Join(src, BuildPath, "*.o"))
+	objs, err := filepath.Glob(filepath.Join(src, DefaultBuildDirName, "*.o"))
 	if err != nil || len(objs) == 0 {
 		t.Fatalf("オブジェクトファイルが見つからない: %v", err)
 	}

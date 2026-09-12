@@ -45,25 +45,23 @@ func copyDir(tb testing.TB, src, dst string) {
 	}
 }
 
-// castleWorkDir は examples/castle を一時ディレクトリに複製し、その src/ に chdir する。
+// castleWorkDir は examples/castle を一時ディレクトリに複製し、その src/ を返す。
 func castleWorkDir(b *testing.B) string {
 	b.Helper()
 	tmp := b.TempDir()
 	copyDir(b, filepath.Join(absRepoRoot, "examples", "castle"), tmp)
-	src := filepath.Join(tmp, "src")
-	b.Chdir(src)
-	return src
+	return filepath.Join(tmp, "src")
 }
 
 // BenchmarkCastleFrontend は castle の parse → HLC → LLC (純 Go 部分、ファイル出力なし)。
 func BenchmarkCastleFrontend(b *testing.B) {
-	castleWorkDir(b)
+	src := castleWorkDir(b)
 	libPath := []string{".",
 		filepath.ToSlash(filepath.Join(absRepoRoot, "fclib")),
 		filepath.ToSlash(filepath.Join(absRepoRoot, "fclib", "nes"))}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		prog, err := sema.Compile(libPath, "main.fc")
+		prog, err := sema.Compile(src, libPath, "main.fc")
 		if err != nil {
 			b.Fatalf("コンパイル失敗: %v", err)
 		}
@@ -83,11 +81,11 @@ func BenchmarkCastleCompile(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		if err := os.RemoveAll(filepath.Join(src, BuildPath)); err != nil {
+		if err := os.RemoveAll(filepath.Join(src, DefaultBuildDirName)); err != nil {
 			b.Fatal(err)
 		}
 		b.StartTimer()
-		code, err := compiler.Build("main.fc", &BuildOptions{Target: "nes", CompileOnly: true})
+		code, err := compiler.Build("main.fc", &BuildOptions{Target: "nes", CompileOnly: true, Dir: src})
 		if err != nil || code != 0 {
 			b.Fatalf("コンパイル失敗: code=%d err=%v", code, err)
 		}

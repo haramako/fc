@@ -206,13 +206,23 @@ func (h *Hlc) useModule(name string) *ir.ModuleInterface {
 	return m.Interface()
 }
 
-// resolveFile は include / incbin のファイル名を実パスにする。
-func (h *Hlc) resolveFile(name string) string {
-	path, err := h.deps.File(name)
+// resolveFile は include / incbin のファイル名を解決する (ref: 生成物に埋め込む参照形、abs: 読み込み用)。
+func (h *Hlc) resolveFile(name string) (ref, abs string) {
+	ref, abs, err := h.deps.File(name)
 	if err != nil {
 		panic(err)
 	}
-	return path
+	return ref, abs
+}
+
+// readFile は検索パス上のファイルを読む (incbin、マクロの外部表など)。
+func (h *Hlc) readFile(name string) []byte {
+	_, abs := h.resolveFile(name)
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		panic(&diag.Error{Msg: err.Error()})
+	}
+	return data
 }
 
 // ---------------------------------------------------------------
@@ -337,14 +347,15 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		case "asm":
 			h.module.IncludeAsms = append(h.module.IncludeAsms, filename)
 		case "macro":
-			path := h.resolveFile(filename)
+			ref, _ := h.resolveFile(filename)
 			reg, ok := macroFiles[filename]
 			if !ok {
-				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", path)})
+				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", ref)})
 			}
 			reg(h)
 		case "chr":
-			h.module.IncludeChrs = append(h.module.IncludeChrs, h.resolveFile(filename))
+			ref, _ := h.resolveFile(filename)
+			h.module.IncludeChrs = append(h.module.IncludeChrs, ref)
 		default:
 			panic(&diag.Error{Msg: fmt.Sprintf("invalid keyword %s", kind)})
 		}
@@ -666,10 +677,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(typ, len(vals)), vals))
 
 	case cIncbin:
-		data, err := os.ReadFile(h.resolveFile(c.s))
-		if err != nil {
-			panic(&diag.Error{Msg: err.Error()})
-		}
+		data := h.readFile(c.s)
 		// unpack('C*') は符号なしバイト
 		elems := make([]*cexpr, len(data))
 		for i, b := range data {

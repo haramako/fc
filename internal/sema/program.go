@@ -55,8 +55,10 @@ type Resolver interface {
 	// Module は `use name` の先を、トップレベル宣言まで処理した状態で返す。
 	// 処理途中 (相互 use) のモジュールはその状態のまま返す。
 	Module(name string) (*ir.Module, error)
-	// File は include / incbin のファイル名を実パスに解決する。
-	File(name string) (string, error)
+	// File は include / incbin のファイル名を解決する。
+	// ref は生成物 (アセンブラの .incbin やエラー位置) に埋め込む参照形 (検索パスからの相対)、
+	// abs は読み込みに使う実パス。
+	File(name string) (ref, abs string, err error)
 }
 
 // CompileModule は 1 モジュールのトップレベルを解析し、Program に登録して返す (相 1)。
@@ -118,24 +120,36 @@ func (h *Hlc) recoverTo(err *error) {
 // ---------------------------------------------------------------
 
 // Loader は libPath からソースを探して読み込み、use の先を再帰的にコンパイルする Resolver。
+// libPath の相対エントリは baseDir を基準に解決するので、作業ディレクトリに依存しない (C7)。
+// 生成物に埋め込む参照形 (File の ref) は libPath エントリからの相対のまま保つ。
 type Loader struct {
 	prog    *Program
+	baseDir string   // 相対パスの基準 ("" なら作業ディレクトリ)
 	libPath []string // Fc::LIB_PATH 相当。先頭から順に探す
 }
 
-func NewLoader(prog *Program, libPath []string) *Loader {
-	return &Loader{prog: prog, libPath: libPath}
+func NewLoader(prog *Program, baseDir string, libPath []string) *Loader {
+	return &Loader{prog: prog, baseDir: baseDir, libPath: libPath}
+}
+
+// abs は参照形のパスを読み込み用の実パスにする。
+func (l *Loader) abs(ref string) string {
+	if l.baseDir == "" || filepath.IsAbs(ref) {
+		return ref
+	}
+	return filepath.Join(l.baseDir, ref)
 }
 
 // File は libPath 上でファイルを探す。
-func (l *Loader) File(name string) (string, error) {
+func (l *Loader) File(name string) (ref, abs string, err error) {
 	for _, p := range l.libPath {
-		cand := joinRubyPath(p, name)
-		if _, err := os.Stat(cand); err == nil {
-			return cand, nil
+		ref = joinRubyPath(p, name)
+		abs = l.abs(ref)
+		if _, err := os.Stat(abs); err == nil {
+			return ref, abs, nil
 		}
 	}
-	return "", &diag.Error{Msg: fmt.Sprintf("file %s not found", name)}
+	return "", "", &diag.Error{Msg: fmt.Sprintf("file %s not found", name)}
 }
 
 // joinRubyPath は Ruby の Pathname#+ 相当 ('.' + f は f になる)。
@@ -156,15 +170,15 @@ func (l *Loader) Module(name string) (*ir.Module, error) {
 
 // Load はファイル名でモジュールを読み込んで相 1 まで進める (メインモジュールの入口)。
 func (l *Loader) Load(filename string) (*ir.Module, error) {
-	path, err := l.File(filename)
+	ref, abs, err := l.File(filename)
 	if err != nil {
 		return nil, err
 	}
-	src, err := ReadSource(path)
+	src, err := ReadSource(abs)
 	if err != nil {
 		return nil, &diag.Error{Msg: err.Error()}
 	}
-	file, perr := syntax.Parse(src, path)
+	file, perr := syntax.Parse(src, ref)
 	if perr != nil {
 		se := perr.(*syntax.Error)
 		return nil, &diag.Error{Msg: se.Msg, Pos: se.Position()}
@@ -173,9 +187,10 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 }
 
 // Compile は libPath 上の mainFile から始めてプログラム全体を解析する (相 1 → 相 2)。
-func Compile(libPath []string, mainFile string) (*Program, error) {
+// baseDir は libPath の相対エントリの基準 ("" なら作業ディレクトリ)。
+func Compile(baseDir string, libPath []string, mainFile string) (*Program, error) {
 	prog := NewProgram()
-	loader := NewLoader(prog, libPath)
+	loader := NewLoader(prog, baseDir, libPath)
 	if _, err := loader.Load(mainFile); err != nil {
 		return nil, err
 	}

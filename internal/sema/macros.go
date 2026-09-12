@@ -5,6 +5,7 @@ package sema
 // 各登録関数は Ruby ファイルの instance_eval 時の動作 (トップレベルの @scope.find 等) を再現する。
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -63,14 +64,10 @@ func registerMath(h *Hlc) {
 
 // castle プロジェクトの src/macro.rb (テキスト変換マクロ _T / _M / VERSION_STR)。
 // Ruby版と同じく、フォント文字表 (../tmp/font/*.chr.txt) は登録時に、
-// ../VERSION はマクロ実行時に、カレントディレクトリ相対で読む。
+// ../VERSION はマクロ実行時に読む。パスはソースの検索パス (先頭はソースディレクトリ) 基準。
 func registerCastleMacros(h *Hlc) {
 	readText := func(path string) string {
-		b, err := ReadSource(path)
-		if err != nil {
-			panic(&diag.Error{Msg: err.Error()})
-		}
-		return string(b)
+		return string(bytes.ReplaceAll(h.readFile(path), []byte("\r\n"), []byte("\n")))
 	}
 	conv := NewTextConverter(readText("../tmp/font/text.chr.txt"))
 	miscConv := NewTextConverter(readText("../tmp/font/misc_text.chr.txt"))

@@ -19,7 +19,8 @@ import (
 	"github.com/haramako/fc/internal/sema"
 )
 
-const BuildPath = ".fc-build"
+// DefaultBuildDirName はソースディレクトリ直下に作る中間生成物ディレクトリの名前。
+const DefaultBuildDirName = ".fc-build"
 
 // CommandError は外部コマンド (ca65 / ld65) の失敗。
 type CommandError struct {
@@ -35,19 +36,27 @@ func (e *CommandError) Error() string {
 
 type BuildOptions struct {
 	Target        string // emu / nes (デフォルト emu)
-	Out           string // 出力ファイル (デフォルト a.bin / a.nes)
+	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
 	Asm           bool   // -S (Ruby版でも実質未使用)
 	DebugInfo     bool   // -d (Go版はデバッグログのみ)
 	OptimizeLevel int    // -O (デフォルト 2)
 	CompileOnly   bool
 	Stdout        io.Writer
+
+	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
+	// BuildDir は中間生成物 (.s / .inc / .o / base.o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
+	// CLI はどちらも既定のままなので外部挙動は従来どおり (doc/v2_plan.md G6)。
+	Dir      string
+	BuildDir string
 }
 
 type Compiler struct {
-	FCHome string // fclib/ share/ を含むディレクトリ
-	target string
-	prog   *sema.Program
+	FCHome   string // fclib/ share/ を含むディレクトリ
+	target   string
+	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
+	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
+	prog     *sema.Program
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -107,13 +116,21 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 		opt.Stdout = os.Stdout
 	}
 	c.target = opt.Target
+	c.dir = opt.Dir
+	if c.dir == "" {
+		c.dir = "."
+	}
+	c.buildDir = opt.BuildDir
+	if c.buildDir == "" {
+		c.buildDir = filepath.Join(c.dir, DefaultBuildDirName)
+	}
 
-	if err := os.MkdirAll(BuildPath, 0o777); err != nil {
+	if err := os.MkdirAll(c.buildDir, 0o777); err != nil {
 		return 0, err
 	}
 
 	// compile (ソースコード -> 中間コード)
-	prog, cerr := sema.Compile(c.libPath(opt.Target), filename)
+	prog, cerr := sema.Compile(opt.Dir, c.libPath(opt.Target), filename)
 	if cerr != nil {
 		return 0, cerr
 	}
@@ -129,10 +146,10 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 		if lerr != nil {
 			return 0, lerr
 		}
-		if err := os.WriteFile(filepath.Join(BuildPath, fmt.Sprintf("_%s.inc", mod.Id)), []byte(strings.Join(inc, "\n")), 0o666); err != nil {
+		if err := os.WriteFile(filepath.Join(c.buildDir, fmt.Sprintf("_%s.inc", mod.Id)), []byte(strings.Join(inc, "\n")), 0o666); err != nil {
 			return 0, err
 		}
-		if err := os.WriteFile(filepath.Join(BuildPath, fmt.Sprintf("_%s.s", mod.Id)), []byte(strings.Join(asm, "\n")), 0o666); err != nil {
+		if err := os.WriteFile(filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)), []byte(strings.Join(asm, "\n")), 0o666); err != nil {
 			return 0, err
 		}
 	}
@@ -140,11 +157,11 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 	// assemble (アセンブラ -> オブジェクトファイル)
 	var objs []string
 	for _, mod := range prog.Modules.List() {
-		objs = append(objs, filepath.Join(BuildPath, fmt.Sprintf("_%s.o", mod.Id)))
+		objs = append(objs, filepath.Join(c.buildDir, fmt.Sprintf("_%s.o", mod.Id)))
 		if mod.FromFcm {
 			continue
 		}
-		c.ca65(filepath.Join(BuildPath, fmt.Sprintf("_%s.s", mod.Id)))
+		c.ca65(filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
 
 	c.makeRuntime(opt.Target)
@@ -201,10 +218,10 @@ func (c *Compiler) makeBase() {
 	}
 
 	str := c.baseAsmTemplate(inesprg, ineschr, 1, inesmap)
-	if err := os.WriteFile(filepath.Join(BuildPath, "base.s"), []byte(str), 0o666); err != nil {
+	if err := os.WriteFile(filepath.Join(c.buildDir, "base.s"), []byte(str), 0o666); err != nil {
 		panic(err)
 	}
-	c.ca65(filepath.Join(BuildPath, "base.s"))
+	c.ca65(filepath.Join(c.buildDir, "base.s"))
 }
 
 type bankInfo struct {
@@ -306,13 +323,13 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) {
 		cfg = b.String()
 	}
 
-	if err := os.WriteFile(filepath.Join(BuildPath, "ld65.cfg"), []byte(cfg), 0o666); err != nil {
+	if err := os.WriteFile(filepath.Join(c.buildDir, "ld65.cfg"), []byte(cfg), 0o666); err != nil {
 		panic(err)
 	}
 
 	mapFile := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".map"
-	args := []string{"-m", mapFile, "-o", opt.Out, "-C", filepath.Join(BuildPath, "ld65.cfg"),
-		filepath.Join(BuildPath, "base.o"), filepath.Join(BuildPath, "runtime_init.o"), filepath.Join(BuildPath, "runtime.o")}
+	args := []string{"-m", mapFile, "-o", opt.Out, "-C", filepath.Join(c.buildDir, "ld65.cfg"),
+		filepath.Join(c.buildDir, "base.o"), filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
 	args = append(args, objs...)
 	c.sh("ld65", args...)
 }
@@ -368,16 +385,21 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 // ca65 はアセンブルを実行する。
 func (c *Compiler) ca65(path string) {
 	base := filepath.Base(path)
-	obj := filepath.Join(BuildPath, strings.TrimSuffix(base, filepath.Ext(base))+".o")
-	c.sh("ca65",
+	obj := filepath.Join(c.buildDir, strings.TrimSuffix(base, filepath.Ext(base))+".o")
+	args := []string{
 		"-g",
 		"-o", obj,
 		"-I", filepath.Join(c.FCHome, "share"),
-		"-I", BuildPath,
+		"-I", c.buildDir,
 		"-I", filepath.Join(c.FCHome, "fclib"),
-		"-I", ".",
+		"-I", c.dir,
 		"-I", filepath.Join(c.FCHome, "fclib", c.target),
-		path)
+	}
+	if c.dir != "." {
+		// .incbin は -I でなく --bin-include-dir で探す (既定は作業ディレクトリ)
+		args = append(args, "--bin-include-dir", c.dir)
+	}
+	c.sh("ca65", append(args, path)...)
 }
 
 // sh は外部コマンドを実行する (失敗時は CommandError を panic)。

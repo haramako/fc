@@ -25,8 +25,7 @@ func compileSrc(t *testing.T, src string) (string, error) {
 	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir)
-	prog, err := Compile([]string{".", filepath.ToSlash(filepath.Join(repoRoot, "fclib")), filepath.ToSlash(filepath.Join(repoRoot, "fclib", "emu"))}, "t.fc")
+	prog, err := Compile(dir, []string{".", filepath.ToSlash(filepath.Join(repoRoot, "fclib")), filepath.ToSlash(filepath.Join(repoRoot, "fclib", "emu"))}, "t.fc")
 	if err != nil {
 		return "", err
 	}

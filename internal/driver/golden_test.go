@@ -27,7 +27,7 @@ var update = flag.Bool("update", false, "golden を現在の出力で書き換�
 const goldenRoot = "../../testdata/golden"
 const repoRoot = "../.."
 
-// t.Chdir を使うサブテストがあるため、パスは絶対化しておく
+// テストは作業ディレクトリに依存しない (Dir / BuildDir を明示する) が、パスは絶対化しておく
 var absGoldenRoot, absRepoRoot string
 
 func init() {
@@ -135,15 +135,37 @@ func compareGoldenBytes(t *testing.T, rel string, got []byte) {
 	}
 }
 
-// compileForGolden は test/ ディレクトリで指定テストをHLCコンパイルする。
+// testDir は test/*.fc の置き場所。
+func testDir() string { return filepath.Join(absRepoRoot, "test") }
+
+// compileForGolden は test/ ディレクトリの指定テストをHLCコンパイルする。
 func compileForGolden(t *testing.T, srcName, target string) *sema.Program {
 	t.Helper()
-	t.Chdir(filepath.Join(absRepoRoot, "test"))
-	prog, err := sema.Compile([]string{".", "../fclib", "../fclib/" + target}, srcName+".fc")
+	prog, err := sema.Compile(testDir(), []string{".", "../fclib", "../fclib/" + target}, srcName+".fc")
 	if err != nil {
 		t.Fatalf("コンパイル失敗: %v", err)
 	}
 	return prog
+}
+
+// buildForGolden は test/ ディレクトリの指定テストをフルビルドし、出力ファイルのパスを返す。
+// 中間生成物と出力は一時ディレクトリに置く (並列実行しても衝突しない)。
+func buildForGolden(t *testing.T, srcName, target string, run bool, stdout *strings.Builder) (int, string) {
+	t.Helper()
+	tmp := t.TempDir()
+	out := filepath.Join(tmp, "a.bin")
+	if target == "nes" {
+		out = filepath.Join(tmp, "a.nes")
+	}
+	compiler := NewCompiler(absRepoRoot)
+	code, err := compiler.Build(srcName+".fc", &BuildOptions{
+		Target: target, Out: out, Run: run, Stdout: stdout,
+		Dir: testDir(), BuildDir: filepath.Join(tmp, "build"),
+	})
+	if err != nil {
+		t.Fatalf("ビルド失敗: %v", err)
+	}
+	return code, out
 }
 
 // goldenKey は golden のキー名 (test_basic / test_basic_nes) からソース名とターゲットを得る。
@@ -187,6 +209,7 @@ func TestGoldenIR(t *testing.T) {
 	for _, m := range matches {
 		name := strings.TrimSuffix(filepath.Base(m), ".ir")
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
 			compareGolden(t, "ir/"+name+".ir", ir.DumpProgram(hlc.Options, hlc.Modules.List()))
@@ -220,6 +243,7 @@ func TestGoldenAllocIR(t *testing.T) {
 	for _, m := range matches {
 		name := strings.TrimSuffix(filepath.Base(m), ".air")
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
 			compareGolden(t, "allocir/"+name+".air", allocLambdas(hlc))
@@ -253,6 +277,7 @@ func TestGoldenAsm(t *testing.T) {
 		}
 		name := d.Name()
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
 			llc := codegen.NewLlc(2, hlc.Types)
@@ -278,21 +303,13 @@ func TestGoldenBinary(t *testing.T) {
 		base := filepath.Base(m)
 		name := strings.TrimSuffix(base, filepath.Ext(base))
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			srcName, target := goldenKeyInfo(name)
-			t.Chdir(filepath.Join(absRepoRoot, "test"))
-			compiler := NewCompiler(absRepoRoot)
-			code, berr := compiler.Build(srcName+".fc", &BuildOptions{Target: target})
-			if berr != nil {
-				t.Fatalf("ビルド失敗: %v", berr)
-			}
+			code, out := buildForGolden(t, srcName, target, false, nil)
 			if code != 0 {
 				t.Fatalf("ビルド結果コード: %d", code)
 			}
-			outName := "a.bin"
-			if target == "nes" {
-				outName = "a.nes"
-			}
-			got, err := os.ReadFile(outName)
+			got, err := os.ReadFile(out)
 			if err != nil {
 				t.Fatalf("出力読み込み失敗: %v", err)
 			}
@@ -310,14 +327,10 @@ func TestGoldenStdout(t *testing.T) {
 	for _, m := range matches {
 		name := strings.TrimSuffix(filepath.Base(m), ".txt")
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			srcName, target := goldenKeyInfo(name)
-			t.Chdir(filepath.Join(absRepoRoot, "test"))
-			compiler := NewCompiler(absRepoRoot)
 			var out strings.Builder
-			code, berr := compiler.Build(srcName+".fc", &BuildOptions{Target: target, Run: true, Stdout: &out})
-			if berr != nil {
-				t.Fatalf("ビルド失敗: %v", berr)
-			}
+			code, _ := buildForGolden(t, srcName, target, true, &out)
 			compareGolden(t, "stdout/"+name+".txt", out.String())
 			compareGolden(t, "stdout/"+name+".exit", fmt.Sprintf("%d\n", code))
 		})
