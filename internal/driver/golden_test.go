@@ -1,8 +1,12 @@
-package fc
+package driver
 
 import (
 	"flag"
 	"fmt"
+	"github.com/haramako/fc/internal/codegen"
+	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/regalloc"
+	"github.com/haramako/fc/internal/sema"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -89,10 +93,10 @@ func compareGoldenBytes(t *testing.T, rel string, got []byte) {
 }
 
 // compileForGolden は test/ ディレクトリで指定テストをHLCコンパイルする。
-func compileForGolden(t *testing.T, srcName, target string) *Hlc {
+func compileForGolden(t *testing.T, srcName, target string) *sema.Hlc {
 	t.Helper()
 	t.Chdir(filepath.Join(absRepoRoot, "test"))
-	hlc := NewHlc([]string{".", "../fclib", "../fclib/" + target})
+	hlc := sema.NewHlc([]string{".", "../fclib", "../fclib/" + target})
 	if err := hlc.Compile(srcName + ".fc"); err != nil {
 		t.Fatalf("コンパイル失敗: %v", err)
 	}
@@ -142,23 +146,23 @@ func TestGoldenIR(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
-			compareGolden(t, "ir/"+name+".ir", DumpIR(hlc))
+			compareGolden(t, "ir/"+name+".ir", ir.DumpProgram(hlc.Options, hlc.Modules.List()))
 		})
 	}
 }
 
 // allocLambdas は LLC と同じ順序 (モジュール順 × defs内のcode順、extern除外) で
 // 割付+delete_unuse を実行し、ダンプを返す。
-func allocLambdas(hlc *Hlc) string {
+func allocLambdas(hlc *sema.Hlc) string {
 	var b strings.Builder
 	for _, mod := range hlc.Modules.List() {
 		for _, d := range mod.Defs {
-			if d.Kind != DefCode || d.Lambda.Extern {
+			if d.Kind != ir.DefCode || d.Lambda.Extern {
 				continue
 			}
-			AllocateRegister(d.Lambda)
-			DeleteUnuse(d.Lambda)
-			b.WriteString(DumpAllocLambda(mod.Id, d.Sym, d.Lambda))
+			regalloc.AllocateRegister(d.Lambda)
+			regalloc.DeleteUnuse(d.Lambda)
+			b.WriteString(ir.DumpAllocLambda(mod.Id, d.Sym, d.Lambda))
 		}
 	}
 	return b.String()
@@ -208,7 +212,7 @@ func TestGoldenAsm(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
-			llc := NewLlc(2, hlc.Types())
+			llc := codegen.NewLlc(2, hlc.Types())
 			for _, mod := range hlc.Modules.List() {
 				asm, inc, err := llc.Compile(mod)
 				if err != nil {

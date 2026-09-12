@@ -1,4 +1,4 @@
-package fc
+package ir
 
 // 中間表現 (IR) の型定義 (doc/v2_plan.md R1-d)。
 //
@@ -17,40 +17,40 @@ import (
 type OpCode uint8
 
 const (
-	opInvalid OpCode = iota
-	OpLabel                 // Label:
-	OpIf                    // if Src[0] == 0 then goto Label
-	OpJump                  // goto Label
-	OpReturn                // return [Src[0]]
-	OpPushResult            // 戻り値領域を予約 (Type)
-	OpPushArg               // 引数を積む (Type, Src[0])
-	OpCall                  // Dst = call Src[0]
-	OpPushFastcallResult    // fastcall 版
-	OpPushFastcallArg       //
-	OpFastcall              //
-	OpLoad                  // Dst = Src[0]
-	OpSignExtension         // Dst = sign_extend(Src[0])
-	OpAdd                   // Dst = Src[0] op Src[1]
-	OpSub                   //
-	OpAnd                   //
-	OpOr                    //
-	OpXor                   //
-	OpMul                   //
-	OpDiv                   //
-	OpMod                   //
-	OpShiftLeft             //
-	OpShiftRight            //
-	OpUminus                // Dst = -Src[0]
-	OpEq                    // Dst = (Src[0] == Src[1])
-	OpLt                    // Dst = (Src[0] < Src[1])
-	OpNot                   // Dst = !Src[0]
-	OpAsm                   // インラインアセンブラ (Text)
-	OpIndex                 // Dst = &Src[0][Src[1]]
-	OpRef                   // Dst = &Src[0]
-	OpPget                  // Dst = *Src[0]
-	OpPset                  // *Src[0] = Src[1]
-	OpIndexPget             // Dst = Src[0][Src[1]]        (ピープホール最適化で生成)
-	OpIndexPset             // Src[0][Src[1]] = Src[2]     (同上)
+	opInvalid            OpCode = iota
+	OpLabel                     // Label:
+	OpIf                        // if Src[0] == 0 then goto Label
+	OpJump                      // goto Label
+	OpReturn                    // return [Src[0]]
+	OpPushResult                // 戻り値領域を予約 (Type)
+	OpPushArg                   // 引数を積む (Type, Src[0])
+	OpCall                      // Dst = call Src[0]
+	OpPushFastcallResult        // fastcall 版
+	OpPushFastcallArg           //
+	OpFastcall                  //
+	OpLoad                      // Dst = Src[0]
+	OpSignExtension             // Dst = sign_extend(Src[0])
+	OpAdd                       // Dst = Src[0] op Src[1]
+	OpSub                       //
+	OpAnd                       //
+	OpOr                        //
+	OpXor                       //
+	OpMul                       //
+	OpDiv                       //
+	OpMod                       //
+	OpShiftLeft                 //
+	OpShiftRight                //
+	OpUminus                    // Dst = -Src[0]
+	OpEq                        // Dst = (Src[0] == Src[1])
+	OpLt                        // Dst = (Src[0] < Src[1])
+	OpNot                       // Dst = !Src[0]
+	OpAsm                       // インラインアセンブラ (Text)
+	OpIndex                     // Dst = &Src[0][Src[1]]
+	OpRef                       // Dst = &Src[0]
+	OpPget                      // Dst = *Src[0]
+	OpPset                      // *Src[0] = Src[1]
+	OpIndexPget                 // Dst = Src[0][Src[1]]        (ピープホール最適化で生成)
+	OpIndexPset                 // Src[0][Src[1]] = Src[2]     (同上)
 	opCodeCount
 )
 
@@ -74,13 +74,6 @@ func (c OpCode) String() string {
 	return fmt.Sprintf("OpCode(%d)", int(c))
 }
 
-// copToOpCode は HLC 内部の演算名 (cexpr.go) から OpCode への対応。
-var copToOpCode = map[cop]OpCode{
-	opLoad: OpLoad, opAdd: OpAdd, opSub: OpSub, opMul: OpMul, opDiv: OpDiv, opMod: OpMod,
-	opAnd: OpAnd, opOr: OpOr, opXor: OpXor, opShiftLeft: OpShiftLeft, opShiftRight: OpShiftRight,
-	opNot: OpNot, opUminus: OpUminus, opEq: OpEq, opLt: OpLt,
-}
-
 // Operand は IR 命令の値オペランド。*Value / *CastedValue / *PointeredArray が実装する。
 type Operand interface {
 	operandNode()
@@ -93,15 +86,15 @@ func (*PointeredArray) operandNode() {}
 // Op は IR の 1 命令。使うフィールドは OpCode ごとに決まっている (OpCode 定義のコメント参照)。
 type Op struct {
 	Code  OpCode
-	Dst   Operand   // 結果の格納先 (無い命令、または削除された戻り値では nil)
-	Src   []Operand // 入力
-	Label string    // OpLabel / OpIf / OpJump の飛び先
+	Dst   Operand     // 結果の格納先 (無い命令、または削除された戻り値では nil)
+	Src   []Operand   // 入力
+	Label string      // OpLabel / OpIf / OpJump の飛び先
 	Type  *types.Type // OpPushResult / OpPushArg / OpPushFastcall* の型
-	Text  string    // OpAsm のアセンブラ行
+	Text  string      // OpAsm のアセンブラ行
 }
 
-// src は i 番目の入力 (無ければ nil)。
-func (op *Op) src(i int) Operand {
+// In は i 番目の入力 (無ければ nil)。
+func (op *Op) In(i int) Operand {
 	if i < len(op.Src) {
 		return op.Src[i]
 	}

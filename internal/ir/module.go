@@ -1,4 +1,4 @@
-package fc
+package ir
 
 // モジュール・関数・定義 (lib/fc/base.rb の Module / Lambda 由来)。
 
@@ -158,8 +158,8 @@ type Lambda struct {
 	Id        string          // アセンブラシンボル名 (_<module>_<name>、_main、symbol オプション、または $N)
 	Name      string          // 宣言名 (関数リテラルでは "")
 	Pos       syntax.Position // 宣言の位置 (コード生成時のエラーに使う)
-	Params    []Param  // 仮引数の宣言
-	Args      []*Value // 仮引数の変数 (compileLambda で Params から作られる)
+	Params    []Param         // 仮引数の宣言
+	Args      []*Value        // 仮引数の変数 (compileLambda で Params から作られる)
 	Type      *types.Type
 	Options   Options       // options(...) の生の値 (segment, fastcall, symbol, ...)
 	Extern    bool          // 本体を持たない (宣言のみ)

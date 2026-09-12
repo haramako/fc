@@ -37,12 +37,12 @@ func (k Kind) String() string {
 
 // Type は fc の型。Universe でインターンされるので、フィールドは変更しないこと。
 type Type struct {
-	Kind   Kind
-	Size   int   // バイト数。長さ省略配列は -1
-	Signed bool  // Int のみ
-	Base   *Type // Pointer / Array の要素型、Func の戻り値型
-	Length int   // Array の要素数。省略時 -1
-	Params []*Type
+	Kind     Kind
+	Size     int   // バイト数。長さ省略配列は -1
+	Signed   bool  // Int のみ
+	Base     *Type // Pointer / Array の要素型、Func の戻り値型
+	Length   int   // Array の要素数。省略時 -1
+	Params   []*Type
 	fastcall bool
 	str      string
 }
@@ -73,10 +73,16 @@ func (u *Universe) intern(t *Type) *Type {
 }
 
 // Void / Bool / Module / Macro は単位型。
-func (u *Universe) Void() *Type   { return u.intern(&Type{Kind: Void, Size: 0, Length: -1, str: "void"}) }
-func (u *Universe) Bool() *Type   { return u.intern(&Type{Kind: Bool, Size: 1, Length: -1, str: "ubool8"}) }
-func (u *Universe) Module() *Type { return u.intern(&Type{Kind: Module, Size: 0, Length: -1, str: "module"}) }
-func (u *Universe) Macro() *Type  { return u.intern(&Type{Kind: Macro, Size: 0, Length: -1, str: "macro"}) }
+func (u *Universe) Void() *Type { return u.intern(&Type{Kind: Void, Size: 0, Length: -1, str: "void"}) }
+func (u *Universe) Bool() *Type {
+	return u.intern(&Type{Kind: Bool, Size: 1, Length: -1, str: "ubool8"})
+}
+func (u *Universe) Module() *Type {
+	return u.intern(&Type{Kind: Module, Size: 0, Length: -1, str: "module"})
+}
+func (u *Universe) Macro() *Type {
+	return u.intern(&Type{Kind: Macro, Size: 0, Length: -1, str: "macro"})
+}
 
 // IntType は size バイトの整数型。
 func (u *Universe) IntType(size int, signed bool) *Type {

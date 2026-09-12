@@ -395,7 +395,7 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		if c.D == 0 { // normal binary mode
 			r := x + y + c.C
 			c.A = 0xff & r
-			c.V = (((0x7f&x)+(0x7f&y)+c.C)>>7) ^ ((x + y + c.C) >> 8)
+			c.V = (((0x7f & x) + (0x7f & y) + c.C) >> 7) ^ ((x + y + c.C) >> 8)
 			c.Z = b2i(r&0xff == 0)
 			c.C = b2i(r > 255)
 			c.N = (0x80 & r) >> 7
@@ -421,7 +421,7 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 			y = y ^ 0xff
 			r := x + y + c.C
 			c.A = 0xff & r
-			c.V = (((0x7f&x)+(0x7f&y)+c.C)>>7) ^ ((x + y + c.C) >> 8)
+			c.V = (((0x7f & x) + (0x7f & y) + c.C) >> 7) ^ ((x + y + c.C) >> 8)
 			c.Z = b2i(0xff&r == 0)
 			c.C = b2i(r > 255)
 			c.N = (0x80 & r) >> 7
@@ -731,7 +731,7 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 
 	case PHP:
 		addr := 0x0100 + (0xff & c.S)
-		val := c.N            // bit 7
+		val := c.N             // bit 7
 		val = (val << 1) + c.V // bit 6
 		val = (val << 1) + 1   // bit 5
 		val = (val << 1) + c.B // bit 4

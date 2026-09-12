@@ -1,4 +1,4 @@
-package fc
+package driver
 
 // lib/fc/compiler.rb の Compiler (パイプライン統括・ca65/ld65起動・リンク) の移植。
 // ERBテンプレートは text/template ではなく直接文字列生成で 1:1 に再現している
@@ -12,7 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/haramako/fc/internal/codegen"
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/r6502"
+	"github.com/haramako/fc/internal/sema"
 )
 
 const BuildPath = ".fc-build"
@@ -43,7 +47,7 @@ type BuildOptions struct {
 type Compiler struct {
 	FCHome string // fclib/ share/ を含むディレクトリ
 	target string
-	hlc    *Hlc
+	hlc    *sema.Hlc
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -75,7 +79,7 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 				err = ce
 				return
 			}
-			if ce, ok := r.(*CompileError); ok {
+			if ce, ok := r.(*diag.Error); ok {
 				err = ce
 				return
 			}
@@ -87,7 +91,7 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 		opt.Target = "emu"
 	}
 	if opt.Target == "x6502" {
-		return 0, &CompileError{Msg: "target x6502 is not supported by go port"}
+		return 0, &diag.Error{Msg: "target x6502 is not supported by go port"}
 	}
 	if opt.Out == "" {
 		if opt.Target == "nes" {
@@ -109,14 +113,14 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 	}
 
 	// compile (ソースコード -> 中間コード)
-	hlc := NewHlc([]string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", opt.Target))})
+	hlc := sema.NewHlc([]string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", opt.Target))})
 	if cerr := hlc.Compile(filename); cerr != nil {
 		return 0, cerr
 	}
 	c.hlc = hlc
 
 	// compile2 (中間コード -> アセンブラファイル)
-	llc := NewLlc(opt.OptimizeLevel, hlc.Types())
+	llc := codegen.NewLlc(opt.OptimizeLevel, hlc.Types())
 	for _, mod := range hlc.Modules.List() {
 		if mod.FromFcm {
 			continue
@@ -169,14 +173,14 @@ func (c *Compiler) makeBase() {
 	inesmap := 0
 	if m, ok := opts.Get("mapper"); ok {
 		switch m.Kind {
-		case OptStr:
+		case ir.OptStr:
 			switch m.Str {
 			case "MMC0":
 				inesmap = 0
 			case "MMC3":
 				inesmap = 4
 			}
-		case OptInt:
+		case ir.OptInt:
 			inesmap = m.Int
 		}
 	}

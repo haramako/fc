@@ -1,4 +1,4 @@
-package fc
+package driver
 
 // test/test-all の「エラーが起こるソースのテスト」の移植。
 // errors.fc を //@ 区切りでパースし、各断片が期待の正規表現に一致する
@@ -9,6 +9,8 @@ package fc
 // 「コンパイルが通ってしまったら失敗」とする。
 
 import (
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/sema"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,7 +24,7 @@ function main():void{}
 `
 
 func TestErrorsFC(t *testing.T) {
-	txt, err := ReadSource(filepath.Join(absRepoRoot, "test", "errors.fc"))
+	txt, err := sema.ReadSource(filepath.Join(absRepoRoot, "test", "errors.fc"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +61,7 @@ func TestErrorsFC(t *testing.T) {
 			}
 			// CompileError は断片内 (errorsCommon より前) の位置を指していること。
 			// 外部コマンド (ca65) のエラーは CommandError で位置を持たない
-			if ce, ok := berr.(*CompileError); ok {
+			if ce, ok := berr.(*diag.Error); ok {
 				fragLines := strings.Count(src, "\n") + 1
 				if !ce.Pos.IsValid() || ce.Pos.Line > fragLines || !strings.HasSuffix(ce.Pos.Filename, "fail_test.fc") {
 					t.Errorf("断片 %d: 位置が不正 %s (断片は %d 行)", i, ce.Pos, fragLines)
@@ -68,5 +70,25 @@ func TestErrorsFC(t *testing.T) {
 				t.Errorf("断片 %d: エラー型が不正 %T", i, berr)
 			}
 		})
+	}
+}
+
+// TestLlcErrorPosition: コード生成時のエラーは関数の宣言位置を指す。
+func TestLlcErrorPosition(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	src := "var x:int;\n\nfunction main():void\n{\n  x = x / 0;\n}\n"
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	compiler := NewCompiler(absRepoRoot)
+	_, err := compiler.Build("t.fc", &BuildOptions{Target: "emu", CompileOnly: true})
+	ce, ok := err.(*diag.Error)
+	if !ok {
+		t.Fatalf("CompileError であるべき: %v", err)
+	}
+	if !strings.Contains(ce.Msg, "div by 0") || ce.Pos.Line != 3 || ce.Pos.Col != 1 {
+		t.Errorf("got %+v", ce)
 	}
 }

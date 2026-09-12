@@ -1,4 +1,4 @@
-package fc
+package sema
 
 // fclib/*.rb の Ruby マクロを Go ネイティブ実装に固定したもの。
 // include("stdio.rb") 等はファイル名キーでここに解決される (確定方針参照)。
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
@@ -26,7 +27,7 @@ var macroFiles = map[string]func(h *Hlc){
 // include("stdmacro.rb") 自体は受理し、呼び出されたらエラーにする (v2 で削除予定: v2_decisions.md §3)。
 func registerStdmacro(h *Hlc) {
 	h.defmacro("times", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		panic(&CompileError{Msg: "times macro is not supported"})
+		panic(&diag.Error{Msg: "times macro is not supported"})
 	})
 }
 
@@ -67,7 +68,7 @@ func registerCastleMacros(h *Hlc) {
 	readText := func(path string) string {
 		b, err := ReadSource(path)
 		if err != nil {
-			panic(&CompileError{Msg: err.Error()})
+			panic(&diag.Error{Msg: err.Error()})
 		}
 		return string(b)
 	}
@@ -111,7 +112,7 @@ func rubyChomp(s string) string {
 func registerUnittest(h *Hlc) {
 	stdioMod := h.scope.FindMust("stdio", true).Module
 	if stdioMod == nil {
-		panic(&CompileError{Msg: "stdio is not a module"})
+		panic(&diag.Error{Msg: "stdio is not a module"})
 	}
 	print := stdioMod.Scope.Find("print", true)
 	exit := stdioMod.Scope.Find("exit", true)

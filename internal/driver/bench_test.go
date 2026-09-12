@@ -1,4 +1,4 @@
-package fc
+package driver
 
 // 性能退行の検知用ベンチマーク (doc/v2_plan.md R0-5)。
 // 基準値は v2_plan.md の作業ログに記録し、各フェーズ末に再計測する。
@@ -6,6 +6,8 @@ package fc
 //	go test ./internal/fc -run xxx -bench BenchmarkCastle -benchmem
 
 import (
+	"github.com/haramako/fc/internal/codegen"
+	"github.com/haramako/fc/internal/sema"
 	"io"
 	"io/fs"
 	"os"
@@ -61,11 +63,11 @@ func BenchmarkCastleFrontend(b *testing.B) {
 		filepath.ToSlash(filepath.Join(absRepoRoot, "fclib", "nes"))}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		hlc := NewHlc(libPath)
+		hlc := sema.NewHlc(libPath)
 		if err := hlc.Compile("main.fc"); err != nil {
 			b.Fatalf("コンパイル失敗: %v", err)
 		}
-		llc := NewLlc(2, hlc.Types())
+		llc := codegen.NewLlc(2, hlc.Types())
 		for _, mod := range hlc.Modules.List() {
 			if _, _, err := llc.Compile(mod); err != nil {
 				b.Fatal(err)

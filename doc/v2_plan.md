@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R2 完了、R3 着手前**
+最終更新: 2026-09-12 / 状態: **R3 進行中（R3-a 完了）**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
 | R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | ✅ 2026-09-12 |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ✅ 2026-09-12 |
-| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ⬜ |
+| R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | 🔄 a ✅ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R3-a（パッケージ分割、§6.1）。
+**次にやること**: R3-b（モジュール単位の sema、§6.2）。
 
 ---
 
@@ -60,12 +60,12 @@
 | 目的 | コマンド | 所要 |
 |---|---|---|
 | 全部 | `go test ./...` | 約 75 秒（fc 20s + nes 16s + ビルド） |
-| コンパイラ golden だけ | `go test ./internal/fc -run 'TestGolden'` | 数秒 |
-| 実プロジェクト ROM | `go test ./internal/fc -run 'TestExample'` | 約 5 秒 |
+| コンパイラ golden だけ | `go test ./internal/driver -run 'TestGolden'` | 数秒 |
+| 実プロジェクト ROM | `go test ./internal/driver -run 'TestExample'` | 約 5 秒 |
 | NES スモーク/自動プレイ | `go test ./internal/nes` | 約 16 秒（Mesen が無ければ当該テストは Skip） |
-| golden 再生成（R0 以降） | `go test ./internal/fc -run 'TestGolden' -update` | |
+| golden 再生成（R0 以降） | `go test ./internal/driver -run 'TestGolden' -update` | |
 | 静的検査 | `go vet ./...`（現状クリーン。維持する） | |
-| ベンチ（R0-5 以降） | `go test ./internal/fc -run xxx -bench BenchmarkCastle -benchmem` | |
+| ベンチ（R0-5 以降） | `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem` | |
 
 ### 0.4 スコープ外（やらないこと）
 
@@ -546,7 +546,7 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
 
 ## 6. R3 — パッケージ構成・API・決定性・並列化（2〜3 日）
 
-### 6.1 R3-a パッケージ分割（1 日）
+### 6.1 R3-a パッケージ分割（1 日）✅ 2026-09-12
 
 目標配置（R1 で新規コードは既にここにある）:
 
@@ -562,11 +562,22 @@ internal/r6502, internal/nes  変更なし
 cmd/fcc            CLI のみ
 ```
 
-- [ ] import 方向: `syntax` ← `sema` ← `driver`、`types`/`ir` ← `sema`/`regalloc`/`codegen` ← `driver`。
+- [x] import 方向: `syntax` ← `sema` ← `driver`、`types`/`ir` ← `sema`/`regalloc`/`codegen` ← `driver`。
       **`syntax` は他の internal を import しない**（C3）。`go vet` に加えて import 規則のテスト
       （`go list -deps` を使う小さなテスト、または `depguard` 相当の簡易チェック）を 1 本置く
-- [ ] 移動は機械的に（`gopls rename`/`gofmt -r`、または手作業）。**移動コミットではロジックを変えない**
+- [x] 移動は機械的に（`gopls rename`/`gofmt -r`、または手作業）。**移動コミットではロジックを変えない**
 - 合格: 全 golden 差分ゼロ
+- 結果:
+  - 配置は上の目標どおり + `internal/diag`（`diag.Error{Msg, Pos}`。旧 `CompileError`。regalloc/codegen/sema/driver が共有するので独立パッケージに）。
+    `Scope` は `ir`（IR の値の記号表なので）。Ruby 由来の整数演算 (`FloorDiv/FloorMod/Shl/Shr`) も `ir/intmath.go`
+  - `ir` を sema から切るため、マクロ本体 (`MacroFn`) は `Value` から外し `sema.Hlc.macros map[*ir.Value]MacroFn` に。
+    マクロ値は `Type.Kind == types.Macro` の KindGlobal で表す
+  - 公開化: `ir.OperandString`、`ir.DumpOp`、`ir.DumpProgram(opts, mods)`（旧 `DumpIR(h)`）、`Op.In(i)`（旧 `src`）、`sema.ReadSource`
+  - テストの配置: golden / examples / errors / bench / LLC エラー位置 → `driver`（全パッケージを束ねる唯一の場所）、
+    HLC 単体 → `sema`、割付 → `regalloc`、`Options` → `ir`、import 方向 → `driver/deps_test.go`
+    （`go list` で検査。`syntax`/`types` は internal を一切 import しない）
+  - `cmd/fcc` と `internal/nes` は `driver` を使う。`internal/fc` は消滅
+  - 全 golden 差分ゼロ（移動のみ。`gofmt -w` による整形差分が `r6502.go`/`types.go` に入った）
 
 ### 6.2 R3-b モジュール単位の sema（C4）（0.5〜1 日）
 

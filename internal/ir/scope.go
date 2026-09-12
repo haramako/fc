@@ -1,8 +1,12 @@
-package fc
+package ir
 
 // スコープ (名前 → Value)。lib/fc/base.rb の Scope 由来。
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/haramako/fc/internal/diag"
+)
 
 type Scope struct {
 	Parent   *Scope
@@ -45,13 +49,13 @@ func (s *Scope) FindMust(id string, withPrivate bool) *Value {
 	if v := s.Find(id, withPrivate); v != nil {
 		return v
 	}
-	panic(&CompileError{Msg: fmt.Sprintf("%s not found", id)})
+	panic(&diag.Error{Msg: fmt.Sprintf("%s not found", id)})
 }
 
 // Declare は値を宣言する。同名が既にあれば CompileError。
 func (s *Scope) Declare(val *Value) {
 	if _, ok := s.declares[val.Name]; ok {
-		panic(&CompileError{Msg: fmt.Sprintf("%s already defined", val.Name)})
+		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", val.Name)})
 	}
 	s.declares[val.Name] = val
 	s.order = append(s.order, val.Name)

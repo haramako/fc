@@ -1,11 +1,11 @@
-package fc
+package sema
 
-// HLC: 構文木 (internal/syntax) → 中間コード (Lambda.Ops)。lib/fc/hlc.rb 由来。
+// HLC: 構文木 (internal/syntax) → 中間コード (ir.Lambda.Ops)。lib/fc/hlc.rb 由来。
 //
 // R1-c (doc/v2_plan.md §4.4) で入力を型付き構文木にし、定数評価を純関数化した
 // (構文木は変異しない。評価結果は cexpr に持つ)。tmp_count の採番順・エラーメッセージ文言は
 // 旧実装と同一で、生成される IR はバイト単位で一致する。
-// IR は ir.go の Op (opcode enum + Dst/Src/Label/Type/Text)。
+// IR は ir.go の ir.Op (opcode enum + Dst/Src/Label/Type/Text)。
 
 import (
 	"fmt"
@@ -13,26 +13,31 @@ import (
 	"path/filepath"
 	"strings"
 
+	"bytes"
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
 
 type Hlc struct {
-	Modules *ModuleList // 登録順 (use に出会った深さ優先順)。リンク順にもなる
-	Options Options     // グローバルな options (mapper, bank_count, ...)。モジュール処理順の後勝ち
+	Modules *ir.ModuleList // 登録順 (use に出会った深さ優先順)。リンク順にもなる
+	Options ir.Options     // グローバルな options (mapper, bank_count, ...)。モジュール処理順の後勝ち
 
 	LibPath []string // Fc::LIB_PATH 相当
 
 	types       *types.Universe
 	curTmpCount int
-	globalScope *Scope
-	scope       *Scope
+	globalScope *ir.Scope
+	scope       *ir.Scope
 	loops       [][]string // [ [continueラベル, breakラベル], ... ]
 	fastCalling bool
 
-	module *Module
-	lmd    *Lambda
+	module *ir.Module
+	lmd    *ir.Lambda
 	curPos syntax.Position // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
+
+	macros map[*ir.Value]MacroFn // マクロ値 → 本体
 
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
@@ -52,16 +57,17 @@ type macroResult struct {
 
 func NewHlc(libPath []string) *Hlc {
 	h := &Hlc{
-		Modules: NewModuleList(),
+		Modules: ir.NewModuleList(),
 		LibPath: libPath,
 		types:   types.NewUniverse(),
+		macros:  map[*ir.Value]MacroFn{},
 	}
-	h.globalScope = NewScope(nil)
+	h.globalScope = ir.NewScope(nil)
 	h.scope = h.globalScope
 
 	h.defmacro("asm", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		for _, line := range args {
-			h.emit(&Op{Code: OpAsm, Text: mustString(line)})
+			h.emit(&ir.Op{Code: ir.OpAsm, Text: mustString(line)})
 		}
 		return macroResult{}
 	})
@@ -75,7 +81,7 @@ func (h *Hlc) Types() *types.Universe { return h.types }
 func (h *Hlc) Compile(filename string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if ce, ok := r.(*CompileError); ok {
+			if ce, ok := r.(*diag.Error); ok {
 				if !ce.Pos.IsValid() {
 					ce.Pos = h.curPos
 				}
@@ -128,7 +134,7 @@ func (h *Hlc) enterExpr(pos syntax.Pos) func() {
 	h.curPos = syntax.At(h.module.Path, pos)
 	return func() {
 		if r := recover(); r != nil {
-			if ce, ok := r.(*CompileError); ok && !ce.Pos.IsValid() {
+			if ce, ok := r.(*diag.Error); ok && !ce.Pos.IsValid() {
 				ce.Pos = h.curPos
 			}
 			h.curPos = old
@@ -147,14 +153,15 @@ func (h *Hlc) tmpName(prefix string) string {
 	return fmt.Sprintf("%s%d", prefix, h.tmpCount())
 }
 
-func (h *Hlc) defmacro(name string, fn MacroFn) *Value {
-	v := h.addVar(NewMacroValue(name, h.types.Macro(), fn))
+func (h *Hlc) defmacro(name string, fn MacroFn) *ir.Value {
+	v := h.addVar(ir.NewGlobal(name, h.types.Macro(), ""))
 	v.Public = true
+	h.macros[v] = fn
 	return v
 }
 
 // addVar は変数/定数を追加する。
-func (h *Hlc) addVar(v *Value) *Value {
+func (h *Hlc) addVar(v *ir.Value) *ir.Value {
 	if h.lmd != nil {
 		h.lmd.Vars = append(h.lmd.Vars, v)
 	} else if h.module != nil {
@@ -164,7 +171,7 @@ func (h *Hlc) addVar(v *Value) *Value {
 	return v
 }
 
-func defsFind(defs []*Def, symbol string) bool {
+func defsFind(defs []*ir.Def, symbol string) bool {
 	for _, d := range defs {
 		if d.Sym == symbol {
 			return true
@@ -175,7 +182,7 @@ func defsFind(defs []*Def, symbol string) bool {
 
 // addDef は現在の関数 (またはモジュール) に定義を追加し、そのシンボル名を返す。
 // モジュールレベルでは `_<module>_<name>` にマングルされる。同名が既にあれば追加しない。
-func (h *Hlc) addDef(name string, d *Def) string {
+func (h *Hlc) addDef(name string, d *ir.Def) string {
 	if h.lmd != nil {
 		d.Sym = name
 		if !defsFind(h.lmd.Defs, d.Sym) {
@@ -191,7 +198,7 @@ func (h *Hlc) addDef(name string, d *Def) string {
 }
 
 // addDefModule はモジュールにシンボル名そのままの定義を追加する (関数用)。
-func (h *Hlc) addDefModule(d *Def) {
+func (h *Hlc) addDefModule(d *ir.Def) {
 	if !defsFind(h.module.Defs, d.Sym) {
 		h.module.Defs = append(h.module.Defs, d)
 	}
@@ -199,12 +206,12 @@ func (h *Hlc) addDefModule(d *Def) {
 
 func (h *Hlc) inScope(f func()) {
 	old := h.scope
-	h.scope = NewScope(old)
+	h.scope = ir.NewScope(old)
 	f()
 	h.scope = old
 }
 
-func (h *Hlc) attachScope(newScope *Scope, f func()) {
+func (h *Hlc) attachScope(newScope *ir.Scope, f func()) {
 	old := h.scope
 	h.scope = newScope
 	f()
@@ -219,7 +226,7 @@ func (h *Hlc) findModule(file string) string {
 			return cand
 		}
 	}
-	panic(&CompileError{Msg: fmt.Sprintf("file %s not found", file)})
+	panic(&diag.Error{Msg: fmt.Sprintf("file %s not found", file)})
 }
 
 // joinRubyPath は Ruby の Pathname#+ 相当 ('.' + f は f になる)。
@@ -231,9 +238,9 @@ func joinRubyPath(p, f string) string {
 }
 
 // mustValue は評価済みの値であることを要求する (マクロ引数など)。
-func mustValue(c *cexpr) *Value {
+func mustValue(c *cexpr) *ir.Value {
 	if c.kind != cValue {
-		panic(&CompileError{Msg: "constant value required"})
+		panic(&diag.Error{Msg: "constant value required"})
 	}
 	return c.val
 }
@@ -242,7 +249,7 @@ func mustValue(c *cexpr) *Value {
 func mustString(c *cexpr) string {
 	v := mustValue(c)
 	if !v.IsString {
-		panic(&CompileError{Msg: "string literal required"})
+		panic(&diag.Error{Msg: "string literal required"})
 	}
 	return v.Str
 }
@@ -251,24 +258,24 @@ func mustString(c *cexpr) string {
 func (h *Hlc) compatible(a, b *types.Type) *types.Type {
 	r := h.types.Compatible(a, b)
 	if r == nil {
-		panic(&CompileError{Msg: fmt.Sprintf("not compatible type '%s' and '%s'", a, b)})
+		panic(&diag.Error{Msg: fmt.Sprintf("not compatible type '%s' and '%s'", a, b)})
 	}
 	return r
 }
 
 // guessType は宣言型 typ (省略可) と初期値 val から変数の型を決める。
-func (h *Hlc) guessType(typ *types.Type, val Operand) *types.Type {
+func (h *Hlc) guessType(typ *types.Type, val ir.Operand) *types.Type {
 	if typ != nil {
-		return h.compatible(typ, ValType(val))
+		return h.compatible(typ, ir.ValType(val))
 	}
-	return ValType(val)
+	return ir.ValType(val)
 }
 
 // ---------------------------------------------------------------
 // モジュールのコンパイル
 // ---------------------------------------------------------------
 
-func (h *Hlc) compileModule(filename string) *Module {
+func (h *Hlc) compileModule(filename string) *ir.Module {
 	path := h.findModule(filename)
 	id := strings.TrimSuffix(filepath.Base(filename), ".fc")
 	if m, ok := h.Modules.Get(id); ok {
@@ -276,16 +283,16 @@ func (h *Hlc) compileModule(filename string) *Module {
 	}
 
 	oldModule := h.module
-	h.module = NewModule(id, path, h.globalScope)
+	h.module = ir.NewModule(id, path, h.globalScope)
 	h.Modules.Add(h.module)
 	src, err := ReadSource(path)
 	if err != nil {
-		panic(&CompileError{Msg: err.Error()})
+		panic(&diag.Error{Msg: err.Error()})
 	}
 	file, perr := syntax.Parse(src, path)
 	if perr != nil {
 		se := perr.(*syntax.Error)
-		panic(&CompileError{Msg: se.Msg, Pos: se.Position()})
+		panic(&diag.Error{Msg: se.Msg, Pos: se.Position()})
 	}
 
 	h.attachScope(h.module.Scope, func() {
@@ -301,7 +308,7 @@ func (h *Hlc) compileModule(filename string) *Module {
 // Lambdaのコンパイル
 // ---------------------------------------------------------------
 
-func (h *Hlc) compileLambda(lmd *Lambda) {
+func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 	oldLmd := h.lmd
 	h.lmd = lmd
 	if len(h.loops) != 0 {
@@ -310,14 +317,14 @@ func (h *Hlc) compileLambda(lmd *Lambda) {
 	h.inScope(func() {
 		// 帰り値の追加
 		if lmd.Type.Base.Kind != types.Void {
-			lmd.Result = NewLocal("$result", lmd.Type.Base, LTResult)
-			lmd.Vars = append([]*Value{lmd.Result}, lmd.Vars...)
+			lmd.Result = ir.NewLocal("$result", lmd.Type.Base, ir.LTResult)
+			lmd.Vars = append([]*ir.Value{lmd.Result}, lmd.Vars...)
 		}
 
 		// 引数の追加
-		lmd.Args = make([]*Value, len(lmd.Params))
+		lmd.Args = make([]*ir.Value, len(lmd.Params))
 		for i, p := range lmd.Params {
-			lmd.Args[i] = h.addVar(NewLocal(p.Name, p.Type, LTArg))
+			lmd.Args[i] = h.addVar(ir.NewLocal(p.Name, p.Type, ir.LTArg))
 		}
 
 		if lmd.Body != nil {
@@ -325,13 +332,13 @@ func (h *Hlc) compileLambda(lmd *Lambda) {
 		}
 
 		// returnを追加する
-		var last *Op
+		var last *ir.Op
 		if len(lmd.Ops) > 0 {
 			last = lmd.Ops[len(lmd.Ops)-1]
 		}
-		if last == nil || last.Code != OpReturn {
+		if last == nil || last.Code != ir.OpReturn {
 			if lmd.Type.Base.Kind == types.Void {
-				h.emit(&Op{Code: OpReturn})
+				h.emit(&ir.Op{Code: ir.OpReturn})
 			}
 		}
 	})
@@ -350,7 +357,7 @@ func (h *Hlc) compileStmts(stmts []syntax.Stmt) {
 
 func (h *Hlc) mustInModule() {
 	if h.lmd != nil {
-		panic(&CompileError{Msg: "must be at module level (not inside a function)"})
+		panic(&diag.Error{Msg: "must be at module level (not inside a function)"})
 	}
 }
 
@@ -412,7 +419,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			case ".rb":
 				kind = "macro"
 			default:
-				panic(&CompileError{Msg: fmt.Sprintf("unknown include extension %s", filename)})
+				panic(&diag.Error{Msg: fmt.Sprintf("unknown include extension %s", filename)})
 			}
 		}
 		switch kind {
@@ -422,13 +429,13 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			path := h.findModule(filename)
 			reg, ok := macroFiles[filename]
 			if !ok {
-				panic(&CompileError{Msg: fmt.Sprintf("macro file %s is not supported by go port", path)})
+				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", path)})
 			}
 			reg(h)
 		case "chr":
 			h.module.IncludeChrs = append(h.module.IncludeChrs, h.findModule(filename))
 		default:
-			panic(&CompileError{Msg: fmt.Sprintf("invalid keyword %s", kind)})
+			panic(&diag.Error{Msg: fmt.Sprintf("invalid keyword %s", kind)})
 		}
 		h.module.Depends = append(h.module.Depends, filename)
 
@@ -443,7 +450,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if s.As != nil {
 				id = s.As.Name
 			}
-			v := h.addVar(NewModuleValue(id, h.types.Module(), m))
+			v := h.addVar(ir.NewModuleValue(id, h.types.Module(), m))
 			v.Public = true
 		}
 
@@ -452,7 +459,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		params := make([]lambdaParam, len(s.Params))
 		for i, p := range s.Params {
 			if p.Type == nil {
-				panic(&CompileError{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
+				panic(&diag.Error{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
 			}
 			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type}
 		}
@@ -480,24 +487,24 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		labels := h.newLabels("then", "else", "end")
 		thenLabel, elseLabel, endLabel := labels[0], labels[1], labels[2]
 		cond := h.rval(toC(s.Cond))
-		h.emit(&Op{Code: OpIf, Src: []Operand{cond}, Label: elseLabel})
-		h.emit(&Op{Code: OpLabel, Label: thenLabel})
+		h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{cond}, Label: elseLabel})
+		h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
 		h.inScope(func() { h.compileStatement(s.Then) })
-		h.emit(&Op{Code: OpJump, Label: endLabel})
-		h.emit(&Op{Code: OpLabel, Label: elseLabel})
+		h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
+		h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
 		if s.Else != nil {
 			h.inScope(func() { h.compileStatement(s.Else) })
 		}
-		h.emit(&Op{Code: OpLabel, Label: endLabel})
+		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 
 	case *syntax.LoopStmt:
 		h.inScope(func() {
 			labels := h.newLabels("begin", "end")
 			h.loops = append(h.loops, labels)
-			h.emit(&Op{Code: OpLabel, Label: labels[0]})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[0]})
 			h.compileStatement(s.Body)
-			h.emit(&Op{Code: OpJump, Label: labels[0]})
-			h.emit(&Op{Code: OpLabel, Label: labels[1]})
+			h.emit(&ir.Op{Code: ir.OpJump, Label: labels[0]})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[1]})
 			h.loops = h.loops[:len(h.loops)-1]
 		})
 
@@ -518,29 +525,29 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 
 	case *syntax.BreakStmt:
 		if len(h.loops) == 0 {
-			panic(&CompileError{Msg: "cannot break without loop"})
+			panic(&diag.Error{Msg: "cannot break without loop"})
 		}
-		h.emit(&Op{Code: OpJump, Label: h.loops[len(h.loops)-1][1]})
+		h.emit(&ir.Op{Code: ir.OpJump, Label: h.loops[len(h.loops)-1][1]})
 
 	case *syntax.ContinueStmt:
 		if len(h.loops) == 0 {
-			panic(&CompileError{Msg: "cannot break without loop"})
+			panic(&diag.Error{Msg: "cannot break without loop"})
 		}
-		h.emit(&Op{Code: OpJump, Label: h.loops[len(h.loops)-1][0]})
+		h.emit(&ir.Op{Code: ir.OpJump, Label: h.loops[len(h.loops)-1][0]})
 
 	case *syntax.ReturnStmt:
 		if h.lmd.Type.Base.Kind != types.Void {
 			// 非void関数
 			if s.Value == nil {
-				panic(&CompileError{Msg: "can't return without value"})
+				panic(&diag.Error{Msg: "can't return without value"})
 			}
-			h.emit(&Op{Code: OpReturn, Src: []Operand{h.rval(toC(s.Value))}})
+			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.rval(toC(s.Value))}})
 		} else {
 			// void関数
 			if s.Value != nil {
-				panic(&CompileError{Msg: "can't return with value from void function"})
+				panic(&diag.Error{Msg: "can't return with value from void function"})
 			}
-			h.emit(&Op{Code: OpReturn})
+			h.emit(&ir.Op{Code: ir.OpReturn})
 		}
 
 	case *syntax.ExprStmt:
@@ -555,20 +562,20 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			labels := h.newLabels("then", "else")
 			thenLabel, elseLabel := labels[0], labels[1]
 			for _, v := range c.Values {
-				h.emit(&Op{Code: OpEq, Dst: tmp, Src: []Operand{cond, h.constEvalOperand(toC(v))}})
-				h.emit(&Op{Code: OpNot, Dst: tmp, Src: []Operand{tmp}})
-				h.emit(&Op{Code: OpIf, Src: []Operand{tmp}, Label: thenLabel})
+				h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, h.constEvalOperand(toC(v))}})
+				h.emit(&ir.Op{Code: ir.OpNot, Dst: tmp, Src: []ir.Operand{tmp}})
+				h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: thenLabel})
 			}
-			h.emit(&Op{Code: OpJump, Label: elseLabel})
-			h.emit(&Op{Code: OpLabel, Label: thenLabel})
+			h.emit(&ir.Op{Code: ir.OpJump, Label: elseLabel})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
 			h.compileStmts(c.Body)
-			h.emit(&Op{Code: OpJump, Label: endLabel})
-			h.emit(&Op{Code: OpLabel, Label: elseLabel})
+			h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
 		}
 		if s.Default != nil {
 			h.compileStmts(s.Default.Body)
 		}
-		h.emit(&Op{Code: OpLabel, Label: endLabel})
+		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 
 		// TODO: 一時的に、public/privateの切り替えを可能にしている。そのうち消すこと
 	case *syntax.ScopeLabel:
@@ -580,98 +587,98 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 }
 
 // optionValueOf は定数評価済みの値を options の値にする (整数 / 文字列 / シンボル)。
-func optionValueOf(v *Value) OptionValue {
+func optionValueOf(v *ir.Value) ir.OptionValue {
 	switch {
 	case v.IsString:
-		return OptionValue{Kind: OptStr, Str: v.Str}
-	case v.Kind == KindLiteral && v.IsInt:
-		return OptionValue{Kind: OptInt, Int: v.Int}
+		return ir.OptionValue{Kind: ir.OptStr, Str: v.Str}
+	case v.Kind == ir.KindLiteral && v.IsInt:
+		return ir.OptionValue{Kind: ir.OptInt, Int: v.Int}
 	case v.Symbol != "":
-		return OptionValue{Kind: OptIdent, Str: v.Symbol}
+		return ir.OptionValue{Kind: ir.OptIdent, Str: v.Symbol}
 	}
-	panic(&CompileError{Msg: "option value must be an integer or string"})
+	panic(&diag.Error{Msg: "option value must be an integer or string"})
 }
 
 // compileVarSpec は var 宣言の 1 変数分。
 func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	name := sp.Name.Name
 	opt := parseOptions(sp.Options)
-	var init Operand
+	var init ir.Operand
 	if sp.Init != nil {
 		init = h.rval(toC(sp.Init))
 	}
 	if init != nil && h.lmd == nil {
-		panic(&CompileError{Msg: "can't init global variable"})
+		panic(&diag.Error{Msg: "can't init global variable"})
 	}
 	typ := h.typeEval(sp.Type)
 	if typ == nil {
 		typ = h.guessType(nil, init)
 	}
 	if typ != nil && init != nil {
-		h.compatible(typ, ValType(init))
+		h.compatible(typ, ir.ValType(init))
 	}
-	var vv *Value
+	var vv *ir.Value
 	if h.lmd == nil {
 		var symbol string
 		if addr, ok := opt.Get("address"); ok {
-			var equ *Value
-			if addr.Kind == OptInt {
-				equ = NewIntLiteral("", typ, addr.Int)
+			var equ *ir.Value
+			if addr.Kind == ir.OptInt {
+				equ = ir.NewIntLiteral("", typ, addr.Int)
 			} else {
-				equ = NewSymbolLiteral("", typ, addr.Str)
+				equ = ir.NewSymbolLiteral("", typ, addr.Str)
 			}
-			symbol = h.addDef(name, &Def{Kind: DefEqu, Type: typ, Equ: equ})
+			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: equ})
 		} else {
 			seg := ""
 			if sv, ok := opt.Get("segment"); ok {
 				seg = sv.Text()
 			}
-			symbol = h.addDef(name, &Def{Kind: DefBss, Type: typ, Segment: seg})
+			symbol = h.addDef(name, &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg})
 		}
-		vv = h.addVar(NewGlobal(name, typ, symbol))
+		vv = h.addVar(ir.NewGlobal(name, typ, symbol))
 	} else {
-		vv = h.addVar(NewLocal(name, typ, LTNone))
+		vv = h.addVar(ir.NewLocal(name, typ, ir.LTNone))
 	}
 	if h.scopeIsPublic(publicPos) {
 		vv.Public = true
 	}
 	if init != nil {
-		h.emit(&Op{Code: OpLoad, Dst: vv, Src: []Operand{init}})
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{init}})
 	}
 }
 
 // compileConstSpec は const 宣言の 1 定数分 (関数宣言の脱糖にも使う)。
 // typ / val / opt はそれぞれ省略可 (nil)。
-func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt Options, publicPos syntax.Pos) {
-	var newVal *Value
+func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
+	var newVal *ir.Value
 	if val != nil {
 		cv := h.constEval(val)
 		if cv.kind != cValue {
-			panic(&CompileError{Msg: fmt.Sprintf("const %s must be constant", name)})
+			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
 		}
 		v := cv.val
 		t := h.guessType(h.typeEval(typ), v)
-		if v.Kind == KindArrayLiteral {
-			symbol := h.addDef(name, &Def{Kind: DefBlock, Type: t, Elems: v.Elems})
-			newVal = h.addVar(NewGlobal(name, t, symbol))
+		if v.Kind == ir.KindArrayLiteral {
+			symbol := h.addDef(name, &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems})
+			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 		} else {
-			var lit *Value
+			var lit *ir.Value
 			if v.IsInt {
-				lit = NewIntLiteral(name, t, v.Int)
+				lit = ir.NewIntLiteral(name, t, v.Int)
 			} else {
-				lit = NewSymbolLiteral(name, t, v.Symbol)
+				lit = ir.NewSymbolLiteral(name, t, v.Symbol)
 			}
 			newVal = h.addVar(lit)
 			if h.lmd == nil {
-				h.addDef(name, &Def{Kind: DefEqu, Type: t, Equ: lit})
+				h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: t, Equ: lit})
 			}
 		}
 	} else {
 		// 値なしの const は address:"..." (文字列) が必須
-		if addr, ok := opt.Get("address"); ok && addr.Kind == OptStr {
-			newVal = h.addVar(NewGlobal(name, h.typeEval(typ), addr.Str))
+		if addr, ok := opt.Get("address"); ok && addr.Kind == ir.OptStr {
+			newVal = h.addVar(ir.NewGlobal(name, h.typeEval(typ), addr.Str))
 		} else {
-			panic(&CompileError{Msg: fmt.Sprintf("cannot define const without value %s", name)})
+			panic(&diag.Error{Msg: fmt.Sprintf("cannot define const without value %s", name)})
 		}
 	}
 	if h.scopeIsPublic(publicPos) {
@@ -703,11 +710,11 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 	return r
 }
 
-// constEvalOperand は評価結果を IR のオペランド (*Value) として取り出す。定数でなければ CompileError。
-func (h *Hlc) constEvalOperand(c *cexpr) Operand {
+// constEvalOperand は評価結果を IR のオペランド (*ir.Value) として取り出す。定数でなければ CompileError。
+func (h *Hlc) constEvalOperand(c *cexpr) ir.Operand {
 	r := h.constEval(c)
 	if r.kind != cValue {
-		panic(&CompileError{Msg: "constant value required"})
+		panic(&diag.Error{Msg: "constant value required"})
 	}
 	return r.val
 }
@@ -734,23 +741,23 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		return cv(rv)
 
 	case cArray:
-		vals := make([]Operand, len(c.args))
+		vals := make([]ir.Operand, len(c.args))
 		var typ *types.Type
 		for i, e := range c.args {
 			v := h.constEvalOperand(e)
 			vals[i] = v
 			if i == 0 {
-				typ = ValType(v)
+				typ = ir.ValType(v)
 			} else {
-				typ = h.compatible(typ, ValType(v))
+				typ = h.compatible(typ, ir.ValType(v))
 			}
 		}
-		return cv(NewArrayLiteral(h.tmpName("$"), h.types.ArrayOf(typ, len(vals)), vals))
+		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.types.ArrayOf(typ, len(vals)), vals))
 
 	case cIncbin:
 		data, err := os.ReadFile(h.findModule(c.s))
 		if err != nil {
-			panic(&CompileError{Msg: err.Error()})
+			panic(&diag.Error{Msg: err.Error()})
 		}
 		// unpack('C*') は符号なしバイト
 		elems := make([]*cexpr, len(data))
@@ -761,9 +768,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 
 	case cLambda:
 		lam := c.lam
-		params := make([]Param, len(lam.params))
+		params := make([]ir.Param, len(lam.params))
 		for i, p := range lam.params {
-			params[i] = Param{Name: p.name, Type: h.typeOf(p.typ)}
+			params[i] = ir.Param{Name: p.name, Type: h.typeOf(p.typ)}
 		}
 		baseType := h.typeOf(lam.result)
 		var id string
@@ -779,17 +786,17 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		lmd := h.newLambda(id, lam.name, params, baseType, lam.options, lam.body)
 		lmd.Pos = syntax.At(h.module.Path, c.pos)
 		h.module.Lambdas = append(h.module.Lambdas, lmd)
-		h.addDefModule(&Def{Sym: id, Kind: DefCode, Type: lmd.Type, Lambda: lmd})
-		return cv(NewSymbolLiteral("", lmd.Type, id))
+		h.addDefModule(&ir.Def{Sym: id, Kind: ir.DefCode, Type: lmd.Type, Lambda: lmd})
+		return cv(ir.NewSymbolLiteral("", lmd.Type, id))
 
 	case cDot:
 		left := h.constEval(c.args[0])
-		var mod *Module
+		var mod *ir.Module
 		if left.kind == cValue {
 			mod = left.val.Module
 		}
 		if mod == nil {
-			panic(&CompileError{Msg: fmt.Sprintf("%s is not a module", c.args[0].name)})
+			panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module", c.args[0].name)})
 		}
 		return cv(mod.Scope.FindMust(c.name, true))
 
@@ -800,7 +807,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			ty = h.typeEval(c.typ)
 		}
 		if x.isLiteralInt() {
-			return cv(NewIntLiteral("", ty, x.val.Int))
+			return cv(ir.NewIntLiteral("", ty, x.val.Int))
 		}
 		return &cexpr{kind: cCast, args: []*cexpr{x}, typ: c.typ, ty: ty}
 
@@ -843,15 +850,32 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	panic(fmt.Sprintf("invalid op %v", c.op))
 }
 
-// newLambda は Lambda を作る。型は params / baseType / options(fastcall) から決まる。
-func (h *Hlc) newLambda(id, name string, params []Param, baseType *types.Type, opts Options, body *syntax.Block) *Lambda {
+// IntValue は値から型を推定した整数リテラル (Value.new_int 相当)。
+// 旧実装の境界 (-128 が sint16 になる) をそのまま保存する。
+func (h *Hlc) IntValue(n int) *ir.Value {
+	var t *types.Type
+	switch {
+	case n >= 256:
+		t = h.types.IntType(2, false)
+	case n < -127:
+		t = h.types.IntType(2, true)
+	case n < 0:
+		t = h.types.IntType(1, true)
+	default:
+		t = h.types.IntType(1, false)
+	}
+	return ir.NewIntLiteral("", t, n)
+}
+
+// newLambda は ir.Lambda を作る。型は params / baseType / options(fastcall) から決まる。
+func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type, opts ir.Options, body *syntax.Block) *ir.Lambda {
 	argTypes := make([]*types.Type, len(params))
 	for i, p := range params {
 		argTypes[i] = p.Type
 	}
 	// 旧実装は truthy(opt[:fastcall]) で、値が何であれキーがあれば fastcall 扱い
 	typ := h.types.Func(argTypes, baseType, opts.Has("fastcall"))
-	return &Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Extern: body == nil, Body: body}
+	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Extern: body == nil, Body: body}
 }
 
 // foldIntOp は整数リテラル同士の演算を畳み込む (Ruby の整数演算と真偽値→0/1 に準拠)。
@@ -870,9 +894,9 @@ func foldIntOp(op cop, v1, v2 int) int {
 	case opMul:
 		return v1 * v2
 	case opDiv:
-		return rubyDiv(v1, v2)
+		return ir.FloorDiv(v1, v2)
 	case opMod:
-		return rubyMod(v1, v2)
+		return ir.FloorMod(v1, v2)
 	case opEq:
 		return b2i(v1 == v2)
 	case opNe:
@@ -900,42 +924,11 @@ func foldIntOp(op cop, v1, v2 int) int {
 	case opUminus:
 		return -v1
 	case opShiftLeft:
-		return rubyShl(v1, v2)
+		return ir.Shl(v1, v2)
 	case opShiftRight:
-		return rubyShr(v1, v2)
+		return ir.Shr(v1, v2)
 	}
 	panic("unreachable")
-}
-
-// Ruby の整数演算 (floor除算・floor剰余)
-func rubyDiv(a, b int) int {
-	q := a / b
-	if a%b != 0 && (a < 0) != (b < 0) {
-		q--
-	}
-	return q
-}
-
-func rubyMod(a, b int) int {
-	m := a % b
-	if m != 0 && (m < 0) != (b < 0) {
-		m += b
-	}
-	return m
-}
-
-func rubyShl(a, b int) int {
-	if b < 0 {
-		return rubyShr(a, -b)
-	}
-	return a << uint(b)
-}
-
-func rubyShr(a, b int) int {
-	if b < 0 {
-		return rubyShl(a, -b)
-	}
-	return a >> uint(b)
 }
 
 // ---------------------------------------------------------------
@@ -949,7 +942,7 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	case *syntax.NamedType:
 		ty, ok := h.types.Named(t.Name.Name)
 		if !ok {
-			panic(&CompileError{Msg: fmt.Sprintf("invalid basic type %s", t.Name.Name)})
+			panic(&diag.Error{Msg: fmt.Sprintf("invalid basic type %s", t.Name.Name)})
 		}
 		return ty
 	case *syntax.PointerType:
@@ -964,7 +957,7 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 		params := make([]*types.Type, len(t.Params))
 		for i, p := range t.Params {
 			if p.Name != nil {
-				panic(&CompileError{Msg: "named parameter is not allowed in function type"})
+				panic(&diag.Error{Msg: "named parameter is not allowed in function type"})
 			}
 			params[i] = h.typeOf(p.Type)
 		}
@@ -984,10 +977,10 @@ func (h *Hlc) typeEval(t syntax.TypeExpr) *types.Type {
 		if at.Len != nil {
 			sv := h.constEval(toC(at.Len))
 			if sv.kind != cValue {
-				panic(&CompileError{Msg: "array size must be constant"})
+				panic(&diag.Error{Msg: "array size must be constant"})
 			}
 			// 整数リテラル以外 (変数など) は長さ省略扱い (旧実装と同じ)
-			if sv.val.Kind == KindLiteral && sv.val.IsInt {
+			if sv.val.Kind == ir.KindLiteral && sv.val.IsInt {
 				n = sv.val.Int
 			}
 		}
@@ -1001,35 +994,35 @@ func (h *Hlc) typeEval(t syntax.TypeExpr) *types.Type {
 // ---------------------------------------------------------------
 
 // rval は右辺値として評価し、値を返す。
-func (h *Hlc) rval(c *cexpr) Operand {
+func (h *Hlc) rval(c *cexpr) ir.Operand {
 	v, left := h.lval(c)
 	if left {
-		r := h.newTmp(ValType(v).Base)
-		h.emit(&Op{Code: OpPget, Dst: r, Src: []Operand{v}})
+		r := h.newTmp(ir.ValType(v).Base)
+		h.emit(&ir.Op{Code: ir.OpPget, Dst: r, Src: []ir.Operand{v}})
 		return r
 	}
 	return v
 }
 
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
-func (h *Hlc) lval(c *cexpr) (Operand, bool) {
+func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	defer h.enterExpr(c.pos)()
 	leftValue := false
 	e := h.constEval(c)
-	var r Operand
+	var r ir.Operand
 
 	switch e.kind {
 
 	case cValue:
-		if e.val.Kind == KindArrayLiteral {
-			symbol := h.addDef(h.tmpName("_"), &Def{Kind: DefBlock, Type: e.val.Type, Elems: e.val.Elems})
-			r = NewGlobal(h.tmpName("$"), e.val.Type, symbol)
+		if e.val.Kind == ir.KindArrayLiteral {
+			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
+			r = ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
 		} else {
 			r = e.val
 		}
 
 	case cCast:
-		r = NewCastedValue(h.rval(e.args[0]), e.ty, 0)
+		r = ir.NewCastedValue(h.rval(e.args[0]), e.ty, 0)
 
 	case cOp:
 		switch e.op {
@@ -1038,25 +1031,25 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 			left, lv := h.lval(e.args[0])
 			right := h.rval(e.args[1])
 			if lv {
-				h.compatible(ValType(left).Base, ValType(right))
-				right = h.cast(right, ValType(left).Base)
-				h.emit(&Op{Code: OpPset, Src: []Operand{left, right}})
+				h.compatible(ir.ValType(left).Base, ir.ValType(right))
+				right = h.cast(right, ir.ValType(left).Base)
+				h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{left, right}})
 				r = left
 				leftValue = true
 			} else {
-				h.compatible(ValType(left), ValType(right))
-				if !ValAssignable(left) {
-					panic(&CompileError{Msg: fmt.Sprintf("%s is not left value", valToS(left))})
+				h.compatible(ir.ValType(left), ir.ValType(right))
+				if !ir.ValAssignable(left) {
+					panic(&diag.Error{Msg: fmt.Sprintf("%s is not left value", ir.OperandString(left))})
 				}
-				right = h.cast(right, ValType(left))
-				h.emit(&Op{Code: OpLoad, Dst: left, Src: []Operand{right}})
+				right = h.cast(right, ir.ValType(left))
+				h.emit(&ir.Op{Code: ir.OpLoad, Dst: left, Src: []ir.Operand{right}})
 				r = left
 			}
 
 		case opNot, opUminus:
 			left := h.rval(e.args[0])
-			tmp := h.newTmp(ValType(left))
-			h.emit(&Op{Code: copToOpCode[e.op], Dst: tmp, Src: []Operand{left}})
+			tmp := h.newTmp(ir.ValType(left))
+			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}})
 			r = tmp
 
 		case opAdd, opSub, opMul, opDiv, opMod,
@@ -1066,8 +1059,8 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
-					ValType(left).Kind == types.Pointer && ValType(right).Kind == types.Int {
-					typ = ValType(left)
+					ir.ValType(left).Kind == types.Pointer && ir.ValType(right).Kind == types.Int {
+					typ = ir.ValType(left)
 				} else {
 					panic(cerr)
 				}
@@ -1075,7 +1068,7 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 				left, right = l2, r2
 			}
 			tmp := h.newTmp(typ)
-			h.emit(&Op{Code: copToOpCode[e.op], Dst: tmp, Src: []Operand{left, right}})
+			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 
 		case opEq, opLt:
@@ -1083,7 +1076,7 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 			right := h.rval(e.args[1])
 			_, left, right = h.makeCompatible(left, right)
 			tmp := h.newTmp(h.types.IntType(1, false))
-			h.emit(&Op{Code: copToOpCode[e.op], Dst: tmp, Src: []Operand{left, right}})
+			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 
 		case opNe, opGt, opLe, opGe:
@@ -1105,11 +1098,11 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 			endLabel := h.newLabel("end")
 			rr := h.newTmp(h.types.IntType(1, false))
 			left := h.rval(e.args[0])
-			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{left}})
-			h.emit(&Op{Code: OpIf, Src: []Operand{rr}, Label: endLabel})
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{left}})
+			h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{rr}, Label: endLabel})
 			right := h.rval(e.args[1])
-			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{right}})
-			h.emit(&Op{Code: OpLabel, Label: endLabel})
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{right}})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 			r = rr
 
 		case opLor:
@@ -1117,20 +1110,20 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 			rr := h.newTmp(h.types.IntType(1, false))
 			r2 := h.newTmp(h.types.IntType(1, false))
 			left := h.rval(e.args[0])
-			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{left}})
-			h.emit(&Op{Code: OpNot, Dst: r2, Src: []Operand{rr}})
-			h.emit(&Op{Code: OpIf, Src: []Operand{r2}, Label: endLabel})
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{left}})
+			h.emit(&ir.Op{Code: ir.OpNot, Dst: r2, Src: []ir.Operand{rr}})
+			h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{r2}, Label: endLabel})
 			right := h.rval(e.args[1])
-			h.emit(&Op{Code: OpLoad, Dst: rr, Src: []Operand{right}})
-			h.emit(&Op{Code: OpLabel, Label: endLabel})
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{right}})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 			r = rr
 
 		case opCall:
 			lmdV := h.rval(e.args[0])
 			args := e.args[1:]
-			if ValType(lmdV).Kind == types.Macro {
+			if ir.ValType(lmdV).Kind == types.Macro {
 				// マクロの実行
-				fn := ValLiteral(lmdV).Macro
+				fn := h.macros[ir.ValLiteral(lmdV)]
 				x := fn(h, args, e.block)
 				if x.stmts != nil {
 					for _, st := range x.stmts {
@@ -1141,40 +1134,40 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 				}
 			} else {
 				// 普通の関数コール
-				lmdType := ValType(lmdV)
+				lmdType := ir.ValType(lmdV)
 				if lmdType.Base.Kind != types.Void {
 					r = h.newTmp(lmdType.Base)
 				}
 				if len(args) != len(lmdType.Params) {
-					panic(&CompileError{Msg: fmt.Sprintf("%s has %d but %d", valToS(lmdV), len(lmdType.Params), len(args))})
+					panic(&diag.Error{Msg: fmt.Sprintf("%s has %d but %d", ir.OperandString(lmdV), len(lmdType.Params), len(args))})
 				}
 				if h.lmd.Type.Fastcall() {
-					panic(&CompileError{Msg: "cannot call function from fastcall"})
+					panic(&diag.Error{Msg: "cannot call function from fastcall"})
 				}
 
 				if lmdType.Fastcall() {
 					if h.fastCalling {
-						panic(&CompileError{Msg: "cannot fastcall in fastcalling"})
+						panic(&diag.Error{Msg: "cannot fastcall in fastcalling"})
 					}
 					h.fastCalling = true
-					h.emit(&Op{Code: OpPushFastcallResult, Type: lmdType.Base})
+					h.emit(&ir.Op{Code: ir.OpPushFastcallResult, Type: lmdType.Base})
 					for i, arg := range args {
 						v := h.rval(arg)
-						h.compatible(lmdType.Params[i], ValType(v))
+						h.compatible(lmdType.Params[i], ir.ValType(v))
 						v = h.cast(v, lmdType.Params[i])
-						h.emit(&Op{Code: OpPushFastcallArg, Type: lmdType.Params[i], Src: []Operand{v}})
+						h.emit(&ir.Op{Code: ir.OpPushFastcallArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
 					}
-					h.emit(&Op{Code: OpFastcall, Dst: r, Src: []Operand{lmdV}})
+					h.emit(&ir.Op{Code: ir.OpFastcall, Dst: r, Src: []ir.Operand{lmdV}})
 					h.fastCalling = false
 				} else {
-					h.emit(&Op{Code: OpPushResult, Type: lmdType.Base})
+					h.emit(&ir.Op{Code: ir.OpPushResult, Type: lmdType.Base})
 					for i, arg := range args {
 						v := h.rval(arg)
-						h.compatible(lmdType.Params[i], ValType(v))
+						h.compatible(lmdType.Params[i], ir.ValType(v))
 						v = h.cast(v, lmdType.Params[i])
-						h.emit(&Op{Code: OpPushArg, Type: lmdType.Params[i], Src: []Operand{v}})
+						h.emit(&ir.Op{Code: ir.OpPushArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
 					}
-					h.emit(&Op{Code: OpCall, Dst: r, Src: []Operand{lmdV}})
+					h.emit(&ir.Op{Code: ir.OpCall, Dst: r, Src: []ir.Operand{lmdV}})
 				}
 			}
 
@@ -1183,33 +1176,33 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 			if lv {
 				r = left
 			} else {
-				if !ValAssignable(left) {
-					panic(&CompileError{Msg: fmt.Sprintf("%s is not left value", valToS(left))})
+				if !ir.ValAssignable(left) {
+					panic(&diag.Error{Msg: fmt.Sprintf("%s is not left value", ir.OperandString(left))})
 				}
-				tmp := h.newTmp(h.types.PointerTo(ValType(left)))
-				h.emit(&Op{Code: OpRef, Dst: tmp, Src: []Operand{left}})
+				tmp := h.newTmp(h.types.PointerTo(ir.ValType(left)))
+				h.emit(&ir.Op{Code: ir.OpRef, Dst: tmp, Src: []ir.Operand{left}})
 				r = tmp
 			}
 
 		case opDeref: // *演算子
 			r = h.rval(e.args[0])
-			if ValType(r).Kind != types.Pointer {
+			if ir.ValType(r).Kind != types.Pointer {
 				// Ruby版では未代入の `left` を参照するため空文字列になる
-				panic(&CompileError{Msg: " is not pointer"})
+				panic(&diag.Error{Msg: " is not pointer"})
 			}
 			leftValue = true
 
 		case opIndex: // []演算子
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
-			if ValType(left).Kind != types.Pointer && ValType(left).Kind != types.Array {
-				panic(&CompileError{Msg: "index must be pointer or array"})
+			if ir.ValType(left).Kind != types.Pointer && ir.ValType(left).Kind != types.Array {
+				panic(&diag.Error{Msg: "index must be pointer or array"})
 			}
-			if ValType(right).Kind != types.Int {
-				panic(&CompileError{Msg: "index must be int"})
+			if ir.ValType(right).Kind != types.Int {
+				panic(&diag.Error{Msg: "index must be int"})
 			}
-			tmp := h.newTmp(h.types.PointerTo(ValType(left).Base))
-			h.emit(&Op{Code: OpIndex, Dst: tmp, Src: []Operand{left, right}})
+			tmp := h.newTmp(h.types.PointerTo(ir.ValType(left).Base))
+			h.emit(&ir.Op{Code: ir.OpIndex, Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 			leftValue = true
 
@@ -1222,7 +1215,7 @@ func (h *Hlc) lval(c *cexpr) (Operand, bool) {
 	return r, leftValue
 }
 
-func (h *Hlc) emit(op *Op) {
+func (h *Hlc) emit(op *ir.Op) {
 	h.lmd.Ops = append(h.lmd.Ops, op)
 }
 
@@ -1238,48 +1231,48 @@ func (h *Hlc) newLabels(names ...string) []string {
 	return r
 }
 
-func (h *Hlc) newTmp(typ *types.Type) *Value {
-	return h.addVar(NewLocal(h.tmpName("$"), typ, LTTemp))
+func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
+	return h.addVar(ir.NewLocal(h.tmpName("$"), typ, ir.LTTemp))
 }
 
 // cast は v を type にキャストする (必要ならコードも生成)。
-func (h *Hlc) cast(v Operand, typ *types.Type) Operand {
+func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
 	if typ.Kind == types.Int {
 		// int の変換
-		if typ == ValType(v) {
+		if typ == ir.ValType(v) {
 			return v
 		}
-		if typ.Size <= ValType(v).Size {
+		if typ.Size <= ir.ValType(v).Size {
 			return v
 		}
-		if !ValType(v).Signed {
+		if !ir.ValType(v).Signed {
 			return v
 		}
-		if ValKind(v) == KindLiteral {
+		if ir.ValKind(v) == ir.KindLiteral {
 			return v
 		}
 		newV := h.newTmp(typ)
-		h.emit(&Op{Code: OpSignExtension, Dst: newV, Src: []Operand{v}})
+		h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: newV, Src: []ir.Operand{v}})
 		return newV
-	} else if typ.Kind == types.Pointer && ValType(v).Kind == types.Array && ValType(v).Base == typ.Base {
-		return NewPointeredArray(v, h.types.PointerTo(ValType(v).Base))
+	} else if typ.Kind == types.Pointer && ir.ValType(v).Kind == types.Array && ir.ValType(v).Base == typ.Base {
+		return ir.NewPointeredArray(v, h.types.PointerTo(ir.ValType(v).Base))
 	}
 	return v
 }
 
 // makeCompatible は互換型に変換する (キャストコード生成込み)。
-func (h *Hlc) makeCompatible(a, b Operand) (*types.Type, Operand, Operand) {
-	typ := h.compatible(ValType(a), ValType(b))
+func (h *Hlc) makeCompatible(a, b ir.Operand) (*types.Type, ir.Operand, ir.Operand) {
+	typ := h.compatible(ir.ValType(a), ir.ValType(b))
 	a = h.cast(a, typ)
 	b = h.cast(b, typ)
 	return typ, a, b
 }
 
 // tryMakeCompatible は makeCompatible の CompileError を捕捉するバージョン。
-func (h *Hlc) tryMakeCompatible(a, b Operand) (typ *types.Type, ra, rb Operand, err *CompileError) {
+func (h *Hlc) tryMakeCompatible(a, b ir.Operand) (typ *types.Type, ra, rb ir.Operand, err *diag.Error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if ce, ok := r.(*CompileError); ok {
+			if ce, ok := r.(*diag.Error); ok {
 				err = ce
 				return
 			}
@@ -1288,4 +1281,15 @@ func (h *Hlc) tryMakeCompatible(a, b Operand) (typ *types.Type, ra, rb Operand, 
 	}()
 	typ, ra, rb = h.makeCompatible(a, b)
 	return
+}
+
+// ReadSource はソースファイルを読み込む。
+// Ruby版は File.read (テキストモード) で読むため、Windows では CRLF→LF 変換が行われる。
+// 同じ挙動になるよう常に CRLF→LF 変換する (golden は Windows で生成されている)。
+func ReadSource(path string) ([]byte, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")), nil
 }

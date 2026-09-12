@@ -1,13 +1,21 @@
-package fc
+package sema
 
 // HLC (構文木 → IR) の単体テスト。golden が網羅しない「保存すべき挙動」を小さなソースで固定する。
 
 import (
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/ir"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// repoRoot はリポジトリルート (fclib を参照するため)。
+var repoRoot = func() string {
+	p, _ := filepath.Abs(filepath.Join("..", ".."))
+	return p
+}()
 
 // compileSrc はソース文字列を HLC コンパイルして IR ダンプを返す (失敗時は err)。
 func compileSrc(t *testing.T, src string) (string, error) {
@@ -18,11 +26,11 @@ func compileSrc(t *testing.T, src string) (string, error) {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
-	hlc := NewHlc([]string{".", filepath.ToSlash(filepath.Join(absRepoRoot, "fclib")), filepath.ToSlash(filepath.Join(absRepoRoot, "fclib", "emu"))})
+	hlc := NewHlc([]string{".", filepath.ToSlash(filepath.Join(repoRoot, "fclib")), filepath.ToSlash(filepath.Join(repoRoot, "fclib", "emu"))})
 	if err := hlc.Compile("t.fc"); err != nil {
 		return "", err
 	}
-	return DumpIR(hlc), nil
+	return ir.DumpProgram(hlc.Options, hlc.Modules.List()), nil
 }
 
 func mustCompileSrc(t *testing.T, src string) string {
@@ -114,9 +122,9 @@ func TestHlcErrors(t *testing.T) {
 			t.Errorf("%q: エラーになるべき", c.src)
 			continue
 		}
-		ce, ok := err.(*CompileError)
+		ce, ok := err.(*diag.Error)
 		if !ok {
-			t.Errorf("%q: *CompileError であるべき: %T", c.src, err)
+			t.Errorf("%q: *diag.Error であるべき: %T", c.src, err)
 			continue
 		}
 		if !strings.Contains(ce.Msg, c.want) {
@@ -146,7 +154,7 @@ func TestHlcErrorPosition(t *testing.T) {
 	}
 	for _, c := range cases {
 		_, err := compileSrc(t, c.src)
-		ce, ok := err.(*CompileError)
+		ce, ok := err.(*diag.Error)
 		if !ok {
 			t.Fatalf("%q: CompileError であるべき: %v", c.src, err)
 		}
@@ -156,25 +164,5 @@ func TestHlcErrorPosition(t *testing.T) {
 		if !strings.HasSuffix(ce.Pos.Filename, "t.fc") {
 			t.Errorf("ファイル名: %s", ce.Pos.Filename)
 		}
-	}
-}
-
-// TestLlcErrorPosition: コード生成時のエラーは関数の宣言位置を指す。
-func TestLlcErrorPosition(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "t.fc")
-	src := "var x:int;\n\nfunction main():void\n{\n  x = x / 0;\n}\n"
-	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	t.Chdir(dir)
-	compiler := NewCompiler(absRepoRoot)
-	_, err := compiler.Build("t.fc", &BuildOptions{Target: "emu", CompileOnly: true})
-	ce, ok := err.(*CompileError)
-	if !ok {
-		t.Fatalf("CompileError であるべき: %v", err)
-	}
-	if !strings.Contains(ce.Msg, "div by 0") || ce.Pos.Line != 3 || ce.Pos.Col != 1 {
-		t.Errorf("got %+v", ce)
 	}
 }

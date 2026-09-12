@@ -1,4 +1,4 @@
-package fc
+package ir
 
 // IR / alloc-IR のダンプ (golden 比較用)。形式は移植期の tools/dumper.rb に由来する。
 // R1-e で内部表現が型付きになった際、Ruby の Symbol/String の区別に由来していた
@@ -117,7 +117,7 @@ func dumpGval(v *Value, ctx *irCtx) string {
 		return dumpElems(v.Elems, ctx)
 	case v.Module != nil:
 		return "mod:" + v.Module.Id
-	case v.Macro != nil:
+	case v.Type.Kind == types.Macro:
 		return "macro"
 	case v.Symbol != "":
 		return symS(v.Symbol)
@@ -213,8 +213,8 @@ func dumpDef(d *Def, ctx *irCtx) string {
 	return fmt.Sprintf("(def %s %s %s %s)", d.Sym, d.Kind, typeS(d.Type), vs)
 }
 
-// dumpOp は命令を旧 IR と同じ位置引数の並び (Op.positional) で出力する。
-func dumpOp(op *Op, ctx *irCtx) string {
+// DumpOp は命令を旧 IR と同じ位置引数の並び (Op.positional) で出力する (ctx は nil 可)。
+func DumpOp(op *Op, ctx *irCtx) string {
 	if op == nil {
 		return "nil"
 	}
@@ -236,13 +236,13 @@ func dumpOp(op *Op, ctx *irCtx) string {
 	return "(" + strings.Join(parts, " ") + ")"
 }
 
-// DumpIR は HLC 完了直後の IR を出力する。
-func DumpIR(h *Hlc) string {
+// DumpProgram は HLC 完了直後の IR (グローバル options と全モジュール) を出力する。
+func DumpProgram(opts Options, mods []*Module) string {
 	var r []string
-	for _, e := range h.Options {
+	for _, e := range opts {
 		r = append(r, fmt.Sprintf("(option %s %s)", e.Key, dumpOptionValue(e.Value)))
 	}
-	for _, mod := range h.Modules.List() {
+	for _, mod := range mods {
 		r = append(r, fmt.Sprintf("(module %s", mod.Id))
 		r = append(r, fmt.Sprintf(" (options %s)", dumpOptions(mod.Options)))
 		r = append(r, fmt.Sprintf(" (include_asms (%s))", joinEsc(mod.IncludeAsms)))
@@ -304,7 +304,7 @@ func dumpLambda(lmd *Lambda) []string {
 	r = append(r, "  )")
 	r = append(r, "  (ops")
 	for i, op := range lmd.Ops {
-		r = append(r, fmt.Sprintf("   %04d %s", i, dumpOp(op, ctx)))
+		r = append(r, fmt.Sprintf("   %04d %s", i, DumpOp(op, ctx)))
 	}
 	r = append(r, "  )")
 	r = append(r, " )")
@@ -323,7 +323,7 @@ func DumpAllocLambda(modId string, sym string, lmd *Lambda) string {
 	r = append(r, " )")
 	r = append(r, " (ops")
 	for i, op := range lmd.Ops {
-		r = append(r, fmt.Sprintf("  %04d %s", i, dumpOp(op, ctx)))
+		r = append(r, fmt.Sprintf("  %04d %s", i, DumpOp(op, ctx)))
 	}
 	r = append(r, " )")
 	r = append(r, ")")

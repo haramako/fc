@@ -1,4 +1,4 @@
-package fc
+package driver
 
 // examples/ の実プロジェクト由来サンプル (miku, castle) の回帰テスト。
 // このコンパイラの実利用プロジェクトはこの2つだけであり、これらの ROM が

@@ -1,10 +1,14 @@
-package fc
+package regalloc
 
 // test/fc/test_allocator.rb の移植。
 
-import "testing"
+import (
+	"testing"
 
-func lr(min, max int) *LiveRange { return &LiveRange{Min: min, Max: max} }
+	"github.com/haramako/fc/internal/ir"
+)
+
+func lr(min, max int) *ir.LiveRange { return &ir.LiveRange{Min: min, Max: max} }
 
 func TestAllocatorUnit(t *testing.T) {
 	flow := [][]int{{}, {}, {}, {}, {1}, {}}
@@ -13,7 +17,7 @@ func TestAllocatorUnit(t *testing.T) {
 		lrc := NewLiveRangeCalculator(flow)
 		cases := []struct {
 			defines, uses []int
-			want          *LiveRange
+			want          *ir.LiveRange
 		}{
 			{[]int{0, 3}, []int{1, 4}, lr(0, 4)}, // a
 			{[]int{1}, []int{3}, lr(1, 3)},       // b
@@ -27,9 +31,9 @@ func TestAllocatorUnit(t *testing.T) {
 		}
 	})
 
-	liverange := func(flow [][]int, infos [][2][]int) []*LiveRange {
+	liverange := func(flow [][]int, infos [][2][]int) []*ir.LiveRange {
 		lrc := NewLiveRangeCalculator(flow)
-		var rs []*LiveRange
+		var rs []*ir.LiveRange
 		for _, info := range infos {
 			if l := lrc.CalcLiveRange(info[0], info[1]); l != nil {
 				rs = append(rs, l)

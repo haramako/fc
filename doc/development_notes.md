@@ -45,12 +45,12 @@ go test ./...                                    # 全部 (golden + examples + N
 
 | 層 | テスト | 時間 | 何を保証するか |
 |---|---|---|---|
-| golden差分 | TestGolden*（internal/fc） | 数秒 | コンパイラ出力の全段階が基準と一致 |
+| golden差分 | TestGolden*（internal/driver） | 数秒 | コンパイラ出力の全段階が基準と一致 |
 | ROMバイト一致 | TestExampleMiku / TestExampleCastle | 〜5秒 | 実プロジェクト2つのROMがスナップショットと一致 |
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
 
-- golden の再生成（feature/v2 以降）: **`go test ./internal/fc -run 'TestGolden|TestExample' -update`**。
+- golden の再生成（feature/v2 以降）: **`go test ./internal/driver -run 'TestGolden|TestExample' -update`**。
   Go 自身の出力で上書きする（Ruby オラクルの `tools/gen_golden.rb` は凍結。形式は
   [go_port_dump_format.md](go_port_dump_format.md)）。**意図しない差分を `-update` で消さない**
   （運用ルールは [v2_plan.md](v2_plan.md) §0.1 G2）。ast golden は廃止済み
@@ -60,7 +60,7 @@ go test ./...                                    # 全部 (golden + examples + N
   コンパイル→実行して stdout・終了コードごと検証する**（assert 失敗 = exit 1 + ERROR 出力
   で必ず不一致になる）。テスト .fc を新規追加したら golden ディレクトリに空ファイルを置くか
   `-update` で生成する
-- 性能退行の検知: `go test ./internal/fc -run xxx -bench BenchmarkCastle -benchmem`
+- 性能退行の検知: `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
   （基準値は v2_plan.md の作業ログ）
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は
   [../examples/README.md](../examples/README.md)）

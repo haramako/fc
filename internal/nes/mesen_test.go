@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haramako/fc/internal/fc"
+	"github.com/haramako/fc/internal/driver"
 )
 
 func runTool(t *testing.T, dir string, name string, args ...string) {
@@ -107,8 +107,8 @@ func buildCastleWithMap(t *testing.T) (romPath, mapPath string) {
 	src := filepath.Join(dir, "src")
 	t.Chdir(src)
 
-	compiler := fc.NewCompiler(repoRoot)
-	if _, err := compiler.Build("main.fc", &fc.BuildOptions{Target: "nes", CompileOnly: true}); err != nil {
+	compiler := driver.NewCompiler(repoRoot)
+	if _, err := compiler.Build("main.fc", &driver.BuildOptions{Target: "nes", CompileOnly: true}); err != nil {
 		t.Fatalf("コンパイル失敗: %v", err)
 	}
 	runTool(t, src, "ca65", "data.asm", "-o", ".fc-build/data.o")

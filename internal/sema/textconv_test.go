@@ -1,6 +1,8 @@
-package fc
+package sema
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestTextConverter(t *testing.T) {
 	// using: インデックスは登録順 (あ=0, い=1, ↓=2, ゛=3, か=4, Ａ=5, ？=6, 　=7)

@@ -1,11 +1,13 @@
-package fc
+package sema
 
 // castle プロジェクトの src/macro.rb が使う NesTools::TextConverter
 // (nes_tools/lib/nes_tools/text_converter.rb) のうち、マクロに必要な部分の移植。
 // conv() の tr 対応表はソース15文字に対して宛先14文字でずれている
 // (\→＊, *→＝, =→＠, @→＠) が、Ruby 版の挙動を忠実に再現している。
 
-import "strings"
+import (
+	"strings"
+)
 
 // convertChar は CONVERT_CHAR 相当 (濁点・半濁点の分解など)。
 var convertChar = map[rune]string{

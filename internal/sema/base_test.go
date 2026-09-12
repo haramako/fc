@@ -1,11 +1,14 @@
-package fc
+package sema
 
-// Value / Scope の基本テスト (test/fc/test_base.rb 由来。型のテストは internal/types へ移動)。
+// ir.Value / Scope の基本テスト (test/fc/test_base.rb 由来。型のテストは internal/types へ移動)。
 
-import "testing"
+import (
+	"github.com/haramako/fc/internal/ir"
+	"testing"
+)
 
 func TestIntValue(t *testing.T) {
-	// Value.new_int の型推定 (Ruby: n<-127 は sint16 という境界も含めて)
+	// ir.Value.new_int の型推定 (Ruby: n<-127 は sint16 という境界も含めて)
 	h := NewHlc(nil)
 	cases := []struct {
 		n    int
@@ -25,10 +28,10 @@ func TestIntValue(t *testing.T) {
 func TestScope(t *testing.T) {
 	h := NewHlc(nil)
 	u8 := h.Types().IntType(1, false)
-	g := NewScope(nil)
-	s := NewScope(g)
-	v1 := NewGlobal("a", u8, "_a")
-	v2 := NewGlobal("b", u8, "_b")
+	g := ir.NewScope(nil)
+	s := ir.NewScope(g)
+	v1 := ir.NewGlobal("a", u8, "_a")
+	v2 := ir.NewGlobal("b", u8, "_b")
 	v2.Public = true
 	g.Declare(v1)
 	s.Declare(v2)
@@ -44,10 +47,10 @@ func TestScope(t *testing.T) {
 	}
 
 	// use 経由は public のみ見える
-	other := NewScope(nil)
-	pub := NewGlobal("p", u8, "_p")
+	other := ir.NewScope(nil)
+	pub := ir.NewGlobal("p", u8, "_p")
 	pub.Public = true
-	priv := NewGlobal("q", u8, "_q")
+	priv := ir.NewGlobal("q", u8, "_q")
 	other.Declare(pub)
 	other.Declare(priv)
 	s.Use(other)
@@ -76,28 +79,6 @@ func TestScope(t *testing.T) {
 				t.Error("二重宣言が通った")
 			}
 		}()
-		s.Declare(NewGlobal("b", u8, "_b2"))
+		s.Declare(ir.NewGlobal("b", u8, "_b2"))
 	}()
-}
-
-func TestOptions(t *testing.T) {
-	var o Options
-	o.Set("a", OptionValue{Kind: OptInt, Int: 1})
-	o.Set("b", OptionValue{Kind: OptStr, Str: "x"})
-	o.Set("a", OptionValue{Kind: OptInt, Int: 2}) // 後勝ち・位置維持
-	if len(o) != 2 || o[0].Key != "a" || o[0].Value.Int != 2 || o[1].Key != "b" {
-		t.Errorf("Options: %+v", o)
-	}
-	if n, ok := o.Int("a"); !ok || n != 2 {
-		t.Error("Int")
-	}
-	if _, ok := o.Int("b"); ok {
-		t.Error("文字列を Int で取れてはいけない")
-	}
-	if !o.Has("b") || o.Has("c") {
-		t.Error("Has")
-	}
-	if (OptionValue{Kind: OptIdent, Str: "my"}).Text() != "my" || (OptionValue{Kind: OptInt, Int: 5}).Text() != "5" {
-		t.Error("Text")
-	}
 }

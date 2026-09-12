@@ -1,4 +1,4 @@
-package fc
+package ir
 
 // IR の値 (変数・定数・リテラル) とそのラッパ。lib/fc/base.rb の Value / CastedValue / PointeredArray 由来。
 
@@ -36,7 +36,7 @@ func (l LocalType) String() string {
 //
 // Kind ごとに有効なフィールド:
 //   - KindLocal:        Name, LocalType
-//   - KindGlobal:       Name と、Symbol (アセンブラシンボル) / Module (モジュール束縛) / Macro のいずれか
+//   - KindGlobal:       Name と、Symbol (アセンブラシンボル) / Module (モジュール束縛) のいずれか (マクロは型で表す)
 //   - KindLiteral:      IsInt なら Int、そうでなければ Symbol (関数シンボル)。Name は定数名 ("" なら無名)
 //   - KindArrayLiteral: Elems
 type Value struct {
@@ -48,8 +48,7 @@ type Value struct {
 	Int    int
 	Symbol string
 	Elems  []Operand
-	Module *Module
-	Macro  MacroFn
+	Module *Module // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
@@ -78,7 +77,7 @@ func (v *Value) HasAddress() bool {
 
 func newValue(kind ValueKind, name string, typ *types.Type) *Value {
 	if typ == nil {
-		panic(&CompileError{Msg: "invalid type, nil"})
+		panic("ir: value without type")
 	}
 	return &Value{Kind: kind, Name: name, Type: typ}
 }
@@ -104,13 +103,6 @@ func NewModuleValue(name string, typ *types.Type, m *Module) *Value {
 	return v
 }
 
-// NewMacroValue は組み込みマクロ。
-func NewMacroValue(name string, typ *types.Type, fn MacroFn) *Value {
-	v := newValue(KindGlobal, name, typ)
-	v.Macro = fn
-	return v
-}
-
 // NewIntLiteral は整数リテラル (型は明示)。
 func NewIntLiteral(name string, typ *types.Type, n int) *Value {
 	v := newValue(KindLiteral, name, typ)
@@ -131,23 +123,6 @@ func NewArrayLiteral(name string, typ *types.Type, elems []Operand) *Value {
 	v := newValue(KindArrayLiteral, name, typ)
 	v.Elems = elems
 	return v
-}
-
-// IntValue は値から型を推定した整数リテラル (Value.new_int 相当)。
-// 旧実装の境界 (-128 が sint16 になる) をそのまま保存する。
-func (h *Hlc) IntValue(n int) *Value {
-	var t *types.Type
-	switch {
-	case n >= 256:
-		t = h.types.IntType(2, false)
-	case n < -127:
-		t = h.types.IntType(2, true)
-	case n < 0:
-		t = h.types.IntType(1, true)
-	default:
-		t = h.types.IntType(1, false)
-	}
-	return NewIntLiteral("", t, n)
 }
 
 func (v *Value) Assignable() bool {
@@ -207,18 +182,18 @@ func (v *Value) Inspect() string {
 // String は CastedValue#to_s 相当。
 func (c *CastedValue) String() string {
 	if c.Offset == 0 {
-		return fmt.Sprintf("<%s>%s", c.Type, valToS(c.From))
+		return fmt.Sprintf("<%s>%s", c.Type, OperandString(c.From))
 	}
-	return fmt.Sprintf("<%s+%d>%s", c.Type, c.Offset, valToS(c.From))
+	return fmt.Sprintf("<%s+%d>%s", c.Type, c.Offset, OperandString(c.From))
 }
 
 // String は PointeredArray#to_s 相当。
 func (p *PointeredArray) String() string {
-	return valToS(p.From) + "#p"
+	return OperandString(p.From) + "#p"
 }
 
-// valToS はオペランドの表示。
-func valToS(v Operand) string {
+// OperandString はオペランドの表示 (エラーメッセージ用)。
+func OperandString(v Operand) string {
 	if v == nil {
 		return ""
 	}

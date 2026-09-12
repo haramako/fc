@@ -1,11 +1,11 @@
-package fc
+package sema
 
 // cexpr は HLC 内部の式表現。
 //
 // 構文木 (syntax.Expr) をそのまま定数評価の対象にせず、一度この形に変換してから評価する。
 // 理由は 2 つ:
 //   - 構文木は不変に保つ (C1)。旧実装 (Ruby 由来) は定数評価が AST を破壊的に書き換えていた
-//   - マクロの展開結果は「評価済みの値 (*Value) を葉に持つ式」であり、構文木では表せない
+//   - マクロの展開結果は「評価済みの値 (*ir.Value) を葉に持つ式」であり、構文木では表せない
 //
 // constEval の入力 (未評価) と出力 (評価済み: 葉は cValue、演算ノードの子は評価済み) の両方を表す。
 // 評価済みの木に constEval を再適用しても結果は変わらない (冪等)。
@@ -15,6 +15,8 @@ package fc
 // これは Hlc.cmemo (同一ノードの評価結果のメモ) で再現する。
 
 import (
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
@@ -77,12 +79,12 @@ type lambdaLit struct {
 	params  []lambdaParam
 	result  syntax.TypeExpr
 	body    *syntax.Block // nil なら extern
-	options Options       // options(...) の生の値
+	options ir.Options    // options(...) の生の値
 }
 
 type cexpr struct {
 	kind  ckind
-	val   *Value
+	val   *ir.Value
 	n     int
 	s     string
 	name  string
@@ -99,11 +101,11 @@ type cexpr struct {
 // コンストラクタ (マクロ実装からも使う)
 // ---------------------------------------------------------------
 
-func cv(v *Value) *cexpr            { return &cexpr{kind: cValue, val: v} }
-func cint(n int) *cexpr             { return &cexpr{kind: cInt, n: n} }
-func cstr(s string) *cexpr          { return &cexpr{kind: cStr, s: s} }
-func cident(name string) *cexpr     { return &cexpr{kind: cIdent, name: name} }
-func carray(elems []*cexpr) *cexpr  { return &cexpr{kind: cArray, args: elems} }
+func cv(v *ir.Value) *cexpr        { return &cexpr{kind: cValue, val: v} }
+func cint(n int) *cexpr            { return &cexpr{kind: cInt, n: n} }
+func cstr(s string) *cexpr         { return &cexpr{kind: cStr, s: s} }
+func cident(name string) *cexpr    { return &cexpr{kind: cIdent, name: name} }
+func carray(elems []*cexpr) *cexpr { return &cexpr{kind: cArray, args: elems} }
 
 func cop2(op cop, args ...*cexpr) *cexpr { return &cexpr{kind: cOp, op: op, args: args} }
 
@@ -114,7 +116,7 @@ func ccall(fn *cexpr, args ...*cexpr) *cexpr {
 
 // isLiteralInt は評価済みの整数リテラルかを返す。
 func (c *cexpr) isLiteralInt() bool {
-	return c.kind == cValue && c.val.Kind == KindLiteral && c.val.IsInt
+	return c.kind == cValue && c.val.Kind == ir.KindLiteral && c.val.IsInt
 }
 
 // ---------------------------------------------------------------
@@ -154,7 +156,7 @@ func toC0(e syntax.Expr) *cexpr {
 		if e.Op == syntax.Dot {
 			id, ok := e.Y.(*syntax.Ident)
 			if !ok {
-				panic(&CompileError{Msg: "dot: right side must be identifier"})
+				panic(&diag.Error{Msg: "dot: right side must be identifier"})
 			}
 			return &cexpr{kind: cDot, args: []*cexpr{toC(e.X)}, name: id.Name}
 		}
@@ -196,12 +198,12 @@ func toC0(e syntax.Expr) *cexpr {
 	case *syntax.LambdaExpr:
 		ft, ok := e.Type.(*syntax.FuncType)
 		if !ok {
-			panic(&CompileError{Msg: "must be lambda type"})
+			panic(&diag.Error{Msg: "must be lambda type"})
 		}
 		params := make([]lambdaParam, len(ft.Params))
 		for i, p := range ft.Params {
 			if p.Name == nil {
-				panic(&CompileError{Msg: "lambda parameter must have a name"})
+				panic(&diag.Error{Msg: "lambda parameter must have a name"})
 			}
 			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type}
 		}
@@ -210,26 +212,33 @@ func toC0(e syntax.Expr) *cexpr {
 	panic("toC: unknown expression")
 }
 
-// parseOptions は options(...) を生の値のまま Options にする (重複キーは後勝ち・位置維持)。
+// parseOptions は options(...) を生の値のまま ir.Options にする (重複キーは後勝ち・位置維持)。
 // 値は整数 / 文字列 / 識別子のいずれか。nil なら nil。
-func parseOptions(o *syntax.Options) Options {
+func parseOptions(o *syntax.Options) ir.Options {
 	if o == nil {
 		return nil
 	}
-	var r Options
+	var r ir.Options
 	for _, e := range o.Entries {
-		var v OptionValue
+		var v ir.OptionValue
 		switch x := e.Value.(type) {
 		case *syntax.IntLit:
-			v = OptionValue{Kind: OptInt, Int: x.Value}
+			v = ir.OptionValue{Kind: ir.OptInt, Int: x.Value}
 		case *syntax.StringLit:
-			v = OptionValue{Kind: OptStr, Str: x.Value}
+			v = ir.OptionValue{Kind: ir.OptStr, Str: x.Value}
 		case *syntax.Ident:
-			v = OptionValue{Kind: OptIdent, Str: x.Name}
+			v = ir.OptionValue{Kind: ir.OptIdent, Str: x.Name}
 		default:
-			panic(&CompileError{Msg: "option " + e.Key.Name + " must be a literal or identifier"})
+			panic(&diag.Error{Msg: "option " + e.Key.Name + " must be a literal or identifier"})
 		}
 		r.Set(e.Key.Name, v)
 	}
 	return r
+}
+
+// copToOpCode は HLC 内部の演算名から IR の OpCode への対応。
+var copToOpCode = map[cop]ir.OpCode{
+	opLoad: ir.OpLoad, opAdd: ir.OpAdd, opSub: ir.OpSub, opMul: ir.OpMul, opDiv: ir.OpDiv, opMod: ir.OpMod,
+	opAnd: ir.OpAnd, opOr: ir.OpOr, opXor: ir.OpXor, opShiftLeft: ir.OpShiftLeft, opShiftRight: ir.OpShiftRight,
+	opNot: ir.OpNot, opUminus: ir.OpUminus, opEq: ir.OpEq, opLt: ir.OpLt,
 }

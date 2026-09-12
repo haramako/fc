@@ -1,44 +1,48 @@
-package fc
+package regalloc
 
 // レジスタ割付。lib/fc/allocator.rb 由来。
 // use_define / register_vars は Ruby の Hash と同じく挿入順を保つ必要がある。
-// CastedValue は Delegator のため下位の Value と同一キーに合流する (UnderlyingValue)。
+// ir.CastedValue は Delegator のため下位の ir.Value と同一キーに合流する (ir.UnderlyingValue)。
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/ir"
+)
 
 // ---------------------------------------------------------------
 // live range の計算
 // ---------------------------------------------------------------
 
 type useDefineEntry struct {
-	v       *Value
+	v       *ir.Value
 	defines []int
 	uses    []int
 }
 
 // CalcLiveRange は Fc.calc_live_range 相当。lmd の各ローカル変数に live_range を設定する。
-func CalcLiveRange(lmd *Lambda) {
+func CalcLiveRange(lmd *ir.Lambda) {
 	// ラベルの収集
 	labels := map[string]int{}
 	for i, op := range lmd.Ops {
-		if op != nil && op.Code == OpLabel {
+		if op != nil && op.Code == ir.OpLabel {
 			labels[op.Label] = i
 		}
 	}
 
 	// 変数の定義・使用、制御フローグラフの集計
 	var udOrder []*useDefineEntry
-	udIndex := map[*Value]*useDefineEntry{}
-	record := func(vAny Operand, isDefine bool, i int) {
+	udIndex := map[*ir.Value]*useDefineEntry{}
+	record := func(vAny ir.Operand, isDefine bool, i int) {
 		if vAny == nil {
 			return
 		}
-		if ValKind(vAny) != KindLocal {
+		if ir.ValKind(vAny) != ir.KindLocal {
 			return
 		}
-		v := UnderlyingValue(vAny)
+		v := ir.UnderlyingValue(vAny)
 		if v == nil {
-			// PointeredArray がローカル変数を包む場合、Ruby版は live_range 設定で
+			// ir.PointeredArray がローカル変数を包む場合、Ruby版は live_range 設定で
 			// NoMethodError になる (実際には発生しない経路)
 			panic(fmt.Sprintf("cannot record %T in use_define", vAny))
 		}
@@ -57,32 +61,32 @@ func CalcLiveRange(lmd *Lambda) {
 
 	flow := make([][]int, 0, len(lmd.Ops))
 	for i, op := range lmd.Ops {
-		var uses, defines []Operand
+		var uses, defines []ir.Operand
 		var node []int
 		switch op.Code {
-		case OpLabel, OpAsm, OpPushResult, OpPushFastcallResult:
+		case ir.OpLabel, ir.OpAsm, ir.OpPushResult, ir.OpPushFastcallResult:
 			// DO NOTHING
-		case OpIf:
+		case ir.OpIf:
 			uses = append(uses, op.Src[0])
 			node = append(node, labels[op.Label])
-		case OpJump:
+		case ir.OpJump:
 			node = append(node, labels[op.Label])
-		case OpReturn:
-			uses = append(uses, op.src(0))
-		case OpPushArg, OpPushFastcallArg:
+		case ir.OpReturn:
+			uses = append(uses, op.In(0))
+		case ir.OpPushArg, ir.OpPushFastcallArg:
 			uses = append(uses, op.Src[0])
-		case OpLoad, OpUminus, OpNot, OpSignExtension, OpRef, OpCall, OpFastcall:
+		case ir.OpLoad, ir.OpUminus, ir.OpNot, ir.OpSignExtension, ir.OpRef, ir.OpCall, ir.OpFastcall:
 			defines = append(defines, op.Dst)
 			uses = append(uses, op.Src[0])
-		case OpAdd, OpSub, OpAnd, OpOr, OpXor,
-			OpMul, OpDiv, OpMod, OpEq, OpLt,
-			OpShiftLeft, OpShiftRight, OpIndex, OpPget:
+		case ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
+			ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpEq, ir.OpLt,
+			ir.OpShiftLeft, ir.OpShiftRight, ir.OpIndex, ir.OpPget:
 			defines = append(defines, op.Dst)
 			uses = append(uses, op.Src...)
-		case OpPset:
+		case ir.OpPset:
 			uses = append(uses, op.Src[0], op.Src[1])
 		default:
-			panic(fmt.Sprintf("invalid op %v", dumpOp(op, nil)))
+			panic(fmt.Sprintf("invalid op %v", ir.DumpOp(op, nil)))
 		}
 
 		flow = append(flow, node)
@@ -97,7 +101,7 @@ func CalcLiveRange(lmd *Lambda) {
 
 	// 引数は、最初に定義されているものとする
 	for _, e := range udOrder {
-		if e.v.LocalType == LTArg {
+		if e.v.LocalType == ir.LTArg {
 			e.defines = append(e.defines, 0)
 		}
 	}
@@ -115,14 +119,14 @@ func CalcLiveRange(lmd *Lambda) {
 
 // AllocateRegister は Fc.allocate_register 相当。
 // 変数の address, location, unuse が設定される。
-func AllocateRegister(lmd *Lambda) {
+func AllocateRegister(lmd *ir.Lambda) {
 	CalcLiveRange(lmd)
 
 	// ref(&演算子)を受けた変数を集める
-	refered := map[*Value]bool{}
+	refered := map[*ir.Value]bool{}
 	for _, op := range lmd.Ops {
-		if op != nil && op.Code == OpRef {
-			refered[UnderlyingValue(op.Src[0])] = true
+		if op != nil && op.Code == ir.OpRef {
+			refered[ir.UnderlyingValue(op.Src[0])] = true
 		}
 	}
 
@@ -135,27 +139,27 @@ func AllocateRegister(lmd *Lambda) {
 		if v.LiveRange != nil {
 			for i := v.LiveRange.Min + 1; i <= v.LiveRange.Max-1; i++ {
 				if i >= 0 && i < len(lmd.Ops) && lmd.Ops[i] != nil &&
-					lmd.Ops[i].Code == OpCall && !ValType(lmd.Ops[i].Src[0]).Fastcall() {
+					lmd.Ops[i].Code == ir.OpCall && !ir.ValType(lmd.Ops[i].Src[0]).Fastcall() {
 					beyondCall = true
 				}
 			}
 		}
 
-		if v.LocalType == LTResult {
+		if v.LocalType == ir.LTResult {
 			// 返り値
 			if fastcall {
-				lmd.Result.Location = LocFastcallReg
+				lmd.Result.Location = ir.LocFastcallReg
 			} else {
-				lmd.Result.Location = LocFrame
+				lmd.Result.Location = ir.LocFrame
 			}
 			lmd.Result.Address = 0
-		} else if beyondCall || v.LocalType == LTArg || refered[v] {
+		} else if beyondCall || v.LocalType == ir.LTArg || refered[v] {
 			// 引数か、関数をまたいでいるなら、フレームに割り当てる
 			v.Address = frameSize
 			if fastcall {
-				v.Location = LocFastcallReg
+				v.Location = ir.LocFastcallReg
 			} else {
-				v.Location = LocFrame
+				v.Location = ir.LocFrame
 			}
 			frameSize += v.Type.Size
 		} else if v.LiveRange != nil {
@@ -163,7 +167,7 @@ func AllocateRegister(lmd *Lambda) {
 			registerVars = append(registerVars, &allocEntry{key: v, liveRange: v.LiveRange})
 		} else {
 			// 未使用フラグをたてる
-			v.Location = LocUnused
+			v.Location = ir.LocUnused
 			v.Unuse = true
 		}
 	}
@@ -177,18 +181,18 @@ func AllocateRegister(lmd *Lambda) {
 	for _, reg := range allocator.Regs {
 		// アドレスを算出する
 		if regSize > 16 {
-			panic(&CompileError{Msg: fmt.Sprintf("frame size over on %s", lmd)})
+			panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s", lmd)})
 		}
 		// 割り当てる
 		for _, v := range reg.vars {
 			if fastcall {
 				if frameSize+regSize > 16 {
-					panic(&CompileError{Msg: fmt.Sprintf("frame size over on %s", lmd)})
+					panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s", lmd)})
 				}
-				v.Location = LocFastcallReg
+				v.Location = ir.LocFastcallReg
 				v.Address = frameSize + regSize
 			} else {
-				v.Location = LocReg
+				v.Location = ir.LocReg
 				v.Address = regSize
 			}
 		}
@@ -199,8 +203,8 @@ func AllocateRegister(lmd *Lambda) {
 }
 
 // allocateA は Aレジスタを割り当てられるなら割り当てる。
-func allocateA(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
-	var aVars []*Value
+func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
+	var aVars []*ir.Value
 	for _, e := range registerVars {
 		v := e.key
 		if v.Type.Size != 1 {
@@ -212,18 +216,18 @@ func allocateA(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 			if !isSameValue(op.Dst, v) {
 				continue
 			}
-			if !codeIn(op.Code, OpLoad, OpAdd, OpSub, OpAnd, OpOr, OpXor,
-				OpMul, OpDiv, OpMod, OpUminus, OpEq, OpLt, OpPget) {
+			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
+				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpPget) {
 				continue
 			}
 
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
 			switch nextOp.Code {
-			case OpLoad, OpSignExtension, OpAdd, OpAnd, OpOr, OpXor,
-				OpEq, OpLt, OpPget, OpSub, OpPushArg,
-				OpIf, OpReturn:
+			case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor,
+				ir.OpEq, ir.OpLt, ir.OpPget, ir.OpSub, ir.OpPushArg,
+				ir.OpIf, ir.OpReturn:
 				// 最初の入力オペランドが v であること (旧実装の op[2] / if・return では op[1] に相当)
-				if !isSameValue(nextOp.src(0), v) {
+				if !isSameValue(nextOp.In(0), v) {
 					continue
 				}
 			default:
@@ -234,15 +238,15 @@ func allocateA(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 		}
 	}
 	for _, v := range aVars {
-		v.Location = LocA
+		v.Location = ir.LocA
 		registerVars = deleteEntry(registerVars, v)
 	}
 	return registerVars
 }
 
 // allocateCond はコンディションレジスタを割り当てられるなら割り当てる。
-func allocateCond(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
-	var condVars []*Value
+func allocateCond(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
+	var condVars []*ir.Value
 	for _, e := range registerVars {
 		v := e.key
 		if v.Type.Size != 1 {
@@ -253,14 +257,14 @@ func allocateCond(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 			if !isSameValue(op.Dst, v) {
 				continue
 			}
-			if !codeIn(op.Code, OpEq, OpLt, OpNot) {
+			if !codeIn(op.Code, ir.OpEq, ir.OpLt, ir.OpNot) {
 				continue
 			}
 
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
 			switch nextOp.Code {
-			case OpIf, OpNot:
-				if !isSameValue(nextOp.src(0), v) {
+			case ir.OpIf, ir.OpNot:
+				if !isSameValue(nextOp.In(0), v) {
 					continue
 				}
 			default:
@@ -268,31 +272,31 @@ func allocateCond(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 			}
 
 			switch op.Code {
-			case OpEq:
-				v.Location = LocCond
+			case ir.OpEq:
+				v.Location = ir.LocCond
 				v.CondPositive = true
-				v.CondReg = CondZero
-			case OpLt:
-				v.Location = LocCond
+				v.CondReg = ir.CondZero
+			case ir.OpLt:
+				v.Location = ir.LocCond
 				v.CondPositive = true
-				if ValType(op.Src[0]).Signed || ValType(op.Src[1]).Signed {
-					if ValType(op.Src[0]).Size > 1 || ValType(op.Src[1]).Size > 1 {
+				if ir.ValType(op.Src[0]).Signed || ir.ValType(op.Src[1]).Signed {
+					if ir.ValType(op.Src[0]).Size > 1 || ir.ValType(op.Src[1]).Size > 1 {
 						// サイズ2以上の符号付き比較はフラグが特定できない。
 						// Ruby版は next の前に location/cond_positive を設定済みのまま残す
 						// (後で register_vars の割付により location は上書きされる)
 						continue
 					}
-					v.CondReg = CondNegative
+					v.CondReg = ir.CondNegative
 				} else {
-					v.CondReg = CondCarry
+					v.CondReg = ir.CondCarry
 				}
-			case OpNot:
-				if ValLocation(op.Src[0]) != LocCond {
+			case ir.OpNot:
+				if ir.ValLocation(op.Src[0]) != ir.LocCond {
 					continue
 				}
-				v.Location = LocCond
-				v.CondReg = UnderlyingValue(op.Src[0]).CondReg
-				v.CondPositive = !UnderlyingValue(op.Src[0]).CondPositive
+				v.Location = ir.LocCond
+				v.CondReg = ir.UnderlyingValue(op.Src[0]).CondReg
+				v.CondPositive = !ir.UnderlyingValue(op.Src[0]).CondPositive
 			default:
 				panic("unreachable")
 			}
@@ -305,12 +309,12 @@ func allocateCond(lmd *Lambda, registerVars []*allocEntry) []*allocEntry {
 	return registerVars
 }
 
-func isSameValue(opElem Operand, v *Value) bool {
-	// Ruby の op[1] == v (CastedValue は Delegator の == で from と比較される)
-	return opElem != nil && UnderlyingValue(opElem) == v
+func isSameValue(opElem ir.Operand, v *ir.Value) bool {
+	// Ruby の op[1] == v (ir.CastedValue は Delegator の == で from と比較される)
+	return opElem != nil && ir.UnderlyingValue(opElem) == v
 }
 
-func codeIn(c OpCode, codes ...OpCode) bool {
+func codeIn(c ir.OpCode, codes ...ir.OpCode) bool {
 	for _, x := range codes {
 		if c == x {
 			return true
@@ -319,7 +323,7 @@ func codeIn(c OpCode, codes ...OpCode) bool {
 	return false
 }
 
-func deleteEntry(entries []*allocEntry, v *Value) []*allocEntry {
+func deleteEntry(entries []*allocEntry, v *ir.Value) []*allocEntry {
 	r := entries[:0]
 	for _, e := range entries {
 		if e.key != v {
@@ -334,13 +338,13 @@ func deleteEntry(entries []*allocEntry, v *Value) []*allocEntry {
 // ---------------------------------------------------------------
 
 type allocEntry struct {
-	key       *Value
-	liveRange *LiveRange
+	key       *ir.Value
+	liveRange *ir.LiveRange
 }
 
 type AllocatorReg struct {
-	liveRange *LiveRange
-	vars      []*Value
+	liveRange *ir.LiveRange
+	vars      []*ir.Value
 }
 
 type Allocator struct {
@@ -360,7 +364,7 @@ func NewAllocator(vars []*allocEntry) *Allocator {
 			}
 		}
 		if !found {
-			a.Regs = append(a.Regs, &AllocatorReg{liveRange: e.liveRange, vars: []*Value{e.key}})
+			a.Regs = append(a.Regs, &AllocatorReg{liveRange: e.liveRange, vars: []*ir.Value{e.key}})
 		}
 	}
 	return a
@@ -368,9 +372,9 @@ func NewAllocator(vars []*allocEntry) *Allocator {
 
 // allocRanges は live range の重ならないものを同じレジスタにまとめる (NewAllocator の中核。単体テスト用に分離)。
 // 返り値は各レジスタに入るキーの index のリスト。
-func allocRanges(ranges []*LiveRange) [][]int {
+func allocRanges(ranges []*ir.LiveRange) [][]int {
 	var regs [][]int
-	var regRanges []*LiveRange
+	var regRanges []*ir.LiveRange
 	for i, lr := range ranges {
 		found := false
 		for j := range regs {
@@ -389,12 +393,12 @@ func allocRanges(ranges []*LiveRange) [][]int {
 	return regs
 }
 
-func overlapRange(r1, r2 *LiveRange) bool {
+func overlapRange(r1, r2 *ir.LiveRange) bool {
 	return r1.Max >= r2.Min && r1.Min <= r2.Max
 }
 
-func joinRange(r1, r2 *LiveRange) *LiveRange {
-	return &LiveRange{Min: min(r1.Min, r2.Min), Max: max(r1.Max, r2.Max)}
+func joinRange(r1, r2 *ir.LiveRange) *ir.LiveRange {
+	return &ir.LiveRange{Min: min(r1.Min, r2.Min), Max: max(r1.Max, r2.Max)}
 }
 
 // ---------------------------------------------------------------
@@ -425,7 +429,7 @@ func NewLiveRangeCalculator(flow [][]int) *LiveRangeCalculator {
 }
 
 // CalcLiveRange は live range を計算する。全く使われていない場合 nil を返す。
-func (l *LiveRangeCalculator) CalcLiveRange(defines, uses []int) *LiveRange {
+func (l *LiveRangeCalculator) CalcLiveRange(defines, uses []int) *ir.LiveRange {
 	type liveInfo struct {
 		define, use, liveIn, liveOut bool
 	}
@@ -477,25 +481,25 @@ func (l *LiveRangeCalculator) CalcLiveRange(defines, uses []int) *LiveRange {
 	if minI == 1000000 {
 		return nil
 	}
-	return &LiveRange{Min: minI, Max: maxI}
+	return &ir.LiveRange{Min: minI, Max: maxI}
 }
 
 // ---------------------------------------------------------------
 // 使っていない変数の削除 (Ruby版では Llc#delete_unuse)
 // ---------------------------------------------------------------
 
-func DeleteUnuse(lmd *Lambda) {
+func DeleteUnuse(lmd *ir.Lambda) {
 	for i, op := range lmd.Ops {
 		if op == nil {
 			continue
 		}
 		switch op.Code {
-		case OpPget, OpLoad:
-			if op.Dst != nil && UnderlyingValue(op.Dst) != nil && UnderlyingValue(op.Dst).Unuse {
+		case ir.OpPget, ir.OpLoad:
+			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
 				lmd.Ops[i] = nil
 			}
-		case OpCall, OpFastcall:
-			if op.Dst != nil && UnderlyingValue(op.Dst) != nil && UnderlyingValue(op.Dst).Unuse {
+		case ir.OpCall, ir.OpFastcall:
+			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
 				op.Dst = nil
 			}
 		}

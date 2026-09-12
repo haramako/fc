@@ -11,7 +11,8 @@ import (
 	"path/filepath"
 
 	fcdata "github.com/haramako/fc"
-	"github.com/haramako/fc/internal/fc"
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/driver"
 )
 
 const usage = `NES Compiler
@@ -53,7 +54,7 @@ func run() int {
 	}
 	rest := fs.Args()
 
-	opt := &fc.BuildOptions{
+	opt := &driver.BuildOptions{
 		Target:        *target,
 		Out:           *out,
 		Run:           *runFlag,
@@ -70,12 +71,12 @@ func run() int {
 	if cleanup != nil {
 		defer cleanup()
 	}
-	compiler := fc.NewCompiler(fcHome)
+	compiler := driver.NewCompiler(fcHome)
 
 	buildOne := func(src string) int {
 		code, err := compiler.Build(src, opt)
 		if err != nil {
-			if ce, ok := err.(*fc.CompileError); ok {
+			if ce, ok := err.(*diag.Error); ok {
 				fmt.Printf("%s: error: %s\n", ce.Pos, ce.Msg)
 				return 1
 			}

@@ -47,17 +47,24 @@ go test ./...
 ```
 
 テストは `testdata/golden/` の golden データ (AST / IR / 割付後IR / アセンブリ / バイナリ /
-実行出力) との差分比較で行われます。golden は Ruby 版 (オラクル) から生成されたものです:
+実行出力) との差分比較で行われます。golden は Go 自身の出力のスナップショットで、次で再生成します:
 
 ```bash
-ruby tools/gen_golden.rb   # ruby/ 以下の Ruby 版が必要 (ruby 3.x + racc)
+go test ./internal/driver -run 'TestGolden|TestExample' -update
 ```
 
 ## リポジトリ構成
 
 ```
 cmd/fcc/          CLI
-internal/fc/      コンパイラ本体 (レキサ/パーサ/HLC/アロケータ/LLC/ドライバ)
+internal/syntax/  字句解析・構文解析・構文木 (他の internal に依存しない)
+internal/types/   型とインターン
+internal/diag/    診断 (エラー) 型
+internal/ir/      中間表現 (Value / Op / Lambda / Module) とダンプ
+internal/sema/    意味解析 (構文木 → IR)、組み込みマクロ
+internal/regalloc/ レジスタ割付
+internal/codegen/ IR → ca65 アセンブリ
+internal/driver/  パイプライン統括 (ca65 / ld65 の起動、リンク、emu 実行)。golden / examples テストもここ
 internal/r6502/   6502エミュレータ (emuターゲット実行用)
 internal/nes/     ヘッドレスNESランナー (テスト用)
 fclib/            FC言語の標準ライブラリ
