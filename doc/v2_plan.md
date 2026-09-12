@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R1 進行中（R1-a 完了）**
+最終更新: 2026-09-12 / 状態: **R1 進行中（R1-a, R1-b 完了）**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
-| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | 🔄 a ✅ |
+| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | 🔄 a,b ✅ |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ⬜ |
 | R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ⬜ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R1-b（型付き AST + 新パーサ + lower、§4.3）。
+**次にやること**: R1-c（sema が型付き AST を直接読む、§4.4）。最大の山。`+=` 共有ノードのハザード（§2.2）に注意。
 
 ---
 
@@ -340,9 +340,9 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
   `internal/fc/lexer_diff_test.go`（コーパス 68 ファイルでトークン列一致。R1-c で旧レキサと共に削除）。
   差分テストで判明した旧仕様の細部: 10 進は `\d+` のみなので `1_000` は `1` + 識別子 `_000`（16 進は `\w+` で `_` 込み）
 
-### 4.3 R1-b 型付き AST と新パーサ（1.5 日）
+### 4.3 R1-b 型付き AST と新パーサ（1.5 日）✅ 2026-09-12
 
-- [ ] `internal/syntax/ast.go`: ノード型。設計原則（C1, C2）:
+- [x] `internal/syntax/ast.go`: ノード型。設計原則（C1, C2）:
       - 全ノードが `Pos() Pos` と `End() Pos` を返す（`Node` インターフェース）
       - `File{ Stmts []Stmt; Comments []Comment }`
       - 文: `VarDecl{Scope, Decls []*VarSpec}`, `ConstDecl`, `FuncDecl{Scope, Name, Params, Result, Options, Body}`,
@@ -355,21 +355,32 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
       - 型式: `TypeExpr` 系（`BasicType`, `PointerType`, `ArrayType{Len Expr|nil}`, `FuncType{Params, Result, Fastcall}`）
       - `Options{Entries []OptionEntry{Key, Value Expr}}`（順序保持）
       - ノードは**不変として扱う**（ポインタ共有してもよいが書き換えない）
-- [ ] `internal/syntax/parser.y`: 現 `internal/fc/parser.y` を**規則と優先順位は 1:1 のまま**、
+- [x] `internal/syntax/parser.y`: 現 `internal/fc/parser.y` を**規則と優先順位は 1:1 のまま**、
       アクションだけ typed ノード生成に書き直す。`%union` にノード型別フィールドを置く（`any` で受けて
       アサーションしない）。`//go:generate goyacc -o parser.go -p syntax parser.y`
-- [ ] `internal/syntax/parse.go`: `Parse(src []byte, filename string) (*File, error)`。
+- [x] `internal/syntax/parse.go`: `Parse(src []byte, filename string) (*File, error)`。
       構文エラーは `*syntax.Error{Pos, Msg}`。メッセージは現行同様 `parse error ...`（errors.fc が `/parse error/` で照合）
-- [ ] `internal/fc/lower.go`（**一時的な境界コード**、ヘッダに「R1-c で削除」と明記）:
+- [x] `internal/fc/lower.go`（**一時的な境界コード**、ヘッダに「R1-c で削除」と明記）:
       `Lower(*syntax.File) (ast []any, posInfo *OMap)` — typed AST を現行の `[]any` S 式に変換。
       `+=` の脱糖（`X` 共有含む）もここで再現。`posInfo` は文ノードの `Pos().Line` から作る
       （キーは現行どおり `Canon`。collapse 挙動もそのまま再現される）
-- [ ] `fc.ParseSrc` の中身を `syntax.Parse` + `Lower` に差し替える。旧 parser.y/parser.go/parser_driver.go/lexer.go は
+- [x] `fc.ParseSrc` の中身を `syntax.Parse` + `Lower` に差し替える。旧 parser.y/parser.go/parser_driver.go/lexer.go は
       **差分テストのためにまだ残す**
-- [ ] `lower_test.go` 差分テスト: コーパス全 .fc について `SexpStr(Lower(syntax.Parse(src)))` ==
+- [x] `lower_test.go` 差分テスト: コーパス全 .fc について `SexpStr(Lower(syntax.Parse(src)))` ==
       `SexpStr(旧ParseSrc(src))`、かつ posInfo の S 式も一致
-- [ ] `ast_test.go`: 全ノードの Pos/End が単調（親は子を包含）であることをコーパス全体で検査する汎用テスト
+- [x] `ast_test.go`: 全ノードの Pos/End が単調（親は子を包含）であることをコーパス全体で検査する汎用テスト
 - 合格: 差分テスト緑、`go test ./...` 差分ゼロ（golden は Lower 経由で完全一致するはず）
+- 結果:
+  - `internal/syntax/ast.go`（文 17 種・式 13 種・型式 4 種・Options。全ノード Pos/End）、`parser.y`（旧文法と規則・優先順位 1:1、
+    到達不能な `id_list: tID` のみ削除。goyacc は新旧とも conflict ゼロ）、`parse.go`、`walk.go`（`Inspect`/`Children`）
+  - `internal/fc/lower.go`（境界コード、R1-c で削除）。`fc.ParseSrc` は `syntax.Parse` + `Lower` に切替済み、旧パーサは `parseSrcOld` として差分テスト専用に残置
+  - テスト: `lower_test.go`（コーパス 68 ファイルで AST の S 式一致 + pos_info キー順一致）、`parse_test.go`（コーパス 67 ファイルで
+    全ノードの Pos/End 包含・ソース順・リテラル Text 一致、エラー、代表構文の形）
+  - 判明した注意点: pos_info の登録順は「兄弟は出現順、内側の文が外側より先、if の then 節が else 節より先」。
+    Lower の評価順を旧 reduce 順に合わせる必要があった（Go の複合リテラルは要素順に評価されるが、事前に変数へ取り出すと順が変わる）
+  - 意図的な差: pos_info の行番号は文の**開始行**（旧: reduce 時のレキサ行 ≒ 末尾行、if 文では後続トークンの行）。
+    CompileError の行番号だけに影響し、テストは行番号を見ない（§2.6）
+  - golden（ir/allocir/asm/bin/stdout/examples）全差分ゼロ、`go test ./...` 緑
 
 ### 4.4 R1-c sema が typed AST を直接読む（2 日・最大の山）
 
@@ -534,8 +545,14 @@ cmd/fcc            CLI のみ
 実装中に見つかった「仕様として決めるべき点」をここに溜める。決まるまでは現行挙動維持。
 各項目の事実・選択肢・推奨は [v2_decisions.md](v2_decisions.md) にまとめてある（決定もそこに記録する）。
 
-- [ ] **相互 `use` の可視性**（R3-b）: 現行は `use` 到達順に依存した部分可視性。v2 の `use` 設計で
-      「DAG 強制」か「宣言フェーズの分離で順序非依存」かを決める
+- [x] **相互 `use` の可視性**（R3-b）→ **決定 2026-09-12: B「宣言フェーズ分離・順序非依存」**。
+      循環 `use` は許容（castle は 41 モジュール中 26 が相互参照の塊）。トップレベル定数はシンボル単位で
+      遅延評価し、値レベルの循環だけエラー。採用条件:
+      **B-1** リンク順は発見順に依存しない（モジュール名順を推奨。問題が出たら利用側プログラムを直す）、
+      **B-2** 名前衝突は「自宣言 > 選択的輸入 > glob、曖昧なときだけエラー、モジュール束縛の glob 再輸出は維持」
+      （規則 S1〜S6）、**B-3** §3 の決定で消滅、**B-4** グローバル `options` キーはメインモジュール限定。
+      **R3-b は構造の準備のみ**（`sema.CompileModule` + `ModuleInterface`）で解決順序は現行維持、
+      切替は F-mod。詳細は [v2_decisions.md](v2_decisions.md) §1
 - [x] `use * from` の継続可否（v2）→ **決定 2026-09-12**: `use * from mod;` は**維持**。
       v2 文法で**選択的インポート（`use a, b from mod;` 相当）を本当に実装する**
       （リファレンスに記載があるが現行では構文的に到達不能: `parser.y:85` の `id_list: tID`）。

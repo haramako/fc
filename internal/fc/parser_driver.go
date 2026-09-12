@@ -8,6 +8,8 @@ package fc
 import (
 	"fmt"
 	"strings"
+
+	"github.com/haramako/fc/internal/syntax"
 )
 
 type parserLexer struct {
@@ -44,7 +46,20 @@ func (p *parserLexer) info(node any) {
 }
 
 // ParseSrc はソースをパースして (ast, pos_info) を返す。
+// R1-b 以降: 新パーサ (internal/syntax) で構文木を作り、Lower で旧 AST に変換する。
+// 旧 goyacc パーサ (parseSrcOld) は lower_test.go の差分テストのためだけに残している (R1-c で削除)。
 func ParseSrc(src []byte, filename string) (ast []any, posInfo *OMap, err error) {
+	f, perr := syntax.Parse(src, filename)
+	if perr != nil {
+		se := perr.(*syntax.Error)
+		return nil, nil, &CompileError{Msg: se.Msg, Filename: se.Filename, LineNo: se.Pos.Line}
+	}
+	ast, posInfo = Lower(f)
+	return ast, posInfo, nil
+}
+
+// parseSrcOld は旧 goyacc パーサによるパース (差分テスト用)。
+func parseSrcOld(src []byte, filename string) (ast []any, posInfo *OMap, err error) {
 	pl := &parserLexer{lex: NewLexer(src, filename), posInfo: NewOMap()}
 	defer func() {
 		if r := recover(); r != nil {

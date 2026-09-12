@@ -25,7 +25,7 @@ type Kind int
 // トークン種別。記号・キーワードの集合は旧レキサ (internal/fc/lexer.go) と同一。
 const (
 	EOF Kind = iota
-	Ident
+	Identifier
 	Number
 	String
 
@@ -93,7 +93,7 @@ const (
 )
 
 var kindNames = [...]string{
-	EOF: "EOF", Ident: "Ident", Number: "Number", String: "String",
+	EOF: "EOF", Identifier: "Identifier", Number: "Number", String: "String",
 	KwInclude: "include", KwFunction: "function", KwConst: "const", KwVar: "var",
 	KwOptions: "options", KwIf: "if", KwElse: "else", KwElsif: "elsif",
 	KwLoop: "loop", KwWhile: "while", KwFor: "for", KwReturn: "return",
@@ -135,8 +135,8 @@ func (t Token) String() string {
 		return fmt.Sprintf("Number(%d)", t.Int)
 	case String:
 		return fmt.Sprintf("String(%q)", t.Str)
-	case Ident:
-		return fmt.Sprintf("Ident(%s)", t.Text)
+	case Identifier:
+		return fmt.Sprintf("Identifier(%s)", t.Text)
 	default:
 		return t.Kind.String()
 	}

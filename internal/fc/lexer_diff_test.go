@@ -15,7 +15,7 @@ import (
 
 // 旧トークンコード → 新 Kind
 var oldToNewKind = map[int]syntax.Kind{
-	NUMBER: syntax.Number, IDENT: syntax.Ident, STRING: syntax.String,
+	NUMBER: syntax.Number, IDENT: syntax.Identifier, STRING: syntax.String,
 	kINCLUDE: syntax.KwInclude, kFUNCTION: syntax.KwFunction, kCONST: syntax.KwConst, kVAR: syntax.KwVar,
 	kOPTIONS: syntax.KwOptions, kIF: syntax.KwIf, kELSE: syntax.KwElse, kELSIF: syntax.KwElsif,
 	kLOOP: syntax.KwLoop, kWHILE: syntax.KwWhile, kFOR: syntax.KwFor, kRETURN: syntax.KwReturn,

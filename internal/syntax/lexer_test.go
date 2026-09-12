@@ -74,10 +74,10 @@ func TestTokenize(t *testing.T) {
 				{KwDefault, "default"}, {KwUse, "use"}, {KwAs, "as"}, {KwFrom, "from"}, {KwPublic, "public"},
 				{KwPrivate, "private"}}},
 		{"identifiers", "foo _bar baz9 If Function",
-			[]tok{{Ident, "foo"}, {Ident, "_bar"}, {Ident, "baz9"}, {Ident, "If"}, {Ident, "Function"}}},
+			[]tok{{Identifier, "foo"}, {Identifier, "_bar"}, {Identifier, "baz9"}, {Identifier, "If"}, {Identifier, "Function"}}},
 		// 10 進は \d+ のみ。`1_000` は 1 + 識別子 `_000` (16 進の \w+ とは異なる)
 		{"decimal", "0 42 1_000 007",
-			[]tok{{Number, "0"}, {Number, "42"}, {Number, "1"}, {Ident, "_000"}, {Number, "7"}}},
+			[]tok{{Number, "0"}, {Number, "42"}, {Number, "1"}, {Identifier, "_000"}, {Number, "7"}}},
 		{"hex", "0x10 0XfF 0xab_cd",
 			[]tok{{Number, "16"}, {Number, "255"}, {Number, "43981"}}},
 		{"binary", "0b101 0B11",
@@ -90,9 +90,9 @@ func TestTokenize(t *testing.T) {
 		{"quirk: 0xZZ is 0, 0x1g consumes g", "0xZZ 0x1g",
 			[]tok{{Number, "0"}, {Number, "1"}}},
 		{"quirk: 12ab splits", "12ab",
-			[]tok{{Number, "12"}, {Ident, "ab"}}},
+			[]tok{{Number, "12"}, {Identifier, "ab"}}},
 		{"quirk: 0b without digit", "0bx",
-			[]tok{{Number, "0"}, {Ident, "bx"}}},
+			[]tok{{Number, "0"}, {Identifier, "bx"}}},
 		{"quirk: underscore rules (hex)", "0x1__0 0x_1 0x1_ 0x1_f",
 			// \w+ で全部消費し、to_i(16) は `_` を「前後が数字」のときだけ区切りとして許す
 			[]tok{{Number, "1"}, {Number, "0"}, {Number, "1"}, {Number, "31"}}},
@@ -105,22 +105,22 @@ func TestTokenize(t *testing.T) {
 		{"sq string (no escape)", `'abc' 'a\nb' 'x\'y'`,
 			[]tok{{String, "abc"}, {String, `a\nb`}, {String, `x\'y`}}},
 		{"triple string", "\"\"\"line1\nline2 \"quoted\"\\n\"\"\" x",
-			[]tok{{String, "line1\nline2 \"quoted\"\n"}, {Ident, "x"}}},
+			[]tok{{String, "line1\nline2 \"quoted\"\n"}, {Identifier, "x"}}},
 		{"triple string fallback to dq when unterminated", `"""abc" d`,
 			// """abc" → 閉じ """ が無いので "" として解釈: `""` (空) + `"abc"` + d
-			[]tok{{String, ""}, {String, "abc"}, {Ident, "d"}}},
+			[]tok{{String, ""}, {String, "abc"}, {Identifier, "d"}}},
 		{"line comment", "a // comment\nb",
-			[]tok{{Ident, "a"}, {Ident, "b"}}},
+			[]tok{{Identifier, "a"}, {Identifier, "b"}}},
 		{"empty line comment does not swallow next line", "//\nb\n//\n//\nc",
-			[]tok{{Ident, "b"}, {Ident, "c"}}},
+			[]tok{{Identifier, "b"}, {Identifier, "c"}}},
 		{"line comment at EOF without newline", "a // c",
-			[]tok{{Ident, "a"}}},
+			[]tok{{Identifier, "a"}}},
 		{"block comment", "a /* x\ny */ b /**/ c /***/ d",
-			[]tok{{Ident, "a"}, {Ident, "b"}, {Ident, "c"}, {Ident, "d"}}},
+			[]tok{{Identifier, "a"}, {Identifier, "b"}, {Identifier, "c"}, {Identifier, "d"}}},
 		{"unterminated block comment falls back to tokens", "a /* b",
-			[]tok{{Ident, "a"}, {Slash, "/"}, {Star, "*"}, {Ident, "b"}}},
+			[]tok{{Identifier, "a"}, {Slash, "/"}, {Star, "*"}, {Identifier, "b"}}},
 		{"whitespace kinds", "a\t\r\n\f\vb",
-			[]tok{{Ident, "a"}, {Ident, "b"}}},
+			[]tok{{Identifier, "a"}, {Identifier, "b"}}},
 		{"empty", "", nil},
 	}
 	for _, tt := range tests {
@@ -212,10 +212,10 @@ func TestPositions(t *testing.T) {
 }
 
 func TestKindString(t *testing.T) {
-	if KwVar.String() != "var" || Leq.String() != "<=" || Ident.String() != "Ident" {
+	if KwVar.String() != "var" || Leq.String() != "<=" || Identifier.String() != "Identifier" {
 		t.Error("Kind.String")
 	}
-	if !KwVar.IsKeyword() || Ident.IsKeyword() || Leq.IsKeyword() {
+	if !KwVar.IsKeyword() || Identifier.IsKeyword() || Leq.IsKeyword() {
 		t.Error("IsKeyword")
 	}
 }

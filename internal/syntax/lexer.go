@@ -190,7 +190,7 @@ func (l *Lexer) Next() (Token, error) {
 		if kind, ok := keywords[word]; ok {
 			return tok(kind, n), nil
 		}
-		return tok(Ident, n), nil
+		return tok(Identifier, n), nil
 	}
 
 	// 文字列
