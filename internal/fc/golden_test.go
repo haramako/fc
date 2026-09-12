@@ -1,6 +1,8 @@
 package fc
 
 import (
+	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -8,9 +10,14 @@ import (
 	"testing"
 )
 
-// golden データは testdata/golden/ (リポジトリルート) にあり、
-// tools/gen_golden.rb で Ruby版(オラクル)から生成される。
-// 形式は doc/go_port_dump_format.md を参照。
+// golden データは testdata/golden/ (リポジトリルート) にある。
+// Go 自身の出力をスナップショットとして保持し、以下で再生成する:
+//
+//	go test ./internal/fc -run 'TestGolden|TestExample' -update
+//
+// (移植期は Ruby 版オラクルの tools/gen_golden.rb で生成していた。形式は doc/go_port_dump_format.md)
+
+var update = flag.Bool("update", false, "golden を現在の出力で書き換える")
 
 const goldenRoot = "../../testdata/golden"
 const repoRoot = "../.."
@@ -35,6 +42,50 @@ func readGolden(t *testing.T, rel string) string {
 		t.Fatalf("golden読み込み失敗: %v", err)
 	}
 	return normalizeText(string(b))
+}
+
+func writeGolden(t *testing.T, rel string, data []byte) {
+	t.Helper()
+	path := filepath.Join(absGoldenRoot, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o666); err != nil {
+		t.Fatalf("golden書き込み失敗: %v", err)
+	}
+	t.Logf("golden 更新: %s", rel)
+}
+
+// compareGolden はテキスト golden (rel は testdata/golden からの相対パス) と比較する。
+// -update 時は比較せず got で上書きする (改行は LF)。
+func compareGolden(t *testing.T, rel, got string) {
+	t.Helper()
+	if *update {
+		writeGolden(t, rel, []byte(normalizeText(got)))
+		return
+	}
+	compareText(t, rel, got, readGolden(t, rel))
+}
+
+// compareGoldenBytes はバイナリ golden と比較する。-update 時は got で上書きする。
+func compareGoldenBytes(t *testing.T, rel string, got []byte) {
+	t.Helper()
+	if *update {
+		writeGolden(t, rel, got)
+		return
+	}
+	want, err := os.ReadFile(filepath.Join(absGoldenRoot, rel))
+	if err != nil {
+		t.Fatalf("golden読み込み失敗: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%s: サイズ不一致: got %d want %d", rel, len(got), len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("%s: バイト不一致: offset 0x%04x got %02x want %02x", rel, i, got[i], want[i])
+		}
+	}
 }
 
 // compileForGolden は test/ ディレクトリで指定テストをHLCコンパイルする。
@@ -80,40 +131,7 @@ func compareText(t *testing.T, name, got, want string) {
 	t.Errorf("%s: 不一致 (行数 got=%d want=%d)", name, len(gotLines), len(wantLines))
 }
 
-// Phase 1: test/test_*.fc + fclib/**/*.fc (x6502除く) のAST一致
-func TestGoldenAST(t *testing.T) {
-	astRoot := filepath.Join(goldenRoot, "ast")
-	err := filepath.WalkDir(astRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".ast") {
-			return nil
-		}
-		rel, _ := filepath.Rel(astRoot, path)
-		rel = filepath.ToSlash(rel)
-		name := strings.TrimSuffix(rel, ".ast") // 例: test/test_basic, fclib/nes/stdio
-		t.Run(name, func(t *testing.T) {
-			srcPath := filepath.Join(repoRoot, name+".fc")
-			src, err := ReadSource(srcPath)
-			if err != nil {
-				t.Fatalf("ソース読み込み失敗: %v", err)
-			}
-			ast, posInfo, err := ParseSrc(src, srcPath)
-			if err != nil {
-				t.Fatalf("パース失敗: %v", err)
-			}
-			compareText(t, name+".ast", DumpAST(ast), readGolden(t, "ast/"+rel))
-			compareText(t, name+".pos", DumpPos(posInfo), readGolden(t, "ast/"+name+".pos"))
-		})
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-// Phase 3: 全テストの HLC 出力(IR)一致
+// 全テストの HLC 出力(IR)一致
 func TestGoldenIR(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "ir", "*.ir"))
 	if err != nil || len(matches) == 0 {
@@ -124,7 +142,7 @@ func TestGoldenIR(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
-			compareText(t, name+".ir", DumpIR(hlc), readGolden(t, "ir/"+name+".ir"))
+			compareGolden(t, "ir/"+name+".ir", DumpIR(hlc))
 		})
 	}
 }
@@ -151,7 +169,7 @@ func allocLambdas(hlc *Hlc) string {
 	return b.String()
 }
 
-// Phase 4: レジスタ割付+delete_unuse 後のIR一致
+// レジスタ割付+delete_unuse 後のIR一致
 func TestGoldenAllocIR(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "allocir", "*.air"))
 	if err != nil || len(matches) == 0 {
@@ -162,7 +180,7 @@ func TestGoldenAllocIR(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
-			compareText(t, name+".air", allocLambdas(hlc), readGolden(t, "allocir/"+name+".air"))
+			compareGolden(t, "allocir/"+name+".air", allocLambdas(hlc))
 		})
 	}
 }
@@ -181,7 +199,7 @@ func normalizeAsm(lines []string) string {
 	return strings.Join(out, "\n") + "\n"
 }
 
-// Phase 5: 正規化済みアセンブラ(.s/.inc)一致
+// 正規化済みアセンブラ(.s/.inc)一致
 func TestGoldenAsm(t *testing.T) {
 	dirs, err := os.ReadDir(filepath.Join(absGoldenRoot, "asm"))
 	if err != nil || len(dirs) == 0 {
@@ -199,16 +217,14 @@ func TestGoldenAsm(t *testing.T) {
 			for _, me := range hlc.Modules.Entries() {
 				mod := me.Val.(*Module)
 				asm, inc := llc.Compile(mod)
-				compareText(t, name+"/"+ToS(mod.Id)+".s", normalizeAsm(asm),
-					readGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".s"))
-				compareText(t, name+"/"+ToS(mod.Id)+".inc", normalizeAsm(inc),
-					readGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".inc"))
+				compareGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".s", normalizeAsm(asm))
+				compareGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".inc", normalizeAsm(inc))
 			}
 		})
 	}
 }
 
-// Phase 6: リンク済みバイナリ(a.bin/a.nes)のバイト一致
+// リンク済みバイナリ(a.bin/a.nes)のバイト一致
 func TestGoldenBinary(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "bin", "*"))
 	if err != nil || len(matches) == 0 {
@@ -236,23 +252,12 @@ func TestGoldenBinary(t *testing.T) {
 			if err != nil {
 				t.Fatalf("出力読み込み失敗: %v", err)
 			}
-			want, err := os.ReadFile(m)
-			if err != nil {
-				t.Fatalf("golden読み込み失敗: %v", err)
-			}
-			if len(got) != len(want) {
-				t.Fatalf("サイズ不一致: got %d want %d", len(got), len(want))
-			}
-			for i := range got {
-				if got[i] != want[i] {
-					t.Fatalf("バイト不一致: offset 0x%04x got %02x want %02x", i, got[i], want[i])
-				}
-			}
+			compareGoldenBytes(t, "bin/"+base, got)
 		})
 	}
 }
 
-// Phase 7: エミュレータ実行の stdout / 終了コード一致
+// エミュレータ実行の stdout / 終了コード一致
 func TestGoldenStdout(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "stdout", "*.txt"))
 	if err != nil || len(matches) == 0 {
@@ -269,11 +274,8 @@ func TestGoldenStdout(t *testing.T) {
 			if berr != nil {
 				t.Fatalf("ビルド失敗: %v", berr)
 			}
-			compareText(t, name+".txt", out.String(), readGolden(t, "stdout/"+name+".txt"))
-			wantExit := strings.TrimSpace(readGolden(t, "stdout/"+name+".exit"))
-			if ToS(code) != wantExit {
-				t.Errorf("終了コード不一致: got %d want %s", code, wantExit)
-			}
+			compareGolden(t, "stdout/"+name+".txt", out.String())
+			compareGolden(t, "stdout/"+name+".exit", fmt.Sprintf("%d\n", code))
 		})
 	}
 }

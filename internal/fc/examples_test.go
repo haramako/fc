@@ -25,24 +25,14 @@ func runTool(t *testing.T, dir string, name string, args ...string) {
 	}
 }
 
+// compareROM は ROM を golden (testdata/golden/ 相対) とバイト比較する。-update で更新できる。
 func compareROM(t *testing.T, gotPath, goldenRel string) {
 	t.Helper()
 	got, err := os.ReadFile(gotPath)
 	if err != nil {
 		t.Fatalf("ROM読み込み失敗: %v", err)
 	}
-	want, err := os.ReadFile(filepath.Join(absGoldenRoot, goldenRel))
-	if err != nil {
-		t.Fatalf("golden読み込み失敗: %v", err)
-	}
-	if len(got) != len(want) {
-		t.Fatalf("ROMサイズ不一致: got %d want %d", len(got), len(want))
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			t.Fatalf("ROMバイト不一致: offset 0x%04x got %02x want %02x", i, got[i], want[i])
-		}
-	}
+	compareGoldenBytes(t, goldenRel, got)
 }
 
 // TestExampleMiku は examples/miku (fc-miku 由来) のフルビルド。

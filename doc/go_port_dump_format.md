@@ -1,8 +1,14 @@
 # golden ダンプ正規形の仕様
 
 Ruby版(オラクル)の `tools/dumper.rb` が定義する形式。Go版はこの形式のダンプを実装し、
-`testdata/golden/` と比較する。**この仕様の正典は `tools/dumper.rb` の実装**であり、
-本ドキュメントはその要約。両者が食い違う場合は dumper.rb に従う。
+`testdata/golden/` と比較する。
+
+> **2026-09-12 (feature/v2 R0) 以降**: golden は Go 自身の出力をスナップショットとして保持し、
+> `go test ./internal/fc -run 'TestGolden|TestExample' -update` で再生成する。Ruby オラクル
+> (`tools/gen_golden.rb` / `tools/dumper.rb`) は役目を終え凍結。本書の形式は現行 Go 実装 (`irdump.go`)
+> の記述として残すが、**ir / allocir の形式は R1-d (型付き IR 導入) で変わる予定**。
+
+移植期の注: この仕様の正典は `tools/dumper.rb` の実装であり、本ドキュメントはその要約だった。
 
 ## 基本シリアライズ
 
@@ -17,7 +23,10 @@ Ruby版(オラクル)の `tools/dumper.rb` が定義する形式。Go版はこ�
 | Hash | `{k1 v1 k2 v2 ...}` 挿入順 |
 | Type | `#"<to_s>"` 例: `#"uint8"` `#"uint8*"` `#"uint8[4]"` `#"fastcall uint8(uint8)"` |
 
-## AST ダンプ (`ast/**/*.ast`)
+## AST ダンプ (`ast/**/*.ast`) — 廃止 (feature/v2 R0-2)
+
+Ruby の S 式構造に紐付いた形式のため、型付き AST への移行に伴い golden ごと削除した。
+後継はフォーマッタの冪等性・往復テスト (go_evolution_plan.md F-fmt)。以下は記録として残す。
 
 パース直後(HLC適用前)の生AST。トップレベル文ごとに1エントリ、`pretty_sexp` で整形:
 compact形式(要素をスペース区切りで並べたもの)が80文字以下ならその1行、超える配列は

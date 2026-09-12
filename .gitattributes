@@ -1,0 +1,14 @@
+# テキストは自動判定 (リポジトリ内は LF)。
+* text=auto
+
+# golden はチェックアウトでも LF に固定する
+# (Go のテストが -update で LF で書き出すので、Windows/Linux どちらでも diff ノイズを出さない)。
+testdata/golden/** text eol=lf
+
+# バイナリ (上の golden の指定より後に置いて text を打ち消す)
+*.bin binary
+*.nes binary
+*.o binary
+*.lib binary
+*.chr binary
+*.png binary

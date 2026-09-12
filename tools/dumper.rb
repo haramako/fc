@@ -1,5 +1,7 @@
 # coding: utf-8
 #
+# [凍結 2026-09-12] feature/v2 以降は使用しない (gen_golden.rb の注記を参照)。
+#
 # golden 生成用の正規形ダンパー。
 # lib/ (Ruby版=オラクル) は一切変更せず、モンキーパッチでフックする。
 # 出力形式の仕様は doc/go_port_dump_format.md を参照。Go版はこの形式に合わせる。

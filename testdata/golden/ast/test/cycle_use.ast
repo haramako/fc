@@ -1,3 +1,0 @@
-(:use :test_cycle :tc nil)
-(:const ((:CYCLE_CONST nil 99 nil)) :public)
-(:function :public :hoge () :int nil ((:return (:dot :tc :cycle_var))))

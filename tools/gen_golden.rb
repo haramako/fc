@@ -1,5 +1,9 @@
 # coding: utf-8
 #
+# [凍結 2026-09-12] feature/v2 以降は使用しない。golden は Go 自身の出力から
+#   go test ./internal/fc -run 'TestGolden|TestExample' -update
+# で再生成する (doc/v2_plan.md R0)。ast/ golden は廃止済み。
+#
 # Ruby版(オラクル)から golden データ一式を生成する。
 #   ruby tools/gen_golden.rb
 # リポジトリルートから実行すること。testdata/golden/ 以下に出力する。
