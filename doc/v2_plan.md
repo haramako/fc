@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **計画策定完了・未着手**
+最終更新: 2026-09-12 / 状態: **R0 完了、R1 着手前**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
-| R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ⬜ |
+| R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
 | R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | ⬜ |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ⬜ |
 | R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ⬜ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R0-1 から順に。
+**次にやること**: R1-a（新レキサ、§4.2）から。新規コードは `internal/syntax/` に置く。
 
 ---
 
@@ -251,55 +251,44 @@ castle は 3 の後に独自 `data.asm` と独自 `ld65.cfg` でリンクする�
 合格条件（フェーズ全体）: `go test ./internal/fc -run TestGolden -update` → `git status` で
 `testdata/golden/` に差分なし（ast 削除以外）。`go test ./...` 緑。
 
-### R0-1 `.gitignore` と `.gitattributes`
+### R0-1 `.gitignore` と `.gitattributes` ✅
 
-- [ ] 未コミットの `.gitignore` の `/fcc`（Linux バイナリ）を含める
-- [ ] `.gitattributes` を追加: `testdata/golden/** text eol=lf` に加え `*.bin binary` `*.nes binary` `*.o binary`。
-      目的: Windows/Linux どちらで `-update` しても diff ノイズが出ないこと
-- 合格: `git status` クリーン（`.gitattributes` 追加で既存ファイルが renormalize 差分を出す場合は
-  `git add --renormalize .` して内容差分がないことを確認してから同コミットに含める）
+- [x] 未コミットの `.gitignore` の `/fcc`（Linux バイナリ）を含める（計画コミット af22b45 に同梱）
+- [x] `.gitattributes` を追加: `* text=auto`、`testdata/golden/** text eol=lf`、`*.bin/*.nes/*.o/*.lib/*.chr/*.png binary`
+- 結果: index は元から全 LF（`git ls-files --eol`）だったので renormalize 差分なし。
+  golden を再チェックアウトして作業ツリーも LF に
 
-### R0-2 ast golden の廃止
+### R0-2 ast golden の廃止 ✅
 
-- [ ] `testdata/golden/ast/` を削除
-- [ ] `TestGoldenAST`、`DumpAST`、`DumpPos`、`pretty_sexp` 相当（sexp.go の AST 専用部分）を削除。
-      `SexpStr`/`EscStr` は irdump が使うので残す
-- [ ] `doc/go_port_dump_format.md` の「AST ダンプ」節に「廃止（feature/v2 R0-2）」を追記
-- 合格: `go test ./...` 緑
+- [x] `testdata/golden/ast/`（50 ファイル）を削除
+- [x] `TestGoldenAST`、`DumpAST`、`DumpPos`、`PrettySexp` を削除。`SexpStr`/`EscStr`/`Canon` は残す
+- [x] `doc/go_port_dump_format.md` の「AST ダンプ」節に廃止を追記
 
-### R0-3 `-update` フラグ
+### R0-3 `-update` フラグ ✅
 
-- [ ] `golden_test.go` に `var update = flag.Bool("update", false, "golden を現在の出力で書き換える")`
-- [ ] `compareText(t, name, got, want)` を「`*update` なら `got` を LF でファイルに書いて return」に。
-      書き出し先は `readGolden` と同じ相対パス → 呼び出し側で golden 相対パスを渡す形に整理
-      （現状は `readGolden(t, rel)` の結果を渡している。`compareGolden(t, rel, got)` のように rel を受ける API に変える）
-- [ ] バイナリ（`TestGoldenBinary` の `.bin`/`.nes`、`examples_test.go` の ROM）も同様に `-update` 対応
-- [ ] `TestGoldenStdout` の `.exit` も書き出す
-- [ ] **初回再生成**: `go test ./internal/fc -run 'TestGolden|TestExample' -update` を実行し、
-      `git status` が **クリーン**であることを確認する（Go 出力 == Ruby オラクル出力の最終確認。
-      ここで差分が出たら R0-1 の改行設定の問題か、既存の不一致。後者なら報告して止める）
-- 合格: 上記クリーン。`-update` 無しで再実行して緑
+- [x] `golden_test.go`: `var update = flag.Bool("update", ...)`
+- [x] `compareGolden(t, rel, got)` / `compareGoldenBytes(t, rel, got)`: rel は `testdata/golden/` 相対。
+      `-update` 時は LF で書き出し（`writeGolden`）
+- [x] bin / examples ROM（`compareROM` が `compareGoldenBytes` に委譲）も対応
+- [x] `.exit` は `fmt.Sprintf("%d\n", code)` で書き出し（既存 golden と同形式）
+- [x] 初回再生成 → `git status` クリーン（Go 出力 == Ruby オラクル出力をバイト単位で最終確認）→ 再実行で緑
 
-### R0-4 Ruby オラクルの役目終了の明記
+### R0-4 Ruby オラクルの役目終了の明記 ✅
 
-- [ ] `tools/gen_golden.rb`、`tools/dumper.rb` の先頭コメントに
-      「2026-09-12 以降（feature/v2）は使用しない。golden は `go test ./internal/fc -run TestGolden -update` で再生成する」を追記（G5: それ以外は触らない）
-- [ ] `doc/go_port_dump_format.md` 冒頭に同趣旨の注記（ir/allocir の形式は R1-d で変わる予定であることも）
-- [ ] `development_notes.md` の「テストの三段構え」節: golden 再生成の記述を `-update` に更新、
-      ブランチ運用節に `feature/v2` を追記
+- [x] `tools/gen_golden.rb`、`tools/dumper.rb` の先頭に凍結注記（それ以外は無変更）
+- [x] `doc/go_port_dump_format.md` 冒頭に `-update` 方式の注記（ir/allocir 形式は R1-d で変わる旨も）
+- [x] `development_notes.md`: golden 再生成の記述を `-update` に更新、ベンチの実行方法、`feature/v2` を追記
 
-### R0-5 ベンチマーク
+### R0-5 ベンチマーク ✅
 
-- [ ] `internal/fc/bench_test.go`: `BenchmarkCastleCompile` — `examples/castle/src` を一時ディレクトリに
-      複製し（G8）、`BuildOptions{Target:"nes", CompileOnly:true}` で HLC+LLC+ca65 まで。
-      可能なら ca65 を除いた純 Go 部分（parse+HLC+LLC）だけのベンチも分ける（`BenchmarkCastleFrontend`）
-- [ ] 計測値（ns/op, allocs/op）を §9 作業ログに**基準値として記録**。以後の R1〜R3 の各フェーズ末に再計測し、
-      2 倍以上の退行があれば原因を調べる（性能改善は目標ではないが、静かな退行は検知する）
+- [x] `internal/fc/bench_test.go`: `BenchmarkCastleFrontend`（parse+HLC+LLC、ファイル出力なし）と
+      `BenchmarkCastleCompile`（`fcc compile -t nes` 相当、ca65 含む）。castle を一時ディレクトリに複製して実行
+- [x] 基準値を §9 に記録。以後 R1〜R3 の各フェーズ末に再計測し、2 倍以上の退行があれば原因を調べる
 
-### R0-6 計画ドキュメント運用の切替
+### R0-6 計画ドキュメント運用の切替 ✅
 
-- [ ] `go_evolution_plan.md` の冒頭「状態」を更新し、R0〜R3 の実行計画は本書（v2_plan.md）が正典と明記
-- [ ] 本書の進捗表を更新、R0 を ✅ に
+- [x] `go_evolution_plan.md` の「状態」を更新（v2_plan.md が R0〜R3 の正典）
+- [x] 本書の進捗表を更新、R0 を ✅ に
 
 ---
 
@@ -540,6 +529,7 @@ cmd/fcc            CLI のみ
 ## 7. 未決事項（ユーザー判断待ち・エージェントは追記のみ）
 
 実装中に見つかった「仕様として決めるべき点」をここに溜める。決まるまでは現行挙動維持。
+各項目の事実・選択肢・推奨は [v2_decisions.md](v2_decisions.md) にまとめてある（決定もそこに記録する）。
 
 - [ ] **相互 `use` の可視性**（R3-b）: 現行は `use` 到達順に依存した部分可視性。v2 の `use` 設計で
       「DAG 強制」か「宣言フェーズの分離で順序非依存」かを決める
@@ -580,3 +570,17 @@ cmd/fcc            CLI のみ
   - R3-c のラベル採番変更は「正規化を先に入れてから切り替える」2 コミット手順に
   - ir/allocir golden は削除ではなく R1-d で新形式に再生成する方針に（レジスタ割付の回帰検知を残す）
 - 基準値: `go test ./...` 約 75 秒（fc 20s, nes 16s）。`go vet` クリーン
+
+### 2026-09-12 — R0 完了
+
+- コミット: 5eac0f3（R0-1〜4）、次コミット（R0-5〜6）
+- `-update` による初回再生成で golden に差分ゼロ。厳密クローンの最終確認となった
+- **ベンチ基準値**（Windows 11 / Go 1.24 / castle 36 モジュール 12,378 行）:
+
+  | ベンチ | ns/op | B/op | allocs/op |
+  |---|---|---|---|
+  | `BenchmarkCastleFrontend`（parse+HLC+LLC） | 519 ms | 155 MB | 3.34 M |
+  | `BenchmarkCastleCompile`（+ca65 ×約 40 プロセス） | 5.10 s | 166 MB | 3.43 M |
+
+  Compile の大半は ca65 のプロセス起動。純 Go 部分は 0.5 秒で、`Canon()` の文字列化キーと
+  `[]any` の割り当てが主因と推測（R1-e で解消見込み。性能改善は目標ではないが退行検知の基準にする）
