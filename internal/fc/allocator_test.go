@@ -27,46 +27,37 @@ func TestAllocatorUnit(t *testing.T) {
 		}
 	})
 
-	liverange := func(flow [][]int, keys []any, infos [][2][]int) ([]any, []*LiveRange) {
+	liverange := func(flow [][]int, infos [][2][]int) []*LiveRange {
 		lrc := NewLiveRangeCalculator(flow)
-		var ks []any
 		var rs []*LiveRange
-		for i, k := range keys {
-			l := lrc.CalcLiveRange(infos[i][0], infos[i][1])
-			if l != nil {
-				ks = append(ks, k)
+		for _, info := range infos {
+			if l := lrc.CalcLiveRange(info[0], info[1]); l != nil {
 				rs = append(rs, l)
 			}
 		}
-		return ks, rs
+		return rs
 	}
 
 	t.Run("should allocate 3 registers", func(t *testing.T) {
-		ks, rs := liverange(flow,
-			[]any{"a", "b", "c"},
-			[][2][]int{
-				{{0, 3}, {1, 4}},
-				{{1}, {3}},
-				{{3}, {3, 5}},
-			})
-		alloc := NewAllocatorGeneric(ks, rs)
-		if len(alloc.Regs) != 3 {
-			t.Errorf("regs: got %d want 3", len(alloc.Regs))
+		rs := liverange(flow, [][2][]int{
+			{{0, 3}, {1, 4}}, // a
+			{{1}, {3}},       // b
+			{{3}, {3, 5}},    // c
+		})
+		if regs := allocRanges(rs); len(regs) != 3 {
+			t.Errorf("regs: got %d want 3", len(regs))
 		}
 	})
 
 	t.Run("should allocate 3 registers (with d)", func(t *testing.T) {
-		ks, rs := liverange(flow,
-			[]any{"a", "b", "c", "d"},
-			[][2][]int{
-				{{0, 3}, {1, 4}},
-				{{1}, {3}},
-				{{3}, {3, 5}},
-				{{0}, {0}},
-			})
-		alloc := NewAllocatorGeneric(ks, rs)
-		if len(alloc.Regs) != 3 {
-			t.Errorf("regs: got %d want 3", len(alloc.Regs))
+		rs := liverange(flow, [][2][]int{
+			{{0, 3}, {1, 4}}, // a
+			{{1}, {3}},       // b
+			{{3}, {3, 5}},    // c
+			{{0}, {0}},       // d
+		})
+		if regs := allocRanges(rs); len(regs) != 3 {
+			t.Errorf("regs: got %d want 3", len(regs))
 		}
 	})
 }

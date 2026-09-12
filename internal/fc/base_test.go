@@ -1,67 +1,12 @@
 package fc
 
-// test/fc/test_base.rb の移植 + Value/Scope の基本テスト。
+// Value / Scope の基本テスト (test/fc/test_base.rb 由来。型のテストは internal/types へ移動)。
 
 import "testing"
 
-func TestType(t *testing.T) {
-	t.Run("as void", func(t *testing.T) {
-		v := TypeOf(Sym("void"))
-		if v.Kind != "void" || v.Base != nil || v.Size != 0 {
-			t.Errorf("void: %+v", v)
-		}
-	})
-	t.Run("as bool", func(t *testing.T) {
-		v := TypeOf(Sym("bool"))
-		if v.Kind != "bool" || v.Base != nil || v.Size != 1 {
-			t.Errorf("bool: %+v", v)
-		}
-	})
-	t.Run("as int", func(t *testing.T) {
-		v := TypeOf(Sym("int"))
-		if v.Kind != "int" || v.Signed != false || v.Base != nil || v.Size != 1 {
-			t.Errorf("int: %+v", v)
-		}
-	})
-	t.Run("as array", func(t *testing.T) {
-		v := TypeOf([]any{Sym("array"), 10, Sym("int16")})
-		if v.Kind != "array" || v.Base != TypeOf(Sym("int16")) || v.Length != 10 || v.Size != 20 {
-			t.Errorf("array: %+v", v)
-		}
-	})
-	t.Run("as pointer", func(t *testing.T) {
-		v := TypeOf([]any{Sym("pointer"), Sym("int")})
-		if v.Kind != "pointer" || v.Size != 2 || v.Base != TypeOf(Sym("int")) {
-			t.Errorf("pointer: %+v", v)
-		}
-	})
-	t.Run("as lambda", func(t *testing.T) {
-		v := TypeOf([]any{Sym("lambda"), []any{TypeOf(Sym("int")), TypeOf(Sym("int"))}, []any{Sym("pointer"), Sym("int")}})
-		if v.Kind != "lambda" || v.Size != 2 || v.Base != TypeOf([]any{Sym("pointer"), Sym("int")}) {
-			t.Errorf("lambda: %+v", v)
-		}
-		if len(v.Args) != 2 || v.Args[0] != TypeOf(Sym("int")) || v.Args[1] != TypeOf(Sym("int")) {
-			t.Errorf("lambda args: %+v", v.Args)
-		}
-	})
-	t.Run("as complex type", func(t *testing.T) {
-		v := TypeOf([]any{Sym("array"), 10, []any{Sym("pointer"), []any{Sym("array"), 2, Sym("int")}}})
-		if v.String() != "uint8[2]*[10]" {
-			t.Errorf("complex: %s", v)
-		}
-	})
-	// インターンの確認
-	t.Run("intern", func(t *testing.T) {
-		a := TypeOf([]any{Sym("pointer"), Sym("uint8")})
-		b := TypeOf([]any{Sym("pointer"), Sym("int")})
-		if a != b {
-			t.Errorf("intern: %p != %p", a, b)
-		}
-	})
-}
-
-func TestValue(t *testing.T) {
+func TestIntValue(t *testing.T) {
 	// Value.new_int の型推定 (Ruby: n<-127 は sint16 という境界も含めて)
+	h := NewHlc(nil)
 	cases := []struct {
 		n    int
 		want string
@@ -70,51 +15,89 @@ func TestValue(t *testing.T) {
 		{-1, "sint8"}, {-127, "sint8"}, {-128, "sint16"}, {-255, "sint16"},
 	}
 	for _, c := range cases {
-		v := NewIntValue(c.n)
-		if v.Type.String() != c.want {
+		v := h.IntValue(c.n)
+		if v.Type.String() != c.want || !v.IsInt || v.Int != c.n {
 			t.Errorf("new_int(%d): got %s want %s", c.n, v.Type, c.want)
 		}
 	}
 }
 
 func TestScope(t *testing.T) {
+	h := NewHlc(nil)
+	u8 := h.Types().IntType(1, false)
 	g := NewScope(nil)
 	s := NewScope(g)
-	v1 := NewValue(KindGlobal, Sym("a"), TypeOf(Sym("int")), nil, nil)
-	v2 := NewValue(KindGlobal, Sym("b"), TypeOf(Sym("int")), nil, nil)
+	v1 := NewGlobal("a", u8, "_a")
+	v2 := NewGlobal("b", u8, "_b")
 	v2.Public = true
 	g.Declare(v1)
 	s.Declare(v2)
 
-	if s.Find(Sym("a"), true) != v1 {
+	if s.Find("a", true) != v1 {
 		t.Error("親スコープの検索に失敗")
 	}
-	if s.Find(Sym("b"), true) != v2 {
+	if s.Find("b", true) != v2 {
 		t.Error("自スコープの検索に失敗")
 	}
-	if s.Find(Sym("c"), true) != nil {
+	if s.Find("c", true) != nil {
 		t.Error("存在しないIDが見つかった")
 	}
 
 	// use 経由は public のみ見える
 	other := NewScope(nil)
-	pub := NewValue(KindGlobal, Sym("p"), TypeOf(Sym("int")), nil, nil)
+	pub := NewGlobal("p", u8, "_p")
 	pub.Public = true
-	priv := NewValue(KindGlobal, Sym("q"), TypeOf(Sym("int")), nil, nil)
+	priv := NewGlobal("q", u8, "_q")
 	other.Declare(pub)
 	other.Declare(priv)
 	s.Use(other)
-	if s.Find(Sym("p"), true) != pub {
+	if s.Find("p", true) != pub {
 		t.Error("use経由のpublicが見えない")
 	}
-	if s.Find(Sym("q"), true) != nil {
+	if s.Find("q", true) != nil {
 		t.Error("use経由のprivateが見えてしまう")
 	}
 
 	// 相互use しても無限再帰しない
 	other.Use(s)
-	if s.Find(Sym("nothing"), true) != nil {
+	if s.Find("nothing", true) != nil {
 		t.Error("相互useで誤検出")
 	}
-	_ = s.IdList()
+	// IdList は自スコープの宣言順 → use 先 → 親
+	ids := s.IdList()
+	if len(ids) < 3 || ids[0] != "b" || ids[1] != "p" {
+		t.Errorf("IdList: %v", ids)
+	}
+
+	// 二重宣言はエラー
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("二重宣言が通った")
+			}
+		}()
+		s.Declare(NewGlobal("b", u8, "_b2"))
+	}()
+}
+
+func TestOptions(t *testing.T) {
+	var o Options
+	o.Set("a", OptionValue{Kind: OptInt, Int: 1})
+	o.Set("b", OptionValue{Kind: OptStr, Str: "x"})
+	o.Set("a", OptionValue{Kind: OptInt, Int: 2}) // 後勝ち・位置維持
+	if len(o) != 2 || o[0].Key != "a" || o[0].Value.Int != 2 || o[1].Key != "b" {
+		t.Errorf("Options: %+v", o)
+	}
+	if n, ok := o.Int("a"); !ok || n != 2 {
+		t.Error("Int")
+	}
+	if _, ok := o.Int("b"); ok {
+		t.Error("文字列を Int で取れてはいけない")
+	}
+	if !o.Has("b") || o.Has("c") {
+		t.Error("Has")
+	}
+	if (OptionValue{Kind: OptIdent, Str: "my"}).Text() != "my" || (OptionValue{Kind: OptInt, Int: 5}).Text() != "5" {
+		t.Error("Text")
+	}
 }

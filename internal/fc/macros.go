@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/haramako/fc/internal/syntax"
+	"github.com/haramako/fc/internal/types"
 )
 
 var macroFiles = map[string]func(h *Hlc){
@@ -31,18 +32,18 @@ func registerStdmacro(h *Hlc) {
 
 // fclib/stdio.rb
 func registerStdio(h *Hlc) {
-	uint8p := TypeOf([]any{Sym("pointer"), Sym("uint8")})
-	print := h.scope.Find(Sym("print"), true)
-	printInt16 := h.scope.Find(Sym("print_int16"), true)
+	uint8p := h.types.PointerTo(h.types.IntType(1, false))
+	print := h.scope.Find("print", true)
+	printInt16 := h.scope.Find("print_int16", true)
 
 	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		r := macroResult{stmts: []*cexpr{}}
 		for _, arg := range args {
 			// 旧実装は引数が定数値でないと ValType が落ちていた。同じく定数値を要求する
 			typ := mustValue(arg).Type
-			if CompatibleTypeOk(uint8p, typ) != nil {
+			if h.types.Compatible(uint8p, typ) != nil {
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
-			} else if typ.Kind == "int" {
+			} else if typ.Kind == types.Int {
 				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
 			}
 		}
@@ -52,7 +53,7 @@ func registerStdio(h *Hlc) {
 
 // fclib/math.rb
 func registerMath(h *Hlc) {
-	sin := h.scope.Find(Sym("sin"), true)
+	sin := h.scope.Find("sin", true)
 
 	h.defmacro("cos", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		return macroResult{expr: ccall(cv(sin), cop2(opAdd, args[0], cint(64)))}
@@ -80,21 +81,13 @@ func registerCastleMacros(h *Hlc) {
 		}
 		return macroResult{expr: carray(elems)}
 	}
-	// 引数は文字列リテラル (BaseString を持つ定数値) でなければならない
-	baseString := func(c *cexpr) string {
-		s, ok := mustValue(c).BaseString.(string)
-		if !ok {
-			panic(&CompileError{Msg: "string literal required"})
-		}
-		return s
-	}
 
 	h.defmacro("_T", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		return textArray(append(conv.Conv(baseString(args[0])), 0))
+		return textArray(append(conv.Conv(mustString(args[0])), 0))
 	})
 
 	h.defmacro("_M", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		return textArray(append(miscConv.Conv(baseString(args[0])), 0))
+		return textArray(append(miscConv.Conv(mustString(args[0])), 0))
 	})
 
 	h.defmacro("VERSION_STR", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
@@ -116,10 +109,13 @@ func rubyChomp(s string) string {
 
 // fclib/unittest.rb
 func registerUnittest(h *Hlc) {
-	stdioMod := h.scope.FindMust(Sym("stdio"), true).Val.(*Module)
-	print := stdioMod.Scope.Find(Sym("print"), true)
-	exit := stdioMod.Scope.Find(Sym("exit"), true)
-	init := stdioMod.Scope.Find(Sym("init"), true)
+	stdioMod := h.scope.FindMust("stdio", true).Module
+	if stdioMod == nil {
+		panic(&CompileError{Msg: "stdio is not a module"})
+	}
+	print := stdioMod.Scope.Find("print", true)
+	exit := stdioMod.Scope.Find("exit", true)
+	init := stdioMod.Scope.Find("init", true)
 
 	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
@@ -127,7 +123,7 @@ func registerUnittest(h *Hlc) {
 			if len(id) >= 5 && id[:5] == "test_" {
 				r.stmts = append(r.stmts,
 					ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
-					ccall(cident(string(id))),
+					ccall(cident(id)),
 					ccall(cv(print), cstr("\n")),
 				)
 			}

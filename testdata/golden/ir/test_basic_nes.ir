@@ -457,9 +457,9 @@
   (def _stdio_exit code #"void(uint8)" {lambda _stdio_exit})
   (def _stdio_init code #"void()" {lambda _stdio_init})
   (def _interrupt code #"void()" {lambda _interrupt})
-  (def _stdio_interrupt equ #"void()" "_interrupt")
+  (def _stdio_interrupt equ #"void()" :_interrupt)
   (def _interrupt_irq code #"void()" {lambda _interrupt_irq})
-  (def _stdio_interrupt_irq equ #"void()" "_interrupt_irq")
+  (def _stdio_interrupt_irq equ #"void()" :_interrupt_irq)
  )
  (vars
   (var 0 vsync_flag global #"uint8" val=:_stdio_vsync_flag pub)
@@ -472,8 +472,8 @@
   (var 7 puts literal #"void(uint8*)" val=:_stdio_puts pub)
   (var 8 exit literal #"void(uint8)" val=:_stdio_exit pub)
   (var 9 init literal #"void()" val=:_stdio_init pub)
-  (var 10 interrupt literal #"void()" val="_interrupt" pub)
-  (var 11 interrupt_irq literal #"void()" val="_interrupt_irq" pub)
+  (var 10 interrupt literal #"void()" val=:_interrupt pub)
+  (var 11 interrupt_irq literal #"void()" val=:_interrupt_irq pub)
   (var 12 printf global #"macro" val=macro pub)
  )
  (lambda _stdio_print_int16 #"void(uint16)" opt={id :print_int16 extern true}

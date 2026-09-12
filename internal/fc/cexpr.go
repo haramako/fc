@@ -14,7 +14,10 @@ package fc
 // 破壊的評価により「2 回目の訪問は評価済みの X を見る」挙動になっていた。
 // これは Hlc.cmemo (同一ノードの評価結果のメモ) で再現する。
 
-import "github.com/haramako/fc/internal/syntax"
+import (
+	"github.com/haramako/fc/internal/syntax"
+	"github.com/haramako/fc/internal/types"
+)
 
 type ckind uint8
 
@@ -31,7 +34,7 @@ const (
 	cOp                  // 演算 op (args)
 )
 
-// cop は演算の種類。文字列値は旧 IR の opcode (Sym) と同じ綴り。
+// cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
 type cop string
 
 const (
@@ -70,10 +73,11 @@ type lambdaParam struct {
 
 // lambdaLit は関数リテラル (関数宣言の脱糖結果、または `-> type { ... }`)。
 type lambdaLit struct {
-	params []lambdaParam
-	result syntax.TypeExpr
-	body   *syntax.Block // nil なら extern
-	opt    *OMap         // id / options(...) の生の値
+	name    string // 宣言名 (関数リテラルでは "")
+	params  []lambdaParam
+	result  syntax.TypeExpr
+	body    *syntax.Block // nil なら extern
+	options Options       // options(...) の生の値
 }
 
 type cexpr struct {
@@ -85,7 +89,7 @@ type cexpr struct {
 	op    cop
 	args  []*cexpr
 	typ   syntax.TypeExpr // cCast の型式
-	ty    *Type           // cCast の評価後の型
+	ty    *types.Type     // cCast の評価後の型
 	block *syntax.Block   // opCall の後置ブロック
 	lam   *lambdaLit      // cLambda
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
@@ -95,11 +99,11 @@ type cexpr struct {
 // コンストラクタ (マクロ実装からも使う)
 // ---------------------------------------------------------------
 
-func cv(v *Value) *cexpr         { return &cexpr{kind: cValue, val: v} }
-func cint(n int) *cexpr          { return &cexpr{kind: cInt, n: n} }
-func cstr(s string) *cexpr       { return &cexpr{kind: cStr, s: s} }
-func cident(name string) *cexpr  { return &cexpr{kind: cIdent, name: name} }
-func carray(elems []*cexpr) *cexpr { return &cexpr{kind: cArray, args: elems} }
+func cv(v *Value) *cexpr            { return &cexpr{kind: cValue, val: v} }
+func cint(n int) *cexpr             { return &cexpr{kind: cInt, n: n} }
+func cstr(s string) *cexpr          { return &cexpr{kind: cStr, s: s} }
+func cident(name string) *cexpr     { return &cexpr{kind: cIdent, name: name} }
+func carray(elems []*cexpr) *cexpr  { return &cexpr{kind: cArray, args: elems} }
 
 func cop2(op cop, args ...*cexpr) *cexpr { return &cexpr{kind: cOp, op: op, args: args} }
 
@@ -110,7 +114,7 @@ func ccall(fn *cexpr, args ...*cexpr) *cexpr {
 
 // isLiteralInt は評価済みの整数リテラルかを返す。
 func (c *cexpr) isLiteralInt() bool {
-	return c.kind == cValue && c.val.Kind == KindLiteral && isInt(c.val.Val)
+	return c.kind == cValue && c.val.Kind == KindLiteral && c.val.IsInt
 }
 
 // ---------------------------------------------------------------
@@ -201,73 +205,31 @@ func toC0(e syntax.Expr) *cexpr {
 			}
 			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type}
 		}
-		return &cexpr{kind: cLambda, lam: &lambdaLit{params: params, result: ft.Result, body: e.Body, opt: NewOMap()}}
+		return &cexpr{kind: cLambda, lam: &lambdaLit{params: params, result: ft.Result, body: e.Body}}
 	}
 	panic("toC: unknown expression")
 }
 
-// ---------------------------------------------------------------
-// 型式 → 旧形式の型 AST (TypeOf の入力)
-// ---------------------------------------------------------------
-
-// typeAST は型式を TypeOf が受け付ける旧形式に変換する。
-// 配列長は整数リテラルのときだけ数値になり、それ以外 (省略・定数式) は長さ省略扱いになる
-// (旧実装の TypeOf は評価していない AST を受け取るとそう振る舞った)。最外の配列長を
-// 定数評価するのは typeEval の仕事。
-// R1-e で TypeOf と共に型付きコンストラクタに置き換える。
-func typeAST(t syntax.TypeExpr) any {
-	switch t := t.(type) {
-	case nil:
-		return nil
-	case *syntax.NamedType:
-		return Sym(t.Name.Name)
-	case *syntax.PointerType:
-		return []any{Sym("pointer"), typeAST(t.Elem)}
-	case *syntax.ArrayType:
-		var n any
-		if lit, ok := t.Len.(*syntax.IntLit); ok {
-			n = lit.Value
-		}
-		return []any{Sym("array"), n, typeAST(t.Elem)}
-	case *syntax.FuncType:
-		params := make([]any, len(t.Params))
-		for i, p := range t.Params {
-			if p.Name != nil {
-				// 旧実装では型位置の名前付き引数は TypeOf が "invalid type declaration" で落ちる。同じ形を渡す
-				params[i] = []any{Sym(p.Name.Name), typeAST(p.Type)}
-			} else {
-				params[i] = typeAST(p.Type)
-			}
-		}
-		return []any{Sym("lambda"), params, typeAST(t.Result)}
-	}
-	panic("typeAST: unknown type expression")
-}
-
-// rawOptionValue は options(...) の値を、Value.Opt / Lambda.Opt に格納する生の形にする
-// (旧実装はパース直後の AST をそのまま格納していた: 整数 / 文字列 / 識別子(Sym))。
-// それ以外の式は構文木ノードをそのまま入れる (旧実装の AST 相当。corpus には存在しない)。
-func rawOptionValue(e syntax.Expr) any {
-	switch e := e.(type) {
-	case *syntax.IntLit:
-		return e.Value
-	case *syntax.StringLit:
-		return e.Value
-	case *syntax.Ident:
-		return Sym(e.Name)
-	}
-	return e
-}
-
-// rawOptions は options(...) を Sym → 生の値 の OMap にする (重複キーは後勝ち・位置維持)。
-// nil なら nil を返す。
-func rawOptions(o *syntax.Options) *OMap {
+// parseOptions は options(...) を生の値のまま Options にする (重複キーは後勝ち・位置維持)。
+// 値は整数 / 文字列 / 識別子のいずれか。nil なら nil。
+func parseOptions(o *syntax.Options) Options {
 	if o == nil {
 		return nil
 	}
-	m := NewOMap()
+	var r Options
 	for _, e := range o.Entries {
-		m.Set(Sym(e.Key.Name), rawOptionValue(e.Value))
+		var v OptionValue
+		switch x := e.Value.(type) {
+		case *syntax.IntLit:
+			v = OptionValue{Kind: OptInt, Int: x.Value}
+		case *syntax.StringLit:
+			v = OptionValue{Kind: OptStr, Str: x.Value}
+		case *syntax.Ident:
+			v = OptionValue{Kind: OptIdent, Str: x.Name}
+		default:
+			panic(&CompileError{Msg: "option " + e.Key.Name + " must be a literal or identifier"})
+		}
+		r.Set(e.Key.Name, v)
 	}
-	return m
+	return r
 }

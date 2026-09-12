@@ -151,19 +151,14 @@ func TestGoldenIR(t *testing.T) {
 // 割付+delete_unuse を実行し、ダンプを返す。
 func allocLambdas(hlc *Hlc) string {
 	var b strings.Builder
-	for _, me := range hlc.Modules.Entries() {
-		mod := me.Val.(*Module)
+	for _, mod := range hlc.Modules.List() {
 		for _, d := range mod.Defs {
-			if d.Kind != DefCode {
+			if d.Kind != DefCode || d.Lambda.Extern {
 				continue
 			}
-			lmd := d.Val.(*Lambda)
-			if truthy(lmd.Opt.GetOr(Sym("extern"))) {
-				continue
-			}
-			AllocateRegister(lmd)
-			DeleteUnuse(lmd)
-			b.WriteString(DumpAllocLambda(mod.Id, d.Sym, lmd))
+			AllocateRegister(d.Lambda)
+			DeleteUnuse(d.Lambda)
+			b.WriteString(DumpAllocLambda(mod.Id, d.Sym, d.Lambda))
 		}
 	}
 	return b.String()
@@ -213,12 +208,11 @@ func TestGoldenAsm(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
-			llc := NewLlc(2)
-			for _, me := range hlc.Modules.Entries() {
-				mod := me.Val.(*Module)
+			llc := NewLlc(2, hlc.Types())
+			for _, mod := range hlc.Modules.List() {
 				asm, inc := llc.Compile(mod)
-				compareGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".s", normalizeAsm(asm))
-				compareGolden(t, "asm/"+name+"/"+ToS(mod.Id)+".inc", normalizeAsm(inc))
+				compareGolden(t, "asm/"+name+"/"+mod.Id+".s", normalizeAsm(asm))
+				compareGolden(t, "asm/"+name+"/"+mod.Id+".inc", normalizeAsm(inc))
 			}
 		})
 	}

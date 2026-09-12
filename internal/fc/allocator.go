@@ -97,7 +97,7 @@ func CalcLiveRange(lmd *Lambda) {
 
 	// 引数は、最初に定義されているものとする
 	for _, e := range udOrder {
-		if eqAny(e.v.Opt.GetOr(Sym("local_type")), Sym("arg")) {
+		if e.v.LocalType == LTArg {
 			e.defines = append(e.defines, 0)
 		}
 	}
@@ -141,7 +141,7 @@ func AllocateRegister(lmd *Lambda) {
 			}
 		}
 
-		if eqAny(v.Opt.GetOr(Sym("local_type")), Sym("result")) {
+		if v.LocalType == LTResult {
 			// 返り値
 			if fastcall {
 				lmd.Result.Location = LocFastcallReg
@@ -149,7 +149,7 @@ func AllocateRegister(lmd *Lambda) {
 				lmd.Result.Location = LocFrame
 			}
 			lmd.Result.Address = 0
-		} else if beyondCall || eqAny(v.Opt.GetOr(Sym("local_type")), Sym("arg")) || refered[v] {
+		} else if beyondCall || v.LocalType == LTArg || refered[v] {
 			// 引数か、関数をまたいでいるなら、フレームに割り当てる
 			v.Address = frameSize
 			if fastcall {
@@ -180,8 +180,7 @@ func AllocateRegister(lmd *Lambda) {
 			panic(&CompileError{Msg: fmt.Sprintf("frame size over on %s", lmd)})
 		}
 		// 割り当てる
-		for _, kAny := range reg.vars {
-			v := kAny.(*Value)
+		for _, v := range reg.vars {
 			if fastcall {
 				if frameSize+regSize > 16 {
 					panic(&CompileError{Msg: fmt.Sprintf("frame size over on %s", lmd)})
@@ -341,7 +340,7 @@ type allocEntry struct {
 
 type AllocatorReg struct {
 	liveRange *LiveRange
-	vars      []any
+	vars      []*Value
 }
 
 type Allocator struct {
@@ -361,31 +360,33 @@ func NewAllocator(vars []*allocEntry) *Allocator {
 			}
 		}
 		if !found {
-			a.Regs = append(a.Regs, &AllocatorReg{liveRange: e.liveRange, vars: []any{e.key}})
+			a.Regs = append(a.Regs, &AllocatorReg{liveRange: e.liveRange, vars: []*Value{e.key}})
 		}
 	}
 	return a
 }
 
-// NewAllocatorGeneric はキーが任意の値のバージョン (単体テスト用)。
-func NewAllocatorGeneric(keys []any, ranges []*LiveRange) *Allocator {
-	a := &Allocator{}
-	for i, k := range keys {
-		lr := ranges[i]
+// allocRanges は live range の重ならないものを同じレジスタにまとめる (NewAllocator の中核。単体テスト用に分離)。
+// 返り値は各レジスタに入るキーの index のリスト。
+func allocRanges(ranges []*LiveRange) [][]int {
+	var regs [][]int
+	var regRanges []*LiveRange
+	for i, lr := range ranges {
 		found := false
-		for _, reg := range a.Regs {
-			if !overlapRange(reg.liveRange, lr) {
-				reg.liveRange = joinRange(reg.liveRange, lr)
-				reg.vars = append(reg.vars, k)
+		for j := range regs {
+			if !overlapRange(regRanges[j], lr) {
+				regRanges[j] = joinRange(regRanges[j], lr)
+				regs[j] = append(regs[j], i)
 				found = true
 				break
 			}
 		}
 		if !found {
-			a.Regs = append(a.Regs, &AllocatorReg{liveRange: lr, vars: []any{k}})
+			regs = append(regs, []int{i})
+			regRanges = append(regRanges, lr)
 		}
 	}
-	return a
+	return regs
 }
 
 func overlapRange(r1, r2 *LiveRange) bool {

@@ -1,28 +1,30 @@
 package fc
 
-// lib/fc/base.rb の Scope の移植。
+// スコープ (名前 → Value)。lib/fc/base.rb の Scope 由来。
 
 import "fmt"
 
 type Scope struct {
 	Parent   *Scope
-	Declares *OMap // key: Sym(id), val: *Value
+	declares map[string]*Value
+	order    []string // 宣言順 (IdList の列挙順が出力に影響するため保つ)
 	uses     []*Scope
 	finding  bool // useの相互参照による無限再帰の防止フラグ
 }
 
 func NewScope(parent *Scope) *Scope {
-	return &Scope{Parent: parent, Declares: NewOMap()}
+	return &Scope{Parent: parent, declares: map[string]*Value{}}
 }
 
-func (s *Scope) Find(id Sym, withPrivate bool) *Value {
+// Find は id を探す。withPrivate が偽なら public な宣言だけを見る。
+// 自スコープ → use したスコープ (public のみ) → 親スコープ の順。
+func (s *Scope) Find(id string, withPrivate bool) *Value {
 	if s.finding {
 		return nil
 	}
 	s.finding = true
 	defer func() { s.finding = false }()
-	if v, ok := s.Declares.Get(id); ok {
-		val := v.(*Value)
+	if val, ok := s.declares[id]; ok {
 		if withPrivate || val.Public {
 			return val
 		}
@@ -38,36 +40,37 @@ func (s *Scope) Find(id Sym, withPrivate bool) *Value {
 	return nil
 }
 
-// FindMust は Ruby の find! 相当。
-func (s *Scope) FindMust(id Sym, withPrivate bool) *Value {
+// FindMust は Find と同じだが、見つからなければ CompileError。
+func (s *Scope) FindMust(id string, withPrivate bool) *Value {
 	if v := s.Find(id, withPrivate); v != nil {
 		return v
 	}
 	panic(&CompileError{Msg: fmt.Sprintf("%s not found", id)})
 }
 
+// Declare は値を宣言する。同名が既にあれば CompileError。
 func (s *Scope) Declare(val *Value) {
-	if _, ok := s.Declares.Get(val.Id); ok {
-		panic(&CompileError{Msg: fmt.Sprintf("%v already defined", val.Id)})
+	if _, ok := s.declares[val.Name]; ok {
+		panic(&CompileError{Msg: fmt.Sprintf("%s already defined", val.Name)})
 	}
-	s.Declares.Set(val.Id, val)
+	s.declares[val.Name] = val
+	s.order = append(s.order, val.Name)
 }
 
+// Use は scope の public な宣言をこのスコープから見えるようにする (`use * from mod;`)。
 func (s *Scope) Use(scope *Scope) {
 	s.uses = append(s.uses, scope)
 }
 
-// IdList はスコープから見えるIDの列挙 (Ruby と同じ順序)。
-func (s *Scope) IdList() []Sym {
+// IdList はスコープから見えるIDの列挙 (自スコープの宣言順 → use 先 → 親)。
+func (s *Scope) IdList() []string {
 	if s.finding {
 		return nil
 	}
 	s.finding = true
 	defer func() { s.finding = false }()
-	var r []Sym
-	for _, e := range s.Declares.Entries() {
-		r = append(r, e.Key.(Sym))
-	}
+	var r []string
+	r = append(r, s.order...)
 	for _, sc := range s.uses {
 		r = append(r, sc.IdList()...)
 	}

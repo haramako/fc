@@ -2,55 +2,152 @@ package fc
 
 // IR の値 (変数・定数・リテラル) とそのラッパ。lib/fc/base.rb の Value / CastedValue / PointeredArray 由来。
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/haramako/fc/internal/types"
+)
 
 type LiveRange struct {
 	Min, Max int
 }
 
+// LocalType はローカル変数の役割 (レジスタ割付で使う)。
+type LocalType uint8
+
+const (
+	LTNone   LocalType = iota // ユーザー宣言の変数、またはグローバル
+	LTArg                     // 関数の引数
+	LTResult                  // 戻り値
+	LTTemp                    // コンパイラが作った一時変数
+)
+
+var localTypeNames = [...]string{LTNone: "", LTArg: "arg", LTResult: "result", LTTemp: "temp"}
+
+func (l LocalType) String() string {
+	if int(l) < len(localTypeNames) {
+		return localTypeNames[l]
+	}
+	return fmt.Sprintf("LocalType(%d)", int(l))
+}
+
 // Value は変数・定数・リテラル・モジュール束縛を表す。レジスタ割付の結果も持つ。
+//
+// Kind ごとに有効なフィールド:
+//   - KindLocal:        Name, LocalType
+//   - KindGlobal:       Name と、Symbol (アセンブラシンボル) / Module (モジュール束縛) / Macro のいずれか
+//   - KindLiteral:      IsInt なら Int、そうでなければ Symbol (関数シンボル)。Name は定数名 ("" なら無名)
+//   - KindArrayLiteral: Elems
 type Value struct {
-	Kind       ValueKind
-	Type       *Type
-	Id         any // 変数名 (Sym) または nil
-	Val        any // literal/array_literal の場合のみ (int, Sym, []Operand(配列要素), string, *Module, MacroFn)
-	Opt        *OMap
-	BaseString any // 元の値が文字列だった場合、その文字列 (string)。なければ nil
-	Public     bool
+	Kind ValueKind
+	Type *types.Type
+	Name string // 変数名 / 定数名。無名なら ""
+
+	IsInt  bool
+	Int    int
+	Symbol string
+	Elems  []Operand
+	Module *Module
+	Macro  MacroFn
+
+	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
+	IsString bool
+	Str      string
+
+	Public    bool
+	LocalType LocalType
 
 	// 以下はレジスタ割付で設定される
-	Address      any // アドレス (int) または nil
 	Location     Location
+	Address      int // Location が LocFrame / LocReg / LocFastcallReg のとき有効
 	Unuse        bool
 	LiveRange    *LiveRange
 	CondReg      CondReg // Location == LocCond のときのみ
 	CondPositive bool    // Location == LocCond のときのみ
 }
 
-func NewValue(kind ValueKind, id any, typ *Type, val any, opt *OMap) *Value {
+// HasAddress は Address が有効な置き場所かを返す。
+func (v *Value) HasAddress() bool {
+	switch v.Location {
+	case LocFrame, LocReg, LocFastcallReg:
+		return true
+	}
+	return false
+}
+
+func newValue(kind ValueKind, name string, typ *types.Type) *Value {
 	if typ == nil {
 		panic(&CompileError{Msg: "invalid type, nil"})
 	}
-	if opt == nil {
-		opt = NewOMap()
-	}
-	return &Value{Kind: kind, Id: id, Type: typ, Val: val, Opt: opt}
+	return &Value{Kind: kind, Name: name, Type: typ}
 }
 
-// NewIntValue は Value.new_int 相当。
-func NewIntValue(n int) *Value {
-	var t *Type
+// NewLocal はローカル変数。
+func NewLocal(name string, typ *types.Type, lt LocalType) *Value {
+	v := newValue(KindLocal, name, typ)
+	v.LocalType = lt
+	return v
+}
+
+// NewGlobal はアセンブラシンボルを持つグローバル (変数 / 定数配列 / 関数)。
+func NewGlobal(name string, typ *types.Type, symbol string) *Value {
+	v := newValue(KindGlobal, name, typ)
+	v.Symbol = symbol
+	return v
+}
+
+// NewModuleValue はモジュール束縛 (`use mod;`)。
+func NewModuleValue(name string, typ *types.Type, m *Module) *Value {
+	v := newValue(KindGlobal, name, typ)
+	v.Module = m
+	return v
+}
+
+// NewMacroValue は組み込みマクロ。
+func NewMacroValue(name string, typ *types.Type, fn MacroFn) *Value {
+	v := newValue(KindGlobal, name, typ)
+	v.Macro = fn
+	return v
+}
+
+// NewIntLiteral は整数リテラル (型は明示)。
+func NewIntLiteral(name string, typ *types.Type, n int) *Value {
+	v := newValue(KindLiteral, name, typ)
+	v.IsInt = true
+	v.Int = n
+	return v
+}
+
+// NewSymbolLiteral は関数シンボルのリテラル。
+func NewSymbolLiteral(name string, typ *types.Type, symbol string) *Value {
+	v := newValue(KindLiteral, name, typ)
+	v.Symbol = symbol
+	return v
+}
+
+// NewArrayLiteral は配列リテラル。
+func NewArrayLiteral(name string, typ *types.Type, elems []Operand) *Value {
+	v := newValue(KindArrayLiteral, name, typ)
+	v.Elems = elems
+	return v
+}
+
+// IntValue は値から型を推定した整数リテラル (Value.new_int 相当)。
+// 旧実装の境界 (-128 が sint16 になる) をそのまま保存する。
+func (h *Hlc) IntValue(n int) *Value {
+	var t *types.Type
 	switch {
 	case n >= 256:
-		t = TypeOf(Sym("int16"))
+		t = h.types.IntType(2, false)
 	case n < -127:
-		t = TypeOf(Sym("sint16"))
+		t = h.types.IntType(2, true)
 	case n < 0:
-		t = TypeOf(Sym("sint8"))
+		t = h.types.IntType(1, true)
 	default:
-		t = TypeOf(Sym("int8"))
+		t = h.types.IntType(1, false)
 	}
-	return NewValue(KindLiteral, nil, t, n, nil)
+	return NewIntLiteral("", t, n)
 }
 
 func (v *Value) Assignable() bool {
@@ -60,44 +157,51 @@ func (v *Value) Assignable() bool {
 // CastedValue は reinterpret_cast 相当。Ruby では Delegator で @from に委譲される。
 type CastedValue struct {
 	From   Operand // *Value または *CastedValue
-	Type   *Type
+	Type   *types.Type
 	Offset int
 }
 
-func NewCastedValue(from Operand, typ *Type, offset int) *CastedValue {
+func NewCastedValue(from Operand, typ *types.Type, offset int) *CastedValue {
 	return &CastedValue{From: from, Type: typ, Offset: offset}
 }
 
 // PointeredArray は配列からポインタへ自動変換された値。
 type PointeredArray struct {
 	From Operand // *Value (または *CastedValue)
-	Type *Type
+	Type *types.Type
 }
 
-func NewPointeredArray(from Operand) *PointeredArray {
-	return &PointeredArray{From: from, Type: TypeOf([]any{Sym("pointer"), ValType(from).Base})}
+func NewPointeredArray(from Operand, ptrType *types.Type) *PointeredArray {
+	return &PointeredArray{From: from, Type: ptrType}
 }
 
 // ---------------------------------------------------------------
-// Ruby の to_s / inspect 相当 (エラーメッセージで使用)
+// 表示 (エラーメッセージで使用)
 // ---------------------------------------------------------------
+
+// valueString は Value#to_s 相当の旧表示を返す。
+func (v *Value) String() string {
+	if v.Name != "" {
+		return "{" + v.Name + "}"
+	}
+	return v.Inspect()
+}
 
 // Inspect は Value#inspect 相当。
 func (v *Value) Inspect() string {
-	if v.Id != nil {
-		return fmt.Sprintf("{%s:%s}", ToS(v.Id), v.Type)
-	} else if v.BaseString != nil {
-		return `{"` + v.BaseString.(string) + `"}`
+	switch {
+	case v.Name != "":
+		return fmt.Sprintf("{%s:%s}", v.Name, v.Type)
+	case v.IsString:
+		return `{"` + v.Str + `"}`
+	case v.Kind == KindLiteral && v.IsInt:
+		return "{" + strconv.Itoa(v.Int) + "}"
+	case v.Symbol != "":
+		return "{" + v.Symbol + "}"
+	case v.Module != nil:
+		return "{" + v.Module.Id + "}"
 	}
-	return fmt.Sprintf("{%s}", ToS(v.Val))
-}
-
-// String は Value#to_s 相当。
-func (v *Value) String() string {
-	if v.Id != nil {
-		return fmt.Sprintf("{%s}", ToS(v.Id))
-	}
-	return v.Inspect()
+	return "{}"
 }
 
 // String は CastedValue#to_s 相当。
@@ -113,9 +217,12 @@ func (p *PointeredArray) String() string {
 	return valToS(p.From) + "#p"
 }
 
-// valToS はオペランドの to_s。
+// valToS はオペランドの表示。
 func valToS(v Operand) string {
-	return ToS(v)
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s", v)
 }
 
 // ---------------------------------------------------------------
@@ -152,7 +259,7 @@ func ValKind(v Operand) ValueKind {
 }
 
 // ValType は v.type (CastedValue/PointeredArray は自身の型を持つ)。
-func ValType(v Operand) *Type {
+func ValType(v Operand) *types.Type {
 	switch x := v.(type) {
 	case *Value:
 		return x.Type
@@ -164,17 +271,26 @@ func ValType(v Operand) *Type {
 	panic(fmt.Sprintf("ValType: invalid value %T", v))
 }
 
-// ValVal は v.val (PointeredArray は常に nil)。
-func ValVal(v Operand) any {
+// ValLiteral はリテラル値の本体 (CastedValue は from に委譲、PointeredArray は nil)。
+// 整数リテラルか関数シンボルかは IsInt で判定する。
+func ValLiteral(v Operand) *Value {
 	switch x := v.(type) {
 	case *Value:
-		return x.Val
+		return x
 	case *CastedValue:
-		return ValVal(x.From)
+		return ValLiteral(x.From)
 	case *PointeredArray:
 		return nil
 	}
-	panic(fmt.Sprintf("ValVal: invalid value %T", v))
+	panic(fmt.Sprintf("ValLiteral: invalid value %T", v))
+}
+
+// ValIntLiteral は v が整数リテラルならその値を返す。
+func ValIntLiteral(v Operand) (int, bool) {
+	if lv := ValLiteral(v); lv != nil && lv.Kind == KindLiteral && lv.IsInt {
+		return lv.Int, true
+	}
+	return 0, false
 }
 
 // ValAssignable は v.assignable?
@@ -202,7 +318,7 @@ func ValLocation(v Operand) Location {
 }
 
 // ValAddress は v.address (CastedValue は from に委譲)。
-func ValAddress(v Operand) any {
+func ValAddress(v Operand) int {
 	switch x := v.(type) {
 	case *Value:
 		return x.Address
@@ -212,13 +328,13 @@ func ValAddress(v Operand) any {
 	panic(fmt.Sprintf("ValAddress: invalid value %T", v))
 }
 
-// ValOpt は v.opt (CastedValue は from に委譲)。
-func ValOpt(v Operand) *OMap {
+// ValLocalType は v.opt[:local_type] (CastedValue は from に委譲)。
+func ValLocalType(v Operand) LocalType {
 	switch x := v.(type) {
 	case *Value:
-		return x.Opt
+		return x.LocalType
 	case *CastedValue:
-		return ValOpt(x.From)
+		return ValLocalType(x.From)
 	}
-	panic(fmt.Sprintf("ValOpt: invalid value %T", v))
+	panic(fmt.Sprintf("ValLocalType: invalid value %T", v))
 }

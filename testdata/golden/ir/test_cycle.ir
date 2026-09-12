@@ -189,9 +189,9 @@
   (def _stdio_exit code #"fastcall void(uint8)" {lambda _stdio_exit})
   (def _stdio_init code #"void()" {lambda _stdio_init})
   (def _interrupt code #"void()" {lambda _interrupt})
-  (def _stdio_interrupt equ #"void()" "_interrupt")
+  (def _stdio_interrupt equ #"void()" :_interrupt)
   (def _interrupt_irq code #"void()" {lambda _interrupt_irq})
-  (def _stdio_interrupt_irq equ #"void()" "_interrupt_irq")
+  (def _stdio_interrupt_irq equ #"void()" :_interrupt_irq)
  )
  (vars
   (var 0 EMU_ADDR global #"uint8*" val=:_stdio_EMU_ADDR pub)
@@ -203,8 +203,8 @@
   (var 6 puts literal #"void(uint8*)" val=:_stdio_puts pub)
   (var 7 exit literal #"fastcall void(uint8)" val=:_stdio_exit pub)
   (var 8 init literal #"void()" val=:_stdio_init pub)
-  (var 9 interrupt literal #"void()" val="_interrupt" pub)
-  (var 10 interrupt_irq literal #"void()" val="_interrupt_irq" pub)
+  (var 9 interrupt literal #"void()" val=:_interrupt pub)
+  (var 10 interrupt_irq literal #"void()" val=:_interrupt_irq pub)
   (var 11 printf global #"macro" val=macro pub)
  )
  (lambda _stdio_print_int16 #"fastcall void(uint16)" opt={id :print_int16 fastcall :true}

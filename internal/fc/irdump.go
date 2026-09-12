@@ -1,13 +1,41 @@
 package fc
 
-// IR / alloc-IR のダンプ (golden 比較用)。形式は移植期の tools/dumper.rb と同一。
+// IR / alloc-IR のダンプ (golden 比較用)。形式は移植期の tools/dumper.rb に由来する。
+// R1-e で内部表現が型付きになった際、Ruby の Symbol/String の区別に由来していた
+// `:name` / `"name"` の出し分けはシンボルをすべて `:name` に統一した (golden は再生成済み)。
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/haramako/fc/internal/types"
 )
 
-func typeS(t *Type) string {
+// EscStr は文字列をバイト単位でエスケープする。
+func EscStr(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == 0x22:
+			b.WriteString("\\\"")
+		case c == 0x5c:
+			b.WriteString("\\\\")
+		case c == 0x0a:
+			b.WriteString("\\n")
+		case c >= 0x20 && c <= 0x7e:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, "\\x%02X", c)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+func typeS(t *types.Type) string {
 	return "#" + EscStr(t.String())
 }
 
@@ -23,134 +51,123 @@ func makeCtx(lmd *Lambda) *irCtx {
 	return &irCtx{varIndex: m}
 }
 
-// dumpValue は dumper.rb の dump_value 相当。
-func dumpValue(v any, ctx *irCtx) string {
+func symS(s string) string { return ":" + s }
+
+func nameS(name string) string {
+	if name == "" {
+		return "nil"
+	}
+	return name
+}
+
+// dumpOperand は命令のオペランドを出力する。
+func dumpOperand(v Operand, ctx *irCtx) string {
 	switch x := v.(type) {
+	case nil:
+		return "nil"
 	case *CastedValue:
-		return fmt.Sprintf("{cast %s %d %s}", typeS(x.Type), x.Offset, dumpValue(x.From, ctx))
+		return fmt.Sprintf("{cast %s %d %s}", typeS(x.Type), x.Offset, dumpOperand(x.From, ctx))
 	case *PointeredArray:
-		return fmt.Sprintf("{pa %s}", dumpValue(x.From, ctx))
+		return fmt.Sprintf("{pa %s}", dumpOperand(x.From, ctx))
 	case *Value:
 		if ctx != nil {
 			if idx, ok := ctx.varIndex[x]; ok {
-				return fmt.Sprintf("{l%d %s}", idx, ToS(x.Id))
+				return fmt.Sprintf("{l%d %s}", idx, nameS(x.Name))
 			}
 		}
 		return dumpValueFull(x, ctx)
-	case *Lambda:
-		return fmt.Sprintf("{lambda %s}", ToS(x.Id))
-	case *Type:
-		return typeS(x)
-	case Sym:
-		return ":" + string(x)
-	case string:
-		return EscStr(x)
-	case int:
-		return fmt.Sprintf("%d", x)
-	case nil:
-		return "nil"
-	default:
-		panic(fmt.Sprintf("cannot dump value %T: %v", v, v))
 	}
+	panic(fmt.Sprintf("cannot dump operand %T: %v", v, v))
 }
 
 func dumpValueFull(v *Value, ctx *irCtx) string {
 	bs := ""
-	if v.BaseString != nil {
-		bs = " " + EscStr(v.BaseString.(string))
-	}
-	ids := "nil"
-	if v.Id != nil {
-		ids = ToS(v.Id)
+	if v.IsString {
+		bs = " " + EscStr(v.Str)
 	}
 	switch v.Kind {
 	case KindLiteral:
-		return fmt.Sprintf("{lit %s %s %s%s}", ids, dumpGval(v.Val, ctx), typeS(v.Type), bs)
+		return fmt.Sprintf("{lit %s %s %s%s}", nameS(v.Name), dumpGval(v, ctx), typeS(v.Type), bs)
 	case KindArrayLiteral:
-		elems := make([]string, len(v.Val.([]Operand)))
-		for i, e := range v.Val.([]Operand) {
-			elems[i] = dumpValue(e, ctx)
-		}
-		return fmt.Sprintf("{arr %s %s (%s)%s}", ids, typeS(v.Type), strings.Join(elems, " "), bs)
+		return fmt.Sprintf("{arr %s %s %s%s}", nameS(v.Name), typeS(v.Type), dumpElems(v.Elems, ctx), bs)
 	case KindGlobal:
-		return fmt.Sprintf("{g %s %s %s%s}", ids, typeS(v.Type), dumpGval(v.Val, ctx), bs)
-	case KindModule:
-		return fmt.Sprintf("{mod %s}", ids)
+		return fmt.Sprintf("{g %s %s %s%s}", nameS(v.Name), typeS(v.Type), dumpGval(v, ctx), bs)
 	case KindLocal:
 		// 他のLambdaのローカルなど、表にない場合
-		return fmt.Sprintf("{l? %s %s}", ids, typeS(v.Type))
+		return fmt.Sprintf("{l? %s %s}", nameS(v.Name), typeS(v.Type))
 	default:
 		panic(fmt.Sprintf("cannot dump value kind %s", v.Kind))
 	}
 }
 
-func dumpGval(val any, ctx *irCtx) string {
-	switch x := val.(type) {
-	case nil:
-		return "nil"
-	case int:
-		return fmt.Sprintf("%d", x)
-	case Sym:
-		return ":" + string(x)
-	case string:
-		return EscStr(x)
-	case *Module:
-		return "mod:" + ToS(x.Id)
-	case MacroFn:
-		return "macro"
-	case []Operand:
-		elems := make([]string, len(x))
-		for i, e := range x {
-			elems[i] = dumpValue(e, ctx)
-		}
-		return "(" + strings.Join(elems, " ") + ")"
-	default:
-		panic(fmt.Sprintf("cannot dump gval %T", val))
+func dumpElems(elems []Operand, ctx *irCtx) string {
+	parts := make([]string, len(elems))
+	for i, e := range elems {
+		parts[i] = dumpOperand(e, ctx)
 	}
+	return "(" + strings.Join(parts, " ") + ")"
 }
 
-func dumpOptS(opt *OMap) string {
-	if opt == nil {
-		return "{}"
+// dumpGval は Value の「値」部分 (旧 Value#val)。
+func dumpGval(v *Value, ctx *irCtx) string {
+	switch {
+	case v.Kind == KindLiteral && v.IsInt:
+		return strconv.Itoa(v.Int)
+	case v.Kind == KindArrayLiteral:
+		return dumpElems(v.Elems, ctx)
+	case v.Module != nil:
+		return "mod:" + v.Module.Id
+	case v.Macro != nil:
+		return "macro"
+	case v.Symbol != "":
+		return symS(v.Symbol)
 	}
-	parts := make([]string, 0, opt.Len())
-	for _, e := range opt.Entries() {
-		var vs string
-		switch x := e.Val.(type) {
-		case nil:
-			vs = "nil"
-		case bool:
-			if x {
-				vs = "true"
-			} else {
-				vs = "false"
-			}
-		case int:
-			vs = fmt.Sprintf("%d", x)
-		case Sym:
-			vs = ":" + string(x)
-		case string:
-			vs = EscStr(x)
-		default:
-			panic(fmt.Sprintf("cannot dump opt val %T", e.Val))
-		}
-		parts = append(parts, fmt.Sprintf("%s %s", ToS(e.Key), vs))
+	return "nil"
+}
+
+func dumpOptionValue(v OptionValue) string {
+	switch v.Kind {
+	case OptInt:
+		return strconv.Itoa(v.Int)
+	case OptStr:
+		return EscStr(v.Str)
+	case OptIdent:
+		return symS(v.Str)
+	}
+	panic("invalid option value")
+}
+
+func dumpOptions(opts Options) string {
+	parts := make([]string, 0, len(opts))
+	for _, e := range opts {
+		parts = append(parts, e.Key+" "+dumpOptionValue(e.Value))
+	}
+	return "{" + strings.Join(parts, " ") + "}"
+}
+
+// dumpLambdaOpt は旧 Lambda#opt (id → options の各エントリ → extern) と同じ並びで出力する。
+func dumpLambdaOpt(lmd *Lambda) string {
+	parts := []string{}
+	if lmd.Name != "" {
+		parts = append(parts, "id "+symS(lmd.Name))
+	}
+	for _, e := range lmd.Options {
+		parts = append(parts, e.Key+" "+dumpOptionValue(e.Value))
+	}
+	if lmd.Extern {
+		parts = append(parts, "extern true")
 	}
 	return "{" + strings.Join(parts, " ") + "}"
 }
 
 func dumpVar(v *Value, i int, ctx *irCtx, alloc bool) string {
 	var b strings.Builder
-	ids := "nil"
-	if v.Id != nil {
-		ids = ToS(v.Id)
-	}
-	fmt.Fprintf(&b, "(var %d %s %s %s", i, ids, v.Kind, typeS(v.Type))
+	fmt.Fprintf(&b, "(var %d %s %s %s", i, nameS(v.Name), v.Kind, typeS(v.Type))
 	if v.Kind != KindLocal {
-		fmt.Fprintf(&b, " val=%s", dumpGval(v.Val, ctx))
+		fmt.Fprintf(&b, " val=%s", dumpGval(v, ctx))
 	}
-	if lt := v.Opt.GetOr(Sym("local_type")); lt != nil {
-		fmt.Fprintf(&b, " lt=%s", ToS(lt))
+	if v.LocalType != LTNone {
+		fmt.Fprintf(&b, " lt=%s", v.LocalType)
 	}
 	if v.Public {
 		b.WriteString(" pub")
@@ -161,11 +178,11 @@ func dumpVar(v *Value, i int, ctx *irCtx, alloc bool) string {
 		} else {
 			b.WriteString(" loc=nil")
 		}
-		if v.Address != nil {
-			fmt.Fprintf(&b, " addr=%s", ToS(v.Address))
+		if v.HasAddress() {
+			fmt.Fprintf(&b, " addr=%d", v.Address)
 		}
 		if v.CondReg != CondNone {
-			fmt.Fprintf(&b, " cond=%s,%s", v.CondReg, ToS(v.CondPositive))
+			fmt.Fprintf(&b, " cond=%s,%t", v.CondReg, v.CondPositive)
 		}
 		if v.Unuse {
 			b.WriteString(" unuse")
@@ -177,29 +194,23 @@ func dumpVar(v *Value, i int, ctx *irCtx, alloc bool) string {
 
 func dumpDef(d *Def, ctx *irCtx) string {
 	var vs string
-	switch x := d.Val.(type) {
-	case nil:
-		vs = "nil"
-	case int:
-		vs = fmt.Sprintf("%d", x)
-	case Sym:
-		vs = ":" + string(x)
-	case string:
-		vs = EscStr(x)
-	case *Lambda:
-		vs = fmt.Sprintf("{lambda %s}", ToS(x.Id))
-	case *OMap:
-		vs = dumpOptS(x)
-	case []Operand:
-		elems := make([]string, len(x))
-		for i, e := range x {
-			elems[i] = dumpValue(e, ctx)
+	switch d.Kind {
+	case DefEqu:
+		vs = dumpGval(d.Equ, ctx)
+	case DefBss:
+		if d.Segment != "" {
+			vs = "{segment " + EscStr(d.Segment) + "}"
+		} else {
+			vs = "{segment nil}"
 		}
-		vs = "(" + strings.Join(elems, " ") + ")"
+	case DefBlock:
+		vs = dumpElems(d.Elems, ctx)
+	case DefCode:
+		vs = fmt.Sprintf("{lambda %s}", d.Lambda.Id)
 	default:
-		panic(fmt.Sprintf("cannot dump def val %T", d.Val))
+		panic(fmt.Sprintf("cannot dump def kind %s", d.Kind))
 	}
-	return fmt.Sprintf("(def %s %s %s %s)", ToS(d.Sym), d.Kind, typeS(d.Type), vs)
+	return fmt.Sprintf("(def %s %s %s %s)", d.Sym, d.Kind, typeS(d.Type), vs)
 }
 
 // dumpOp は命令を旧 IR と同じ位置引数の並び (Op.positional) で出力する。
@@ -207,35 +218,38 @@ func dumpOp(op *Op, ctx *irCtx) string {
 	if op == nil {
 		return "nil"
 	}
-	pos := op.positional()
-	parts := make([]string, len(pos))
-	for i, e := range pos {
-		parts[i] = dumpValue(e, ctx)
+	parts := []string{symS(op.Code.String())}
+	for _, e := range op.positional() {
+		switch x := e.(type) {
+		case string:
+			parts = append(parts, EscStr(x))
+		case *types.Type:
+			parts = append(parts, typeS(x))
+		case Operand:
+			parts = append(parts, dumpOperand(x, ctx))
+		case nil:
+			parts = append(parts, "nil")
+		default:
+			panic(fmt.Sprintf("cannot dump op element %T", e))
+		}
 	}
 	return "(" + strings.Join(parts, " ") + ")"
 }
 
-// DumpIR は dumper.rb の dump_ir 相当 (HLC完了直後)。
+// DumpIR は HLC 完了直後の IR を出力する。
 func DumpIR(h *Hlc) string {
 	var r []string
-	for _, e := range h.Options.Entries() {
-		var vs string
-		if s, ok := e.Val.(string); ok {
-			vs = EscStr(s)
-		} else {
-			vs = ToS(e.Val)
-		}
-		r = append(r, fmt.Sprintf("(option %s %s)", ToS(e.Key), vs))
+	for _, e := range h.Options {
+		r = append(r, fmt.Sprintf("(option %s %s)", e.Key, dumpOptionValue(e.Value)))
 	}
-	for _, me := range h.Modules.Entries() {
-		mod := me.Val.(*Module)
-		r = append(r, fmt.Sprintf("(module %s", ToS(mod.Id)))
-		r = append(r, fmt.Sprintf(" (options %s)", dumpOptS(mod.Options)))
+	for _, mod := range h.Modules.List() {
+		r = append(r, fmt.Sprintf("(module %s", mod.Id))
+		r = append(r, fmt.Sprintf(" (options %s)", dumpOptions(mod.Options)))
 		r = append(r, fmt.Sprintf(" (include_asms (%s))", joinEsc(mod.IncludeAsms)))
 		r = append(r, fmt.Sprintf(" (include_chrs (%s))", joinEsc(mod.IncludeChrs)))
-		keys := make([]string, 0, mod.Modules.Len())
-		for _, e := range mod.Modules.Entries() {
-			keys = append(keys, ToS(e.Key))
+		keys := make([]string, 0, len(mod.Modules.List()))
+		for _, m := range mod.Modules.List() {
+			keys = append(keys, m.Id)
 		}
 		r = append(r, fmt.Sprintf(" (modules (%s))", strings.Join(keys, " ")))
 		r = append(r, " (defs")
@@ -267,14 +281,14 @@ func joinEsc(ss []string) string {
 func dumpLambda(lmd *Lambda) []string {
 	ctx := makeCtx(lmd)
 	var r []string
-	r = append(r, fmt.Sprintf(" (lambda %s %s opt=%s", ToS(lmd.Id), typeS(lmd.Type), dumpOptS(lmd.Opt)))
+	r = append(r, fmt.Sprintf(" (lambda %s %s opt=%s", lmd.Id, typeS(lmd.Type), dumpLambdaOpt(lmd)))
 	args := make([]string, len(lmd.Args))
 	for i, a := range lmd.Args {
-		args[i] = dumpValue(a, ctx)
+		args[i] = dumpOperand(a, ctx)
 	}
 	r = append(r, fmt.Sprintf("  (args (%s))", strings.Join(args, " ")))
 	if lmd.Result != nil {
-		r = append(r, fmt.Sprintf("  (result %s)", dumpValue(lmd.Result, ctx)))
+		r = append(r, fmt.Sprintf("  (result %s)", dumpOperand(lmd.Result, ctx)))
 	} else {
 		r = append(r, "  (result nil)")
 	}
@@ -297,11 +311,11 @@ func dumpLambda(lmd *Lambda) []string {
 	return r
 }
 
-// DumpAllocLambda は dumper.rb の dump_alloc_lambda 相当 (割付+delete_unuse直後)。
-func DumpAllocLambda(modId Sym, sym any, lmd *Lambda) string {
+// DumpAllocLambda は割付 + delete_unuse 直後の関数をダンプする。
+func DumpAllocLambda(modId string, sym string, lmd *Lambda) string {
 	ctx := makeCtx(lmd)
 	var r []string
-	r = append(r, fmt.Sprintf("(alloc-lambda %s %s %s frame_size=%d", ToS(modId), ToS(sym), ToS(lmd.Id), lmd.FrameSize))
+	r = append(r, fmt.Sprintf("(alloc-lambda %s %s %s frame_size=%d", modId, sym, lmd.Id, lmd.FrameSize))
 	r = append(r, " (vars")
 	for i, v := range lmd.Vars {
 		r = append(r, "  "+dumpVar(v, i, ctx, true))

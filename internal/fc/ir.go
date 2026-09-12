@@ -3,11 +3,15 @@ package fc
 // 中間表現 (IR) の型定義 (doc/v2_plan.md R1-d)。
 //
 // HLC が生成し、レジスタ割付 (allocator.go) とコード生成 (llc.go) が消費する。
-// 旧実装では命令は []any (先頭が Sym の opcode、以降が位置引数) だった。ここでは
+// 旧実装では命令は []any (先頭が opcode のシンボル、以降が位置引数) だった。ここでは
 // opcode を enum、オペランドを意味ごとのフィールド (Dst / Src / Label / Type / Text) に分ける。
 // ダンプ (irdump.go) は旧形式と同じ位置引数の並びで出力するので golden は変わらない。
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/haramako/fc/internal/types"
+)
 
 // OpCode は IR 命令の種類。
 type OpCode uint8
@@ -62,7 +66,7 @@ var opCodeNames = [...]string{
 	OpIndexPget: "index_pget", OpIndexPset: "index_pset",
 }
 
-// String は旧 IR の opcode 名 (Sym の綴り) を返す。
+// String は旧 IR の opcode 名を返す。
 func (c OpCode) String() string {
 	if c > opInvalid && c < opCodeCount {
 		return opCodeNames[c]
@@ -92,7 +96,7 @@ type Op struct {
 	Dst   Operand   // 結果の格納先 (無い命令、または削除された戻り値では nil)
 	Src   []Operand // 入力
 	Label string    // OpLabel / OpIf / OpJump の飛び先
-	Type  *Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
+	Type  *types.Type // OpPushResult / OpPushArg / OpPushFastcall* の型
 	Text  string    // OpAsm のアセンブラ行
 }
 
@@ -104,9 +108,10 @@ func (op *Op) src(i int) Operand {
 	return nil
 }
 
-// positional は旧 IR ([]any) と同じ位置引数の並びを返す (ダンプ用)。
+// positional は旧 IR と同じ位置引数の並び (opcode を除く) を返す (ダンプ用)。
+// 要素は Operand / string (ラベル・asm) / *types.Type / nil のいずれか。
 func (op *Op) positional() []any {
-	r := []any{Sym(op.Code.String())}
+	var r []any
 	switch op.Code {
 	case OpLabel, OpJump:
 		r = append(r, op.Label)
@@ -144,12 +149,11 @@ const (
 	KindGlobal                 // グローバル変数 / 定数配列 / 関数 / モジュール束縛
 	KindLiteral                // 整数リテラル / 関数シンボル
 	KindArrayLiteral           // 配列リテラル (Def に落とす前)
-	KindModule                 // モジュール
 )
 
 var valueKindNames = [...]string{
 	KindLocal: "local", KindGlobal: "global", KindLiteral: "literal",
-	KindArrayLiteral: "array_literal", KindModule: "module",
+	KindArrayLiteral: "array_literal",
 }
 
 func (k ValueKind) String() string {

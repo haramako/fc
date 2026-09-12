@@ -12,18 +12,18 @@
 
 ## 進捗
 
-最終更新: 2026-09-12 / 状態: **R1 進行中（R1-a〜d 完了）**
+最終更新: 2026-09-12 / 状態: **R1 完了、R2 着手前**
 
 | Phase | 内容 | 目安 | 状態 |
 |---|---|---|---|
 | R0 | 検証基盤の切り替え（`-update`、ast golden 廃止、ベンチ） | 0.5日 | ✅ 2026-09-12 |
-| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | 🔄 a〜d ✅ |
+| R1 | 型付きフロントエンド・型付き IR（a〜g の 7 ステップ） | 5〜7日 | ✅ 2026-09-12 |
 | R2 | エラー処理の近代化（位置情報・error 値化） | 1日 | ⬜ |
 | R3 | パッケージ構成・API・決定性・テスト並列化 | 2〜3日 | ⬜ |
 
 状態記号: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
-**次にやること**: R1-e（Sym/OMap/Canon 全廃、types パッケージ、§4.6）。
+**次にやること**: R2（エラー処理の近代化、§5）。
 
 ---
 
@@ -457,34 +457,53 @@ R1-g  パッケージレベル可変状態の棚卸しと排除
   - LLC 内部の行バッファ `asmLines`（`[]any` の flatten、Ruby Array 模倣）は IR ではないので据え置き（R3-a の codegen 移動時に整理）
   - golden 全差分ゼロ、`go test ./...` 緑。ベンチ Frontend 368ms → 341ms
 
-### 4.6 R1-e Sym / OMap / Canon の全廃、types パッケージ（1 日）
+### 4.6 R1-e Sym / OMap / Canon の全廃、types パッケージ（1 日）✅ 2026-09-12
 
-- [ ] `internal/types/`: `Type` 移動。`TypeOf(ast any)` を廃止し `Void()`, `Bool()`, `Int(size, signed)`, `PointerTo(t)`,
+- [x] `internal/types/`: `Type` 移動。`TypeOf(ast any)` を廃止し `Void()`, `Bool()`, `Int(size, signed)`, `PointerTo(t)`,
       `ArrayOf(t, n)`, `Func(params, result, fastcall)`, `Module()`, `Macro()` のコンストラクタに。
       **インターンは `*types.Universe`（または `Interner`）インスタンス**が持ち、`Compiler` が 1 つ作って sema に渡す。
       ポインタ同値比較に依存する箇所（`== TypeOf(Sym("void"))` 等）は `t.Kind == types.Void` に置換
-- [ ] `Value.Opt *OMap` → 明示フィールド（`LocalType`, `Segment`, `Address`, `Extern`, `Symbol`, `Bank` …。
+- [x] `Value.Opt *OMap` → 明示フィールド（`LocalType`, `Segment`, `Address`, `Extern`, `Symbol`, `Bank` …。
       現在 `Opt` に入るキーを `grep 'Opt.GetOr\|opt.GetOr\|Set(Sym(' ` で全部洗い出す）
-- [ ] `Module.Options`, `Hlc.Options` → `type Options struct` + 元の挿入順が必要な箇所（base.asm 生成、irdump）は
+- [x] `Module.Options`, `Hlc.Options` → `type Options struct` + 元の挿入順が必要な箇所（base.asm 生成、irdump）は
       順序付きスライス
-- [ ] `Scope.Declares *OMap` → `map[string]*Value` + `order []string`
-- [ ] `Sym` 型を削除（識別子は `string`、種別は enum）。`ToS` は残っていれば削除
-- [ ] `Canon`, `OMap`, `base.go` の Ruby 互換ヘルパ削除
+- [x] `Scope.Declares *OMap` → `map[string]*Value` + `order []string`
+- [x] `Sym` 型を削除（識別子は `string`、種別は enum）。`ToS` は残っていれば削除
+- [x] `Canon`, `OMap`, `base.go` の Ruby 互換ヘルパ削除
 - 合格: 全 golden 差分ゼロ（irdump の出力形式は R1-d で決めたものを維持。Options の列挙順は旧 OMap の挿入順と同じにする）
+- 結果:
+  - `internal/types`: `Type`（`Kind` enum）、`Universe`（インターン表。`Hlc` が 1 つ持ち `Hlc.Types()` で公開）、
+    `Void/Bool/IntType/Named/PointerTo/ArrayOf/Func`、`Compatible`。表示名 (`uint8`, `ubool8`, `fastcall void(uint8)`) は旧 `to_s` と同一。
+    ポインタ同値比較 (`a.Base == b.Base` 等) はインターンにより従来どおり成立
+  - `Value`: `Name string` / `IsInt+Int` / `Symbol` / `Elems` / `Module` / `Macro` / `IsString+Str` / `LocalType` enum / `Address int`
+    の明示フィールドに（`Id any`/`Val any`/`Opt *OMap`/`BaseString any`/`Address any` を全廃）。コンストラクタは
+    `NewLocal/NewGlobal/NewModuleValue/NewMacroValue/NewIntLiteral/NewSymbolLiteral/NewArrayLiteral` と `Hlc.IntValue`
+  - `Def`: `Equ *Value` / `Segment` / `Elems` / `Lambda` の明示フィールド。`Lambda`: `Id/Name string`、`Options`、`Extern bool`
+  - `Options`（順序付き `[]Option{Key, OptionValue{Int|Str|Ident}}`）で `Hlc.Options`/`Module.Options`/`Lambda.Options` を統一。
+    重複キーは後勝ち・位置維持（旧 OMap と同じ）
+  - `ModuleList`（登録順 + id 索引）で `Hlc.Modules`/`Module.Modules`。`Scope` は `map + order`
+  - 削除: `Sym`、`OMap`、`Canon`、`SexpStr`、`ToS`、`truthy`、`TypeOf`、`type_util.go`、`sexp.go`、`types.go`（fc 側）。
+    `EscStr` は irdump.go へ
+  - **ir/allocir golden を再生成**（15 ファイル、59 行）: 差分は Ruby の Symbol/String 区別に由来する `"_interrupt"` → `:_interrupt`
+    （`symbol:` オプションの関数、`address:"..."` の const）のみであることを全行確認。asm/bin/stdout/examples ROM は差分ゼロ
+  - R1-g（パッケージレベル可変状態）も完了: 残る `var` は不変の対応表（opcode 名・キーワード表・正規表現）のみ。唯一の可変だった `typeCache` は Universe に
 
-### 4.7 R1-f マクロ API（0.5 日）
+### 4.7 R1-f マクロ API（0.5 日）✅ R1-c/R1-e 内で完了
 
-- [ ] `MacroFn` を `func(ctx *MacroContext, args []*ir.Value, block *syntax.BlockStmt) (syntax.Stmt, error)` 等の typed API に。
+- [x] `MacroFn` を `func(ctx *MacroContext, args []*ir.Value, block *syntax.BlockStmt) (syntax.Stmt, error)` 等の typed API に。
       `macros.go`/`textconv.go` の 5 マクロ群を書き直す。マクロの展開結果にも Pos を付与（呼び出し位置を継承）
-- [ ] `include("xxx.rb")` のファイル名キー解決はそのまま（G6: castle が `include macro("macro.rb")` を使う）
+- [x] `include("xxx.rb")` のファイル名キー解決はそのまま（G6: castle が `include macro("macro.rb")` を使う）
 - 合格: 全 golden 差分ゼロ（castle ROM 一致が `_T`/`_M`/`VERSION_STR` の検証になる）
+- 結果: `MacroFn func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult`（R1-c）。マクロ値は `Value.Macro`（R1-e）。
+  展開結果への Pos 付与は、cexpr が `pos` を持つが現状エラー位置は文単位なので未使用（R2 で扱う）
 
-### 4.8 R1-g パッケージレベル可変状態の排除（0.5 日）
+### 4.8 R1-g パッケージレベル可変状態の排除（0.5 日）✅ R1-e 内で完了
 
-- [ ] `grep -n '^var ' internal/**/*.go` で棚卸し。`typeCache`（R1-e で解消済みのはず）、その他
+- [x] `grep -n '^var ' internal/**/*.go` で棚卸し。`typeCache`（R1-e で解消済みのはず）、その他
       `regexp.MustCompile` 等の不変なものは残してよい。可変なものは `Compiler`/`Sema`/`Codegen` のフィールドに
-- [ ] `BuildPath`（`.fc-build`）は定数のままでよいが、R3-d でオプション化する前提でアクセスを 1 箇所に集約
+- [x] `BuildPath`（`.fc-build`）は定数のままでよいが、R3-d でオプション化する前提でアクセスを 1 箇所に集約
 - 合格: `go vet`、全 golden 差分ゼロ。R1 を ✅ に、ベンチ再計測
+- 結果: `BuildPath` は定数のまま（R3-d でオプション化）。残る `var` は不変表のみ
 
 ---
 
@@ -640,6 +659,13 @@ cmd/fcc            CLI のみ
   - R3-c のラベル採番変更は「正規化を先に入れてから切り替える」2 コミット手順に
   - ir/allocir golden は削除ではなく R1-d で新形式に再生成する方針に（レジスタ割付の回帰検知を残す）
 - 基準値: `go test ./...` 約 75 秒（fc 20s, nes 16s）。`go vet` クリーン
+
+### 2026-09-12 — R1 完了
+
+- コミット: e50d425 (R1-a) → 6dacbb8 (R1-b) → 4bd823c (R1-c) → 28abce1 (R1-d) → R1-e (本コミット)
+- ベンチ Frontend: 519ms → 368ms (R1-c) → 341ms (R1-d) → **330ms** (R1-e)、155MB → 109MB、3.34M → 1.81M allocs
+- golden: asm/bin/stdout/examples ROM は全段で差分ゼロ。ir/allocir は R1-e でのみ再生成
+  (シンボルの `"..."`→`:...` 統一、59 行、全行確認済み)
 
 ### 2026-09-12 — R0 完了
 

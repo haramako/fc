@@ -14,7 +14,7 @@
   0005 (:push_arg #"uint8*" {pa {g $6 #"uint8[10]" :_5}})
   0006 (:call nil {lit assert_equal :_unittest_assert_equal #"void(uint16,uint16,uint8*)"})
   0007 (:push_result #"void")
-  0008 (:index {l2 $8} {g asm_symbol #"uint8[]" "_test_option_base_data"} {lit nil 1 #"uint8"})
+  0008 (:index {l2 $8} {g asm_symbol #"uint8[]" :_test_option_base_data} {lit nil 1 #"uint8"})
   0009 (:pget {l3 $9} {l2 $8})
   0010 (:push_arg #"uint16" {l3 $9})
   0011 (:push_arg #"uint16" {lit nil 2 #"uint8"})

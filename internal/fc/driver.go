@@ -113,30 +113,28 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (result int, err er
 	c.hlc = hlc
 
 	// compile2 (中間コード -> アセンブラファイル)
-	llc := NewLlc(opt.OptimizeLevel)
-	for _, me := range hlc.Modules.Entries() {
-		mod := me.Val.(*Module)
+	llc := NewLlc(opt.OptimizeLevel, hlc.Types())
+	for _, mod := range hlc.Modules.List() {
 		if mod.FromFcm {
 			continue
 		}
 		asm, inc := llc.Compile(mod)
-		if err := os.WriteFile(filepath.Join(BuildPath, fmt.Sprintf("_%s.inc", ToS(mod.Id))), []byte(strings.Join(inc, "\n")), 0o666); err != nil {
+		if err := os.WriteFile(filepath.Join(BuildPath, fmt.Sprintf("_%s.inc", mod.Id)), []byte(strings.Join(inc, "\n")), 0o666); err != nil {
 			return 0, err
 		}
-		if err := os.WriteFile(filepath.Join(BuildPath, fmt.Sprintf("_%s.s", ToS(mod.Id))), []byte(strings.Join(asm, "\n")), 0o666); err != nil {
+		if err := os.WriteFile(filepath.Join(BuildPath, fmt.Sprintf("_%s.s", mod.Id)), []byte(strings.Join(asm, "\n")), 0o666); err != nil {
 			return 0, err
 		}
 	}
 
 	// assemble (アセンブラ -> オブジェクトファイル)
 	var objs []string
-	for _, me := range hlc.Modules.Entries() {
-		mod := me.Val.(*Module)
-		objs = append(objs, filepath.Join(BuildPath, fmt.Sprintf("_%s.o", ToS(mod.Id))))
+	for _, mod := range hlc.Modules.List() {
+		objs = append(objs, filepath.Join(BuildPath, fmt.Sprintf("_%s.o", mod.Id)))
 		if mod.FromFcm {
 			continue
 		}
-		c.ca65(filepath.Join(BuildPath, fmt.Sprintf("_%s.s", ToS(mod.Id))))
+		c.ca65(filepath.Join(BuildPath, fmt.Sprintf("_%s.s", mod.Id)))
 	}
 
 	c.makeRuntime(opt.Target)
@@ -163,27 +161,27 @@ func (c *Compiler) makeRuntime(target string) {
 func (c *Compiler) makeBase() {
 	opts := c.hlc.Options
 	inesmap := 0
-	switch m := opts.GetOr(Sym("mapper")).(type) {
-	case nil:
-		inesmap = 0
-	case string:
-		switch m {
-		case "MMC0":
-			inesmap = 0
-		case "MMC3":
-			inesmap = 4
+	if m, ok := opts.Get("mapper"); ok {
+		switch m.Kind {
+		case OptStr:
+			switch m.Str {
+			case "MMC0":
+				inesmap = 0
+			case "MMC3":
+				inesmap = 4
+			}
+		case OptInt:
+			inesmap = m.Int
 		}
-	case int:
-		inesmap = m
 	}
 
 	bankCount := 4
-	if bc, ok := opts.GetOr(Sym("bank_count")).(int); ok {
+	if bc, ok := opts.Int("bank_count"); ok {
 		bankCount = bc
 	}
 	inesprg := bankCount / 2
 	ineschr := 1
-	if cb, ok := opts.GetOr(Sym("char_banks")).(int); ok {
+	if cb, ok := opts.Int("char_banks"); ok {
 		ineschr = cb
 	}
 
@@ -203,12 +201,12 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) {
 	opts := c.hlc.Options
 
 	ineschr := 1
-	if cb, ok := opts.GetOr(Sym("char_banks")).(int); ok {
+	if cb, ok := opts.Int("char_banks"); ok {
 		ineschr = cb
 	}
 
 	var banks []*bankInfo
-	if bc, ok := opts.GetOr(Sym("bank_count")).(int); ok {
+	if bc, ok := opts.Int("bank_count"); ok {
 		for i := 0; i < bc; i++ {
 			size := 0x2000
 			if i == bc-1 {
@@ -226,19 +224,18 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) {
 		bank int
 	}
 	var segs []segInfo
-	for _, me := range c.hlc.Modules.Entries() {
-		m := me.Val.(*Module)
+	for _, m := range c.hlc.Modules.List() {
 		bank := 0
-		if b, ok := m.Options.GetOr(Sym("bank")).(int); ok {
+		if b, ok := m.Options.Int("bank"); ok {
 			bank = b
 		}
 		if bank < 0 {
 			bank = len(banks) + bank
 		}
-		if org, ok := m.Options.GetOr(Sym("org")).(int); ok {
+		if org, ok := m.Options.Int("org"); ok {
 			banks[bank].org = org
 		}
-		segs = append(segs, segInfo{name: ToS(m.Id), bank: bank})
+		segs = append(segs, segInfo{name: m.Id, bank: bank})
 	}
 
 	var cfg string

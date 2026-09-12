@@ -6,17 +6,21 @@ package fc
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/haramako/fc/internal/types"
 )
 
 type Llc struct {
 	OptimizeLevel int
 	labelCount    int
 	codeSegment   string
+	zero          *Value // 定数 0 (mul の 0 倍の最適化用)
 }
 
-func NewLlc(optimizeLevel int) *Llc {
-	return &Llc{OptimizeLevel: optimizeLevel}
+func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
+	return &Llc{OptimizeLevel: optimizeLevel, zero: NewIntLiteral("", u.IntType(1, false), 0)}
 }
 
 // asmLines は文字列/ nil / ネストした配列を保持する行バッファ (Ruby の Array 相当)。
@@ -59,23 +63,22 @@ func (a *asmLines) flatten() []string {
 // Compile はモジュールをアセンブラに変換する。(asm, inc) の行リストを返す。
 func (l *Llc) Compile(mod *Module) ([]string, []string) {
 	l.labelCount = 0
-	l.codeSegment = ToS(mod.Id)
+	l.codeSegment = mod.Id
 
 	inc := &asmLines{}
 	asm := &asmLines{}
 	asm.push("\t.setcpu \"6502\"")
 	asm.push("\t.include \"macro.inc\"")
-	asm.push(fmt.Sprintf("__MODULE_%s__ = 1", strings.ToUpper(ToS(mod.Id))))
+	asm.push(fmt.Sprintf("__MODULE_%s__ = 1", strings.ToUpper(mod.Id)))
 
-	inc.push(fmt.Sprintf(".ifndef __MODULE_%s__", strings.ToUpper(ToS(mod.Id))))
-	inc.push(fmt.Sprintf("__MODULE_%s__ = 1", strings.ToUpper(ToS(mod.Id))))
+	inc.push(fmt.Sprintf(".ifndef __MODULE_%s__", strings.ToUpper(mod.Id)))
+	inc.push(fmt.Sprintf("__MODULE_%s__ = 1", strings.ToUpper(mod.Id)))
 
 	asm.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment)) // dummy
 
-	for _, e := range mod.Modules.Entries() {
-		m := e.Val.(*Module)
-		inc.push(fmt.Sprintf("\t.include \"_%s.inc\"", ToS(m.Id)))
-		asm.push(fmt.Sprintf("\t.include \"_%s.inc\"", ToS(m.Id)))
+	for _, m := range mod.Modules.List() {
+		inc.push(fmt.Sprintf("\t.include \"_%s.inc\"", m.Id))
+		asm.push(fmt.Sprintf("\t.include \"_%s.inc\"", m.Id))
 	}
 
 	// include(.asm)の処理
@@ -86,32 +89,33 @@ func (l *Llc) Compile(mod *Module) ([]string, []string) {
 	for _, d := range mod.Defs {
 		switch d.Kind {
 		case DefEqu:
-			val := d.Val
-			if s, ok := val.(Sym); ok {
-				val = mangle(string(s))
+			var val string
+			if d.Equ.IsInt {
+				val = strconv.Itoa(d.Equ.Int)
+			} else {
+				val = mangle(d.Equ.Symbol)
 			}
-			inc.push(fmt.Sprintf("%s = %s", mangle(ToS(d.Sym)), ToS(val)))
-			asm.push(fmt.Sprintf("%s = %s", mangle(ToS(d.Sym)), ToS(val)))
+			inc.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
+			asm.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
 		case DefBss:
-			inc.push(fmt.Sprintf("\t.import %s", mangle(ToS(d.Sym))))
-			asm.push(fmt.Sprintf("\t.export %s", mangle(ToS(d.Sym))))
-			seg := d.Val.(*OMap).GetOr(Sym("segment"))
-			if seg != nil {
-				asm.push(fmt.Sprintf(".segment \"%s\"", ToS(seg)))
+			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
+			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
+			if d.Segment != "" {
+				asm.push(fmt.Sprintf(".segment \"%s\"", d.Segment))
 			} else {
 				asm.push(".segment \"BSS\"")
 			}
-			asm.push(fmt.Sprintf("%s: .res %d", mangle(ToS(d.Sym)), d.Type.Size))
+			asm.push(fmt.Sprintf("%s: .res %d", mangle(d.Sym), d.Type.Size))
 		case DefBlock:
-			inc.push(fmt.Sprintf("\t.import %s", mangle(ToS(d.Sym))))
-			asm.push(fmt.Sprintf("\t.export %s", mangle(ToS(d.Sym))))
+			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
+			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
-			asm.push(l.emitBlock(d.Sym, d.Type, d.Val.([]Operand)))
+			asm.push(l.emitBlock(d.Sym, d.Type, d.Elems))
 		case DefCode:
-			inc.push(fmt.Sprintf("\t.import %s", mangle(ToS(d.Sym))))
-			asm.push(fmt.Sprintf("\t.export %s", mangle(ToS(d.Sym))))
-			lmd := d.Val.(*Lambda)
-			if truthy(lmd.Opt.GetOr(Sym("extern"))) {
+			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
+			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
+			lmd := d.Lambda
+			if lmd.Extern {
 				continue
 			}
 			asm.push(anyList(l.CompileLambda(d.Sym, lmd)))
@@ -145,7 +149,7 @@ func anyList(ss []string) []any {
 }
 
 // CompileLambda は関数1つ分のアセンブリを生成する。
-func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
+func (l *Llc) CompileLambda(sym string, lmd *Lambda) []string {
 	l.allocRegister(lmd)
 	ops := lmd.Ops
 	if l.OptimizeLevel > 0 {
@@ -156,15 +160,15 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 	r := &asmLines{}
 
 	r.push(";;;=============================")
-	r.push(fmt.Sprintf(";;; function %s", ToS(lmd.Id)))
+	r.push(fmt.Sprintf(";;; function %s", lmd.Id))
 	r.push(";;;=============================")
 
-	if seg := lmd.Opt.GetOr(Sym("segment")); seg != nil {
-		r.push(fmt.Sprintf(".segment \"%s\"", ToS(seg)))
+	if seg := lmd.Segment(); seg != "" {
+		r.push(fmt.Sprintf(".segment \"%s\"", seg))
 	} else {
 		r.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
 	}
-	r.push(fmt.Sprintf(".proc %s", mangle(ToS(sym))))
+	r.push(fmt.Sprintf(".proc %s", mangle(sym)))
 
 	pushArgSize := 0
 	pushFastcallArgSize := 0
@@ -236,14 +240,14 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 			}
 
 		case OpCall:
-			for _, a := range ValType(op.src(0)).Args {
+			for _, a := range ValType(op.src(0)).Params {
 				pushArgSize -= a.Size
 			}
 			pushArgSize -= ValType(op.src(0)).Base.Size
 
 			if ValKind(op.src(0)) == KindLiteral {
 				// 関数を直に呼ぶ
-				r.push(l.callSubroutine(mangle(ToS(ValVal(op.src(0)))), lmd.FrameSize+pushArgSize))
+				r.push(l.callSubroutine(mangle(ValLiteral(op.src(0)).Symbol), lmd.FrameSize+pushArgSize))
 			} else {
 				// 関数ポインタから呼ぶ
 				r.push(l.loadA(op.src(0), 0))
@@ -276,7 +280,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 
 			if ValKind(op.src(0)) == KindLiteral {
 				// 関数を直に呼ぶ
-				r.push(fmt.Sprintf("jsr %s", mangle(ToS(ValVal(op.src(0))))))
+				r.push(fmt.Sprintf("jsr %s", mangle(ValLiteral(op.src(0)).Symbol)))
 			} else {
 				// 関数ポインタから呼ぶ
 				r.push(l.loadA(op.src(0), 0))
@@ -345,7 +349,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 		case OpShiftLeft, OpShiftRight:
 			signed := ValType(op.src(0)).Signed
 			rotate := ifElse(op.Code == OpShiftLeft, "rol", "ror")
-			if n, ok := ValVal(op.src(1)).(int); ok {
+			if n, ok := ValIntLiteral(op.src(1)); ok {
 				// 定数の場合
 				if ValType(op.Dst).Size == 1 {
 					// サイズが1
@@ -417,7 +421,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 			}
 
 		case OpUminus:
-			if ValType(op.Dst).Kind != "int" {
+			if ValType(op.Dst).Kind != types.Int {
 				panic("uminus with non-int")
 			}
 			for i := 0; i < ValType(op.Dst).Size; i++ {
@@ -515,7 +519,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 		case OpIndex:
 			if ValType(op.src(1)).Size == 1 {
 				// インデックスのサイズが１
-				if ValType(op.src(0)).Kind == "array" {
+				if ValType(op.src(0)).Kind == types.Array {
 					r.push(l.loadYIdx(op.src(1), op.src(0)))
 					r.push("sty <reg+0")
 					r.push("clc")
@@ -525,7 +529,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 					r.push(fmt.Sprintf("lda #.HIBYTE(%s)", l.toAsm(op.src(0))))
 					r.push("adc #0")
 					r.push(l.storeA(op.Dst, 1))
-				} else if ValType(op.src(0)).Kind == "pointer" {
+				} else if ValType(op.src(0)).Kind == types.Pointer {
 					r.push(l.loadYIdx(op.src(1), op.src(0)))
 					r.push("sty <reg+0")
 					r.push("clc")
@@ -541,7 +545,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 			} else {
 				// インデックスのサイズが２
 				// TODO: ちゃんとする、テスト作る
-				if ValType(op.src(0)).Kind == "array" {
+				if ValType(op.src(0)).Kind == types.Array {
 					r.push(l.loadA(op.src(1), 0))
 					r.push("sta <reg+0")
 					r.push(l.loadA(op.src(1), 1))
@@ -569,7 +573,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 			if ValLocation(op.src(0)) == LocFrame {
 				r.push("txa")
 				r.push("clc")
-				r.push(fmt.Sprintf("adc #.LOBYTE(S+%s)", ToS(ValAddress(op.src(0)))))
+				r.push(fmt.Sprintf("adc #.LOBYTE(S+%d)", ValAddress(op.src(0))))
 				r.push(l.storeA(op.Dst, 0))
 				r.push("lda #0")
 				r.push(l.storeA(op.Dst, 1))
@@ -604,10 +608,10 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 
 			// 最適化後のオペレータ
 		case OpIndexPget:
-			if ValType(op.src(1)) != TypeOf(Sym("int")) && ValType(op.src(1)) != TypeOf(Sym("sint8")) {
+			if !isByteInt(ValType(op.src(1))) {
 				panic(&CompileError{Msg: "2byte index not supported"})
 			}
-			if ValType(op.src(0)).Kind != "array" {
+			if ValType(op.src(0)).Kind != types.Array {
 				panic("index_pget with non-array")
 			}
 			r.push(l.loadYIdx(op.src(1), op.src(0)))
@@ -617,10 +621,10 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 			}
 
 		case OpIndexPset:
-			if ValType(op.src(1)) != TypeOf(Sym("int")) && ValType(op.src(1)) != TypeOf(Sym("sint8")) {
+			if !isByteInt(ValType(op.src(1))) {
 				panic(&CompileError{Msg: "2byte index not supported"})
 			}
-			if ValType(op.src(0)).Kind != "array" {
+			if ValType(op.src(0)).Kind != types.Array {
 				panic("index_pset with non-array")
 			}
 			r.push(l.loadYIdx(op.src(1), op.src(0)))
@@ -637,7 +641,7 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 	for _, d := range lmd.Defs {
 		switch d.Kind {
 		case DefBlock:
-			r.push(l.emitBlock(d.Sym, d.Type, d.Val.([]Operand)))
+			r.push(l.emitBlock(d.Sym, d.Type, d.Elems))
 		default:
 			panic(fmt.Sprintf("invalid lambda def kind %s", d.Kind))
 		}
@@ -662,6 +666,11 @@ func (l *Llc) CompileLambda(sym any, lmd *Lambda) []string {
 }
 
 var reIndentExempt = regexp.MustCompile(`^([.@_a-zA-Z0-9][_a-zA-Z0-9]+:|\.segment|\.proc)`)
+
+// isByteInt は 1 バイトの整数型か (旧実装の `type == int || type == sint8`)。
+func isByteInt(t *types.Type) bool {
+	return t.Kind == types.Int && t.Size == 1
+}
 
 func ifElse(cond bool, a, b string) string {
 	if cond {
@@ -688,7 +697,7 @@ func (l *Llc) loadYIdx(idx, ptr Operand) []any {
 
 func (l *Llc) load(to, from Operand) []any {
 	r := []any{}
-	if ValType(to).Kind == "pointer" && ValType(from).Kind == "array" {
+	if ValType(to).Kind == types.Pointer && ValType(from).Kind == types.Array {
 		if ValType(from).Base != ValType(to).Base {
 			panic(fmt.Sprintf("can't convert from %s to %s", valToS(from), valToS(to)))
 		}
@@ -699,7 +708,7 @@ func (l *Llc) load(to, from Operand) []any {
 		r = append(r, fmt.Sprintf("sta %s", l.byte(to, 1)))
 	} else {
 		// 通常の代入
-		if ValType(from).Kind != "int" {
+		if ValType(from).Kind != types.Int {
 			if ValType(from).Base != ValType(to).Base {
 				panic(fmt.Sprintf("can't convert from %s to %s", valToS(from), valToS(to)))
 			}
@@ -814,21 +823,26 @@ func (l *Llc) toAsm(v Operand) string {
 		case KindLocal:
 			switch ValLocation(v) {
 			case LocFrame:
-				return fmt.Sprintf("<S+%s,x", ToS(ValAddress(v)))
+				return fmt.Sprintf("<S+%d,x", ValAddress(v))
 			case LocReg:
-				return fmt.Sprintf("<L+%s", ToS(ValAddress(v)))
+				return fmt.Sprintf("<L+%d", ValAddress(v))
 			case LocFastcallReg:
-				return fmt.Sprintf("<FC_FASTCALL_REG+%s", ToS(ValAddress(v)))
+				return fmt.Sprintf("<FC_FASTCALL_REG+%d", ValAddress(v))
 			default:
 				panic(fmt.Sprintf("invalid location %s of %s", ValLocation(v), valToS(v)))
 			}
 		case KindGlobal:
-			if ValVal(v) == nil {
-				panic(fmt.Sprintf("invalid %s, %s", valToS(v), ToS(ValVal(v))))
+			lv := ValLiteral(v)
+			if lv.Symbol == "" {
+				panic(fmt.Sprintf("invalid %s", valToS(v)))
 			}
-			return mangle(ToS(ValVal(v)))
+			return mangle(lv.Symbol)
 		case KindLiteral:
-			return fmt.Sprintf("#%s", ToS(ValVal(v)))
+			lv := ValLiteral(v)
+			if lv.IsInt {
+				return fmt.Sprintf("#%d", lv.Int)
+			}
+			return "#" + lv.Symbol
 		default:
 			panic(fmt.Sprintf("invalid v %s", valToS(v)))
 		}
@@ -860,20 +874,17 @@ func (l *Llc) byte(v Operand, n int) string {
 		return "#0" // 符号拡張は、:sign_extension オペレータで行うので、存在しないbyteは0扱い
 	}
 	if ValKind(v) == KindLiteral {
-		switch val := ValVal(v).(type) {
-		case int:
-			return fmt.Sprintf("#%d", rubyMod(rubyShr(val, n*8), 256))
-		case Sym:
-			switch n {
-			case 0:
-				return fmt.Sprintf("#.LOBYTE(%s)", mangle(string(val)))
-			case 1:
-				return fmt.Sprintf("#.HIBYTE(%s)", mangle(string(val)))
-			default:
-				panic("invalid byte index for symbol")
-			}
+		lv := ValLiteral(v)
+		if lv.IsInt {
+			return fmt.Sprintf("#%d", rubyMod(rubyShr(lv.Int, n*8), 256))
+		}
+		switch n {
+		case 0:
+			return fmt.Sprintf("#.LOBYTE(%s)", mangle(lv.Symbol))
+		case 1:
+			return fmt.Sprintf("#.HIBYTE(%s)", mangle(lv.Symbol))
 		default:
-			panic(fmt.Sprintf("invalid literal val %T", ValVal(v)))
+			panic("invalid byte index for symbol")
 		}
 	}
 	if n < ValType(v).Size {
@@ -883,9 +894,9 @@ func (l *Llc) byte(v Operand, n int) string {
 }
 
 // emitBlock は v を .db/.dw に変換する。
-func (l *Llc) emitBlock(sym any, typ *Type, val []Operand) []any {
+func (l *Llc) emitBlock(sym string, typ *types.Type, val []Operand) []any {
 	r := []any{}
-	r = append(r, mangle(ToS(sym))+":")
+	r = append(r, mangle(sym)+":")
 	var op string
 	var limit int
 	switch typ.Base.Size {
@@ -902,11 +913,12 @@ func (l *Llc) emitBlock(sym any, typ *Type, val []Operand) []any {
 		e := min(s+16, len(val))
 		parts := make([]string, 0, e-s)
 		for _, elem := range val[s:e] {
-			switch x := ValVal(elem).(type) {
-			case int:
-				parts = append(parts, fmt.Sprintf("%d", rubyMod(x, limit)))
-			case Sym:
-				parts = append(parts, string(x))
+			lv := ValLiteral(elem)
+			switch {
+			case lv != nil && lv.Kind == KindLiteral && lv.IsInt:
+				parts = append(parts, fmt.Sprintf("%d", rubyMod(lv.Int, limit)))
+			case lv != nil && lv.Kind == KindLiteral:
+				parts = append(parts, lv.Symbol)
 			default:
 				parts = append(parts, l.toAsm(elem))
 			}
@@ -924,8 +936,7 @@ func (l *Llc) emitBlock(sym any, typ *Type, val []Operand) []any {
 func (l *Llc) mulDivMod(op *Op) []any {
 	r := []any{}
 	dst, s0, s1 := op.Dst, op.src(0), op.src(1)
-	op3val := ValVal(s1)
-	op3int, op3IsInt := op3val.(int)
+	op3int, op3IsInt := ValIntLiteral(s1)
 	isPow2 := false
 	if op3IsInt {
 		switch op3int {
@@ -937,7 +948,7 @@ func (l *Llc) mulDivMod(op *Op) []any {
 		// 0の場合
 		switch op.Code {
 		case OpMul:
-			r = append(r, anyIfy(l.load(dst, NewIntValue(0))))
+			r = append(r, anyIfy(l.load(dst, l.zero)))
 		case OpDiv, OpMod:
 			panic(&CompileError{Msg: "div by 0"})
 		}
@@ -1095,7 +1106,7 @@ func (l *Llc) optimizePointer(lmd *Lambda, ops []*Op) []*Op {
 		case OpPget:
 			if isSameOperand(op.Dst, nextOp.Src[0]) && // 同じ変数を連続で使っていて
 				ValKind(arr) == KindGlobal && // 単純なシンボルで
-				eqAny(ValOpt(op.Dst).GetOr(Sym("local_type")), Sym("temp")) && // その変数をそこでしか使っていない
+				ValLocalType(op.Dst) == LTTemp && // その変数をそこでしか使っていない
 				ValType(idx).Size == 1 { // インデックスのサイズが1byte
 				ops[i] = &Op{Code: OpIndexPget, Dst: nextOp.Dst, Src: []Operand{arr, idx}}
 				ops[i+1] = nil
@@ -1103,7 +1114,7 @@ func (l *Llc) optimizePointer(lmd *Lambda, ops []*Op) []*Op {
 		case OpPset:
 			if isSameOperand(op.Dst, nextOp.Src[0]) &&
 				ValKind(arr) == KindGlobal &&
-				eqAny(ValOpt(op.Dst).GetOr(Sym("local_type")), Sym("temp")) &&
+				ValLocalType(op.Dst) == LTTemp &&
 				ValType(idx).Size == 1 {
 				ops[i] = &Op{Code: OpIndexPset, Src: []Operand{arr, idx, nextOp.Src[1]}}
 				ops[i+1] = nil

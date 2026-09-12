@@ -65,9 +65,9 @@ func BenchmarkCastleFrontend(b *testing.B) {
 		if err := hlc.Compile("main.fc"); err != nil {
 			b.Fatalf("コンパイル失敗: %v", err)
 		}
-		llc := NewLlc(2)
-		for _, me := range hlc.Modules.Entries() {
-			llc.Compile(me.Val.(*Module))
+		llc := NewLlc(2, hlc.Types())
+		for _, mod := range hlc.Modules.List() {
+			llc.Compile(mod)
 		}
 	}
 }
