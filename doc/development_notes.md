@@ -8,6 +8,9 @@ Go移植後の fc を開発するときに知っておくべきこと。
 
 - 開発は **`agent/golang`** で行う。**安定するまで master へはマージしない**
   （一度マージしたが取り消し済み。master = 8358b15 のまま）
+- **`feature/v2`**（2026-09-12、`agent/golang` 45c2d78 から分岐）: Go らしい実装への転換
+  （R0〜R3）と、その後の文法 v2 / フォーマッタ / モジュール単位コンパイル。
+  作業指示書は [v2_plan.md](v2_plan.md)。厳密クローンの基準点は `agent/golang` に残る
 - タグ:
   - `ruby-frozen` — 移植前の Ruby 版オリジナル
   - `go-strict-clone` — 厳密クローン完了・castle 動作確認済みの基準点
