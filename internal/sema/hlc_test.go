@@ -165,3 +165,59 @@ func TestHlcErrorPosition(t *testing.T) {
 		}
 	}
 }
+
+// compileFiles は複数ファイルを同じディレクトリに置いて main をコンパイルする (v1/v2 混在のテスト用)。
+func compileFiles(t *testing.T, files map[string]string, main string) error {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := Compile(dir, []string{".", filepath.ToSlash(filepath.Join(repoRoot, "fclib")), filepath.ToSlash(filepath.Join(repoRoot, "fclib", "emu"))}, main)
+	return err
+}
+
+// TestVisibilityV2: v2 モジュールはデフォルト private、ドット参照は public のみ、再輸出は public use (doc/v2_grammar.md §3.2)。
+// 規則は宣言側モジュールのバージョンで決まり、v1 モジュールは従来どおり。
+func TestVisibilityV2(t *testing.T) {
+	m2 := "#fc 2\nvar a:int;\npublic var b:int;\n"
+	m1 := "var a:int;\n"
+	cases := []struct {
+		name  string
+		files map[string]string
+		want  string // "" なら成功
+	}{
+		{"v2 glob sees only public", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse * from m;\nfunction main():void { b = 1; }\n"}, ""},
+		{"v2 glob hides private", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse * from m;\nfunction main():void { a = 1; }\n"}, "a not found"},
+		{"v2 dot sees public", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse m;\nfunction main():void { m.b = 1; }\n"}, ""},
+		{"v2 dot hides private", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse m;\nfunction main():void { m.a = 1; }\n"}, "m.a is private"},
+		{"v1 dot reaches private from v2", map[string]string{"m.fc": m1, "t.fc": "#fc 2\nuse m;\nfunction main():void { m.a = 1; }\n"}, ""},
+		{"v1 default public via glob", map[string]string{"m.fc": m1, "t.fc": "#fc 2\nuse * from m;\nfunction main():void { a = 1; }\n"}, ""},
+		{"v2 private from v1 dot", map[string]string{"m.fc": m2, "t.fc": "use m;\nfunction main():void { m.a = 1; }\n"}, "m.a is private"},
+		{"v2 binding not reexported", map[string]string{"m.fc": m2, "c.fc": "#fc 2\nuse m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { m.b = 1; }\n"}, "m not found"},
+		{"v2 public use reexports binding", map[string]string{"m.fc": m2, "c.fc": "#fc 2\npublic use m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { m.b = 1; }\n"}, ""},
+		{"v2 glob not reexported", map[string]string{"m.fc": m2, "c.fc": "#fc 2\nuse * from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, "b not found"},
+		{"v2 public glob reexports", map[string]string{"m.fc": m2, "c.fc": "#fc 2\npublic use * from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, ""},
+		{"v1 binding reexported as before", map[string]string{"m.fc": m2, "c.fc": "use m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { m.b = 1; }\n"}, ""},
+		{"v1 glob reexported as before", map[string]string{"m.fc": m2, "c.fc": "use * from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, ""},
+		{"public use needs fc 2", map[string]string{"m.fc": m2, "t.fc": "public use m;\nfunction main():void {}\n"}, "`public use` requires fc 2"},
+		{"v2 public function visible", map[string]string{"m.fc": "#fc 2\npublic function f():void {}\nfunction g():void {}\n", "t.fc": "#fc 2\nuse * from m;\nfunction main():void { f(); }\n"}, ""},
+		{"v2 private function hidden", map[string]string{"m.fc": "#fc 2\npublic function f():void {}\nfunction g():void {}\n", "t.fc": "#fc 2\nuse * from m;\nfunction main():void { g(); }\n"}, "g not found"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := compileFiles(t, c.files, "t.fc")
+			if c.want == "" {
+				if err != nil {
+					t.Fatalf("成功するべき: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("got %v, want /%s/", err, c.want)
+			}
+		})
+	}
+}

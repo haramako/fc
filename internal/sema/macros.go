@@ -95,9 +95,10 @@ func registerUnittest(h *Hlc) {
 	if stdioMod == nil {
 		panic(&diag.Error{Msg: "stdio is not a module"})
 	}
-	print := stdioMod.Lookup("print")
-	exit := stdioMod.Lookup("exit")
-	init := stdioMod.Lookup("init")
+	// 組み込み機能の内部参照なので stdio の可視性に関係なく届く (init は private)
+	print := stdioMod.LookupInternal("print")
+	exit := stdioMod.LookupInternal("exit")
+	init := stdioMod.LookupInternal("init")
 
 	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}

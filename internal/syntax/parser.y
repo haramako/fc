@@ -105,7 +105,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | opt_scope kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
                                                 { $$ = funcDecl($1, $2, $3, $5, $8, $9, $10) }
          | options ';'                          { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} }
-         | kUSE opt_from IDENT opt_as ';'       { $$ = &UseDecl{Use: $1.Pos, Star: optPos($2), FromAll: $2 != nil, Module: ident($3), As: $4, Semi: $5.Pos} }
+         | opt_scope kUSE opt_from IDENT opt_as ';' { $$ = &UseDecl{PublicPos: optPos($1), Use: $2.Pos, Star: optPos($3), FromAll: $3 != nil, Module: ident($4), As: $5, Semi: $6.Pos} }
          | kINCLUDE opt_ident '(' STRING ')' opt_options ';' { $$ = &IncludeDecl{Include: $1.Pos, Kind: $2, Path: strLit($4), Rparen: $5.Pos, Options: $6, Semi: $7.Pos} }
          | kPUBLIC ':'                          { $$ = &ScopeLabel{Keyword: $1.Pos, Public: true, Colon: $2.Pos} }
          | kPRIVATE ':'                         { $$ = &ScopeLabel{Keyword: $1.Pos, Public: false, Colon: $2.Pos} }

@@ -55,7 +55,7 @@ func TestScope(t *testing.T) {
 	priv := ir.NewGlobal("q", u8, "_q")
 	other.Declare(pub)
 	other.Declare(priv)
-	s.Use(otherMod.Interface())
+	s.Use(otherMod.Interface(), true)
 	if s.Find("p", true) != pub {
 		t.Error("use経由のpublicが見えない")
 	}
@@ -66,7 +66,7 @@ func TestScope(t *testing.T) {
 	// 相互use しても無限再帰しない
 	selfMod := ir.NewModule("self", "self.fc", nil)
 	selfMod.Scope = s
-	other.Use(selfMod.Interface())
+	other.Use(selfMod.Interface(), true)
 	if s.Find("nothing", true) != nil {
 		t.Error("相互useで誤検出")
 	}

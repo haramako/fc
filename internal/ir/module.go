@@ -136,21 +136,24 @@ func (m *Module) AddUse(mi *ModuleInterface) {
 // 宣言の検索と識別だけを提供し、Lambda 本体や IR には触れさせない。
 // F-mod (分割コンパイル) ではこれをシリアライズしたものが `use` の入力になる。
 //
-// 可視性は現行の言語仕様に従う: `use * from mod;` (LookupPublic) は public だけを取り込むが、
-// `mod.name` のドット参照 (Lookup) は private にも届く (v2 の名前解決規則で見直す: v2_decisions.md §1.1)。
+// 可視性は宣言側モジュールの文法バージョンで決まる (doc/v2_grammar.md §3.2, §4.2):
+//   - `use * from mod;` (LookupPublic) はどちらのバージョンでも public だけを取り込む
+//   - `mod.name` のドット参照 (Lookup) は v1 モジュールでは private にも届き、v2 では public のみ (規則 S7)
 type ModuleInterface struct {
-	Id    string
-	scope *Scope
+	Id      string
+	Version int
+	scope   *Scope
 }
 
 // Interface はこのモジュールの外面を返す。
 func (m *Module) Interface() *ModuleInterface {
-	return &ModuleInterface{Id: m.Id, scope: m.Scope}
+	return &ModuleInterface{Id: m.Id, Version: m.Version, scope: m.Scope}
 }
 
-// Lookup はドット参照用に宣言を名前で探す (private 含む。無ければ nil)。
+// Lookup はドット参照 `mod.name` 用に宣言を探す (無ければ nil)。
+// v1 モジュールなら private にも届く。v2 モジュールなら public のみ。
 func (mi *ModuleInterface) Lookup(name string) *Value {
-	return mi.scope.Find(name, true)
+	return mi.scope.Find(name, mi.Version < syntax.Version2)
 }
 
 // LookupPublic は `use * from` 用に公開宣言だけを探す (無ければ nil)。
@@ -158,10 +161,20 @@ func (mi *ModuleInterface) LookupPublic(name string) *Value {
 	return mi.scope.Find(name, false)
 }
 
+// LookupInternal はバージョンに関係なく private も含めて探す (コンパイラ組み込み機能の内部参照用。
+// 利用者コードの名前解決には使わない)。
+func (mi *ModuleInterface) LookupInternal(name string) *Value {
+	return mi.scope.Find(name, true)
+}
+
 // LookupMust は Lookup と同じだが、見つからなければ diag.Error。
+// v2 モジュールの private を指していたら、その旨を伝える。
 func (mi *ModuleInterface) LookupMust(name string) *Value {
 	if v := mi.Lookup(name); v != nil {
 		return v
+	}
+	if mi.LookupInternal(name) != nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is private (declare it with `public` in module %s)", mi.Id, name, mi.Id)})
 	}
 	panic(&diag.Error{Msg: fmt.Sprintf("%s not found", name)})
 }

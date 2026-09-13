@@ -366,14 +366,16 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		id := s.Module.Name
 		m := h.useModule(id)
 		h.module.AddUse(m)
+		// 再輸出: v1 は常に (glob も束縛も public)、v2 は `public use` のときだけ (doc/v2_grammar.md §3.2)
+		reexport := h.module.Version < syntax.Version2 || s.PublicPos.IsValid()
 		if s.FromAll {
-			h.scope.Use(m)
+			h.scope.Use(m, reexport)
 		} else {
 			if s.As != nil {
 				id = s.As.Name
 			}
 			v := h.addVar(ir.NewModuleValue(id, h.prog.Types.Module(), m))
-			v.Public = true
+			v.Public = reexport
 		}
 
 	case *syntax.FuncDecl:

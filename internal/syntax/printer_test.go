@@ -58,6 +58,7 @@ func TestFormatStyle(t *testing.T) {
 		{"empty file with comment", "// only\n", "// only\n"},
 		{"fc 2 pragma", "#fc 2\n\n// c\nvar a:int;\n", "#fc 2\n\n// c\nvar a:int;\n"},
 		{"fc 2 pragma normalized", "#fc   2\nvar a:int;\n", "#fc 2\nvar a:int;\n"},
+		{"fc 2 public use", "#fc 2\npublic  use  m;\npublic use * from n;\n", "#fc 2\npublic use m;\npublic use * from n;\n"},
 		{"empty blocks",
 			"function f():void {}\nfunction g():void\n{\n\t// note\n}\nfunction h():void { if (a) {} else { } loop(){} }\n",
 			"function f():void {}\nfunction g():void\n{\n\t// note\n}\nfunction h():void\n{\n\tif (a) {} else {}\n\tloop() {}\n}\n"},

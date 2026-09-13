@@ -388,6 +388,10 @@ func (p *printer) stmt(s Stmt) {
 		p.tokAt(s.Semi, ";")
 
 	case *UseDecl:
+		if s.PublicPos.IsValid() {
+			p.tokAt(s.PublicPos, "public")
+			p.space()
+		}
 		p.tokAt(s.Use, "use")
 		p.space()
 		if s.FromAll {

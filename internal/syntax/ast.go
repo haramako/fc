@@ -180,13 +180,15 @@ type OptionsStmt struct {
 }
 
 // UseDecl は `use mod;` / `use mod as x;` / `use * from mod;`。
+// `public use ...` (v2) は取り込んだものを再輸出する (PublicPos が有効)。
 type UseDecl struct {
-	Use     Pos
-	Star    Pos // `*` の位置。FromAll のとき有効
-	FromAll bool
-	Module  *Ident
-	As      *Ident // nil なら省略
-	Semi    Pos
+	PublicPos Pos // `public` の位置 (省略時は !IsValid())
+	Use       Pos
+	Star      Pos // `*` の位置。FromAll のとき有効
+	FromAll   bool
+	Module    *Ident
+	As        *Ident // nil なら省略
+	Semi      Pos
 }
 
 // IncludeDecl は `include [kind]("path") [options(...)];`。Kind は `macro` 等の修飾子。
@@ -459,7 +461,7 @@ func (s *ExprStmt) End() Pos { return after(s.Semi, 1) }
 func (s *OptionsStmt) Pos() Pos { return s.Options.Pos() }
 func (s *OptionsStmt) End() Pos { return after(s.Semi, 1) }
 
-func (s *UseDecl) Pos() Pos { return s.Use }
+func (s *UseDecl) Pos() Pos { return firstValid(s.PublicPos, s.Use) }
 func (s *UseDecl) End() Pos { return after(s.Semi, 1) }
 
 func (s *IncludeDecl) Pos() Pos { return s.Include }

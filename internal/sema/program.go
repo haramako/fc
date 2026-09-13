@@ -70,6 +70,8 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	}
 	mod = ir.NewModule(id, file.Filename, p.global)
 	mod.Version = file.Version
+	// v2 は宣言のデフォルトが private (doc/v2_grammar.md §3.2)。v1 は public (歴史的理由)
+	mod.CurrentPublic = file.Version < syntax.Version2
 	p.Modules.Add(mod)
 
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}

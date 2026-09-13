@@ -289,7 +289,7 @@ Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外とし�
 | # | 作業 | 依存 | 目安 |
 |---|---|---|---|
 | 1 | `#fc 2` プラグマ、`File.Version` / `ir.Module.Version`、パーサのバージョンゲート（ラベル・`include kind` の拒否） ✅ 2026-09-14 | — | 0.5 日 |
-| 2 | sema の可視性規則をバージョンで切り替え（デフォルト private、S7、`public use`）。混在テスト | 1 | 1 日 |
+| 2 | sema の可視性規則をバージョンで切り替え（デフォルト private、S7、`public use`）。混在テスト ✅ 2026-09-14 | 1 | 1 日 |
 | 3 | `use a, b from mod;` | 1, 2 | 0.5 日 |
 | 4 | 組み込み化: `printf` / `unittest_run_tests` 常時登録、`include("*.rb")` を警告化。`textmap` | — | 1 日 |
 | 4b | `loop {`、文ラベル、`break`/`continue` の v2 規則（§3.6, §3.7）。v1 モジュールは現行規則のまま | 1 | 0.5 日 |
