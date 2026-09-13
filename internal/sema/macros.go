@@ -7,7 +7,6 @@ package sema
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/syntax"
@@ -62,9 +61,10 @@ func registerMath(h *Hlc) {
 	})
 }
 
-// castle プロジェクトの src/macro.rb (テキスト変換マクロ _T / _M / VERSION_STR)。
-// Ruby版と同じく、フォント文字表 (../tmp/font/*.chr.txt) は登録時に、
-// ../VERSION はマクロ実行時に読む。パスはソースの検索パス (先頭はソースディレクトリ) 基準。
+// castle プロジェクトの src/macro.rb (テキスト変換マクロ _T / _M)。
+// VERSION_STR は 2026-09-13 に廃止 (castle 側を固定文字列 _M("VERSION 0.5.0") にした)。
+// Ruby版と同じく、フォント文字表 (../tmp/font/*.chr.txt) は登録時に読む。
+// パスはソースの検索パス (先頭はソースディレクトリ) 基準。
 func registerCastleMacros(h *Hlc) {
 	readText := func(path string) string {
 		return string(bytes.ReplaceAll(h.readFile(path), []byte("\r\n"), []byte("\n")))
@@ -87,22 +87,6 @@ func registerCastleMacros(h *Hlc) {
 	h.defmacro("_M", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		return textArray(append(miscConv.Conv(mustString(args[0])), 0))
 	})
-
-	h.defmacro("VERSION_STR", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		version := rubyChomp(readText("../VERSION"))
-		return textArray(append(miscConv.Conv("VERSION "+version), 0))
-	})
-}
-
-// rubyChomp は String#chomp 相当 (末尾の改行1つを除去)。
-func rubyChomp(s string) string {
-	if strings.HasSuffix(s, "\r\n") {
-		return s[:len(s)-2]
-	}
-	if strings.HasSuffix(s, "\n") || strings.HasSuffix(s, "\r") {
-		return s[:len(s)-1]
-	}
-	return s
 }
 
 // fclib/unittest.rb

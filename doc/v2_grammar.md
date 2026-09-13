@@ -1,8 +1,8 @@
-# 文法 v2 設計メモ（レビュー用ドラフト）
+# 文法 v2 設計メモ
 
-作成: 2026-09-13（Opus 5）。[go_evolution_plan.md](go_evolution_plan.md) F-fmt の「文法 v2 の設計」項。
-決定済みの前提は [v2_decisions.md](v2_decisions.md) §1〜§4・§6。**オーナー判断が要る箇所は「要判断」で
-マークし、末尾 §9 に一覧した。** 決まったら本書の該当箇所を「決定」に書き換える。
+作成: 2026-09-13（Opus 5）、**2026-09-14 レビュー済み（Q1〜Q6 決定、VERSION_STR 廃止、break の仕様変更を追加）**。
+[go_evolution_plan.md](go_evolution_plan.md) F-fmt の「文法 v2 の設計」項。
+決定済みの前提は [v2_decisions.md](v2_decisions.md) §1〜§4・§6。判断の記録は末尾 §9。
 
 ---
 
@@ -82,9 +82,9 @@ public use mod;             // 新設（§3.2）。束縛を再輸出する
 ```
 
 名前衝突の規則は S1〜S6 + S7（v2_decisions.md §1.1）。`use a from mod as x;`（リファレンスにある改名付き
-選択的インポート）は**入れない**（用途がなく、`use mod as m; m.a` で足りる）。**要判断 Q1**
+選択的インポート）は**入れない**（用途がなく、`use mod as m; m.a` で足りる。Q1 決定）。
 
-### 3.4 `include` [提案]
+### 3.4 `include` [決定]
 
 | 形 | v1 | v2 |
 |---|---|---|
@@ -93,9 +93,9 @@ public use mod;             // 新設（§3.2）。束縛を再輸出する
 | `include("x.rb")` / `include macro("x.rb")` | Ruby マクロ | **削除**。§6.3 の置換へ。移行期間中は警告付きで受理 |
 | `include kind("...")` のキンド指定 | `macro` のみ実用 | **削除**（拡張子で決まる） |
 
-### 3.5 マクロの置換 [決定（方針）/ 表記は提案]
+### 3.5 マクロの置換 [決定]
 
-v2_decisions.md §3 で「汎用マクロは作らず用途別の小機能に置換」と決定済み。表記の提案:
+v2_decisions.md §3 で「汎用マクロは作らず用途別の小機能に置換」と決定済み。表記（Q2 決定）:
 
 | v1 | v2 | 備考 |
 |---|---|---|
@@ -104,19 +104,42 @@ v2_decisions.md §3 で「汎用マクロは作らず用途別の小機能に置
 | `cos(x)` （`include("math.rb")`） | `math.fc` に **普通の関数** `function cos(x:int):int { return sin(x + 64); }` | 呼び出し箇所は 0。インライン化は F2 で |
 | `times(n){...}` | **削除** | 使用 0 |
 | castle `_T("…")` / `_M("…")` | `const _T = textmap("../tmp/font/text.chr.txt");` を宣言し、**呼び出し側は `_T("…")` のまま** | `textmap(path)` は組み込みで、型 `textmap` の定数を作る。textmap 型の値の呼び出し `_T("…")` は定数式で、文字列を表で変換した `[..., 0]` の `int[]` リテラルになる。**63 + 8 箇所の呼び出しを変えずに済む** |
-| castle `VERSION_STR()` | `const VERSION_STR = _M("VERSION " + inctext("../VERSION"));` と **呼び出し側は `VERSION_STR`（括弧なし）** | `inctext(path)` は組み込みでファイル内容（末尾改行を除く）の文字列定数。文字列定数同士の `+` を定数畳み込みで許す（新設）。呼び出し側 1 箇所をマイグレータが書き換える |
+| castle `VERSION_STR()` | **廃止**（2026-09-14 決定）。castle 側を固定文字列 `_M("VERSION 0.5.0")` に変更済み（`title.fc`、マクロは `macro.rb` と Go 側から削除。ROM 一致を確認） | ビルド時定数の注入機構（`inctext` 等）は作らない。必要になったら追加的に入れる |
 
 `textmap` の表ファイル形式は現行 `nes_tools` の `TextConverter`（`internal/sema/textconv.go` に移植済み）と同じ。
-**要判断 Q2**: `_T("…")`（定数の関数呼び出し風）か、`t"…"` のようなリテラル接頭辞か。前者は呼び出し側
-無変更で移行できる。後者は見た目が良いがレキサ変更と 71 箇所の書き換えが要る。推奨は前者。
+リテラル接頭辞（`t"…"`）は**作らない**（Q2 決定）。`_T("…")` の呼び出し側 71 箇所は無変更で移行する。
 
-### 3.6 `loop` [提案]
+### 3.6 `loop` [決定]
 
-`loop() { ... }` → `loop { ... }`。括弧は無意味で、22 箇所すべて `loop(){` 形なので機械置換できる。
-`language_reference.md` はすでに `loop {` と書いている。**要判断 Q3**（やらなくても害はない。
-「v2 は破壊的変更の一括適用」なので、今やらないなら当面やらない）
+`loop() { ... }` → `loop { ... }`（Q3 決定）。括弧は無意味で、22 箇所すべて `loop(){` 形なので機械置換できる。
+`language_reference.md` はすでに `loop {` と書いている。
 
-### 3.7 レキサの是正 [提案・バージョン非依存]
+### 3.7 `break` / `continue` とラベル [決定 2026-09-14]
+
+現行（v1）の `break` は **switch を抜けず、外側のループを抜ける**（sema は `h.loops` しか見ない。ループの外なら
+"cannot break without loop"）。`case` は fallthrough しないので switch を抜けるための `break` は不要だったが、
+C の感覚と逆で罠になっている。コーパスでは `break;` 37 箇所のうち **7 箇所が switch の中**（castle `debug_menu.fc` 6、
+`title.fc` 1）で、すべて「switch を含むループを抜ける」意図で書かれている。
+
+v2 の仕様:
+
+| | v1 | v2 |
+|---|---|---|
+| `break;` の対象 | 最も内側の**ループ** | 最も内側の **ループまたは switch**（C / Go と同じ） |
+| `continue;` の対象 | 最も内側のループ | 同じ（switch は対象外） |
+| ラベル | なし | **文ラベル** `L: loop { ... }` / `L: while (...) { ... }` / `L: for (...) { ... }` / `L: switch (...) { ... }` と **`break L;` / `continue L;`** |
+| `case` の fallthrough | なし | なし（変更しない） |
+
+文法: ラベルは `IDENT ':'` を繰り返し文・switch の直前に置く（Go と同じ）。v1 の `public:` / `private:` は
+キーワードなので衝突しない（v2 では消える）。`break L;` の L が囲むラベルでなければエラー。
+ラベルは文のスコープだけに存在し、変数名と衝突しない。
+
+移行: マイグレータが「switch の中にあり、最も内側の breakable が switch である `break;`」を見つけたら、
+その switch を囲む最も内側のループにラベル（`loop_1:` のような未使用名）を付け、`break L;` に書き換える。
+7 箇所すべて機械的に処理でき、生成コードは変わらない（P3 で確認）。sema 側は `h.loops` を「ラベル付き
+breakable のスタック」に一般化し、v1 モジュールでは switch をスタックに積まない。
+
+### 3.8 レキサの是正 [提案・バージョン非依存]
 
 v1/v2 共通のレキサで直す（直しても正しいプログラムの意味は変わらない。v2_plan.md §2.5 の保存項目）:
 
@@ -128,9 +151,9 @@ v1/v2 共通のレキサで直す（直しても正しいプログラムの意�
 これらは文法バージョンと独立に R4 の項目として扱う。v2 の範囲には入れないが、`#fc 2` の導入と同時期に
 やるとマイグレータの検証（asm 一致）で副作用を確認できる。
 
-### 3.8 見送り（v2 に入れない）[見送り]
+### 3.9 見送り（v2 に入れない）[見送り]
 
-追加的に後から入れられるもの、または判断材料が足りないもの:
+追加的に後から入れられるもの、または判断材料が足りないもの（Q6: いったん追加なし）:
 
 | 項目 | 理由 |
 |---|---|
@@ -139,7 +162,6 @@ v1/v2 共通のレキサで直す（直しても正しいプログラムの意�
 | `for (i, 0, n)` の表記変更 | 意味は明確。変えるなら範囲型の導入と一緒に |
 | `elsif` → `else if` | 趣味の範囲。どちらも許すのは混乱の元 |
 | `'...'` と `"..."` の区別（文字リテラル） | 現行は両方文字列。`print('.')` が 1 文字**文字列**として動いている。変えると意味が変わる |
-| `switch` の `break` | 現行は fallthrough なし（`case` 末尾で自動的に抜ける）。**`break` は switch を抜けるのではなく外側のループを抜ける**（sema は `h.loops` しか見ない。ループ外なら "cannot break without loop"）。castle `debug_menu.fc` の `case 4: ...; break;` はこの意味で動いている。C の感覚と逆なので罠だが、変えると挙動が変わる → R4 で「switch 内の `break` は警告」を検討。v2 文法では触らない |
 | `~`、`\|=` `&=` `^=`、`sizeof`、`goto`、ブロックスコープ、インライン関数、クロージャ | memo.txt 由来の機能追加。すべて追加的なので F2 で |
 | `;` / `(` の省略 | memo.txt にあるが文法の曖昧性を生む。やらない |
 
@@ -149,8 +171,8 @@ v1/v2 共通のレキサで直す（直しても正しいプログラムの意�
 
 ### 4.1 パーサ: 1 つの文法 + バージョンゲート
 
-v1/v2 の文法差は「削る 3 つ（ラベル、`private` キーワード、`include kind`）＋足す 2 つ（`use a, b from`、
-`public use`）＋任意の 1 つ（`loop` の括弧）」と小さい。goyacc の文法ファイルは**スーパーセット 1 本**にし、
+v1/v2 の文法差は「削る 4 つ（可視性ラベル、`private` キーワード、`include kind`、`loop()` の括弧）＋足す 4 つ
+（`use a, b from`、`public use`、`loop {`、文ラベルと `break L;`/`continue L;`）」と小さく、式・型・宣言の骨格は同じ。goyacc の文法ファイルは**スーパーセット 1 本**にし、
 `parse.go` で `File.Version` を見て「v2 で削られた構文」「v1 に無い構文」をエラーにする。
 
 - 文法ファイルを 2 本持つと、AST 構築コード（`parser.y` のアクション）が重複し、以後の変更を 2 回書くことになる
@@ -167,7 +189,7 @@ v1/v2 の文法差は「削る 3 つ（ラベル、`private` キーワード、`
 これで「v2 の main が v1 の fclib を使う」「v1 の castle が v2 化した 1 モジュールを使う」の両方が動く。
 `ir.Module` に `Version int` を持たせる。v1 の規則は移行期間中ずっと維持する（P2）。
 
-### 4.3 組み込み（`printf`、`unittest_run_tests`、`textmap`、`inctext`）
+### 4.3 組み込み（`printf`、`unittest_run_tests`、`textmap`）
 
 現行の `macros.go` は `include("x.rb")` のファイル名で登録している。これを**常時登録の組み込み**に変える:
 
@@ -177,8 +199,6 @@ v1/v2 の文法差は「削る 3 つ（ラベル、`private` キーワード、`
   **定数ごとに閉じる**（`const _T = textmap(...)` の値が表を 1 つ持つ）。現行も `include("macro.rb")` は
   `common.fc` の 1 回だけで表は 1 つ、`_T` は `use * from common` で配られているので、v2 でも同じ 1 表を全モジュールが
   共有し、登録順 = コンパイル順も変わらない。移行検証の asm 一致で最終確認する
-- `inctext(path)`: 新設。定数式。ファイル内容の文字列（末尾の改行は 1 つ除く）
-- 文字列定数の `+`: 定数畳み込み（`cexpr` の評価で両辺が文字列リテラルなら連結）
 
 v1 モジュールでの `include("x.rb")` は受理して警告を出し、何もしない（組み込みが常時有効なので）。
 castle の `include("macro.rb")` だけは「置換が必要」と警告する。
@@ -201,26 +221,25 @@ fcc migrate [--visibility=minimal|preserve] [--lib DIR]... <main.fc> [<main2.fc>
    - `(参照元モジュール, 参照先モジュール, シンボル)` — ドット参照と glob 経由の非修飾参照
    - `(モジュール, use 束縛名)` — その束縛が他モジュールから glob 経由で参照されたか（`public use` が要るか）
    - `include("x.rb")` の出現箇所
-   - `VERSION_STR()` 呼び出し（castle 固有。`macro.rb` に定義されたマクロの呼び出し全般として扱う）
+   - switch の中にあり最も内側の breakable が switch である `break;`（§3.7。囲むループにラベルが要る）
 2. **書き換え**（AST 上で。ファイルごと）:
    - 先頭に `#fc 2`
    - `ScopeLabel` を削除。その効果（以降のデフォルト）は `VarDecl.PublicPos` / `FuncDecl.PublicPos` に展開する
    - 可視性: `minimal` なら 1 で参照された宣言だけ `public`、`preserve` なら v1 の実効可視性を `public` に写し、
      さらに 1 のドット参照先を `public` にする。fclib は `--lib` で指定し、**preserve** で扱う（利用者が
-     複数なので参照の和集合では決まらない）。**要判断 Q4**: 既定は minimal でよいか
+     複数なので参照の和集合では決まらない）。既定は minimal（Q4 決定）
    - `use X;` で 1 の再輸出判定が真なら `public use X;`
    - `include("*.rb")` の文を削除（castle の `include("macro.rb")` は削除せず警告。§6.3）
-   - `VERSION_STR()` → `VERSION_STR`
-   - （Q3 が可なら）`loop()` → `loop`
+   - `loop()` → `loop`
+   - switch 内の loop-break: 囲むループに `loop_N:` ラベルを付け `break loop_N;` に（§3.7）
 3. **出力**: フォーマッタで印字（v2 はフォーマット済みの状態で始まる）。CRLF は入力に合わせる
 4. **検証**（マイグレータ自身が行う）: 移行前・後のプログラムをそれぞれコンパイルし、全モジュールの
    `.s`/`.inc` を比較。差分があれば失敗として報告し、ファイルは書き換えない（`--force` で書く）
 
-castle の `macro.rb` の置換（§6.3）は 3 行の手作業で、マイグレータは「ここに書く」というメッセージを出す:
+castle の `macro.rb` の置換（§6.3）は 2 行の手作業で、マイグレータは「ここに書く」というメッセージを出す:
 ```
 const _T = textmap("../tmp/font/text.chr.txt");
 const _M = textmap("../tmp/font/misc_text.chr.txt");
-const VERSION_STR = _M("VERSION " + inctext("../VERSION"));
 ```
 
 ---
@@ -237,7 +256,8 @@ const VERSION_STR = _M("VERSION " + inctext("../VERSION"));
   `en_vtbl` 経由で使うのは `PROCESS` / `NEW_FUNC`（en_vtbl 自身の public 定数）だけで、en1〜en8 のシンボルへの
   直接参照は 0。v2 では glob は再輸出しない（必要なら `public use * from X;`）。castle に他の依存があるかは
   マイグレータの解析で判明する
-- `include("macro.rb")` → 手で 3 行（§5）。`VERSION_STR()` 1 箇所 → `VERSION_STR`
+- `include("macro.rb")` → 手で 2 行（§5）
+- switch 内の `break;` 7 箇所（debug_menu 6、title 1）→ 囲むループにラベル + `break L;`（§3.7）
 
 ### 6.2 miku（5 モジュール）・test（13）・fclib（10）
 
@@ -248,8 +268,8 @@ const VERSION_STR = _M("VERSION " + inctext("../VERSION"));
 
 ### 6.3 castle `macro.rb` の特別扱い
 
-Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外として、手作業 3 行（§5）で置き換える。
-`_T` / `_M` の 71 箇所の呼び出しは無変更（Q2 で前者を採る場合）。
+Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外として、手作業 2 行（§5）で置き換える。
+`_T` / `_M` の 71 箇所の呼び出しは無変更。`VERSION_STR` は 2026-09-14 に廃止済み（§3.5）。
 
 ---
 
@@ -257,10 +277,8 @@ Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外とし�
 
 1. `fcc migrate` を castle / miku / test の各 main と `--lib fclib` に対して実行
 2. 移行後のツリーで `fcc compile` し、全モジュールの `.s`/`.inc` が移行前と一致（P3）。castle は ROM も
-3. `go test ./...` の golden: test/*.fc を v2 に移行した後、ir/allocir/asm golden が不変であること
-   （名前解決の変更はシンボル名・番号に影響しない）。**test/*.fc を v2 化するタイミングは要判断 Q5**
-   （golden の入力を v2 にすると v1 パーサの回帰テストが薄くなる → `test/` は v1 のまま残し、
-   v2 版を `test/v2/` に置いて両方回す、が推奨）
+3. `go test ./...` の golden: `test/*.fc` は **v1 のまま残し**、v2 版を `test/v2/` に複製して両方回す（Q5 決定。
+   v1 パーサの回帰を残すため）。v2 版の ir/allocir/asm は v1 版と一致すること（名前解決の変更はシンボル名・番号に影響しない）
 4. 混在: castle の 1 モジュールだけ v2 にしてビルドが通ること（P5）
 5. `fcc fmt` が v2 ファイルで冪等・往復同値（既存の `TestFormatCorpus` に v2 コーパスを足す）
 
@@ -273,7 +291,8 @@ Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外とし�
 | 1 | `#fc 2` プラグマ、`File.Version` / `ir.Module.Version`、パーサのバージョンゲート（ラベル・`include kind` の拒否） | — | 0.5 日 |
 | 2 | sema の可視性規則をバージョンで切り替え（デフォルト private、S7、`public use`）。混在テスト | 1 | 1 日 |
 | 3 | `use a, b from mod;` | 1, 2 | 0.5 日 |
-| 4 | 組み込み化: `printf` / `unittest_run_tests` 常時登録、`include("*.rb")` を警告化。`textmap` / `inctext` / 文字列 `+` | — | 1 日 |
+| 4 | 組み込み化: `printf` / `unittest_run_tests` 常時登録、`include("*.rb")` を警告化。`textmap` | — | 1 日 |
+| 4b | `loop {`、文ラベル、`break`/`continue` の v2 規則（§3.6, §3.7）。v1 モジュールは現行規則のまま | 1 | 0.5 日 |
 | 5 | `fcc migrate`（解析・書き換え・検証） | 1〜4 | 1.5 日 |
 | 6 | castle / miku / fclib / test の移行実行と検証、`language_reference.md` の v2 版改訂 | 5 | 1 日 |
 
@@ -281,18 +300,20 @@ Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外とし�
 
 ---
 
-## 9. 要判断（オーナー）
+## 9. 判断の記録（オーナー、2026-09-14）
 
-- [ ] **Q1** `use a from mod as x;`（改名付き選択的インポート）は入れない — 推奨: 入れない
-- [ ] **Q2** `_T("…")` の表記: (a) `const _T = textmap(...)` + 呼び出し側無変更、(b) リテラル接頭辞 `t"…"` — 推奨: (a)
-- [ ] **Q3** `loop()` → `loop` に変える — 推奨: 変える（機械置換 22 箇所、費用ほぼゼロ。今やらないなら当面やらない）
-- [ ] **Q4** `fcc migrate` の可視性の既定は `minimal`（参照されている宣言だけ `public`）— 推奨: minimal。fclib は preserve
-- [ ] **Q5** `test/*.fc` は v1 のまま残し、v2 版を `test/v2/` に複製して両方テストする — 推奨: そうする（v1 パーサの回帰を残す）
-- [ ] **Q6** §3.8 の見送り一覧に v2 に入れたいものがあるか（特に `options` の表記、`elsif`）
+- [x] **Q1** `use a from mod as x;`（改名付き選択的インポート）→ **入れない**
+- [x] **Q2** `_T("…")` の表記 → **`const _T = textmap(...)` + 呼び出し側無変更。リテラル接頭辞は不要**
+- [x] **Q3** `loop()` → `loop` → **変える**
+- [x] **Q4** `fcc migrate` の可視性の既定 → **minimal。fclib は preserve**
+- [x] **Q5** `test/*.fc` → **v1 のまま残し、v2 版を `test/v2/` に複製して両方テスト**
+- [x] **Q6** 見送り一覧からの追加 → **いったんなし**
+- [x] **VERSION_STR** → **廃止**。castle 側を固定文字列に変更（§3.5）
+- [x] **`break`** → **ラベル付き break を導入し、ラベルなしは switch を抜ける**（§3.7）
 
 確認済み（2026-09-13）:
 
-- `switch` 内の `break;` は**外側ループを抜ける**（switch は抜けない）。v2 では触らず R4 で警告を検討（§3.8）
+- `switch` 内の `break;` は v1 では**外側ループを抜ける**（switch は抜けない）。7 箇所（§3.7）
 - castle `en` → `en_vtbl` → `en1..8` の glob-of-glob: `en` は `en_vtbl` 自身の public 定数しか使っておらず、
   en1〜en8 への直接参照は 0（§6.1）。他の依存はマイグレータの解析で拾う
 - `textmap` の表は現行も 1 つ（`common.fc` の 1 回の include）で、v2 の `const _T = textmap(...)` でも同じ（§4.3）

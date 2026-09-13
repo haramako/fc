@@ -18,6 +18,3 @@ defmacro( :_M ) do |args|
   [:array, text]
 end
 
-defmacro( :VERSION_STR ) do |args|
-  [:array, misc_conv.conv( 'VERSION ' + IO.read('../VERSION').chomp ) + [0]]
-end

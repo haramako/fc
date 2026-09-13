@@ -63,7 +63,7 @@ public function do_title():int
 	ppu.put_in_lock(0x2100, &TITLE_BG[256], 256);
 	ppu.put_in_lock(0x23C0, &TITLE_TILEPAL[0], 32);
 	
-	put_text_in_lock( ppu.pos(10,26), VERSION_STR() );
+	put_text_in_lock( ppu.pos(10,26), _M("VERSION 0.5.0") );
 	if( debug_mode ) put_text_in_lock( ppu.pos(11,24), _M("DEBUG MODE") );
 	if( savedata.exists ){
 		put_text_in_lock( ppu.pos(13,16),_M("つづける") );
