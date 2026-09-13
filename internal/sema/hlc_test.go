@@ -179,6 +179,21 @@ func compileFiles(t *testing.T, files map[string]string, main string) error {
 	return err
 }
 
+func mustCompileFiles(t *testing.T, files map[string]string, main string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prog, err := Compile(dir, []string{".", filepath.ToSlash(filepath.Join(repoRoot, "fclib")), filepath.ToSlash(filepath.Join(repoRoot, "fclib", "emu"))}, main)
+	if err != nil {
+		t.Fatalf("コンパイル失敗: %v", err)
+	}
+	return ir.DumpProgram(prog.Options, prog.Modules.List())
+}
+
 // TestVisibilityV2: v2 モジュールはデフォルト private、ドット参照は public のみ、再輸出は public use (doc/v2_grammar.md §3.2)。
 // 規則は宣言側モジュールのバージョンで決まり、v1 モジュールは従来どおり。
 func TestVisibilityV2(t *testing.T) {

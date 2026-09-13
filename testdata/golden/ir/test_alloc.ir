@@ -119,9 +119,8 @@
  )
  (vars
   (var 0 stdio global #"module" val=mod:stdio pub)
-  (var 1 unittest_run_tests global #"macro" val=macro pub)
-  (var 2 assert_true literal #"void(uint8,uint8*)" val=:_unittest_assert_true pub)
-  (var 3 assert_equal literal #"void(uint16,uint16,uint8*)" val=:_unittest_assert_equal pub)
+  (var 1 assert_true literal #"void(uint8,uint8*)" val=:_unittest_assert_true pub)
+  (var 2 assert_equal literal #"void(uint16,uint16,uint8*)" val=:_unittest_assert_equal pub)
  )
  (lambda _unittest_assert_true #"void(uint8,uint8*)" opt={id :assert_true}
   (args ({l0 a} {l1 message}))
@@ -249,7 +248,6 @@
   (var 8 init literal #"void()" val=:_stdio_init pub)
   (var 9 interrupt literal #"void()" val=:_interrupt pub)
   (var 10 interrupt_irq literal #"void()" val=:_interrupt_irq pub)
-  (var 11 printf global #"macro" val=macro pub)
  )
  (lambda _stdio_print_int16 #"fastcall void(uint16)" opt={id :print_int16 fastcall :true}
   (args ({l0 n}))

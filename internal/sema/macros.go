@@ -1,55 +1,23 @@
 package sema
 
-// fclib/*.rb の Ruby マクロを Go ネイティブ実装に固定したもの。
-// include("stdio.rb") 等はファイル名キーでここに解決される (確定方針参照)。
-// 各登録関数は Ruby ファイルの instance_eval 時の動作 (トップレベルの @scope.find 等) を再現する。
+// v1 の include("xxx.rb") (Ruby マクロ) の Go 実装。ファイル名キーで解決する。
+// v2 では include("*.rb") は廃止 (doc/v2_grammar.md §3.4, §3.5):
+//   - stdio.rb / unittest.rb / stdmacro.rb の中身は組み込み (builtins.go) になったので include は無視する
+//   - math.rb (cos) は v1 のあいだだけマクロ。v2 の math.fc では普通の関数にする
+//   - castle の macro.rb (_T / _M) は v1 のあいだだけ。v2 では const _T = textmap("...") に置き換える
 
 import (
 	"bytes"
-	"fmt"
 
-	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/syntax"
-	"github.com/haramako/fc/internal/types"
 )
 
 var macroFiles = map[string]func(h *Hlc){
-	"stdmacro.rb": registerStdmacro,
-	"stdio.rb":    registerStdio,
+	"stdmacro.rb": func(h *Hlc) {}, // times は未使用のまま削除
+	"stdio.rb":    func(h *Hlc) {}, // printf は組み込み
+	"unittest.rb": func(h *Hlc) {}, // unittest_run_tests は組み込み
 	"math.rb":     registerMath,
-	"unittest.rb": registerUnittest,
 	"macro.rb":    registerCastleMacros,
-}
-
-// fclib/stdmacro.rb
-// times(n){...} は現行の Ruby 版でも展開結果が compile_statement で解釈できない形
-// (ループ本体が文リストのまま) で、実際にはどこからも使われていない。
-// include("stdmacro.rb") 自体は受理し、呼び出されたらエラーにする (v2 で削除予定: v2_decisions.md §3)。
-func registerStdmacro(h *Hlc) {
-	h.defmacro("times", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		panic(&diag.Error{Msg: "times macro is not supported"})
-	})
-}
-
-// fclib/stdio.rb
-func registerStdio(h *Hlc) {
-	uint8p := h.prog.Types.PointerTo(h.prog.Types.IntType(1, false))
-	print := h.scope.Find("print", true)
-	printInt16 := h.scope.Find("print_int16", true)
-
-	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		r := macroResult{stmts: []*cexpr{}}
-		for _, arg := range args {
-			// 旧実装は引数が定数値でないと ValType が落ちていた。同じく定数値を要求する
-			typ := mustValue(arg).Type
-			if h.prog.Types.Compatible(uint8p, typ) != nil {
-				r.stmts = append(r.stmts, ccall(cv(print), arg))
-			} else if typ.Kind == types.Int {
-				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
-			}
-		}
-		return r
-	})
 }
 
 // fclib/math.rb
@@ -86,32 +54,5 @@ func registerCastleMacros(h *Hlc) {
 
 	h.defmacro("_M", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		return textArray(append(miscConv.Conv(mustString(args[0])), 0))
-	})
-}
-
-// fclib/unittest.rb
-func registerUnittest(h *Hlc) {
-	stdioMod := h.scope.FindMust("stdio", true).Module
-	if stdioMod == nil {
-		panic(&diag.Error{Msg: "stdio is not a module"})
-	}
-	// 組み込み機能の内部参照なので stdio の可視性に関係なく届く (init は private)
-	print := stdioMod.LookupInternal("print")
-	exit := stdioMod.LookupInternal("exit")
-	init := stdioMod.LookupInternal("init")
-
-	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
-		for _, id := range h.scope.IdList() {
-			if len(id) >= 5 && id[:5] == "test_" {
-				r.stmts = append(r.stmts,
-					ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
-					ccall(cident(id)),
-					ccall(cv(print), cstr("\n")),
-				)
-			}
-		}
-		r.stmts = append(r.stmts, ccall(cv(exit), cint(0)))
-		return r
 	})
 }

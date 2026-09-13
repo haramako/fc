@@ -347,6 +347,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		case "asm":
 			h.module.IncludeAsms = append(h.module.IncludeAsms, filename)
 		case "macro":
+			if h.module.Version >= syntax.Version2 {
+				panic(&diag.Error{Msg: fmt.Sprintf("include(%q): Ruby macros are not supported in fc 2 (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
+			}
 			ref, _ := h.resolveFile(filename)
 			reg, ok := macroFiles[filename]
 			if !ok {
@@ -596,7 +599,11 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 		}
 		v := cv.val
 		t := h.guessType(h.typeEval(typ), v)
-		if v.Kind == ir.KindArrayLiteral {
+		if v.Type.Kind == types.Macro {
+			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
+			v.Name = name
+			newVal = h.addVar(v)
+		} else if v.Kind == ir.KindArrayLiteral {
 			symbol := h.addDef(name, &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems})
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 		} else {
@@ -772,6 +779,12 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
 				args[i] = h.constEval(a)
+			}
+			// 定数式で評価する組み込み (textmap など) はここで展開する
+			if args[0].kind == cValue && args[0].val.Type.Kind == types.Macro {
+				if fn, ok := h.prog.constMacros[args[0].val]; ok {
+					return fn(h, args[1:])
+				}
 			}
 			return &cexpr{kind: cOp, op: opCall, args: args, block: c.block}
 

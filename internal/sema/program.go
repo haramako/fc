@@ -28,25 +28,21 @@ type Program struct {
 	Modules *ir.ModuleList // 登録順 (use に出会った深さ優先順)。リンク順にもなる
 	Options ir.Options     // グローバルな options (mapper, bank_count, ...)。モジュール処理順の後勝ち
 
-	global *ir.Scope             // 組み込みマクロ (asm) を持つ最上位スコープ
-	macros map[*ir.Value]MacroFn // マクロ値 → 本体
+	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
+	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
+	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
 }
 
 // NewProgram は空のプログラム状態を作り、組み込みマクロを登録する。
 func NewProgram() *Program {
 	p := &Program{
-		Types:   types.NewUniverse(),
-		Modules: ir.NewModuleList(),
-		macros:  map[*ir.Value]MacroFn{},
+		Types:       types.NewUniverse(),
+		Modules:     ir.NewModuleList(),
+		macros:      map[*ir.Value]MacroFn{},
+		constMacros: map[*ir.Value]ConstMacroFn{},
 	}
 	p.global = ir.NewScope(nil)
-	h := &Hlc{prog: p, scope: p.global}
-	h.defmacro("asm", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		for _, line := range args {
-			h.emit(&ir.Op{Code: ir.OpAsm, Text: mustString(line)})
-		}
-		return macroResult{}
-	})
+	registerBuiltins(p)
 	return p
 }
 
