@@ -199,3 +199,42 @@ var p:int*[4](int, y:int) = -> void { };
 		t.Errorf("lambda: %+v", pt.Init)
 	}
 }
+
+// TestVersionPragma: 先頭行の `#fc N` プラグマと、バージョンごとの受理範囲。
+func TestVersionPragma(t *testing.T) {
+	f, err := Parse([]byte("#fc 2\nvar a:int;\n"), "t.fc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Version != Version2 || f.Pragma != "#fc 2" {
+		t.Errorf("version=%d pragma=%q", f.Version, f.Pragma)
+	}
+	if got := f.Stmts[0].Pos(); got.Line != 2 || got.Col != 1 {
+		t.Errorf("first statement at %v, want 2:1", got)
+	}
+	f, err = Parse([]byte("var a:int;\n"), "t.fc")
+	if err != nil || f.Version != Version1 || f.Pragma != "" {
+		t.Errorf("v1: err=%v version=%d pragma=%q", err, f.Version, f.Pragma)
+	}
+
+	bad := []struct{ src, msg string }{
+		{"#fc 3\n", "invalid version pragma"},
+		{"#fc\n", "invalid version pragma"},
+		{"#fc 2 extra\n", "invalid version pragma"},
+		{"var a:int;\n#fc 2\n", "invalid token"},
+		{"#fc 2\nprivate:\nvar a:int;\n", "labels are not allowed in fc 2"},
+		{"#fc 2\ninclude macro(\"x.rb\");\n", "include macro(...) is not allowed in fc 2"},
+	}
+	for _, b := range bad {
+		_, err := Parse([]byte(b.src), "t.fc")
+		if err == nil || !strings.Contains(err.Error(), b.msg) {
+			t.Errorf("%q: got %v, want /%s/", b.src, err, b.msg)
+		}
+	}
+	// v1 では従来どおり受理する
+	for _, ok := range []string{"private:\nvar a:int;\n", "include macro(\"x.rb\");\n"} {
+		if _, err := Parse([]byte(ok), "t.fc"); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+}

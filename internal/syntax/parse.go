@@ -5,6 +5,7 @@ package syntax
 //go:generate goyacc -o parser.go -p yy parser.y
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -23,12 +24,49 @@ func Parse(src []byte, filename string) (*File, error) {
 	if rc != 0 {
 		return nil, &Error{Filename: filename, Pos: lx.last.Pos, Msg: "parse error"}
 	}
-	return &File{
+	f := &File{
 		Filename: filename,
+		Version:  lx.lex.Version(),
+		Pragma:   lx.lex.Pragma(),
 		Stmts:    lx.result,
 		Comments: lx.lex.Comments(),
 		EOFPos:   lx.last.Pos,
-	}, nil
+	}
+	if err := checkVersion(f); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// checkVersion は文法バージョンごとの受理範囲を検査する (doc/v2_grammar.md §4.1)。
+// 文法ファイルは v1 ∪ v2 のスーパーセットなので、「そのバージョンに無い構文」をここで落とす。
+func checkVersion(f *File) error {
+	var err *Error
+	fail := func(pos Pos, msg string) {
+		if err == nil {
+			err = &Error{Filename: f.Filename, Pos: pos, Msg: msg}
+		}
+	}
+	Inspect(f, func(n Node) bool {
+		if err != nil {
+			return false
+		}
+		switch n := n.(type) {
+		case *ScopeLabel:
+			if f.Version >= Version2 {
+				fail(n.Keyword, "public:/private: labels are not allowed in fc 2 (declarations are private by default; mark exports with `public`)")
+			}
+		case *IncludeDecl:
+			if f.Version >= Version2 && n.Kind != nil {
+				fail(n.Kind.NamePos, fmt.Sprintf("include %s(...) is not allowed in fc 2 (the kind is decided by the file extension)", n.Kind.Name))
+			}
+		}
+		return true
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // yyLexAdapter は goyacc の yyLexer インターフェースを Lexer で実装する。

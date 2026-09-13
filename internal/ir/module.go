@@ -96,6 +96,7 @@ func (o Options) Has(key string) bool {
 type Module struct {
 	Id             string
 	Path           string
+	Version        int // 文法バージョン (syntax.Version1 / Version2)。可視性などの規則はこれで切り替える
 	Vars           []*Value
 	Lambdas        []*Lambda
 	Options        Options // options(...) 文で設定されたモジュール属性 (bank, org, ...)。値は定数評価済み
@@ -115,6 +116,7 @@ func NewModule(id, path string, globalScope *Scope) *Module {
 	return &Module{
 		Id:            id,
 		Path:          path,
+		Version:       syntax.Version1,
 		Scope:         NewScope(globalScope),
 		CurrentPublic: true,
 	}

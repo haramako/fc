@@ -3,6 +3,8 @@ package syntax
 import (
 	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // Lexer は fc ソースの字句解析器。
@@ -22,12 +24,55 @@ type Lexer struct {
 	line     int // 現在行 (1 始まり)
 	lineOff  int // 現在行の先頭オフセット
 	comments []Comment
+	version  int    // 先頭行の `#fc N` プラグマ (無ければ Version1)
+	pragma   string // プラグマの原文 (行末の改行を含まない。無ければ "")
+	verErr   *Error // プラグマの構文エラー (最初の Next で返す)
 }
+
+// 文法バージョン。
+const (
+	Version1 = 1 // 宣言なし
+	Version2 = 2 // `#fc 2`
+)
 
 // NewLexer はレキサを作る。src の CRLF は呼び出し側で正規化済みであることを想定するが、
 // '\r' は空白として扱うので残っていても動作する。
 func NewLexer(src []byte, filename string) *Lexer {
-	return &Lexer{src: src, filename: filename, line: 1}
+	l := &Lexer{src: src, filename: filename, line: 1, version: Version1}
+	l.scanPragma()
+	return l
+}
+
+// Version は文法バージョン (先頭行の `#fc N`。無ければ Version1)。
+func (l *Lexer) Version() int { return l.version }
+
+// Pragma は先頭行のプラグマの原文 (無ければ "")。
+func (l *Lexer) Pragma() string { return l.pragma }
+
+// scanPragma は先頭行の `#fc N` を読む。`#fc` で始まらなければ何もしない
+// (それ以外の `#` は通常の字句解析でエラーになる)。
+func (l *Lexer) scanPragma() {
+	if !bytes.HasPrefix(l.src, []byte("#fc")) {
+		return
+	}
+	n := bytes.IndexByte(l.src, '\n')
+	if n < 0 {
+		n = len(l.src)
+	}
+	line := string(l.src[:n])
+	l.pragma = line
+	fields := strings.Fields(line)
+	ver := 0
+	if len(fields) == 2 && fields[0] == "#fc" {
+		ver, _ = strconv.Atoi(fields[1])
+	}
+	switch ver {
+	case Version1, Version2:
+		l.version = ver
+	default:
+		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: fmt.Sprintf("invalid version pragma %q (expected \"#fc 2\")", line)}
+	}
+	l.advance(n)
 }
 
 // Filename はソースファイル名。
@@ -151,6 +196,9 @@ func (l *Lexer) addComment(n int) {
 
 // Next は次のトークンを返す。入力の終わりでは Kind == EOF。
 func (l *Lexer) Next() (Token, error) {
+	if l.verErr != nil {
+		return Token{}, l.verErr
+	}
 	l.skipSpaceAndComments()
 	start := l.pos()
 	if l.off >= len(l.src) {

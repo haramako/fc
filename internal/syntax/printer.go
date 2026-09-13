@@ -17,6 +17,7 @@ package syntax
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 )
 
@@ -33,6 +34,12 @@ func Format(src []byte, filename string) ([]byte, error) {
 // Print は構文木を整形して出力する。f.Comments の位置を使ってコメントを差し込む。
 func Print(f *File) []byte {
 	p := &printer{comments: f.Comments}
+	if f.Version >= Version2 {
+		p.write(fmt.Sprintf("#fc %d", f.Version))
+		p.lastLine = 1
+		p.newline()
+		p.blankOK = true
+	}
 	p.stmtList(f.Stmts, true)
 	p.flushComments(Pos{Offset: int(^uint(0) >> 1)})
 	if p.buf.Len() > 0 {
@@ -169,7 +176,9 @@ func (p *printer) stmtList(stmts []Stmt, top bool) {
 	for i, s := range stmts {
 		if i > 0 || top {
 			p.newline()
-			p.blankOK = i > 0
+			if i > 0 {
+				p.blankOK = true // 先頭の文の前は呼び出し側の設定に従う (ブロック先頭は偽、プラグマの後は真)
+			}
 		}
 		p.stmt(s)
 	}

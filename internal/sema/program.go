@@ -69,6 +69,7 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 		return m, nil
 	}
 	mod = ir.NewModule(id, file.Filename, p.global)
+	mod.Version = file.Version
 	p.Modules.Add(mod)
 
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}

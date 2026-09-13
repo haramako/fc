@@ -56,6 +56,8 @@ func TestFormatStyle(t *testing.T) {
 			"const t = [\n\t1, 2, // row 1\n\t3, 4 // row 2\n];\n",
 			"const t = [\n\t1, 2, // row 1\n\t3, 4 // row 2\n];\n"},
 		{"empty file with comment", "// only\n", "// only\n"},
+		{"fc 2 pragma", "#fc 2\n\n// c\nvar a:int;\n", "#fc 2\n\n// c\nvar a:int;\n"},
+		{"fc 2 pragma normalized", "#fc   2\nvar a:int;\n", "#fc 2\nvar a:int;\n"},
 		{"empty blocks",
 			"function f():void {}\nfunction g():void\n{\n\t// note\n}\nfunction h():void { if (a) {} else { } loop(){} }\n",
 			"function f():void {}\nfunction g():void\n{\n\t// note\n}\nfunction h():void\n{\n\tif (a) {} else {}\n\tloop() {}\n}\n"},
