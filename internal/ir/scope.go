@@ -11,9 +11,18 @@ import (
 type Scope struct {
 	Parent   *Scope
 	declares map[string]*Value
-	order    []string   // 宣言順 (IdList の列挙順が出力に影響するため保つ)
+	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
+	aliases  map[string]scopeAlias // `use a, b from mod;` (v2) で束縛した名前
+	aliasOrd []string
 	uses     []scopeUse // `use * from mod;` で取り込んだモジュール (public のみ見える)
 	finding  bool       // useの相互参照による無限再帰の防止フラグ
+}
+
+// scopeAlias は選択的インポート 1 件。他モジュールの宣言 (Value) をこのスコープの名前に束縛する。
+// reexport なら外 (LookupPublic) からも見える (`public use a from mod;`)。
+type scopeAlias struct {
+	val      *Value
+	reexport bool
 }
 
 // scopeUse は glob 取り込み 1 件。reexport なら外 (LookupPublic) からもこの取り込みを辿れる
@@ -40,6 +49,11 @@ func (s *Scope) Find(id string, withPrivate bool) *Value {
 			return val
 		}
 	}
+	if a, ok := s.aliases[id]; ok {
+		if withPrivate || a.reexport {
+			return a.val
+		}
+	}
 	for _, u := range s.uses {
 		if !withPrivate && !u.reexport {
 			continue
@@ -62,13 +76,32 @@ func (s *Scope) FindMust(id string, withPrivate bool) *Value {
 	panic(&diag.Error{Msg: fmt.Sprintf("%s not found", id)})
 }
 
-// Declare は値を宣言する。同名が既にあれば CompileError。
+// Declare は値を宣言する。同名が既にあれば CompileError (選択的インポートとの衝突も含む: 規則 S2)。
 func (s *Scope) Declare(val *Value) {
 	if _, ok := s.declares[val.Name]; ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", val.Name)})
 	}
+	if _, ok := s.aliases[val.Name]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s already imported", val.Name)})
+	}
 	s.declares[val.Name] = val
 	s.order = append(s.order, val.Name)
+}
+
+// Alias は他モジュールの宣言 val を name でこのスコープに束縛する (`use a, b from mod;`)。
+// 自宣言・既存の束縛と同名なら CompileError (規則 S2)。
+func (s *Scope) Alias(name string, val *Value, reexport bool) {
+	if _, ok := s.declares[name]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", name)})
+	}
+	if _, ok := s.aliases[name]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s already imported", name)})
+	}
+	if s.aliases == nil {
+		s.aliases = map[string]scopeAlias{}
+	}
+	s.aliases[name] = scopeAlias{val: val, reexport: reexport}
+	s.aliasOrd = append(s.aliasOrd, name)
 }
 
 // Use はモジュールの public な宣言をこのスコープから見えるようにする (`use * from mod;`)。
@@ -86,6 +119,7 @@ func (s *Scope) IdList() []string {
 	defer func() { s.finding = false }()
 	var r []string
 	r = append(r, s.order...)
+	r = append(r, s.aliasOrd...)
 	for _, u := range s.uses {
 		r = append(r, u.mi.scope.IdList()...)
 	}

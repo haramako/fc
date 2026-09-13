@@ -1,8 +1,10 @@
 /*
- * parser.y — fc 文法 (v1) の goyacc 定義。型付き構文木 (ast.go) を生成する。
+ * parser.y — fc 文法の goyacc 定義。型付き構文木 (ast.go) を生成する。
  *
- * 文法規則と優先順位は internal/fc/parser.y (Ruby racc 版の移植) と 1:1 で対応させている。
- * 唯一の差: 到達不能だった `id_list: tID ...` 規則 (レキサが決して返さないトークン) を削除した。
+ * v1 と v2 (doc/v2_grammar.md) のスーパーセットを 1 つの文法で受理し、
+ * バージョンごとの受理範囲は parse.go の checkVersion で絞る。
+ * v1 部分の規則と優先順位は Ruby racc 版の parser.y と 1:1 で対応させている
+ * (到達不能だった `id_list: tID ...` 規則だけ削除)。v2 で足した規則には「v2」と注記する。
  *
  * 生成: go generate ./internal/syntax  ( goyacc -o parser.go -p yy parser.y )
  */
@@ -30,6 +32,8 @@ package syntax
 	block   *Block
 	fbody   funcBody
 	ident   *Ident
+	idents  []*Ident
+	use     *UseDecl
 	optTok  *Token
 }
 
@@ -40,8 +44,10 @@ package syntax
 
 %type <stmts>   program opt_statement_list statement_list
 %type <stmt>    statement_i statement else_block
-%type <optTok>  opt_scope opt_from
+%type <optTok>  opt_scope
+%type <use>     use_target
 %type <ident>   opt_as opt_ident
+%type <idents>  ident_list
 %type <deflt>   opt_default_block
 %type <cases>   switch_block
 %type <kase>    case_block
@@ -105,7 +111,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | opt_scope kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
                                                 { $$ = funcDecl($1, $2, $3, $5, $8, $9, $10) }
          | options ';'                          { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} }
-         | opt_scope kUSE opt_from IDENT opt_as ';' { $$ = &UseDecl{PublicPos: optPos($1), Use: $2.Pos, Star: optPos($3), FromAll: $3 != nil, Module: ident($4), As: $5, Semi: $6.Pos} }
+         | opt_scope kUSE use_target ';'        { u := $3; u.PublicPos = optPos($1); u.Use = $2.Pos; u.Semi = $4.Pos; $$ = u }
          | kINCLUDE opt_ident '(' STRING ')' opt_options ';' { $$ = &IncludeDecl{Include: $1.Pos, Kind: $2, Path: strLit($4), Rparen: $5.Pos, Options: $6, Semi: $7.Pos} }
          | kPUBLIC ':'                          { $$ = &ScopeLabel{Keyword: $1.Pos, Public: true, Colon: $2.Pos} }
          | kPRIVATE ':'                         { $$ = &ScopeLabel{Keyword: $1.Pos, Public: false, Colon: $2.Pos} }
@@ -115,11 +121,16 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
 opt_scope: /* empty */ { $$ = nil }
          | kPUBLIC { t := $1; $$ = &t }
 
-opt_from: /* empty */ { $$ = nil }
-        | '*' kFROM { t := $1; $$ = &t }
+/* use の対象: モジュール束縛 / glob / 選択的インポート (v2) */
+use_target: IDENT opt_as                { $$ = &UseDecl{Module: ident($1), As: $2} }
+          | '*' kFROM IDENT             { $$ = &UseDecl{Star: $1.Pos, FromAll: true, Module: ident($3)} }
+          | ident_list kFROM IDENT      { $$ = &UseDecl{Names: $1, Module: ident($3)} } /* v2 */
 
 opt_as: /* empty */ { $$ = nil }
       | kAS IDENT { $$ = ident($2) }
+
+ident_list: IDENT { $$ = []*Ident{ident($1)} }
+          | ident_list ',' IDENT { $$ = append($1, ident($3)) }
 
 opt_ident: /* empty */ { $$ = nil }
          | IDENT { $$ = ident($1) }

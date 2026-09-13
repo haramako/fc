@@ -60,6 +60,9 @@ func checkVersion(f *File) error {
 			if f.Version < Version2 && n.PublicPos.IsValid() {
 				fail(n.PublicPos, "`public use` requires fc 2 (add `#fc 2` to the first line)")
 			}
+			if f.Version < Version2 && len(n.Names) > 0 {
+				fail(n.Names[0].NamePos, "`use a, b from mod;` requires fc 2 (add `#fc 2` to the first line)")
+			}
 		case *IncludeDecl:
 			if f.Version >= Version2 && n.Kind != nil {
 				fail(n.Kind.NamePos, fmt.Sprintf("include %s(...) is not allowed in fc 2 (the kind is decided by the file extension)", n.Kind.Name))

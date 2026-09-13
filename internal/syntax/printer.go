@@ -399,6 +399,17 @@ func (p *printer) stmt(s Stmt) {
 			p.space()
 			p.tok("from")
 			p.space()
+		} else if len(s.Names) > 0 {
+			for i, id := range s.Names {
+				if i > 0 {
+					p.tok(",")
+					p.space()
+				}
+				p.ident(id)
+			}
+			p.space()
+			p.tok("from")
+			p.space()
 		}
 		p.ident(s.Module)
 		if s.As != nil {

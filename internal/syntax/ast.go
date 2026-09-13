@@ -179,13 +179,14 @@ type OptionsStmt struct {
 	Semi    Pos
 }
 
-// UseDecl は `use mod;` / `use mod as x;` / `use * from mod;`。
+// UseDecl は `use mod;` / `use mod as x;` / `use * from mod;` / `use a, b from mod;` (v2)。
 // `public use ...` (v2) は取り込んだものを再輸出する (PublicPos が有効)。
 type UseDecl struct {
 	PublicPos Pos // `public` の位置 (省略時は !IsValid())
 	Use       Pos
 	Star      Pos // `*` の位置。FromAll のとき有効
 	FromAll   bool
+	Names     []*Ident // 選択的インポートの名前 (v2)。nil ならモジュール束縛か glob
 	Module    *Ident
 	As        *Ident // nil なら省略
 	Semi      Pos

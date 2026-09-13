@@ -84,6 +84,9 @@ func Children(node Node) []Node {
 	case *OptionsStmt:
 		add(n.Options)
 	case *UseDecl:
+		for _, id := range n.Names {
+			add(id)
+		}
 		add(n.Module)
 		add(n.As)
 	case *IncludeDecl:

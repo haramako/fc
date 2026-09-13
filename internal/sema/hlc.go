@@ -368,9 +368,23 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.module.AddUse(m)
 		// 再輸出: v1 は常に (glob も束縛も public)、v2 は `public use` のときだけ (doc/v2_grammar.md §3.2)
 		reexport := h.module.Version < syntax.Version2 || s.PublicPos.IsValid()
-		if s.FromAll {
+		switch {
+		case s.FromAll:
 			h.scope.Use(m, reexport)
-		} else {
+		case len(s.Names) > 0:
+			// 選択的インポート (v2): 公開宣言を非修飾名で自スコープに束縛する。
+			// 束縛は宣言そのものの Value を共有する (別名ではなく同じ実体)。再輸出は public use のときだけ
+			for _, name := range s.Names {
+				v := m.LookupPublic(name.Name)
+				if v == nil {
+					if m.LookupInternal(name.Name) != nil {
+						panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is private (declare it with `public` in module %s)", m.Id, name.Name, m.Id), Pos: syntax.At(h.module.Path, name.NamePos)})
+					}
+					panic(&diag.Error{Msg: fmt.Sprintf("%s not found in module %s", name.Name, m.Id), Pos: syntax.At(h.module.Path, name.NamePos)})
+				}
+				h.scope.Alias(name.Name, v, reexport)
+			}
+		default:
 			if s.As != nil {
 				id = s.As.Name
 			}
