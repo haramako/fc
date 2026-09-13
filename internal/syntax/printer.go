@@ -294,9 +294,18 @@ func (p *printer) stmt(s Stmt) {
 
 	case *LoopStmt:
 		p.tokAt(s.Loop, "loop")
-		p.tok("(")
-		p.tokAt(s.Rparen, ")")
+		if s.Rparen.IsValid() {
+			// v1: loop()
+			p.tok("(")
+			p.tokAt(s.Rparen, ")")
+		}
 		p.body(s.Body)
+
+	case *LabeledStmt:
+		p.ident(s.Label)
+		p.tokAt(s.Colon, ":")
+		p.space()
+		p.stmt(s.Stmt)
 
 	case *WhileStmt:
 		p.tokAt(s.While, "while")
@@ -323,10 +332,18 @@ func (p *printer) stmt(s Stmt) {
 
 	case *BreakStmt:
 		p.tokAt(s.Keyword, "break")
+		if s.Label != nil {
+			p.space()
+			p.ident(s.Label)
+		}
 		p.tokAt(s.Semi, ";")
 
 	case *ContinueStmt:
 		p.tokAt(s.Keyword, "continue")
+		if s.Label != nil {
+			p.space()
+			p.ident(s.Label)
+		}
 		p.tokAt(s.Semi, ";")
 
 	case *ReturnStmt:

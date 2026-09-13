@@ -292,7 +292,7 @@ Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外とし�
 | 2 | sema の可視性規則をバージョンで切り替え（デフォルト private、S7、`public use`）。混在テスト ✅ 2026-09-14 | 1 | 1 日 |
 | 3 | `use a, b from mod;` ✅ 2026-09-14 | 1, 2 | 0.5 日 |
 | 4 | 組み込み化: `printf` / `unittest_run_tests` 常時登録、`include("*.rb")` を警告化。`textmap` ✅ 2026-09-14（v1 の `include("stdio.rb")` 等は無視。警告の出力経路がまだ無いので警告は出さない。v2 では `include("*.rb")` はエラー） | — | 1 日 |
-| 4b | `loop {`、文ラベル、`break`/`continue` の v2 規則（§3.6, §3.7）。v1 モジュールは現行規則のまま | 1 | 0.5 日 |
+| 4b | `loop {`、文ラベル、`break`/`continue` の v2 規則（§3.6, §3.7）。v1 モジュールは現行規則のまま ✅ 2026-09-14 | 1 | 0.5 日 |
 | 5 | `fcc migrate`（解析・書き換え・検証） | 1〜4 | 1.5 日 |
 | 6 | castle / miku / fclib / test の移行実行と検証、`language_reference.md` の v2 版改訂 | 5 | 1 日 |
 

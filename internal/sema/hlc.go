@@ -24,9 +24,10 @@ type Hlc struct {
 	prog *Program
 	deps Resolver
 
-	scope       *ir.Scope
-	loops       [][]string // [ [continueラベル, breakラベル], ... ]
-	fastCalling bool
+	scope        *ir.Scope
+	loops        []breakable   // 囲んでいるループ/switch (内側が末尾)
+	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
+	fastCalling  bool
 
 	module *ir.Module
 	lmd    *ir.Lambda
@@ -35,6 +36,54 @@ type Hlc struct {
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
 	cmemo map[*cexpr]*cexpr
+}
+
+// breakable は break / continue の飛び先になる文 (ループ、v2 では switch も)。
+type breakable struct {
+	label         string // 文ラベル (無ければ "")
+	isSwitch      bool
+	breakLabel    string
+	continueLabel string // switch では ""
+}
+
+// pushBreakable はループ/switch の開始時に飛び先を登録する (直前の文ラベルがあれば引き取る)。
+func (h *Hlc) pushBreakable(b breakable) {
+	if h.pendingLabel != nil {
+		b.label = h.pendingLabel.Name
+		h.pendingLabel = nil
+		for _, o := range h.loops {
+			if o.label == b.label {
+				panic(&diag.Error{Msg: fmt.Sprintf("label %s is already in use", b.label)})
+			}
+		}
+	}
+	h.loops = append(h.loops, b)
+}
+
+func (h *Hlc) popBreakable() {
+	h.loops = h.loops[:len(h.loops)-1]
+}
+
+// findBreakable は break / continue の飛び先を決める (doc/v2_grammar.md §3.7)。
+//   - ラベル付きならそのラベルの文
+//   - ラベルなし: break は最も内側のループまたは switch (v1 では switch を積まないのでループのみ)、
+//     continue は最も内側のループ
+func (h *Hlc) findBreakable(kw string, label *syntax.Ident) breakable {
+	if label != nil {
+		for i := len(h.loops) - 1; i >= 0; i-- {
+			if h.loops[i].label == label.Name {
+				return h.loops[i]
+			}
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("label %s not found for %s", label.Name, kw), Pos: syntax.At(h.module.Path, label.NamePos)})
+	}
+	for i := len(h.loops) - 1; i >= 0; i-- {
+		if kw == "continue" && h.loops[i].isSwitch {
+			continue
+		}
+		return h.loops[i]
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("cannot %s without loop", kw)})
 }
 
 // MacroFn は Go 組み込みマクロ (Ruby 版 fclib/*.rb の defmacro 相当)。
@@ -441,13 +490,23 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.LoopStmt:
 		h.inScope(func() {
 			labels := h.newLabels("begin", "end")
-			h.loops = append(h.loops, labels)
+			h.pushBreakable(breakable{continueLabel: labels[0], breakLabel: labels[1]})
 			h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[0]})
 			h.compileStatement(s.Body)
 			h.emit(&ir.Op{Code: ir.OpJump, Label: labels[0]})
 			h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[1]})
-			h.loops = h.loops[:len(h.loops)-1]
+			h.popBreakable()
 		})
+
+	case *syntax.LabeledStmt:
+		// ラベルは直後のループ/switch が pushBreakable で引き取る (while/for は loop に脱糖されるので、
+		// 脱糖で先に出る代入文は触らない)
+		h.pendingLabel = s.Label
+		h.compileStatement(s.Stmt)
+		if h.pendingLabel != nil {
+			h.pendingLabel = nil
+			panic(&diag.Error{Msg: fmt.Sprintf("label %s must be placed on loop / while / for / switch", s.Label.Name)})
+		}
 
 	case *syntax.WhileStmt:
 		// loop() { if (cond) body else break; }
@@ -465,16 +524,14 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		})
 
 	case *syntax.BreakStmt:
-		if len(h.loops) == 0 {
-			panic(&diag.Error{Msg: "cannot break without loop"})
-		}
-		h.emit(&ir.Op{Code: ir.OpJump, Label: h.loops[len(h.loops)-1][1]})
+		h.emit(&ir.Op{Code: ir.OpJump, Label: h.findBreakable("break", s.Label).breakLabel})
 
 	case *syntax.ContinueStmt:
-		if len(h.loops) == 0 {
-			panic(&diag.Error{Msg: "cannot break without loop"})
+		b := h.findBreakable("continue", s.Label)
+		if b.isSwitch {
+			panic(&diag.Error{Msg: fmt.Sprintf("cannot continue a switch (label %s)", b.label)})
 		}
-		h.emit(&ir.Op{Code: ir.OpJump, Label: h.loops[len(h.loops)-1][0]})
+		h.emit(&ir.Op{Code: ir.OpJump, Label: b.continueLabel})
 
 	case *syntax.ReturnStmt:
 		if h.lmd.Type.Base.Kind != types.Void {
@@ -499,6 +556,13 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		cond := h.rval(toC(s.Tag))
 		tmp := h.newTmp(h.prog.Types.IntType(1, false))
 		endLabel := h.newLabel("end")
+		// v2: ラベルなし break は switch を抜ける。v1 では switch は break の対象外 (外側のループを抜ける)
+		isV2 := h.module.Version >= syntax.Version2
+		if isV2 {
+			h.pushBreakable(breakable{isSwitch: true, breakLabel: endLabel})
+		} else {
+			h.pendingLabel = nil
+		}
 		for _, c := range s.Cases {
 			labels := h.newLabels("then", "else")
 			thenLabel, elseLabel := labels[0], labels[1]
@@ -517,6 +581,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.compileStmts(s.Default.Body)
 		}
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
+		if isV2 {
+			h.popBreakable()
+		}
 
 		// TODO: 一時的に、public/privateの切り替えを可能にしている。そのうち消すこと
 	case *syntax.ScopeLabel:

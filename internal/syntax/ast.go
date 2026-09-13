@@ -98,11 +98,18 @@ type IfStmt struct {
 	Else    Stmt
 }
 
-// LoopStmt は `loop() stmt`。
+// LoopStmt は `loop() stmt` (v1) / `loop { ... }` (v2。Rparen は無効)。
 type LoopStmt struct {
 	Loop   Pos
-	Rparen Pos
+	Rparen Pos // v1 の `)`。v2 の括弧なし形では !IsValid()
 	Body   Stmt
+}
+
+// LabeledStmt は文ラベル `L: stmt` (v2)。stmt は loop / while / for / switch に限る。
+type LabeledStmt struct {
+	Label *Ident
+	Colon Pos
+	Stmt  Stmt
 }
 
 // WhileStmt は `while(cond) stmt`。
@@ -123,15 +130,17 @@ type ForStmt struct {
 	Body   *Block
 }
 
-// BreakStmt は `break;`。
+// BreakStmt は `break;` / `break L;` (v2)。
 type BreakStmt struct {
 	Keyword Pos
+	Label   *Ident // nil ならラベルなし
 	Semi    Pos
 }
 
-// ContinueStmt は `continue;`。
+// ContinueStmt は `continue;` / `continue L;` (v2)。
 type ContinueStmt struct {
 	Keyword Pos
+	Label   *Ident // nil ならラベルなし
 	Semi    Pos
 }
 
@@ -432,6 +441,9 @@ func (s *IfStmt) End() Pos {
 func (s *LoopStmt) Pos() Pos { return s.Loop }
 func (s *LoopStmt) End() Pos { return s.Body.End() }
 
+func (s *LabeledStmt) Pos() Pos { return s.Label.Pos() }
+func (s *LabeledStmt) End() Pos { return s.Stmt.End() }
+
 func (s *WhileStmt) Pos() Pos { return s.While }
 func (s *WhileStmt) End() Pos { return s.Body.End() }
 
@@ -569,6 +581,7 @@ func (*VarDecl) stmtNode()      {}
 func (*FuncDecl) stmtNode()     {}
 func (*IfStmt) stmtNode()       {}
 func (*LoopStmt) stmtNode()     {}
+func (*LabeledStmt) stmtNode()  {}
 func (*WhileStmt) stmtNode()    {}
 func (*ForStmt) stmtNode()      {}
 func (*BreakStmt) stmtNode()    {}

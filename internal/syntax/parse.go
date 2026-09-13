@@ -63,6 +63,30 @@ func checkVersion(f *File) error {
 			if f.Version < Version2 && len(n.Names) > 0 {
 				fail(n.Names[0].NamePos, "`use a, b from mod;` requires fc 2 (add `#fc 2` to the first line)")
 			}
+		case *LoopStmt:
+			if f.Version >= Version2 && n.Rparen.IsValid() {
+				fail(n.Loop, "`loop()` is written `loop` in fc 2")
+			}
+			if f.Version < Version2 && !n.Rparen.IsValid() {
+				fail(n.Loop, "`loop { ... }` requires fc 2 (write `loop() { ... }` in fc 1)")
+			}
+		case *LabeledStmt:
+			if f.Version < Version2 {
+				fail(n.Label.NamePos, "statement labels require fc 2")
+			}
+			switch n.Stmt.(type) {
+			case *LoopStmt, *WhileStmt, *ForStmt, *SwitchStmt:
+			default:
+				fail(n.Label.NamePos, "a label must be placed on loop / while / for / switch")
+			}
+		case *BreakStmt:
+			if f.Version < Version2 && n.Label != nil {
+				fail(n.Label.NamePos, "`break label;` requires fc 2")
+			}
+		case *ContinueStmt:
+			if f.Version < Version2 && n.Label != nil {
+				fail(n.Label.NamePos, "`continue label;` requires fc 2")
+			}
 		case *IncludeDecl:
 			if f.Version >= Version2 && n.Kind != nil {
 				fail(n.Kind.NamePos, fmt.Sprintf("include %s(...) is not allowed in fc 2 (the kind is decided by the file extension)", n.Kind.Name))

@@ -55,6 +55,13 @@ func Children(node Node) []Node {
 		add(n.Cond)
 		add(n.Then)
 		add(n.Else)
+	case *LabeledStmt:
+		add(n.Label)
+		add(n.Stmt)
+	case *BreakStmt:
+		add(n.Label)
+	case *ContinueStmt:
+		add(n.Label)
 	case *LoopStmt:
 		add(n.Body)
 	case *WhileStmt:
@@ -65,7 +72,7 @@ func Children(node Node) []Node {
 		add(n.From)
 		add(n.To)
 		add(n.Body)
-	case *BreakStmt, *ContinueStmt, *EmptyStmt, *ScopeLabel:
+	case *EmptyStmt, *ScopeLabel:
 	case *ReturnStmt:
 		add(n.Value)
 	case *SwitchStmt:
