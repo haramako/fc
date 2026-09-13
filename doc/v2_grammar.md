@@ -298,7 +298,7 @@ Ruby ファイルなので AST 変換の対象外。P2 の唯一の例外とし�
 | 4 | 組み込み化: `printf` / `unittest_run_tests` 常時登録、`include("*.rb")` を警告化。`textmap` ✅ 2026-09-14（v1 の `include("stdio.rb")` 等は無視。警告の出力経路がまだ無いので警告は出さない。v2 では `include("*.rb")` はエラー） | — | 1 日 |
 | 4b | `loop {`、文ラベル、`break`/`continue` の v2 規則（§3.6, §3.7）。v1 モジュールは現行規則のまま ✅ 2026-09-14 | 1 | 0.5 日 |
 | 5 | `fcc migrate`（解析・書き換え・検証） ✅ 2026-09-14（castle 36 ファイル・miku 4 ファイル・test+fclib を一時コピーで移行し、asm 正規化比較と ROM バイト一致を確認） | 1〜4 | 1.5 日 |
-| 6 | castle / miku / fclib / test の移行実行と検証、`language_reference.md` の v2 版改訂 | 5 | 1 日 |
+| 6 | castle / miku / fclib / test の移行実行と検証、`language_reference.md` の v2 版改訂 — ✅ 2026-09-14 fclib・test（`test/v2/`）・リファレンス改訂。castle / miku はコピーで検証済み（ROM 一致）、リポジトリ内 examples の書き換えはオーナー判断待ち | 5 | 1 日 |
 
 合計 5〜6 日。1〜4 は v1 の挙動を変えないので、それぞれ独立にコミットできる（golden 不変で確認）。
 

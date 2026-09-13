@@ -53,6 +53,13 @@ go test ./...                                    # 全部 (golden + examples + N
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
 
+- **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`。仕様は [language_reference.md](language_reference.md)、設計の経緯は
+  [v2_grammar.md](v2_grammar.md)。**fclib は v2 に移行済み**、`test/*.fc` は v1 のまま残し（v1 パーサの回帰）、
+  v2 版を `test/v2/` に置いて `TestGoldenV2` で同じ golden に一致させている。`test/v2/` は `test/*.fc` を
+  変えたら `fcc migrate` で作り直す（`cd test/v2 && cp ../test_*.fc ../cycle_use.fc . && fcc migrate -w test_*.fc`）
+- **`fcc migrate`**: `fcc migrate [-t nes] [--lib DIR] [--textmap NAME=PATH] -w <main.fc>...`。作業ディレクトリと
+  `--lib` の下のファイルだけを書き換え、再コンパイルして asm（正規化）が一致しなければ元に戻す（`--force` で受け入れ）。
+  castle は `cd src && fcc migrate -t nes --textmap _T=../tmp/font/text.chr.txt --textmap _M=../tmp/font/misc_text.chr.txt -w main.fc`
 - **`fcc fmt`**（2026-09-12〜）: `fcc fmt -l <files>` で未整形のファイルを列挙、`-w` で上書き、`-d` で差分。
   正規形は [internal/syntax/printer.go](../internal/syntax/printer.go) 先頭のコメントと `TestFormatStyle` が定義。
   **リポジトリ内の .fc はまだ整形していない**（castle は製品コードなので一括整形はオーナー判断。整形しても asm は変わらない）
