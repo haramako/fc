@@ -1,27 +1,31 @@
-options( bank: -1 );
+#fc 2
+options(bank: -1);
 
-include( "mem.asm" );
+include("mem.asm");
 
-function set(p:int*, c:int, size:int):void options(fastcall:true);
-function zero(p:int*, size:int):void;
-function copy(_to:int*, _from:int*, size:int16):void;
-function compare(p1:int*, p2:int*, size:int):int;
+public function set(p:int*, c:int, size:int):void options(fastcall: true);
+public function zero(p:int*, size:int):void;
+public function copy(_to:int*, _from:int*, size:int16):void;
+public function compare(p1:int*, p2:int*, size:int):int;
 
-function strlen(str:int*):int options(fastcall:true)
+public function strlen(str:int*):int options(fastcall: true)
 {
 	var n = 0;
-	while( str[n] ){ n += 1; }
+	while (str[n]) {
+		n += 1;
+	}
 	return n;
 }
 
-function strcpy(to:int*, str:int*):int options(fastcall:true)
+public function strcpy(to:int*, str:int*):int options(fastcall: true)
 {
 	var i = 0;
-	while(1){
+	while (1) {
 		var c = str[i];
 		to[i] = c;
-		if( !c ){ return i; }
-		i+=1;
+		if (!c) {
+			return i;
+		}
+		i += 1;
 	}
 }
-

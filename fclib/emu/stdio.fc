@@ -1,38 +1,37 @@
+#fc 2
 /*
  * コマンドラインエミュレータ用の定義ファイル
  */
-options( bank: -1 );
+options(bank: -1);
 
-public var EMU_ADDR    :int*  options (address:0xfff0);
-public var EMU_DATA    :int16 options (address:0xfff2);
-public var EMU_PRINT   :int   options (address:0xFFFE);
-public var EMU_EXIT    :int   options (address:0xFFFF);
+public var EMU_ADDR:int* options(address: 0xfff0);
+public var EMU_DATA:int16 options(address: 0xfff2);
+public var EMU_PRINT:int options(address: 0xFFFE);
+public var EMU_EXIT:int options(address: 0xFFFF);
 
-public function print_int16( n:int16 ):void options(fastcall:true)
+public function print_int16(n:int16):void options(fastcall: true)
 {
 	EMU_DATA = n;
 	EMU_PRINT = 2;
 }
 
-public function print( str:int* ):void options(fastcall:true)
+public function print(str:int*):void options(fastcall: true)
 {
 	EMU_ADDR = str;
 	EMU_PRINT = 1;
 }
 
-public function puts( str:int* ):void
+public function puts(str:int*):void
 {
-	printf( str, "\n");
+	printf(str, "\n");
 }
 
-public function exit( code:int ):void options(fastcall:true)
+public function exit(code:int):void options(fastcall: true)
 {
 	EMU_EXIT = code;
 }
 
 public function init():void {}
 
-public function interrupt():void options(symbol:'_interrupt'){} 
-public function interrupt_irq():void options(symbol:'_interrupt_irq'){}
-
-include macro ( "stdio.rb" );
+public function interrupt():void options(symbol: '_interrupt') {}
+public function interrupt_irq():void options(symbol: '_interrupt_irq') {}

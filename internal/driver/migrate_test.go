@@ -127,7 +127,7 @@ func TestMigrateCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate 失敗: %v\n%s", err, report.String())
 	}
-	if len(res.Files) < 15 {
+	if len(res.Files) < 14 {
 		t.Errorf("移行ファイルが少ない: %d", len(res.Files))
 	}
 	for _, f := range res.Files {

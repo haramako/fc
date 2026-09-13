@@ -166,7 +166,8 @@ func (mi *ModuleInterface) LookupPublic(name string) *Value {
 // LookupInternal はバージョンに関係なく private も含めて探す (コンパイラ組み込み機能の内部参照用。
 // 利用者コードの名前解決には使わない)。
 func (mi *ModuleInterface) LookupInternal(name string) *Value {
-	return mi.scope.Find(name, true)
+	// 利用者コードの参照ではないので名前解決の観測 (migrate の参照解析) には乗せない
+	return mi.scope.withoutTrace(func() *Value { return mi.scope.Find(name, true) })
 }
 
 // LookupMust は Lookup と同じだが、見つからなければ diag.Error。

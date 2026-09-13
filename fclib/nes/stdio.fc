@@ -1,31 +1,32 @@
+#fc 2
 /*
  * NES用の定義ファイル
  */
 
-options( bank: -1 );
+options(bank: -1);
 
-use * from nes;
-include( "stdio.asm" );
+public use * from nes;
+include("stdio.asm");
 
-var vsync_flag:int;
-var ppu_addr:int16;
-var print_addr:int16;
+public var vsync_flag:int;
+public var ppu_addr:int16;
+public var print_addr:int16;
 
-function print_int16( n:int16 ):void;
-function wait_vsync():void;
-function print( str:int* ):void;
-function ppu_put( addr:int16, data:int*, size:int ):void;
+public function print_int16(n:int16):void;
+public function wait_vsync():void;
+public function print(str:int*):void;
+public function ppu_put(addr:int16, data:int*, size:int):void;
 
-function puts( str:int* ):void
+public function puts(str:int*):void
 {
 	printf(str, "\n");
 }
 
-function exit( code:int ):void
+public function exit(code:int):void
 {
-	printf('exit(', code, ")\n" );
+	printf('exit(', code, ")\n");
 	PPU_CTRL1 = 0b11001000;
-	while(1){
+	while (1) {
 		wait_vsync();
 		PPU_SCROLL = 0;
 		PPU_SCROLL = 0;
@@ -34,15 +35,13 @@ function exit( code:int ):void
 	}
 }
 
-function init():void
+public function init():void
 {
 	vsync_flag = 0xfd;
-	const pallet = [15,61,16,48, 0,17,33,49, 0,18,34,50, 0,19,35,51];
-	ppu_put( 0x3f00, pallet, 16);
+	const pallet = [15, 61, 16, 48, 0, 17, 33, 49, 0, 18, 34, 50, 0, 19, 35, 51];
+	ppu_put(0x3f00, pallet, 16);
 	print_addr = 0x2000;
 }
 
-public function interrupt():void options(symbol:'_interrupt');
-public function interrupt_irq():void options(symbol:'_interrupt_irq');
-
-include macro ( "stdio.rb" );
+public function interrupt():void options(symbol: '_interrupt');
+public function interrupt_irq():void options(symbol: '_interrupt_irq');

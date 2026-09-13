@@ -59,6 +59,19 @@ const (
 // SetTrace は名前解決の観測関数を設定する (最上位スコープに置き、子スコープから辿って呼ぶ)。
 func (s *Scope) SetTrace(fn func(TraceEvent)) { s.trace = fn }
 
+// withoutTrace は観測を一時的に止めて fn を実行する (コンパイラ内部の参照用)。
+func (s *Scope) withoutTrace(fn func() *Value) *Value {
+	for r := s; r != nil; r = r.Parent {
+		if r.trace != nil {
+			saved := r.trace
+			r.trace = nil
+			defer func() { r.trace = saved }()
+			break
+		}
+	}
+	return fn()
+}
+
 func (s *Scope) emitTrace(ev TraceEvent) {
 	for r := s; r != nil; r = r.Parent {
 		if r.trace != nil {

@@ -1,22 +1,22 @@
-use stdio;
-include( "unittest.rb" );
+#fc 2
+public use stdio;
 
-public function assert_true( a:int, message:int* ):void
+public function assert_true(a:int, message:int*):void
 {
-  if( !a ){
-	  stdio.printf( "\nERROR: ", message, "  expects true but false\n" );
-	  stdio.exit(1);
-  }else{
-	  stdio.print('.');
-  }
+	if (!a) {
+		stdio.printf("\nERROR: ", message, "  expects true but false\n");
+		stdio.exit(1);
+	} else {
+		stdio.print('.');
+	}
 }
 
-public function assert_equal( a:int16, b:int16, message:int* ):void
+public function assert_equal(a:int16, b:int16, message:int*):void
 {
-  if( a != b ){
-	  stdio.printf( "\nERROR: ", message,"  expects ", b , "  but ", a, "\n" );
-	  stdio.exit(1);
-  }else{
-	  stdio.print('.');
-  }
+	if (a != b) {
+		stdio.printf("\nERROR: ", message, "  expects ", b, "  but ", a, "\n");
+		stdio.exit(1);
+	} else {
+		stdio.print('.');
+	}
 }
