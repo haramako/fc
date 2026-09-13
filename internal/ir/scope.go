@@ -10,6 +10,8 @@ import (
 
 type Scope struct {
 	Parent   *Scope
+	Owner    string // モジュールスコープならモジュール id (ローカル/グローバルは "")
+	trace    func(TraceEvent)
 	declares map[string]*Value
 	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
 	aliases  map[string]scopeAlias // `use a, b from mod;` (v2) で束縛した名前
@@ -36,6 +38,36 @@ func NewScope(parent *Scope) *Scope {
 	return &Scope{Parent: parent, declares: map[string]*Value{}}
 }
 
+// TraceEvent は名前解決の観測 (fcc migrate の参照解析用。通常のコンパイルでは発生しない)。
+//   - TraceHit: モジュール Scope の宣言/束縛 Name が見つかった
+//   - TraceGlob: モジュール Scope の glob 取り込み (use * from Via) を辿って Name が見つかった
+type TraceEvent struct {
+	Kind  TraceKind
+	Scope string // 観測したモジュールスコープの Owner
+	Via   string // TraceGlob: 辿った glob 先のモジュール id
+	Name  string
+	Value *Value // TraceHit: 見つかった値
+}
+
+type TraceKind int
+
+const (
+	TraceHit TraceKind = iota
+	TraceGlob
+)
+
+// SetTrace は名前解決の観測関数を設定する (最上位スコープに置き、子スコープから辿って呼ぶ)。
+func (s *Scope) SetTrace(fn func(TraceEvent)) { s.trace = fn }
+
+func (s *Scope) emitTrace(ev TraceEvent) {
+	for r := s; r != nil; r = r.Parent {
+		if r.trace != nil {
+			r.trace(ev)
+			return
+		}
+	}
+}
+
 // Find は id を探す。withPrivate が偽なら外から見える宣言 (public な宣言と再輸出された glob 取り込み) だけを見る。
 // 自スコープ → use したスコープ (public のみ) → 親スコープ の順。
 func (s *Scope) Find(id string, withPrivate bool) *Value {
@@ -46,11 +78,17 @@ func (s *Scope) Find(id string, withPrivate bool) *Value {
 	defer func() { s.finding = false }()
 	if val, ok := s.declares[id]; ok {
 		if withPrivate || val.Public {
+			if s.Owner != "" {
+				s.emitTrace(TraceEvent{Kind: TraceHit, Scope: s.Owner, Name: id, Value: val})
+			}
 			return val
 		}
 	}
 	if a, ok := s.aliases[id]; ok {
 		if withPrivate || a.reexport {
+			if s.Owner != "" {
+				s.emitTrace(TraceEvent{Kind: TraceHit, Scope: s.Owner, Name: id, Value: a.val})
+			}
 			return a.val
 		}
 	}
@@ -59,6 +97,9 @@ func (s *Scope) Find(id string, withPrivate bool) *Value {
 			continue
 		}
 		if v := u.mi.LookupPublic(id); v != nil {
+			if s.Owner != "" {
+				s.emitTrace(TraceEvent{Kind: TraceGlob, Scope: s.Owner, Via: u.mi.Id, Name: id, Value: v})
+			}
 			return v
 		}
 	}

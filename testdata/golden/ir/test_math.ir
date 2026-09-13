@@ -638,7 +638,6 @@
   (var 6 rand literal #"fastcall uint8()" val=:_math_rand pub)
   (var 7 sign literal #"fastcall uint8(sint8)" val=:_math_sign pub)
   (var 8 abs literal #"fastcall uint8(sint8)" val=:_math_abs pub)
-  (var 9 cos global #"macro" val=macro pub)
  )
  (lambda _math_sin #"fastcall sint8(sint8)" opt={id :sin fastcall :true}
   (args ({l1 x}))

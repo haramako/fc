@@ -113,11 +113,13 @@ type Module struct {
 }
 
 func NewModule(id, path string, globalScope *Scope) *Module {
+	scope := NewScope(globalScope)
+	scope.Owner = id
 	return &Module{
 		Id:            id,
 		Path:          path,
 		Version:       syntax.Version1,
-		Scope:         NewScope(globalScope),
+		Scope:         scope,
 		CurrentPublic: true,
 	}
 }

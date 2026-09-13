@@ -16,6 +16,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
+	"github.com/haramako/fc/internal/migrate"
 	"github.com/haramako/fc/internal/syntax"
 )
 
@@ -109,4 +110,38 @@ func Format(src []byte, filename string) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// Visibility は Migrate での `public` の付け方。
+type Visibility = migrate.Visibility
+
+const (
+	VisibilityMinimal  = migrate.Minimal  // 他モジュールから参照されている宣言だけ public (既定)
+	VisibilityPreserve = migrate.Preserve // v1 の実効可視性を保ち、さらに参照されているものを public (ライブラリ向け)
+)
+
+// MigrateOptions は fc 1 → fc 2 の移行 (fcc migrate) の設定。
+type MigrateOptions struct {
+	Target     string            // TargetEmu (既定) / TargetNES
+	Dir        string            // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
+	Mains      []string          // 解析の起点 (Dir 相対)。全 main の参照を合わせて可視性を決める
+	Libs       []string          // ライブラリのディレクトリ (preserve で移行)
+	Visibility Visibility        // Libs 以外の既定
+	Textmaps   map[string]string // include("macro.rb") を置き換える const NAME = textmap("PATH")
+	Write      bool              // 書き込む (偽なら対象を報告するだけ)
+	Force      bool              // asm が変わっても書き込んだままにする
+	Out        io.Writer         // 報告の出力先 (nil なら os.Stdout)
+}
+
+// MigrateResult は移行の結果。
+type MigrateResult = driver.MigrateResult
+
+// Migrate は v1 ソースを文法 v2 に書き換える。Write のとき、書き換え後に再コンパイルして
+// asm が一致しなければ元に戻してエラーを返す (Force で受け入れる)。
+func (c *Compiler) Migrate(opt MigrateOptions) (*MigrateResult, error) {
+	return c.c.Migrate(&driver.MigrateOptions{
+		Target: opt.Target, Dir: opt.Dir, Mains: opt.Mains, Libs: opt.Libs,
+		Visibility: opt.Visibility, Textmaps: opt.Textmaps,
+		Write: opt.Write, Force: opt.Force, Out: opt.Out,
+	})
 }

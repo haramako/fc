@@ -36,9 +36,13 @@ func Print(f *File) []byte {
 	p := &printer{comments: f.Comments}
 	if f.Version >= Version2 {
 		p.write(fmt.Sprintf("#fc %d", f.Version))
-		p.lastLine = 1
+		// ソースにプラグマ行があれば 1 行目として扱う (直後の空行を保つ)。
+		// 合成されたプラグマ (migrate) ならソースの 1 行目はまだ出力していない
+		if f.Pragma != "" {
+			p.lastLine = 1
+			p.blankOK = true
+		}
 		p.newline()
-		p.blankOK = true
 	}
 	p.stmtList(f.Stmts, true)
 	p.flushComments(Pos{Offset: int(^uint(0) >> 1)})

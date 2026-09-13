@@ -28,9 +28,26 @@ type Program struct {
 	Modules *ir.ModuleList // 登録順 (use に出会った深さ優先順)。リンク順にもなる
 	Options ir.Options     // グローバルな options (mapper, bank_count, ...)。モジュール処理順の後勝ち
 
+	// Sources はモジュール id → 読み込んだソース (fcc migrate / ツール用。Loader が登録する)
+	Sources map[string]*Source
+
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
+	curModule   string                     // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
+}
+
+// Source は読み込んだソースファイル。
+type Source struct {
+	File *syntax.File
+	Abs  string // 読み込みに使った実パス
+	Src  []byte // CRLF 正規化後の内容
+}
+
+// SetTrace は名前解決の観測を有効にする (fcc migrate の参照解析)。
+// fn には (参照元モジュール id, 観測) が渡る。
+func (p *Program) SetTrace(fn func(origin string, ev ir.TraceEvent)) {
+	p.global.SetTrace(func(ev ir.TraceEvent) { fn(p.curModule, ev) })
 }
 
 // NewProgram は空のプログラム状態を作り、組み込みマクロを登録する。
@@ -38,6 +55,7 @@ func NewProgram() *Program {
 	p := &Program{
 		Types:       types.NewUniverse(),
 		Modules:     ir.NewModuleList(),
+		Sources:     map[string]*Source{},
 		macros:      map[*ir.Value]MacroFn{},
 		constMacros: map[*ir.Value]ConstMacroFn{},
 	}
@@ -70,6 +88,11 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	mod.CurrentPublic = file.Version < syntax.Version2
 	p.Modules.Add(mod)
 
+	// use で別モジュールの相 1 にネストして入るので、参照元モジュールを保存・復帰する
+	outer := p.curModule
+	p.curModule = id
+	defer func() { p.curModule = outer }()
+
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}
 	defer h.recoverTo(&err)
 	h.compileStmts(file.Stmts)
@@ -78,6 +101,9 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 
 // CompileBodies はモジュールの全関数本体をコンパイルする (相 2)。
 func (p *Program) CompileBodies(mod *ir.Module, deps Resolver) (err error) {
+	outer := p.curModule
+	p.curModule = mod.Id
+	defer func() { p.curModule = outer }()
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}
 	defer h.recoverTo(&err)
 	// コンパイル中にネストしたlambdaが追加されることがあるため index ループ
@@ -182,6 +208,10 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 		se := perr.(*syntax.Error)
 		return nil, &diag.Error{Msg: se.Msg, Pos: se.Position()}
 	}
+	id := strings.TrimSuffix(filepath.Base(ref), ".fc")
+	if _, ok := l.prog.Sources[id]; !ok {
+		l.prog.Sources[id] = &Source{File: file, Abs: abs, Src: src}
+	}
 	return l.prog.CompileModule(file, l)
 }
 
@@ -189,12 +219,17 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 // baseDir は libPath の相対エントリの基準 ("" なら作業ディレクトリ)。
 func Compile(baseDir string, libPath []string, mainFile string) (*Program, error) {
 	prog := NewProgram()
-	loader := NewLoader(prog, baseDir, libPath)
-	if _, err := loader.Load(mainFile); err != nil {
-		return nil, err
-	}
-	if err := prog.CompileAllBodies(loader); err != nil {
+	if err := CompileProgram(prog, baseDir, libPath, mainFile); err != nil {
 		return nil, err
 	}
 	return prog, nil
+}
+
+// CompileProgram は Compile と同じだが、呼び出し側が用意した Program (SetTrace 済みなど) に対して行う。
+func CompileProgram(prog *Program, baseDir string, libPath []string, mainFile string) error {
+	loader := NewLoader(prog, baseDir, libPath)
+	if _, err := loader.Load(mainFile); err != nil {
+		return err
+	}
+	return prog.CompileAllBodies(loader)
 }

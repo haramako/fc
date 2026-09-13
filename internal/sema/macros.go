@@ -3,7 +3,7 @@ package sema
 // v1 の include("xxx.rb") (Ruby マクロ) の Go 実装。ファイル名キーで解決する。
 // v2 では include("*.rb") は廃止 (doc/v2_grammar.md §3.4, §3.5):
 //   - stdio.rb / unittest.rb / stdmacro.rb の中身は組み込み (builtins.go) になったので include は無視する
-//   - math.rb (cos) は v1 のあいだだけマクロ。v2 の math.fc では普通の関数にする
+//   - math.rb (cos) も組み込み (math モジュールの sin を参照する)
 //   - castle の macro.rb (_T / _M) は v1 のあいだだけ。v2 では const _T = textmap("...") に置き換える
 
 import (
@@ -16,17 +16,8 @@ var macroFiles = map[string]func(h *Hlc){
 	"stdmacro.rb": func(h *Hlc) {}, // times は未使用のまま削除
 	"stdio.rb":    func(h *Hlc) {}, // printf は組み込み
 	"unittest.rb": func(h *Hlc) {}, // unittest_run_tests は組み込み
-	"math.rb":     registerMath,
+	"math.rb":     func(h *Hlc) {}, // cos は組み込み
 	"macro.rb":    registerCastleMacros,
-}
-
-// fclib/math.rb
-func registerMath(h *Hlc) {
-	sin := h.scope.Find("sin", true)
-
-	h.defmacro("cos", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		return macroResult{expr: ccall(cv(sin), cop2(opAdd, args[0], cint(64)))}
-	})
 }
 
 // castle プロジェクトの src/macro.rb (テキスト変換マクロ _T / _M)。

@@ -8,10 +8,11 @@ package sema
 //   - asm("...")            : インラインアセンブラ
 //   - printf(args...)       : 引数の型で stdio.print / stdio.print_int16 を呼び分ける
 //   - unittest_run_tests()  : スコープ内の test_* 関数を順に呼ぶ
+//   - cos(x)                : sin(x + 64) への展開 (math モジュールの sin を使う)
 //   - textmap(path)         : 文字列→文字コード表 (const _T = textmap("..."); _T("…") で int[] 定数)
 //
-// printf / unittest_run_tests は stdio モジュールの関数を参照する。可視性に関係なく届く
-// (LookupInternal) が、stdio がプログラムに読み込まれていなければエラー。
+// printf / unittest_run_tests / cos は stdio / math モジュールの関数を参照する。可視性に関係なく届く
+// (LookupInternal) が、そのモジュールがプログラムに読み込まれていなければエラー。
 
 import (
 	"bytes"
@@ -71,6 +72,20 @@ func registerBuiltins(p *Program) {
 		}
 		r.stmts = append(r.stmts, ccall(cv(exit), cint(0)))
 		return r
+	})
+
+	// cos(x) = sin(x + 64) のマクロ展開 (v1 の math.rb)。math モジュールの sin を参照する。
+	// 関数にすると呼び出し側の asm が変わるので、インライン関数 (F2) が入るまでは組み込みマクロのまま。
+	// `math.cos(x)` はドット参照が math のスコープから親 (グローバル) に辿り着くので従来どおり書ける
+	h.defmacro("cos", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		m, ok := h.prog.Modules.Get("math")
+		if !ok {
+			panic(&diag.Error{Msg: "cos requires the math module (add `use math;`)"})
+		}
+		if len(args) != 1 {
+			panic(&diag.Error{Msg: "cos takes 1 argument"})
+		}
+		return macroResult{expr: ccall(cv(m.Interface().LookupInternal("sin")), cop2(opAdd, args[0], cint(64)))}
 	})
 
 	// textmap(path) は定数式。文字表を持つ新しいマクロ値を返し、それを呼ぶと文字列が int[] 定数になる
