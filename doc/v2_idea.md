@@ -63,7 +63,7 @@ lda AoSPoint_Base+1, y  ;; p.y
 ## FC BUG
 
 追加要望
-* fc: min, max, clamp の実装
+* fc: min, max, clamp の実装 ✅ 2026-09-15（組み込み。型ごとの関数は不要）
 * fc: frame size overの制限を緩める => ちゃんとregister spillを実装する
 * fc: switch文の問題 => まとめて対処したいので保留
   * fc: switchのcaseがかぶってもエラーにならない

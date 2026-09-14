@@ -352,6 +352,8 @@ var v:int16 = s as int16;                // s:sint8 = -1 なら -1 (符号拡張
 
 | 名前 | 働き |
 |---|---|
+| `min(a, b)` / `max(a, b)` | 小さい方 / 大きい方。型は引数の互換型（片方が符号付きなら符号付き比較、`int16` と `int` なら `int16`）。定数なら畳み込み。関数呼び出しではなく、その場に比較と代入のコードを出す（fastcall 関数の中でも使える） |
+| `clamp(x, lo, hi)` | `lo` 以上 `hi` 以下に収める（`x < lo` なら `lo`、`hi < x` なら `hi`）。型・コードは `min` / `max` と同じ |
 | `asm("lda #1", "sta $2000")` | インラインアセンブラ（各引数が 1 行） |
 | `printf(a, b, ...)` | 引数の型で `stdio.print`（`uint8*`）/ `stdio.print_int16`（整数）を呼び分ける。`stdio` モジュールが必要 |
 | `unittest_run_tests()` | `stdio.init()` の後、スコープ内の `test_*` 関数を宣言順に呼び、`stdio.exit(0)` する（`stdio` が必要） |

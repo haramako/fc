@@ -1081,6 +1081,27 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		case opField:
 			return &cexpr{kind: cOp, op: opField, args: []*cexpr{h.constEval(c.args[0])}, name: c.name}
 
+		case opMin, opMax, opClamp:
+			args := make([]*cexpr, len(c.args))
+			allLit := true
+			for i, a := range c.args {
+				args[i] = h.constEval(a)
+				allLit = allLit && args[i].isLiteralInt()
+			}
+			if allLit {
+				v := args[0].val.Int
+				switch c.op {
+				case opMin:
+					v = min(v, args[1].val.Int)
+				case opMax:
+					v = max(v, args[1].val.Int)
+				case opClamp:
+					v = min(max(v, args[1].val.Int), args[2].val.Int)
+				}
+				return cv(h.IntValue(v))
+			}
+			return &cexpr{kind: cOp, op: c.op, args: args}
+
 		case opLoad, opIndex, opRef, opDeref:
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
@@ -1613,6 +1634,45 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: fmt.Sprintf("cannot dereference %s (type %s is not a pointer)", describe(r), ir.ValType(r))})
 			}
 			leftValue = true
+
+		case opMin, opMax, opClamp:
+			// 組み込みの min / max / clamp: 互換型の一時変数に入れて、比較して入れ替える
+			//   min: t = a; if (b < a) t = b     max: t = a; if (a < b) t = b
+			//   clamp: t = x; if (t < lo) t = lo; if (hi < t) t = hi
+			vals := make([]ir.Operand, len(e.args))
+			for i, a := range e.args {
+				vals[i] = h.rval(a)
+			}
+			typ := ir.ValType(vals[0])
+			for _, v := range vals[1:] {
+				typ = h.compatible(typ, ir.ValType(v))
+			}
+			if typ.Kind != types.Int && typ.Kind != types.Bool {
+				panic(&diag.Error{Msg: fmt.Sprintf("%s: arguments must be integers (got %s)", e.op, typ)})
+			}
+			for i := range vals {
+				vals[i] = h.cast(vals[i], typ)
+			}
+			tmp := h.newTmp(typ)
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{vals[0]}})
+			replaceIf := func(a, b ir.Operand, with ir.Operand) { // if (a < b) tmp = with
+				c := h.newTmp(h.prog.Types.IntType(1, false))
+				end := h.newLabel("end")
+				h.emit(&ir.Op{Code: ir.OpLt, Dst: c, Src: []ir.Operand{a, b}})
+				h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{c}, Label: end})
+				h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{with}})
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: end})
+			}
+			switch e.op {
+			case opMin:
+				replaceIf(vals[1], tmp, vals[1])
+			case opMax:
+				replaceIf(tmp, vals[1], vals[1])
+			case opClamp:
+				replaceIf(tmp, vals[1], vals[1])
+				replaceIf(vals[2], tmp, vals[2])
+			}
+			r = tmp
 
 		case opField: // struct のフィールド参照 a.f (a が struct へのポインタなら自動で参照はがし)
 			fr := h.fieldRef(e.args[0], e.name)

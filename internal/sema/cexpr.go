@@ -69,6 +69,9 @@ const (
 	opRef        cop = "ref"
 	opDeref      cop = "deref"
 	opField      cop = "field"  // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
+	opMin        cop = "min"    // min(a, b) (組み込み。型は両辺の互換型、符号もそれに従う)
+	opMax        cop = "max"    // max(a, b)
+	opClamp      cop = "clamp"  // clamp(x, lo, hi)
 	opBitNot     cop = "bitnot" // ~x
 )
 

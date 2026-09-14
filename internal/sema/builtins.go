@@ -77,6 +77,21 @@ func registerBuiltins(p *Program) {
 		return r
 	})
 
+	// min(a, b) / max(a, b) / clamp(x, lo, hi): 型は引数の互換型で決まる (符号付きなら符号付き比較)。
+	// 定数なら畳み込み、そうでなければ比較して入れ替えるコードをその場に出す (関数呼び出しは無い)
+	for _, bi := range []struct {
+		name string
+		op   cop
+		n    int
+	}{{"min", opMin, 2}, {"max", opMax, 2}, {"clamp", opClamp, 3}} {
+		h.defmacro(bi.name, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+			if len(args) != bi.n {
+				panic(&diag.Error{Msg: fmt.Sprintf("%s takes %d arguments", bi.name, bi.n)})
+			}
+			return macroResult{expr: &cexpr{kind: cOp, op: bi.op, args: args}}
+		})
+	}
+
 	// cos(x) = sin(x + 64) のマクロ展開 (v1 の math.rb)。math モジュールの sin を参照する。
 	// 関数にすると呼び出し側の asm が変わるので、インライン関数 (F2) が入るまでは組み込みマクロのまま。
 	// `math.cos(x)` はドット参照が math のスコープから親 (グローバル) に辿り着くので従来どおり書ける
