@@ -241,22 +241,23 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
 
 - [ ] 複合代入 `|=` `&=` `^=` `*=` `/=` `%=` `<<=` `>>=`（memo: `|=` などを実装）
 - [ ] ビット反転 `~`（memo）
-- [ ] `sizeof()`（memo）
+- [x] `sizeof()`（memo）✅ 2026-09-14（v2、`sizeof(T)` / `sizeof(変数)`）
 - [ ] グローバル変数の初期化（memo。現状 "can't init global variable"）
       → BSSではなくデータセグメント+起動時コピー、または初期値付きDATA配置
 - [ ] const の二重配列・ポインタ配列（memo）
 - [ ] switch のジャンプテーブル実装（hlc内に既存TODO）
 - [ ] ブロックスコープの充実・宣言と定義の分離（memo: declare/define分離、
       public属性のscope移動、const属性のtype移動 — R1の型付き化と相性が良い）
-- [ ] struct（レコード型）— memo にはないが 6502 ゲーム開発で最も効く追加。
-      castle の並行配列パターン（en1〜en8等）を置き換えられる
+- [x] struct（レコード型）— memo にはないが 6502 ゲーム開発で最も効く追加。
+      castle の並行配列パターン（en1〜en8等）を置き換えられる ✅ 2026-09-14（v2 の `struct` と、並行配列そのものを宣言する `soa`。
+      [v2_types_struct.md](v2_types_struct.md)。castle への適用は未）
 - [ ] インライン関数（memo）
 - [ ] goto（memo。イベント処理の状態機械で有用）
 - [ ] クロージャ（memo。コスト大・要件不明瞭なので最後尾。まず要否を再検討）
 
 ### F3 — コード生成・最適化（doc/optimization.md の先へ）
 
-- [ ] ピープホール最適化の一般化（現状 `index`+`pget/pset` 融合のみ →
+- [ ] ピープホール最適化の一般化（現状 `index`+`pget/pset` と `add(ptr,#k)`+`pget/pset`（2026-09-14）の融合のみ →
       冗長 `lda`/`sta` 除去、フラグ再利用 = memo「ステータスレジスタ最適化」）
 - [ ] 定数伝播・畳み込みの拡張（現状は2の累乗 mul/div/mod のみ）
 - [ ] レジスタ割付の改善: A レジスタ割付条件の拡大、live range の精度向上
