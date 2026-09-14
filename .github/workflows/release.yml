@@ -19,6 +19,34 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # 同梱する ca65 / ld65 を dist-cc65/<os>_<arch>/ に用意する (.goreleaser.yaml の archives.files が拾う)。
+      # Linux amd64 はソースから静的リンクで、Windows は公式スナップショット (32 ビット exe。arm64 Windows でも動く)。
+      # それ以外 (darwin, linux/arm64) は同梱せず、README-cc65.txt で案内する
+      - name: Prepare bundled cc65
+        run: |
+          set -eu
+          mkdir -p dist-cc65
+          git clone --depth 1 https://github.com/cc65/cc65.git /tmp/cc65
+          ver=$(git -C /tmp/cc65 rev-parse --short HEAD)
+          make -C /tmp/cc65 -j"$(nproc)" bin LDFLAGS=-static
+          curl -fsSL -o /tmp/cc65-win.zip "https://downloads.sourceforge.net/project/cc65/cc65-snapshot-win32.zip"
+          mkdir -p /tmp/cc65-win && (cd /tmp/cc65-win && unzip -q /tmp/cc65-win.zip)
+          for t in linux_amd64 linux_arm64 windows_amd64 windows_arm64 darwin_amd64 darwin_arm64; do
+            mkdir -p "dist-cc65/$t"
+            cp /tmp/cc65/LICENSE "dist-cc65/$t/LICENSE-cc65.txt"
+          done
+          cp /tmp/cc65/bin/ca65 /tmp/cc65/bin/ld65 dist-cc65/linux_amd64/
+          for t in windows_amd64 windows_arm64; do
+            cp /tmp/cc65-win/bin/ca65.exe /tmp/cc65-win/bin/ld65.exe "dist-cc65/$t/"
+          done
+          for t in linux_amd64 windows_amd64 windows_arm64; do
+            printf 'ca65 / ld65 bundled from cc65 (https://cc65.github.io/, zlib license, git %s).\nfcc uses the copies next to its own executable first; set FC_CC65_BIN=<dir> or put another cc65 on PATH to override.\n' "$ver" > "dist-cc65/$t/README-cc65.txt"
+          done
+          for t in linux_arm64 darwin_amd64 darwin_arm64; do
+            printf 'ca65 / ld65 are not bundled for this platform. Install cc65 (https://cc65.github.io/, e.g. brew install cc65 / apt install cc65) so that ca65 and ld65 are on PATH, or set FC_CC65_BIN=<dir>.\n' > "dist-cc65/$t/README-cc65.txt"
+          done
+          ls -lR dist-cc65
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

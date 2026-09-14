@@ -513,7 +513,7 @@ func (c *Compiler) sh(name string, args ...string) {
 
 // run は外部コマンドを実行し、失敗なら *CommandError を返す。
 func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, ToolPath(name), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		code := -1

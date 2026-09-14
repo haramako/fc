@@ -15,3 +15,4 @@ a.*
 y.output
 fcc.exe
 /fcc
+dist-cc65/

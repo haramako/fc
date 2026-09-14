@@ -9,7 +9,9 @@ ld65 でリンクして NES ROM (.nes) または実験用バイナリ (emu タ�
 ## 必要なもの
 
 - Go 1.24+
-- [cc65](https://cc65.github.io/) (ca65 / ld65 が PATH にあること)
+- [cc65](https://cc65.github.io/) の ca65 / ld65（ソースからビルドする場合は PATH に置く。
+  [リリース](https://github.com/haramako/fc/releases)の Windows / Linux(amd64) 版には同梱してあり、`fcc` と同じ
+  ディレクトリのものが優先される。`FC_CC65_BIN=<dir>` で差し替え可。`fcc version` がどれを使うか表示する）
 
 ## ビルド
 

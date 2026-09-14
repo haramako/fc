@@ -1,4 +1,5 @@
 # goreleaser: fcc の単体バイナリを各プラットフォーム向けに作る (fclib/ share/ は embed 済み)。
+# Windows / Linux amd64 には ca65 / ld65 (cc65、zlib ライセンス) を同梱する。
 #
 #   ローカルで試す:  goreleaser release --snapshot --clean
 #   リリース:        タグ v* を push すると .github/workflows/release.yml が走る
@@ -28,6 +29,10 @@ archives:
       - README.md
       - LICENSE.txt
       - doc/language_reference.md
+      # 同梱の ca65 / ld65 (cc65。Windows / Linux amd64)。release.yml が dist-cc65/<os>_<arch>/ に用意する。
+      # fcc は自分の実行ファイルと同じディレクトリの ca65 / ld65 を最初に探す (internal/driver/tools.go)
+      - src: "dist-cc65/{{ .Os }}_{{ .Arch }}/*"
+        strip_parent: true
 
 checksum:
   name_template: "checksums.txt"

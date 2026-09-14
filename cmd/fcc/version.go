@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
+
+	"github.com/haramako/fc/internal/driver"
 )
 
 var version = "" // -X main.version=v1.2.3
@@ -48,5 +50,13 @@ func versionString() string {
 
 func runVersion() int {
 	fmt.Println(versionString())
+	// 使う ca65 / ld65 (同梱 / FC_CC65_BIN / PATH の順に探す)
+	for _, tool := range []string{"ca65", "ld65"} {
+		p := driver.ToolPath(tool)
+		if p == tool {
+			p = "(not found)"
+		}
+		fmt.Printf("%s: %s\n", tool, p)
+	}
 	return 0
 }
