@@ -5,8 +5,8 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 **Rubyとのバイナリレベルの互換性は捨ててよい**という前提で、
 (A) Goに即した設計への転換と (B) 機能追加を計画する。
 
-> 状態: **本編(R0〜R5 / F1〜F3)は未着手**。ただし検証基盤まわりの一部
-> （実プロジェクトの取り込み・NESランナー・MesenCE統合）は 2026-08-29 に先行実装済み。
+> 状態（2026-09-14）: **R0〜R3 完了、F-fmt（フォーマッタ・文法 v2・migrate）完了**。
+> 未着手: R2 の複数エラー報告・メッセージ改善、R3 のモジュール並列コンパイル（→ F-mod）、R4、R5、F-mod、F1〜F4。
 > 末尾の「作業ログ」を参照。着手時はチェックボックスと作業ログを更新していく。
 >
 > **2026-09-12 更新**: R0〜R3 の実行計画は **[v2_plan.md](v2_plan.md)**（ブランチ `feature/v2`）に
@@ -49,16 +49,16 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 
 ### Phase R0 — 検証基盤の切り替え（最優先・0.5〜1日）
 
-- [ ] スナップショットテスト機構: `go test ./... -update` で ir/allocir/asm/bin/stdout の
+- [x] スナップショットテスト機構: `go test ./... -update` で ir/allocir/asm/bin/stdout の ✅ v2_plan.md R0-1
       golden を **Go自身の出力から再生成**できるようにする（現 gen_golden.rb の役目を置換）
-- [ ] `testdata/golden/ast` と `.pos` は Ruby 由来のまま凍結 → R1 で typed AST に置き換える際に廃止
+- [x] `testdata/golden/ast` と `.pos` は Ruby 由来のまま凍結 → R1 で typed AST に置き換える際に廃止 ✅ R0-2 で廃止
 - [x] 実プロジェクト受け入れテスト → **先行実装済み (2026-08-29)**。当初案の
       「外部ディレクトリを参照する external test」ではなく、**コンパイルに必要な資材を
       `examples/` に取り込む**方式に変更した（外部環境に依存せず CI でも回るため）。
       `TestExampleMiku` / `TestExampleCastle` が ROM のバイト一致まで検証する。
       実プロジェクトとの差分確認は `tools/sync_examples.ps1`
-- [ ] ベンチマーク追加（castle フルコンパイル時間、test一式時間）— 以後の変更の性能退行検知
-- [ ] 計画ドキュメント運用の切替（本ドキュメントを進行管理に昇格、go_port_plan.md はアーカイブ）
+- [x] ベンチマーク追加（castle フルコンパイル時間、test一式時間）— 以後の変更の性能退行検知 ✅ R0-3 `internal/driver/bench_test.go`
+- [x] 計画ドキュメント運用の切替（本ドキュメントを進行管理に昇格、go_port_plan.md はアーカイブ） ✅ R0〜R3 の進行管理は v2_plan.md、本書は全体像と Part B
 
 **合格条件**: `-update` でgolden再生成→再実行で差分ゼロ。castleスモーク通過。
 
@@ -67,19 +67,19 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 現状はRubyの模倣（`[]any` + `Sym` + `OMap`、`const_eval` の破壊的書き換え、
 `pos_info` の構造的キー）。これを解体する。
 
-- [ ] 型付きASTノード定義（`ast` パッケージ）: 各ノードが **位置情報(file:line:col)を保持**
+- [x] 型付きASTノード定義（`ast` パッケージ）: 各ノードが **位置情報(file:line:col)を保持** ✅ R1-b `internal/syntax/ast.go`
       → `pos_info` の「同一内容の文が同じ行番号に collapse する」バグが構造的に消える
-- [ ] パーサアクションを型付きノード生成に書き換え（goyacc は維持。`%union` を活用）
-- [ ] `const_eval` の純関数化（ASTの破壊的書き換えを廃止。`+=` の部分木共有などの
+- [x] パーサアクションを型付きノード生成に書き換え（goyacc は維持。`%union` を活用） ✅ R1-b
+- [x] `const_eval` の純関数化（ASTの破壊的書き換えを廃止。`+=` の部分木共有などの ✅ R1-c。ただし `+=` の部分木共有 (左辺 2 回評価) は asm 不変のため `cmemo` で**保存**した。廃止は R4
       Ruby互換のためだけの挙動を廃止）
-- [ ] 型付きIR: `[][]any` の ops → `Op` 構造体（opcode enum + オペランド）。
+- [x] 型付きIR: `[][]any` の ops → `Op` 構造体（opcode enum + オペランド）。 ✅ R1-d / R3-a `internal/ir`
       Value/CastedValue/PointeredArray の動的ディスパッチ（`ValKind` 等）を廃止し、
       オペランドを interface + 型switch か、フラットな構造体に整理
-- [ ] マクロAPIを型付きビルダーに変更（`_T`/`printf` 等を新APIで書き直し）
-- [ ] `OMap` の廃止/縮小: 順序が必要な箇所（scope宣言順・options）は明示的な
+- [x] マクロAPIを型付きビルダーに変更（`_T`/`printf` 等を新APIで書き直し） ✅ R1-f、2026-09-14 に組み込み化 (`sema/builtins.go`)
+- [x] `OMap` の廃止/縮小: 順序が必要な箇所（scope宣言順・options）は明示的な ✅ R1-e で全廃
       ordered 構造に。**`Canon()` の文字列化キーは全廃**（性能・明瞭性）
-- [ ] `Sym` の整理（型付きAST後は enum/string で十分になる）
-- [ ] グローバル可変状態の排除: `typeCache` を Compiler インスタンス持ちにする
+- [x] `Sym` の整理（型付きAST後は enum/string で十分になる） ✅ R1-e で全廃
+- [x] グローバル可変状態の排除: `typeCache` を Compiler インスタンス持ちにする ✅ R1-g (`types.Universe` を Program 持ち)
       （モジュール並列コンパイルとテスト並列化の前提）
 
 **合格条件**: 挙動golden（stdout/exit・errors）全一致 + asm スナップショット差分ゼロ
@@ -87,23 +87,23 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 
 ### Phase R2 — エラー処理と報告の近代化（1〜2日）
 
-- [ ] `panic(*CompileError)`+recover を境界まで整理: パッケージ外は `error`、
+- [x] `panic(*CompileError)`+recover を境界まで整理: パッケージ外は `error`、 ✅ R2 (`diag.Error`、回復点は sema.CompileModule/CompileBodies と codegen.Compile)
       内部は panic を許容するなら回復点を `Compile()` 1箇所に明文化
-- [ ] エラーに正確な位置(file:line:col)を必ず付与（R1の位置情報で実現）
-- [ ] **複数エラー報告**: 文単位でリカバリして最初の1個で止めない
-- [ ] メッセージ文言の改善（`" is not pointer"` のような Ruby 由来の欠損を修正。
+- [x] エラーに正確な位置(file:line:col)を必ず付与（R1の位置情報で実現） ✅ R2 (+ 2026-09-12 に `ir.Op.Pos` でコード生成時のエラーも式の位置に)
+- [ ] **複数エラー報告**: 文単位でリカバリして最初の1個で止めない（**未着手**。R2 では「最初のエラー以降の挙動が変わる」ため除外。`fcc check` と一緒に）
+- [ ] メッセージ文言の改善（**未着手**。`" is not pointer"` のような Ruby 由来の欠損を修正。
       errors.fc の正規表現は緩いので大半は互換のまま改善可能）
-- [ ] CLI出力の整形（`file:line:col: error: ...` 形式、TTYなら色付け）
+- [x] CLI出力の整形（`file:line:col: error: ...` 形式、TTYなら色付け） ✅ `file:line:col: error: msg`。TTY の色付けは未実装
 
 ### Phase R3 — パッケージ構成とAPI（1〜2日）
 
-- [ ] `internal/fc` の分割: `lexer` / `ast` / `sema`(旧HLC) / `ir` / `regalloc` /
+- [x] `internal/fc` の分割: `lexer` / `ast` / `sema`(旧HLC) / `ir` / `regalloc` / ✅ R3-a
       `codegen`(旧LLC) / `driver` 程度の粒度に
-- [ ] ライブラリAPIの公開: `pkg/fc` に `Compile(opts) (*Program, error)` 相当を出し、
+- [x] ライブラリAPIの公開: `pkg/fc` に `Compile(opts) (*Program, error)` 相当を出し、 ✅ R3-e `pkg/fc` (`Build` / `Format` / `Migrate`)
       CLI以外（エディタ連携・ツール）から使えるようにする
-- [ ] モジュール単位の並列コンパイル（R1のグローバル状態排除が前提。
+- [ ] モジュール単位の並列コンパイル（**未着手**。ca65 の並列化だけ 2026-09-12 に前倒し。sema/codegen の並列は F-mod。R1のグローバル状態排除が前提。
       採番の決定性はモジュール内に閉じるよう再設計）
-- [ ] `go test` の並列化解禁（現状 `t.Chdir` 依存 → 作業ディレクトリ非依存のビルドAPIに）
+- [x] `go test` の並列化解禁（現状 `t.Chdir` 依存 → 作業ディレクトリ非依存のビルドAPIに） ✅ R3-d
 
 ### Phase R4 — Ruby癖の掃除 = 意図的な挙動変更（1〜2日）
 
