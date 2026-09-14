@@ -19,6 +19,7 @@ import (
 type Llc struct {
 	OptimizeLevel int
 	Limits        regalloc.Limits // レジスタ領域の大きさ (base.asm と一致させる)
+	FarCall       bool            // far call が有効 (各モジュールに farcall / FC_FARCALL の import を出す)
 	labelCount    int
 	codeSegment   string
 	curLambda     *ir.Lambda // 処理中の関数 (エラー位置の補完用)
@@ -104,6 +105,10 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	for _, m := range mod.Uses {
 		inc.push(fmt.Sprintf("\t.include \"_%s.inc\"", m.Id))
 		asm.push(fmt.Sprintf("\t.include \"_%s.inc\"", m.Id))
+	}
+	if l.FarCall {
+		asm.push("\t.import farcall")
+		asm.push("\t.import FC_FARCALL")
 	}
 
 	// include(.asm)の処理
@@ -285,7 +290,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 			pushArgSize -= ir.ValType(op.In(0)).Base.Size
 
-			if ir.ValKind(op.In(0)) == ir.KindLiteral {
+			if op.Far {
+				// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いて farcall (ターゲット側のトランポリン) を呼ぶ
+				r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
+				r.push(l.callSubroutine("farcall", lmd.FrameSize+pushArgSize))
+			} else if ir.ValKind(op.In(0)) == ir.KindLiteral {
 				// 関数を直に呼ぶ
 				r.push(l.callSubroutine(mangle(ir.ValLiteral(op.In(0)).Symbol), lmd.FrameSize+pushArgSize))
 			} else {
@@ -318,7 +327,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		case ir.OpFastcall:
 			pushFastcallArgSize = 0
 
-			if ir.ValKind(op.In(0)) == ir.KindLiteral {
+			if op.Far {
+				r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
+				r.push("jsr farcall")
+			} else if ir.ValKind(op.In(0)) == ir.KindLiteral {
 				// 関数を直に呼ぶ
 				r.push(fmt.Sprintf("jsr %s", mangle(ir.ValLiteral(op.In(0)).Symbol)))
 			} else {
@@ -928,6 +940,16 @@ func (l *Llc) storeA(v ir.Operand, n int) any {
 		return nil
 	}
 	return fmt.Sprintf("sta %s", l.byte(v, n))
+}
+
+// farCallSetup は far call の呼び先アドレスとバンク番号 (ld65.cfg の bank = N を .bank で引く) を FC_FARCALL に置く。
+func (l *Llc) farCallSetup(sym string) []any {
+	s := mangle(sym)
+	return []any{
+		fmt.Sprintf("lda #<%s", s), "sta FC_FARCALL+0",
+		fmt.Sprintf("lda #>%s", s), "sta FC_FARCALL+1",
+		fmt.Sprintf("lda #<.bank(%s)", s), "sta FC_FARCALL+2",
+	}
 }
 
 // callSubroutine はスタックポインタ(X)を進めて jsr する。

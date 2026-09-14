@@ -1,6 +1,6 @@
 # far call（バンクをまたぐ関数呼び出し）
 
-2026-09-15 設計メモ。v2_idea.md「interbank call を実装する」。
+2026-09-15 設計メモ。v2_idea.md「interbank call を実装する」。実装済み（§7）。利用者向けの説明は language_reference.md §4.4。
 
 ## 1. 動機
 
@@ -60,7 +60,7 @@ far call になるが、トランポリンが**実行時にバンクを比べて
 引数・戻り値は普通の関数と**完全に同じ**（フレームに積む / fastcall なら FC_FASTCALL_REG）。加えて
 
 ```
-FC_FARCALL: .res 3         ; base.asm の FC_ZEROPAGE に追加。+0,+1 = 呼び先アドレス、+2 = バンク番号 (.bank)
+FC_FARCALL: .res 3         ; base.asm の BSS に追加 (ZP に空きが無いプロジェクトがあるので絶対アドレス)。+0,+1 = 呼び先アドレス、+2 = バンク番号 (.bank)
 ```
 
 にセットして、普通の関数なら `call farcall, #frame_size`（`call` マクロで X を進める）、fastcall なら `jsr farcall`。
@@ -70,11 +70,11 @@ FC_FARCALL: .res 3         ; base.asm の FC_ZEROPAGE に追加。+0,+1 = 呼び
 
 ```
 	lda #<_bg_mmc__fetch_area
-	sta <FC_FARCALL+0
+	sta FC_FARCALL+0
 	lda #>_bg_mmc__fetch_area
-	sta <FC_FARCALL+1
+	sta FC_FARCALL+1
 	lda #<.bank(_bg_mmc__fetch_area)
-	sta <FC_FARCALL+2
+	sta FC_FARCALL+2
 	call farcall, #12
 ```
 
@@ -94,11 +94,11 @@ emu ターゲットには「切替せず jsr するだけ」の実装を置く�
 MMC3 用の参考実装（castle の `mmc3.fc` の `pbank_bak` / `BANK_SELECT` を使う）:
 
 ```
-	.importzp FC_FARCALL
+	.import FC_FARCALL
 	.import _mmc3_pbank_bak
 	.export farcall
 farcall:
-	lda <FC_FARCALL+1
+	lda FC_FARCALL+1
 	cmp #$A0
 	bcs @slot1
 	ldy #0                  ; slot 0: pbank_bak+0, BANK_SELECT = 6
@@ -106,21 +106,21 @@ farcall:
 @slot1:
 	ldy #1                  ; slot 1: pbank_bak+1, BANK_SELECT = 7
 	lda _mmc3_pbank_bak,y
-	cmp <FC_FARCALL+2
+	cmp FC_FARCALL+2
 	bne @switch
 	jmp (FC_FARCALL)       ; 既にマップ済み: そのまま飛ぶ
 @switch:
 	pha                     ; 今のバンクを退避
 	tya
 	pha                     ; スロットも退避
-	lda <FC_FARCALL+2
+	lda FC_FARCALL+2
 	sta _mmc3_pbank_bak,y
 	sei
 	tya
 	clc
 	adc #6
 	sta $8000
-	lda <FC_FARCALL+2
+	lda FC_FARCALL+2
 	sta $8001
 	cli
 	jsr @indirect
@@ -175,9 +175,9 @@ farcall:
 3. `bg.fc` の `fetch_area` 系ラッパーは不要になる（残しても動く）。`set_pbank` の手動切替はデータ参照のためだけに残る
 4. `fcc check` の far call 一覧で、熱い経路が far になっていないか確認。必要なら `options(near: true)`
 
-## 7. 実装計画（fc 側、1 日程度）
+## 7. 実装計画（fc 側、1 日程度）✅ 2026-09-15 実装済み（1〜6 すべて。NES 実機での確認は castle 側で）
 
-1. base.asm に `FC_FARCALL: .res 3`（`.exportzp`）。fc 生成の ld65.cfg に `bank = N`
+1. base.asm に `FC_FARCALL: .res 3`（BSS、`.export`）。fc 生成の ld65.cfg に `bank = N`
 2. sema: 呼び出しで「呼び先モジュールが切替バンク（`bank` ≥ 0）かつ別モジュール、かつ `near` でない」を判定し、
    `OpCall` / `OpFastcall` に `Far: true` を付ける（IR ダンプは `(:call ... far)`）
 3. codegen: Far なら FC_FARCALL のセットと `call farcall, #n` / `jsr farcall`。fastcall の引数積みの後にセットする

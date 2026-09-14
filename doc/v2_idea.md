@@ -15,7 +15,7 @@
 - void* のようなポインタのtop型を追加する ✅ 2026-09-14（`*void`、暗黙変換あり）
 
 
-- interbank call を実装する
+- interbank call を実装する ✅ 2026-09-15（far call。呼ぶ側の構文は無しで自動。doc/v2_farcall.md）
   - `add(1,2)` のかわりに bank(3).add(1,2)
 
 structに関しては、AoS（通常の構造体）だけではなくSoAの形も対応したい。

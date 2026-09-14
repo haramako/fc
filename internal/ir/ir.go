@@ -96,6 +96,7 @@ type Op struct {
 	Label string          // OpLabel / OpIf / OpJump の飛び先
 	Type  *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
 	Text  string          // OpAsm のアセンブラ行
+	Far   bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
 	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
 }
 
@@ -135,6 +136,9 @@ func (op *Op) positional() []any {
 		r = append(r, op.Dst)
 		for _, s := range op.Src {
 			r = append(r, s)
+		}
+		if op.Far {
+			r = append(r, "far")
 		}
 	}
 	return r

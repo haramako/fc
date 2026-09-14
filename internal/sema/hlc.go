@@ -1006,6 +1006,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		lmd.Pos = syntax.At(h.module.Path, c.pos)
 		h.module.Lambdas = append(h.module.Lambdas, lmd)
 		h.addDefModule(&ir.Def{Sym: id, Kind: ir.DefCode, Type: lmd.Type, Lambda: lmd})
+		h.prog.lambdas[id] = lmd
 		return cv(ir.NewSymbolLiteral("", lmd.Type, id))
 
 	case cDot:
@@ -1138,7 +1139,7 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 	}
 	// 旧実装は truthy(opt[:fastcall]) で、値が何であれキーがあれば fastcall 扱い
 	typ := h.prog.Types.Func(argTypes, baseType, opts.Has("fastcall"))
-	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Extern: body == nil, Body: body}
+	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil, Body: body}
 }
 
 // foldIntOp は整数リテラル同士の演算を畳み込む (Ruby の整数演算と真偽値→0/1 に準拠)。
@@ -1578,7 +1579,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 						}
 						h.emit(&ir.Op{Code: ir.OpPushFastcallArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
 					}
-					h.emit(&ir.Op{Code: ir.OpFastcall, Dst: r, Src: []ir.Operand{lmdV}})
+					h.emit(&ir.Op{Code: ir.OpFastcall, Dst: r, Src: []ir.Operand{lmdV}, Far: h.isFarCall(lmdV)})
 					h.fastCalling = false
 				} else {
 					h.emit(&ir.Op{Code: ir.OpPushResult, Type: lmdType.Base})
@@ -1588,7 +1589,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 						v = h.cast(v, lmdType.Params[i])
 						h.emit(&ir.Op{Code: ir.OpPushArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
 					}
-					h.emit(&ir.Op{Code: ir.OpCall, Dst: r, Src: []ir.Operand{lmdV}})
+					h.emit(&ir.Op{Code: ir.OpCall, Dst: r, Src: []ir.Operand{lmdV}, Far: h.isFarCall(lmdV)})
 				}
 			}
 
@@ -1768,6 +1769,25 @@ func (h *Hlc) newLabels(names ...string) []string {
 
 func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
 	return h.addVar(ir.NewLocal(h.tmpName("$"), typ, ir.LTTemp))
+}
+
+// isFarCall は呼び先 fn (関数のシンボルリテラル) が far call (farcall トランポリン経由) になるか (doc/v2_farcall.md §3.2):
+// options(farcall: true) が有効で、呼び先が別モジュールの切替バンクの関数で、options(near: true) が付いていないとき。
+// 関数ポインタ経由は対象外 (呼ぶ側の責任)。
+func (h *Hlc) isFarCall(fn ir.Operand) bool {
+	if !h.prog.FarCallEnabled() {
+		return false
+	}
+	lit := ir.ValLiteral(fn)
+	if lit == nil || lit.Kind != ir.KindLiteral || lit.IsInt {
+		return false
+	}
+	callee, ok := h.prog.lambdas[lit.Symbol]
+	if !ok || callee.Module == nil || callee.Module == h.module || !callee.Module.Switchable() || callee.Options.Has("near") {
+		return false
+	}
+	h.prog.FarCalls = append(h.prog.FarCalls, FarCall{Pos: h.curPos, Caller: h.lmd.Id, Callee: callee.Id})
+	return true
 }
 
 // containsCall は式 (評価済みでもよい) に関数呼び出し (マクロ呼び出しも含む) が含まれるか。

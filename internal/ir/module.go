@@ -236,6 +236,7 @@ type Lambda struct {
 	Args      []*Value        // 仮引数の変数 (compileLambda で Params から作られる)
 	Type      *types.Type
 	Options   Options       // options(...) の生の値 (segment, fastcall, symbol, ...)
+	Module    *Module       // 宣言したモジュール (far call の判定に使う)
 	Extern    bool          // 本体を持たない (宣言のみ)
 	Body      *syntax.Block // 関数本体。nil なら extern
 	Ops       []*Op         // nil 要素は最適化で削除された命令
@@ -246,6 +247,16 @@ type Lambda struct {
 	Asm       []string
 	FrameSize int
 	ZpUsed    int // レジスタ割付後: 普通の関数は L の使用バイト数、fastcall は FC_FASTCALL_REG の使用バイト数 (引数・戻り値込み)
+}
+
+// Switchable はこのモジュールが切替バンクに載っているか (`options(bank: N)` で N >= 0。`options(near: true)` なら固定扱い)。
+// doc/v2_farcall.md §3.2
+func (m *Module) Switchable() bool {
+	if m.Options.Has("near") {
+		return false
+	}
+	b, ok := m.Options.Int("bank")
+	return ok && b >= 0
 }
 
 // Segment は配置セグメント (options(segment:...))。"" なら既定。

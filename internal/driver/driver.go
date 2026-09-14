@@ -64,6 +64,7 @@ type Result struct {
 	Objects  []string       // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
 	BuildDir string         // 中間生成物ディレクトリ
 	Warnings []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
+	FarCalls []sema.FarCall // far call になった呼び出し (options(farcall: true) のとき。fcc build -d で表示)
 }
 
 type Compiler struct {
@@ -173,6 +174,8 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	// compile2 (中間コード -> アセンブラファイル)
 	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
 	llc.Limits.FastcallReg = c.fastcallRegSize()
+	llc.FarCall = prog.FarCallEnabled()
+	result.FarCalls = prog.FarCalls
 	for _, mod := range prog.Modules.List() {
 		if mod.FromFcm {
 			continue
@@ -200,6 +203,9 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		sources = append(sources, filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
 	sources = append(sources, c.findShare("runtime.asm"), filepath.Join(c.FCHome, "fclib", opt.Target, "runtime_init.asm"))
+	if fc := c.farcallAsm(); fc != "" {
+		sources = append(sources, fc)
+	}
 	if err := c.assembleAll(sources); err != nil {
 		return nil, err
 	}
@@ -297,7 +303,7 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 	var segs []segInfo
 	for _, m := range c.prog.Modules.List() {
 		bank := 0
-		if b, ok := m.Options.Int("bank"); ok {
+		if b, ok := m.Options.Int("bank"); ok && c.target == "nes" { // emu にバンクは無い (bank は far call の判定にだけ使う)
 			bank = b
 		}
 		if bank < 0 {
@@ -323,7 +329,7 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 		b.WriteString("  SRAM: start = $0200, size = $0500, type = rw, define = yes;\n")
 		b.WriteString("  HEADER: start = $0000, size = $10, file = %O, fill = yes;\n")
 		for i, bank := range banks {
-			fmt.Fprintf(&b, "  ROM%d: start = $%x, size = $%x, file = %%O, fill = yes, define = yes;\n", i, bank.org, bank.size)
+			fmt.Fprintf(&b, "  ROM%d: start = $%x, size = $%x, file = %%O, fill = yes, define = yes, bank = %d;\n", i, bank.org, bank.size, i)
 		}
 		b.WriteString("  ROMV: start = $fffa, size = $0006, file = %O, fill = yes;\n")
 		fmt.Fprintf(&b, "  ROMC: start = $0000, size = $%x, file = %%O, fill = yes;\n", ineschr*0x2000)
@@ -349,7 +355,7 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 		b.WriteString("  ZP_STACK: start = $80, size = $80, type = rw, define = yes;\n")
 		b.WriteString("  SRAM: start = $0200, size = $0500, type = rw, define = yes;\n")
 		b.WriteString("  ROMV: start = $1000, size = 3, type = rw, define = yes;\n")
-		b.WriteString("  ROM: start = $1003, size = $DFFD, file = %O, fill = no, define = yes;\n")
+		b.WriteString("  ROM: start = $1003, size = $DFFD, file = %O, fill = no, define = yes, bank = 0;\n")
 		b.WriteString("  CHARS: start = $0000, size = $10000, type = rw, fill = no, define = yes;\n")
 		b.WriteString("}\n\nSEGMENTS {\n")
 		b.WriteString("  CODE: load = ROM, type = ro, define = yes;\n")
@@ -374,9 +380,27 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 	mapFile := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".map"
 	args := []string{"-m", mapFile, "-o", opt.Out, "-C", filepath.Join(c.buildDir, "ld65.cfg"),
 		filepath.Join(c.buildDir, "base.o"), filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
+	if c.farcallAsm() != "" {
+		args = append(args, filepath.Join(c.buildDir, "farcall.o"))
+	}
 	args = append(args, objs...)
 	c.sh("ld65", args...)
 	return mapFile
+}
+
+// farcallAsm は fc が用意する farcall トランポリン (doc/v2_farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では
+// 「そのまま飛ぶ」だけの fclib/<target>/farcall.asm を使う。バンク切替のあるマッパーはプロジェクトが farcall を用意する。
+func (c *Compiler) farcallAsm() string {
+	if c.target == "nes" {
+		if m, ok := c.prog.Options.Get("mapper"); ok && !(m.Kind == ir.OptStr && m.Str == "MMC0" || m.Kind == ir.OptInt && m.Int == 0) {
+			return ""
+		}
+	}
+	p := filepath.Join(c.FCHome, "fclib", c.target, "farcall.asm")
+	if !fileExists(p) {
+		return ""
+	}
+	return p
 }
 
 // fastcallRegSize は FC_FASTCALL_REG の大きさ (options(fastcall_reg: N)。既定は regalloc.DefaultLimits)。
@@ -396,6 +420,7 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\t.exportzp FC_REG\n" +
 		"\t.exportzp FC_STACK\n" +
 		"\t.exportzp FC_FASTCALL_REG\n" +
+		"\t.export FC_FARCALL\n" +
 		"\t.export FC_FASTCALL_REG_SIZE : absolute\n" +
 		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", c.fastcallRegSize()) +
 		"\t.exportzp L \t\t\t\t\t; TODO: そのうち消すこと\n" +
@@ -410,6 +435,9 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"FC_LOCAL: .res $10\n" +
 		"FC_REG: .res $10\n" +
 		"FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE\n" +
+		"\n" +
+		".segment \"BSS\"\n" +
+		"FC_FARCALL: .res 3\n" +
 		"\n" +
 		".segment \"FC_STACK\": zeropage\n" +
 		"\t\n" +

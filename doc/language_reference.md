@@ -86,7 +86,12 @@ options(mapper: "MMC3");      // iNES マッパ（"MMC0" / "MMC3" / 番号）—
 options(bank_count: 4);       // PRG バンク数 — メインモジュールで
 options(char_banks: 1);       // CHR バンク数 — メインモジュールで
 options(fastcall_reg: 32);    // fastcall 関数が使うゼロページ領域 FC_FASTCALL_REG の大きさ（既定 32、16〜128）— メインモジュールで
+options(farcall: true);       // far call（§4.4）を有効にする — メインモジュールで
+options(near: true);          // このモジュールは常にマップされている扱い（far call の対象にしない）
 ```
+
+`bank: N` は fc が ld65.cfg を生成する構成では配置先のバンク。自前の ld65.cfg を使う構成では配置に使われないが、
+far call の判定に「N ≥ 0 なら切替バンク、無しか負なら固定バンク」として使われる（§4.4）。
 
 ---
 
@@ -231,6 +236,32 @@ function f():void options(segment: "game") { ... }     // 配置セグメント
   base.asm を自前で持つプロジェクトは `FC_FASTCALL_REG: .res N` と `FC_FASTCALL_REG_SIZE = N`（`.export … : absolute`）を
   合わせる（不足はリンク時の `.assert` で検出される）
 - `options(symbol: "...")`: 生成するシンボル名を固定する（割り込みベクタなど）
+- `options(near: true)`: far call（§4.4）の対象にしない（呼ぶ側はマップ済みと仮定して `jsr` する）
+
+### 4.4 far call（バンクをまたぐ呼び出し）
+
+MMC3 のように PRG が切替バンクに分かれているとき、メインモジュールに `options(farcall: true)` を書くと、
+**切替バンク（`options(bank: N)`、N ≥ 0）にある別モジュールの関数**への呼び出しを、コンパイラが自動で
+`farcall` トランポリン経由にする。呼ぶ側の書き方は普通の呼び出しと同じで、引数・戻り値の渡し方も変わらない。
+
+```
+options(bank: 8);                              // bg_mmc.fc: 切替バンク
+public function fetch_area(area:int, dir:int):void { ... }
+
+bg_mmc.fetch_area(a, d);                        // 固定バンクから: farcall 経由 (バンクを切り替えて呼び、戻す)
+```
+
+- 呼び先が固定バンク（`bank` 無しか負）、同じモジュール内、または `options(near: true)` の関数 → 今までどおり `jsr`
+- バンク番号はコンパイラでなく ld65 が決める: `ld65.cfg` の MEMORY に `bank = N`（マッパーに書く値）を付ける
+  （fc が cfg を生成する構成では自動）。生成コードは `.bank(シンボル)` で参照する
+- `farcall` はターゲット側が asm で用意する（`fclib/nes/farcall_mmc3.asm` が MMC3 の参考実装。emu と MMC0 は fc が
+  「そのまま飛ぶ」だけのものを用意する）。規約: `FC_FARCALL`（3 バイト: 呼び先アドレス、バンク）を読み、X と
+  FC_FASTCALL_REG を壊さない。参考実装は同じバンクが既に入っていれば切り替えずに飛ぶ（+37 サイクル）、
+  違えば退避・切替・復帰する（+100 サイクル程度）
+- 関数ポインタ経由の呼び出しは対象外（バンクは呼ぶ側の責任）。他バンクのデータ参照も対象外
+- `fcc build -d` で far call になった箇所の一覧が出る
+
+設計の経緯は [v2_farcall.md](v2_farcall.md)。
 
 ### 4.3 ラムダ
 

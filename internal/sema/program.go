@@ -38,7 +38,10 @@ type Program struct {
 	// CastKinds は v1 の `<T>x` の位置 → v2 で書くべき種類 (as / bitcast)。fcc migrate が使う
 	CastKinds map[syntax.Position]syntax.CastKind
 
-	soas        map[*types.Type]*soaInfo   // SoA コンテナ型 → フィールドごとの配列 (soa.go)
+	soas    map[*types.Type]*soaInfo // SoA コンテナ型 → フィールドごとの配列 (soa.go)
+	lambdas map[string]*ir.Lambda    // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
+	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
+	FarCalls    []FarCall
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
@@ -68,6 +71,7 @@ func NewProgram() *Program {
 		macros:      map[*ir.Value]MacroFn{},
 		constMacros: map[*ir.Value]ConstMacroFn{},
 		soas:        map[*types.Type]*soaInfo{},
+		lambdas:     map[string]*ir.Lambda{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)
@@ -121,6 +125,19 @@ func (p *Program) CompileBodies(mod *ir.Module, deps Resolver) (err error) {
 		h.compileLambda(mod.Lambdas[i])
 	}
 	return nil
+}
+
+// FarCall は far call になった呼び出し箇所。
+type FarCall struct {
+	Pos    syntax.Position
+	Caller string // 関数のシンボル
+	Callee string
+}
+
+// FarCallEnabled は far call の仕組みが有効か (メインモジュールの options(farcall: true))。
+func (p *Program) FarCallEnabled() bool {
+	v, ok := p.Options.Get("farcall")
+	return ok && (v.Kind == ir.OptInt && v.Int != 0 || v.Kind == ir.OptIdent && v.Str == "true")
 }
 
 // MaxErrors はこれ以上エラーが集まったら処理を打ち切る件数。

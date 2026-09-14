@@ -2,6 +2,7 @@
 	.exportzp FC_REG
 	.exportzp FC_STACK
 	.exportzp FC_FASTCALL_REG
+	.export FC_FARCALL
 	.exportzp L 					; TODO: そのうち消すこと
 	.exportzp reg
 	.exportzp S
@@ -56,6 +57,9 @@ FC_FASTCALL_REG_SIZE = $10
 FC_LOCAL: .res $10
 FC_REG: .res $10
 FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE
+
+.segment "BSS"
+FC_FARCALL: .res 3						; far call の呼び先アドレスとバンク (fc が使う。ZP でなくてよい)
 
 .segment "FC_STACK": zeropage
 	
