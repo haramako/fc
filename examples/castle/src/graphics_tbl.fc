@@ -1,3 +1,4 @@
+#fc 2
 public const SPR_SLIME = 0;
 public const SPR_GAS = 56;
 public const SPR_TIMEGATE = 0;

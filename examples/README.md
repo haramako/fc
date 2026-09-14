@@ -15,9 +15,14 @@
 | `miku/` | `C:\Work\fc-miku` | `fcc build -t nes miku.fc`（fc標準ドライバのみでROM生成） |
 | `castle/` | `C:\Work\castle` | `fcc compile -t nes main.fc` → `ca65 data.asm` → 独自 `ld65.cfg` でリンク（実プロジェクトの Rakefile と同じ手順） |
 
-castle は `src/macro.rb`（`_T`/`_M`/`VERSION_STR` テキスト変換マクロ）と
-`tmp/font/*.chr.txt`、独自リンカ設定、NSD サウンドドライバを含む、
-コンパイラ機能をほぼ全部通るサンプルになっている。
+castle は `textmap` によるテキスト変換（`_T`/`_M`、表は `tmp/font/*.chr.txt`）、独自リンカ設定、
+NSD サウンドドライバを含む、コンパイラ機能をほぼ全部通るサンプルになっている。
+
+**examples/ の .fc は 2026-09-14 に `fcc migrate` で文法 v2 に移行した**（ROM はバイト一致）。
+実プロジェクト側はまだ v1 のことがあるので、`sync_examples.ps1 -Update` で取り込む前に実プロジェクトを
+v2 に移行するか、取り込んだ後に `fcc migrate` を掛け直すこと（castle は
+`cd src && fcc migrate -t nes --textmap _T=../tmp/font/text.chr.txt --textmap _M=../tmp/font/misc_text.chr.txt -w main.fc`。
+`src/macro.rb` は不要になったので削除済み。`title.fc` の `VERSION_STR()` は固定文字列 `_M("VERSION 0.5.0")` に変更済み）。
 
 ## テスト
 

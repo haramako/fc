@@ -15,8 +15,7 @@ Go移植後の fc を開発するときに知っておくべきこと。
   - `ruby-frozen` — 移植前の Ruby 版オリジナル。**Ruby 資産は 2026-09-12 にリポジトリから削除**した
     （`ruby/`, `test/test-all`, `tools/gen_golden.rb`, `tools/dumper.rb`, `misc/table.rb`）。
     Go ソースのコメントにある `lib/fc/llc.rb:689` のような出典は `git show ruby-frozen:ruby/lib/fc/llc.rb` で読む。
-    `fclib/*.rb` と `examples/castle/src/macro.rb` は `.fc` 側の `include("x.rb")` が参照する名前なので残している
-    （Go は中身を読まず、ファイル名で組み込み実装に解決する。v2 の表記に置き換える際に削除: v2_decisions.md §3）。
+    `fclib/*.rb` と `examples/castle/src/macro.rb` も 2026-09-14 の v2 移行で削除（`printf` 等は組み込み、`_T`/`_M` は `textmap`）。
     `fclib/math.fc` / `share/runtime.asm` の sin/atan/rand/乗算テーブルは `misc/table.rb` の生成物（タグから参照可）
   - `go-strict-clone` — 厳密クローン完了・castle 動作確認済みの基準点
 - **push 注意**: origin は公開の github.com/haramako/fc。

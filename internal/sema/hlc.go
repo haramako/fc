@@ -399,9 +399,10 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if h.module.Version >= syntax.Version2 {
 				panic(&diag.Error{Msg: fmt.Sprintf("include(%q): Ruby macros are not supported in fc 2 (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
 			}
-			ref, _ := h.resolveFile(filename)
+			// 既知の .rb はファイルが無くても受理する (組み込みで代替済み。fclib/*.rb はリポジトリから削除した)
 			reg, ok := macroFiles[filename]
 			if !ok {
+				ref, _ := h.resolveFile(filename)
 				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", ref)})
 			}
 			reg(h)

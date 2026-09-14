@@ -1,5 +1,6 @@
+#fc 2
 use * from en;
-use * from graphics;
+public use * from graphics;
 use ppu;
 use my;
 use savedata;
@@ -14,11 +15,9 @@ public function none_process(i:int):void {}
  * ウィルオーウィスプ
  *********************************************/
 
-function wow_new(i : int) : void
-{
-}
+public function wow_new(i:int):void {}
 
-function wow_process(i : int) : void
+public function wow_process(i:int):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -27,27 +26,22 @@ function wow_process(i : int) : void
 	var speed = p2[i];
 
 	var n = (speed + giff) / 16;
-	while (n)
-	{
+	while (n) {
 		var vx = DIR_VX[dir];
 		var vy = DIR_VY[dir];
 		var xbias = 0;
-		if (vx < 0)
-		{
+		if (vx < 0) {
 			xbias = -1;
 		}
 		var ybias = 0;
-		if (vy < 0)
-		{
+		if (vy < 0) {
 			ybias = -1;
 		}
-		if (y >= 240 || y < 16)
-		{
+		if (y >= 240 || y < 16) {
 			type[i] = 0;
 			return;
 		}
-		if (bg.cell_type(x + vx * 8 + xbias, y + vy * 8 + ybias) & bg.TYPE_STOP || check_outside(x, y))
-		{
+		if (bg.cell_type(x + vx * 8 + xbias, y + vy * 8 + ybias) & bg.TYPE_STOP || check_outside(x, y)) {
 			dir = (2 + dir) % 4;
 		}
 		x += DIR_VX[dir];
@@ -55,11 +49,9 @@ function wow_process(i : int) : void
 
 		var cx = x % 16;
 		var cy = y % 16;
-		if (x % 16 == 8 && y % 16 == 8)
-		{
+		if (x % 16 == 8 && y % 16 == 8) {
 			var c = bg.cell(x, y);
-			if (c >= 4 && c < 8)
-			{
+			if (c >= 4 && c < 8) {
 				dir = c - 4;
 			}
 		}
@@ -79,19 +71,17 @@ function wow_process(i : int) : void
 /*********************************************
  * エレベーター
  *********************************************/
-function elevator_new(i : int) : void
+public function elevator_new(i:int):void
 {
-	if (p2[i] == 0)
-	{
+	if (p2[i] == 0) {
 		p2[i] = 8;
 	}
-	if (p3[i] == 0)
-	{
+	if (p3[i] == 0) {
 		px[i] += 8;
 	}
 }
 
-function elevator_process(i : int) : void
+public function elevator_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -99,21 +89,16 @@ function elevator_process(i : int) : void
 	var speed = p2[i];
 
 	var n = (speed + giff) / 16;
-	while (n)
-	{
+	while (n) {
 		var vx = DIR_VX[dir];
 		var vy = DIR_VY[dir];
-		var size : int;
-		if (p3[i] == 1)
-		{
+		var size:int;
+		if (p3[i] == 1) {
 			size = vx * 8;
-		}
-		else
-		{
+		} else {
 			size = vx * 16;
 		}
-		if (bg.cell_type(x + size, y + vy * 8) & bg.TYPE_STOP || check_outside(x, y))
-		{
+		if (bg.cell_type(x + size, y + vy * 8) & bg.TYPE_STOP || check_outside(x, y)) {
 			dir = (2 + dir) % 4;
 		}
 		x += vx;
@@ -122,13 +107,10 @@ function elevator_process(i : int) : void
 		n -= 1;
 	}
 
-	if (p3[i] == 1)
-	{
+	if (p3[i] == 1) {
 		ppu.sprite(x - 8, y - 8, SPR_ELEVATOR, 0);
 		ppu.sprite(x, y - 8, SPR_ELEVATOR, 64);
-	}
-	else
-	{
+	} else {
 		gr_sprite2(x - 8, y, SPR_ELEVATOR, 0);
 		gr_sprite2(x + 8, y, SPR_ELEVATOR, 64);
 	}
@@ -141,9 +123,9 @@ function elevator_process(i : int) : void
 /*********************************************
  * 水の中の泡
  *********************************************/
-function bubble_new(i : int) : void { }
+public function bubble_new(i:int):void {}
 
-function bubble_process(i : int) : void
+public function bubble_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -153,8 +135,7 @@ function bubble_process(i : int) : void
 
 	ppu.sprite(x - 4, y - 8, SPR_BUBBLE, 1);
 
-	if (py[i] < 16 || (bg.cell_type(x, y - 8) & bg.TYPE_WATER) == 0)
-	{
+	if (py[i] < 16 || (bg.cell_type(x, y - 8) & bg.TYPE_WATER) == 0) {
 		type[i] = 0;
 	}
 
@@ -165,31 +146,27 @@ function bubble_process(i : int) : void
 /*********************************************
  * 水に入った時の飛沫
  *********************************************/
-function splash_new(i : int) : void { }
+public function splash_new(i:int):void {}
 
-function splash_process(i : int) : void
+public function splash_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
 	var life = p1[i];
 
-	if (anim % 2)
-	{
-		ppu.sprite(x-12+life/2, y-16, SPR_SPLASH  , 1 | ppu.SPRITE_FLAG_HIDE);
-		ppu.sprite(x+4-life/2, y-16, SPR_SPLASH+2, 1 | ppu.SPRITE_FLAG_HIDE);
+	if (anim % 2) {
+		ppu.sprite(x - 12 + life / 2, y - 16, SPR_SPLASH, 1 | ppu.SPRITE_FLAG_HIDE);
+		ppu.sprite(x + 4 - life / 2, y - 16, SPR_SPLASH + 2, 1 | ppu.SPRITE_FLAG_HIDE);
 		//gr_sprite2(x - 4, y - 8, SPR_SPLASH, 1 | ppu.SPRITE_FLAG_HIDE);
 	}
 
-	if (life)
-	{
+	if (life) {
 		life -= 1;
-	}
-	else
-	{
+	} else {
 		type[i] = 0;
 	}
 
-	y += (8+giff)/16;
+	y += (8 + giff) / 16;
 
 	py[i] = y;
 	p1[i] = life;
@@ -203,7 +180,7 @@ function splash_process(i : int) : void
  * p4: 状態
  * p5: vy;
  *********************************************/
-function block_new(i : int) : void
+public function block_new(i:int):void
 {
 	/*
 	MEMO: バンクの関係で使えないので、my.do_grobe()にベタ書きしてる
@@ -213,7 +190,7 @@ function block_new(i : int) : void
 	*/
 }
 
-function block_process(i : int) : void
+public function block_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -222,53 +199,52 @@ function block_process(i : int) : void
 	var stat = p4[i];
 	var vy = p5[i];
 
-	switch( stat ){
+	switch (stat) {
 	case 0:
 		// 左右に動く
-		if( wait == 0 ){
+		if (wait == 0) {
 			var c = bg.blank_cell;
-			if (bg.cur_area == 13 + 4 * MAP_WIDTH){
+			if (bg.cur_area == 13 + 4 * MAP_WIDTH) {
 				// 例外：塔の中は黒く塗る
 				c = 0;
-			}elsif (bg.cur_area == 7 + 2 * MAP_WIDTH){
+			} elsif (bg.cur_area == 7 + 2 * MAP_WIDTH) {
 				// 例外：空は空で塗る
 				c = 15;
-			} 
+			}
 			bg.put2(x / 16, y / 16, c, 3);
 		}
 		wait += 1;
 		x += DIR_VX[dir];
 
-		gr_sprite2(x,y, SPR_BLOCK, 1);
-		
-		if( wait >= 16 ){
+		gr_sprite2(x, y, SPR_BLOCK, 1);
+
+		if (wait >= 16) {
 			stat = 1;
 			wait = 0;
 			vy = 8;
 		}
 	case 1:
 		// 落下
-		if (y >= 240){
+		if (y >= 240) {
 			type[i] = 0;
-		}else{
+		} else {
 			vy += 8;
-			y += (giff+vy) / 16;
-			if( vy >= 32 ){ 
+			y += (giff + vy) / 16;
+			if (vy >= 32) {
 				vy = 32;
 			}
 		}
 
-		if( bg.cell_type(x,y+8) & bg.TYPE_WALL != 0){
-			y = (y+8)/16*16 - 8;
+		if (bg.cell_type(x, y + 8) & bg.TYPE_WALL != 0) {
+			y = (y + 8) / 16 * 16 - 8;
 			stat = 2;
 		}
 
-		gr_sprite2(x,y, SPR_BLOCK, 1);
+		gr_sprite2(x, y, SPR_BLOCK, 1);
 	case 2:
 		bg.put2(x / 16, y / 16, bg.TILE_MOVABLE_BLOCK, 0);
 		type[i] = 0;
 	}
-
 
 	px[i] = x;
 	py[i] = y;
@@ -281,17 +257,16 @@ function block_process(i : int) : void
 /*********************************************
  * カエル
  *********************************************/
-function frog_new(i : int) : void
+public function frog_new(i:int):void
 {
-	if (p3[i] == 0)
-	{
+	if (p3[i] == 0) {
 		p3[i] = 32;
 	}
 	p4[i] = 0;
 	p5[i] = 30;
 }
 
-function frog_process(i : int) : void
+public function frog_process(i:int):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -300,19 +275,15 @@ function frog_process(i : int) : void
 	var speed = p2[i];
 	var pow = p3[i];
 	var state = p4[i];
-	var t : sint = p5[i];
+	var t:sint = p5[i];
 	var anim = 0;
 
-	switch (state)
-	{
+	switch (state) {
 	case 0:
 		// stand
-		if (t)
-		{
+		if (t) {
 			t -= 1;
-		}
-		else
-		{
+		} else {
 			state = 1;
 			t = -pow;
 		}
@@ -320,32 +291,25 @@ function frog_process(i : int) : void
 		// jump
 		y += (t + giff) / 16;
 		var vx = (pow / 4 + giff) / 16;
-		if (dir == 1)
-		{
+		if (dir == 1) {
 			x += vx;
-		}
-		else
-		{
+		} else {
 			x -= vx;
 		}
 		t += 1;
 		var hit = check_block(&x, &y);
-		if (hit & (DIR_MASK_RIGHT | DIR_MASK_LEFT))
-		{
+		if (hit & (DIR_MASK_RIGHT | DIR_MASK_LEFT)) {
 			dir = 4 - dir;
 		}
-		if (hit & DIR_MASK_DOWN)
-		{
+		if (hit & DIR_MASK_DOWN) {
 			state = 0;
 			t = 30;
 		}
-		if (hit & DIR_MASK_UP)
-		{
+		if (hit & DIR_MASK_UP) {
 			t = 0;
 		}
 
-		if (check_outside(x, y))
-		{
+		if (check_outside(x, y)) {
 			type[i] = 0;
 			return;
 		}
@@ -365,17 +329,16 @@ function frog_process(i : int) : void
 /*********************************************
  * クッキー
  *********************************************/
-function cookie_new(i : int) : void
+public function cookie_new(i:int):void
 {
-	if (p3[i] == 0)
-	{
+	if (p3[i] == 0) {
 		p3[i] = 2;
 	}
 	p4[i] = px[i];
 	p5[i] = py[i];
 }
 
-function cookie_process(i : int) : void
+public function cookie_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -399,40 +362,39 @@ function cookie_process(i : int) : void
 /*********************************************
  * 宝箱
  *********************************************/
-public function has_coin(i:int):int{
-	return my.map_coin[i/8] & BIT_MASK[i%8];
+function has_coin(i:int):int
+{
+	return my.map_coin[i / 8] & BIT_MASK[i % 8];
 }
 
-public function set_coin(i:int):void{
-	my.map_coin[i/8] = my.map_coin[i/8] | BIT_MASK[i%8];
+function set_coin(i:int):void
+{
+	my.map_coin[i / 8] = my.map_coin[i / 8] | BIT_MASK[i % 8];
 	my.coin_num += 1;
 }
 
-function chest_new(i : int) : void
+public function chest_new(i:int):void
 {
 	var item_id = p1[i];
 	var coin_id = p2[i];
-	if( item_id == ITEM_ID_COIN){
-		if( has_coin(coin_id) )
-		{
+	if (item_id == ITEM_ID_COIN) {
+		if (has_coin(coin_id)) {
 			type[i] = 0;
 		}
 	} else {
-		if (my.items[item_id])
-		{
+		if (my.items[item_id]) {
 			type[i] = 0;
 		}
 	}
 }
 
-function chest_process(i : int) : void
+public function chest_process(i:int):void
 {
 	var item_id = p1[i];
 	var x = px[i];
 	var y = py[i];
 
-	if (math.abs(my.x - x) < 16 && math.abs(my.y - y) < 16)
-	{
+	if (math.abs(my.x - x) < 16 && math.abs(my.y - y) < 16) {
 		my.touch_event_func = chest_event;
 		my.touch_event_p1 = i;
 		my.touch_event_x = x;
@@ -440,14 +402,14 @@ function chest_process(i : int) : void
 	}
 
 	var is_great = (item_id >= 12 && item_id <= 17);
-	if( item_id == ITEM_ID_COIN){
-		ppu.sprite(x-4, y-8, SPR_CHEST_COIN, 0);
-	}else{
+	if (item_id == ITEM_ID_COIN) {
+		ppu.sprite(x - 4, y - 8, SPR_CHEST_COIN, 0);
+	} else {
 		gr_sprite2(x, y, SPR_CHEST, is_great);
 	}
 }
 
-function chest_event():int options(segment:my)
+function chest_event():int options(segment: my)
 {
 	var old_pbank = mmc3.set_pbank(0, PBANK_EN1);
 	var result = _chest_event();
@@ -458,10 +420,10 @@ function chest_event():int options(segment:my)
 function _chest_event():int
 {
 	var i = my.touch_event_p1;
-	switch(my.touch_event_stat){
+	switch (my.touch_event_stat) {
 	case 0:
 		// 初期化
-		ppu.cbank2 = my.CBANK_MY+2;
+		ppu.cbank2 = my.CBANK_MY + 2;
 		ppu.clear_sprite2_idx(my.SPRIDX_MY);
 		my.touch_event_stat = 1;
 		my.touch_event_wait = 0;
@@ -476,23 +438,27 @@ function _chest_event():int
 		my.touch_event_wait += 1;
 		var is_great = (i >= 12 && i <= 17);
 
-		var a = 0;;
-		if( my.touch_event_wait > 8 && my.touch_event_wait < 52 ) a = 1;
-		gr_sprite2_idx( my.x, my.y, SPR_EVENT_CHEST_STAND+a*4, 0, my.SPRIDX_MY);
+		var a = 0;
+		;
+		if (my.touch_event_wait > 8 && my.touch_event_wait < 52)
+			a = 1;
+		gr_sprite2_idx(my.x, my.y, SPR_EVENT_CHEST_STAND + a * 4, 0, my.SPRIDX_MY);
 
-		if( my.touch_event_wait <= 50 ){
-			if( i == ITEM_ID_COIN){
-				a = (my.touch_event_wait / 4)%4;
-				ppu.sprite(my.touch_event_x - 4, my.touch_event_y - 8 - my.touch_event_wait/2, SPR_EVENT_CHEST_COIN_OPEN + a*2, 0);
-				if( my.touch_event_wait == 10 ) sound.play_se(sound.SE_COIN,20);
-			}else{
+		if (my.touch_event_wait <= 50) {
+			if (i == ITEM_ID_COIN) {
+				a = (my.touch_event_wait / 4) % 4;
+				ppu.sprite(my.touch_event_x - 4, my.touch_event_y - 8 - my.touch_event_wait / 2, SPR_EVENT_CHEST_COIN_OPEN + a * 2, 0);
+				if (my.touch_event_wait == 10)
+					sound.play_se(sound.SE_COIN, 20);
+			} else {
 				a = my.touch_event_wait / 10;
-				if( a > 2 ) a = 2;
-				gr_sprite2(my.touch_event_x, my.touch_event_y, SPR_EVENT_CHEST_OPEN + a*4, is_great);
+				if (a > 2)
+					a = 2;
+				gr_sprite2(my.touch_event_x, my.touch_event_y, SPR_EVENT_CHEST_OPEN + a * 4, is_great);
 			}
 		}
 
-		if( my.touch_event_wait >= 50 ){
+		if (my.touch_event_wait >= 50) {
 			chest_get_item();
 			my.touch_event_stat = 2;
 		}
@@ -508,21 +474,21 @@ function chest_get_item():void
 	var coin_id = my.touch_event_p2;
 	var has_event = 0;
 
-	if(item_id == ITEM_ID_COIN){
-		if( my.items[item_id] == 0 ){
+	if (item_id == ITEM_ID_COIN) {
+		if (my.items[item_id] == 0) {
 			has_event = 1;
 		}
 		set_coin(coin_id);
 		my.items[ITEM_ID_COIN] = 1;
-		if( my.items[ITEM_ID_WALLET] ){
+		if (my.items[ITEM_ID_WALLET]) {
 			savedata.save_coins();
 		}
-	}else{
+	} else {
 		my.items[item_id] = 1;
 		has_event = 1;
 	}
 
-	if( has_event ){
+	if (has_event) {
 		game_event = event.ID_GET_ITEM;
 		game_event_p1 = item_id;
 	}
@@ -531,19 +497,14 @@ function chest_get_item():void
 /*********************************************
  * ランプの灯火
  *********************************************/
-function lamp_new(i : int) : void
-{
-}
+public function lamp_new(i:int):void {}
 
-function lamp_process(i : int) : void
+public function lamp_process(i:int):void
 {
 	var slot = pslot[i];
-	if (my.items[ITEM_ID_LAMP])
-	{
+	if (my.items[ITEM_ID_LAMP]) {
 		gr_sprite2(px[i], py[i] + 4, SPR_SLOT[slot] + SPR_LAMP + (anim / 4) % 4 * 4, PAL_SLOT[slot]);
-	}
-	else
-	{
+	} else {
 		type[i] = 0;
 	}
 }
@@ -551,11 +512,9 @@ function lamp_process(i : int) : void
 /*********************************************
  * ガスさん
  *********************************************/
-function gas_new(i : int) : void
-{
-}
+public function gas_new(i:int):void {}
 
-function gas_process(i : int) : void
+public function gas_process(i:int):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -564,27 +523,22 @@ function gas_process(i : int) : void
 	var speed = p2[i];
 
 	var n = (speed + giff) / 16;
-	while (n)
-	{
+	while (n) {
 		var vx = DIR_VX[dir];
 		var vy = DIR_VY[dir];
 		var xbias = 0;
-		if (vx < 0)
-		{
+		if (vx < 0) {
 			xbias = -1;
 		}
 		var ybias = 0;
-		if (vy < 0)
-		{
+		if (vy < 0) {
 			ybias = -1;
 		}
-		if (y >= 240 || y < 16)
-		{
+		if (y >= 240 || y < 16) {
 			type[i] = 0;
 			return;
 		}
-		if (bg.cell_type(x + vx * 8 + xbias, y + vy * 8 + ybias) & bg.TYPE_STOP || check_outside(x, y))
-		{
+		if (bg.cell_type(x + vx * 8 + xbias, y + vy * 8 + ybias) & bg.TYPE_STOP || check_outside(x, y)) {
 			dir = (2 + dir) % 4;
 		}
 		x += DIR_VX[dir];
@@ -592,11 +546,9 @@ function gas_process(i : int) : void
 
 		var cx = x % 16;
 		var cy = y % 16;
-		if (x % 16 == 8 && y % 16 == 8)
-		{
+		if (x % 16 == 8 && y % 16 == 8) {
 			var c = bg.cell(x, y);
-			if (c >= 4 && c < 8)
-			{
+			if (c >= 4 && c < 8) {
 				dir = c - 4;
 			}
 		}
@@ -610,8 +562,7 @@ function gas_process(i : int) : void
 	py[i] = y;
 	p1[i] = dir;
 
-	if (!my.items[ITEM_ID_GAS_MASK])
-	{
+	if (!my.items[ITEM_ID_GAS_MASK]) {
 		check_hit(i, 8);
 	}
 }
@@ -620,17 +571,16 @@ function gas_process(i : int) : void
  * ゴースト
  *********************************************/
 
-function ghost_new(i : int) : void
+public function ghost_new(i:int):void
 {
-	if (p1[i] == 0)
-	{
+	if (p1[i] == 0) {
 		p1[i] = 30;
 	}
 	p3[i] = 0;
 	p4[i] = math.rand() / 2;
 }
 
-function ghost_process(i : int) : void
+public function ghost_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -638,56 +588,43 @@ function ghost_process(i : int) : void
 	var wait = p4[i];
 	var angle = p5[i];
 
-	var dy : int;
+	var dy:int;
 	var dir = 0;
-	if ((angle - 64) < 128)
-	{
+	if ((angle - 64) < 128) {
 		dir = 64;
 	}
 
-	switch (state)
-	{
+	switch (state) {
 	case 0:
 		dy = y + math.sin(wait * 4) / 16;
-		if (wait)
-		{
+		if (wait) {
 			wait -= 1;
-		}
-		else
-		{
+		} else {
 			angle = math.atan(my.y / 16 - y / 16, my.x / 16 - x / 16);
 			state = 1;
 			wait = p1[i];
-			if (my.items[ITEM_ID_OMAMORI])
-			{
+			if (my.items[ITEM_ID_OMAMORI]) {
 				wait = wait * 2;
 			}
 		}
 	case 1:
-		if (my.items[ITEM_ID_OMAMORI])
-		{
+		if (my.items[ITEM_ID_OMAMORI]) {
 			x += (math.cos(angle) / 8 + giff) / 16;
 			y += (math.sin(angle) / 8 + giff) / 16;
-		}
-		else
-		{
+		} else {
 			x += (math.cos(angle) / 4 + giff) / 16;
 			y += (math.sin(angle) / 4 + giff) / 16;
 		}
 		dy = y;
-		if (wait)
-		{
+		if (wait) {
 			wait -= 1;
-		}
-		else
-		{
+		} else {
 			state = 0;
 			wait = 64;
 		}
 	}
 
-	if (anim % 2)
-	{
+	if (anim % 2) {
 		var slot = pslot[i];
 		gr_sprite2(x, dy, SPR_SLOT[slot] + SPR_GHOST + ((anim / 8) % 2) * 4, dir | PAL_SLOT[slot]);
 	}
@@ -705,29 +642,24 @@ function ghost_process(i : int) : void
  * スイッチ
  *********************************************/
 
-function switch_new(i : int) : void
+public function switch_new(i:int):void
 {
 	p2[i] = py[i];
 }
 
-function switch_process(i : int) : void
+public function switch_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
 	var flag_num = p1[i];
 
-	if (my.state == my.STATE_ON_ENEMY && my.on_idx == i)
-	{
-		if (y < p2[i] + 8)
-		{
+	if (my.state == my.STATE_ON_ENEMY && my.on_idx == i) {
+		if (y < p2[i] + 8) {
 			y += 1;
 		}
 		my.flags[flag_num] = 1;
-	}
-	else
-	{
-		if (y > p2[i])
-		{
+	} else {
+		if (y > p2[i]) {
 			y -= 1;
 		}
 	}
@@ -743,13 +675,13 @@ function switch_process(i : int) : void
  * 開閉扉スイッチ
  *********************************************/
 
-function flaged_door_new(i : int) : void
+public function flaged_door_new(i:int):void
 {
 	p2[i] = my.flags[p1[i]];
 	p3[i] = 1;
 }
 
-function flaged_door_process(i : int) : void
+public function flaged_door_process(i:int):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -757,29 +689,24 @@ function flaged_door_process(i : int) : void
 	var old_flag = p2[i];
 	var flag = my.flags[flag_num];
 
-	if (p3[i])
-	{
+	if (p3[i]) {
 		flaged_door_redraw(px[i], py[i], p2[i]);
 		p3[i] = 0;
 	}
 
-	if (old_flag != flag)
-	{
-		sound.play_se(sound.SE_OPEN_DOOR,10);
+	if (old_flag != flag) {
+		sound.play_se(sound.SE_OPEN_DOOR, 10);
 		flaged_door_redraw(x, y, flag);
 		p2[i] = flag;
 	}
 }
 
-function flaged_door_redraw(x : int, y : int, flag : int) : void
+function flaged_door_redraw(x:int, y:int, flag:int):void
 {
-	if (flag)
-	{
+	if (flag) {
 		bg.put2(x / 16, y / 16, bg.blank_cell_by_door, bg.tile_pal[bg.blank_cell_by_door]);
 		bg.put2(x / 16, y / 16 + 1, bg.blank_cell_by_door, bg.tile_pal[bg.blank_cell_by_door]);
-	}
-	else
-	{
+	} else {
 		bg.put2(x / 16, y / 16, 38, 0);
 		bg.put2(x / 16, y / 16 + 1, 38, 0);
 	}
@@ -789,32 +716,27 @@ function flaged_door_redraw(x : int, y : int, flag : int) : void
  * 無限湧きポイント
  *********************************************/
 
-function portal_new(i : int) : void
+public function portal_new(i:int):void
 {
 	p5[i] = 0;
 }
 
-function portal_process(i : int) : void
+public function portal_process(i:int):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
 	var freq = p3[i];
 	var rest = p5[i];
-    var spr = SPR_SLOT[slot] + SPR_PORTAL;
-    var pal = PAL_SLOT[slot];
+	var spr = SPR_SLOT[slot] + SPR_PORTAL;
+	var pal = PAL_SLOT[slot];
 
-	if (anim % 64 == 0)
-	{
-		if (rest)
-		{
+	if (anim % 64 == 0) {
+		if (rest) {
 			rest -= 1;
-		}
-		else
-		{
-			var n = new ();
-			if (n != -1)
-			{
+		} else {
+			var n = new();
+			if (n != -1) {
 				type[n] = p4[i];
 				pslot[n] = slot;
 				px[n] = x;
@@ -829,8 +751,7 @@ function portal_process(i : int) : void
 		}
 	}
 
-	if (rest == 0)
-	{
+	if (rest == 0) {
 		gr_sprite2(x, y, spr + anim / 4 % 2 * 4, pal);
 	}
 
@@ -841,12 +762,12 @@ function portal_process(i : int) : void
  * チェックポイント
  *********************************************/
 
-function checkpoint_new(i : int) : void
+public function checkpoint_new(i:int):void
 {
 	p4[i] = 0;
 }
 
-function checkpoint_process(i : int) : void
+public function checkpoint_process(i:int):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -856,41 +777,37 @@ function checkpoint_process(i : int) : void
 	var stat = p4[i];
 	var wait = p5[i];
 
-	switch (stat)
-	{
+	switch (stat) {
 	case 0:
 		// タッチ判定
-		if (!nosave && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12)
-		{
+		if (!nosave && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12) {
 			my.touch_event_func = checkpoint_event;
 			my.touch_event_p1 = i;
 			my.touch_event_x = x;
-			my.touch_event_y = y-16;
+			my.touch_event_y = y - 16;
 		}
 	case 1:
 		// セーブ演出
 		wait += 1;
-		if (wait > 60)
-		{
+		if (wait > 60) {
 			stat = 0;
 		}
-		if (anim % 2)
-		{
+		if (anim % 2) {
 			gr_sprite2(x - 8, y - 12 - wait / 4, my.SPR_SAVE_TEXT + 0, 2);
 			gr_sprite2(x + 8, y - 12 - wait / 4, my.SPR_SAVE_TEXT + 4, 2);
 		}
 	}
 
-	if( !noslot) {
-		gr_sprite2(x, y-16, SPR_SLOT[slot] + SPR_CHECKPOINT, PAL_SLOT[slot] );
-		gr_sprite2(x, y   , SPR_SLOT[slot] + SPR_CHECKPOINT + 4, PAL_SLOT[slot] );
+	if (!noslot) {
+		gr_sprite2(x, y - 16, SPR_SLOT[slot] + SPR_CHECKPOINT, PAL_SLOT[slot]);
+		gr_sprite2(x, y, SPR_SLOT[slot] + SPR_CHECKPOINT + 4, PAL_SLOT[slot]);
 	}
 
 	p4[i] = stat;
 	p5[i] = wait;
 }
 
-function checkpoint_event():int options(segment:my)
+function checkpoint_event():int options(segment: my)
 {
 	var old_pbank = mmc3.set_pbank(0, PBANK_EN1);
 	var result = _checkpoint_event();
@@ -904,22 +821,24 @@ function _checkpoint_event():int
 	var x = px[i];
 	var y = py[i];
 
-	switch(my.touch_event_stat){
+	switch (my.touch_event_stat) {
 	case 0:
-		ppu.cbank2 = my.CBANK_MY+1;
+		ppu.cbank2 = my.CBANK_MY + 1;
 		ppu.clear_sprite2_idx(my.SPRIDX_MY);
 		my.touch_event_stat = 1;
 		my.touch_event_wait = 0;
 		p4[i] = 1;
 		p5[i] = 0;
-		sound.play_se(sound.SE_SAVEPOINT,20);
+		sound.play_se(sound.SE_SAVEPOINT, 20);
 		return _checkpoint_event();
 	case 1:
 		my.touch_event_wait += 1;
-		var a = 0;;
-		if( my.touch_event_wait > 8 && my.touch_event_wait < 52 ) a = 1;
-		gr_sprite2( my.x, my.y, my.SPR_SAVE_STAND+a*4, 0);
-		if( my.touch_event_wait >= 62 ){
+		var a = 0;
+		;
+		if (my.touch_event_wait > 8 && my.touch_event_wait < 52)
+			a = 1;
+		gr_sprite2(my.x, my.y, my.SPR_SAVE_STAND + a * 4, 0);
+		if (my.touch_event_wait >= 62) {
 			my.touch_event_stat = 2;
 		}
 	case 2:
@@ -935,11 +854,12 @@ function _checkpoint_event():int
 /*********************************************
  * チェックポイントのスロット未使用版
  *********************************************/
-function checkpoint_noslot_new(i : int) : void
+public function checkpoint_noslot_new(i:int):void
 {
 	checkpoint_new(i);
 }
 
-function checkpoint_noslot_process(i : int) : void {
+public function checkpoint_noslot_process(i:int):void
+{
 	checkpoint_process(i);
 }
