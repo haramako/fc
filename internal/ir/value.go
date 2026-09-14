@@ -44,12 +44,12 @@ type Value struct {
 	Type *types.Type
 	Name string // 変数名 / 定数名。無名なら ""
 
-	IsInt  bool
-	Int    int
-	Symbol string
-	Elems  []Operand
-	Module *ModuleInterface // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
-	TypeRef *types.Type     // 型名の束縛 (struct / soa 宣言)。Type.Kind == types.TypeName
+	IsInt   bool
+	Int     int
+	Symbol  string
+	Elems   []Operand
+	Module  *ModuleInterface // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
+	TypeRef *types.Type      // 型名の束縛 (struct / soa 宣言)。Type.Kind == types.TypeName
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
