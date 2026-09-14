@@ -24,16 +24,18 @@ import (
 type ckind uint8
 
 const (
-	cValue  ckind = iota // 評価済みの値 (val)
-	cInt                 // 整数リテラル (n)
-	cStr                 // 文字列リテラル (s)
-	cIdent               // 識別子 (name)
-	cArray               // 配列リテラル (args)
-	cIncbin              // incbin (s = パス)
-	cLambda              // 関数リテラル (lambda)
-	cDot                 // モジュール参照 args[0] . name
-	cCast                // キャスト args[0] を typ へ (評価後は ty)
-	cOp                  // 演算 op (args)
+	cValue     ckind = iota // 評価済みの値 (val)
+	cInt                    // 整数リテラル (n)
+	cStr                    // 文字列リテラル (s)
+	cIdent                  // 識別子 (name)
+	cArray                  // 配列リテラル (args)
+	cIncbin                 // incbin (s = パス)
+	cLambda                 // 関数リテラル (lambda)
+	cDot                    // モジュール参照 args[0] . name
+	cCast                   // キャスト args[0] を typ へ (評価後は ty)
+	cOp                     // 演算 op (args)
+	cStructLit              // struct リテラル (typ = 型名 (省略なら nil)、ty = 確定した型、fields)
+	cSizeof                 // sizeof(typ)
 )
 
 // cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
@@ -65,7 +67,14 @@ const (
 	opIndex      cop = "index"
 	opRef        cop = "ref"
 	opDeref      cop = "deref"
+	opField      cop = "field" // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
 )
+
+// cfield は struct リテラルの 1 項目。key が "" なら位置指定。
+type cfield struct {
+	key string
+	val *cexpr
+}
 
 // lambdaParam は関数リテラルの引数 (名前と型式)。
 type lambdaParam struct {
@@ -95,6 +104,7 @@ type cexpr struct {
 	ck    syntax.CastKind // cCast の種類 (v1 <T>x / as / bitcast)
 	block *syntax.Block   // opCall の後置ブロック
 	lam   *lambdaLit      // cLambda
+	flds  []cfield        // cStructLit の項目
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
 }
 
@@ -196,6 +206,21 @@ func toC0(e syntax.Expr) *cexpr {
 		return carray(elems)
 	case *syntax.IncbinExpr:
 		return &cexpr{kind: cIncbin, s: e.Path.Value}
+	case *syntax.StructLit:
+		flds := make([]cfield, len(e.Fields))
+		for i, f := range e.Fields {
+			if f.Key != nil {
+				flds[i].key = f.Key.Name
+			}
+			flds[i].val = toC(f.Value)
+		}
+		c := &cexpr{kind: cStructLit, flds: flds}
+		if e.Type != nil {
+			c.typ = e.Type
+		}
+		return c
+	case *syntax.SizeofExpr:
+		return &cexpr{kind: cSizeof, typ: e.Type}
 	case *syntax.LambdaExpr:
 		ft, ok := e.Type.(*syntax.FuncType)
 		if !ok {

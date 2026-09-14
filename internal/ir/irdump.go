@@ -119,6 +119,8 @@ func dumpGval(v *Value, ctx *irCtx) string {
 		return "mod:" + v.Module.Id
 	case v.Type.Kind == types.Macro:
 		return "macro"
+	case v.TypeRef != nil:
+		return "type:" + v.TypeRef.String()
 	case v.Symbol != "":
 		return symS(v.Symbol)
 	}

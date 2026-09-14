@@ -104,6 +104,13 @@ func NewModuleValue(name string, typ *types.Type, m *ModuleInterface) *Value {
 	return v
 }
 
+// NewTypeValue は型名の束縛 (`struct Name` / `soa Name`)。typ は Kind == types.TypeName、ref が実際の型。
+func NewTypeValue(name string, typ *types.Type, ref *types.Type) *Value {
+	v := newValue(KindGlobal, name, typ)
+	v.TypeRef = ref
+	return v
+}
+
 // NewIntLiteral は整数リテラル (型は明示)。
 func NewIntLiteral(name string, typ *types.Type, n int) *Value {
 	v := newValue(KindLiteral, name, typ)
@@ -293,15 +300,24 @@ func ValLocation(v Operand) Location {
 	panic(fmt.Sprintf("ValLocation: invalid value %T", v))
 }
 
-// ValAddress は v.address (CastedValue は from に委譲)。
+// ValAddress は v.address (CastedValue は from に委譲し、Offset (struct のフィールド) を足す)。
 func ValAddress(v Operand) int {
 	switch x := v.(type) {
 	case *Value:
 		return x.Address
 	case *CastedValue:
-		return ValAddress(x.From)
+		return ValAddress(x.From) + x.Offset
 	}
 	panic(fmt.Sprintf("ValAddress: invalid value %T", v))
+}
+
+// ValOffset は CastedValue の連鎖の Offset の合計 (struct のフィールドの、変数先頭からのバイト位置)。
+func ValOffset(v Operand) int {
+	switch x := v.(type) {
+	case *CastedValue:
+		return ValOffset(x.From) + x.Offset
+	}
+	return 0
 }
 
 // ValLocalType は v.opt[:local_type] (CastedValue は from に委譲)。

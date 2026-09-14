@@ -126,6 +126,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | kBREAK opt_ident ';'                 { $$ = &BreakStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
          | kCONTINUE opt_ident ';'              { $$ = &ContinueStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
          | kRETURN opt_exp ';'                  { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} }
+         | kRETURN anon_struct_lit ';'          { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} } /* v2: 戻り値の型で決まる */
          | kSWITCH '(' exp ')' '{' switch_block opt_default_block '}' { $$ = &SwitchStmt{Switch: $1.Pos, Tag: $3, Lbrace: $5.Pos, Cases: $6, Default: $7, Rbrace: $8.Pos} }
          | exp ';'                              { $$ = &ExprStmt{X: $1, Semi: $2.Pos} }
          | opt_scope kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
@@ -223,6 +224,7 @@ opt_exp: /* empty */ { $$ = nil }
 exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.Pos} }
    | exp '.'  exp           { $$ = binary($1, $2, $3) }
    | exp '='  exp           { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: Assign, Rhs: $3} }
+   | exp '='  anon_struct_lit { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: Assign, Rhs: $3} } /* v2: 左辺の型で決まる */
    | exp '+'  exp           { $$ = binary($1, $2, $3) }
    | exp '-'  exp           { $$ = binary($1, $2, $3) }
    | exp '*'  exp           { $$ = binary($1, $2, $3) }
@@ -295,6 +297,7 @@ var_decl: IDENT ':' type_decl opt_var_init opt_options { $$ = &VarSpec{Name: ide
 
 opt_var_init: /* empty */ { $$ = nil }
             | '=' exp { $$ = $2 }
+            | '=' anon_struct_lit { $$ = $2 } /* v2: 型が宣言にあるので型名を省ける */
 
 /****************************************************/
 /* type declaration */

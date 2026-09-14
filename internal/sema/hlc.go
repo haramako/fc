@@ -408,6 +408,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.module.Options.Set(r.key, val)
 		}
 
+	case *syntax.StructDecl:
+		h.compileStructDecl(s)
+
+	case *syntax.SoaDecl:
+		h.compileSoaDecl(s)
+
 	case *syntax.IncludeDecl:
 		h.mustInModule()
 		filename := s.Path.Value
@@ -634,7 +640,10 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if s.Value == nil {
 				panic(&diag.Error{Msg: "can't return without value"})
 			}
-			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.rval(toC(s.Value))}})
+			rt := h.lmd.Type.Base
+			v := h.rval(h.withExpected(toC(s.Value), rt))
+			h.compatible(rt, ir.ValType(v))
+			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.cast(v, rt)}})
 		} else {
 			// void関数
 			if s.Value != nil {
@@ -706,14 +715,17 @@ func optionValueOf(v *ir.Value) ir.OptionValue {
 func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	name := sp.Name.Name
 	opt := parseOptions(sp.Options)
+	typ := h.typeEval(sp.Type)
 	var init ir.Operand
 	if sp.Init != nil {
-		init = h.rval(toC(sp.Init))
+		init = h.rval(h.withExpected(toC(sp.Init), typ))
 	}
 	if init != nil && h.lmd == nil {
 		panic(&diag.Error{Msg: "can't init global variable"})
 	}
-	typ := h.typeEval(sp.Type)
+	if typ != nil {
+		h.checkComplete(typ, "variable "+name)
+	}
 	if typ == nil {
 		typ = h.guessType(nil, init)
 	}
@@ -755,12 +767,13 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
 	var newVal *ir.Value
 	if val != nil {
-		cv := h.constEval(val)
+		declType := h.typeEval(typ)
+		cv := h.constEval(h.withExpected(val, declType))
 		if cv.kind != cValue {
 			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
 		}
 		v := cv.val
-		t := h.guessType(h.typeEval(typ), v)
+		t := h.guessType(declType, v)
 		if v.Type.Kind == types.Macro {
 			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
 			v.Name = name
@@ -851,6 +864,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		vals := make([]ir.Operand, len(c.args))
 		var typ *types.Type
 		for i, e := range c.args {
+			if h.needsExpected(e) {
+				// 型名を省いた struct リテラルを含む配列: 宣言の型が与えられるまで評価を保留する
+				return &cexpr{kind: cArray, args: c.args}
+			}
 			v := h.constEvalOperand(e)
 			vals[i] = v
 			if i == 0 {
@@ -896,14 +913,17 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 
 	case cDot:
 		left := h.constEval(c.args[0])
-		var mod *ir.ModuleInterface
-		if left.kind == cValue {
-			mod = left.val.Module
+		if left.kind == cValue && left.val.Module != nil {
+			return cv(left.val.Module.LookupMust(c.name))
 		}
-		if mod == nil {
-			panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module", c.args[0].name)})
-		}
-		return cv(mod.LookupMust(c.name))
+		// モジュールでなければ struct のフィールド参照 (実行時に評価する)
+		return &cexpr{kind: cOp, op: opField, args: []*cexpr{left}, name: c.name}
+
+	case cStructLit:
+		return h.constEvalStructLit(c)
+
+	case cSizeof:
+		return cv(h.IntValue(h.sizeofType(c.typ)))
 
 	case cCast:
 		x := h.constEval(c.args[0])
@@ -954,6 +974,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				}
 			}
 			return &cexpr{kind: cOp, op: opCall, args: args, block: c.block}
+
+		case opField:
+			return &cexpr{kind: cOp, op: opField, args: []*cexpr{h.constEval(c.args[0])}, name: c.name}
 
 		case opLoad, opIndex, opRef, opDeref:
 			args := make([]*cexpr, len(c.args))
@@ -1056,11 +1079,7 @@ func foldIntOp(op cop, v1, v2 int) int {
 func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	switch t := t.(type) {
 	case *syntax.NamedType:
-		ty, ok := h.prog.Types.Named(t.Name.Name)
-		if !ok {
-			panic(&diag.Error{Msg: fmt.Sprintf("invalid basic type %s", t.Name.Name)})
-		}
-		return ty
+		return h.namedType(t)
 	case *syntax.PointerType:
 		return h.prog.Types.PointerTo(h.typeOf(t.Elem))
 	case *syntax.ArrayType:
@@ -1080,6 +1099,72 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 		return h.prog.Types.Func(params, h.typeOf(t.Result), false)
 	}
 	panic(fmt.Sprintf("typeOf: unknown type expression %T", t))
+}
+
+// namedType は型名 (基本型、または struct / soa 宣言の名前。`mod.Name` は他モジュールの公開型) を型にする。
+func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
+	name := t.Name.Name
+	if t.Module == nil {
+		if ty, ok := h.prog.Types.Named(name); ok {
+			return ty
+		}
+		if v := h.scope.Find(name, true); v != nil && v.TypeRef != nil {
+			return v.TypeRef
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("invalid basic type %s", name)})
+	}
+	mv := h.scope.FindMust(t.Module.Name, true)
+	if mv.Module == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module", t.Module.Name)})
+	}
+	v := mv.Module.LookupMust(name)
+	if v.TypeRef == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is not a type", t.Module.Name, name)})
+	}
+	return v.TypeRef
+}
+
+// checkComplete は変数・フィールド・配列要素に置ける型か検査する (void と未完成の struct は不可)。
+func (h *Hlc) checkComplete(t *types.Type, what string) {
+	switch {
+	case t.Kind == types.Void:
+		panic(&diag.Error{Msg: fmt.Sprintf("%s cannot be void", what)})
+	case t.Kind == types.Struct && t.Size < 0:
+		panic(&diag.Error{Msg: fmt.Sprintf("%s: struct %s is not complete yet (recursive struct must go through a pointer)", what, t.Name)})
+	case t.Kind == types.Array && t.Base.Kind == types.Struct && t.Base.Size < 0:
+		panic(&diag.Error{Msg: fmt.Sprintf("%s: struct %s is not complete yet (recursive struct must go through a pointer)", what, t.Base.Name)})
+	}
+}
+
+// compileStructDecl は `struct Name { f:T; ... }`。型名を Value (Kind == TypeName, TypeRef) としてスコープに束縛する。
+// 名前は先に束縛するので、フィールドから `*Name` で自己参照できる (値としての自己参照は checkComplete が弾く)。
+func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
+	h.mustInModule()
+	name := s.Name.Name
+	st := h.prog.Types.NewStruct(h.module.Id + "." + name)
+	if st.Size >= 0 {
+		panic(&diag.Error{Msg: fmt.Sprintf("struct %s already defined", name)})
+	}
+	tv := h.addVar(ir.NewTypeValue(name, h.prog.Types.TypeName(), st))
+	if h.scopeIsPublic(s.PublicPos) {
+		tv.Public = true
+	}
+	fields := make([]types.Field, 0, len(s.Fields))
+	for _, f := range s.Fields {
+		fname := f.Name.Name
+		for _, prev := range fields {
+			if prev.Name == fname {
+				panic(&diag.Error{Msg: fmt.Sprintf("field %s already defined in struct %s", fname, name)})
+			}
+		}
+		ft := h.typeEval(f.Type)
+		h.checkComplete(ft, "field "+fname)
+		if ft.Size < 0 {
+			panic(&diag.Error{Msg: fmt.Sprintf("field %s: array field must have a length", fname)})
+		}
+		fields = append(fields, types.Field{Name: fname, Type: ft})
+	}
+	h.prog.Types.SetFields(st, fields)
 }
 
 // typeEval は type_eval 相当。最外の配列長だけを定数評価する (内側の次元は整数リテラルのみ有効)。
@@ -1134,6 +1219,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	switch e.kind {
 
 	case cValue:
+		if e.val.Type.Kind == types.TypeName {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s is a type, not a value", e.val.Name)})
+		}
 		if e.val.Kind == ir.KindArrayLiteral {
 			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
 			r = ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
@@ -1146,12 +1234,44 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		h.recordCast(e, ir.ValType(v), e.ty)
 		r = h.explicitCast(e.ck, v, e.ty)
 
+	case cStructLit:
+		// 実行時に組み立てる struct リテラル: 一時変数 (フレーム上) にフィールドごとに代入する
+		if e.ty == nil {
+			panic(&diag.Error{Msg: "struct literal without a type name needs a context that gives the type (declared type or assignment)"})
+		}
+		tmp := h.newTmp(e.ty)
+		for _, f := range e.ty.Fields {
+			dst := ir.NewCastedValue(tmp, f.Type, f.Offset)
+			var v ir.Operand
+			if fv := structLitField(e, f.Name); fv != nil {
+				v = h.rval(fv)
+				h.compatible(f.Type, ir.ValType(v))
+				v = h.cast(v, f.Type)
+			} else {
+				v = h.zeroValue(f.Type)
+			}
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: dst, Src: []ir.Operand{v}})
+		}
+		r = tmp
+
+	case cArray:
+		panic(&diag.Error{Msg: "array literal with untyped struct literals needs a declared type"})
+
 	case cOp:
 		switch e.op {
 
 		case opLoad:
 			left, lv := h.lval(e.args[0])
-			right := h.rval(e.args[1])
+			rhs := e.args[1]
+			if h.needsExpected(rhs) {
+				// `p = {1, 2}`: 左辺の型で struct リテラルの型を決める
+				lt := ir.ValType(left)
+				if lv {
+					lt = lt.Base
+				}
+				rhs = h.withExpected(rhs, lt)
+			}
+			right := h.rval(rhs)
 			if lv {
 				h.compatible(ir.ValType(left).Base, ir.ValType(right))
 				right = h.cast(right, ir.ValType(left).Base)
@@ -1314,6 +1434,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 			leftValue = true
 
+		case opField: // struct のフィールド参照 a.f (a が struct へのポインタなら自動で参照はがし)
+			r, leftValue = h.fieldAccess(e.args[0], e.name)
+
 		case opIndex: // []演算子
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
@@ -1361,6 +1484,16 @@ func (h *Hlc) newLabels(names ...string) []string {
 
 func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
 	return h.addVar(ir.NewLocal(h.tmpName("$"), typ, ir.LTTemp))
+}
+
+// operandValue はオペランドを *ir.Value にする (CastedValue などは一時変数に写す)。マクロが cexpr の値として使うため。
+func (h *Hlc) operandValue(v ir.Operand) *ir.Value {
+	if val, ok := v.(*ir.Value); ok {
+		return val
+	}
+	tmp := h.newTmp(ir.ValType(v))
+	h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{v}})
+	return tmp
 }
 
 // cast は v を type にキャストする (必要ならコードも生成)。

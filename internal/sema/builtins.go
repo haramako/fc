@@ -44,8 +44,11 @@ func registerBuiltins(p *Program) {
 		printInt16 := stdio.LookupInternal("print_int16")
 		r := macroResult{stmts: []*cexpr{}}
 		for _, arg := range args {
-			// 旧実装は引数が定数値でないと ValType が落ちていた。同じく定数値を要求する
-			typ := mustValue(arg).Type
+			// 旧実装は引数が定数値 (変数・リテラル) しか受けなかった。式 (struct のフィールドなど) は先に評価して値にする
+			if arg.kind != cValue {
+				arg = cv(h.operandValue(h.rval(arg)))
+			}
+			typ := arg.val.Type
 			if h.prog.Types.Compatible(uint8p, typ) != nil {
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
 			} else if typ.Kind == types.Int {

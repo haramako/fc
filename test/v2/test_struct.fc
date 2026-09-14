@@ -1,0 +1,139 @@
+#fc 2
+// struct (doc/v2_types_struct.md §4) のテスト。v1 には無い機能なので test/ に対応するものはない。
+use * from unittest;
+
+struct Point {
+	x:int;
+	y:int16;
+}
+
+struct Line {
+	a:Point;
+	b:Point;
+	tag:int;
+}
+
+struct Node {
+	value:int;
+	next:*Node;
+}
+
+var g:Point;
+var ln:Line;
+var pts:[4]Point;
+const ORIGIN = Point{x: 1, y: 2};
+const TABLE:[3]Point = [
+	{1, 100},
+	{2, 200},
+	Point{x: 3, y: 300},
+];
+var nodes:[3]Node;
+
+function set(p:*Point, x:int, y:int16):void
+{
+	p.x = x;
+	p.y = y;
+}
+
+function sum(p:Point):int16
+{
+	return p.x as int16 + p.y;
+}
+
+function make(x:int):Point
+{
+	return {x, (x * 2) as int16};
+}
+
+function total(p:*Point, n:int):int16
+{
+	var s:int16 = 0;
+	for (var i = 0; i < n; i++) {
+		s += p[i].y;
+	}
+	return s;
+}
+
+function test_field():void
+{
+	g.x = 3;
+	g.y = 300;
+	assert_equal(g.x, 3, 'g.x');
+	assert_equal(g.y, 300, 'g.y');
+	assert_equal(sizeof(Point), 3, 'sizeof(Point)');
+	assert_equal(sizeof(Line), 7, 'sizeof(Line)');
+	assert_equal(sizeof(g), 3, 'sizeof(g)');
+	assert_equal(sizeof(pts), 12, 'sizeof(pts)');
+}
+
+function test_local_and_pointer():void
+{
+	var l:Point = {10, 20};
+	assert_equal(l.x, 10, 'literal x');
+	assert_equal(l.y, 20, 'literal y');
+	set(&l, 7, 700);
+	assert_equal(l.x, 7, 'set x');
+	assert_equal(l.y, 700, 'set y');
+	assert_equal(sum(l), 707, 'by value');
+	var m = make(5);
+	assert_equal(m.x, 5, 'return x');
+	assert_equal(m.y, 10, 'return y');
+	m = g;
+	g.x = 9;
+	assert_equal(m.x, 3, 'copy x');
+	assert_equal(m.y, 300, 'copy y');
+}
+
+function test_nested():void
+{
+	ln.a = g;
+	ln.b.x = 1;
+	ln.b.y = 2;
+	ln.tag = 4;
+	var lp = &ln;
+	lp.a.x += 1;
+	assert_equal(ln.a.x, 10, 'nested a.x');
+	assert_equal(lp.b.y, 2, 'nested b.y');
+	assert_equal(lp.tag, 4, 'nested tag');
+}
+
+function test_array():void
+{
+	assert_equal(ORIGIN.x, 1, 'const x');
+	assert_equal(ORIGIN.y, 2, 'const y');
+	assert_equal(TABLE[1].x, 2, 'table[1].x');
+	assert_equal(TABLE[2].y, 300, 'table[2].y');
+	for (var i = 0; i < 4; i++) {
+		pts[i].x = i;
+		pts[i].y = (i * 10) as int16;
+	}
+	pts[2] = TABLE[2];
+	assert_equal(pts[1].y, 10, 'pts[1].y');
+	assert_equal(pts[2].x, 3, 'pts[2].x');
+	assert_equal(total(pts, 4), 340, 'total');
+	var loc:[2]Point;
+	loc[0] = {5, 6};
+	loc[1].x = 7;
+	loc[1].y = 8;
+	assert_equal(loc[1].x, 7, 'local array');
+	assert_equal(total(loc, 2), 14, 'local total');
+}
+
+function test_linked():void
+{
+	nodes[0] = {1, &nodes[1]};
+	nodes[1] = {2, &nodes[2]};
+	nodes[2] = {3, bitcast<*Node>(0)};
+	var s = 0;
+	var p = &nodes[0];
+	while (bitcast<uint16>(p) != 0) {
+		s += p.value;
+		p = p.next;
+	}
+	assert_equal(s, 6, 'linked list');
+}
+
+function main():void
+{
+	unittest_run_tests();
+}

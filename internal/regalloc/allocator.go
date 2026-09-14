@@ -156,8 +156,9 @@ func AllocateRegister(lmd *ir.Lambda) {
 				lmd.Result.Location = ir.LocFrame
 			}
 			lmd.Result.Address = 0
-		} else if beyondCall || v.LocalType == ir.LTArg || refered[v] || (v.Kind == ir.KindLocal && v.Type.Kind == types.Array) {
-			// 引数か、関数をまたいでいるか、配列なら、フレームに割り当てる
+		} else if beyondCall || v.LocalType == ir.LTArg || refered[v] ||
+			(v.Kind == ir.KindLocal && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct)) {
+			// 引数か、関数をまたいでいるか、配列・struct なら、フレームに割り当てる
 			// (レジスタ領域は 2 バイト単位でしか確保しないので、配列を置くと隣と重なって壊れる)
 			v.Address = frameSize
 			if fastcall {

@@ -116,7 +116,7 @@ func (u *Universe) TypeName() *Type {
 // NewStruct は名前付き struct 型を作る (フィールドは SetFields で後から入れる。自己参照のため)。
 // qualName はモジュール修飾名 (mod.Name)。同名は同じ型。
 func (u *Universe) NewStruct(qualName string) *Type {
-	return u.intern(&Type{Kind: Struct, Name: qualName, Length: -1, str: "struct " + qualName})
+	return u.intern(&Type{Kind: Struct, Name: qualName, Size: -1, Length: -1, str: qualName})
 }
 
 // SetFields は struct のフィールドを確定し、オフセットとサイズを計算する (詰めて配置、アラインメントなし)。

@@ -568,7 +568,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			r.push(op.Text)
 
 		case ir.OpIndex:
-			if ir.ValType(op.In(1)).Size == 1 {
+			if es := ir.ValType(op.In(0)).Base.Size; es != 1 && es != 2 {
+				r.push(l.indexLarge(op))
+			} else if ir.ValType(op.In(1)).Size == 1 {
 				// インデックスのサイズが１
 				if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
 					// フレーム上のローカル配列: 先頭は S + addr + X (ゼロページなので上位は 0。OpRef と同じ)
@@ -929,6 +931,10 @@ func (l *Llc) toAsm(v ir.Operand) string {
 			if lv.Symbol == "" {
 				panic(fmt.Sprintf("invalid %s", ir.OperandString(v)))
 			}
+			if off := ir.ValOffset(v); off != 0 {
+				// struct のフィールド
+				return fmt.Sprintf("%s+%d", mangle(lv.Symbol), off)
+			}
 			return mangle(lv.Symbol)
 		case ir.KindLiteral:
 			lv := ir.ValLiteral(v)
@@ -965,7 +971,7 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 		}
 	}
 	if cv, ok := v.(*ir.CastedValue); ok {
-		if n < cv.Type.Size && n < ir.ValType(cv.From).Size {
+		if n < cv.Type.Size && n+cv.Offset < ir.ValType(cv.From).Size {
 			return fmt.Sprintf("%d+%s", n, l.toAsm(cv))
 		}
 		return "#0" // 符号拡張は、:sign_extension オペレータで行うので、存在しないbyteは0扱い
@@ -994,6 +1000,10 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 	r := []any{}
 	r = append(r, mangle(sym)+":")
+	if typ.Kind == types.Struct || (typ.Kind == types.Array && (typ.Base.Kind == types.Struct || typ.Base.Kind == types.Array)) {
+		// struct / 入れ子の配列: 要素ごとに型に従って .byte / .word を出す
+		return append(r, l.emitData(typ, val)...)
+	}
 	var op string
 	var limit int
 	switch typ.Base.Size {
@@ -1021,6 +1031,98 @@ func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 			}
 		}
 		r = append(r, fmt.Sprintf("\t%s %s", op, strings.Join(parts, ",")))
+	}
+	return r
+}
+
+// emitData は struct / 配列の定数データを型に従って平坦に出力する (1 要素 1 行)。
+func (l *Llc) emitData(typ *types.Type, val []ir.Operand) []any {
+	r := []any{}
+	scalar := func(t *types.Type, v ir.Operand) {
+		op, limit := ".byte", 256
+		if t.Size == 2 {
+			op, limit = ".word", 65536
+		} else if t.Size != 1 {
+			panic(fmt.Sprintf("invalid data element size %d", t.Size))
+		}
+		lv := ir.ValLiteral(v)
+		switch {
+		case lv != nil && lv.Kind == ir.KindLiteral && lv.IsInt:
+			r = append(r, fmt.Sprintf("\t%s %d", op, ir.FloorMod(lv.Int, limit)))
+		case lv != nil && lv.Kind == ir.KindLiteral:
+			r = append(r, fmt.Sprintf("\t%s %s", op, lv.Symbol))
+		default:
+			r = append(r, fmt.Sprintf("\t%s %s", op, l.toAsm(v)))
+		}
+	}
+	var elem func(t *types.Type, v ir.Operand)
+	elem = func(t *types.Type, v ir.Operand) {
+		switch t.Kind {
+		case types.Struct:
+			lv := ir.ValLiteral(v)
+			if lv == nil || lv.Kind != ir.KindArrayLiteral || len(lv.Elems) != len(t.Fields) {
+				panic(&diag.Error{Msg: fmt.Sprintf("invalid constant for struct %s", t.Name)})
+			}
+			for i, f := range t.Fields {
+				elem(f.Type, lv.Elems[i])
+			}
+		case types.Array:
+			lv := ir.ValLiteral(v)
+			if lv == nil || lv.Kind != ir.KindArrayLiteral {
+				panic(&diag.Error{Msg: fmt.Sprintf("invalid constant for %s", t)})
+			}
+			if t.Length >= 0 && len(lv.Elems) != t.Length {
+				panic(&diag.Error{Msg: fmt.Sprintf("array %s has %d elements but %d given", t, t.Length, len(lv.Elems))})
+			}
+			for _, e := range lv.Elems {
+				elem(t.Base, e)
+			}
+		default:
+			scalar(t, v)
+		}
+	}
+	if typ.Kind == types.Struct {
+		elem(typ, ir.NewArrayLiteral("", typ, val))
+	} else {
+		for _, v := range val {
+			elem(typ.Base, v)
+		}
+	}
+	return r
+}
+
+// indexLarge は要素サイズが 1・2 以外 (struct の配列) の index: Dst = 先頭 + idx * size。
+// idx * size は reg+2,reg+3 に 16 ビットで、size のビットごとの shift-add で求める (size は定数)。
+func (l *Llc) indexLarge(op *ir.Op) []any {
+	arr, idx := op.In(0), op.In(1)
+	size := ir.ValType(arr).Base.Size
+	r := []any{}
+	// reg+0,1 = idx (16 ビット)。reg+2,3 = 積
+	r = append(r, l.loadA(idx, 0), "sta <reg+0", l.loadA(idx, 1), "sta <reg+1")
+	top := 15
+	for top >= 0 && size&(1<<top) == 0 {
+		top--
+	}
+	r = append(r, "lda <reg+0", "sta <reg+2", "lda <reg+1", "sta <reg+3")
+	for bit := top - 1; bit >= 0; bit-- {
+		r = append(r, "asl <reg+2", "rol <reg+3")
+		if size&(1<<bit) != 0 {
+			r = append(r, "clc", "lda <reg+2", "adc <reg+0", "sta <reg+2", "lda <reg+3", "adc <reg+1", "sta <reg+3")
+		}
+	}
+	// 先頭アドレスを足す
+	switch {
+	case ir.ValType(arr).Kind == types.Array && ir.ValLocation(arr) == ir.LocFrame:
+		r = append(r, "txa", "clc", fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(arr)), "clc", "adc <reg+2",
+			l.storeA(op.Dst, 0), "lda <reg+3", "adc #0", l.storeA(op.Dst, 1))
+	case ir.ValType(arr).Kind == types.Array:
+		r = append(r, "clc", "lda <reg+2", fmt.Sprintf("adc #.LOBYTE(%s)", l.toAsm(arr)), l.storeA(op.Dst, 0),
+			"lda <reg+3", fmt.Sprintf("adc #.HIBYTE(%s)", l.toAsm(arr)), l.storeA(op.Dst, 1))
+	case ir.ValType(arr).Kind == types.Pointer:
+		r = append(r, "clc", l.loadA(arr, 0), "adc <reg+2", l.storeA(op.Dst, 0),
+			l.loadA(arr, 1), "adc <reg+3", l.storeA(op.Dst, 1))
+	default:
+		panic("invalid index")
 	}
 	return r
 }
@@ -1199,6 +1301,9 @@ func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
 			continue
 		}
 		arr, idx := op.Src[0], op.Src[1]
+		if es := ir.ValType(arr).Base.Size; es != 1 && es != 2 {
+			continue // struct の配列 (要素サイズが 1・2 以外) は sym+i,y の形にできない
+		}
 		switch nextOp.Code {
 		case ir.OpPget:
 			if isSameOperand(op.Dst, nextOp.Src[0]) && // 同じ変数を連続で使っていて
