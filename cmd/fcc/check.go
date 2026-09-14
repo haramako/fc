@@ -3,7 +3,6 @@ package main
 // fcc check: ファイルを生成せずにコンパイルし、エラーと警告を報告する。
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -38,18 +37,28 @@ func runCheck(args []string) int {
 	for _, src := range fs.Args() {
 		ws, err := compiler.Check(src, fc.CheckOptions{Target: *target})
 		if err != nil {
-			var ce *fc.Error
-			if errors.As(err, &ce) {
-				fmt.Printf("%s: error: %s\n", ce.Pos, ce.Msg)
-			} else {
-				fmt.Println(err)
-			}
+			printErrors(err)
 			rc = 1
 			continue
 		}
 		printWarnings(ws)
 	}
 	return rc
+}
+
+// printErrors はコンパイルエラーを `file:line:col: error: msg` で全部出す (それ以外のエラーはそのまま)。
+func printErrors(err error) {
+	es := fc.Errors(err)
+	if len(es) == 0 {
+		fmt.Println(err)
+		return
+	}
+	for _, e := range es {
+		fmt.Printf("%s: error: %s\n", e.Pos, e.Msg)
+	}
+	if len(es) > 1 {
+		fmt.Printf("%d errors\n", len(es))
+	}
 }
 
 // printWarnings は警告を `file:line:col: warning: msg` で標準エラーに出す。

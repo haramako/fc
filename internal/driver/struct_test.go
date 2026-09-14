@@ -177,7 +177,7 @@ func TestStructErrors(t *testing.T) {
 		{"struct P { x:int; }\nstruct P { y:int; }\n", "already defined"},
 		{"struct P { x:int; x:int; }\n", "already defined in struct"},
 		{"struct P { x:int; }\nfunction main():void { var v = P; }\n", "is a type, not a value"},
-		{"var p:Q;\n", "invalid basic type Q"},
+		{"var p:Q;\n", "unknown type Q"},
 		{"struct P { x:int; }\nfunction f():void { struct Q { a:int; } }\n", "must be at module level"},
 	}
 	for _, c := range cases {

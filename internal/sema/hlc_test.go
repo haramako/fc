@@ -3,6 +3,7 @@ package sema
 // HLC (構文木 → IR) の単体テスト。golden が網羅しない「保存すべき挙動」を小さなソースで固定する。
 
 import (
+	"errors"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"os"
@@ -111,9 +112,9 @@ func TestHlcErrors(t *testing.T) {
 		{"function f():int { return; }\nfunction main():void {}", "can't return without value"},
 		{"var x:int;\nconst a = x + 1;\nfunction main():void {}", "must be constant"},
 		{"function main():void { var a:int; var b:int[a+1]; }", "array size must be constant"},
-		{"function main():void { var p:int*; p = &1; }", "is not left value"},
-		{"function main():void { var a:int; *a = 1; }", "is not pointer"},
-		{"function main():void { var a:int; a[0] = 1; }", "index must be pointer or array"},
+		{"function main():void { var p:int*; p = &1; }", "cannot take the address of 1"},
+		{"function main():void { var a:int; *a = 1; }", "is not a pointer"},
+		{"function main():void { var a:int; a[0] = 1; }", "is not a pointer or array"},
 	}
 	for _, c := range cases {
 		_, err := compileSrc(t, c.src)
@@ -121,8 +122,8 @@ func TestHlcErrors(t *testing.T) {
 			t.Errorf("%q: エラーになるべき", c.src)
 			continue
 		}
-		ce, ok := err.(*diag.Error)
-		if !ok {
+		var ce *diag.Error
+		if !errors.As(err, &ce) {
 			t.Errorf("%q: *diag.Error であるべき: %T", c.src, err)
 			continue
 		}
@@ -153,8 +154,8 @@ func TestHlcErrorPosition(t *testing.T) {
 	}
 	for _, c := range cases {
 		_, err := compileSrc(t, c.src)
-		ce, ok := err.(*diag.Error)
-		if !ok {
+		var ce *diag.Error
+		if !errors.As(err, &ce) {
 			t.Fatalf("%q: CompileError であるべき: %v", c.src, err)
 		}
 		if ce.Pos.Line != c.line || ce.Pos.Col != c.col {

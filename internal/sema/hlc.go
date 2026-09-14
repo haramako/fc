@@ -239,7 +239,7 @@ func (h *Hlc) attachScope(newScope *ir.Scope, f func()) {
 // mustValue は評価済みの値であることを要求する (マクロ引数など)。
 func mustValue(c *cexpr) *ir.Value {
 	if c.kind != cValue {
-		panic(&diag.Error{Msg: "constant value required"})
+		panic(&diag.Error{Msg: "constant value required (got an expression that is evaluated at runtime)"})
 	}
 	return c.val
 }
@@ -248,24 +248,50 @@ func mustValue(c *cexpr) *ir.Value {
 func mustString(c *cexpr) string {
 	v := mustValue(c)
 	if !v.IsString {
-		panic(&diag.Error{Msg: "string literal required"})
+		panic(&diag.Error{Msg: fmt.Sprintf("string literal required (got %s)", describe(v))})
 	}
 	return v.Str
+}
+
+// describe はエラーメッセージ用の値の表示 (名前があれば名前、リテラルは値、それ以外は型)。
+func describe(v ir.Operand) string {
+	if val := ir.UnderlyingValue(v); val != nil {
+		switch {
+		case val.Name != "" && val.Kind != ir.KindLiteral:
+			return "`" + val.Name + "`"
+		case val.Name != "":
+			return "`" + val.Name + "`"
+		case val.Kind == ir.KindLiteral && val.IsInt:
+			return fmt.Sprintf("%d", val.Int)
+		case val.IsString:
+			return fmt.Sprintf("%q", val.Str)
+		}
+	}
+	return "expression of type " + ir.ValType(v).String()
 }
 
 // compatible は互換型を返す (なければ CompileError)。
 func (h *Hlc) compatible(a, b *types.Type) *types.Type {
 	r := h.prog.Types.Compatible(a, b)
 	if r == nil {
-		panic(&diag.Error{Msg: fmt.Sprintf("not compatible type '%s' and '%s'", a, b)})
+		panic(&diag.Error{Msg: fmt.Sprintf("types %s and %s are not compatible", a, b)})
+	}
+	return r
+}
+
+// compatibleAssign は代入 (初期化・引数・戻り値も) の型検査。to が代入先。
+func (h *Hlc) compatibleAssign(what string, to, from *types.Type) *types.Type {
+	r := h.prog.Types.Compatible(to, from)
+	if r == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s: cannot assign %s to %s (not compatible types)", what, from, to)})
 	}
 	return r
 }
 
 // guessType は宣言型 typ (省略可) と初期値 val から変数の型を決める。
-func (h *Hlc) guessType(typ *types.Type, val ir.Operand) *types.Type {
+func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Type {
 	if typ != nil {
-		return h.compatible(typ, ir.ValType(val))
+		return h.compatibleAssign("`"+name+"`", typ, ir.ValType(val))
 	}
 	return ir.ValType(val)
 }
@@ -355,7 +381,64 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 
 func (h *Hlc) compileStmts(stmts []syntax.Stmt) {
 	for _, s := range stmts {
-		h.compileStatement(s)
+		h.compileStatementRecover(s)
+	}
+}
+
+// compileStatementRecover は 1 文をコンパイルし、エラーなら記録して次の文へ進めるようにする (複数エラー報告)。
+// 途中で抜けた分のスコープ・ループのスタックなどを元に戻し、失敗した宣言の名前は Bad 型で束縛して
+// 以降の参照が巻き添えのエラーを出さないようにする。
+func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
+	scope, loops, pending, fast := h.scope, len(h.loops), h.pendingLabel, h.fastCalling
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		ce, ok := r.(*diag.Error)
+		if !ok || ce.Fatal {
+			panic(r)
+		}
+		if !ce.Pos.IsValid() {
+			ce.Pos = h.curPos
+		}
+		h.scope, h.pendingLabel, h.fastCalling = scope, pending, fast
+		h.loops = h.loops[:loops]
+		h.cmemo = nil
+		h.prog.report(ce) // 上限なら Fatal を投げる
+		h.declareBad(s)
+	}()
+	h.compileStatement(s)
+}
+
+// declareBad はエラーになった宣言の名前を Bad 型で束縛する (未宣言のまま残すと使う側が全部 "not found" になる)。
+func (h *Hlc) declareBad(s syntax.Stmt) {
+	bad := func(id *syntax.Ident) {
+		if id == nil || h.scope.DeclaredHere(id.Name) {
+			return
+		}
+		h.addVar(ir.NewGlobal(id.Name, h.prog.Types.Bad(), "$bad"))
+	}
+	switch s := s.(type) {
+	case *syntax.VarDecl:
+		for _, sp := range s.Specs {
+			bad(sp.Name)
+		}
+	case *syntax.FuncDecl:
+		bad(s.Name)
+	case *syntax.StructDecl:
+		bad(s.Name)
+	case *syntax.SoaDecl:
+		bad(s.Name)
+	case *syntax.UseDecl:
+		if s.As != nil {
+			bad(s.As)
+		} else if !s.FromAll && len(s.Names) == 0 {
+			bad(s.Module)
+		}
+		for _, n := range s.Names {
+			bad(n)
+		}
 	}
 }
 
@@ -455,7 +538,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			ref, _ := h.resolveFile(filename)
 			h.module.IncludeChrs = append(h.module.IncludeChrs, ref)
 		default:
-			panic(&diag.Error{Msg: fmt.Sprintf("invalid keyword %s", kind)})
+			panic(&diag.Error{Msg: fmt.Sprintf("unknown include kind %s (asm / chr)", kind)})
 		}
 		h.module.Depends = append(h.module.Depends, filename)
 
@@ -638,16 +721,16 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		if h.lmd.Type.Base.Kind != types.Void {
 			// 非void関数
 			if s.Value == nil {
-				panic(&diag.Error{Msg: "can't return without value"})
+				panic(&diag.Error{Msg: fmt.Sprintf("can't return without value from %s (returns %s)", h.lmd.Name, h.lmd.Type.Base)})
 			}
 			rt := h.lmd.Type.Base
 			v := h.rval(h.withExpected(toC(s.Value), rt))
-			h.compatible(rt, ir.ValType(v))
+			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
 			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.cast(v, rt)}})
 		} else {
 			// void関数
 			if s.Value != nil {
-				panic(&diag.Error{Msg: "can't return with value from void function"})
+				panic(&diag.Error{Msg: fmt.Sprintf("can't return with value from void function %s", h.lmd.Name)})
 			}
 			h.emit(&ir.Op{Code: ir.OpReturn})
 		}
@@ -729,16 +812,16 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		init = h.rval(h.withExpected(toC(sp.Init), typ))
 	}
 	if init != nil && h.lmd == nil {
-		panic(&diag.Error{Msg: "can't init global variable"})
+		panic(&diag.Error{Msg: fmt.Sprintf("can't init global variable %s (globals start as 0; assign it in a function, or use const)", name)})
 	}
 	if typ != nil {
 		h.checkComplete(typ, "variable "+name)
 	}
 	if typ == nil {
-		typ = h.guessType(nil, init)
+		typ = h.guessType(name, nil, init)
 	}
 	if typ != nil && init != nil {
-		h.compatible(typ, ir.ValType(init))
+		h.compatibleAssign("`"+name+"`", typ, ir.ValType(init))
 	}
 	var vv *ir.Value
 	if h.lmd == nil {
@@ -781,7 +864,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
 		}
 		v := cv.val
-		t := h.guessType(declType, v)
+		t := h.guessType(name, declType, v)
 		if v.Type.Kind == types.Macro {
 			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
 			v.Name = name
@@ -842,7 +925,7 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 func (h *Hlc) constEvalOperand(c *cexpr) ir.Operand {
 	r := h.constEval(c)
 	if r.kind != cValue {
-		panic(&diag.Error{Msg: "constant value required"})
+		panic(&diag.Error{Msg: "constant value required (got an expression that is evaluated at runtime)"})
 	}
 	return r.val
 }
@@ -927,6 +1010,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 
 	case cDot:
 		left := h.constEval(c.args[0])
+		if left.kind == cValue && left.val.Type.Kind == types.Bad {
+			panic(&diag.Error{Suppressed: true})
+		}
 		if left.kind == cValue && left.val.Module != nil {
 			return cv(left.val.Module.LookupMust(c.name))
 		}
@@ -1134,14 +1220,19 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 		if ty, ok := h.prog.Types.Named(name); ok {
 			return ty
 		}
-		if v := h.scope.Find(name, true); v != nil && v.TypeRef != nil {
-			return v.TypeRef
+		if v := h.scope.Find(name, true); v != nil {
+			if v.TypeRef != nil {
+				return v.TypeRef
+			}
+			if v.Type.Kind == types.Bad {
+				return v.Type // エラーになった struct / soa 宣言
+			}
 		}
-		panic(&diag.Error{Msg: fmt.Sprintf("invalid basic type %s", name)})
+		panic(&diag.Error{Msg: fmt.Sprintf("unknown type %s", name)})
 	}
 	mv := h.scope.FindMust(t.Module.Name, true)
 	if mv.Module == nil {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module", t.Module.Name)})
+		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module (in type %s.%s)", t.Module.Name, t.Module.Name, name)})
 	}
 	v := mv.Module.LookupMust(name)
 	if v.TypeRef == nil {
@@ -1225,7 +1316,7 @@ func (h *Hlc) rval(c *cexpr) ir.Operand {
 	v, left := h.lval(c)
 	if v == nil {
 		// void 関数の呼び出しなど値を持たない式を、値が要る場所 (条件・代入・引数) に書いた
-		panic(&diag.Error{Msg: "expression has no value (void)"})
+		panic(&diag.Error{Msg: "expression has no value (void function call used as a value)"})
 	}
 	if left {
 		if ir.ValType(v).Kind == types.SoaRef {
@@ -1248,6 +1339,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	switch e.kind {
 
 	case cValue:
+		if e.val.Type.Kind == types.Bad {
+			panic(&diag.Error{Suppressed: true}) // エラーになった宣言の参照: 報告済みなので黙って打ち切る
+		}
 		if e.val.Type.Kind == types.TypeName {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s is a type, not a value", e.val.Name)})
 		}
@@ -1335,7 +1429,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					}
 					typ = ir.ValType(left)
 				} else {
-					panic(cerr)
+					panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to %s and %s (not compatible types)", opSymbol(e.op), ir.ValType(left), ir.ValType(right))})
 				}
 			} else {
 				left, right = l2, r2
@@ -1424,7 +1518,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					r = h.newTmp(lmdType.Base)
 				}
 				if len(args) != len(lmdType.Params) {
-					panic(&diag.Error{Msg: fmt.Sprintf("%s has %d but %d", ir.OperandString(lmdV), len(lmdType.Params), len(args))})
+					panic(&diag.Error{Msg: fmt.Sprintf("%s expects %d argument(s) but %d given", describe(lmdV), len(lmdType.Params), len(args))})
 				}
 				if h.lmd.Type.Fastcall() {
 					panic(&diag.Error{Msg: "cannot call function from fastcall"})
@@ -1445,7 +1539,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					if pre {
 						for i, arg := range args {
 							v := h.rval(h.withExpected(arg, lmdType.Params[i]))
-							h.compatible(lmdType.Params[i], ir.ValType(v))
+							h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
 							argVals[i] = h.cast(v, lmdType.Params[i])
 						}
 					}
@@ -1458,7 +1552,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 						v := argVals[i]
 						if !pre {
 							v = h.rval(h.withExpected(arg, lmdType.Params[i]))
-							h.compatible(lmdType.Params[i], ir.ValType(v))
+							h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
 							v = h.cast(v, lmdType.Params[i])
 						}
 						h.emit(&ir.Op{Code: ir.OpPushFastcallArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
@@ -1469,7 +1563,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					h.emit(&ir.Op{Code: ir.OpPushResult, Type: lmdType.Base})
 					for i, arg := range args {
 						v := h.rval(h.withExpected(arg, lmdType.Params[i]))
-						h.compatible(lmdType.Params[i], ir.ValType(v))
+						h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
 						v = h.cast(v, lmdType.Params[i])
 						h.emit(&ir.Op{Code: ir.OpPushArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
 					}
@@ -1493,7 +1587,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				r = left
 			} else {
 				if !ir.ValAssignable(left) {
-					panic(&diag.Error{Msg: fmt.Sprintf("%s is not left value", ir.OperandString(left))})
+					panic(&diag.Error{Msg: fmt.Sprintf("cannot take the address of %s (not a variable)", describe(left))})
 				}
 				tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left)))
 				h.emit(&ir.Op{Code: ir.OpRef, Dst: tmp, Src: []ir.Operand{left}})
@@ -1516,8 +1610,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: "cannot dereference *void (bitcast to a typed pointer first)"})
 			}
 			if ir.ValType(r).Kind != types.Pointer && ir.ValType(r).Kind != types.SoaRef {
-				// Ruby版では未代入の `left` を参照するため空文字列になる
-				panic(&diag.Error{Msg: " is not pointer"})
+				panic(&diag.Error{Msg: fmt.Sprintf("cannot dereference %s (type %s is not a pointer)", describe(r), ir.ValType(r))})
 			}
 			leftValue = true
 
@@ -1539,13 +1632,13 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
 			if ir.ValType(left).Kind != types.Pointer && ir.ValType(left).Kind != types.Array {
-				panic(&diag.Error{Msg: "index must be pointer or array"})
+				panic(&diag.Error{Msg: fmt.Sprintf("cannot index %s (type %s is not a pointer or array)", describe(left), ir.ValType(left))})
 			}
 			if ir.ValType(left).Base.Kind == types.Void {
 				panic(&diag.Error{Msg: "cannot index *void (bitcast to a typed pointer first)"})
 			}
 			if ir.ValType(right).Kind != types.Int {
-				panic(&diag.Error{Msg: "index must be int"})
+				panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(right))})
 			}
 			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))
 			h.emit(&ir.Op{Code: ir.OpIndex, Dst: tmp, Src: []ir.Operand{left, right}})
@@ -1577,14 +1670,14 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 			h.soaScatter(left, right)
 			return left
 		}
-		h.compatible(ir.ValType(left).Base, ir.ValType(right))
+		h.compatibleAssign("assignment", ir.ValType(left).Base, ir.ValType(right))
 		right = h.cast(right, ir.ValType(left).Base)
 		h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{left, right}})
 		return left
 	}
-	h.compatible(ir.ValType(left), ir.ValType(right))
+	h.compatibleAssign("assignment to "+describe(left), ir.ValType(left), ir.ValType(right))
 	if !ir.ValAssignable(left) {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s is not left value", ir.OperandString(left))})
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
 	right = h.cast(right, ir.ValType(left))
 	h.emit(&ir.Op{Code: ir.OpLoad, Dst: left, Src: []ir.Operand{right}})

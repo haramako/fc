@@ -127,7 +127,61 @@ func (s *Scope) FindMust(id string, withPrivate bool) *Value {
 	if v := s.Find(id, withPrivate); v != nil {
 		return v
 	}
-	panic(&diag.Error{Msg: fmt.Sprintf("%s not found", id)})
+	msg := fmt.Sprintf("%s not found", id)
+	if hint := s.Suggest(id); hint != "" {
+		msg += fmt.Sprintf(" (did you mean %s?)", hint)
+	}
+	panic(&diag.Error{Msg: msg})
+}
+
+// Suggest は id に綴りの近い見える名前を返す (編集距離 2 以内で最も近いもの。無ければ "")。
+func (s *Scope) Suggest(id string) string {
+	best, bestD := "", 3
+	if len(id) < 3 {
+		return ""
+	}
+	seen := map[string]bool{}
+	for _, name := range s.IdList() {
+		if seen[name] || name == id {
+			continue
+		}
+		seen[name] = true
+		if d := editDistance(id, name); d < bestD || (d == bestD && best != "" && name < best) {
+			best, bestD = name, d
+		}
+	}
+	return best
+}
+
+// editDistance はレーベンシュタイン距離 (大文字小文字の違いは 0.5 扱いにせず 1 のまま)。
+func editDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	prev := make([]int, len(rb)+1)
+	cur := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		cur[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(rb)]
+}
+
+// DeclaredHere はこのスコープ自身に id の宣言 (または束縛) があるか。
+func (s *Scope) DeclaredHere(id string) bool {
+	if _, ok := s.declares[id]; ok {
+		return true
+	}
+	_, ok := s.aliases[id]
+	return ok
 }
 
 // Declare は値を宣言する。同名が既にあれば CompileError (選択的インポートとの衝突も含む: 規則 S2)。

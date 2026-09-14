@@ -708,7 +708,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			// 最適化後のオペレータ
 		case ir.OpIndexPget:
 			if !isByteInt(ir.ValType(op.In(1))) {
-				panic(&diag.Error{Msg: "2byte index not supported"})
+				panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 			}
 			if ir.ValType(op.In(0)).Kind != types.Array {
 				panic("index_pget with non-array")
@@ -721,7 +721,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 
 		case ir.OpIndexPset:
 			if !isByteInt(ir.ValType(op.In(1))) {
-				panic(&diag.Error{Msg: "2byte index not supported"})
+				panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 			}
 			if ir.ValType(op.In(0)).Kind != types.Array {
 				panic("index_pset with non-array")

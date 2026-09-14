@@ -8,6 +8,7 @@ package driver
 // (列も見るなら `//! col=N`)。マーカーのない断片は「断片内を指していること」だけ検査する。
 
 import (
+	"errors"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/sema"
 	"os"
@@ -62,7 +63,8 @@ func TestErrorsFC(t *testing.T) {
 			}
 			// CompileError は断片内 (errorsCommon より前) の位置、マーカーがあればその行 (と列) を指していること。
 			// 外部コマンド (ca65) のエラーは CommandError で位置を持たない
-			if ce, ok := berr.(*diag.Error); ok {
+			var ce *diag.Error
+			if errors.As(berr, &ce) {
 				fragLines := strings.Count(src, "\n") + 1
 				if !ce.Pos.IsValid() || ce.Pos.Line > fragLines || !strings.HasSuffix(ce.Pos.Filename, "fail_test.fc") {
 					t.Errorf("断片 %d: 位置が不正 %s (断片は %d 行)", i, ce.Pos, fragLines)

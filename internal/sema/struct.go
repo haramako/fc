@@ -251,7 +251,7 @@ func (h *Hlc) fieldRef(arg *cexpr, name string) fieldRef {
 		v, flv, split := h.soaField(left, t, name)
 		return fieldRef{v: v, lv: flv, split: split, soaConst: t.Soa.IsConst}
 	}
-	panic(&diag.Error{Msg: fmt.Sprintf("%s is not a struct (no field %s)", t, name)})
+	panic(&diag.Error{Msg: fmt.Sprintf("cannot access field %s: %s is not a struct (type %s)", name, describe(left), t)})
 }
 
 func (h *Hlc) fieldOf(st *types.Type, name string) types.Field {

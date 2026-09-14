@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -102,12 +101,7 @@ func run() int {
 
 	res, err := compiler.Build(context.Background(), rest[0], opt)
 	if err != nil {
-		var ce *fc.Error
-		if errors.As(err, &ce) {
-			fmt.Printf("%s: error: %s\n", ce.Pos, ce.Msg)
-			return 1
-		}
-		fmt.Println(err)
+		printErrors(err)
 		return 1
 	}
 	printWarnings(res.Warnings)

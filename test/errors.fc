@@ -47,3 +47,26 @@ function hoge():void options(fastcall:true){
 	hoge(); //! col=2
 }
 
+
+//@counter2 not found \(did you mean counter\?\)
+var counter:int;
+function hoge():void {
+	counter2 = 1; //! col=2
+}
+
+//@parse error: unexpected `\}`
+function hoge():void {
+	var a = 1 +
+} //! col=1
+
+//@cannot dereference `a` \(type uint8 is not a pointer\)
+function hoge():void {
+	var a:int;
+	*a = 1; //! col=2
+}
+
+//@`f` expects 1 argument\(s\) but 2 given
+function f(a:int):void {}
+function hoge():void {
+	f(1, 2); //! col=2
+}

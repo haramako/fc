@@ -6,6 +6,7 @@ package syntax
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -217,12 +218,52 @@ func (a *yyLexAdapter) Lex(lval *yySymType) int {
 	return kindToYacc[t.Kind]
 }
 
+func init() {
+	// "syntax error: unexpected X, expecting Y or Z" 形式にする (トークン名は tokenDisplay で読める綴りに)
+	yyErrorVerbose = true
+}
+
+// tokenDisplay は goyacc のトークン名 (kFUNCTION, IDENT, LEQ, '(') → エラーメッセージ用の綴り。
+var tokenDisplay = func() map[string]string {
+	m := map[string]string{"$end": "end of file", "$unk": "invalid token"}
+	m[yyTokname(yyTokIndex(kindToYacc[Identifier]))] = "identifier"
+	m[yyTokname(yyTokIndex(kindToYacc[Number]))] = "number"
+	m[yyTokname(yyTokIndex(kindToYacc[String]))] = "string"
+	for k, id := range kindToYacc {
+		if k == Identifier || k == Number || k == String {
+			continue
+		}
+		m[yyTokname(yyTokIndex(id))] = "`" + k.String() + "`"
+	}
+	return m
+}()
+
+// yyTokIndex はトークン id (kindToYacc の値) を goyacc 内部の番号 (yyTokname / エラーメッセージが使う) にする
+// (yylex1 の変換と同じ)。
+func yyTokIndex(id int) int {
+	if id >= 0 && id < len(yyTok1) {
+		return int(yyTok1[id])
+	}
+	if id >= yyPrivate && id-yyPrivate < len(yyTok2) {
+		return int(yyTok2[id-yyPrivate])
+	}
+	return 0
+}
+
 func (a *yyLexAdapter) Error(s string) {
 	if a.parseErr != nil {
 		return
 	}
 	// racc は "parse error on value ..." 形式 (errors.fc が /parse error/ で照合する)
 	msg := strings.Replace(s, "syntax error", "parse error", 1)
+	for name, disp := range tokenDisplay {
+		msg = strings.ReplaceAll(msg, " "+name, " "+disp)
+	}
+	if a.last.Kind == Identifier || a.last.Kind == Number || a.last.Kind == String {
+		// 識別子などは綴りも添える: unexpected identifier "fuga"
+		name := tokenDisplay[yyTokname(yyTokIndex(kindToYacc[a.last.Kind]))]
+		msg = strings.Replace(msg, "unexpected "+name, "unexpected "+name+" "+strconv.Quote(a.last.Text), 1)
+	}
 	a.parseErr = &Error{Filename: a.lex.Filename(), Pos: a.last.Pos, Msg: msg}
 }
 

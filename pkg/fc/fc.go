@@ -52,6 +52,13 @@ type Result = driver.Result
 // Error はコンパイルエラー (位置付き)。外部コマンド (ca65 / ld65) の失敗は *CommandError。
 type Error = diag.Error
 
+// ErrorList は複数のコンパイルエラー (意味解析は文ごとに回復して集める)。errors.As で *Error を取ると最初の 1 件。
+// 全部を出すには Errors(err) を使う。
+type ErrorList = diag.ErrorList
+
+// Errors は err に含まれるコンパイルエラーを全部返す (*Error なら 1 件、ErrorList なら全部、それ以外は nil)。
+func Errors(err error) []*Error { return diag.Errors(err) }
+
 // Warning は警告 (位置付き)。Result.Warnings / Check で返る。
 type Warning = diag.Warning
 

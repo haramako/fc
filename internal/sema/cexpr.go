@@ -78,6 +78,16 @@ var compoundOps = map[syntax.Kind]cop{
 	syntax.AndEq: opAnd, syntax.OrEq: opOr, syntax.XorEq: opXor, syntax.ShlEq: opShiftLeft, syntax.ShrEq: opShiftRight,
 }
 
+// opSymbol は演算のソース上の綴り (エラーメッセージ用)。
+func opSymbol(op cop) string {
+	for k, v := range binaryOps {
+		if v == op {
+			return k.String()
+		}
+	}
+	return string(op)
+}
+
 // cfield は struct リテラルの 1 項目。key が "" なら位置指定。
 type cfield struct {
 	key string

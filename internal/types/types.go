@@ -24,11 +24,12 @@ const (
 	Struct   // 構造体 (Fields)
 	TypeName // 型名を束縛した値の型 (Value.TypeRef が実際の型)
 	SoaRef   // SoA コンテナの要素ハンドル (実体は uint8 のインデックス。Base = 要素の struct 型、Soa = コンテナ)
+	Bad      // エラーになった宣言の型 (これに触れるエラーは報告しない: 巻き添えの抑制)
 )
 
 var kindNames = [...]string{
 	Void: "void", Bool: "bool", Int: "int", Module: "module", Macro: "macro",
-	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", TypeName: "typename", SoaRef: "soaref",
+	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", TypeName: "typename", SoaRef: "soaref", Bad: "bad",
 }
 
 func (k Kind) String() string {
@@ -108,6 +109,11 @@ func (u *Universe) Module() *Type {
 }
 func (u *Universe) Macro() *Type {
 	return u.intern(&Type{Kind: Macro, Size: 0, Length: -1, str: "macro"})
+}
+
+// Bad はエラーになった宣言に付ける型。どの型とも互換で、これを使う式のエラーは抑制される。
+func (u *Universe) Bad() *Type {
+	return u.intern(&Type{Kind: Bad, Size: 1, Length: -1, str: "<error>"})
 }
 
 // TypeName は型名を束縛した値 (struct 宣言) の型。
@@ -230,6 +236,13 @@ func (u *Universe) Func(params []*Type, result *Type, fastcall bool) *Type {
 //   - 要素型が同じ配列同士: a が長さ省略なら b、長さが違えば要素型へのポインタ
 func (u *Universe) Compatible(a, b *Type) *Type {
 	if a == b {
+		return a
+	}
+	// エラーになった宣言の型は何とでも互換 (巻き添えのエラーを出さない)
+	if a.Kind == Bad {
+		return b
+	}
+	if b.Kind == Bad {
 		return a
 	}
 	// bool は uint8 と互換 (比較の結果は uint8 のまま。true / false は bool)

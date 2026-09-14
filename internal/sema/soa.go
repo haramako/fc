@@ -235,7 +235,7 @@ func soaRetype(v ir.Operand, t *types.Type) ir.Operand {
 // soaIndex は `Points[i]`: 添字からハンドルを作る (コードは出ない。1 バイトの添字のみ)。
 func (h *Hlc) soaIndex(soa *types.Type, idx ir.Operand) ir.Operand {
 	if ir.ValType(idx).Kind != types.Int {
-		panic(&diag.Error{Msg: "index must be int"})
+		panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(idx))})
 	}
 	if _, isLit := ir.ValIntLiteral(idx); !isLit && ir.ValType(idx).Size != 1 {
 		panic(&diag.Error{Msg: fmt.Sprintf("soa %s: index must be 1 byte", shortName(soa.Name))})

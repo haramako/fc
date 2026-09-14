@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/haramako/fc/internal/diag"
@@ -32,6 +33,8 @@ type Program struct {
 	Sources map[string]*Source
 	// Warnings は意味解析で見つけた警告 (出現順)
 	Warnings []diag.Warning
+	// Errors は意味解析で見つけたエラー (出現順)。文ごとに回復して集める。MaxErrors で打ち切る
+	Errors diag.ErrorList
 	// CastKinds は v1 の `<T>x` の位置 → v2 で書くべき種類 (as / bitcast)。fcc migrate が使う
 	CastKinds map[syntax.Position]syntax.CastKind
 
@@ -120,6 +123,43 @@ func (p *Program) CompileBodies(mod *ir.Module, deps Resolver) (err error) {
 	return nil
 }
 
+// MaxErrors はこれ以上エラーが集まったら処理を打ち切る件数。
+const MaxErrors = 30
+
+// report はエラーを記録する (同じ位置・同じ文言は 1 回だけ)。件数が上限に達したら Fatal なエラーを投げて打ち切る。
+func (p *Program) report(e *diag.Error) {
+	if e.Suppressed {
+		return
+	}
+	for _, prev := range p.Errors {
+		if prev.Pos == e.Pos && prev.Msg == e.Msg {
+			return
+		}
+	}
+	p.Errors = append(p.Errors, e)
+	if len(p.Errors) >= MaxErrors {
+		panic(&diag.Error{Msg: fmt.Sprintf("too many errors (%d); stopping", len(p.Errors)), Pos: e.Pos, Fatal: true})
+	}
+}
+
+// ErrorList は集めたエラーをファイル・位置順に並べて error として返す (無ければ nil)。
+func (p *Program) ErrorList() error {
+	if len(p.Errors) == 0 {
+		return nil
+	}
+	sort.SliceStable(p.Errors, func(i, j int) bool {
+		a, b := p.Errors[i].Pos, p.Errors[j].Pos
+		if a.Filename != b.Filename {
+			return a.Filename < b.Filename
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		return a.Col < b.Col
+	})
+	return p.Errors
+}
+
 // CompileAllBodies は登録済み全モジュールの関数本体をコンパイルする。
 func (p *Program) CompileAllBodies(deps Resolver) error {
 	for _, mod := range p.Modules.List() {
@@ -133,7 +173,8 @@ func (p *Program) CompileAllBodies(deps Resolver) error {
 	return nil
 }
 
-// recoverTo は回復点: panic された *diag.Error に処理中の位置を補完して err に入れる。
+// recoverTo はモジュール単位の回復点: 文単位の回復をすり抜けた *diag.Error (Fatal など) を記録する。
+// 記録したエラーは Program.Errors に集まり、呼び出し側が ErrorList() でまとめて受け取る (err には入れない)。
 func (h *Hlc) recoverTo(err *error) {
 	if r := recover(); r != nil {
 		ce, ok := r.(*diag.Error)
@@ -143,7 +184,14 @@ func (h *Hlc) recoverTo(err *error) {
 		if !ce.Pos.IsValid() {
 			ce.Pos = h.curPos
 		}
-		*err = ce
+		if ce.Fatal && ce.Suppressed {
+			return // 上限到達の再送 (report 済み)
+		}
+		if ce.Fatal {
+			h.prog.Errors = append(h.prog.Errors, ce)
+			return
+		}
+		h.prog.report(ce)
 	}
 }
 
@@ -238,5 +286,8 @@ func CompileProgram(prog *Program, baseDir string, libPath []string, mainFile st
 	if _, err := loader.Load(mainFile); err != nil {
 		return err
 	}
-	return prog.CompileAllBodies(loader)
+	if err := prog.CompileAllBodies(loader); err != nil {
+		return err
+	}
+	return prog.ErrorList()
 }

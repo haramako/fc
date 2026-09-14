@@ -93,10 +93,16 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 - [x] 警告の仕組みと `fcc check`（2026-09-14）: `diag.Warning`、`syntax.Lint`（`a & b == c`、v1 の for 内 `continue`、
       v1 の switch 内 `break`）、sema の警告（v1 の `include("*.rb")`）。`Result.Warnings` / `fc.Check`。CLI は
       `file:line:col: warning: msg` を標準エラーに出す
-- [ ] **複数エラー報告**: 文単位でリカバリして最初の1個で止めない（**未着手**。R2 では「最初のエラー以降の挙動が変わる」ため除外）
-- [ ] メッセージ文言の改善（**未着手**。`" is not pointer"` のような Ruby 由来の欠損を修正。
-      errors.fc の正規表現は緩いので大半は互換のまま改善可能）
-- [x] CLI出力の整形（`file:line:col: error: ...` 形式、TTYなら色付け） ✅ `file:line:col: error: msg`。TTY の色付けは未実装
+- [x] **複数エラー報告** ✅ 2026-09-15: 意味解析は文ごとに回復して `Program.Errors` に集め（上限 30 件）、
+      `diag.ErrorList` で返す（`errors.As` で最初の 1 件、`diag.Errors(err)` で全部）。失敗した宣言は `types.Bad` で束縛して
+      参照側の巻き添えエラー（"not found" の雪崩）を抑制。モジュールをまたいでも続行し、最後に位置順で報告。
+      CLI は全件を `file:line:col: error:` で出す（VS Code 拡張の Problems にもそのまま乗る）
+- [x] メッセージ文言の改善 ✅ 2026-09-15: `" is not pointer"` → `cannot dereference `a` (type uint8 is not a pointer)`、
+      引数の数（`` `f` expects 1 argument(s) but 2 given ``）、代入・引数・戻り値の型不一致に文脈（`assignment to `s`: cannot assign …`）、
+      `x not found (did you mean xx?)`（編集距離 2 以内の候補）、パースエラーに「unexpected `}`, expecting `;` or `,`」
+      （goyacc の verbose をトークンの綴りに変換）、`unknown type X`、添字・アドレス取得・void 値の主語付き文言。
+      errors.fc に新文言の断片を追加
+- [x] CLI出力の整形（`file:line:col: error: ...` 形式、TTYなら色付け） ✅ `file:line:col: error: msg`（複数件は末尾に `N errors`）。TTY の色付けは未実装
 
 ### Phase R3 — パッケージ構成とAPI（1〜2日）
 
