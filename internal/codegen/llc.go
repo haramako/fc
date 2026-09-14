@@ -1132,6 +1132,7 @@ func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
 		case ir.OpPget:
 			if isSameOperand(op.Dst, nextOp.Src[0]) && // 同じ変数を連続で使っていて
 				ir.ValKind(arr) == ir.KindGlobal && // 単純なシンボルで
+				ir.ValType(arr).Kind == types.Array && // 配列 (グローバルのポインタ変数は sym+i,y では読めない)
 				ir.ValLocalType(op.Dst) == ir.LTTemp && // その変数をそこでしか使っていない
 				ir.ValType(idx).Size == 1 { // インデックスのサイズが1byte
 				ops[i] = &ir.Op{Code: ir.OpIndexPget, Dst: nextOp.Dst, Src: []ir.Operand{arr, idx}, Pos: nextOp.Pos}
@@ -1140,6 +1141,7 @@ func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
 		case ir.OpPset:
 			if isSameOperand(op.Dst, nextOp.Src[0]) &&
 				ir.ValKind(arr) == ir.KindGlobal &&
+				ir.ValType(arr).Kind == types.Array &&
 				ir.ValLocalType(op.Dst) == ir.LTTemp &&
 				ir.ValType(idx).Size == 1 {
 				ops[i] = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, nextOp.Src[1]}, Pos: nextOp.Pos}

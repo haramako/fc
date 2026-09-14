@@ -1097,6 +1097,10 @@ func (h *Hlc) typeEval(t syntax.TypeExpr) *types.Type {
 // rval は右辺値として評価し、値を返す。
 func (h *Hlc) rval(c *cexpr) ir.Operand {
 	v, left := h.lval(c)
+	if v == nil {
+		// void 関数の呼び出しなど値を持たない式を、値が要る場所 (条件・代入・引数) に書いた
+		panic(&diag.Error{Msg: "expression has no value (void)"})
+	}
 	if left {
 		r := h.newTmp(ir.ValType(v).Base)
 		h.emit(&ir.Op{Code: ir.OpPget, Dst: r, Src: []ir.Operand{v}})

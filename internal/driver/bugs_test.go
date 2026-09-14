@@ -1,0 +1,82 @@
+package driver
+
+// castle の doc/memo.md「FC BUG」由来の回帰テスト (doc/go_evolution_plan.md R4 の表)。
+// 小さなプログラムを emu で実行して出力を見る。
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// runEmu は fc 2 のソース (use * from stdio 済み) を emu でビルド・実行し、標準出力を返す。
+func runEmu(t *testing.T, body string) string {
+	t.Helper()
+	dir := t.TempDir()
+	src := "#fc 2\nuse * from stdio;\n" + body
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+	if err != nil {
+		t.Fatalf("ビルド失敗: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("終了コード %d:\n%s", code, out.String())
+	}
+	return out.String()
+}
+
+func TestBugGlobalPointerIndex(t *testing.T) {
+	t.Parallel()
+	// グローバルのポインタ変数への添字代入 (index+pset の融合がポインタを配列扱いしていた)
+	out := runEmu(t, `var buf:int*;
+var arr:int[8];
+function main():void
+{
+	buf = arr;
+	buf[2] = 5;
+	var v = buf[2];
+	var w = arr[2];
+	printf("v=", v, " w=", w, "\n");
+	exit(0);
+}
+`)
+	if out != "v=5 w=5\n" {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestBugUnusedExpressionStatement(t *testing.T) {
+	t.Parallel()
+	// 結果を使わない演算の式文 (一時変数に場所が割り付かずコード生成で落ちていた)
+	out := runEmu(t, `function main():void
+{
+	var c = 32;
+	c == 32;
+	c + 1;
+	-c;
+	printf("ok\n");
+	exit(0);
+}
+`)
+	if out != "ok\n" {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestBugVoidValue(t *testing.T) {
+	t.Parallel()
+	// void 関数の呼び出しを値として使うとエラー (クラッシュしない)
+	dir := t.TempDir()
+	src := "#fc 2\nfunction f():void {}\nfunction main():void\n{\n\tif (f()) {}\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
+	if err == nil || !strings.Contains(err.Error(), "expression has no value") {
+		t.Errorf("got %v", err)
+	}
+}

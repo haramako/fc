@@ -19,6 +19,7 @@ import (
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/sema"
+	"github.com/haramako/fc/internal/syntax"
 )
 
 // DefaultBuildDirName はソースディレクトリ直下に作る中間生成物ディレクトリの名前。
@@ -297,6 +298,11 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 		}
 		if bank < 0 {
 			bank = len(banks) + bank
+		}
+		if bank < 0 || bank >= len(banks) {
+			b, _ := m.Options.Int("bank")
+			panic(&diag.Error{Msg: fmt.Sprintf("module %s: options(bank: %d) is out of range (bank_count is %d)", m.Id, b, len(banks)),
+				Pos: syntax.Position{Filename: m.Path}})
 		}
 		if org, ok := m.Options.Int("org"); ok {
 			banks[bank].org = org
