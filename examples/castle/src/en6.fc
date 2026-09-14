@@ -299,7 +299,7 @@ public function ghost4_process(i:int):void
 		// クールダウン
 		wait -= 1;
 
-		if (show & wait < 60) {
+		if (show && wait < 60) {
 			ppu.sprite(x, y, spr + 5 * 4 + anim2 / 2, flag);
 		}
 
@@ -361,7 +361,7 @@ public function ghost4_process(i:int):void
 		x += (math.cos(angle) / 8 + giff) / 16;
 		y += (math.sin(angle) / 8 + giff) / 16;
 
-		if (wait >= 200 | check_outside(x, y)) {
+		if (wait >= 200 || check_outside(x, y)) {
 			stat = 4;
 			wait = 0;
 			p7[i] = x;

@@ -758,7 +758,7 @@ function process_anchor():void
 	anchor_y += vy;
 	var ct = bg.cell_type(anchor_x - 4, anchor_y + 8);
 	var ct2 = bg.cell_type(anchor_x + 4, anchor_y + 8);
-	if (ct & bg.TYPE_WALL != 0 || ct2 & bg.TYPE_WALL != 0) {
+	if ((ct & bg.TYPE_WALL) != 0 || (ct2 & bg.TYPE_WALL) != 0) {
 		anchor_vy = 0;
 		anchor_vx = 0;
 		anchor_x -= vx;

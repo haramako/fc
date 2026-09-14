@@ -235,7 +235,7 @@ public function block_process(i:int):void
 			}
 		}
 
-		if (bg.cell_type(x, y + 8) & bg.TYPE_WALL != 0) {
+		if ((bg.cell_type(x, y + 8) & bg.TYPE_WALL) != 0) {
 			y = (y + 8) / 16 * 16 - 8;
 			stat = 2;
 		}

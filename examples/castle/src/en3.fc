@@ -140,7 +140,7 @@ public function bamboo_process(i:int):void
 			var ct1 = bg.tile_type[c1];
 			var c2 = bg.cell(my.x + 8, my.y + 8);
 			var ct2 = bg.tile_type[c2];
-			var on_ground = (ct1 & bg.TYPE_WALL != 0) || (ct2 & bg.TYPE_WALL != 0); // 地面の上にいるか
+			var on_ground = ((ct1 & bg.TYPE_WALL) != 0) || ((ct2 & bg.TYPE_WALL) != 0); // 地面の上にいるか
 			var on_ladder = ((ct1 & bg.TYPE_LADDER) != 0) || ((ct2 & bg.TYPE_LADDER) != 0); // 梯子の上にいるか
 			var on_forbidden = 0; // 禁止マスの上にいるか
 			switch (bg.area_type) {

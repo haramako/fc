@@ -539,7 +539,7 @@ public function spider_process(i:int):void
 		y += (vy + giff) / 16;
 		gr_sprite2(x, y, spr + 1 * 4, pal);
 
-		if (bg.cell_type(x, y + 8) & bg.TYPE_WALL != 0) {
+		if ((bg.cell_type(x, y + 8) & bg.TYPE_WALL) != 0) {
 			stat = 3;
 			wait = 0;
 			foot_cell_idx = x / 16 + (y + 8) / 16 * 16;
