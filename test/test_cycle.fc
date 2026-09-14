@@ -3,12 +3,12 @@ use * from unittest;
 use cycle_use;
 var cycle_var:int;
 
-include( "character.chr" );
+include("character.chr");
 
 function test_cycle_use():void
 {
 	cycle_var = cycle_use.CYCLE_CONST;
-	assert_equal( cycle_use.hoge(), 99, "cycle use");
+	assert_equal(cycle_use.hoge(), 99, "cycle use");
 }
 
 function main():void

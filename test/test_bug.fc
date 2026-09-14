@@ -1,6 +1,6 @@
 use * from unittest;
 use math;
-include( "character.chr" );
+include("character.chr");
 
 function hoge(p:int*):void {}
 
