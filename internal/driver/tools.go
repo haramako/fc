@@ -8,12 +8,15 @@ package driver
 //  3. PATH (従来どおり)
 //
 // 見つからなければ名前のまま返し、起動時の "executable file not found" がそのまま出る。
+// 自分の場所は os.Executable (Linux は /proc/self/exe、macOS / Windows は OS の API) で取り、
+// それが取れない環境 (/proc の無いコンテナなど) では argv[0] から推定する。
 
 import (
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -50,11 +53,7 @@ func findTool(name string) string {
 	if d := os.Getenv("FC_CC65_BIN"); d != "" {
 		dirs = append(dirs, d)
 	}
-	if self, err := os.Executable(); err == nil {
-		if real, err := filepath.EvalSymlinks(self); err == nil {
-			self = real
-		}
-		d := filepath.Dir(self)
+	if d := selfDir(); d != "" {
 		dirs = append(dirs, d, filepath.Join(d, "cc65"), filepath.Join(d, "bin"))
 	}
 	for _, d := range dirs {
@@ -67,4 +66,38 @@ func findTool(name string) string {
 		return p
 	}
 	return name
+}
+
+// selfDir は fcc の実行ファイルがあるディレクトリ (シンボリックリンクは解決)。分からなければ ""。
+func selfDir() string {
+	self, err := os.Executable()
+	if err != nil || self == "" {
+		self = execFromArgv0(os.Args)
+	}
+	if self == "" {
+		return ""
+	}
+	if real, err := filepath.EvalSymlinks(self); err == nil {
+		self = real
+	}
+	return filepath.Dir(self)
+}
+
+// execFromArgv0 は argv[0] から実行ファイルのパスを推定する (os.Executable が使えないときの代替)。
+// パス区切りを含めばそのまま (相対なら作業ディレクトリ基準)、含まなければ PATH から探す。
+func execFromArgv0(args []string) string {
+	if len(args) == 0 || args[0] == "" {
+		return ""
+	}
+	a := args[0]
+	if strings.ContainsAny(a, `/\`) {
+		if abs, err := filepath.Abs(a); err == nil {
+			return abs
+		}
+		return a
+	}
+	if p, err := exec.LookPath(a); err == nil {
+		return p
+	}
+	return ""
 }

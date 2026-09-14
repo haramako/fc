@@ -35,3 +35,24 @@ func TestToolPath(t *testing.T) {
 		t.Errorf("PATH: got %q", got)
 	}
 }
+
+// TestExecFromArgv0: os.Executable が使えないときの argv[0] からの推定。
+func TestExecFromArgv0(t *testing.T) {
+	if got := execFromArgv0(nil); got != "" {
+		t.Errorf("nil: %q", got)
+	}
+	if got := execFromArgv0([]string{"no_such_command_xyz"}); got != "" {
+		t.Errorf("not on PATH: %q", got)
+	}
+	rel := filepath.Join(".", "sub", "fcc")
+	if got := execFromArgv0([]string{rel}); !filepath.IsAbs(got) || filepath.Base(got) != "fcc" {
+		t.Errorf("relative: %q", got)
+	}
+	// PATH 上のコマンド名 (go はテスト環境に必ずある)
+	if got := execFromArgv0([]string{"go"}); got == "" || !filepath.IsAbs(got) {
+		t.Errorf("PATH lookup: %q", got)
+	}
+	if d := selfDir(); d == "" {
+		t.Error("selfDir が空")
+	}
+}
