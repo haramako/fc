@@ -328,6 +328,11 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 
 		if lmd.Body != nil {
 			h.compileStmts(lmd.Body.Stmts)
+			if lmd.Type.Base.Kind != types.Void && !terminates(lmd.Body, h.module.Version < syntax.Version2) {
+				// 終端に落ちると rts が無く次の関数へ流れて暴走する (v1 は黙って通していた)
+				panic(&diag.Error{Msg: fmt.Sprintf("missing return at end of function %s (returns %s)", lmd.Name, lmd.Type.Base),
+					Pos: syntax.Position{Filename: lmd.Pos.Filename, Line: lmd.Body.Rbrace.Line, Col: lmd.Body.Rbrace.Col}})
+			}
 		}
 
 		// returnを追加する

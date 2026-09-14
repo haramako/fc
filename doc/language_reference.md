@@ -159,8 +159,9 @@ function interrupt():void options(symbol: "_interrupt"); // 本体なし: アセ
 function f():void options(segment: "game") { ... }     // 配置セグメント
 ```
 
-- 引数・戻り値の型は必須。`void` 関数は `return;`、それ以外は `return expr;`
-  （注: 非 void 関数で `return` を書かずに終端へ到達してもエラーにならない。v1 からの既知の癖）
+- 引数・戻り値の型は必須。`void` 関数は `return;`、それ以外は `return expr;`。
+  非 void 関数は本体が必ず `return` で終わらなければならない（最後の文が `return`、両枝が `return` で終わる
+  `if`/`else`、`break` の無い `loop`・`while (1)`・`for (;;)`、`default` 付きで全 case が `return` で終わる `switch`）
 - `fastcall`: 引数をスタックではなくレジスタ/ゼロページで渡す。fastcall 関数の中から他の関数は呼べない
 - `options(symbol: "...")`: 生成するシンボル名を固定する（割り込みベクタなど）
 

@@ -123,8 +123,10 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
       **castle の実挙動は要手動検証**: 対象は [castle_signed_compare_sites.txt](castle_signed_compare_sites.txt)（86 箇所）。
       内蔵エミュ / MesenCE の自動プレイは通る。my_process セグメントが満杯に近く、比較の符号付き部分が
       伸びたため値を作る場合のコードを詰めた（`lda #0; rol a; eor #1`）
-- [ ] **非void関数の return 忘れが素通りする**（memo.txt: do_debug_selectで発症）
-      → コンパイルエラー化（compile_lambda にコメントアウトされた raise が既にある）
+- [x] **非void関数の return 忘れが素通りする**（memo.txt: do_debug_selectで発症）
+      → コンパイルエラー化 ✅ 2026-09-14 Go と同じ「終端文」の規則（`sema/terminate.go`）: 本体の最後が return /
+      両枝が終端する if / break の無い `loop`・`while (1)`・`for (;;)` / default 付きで全 case が終端する switch。
+      "missing return at end of function f" を関数末尾の位置で。castle / miku / fclib / test に違反は無かった
 - [x] レキサ: `//\n`（空コメント）が次行を飲み込む（memo.txt にもバグとして記載）、
       `/**/` 空コメント非対応、`0b2` 容認、`\xZZ`→0 などを正しい定義に ✅ 2026-09-14（不正な桁・エスケープはエラー、`_` 区切り可）
 - [ ] `pos_info` collapse によるエラー行番号ずれ（R1で構造的に解消）
@@ -148,7 +150,7 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 | `for` で `continue` がインデックスを進めない | **v2 で解消**（2026-09-14） | v2 の C 型 `for (init; cond; step)` では `continue` が step に飛ぶ。v1 の `for (i, from, to)` は互換のため癖を残す |
 | `var x:sint; x > 0` が符号なし比較 | **修正済み**（2026-09-14、`lt` の書き直し） | 検証対象は castle_signed_compare_sites.txt |
 | `\|\|` で両方 false なのに then | **修正済み**（`lt` 符号バグの現れだった） | `vy > 0 \|\| idx == -1` の `vy:sint = -1` が符号なし比較で真になっていた |
-| 帰り値がある関数で `return` なし | **未修正** | エラーにならず、実行すると暴走（`rts` が無く次の関数へ落ちる） |
+| 帰り値がある関数で `return` なし | **修正済み**（2026-09-14、コンパイルエラー） | 終端文の規則。v1 は黙って通し、実行すると暴走していた |
 | switch の case 重複 | **未検出** | 先勝ちで黙って通る |
 | ケツカンマ | **未対応** | `[1, 2, 3,]` は parse error（追加的な文法変更で対応可） |
 | switch の case が空 | 部分的 | `case 0: ;` は通る。`case 0:` の直後に `case 1:` は文が必須で parse error |
