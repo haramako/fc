@@ -52,6 +52,8 @@ const (
 	OpPset                      // *Src[0] = Src[1]
 	OpIndexPget                 // Dst = Src[0][Src[1]]        (ピープホール最適化で生成)
 	OpIndexPset                 // Src[0][Src[1]] = Src[2]     (同上)
+	OpFieldPget                 // Dst = *(Src[0] + Src[1])     (同上。struct のフィールド: Src[1] は定数オフセット)
+	OpFieldPset                 // *(Src[0] + Src[1]) = Src[2]  (同上。Type はフィールドの型)
 	opCodeCount
 )
 
@@ -65,6 +67,7 @@ var opCodeNames = [...]string{
 	OpUminus: "uminus", OpEq: "eq", OpLt: "lt", OpNot: "not", OpAsm: "asm",
 	OpIndex: "index", OpRef: "ref", OpPget: "pget", OpPset: "pset",
 	OpIndexPget: "index_pget", OpIndexPset: "index_pset",
+	OpFieldPget: "field_pget", OpFieldPset: "field_pset",
 }
 
 // String は旧 IR の opcode 名を返す。
@@ -122,7 +125,7 @@ func (op *Op) positional() []any {
 		r = append(r, op.Type, op.Src[0])
 	case OpAsm:
 		r = append(r, op.Text)
-	case OpPset, OpIndexPset:
+	case OpPset, OpIndexPset, OpFieldPset:
 		for _, s := range op.Src {
 			r = append(r, s)
 		}

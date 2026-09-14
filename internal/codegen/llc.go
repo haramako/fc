@@ -711,6 +711,31 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(fmt.Sprintf("sta %s+%d,y", l.toAsm(op.In(0)), i))
 			}
 
+		case ir.OpFieldPget:
+			// ポインタ + 定数オフセット経由の読み出し (struct のフィールド)
+			off, _ := ir.ValIntLiteral(op.In(1))
+			r.push(l.loadA(op.In(0), 0))
+			r.push("sta <reg+0")
+			r.push(l.loadA(op.In(0), 1))
+			r.push("sta <reg+1")
+			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+				r.push(fmt.Sprintf("ldy #%d", off+i))
+				r.push("lda (reg),y")
+				r.push(l.storeA(op.Dst, i))
+			}
+
+		case ir.OpFieldPset:
+			off, _ := ir.ValIntLiteral(op.In(1))
+			r.push(l.loadA(op.In(0), 0))
+			r.push("sta <reg+0")
+			r.push(l.loadA(op.In(0), 1))
+			r.push("sta <reg+1")
+			for i := 0; i < op.Type.Size; i++ { // Type はフィールドの型 (値が小さいリテラルでもフィールド全体を書く)
+				r.push(l.loadA(op.In(2), i))
+				r.push(fmt.Sprintf("ldy #%d", off+i))
+				r.push("sta (reg),y")
+			}
+
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
@@ -1294,6 +1319,33 @@ func (l *Llc) allocRegister(lmd *ir.Lambda) {
 // optimizePointer は index->pget, index->pset の組み合わせを合成する。
 func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
 	ops = append([]*ir.Op{}, ops...)
+
+	// add(ポインタ, 定数) + pget/pset の最適化 (struct のフィールドをポインタ経由で触る): ldy #off; lda (reg),y
+	for i, op := range ops {
+		if op == nil || op.Code != ir.OpAdd || i+1 >= len(ops) || ops[i+1] == nil {
+			continue
+		}
+		nextOp := ops[i+1]
+		ptr, off := op.Src[0], op.Src[1]
+		k, isLit := ir.ValIntLiteral(off)
+		tmp := ir.UnderlyingValue(op.Dst)
+		if !isLit || k < 0 || k > 255 || ir.ValType(ptr).Kind != types.Pointer || ir.ValType(ptr).Size != 2 ||
+			tmp == nil || tmp.LocalType != ir.LTTemp || tmp.LiveRange == nil || tmp.LiveRange.Max-tmp.LiveRange.Min != 1 {
+			continue
+		}
+		switch nextOp.Code {
+		case ir.OpPget:
+			if isSameOperand(op.Dst, nextOp.Src[0]) && k+ir.ValType(nextOp.Dst).Size <= 256 {
+				ops[i] = &ir.Op{Code: ir.OpFieldPget, Dst: nextOp.Dst, Src: []ir.Operand{ptr, off}, Pos: nextOp.Pos}
+				ops[i+1] = nil
+			}
+		case ir.OpPset:
+			if isSameOperand(op.Dst, nextOp.Src[0]) && k+ir.ValType(op.Dst).Base.Size <= 256 {
+				ops[i] = &ir.Op{Code: ir.OpFieldPset, Src: []ir.Operand{ptr, off, nextOp.Src[1]}, Type: ir.ValType(op.Dst).Base, Pos: nextOp.Pos}
+				ops[i+1] = nil
+			}
+		}
+	}
 
 	// index + pget/pset の最適化
 	for i, op := range ops {
