@@ -84,6 +84,9 @@ const (
 	KwStruct  // struct (v2)
 	KwSizeof  // sizeof (v2)
 	KwSoa     // soa (v2)
+	KwTrue    // true (v2)
+	KwFalse   // false (v2)
+	KwNull    // null (v2)
 
 	// 記号 (2 文字)
 	Leq    // <=
@@ -142,7 +145,7 @@ var kindNames = [...]string{
 	KwBreak: "break", KwContinue: "continue", KwIncbin: "incbin",
 	KwSwitch: "switch", KwCase: "case", KwDefault: "default",
 	KwUse: "use", KwAs: "as", KwFrom: "from", KwPublic: "public", KwPrivate: "private",
-	KwFn: "fn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa",
+	KwFn: "fn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
 	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
 	MulEq: "*=", DivEq: "/=", ModEq: "%=", AndEq: "&=", OrEq: "|=", XorEq: "^=", ShlEq: "<<=", ShrEq: ">>=",
@@ -170,7 +173,7 @@ func (k Kind) String() string {
 }
 
 // IsKeyword はキーワードかを返す。
-func (k Kind) IsKeyword() bool { return k >= KwInclude && k <= KwSoa }
+func (k Kind) IsKeyword() bool { return k >= KwInclude && k <= KwNull }
 
 // Token は 1 トークン。Pos は先頭、End は末尾の次の位置。
 type Token struct {

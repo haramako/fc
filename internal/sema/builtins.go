@@ -51,7 +51,7 @@ func registerBuiltins(p *Program) {
 			typ := arg.val.Type
 			if h.prog.Types.Compatible(uint8p, typ) != nil {
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
-			} else if typ.Kind == types.Int {
+			} else if typ.Kind == types.Int || typ.Kind == types.Bool {
 				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
 			}
 		}

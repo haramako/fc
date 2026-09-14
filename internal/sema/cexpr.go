@@ -36,6 +36,7 @@ const (
 	cOp                     // 演算 op (args)
 	cStructLit              // struct リテラル (typ = 型名 (省略なら nil)、ty = 確定した型、fields)
 	cSizeof                 // sizeof(typ)
+	cNull                   // null (型は文脈から。ty が決まれば 0 のリテラルになる)
 )
 
 // cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
@@ -166,6 +167,13 @@ func toC0(e syntax.Expr) *cexpr {
 		return cident(e.Name)
 	case *syntax.IntLit:
 		return cint(e.Value)
+	case *syntax.BoolLit:
+		if e.Value {
+			return &cexpr{kind: cInt, n: 1, s: "bool"}
+		}
+		return &cexpr{kind: cInt, n: 0, s: "bool"}
+	case *syntax.NullLit:
+		return &cexpr{kind: cNull}
 	case *syntax.StringLit:
 		return cstr(e.Value)
 	case *syntax.ParenExpr:
@@ -258,6 +266,12 @@ func parseOptions(o *syntax.Options) ir.Options {
 			v = ir.OptionValue{Kind: ir.OptStr, Str: x.Value}
 		case *syntax.Ident:
 			v = ir.OptionValue{Kind: ir.OptIdent, Str: x.Name}
+		case *syntax.BoolLit:
+			// options(fastcall: true): v1 の識別子 `true` と同じ扱い (ダンプも同じ。fastcall はキーの有無だけを見る)
+			v = ir.OptionValue{Kind: ir.OptIdent, Str: "false"}
+			if x.Value {
+				v.Str = "true"
+			}
 		default:
 			panic(&diag.Error{Msg: "option " + e.Key.Name + " must be a literal or identifier"})
 		}

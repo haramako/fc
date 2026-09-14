@@ -120,7 +120,11 @@ var keywords = map[string]Kind{
 	"switch": KwSwitch, "case": KwCase, "default": KwDefault,
 	"use": KwUse, "as": KwAs, "from": KwFrom, "public": KwPublic, "private": KwPrivate,
 	"fn": KwFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
+	"true": KwTrue, "false": KwFalse, "null": KwNull,
 }
+
+// v2Keywords は v2 で足した予約語のうち、v1 では識別子として使えていたもの (v1 のソースを壊さない)。
+var v2Keywords = map[Kind]bool{KwTrue: true, KwFalse: true, KwNull: true}
 
 // Ruby の \s 相当
 func isSpace(c byte) bool {
@@ -241,6 +245,9 @@ func (l *Lexer) Next() (Token, error) {
 		if kind, ok := keywords[string(rest[:n])]; ok {
 			if kind == KwPrivate && l.version >= Version2 {
 				// v2 に `private` は無い (宣言はデフォルトで private。v1 の `private:` ラベルのためだけの予約語)
+				return tok(Identifier, n), nil
+			}
+			if v2Keywords[kind] && l.version < Version2 {
 				return tok(Identifier, n), nil
 			}
 			return tok(kind, n), nil

@@ -297,6 +297,17 @@ type IntLit struct {
 	Text     string
 }
 
+// BoolLit は `true` / `false` (v2)。型は bool。
+type BoolLit struct {
+	ValuePos Pos
+	Value    bool
+}
+
+// NullLit は `null` (v2)。ポインタ / 関数ポインタの 0。型は文脈 (代入先・比較相手・引数) から決まる。
+type NullLit struct {
+	ValuePos Pos
+}
+
 // StringLit は文字列リテラル。Value はエスケープ解釈後、Text はソース上の綴り (引用符含む)。
 type StringLit struct {
 	ValuePos Pos
@@ -645,6 +656,16 @@ func (s *EmptyStmt) End() Pos { return after(s.Semi, 1) }
 func (e *Ident) Pos() Pos { return e.NamePos }
 func (e *Ident) End() Pos { return after(e.NamePos, len(e.Name)) }
 
+func (e *BoolLit) Pos() Pos { return e.ValuePos }
+func (e *BoolLit) End() Pos {
+	if e.Value {
+		return after(e.ValuePos, 4)
+	}
+	return after(e.ValuePos, 5)
+}
+func (e *NullLit) Pos() Pos { return e.ValuePos }
+func (e *NullLit) End() Pos { return after(e.ValuePos, 4) }
+
 func (e *IntLit) Pos() Pos { return e.ValuePos }
 func (e *IntLit) End() Pos { return after(e.ValuePos, len(e.Text)) }
 
@@ -805,6 +826,8 @@ func (*EmptyStmt) stmtNode()    {}
 
 func (*Ident) exprNode()      {}
 func (*IntLit) exprNode()     {}
+func (*BoolLit) exprNode()    {}
+func (*NullLit) exprNode()    {}
 func (*StringLit) exprNode()  {}
 func (*ParenExpr) exprNode()  {}
 func (*BinaryExpr) exprNode() {}

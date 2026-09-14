@@ -660,6 +660,14 @@ func (p *printer) expr(e Expr) {
 		p.ident(e)
 	case *IntLit:
 		p.tokAt(e.ValuePos, e.Text)
+	case *BoolLit:
+		if e.Value {
+			p.tokAt(e.ValuePos, "true")
+		} else {
+			p.tokAt(e.ValuePos, "false")
+		}
+	case *NullLit:
+		p.tokAt(e.ValuePos, "null")
 	case *StringLit:
 		p.tokAt(e.ValuePos, e.Text)
 	case *ParenExpr:

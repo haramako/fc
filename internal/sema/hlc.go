@@ -851,7 +851,13 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	switch c.kind {
 
 	case cInt:
+		if c.s == "bool" {
+			return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), c.n))
+		}
 		return cv(h.IntValue(c.n))
+
+	case cNull:
+		return &cexpr{kind: cNull} // 型が決まるまで保留 (withExpected)
 
 	case cIdent:
 		return cv(h.scope.FindMust(c.name, true))
@@ -938,6 +944,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		ty := c.ty // 評価済みノードの再評価では型を再計算しない
 		if ty == nil {
 			ty = h.typeEval(c.typ)
+		}
+		if x.kind == cNull {
+			return cv(h.nullOf(ty).(*ir.Value)) // `null as *T`
 		}
 		if x.isLiteralInt() {
 			// 整数リテラルはサイズを持たないので、bitcast のサイズ検査はしない (`bitcast<*int>(0x2000)`, `bitcast<fn():int>(0)`)
@@ -1094,6 +1103,9 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 		elem := h.typeOf(t.Elem)
 		if elem.IsSoa {
 			return h.prog.Types.SoaRef(elem, elem.Base, "") // `*Points`: SoA の要素ハンドル
+		}
+		if elem.Kind == types.Void && h.module.Version < syntax.Version2 {
+			panic(&diag.Error{Msg: "`*void` requires fc 2"})
 		}
 		return h.prog.Types.PointerTo(elem)
 	case *syntax.ArrayType:
@@ -1277,6 +1289,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	case cArray:
 		panic(&diag.Error{Msg: "array literal with untyped struct literals needs a declared type"})
 
+	case cNull:
+		panic(&diag.Error{Msg: "null needs a context that gives the pointer type (assignment, comparison, argument, or `null as *T`)"})
+
 	case cOp:
 		switch e.op {
 
@@ -1315,6 +1330,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
 					(ir.ValType(left).Kind == types.Pointer || ir.ValType(left).Kind == types.SoaRef) && ir.ValType(right).Kind == types.Int {
+					if ir.ValType(left).Kind == types.Pointer && ir.ValType(left).Base.Kind == types.Void {
+						panic(&diag.Error{Msg: "no arithmetic on *void"})
+					}
 					typ = ir.ValType(left)
 				} else {
 					panic(cerr)
@@ -1327,8 +1345,20 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = tmp
 
 		case opEq, opLt:
-			left := h.rval(e.args[0])
-			right := h.rval(e.args[1])
+			a0, a1 := e.args[0], e.args[1]
+			if a0.kind == cNull && a1.kind != cNull {
+				a0, a1 = a1, a0 // `null == p` も `p == null` と同じ
+			}
+			left := h.rval(a0)
+			var right ir.Operand
+			if a1.kind == cNull {
+				right = h.nullOf(ir.ValType(left))
+			} else {
+				right = h.rval(a1)
+			}
+			if e.op == opEq && isVoidPtr(ir.ValType(right)) && !isVoidPtr(ir.ValType(left)) {
+				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
+			}
 			_, left, right = h.makeCompatible(left, right)
 			tmp := h.newTmp(h.prog.Types.IntType(1, false))
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
@@ -1407,7 +1437,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					h.fastCalling = true
 					h.emit(&ir.Op{Code: ir.OpPushFastcallResult, Type: lmdType.Base})
 					for i, arg := range args {
-						v := h.rval(arg)
+						v := h.rval(h.withExpected(arg, lmdType.Params[i]))
 						h.compatible(lmdType.Params[i], ir.ValType(v))
 						v = h.cast(v, lmdType.Params[i])
 						h.emit(&ir.Op{Code: ir.OpPushFastcallArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
@@ -1417,7 +1447,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				} else {
 					h.emit(&ir.Op{Code: ir.OpPushResult, Type: lmdType.Base})
 					for i, arg := range args {
-						v := h.rval(arg)
+						v := h.rval(h.withExpected(arg, lmdType.Params[i]))
 						h.compatible(lmdType.Params[i], ir.ValType(v))
 						v = h.cast(v, lmdType.Params[i])
 						h.emit(&ir.Op{Code: ir.OpPushArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
@@ -1461,6 +1491,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			} else {
 				r = v
 			}
+			if ir.ValType(r).Kind == types.Pointer && ir.ValType(r).Base.Kind == types.Void {
+				panic(&diag.Error{Msg: "cannot dereference *void (bitcast to a typed pointer first)"})
+			}
 			if ir.ValType(r).Kind != types.Pointer && ir.ValType(r).Kind != types.SoaRef {
 				// Ruby版では未代入の `left` を参照するため空文字列になる
 				panic(&diag.Error{Msg: " is not pointer"})
@@ -1486,6 +1519,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			right := h.rval(e.args[1])
 			if ir.ValType(left).Kind != types.Pointer && ir.ValType(left).Kind != types.Array {
 				panic(&diag.Error{Msg: "index must be pointer or array"})
+			}
+			if ir.ValType(left).Base.Kind == types.Void {
+				panic(&diag.Error{Msg: "cannot index *void (bitcast to a typed pointer first)"})
 			}
 			if ir.ValType(right).Kind != types.Int {
 				panic(&diag.Error{Msg: "index must be int"})
@@ -1589,10 +1625,24 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
 		newV := h.newTmp(typ)
 		h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: newV, Src: []ir.Operand{v}})
 		return newV
-	} else if typ.Kind == types.Pointer && ir.ValType(v).Kind == types.Array && ir.ValType(v).Base == typ.Base {
+	} else if typ.Kind == types.Pointer && ir.ValType(v).Kind == types.Array && (ir.ValType(v).Base == typ.Base || typ.Base.Kind == types.Void) {
 		return ir.NewPointeredArray(v, h.prog.Types.PointerTo(ir.ValType(v).Base))
 	}
 	return v
+}
+
+// isVoidPtr は *void か。
+func isVoidPtr(t *types.Type) bool { return t.Kind == types.Pointer && t.Base.Kind == types.Void }
+
+// nullOf は型 t (ポインタ / 関数ポインタ) の null (0 のリテラル)。SoA のハンドルは 0 が有効な要素なので null を持たない。
+func (h *Hlc) nullOf(t *types.Type) ir.Operand {
+	switch t.Kind {
+	case types.Pointer, types.Func:
+		return ir.NewIntLiteral("", t, 0)
+	case types.SoaRef:
+		panic(&diag.Error{Msg: fmt.Sprintf("soa handle %s has no null (index 0 is a valid element)", t)})
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("null cannot be used as %s", t)})
 }
 
 // classifyCast は v1 の `<T>x` を v2 の `as` (数値変換) / `bitcast` (ビット読み替え) のどちらで書くべきかを返す
@@ -1621,10 +1671,10 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 	switch kind {
 	case syntax.CastAs:
 		// 数値変換: 整数 → 整数、配列 → 同じ要素型のポインタ
-		if from.Kind == types.Int && to.Kind == types.Int {
+		if (from.Kind == types.Int || from.Kind == types.Bool) && (to.Kind == types.Int || to.Kind == types.Bool) {
 			return
 		}
-		if from.Kind == types.Array && to.Kind == types.Pointer && from.Base == to.Base {
+		if from.Kind == types.Array && to.Kind == types.Pointer && (from.Base == to.Base || to.Base.Kind == types.Void) {
 			return
 		}
 		if (from.Kind == types.Int && to.Kind == types.SoaRef) || (from.Kind == types.SoaRef && to.Kind == types.Int) {

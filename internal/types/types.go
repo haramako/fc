@@ -224,11 +224,26 @@ func (u *Universe) Func(params []*Type, result *Type, fastcall bool) *Type {
 }
 
 // Compatible は a と b の互換型を返す (TypeUtil.compatible_type? 相当)。互換性がなければ nil。
+// 代入では a が代入先 (*void の規則だけ向きがある)。
 //   - 整数同士: サイズが大きい方。同サイズなら符号付きの方
 //   - ポインタと同じ要素型の配列: ポインタ
 //   - 要素型が同じ配列同士: a が長さ省略なら b、長さが違えば要素型へのポインタ
 func (u *Universe) Compatible(a, b *Type) *Type {
 	if a == b {
+		return a
+	}
+	// bool は uint8 と互換 (比較の結果は uint8 のまま。true / false は bool)
+	if a.Kind == Bool {
+		a = u.IntType(1, false)
+	}
+	if b.Kind == Bool {
+		b = u.IntType(1, false)
+	}
+	if a == b {
+		return a
+	}
+	// *void (a 側 = 代入先) にはどのポインタ / 関数ポインタ / 配列も入る。逆 (*void → *T) は bitcast が要る
+	if a.Kind == Pointer && a.Base.Kind == Void && (b.Kind == Pointer || b.Kind == Func || b.Kind == Array) {
 		return a
 	}
 	if a.Kind == Int && b.Kind == Int {

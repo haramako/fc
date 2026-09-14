@@ -44,7 +44,7 @@ package syntax
 }
 
 %token <tok> NUMBER IDENT STRING
-%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kBITCAST kSTRUCT kSIZEOF kSOA
+%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~'
@@ -274,6 +274,9 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | kINCBIN '(' STRING ')' { $$ = &IncbinExpr{Incbin: $1.Pos, Path: strLit($3), Rparen: $4.Pos} }
    | ARROW type_decl function_block { $$ = &LambdaExpr{Arrow: $1.Pos, Type: $2, Body: $3.Block, Semi: $3.Semi} }
    | NUMBER                 { $$ = &IntLit{ValuePos: $1.Pos, Value: $1.Int, Text: $1.Text} }
+   | kTRUE                  { $$ = &BoolLit{ValuePos: $1.Pos, Value: true} }  /* v2 */
+   | kFALSE                 { $$ = &BoolLit{ValuePos: $1.Pos, Value: false} } /* v2 */
+   | kNULL                  { $$ = &NullLit{ValuePos: $1.Pos} }               /* v2 */
    | IDENT                  { $$ = ident($1) }
    | STRING                 { $$ = strLit($1) }
 

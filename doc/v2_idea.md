@@ -9,10 +9,10 @@
 
 - ca65相当のアセンブラの組み込み(cgoとか？)
 
-- bool(true/false)の追加
+- bool(true/false)の追加 ✅ 2026-09-14（比較の結果型はまだ uint8）
 
-- nullの追加
-- void* のようなポインタのtop型を追加する
+- nullの追加 ✅ 2026-09-14（SoA ハンドルには無し）
+- void* のようなポインタのtop型を追加する ✅ 2026-09-14（`*void`、暗黙変換あり）
 
 
 - interbank call を実装する

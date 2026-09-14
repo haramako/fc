@@ -807,8 +807,9 @@ func (l *Llc) loadYIdx(idx, ptr ir.Operand) []any {
 
 func (l *Llc) load(to, from ir.Operand) []any {
 	r := []any{}
+	voidPtr := ir.ValType(to).Kind == types.Pointer && ir.ValType(to).Base.Kind == types.Void // *void にはどのポインタも入る
 	if ir.ValType(to).Kind == types.Pointer && ir.ValType(from).Kind == types.Array {
-		if ir.ValType(from).Base != ir.ValType(to).Base {
+		if ir.ValType(from).Base != ir.ValType(to).Base && !voidPtr {
 			panic(fmt.Sprintf("can't convert from %s to %s", ir.OperandString(from), ir.OperandString(to)))
 		}
 		// 配列からポインタに変換
@@ -828,7 +829,7 @@ func (l *Llc) load(to, from ir.Operand) []any {
 		}
 	} else {
 		// 通常の代入
-		if ir.ValType(from).Kind != types.Int {
+		if ir.ValType(from).Kind != types.Int && !voidPtr {
 			if ir.ValType(from).Base != ir.ValType(to).Base {
 				panic(fmt.Sprintf("can't convert from %s to %s", ir.OperandString(from), ir.OperandString(to)))
 			}

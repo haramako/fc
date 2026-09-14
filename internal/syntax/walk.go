@@ -130,7 +130,7 @@ func Children(node Node) []Node {
 		add(n.Options)
 	case *Block:
 		addStmts(n.Stmts)
-	case *Ident, *IntLit, *StringLit:
+	case *Ident, *IntLit, *StringLit, *BoolLit, *NullLit:
 	case *ParenExpr:
 		add(n.X)
 	case *BinaryExpr:
