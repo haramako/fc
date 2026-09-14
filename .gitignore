@@ -1,5 +1,7 @@
 /.vscode
 tmp
+# castle の生成済みリソース (フォント表・リスト) はビルドに必要なので入れる
+!examples/castle/tmp/
 
 *.lst
 *.nes
