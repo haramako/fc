@@ -360,7 +360,7 @@ function run_marchant():void
 	ppu.wait_vsync();
 }
 
-function put_text(x:int, y:int, buf:int*, text:uint8*):void
+function put_text(x:int, y:int, buf:*int, text:*uint8):void
 {
 	mem.zero(buf, 64);
 	game.text_print(buf, text);
@@ -379,7 +379,7 @@ const ITEM_PRICES = [
 	14, 0, 0
 ];
 
-var marchant_message:int*;
+var marchant_message:*int;
 
 function run_marchant_main():void
 {
@@ -546,17 +546,17 @@ function memory_draw(id:int):void
 //=================================================
 // 鳥の巣ワープ
 //=================================================
-const BIRD_NEST_MOVE_TO_AREA:int[] = [
+const BIRD_NEST_MOVE_TO_AREA:[]int = [
 	7 * 16 + 12,
 	3 * 16 + 2
 ];
 
-const BIRD_NEST_X:int[] = [
+const BIRD_NEST_X:[]int = [
 	4 * 16 + 8,
 	9 * 16 + 8
 ];
 
-const BIRD_NEST_Y:int[] = [
+const BIRD_NEST_Y:[]int = [
 	7 * 16 + 8,
 	8 * 16 + 8
 ];

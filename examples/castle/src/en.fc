@@ -9,20 +9,20 @@ public use mem;
 public use * from en_vtbl;
 
 const MAX = 16;
-public var type:int[MAX] options(segment: "BSS_EX");
-public var px:int[MAX] options(segment: "BSS_EX");
-public var py:int[MAX] options(segment: "BSS_EX");
-public var pslot:int[MAX] options(segment: "BSS_EX");
-public var p1:int[MAX] options(segment: "BSS_EX");
-public var p2:int[MAX] options(segment: "BSS_EX");
-public var p3:int[MAX] options(segment: "BSS_EX");
-public var p4:int[MAX] options(segment: "BSS_EX");
-public var p5:int[MAX] options(segment: "BSS_EX");
-public var p6:int[MAX] options(segment: "BSS_EX");
-public var p7:int[MAX] options(segment: "BSS_EX");
-public var p8:int[MAX] options(segment: "BSS_EX");
+public var type:[MAX]int options(segment: "BSS_EX");
+public var px:[MAX]int options(segment: "BSS_EX");
+public var py:[MAX]int options(segment: "BSS_EX");
+public var pslot:[MAX]int options(segment: "BSS_EX");
+public var p1:[MAX]int options(segment: "BSS_EX");
+public var p2:[MAX]int options(segment: "BSS_EX");
+public var p3:[MAX]int options(segment: "BSS_EX");
+public var p4:[MAX]int options(segment: "BSS_EX");
+public var p5:[MAX]int options(segment: "BSS_EX");
+public var p6:[MAX]int options(segment: "BSS_EX");
+public var p7:[MAX]int options(segment: "BSS_EX");
+public var p8:[MAX]int options(segment: "BSS_EX");
 public var cur_max:int;
-public var temp:int[16] options(segment: "BSS_EX"); // en.process_*()内部などで使えるテンポラリ
+public var temp:[16]int options(segment: "BSS_EX"); // en.process_*()内部などで使えるテンポラリ
 
 /*********************************************
  * 敵関係のルーチン
@@ -74,7 +74,7 @@ public function setup(i:int):void
 	mmc3.set_pbank(0, old_pbank);
 }
 
-public function check_block(px:int*, py:int*):int
+public function check_block(px:*int, py:*int):int
 {
 	const size = 8;
 	var x = *px;

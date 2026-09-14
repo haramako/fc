@@ -39,7 +39,7 @@ package syntax
 }
 
 %token <tok> NUMBER IDENT STRING
-%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE
+%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kBITCAST
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!'
 
@@ -62,7 +62,7 @@ package syntax
 %type <specs>   opt_var_decl_list var_decl_list
 %type <spec>    var_decl
 %type <expr>    opt_var_init
-%type <typ>     type_decl
+%type <typ>     type_decl type_post type_v2 type_v2_prefix
 %type <params>  arg_decl_list
 %type <param>   arg_decl
 
@@ -77,6 +77,7 @@ package syntax
 %left LSHIFT RSHIFT
 %left '+' '-'
 %left '*' '/' '%'
+%left kAS
 %nonassoc UMINUS
 %left '.' '(' '['
 %nonassoc NO_ELSE
@@ -206,7 +207,9 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | exp GEQ exp            { $$ = binary($1, $2, $3) }
    | exp LSHIFT exp         { $$ = binary($1, $2, $3) }
    | exp RSHIFT exp         { $$ = binary($1, $2, $3) }
-   | '<' type_decl '>' exp  { $$ = &CastExpr{Lt: $1.Pos, Type: $2, Gt: $3.Pos, X: $4} }
+   | '<' type_decl '>' exp  { $$ = &CastExpr{Lt: $1.Pos, Type: $2, Gt: $3.Pos, X: $4} } /* v1 */
+   | exp kAS type_v2         { $$ = &CastExpr{Kind: CastAs, X: $1, As: $2.Pos, Type: $3} } /* v2: 数値変換 */
+   | kBITCAST '<' type_decl '>' '(' exp ')' { $$ = &CastExpr{Kind: CastBit, Bitcast: $1.Pos, Lt: $2.Pos, Type: $3, Gt: $4.Pos, Lparen: $5.Pos, X: $6, Rparen: $7.Pos} } /* v2: ビット読み替え */
    | '!' exp %prec UMINUS   { $$ = unary($1, $2) }
    | '-' exp %prec UMINUS   { $$ = unary($1, $2) }
    | '+' exp %prec UMINUS   { $$ = unary($1, $2) }
@@ -255,10 +258,26 @@ opt_var_init: /* empty */ { $$ = nil }
 
 /****************************************************/
 /* type declaration */
-type_decl: type_decl '[' exp ']'           { $$ = &ArrayType{Elem: $1, Lbrack: $2.Pos, Len: $3, Rbrack: $4.Pos} }
-         | type_decl '[' ']'               { $$ = &ArrayType{Elem: $1, Lbrack: $2.Pos, Rbrack: $3.Pos} }
-         | type_decl '*'                   { $$ = &PointerType{Elem: $1, Star: $2.Pos} }
-         | type_decl '(' arg_decl_list ')' { $$ = &FuncType{Result: $1, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos} }
+/* 型。v1 は後置 (int*[4])、v2 は前置 ([4]*int)。1 つの文法で両方受理し、混在や版違いは parse.go のゲートで落とす */
+type_decl: type_v2_prefix
+         | type_post
+
+type_v2_prefix: '*' type_decl                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
+              | '[' exp ']' type_decl                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
+              | '[' ']' type_decl                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
+              | kFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
+
+/* v2 の前置形だけ (後置なし)。`x as T` の T に使う: 後ろに二項演算子が続いても曖昧にならない */
+type_v2: '*' type_v2                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
+       | '[' exp ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
+       | '[' ']' type_v2                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
+       | kFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
+       | IDENT                              { $$ = &NamedType{Name: ident($1)} }
+
+type_post: type_post '[' exp ']'           { $$ = &ArrayType{Elem: $1, Lbrack: $2.Pos, Len: $3, Rbrack: $4.Pos} }
+         | type_post '[' ']'               { $$ = &ArrayType{Elem: $1, Lbrack: $2.Pos, Rbrack: $3.Pos} }
+         | type_post '*'                   { $$ = &PointerType{Elem: $1, Star: $2.Pos} }
+         | type_post '(' arg_decl_list ')' { $$ = &FuncType{Result: $1, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos} }
          | IDENT                           { $$ = &NamedType{Name: ident($1)} }
 
 arg_decl_list: arg_decl_list ',' arg_decl { $$ = append($1, $3) }

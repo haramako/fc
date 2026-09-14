@@ -197,9 +197,9 @@ public function fish_process(i:int):void
 			dir = DIR_RIGHT;
 		}
 	if (dir == DIR_LEFT) {
-		x -= (<sint8>giff + speed) / 16;
+		x -= (giff + speed as sint8) / 16;
 	} else {
-		x += (<sint8>giff + speed) / 16;
+		x += (giff + speed as sint8) / 16;
 	}
 
 	switch (stat) {
@@ -214,7 +214,7 @@ public function fish_process(i:int):void
 	case 1: // 気付いた！
 		count += 1;
 		vx = math.sin(count * 8) / 32;
-		vx = (<uint8>vx) * (<uint8>DIR_VX[dir]);
+		vx = (vx as uint8) * (DIR_VX[dir] as uint8);
 		x = px[i];
 		y -= (giff + 4) / 16;
 		if (count > 32) {

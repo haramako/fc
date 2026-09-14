@@ -14,10 +14,10 @@ public var print_addr:int16;
 
 public function print_int16(n:int16):void;
 public function wait_vsync():void;
-public function print(str:int*):void;
-public function ppu_put(addr:int16, data:int*, size:int):void;
+public function print(str:*int):void;
+public function ppu_put(addr:int16, data:*int, size:int):void;
 
-public function puts(str:int*):void
+public function puts(str:*int):void
 {
 	printf(str, "\n");
 }

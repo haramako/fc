@@ -70,8 +70,8 @@ public var anchor_wait:int;
 
 public var grobe_progress:int; // グローブの押している時間
 
-public var touch_event_func:int(); // 予約されているタッチイベント
-public var touch_event_func_activated:int(); // 現在実行中のタッチイベント
+public var touch_event_func:fn():int; // 予約されているタッチイベント
+public var touch_event_func_activated:fn():int; // 現在実行中のタッチイベント
 public var touch_event_x:int; // タッチイベントのマーカーの表示場所
 public var touch_event_y:int;
 public var touch_event_stat:int; // タッチイベントの状態
@@ -83,7 +83,7 @@ public var watch_used:int; // 懐中時計を使用済みかどうか
 public var watch_in_area:int; // 懐中時計がこの画面にあるか
 
 public const ITEM_MAX = 64;
-public var items:int[ITEM_MAX] options(segment: "BSS_EX");
+public var items:[ITEM_MAX]int options(segment: "BSS_EX");
 public const FLAG_MAX = 32;
 public const FLAG_WATERGATE = 31;
 public const FLAG_COLORSWITCH = 30;
@@ -92,18 +92,18 @@ public const FLAG_MAGMAGATE = 28; // マグマを消火する
 public const FLAG_ANCHOR_GENERATOR = 27; // 錨生成器
 public const FLAG_SUNGATE = 26; // 太陽神殿のゲート(1:太陽, 2:月, 4:星のビットフラグ)
 public const FLAG_SOUL_GATE = 25; // 魂のゲートの所持魂（6bitのビットフラグ）
-public var flags:int[FLAG_MAX] options(segment: "BSS_EX");
+public var flags:[FLAG_MAX]int options(segment: "BSS_EX");
 public const MAP_FLAG_MAX = 64;
-public var map_flag:int[MAP_FLAG_MAX] options(segment: "BSS_EX");
+public var map_flag:[MAP_FLAG_MAX]int options(segment: "BSS_EX");
 public const MAP_COIN_MAX = 64;
-public var map_coin:int[MAP_COIN_MAX / 8] options(segment: "BSS_EX");
+public var map_coin:[MAP_COIN_MAX / 8]int options(segment: "BSS_EX");
 public const SUBTEXT_FLAG_MAX = 16;
-public var subtext_flags:int[SUBTEXT_FLAG_MAX / 8] options(segment: "BSS_EX");
+public var subtext_flags:[SUBTEXT_FLAG_MAX / 8]int options(segment: "BSS_EX");
 public const MEMORY_FLAG_MAX = 128;
-public var memory_flags:int[MEMORY_FLAG_MAX / 8] options(segment: "BSS_EX");
-public var memory_read_flags:int[MEMORY_FLAG_MAX / 8] options(segment: "BSS_EX");
+public var memory_flags:[MEMORY_FLAG_MAX / 8]int options(segment: "BSS_EX");
+public var memory_read_flags:[MEMORY_FLAG_MAX / 8]int options(segment: "BSS_EX");
 public const CHECKPOINT_FLAG_MAX = 16;
-public var checkpoint_flags:int[CHECKPOINT_FLAG_MAX] options(segment: "BSS_EX");
+public var checkpoint_flags:[CHECKPOINT_FLAG_MAX]int options(segment: "BSS_EX");
 
 const ANIM_STAT_NONE = 0;
 public const ANIM_STAT_PUSH = 1;

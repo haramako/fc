@@ -315,7 +315,7 @@ function water_jet_process_bubble(x:int, y:int, i:int, dir:int, idx:int):int
 		ppu.sprite(x - 4 + DIR_VX[dir] * d + dx, y - 8 + DIR_VY[dir] * d + dy, SPR_BUBBLE, 1);
 		return i + 1;
 	} else {
-		return 24 + <int>math.rand() / 32;
+		return 24 + math.rand() / 32 as int;
 	}
 }
 
@@ -486,7 +486,7 @@ function staff_gate_redraw(x:int, y:int, flag:int):void
  *********************************************/
 
 var soul_gate_flag:int;
-var soul_gate_idx:int[6]; // ソウルゲートのインデックス
+var soul_gate_idx:[6]int; // ソウルゲートのインデックス
 var soul_gate_portal_idx:int;
 
 public function soul_gate_new(i:int):void

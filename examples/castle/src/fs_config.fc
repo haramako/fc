@@ -1,7 +1,7 @@
 #fc 2
 options(bank: -2);
-public var FILE_ADDR:uint16[] options(address: 0xa000);
-public var FILE_SIZE:uint16[] options(address: 0xa676);
+public var FILE_ADDR:[]uint16 options(address: 0xa000);
+public var FILE_SIZE:[]uint16 options(address: 0xa676);
 public const ITEM_NAME_BASE:int16 = 0;
 public const ITEM_DESC_NAME_BASE:int16 = 48;
 public const ITEM_DESC_BASE:int16 = 96;

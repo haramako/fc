@@ -101,6 +101,7 @@ func (c *Compiler) Migrate(opt *MigrateOptions) (*MigrateResult, error) {
 	a := migrate.NewAnalysis()
 	before := map[string]string{} // module id → asm (移行前)
 	sources := map[string]*sema.Source{}
+	castKinds := map[syntax.Position]syntax.CastKind{}
 	for _, main := range opt.Mains {
 		prog, asm, err := c.compileToAsm(opt.Dir, opt.Target, main, a.Trace)
 		if err != nil {
@@ -108,6 +109,9 @@ func (c *Compiler) Migrate(opt *MigrateOptions) (*MigrateResult, error) {
 		}
 		for id, s := range prog.Sources {
 			sources[id] = s
+		}
+		for pos, k := range prog.CastKinds {
+			castKinds[pos] = k
 		}
 		for id, text := range asm {
 			before[id] = text
@@ -137,7 +141,7 @@ func (c *Compiler) Migrate(opt *MigrateOptions) (*MigrateResult, error) {
 		if perr != nil {
 			return nil, perr
 		}
-		mopt := migrate.Options{Visibility: opt.Visibility, Textmaps: opt.Textmaps}
+		mopt := migrate.Options{Visibility: opt.Visibility, Textmaps: opt.Textmaps, CastKinds: castKinds}
 		if isLib(src.Abs) {
 			mopt.Visibility = migrate.Preserve
 		}

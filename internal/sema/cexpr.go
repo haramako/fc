@@ -92,6 +92,7 @@ type cexpr struct {
 	args  []*cexpr
 	typ   syntax.TypeExpr // cCast の型式
 	ty    *types.Type     // cCast の評価後の型
+	ck    syntax.CastKind // cCast の種類 (v1 <T>x / as / bitcast)
 	block *syntax.Block   // opCall の後置ブロック
 	lam   *lambdaLit      // cLambda
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
@@ -177,7 +178,7 @@ func toC0(e syntax.Expr) *cexpr {
 		}
 		return cop2(unaryOps[e.Op], toC(e.X))
 	case *syntax.CastExpr:
-		return &cexpr{kind: cCast, args: []*cexpr{toC(e.X)}, typ: e.Type}
+		return &cexpr{kind: cCast, args: []*cexpr{toC(e.X)}, typ: e.Type, ck: e.Kind}
 	case *syntax.CallExpr:
 		args := make([]*cexpr, 0, len(e.Args)+1)
 		args = append(args, toC(e.Fun))

@@ -79,7 +79,7 @@ public const PBANK_FS = 23;
 
 public const VRAM_PALETTE = 0x3f00;
 
-public const BIT_MASK:int[] = [1, 2, 4, 8, 16, 32, 64, 128];
+public const BIT_MASK:[]int = [1, 2, 4, 8, 16, 32, 64, 128];
 
 public const GIFF_TABLE = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
 public var anim:int;
@@ -112,8 +112,8 @@ public function gr_sprite2_idx(x:int, y:int, pat:int, flag:int, idx:int):void
 	}
 }
 
-public const DIR_VX:sint[] = [0, 1, 0, -1];
-public const DIR_VY:sint[] = [-1, 0, 1, 0];
+public const DIR_VX:[]sint = [0, 1, 0, -1];
+public const DIR_VY:[]sint = [-1, 0, 1, 0];
 public const DIR_FLIP = [0, 0, 0, 1];
 public const DIR_FLIP_XY = [0, 0, 128, 64];
 public const DIR_NONE = -1;

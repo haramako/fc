@@ -47,7 +47,7 @@ type Type struct {
 	str      string
 }
 
-// String は型の表示名 (`uint8`, `sint16`, `uint8*`, `uint8[4]`, `fastcall void(uint8)` など)。
+// String は型の表示名 (`uint8`, `sint16`, `*uint8`, `[4]uint8`, `fastcall fn(uint8):void` など。v2 の前置形)。
 func (t *Type) String() string { return t.str }
 
 // Fastcall は Func が fastcall 呼び出し規約かを返す。
@@ -123,7 +123,7 @@ func (u *Universe) Named(name string) (t *Type, ok bool) {
 
 // PointerTo は base へのポインタ型。
 func (u *Universe) PointerTo(base *Type) *Type {
-	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, str: base.str + "*"})
+	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, str: "*" + base.str})
 }
 
 // ArrayOf は base の配列型。length < 0 なら長さ省略 (Size も -1)。
@@ -135,7 +135,7 @@ func (u *Universe) ArrayOf(base *Type, length int) *Type {
 		t.Size = base.Size * length
 		l = fmt.Sprintf("%d", length)
 	}
-	t.str = fmt.Sprintf("%s[%s]", base.str, l)
+	t.str = fmt.Sprintf("[%s]%s", l, base.str)
 	return u.intern(t)
 }
 
@@ -150,7 +150,7 @@ func (u *Universe) Func(params []*Type, result *Type, fastcall bool) *Type {
 	for i, a := range params {
 		args[i] = a.str
 	}
-	t.str = fmt.Sprintf("%s%s(%s)", fc, result.str, strings.Join(args, ","))
+	t.str = fmt.Sprintf("%sfn(%s):%s", fc, strings.Join(args, ","), result.str)
 	return u.intern(t)
 }
 

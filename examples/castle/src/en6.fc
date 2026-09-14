@@ -593,14 +593,14 @@ public function waterfall_process(i:int):void
 		create_bubble(x + dx, y + dy);
 	}
 
-	var mx:sint = <sint>(my.x / 2) - <sint>(x / 2 - 4);
+	var mx:sint = (my.x / 2) - (x / 2 - 4) as sint as sint;
 	var mmy:sint = my.y / 2 - (y / 2 - 4);
 
-	if ((mx > <sint>0) && (mx < (<sint>(width * 8))) && (mmy > <sint>0) && (mmy < <sint>(height * 8))) {
+	if ((mx > 0 as sint) && (mx < ((width * 8) as sint)) && (mmy > 0 as sint) && (mmy < (height * 8) as sint)) {
 		if (anim % 16 == 0 && !has_bubble) {
 			create_splash(my.x, my.y);
 		}
-		if (mx > <sint>(width * 4)) {
+		if (mx > (width * 4) as sint) {
 			if (my.state == my.STATE_STAND) {
 				my.x += anim % 4;
 			} else {

@@ -119,8 +119,13 @@ func Children(node Node) []Node {
 	case *UnaryExpr:
 		add(n.X)
 	case *CastExpr:
-		add(n.Type)
-		add(n.X)
+		if n.Kind == CastAs { // x as T
+			add(n.X)
+			add(n.Type)
+		} else {
+			add(n.Type)
+			add(n.X)
+		}
 	case *CallExpr:
 		add(n.Fun)
 		addExprs(n.Args)
@@ -138,14 +143,26 @@ func Children(node Node) []Node {
 	case *NamedType:
 		add(n.Name)
 	case *ArrayType:
-		add(n.Elem)
-		add(n.Len)
+		if n.IsPrefix() { // [N]T
+			add(n.Len)
+			add(n.Elem)
+		} else {
+			add(n.Elem)
+			add(n.Len)
+		}
 	case *PointerType:
 		add(n.Elem)
 	case *FuncType:
-		add(n.Result)
-		for _, p := range n.Params {
-			add(p)
+		if n.IsPrefix() { // fn(params):R
+			for _, p := range n.Params {
+				add(p)
+			}
+			add(n.Result)
+		} else {
+			add(n.Result)
+			for _, p := range n.Params {
+				add(p)
+			}
 		}
 	case *Param:
 		add(n.Name)

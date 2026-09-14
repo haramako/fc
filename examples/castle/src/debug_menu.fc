@@ -15,20 +15,20 @@ use sound;
 var last_checkpoint:int;
 
 var num:int;
-var items:int*[16];
+var items:[16]*int;
 var cur:int;
-var title:int*;
+var title:*int;
 
 function init():void {}
 
-function begin(name:int*):void
+function begin(name:*int):void
 {
 	title = name;
 	num = 0;
 	cur = 0;
 }
 
-function add(item:int*):void
+function add(item:*int):void
 {
 	items[num] = item;
 	num += 1;
@@ -186,7 +186,7 @@ function do_flag():int
 	return 1;
 }
 
-function do_debug_flag_change(mask:int, title:int*):void
+function do_debug_flag_change(mask:int, title:*int):void
 {
 	var flag = debug_flag & mask;
 	flag = do_select(flag, title);
@@ -198,7 +198,7 @@ function do_debug_flag_change(mask:int, title:int*):void
 	savedata.save();
 }
 
-function do_select(init:int, title:int*):int
+function do_select(init:int, title:*int):int
 {
 	begin(title);
 	add(_T("OFF"));
@@ -214,7 +214,7 @@ function do_select(init:int, title:int*):int
 	}
 }
 
-function do_select2(init:int, title:int*):int
+function do_select2(init:int, title:*int):int
 {
 	begin(title);
 	add(_T("OFF"));
@@ -269,7 +269,7 @@ function do_flag_select():void
 	}
 }
 
-function do_flag_change(flag_id:int, title:int*):void
+function do_flag_change(flag_id:int, title:*int):void
 {
 	var n = do_select2(my.flags[flag_id], title);
 	if (n != -1) {

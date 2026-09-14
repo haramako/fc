@@ -48,9 +48,9 @@ public function start():void
 	ppu.wait_vsync();
 }
 
-const TITLE_PALETTE:int[] = incbin("../res/images/title.nespal");
-const TITLE_BG:int[] = incbin("../res/images/title.bg");
-const TITLE_TILEPAL:int[] = incbin("../res/images/title.tilepal");
+const TITLE_PALETTE:[]int = incbin("../res/images/title.nespal");
+const TITLE_BG:[]int = incbin("../res/images/title.bg");
+const TITLE_TILEPAL:[]int = incbin("../res/images/title.tilepal");
 
 function do_title():int
 {
@@ -149,14 +149,14 @@ function light_down():void
 	}
 }
 
-function put_text_in_lock(addr:int16, s:int*):void
+function put_text_in_lock(addr:int16, s:*int):void
 {
 	mem.set(ppu.gr_buf, 0, 64);
 	text_print(ppu.gr_buf, s);
 	ppu.put_in_lock(addr, ppu.gr_buf, 64);
 }
 
-function put_text_in_lock2(addr:int16, s:int*, col:int, row:int):int*
+function put_text_in_lock2(addr:int16, s:*int, col:int, row:int):*int
 {
 	while (row > 0 && *s != 0) {
 		s += text_print2(ppu.gr_buf, s, col);
@@ -168,7 +168,7 @@ function put_text_in_lock2(addr:int16, s:int*, col:int, row:int):int*
 	return s;
 }
 
-function text_print(p:int*, str:int*):int
+function text_print(p:*int, str:*int):int
 {
 	var i = 0;
 	var pi = 0;
@@ -188,7 +188,7 @@ function text_print(p:int*, str:int*):int
 	return 0;
 }
 
-function text_print2(p:int*, str:int*, size:int):int
+function text_print2(p:*int, str:*int, size:int):int
 {
 	mem.zero(p, size * 2);
 	var i = 0;
@@ -244,7 +244,7 @@ function do_text_viewer():int
 	return SCENE_CREDIT;
 }
 
-function feed_page(s:int*):int*
+function feed_page(s:*int):*int
 {
 	ppu.fill_in_lock(0x2000, 256 * 4, 0);
 	return put_text_in_lock2(ppu.pos(3, 4), s, 26, 10);

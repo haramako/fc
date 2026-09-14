@@ -45,7 +45,7 @@ function main():void
 	// play music
 	sound.init();
 	ppu.on_vsync = sound.main_nsd;
-	ppu.on_wait_vsync = ->void() {
+	ppu.on_wait_vsync = ->fn():void {
 		bg.buf_idx = 0;
 		sound.process_frame();
 	};

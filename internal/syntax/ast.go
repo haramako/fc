@@ -306,12 +306,29 @@ type UnaryExpr struct {
 	X     Expr
 }
 
-// CastExpr は `<type> x`。
+// CastKind はキャストの種類。
+type CastKind int
+
+const (
+	CastLegacy CastKind = iota // v1: `<T>x` (ビットの読み替え)
+	CastAs                     // v2: `x as T` (数値変換)
+	CastBit                    // v2: `bitcast<T>(x)` (ビットの読み替え)
+)
+
+// CastExpr はキャスト。
+//   - v1 `<T>x`:          Lt / Type / Gt / X
+//   - v2 `x as T`:        X / As / Type
+//   - v2 `bitcast<T>(x)`: Bitcast / Lt / Type / Gt / Lparen / X / Rparen
 type CastExpr struct {
-	Lt   Pos
-	Type TypeExpr
-	Gt   Pos
-	X    Expr
+	Kind    CastKind
+	Bitcast Pos // `bitcast`
+	Lt      Pos // `<`
+	Type    TypeExpr
+	Gt      Pos // `>`
+	Lparen  Pos
+	X       Expr
+	Rparen  Pos
+	As      Pos // `as`
 }
 
 // CallExpr は `fun(args) [{ block }]`。Block はマクロ呼び出し用の後置ブロック (nil なら省略)。
@@ -378,13 +395,19 @@ type PointerType struct {
 	Star Pos
 }
 
-// FuncType は `result(params)`。
+// FuncType は関数型。v1 `result(params)` / v2 `fn(params):result` (Fn が有効)。
 type FuncType struct {
+	Fn     Pos // v2 の `fn` (v1 では無効)
 	Result TypeExpr
 	Lparen Pos
 	Params []*Param
 	Rparen Pos
 }
+
+// IsPrefix は v2 の前置形 (`[4]int`, `*int`, `fn(...):T`) で書かれているか。
+func (t *ArrayType) IsPrefix() bool   { return t.Lbrack.Offset < t.Elem.Pos().Offset }
+func (t *PointerType) IsPrefix() bool { return t.Star.Offset < t.Elem.Pos().Offset }
+func (t *FuncType) IsPrefix() bool    { return t.Fn.IsValid() }
 
 // Param は関数型の引数。Name は省略可。
 type Param struct {
@@ -558,8 +581,24 @@ func (e *AssignExpr) End() Pos { return e.Rhs.End() }
 func (e *UnaryExpr) Pos() Pos { return e.OpPos }
 func (e *UnaryExpr) End() Pos { return e.X.End() }
 
-func (e *CastExpr) Pos() Pos { return e.Lt }
-func (e *CastExpr) End() Pos { return e.X.End() }
+func (e *CastExpr) Pos() Pos {
+	switch e.Kind {
+	case CastAs:
+		return e.X.Pos()
+	case CastBit:
+		return e.Bitcast
+	}
+	return e.Lt
+}
+func (e *CastExpr) End() Pos {
+	switch e.Kind {
+	case CastAs:
+		return e.Type.End()
+	case CastBit:
+		return after(e.Rparen, 1)
+	}
+	return e.X.End()
+}
 
 func (e *CallExpr) Pos() Pos { return e.Fun.Pos() }
 func (e *CallExpr) End() Pos {
@@ -589,14 +628,44 @@ func (e *LambdaExpr) End() Pos {
 func (t *NamedType) Pos() Pos { return t.Name.Pos() }
 func (t *NamedType) End() Pos { return t.Name.End() }
 
-func (t *ArrayType) Pos() Pos { return t.Elem.Pos() }
-func (t *ArrayType) End() Pos { return after(t.Rbrack, 1) }
+func (t *ArrayType) Pos() Pos {
+	if t.IsPrefix() {
+		return t.Lbrack
+	}
+	return t.Elem.Pos()
+}
+func (t *ArrayType) End() Pos {
+	if t.IsPrefix() {
+		return t.Elem.End()
+	}
+	return after(t.Rbrack, 1)
+}
 
-func (t *PointerType) Pos() Pos { return t.Elem.Pos() }
-func (t *PointerType) End() Pos { return after(t.Star, 1) }
+func (t *PointerType) Pos() Pos {
+	if t.IsPrefix() {
+		return t.Star
+	}
+	return t.Elem.Pos()
+}
+func (t *PointerType) End() Pos {
+	if t.IsPrefix() {
+		return t.Elem.End()
+	}
+	return after(t.Star, 1)
+}
 
-func (t *FuncType) Pos() Pos { return t.Result.Pos() }
-func (t *FuncType) End() Pos { return after(t.Rparen, 1) }
+func (t *FuncType) Pos() Pos {
+	if t.IsPrefix() {
+		return t.Fn
+	}
+	return t.Result.Pos()
+}
+func (t *FuncType) End() Pos {
+	if t.IsPrefix() {
+		return t.Result.End()
+	}
+	return after(t.Rparen, 1)
+}
 
 func (p *Param) Pos() Pos {
 	if p.Name != nil {

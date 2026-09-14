@@ -26,31 +26,31 @@ const SPRITE_IDX_MAX = 240;
 
 const GR_MAX = 8;
 var gr_idx:int;
-var gr_to_buf:int16[GR_MAX];
-var gr_from_buf:int*[GR_MAX];
-var gr_size_buf:int[GR_MAX];
-var gr_flag_buf:int[GR_MAX];
+var gr_to_buf:[GR_MAX]int16;
+var gr_from_buf:[GR_MAX]*int;
+var gr_size_buf:[GR_MAX]int;
+var gr_flag_buf:[GR_MAX]int;
 var gr_sprite_idx:int;
 var gr_sprite_dir:int; // spriteの増分 0:順方向, 1:逆方向
-var gr_sprite_buf:int[256] options(address: 0x0700);
-public var gr_buf:int[256];
+var gr_sprite_buf:[256]int options(address: 0x0700);
+public var gr_buf:[256]int;
 var gr_buf_idx:int;
 
 var put_to:int16;
-var put_from:int* options(address: 0x60);
+var put_from:*int options(address: 0x60);
 var put_size:int;
 var interrupt_i:int;
 
 // IRQ関連
 var irq_counter:int;
-public var irq_setup:void() options(address: 0x62);
-var irq_next:void() options(address: 0x64);
+public var irq_setup:fn():void options(address: 0x62);
+var irq_next:fn():void options(address: 0x64);
 
-public var on_vsync:void() options(address: 0x78);
+public var on_vsync:fn():void options(address: 0x78);
 var locked:int;
 public var cbank2:int; // CBANK2の値(interrupt時に書き込まれる)
 
-public var on_wait_vsync:void();
+public var on_wait_vsync:fn():void;
 
 public function null_func():void {}
 
@@ -105,11 +105,11 @@ public function unlock():void
 	wait_vsync();
 }
 
-public function put_in_lock(addr:int16, _from:int*, size:int):void;
+public function put_in_lock(addr:int16, _from:*int, size:int):void;
 
 public function fill_in_lock(addr:int16, size:int16, n:int):void;
 
-public function put(addr:int16, _from:int*, size:int, flag:int):void options(fastcall: true)
+public function put(addr:int16, _from:*int, size:int, flag:int):void options(fastcall: true)
 {
 	while (gr_idx >= GR_MAX) {
 		vsync_flag = 2;
@@ -122,7 +122,7 @@ public function put(addr:int16, _from:int*, size:int, flag:int):void options(fas
 	gr_idx += 1;
 }
 
-public function alloc(size:int):int* options(fastcall: true)
+public function alloc(size:int):*int options(fastcall: true)
 {
 	var old = gr_buf_idx;
 	gr_buf_idx += size;

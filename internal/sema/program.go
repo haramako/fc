@@ -32,6 +32,8 @@ type Program struct {
 	Sources map[string]*Source
 	// Warnings は意味解析で見つけた警告 (出現順)
 	Warnings []diag.Warning
+	// CastKinds は v1 の `<T>x` の位置 → v2 で書くべき種類 (as / bitcast)。fcc migrate が使う
+	CastKinds map[syntax.Position]syntax.CastKind
 
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
@@ -58,6 +60,7 @@ func NewProgram() *Program {
 		Types:       types.NewUniverse(),
 		Modules:     ir.NewModuleList(),
 		Sources:     map[string]*Source{},
+		CastKinds:   map[syntax.Position]syntax.CastKind{},
 		macros:      map[*ir.Value]MacroFn{},
 		constMacros: map[*ir.Value]ConstMacroFn{},
 	}

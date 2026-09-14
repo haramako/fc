@@ -3,12 +3,12 @@ options(bank: -1);
 
 include("mem.asm");
 
-public function set(p:int*, c:int, size:int):void options(fastcall: true);
-public function zero(p:int*, size:int):void;
-public function copy(_to:int*, _from:int*, size:int16):void;
-public function compare(p1:int*, p2:int*, size:int):int;
+public function set(p:*int, c:int, size:int):void options(fastcall: true);
+public function zero(p:*int, size:int):void;
+public function copy(_to:*int, _from:*int, size:int16):void;
+public function compare(p1:*int, p2:*int, size:int):int;
 
-public function strlen(str:int*):int options(fastcall: true)
+public function strlen(str:*int):int options(fastcall: true)
 {
 	var n = 0;
 	while (str[n]) {
@@ -17,7 +17,7 @@ public function strlen(str:int*):int options(fastcall: true)
 	return n;
 }
 
-public function strcpy(to:int*, str:int*):int options(fastcall: true)
+public function strcpy(to:*int, str:*int):int options(fastcall: true)
 {
 	var i = 0;
 	while (1) {

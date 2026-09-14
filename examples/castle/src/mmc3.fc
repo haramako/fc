@@ -14,8 +14,8 @@ var IRQ_LATCH:int options(address: 0xC000);
 var IRQ_RELOAD:int options(address: 0xC001);
 var IRQ_DISABLE:int options(address: 0xE000);
 var IRQ_ENABLE:int options(address: 0xE001);
-public var cbank_bak:int[6];
-public var pbank_bak:int[2];
+public var cbank_bak:[6]int;
+public var pbank_bak:[2]int;
 
 /**
  * 初期化する.

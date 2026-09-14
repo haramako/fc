@@ -232,7 +232,7 @@ function light_undown():void
 	}
 }
 
-const BGM_BY_AREA:int[] = [
+const BGM_BY_AREA:[]int = [
 	0,
 	sound.BGM_GROUND,
 	sound.BGM_GROUND,
@@ -359,7 +359,7 @@ function move_checkpoint_with_flag(i:int, in_lock:int):void
 	set_last();
 }
 
-public function text_print(p:int*, str:int*):int
+public function text_print(p:*int, str:*int):int
 {
 	var i = 0;
 	var pi = 0;
@@ -379,7 +379,7 @@ public function text_print(p:int*, str:int*):int
 	return 0;
 }
 
-public function text_print_num(p:int*, n:int):int
+public function text_print_num(p:*int, n:int):int
 {
 	var i:int;
 	for (i = 0; i < 3; i++) {

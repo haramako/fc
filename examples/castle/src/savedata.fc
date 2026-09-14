@@ -9,7 +9,7 @@ const IDX_DEBUG_FLAG = 2;
 const IDX_LAST_CHECKPOINT = 3;
 const IDX_COIN_NUM = 4;
 public var exists:int;
-var data:int[512] options(segment: "BSS_SAVEDATA");
+var data:[512]int options(segment: "BSS_SAVEDATA");
 
 public function init():void
 {

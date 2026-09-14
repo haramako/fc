@@ -17,29 +17,29 @@ const ATTRIBUTE = 0b10000000;
 
 const GR_MAX = 8;
 var gr_idx:int;
-var gr_to_buf:int16[GR_MAX];
-var gr_from_buf:int*[GR_MAX];
-var gr_size_buf:int[GR_MAX];
-var gr_flag_buf:int[GR_MAX];
+var gr_to_buf:[GR_MAX]int16;
+var gr_from_buf:[GR_MAX]*int;
+var gr_size_buf:[GR_MAX]int;
+var gr_flag_buf:[GR_MAX]int;
 var gr_sprite_idx:int;
-var gr_sprite_buf:int[256] options(address: 0x0700);
-var gr_buf:int[256];
+var gr_sprite_buf:[256]int options(address: 0x0700);
+var gr_buf:[256]int;
 var gr_buf_idx:int;
 
 var put_to:int16;
-var put_from:int* options(address: 0x60);
+var put_from:*int options(address: 0x60);
 var put_size:int;
 var interrupt_i:int;
 
 // IRQ関連
 var irq_counter:int;
-var irq_setup:void() options(address: 0x62);
+var irq_setup:fn():void options(address: 0x62);
 var irq_next:uint16 options(address: 0x64);
 
-var on_vsync:void() options(address: 0x78);
+var on_vsync:fn():void options(address: 0x78);
 var locked:int;
 
-var on_wait_vsync:void();
+var on_wait_vsync:fn():void;
 
 function null_func():void {}
 
@@ -85,11 +85,11 @@ public function unlock():void
 	wait_vsync();
 }
 
-public function put_in_lock(addr:int16, _from:int*, size:int):void;
+public function put_in_lock(addr:int16, _from:*int, size:int):void;
 
 public function fill_in_lock(addr:int16, size:int16, n:int):void;
 
-public function put(addr:int16, _from:int*, size:int, flag:int):void
+public function put(addr:int16, _from:*int, size:int, flag:int):void
 {
 	while (gr_idx >= GR_MAX) {
 		vsync_flag = 2;
@@ -102,7 +102,7 @@ public function put(addr:int16, _from:int*, size:int, flag:int):void
 	gr_idx += 1;
 }
 
-function alloc(size:int):int*
+function alloc(size:int):*int
 {
 	var old = gr_buf_idx;
 	gr_buf_idx += size;

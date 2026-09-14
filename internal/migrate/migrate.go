@@ -35,6 +35,8 @@ type Options struct {
 	// Textmaps は castle の macro.rb の置換: 名前 → 文字表ファイルのパス。
 	// `include("macro.rb")` (組み込みで代替できない Ruby マクロ) をこの const 宣言に置き換える
 	Textmaps map[string]string
+	// CastKinds は v1 の `<T>x` の位置 → v2 で書くべき種類 (sema.Program.CastKinds)。無い位置は as にする
+	CastKinds map[syntax.Position]syntax.CastKind
 }
 
 // Analysis はモジュールをまたぐ参照の集計。
@@ -90,12 +92,15 @@ var builtinRubyFiles = map[string]bool{"stdio.rb": true, "unittest.rb": true, "s
 func Rewrite(f *syntax.File, modID string, a *Analysis, opt Options) ([]string, error) {
 	r := &rewriter{f: f, mod: modID, a: a, opt: opt}
 	if f.Version >= syntax.Version2 {
-		// v2 ファイルは、v2 の途中で足した書き換え (v1 形の for → C 型) だけを適用する
+		// v2 ファイルは、v2 の途中で足した書き換え (v1 形の for → C 型、`<T>x` → as/bitcast) だけを適用する
+		// (型の前置形はプリンタがバージョンで決めるので書き換え不要)
 		r.bodies()
+		r.casts()
 		return r.notes, nil
 	}
 	r.topLevel()
 	r.bodies()
+	r.casts()
 	f.Version = syntax.Version2 // Pragma は空のまま (ソースにプラグマ行が無いことを印字側に伝える)
 	return r.notes, nil
 }
@@ -223,6 +228,34 @@ func textmapConst(pos syntax.Pos, name, path string, public bool) syntax.Stmt {
 		d.PublicPos = pos
 	}
 	return d
+}
+
+// casts は v1 の `<T>x` を `x as T` (数値変換) か `bitcast<T>(x)` (ビット読み替え) に書き換える。
+// どちらにするかは sema が記録した型情報 (Options.CastKinds) で決める。
+func (r *rewriter) casts() {
+	syntax.Inspect(r.f, func(n syntax.Node) bool {
+		c, ok := n.(*syntax.CastExpr)
+		if !ok || c.Kind != syntax.CastLegacy {
+			return true
+		}
+		kind, known := r.opt.CastKinds[syntax.At(r.f.Filename, c.Type.Pos())]
+		if !known {
+			kind = syntax.CastAs
+			r.note("%s: <T>x の種類 (as / bitcast) を型から判定できなかったので as にした", c.Lt)
+		}
+		if kind == syntax.CastBit {
+			c.Kind = syntax.CastBit
+			c.Bitcast = c.Lt
+			if pe, ok := c.X.(*syntax.ParenExpr); ok {
+				c.X = pe.X // bitcast<T>((x)) の二重括弧を避ける
+			}
+			c.Lparen, c.Rparen = c.Gt, c.X.End()
+		} else {
+			c.Kind = syntax.CastAs
+			c.As = c.Lt
+		}
+		return true
+	})
 }
 
 // bodies は関数本体を書き換える: loop() → loop、switch 内の loop-break をラベル付きに。

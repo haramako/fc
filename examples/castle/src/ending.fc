@@ -290,7 +290,7 @@ function process_my():void
 // テキスト
 //===============================
 var text_stat:int;
-var text_buf:int*;
+var text_buf:*int;
 var text_idx:int;
 
 function init_text():void
@@ -486,7 +486,7 @@ function move_area_locked(area:int):void
 	ppu.put_in_lock(VRAM_PALETTE, buf, 32);
 }
 
-function text_print_width(p:int*, str:int*, width:int):int
+function text_print_width(p:*int, str:*int, width:int):int
 {
 	var i = 0;
 	var pi = 0;

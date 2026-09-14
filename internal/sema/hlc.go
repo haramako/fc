@@ -912,9 +912,14 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			ty = h.typeEval(c.typ)
 		}
 		if x.isLiteralInt() {
+			// 整数リテラルはサイズを持たないので、bitcast のサイズ検査はしない (`bitcast<*int>(0x2000)`, `bitcast<fn():int>(0)`)
+			h.recordCast(c, x.val.Type, ty)
+			if c.ck == syntax.CastAs {
+				h.checkCast(c.ck, x.val.Type, ty)
+			}
 			return cv(ir.NewIntLiteral("", ty, x.val.Int))
 		}
-		return &cexpr{kind: cCast, args: []*cexpr{x}, typ: c.typ, ty: ty}
+		return &cexpr{kind: cCast, args: []*cexpr{x}, typ: c.typ, ty: ty, ck: c.ck, pos: c.pos}
 
 	case cOp:
 		switch c.op {
@@ -1137,7 +1142,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		}
 
 	case cCast:
-		r = ir.NewCastedValue(h.rval(e.args[0]), e.ty, 0)
+		v := h.rval(e.args[0])
+		h.recordCast(e, ir.ValType(v), e.ty)
+		r = h.explicitCast(e.ck, v, e.ty)
 
 	case cOp:
 		switch e.op {
@@ -1379,6 +1386,73 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
 		return ir.NewPointeredArray(v, h.prog.Types.PointerTo(ir.ValType(v).Base))
 	}
 	return v
+}
+
+// classifyCast は v1 の `<T>x` を v2 の `as` (数値変換) / `bitcast` (ビット読み替え) のどちらで書くべきかを返す
+// (fcc migrate 用)。同サイズの整数同士と、配列 → 同じ要素型のポインタは as。それ以外はビット読み替え。
+func classifyCast(from, to *types.Type) syntax.CastKind {
+	switch {
+	case from.Kind == types.Int && to.Kind == types.Int:
+		return syntax.CastAs
+	case from.Kind == types.Array && to.Kind == types.Pointer && from.Base == to.Base:
+		return syntax.CastAs
+	}
+	return syntax.CastBit
+}
+
+// recordCast はキャストの位置と種類を記録する (v1 のキャストを migrate が書き換えるため)。
+// 位置は型式の位置で引く (括弧付きの式では cexpr の pos が括弧の位置に上書きされるため)。
+func (h *Hlc) recordCast(c *cexpr, from, to *types.Type) {
+	if c.ck != syntax.CastLegacy || c.typ == nil {
+		return
+	}
+	h.prog.CastKinds[syntax.At(h.module.Path, c.typ.Pos())] = classifyCast(from, to)
+}
+
+// checkCast はキャストの種類ごとの規則を検査する (doc/v2_types_struct.md §3.5)。
+func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
+	switch kind {
+	case syntax.CastAs:
+		// 数値変換: 整数 → 整数、配列 → 同じ要素型のポインタ
+		if from.Kind == types.Int && to.Kind == types.Int {
+			return
+		}
+		if from.Kind == types.Array && to.Kind == types.Pointer && from.Base == to.Base {
+			return
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot convert %s to %s with `as` (use bitcast for bit reinterpretation)", from, to)})
+	case syntax.CastBit:
+		// ビット読み替え: サイズが同じもの同士 (配列はポインタ = 2 バイトとみなす)
+		fromSize := from.Size
+		if from.Kind == types.Array {
+			fromSize = 2
+		}
+		if to.Kind == types.Array || to.Kind == types.Void || from.Kind == types.Void {
+			panic(&diag.Error{Msg: fmt.Sprintf("cannot bitcast %s to %s", from, to)})
+		}
+		if fromSize != to.Size {
+			panic(&diag.Error{Msg: fmt.Sprintf("cannot bitcast %s (%d bytes) to %s (%d bytes): sizes differ", from, fromSize, to, to.Size)})
+		}
+	}
+}
+
+// explicitCast は明示キャストの値を作る。
+//   - v1 `<T>x` と `bitcast<T>(x)`: 型ラベルの貼り替え (CastedValue)
+//   - `x as T`: 数値変換。拡張は元が符号付きなら符号拡張、縮小は下位バイト、同サイズはビットそのまま
+func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) ir.Operand {
+	from := ir.ValType(v)
+	h.checkCast(kind, from, to)
+	if kind == syntax.CastAs {
+		if from.Kind == types.Array {
+			return ir.NewPointeredArray(v, to)
+		}
+		if to.Size > from.Size && from.Signed {
+			newV := h.newTmp(to)
+			h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: newV, Src: []ir.Operand{v}})
+			return newV
+		}
+	}
+	return ir.NewCastedValue(v, to, 0)
 }
 
 // makeCompatible は互換型に変換する (キャストコード生成込み)。

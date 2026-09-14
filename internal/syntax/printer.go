@@ -33,7 +33,7 @@ func Format(src []byte, filename string) ([]byte, error) {
 
 // Print は構文木を整形して出力する。f.Comments の位置を使ってコメントを差し込む。
 func Print(f *File) []byte {
-	p := &printer{comments: f.Comments}
+	p := &printer{comments: f.Comments, version: f.Version}
 	if f.Version >= Version2 {
 		p.write(fmt.Sprintf("#fc %d", f.Version))
 		// ソースにプラグマ行があれば 1 行目として扱う (直後の空行を保つ)。
@@ -66,6 +66,7 @@ type printer struct {
 	lastByte  byte
 
 	afterComment bool // 直前に出力したのがコメント
+	version      int  // 印字する文法バージョン (型の形が違う)
 }
 
 // ---------------------------------------------------------------
@@ -634,10 +635,27 @@ func (p *printer) expr(e Expr) {
 		p.tokAt(e.OpPos, e.Op.String())
 		p.expr(e.X)
 	case *CastExpr:
-		p.tokAt(e.Lt, "<")
-		p.typeExpr(e.Type)
-		p.tokAt(e.Gt, ">")
-		p.expr(e.X)
+		switch e.Kind {
+		case CastAs:
+			p.expr(e.X)
+			p.space()
+			p.tokAt(e.As, "as")
+			p.space()
+			p.typeExpr(e.Type)
+		case CastBit:
+			p.tokAt(e.Bitcast, "bitcast")
+			p.tokAt(e.Lt, "<")
+			p.typeExpr(e.Type)
+			p.tokAt(e.Gt, ">")
+			p.tokAt(e.Lparen, "(")
+			p.expr(e.X)
+			p.tokAt(e.Rparen, ")")
+		default:
+			p.tokAt(e.Lt, "<")
+			p.typeExpr(e.Type)
+			p.tokAt(e.Gt, ">")
+			p.expr(e.X)
+		}
 	case *CallExpr:
 		p.expr(e.Fun)
 		p.tokAt(e.Lparen, "(")
@@ -711,7 +729,13 @@ func (p *printer) exprList(list []Expr, comma, close Pos) {
 // 型
 // ---------------------------------------------------------------
 
+// typeExpr は型を印字する。v2 は前置形 (`[4]*int`, `fn(int):void`)、v1 は後置形 (`int*[4]`, `void(int)`)。
+// AST は同じなので、印字する形はファイルのバージョンで決める (migrate はバージョンを変えるだけでよい)。
 func (p *printer) typeExpr(t TypeExpr) {
+	if p.version >= Version2 {
+		p.typeExprV2(t)
+		return
+	}
 	switch t := t.(type) {
 	case *NamedType:
 		p.ident(t.Name)
@@ -728,19 +752,49 @@ func (p *printer) typeExpr(t TypeExpr) {
 	case *FuncType:
 		p.typeExpr(t.Result)
 		p.tokAt(t.Lparen, "(")
-		for i, prm := range t.Params {
-			if i > 0 {
-				p.tok(",")
-				p.space()
-			}
-			if prm.Name != nil {
-				p.ident(prm.Name)
-				p.tok(":")
-			}
-			p.typeExpr(prm.Type)
-		}
+		p.params(t.Params)
 		p.tokAt(t.Rparen, ")")
 	default:
 		panic("unknown type")
+	}
+}
+
+func (p *printer) typeExprV2(t TypeExpr) {
+	switch t := t.(type) {
+	case *NamedType:
+		p.ident(t.Name)
+	case *ArrayType:
+		p.tokAt(t.Lbrack, "[")
+		if t.Len != nil {
+			p.expr(t.Len)
+		}
+		p.tokAt(t.Rbrack, "]")
+		p.typeExprV2(t.Elem)
+	case *PointerType:
+		p.tokAt(t.Star, "*")
+		p.typeExprV2(t.Elem)
+	case *FuncType:
+		p.tokAt(t.Fn, "fn")
+		p.tokAt(t.Lparen, "(")
+		p.params(t.Params)
+		p.tokAt(t.Rparen, ")")
+		p.tok(":")
+		p.typeExprV2(t.Result)
+	default:
+		panic("unknown type")
+	}
+}
+
+func (p *printer) params(params []*Param) {
+	for i, prm := range params {
+		if i > 0 {
+			p.tok(",")
+			p.space()
+		}
+		if prm.Name != nil {
+			p.ident(prm.Name)
+			p.tok(":")
+		}
+		p.typeExpr(prm.Type)
 	}
 }

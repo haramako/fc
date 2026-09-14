@@ -33,8 +33,8 @@ func runEmu(t *testing.T, body string) string {
 func TestBugGlobalPointerIndex(t *testing.T) {
 	t.Parallel()
 	// グローバルのポインタ変数への添字代入 (index+pset の融合がポインタを配列扱いしていた)
-	out := runEmu(t, `var buf:int*;
-var arr:int[8];
+	out := runEmu(t, `var buf:*int;
+var arr:[8]int;
 function main():void
 {
 	buf = arr;
@@ -87,14 +87,14 @@ func TestBugLocalArray(t *testing.T) {
 	// ローカル配列 (レジスタ領域に 2 バイトで置かれて隣の一時変数と重なっていた → フレームに置く)。
 	// 定数添字・変数添字・2 バイト添字・ポインタ経由・関数への受け渡し
 	out := runEmu(t, `use mem;
-function fill(p:int*, n:int):void
+function fill(p:*int, n:int):void
 {
 	var i:int;
 	for (i = 0; i < n; i++) {
 		p[i] = i + 40;
 	}
 }
-function sum(p:int*, n:int):int
+function sum(p:*int, n:int):int
 {
 	var s = 0;
 	var i:int;
@@ -105,7 +105,7 @@ function sum(p:int*, n:int):int
 }
 function main():void
 {
-	var la:int[4];
+	var la:[4]int;
 	la[0] = 7;
 	la[1] = 8;
 	la[2] = 9;
@@ -124,7 +124,7 @@ function main():void
 	la[i16] = 99;
 	var l1 = la[1];
 	printf("idx16 ", l1, "\n");
-	var p:int* = la;
+	var p:*int = la;
 	p[0] = 1;
 	l0 = la[0];
 	printf("ptr ", l0, "\n");
@@ -133,7 +133,7 @@ function main():void
 	fill(la, 4);
 	var s2 = sum(la, 4);
 	printf("call ", s1, " ", s2, "\n");
-	var big:int[20];
+	var big:[20]int;
 	big[19] = 77;
 	var b19 = big[19];
 	printf("big ", b19, "\n");

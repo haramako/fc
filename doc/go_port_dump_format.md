@@ -21,7 +21,7 @@ Ruby版(オラクル)の `tools/dumper.rb` が定義する形式。Go版はこ�
 | 文字列 | `"..."` バイト単位エスケープ: `\"` `\\` `\n`、0x20-0x7e はそのまま、その他は `\xNN`(大文字16進) |
 | 配列 | `(e1 e2 ...)` |
 | Hash | `{k1 v1 k2 v2 ...}` 挿入順 |
-| Type | `#"<to_s>"` 例: `#"uint8"` `#"uint8*"` `#"uint8[4]"` `#"fastcall uint8(uint8)"` |
+| Type | `#"<String()>"` 例: `#"uint8"` `#"*uint8"` `#"[4]uint8"` `#"fastcall fn(uint8):uint8"`（2026-09-14 から v2 の前置形。以前は `uint8*` `uint8[4]` `fastcall uint8(uint8)`） |
 
 ## AST ダンプ (`ast/**/*.ast`) — 廃止 (feature/v2 R0-2)
 

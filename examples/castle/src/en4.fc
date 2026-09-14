@@ -561,7 +561,7 @@ public function spider_process(i:int):void
 		}
 		gr_sprite2(x, y, spr + 2 * 4, pal | DIR_FLIP[dir]);
 	case 4: // 歩く
-		spider_walk(&foot_cell_idx, &dir, <sint*>&wait, reverse);
+		spider_walk(&foot_cell_idx, &dir, bitcast<*sint>(&wait), reverse);
 
 		if (dir == -1) {
 			//落ちる
@@ -618,7 +618,7 @@ const DIR_CELL_OFFSET = [-16, 1, 16, -1];
  *
  * □: foot, 1: next_upper, 2: next_foot
  */
-function spider_walk(p_foot_cell_idx:int*, p_dir:int*, p_wait:sint*, reverse:int):void
+function spider_walk(p_foot_cell_idx:*int, p_dir:*int, p_wait:*sint, reverse:int):void
 {
 	var dir = *p_dir;
 	var foot_cell_idx = *p_foot_cell_idx;

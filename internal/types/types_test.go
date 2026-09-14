@@ -30,23 +30,23 @@ func TestUniverse(t *testing.T) {
 	}
 
 	p := u.PointerTo(i8)
-	if p.String() != "uint8*" || p.Size != 2 || p.Base != i8 || p != u.PointerTo(i8) {
+	if p.String() != "*uint8" || p.Size != 2 || p.Base != i8 || p != u.PointerTo(i8) {
 		t.Errorf("pointer: %+v", p)
 	}
 	a := u.ArrayOf(u.IntType(2, false), 10)
-	if a.String() != "uint16[10]" || a.Size != 20 || a.Length != 10 {
+	if a.String() != "[10]uint16" || a.Size != 20 || a.Length != 10 {
 		t.Errorf("array: %+v", a)
 	}
 	au := u.ArrayOf(i8, -1)
-	if au.String() != "uint8[]" || au.Size != -1 || au.Length != -1 {
+	if au.String() != "[]uint8" || au.Size != -1 || au.Length != -1 {
 		t.Errorf("unsized array: %+v", au)
 	}
 	f := u.Func([]*Type{i8, i8}, p, false)
-	if f.String() != "uint8*(uint8,uint8)" || f.Size != 2 || f.Base != p || f.Fastcall() {
+	if f.String() != "fn(uint8,uint8):*uint8" || f.Size != 2 || f.Base != p || f.Fastcall() {
 		t.Errorf("func: %+v", f)
 	}
 	ff := u.Func(nil, u.Void(), true)
-	if ff.String() != "fastcall void()" || !ff.Fastcall() || ff == u.Func(nil, u.Void(), false) {
+	if ff.String() != "fastcall fn():void" || !ff.Fastcall() || ff == u.Func(nil, u.Void(), false) {
 		t.Errorf("fastcall func: %+v", ff)
 	}
 }

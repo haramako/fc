@@ -3,9 +3,9 @@ use * from unittest;
 
 include("character.chr");
 
-var array:int[10];
-const CONST:int[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-const add2 = ->int(a:int) {
+var array:[10]int;
+const CONST:[]int = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const add2 = ->fn(a:int):int {
 	return a + 2;
 };
 
@@ -60,17 +60,17 @@ function mul2(a:int):int
 	return a * 2;
 }
 
-const FUNC_TABLE:int(int)[] = [add1, mul2];
+const FUNC_TABLE:[]fn(int):int = [add1, mul2];
 
 function test_func_pointer():void
 {
-	var f:int(int) = add1;
+	var f:fn(int):int = add1;
 	assert_equal(f(10), 11, 'f()');
 	assert_equal(FUNC_TABLE[0](10), 11, 'FUNC_TABLE[0]()');
 	assert_equal(FUNC_TABLE[1](10), 20, 'FUNC_TABLE[1]()');
 
 	assert_equal(add2(1), 3, 'lambda');
-	assert_equal(->int(a:int) {
+	assert_equal(->fn(a:int):int {
 			return a + 2;
 		}(1), 3, 'lambda literal');
 }
@@ -79,7 +79,7 @@ function test_escape():void
 {
 	const STR = "\n\xff";
 	assert_equal(STR[0], 10, "escape n");
-	assert_equal(<uint>STR[1], 0xff, "escape x");
+	assert_equal(STR[1] as uint, 0xff, "escape x");
 }
 
 function segmented_function():int options(segment: "CODE")

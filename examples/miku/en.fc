@@ -7,22 +7,22 @@ use ppu;
 include("en.asm");
 
 const MAX = 16;
-var type:int[MAX];
-var x_:int[MAX];
-var y_:int[MAX];
-var p1_:int[MAX];
-var p2_:int[MAX];
-var p3_:int[MAX];
-var p4_:int[MAX];
+var type:[MAX]int;
+var x_:[MAX]int;
+var y_:[MAX]int;
+var p1_:[MAX]int;
+var p2_:[MAX]int;
+var p3_:[MAX]int;
+var p4_:[MAX]int;
 var wait:int;
 var now:int;
 
 const BUL_MAX = 32;
-var bul_type:int[BUL_MAX];
-var bul_x:int[BUL_MAX]; // フリーリストのnextとしても使用
-var bul_y:int[BUL_MAX];
-var bul_vx:sint8[BUL_MAX];
-var bul_vy:sint8[BUL_MAX];
+var bul_type:[BUL_MAX]int;
+var bul_x:[BUL_MAX]int; // フリーリストのnextとしても使用
+var bul_y:[BUL_MAX]int;
+var bul_vx:[BUL_MAX]sint8;
+var bul_vy:[BUL_MAX]sint8;
 var bul_idx:int;
 var bul_free:int; // フリーリストの先頭
 
@@ -220,17 +220,17 @@ function en_1_process(i:int):void
 
 const SPR_BILLY = 0;
 
-const BILLY_NORMAL:int[] = [0x80, 0x81, 0x82, 0x83,
+const BILLY_NORMAL:[]int = [0x80, 0x81, 0x82, 0x83,
 	0x90, 0x91, 0x92, 0x93,
 	0xA0, 0xA1, 0xa2, 0xa3,
 	0xb0, 0xb1, 0xb2, 0xb3];
 
-const BILLY_SMOKE:int[] = [0x84, 0x85, 0x86, 0x87,
+const BILLY_SMOKE:[]int = [0x84, 0x85, 0x86, 0x87,
 	0x94, 0x95, 0x96, 0x97,
 	0xa4, 0xa5, 0xa6, 0xa7,
 	0xb4, 0xb5, 0xb6, 0xb7];
 
-const BANG:int[] = [0x88, 0x89, 0x98, 0x99,
+const BANG:[]int = [0x88, 0x89, 0x98, 0x99,
 	0x8a, 0x8b, 0x9a, 0x9b,
 	0x8c, 0x8d, 0x9c, 0x9d,
 	0x8e, 0x8f, 0x9e, 0x9f,
@@ -322,7 +322,7 @@ function bang(cx:int, cy:int, n:int):void
 	}
 }
 
-function gr_print(cx:int, cy:int, data:int8*, width:int, height:int):void
+function gr_print(cx:int, cy:int, data:*int8, width:int, height:int):void
 {
 	var y:int;
 	var i = 0;
@@ -332,4 +332,4 @@ function gr_print(cx:int, cy:int, data:int8*, width:int, height:int):void
 	}
 }
 
-const PROCESS:void(int)[] = [none_process, en_1_process, billy_process];
+const PROCESS:[]fn(int):void = [none_process, en_1_process, billy_process];

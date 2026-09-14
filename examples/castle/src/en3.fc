@@ -417,9 +417,9 @@ public function fish_w_process(i:int):void
 	switch (stat) {
 	case 0:
 		if (dir == DIR_LEFT) {
-			x -= (<sint8>giff + speed) / 16;
+			x -= (giff + speed as sint8) / 16;
 		} else {
-			x += (<sint8>giff + speed) / 16;
+			x += (giff + speed as sint8) / 16;
 		}
 
 		hit = check_block(&x, &y);
@@ -441,7 +441,7 @@ public function fish_w_process(i:int):void
 	case 1: // 気付いた！
 		count += 1;
 		vx = math.sin(count * 8) / 32;
-		vx = (<uint8>vx) * (<uint8>DIR_VX[dir]);
+		vx = (vx as uint8) * (DIR_VX[dir] as uint8);
 		if (count > 32) {
 			stat = 2;
 			count = 0;
@@ -470,7 +470,7 @@ public function fish_w_process(i:int):void
 	case 3: // 気付いた！
 		count += 1;
 		vx = math.sin(count * 8) / 32;
-		vx = (<uint8>vx) * (<uint8>DIR_VX[dir]);
+		vx = (vx as uint8) * (DIR_VX[dir] as uint8);
 		if (count > 32) {
 			stat = 0;
 			count = 60;

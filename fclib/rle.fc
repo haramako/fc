@@ -1,4 +1,4 @@
 #fc 2
 options(bank: -1);
 include("rle.asm");
-public function unpack(dest:int*, src:int*):int16;
+public function unpack(dest:*int, src:*int):int16;

@@ -307,7 +307,7 @@ function draw_coin():void
 	}
 }
 
-function text_print_num(p:int*, n:int):int
+function text_print_num(p:*int, n:int):int
 {
 	var i:int;
 	for (i = 0; i < 3; i++) {
@@ -318,7 +318,7 @@ function text_print_num(p:int*, n:int):int
 	return i;
 }
 
-public function text_print(p:int*, str:int*):int options(segment: "game")
+public function text_print(p:*int, str:*int):int options(segment: "game")
 {
 	var i = 0;
 	var pi = 0;
@@ -338,7 +338,7 @@ public function text_print(p:int*, str:int*):int options(segment: "game")
 	return 0;
 }
 
-public function text_print_width(p:int*, str:int*, width:int):int options(segment: "game")
+public function text_print_width(p:*int, str:*int, width:int):int options(segment: "game")
 {
 	var i:uint8 = 0;
 	var pi:uint8 = 0;
@@ -550,7 +550,7 @@ function map_init():void
 	}
 
 	// タイルのコピー
-	var buf:int* = bg.data_buf;
+	var buf:*int = bg.data_buf;
 	buf += 2048 - 16 * 18; // bgが使ってる領域と被らないようにずらす
 	fs.copy(buf, fs.MINIMAP_BG);
 

@@ -39,7 +39,7 @@ function test_read_vln16():void
 	assert_equal(lzw.read_vln16(), 0b1000000000000001, "read_vln16(1)");
 }
 
-var buf:int[256];
+var buf:[256]int;
 function test_unpack():void
 {
 	const PACKED = [12, 82, 44, 182, 203, 101, 190, 64, 51, 40, 200, 145, 37, 192];

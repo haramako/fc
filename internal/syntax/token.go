@@ -79,6 +79,8 @@ const (
 	KwFrom
 	KwPublic
 	KwPrivate
+	KwFn      // fn (v2: 関数型)
+	KwBitcast // bitcast (v2)
 
 	// 記号 (2 文字)
 	Leq    // <=
@@ -128,6 +130,7 @@ var kindNames = [...]string{
 	KwBreak: "break", KwContinue: "continue", KwIncbin: "incbin",
 	KwSwitch: "switch", KwCase: "case", KwDefault: "default",
 	KwUse: "use", KwAs: "as", KwFrom: "from", KwPublic: "public", KwPrivate: "private",
+	KwFn: "fn", KwBitcast: "bitcast",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
 	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
 	LParen: "(", RParen: ")", LBrace: "{", RBrace: "}", Semicolon: ";", Colon: ":",
@@ -145,7 +148,7 @@ func (k Kind) String() string {
 }
 
 // IsKeyword はキーワードかを返す。
-func (k Kind) IsKeyword() bool { return k >= KwInclude && k <= KwPrivate }
+func (k Kind) IsKeyword() bool { return k >= KwInclude && k <= KwBitcast }
 
 // Token は 1 トークン。Pos は先頭、End は末尾の次の位置。
 type Token struct {

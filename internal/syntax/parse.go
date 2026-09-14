@@ -38,6 +38,7 @@ func Parse(src []byte, filename string) (*File, error) {
 	return f, nil
 }
 
+
 // checkVersion は文法バージョンごとの受理範囲を検査する (doc/v2_grammar.md §4.1)。
 // 文法ファイルは v1 ∪ v2 のスーパーセットなので、「そのバージョンに無い構文」をここで落とす。
 func checkVersion(f *File) error {
@@ -45,6 +46,14 @@ func checkVersion(f *File) error {
 	fail := func(pos Pos, msg string) {
 		if err == nil {
 			err = &Error{Filename: f.Filename, Pos: pos, Msg: msg}
+		}
+	}
+	checkTypeForm := func(prefix bool, pos Pos) {
+		if f.Version >= Version2 && !prefix {
+			fail(pos, "postfix types (int*, int[4], void(int)) are written prefix in fc 2 (*int, [4]int, fn(int):void)")
+		}
+		if f.Version < Version2 && prefix {
+			fail(pos, "prefix types (*int, [4]int, fn(int):void) require fc 2")
 		}
 	}
 	Inspect(f, func(n Node) bool {
@@ -76,6 +85,19 @@ func checkVersion(f *File) error {
 			}
 			if f.Version < Version2 && !n.IsV1() {
 				fail(n.For, "C-style `for (init; cond; step)` requires fc 2")
+			}
+		case *ArrayType:
+			checkTypeForm(n.IsPrefix(), n.Lbrack)
+		case *PointerType:
+			checkTypeForm(n.IsPrefix(), n.Star)
+		case *FuncType:
+			checkTypeForm(n.IsPrefix(), n.Lparen)
+		case *CastExpr:
+			if f.Version >= Version2 && n.Kind == CastLegacy {
+				fail(n.Lt, "`<T>x` is written `x as T` (numeric conversion) or `bitcast<T>(x)` (bit reinterpretation) in fc 2")
+			}
+			if f.Version < Version2 && n.Kind != CastLegacy {
+				fail(n.Pos(), "`as` / `bitcast` require fc 2")
 			}
 		case *ArrayLit:
 			if f.Version < Version2 && n.Comma.IsValid() {
@@ -140,7 +162,7 @@ var kindToYacc = map[Kind]int{
 	KwLoop: kLOOP, KwWhile: kWHILE, KwFor: kFOR, KwReturn: kRETURN,
 	KwBreak: kBREAK, KwContinue: kCONTINUE, KwIncbin: kINCBIN,
 	KwSwitch: kSWITCH, KwCase: kCASE, KwDefault: kDEFAULT,
-	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE,
+	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwBitcast: kBITCAST,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
 	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
 	LParen: '(', RParen: ')', LBrace: '{', RBrace: '}', Semicolon: ';', Colon: ':',

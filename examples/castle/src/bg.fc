@@ -9,33 +9,33 @@ public use mem;
 use en;
 use en_vtbl;
 
-public var data:int[256] options(segment: "BSS_EX");
-public var enemy:int[256] options(segment: "BSS_EX");
-public var data_buf:int[2048] options(segment: "BSS_EX");
+public var data:[256]int options(segment: "BSS_EX");
+public var enemy:[256]int options(segment: "BSS_EX");
+public var data_buf:[2048]int options(segment: "BSS_EX");
 public var enemy_num:int;
 
 public var buf_idx:int;
-public var buf:int[256] options(segment: "BSS_EX");
-public var pal:int[64] options(segment: "BSS_EX");
+public var buf:[256]int options(segment: "BSS_EX");
+public var pal:[64]int options(segment: "BSS_EX");
 public var blank_cell:int; // 空白のセル番号(空と黒を使い分けるため)
 public var blank_cell_by_door:int; // ドアが空白に置き換えるセル番号(水と黒を使い分けるため)
 
-public var pallet:int[32];
+public var pallet:[32]int;
 
 public var cur_area:int;
-public var area_slot:int[2];
+public var area_slot:[2]int;
 
-public var tile_pal:int[64] options(segment: "BSS_EX");
+public var tile_pal:[64]int options(segment: "BSS_EX");
 public var in_dark:int;
 public var area_type:int;
 public var area_water_y:int; // 水面の高さ（fishの動きに影響)
 public var area_subtext:int; // 現在のエリアのエリア名表示ID
 public var area_flags:int; // エリアのビットフラグ(1:キャンドル)
 
-public var tile_type:int[64] options(segment: "BSS_EX");
-var _padding_for_align:int[64] options(segment: "BSS_EX"); // 256byte alignのため
+public var tile_type:[64]int options(segment: "BSS_EX");
+var _padding_for_align:[64]int options(segment: "BSS_EX"); // 256byte alignのため
 
-public const SPRITE_PALETTE:int[] = incbin("../res/images/sprite.nespal");
+public const SPRITE_PALETTE:[]int = incbin("../res/images/sprite.nespal");
 
 public const TYPE_WALL = 1 << 0;
 public const TYPE_FLOOR = 1 << 1;
@@ -54,7 +54,7 @@ public const TYPE_SPIKE_GROUND = 1 << 6; // 下とげ
 // 2 WATER : 水
 // 4
 // 8
-public const TILE_TYPE:int[] = [
+public const TILE_TYPE:[]int = [
 	// 0: 共通
 	0, 0, 4, 4, 0, 0, 0, 0,
 	0, 1, 3, 0x13, 0x10, 0, 0, 0,
@@ -262,7 +262,7 @@ public function update_palette(in_ppu_lock:int):void
 	mmc3.set_pbank(1, old_pbank);
 }
 
-public function pal_down(pal:int*, size:int, pow:int):void options(fastcall: true)
+public function pal_down(pal:*int, size:int, pow:int):void options(fastcall: true)
 {
 	var i:int;
 	var n = pow * 16;
@@ -278,7 +278,7 @@ public function pal_down(pal:int*, size:int, pow:int):void options(fastcall: tru
 	}
 }
 
-public function pal_up(pal:int*, size:int, pow:int):void options(fastcall: true)
+public function pal_up(pal:*int, size:int, pow:int):void options(fastcall: true)
 {
 	var i:int;
 	var n = pow * 16;
