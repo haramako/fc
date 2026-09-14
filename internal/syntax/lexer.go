@@ -221,11 +221,13 @@ func (l *Lexer) Next() (Token, error) {
 
 	// 数値 ( 旧レキサの -? は記号が先に消費されるため到達しない )
 	if isDigit(rest[0]) {
-		if n, v, ok := scanNumber(rest); ok {
-			t := tok(Number, n)
-			t.Int = v
-			return t, nil
+		n, v, msg := scanNumber(rest)
+		if msg != "" {
+			return Token{}, &Error{Filename: l.filename, Pos: start, Msg: msg}
 		}
+		t := tok(Number, n)
+		t.Int = v
+		return t, nil
 	}
 
 	// 識別子 / キーワード
@@ -241,7 +243,10 @@ func (l *Lexer) Next() (Token, error) {
 	}
 
 	// 文字列
-	if n, s, ok := scanString(rest); ok {
+	if n, s, msg := scanString(rest); n > 0 {
+		if msg != "" {
+			return Token{}, &Error{Filename: l.filename, Pos: start, Msg: msg}
+		}
 		t := tok(String, n)
 		t.Str = s
 		return t, nil
@@ -250,32 +255,45 @@ func (l *Lexer) Next() (Token, error) {
 	return Token{}, &Error{Filename: l.filename, Pos: start, Msg: fmt.Sprintf("invalid token at %d", start.Line)}
 }
 
-// scanNumber は数値リテラルを読む。返り値は消費バイト数と値。
-// 旧レキサの正規表現 ( ^0[xX](\w+) | ^0[bB](\d+) | ^\d+ ) と Ruby の String#to_i(base) の
-// 部分パース挙動を保存する: 無効な桁は値としては無視されるが文字としては消費される
-// (例: `0xZZ` → 0、`0b2` → 0、`12ab` → 12 の後に識別子 `ab`)。
-func scanNumber(s []byte) (n int, val int, ok bool) {
-	if len(s) >= 3 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X') && isWord(s[2]) {
-		n = 2
-		for n < len(s) && isWord(s[n]) {
-			n++
-		}
-		return n, rubyToI(s[2:n], 16), true
+// scanNumber は数値リテラルを読む。返り値は消費バイト数と値 (msg が非空ならエラー)。
+//
+//	0x[0-9a-fA-F_]+   16 進    0b[01_]+   2 進    [0-9_]+   10 進
+//
+// `_` は桁の間の区切りとして許す (`1_000`, `0xab_cd`)。基数に合わない桁 (`0b2`, `0xZZ`) はエラー
+// (v1 の Ruby 版は無効な桁を黙って 0 扱いにしていた)。`12ab` は 12 の後に識別子 ab (C と同じく分かれる)。
+func scanNumber(s []byte) (n int, val int, msg string) {
+	base := 10
+	if len(s) >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X') {
+		base, n = 16, 2
+	} else if len(s) >= 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B') {
+		base, n = 2, 2
 	}
-	if len(s) >= 3 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B') && isDigit(s[2]) {
-		n = 2
-		for n < len(s) && isDigit(s[n]) {
+	digits := 0
+	for n < len(s) {
+		c := s[n]
+		if c == '_' {
+			// 桁の間だけ区切りとして許す
+			if digits == 0 || n+1 >= len(s) || digitVal(s[n+1], base) < 0 {
+				return n, 0, "invalid digit '_' in numeric literal (allowed only between digits)"
+			}
 			n++
+			continue
 		}
-		return n, rubyToI(s[2:n], 2), true
-	}
-	for n < len(s) && isDigit(s[n]) {
+		d := digitVal(c, base)
+		if d < 0 {
+			if base != 10 && isWord(c) {
+				return n, 0, fmt.Sprintf("invalid digit %q in base %d literal", c, base)
+			}
+			break
+		}
+		val = val*base + d
+		digits++
 		n++
 	}
-	if n == 0 {
-		return 0, 0, false
+	if base != 10 && digits == 0 {
+		return n, 0, fmt.Sprintf("base %d literal needs digits", base)
 	}
-	return n, rubyToI(s[:n], 10), true
+	return n, val, ""
 }
 
 // rubyToI は Ruby の String#to_i(base) 相当 (符号なし部分文字列用)。
@@ -326,10 +344,11 @@ func digitVal(c byte, base int) int {
 // scanString は文字列リテラルを読む。返り値は消費バイト数と解釈後の値。
 // 形式は旧レキサと同一: `"""..."""` (複数行・エスケープ解釈)、`"..."` (エスケープ解釈)、
 // `'...'` (エスケープ解釈なし)。
-func scanString(s []byte) (n int, val string, ok bool) {
+func scanString(s []byte) (n int, val string, msg string) {
 	if bytes.HasPrefix(s, []byte(`"""`)) {
 		if idx := bytes.Index(s[3:], []byte(`"""`)); idx >= 0 {
-			return 3 + idx + 3, unescape(s[3 : 3+idx]), true
+			val, msg = unescape(s[3 : 3+idx])
+			return 3 + idx + 3, val, msg
 		}
 		// 閉じがなければ "" としての解釈にフォールバック
 	}
@@ -341,13 +360,14 @@ func scanString(s []byte) (n int, val string, ok bool) {
 			c := s[i]
 			if c == q {
 				if q == '"' {
-					return i + 1, unescape(s[1:i]), true
+					val, msg = unescape(s[1:i])
+					return i + 1, val, msg
 				}
-				return i + 1, string(s[1:i]), true
+				return i + 1, string(s[1:i]), ""
 			}
 			if c == '\\' {
 				if i+1 >= len(s) || s[i+1] == '\n' {
-					return 0, "", false
+					return 0, "", ""
 				}
 				i += 2
 				continue
@@ -355,12 +375,12 @@ func scanString(s []byte) (n int, val string, ok bool) {
 			i++
 		}
 	}
-	return 0, "", false
+	return 0, "", ""
 }
 
-// unescape は gsub(/\\n|\\x../) 相当のエスケープ処理。
-// \n → 改行、\xNN → バイト (N は改行以外の任意 2 文字、Ruby to_i(16) 準拠で不正なら 0)。それ以外はそのまま。
-func unescape(s []byte) string {
+// unescape はエスケープを解釈する。\n → 改行、\xNN → バイト (NN は 16 進 2 桁。それ以外はエラー)。
+// 他の `\` はそのまま残す (v1 の Ruby 版と同じ)。
+func unescape(s []byte) (string, string) {
 	var out []byte
 	i := 0
 	for i < len(s) {
@@ -370,8 +390,11 @@ func unescape(s []byte) string {
 				i += 2
 				continue
 			}
-			if s[i+1] == 'x' && i+3 < len(s) && s[i+2] != '\n' && s[i+3] != '\n' {
-				out = append(out, byte(rubyToI(s[i+2:i+4], 16)))
+			if s[i+1] == 'x' {
+				if i+3 >= len(s) || digitVal(s[i+2], 16) < 0 || digitVal(s[i+3], 16) < 0 {
+					return "", "invalid \\x escape (needs 2 hex digits)"
+				}
+				out = append(out, byte(digitVal(s[i+2], 16)*16+digitVal(s[i+3], 16)))
 				i += 4
 				continue
 			}
@@ -379,5 +402,5 @@ func unescape(s []byte) string {
 		out = append(out, s[i])
 		i++
 	}
-	return string(out)
+	return string(out), ""
 }

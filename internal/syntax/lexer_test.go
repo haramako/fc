@@ -2,6 +2,7 @@ package syntax
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -75,31 +76,22 @@ func TestTokenize(t *testing.T) {
 				{KwPrivate, "private"}}},
 		{"identifiers", "foo _bar baz9 If Function",
 			[]tok{{Identifier, "foo"}, {Identifier, "_bar"}, {Identifier, "baz9"}, {Identifier, "If"}, {Identifier, "Function"}}},
-		// 10 進は \d+ のみ。`1_000` は 1 + 識別子 `_000` (16 進の \w+ とは異なる)
 		{"decimal", "0 42 1_000 007",
-			[]tok{{Number, "0"}, {Number, "42"}, {Number, "1"}, {Identifier, "_000"}, {Number, "7"}}},
+			[]tok{{Number, "0"}, {Number, "42"}, {Number, "1000"}, {Number, "7"}}},
 		{"hex", "0x10 0XfF 0xab_cd",
 			[]tok{{Number, "16"}, {Number, "255"}, {Number, "43981"}}},
 		{"binary", "0b101 0B11",
 			[]tok{{Number, "5"}, {Number, "3"}}},
 		{"negative is separate token", "-5 -0x10",
 			[]tok{{Minus, "-"}, {Number, "5"}, {Minus, "-"}, {Number, "16"}}},
-		// Ruby 由来の癖 (保存する): 無効な桁は値として無視されるが文字としては消費される
-		{"quirk: 0b2 is accepted as 0", "0b2 0b12",
-			[]tok{{Number, "0"}, {Number, "1"}}},
-		{"quirk: 0xZZ is 0, 0x1g consumes g", "0xZZ 0x1g",
-			[]tok{{Number, "0"}, {Number, "1"}}},
-		{"quirk: 12ab splits", "12ab",
+		{"12ab splits", "12ab",
 			[]tok{{Number, "12"}, {Identifier, "ab"}}},
-		{"quirk: 0b without digit", "0bx",
-			[]tok{{Number, "0"}, {Identifier, "bx"}}},
-		{"quirk: underscore rules (hex)", "0x1__0 0x_1 0x1_ 0x1_f",
-			// \w+ で全部消費し、to_i(16) は `_` を「前後が数字」のときだけ区切りとして許す
-			[]tok{{Number, "1"}, {Number, "0"}, {Number, "1"}, {Number, "31"}}},
+		{"underscore between digits", "0x1_f 1_2_3",
+			[]tok{{Number, "31"}, {Number, "123"}}},
 		{"dq string", `"abc" "a\nb" "\x41\x4a" "\t\q" ""`,
 			[]tok{{String, "abc"}, {String, "a\nb"}, {String, "AJ"}, {String, `\t\q`}, {String, ""}}},
-		{"quirk: \\xZZ is 0, \\x with one hex digit", `"\xZZ" "\x4Z"`,
-			[]tok{{String, "\x00"}, {String, "\x04"}}},
+		{"other backslashes are kept", `"\t\q"`,
+			[]tok{{String, `\t\q`}}},
 		{"dq string with raw newline", "\"a\nb\"",
 			[]tok{{String, "a\nb"}}},
 		{"sq string (no escape)", `'abc' 'a\nb' 'x\'y'`,
@@ -217,5 +209,27 @@ func TestKindString(t *testing.T) {
 	}
 	if !KwVar.IsKeyword() || Identifier.IsKeyword() || Leq.IsKeyword() {
 		t.Error("IsKeyword")
+	}
+}
+
+// TestLexerErrors: v1 の Ruby 版が黙って通していた不正なリテラルはエラーにする (doc/v2_grammar.md §3.9)。
+func TestLexerErrors(t *testing.T) {
+	cases := []struct{ src, want string }{
+		{"0b2", "invalid digit '2' in base 2 literal"},
+		{"0b12", "invalid digit '2' in base 2 literal"},
+		{"0xZZ", "invalid digit 'Z' in base 16 literal"},
+		{"0x1g", "invalid digit 'g' in base 16 literal"},
+		{"0bx", "invalid digit 'x' in base 2 literal"},
+		{"0x", "base 16 literal needs digits"},
+		{"0x1__0", "invalid digit '_'"},
+		{`"\xZZ"`, `invalid \x escape`},
+		{`"\x4Z"`, `invalid \x escape`},
+		{`"\x4"`, `invalid \x escape`},
+	}
+	for _, c := range cases {
+		_, _, err := Tokenize([]byte(c.src), "t.fc")
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: got %v, want /%s/", c.src, err, c.want)
+		}
 	}
 }
