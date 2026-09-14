@@ -52,6 +52,20 @@ type Result = driver.Result
 // Error はコンパイルエラー (位置付き)。外部コマンド (ca65 / ld65) の失敗は *CommandError。
 type Error = diag.Error
 
+// Warning は警告 (位置付き)。Result.Warnings / Check で返る。
+type Warning = diag.Warning
+
+// CheckOptions は Check の設定。
+type CheckOptions struct {
+	Target string // TargetEmu (既定) / TargetNES
+	Dir    string // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
+}
+
+// Check は src から始まるプログラムを検査する (ファイルは書かない)。警告を返し、エラーは *Error。
+func (c *Compiler) Check(src string, opt CheckOptions) ([]Warning, error) {
+	return c.c.Check(src, &driver.CheckOptions{Target: opt.Target, Dir: opt.Dir})
+}
+
 // CommandError は外部コマンドの失敗。
 type CommandError = driver.CommandError
 

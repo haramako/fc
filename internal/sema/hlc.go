@@ -434,6 +434,11 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				ref, _ := h.resolveFile(filename)
 				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", ref)})
 			}
+			if filename == "macro.rb" {
+				h.warn("include(%q): Ruby macros are deprecated; in fc 2 use `const _T = textmap(\"...\")` (fcc migrate --textmap)", filename)
+			} else {
+				h.warn("include(%q) is no longer needed (printf / unittest_run_tests / cos are built in); remove it or run fcc migrate", filename)
+			}
 			reg(h)
 		case "chr":
 			ref, _ := h.resolveFile(filename)
@@ -1318,6 +1323,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		panic(fmt.Sprintf("unknown expression kind %d", e.kind))
 	}
 	return r, leftValue
+}
+
+// warn は警告を記録する (位置は処理中の文/式)。
+func (h *Hlc) warn(format string, args ...any) {
+	h.prog.Warnings = append(h.prog.Warnings, diag.Warning{Msg: fmt.Sprintf(format, args...), Pos: h.curPos})
 }
 
 func (h *Hlc) emit(op *ir.Op) {

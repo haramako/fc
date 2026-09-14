@@ -22,6 +22,12 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Msg }
 
+// Warning は警告 (ビルドは続く)。Error と同じく位置付き。
+type Warning struct {
+	Msg string
+	Pos syntax.Position
+}
+
 // Errorf は書式付きで Error を作る。
 func Errorf(format string, args ...any) *Error {
 	return &Error{Msg: fmt.Sprintf(format, args...)}

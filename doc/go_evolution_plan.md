@@ -90,7 +90,10 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 - [x] `panic(*CompileError)`+recover を境界まで整理: パッケージ外は `error`、 ✅ R2 (`diag.Error`、回復点は sema.CompileModule/CompileBodies と codegen.Compile)
       内部は panic を許容するなら回復点を `Compile()` 1箇所に明文化
 - [x] エラーに正確な位置(file:line:col)を必ず付与（R1の位置情報で実現） ✅ R2 (+ 2026-09-12 に `ir.Op.Pos` でコード生成時のエラーも式の位置に)
-- [ ] **複数エラー報告**: 文単位でリカバリして最初の1個で止めない（**未着手**。R2 では「最初のエラー以降の挙動が変わる」ため除外。`fcc check` と一緒に）
+- [x] 警告の仕組みと `fcc check`（2026-09-14）: `diag.Warning`、`syntax.Lint`（`a & b == c`、v1 の for 内 `continue`、
+      v1 の switch 内 `break`）、sema の警告（v1 の `include("*.rb")`）。`Result.Warnings` / `fc.Check`。CLI は
+      `file:line:col: warning: msg` を標準エラーに出す
+- [ ] **複数エラー報告**: 文単位でリカバリして最初の1個で止めない（**未着手**。R2 では「最初のエラー以降の挙動が変わる」ため除外）
 - [ ] メッセージ文言の改善（**未着手**。`" is not pointer"` のような Ruby 由来の欠損を修正。
       errors.fc の正規表現は緩いので大半は互換のまま改善可能）
 - [x] CLI出力の整形（`file:line:col: error: ...` 形式、TTYなら色付け） ✅ `file:line:col: error: msg`。TTY の色付けは未実装
@@ -131,7 +134,7 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 | 項目 | 状態 | 確認内容 |
 |---|---|---|
 | `//` の後に何もないとエラー | **修正済み** | R1-a の新レキサ |
-| `&` と `==` の優先順位 | 仕様（C と同じで `==` が強い） | `fcc check` で括弧なしの `a & b == c` を警告する候補 |
+| `&` と `==` の優先順位 | 仕様（C と同じで `==` が強い） | `fcc check` / ビルド時に括弧なしの `a & b == c` を警告する（2026-09-14）。**castle に 8 箇所ある**（en1.fc:238, en3.fc:143 ×2, en4.fc:542, en6.fc:302, en6.fc:364, my_process.fc:761 ×2。`ct & bg.TYPE_WALL != 0` は `ct & 1` になっている → 要手動確認） |
 | ローカル配列がだめ | **修正済み**（2026-09-14） | `var la:int[4]` が `L+0..3` に置かれるのに、添字計算の一時ポインタが `L+2..3` に割り付けられて配列を壊す（`la[2]`/`la[3]` が化ける。グローバル配列は正常）。レジスタ割付が配列サイズを見ていない（memo.txt「indexなどのsize倍する処理」） |
 | グローバル `var buf:int*; buf[i] = 0;` の pset | **修正済み**（2026-09-14） | `panic: index_pset with non-array`（ローカル変数なら OK） |
 | `c == 32;` の式文 | **修正済み**（2026-09-14） | `panic: invalid location none of {$N}`（test_bug.fc の既知バグと同じ経路。結果を使わない比較の tmp） |

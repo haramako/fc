@@ -30,6 +30,8 @@ type Program struct {
 
 	// Sources はモジュール id → 読み込んだソース (fcc migrate / ツール用。Loader が登録する)
 	Sources map[string]*Source
+	// Warnings は意味解析で見つけた警告 (出現順)
+	Warnings []diag.Warning
 
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体

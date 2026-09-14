@@ -4,6 +4,7 @@ package driver
 // 小さなプログラムを emu で実行して出力を見る。
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,5 +143,32 @@ function main():void
 	want := "const 7 10\nvar 22 23\nidx16 99\nptr 1\ncall 12 166\nbig 77\n"
 	if out != want {
 		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
+}
+
+// TestCheckWarnings: fcc check / ビルド結果の警告 (構文検査 + v1 の include("*.rb"))。
+func TestCheckWarnings(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := "use * from stdio;\ninclude(\"stdio.rb\");\nfunction main():void\n{\n\tvar a = 1;\n\tif (a & 2 == 0) {}\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	c := NewCompiler(absRepoRoot)
+	ws, err := c.Check("t.fc", &CheckOptions{Dir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ws) != 2 || !strings.Contains(ws[0].Msg, "no longer needed") || ws[0].Pos.Line != 2 ||
+		!strings.Contains(ws[1].Msg, "binds looser") || ws[1].Pos.Line != 6 {
+		t.Errorf("warnings: %+v", ws)
+	}
+	// Build の結果にも同じ警告が付く
+	res, err := c.BuildContext(context.Background(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Warnings) != 2 {
+		t.Errorf("build warnings: %+v", res.Warnings)
 	}
 }

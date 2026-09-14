@@ -57,11 +57,12 @@ type BuildOptions struct {
 
 // Result はビルドの結果。
 type Result struct {
-	ExitCode int      // Run 指定時のプログラムの終了コード (それ以外は 0)
-	Out      string   // 出力ファイル (CompileOnly なら "")
-	MapFile  string   // ld65 のマップファイル (CompileOnly なら "")
-	Objects  []string // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
-	BuildDir string   // 中間生成物ディレクトリ
+	ExitCode int            // Run 指定時のプログラムの終了コード (それ以外は 0)
+	Out      string         // 出力ファイル (CompileOnly なら "")
+	MapFile  string         // ld65 のマップファイル (CompileOnly なら "")
+	Objects  []string       // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
+	BuildDir string         // 中間生成物ディレクトリ
+	Warnings []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
 }
 
 type Compiler struct {
@@ -166,6 +167,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		return nil, cerr
 	}
 	c.prog = prog
+	result.Warnings = collectWarnings(prog)
 
 	// compile2 (中間コード -> アセンブラファイル)
 	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
