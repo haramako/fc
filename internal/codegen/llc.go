@@ -515,9 +515,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				// 調査用: 符号付き比較の場所を列挙する
 				lit0, ok0 := ir.ValIntLiteral(op.In(0))
 				lit1, ok1 := ir.ValIntLiteral(op.In(1))
-				fmt.Fprintf(os.Stderr, "SIGNED_LT %s mixed=%v bigliteral=%v %s < %s\n", op.Pos,
+				fmt.Fprintf(os.Stderr, "SIGNED_LT %s mixed=%v bigliteral=%v %s:%s < %s:%s cond=%v\n", op.Pos,
 					ir.ValType(op.In(0)).Signed != ir.ValType(op.In(1)).Signed, ok0 && lit0 >= 128 || ok1 && lit1 >= 128,
-					ir.OperandString(op.In(0)), ir.OperandString(op.In(1)))
+					ir.OperandString(op.In(0)), ir.ValType(op.In(0)), ir.OperandString(op.In(1)), ir.ValType(op.In(1)),
+					ir.ValLocation(op.Dst) == ir.LocCond)
 			}
 			if lit, ok := ir.ValIntLiteral(op.In(1)); signed && ok && lit == 0 {
 				// a < 0 (符号付き) は a の最上位バイトの符号ビットそのもの

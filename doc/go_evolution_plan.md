@@ -148,7 +148,7 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 | `c == 32;` の式文 | **修正済み**（2026-09-14） | `panic: invalid location none of {$N}`（test_bug.fc の既知バグと同じ経路。結果を使わない比較の tmp） |
 | void 関数を `if` に入れる | **エラー化**（2026-09-14: "expression has no value (void)"） | `panic: ValLocation: invalid value <nil>` |
 | `for` で `continue` がインデックスを進めない | **v2 で解消**（2026-09-14） | v2 の C 型 `for (init; cond; step)` では `continue` が step に飛ぶ。v1 の `for (i, from, to)` は互換のため癖を残す |
-| `var x:sint; x > 0` が符号なし比較 | **修正済み**（2026-09-14、`lt` の書き直し） | 検証対象は castle_signed_compare_sites.txt |
+| `var x:sint; x > 0` が符号なし比較 | **修正済み**（2026-09-14、`lt` の書き直し）。castle の 86 箇所を検証済み（2026-09-15、castle_signed_compare_sites.txt）: 挙動が変わるのは en6.fc:599 の 1 件（`(height * 8) as sint` が 128 で負に折り返す滝。要修正） | 旧は if 条件では N フラグ（オーバーフロー未補正）、`&&`/`\|\|` の項では左辺リテラルだと符号なし |
 | `\|\|` で両方 false なのに then | **修正済み**（`lt` 符号バグの現れだった） | `vy > 0 \|\| idx == -1` の `vy:sint = -1` が符号なし比較で真になっていた |
 | 帰り値がある関数で `return` なし | **修正済み**（2026-09-14、コンパイルエラー） | 終端文の規則。v1 は黙って通し、実行すると暴走していた |
 | switch の case 重複 | **修正済み**（2026-09-14、コンパイルエラー `duplicate case value N`） | 先勝ちで黙って通っていた |

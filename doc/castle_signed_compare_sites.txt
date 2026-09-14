@@ -1,5 +1,33 @@
 # castle / fclib の符号付き比較の一覧 (2026-09-14、lt 符号バグ修正の手動検証用)
 #
+# ---- 検証結果 (2026-09-15、旧コンパイラ df1eea5^ と現行で小プログラムを実行して確認) ----
+#
+# 旧コンパイラの実際の挙動 (regalloc は両辺の符号を見て N フラグを選び、codegen は左辺だけを見ていた):
+#   - if / while の条件 (cond=true): どちらかが符号付きなら `cmp` の N フラグ = (a-b) mod 256 の符号。
+#     オーバーフロー補正が無いので |a-b| >= 128 のときだけ誤る (それ以外は正しい)
+#   - 値として使う比較 (cond=false: `&&` / `||` の項、代入): 左辺が符号なし (リテラル含む) なら符号なし比較
+#     → `vy > 0 || ...` は vy < 0 で真 (オーナーが踏んだ `||` のバグ)。左辺が符号付きなら N フラグ (上と同じ)
+#
+# 移行後の castle (C:/Work/castle, 86 箇所、全部 1 バイト) を分類した結果:
+#   - cond=true の 79 箇所: 差が出るのは |a-b| >= 128 のときだけ。変数の実際の範囲 (速度は ±64 でクランプ、
+#     count は 0..60、dx/dy は ±127、n は -15..) では到達しないので挙動は変わらない
+#   - cond=false の 7 箇所: en2:561 / en5:380 (`vy > -1 &&`)、event:483 (`item_id < 0 ||`)、my_process:775
+#     (`anchor_vy > -2 &&`) は左辺が符号付きで安全。my_process:264 (`in_water && vy > 32`) は左辺リテラルで
+#     旧は符号なしだったが「下降中」(vy >= 0) の分岐の中なので差なし。
+#     en6:599 の 4 箇所は `0 as sint` / `(width * 8) as sint` と左辺を符号付きにする回避が入っている
+#
+# ★ 挙動が変わる箇所 (1 件): en6.fc:599 waterfall_process
+#     if (mx > 0 as sint && mx < (width * 8) as sint && mmy > 0 as sint && mmy < (height * 8) as sint)
+#   map.json の waterfall は p2 (height) = 16 のものが 4 つあり、(16 * 8) as sint = -128 になる。
+#   旧: mmy - (-128) のオーバーフローで N が立ち「mmy < 128」として偶然動いていた。
+#   新: 正しく `mmy < -128` = 常に偽 → その 4 つの滝で水中判定 (create_splash / 押し戻し) が効かなくなる。
+#   直し方: mmy > 0 を確認した後は符号なしで比べる: `(mmy as int) < height * 8` (height * 8 = 128 は uint8 に収まる)。
+#   mx 側 (width = 2) と en6:603 (width * 4) は範囲内で問題なし。
+#
+# fclib/math.fc は 2026-09-14 に `x < 128` → `x >= 0` に書き直し済み。
+#
+# ---- 以下は当初の一覧 (2026-09-14) ----
+#
 # 生成: cd examples/castle/src && FC_TRACE_SIGNED=1 fcc check -t nes main.fc 2>&1 | grep SIGNED_LT | sort -u
 # 形式: 位置 mixed=(片側だけ符号付き) bigliteral=(128 以上のリテラルあり) 左 < 右
 #   v1 との違い: 左がリテラル (例 '0 < vx') は v1 では符号なし比較だった → 負数で結果が変わる。
