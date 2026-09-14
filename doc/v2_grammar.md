@@ -63,7 +63,7 @@ v2 は「**v1 ソースを `fcc migrate` で機械的に移行できる、破壊
 |---|---|---|
 | 宣言のデフォルト | public（`Module.CurrentPublic` 初期値） | **private** |
 | `public:` / `private:` ラベル | 以降のデフォルトを切り替える | **削除**（構文エラー） |
-| `private` キーワード | 文法上あるが未使用 | **削除**（デフォルトなので不要） |
+| `private` キーワード | 文法上あるが未使用 | **削除**（デフォルトなので不要。2026-09-14: v2 では予約語でもなくなり、識別子に使える） |
 | `mod.name`（ドット参照） | private にも届く | **public のみ**（規則 S7） |
 | `use * from mod` | public のみ取り込む | 同じ |
 | `use X;` が作るモジュール束縛 | public（glob で再輸出される） | **private**。再輸出は `public use X;` で明示（S6） |

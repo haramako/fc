@@ -99,6 +99,14 @@ const (
 	OrOr   // ||
 	Inc    // ++ (v2)
 	Dec    // -- (v2)
+	MulEq  // *= (v2)
+	DivEq  // /= (v2)
+	ModEq  // %= (v2)
+	AndEq  // &= (v2)
+	OrEq   // |= (v2)
+	XorEq  // ^= (v2)
+	ShlEq  // <<= (v2)
+	ShrEq  // >>= (v2)
 
 	// 記号 (1 文字)
 	LParen    // (
@@ -123,6 +131,7 @@ const (
 	Comma     // ,
 	Dot       // .
 	Not       // !
+	Tilde     // ~ (v2)
 )
 
 var kindNames = [...]string{
@@ -136,10 +145,20 @@ var kindNames = [...]string{
 	KwFn: "fn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
 	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
+	MulEq: "*=", DivEq: "/=", ModEq: "%=", AndEq: "&=", OrEq: "|=", XorEq: "^=", ShlEq: "<<=", ShrEq: ">>=",
 	LParen: "(", RParen: ")", LBrace: "{", RBrace: "}", Semicolon: ";", Colon: ":",
 	Lt: "<", Gt: ">", LBrack: "[", RBrack: "]", Plus: "+", Minus: "-", Star: "*",
 	Slash: "/", Percent: "%", Amp: "&", Pipe: "|", Caret: "^", Assign: "=",
-	Comma: ",", Dot: ".", Not: "!",
+	Comma: ",", Dot: ".", Not: "!", Tilde: "~",
+}
+
+// IsCompoundAssign は `op=` 形の代入演算子か (+= と -= は v1 から、他は v2)。
+func (k Kind) IsCompoundAssign() bool {
+	switch k {
+	case AddEq, SubEq, MulEq, DivEq, ModEq, AndEq, OrEq, XorEq, ShlEq, ShrEq:
+		return true
+	}
+	return false
 }
 
 // String はトークン種別の表示名 (キーワードと記号はその綴り)。

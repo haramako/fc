@@ -564,6 +564,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(endLabel + ":")
 			}
 
+		case ir.OpBitNot:
+			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+				r.push(l.loadA(op.In(0), i))
+				r.push("eor #255")
+				r.push(l.storeA(op.Dst, i))
+			}
+
 		case ir.OpAsm:
 			r.push(op.Text)
 

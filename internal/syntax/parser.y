@@ -46,7 +46,8 @@ package syntax
 %token <tok> NUMBER IDENT STRING
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kBITCAST kSTRUCT kSIZEOF kSOA
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
-%token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!'
+%token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
+%token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~'
 
 %type <stmts>   program opt_statement_list statement_list
 %type <stmt>    statement_i statement else_block opt_for_init opt_for_step simple_stmt incdec
@@ -78,7 +79,7 @@ package syntax
 %type <params>  arg_decl_list
 %type <param>   arg_decl
 
-%right '=' ADDEQ SUBEQ
+%right '=' ADDEQ SUBEQ MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
 %left OROR
 %left ANDAND
 %left '|'
@@ -197,12 +198,13 @@ opt_ident: /* empty */ { $$ = nil }
          | IDENT { $$ = ident($1) }
 
 opt_default_block: /* empty */ { $$ = nil }
-                 | kDEFAULT ':' statement_list { $$ = &DefaultClause{Default: $1.Pos, Colon: $2.Pos, Body: $3} }
+                 | kDEFAULT ':' opt_statement_list { $$ = &DefaultClause{Default: $1.Pos, Colon: $2.Pos, Body: $3} }
 
 switch_block: switch_block case_block { $$ = append($1, $2) }
             | case_block { $$ = []*CaseClause{$1} }
 
-case_block: kCASE exp_list ':' statement_list { $$ = &CaseClause{Case: $1.Pos, Values: $2, Colon: $3.Pos, Body: $4} }
+/* 本体は空でもよい (`case 0:` の直後に `case 1:`)。fall through はしない: 空の case は「何もしない」 */
+case_block: kCASE exp_list ':' opt_statement_list { $$ = &CaseClause{Case: $1.Pos, Values: $2, Colon: $3.Pos, Body: $4} }
 
 function_block: block { $$ = funcBody{Block: $1} }
               | ';' { $$ = funcBody{Semi: $1.Pos} }
@@ -237,6 +239,14 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | exp OROR exp           { $$ = binary($1, $2, $3) }
    | exp ADDEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: AddEq, Rhs: $3} }
    | exp SUBEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: SubEq, Rhs: $3} }
+   | exp MULEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: MulEq, Rhs: $3} } /* v2 */
+   | exp DIVEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: DivEq, Rhs: $3} }
+   | exp MODEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: ModEq, Rhs: $3} }
+   | exp ANDEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: AndEq, Rhs: $3} }
+   | exp OREQ exp           { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: OrEq, Rhs: $3} }
+   | exp XOREQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: XorEq, Rhs: $3} }
+   | exp SHLEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: ShlEq, Rhs: $3} }
+   | exp SHREQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: ShrEq, Rhs: $3} }
    | exp EQEQ exp           { $$ = binary($1, $2, $3) }
    | exp NEQ exp            { $$ = binary($1, $2, $3) }
    | exp '<'  exp           { $$ = binary($1, $2, $3) }
@@ -249,6 +259,7 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | exp kAS type_v2         { $$ = &CastExpr{Kind: CastAs, X: $1, As: $2.Pos, Type: $3} } /* v2: 数値変換 */
    | kBITCAST '<' type_decl '>' '(' exp ')' { $$ = &CastExpr{Kind: CastBit, Bitcast: $1.Pos, Lt: $2.Pos, Type: $3, Gt: $4.Pos, Lparen: $5.Pos, X: $6, Rparen: $7.Pos} } /* v2: ビット読み替え */
    | '!' exp %prec UMINUS   { $$ = unary($1, $2) }
+   | '~' exp %prec UMINUS   { $$ = unary($1, $2) } /* v2 */
    | '-' exp %prec UMINUS   { $$ = unary($1, $2) }
    | '+' exp %prec UMINUS   { $$ = unary($1, $2) }
    | '*' exp %prec UMINUS   { $$ = unary($1, $2) }

@@ -98,6 +98,14 @@ func checkVersion(f *File) error {
 			if f.Version < Version2 && n.Kind != CastLegacy {
 				fail(n.Pos(), "`as` / `bitcast` require fc 2")
 			}
+		case *AssignExpr:
+			if f.Version < Version2 && n.Op.IsCompoundAssign() && n.Op != AddEq && n.Op != SubEq {
+				fail(n.OpPos, fmt.Sprintf("`%s` requires fc 2", n.Op))
+			}
+		case *UnaryExpr:
+			if f.Version < Version2 && n.Op == Tilde {
+				fail(n.OpPos, "`~` requires fc 2")
+			}
 		case *StructDecl:
 			if f.Version < Version2 {
 				fail(n.Keyword, "`struct` requires fc 2")
@@ -184,10 +192,11 @@ var kindToYacc = map[Kind]int{
 	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
 	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
+	MulEq: MULEQ, DivEq: DIVEQ, ModEq: MODEQ, AndEq: ANDEQ, OrEq: OREQ, XorEq: XOREQ, ShlEq: SHLEQ, ShrEq: SHREQ,
 	LParen: '(', RParen: ')', LBrace: '{', RBrace: '}', Semicolon: ';', Colon: ':',
 	Lt: '<', Gt: '>', LBrack: '[', RBrack: ']', Plus: '+', Minus: '-', Star: '*',
 	Slash: '/', Percent: '%', Amp: '&', Pipe: '|', Caret: '^', Assign: '=',
-	Comma: ',', Dot: '.', Not: '!',
+	Comma: ',', Dot: '.', Not: '!', Tilde: '~',
 }
 
 func (a *yyLexAdapter) Lex(lval *yySymType) int {

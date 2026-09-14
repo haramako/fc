@@ -102,13 +102,14 @@ var symbolTokens = []struct {
 	text string
 	kind Kind
 }{
+	{"<<=", ShlEq}, {">>=", ShrEq}, {"*=", MulEq}, {"/=", DivEq}, {"%=", ModEq}, {"&=", AndEq}, {"|=", OrEq}, {"^=", XorEq}, // v2 (長いものを先に)
 	{"<=", Leq}, {">=", Geq}, {"==", EqEq}, {"+=", AddEq}, {"-=", SubEq},
 	{"!=", Neq}, {"->", Arrow}, {"<<", Shl}, {">>", Shr},
 	{"&&", AndAnd}, {"||", OrOr}, {"++", Inc}, {"--", Dec},
 	{"(", LParen}, {")", RParen}, {"{", LBrace}, {"}", RBrace}, {";", Semicolon}, {":", Colon},
 	{"<", Lt}, {">", Gt}, {"[", LBrack}, {"]", RBrack}, {"+", Plus}, {"-", Minus},
 	{"*", Star}, {"/", Slash}, {"%", Percent}, {"&", Amp}, {"|", Pipe}, {"^", Caret},
-	{"=", Assign}, {",", Comma}, {".", Dot}, {"!", Not},
+	{"=", Assign}, {",", Comma}, {".", Dot}, {"!", Not}, {"~", Tilde},
 }
 
 var keywords = map[string]Kind{
@@ -238,6 +239,10 @@ func (l *Lexer) Next() (Token, error) {
 			n++
 		}
 		if kind, ok := keywords[string(rest[:n])]; ok {
+			if kind == KwPrivate && l.version >= Version2 {
+				// v2 に `private` は無い (宣言はデフォルトで private。v1 の `private:` ラベルのためだけの予約語)
+				return tok(Identifier, n), nil
+			}
 			return tok(kind, n), nil
 		}
 		return tok(Identifier, n), nil

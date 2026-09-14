@@ -667,11 +667,19 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		} else {
 			h.pendingLabel = nil
 		}
+		seen := map[int]bool{} // case の値の重複検出 (先勝ちで黙って通っていた)
 		for _, c := range s.Cases {
 			labels := h.newLabels("then", "else")
 			thenLabel, elseLabel := labels[0], labels[1]
 			for _, v := range c.Values {
-				h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, h.constEvalOperand(toC(v))}})
+				cv := h.constEvalOperand(toC(v))
+				if n, ok := ir.ValIntLiteral(cv); ok {
+					if seen[n] {
+						panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d", n), Pos: syntax.At(h.module.Path, v.Pos())})
+					}
+					seen[n] = true
+				}
+				h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, cv}})
 				h.emit(&ir.Op{Code: ir.OpNot, Dst: tmp, Src: []ir.Operand{tmp}})
 				h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: thenLabel})
 			}
@@ -945,7 +953,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		switch c.op {
 		case opAdd, opSub, opMul, opDiv, opMod,
 			opEq, opNe, opLt, opGt, opLe, opGe,
-			opAnd, opOr, opXor, opLand, opLor, opNot, opUminus,
+			opAnd, opOr, opXor, opLand, opLor, opNot, opUminus, opBitNot,
 			opShiftLeft, opShiftRight:
 			args := make([]*cexpr, len(c.args))
 			args[0] = h.constEval(c.args[0])
@@ -1060,6 +1068,8 @@ func foldIntOp(op cop, v1, v2 int) int {
 		return b2i(v1 != 0 || v2 != 0)
 	case opNot:
 		return b2i(v1 == 0)
+	case opBitNot:
+		return ^v1
 	case opUminus:
 		return -v1
 	case opShiftLeft:
@@ -1291,7 +1301,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = h.assign(left, lv, e.args[1])
 			leftValue = lv
 
-		case opNot, opUminus:
+		case opNot, opUminus, opBitNot:
 			left := h.rval(e.args[0])
 			tmp := h.newTmp(ir.ValType(left))
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}})

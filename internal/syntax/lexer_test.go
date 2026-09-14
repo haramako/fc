@@ -63,10 +63,9 @@ func TestTokenize(t *testing.T) {
 				{Lt, "<"}, {Gt, ">"}, {LBrack, "["}, {RBrack, "]"}, {Plus, "+"}, {Minus, "-"},
 				{Star, "*"}, {Slash, "/"}, {Percent, "%"}, {Amp, "&"}, {Pipe, "|"}, {Caret, "^"},
 				{Assign, "="}, {Comma, ","}, {Dot, "."}, {Not, "!"}}},
-		{"symbol precedence", "<<=>>=",
-			// 先頭一致の並び順: "<<" が "<=" より後なので "<=" が先に当たる... ではなく、並び順は <= >= == ... << >> 。
-			// 先頭 "<<=" に対して "<=" は一致せず、"<<" が当たる。次 "=>>=" は "=" の後 ">>" の後 "="。
-			[]tok{{Shl, "<<"}, {Assign, "="}, {Shr, ">>"}, {Assign, "="}}},
+		{"symbol precedence", "<<=>>= <= << *= ~",
+			// 長い記号を先に試す: "<<=" は 1 トークン (v2 の複合代入。v1 ではゲートで弾く)
+			[]tok{{ShlEq, "<<="}, {ShrEq, ">>="}, {Leq, "<="}, {Shl, "<<"}, {MulEq, "*="}, {Tilde, "~"}}},
 		{"keywords", "include function const var options if else elsif loop while for return break continue incbin switch case default use as from public private",
 			[]tok{{KwInclude, "include"}, {KwFunction, "function"}, {KwConst, "const"}, {KwVar, "var"},
 				{KwOptions, "options"}, {KwIf, "if"}, {KwElse, "else"}, {KwElsif, "elsif"}, {KwLoop, "loop"},

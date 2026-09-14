@@ -78,7 +78,7 @@ func CalcLiveRange(lmd *ir.Lambda) {
 			uses = append(uses, op.In(0))
 		case ir.OpPushArg, ir.OpPushFastcallArg:
 			uses = append(uses, op.Src[0])
-		case ir.OpLoad, ir.OpUminus, ir.OpNot, ir.OpSignExtension, ir.OpRef, ir.OpCall, ir.OpFastcall:
+		case ir.OpLoad, ir.OpUminus, ir.OpNot, ir.OpBitNot, ir.OpSignExtension, ir.OpRef, ir.OpCall, ir.OpFastcall:
 			defines = append(defines, op.Dst)
 			uses = append(uses, op.Src[0])
 		case ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
@@ -236,7 +236,7 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				continue
 			}
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
-				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpPget) {
+				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpPget) {
 				continue
 			}
 
@@ -512,7 +512,7 @@ func DeleteUnuse(lmd *ir.Lambda) {
 			// 副作用のない演算も、結果が使われなければ消す (`c == 32;` のような式文)。
 			// 残すと結果の一時変数に場所が割り付かず、コード生成で落ちる
 			ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
-			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot,
+			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot,
 			ir.OpIndex, ir.OpRef, ir.OpSignExtension:
 			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
 				lmd.Ops[i] = nil

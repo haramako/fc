@@ -321,7 +321,7 @@ type BinaryExpr struct {
 	Y     Expr
 }
 
-// AssignExpr は代入 `lhs = rhs` / `lhs += rhs` / `lhs -= rhs`。Op は Assign / AddEq / SubEq。
+// AssignExpr は代入 `lhs = rhs` / `lhs op= rhs`。Op は Assign か複合代入 (AddEq, SubEq、v2 では MulEq … ShrEq)。
 type AssignExpr struct {
 	Lhs   Expr
 	OpPos Pos

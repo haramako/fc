@@ -45,6 +45,7 @@ const (
 	OpEq                        // Dst = (Src[0] == Src[1])
 	OpLt                        // Dst = (Src[0] < Src[1])
 	OpNot                       // Dst = !Src[0]
+	OpBitNot                    // Dst = ~Src[0]
 	OpAsm                       // インラインアセンブラ (Text)
 	OpIndex                     // Dst = &Src[0][Src[1]]
 	OpRef                       // Dst = &Src[0]
@@ -64,7 +65,7 @@ var opCodeNames = [...]string{
 	OpLoad: "load", OpSignExtension: "sign_extension",
 	OpAdd: "add", OpSub: "sub", OpAnd: "and", OpOr: "or", OpXor: "xor",
 	OpMul: "mul", OpDiv: "div", OpMod: "mod", OpShiftLeft: "shift_left", OpShiftRight: "shift_right",
-	OpUminus: "uminus", OpEq: "eq", OpLt: "lt", OpNot: "not", OpAsm: "asm",
+	OpUminus: "uminus", OpEq: "eq", OpLt: "lt", OpNot: "not", OpBitNot: "bitnot", OpAsm: "asm",
 	OpIndex: "index", OpRef: "ref", OpPget: "pget", OpPset: "pset",
 	OpIndexPget: "index_pget", OpIndexPset: "index_pset",
 	OpFieldPget: "field_pget", OpFieldPset: "field_pset",

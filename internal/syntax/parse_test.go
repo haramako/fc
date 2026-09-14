@@ -222,7 +222,11 @@ func TestVersionPragma(t *testing.T) {
 		{"#fc\n", "invalid version pragma"},
 		{"#fc 2 extra\n", "invalid version pragma"},
 		{"var a:int;\n#fc 2\n", "invalid token"},
-		{"#fc 2\nprivate:\nvar a:int;\n", "labels are not allowed in fc 2"},
+		{"#fc 2\npublic:\nvar a:int;\n", "labels are not allowed in fc 2"},
+		{"#fc 2\nprivate:\nvar a:int;\n", "a label must be placed on"}, // v2 では private は予約語でない
+		{"var a:int;\nfunction f():void { a |= 1; }\n", "`|=` requires fc 2"},
+		{"var a:int;\nfunction f():void { a <<= 1; }\n", "`<<=` requires fc 2"},
+		{"var a:int;\nfunction f():void { a = ~a; }\n", "`~` requires fc 2"},
 		{"#fc 2\ninclude macro(\"x.rb\");\n", "include macro(...) is not allowed in fc 2"},
 		{"const a = [1, 2,];\n", "trailing comma requires fc 2"},
 		{"#fc 2\nvar a:int*;\n", "postfix types (int*, int[4], void(int)) are written prefix in fc 2"},

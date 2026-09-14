@@ -68,7 +68,14 @@ const (
 	opRef        cop = "ref"
 	opDeref      cop = "deref"
 	opField      cop = "field" // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
+	opBitNot     cop = "bitnot" // ~x
 )
+
+// compoundOps は複合代入 `x op= y` の op。
+var compoundOps = map[syntax.Kind]cop{
+	syntax.AddEq: opAdd, syntax.SubEq: opSub, syntax.MulEq: opMul, syntax.DivEq: opDiv, syntax.ModEq: opMod,
+	syntax.AndEq: opAnd, syntax.OrEq: opOr, syntax.XorEq: opXor, syntax.ShlEq: opShiftLeft, syntax.ShrEq: opShiftRight,
+}
 
 // cfield は struct リテラルの 1 項目。key が "" なら位置指定。
 type cfield struct {
@@ -143,7 +150,7 @@ var binaryOps = map[syntax.Kind]cop{
 }
 
 var unaryOps = map[syntax.Kind]cop{
-	syntax.Not: opNot, syntax.Minus: opUminus, syntax.Star: opDeref, syntax.Amp: opRef,
+	syntax.Not: opNot, syntax.Minus: opUminus, syntax.Star: opDeref, syntax.Amp: opRef, syntax.Tilde: opBitNot,
 }
 
 // toC は構文木の式を未評価の cexpr に変換する。
@@ -174,12 +181,9 @@ func toC0(e syntax.Expr) *cexpr {
 		return cop2(binaryOps[e.Op], toC(e.X), toC(e.Y))
 	case *syntax.AssignExpr:
 		lhs := toC(e.Lhs)
-		switch e.Op {
-		case syntax.AddEq:
-			// 旧文法の脱糖 (load X (add X rhs))。X は同一ノードを共有する (cmemo で 1 回だけ評価される)
-			return cop2(opLoad, lhs, cop2(opAdd, lhs, toC(e.Rhs)))
-		case syntax.SubEq:
-			return cop2(opLoad, lhs, cop2(opSub, lhs, toC(e.Rhs)))
+		if op, ok := compoundOps[e.Op]; ok {
+			// 複合代入の脱糖 (load X (op X rhs))。X は同一ノードを共有する (cmemo で 1 回だけ評価される)
+			return cop2(opLoad, lhs, cop2(op, lhs, toC(e.Rhs)))
 		}
 		return cop2(opLoad, lhs, toC(e.Rhs))
 	case *syntax.UnaryExpr:
@@ -266,5 +270,5 @@ func parseOptions(o *syntax.Options) ir.Options {
 var copToOpCode = map[cop]ir.OpCode{
 	opLoad: ir.OpLoad, opAdd: ir.OpAdd, opSub: ir.OpSub, opMul: ir.OpMul, opDiv: ir.OpDiv, opMod: ir.OpMod,
 	opAnd: ir.OpAnd, opOr: ir.OpOr, opXor: ir.OpXor, opShiftLeft: ir.OpShiftLeft, opShiftRight: ir.OpShiftRight,
-	opNot: ir.OpNot, opUminus: ir.OpUminus, opEq: ir.OpEq, opLt: ir.OpLt,
+	opNot: ir.OpNot, opUminus: ir.OpUminus, opEq: ir.OpEq, opLt: ir.OpLt, opBitNot: ir.OpBitNot,
 }
