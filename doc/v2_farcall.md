@@ -95,8 +95,8 @@ MMC3 用の参考実装（castle の `mmc3.fc` の `pbank_bak` / `BANK_SELECT` �
 
 ```
 	.import FC_FARCALL
-	.import _mmc3_pbank_bak
-	.export farcall
+	.global _mmc3_pbank_bak         ; mmc3 モジュールから include するので .import でなく .global
+	.global farcall
 farcall:
 	lda FC_FARCALL+1
 	cmp #$A0
@@ -167,6 +167,17 @@ farcall:
 今の手書きラッパー（`set_pbank` ×2 + ラッパー関数）は 110〜130 サイクルなので、切替ありでも今より軽い。
 1 フレーム 29,780 サイクルに対し、敵 8 体 × 100 = 800（2.7%）。エンティティ単位のディスパッチには十分、
 タイル単位の内側ループには向かない（そこは `near` か、同じモジュールにまとめる）。
+
+### 3.6 castle で分かったこと（2026-09-15、初回適用時）
+
+- `FC_FARCALL` は **BSS でなくてもよい**（絶対アドレスならどこでも）。castle は BSS（SRAM $0200〜）も満杯だったので `BSS_EX` に置く
+- トランポリンを fc のモジュール（mmc3.fc）から `include` すると、そのモジュールの asm には fc が `.global farcall` を出し、
+  include した側が `.export`/`.global farcall` していれば定義側として export になる。参考実装の `_mmc3_pbank_bak` も
+  同じ理由で `.import` でなく `.global`
+- far call の呼び出し側は near より **12 バイト大きい**（`FC_FARCALL` への 3 回の `lda`/`sta`）。castle は 155 箇所が far になり、
+  そのうち約 100 箇所が `en1〜8 → en`（常に slot 1 にマップされている）で、ROM15 (en7) / ROM16 (my_process) が溢れた。
+  `en.fc` に `options(near: true)` を付けるのが現実的（バンクが満杯なので）。将来、呼び出し側を 6 バイトにする
+  「`jsr farcall` の直後にアドレスとバンクを置く」形（トランポリンが戻り番地から読む。+20 サイクル）を検討する
 
 ## 6. castle での移行
 

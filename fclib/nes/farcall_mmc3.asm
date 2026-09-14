@@ -11,8 +11,8 @@
 ;;; ハードウェアスタックに退避して切り替え、戻ってから復帰する (+100 サイクル程度)。入れ子も可。
 
 	.import FC_FARCALL
-	.import _mmc3_pbank_bak
-	.export farcall
+	.global _mmc3_pbank_bak         ; mmc3 モジュールから include するので .import でなく .global (定義側なら export になる)
+	.global farcall
 
 .segment "CODE"
 

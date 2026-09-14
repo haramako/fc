@@ -492,12 +492,20 @@ func (c *Compiler) assembleAll(sources []string) error {
 		}(i, src)
 	}
 	wg.Wait()
+	// 最初に失敗したものが cancel で他を止めるので、止められた側 (出力なし) ではなく本当に失敗したものを返す
+	var first error
 	for _, err := range errs {
-		if err != nil {
+		if err == nil {
+			continue
+		}
+		if ce, ok := err.(*CommandError); ok && strings.TrimSpace(ce.Result) != "" {
 			return err
 		}
+		if first == nil {
+			first = err
+		}
 	}
-	return nil
+	return first
 }
 
 // ca65 はアセンブルを実行する (逐次。失敗は CommandError を panic)。
