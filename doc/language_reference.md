@@ -102,6 +102,8 @@ options(char_banks: 1);       // CHR バンク数 — メインモジュール�
 | `[N]T` | N×size | | 配列。`[]T` は長さ省略（初期値か `address` から決まる） |
 | `*T` | 2 | | ポインタ |
 | `fn(T1, T2, ...):R` | 2 | | 関数型（値は関数のアドレス）。`fastcall` 属性は型の一部（表示名 `fastcall fn(...):R`） |
+| `Name` / `mod.Name` | フィールドの合計 | | struct（§2.1）。他モジュールの public な struct は `mod.Name`、または `use Name from mod;` |
+| `*Name`（Name は `soa`） | 1 | | SoA コンテナの要素ハンドル（§2.2）。2 バイトのポインタとは別物 |
 
 型は Go / Zig と同じく**前置**で、左から右に読む: `[16]*int` は「16 個の、int へのポインタ」、`*[4]int` は
 「4 個の int の配列へのポインタ」、`[]fn(int):void` は「`fn(int):void` の配列」。
@@ -110,7 +112,58 @@ options(char_banks: 1);       // CHR バンク数 — メインモジュール�
   （注: `-128` が `sint16` になる境界は Ruby 版由来）
 - 型変換は明示的に書く。2 種類ある（§6.1）: `x as T`（数値変換）と `bitcast<T>(x)`（ビットの読み替え）。
   サイズが合わない代入はエラー
-- 配列は暗黙にポインタへ変換される（`int[]` を `int*` の引数に渡せる）
+- 配列は暗黙にポインタへ変換される（`[]int` を `*int` の引数に渡せる）
+- `sizeof(T)` は型のバイト数（定数）。`sizeof(x)` と変数名を書けばその変数の型のサイズ
+
+### 2.1 struct
+
+```
+struct Point {
+	x:int;
+	y:int16;
+}
+struct Node {
+	value:int;
+	next:*Node;                 // 自分自身へのポインタは可（値としての自己参照は不可）
+}
+
+var g:Point;                    // フィールドは宣言順に詰めて置かれる（x が +0、y が +1。アラインメントなし）
+var p:Point = {10, 20};         // 位置指定のリテラル（宣言に型があるので型名を省ける）
+var q = Point{x: 1, y: 2};      // 名前付きのリテラル（省いたフィールドは 0）
+const ORIGIN = Point{x: 0, y: 0};
+const TABLE:[3]Point = [{1, 100}, {2, 200}, Point{x: 3, y: 300}];   // ROM 上のデータ（要素ごとに .byte / .word）
+```
+
+- 宣言はモジュールのトップレベルにだけ書ける。`public struct` で他モジュールから見える
+- `p.x` でフィールドを読み書きする。`pp:*Point` なら `pp.x` で自動的に参照はがし（`(*pp).x` と同じ）。
+  入れ子（`ln.a.x`）、配列要素（`arr[i].y`）も同じ
+- 値コピー: 代入 `a = b`、引数（値渡し）、戻り値はフィールド全体をコピーする。比較 `==` はない
+- リテラルの型名は、宣言の型・代入先・`return`・配列リテラルの要素・フィールドの型から決まる文脈で省ける（`{1, 2}`）。
+  全項目が定数ならデータブロック（ROM）になり、そうでなければ実行時にフレーム上に組み立てる
+- struct の配列の添字は要素サイズを掛ける（サイズが 1・2 以外なら 16 ビットのシフト加算）
+- コード: 変数のフィールドは `sym+off` / `S+addr+off,x` で直接触る。ポインタ経由は `ldy #off; lda (reg),y`
+
+### 2.2 soa — SoA コンテナ
+
+6502 では「フィールドごとに配列を分けて添字で触る」（structure of arrays）方が `ldy i; lda Field,y` で速い。
+`soa` は struct の定義を共有したまま、そのレイアウトで置いたコンテナを宣言する:
+
+```
+soa Enemies:[8]Enemy;                        // Enemies_px, Enemies_py, ... の配列（N ≤ 256）。options(segment: "...") 可
+soa const TABLE:[3]Enemy = [{...}, ...];     // 初期値を転置して ROM に置く（読み出しのみ）
+
+var e:*Enemies = &Enemies[2];                // 要素ハンドル（1 バイトのインデックス）
+e.px = 10;                                   // ldy e; lda #10; sta Enemies_px,y
+e.hp -= 1;                                   // 2 バイト以上のフィールドはバイトごとの配列（Enemies_hp_0 / _1）
+Enemies[3].py = 5;                           // 直接添字
+e++;  e += 2;  e == f;  e < f;               // ハンドルの算術・比較はインデックスのもの。`e as int`、`2 as *Enemies`
+var v:Enemy = Enemies[2];  Enemies[3] = v;   // 要素全体のコピー（gather / scatter）。`*e` でも同じ
+function move(e:*Enemies):void { ... }       // ハンドルは 1 バイトで渡せる
+```
+
+- `Enemies[i]` は要素（左辺値）、`&Enemies[i]` はハンドル、`*e` はハンドルの指す要素。入れ子の struct フィールド（`e.pos`）も要素として扱える
+- 配列フィールドを持つ struct は `soa` にできない。2 バイト以上のフィールドのアドレス（`&e.hp`）は取れない
+- 他モジュールからは `mod.Enemies[i]`、`*mod.Enemies`、`use Enemies from mod;`（`public soa` のとき）
 
 ---
 
@@ -245,7 +298,7 @@ outer: loop {
 
 | 演算子 | 意味 |
 |---|---|
-| `.` `()` `[]` | メンバ参照、呼び出し、添字 |
+| `.` `()` `[]` | フィールド参照 / モジュール参照、呼び出し、添字 |
 | `!` `-` `+` `*` `&` `<type>` | 前置: 否定、符号、デリファレンス、アドレス、型変換 |
 | `*` `/` `%` | 乗除（除算・剰余は切り捨て。注: 負数は Ruby 準拠の床除算） |
 | `+` `-` | 加減 |
@@ -261,7 +314,8 @@ outer: loop {
 
 - `a[i]`: 配列/ポインタの添字。添字は 1 バイト（2 バイトの添字は不可）
 - `*p` / `&x`: ポインタ演算
-- `mod.name`: モジュールの public 宣言
+- `mod.name`: モジュールの public 宣言。`x.name`: struct のフィールド（§2.1）
+- `sizeof(T)`: 型のサイズ（定数）
 - `f(args)`: 関数呼び出し。引数の数と型を検査する
 - 定数式（リテラル・`const`・それらの演算）はコンパイル時に畳み込まれる
 
@@ -341,6 +395,7 @@ v1 のソースは `fcc migrate` で機械的に v2 へ変換できる（[v2_gra
 | 型の表記 | 後置 `int*`, `int[4]`, `void(int)` | 前置 `*int`, `[4]int`, `fn(int):void` |
 | キャスト | `<T>x`（ビットの読み替え） | `x as T`（数値変換）と `bitcast<T>(x)`（ビットの読み替え） |
 | 末尾のカンマ `[1, 2,]` / `f(a,)` | 不可 | 可（`fcc fmt` は複数行のときだけ残す） |
+| `struct` / `soa` / `sizeof` / struct リテラル / `mod.T` | なし | あり（§2.1, §2.2） |
 | `break` | 最も内側の**ループ**を抜ける（switch は対象外） | 最も内側のループ**または switch**を抜ける |
 | ラベル付き `break` / `continue` | なし | あり |
 | `include("x.rb")` / `include macro("x.rb")` | Ruby マクロを読み込む | 廃止。`printf` 等は組み込み、文字表は `textmap` |

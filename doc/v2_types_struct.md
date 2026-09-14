@@ -275,10 +275,20 @@ soa const TABLE:[8]Point = [{1, 2}, {3, 4}, ...];   // ROM に転置して置く
 |---|---|---|
 | 1 | 型構文: 文法（前置形、`fn`、`fastcall fn`）、`as` / `bitcast`、プリンタ、ゲート（v2 で後置形・`<T>x` はエラー）、`fcc migrate` の規則（キャストは型で振り分け）、リポジトリ内の再移行、リファレンス更新。型の表示名を前置形にする（ir/allocir golden の型名が変わる） ✅ 2026-09-14（`fastcall fn(...)` の表記は表示名のみ。書く構文は無い: 宣言の `options(fastcall: true)` から決まる） | 1.5 日 |
 | 2 | （Q4 決定により不要） | — |
-| 3 | struct 前半: 型（`types.Struct`）、宣言、フィールド参照（変数・ポインタ・ネスト）、`sizeof` | 1.5 日 |
-| 4 | struct 後半: 配列要素（要素サイズの乗算）、リテラル、定数データブロック、値コピー（代入・引数・戻り値）、モジュール間の型の輸出 | 2 日 |
-| 5 | `soa`: コンテナ宣言（var / const）、ハンドル型、フィールド参照のコード生成（`Field,y`）、直接添字、インデックス演算、gather/scatter、転置データブロック | 2 日 |
-| 6 | テスト（sema / codegen / emu 実行）、castle の `en.fc` の配列群を `soa` で書いてみる試験（examples ではなく test） | 0.5 日 |
+| 3 | struct 前半: 型（`types.Struct`）、宣言、フィールド参照（変数・ポインタ・ネスト）、`sizeof` ✅ 2026-09-14 | 1.5 日 |
+| 4 | struct 後半: 配列要素（要素サイズの乗算）、リテラル、定数データブロック、値コピー（代入・引数・戻り値）、モジュール間の型の輸出 ✅ 2026-09-14（ポインタ経由のフィールドは add + pget/pset → field_pget/pset に融合） | 2 日 |
+| 5 | `soa`: コンテナ宣言（var / const）、ハンドル型、フィールド参照のコード生成（`Field,y`）、直接添字、インデックス演算、gather/scatter、転置データブロック ✅ 2026-09-14 | 2 日 |
+| 6 | テスト（sema / codegen / emu 実行）、castle の `en.fc` の配列群を `soa` で書いてみる試験（examples ではなく test） — テストは ✅（`internal/driver/struct_test.go`, `soa_test.go`, `test/v2/test_struct.fc`, `test_soa.fc`）。castle の試験は未 | 0.5 日 |
+
+実装メモ（2026-09-14）:
+
+- 型名は Value（`types.TypeName`、`Value.TypeRef`）としてスコープに束縛する。`soa` の名前はコンテナの値（`Kind == Array`, `IsSoa`）が
+  そのまま型名を兼ねる（`*Name` は `types.SoaRef`）
+- 変数の struct のフィールドは `ir.CastedValue{Offset}`（コード生成で `sym+off` / `S+addr+off,x`）。ポインタ経由は `add` でオフセットを
+  足した左辺値（コード生成のピープホールで `field_pget` / `field_pset` に）
+- SoA の 2 バイト以上のフィールドはバイトごとの配列。読み出しは一時変数にバイトごと集め、代入はバイトごとに `index_pset`。
+  「変数の一部への書き込み」を regalloc が使用としても数えるようにした（途中で他の変数と重ねられないように）
+- 途中で見つけた別件: `share/runtime.asm` の `__mul_16` が未実装（`rts` のみ）だったので shift-add で実装した（bin golden 更新）
 
 合計 7.5 日。1 / 3〜4 / 5 は順に独立コミットできる。
 
