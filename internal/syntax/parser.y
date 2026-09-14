@@ -19,6 +19,7 @@ package syntax
 	stmts   []Stmt
 	expr    Expr
 	exprs   []Expr
+	alist   argList
 	typ     TypeExpr
 	spec    *VarSpec
 	specs   []*VarSpec
@@ -55,6 +56,7 @@ package syntax
 %type <fbody>   function_block
 %type <expr>    opt_exp exp
 %type <exprs>   exp_list
+%type <alist>   arg_list
 %type <opts>    opt_options options
 %type <optents> option_list option_list_sub option
 %type <specs>   opt_var_decl_list var_decl_list
@@ -210,9 +212,9 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | '+' exp %prec UMINUS   { $$ = unary($1, $2) }
    | '*' exp %prec UMINUS   { $$ = unary($1, $2) }
    | '&' exp %prec UMINUS   { $$ = unary($1, $2) }
-   | exp '(' exp_list ')' opt_block { $$ = &CallExpr{Fun: $1, Lparen: $2.Pos, Args: $3, Rparen: $4.Pos, Block: $5} }
+   | exp '(' arg_list ')' opt_block { $$ = &CallExpr{Fun: $1, Lparen: $2.Pos, Args: $3.exprs, Comma: $3.comma, Rparen: $4.Pos, Block: $5} }
    | exp '[' exp ']'        { $$ = &IndexExpr{X: $1, Lbrack: $2.Pos, Index: $3, Rbrack: $4.Pos} }
-   | '[' exp_list ']'       { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Rbrack: $3.Pos} }
+   | '[' arg_list ']'       { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2.exprs, Comma: $2.comma, Rbrack: $3.Pos} }
    | kINCBIN '(' STRING ')' { $$ = &IncbinExpr{Incbin: $1.Pos, Path: strLit($3), Rparen: $4.Pos} }
    | ARROW type_decl function_block { $$ = &LambdaExpr{Arrow: $1.Pos, Type: $2, Body: $3.Block, Semi: $3.Semi} }
    | NUMBER                 { $$ = &IntLit{ValuePos: $1.Pos, Value: $1.Int, Text: $1.Text} }
@@ -221,7 +223,11 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
 
 exp_list: exp_list ',' exp { $$ = append($1, $3) }
         | exp { $$ = []Expr{$1} }
-        | /* empty */ { $$ = []Expr{} }
+
+/* 呼び出しの引数と配列リテラルの要素。空でもよく、末尾のカンマ (v2) を許す */
+arg_list: /* empty */ { $$ = argList{exprs: []Expr{}} }
+        | exp_list { $$ = argList{exprs: $1} }
+        | exp_list ',' { $$ = argList{exprs: $1, comma: $2.Pos} }
 
 /****************************************************/
 /* option */

@@ -319,6 +319,7 @@ type CallExpr struct {
 	Fun    Expr
 	Lparen Pos
 	Args   []Expr
+	Comma  Pos // 末尾のカンマ (v2。無ければ無効)
 	Rparen Pos
 	Block  *Block
 }
@@ -335,6 +336,7 @@ type IndexExpr struct {
 type ArrayLit struct {
 	Lbrack Pos
 	Elems  []Expr
+	Comma  Pos // 末尾のカンマ (v2。無ければ無効)
 	Rbrack Pos
 }
 

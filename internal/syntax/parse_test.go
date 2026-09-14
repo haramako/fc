@@ -224,6 +224,9 @@ func TestVersionPragma(t *testing.T) {
 		{"var a:int;\n#fc 2\n", "invalid token"},
 		{"#fc 2\nprivate:\nvar a:int;\n", "labels are not allowed in fc 2"},
 		{"#fc 2\ninclude macro(\"x.rb\");\n", "include macro(...) is not allowed in fc 2"},
+		{"const a = [1, 2,];\n", "trailing comma requires fc 2"},
+		{"function f():void { g(1,); }\n", "trailing comma requires fc 2"},
+		{"#fc 2\nconst a = [,];\n", "parse error"},
 	}
 	for _, b := range bad {
 		_, err := Parse([]byte(b.src), "t.fc")

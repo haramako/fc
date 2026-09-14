@@ -77,6 +77,14 @@ func checkVersion(f *File) error {
 			if f.Version < Version2 && !n.IsV1() {
 				fail(n.For, "C-style `for (init; cond; step)` requires fc 2")
 			}
+		case *ArrayLit:
+			if f.Version < Version2 && n.Comma.IsValid() {
+				fail(n.Comma, "trailing comma requires fc 2")
+			}
+		case *CallExpr:
+			if f.Version < Version2 && n.Comma.IsValid() {
+				fail(n.Comma, "trailing comma requires fc 2")
+			}
 		case *IncDecStmt:
 			if f.Version < Version2 {
 				fail(n.OpPos, "`++` / `--` require fc 2")
@@ -166,6 +174,12 @@ func (a *yyLexAdapter) Error(s string) {
 	// racc は "parse error on value ..." 形式 (errors.fc が /parse error/ で照合する)
 	msg := strings.Replace(s, "syntax error", "parse error", 1)
 	a.parseErr = &Error{Filename: a.lex.Filename(), Pos: a.last.Pos, Msg: msg}
+}
+
+// argList は arg_list (引数・配列要素) の値。comma は末尾のカンマの位置 (無ければ無効)。
+type argList struct {
+	exprs []Expr
+	comma Pos
 }
 
 // funcBody は function_block (ブロック or `;`) の値。

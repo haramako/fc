@@ -641,7 +641,7 @@ func (p *printer) expr(e Expr) {
 	case *CallExpr:
 		p.expr(e.Fun)
 		p.tokAt(e.Lparen, "(")
-		p.exprList(e.Args, e.Rparen)
+		p.exprList(e.Args, e.Comma, e.Rparen)
 		p.tokAt(e.Rparen, ")")
 		if e.Block != nil {
 			p.space()
@@ -654,7 +654,7 @@ func (p *printer) expr(e Expr) {
 		p.tokAt(e.Rbrack, "]")
 	case *ArrayLit:
 		p.tokAt(e.Lbrack, "[")
-		p.exprList(e.Elems, e.Rbrack)
+		p.exprList(e.Elems, e.Comma, e.Rbrack)
 		p.tokAt(e.Rbrack, "]")
 	case *IncbinExpr:
 		p.tokAt(e.Incbin, "incbin")
@@ -677,7 +677,8 @@ func (p *printer) expr(e Expr) {
 
 // exprList はカンマ区切りの式列。元ソースで改行されていた要素の前では改行し、
 // 閉じ括弧 (close) が独立した行にあればその前でも改行する (表データの体裁を保つ)。
-func (p *printer) exprList(list []Expr, close Pos) {
+// 末尾のカンマ (comma が有効) は、閉じ括弧が独立した行にあるときだけ残す (gofmt と同じ)。
+func (p *printer) exprList(list []Expr, comma, close Pos) {
 	if len(list) == 0 {
 		return
 	}
@@ -699,6 +700,9 @@ func (p *printer) exprList(list []Expr, close Pos) {
 	}
 	p.indent--
 	if multiline && close.Line > prevLine {
+		if comma.IsValid() {
+			p.tokAt(comma, ",")
+		}
 		p.newline()
 	}
 }
