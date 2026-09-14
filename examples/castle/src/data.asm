@@ -46,11 +46,16 @@
     .byte   0   	; ines map  - Specifies the NES mapper used.
     .byte   0,0,0,0,0,0,0,0 ; 8 zeroes
 
+;; fc の fastcall 関数が使う領域の大きさ。fc は各モジュールで .assert して不足をリンク時に検出する。
+;; ZP に空きが無いので 16 のまま (main.fc の options(fastcall_reg: 16) と一致させる)
+FC_FASTCALL_REG_SIZE = $10
+	.export FC_FASTCALL_REG_SIZE : absolute
+
 .segment "FC_ZEROPAGE": zeropage
 	
 FC_LOCAL: .res $10
 FC_REG: .res $10
-FC_FASTCALL_REG: .res $10
+FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE
 
 .segment "FC_STACK": zeropage
 	

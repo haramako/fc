@@ -90,3 +90,5 @@ _stdio_interrupt = _interrupt
 	rts
 .endproc
 _stdio_interrupt_irq = _interrupt_irq
+	.import FC_FASTCALL_REG_SIZE
+	.assert FC_FASTCALL_REG_SIZE >= 2, error, "fastcall functions of module stdio need 2 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

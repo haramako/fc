@@ -245,6 +245,7 @@ type Lambda struct {
 	Defs      []*Def
 	Asm       []string
 	FrameSize int
+	ZpUsed    int // レジスタ割付後: 普通の関数は L の使用バイト数、fastcall は FC_FASTCALL_REG の使用バイト数 (引数・戻り値込み)
 }
 
 // Segment は配置セグメント (options(segment:...))。"" なら既定。

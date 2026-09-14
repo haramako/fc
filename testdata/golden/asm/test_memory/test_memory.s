@@ -324,8 +324,8 @@ _38:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
-	lda 0+<L+2
+	sta 0+<L+1
+	lda 0+<L+1
 	sta <S+0,x
 	lda #0
 	sta <S+1,x

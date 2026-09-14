@@ -203,9 +203,9 @@
 (alloc-lambda test_stat _test_stat_test_switch _test_stat_test_switch frame_size=0
  (vars
   (var 0 i local #"uint8" pub loc=reg addr=0)
-  (var 1 sum local #"uint8" pub loc=reg addr=2)
+  (var 1 sum local #"uint8" pub loc=reg addr=1)
   (var 2 $87 local #"uint8" lt=temp loc=cond cond=carry,true)
-  (var 3 $88 local #"uint8" lt=temp loc=reg addr=4)
+  (var 3 $88 local #"uint8" lt=temp loc=reg addr=2)
   (var 4 $92 local #"uint8" lt=temp loc=a)
   (var 5 $95 local #"uint8" lt=temp loc=a)
   (var 6 $96 local #"uint8" lt=temp loc=a)

@@ -134,9 +134,24 @@ func isPartialDef(v ir.Operand) bool {
 // レジスタ割付
 // ---------------------------------------------------------------
 
+// Limits はレジスタ領域の大きさ (バイト)。base.asm の FC_LOCAL / FC_FASTCALL_REG の .res と一致させる。
+type Limits struct {
+	Reg         int // L (FC_LOCAL): 普通の関数のレジスタ領域。あふれた変数はフレームに置く
+	FastcallReg int // FC_FASTCALL_REG: fastcall 関数の引数・戻り値・ローカル・一時変数の全部。あふれたらエラー
+}
+
+// DefaultLimits は既定の大きさ (options(fastcall_reg: N) で FastcallReg を変えられる)。
+var DefaultLimits = Limits{Reg: 16, FastcallReg: 32}
+
 // AllocateRegister は Fc.allocate_register 相当。
 // 変数の address, location, unuse が設定される。
-func AllocateRegister(lmd *ir.Lambda) {
+//
+// 置き場所の規則:
+//   - 戻り値・引数・呼び出しをまたぐ変数・& を取られた変数・配列・struct → フレーム (fastcall なら FC_FASTCALL_REG の先頭側)
+//   - それ以外 → レジスタ領域。live range が重ならない変数はバイト単位で同じ場所を共有する
+//   - レジスタ領域に入りきらない変数 → 普通の関数はフレームへあふれさせる (1 サイクル遅いだけ)。
+//     fastcall はスタックを使えないので frame size over
+func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 	CalcLiveRange(lmd)
 
 	// ref(&演算子)を受けた変数を集める
@@ -151,6 +166,15 @@ func AllocateRegister(lmd *ir.Lambda) {
 	frameSize := lmd.Type.Base.Size // 帰り値分を予約しておく
 	var registerVars []*allocEntry  // 挿入順を保つ (Ruby の Hash 相当)
 	fastcall := lmd.Type.Fastcall()
+	frameLoc := ir.LocFrame
+	if fastcall {
+		frameLoc = ir.LocFastcallReg
+	}
+	toFrame := func(v *ir.Value) {
+		v.Address = frameSize
+		v.Location = frameLoc
+		frameSize += v.Type.Size
+	}
 	for _, v := range lmd.Vars {
 		beyondCall := false
 		if v.LiveRange != nil {
@@ -164,23 +188,12 @@ func AllocateRegister(lmd *ir.Lambda) {
 
 		if v.LocalType == ir.LTResult {
 			// 返り値
-			if fastcall {
-				lmd.Result.Location = ir.LocFastcallReg
-			} else {
-				lmd.Result.Location = ir.LocFrame
-			}
+			lmd.Result.Location = frameLoc
 			lmd.Result.Address = 0
 		} else if beyondCall || v.LocalType == ir.LTArg || refered[v] ||
 			(v.Kind == ir.KindLocal && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct)) {
 			// 引数か、関数をまたいでいるか、配列・struct なら、フレームに割り当てる
-			// (レジスタ領域は 2 バイト単位でしか確保しないので、配列を置くと隣と重なって壊れる)
-			v.Address = frameSize
-			if fastcall {
-				v.Location = ir.LocFastcallReg
-			} else {
-				v.Location = ir.LocFrame
-			}
-			frameSize += v.Type.Size
+			toFrame(v)
 		} else if v.LiveRange != nil {
 			// それ以外の使われてる変数は、レジスターメモリに割り当てる
 			registerVars = append(registerVars, &allocEntry{key: v, liveRange: v.LiveRange})
@@ -194,31 +207,83 @@ func AllocateRegister(lmd *ir.Lambda) {
 	registerVars = allocateCond(lmd, registerVars)
 	registerVars = allocateA(lmd, registerVars)
 
-	// 各レジスタのアドレスを割り当てる
-	regSize := 0
-	allocator := NewAllocator(registerVars)
-	for _, reg := range allocator.Regs {
-		// アドレスを算出する
-		if regSize > 16 {
-			panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s", lmd)})
+	// レジスタ領域にバイト単位で詰める。fastcall はフレームの後ろの残り、普通の関数は L の全部
+	capacity := lim.Reg
+	if fastcall {
+		capacity = lim.FastcallReg - frameSize
+	}
+	if capacity < 0 {
+		capacity = 0
+	}
+	packer := newBytePacker(capacity)
+	var spilled []*ir.Value
+	regUsed := 0
+	for _, e := range registerVars {
+		v := e.key
+		addr, ok := packer.place(v.Type.Size, e.liveRange)
+		if !ok {
+			spilled = append(spilled, v)
+			continue
 		}
-		// 割り当てる
-		for _, v := range reg.vars {
-			if fastcall {
-				if frameSize+regSize > 16 {
-					panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s", lmd)})
-				}
-				v.Location = ir.LocFastcallReg
-				v.Address = frameSize + regSize
-			} else {
-				v.Location = ir.LocReg
-				v.Address = regSize
+		if fastcall {
+			v.Location = ir.LocFastcallReg
+			v.Address = frameSize + addr
+		} else {
+			v.Location = ir.LocReg
+			v.Address = addr
+		}
+		regUsed = max(regUsed, addr+v.Type.Size)
+	}
+	if fastcall {
+		if len(spilled) > 0 {
+			need := frameSize + regUsed
+			for _, v := range spilled {
+				need += v.Type.Size
 			}
+			panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s: fastcall function needs about %d bytes of FC_FASTCALL_REG but only %d (%d for arguments/result/arrays); "+
+				"split the function, reduce locals, or raise options(fastcall_reg: N)", lmd, need, lim.FastcallReg, frameSize)})
 		}
-		regSize += 2
+		lmd.ZpUsed = frameSize + regUsed
+	} else {
+		// 入りきらなかった変数はフレームへ
+		for _, v := range spilled {
+			toFrame(v)
+		}
+		lmd.ZpUsed = regUsed
 	}
 
 	lmd.FrameSize = frameSize
+}
+
+// bytePacker はレジスタ領域へのバイト単位の詰め込み。バイトごとに、そこを使っている変数の live range を持つ。
+type bytePacker struct {
+	bytes [][]*ir.LiveRange
+}
+
+func newBytePacker(capacity int) *bytePacker {
+	return &bytePacker{bytes: make([][]*ir.LiveRange, capacity)}
+}
+
+// place は size バイトの変数を、live range が重ならない最初の位置に置く。入らなければ ok=false。
+func (p *bytePacker) place(size int, lr *ir.LiveRange) (addr int, ok bool) {
+	for start := 0; start+size <= len(p.bytes); start++ {
+		free := true
+		for i := start; i < start+size && free; i++ {
+			for _, r := range p.bytes[i] {
+				if overlapRange(r, lr) {
+					free = false
+					break
+				}
+			}
+		}
+		if free {
+			for i := start; i < start+size; i++ {
+				p.bytes[i] = append(p.bytes[i], lr)
+			}
+			return start, true
+		}
+	}
+	return 0, false
 }
 
 // allocateA は Aレジスタを割り当てられるなら割り当てる。

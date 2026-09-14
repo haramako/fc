@@ -18,6 +18,7 @@ import (
 
 type Llc struct {
 	OptimizeLevel int
+	Limits        regalloc.Limits // レジスタ領域の大きさ (base.asm と一致させる)
 	labelCount    int
 	codeSegment   string
 	curLambda     *ir.Lambda // 処理中の関数 (エラー位置の補完用)
@@ -26,7 +27,7 @@ type Llc struct {
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
-	return &Llc{OptimizeLevel: optimizeLevel, zero: ir.NewIntLiteral("", u.IntType(1, false), 0)}
+	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0)}
 }
 
 // asmLines は文字列/ nil / ネストした配列を保持する行バッファ (Ruby の Array 相当)。
@@ -146,6 +147,18 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 		default:
 			panic(fmt.Sprintf("invalid def kind %s", d.Kind))
 		}
+	}
+
+	// fastcall 関数が使う FC_FASTCALL_REG の大きさを、base.asm (プロジェクトが自前で持つこともある) の .res とリンク時に突き合わせる
+	fastcallNeed := 0
+	for _, d := range mod.Defs {
+		if d.Kind == ir.DefCode && !d.Lambda.Extern && d.Lambda.Type.Fastcall() {
+			fastcallNeed = max(fastcallNeed, d.Lambda.ZpUsed)
+		}
+	}
+	if fastcallNeed > 0 {
+		asm.push("	.import FC_FASTCALL_REG_SIZE")
+		asm.push(fmt.Sprintf("	.assert FC_FASTCALL_REG_SIZE >= %d, error, \"fastcall functions of module %s need %d bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)\"", fastcallNeed, mod.Id, fastcallNeed))
 	}
 
 	// include header(.asm)の処理
@@ -1304,7 +1317,7 @@ func pow2(n int) int {
 
 func (l *Llc) allocRegister(lmd *ir.Lambda) {
 	if l.OptimizeLevel > 0 {
-		regalloc.AllocateRegister(lmd)
+		regalloc.AllocateRegister(lmd, l.Limits)
 		regalloc.DeleteUnuse(lmd)
 	} else {
 		// 単純なバージョンのアロケータ(debug用)

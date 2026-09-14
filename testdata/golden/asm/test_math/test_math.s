@@ -16,17 +16,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @1
 	lda #255
 	jmp @2
 @1:
 	lda #0
 @2:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -43,17 +43,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @3
 	lda #255
 	jmp @4
 @3:
 	lda #0
 @4:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #127
 	sta <S+2,x
@@ -70,17 +70,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @5
 	lda #255
 	jmp @6
 @5:
 	lda #0
 @6:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #127
 	sta <S+2,x
@@ -97,17 +97,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @7
 	lda #255
 	jmp @8
 @7:
 	lda #0
 @8:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -124,17 +124,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @9
 	lda #255
 	jmp @10
 @9:
 	lda #0
 @10:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -151,17 +151,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @11
 	lda #255
 	jmp @12
 @11:
 	lda #0
 @12:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #129
 	sta <S+2,x
@@ -178,17 +178,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @13
 	lda #255
 	jmp @14
 @13:
 	lda #0
 @14:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #129
 	sta <S+2,x
@@ -205,17 +205,17 @@ __MODULE_TEST_MATH__ = 1
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @15
 	lda #255
 	jmp @16
 @15:
 	lda #0
 @16:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -256,17 +256,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @17
 	lda #255
 	jmp @18
 @17:
 	lda #0
 @18:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #127
 	sta <S+2,x
@@ -283,17 +283,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @19
 	lda #255
 	jmp @20
 @19:
 	lda #0
 @20:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -310,17 +310,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @21
 	lda #255
 	jmp @22
 @21:
 	lda #0
 @22:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -337,17 +337,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @23
 	lda #255
 	jmp @24
 @23:
 	lda #0
 @24:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #129
 	sta <S+2,x
@@ -364,17 +364,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @25
 	lda #255
 	jmp @26
 @25:
 	lda #0
 @26:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #129
 	sta <S+2,x
@@ -391,17 +391,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @27
 	lda #255
 	jmp @28
 @27:
 	lda #0
 @28:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -418,17 +418,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @29
 	lda #255
 	jmp @30
 @29:
 	lda #0
 @30:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -445,17 +445,17 @@ _39:
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
 	lda 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	bpl @31
 	lda #255
 	jmp @32
 @31:
 	lda #0
 @32:
-	sta 1+<L+2
-	lda 0+<L+2
+	sta 1+<L+1
+	lda 0+<L+1
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <S+1,x
 	lda #127
 	sta <S+2,x

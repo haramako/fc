@@ -228,19 +228,19 @@ _49:
 	clc
 	lda #.LOBYTE(_test_var_array)
 	adc <reg+0
-	sta 0+<L+2
+	sta 0+<L+1
 	lda #.HIBYTE(_test_var_array)
 	adc #0
-	sta 1+<L+2
+	sta 1+<L+1
 	clc
 	lda 0+<L+0
 	adc #1
-	sta 0+<L+4
-	lda 0+<L+2
+	sta 0+<L+3
+	lda 0+<L+1
 	sta <reg+0
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <reg+1
-	lda 0+<L+4
+	lda 0+<L+3
 	ldy #0
 	sta (reg),y
 	clc
@@ -252,19 +252,19 @@ _49:
 	clc
 	lda #.LOBYTE(_test_var_array)
 	adc <reg+0
-	sta 0+<L+2
+	sta 0+<L+1
 	lda #.HIBYTE(_test_var_array)
 	adc #0
-	sta 1+<L+2
+	sta 1+<L+1
 	clc
 	lda 0+<L+0
 	adc #1
-	sta 0+<L+4
-	lda 0+<L+2
+	sta 0+<L+3
+	lda 0+<L+1
 	sta <reg+0
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <reg+1
-	lda 0+<L+4
+	lda 0+<L+3
 	ldy #0
 	sta (reg),y
 	clc
@@ -276,19 +276,19 @@ _49:
 	clc
 	lda #.LOBYTE(_test_var_array)
 	adc <reg+0
-	sta 0+<L+2
+	sta 0+<L+1
 	lda #.HIBYTE(_test_var_array)
 	adc #0
-	sta 1+<L+2
+	sta 1+<L+1
 	clc
 	lda 0+<L+0
 	adc #1
-	sta 0+<L+4
-	lda 0+<L+2
+	sta 0+<L+3
+	lda 0+<L+1
 	sta <reg+0
-	lda 1+<L+2
+	lda 1+<L+1
 	sta <reg+1
-	lda 0+<L+4
+	lda 0+<L+3
 	ldy #0
 	sta (reg),y
 	ldy #0

@@ -156,7 +156,7 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 | switch の case が空 | **修正済み**（2026-09-14） | `case 0:` の直後に `case 1:` を書ける（空の case は「何もしない」。fall through はしない）。`default:` も空でよい |
 | sint の掛け算が特定の順序でだめ | **再現せず** | `-3*2`, `2*-3`, `5*-2`, `-2*5` はすべて正しい。再現条件が別にある（混合型か桁あふれ？） |
 | min / max / clamp | 未実装（fclib） | |
-| frame size over の制限 | 変更なし | regalloc の 16 バイト |
+| frame size over の制限 | **緩和**（2026-09-14、[v2_frame_alloc.md](v2_frame_alloc.md) A） | レジスタをバイト単位で詰め、普通の関数はあふれをフレームへ。fastcall は FC_FASTCALL_REG を 32 に（`options(fastcall_reg: N)`）。根本解決（静的フレーム）は同メモ B |
 | function の null 対応 | 未実装 | |
 
 クラッシュ 3 件は、少なくとも `diag.Error`（位置付きのコンパイルエラー）にするべきもの。

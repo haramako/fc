@@ -439,5 +439,7 @@ _88:
 		.byte 10,0
 .endproc
 _test_basic_main = _main
+	.import FC_FASTCALL_REG_SIZE
+	.assert FC_FASTCALL_REG_SIZE >= 3, error, "fastcall functions of module test_basic need 3 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"
 .segment "CHARS"
 	.incbin "character.chr"

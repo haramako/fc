@@ -1,5 +1,5 @@
 #fc 2
-options(mapper: "MMC3");
+options(mapper: "MMC3", fastcall_reg: 16); // fastcall_reg: ZP に空きが無いので 16 のまま (data.asm の FC_FASTCALL_REG_SIZE と一致)
 options(bank: -1);
 
 //

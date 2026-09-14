@@ -85,6 +85,7 @@ options(org: 0xa000);         // 配置アドレス
 options(mapper: "MMC3");      // iNES マッパ（"MMC0" / "MMC3" / 番号）— メインモジュールで
 options(bank_count: 4);       // PRG バンク数 — メインモジュールで
 options(char_banks: 1);       // CHR バンク数 — メインモジュールで
+options(fastcall_reg: 32);    // fastcall 関数が使うゼロページ領域 FC_FASTCALL_REG の大きさ（既定 32、16〜128）— メインモジュールで
 ```
 
 ---
@@ -222,7 +223,12 @@ function f():void options(segment: "game") { ... }     // 配置セグメント
 - 引数・戻り値の型は必須。`void` 関数は `return;`、それ以外は `return expr;`。
   非 void 関数は本体が必ず `return` で終わらなければならない（最後の文が `return`、両枝が `return` で終わる
   `if`/`else`、`break` の無い `loop`・`while (1)`・`for (;;)`、`default` 付きで全 case が `return` で終わる `switch`）
-- `fastcall`: 引数をスタックではなくレジスタ/ゼロページで渡す。fastcall 関数の中から他の関数は呼べない
+- `fastcall`: 引数をスタックではなくレジスタ/ゼロページで渡す。fastcall 関数の中から他の関数は呼べない。
+  引数・戻り値・ローカル・一時変数の全部がゼロページの `FC_FASTCALL_REG`（既定 32 バイト、`options(fastcall_reg: N)`）に
+  入らなければならず、超えると `frame size over`（必要量が出る）。普通の関数はレジスタ領域（16 バイト）に入りきらない
+  変数がフレーム（スタック）に置かれるだけで制限はない。
+  base.asm を自前で持つプロジェクトは `FC_FASTCALL_REG: .res N` と `FC_FASTCALL_REG_SIZE = N`（`.export … : absolute`）を
+  合わせる（不足はリンク時の `.assert` で検出される）
 - `options(symbol: "...")`: 生成するシンボル名を固定する（割り込みベクタなど）
 
 ### 4.3 ラムダ

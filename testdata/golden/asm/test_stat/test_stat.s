@@ -378,7 +378,7 @@ _80:
 .segment "test_stat"
 .proc _test_stat_test_switch
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	lda #0
 	sta 0+<L+0
 @begin_82:
@@ -392,110 +392,110 @@ _80:
 	cmp #1
 	bne @19
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @20
 @19:
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 @20:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @21
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @22
 @21:
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 @22:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @then_90
 @23:
 	lda 0+<L+0
 	cmp #2
 	bne @24
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @25
 @24:
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 @25:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @26
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @27
 @26:
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 @27:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @then_90
 @28:
 	lda 0+<L+0
 	cmp #3
 	bne @29
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @30
 @29:
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 @30:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @31
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @32
 @31:
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 @32:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @then_90
 @33:
 	jmp @else_91
 @then_90:
 	clc
-	lda 0+<L+2
+	lda 0+<L+1
 	adc 0+<L+0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @end_89
 @else_91:
 	lda 0+<L+0
 	cmp #4
 	bne @34
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @35
 @34:
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 @35:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @36
 	lda #0
-	sta 0+<L+4
+	sta 0+<L+2
 	jmp @37
 @36:
 	lda #1
-	sta 0+<L+4
+	sta 0+<L+2
 @37:
-	lda 0+<L+4
+	lda 0+<L+2
 	beq @then_93
 @38:
 	jmp @else_94
 @then_93:
 	clc
-	lda 0+<L+2
+	lda 0+<L+1
 	adc #10
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @end_89
 @else_94:
 	clc
-	lda 0+<L+2
+	lda 0+<L+1
 	adc #20
-	sta 0+<L+2
+	sta 0+<L+1
 @end_89:
 	clc
 	lda 0+<L+0
@@ -511,7 +511,7 @@ _80:
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
-	lda 0+<L+2
+	lda 0+<L+1
 	sta <S+2,x
 	lda #0
 	sta <S+3,x

@@ -293,8 +293,8 @@ _35:
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
-	sta 0+<L+2
-	lda 0+<L+2
+	sta 0+<L+1
+	lda 0+<L+1
 	sta <reg+0+0
 	lda 0+<S+2,x
 	sta <reg+2+0
@@ -2323,13 +2323,13 @@ _452:
 	lda 0+<L+0
 	beq @252
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @253
 @252:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @253:
-	lda 0+<L+2
+	lda 0+<L+1
 	sta <S+2,x
 	lda #.LOBYTE(_463)
 	sta <S+3,x
@@ -2351,13 +2351,13 @@ _452:
 	lda 0+<L+0
 	beq @255
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @256
 @255:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @256:
-	lda 0+<L+2
+	lda 0+<L+1
 	sta <S+2,x
 	lda #.LOBYTE(_469)
 	sta <S+3,x
@@ -2379,13 +2379,13 @@ _452:
 	lda 0+<L+0
 	beq @258
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @259
 @258:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @259:
-	lda 0+<L+2
+	lda 0+<L+1
 	sta <S+2,x
 	lda #.LOBYTE(_475)
 	sta <S+3,x
@@ -2401,13 +2401,13 @@ _452:
 	lda 0+<L+0
 	beq @260
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @261
 @260:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @261:
-	lda 0+<L+2
+	lda 0+<L+1
 	beq @end_478
 @262:
 	lda 0+<S+1,x
@@ -2429,13 +2429,13 @@ _452:
 	lda 0+<L+0
 	beq @263
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @264
 @263:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @264:
-	lda 0+<L+2
+	lda 0+<L+1
 	beq @end_484
 @265:
 	lda 0+<S+1,x
@@ -2457,13 +2457,13 @@ _452:
 	lda 0+<L+0
 	beq @266
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @267
 @266:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @267:
-	lda 0+<L+2
+	lda 0+<L+1
 	beq @end_490
 @268:
 	lda 0+<S+0,x
@@ -2485,13 +2485,13 @@ _452:
 	lda 0+<L+0
 	beq @269
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @270
 @269:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @270:
-	lda 0+<L+2
+	lda 0+<L+1
 	beq @end_496
 @271:
 	lda 0+<S+1,x
@@ -2500,13 +2500,13 @@ _452:
 	lda 0+<L+0
 	beq @272
 	lda #0
-	sta 0+<L+2
+	sta 0+<L+1
 	jmp @273
 @272:
 	lda #1
-	sta 0+<L+2
+	sta 0+<L+1
 @273:
-	lda 0+<L+2
+	lda 0+<L+1
 	sta <S+2,x
 	lda #.LOBYTE(_500)
 	sta <S+3,x

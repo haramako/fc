@@ -289,3 +289,5 @@ _math_rand_idx: .res 1
 	rts
 @end_79:
 .endproc
+	.import FC_FASTCALL_REG_SIZE
+	.assert FC_FASTCALL_REG_SIZE >= 6, error, "fastcall functions of module math need 6 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

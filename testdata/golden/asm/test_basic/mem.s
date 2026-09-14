@@ -21,13 +21,13 @@ __MODULE_MEM__ = 1
 	clc
 	lda 0+<FC_FASTCALL_REG+1
 	adc <reg+0
-	sta 0+<FC_FASTCALL_REG+5
+	sta 0+<FC_FASTCALL_REG+4
 	lda 1+<FC_FASTCALL_REG+1
 	adc #0
-	sta 1+<FC_FASTCALL_REG+5
-	lda 0+<FC_FASTCALL_REG+5
+	sta 1+<FC_FASTCALL_REG+4
+	lda 0+<FC_FASTCALL_REG+4
 	sta <reg+0
-	lda 1+<FC_FASTCALL_REG+5
+	lda 1+<FC_FASTCALL_REG+4
 	sta <reg+1
 	ldy #0
 	lda (reg),y
@@ -68,43 +68,43 @@ __MODULE_MEM__ = 1
 	clc
 	lda 0+<FC_FASTCALL_REG+3
 	adc <reg+0
-	sta 0+<FC_FASTCALL_REG+7
+	sta 0+<FC_FASTCALL_REG+6
 	lda 1+<FC_FASTCALL_REG+3
+	adc #0
+	sta 1+<FC_FASTCALL_REG+6
+	lda 0+<FC_FASTCALL_REG+6
+	sta <reg+0
+	lda 1+<FC_FASTCALL_REG+6
+	sta <reg+1
+	ldy #0
+	lda (reg),y
+	sta 0+<FC_FASTCALL_REG+6
+	ldy 0+<FC_FASTCALL_REG+5
+	sty <reg+0
+	clc
+	lda 0+<FC_FASTCALL_REG+1
+	adc <reg+0
+	sta 0+<FC_FASTCALL_REG+7
+	lda 1+<FC_FASTCALL_REG+1
 	adc #0
 	sta 1+<FC_FASTCALL_REG+7
 	lda 0+<FC_FASTCALL_REG+7
 	sta <reg+0
 	lda 1+<FC_FASTCALL_REG+7
 	sta <reg+1
-	ldy #0
-	lda (reg),y
-	sta 0+<FC_FASTCALL_REG+7
-	ldy 0+<FC_FASTCALL_REG+5
-	sty <reg+0
-	clc
-	lda 0+<FC_FASTCALL_REG+1
-	adc <reg+0
-	sta 0+<FC_FASTCALL_REG+9
-	lda 1+<FC_FASTCALL_REG+1
-	adc #0
-	sta 1+<FC_FASTCALL_REG+9
-	lda 0+<FC_FASTCALL_REG+9
-	sta <reg+0
-	lda 1+<FC_FASTCALL_REG+9
-	sta <reg+1
-	lda 0+<FC_FASTCALL_REG+7
+	lda 0+<FC_FASTCALL_REG+6
 	ldy #0
 	sta (reg),y
-	lda 0+<FC_FASTCALL_REG+7
+	lda 0+<FC_FASTCALL_REG+6
 	beq @3
 	lda #0
-	sta 0+<FC_FASTCALL_REG+9
+	sta 0+<FC_FASTCALL_REG+7
 	jmp @4
 @3:
 	lda #1
-	sta 0+<FC_FASTCALL_REG+9
+	sta 0+<FC_FASTCALL_REG+7
 @4:
-	lda 0+<FC_FASTCALL_REG+9
+	lda 0+<FC_FASTCALL_REG+7
 	beq @else_18
 @5:
 @then_17:
@@ -125,3 +125,5 @@ __MODULE_MEM__ = 1
 	jmp @begin_9
 @end_10:
 .endproc
+	.import FC_FASTCALL_REG_SIZE
+	.assert FC_FASTCALL_REG_SIZE >= 9, error, "fastcall functions of module mem need 9 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

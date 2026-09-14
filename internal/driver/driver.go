@@ -18,6 +18,7 @@ import (
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/r6502"
+	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 )
@@ -171,6 +172,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 
 	// compile2 (中間コード -> アセンブラファイル)
 	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
+	llc.Limits.FastcallReg = c.fastcallRegSize()
 	for _, mod := range prog.Modules.List() {
 		if mod.FromFcm {
 			continue
@@ -377,12 +379,25 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 	return mapFile
 }
 
+// fastcallRegSize は FC_FASTCALL_REG の大きさ (options(fastcall_reg: N)。既定は regalloc.DefaultLimits)。
+func (c *Compiler) fastcallRegSize() int {
+	if n, ok := c.prog.Options.Int("fastcall_reg"); ok {
+		if n < 16 || n > 128 {
+			panic(&diag.Error{Msg: fmt.Sprintf("options(fastcall_reg: %d): must be 16..128", n)})
+		}
+		return n
+	}
+	return regalloc.DefaultLimits.FastcallReg
+}
+
 // baseAsmTemplate は share/<target>/base.asm.erb 相当。
 func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) string {
 	header := "\t.exportzp FC_LOCAL\n" +
 		"\t.exportzp FC_REG\n" +
 		"\t.exportzp FC_STACK\n" +
 		"\t.exportzp FC_FASTCALL_REG\n" +
+		"\t.export FC_FASTCALL_REG_SIZE : absolute\n" +
+		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", c.fastcallRegSize()) +
 		"\t.exportzp L \t\t\t\t\t; TODO: そのうち消すこと\n" +
 		"\t.exportzp reg\n" +
 		"\t.exportzp S\n" +
@@ -394,7 +409,7 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\t\n" +
 		"FC_LOCAL: .res $10\n" +
 		"FC_REG: .res $10\n" +
-		"FC_FASTCALL_REG: .res $10\n" +
+		"FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE\n" +
 		"\n" +
 		".segment \"FC_STACK\": zeropage\n" +
 		"\t\n" +
