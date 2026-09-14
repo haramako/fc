@@ -31,7 +31,7 @@ public function init():void options(segment: 'game')
 function _init():void
 {
 	var i:int;
-	for (i, 0, MAX) {
+	for (i = 0; i < MAX; i++) {
 		box_x[i] = BOX_INIT_X[i];
 		if (BOX_INIT_POS[i] == 0) {
 			box_area[i] = BOX_TOP_AREA[i];
@@ -54,7 +54,7 @@ public function on_fetch_area():void options(segment: 'common') // endingから�
 	box_running = 0;
 	box_idx = -1;
 	var i:int;
-	for (i, 0, MAX) {
+	for (i = 0; i < MAX; i++) {
 		if (box_area[i] == bg.cur_area) {
 			// 画面内にある
 			box_running = 1;
@@ -80,7 +80,7 @@ function _process():void
 	}
 
 	var i:int;
-	for (i, 0, MAX) {
+	for (i = 0; i < MAX; i++) {
 		var idx = box_idx == i;
 		if (idx || box_active[i]) {
 			process_one(i);

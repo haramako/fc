@@ -21,7 +21,7 @@ function watergate_open():void
 {
 	var i:int;
 	var j:int;
-	for (i, 0, 180) {
+	for (i = 0; i < 180; i++) {
 		ppu.scroll2 = math.rand() % [2, 4, 8, 8, 4, 2][i / 30];
 		ppu.wait_vsync_with_flag(2);
 		anim += 1;
@@ -51,7 +51,7 @@ function watergate_close():void
 {
 	var i:int;
 	var j:int;
-	for (i, 0, 180) {
+	for (i = 0; i < 180; i++) {
 		ppu.scroll2 = math.rand() % [2, 4, 8, 8, 4, 2][i / 30];
 		ppu.wait_vsync_with_flag(2);
 		anim += 1;

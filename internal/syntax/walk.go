@@ -71,7 +71,12 @@ func Children(node Node) []Node {
 		add(n.Var)
 		add(n.From)
 		add(n.To)
+		add(n.Init)
+		add(n.Cond)
+		add(n.Step)
 		add(n.Body)
+	case *IncDecStmt:
+		add(n.X)
 	case *EmptyStmt, *ScopeLabel:
 	case *ReturnStmt:
 		add(n.Value)

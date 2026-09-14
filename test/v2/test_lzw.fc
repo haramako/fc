@@ -9,7 +9,7 @@ function test_read_bit():void
 	lzw.addr = [0b00000101, 0b00111001, 0b01110111];
 	lzw.bpos = 0;
 	var x:int;
-	for (x, 0, 8) {
+	for (x = 0; x < 8; x++) {
 		assert_equal(lzw.read_bit(3), x, "read_bit");
 	}
 }

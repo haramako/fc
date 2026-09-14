@@ -34,7 +34,7 @@ public function init():void {}
 public function clear():void options(segment: "common")
 {
 	var i:int;
-	for (i, 0, MAX) {
+	for (i = 0; i < MAX; i++) {
 		type[i] = 0;
 	}
 	cur_max = 0;
@@ -44,7 +44,7 @@ public function process():void
 {
 	var old_pbank = mmc3.pbank_bak[0];
 	var i:int;
-	for (i, 0, cur_max) {
+	for (i = 0; i < cur_max; i++) {
 		var t = type[i];
 		mmc3.set_pbank(0, EN_BANKS[t]);
 		PROCESS[t](i);
@@ -55,7 +55,7 @@ public function process():void
 public function new():int options(segment: "common", fastcall: true)
 {
 	var i:int;
-	for (i, 0, MAX) {
+	for (i = 0; i < MAX; i++) {
 		if (!type[i]) {
 			if (i >= cur_max) {
 				cur_max = i + 1;

@@ -184,8 +184,9 @@ var ... / const ...                    // 関数内の宣言（ブロックス�
 
 if (cond) stmt [elsif (cond) stmt]... [else stmt]
 while (cond) stmt
-loop stmt                              // 無限ループ（break で抜ける）。stmt はブロック
-for (i, from, to) { ... }              // i = from; while (i < to) { ...; i = i + 1; }
+loop { ... }                           // 無限ループ（break で抜ける）
+for (init; cond; step) { ... }         // C 型。init は var 宣言か式、step は式か ++/--。各部は省略可
+x++;  x--;  ++x;  --x;                 // x = x + 1 / x = x - 1（文としてのみ。式の値は持たない）
 switch (expr) {
 case 1, 2:                             // 複数の値を列挙できる
 	...                                // fallthrough しない（case の終わりで switch を抜ける）
@@ -194,12 +195,24 @@ case 3:
 default:
 	...
 }
-break;        continue;                // 最も内側のループ（break は switch も）を抜ける / 次の繰り返しへ
+break;        continue;                // 最も内側のループ（break は switch も）を抜ける / 次の繰り返しへ（for では step に進む）
 break L;      continue L;              // ラベル付き
 return [expr];
 ```
 
-### 5.1 文ラベル
+### 5.1 `for`
+
+```
+for (var i = 0; i < 10; i++) { ... }        // i のスコープは for の中だけ。型は初期値から（0 → int）
+for (var i:sint = -5; i < 5; i++) { ... }   // 型指定
+for (i = 0; i < n; i += 2) { ... }          // 既存の変数
+for (;;) { ... }                            // 無限ループ
+```
+
+意味は `{ init; while (cond) { body; step; } }` と同じで、`continue` は step に進む。
+`i++` は `i = i + 1` の略記で、`for` の step 以外では文としてだけ書ける（`a = i++` は不可）。
+
+### 5.2 文ラベル
 
 `loop` / `while` / `for` / `switch` にはラベルを付けられる。`break L;` はラベルの文を抜け、
 `continue L;` はラベルのループの次の繰り返しに進む（switch に `continue` はできない）。
@@ -215,7 +228,7 @@ outer: loop {
 }
 ```
 
-### 5.2 条件
+### 5.3 条件
 
 条件式には整数も書ける（0 が偽）。`&&` / `||` は短絡評価する。
 
@@ -303,6 +316,8 @@ v1 のソースは `fcc migrate` で機械的に v2 へ変換できる（[v2_gra
 | `use X;` / `use * from X;` の再輸出 | 常に再輸出される | `public use` のときだけ |
 | 選択的インポート `use a, b from mod;` | なし | あり |
 | `loop` | `loop() stmt` | `loop { ... }` |
+| `for` | `for (i, 0, n) { ... }`（`continue` がインクリメントを飛ばす癖あり） | C 型 `for (i = 0; i < n; i++) { ... }`（`continue` は step へ） |
+| `++` / `--` | なし | あり（文としてのみ） |
 | `break` | 最も内側の**ループ**を抜ける（switch は対象外） | 最も内側のループ**または switch**を抜ける |
 | ラベル付き `break` / `continue` | なし | あり |
 | `include("x.rb")` / `include macro("x.rb")` | Ruby マクロを読み込む | 廃止。`printf` 等は組み込み、文字表は `textmap` |

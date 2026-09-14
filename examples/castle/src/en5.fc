@@ -42,7 +42,7 @@ public function cookiebar_process(i:int):void
 	var n:int;
 	var spr = SPR_SLOT[slot] + SPR_COOKIEBAR;
 	var pal = PAL_SLOT[slot];
-	for (n, 1, size) {
+	for (n = 1; n < size; n++) {
 		sx = x + rx * n / 2;
 		sy = y + ry * n / 2;
 		ppu.sprite(sx - 4, sy - 4, spr + (anim / 4) % 2 * 2, pal + anim % 2);
@@ -424,7 +424,7 @@ function knight_search(x:int, y:int, dir:sint, no_horizontal:int):int
 
 	mem.zero(&temp[0], 7);
 
-	for (i, 0, 5) {
+	for (i = 0; i < 5; i++) {
 		if (i == 2) {
 			// 水平ジャンプ
 			if (!no_horizontal) {
@@ -457,7 +457,7 @@ function knight_search(x:int, y:int, dir:sint, no_horizontal:int):int
 	}
 
 	var total = 0;
-	for (i, 0, 7) {
+	for (i = 0; i < 7; i++) {
 		total += temp[i];
 	}
 
@@ -465,7 +465,7 @@ function knight_search(x:int, y:int, dir:sint, no_horizontal:int):int
 		return -1;
 
 	var n:sint = math.rand() % total;
-	for (i, 0, 7) {
+	for (i = 0; i < 7; i++) {
 		n -= temp[i];
 		if (n < 0)
 			return i;

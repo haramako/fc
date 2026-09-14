@@ -27,7 +27,7 @@ public function init_area_enemy():void
 	en.clear();
 
 	var n = 0;
-	for (n, 0, bg.enemy_num) {
+	for (n = 0; n < bg.enemy_num; n++) {
 		var idx = n * 7;
 		var type = bg.enemy[idx];
 		var i = en.new();
@@ -101,13 +101,13 @@ public function start():void
 		if (my.state == my.STATE_DIE) {
 			if (!bg.in_dark) {
 				var i:int;
-				for (i, 0, 4) {
+				for (i = 0; i < 4; i++) {
 					var buf = ppu.alloc(32);
 					mem.copy(buf, bg.pallet, 32);
 					bg.pal_down(buf, 32, i);
 					ppu.put(VRAM_PALETTE, buf, 32, 0);
 					var j:int;
-					for (j, 0, 10) {
+					for (j = 0; j < 10; j++) {
 						ppu.wait_vsync_with_flag(2);
 					}
 				}
@@ -206,12 +206,12 @@ function light_down():void
 {
 	var buf = ppu.alloc(32);
 	var i:int;
-	for (i, 0, 4) {
+	for (i = 0; i < 4; i++) {
 		mem.copy(buf, bg.pallet, 32);
 		bg.pal_down(buf, 32, i + 1);
 		ppu.put(VRAM_PALETTE, buf, 32, 0);
 		var j:int;
-		for (j, 0, 10) {
+		for (j = 0; j < 10; j++) {
 			ppu.wait_vsync_with_flag(2);
 		}
 	}
@@ -221,12 +221,12 @@ function light_undown():void
 {
 	var buf = ppu.alloc(32);
 	var i:int;
-	for (i, 0, 4) {
+	for (i = 0; i < 4; i++) {
 		mem.copy(buf, bg.pallet, 32);
 		bg.pal_down(buf, 32, 3 - i);
 		ppu.put(VRAM_PALETTE, buf, 32, 0);
 		var j:int;
-		for (j, 0, 10) {
+		for (j = 0; j < 10; j++) {
 			ppu.wait_vsync_with_flag(2);
 		}
 	}
@@ -266,7 +266,7 @@ function update_area_bgm():void
 function near_by_checkpoint(area:int):int
 {
 	var i:int;
-	for (i, 0, MAP_CHECKPOINT_NUM) {
+	for (i = 0; i < MAP_CHECKPOINT_NUM; i++) {
 		if (my.checkpoint_flags[i] == 0 && i != 0) {
 			var cp = MAP_CHECKPOINT[i];
 			var cp_area = MAP_CHECKPOINT_DATA[cp];
@@ -382,7 +382,7 @@ public function text_print(p:int*, str:int*):int
 public function text_print_num(p:int*, n:int):int
 {
 	var i:int;
-	for (i, 0, 3) {
+	for (i = 0; i < 3; i++) {
 		var c = 5 /* "0" */ + n % 10;
 		n = n / 10;
 		p[2 - i] = c;

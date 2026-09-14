@@ -39,7 +39,7 @@ func TestBreakV2(t *testing.T) {
 	t.Run("v2: labeled while / for / continue", func(t *testing.T) {
 		for _, src := range []string{
 			"a: while (x) { b: while (y) { continue a; } }",
-			"a: for (x, 0, 3) { b: for (y, 0, 3) { break a; } }",
+			"a: for (x = 0; x < 3; x++) { b: for (y = 0; y < 3; y++) { break a; } }",
 			"a: loop { b: switch (x) { case 1: break b; } break; }",
 			"a: loop { switch (x) { case 1: continue a; } }",
 		} {

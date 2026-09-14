@@ -70,6 +70,21 @@ func checkVersion(f *File) error {
 			if f.Version < Version2 && !n.Rparen.IsValid() {
 				fail(n.Loop, "`loop { ... }` requires fc 2 (write `loop() { ... }` in fc 1)")
 			}
+		case *ForStmt:
+			if f.Version >= Version2 && n.IsV1() {
+				fail(n.For, "`for (i, from, to)` is written `for (i = from; i < to; i++)` in fc 2")
+			}
+			if f.Version < Version2 && !n.IsV1() {
+				fail(n.For, "C-style `for (init; cond; step)` requires fc 2")
+			}
+		case *IncDecStmt:
+			if f.Version < Version2 {
+				fail(n.OpPos, "`++` / `--` require fc 2")
+			}
+			// `y = x++` は文法上 `(y = x)++` に読めてしまう。++/-- は文なので代入の中では使えない
+			if _, ok := n.X.(*AssignExpr); ok {
+				fail(n.OpPos, "`++` / `--` is a statement and cannot be used inside an expression")
+			}
 		case *LabeledStmt:
 			if f.Version < Version2 {
 				fail(n.Label.NamePos, "statement labels require fc 2")
@@ -119,7 +134,7 @@ var kindToYacc = map[Kind]int{
 	KwSwitch: kSWITCH, KwCase: kCASE, KwDefault: kDEFAULT,
 	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
-	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR,
+	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
 	LParen: '(', RParen: ')', LBrace: '{', RBrace: '}', Semicolon: ';', Colon: ':',
 	Lt: '<', Gt: '>', LBrack: '[', RBrack: ']', Plus: '+', Minus: '-', Star: '*',
 	Slash: '/', Percent: '%', Amp: '&', Pipe: '|', Caret: '^', Assign: '=',

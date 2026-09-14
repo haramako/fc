@@ -129,7 +129,7 @@ func (c *Compiler) Migrate(opt *MigrateOptions) (*MigrateResult, error) {
 	sort.Strings(ids)
 	for _, id := range ids {
 		src := sources[id]
-		if src.File.Version >= syntax.Version2 || !inScope(src.Abs) {
+		if !inScope(src.Abs) {
 			continue
 		}
 		// コンパイルに使った構文木は触らず、ソースから作り直す
@@ -153,6 +153,9 @@ func (c *Compiler) Migrate(opt *MigrateOptions) (*MigrateResult, error) {
 		}
 		if bytes.Contains(orig, []byte("\r\n")) {
 			out = bytes.ReplaceAll(out, []byte("\n"), []byte("\r\n"))
+		}
+		if bytes.Equal(orig, out) {
+			continue // v2 済みで変更なし
 		}
 		changes = append(changes, change{abs: src.Abs, orig: orig, rewritten: out})
 		res.Files = append(res.Files, src.Abs)

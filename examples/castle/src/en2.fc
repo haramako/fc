@@ -438,7 +438,7 @@ function colorswitch_check_enemy_on(me:int):int
 	var y = py[me];
 
 	var i:int;
-	for (i, 0, cur_max) {
+	for (i = 0; i < cur_max; i++) {
 		var et = type[i];
 		if ((et == TYPE_SLIME || et == TYPE_FROG || et == TYPE_BOUNDER) && i != me) {
 			if (math.abs(x - px[i]) < 8 && math.abs(y - py[i]) < 8) {
@@ -600,7 +600,7 @@ function jumpman_search(x:int, y:int, dir:sint, no_horizontal:int):int
 
 	mem.zero(&temp[0], 7);
 
-	for (i, 0, 5) {
+	for (i = 0; i < 5; i++) {
 		if (i == 2) {
 			// 水平ジャンプ
 			if (!no_horizontal) {
@@ -633,7 +633,7 @@ function jumpman_search(x:int, y:int, dir:sint, no_horizontal:int):int
 	}
 
 	var total = 0;
-	for (i, 0, 7) {
+	for (i = 0; i < 7; i++) {
 		total += temp[i];
 	}
 
@@ -641,7 +641,7 @@ function jumpman_search(x:int, y:int, dir:sint, no_horizontal:int):int
 		return -1;
 
 	var n:sint = math.rand() % total;
-	for (i, 0, 7) {
+	for (i = 0; i < 7; i++) {
 		n -= temp[i];
 		if (n < 0)
 			return i;

@@ -120,14 +120,34 @@ type WhileStmt struct {
 	Body   Stmt
 }
 
-// ForStmt は `for(var, from, to) { ... }`。
+// ForStmt は for 文。2 つの形がある:
+//   - v1: `for (var, from, to) { ... }` (Var / From / To)
+//   - v2: `for (init; cond; step) { ... }` (Init / Cond / Step。それぞれ省略可で nil)
+//
+// Init は *VarDecl (Semi 無効) / *ExprStmt / *IncDecStmt、Step は *ExprStmt / *IncDecStmt。
 type ForStmt struct {
 	For    Pos
-	Var    *Ident
-	From   Expr
-	To     Expr
+	Var    *Ident // v1
+	From   Expr   // v1
+	To     Expr   // v1
+	Init   Stmt   // v2
+	Cond   Expr   // v2
+	Step   Stmt   // v2
 	Rparen Pos
 	Body   *Block
+}
+
+// IsV1 は v1 の `for (var, from, to)` 形か。
+func (s *ForStmt) IsV1() bool { return s.Var != nil }
+
+// IncDecStmt は `x++;` / `x--;` / `++x;` / `--x;` (v2)。文としてだけ使え、式の値は持たない。
+// for の step に置いたときは Semi が無効。
+type IncDecStmt struct {
+	X      Expr
+	OpPos  Pos
+	Op     Kind // Inc / Dec
+	Prefix bool
+	Semi   Pos
 }
 
 // BreakStmt は `break;` / `break L;` (v2)。
@@ -420,7 +440,12 @@ func firstValid(ps ...Pos) Pos {
 }
 
 func (s *VarDecl) Pos() Pos { return firstValid(s.PublicPos, s.Keyword) }
-func (s *VarDecl) End() Pos { return after(s.Semi, 1) }
+func (s *VarDecl) End() Pos {
+	if !s.Semi.IsValid() { // for の init では `;` を持たない
+		return s.Specs[len(s.Specs)-1].End()
+	}
+	return after(s.Semi, 1)
+}
 
 func (s *FuncDecl) Pos() Pos { return firstValid(s.PublicPos, s.Keyword) }
 func (s *FuncDecl) End() Pos {
@@ -450,6 +475,22 @@ func (s *WhileStmt) End() Pos { return s.Body.End() }
 func (s *ForStmt) Pos() Pos { return s.For }
 func (s *ForStmt) End() Pos { return s.Body.End() }
 
+func (s *IncDecStmt) Pos() Pos {
+	if s.Prefix {
+		return s.OpPos
+	}
+	return s.X.Pos()
+}
+func (s *IncDecStmt) End() Pos {
+	if s.Semi.IsValid() {
+		return after(s.Semi, 1)
+	}
+	if s.Prefix {
+		return s.X.End()
+	}
+	return after(s.OpPos, 2)
+}
+
 func (s *BreakStmt) Pos() Pos { return s.Keyword }
 func (s *BreakStmt) End() Pos { return after(s.Semi, 1) }
 
@@ -469,7 +510,12 @@ func (c *DefaultClause) Pos() Pos { return c.Default }
 func (c *DefaultClause) End() Pos { return c.Body[len(c.Body)-1].End() }
 
 func (s *ExprStmt) Pos() Pos { return s.X.Pos() }
-func (s *ExprStmt) End() Pos { return after(s.Semi, 1) }
+func (s *ExprStmt) End() Pos {
+	if !s.Semi.IsValid() { // for の init / step では `;` を持たない
+		return s.X.End()
+	}
+	return after(s.Semi, 1)
+}
 
 func (s *OptionsStmt) Pos() Pos { return s.Options.Pos() }
 func (s *OptionsStmt) End() Pos { return after(s.Semi, 1) }
@@ -584,6 +630,7 @@ func (*LoopStmt) stmtNode()     {}
 func (*LabeledStmt) stmtNode()  {}
 func (*WhileStmt) stmtNode()    {}
 func (*ForStmt) stmtNode()      {}
+func (*IncDecStmt) stmtNode()   {}
 func (*BreakStmt) stmtNode()    {}
 func (*ContinueStmt) stmtNode() {}
 func (*ReturnStmt) stmtNode()   {}

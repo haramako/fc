@@ -211,8 +211,8 @@ function put(x:int, y:int, n:int, _pal:int):void
 public function draw_screen():void
 {
 	var ax:int, ay:int;
-	for (ax, 0, 16) {
-		for (ay, 0, 15) {
+	for (ax = 0; ax < 16; ax++) {
+		for (ay = 0; ay < 15; ay++) {
 			var cell:int = data[ay * 16 + ax];
 			put_in_lock(ax, ay, cell);
 		}
@@ -229,7 +229,7 @@ public function fetch_area(area:int, dir:int):void
 public function redraw_colorswitch(area:int):void
 {
 	var i:int;
-	for (i, 0, 16 * 15) {
+	for (i = 0; i < 16 * 15; i++) {
 		if (data[i] >= 56 && data[i] < 62) {
 			var t = (data[i] - 56) % 3;
 			if ((t + 1) == my.flags[my.FLAG_COLORSWITCH]) {
@@ -266,7 +266,7 @@ public function pal_down(pal:int*, size:int, pow:int):void options(fastcall: tru
 {
 	var i:int;
 	var n = pow * 16;
-	for (i, 0, size) {
+	for (i = 0; i < size; i++) {
 		var c = pal[i];
 		if (c != 0x0f) {
 			c = c - n;
@@ -282,7 +282,7 @@ public function pal_up(pal:int*, size:int, pow:int):void options(fastcall: true)
 {
 	var i:int;
 	var n = pow * 16;
-	for (i, 0, size) {
+	for (i = 0; i < size; i++) {
 		var c = pal[i];
 		if (c == 0x0F && n > 0) {
 			c = 0x0D;

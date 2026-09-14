@@ -125,7 +125,7 @@ func (p *printer) write(s string) {
 // 読まれてしまう組み合わせ (`<` `<` → `<<` など) かを返す。
 func mergesWithPrev(prev, next byte) bool {
 	switch string([]byte{prev, next}) {
-	case "<<", ">>", "&&", "||", "==", "<=", ">=", "!=", "+=", "-=", "->", "//", "/*", "*/":
+	case "<<", ">>", "&&", "||", "==", "<=", ">=", "!=", "+=", "-=", "->", "//", "/*", "*/", "++", "--":
 		return true
 	}
 	return false
@@ -323,16 +323,37 @@ func (p *printer) stmt(s Stmt) {
 		p.tokAt(s.For, "for")
 		p.space()
 		p.tok("(")
-		p.ident(s.Var)
-		p.tok(",")
-		p.space()
-		p.expr(s.From)
-		p.tok(",")
-		p.space()
-		p.expr(s.To)
+		if s.IsV1() {
+			p.ident(s.Var)
+			p.tok(",")
+			p.space()
+			p.expr(s.From)
+			p.tok(",")
+			p.space()
+			p.expr(s.To)
+		} else {
+			// for (init; cond; step)。省略部は空 (`for (;;)`)
+			if s.Init != nil {
+				p.simpleStmt(s.Init)
+			}
+			p.tok(";")
+			if s.Cond != nil {
+				p.space()
+				p.expr(s.Cond)
+			}
+			p.tok(";")
+			if s.Step != nil {
+				p.space()
+				p.simpleStmt(s.Step)
+			}
+		}
 		p.tokAt(s.Rparen, ")")
 		p.space()
 		p.block(s.Body)
+
+	case *IncDecStmt:
+		p.incDec(s)
+		p.tokAt(s.Semi, ";")
 
 	case *BreakStmt:
 		p.tokAt(s.Keyword, "break")
@@ -505,6 +526,38 @@ func (p *printer) ifStmt(s *IfStmt) {
 	}
 	p.tok("else")
 	p.body(s.Else)
+}
+
+// simpleStmt は for の init / step (`;` を持たない文)。
+func (p *printer) simpleStmt(s Stmt) {
+	switch s := s.(type) {
+	case *VarDecl:
+		p.tokAt(s.Keyword, "var")
+		p.space()
+		for i, sp := range s.Specs {
+			if i > 0 {
+				p.tok(",")
+				p.space()
+			}
+			p.varSpec(sp)
+		}
+	case *ExprStmt:
+		p.expr(s.X)
+	case *IncDecStmt:
+		p.incDec(s)
+	default:
+		panic("unknown simple statement")
+	}
+}
+
+func (p *printer) incDec(s *IncDecStmt) {
+	if s.Prefix {
+		p.tokAt(s.OpPos, s.Op.String())
+		p.expr(s.X)
+	} else {
+		p.expr(s.X)
+		p.tokAt(s.OpPos, s.Op.String())
+	}
 }
 
 func (p *printer) varSpec(sp *VarSpec) {

@@ -485,7 +485,7 @@ public function anchor_chain_process(i:int):void
 	var y = py[i];
 
 	var n:int;
-	for (n, 0, 6) {
+	for (n = 0; n < 6; n++) {
 		gr_sprite2(x, y + 16 * n, SPR_SLOT[slot] + SPR_ANCHOR_CHAIN, PAL_SLOT[slot] | ppu.SPRITE_FLAG_HIDE);
 	}
 }
@@ -855,7 +855,7 @@ function marchant_sold_out(kind:int):int
 {
 	var idx_base = kind * 3;
 	var i:int;
-	for (i, 0, 3) {
+	for (i = 0; i < 3; i++) {
 		var item_id = MARCHANT_ITEM_IDS[idx_base + i];
 		if (item_id != -1) {
 			if (!my.items[item_id]) {

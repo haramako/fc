@@ -39,11 +39,11 @@ package syntax
 
 %token <tok> NUMBER IDENT STRING
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE
-%token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR
+%token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!'
 
 %type <stmts>   program opt_statement_list statement_list
-%type <stmt>    statement_i statement else_block
+%type <stmt>    statement_i statement else_block opt_for_init opt_for_step simple_stmt incdec
 %type <optTok>  opt_scope
 %type <use>     use_target
 %type <ident>   opt_as opt_ident
@@ -104,7 +104,10 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | kLOOP block                          { $$ = &LoopStmt{Loop: $1.Pos, Body: $2} } /* v2: 括弧なし */
          | IDENT ':' statement                  { $$ = &LabeledStmt{Label: ident($1), Colon: $2.Pos, Stmt: $3} } /* v2: 文ラベル */
          | kWHILE '(' exp ')' statement         { $$ = &WhileStmt{While: $1.Pos, Cond: $3, Rparen: $4.Pos, Body: $5} }
-         | kFOR '(' IDENT ',' exp ',' exp ')' block { $$ = &ForStmt{For: $1.Pos, Var: ident($3), From: $5, To: $7, Rparen: $8.Pos, Body: $9} }
+         | kFOR '(' IDENT ',' exp ',' exp ')' block { $$ = &ForStmt{For: $1.Pos, Var: ident($3), From: $5, To: $7, Rparen: $8.Pos, Body: $9} } /* v1 */
+         | kFOR '(' opt_for_init ';' opt_exp ';' opt_for_step ')' block
+                                                { $$ = &ForStmt{For: $1.Pos, Init: $3, Cond: $5, Step: $7, Rparen: $8.Pos, Body: $9} } /* v2: C 型 */
+         | incdec ';'                           { s := $1.(*IncDecStmt); s.Semi = $2.Pos; $$ = s } /* v2 */
          | kBREAK opt_ident ';'                 { $$ = &BreakStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
          | kCONTINUE opt_ident ';'              { $$ = &ContinueStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
          | kRETURN opt_exp ';'                  { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} }
@@ -119,6 +122,22 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | kPRIVATE ':'                         { $$ = &ScopeLabel{Keyword: $1.Pos, Public: false, Colon: $2.Pos} }
          | block                                { $$ = $1 }
          | ';'                                  { $$ = &EmptyStmt{Semi: $1.Pos} }
+
+/* C 型 for の各部 (v2) */
+opt_for_init: /* empty */ { $$ = nil }
+            | kVAR var_decl_list { $$ = &VarDecl{Keyword: $1.Pos, Specs: $2} }
+            | simple_stmt
+
+opt_for_step: /* empty */ { $$ = nil }
+            | simple_stmt
+
+simple_stmt: exp { $$ = &ExprStmt{X: $1} }
+           | incdec
+
+incdec: exp INCR { $$ = &IncDecStmt{X: $1, OpPos: $2.Pos, Op: Inc} }
+      | exp DECR { $$ = &IncDecStmt{X: $1, OpPos: $2.Pos, Op: Dec} }
+      | INCR exp { $$ = &IncDecStmt{X: $2, OpPos: $1.Pos, Op: Inc, Prefix: true} }
+      | DECR exp { $$ = &IncDecStmt{X: $2, OpPos: $1.Pos, Op: Dec, Prefix: true} }
 
 opt_scope: /* empty */ { $$ = nil }
          | kPUBLIC { t := $1; $$ = &t }

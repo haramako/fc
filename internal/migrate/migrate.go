@@ -88,10 +88,12 @@ var builtinRubyFiles = map[string]bool{"stdio.rb": true, "unittest.rb": true, "s
 // Rewrite は v1 の構文木を v2 に書き換える (破壊的)。modID はファイルのモジュール id。
 // 戻り値は人が確認すべき注記 (手作業が要る箇所など)。
 func Rewrite(f *syntax.File, modID string, a *Analysis, opt Options) ([]string, error) {
-	if f.Version >= syntax.Version2 {
-		return nil, fmt.Errorf("%s: already fc %d", f.Filename, f.Version)
-	}
 	r := &rewriter{f: f, mod: modID, a: a, opt: opt}
+	if f.Version >= syntax.Version2 {
+		// v2 ファイルは、v2 の途中で足した書き換え (v1 形の for → C 型) だけを適用する
+		r.bodies()
+		return r.notes, nil
+	}
 	r.topLevel()
 	r.bodies()
 	f.Version = syntax.Version2 // Pragma は空のまま (ソースにプラグマ行が無いことを印字側に伝える)
@@ -281,6 +283,15 @@ func (r *rewriter) stmt(holder *syntax.Stmt, chain []*encl) {
 		e := &encl{stmt: s, holder: holder}
 		r.stmt(&s.Body, append(chain, e))
 	case *syntax.ForStmt:
+		if s.IsV1() {
+			// for (i, from, to) → for (i = from; i < to; i++)。生成コードは同じ
+			// (continue を含む場合だけ、v2 では step に飛ぶので変わる)
+			pos := s.For
+			s.Init = &syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, OpPos: pos, Op: syntax.Assign, Rhs: s.From}}
+			s.Cond = &syntax.BinaryExpr{X: &syntax.Ident{NamePos: pos, Name: s.Var.Name}, OpPos: pos, Op: syntax.Lt, Y: s.To}
+			s.Step = &syntax.IncDecStmt{X: &syntax.Ident{NamePos: pos, Name: s.Var.Name}, OpPos: pos, Op: syntax.Inc}
+			s.Var, s.From, s.To = nil, nil, nil
+		}
 		e := &encl{stmt: s, holder: holder}
 		r.stmtList(s.Body.Stmts, append(chain, e))
 	case *syntax.SwitchStmt:

@@ -120,7 +120,7 @@ function item_init():void
 	ppu.fill_in_lock(0x2400 + 4 * 32, 0x400 - 4 * 32, 0);
 
 	var i:int;
-	for (i, 0, ITEM_MAX) {
+	for (i = 0; i < ITEM_MAX; i++) {
 		put_item(i);
 	}
 
@@ -301,7 +301,7 @@ function draw_coin():void
 	var i:int;
 	var x = 8 * 6;
 	var y = 8 * 12 + 4;
-	for (i, 0, 3) {
+	for (i = 0; i < 3; i++) {
 		ppu.sprite(x, y, SPR_SYS_NUM + cur[i] * 2, 0);
 		x += 8;
 	}
@@ -310,7 +310,7 @@ function draw_coin():void
 function text_print_num(p:int*, n:int):int
 {
 	var i:int;
-	for (i, 0, 3) {
+	for (i = 0; i < 3; i++) {
 		var c = 0 /* "0" */ + n % 10;
 		n = n / 10;
 		p[2 - i] = c;
@@ -390,7 +390,7 @@ function memory_init():void
 	mem.zero(buf, 255);
 
 	var i:int;
-	for (i, 0, MEMORY_MAX) {
+	for (i = 0; i < MEMORY_MAX; i++) {
 		var x = i % 12;
 		var y = i / 12;
 		var idx = x + 4 + y * 32;
@@ -558,9 +558,9 @@ function map_init():void
 	var y:int;
 	var cur_buf = buf;
 	var addr:int16 = 0x2400 + 8 * 32 + 8;
-	for (y, 0, 18) {
+	for (y = 0; y < 18; y++) {
 		if (y >= 1 && y < 17) {
-			for (x, 0, 16) {
+			for (x = 0; x < 16; x++) {
 				var m = my.get_map(x, y - 1);
 				if (!m) {
 					cur_buf[x] = 0;
@@ -575,7 +575,7 @@ function map_init():void
 	// 属性のコピー
 	fs.copy(buf, fs.MINIMAP_ATTR);
 	addr = 0x27C0 + 2 * 8 + 2;
-	for (y, 0, 7) {
+	for (y = 0; y < 7; y++) {
 		ppu.put_in_lock(addr, buf, 4);
 		buf += 4;
 		addr += 8;
@@ -620,7 +620,7 @@ function map_process():int
 		if (my.items[ITEM_ID_WING] && (pad.pushed & pad.A) && my.get_map(ax, ay)) {
 			// 羽で飛ぶ
 			var i:int;
-			for (i, 0, MAP_CHECKPOINT_NUM) {
+			for (i = 0; i < MAP_CHECKPOINT_NUM; i++) {
 				var cp = MAP_CHECKPOINT[i];
 				var area = ay * 16 + ax;
 				if (MAP_CHECKPOINT_DATA[cp] == area) {
@@ -662,7 +662,7 @@ function map_draw():void
 
 	var i:int;
 	if (my.items[ITEM_ID_PEN]) {
-		for (i, 1, MAP_CHECKPOINT_NUM) {
+		for (i = 1; i < MAP_CHECKPOINT_NUM; i++) {
 			var cp = MAP_CHECKPOINT[i];
 			var area = MAP_CHECKPOINT_DATA[cp];
 			var checked = my.checkpoint_flags[i];
@@ -676,7 +676,7 @@ function map_draw():void
 
 	var has_compass = my.items[ITEM_ID_COMPASS];
 	var has_ouija_board = my.items[ITEM_ID_OUIJA_BOARD];
-	for (i, 1, MAP_CHEST_NUM) {
+	for (i = 1; i < MAP_CHEST_NUM; i++) {
 		var area = MAP_CHEST_AREA[i];
 		var item_id = MAP_CHEST_ITEM_ID[i];
 		var checked = my.items[item_id];

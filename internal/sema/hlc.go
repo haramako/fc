@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"bytes"
 	"github.com/haramako/fc/internal/diag"
@@ -62,6 +63,34 @@ func (h *Hlc) pushBreakable(b breakable) {
 
 func (h *Hlc) popBreakable() {
 	h.loops = h.loops[:len(h.loops)-1]
+}
+
+// forHasContinue は for の本体に、この for を対象にする continue があるか
+// (ラベルなしで、間にループを挟まないもの。または `continue label` でこの for のラベルを指すもの)。
+func forHasContinue(body *syntax.Block, label *syntax.Ident) bool {
+	found := false
+	var walk func(n syntax.Node, nested bool)
+	walk = func(n syntax.Node, nested bool) {
+		if found {
+			return
+		}
+		switch n := n.(type) {
+		case *syntax.ContinueStmt:
+			if n.Label == nil && !nested || n.Label != nil && label != nil && n.Label.Name == label.Name {
+				found = true
+			}
+			return
+		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt:
+			nested = true
+		case *syntax.LambdaExpr:
+			return
+		}
+		for _, c := range syntax.Children(n) {
+			walk(c, nested)
+		}
+	}
+	walk(body, false)
+	return found
 }
 
 // findBreakable は break / continue の飛び先を決める (doc/v2_grammar.md §3.7)。
@@ -500,6 +529,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		})
 
 	case *syntax.LabeledStmt:
+		if strings.HasPrefix(s.Label.Name, "@") {
+			// コンパイラ内部のラベル (for の step)。IR ラベルを置いて中の文を続ける
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: s.Label.Name})
+			h.compileStatement(s.Stmt)
+			break
+		}
 		// ラベルは直後のループ/switch が pushBreakable で引き取る (while/for は loop に脱糖されるので、
 		// 脱糖で先に出る代入文は触らない)
 		h.pendingLabel = s.Label
@@ -514,15 +549,64 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileStatement(&syntax.LoopStmt{Body: &syntax.IfStmt{Cond: s.Cond, Then: s.Body, Else: &syntax.BreakStmt{}}})
 
 	case *syntax.ForStmt:
-		// var = from; while (var < to) { body...; var = var + 1; }
-		body := make([]syntax.Stmt, 0, len(s.Body.Stmts)+1)
-		body = append(body, s.Body.Stmts...)
-		body = append(body, &syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign,
-			Rhs: &syntax.BinaryExpr{X: s.Var, Op: syntax.Plus, Y: &syntax.IntLit{Value: 1, Text: "1"}}}})
-		h.compileStmts([]syntax.Stmt{
-			&syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign, Rhs: s.From}},
-			&syntax.WhileStmt{Cond: &syntax.BinaryExpr{X: s.Var, Op: syntax.Lt, Y: s.To}, Body: &syntax.Block{Stmts: body}},
+		if s.IsV1() {
+			// v1: var = from; while (var < to) { body...; var = var + 1; }
+			// (continue がインクリメントを飛ばす v1 の癖もそのまま)
+			body := make([]syntax.Stmt, 0, len(s.Body.Stmts)+1)
+			body = append(body, s.Body.Stmts...)
+			body = append(body, &syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign,
+				Rhs: &syntax.BinaryExpr{X: s.Var, Op: syntax.Plus, Y: &syntax.IntLit{Value: 1, Text: "1"}}}})
+			h.compileStmts([]syntax.Stmt{
+				&syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign, Rhs: s.From}},
+				&syntax.WhileStmt{Cond: &syntax.BinaryExpr{X: s.Var, Op: syntax.Lt, Y: s.To}, Body: &syntax.Block{Stmts: body}},
+			})
+			break
+		}
+		// v2: { init; loop { if (cond) { body; step: step; } else break; } }
+		// v1 の for (while への脱糖) と同じ IR 形にして、移行しても生成コードが変わらないようにする。
+		// continue は step に飛ぶ。step のラベルは continue がこの for を指すときだけ作る
+		// (ラベルを常に出すと asm に行が増える)。init の変数は for のスコープに閉じる
+		h.inScope(func() {
+			if s.Init != nil {
+				h.compileStatement(s.Init)
+			}
+			label := h.pendingLabel // ラベル付き for なら continue L の判定に使う
+			stepLabel := ""
+			if forHasContinue(s.Body, label) {
+				stepLabel = h.newLabel("step")
+			}
+			labels := h.newLabels("begin", "end")
+			h.pushBreakable(breakable{continueLabel: stepLabel, breakLabel: labels[1]})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[0]})
+			then := make([]syntax.Stmt, 0, len(s.Body.Stmts)+1)
+			then = append(then, s.Body.Stmts...)
+			var step syntax.Stmt = &syntax.EmptyStmt{}
+			if s.Step != nil {
+				step = s.Step
+			}
+			if stepLabel != "" {
+				// 内部ラベル (名前が @ で始まる) は LabeledStmt の特別扱いで IR ラベルになる
+				step = &syntax.LabeledStmt{Label: &syntax.Ident{Name: stepLabel}, Stmt: step}
+			}
+			then = append(then, step)
+			var body syntax.Stmt = &syntax.Block{Stmts: then}
+			if s.Cond != nil {
+				body = &syntax.IfStmt{Cond: s.Cond, Then: body, Else: &syntax.BreakStmt{}}
+			}
+			h.compileStatement(body)
+			h.emit(&ir.Op{Code: ir.OpJump, Label: labels[0]})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[1]})
+			h.popBreakable()
 		})
+
+	case *syntax.IncDecStmt:
+		// x++ → x = x + 1 (v1 の for のインクリメントと同じ形。左辺値は 2 回評価される)
+		op := syntax.Plus
+		if s.Op == syntax.Dec {
+			op = syntax.Minus
+		}
+		h.compileStatement(&syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.X, OpPos: s.OpPos, Op: syntax.Assign,
+			Rhs: &syntax.BinaryExpr{X: s.X, OpPos: s.OpPos, Op: op, Y: &syntax.IntLit{ValuePos: s.OpPos, Value: 1, Text: "1"}}}})
 
 	case *syntax.BreakStmt:
 		h.emit(&ir.Op{Code: ir.OpJump, Label: h.findBreakable("break", s.Label).breakLabel})

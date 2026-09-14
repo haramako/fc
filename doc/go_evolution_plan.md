@@ -136,7 +136,7 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 | グローバル `var buf:int*; buf[i] = 0;` の pset | **未修正・クラッシュ** | `panic: index_pset with non-array`（ローカル変数なら OK） |
 | `c == 32;` の式文 | **未修正・クラッシュ** | `panic: invalid location none of {$N}`（test_bug.fc の既知バグと同じ経路。結果を使わない比較の tmp） |
 | void 関数を `if` に入れる | **未修正・クラッシュ** | `panic: ValLocation: invalid value <nil>` |
-| `for` で `continue` がインデックスを進めない | **未修正** | 脱糖でインクリメントを本体末尾に置くので `continue` が飛ばす → 無限ループ |
+| `for` で `continue` がインデックスを進めない | **v2 で解消**（2026-09-14） | v2 の C 型 `for (init; cond; step)` では `continue` が step に飛ぶ。v1 の `for (i, from, to)` は互換のため癖を残す |
 | `var x:sint; x > 0` が符号なし比較 | **未修正**（`lt` 符号バグ） | `x = -1` で `x < 0` は正しく 1、`x > 0` が 1（誤）。オペランドの片側しか符号を見ていない非対称 |
 | `\|\|` で両方 false なのに then | **`lt` 符号バグの現れ** | `vy > 0 \|\| idx == -1` の `vy:sint = -1` が符号なし比較で真になる。`\|\|` 自体は正常 |
 | 帰り値がある関数で `return` なし | **未修正** | エラーにならず、実行すると暴走（`rts` が無く次の関数へ落ちる） |

@@ -92,6 +92,8 @@ const (
 	Shr    // >>
 	AndAnd // &&
 	OrOr   // ||
+	Inc    // ++ (v2)
+	Dec    // -- (v2)
 
 	// 記号 (1 文字)
 	LParen    // (
@@ -127,7 +129,7 @@ var kindNames = [...]string{
 	KwSwitch: "switch", KwCase: "case", KwDefault: "default",
 	KwUse: "use", KwAs: "as", KwFrom: "from", KwPublic: "public", KwPrivate: "private",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
-	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||",
+	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
 	LParen: "(", RParen: ")", LBrace: "{", RBrace: "}", Semicolon: ";", Colon: ":",
 	Lt: "<", Gt: ">", LBrack: "[", RBrack: "]", Plus: "+", Minus: "-", Star: "*",
 	Slash: "/", Percent: "%", Amp: "&", Pipe: "|", Caret: "^", Assign: "=",

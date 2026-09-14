@@ -104,7 +104,7 @@ function select_draw():void
 
 	var sel_base = page * SEL_NUM_MAX;
 	var i:int;
-	for (i, 0, sel_num) {
+	for (i = 0; i < sel_num; i++) {
 		mem.zero(buf, 64);
 		menu.text_print(buf, items[sel_base + i]);
 		ppu.put_in_lock(0x400 + ppu.pos(4, i * 2 + 5), buf, 64);
@@ -170,7 +170,7 @@ function do_flag():int
 {
 	begin(_T("ちぇっくぽいんとをせんたく"));
 	var i:int;
-	for (i, 0, MAP_CHECKPOINT_NUM) {
+	for (i = 0; i < MAP_CHECKPOINT_NUM; i++) {
 		add(&MAP_CHECKPOINT_DATA[MAP_CHECKPOINT[i] + 3]);
 	}
 	cur = last_checkpoint;

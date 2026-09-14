@@ -35,7 +35,7 @@ public function init():void
 {
 	var i:int;
 	bul_free = 0;
-	for (i, 0, BUL_MAX) {
+	for (i = 0; i < BUL_MAX; i++) {
 		bul_x[i] = i + 1;
 	}
 }
@@ -55,7 +55,7 @@ public function process():void
 		wait -= 1;
 	}
 
-	for (i, 0, MAX) {
+	for (i = 0; i < MAX; i++) {
 		var type = type[i];
 		PROCESS[type](i);
 	}
@@ -64,7 +64,7 @@ public function process():void
 function new():int
 {
 	var i:int;
-	for (i, 0, MAX) {
+	for (i = 0; i < MAX; i++) {
 		if (!type[i]) {
 			return i;
 		}
@@ -112,7 +112,7 @@ function bul_nway(x:int, y:int, angle:int, speed:int, way:int, spread:int):void
 {
 	var i:int;
 	angle = angle - (way * spread) / 2;
-	for (i, 0, way) {
+	for (i = 0; i < way; i++) {
 		var n = bul_new();
 		if (n == 255) {
 			return;
@@ -130,7 +130,7 @@ function bul_nway(x:int, y:int, angle:int, speed:int, way:int, spread:int):void
 function check_hit(i:int):int
 {
 	var j:int;
-	for (j, 0, MY_BUL_MAX) {
+	for (j = 0; j < MY_BUL_MAX; j++) {
 		if (my_bul_type[j] == 1 && x_[i] + 12 - my_bul_x[j] < 24 && y_[i] + 12 - my_bul_y[j] < 24) {
 			my_bul_type[j] = 2;
 			my_bul_vx[j] = 0;
@@ -326,7 +326,7 @@ function gr_print(cx:int, cy:int, data:int8*, width:int, height:int):void
 {
 	var y:int;
 	var i = 0;
-	for (y, 0, height) {
+	for (y = 0; y < height; y++) {
 		ppu.put(ppu.pos(cx, cy + y), &data[i], width, 0);
 		i += width;
 	}

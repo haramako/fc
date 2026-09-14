@@ -104,7 +104,7 @@ var symbolTokens = []struct {
 }{
 	{"<=", Leq}, {">=", Geq}, {"==", EqEq}, {"+=", AddEq}, {"-=", SubEq},
 	{"!=", Neq}, {"->", Arrow}, {"<<", Shl}, {">>", Shr},
-	{"&&", AndAnd}, {"||", OrOr},
+	{"&&", AndAnd}, {"||", OrOr}, {"++", Inc}, {"--", Dec},
 	{"(", LParen}, {")", RParen}, {"{", LBrace}, {"}", RBrace}, {";", Semicolon}, {":", Colon},
 	{"<", Lt}, {">", Gt}, {"[", LBrack}, {"]", RBrack}, {"+", Plus}, {"-", Minus},
 	{"*", Star}, {"/", Slash}, {"%", Percent}, {"&", Amp}, {"|", Pipe}, {"^", Caret},

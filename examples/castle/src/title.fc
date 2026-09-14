@@ -115,7 +115,7 @@ function do_title():int
 			case 0:
 				sound.play_bgm(sound.BGM_GAME_START);
 				var i:int;
-				for (i, 0, 30) {
+				for (i = 0; i < 30; i++) {
 					ppu.wait_vsync_with_flag(2);
 				}
 				light_down();
@@ -137,13 +137,13 @@ function light_down():void
 {
 	var buf = ppu.alloc(32);
 	var i:int;
-	for (i, 0, 4) {
+	for (i = 0; i < 4; i++) {
 		mem.copy(buf, TITLE_PALETTE, 16);
 		mem.copy(buf + 16, TITLE_PALETTE, 16);
 		bg.pal_down(buf, 32, i + 1);
 		ppu.put(VRAM_PALETTE, buf, 32, 0);
 		var j:int;
-		for (j, 0, 10) {
+		for (j = 0; j < 10; j++) {
 			ppu.wait_vsync_with_flag(2);
 		}
 	}

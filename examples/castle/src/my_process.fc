@@ -534,7 +534,7 @@ function get_cell_kind(x:int, y:int):int options(fastcall: true)
 function check_on_enemy():int
 {
 	var i:int;
-	for (i, 0, en.cur_max) {
+	for (i = 0; i < en.cur_max; i++) {
 		var et = en.type[i];
 		if (et) {
 			switch (en.type[i]) {
@@ -689,7 +689,7 @@ function check_block():int
 	var i:int;
 	var head_y = y - 5;
 	var mod16 = head_y % 16;
-	for (i, 0, 2) {
+	for (i = 0; i < 2; i++) {
 		var c = bg.cell_type(x - 4 + i * 8, head_y);
 		if (c == bg.TYPE_WALL) {
 			y = head_y / 16 * 16 + (16 + 5);

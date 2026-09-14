@@ -48,7 +48,7 @@ public function _fetch_area(area:int, dir:int):void
 	// 水門によるエリア切り替え
 	if (my.flags[my.FLAG_WATERGATE]) {
 		var i:int;
-		for (i, 0, WG_AREA_NUM) {
+		for (i = 0; i < WG_AREA_NUM; i++) {
 			var idx = i * 2;
 			if (area == WG_AREA[idx]) {
 				area = WG_AREA[idx + 1];
@@ -60,7 +60,7 @@ public function _fetch_area(area:int, dir:int):void
 	// マグマゲートによる切り替え
 	if (my.flags[my.FLAG_MAGMAGATE]) {
 		var i:int;
-		for (i, 0, MG_AREA_NUM) {
+		for (i = 0; i < MG_AREA_NUM; i++) {
 			var idx = i * 2;
 			if (area == MG_AREA[idx]) {
 				area = MG_AREA[idx + 1];
@@ -72,7 +72,7 @@ public function _fetch_area(area:int, dir:int):void
 	// 錨生成器による切り替え
 	if (my.flags[my.FLAG_ANCHOR_GENERATOR]) {
 		var i:int;
-		for (i, 0, AG_AREA_NUM) {
+		for (i = 0; i < AG_AREA_NUM; i++) {
 			var idx = i * 2;
 			if (area == AG_AREA[idx]) {
 				area = AG_AREA[idx + 1];
@@ -127,7 +127,7 @@ public function _fetch_area(area:int, dir:int):void
 
 	// スプライトパレット、バンクの切り替え
 	var i:int;
-	for (i, 0, 2) {
+	for (i = 0; i < 2; i++) {
 		var slot = area_slot[i];
 		var palset = bg_data.PALSET_OF_TYPE[slot];
 		var palset_pos = palset * 4;
@@ -137,7 +137,7 @@ public function _fetch_area(area:int, dir:int):void
 
 	// 橋スイッチによる切り替え
 	if (area_type == 7) {
-		for (i, 0, 16 * 15) {
+		for (i = 0; i < 16 * 15; i++) {
 			if (data[i] >= 56 && data[i] <= 58) {
 				var t = (data[i] - 56 + 1);
 				if (t != my.flags[my.FLAG_COLORSWITCH]) {
@@ -209,7 +209,7 @@ function light_down():void
 {
 	var buf = ppu.alloc(16);
 	var i:int;
-	for (i, 0, 4) {
+	for (i = 0; i < 4; i++) {
 		mem.copy(buf, pallet, 16);
 		if (i >= 1) {
 			pal_down(buf, 4, 1);
@@ -219,7 +219,7 @@ function light_down():void
 		}
 		ppu.put(VRAM_PALETTE, buf, 16, 0);
 		var j:int;
-		for (j, 0, 4) {
+		for (j = 0; j < 4; j++) {
 			ppu.wait_vsync_with_flag(2);
 		}
 	}
@@ -229,7 +229,7 @@ function light_up():void
 {
 	var buf = ppu.alloc(16);
 	var i:int;
-	for (i, 0, 4) {
+	for (i = 0; i < 4; i++) {
 		mem.copy(buf, pallet, 16);
 		if (i < 1) {
 			bg.pal_down(buf, 4, 1);
@@ -239,7 +239,7 @@ function light_up():void
 		}
 		ppu.put(VRAM_PALETTE, buf, 16, 0);
 		var j:int;
-		for (j, 0, 4) {
+		for (j = 0; j < 4; j++) {
 			ppu.wait_vsync_with_flag(2);
 		}
 	}
@@ -259,7 +259,7 @@ function scroll_left():void
 		draw_map_vertical(x);
 
 		var i:int;
-		for (i, 0, 2) {
+		for (i = 0; i < 2; i++) {
 			my.x += (116 + GIFF_TABLE[x]) / 16;
 			my.draw();
 			ppu.scroll1 = x * 16 + 8 - i * 8;
@@ -290,7 +290,7 @@ function scroll_right():void
 		draw_map_vertical(x);
 
 		var i:int;
-		for (i, 0, 2) {
+		for (i = 0; i < 2; i++) {
 			my.x -= (116 + GIFF_TABLE[x]) / 16;
 			my.draw();
 			ppu.scroll1 = x * 16 + i * 8 + 8;
@@ -332,7 +332,7 @@ function scroll_up():void
 		draw_map_horizontal(y);
 
 		var i:int;
-		for (i, 0, 2) {
+		for (i = 0; i < 2; i++) {
 			var scroll_y = (speed + GIFF_TABLE[y]) / 16;
 			my.y += scroll_y;
 			my.draw();
@@ -387,7 +387,7 @@ function scroll_down():void
 		draw_map_horizontal(y);
 
 		var i:int;
-		for (i, 0, 2) {
+		for (i = 0; i < 2; i++) {
 			var scroll_y = (speed + GIFF_TABLE[y]) / 16;
 			my.y -= scroll_y;
 			my.draw();
@@ -429,7 +429,7 @@ function draw_map_vertical(x:int):void
 {
 	var addr:int16 = 0x2000 + x * 2;
 	var y:int;
-	for (y, 0, 15) {
+	for (y = 0; y < 15; y++) {
 		var n = data[y * 16 + x];
 		if (n < 32 && BLANK_CELL[n]) {
 			n = blank_cell;
@@ -453,7 +453,7 @@ function draw_map_horizontal(y:int):void
 	var y16:int16 = y;
 	var addr:int16 = 0x2000 + y16 * 64;
 	var x:int;
-	for (x, 0, 16) {
+	for (x = 0; x < 16; x++) {
 		var n = data[y * 16 + x];
 		if (n < 32 && BLANK_CELL[n]) {
 			n = blank_cell;
