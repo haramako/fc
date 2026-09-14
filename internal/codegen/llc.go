@@ -545,7 +545,19 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		case ir.OpIndex:
 			if ir.ValType(op.In(1)).Size == 1 {
 				// インデックスのサイズが１
-				if ir.ValType(op.In(0)).Kind == types.Array {
+				if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
+					// フレーム上のローカル配列: 先頭は S + addr + X (ゼロページなので上位は 0。OpRef と同じ)
+					r.push(l.loadYIdx(op.In(1), op.In(0)))
+					r.push("sty <reg+0")
+					r.push("txa")
+					r.push("clc")
+					r.push(fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(op.In(0))))
+					r.push("clc")
+					r.push("adc <reg+0")
+					r.push(l.storeA(op.Dst, 0))
+					r.push("lda #0")
+					r.push(l.storeA(op.Dst, 1))
+				} else if ir.ValType(op.In(0)).Kind == types.Array {
 					r.push(l.loadYIdx(op.In(1), op.In(0)))
 					r.push("sty <reg+0")
 					r.push("clc")
@@ -583,13 +595,26 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 						r.push("rol <reg+1")
 					}
 
-					r.push("lda <reg+0")
-					r.push("clc")
-					r.push(fmt.Sprintf("adc #.LOBYTE(%s)", l.toAsm(op.In(0))))
-					r.push(l.storeA(op.Dst, 0))
-					r.push("lda <reg+1")
-					r.push(fmt.Sprintf("adc #.HIBYTE(%s)", l.toAsm(op.In(0))))
-					r.push(l.storeA(op.Dst, 1))
+					if ir.ValLocation(op.In(0)) == ir.LocFrame {
+						// フレーム上のローカル配列 (上記と同じ。インデックスの上位は 0 とみなす)
+						r.push("txa")
+						r.push("clc")
+						r.push(fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(op.In(0))))
+						r.push("clc")
+						r.push("adc <reg+0")
+						r.push(l.storeA(op.Dst, 0))
+						r.push("lda <reg+1")
+						r.push("adc #0")
+						r.push(l.storeA(op.Dst, 1))
+					} else {
+						r.push("lda <reg+0")
+						r.push("clc")
+						r.push(fmt.Sprintf("adc #.LOBYTE(%s)", l.toAsm(op.In(0))))
+						r.push(l.storeA(op.Dst, 0))
+						r.push("lda <reg+1")
+						r.push(fmt.Sprintf("adc #.HIBYTE(%s)", l.toAsm(op.In(0))))
+						r.push(l.storeA(op.Dst, 1))
+					}
 				} else {
 					panic("invalid index")
 				}
@@ -611,9 +636,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpPget:
-			r.push(fmt.Sprintf("lda %s", l.byte(op.In(0), 0)))
+			r.push(l.loadA(op.In(0), 0))
 			r.push("sta <reg+0")
-			r.push(fmt.Sprintf("lda %s", l.byte(op.In(0), 1)))
+			r.push(l.loadA(op.In(0), 1))
 			r.push("sta <reg+1")
 			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 				r.push(fmt.Sprintf("ldy #%d", i))
@@ -622,9 +647,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpPset:
-			r.push(fmt.Sprintf("lda %s", l.byte(op.In(0), 0)))
+			r.push(l.loadA(op.In(0), 0))
 			r.push("sta <reg+0")
-			r.push(fmt.Sprintf("lda %s", l.byte(op.In(0), 1)))
+			r.push(l.loadA(op.In(0), 1))
 			r.push("sta <reg+1")
 			for i := 0; i < ir.ValType(op.In(0)).Base.Size; i++ {
 				r.push(l.loadA(op.In(1), i))
@@ -728,10 +753,20 @@ func (l *Llc) load(to, from ir.Operand) []any {
 			panic(fmt.Sprintf("can't convert from %s to %s", ir.OperandString(from), ir.OperandString(to)))
 		}
 		// 配列からポインタに変換
-		r = append(r, fmt.Sprintf("lda #.LOBYTE(%s)", l.toAsm(from)))
-		r = append(r, fmt.Sprintf("sta %s", l.byte(to, 0)))
-		r = append(r, fmt.Sprintf("lda #.HIBYTE(%s)", l.toAsm(from)))
-		r = append(r, fmt.Sprintf("sta %s", l.byte(to, 1)))
+		if ir.ValLocation(from) == ir.LocFrame {
+			// フレーム上のローカル配列: S + addr + X (OpRef と同じ)
+			r = append(r, "txa")
+			r = append(r, "clc")
+			r = append(r, fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(from)))
+			r = append(r, fmt.Sprintf("sta %s", l.byte(to, 0)))
+			r = append(r, "lda #0")
+			r = append(r, fmt.Sprintf("sta %s", l.byte(to, 1)))
+		} else {
+			r = append(r, fmt.Sprintf("lda #.LOBYTE(%s)", l.toAsm(from)))
+			r = append(r, fmt.Sprintf("sta %s", l.byte(to, 0)))
+			r = append(r, fmt.Sprintf("lda #.HIBYTE(%s)", l.toAsm(from)))
+			r = append(r, fmt.Sprintf("sta %s", l.byte(to, 1)))
+		}
 	} else {
 		// 通常の代入
 		if ir.ValType(from).Kind != types.Int {
@@ -790,6 +825,13 @@ func (l *Llc) loadA(v ir.Operand, n int) any {
 			return "lda #0"
 		}
 		return nil
+	}
+	if pa, ok := v.(*ir.PointeredArray); ok && ir.ValLocation(pa.From) == ir.LocFrame {
+		// フレーム上のローカル配列をポインタとして使う: 先頭は S + addr + X (上位は 0)
+		if n == 0 {
+			return []string{"txa", "clc", fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(pa.From))}
+		}
+		return "lda #0"
 	}
 	return fmt.Sprintf("lda %s", l.byte(v, n))
 }
@@ -884,6 +926,10 @@ func mangle(str string) string {
 // byte は値からn番目のbyteを取得する。
 func (l *Llc) byte(v ir.Operand, n int) string {
 	if pa, ok := v.(*ir.PointeredArray); ok {
+		if ir.ValLocation(pa.From) == ir.LocFrame {
+			// 即値では表せない (loadA が扱う)。ここに来るのは未対応の経路
+			panic(&diag.Error{Msg: "local array used as pointer in an unsupported position"})
+		}
 		switch n {
 		case 0:
 			return fmt.Sprintf("#.LOBYTE(%s)", l.toAsm(pa.From))

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/types"
 )
 
 // ---------------------------------------------------------------
@@ -40,10 +41,12 @@ func CalcLiveRange(lmd *ir.Lambda) {
 		if ir.ValKind(vAny) != ir.KindLocal {
 			return
 		}
+		if pa, ok := vAny.(*ir.PointeredArray); ok {
+			// ローカル配列をポインタとして使う (引数に渡すなど) のは配列そのものの使用
+			vAny = pa.From
+		}
 		v := ir.UnderlyingValue(vAny)
 		if v == nil {
-			// ir.PointeredArray がローカル変数を包む場合、Ruby版は live_range 設定で
-			// NoMethodError になる (実際には発生しない経路)
 			panic(fmt.Sprintf("cannot record %T in use_define", vAny))
 		}
 		e := udIndex[v]
@@ -153,8 +156,9 @@ func AllocateRegister(lmd *ir.Lambda) {
 				lmd.Result.Location = ir.LocFrame
 			}
 			lmd.Result.Address = 0
-		} else if beyondCall || v.LocalType == ir.LTArg || refered[v] {
-			// 引数か、関数をまたいでいるなら、フレームに割り当てる
+		} else if beyondCall || v.LocalType == ir.LTArg || refered[v] || (v.Kind == ir.KindLocal && v.Type.Kind == types.Array) {
+			// 引数か、関数をまたいでいるか、配列なら、フレームに割り当てる
+			// (レジスタ領域は 2 バイト単位でしか確保しないので、配列を置くと隣と重なって壊れる)
 			v.Address = frameSize
 			if fastcall {
 				v.Location = ir.LocFastcallReg

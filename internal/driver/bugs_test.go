@@ -80,3 +80,67 @@ func TestBugVoidValue(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+func TestBugLocalArray(t *testing.T) {
+	t.Parallel()
+	// ローカル配列 (レジスタ領域に 2 バイトで置かれて隣の一時変数と重なっていた → フレームに置く)。
+	// 定数添字・変数添字・2 バイト添字・ポインタ経由・関数への受け渡し
+	out := runEmu(t, `use mem;
+function fill(p:int*, n:int):void
+{
+	var i:int;
+	for (i = 0; i < n; i++) {
+		p[i] = i + 40;
+	}
+}
+function sum(p:int*, n:int):int
+{
+	var s = 0;
+	var i:int;
+	for (i = 0; i < n; i++) {
+		s += p[i];
+	}
+	return s;
+}
+function main():void
+{
+	var la:int[4];
+	la[0] = 7;
+	la[1] = 8;
+	la[2] = 9;
+	la[3] = 10;
+	var l0 = la[0];
+	var l3 = la[3];
+	printf("const ", l0, " ", l3, "\n");
+	var i:int;
+	for (i = 0; i < 4; i++) {
+		la[i] = i + 20;
+	}
+	var l2 = la[2];
+	l3 = la[3];
+	printf("var ", l2, " ", l3, "\n");
+	var i16:int16 = 1;
+	la[i16] = 99;
+	var l1 = la[1];
+	printf("idx16 ", l1, "\n");
+	var p:int* = la;
+	p[0] = 1;
+	l0 = la[0];
+	printf("ptr ", l0, "\n");
+	mem.set(la, 3, 4);
+	var s1 = sum(la, 4);
+	fill(la, 4);
+	var s2 = sum(la, 4);
+	printf("call ", s1, " ", s2, "\n");
+	var big:int[20];
+	big[19] = 77;
+	var b19 = big[19];
+	printf("big ", b19, "\n");
+	exit(0);
+}
+`)
+	want := "const 7 10\nvar 22 23\nidx16 99\nptr 1\ncall 12 166\nbig 77\n"
+	if out != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
+}
