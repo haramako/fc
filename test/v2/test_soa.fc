@@ -1,0 +1,117 @@
+#fc 2
+// soa コンテナ (doc/v2_types_struct.md §4.5) のテスト。
+use * from unittest;
+
+struct Pos {
+	x:int;
+	y:int;
+}
+
+struct Enemy {
+	pos:Pos;
+	hp:int16;
+	speed:sint8;
+	tick:fn():int;
+}
+
+function tick1():int { return 1; }
+function tick2():int { return 2; }
+
+soa Enemies:[8]Enemy;
+soa const TABLE:[3]Enemy = [
+	{{1, 2}, 300, -1, tick1},
+	{pos: {3, 4}, hp: 400, speed: 2, tick: tick2},
+	{{5, 6}, 500, -3, tick1},
+];
+
+function move(e:*Enemies):void
+{
+	e.pos.x += e.speed as int;
+	e.hp -= 1;
+}
+
+function test_field():void
+{
+	assert_equal(sizeof(*Enemies), 1, 'sizeof handle');
+	var e:*Enemies = 2 as *Enemies;
+	e.pos.x = 10;
+	e.pos.y = 20;
+	e.hp = 1000;
+	e.speed = -5;
+	e.tick = tick2;
+	assert_equal(e.pos.x, 10, 'x');
+	assert_equal(e.pos.y, 20, 'y');
+	assert_equal(e.hp, 1000, 'hp (2 bytes)');
+	assert_equal(e.speed, -5, 'speed (signed)');
+	assert_equal(e.tick(), 2, 'function field');
+	assert_equal(Enemies[2].hp, 1000, 'direct index');
+	Enemies[3].hp = 7;
+	assert_equal(Enemies[3].hp, 7, 'direct index store');
+	move(e);
+	assert_equal(e.pos.x, 5, 'move x');
+	assert_equal(e.hp, 999, 'move hp');
+}
+
+function test_handle_arith():void
+{
+	for (var i = 0; i < 8; i++) {
+		Enemies[i].pos.x = i;
+		Enemies[i].hp = i as int16 * 100;
+	}
+	var s:int16 = 0;
+	var p = &Enemies[0];
+	var last = &Enemies[7];
+	while (p <= last) {
+		s += p.hp;
+		p++;
+	}
+	assert_equal(s, 2800, 'sum by handle');
+	p = &Enemies[1];
+	p += 3;
+	assert_equal(p.pos.x, 4, 'handle += n');
+	assert_equal(p as int, 4, 'handle as int');
+	assert_equal(p == &Enemies[4], 1, 'handle ==');
+	assert_equal(p != &Enemies[4], 0, 'handle !=');
+	assert_equal(p < &Enemies[5], 1, 'handle <');
+}
+
+function test_gather_scatter():void
+{
+	var v:Enemy = {{7, 8}, 900, 1, tick1};
+	*Enemies[5] = v;
+	assert_equal(Enemies[5].pos.y, 8, 'scatter y');
+	assert_equal(Enemies[5].hp, 900, 'scatter hp');
+	var w = *Enemies[5];
+	assert_equal(w.pos.x, 7, 'gather x');
+	assert_equal(w.hp, 900, 'gather hp');
+	assert_equal(w.tick(), 1, 'gather tick');
+	Enemies[6] = Enemies[5];
+	assert_equal(Enemies[6].hp, 900, 'element copy');
+	var q = Enemies[5];
+	assert_equal(q.pos.x, 7, 'element to struct var');
+	var pp = &Enemies[6];
+	pp.pos = {11, 12};
+	assert_equal(Enemies[6].pos.y, 12, 'nested scatter');
+	var pos = pp.pos;
+	assert_equal(pos.x + pos.y, 23, 'nested gather');
+}
+
+function test_const():void
+{
+	assert_equal(TABLE[1].pos.x, 3, 'const x');
+	assert_equal(TABLE[1].hp, 400, 'const hp');
+	assert_equal(TABLE[0].speed, -1, 'const speed');
+	assert_equal(TABLE[2].tick(), 1, 'const tick');
+	var t = &TABLE[2];
+	assert_equal(t.hp, 500, 'const by handle');
+	var s:int16 = 0;
+	for (var i = 0; i < 3; i++) {
+		s += TABLE[i].hp;
+	}
+	assert_equal(s, 1200, 'const sum');
+}
+
+function main():void
+{
+	unittest_run_tests();
+}

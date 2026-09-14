@@ -745,9 +745,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 
 var reIndentExempt = regexp.MustCompile(`^([.@_a-zA-Z0-9][_a-zA-Z0-9]+:|\.segment|\.proc)`)
 
-// isByteInt は 1 バイトの整数型か (旧実装の `type == int || type == sint8`)。
+// isByteInt は 1 バイトの整数型か (旧実装の `type == int || type == sint8`)。SoA のハンドル (1 バイトのインデックス) も含む。
 func isByteInt(t *types.Type) bool {
-	return t.Kind == types.Int && t.Size == 1
+	return (t.Kind == types.Int || t.Kind == types.SoaRef) && t.Size == 1
 }
 
 func ifElse(cond bool, a, b string) string {
@@ -971,6 +971,13 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 		}
 	}
 	if cv, ok := v.(*ir.CastedValue); ok {
+		if lv := ir.ValLiteral(cv); lv != nil && lv.Kind == ir.KindLiteral {
+			// リテラルの一部 (struct のフィールド / SoA のバイト分割): リテラルそのものの n+offset バイト目
+			if n < cv.Type.Size {
+				return l.byte(lv, n+ir.ValOffset(cv))
+			}
+			return "#0"
+		}
 		if n < cv.Type.Size && n+cv.Offset < ir.ValType(cv.From).Size {
 			return fmt.Sprintf("%d+%s", n, l.toAsm(cv))
 		}

@@ -211,11 +211,20 @@ func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
 	return ty.Size
 }
 
-// fieldAccess は `x.name` (x は struct、または struct へのポインタ)。(値, 左辺値か) を返す。
-func (h *Hlc) fieldAccess(arg *cexpr, name string) (ir.Operand, bool) {
+// fieldRef は `x.name` の評価結果。v / lv は lval と同じ (値, 左辺値か)。
+// SoA の 2 バイト以上のフィールドは 1 つの場所で表せないので split で返す (v は nil)。
+type fieldRef struct {
+	v        ir.Operand
+	lv       bool
+	split    *soaSplit
+	soaConst bool // soa const の要素 (代入不可)
+}
+
+// fieldRef は `x.name` (x は struct、struct へのポインタ、または SoA のハンドル)。
+func (h *Hlc) fieldRef(arg *cexpr, name string) fieldRef {
 	left, lv := h.lval(arg)
 	t := ir.ValType(left)
-	if lv {
+	if lv && t.Kind != types.SoaRef {
 		t = t.Base
 	}
 	switch {
@@ -226,15 +235,17 @@ func (h *Hlc) fieldAccess(arg *cexpr, name string) (ir.Operand, bool) {
 			ptr = h.newTmp(t)
 			h.emit(&ir.Op{Code: ir.OpPget, Dst: ptr, Src: []ir.Operand{left}})
 		}
-		return h.fieldViaPointer(ptr, t.Base, name), true
+		return fieldRef{v: h.fieldViaPointer(ptr, t.Base, name), lv: true}
 	case t.Kind == types.Struct:
 		if lv {
-			return h.fieldViaPointer(left, t, name), true
+			return fieldRef{v: h.fieldViaPointer(left, t, name), lv: true}
 		}
 		f := h.fieldOf(t, name)
-		return ir.NewCastedValue(left, f.Type, f.Offset), false
+		return fieldRef{v: ir.NewCastedValue(left, f.Type, f.Offset)}
 	case t.Kind == types.SoaRef:
-		return h.soaField(left, lv, t, name), true
+		// ハンドルは左辺値 (要素) でも右辺値 (ハンドルの値) でも同じインデックス
+		v, flv, split := h.soaField(left, t, name)
+		return fieldRef{v: v, lv: flv, split: split, soaConst: t.Soa.IsConst}
 	}
 	panic(&diag.Error{Msg: fmt.Sprintf("%s is not a struct (no field %s)", t, name)})
 }

@@ -1081,7 +1081,11 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	case *syntax.NamedType:
 		return h.namedType(t)
 	case *syntax.PointerType:
-		return h.prog.Types.PointerTo(h.typeOf(t.Elem))
+		elem := h.typeOf(t.Elem)
+		if elem.IsSoa {
+			return h.prog.Types.SoaRef(elem, elem.Base, "") // `*Points`: SoA の要素ハンドル
+		}
+		return h.prog.Types.PointerTo(elem)
 	case *syntax.ArrayType:
 		n := -1
 		if lit, ok := t.Len.(*syntax.IntLit); ok {
@@ -1202,6 +1206,9 @@ func (h *Hlc) rval(c *cexpr) ir.Operand {
 		panic(&diag.Error{Msg: "expression has no value (void)"})
 	}
 	if left {
+		if ir.ValType(v).Kind == types.SoaRef {
+			return h.soaGather(v)
+		}
 		r := h.newTmp(ir.ValType(v).Base)
 		h.emit(&ir.Op{Code: ir.OpPget, Dst: r, Src: []ir.Operand{v}})
 		return r
@@ -1221,6 +1228,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	case cValue:
 		if e.val.Type.Kind == types.TypeName {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s is a type, not a value", e.val.Name)})
+		}
+		if e.val.Type.IsSoa {
+			panic(&diag.Error{Msg: fmt.Sprintf("soa %s can only be indexed (%s[i]) or used as a type (*%s)", e.val.Name, e.val.Name, e.val.Name)})
 		}
 		if e.val.Kind == ir.KindArrayLiteral {
 			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
@@ -1261,32 +1271,25 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		switch e.op {
 
 		case opLoad:
+			if lhs := e.args[0]; lhs.kind == cOp && lhs.op == opField {
+				// struct のフィールドへの代入。SoA の 2 バイト以上のフィールドは 1 つのポインタで表せないのでここで扱う
+				fr := h.fieldRef(lhs.args[0], lhs.name)
+				if fr.soaConst {
+					panic(&diag.Error{Msg: "cannot assign to element of soa const"})
+				}
+				if fr.split != nil {
+					right := h.rval(h.withExpected(e.args[1], fr.split.typ))
+					h.soaStoreSplit(fr.split, right)
+					r = right
+					break
+				}
+				r = h.assign(fr.v, fr.lv, e.args[1])
+				leftValue = fr.lv
+				break
+			}
 			left, lv := h.lval(e.args[0])
-			rhs := e.args[1]
-			if h.needsExpected(rhs) {
-				// `p = {1, 2}`: 左辺の型で struct リテラルの型を決める
-				lt := ir.ValType(left)
-				if lv {
-					lt = lt.Base
-				}
-				rhs = h.withExpected(rhs, lt)
-			}
-			right := h.rval(rhs)
-			if lv {
-				h.compatible(ir.ValType(left).Base, ir.ValType(right))
-				right = h.cast(right, ir.ValType(left).Base)
-				h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{left, right}})
-				r = left
-				leftValue = true
-			} else {
-				h.compatible(ir.ValType(left), ir.ValType(right))
-				if !ir.ValAssignable(left) {
-					panic(&diag.Error{Msg: fmt.Sprintf("%s is not left value", ir.OperandString(left))})
-				}
-				right = h.cast(right, ir.ValType(left))
-				h.emit(&ir.Op{Code: ir.OpLoad, Dst: left, Src: []ir.Operand{right}})
-				r = left
-			}
+			r = h.assign(left, lv, e.args[1])
+			leftValue = lv
 
 		case opNot, opUminus:
 			left := h.rval(e.args[0])
@@ -1301,7 +1304,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
-					ir.ValType(left).Kind == types.Pointer && ir.ValType(right).Kind == types.Int {
+					(ir.ValType(left).Kind == types.Pointer || ir.ValType(left).Kind == types.SoaRef) && ir.ValType(right).Kind == types.Int {
 					typ = ir.ValType(left)
 				} else {
 					panic(cerr)
@@ -1414,7 +1417,17 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 
 		case opRef: // &演算子
-			left, lv := h.lval(e.args[0])
+			var left ir.Operand
+			var lv bool
+			if a := e.args[0]; a.kind == cOp && a.op == opField {
+				fr := h.fieldRef(a.args[0], a.name)
+				if fr.split != nil {
+					panic(&diag.Error{Msg: fmt.Sprintf("cannot take the address of soa field %s (2 bytes or more: stored as separate byte arrays)", a.name)})
+				}
+				left, lv = fr.v, fr.lv
+			} else {
+				left, lv = h.lval(a)
+			}
 			if lv {
 				r = left
 			} else {
@@ -1427,17 +1440,38 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 
 		case opDeref: // *演算子
-			r = h.rval(e.args[0])
-			if ir.ValType(r).Kind != types.Pointer {
+			if v, lv := h.lval(e.args[0]); lv && ir.ValType(v).Kind == types.SoaRef {
+				// `*Points[i]`: 要素 (左辺値) の参照はがしは要素そのもの
+				r = v
+				leftValue = true
+				break
+			} else if lv {
+				r = h.newTmp(ir.ValType(v).Base)
+				h.emit(&ir.Op{Code: ir.OpPget, Dst: r, Src: []ir.Operand{v}})
+			} else {
+				r = v
+			}
+			if ir.ValType(r).Kind != types.Pointer && ir.ValType(r).Kind != types.SoaRef {
 				// Ruby版では未代入の `left` を参照するため空文字列になる
 				panic(&diag.Error{Msg: " is not pointer"})
 			}
 			leftValue = true
 
 		case opField: // struct のフィールド参照 a.f (a が struct へのポインタなら自動で参照はがし)
-			r, leftValue = h.fieldAccess(e.args[0], e.name)
+			fr := h.fieldRef(e.args[0], e.name)
+			if fr.split != nil {
+				r = h.soaGatherSplit(fr.split)
+			} else {
+				r, leftValue = fr.v, fr.lv
+			}
 
 		case opIndex: // []演算子
+			if a := e.args[0]; a.kind == cValue && a.val.Type.IsSoa {
+				// `Points[i]`: SoA コンテナの添字はハンドルを作るだけ
+				r = h.soaIndex(a.val.Type, h.rval(e.args[1]))
+				leftValue = true
+				break
+			}
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
 			if ir.ValType(left).Kind != types.Pointer && ir.ValType(left).Kind != types.Array {
@@ -1458,6 +1492,36 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		panic(fmt.Sprintf("unknown expression kind %d", e.kind))
 	}
 	return r, leftValue
+}
+
+// assign は代入 `left = rhs` (left は評価済みの左辺、lv は左辺値 (ポインタ) かどうか)。代入した値 (左辺) を返す。
+func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
+	if h.needsExpected(rhs) {
+		// `p = {1, 2}`: 左辺の型で struct リテラルの型を決める
+		lt := ir.ValType(left)
+		if lv {
+			lt = lt.Base
+		}
+		rhs = h.withExpected(rhs, lt)
+	}
+	right := h.rval(rhs)
+	if lv {
+		if ir.ValType(left).Kind == types.SoaRef {
+			h.soaScatter(left, right)
+			return left
+		}
+		h.compatible(ir.ValType(left).Base, ir.ValType(right))
+		right = h.cast(right, ir.ValType(left).Base)
+		h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{left, right}})
+		return left
+	}
+	h.compatible(ir.ValType(left), ir.ValType(right))
+	if !ir.ValAssignable(left) {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s is not left value", ir.OperandString(left))})
+	}
+	right = h.cast(right, ir.ValType(left))
+	h.emit(&ir.Op{Code: ir.OpLoad, Dst: left, Src: []ir.Operand{right}})
+	return left
 }
 
 // warn は警告を記録する (位置は処理中の文/式)。
@@ -1552,6 +1616,9 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 		}
 		if from.Kind == types.Array && to.Kind == types.Pointer && from.Base == to.Base {
 			return
+		}
+		if (from.Kind == types.Int && to.Kind == types.SoaRef) || (from.Kind == types.SoaRef && to.Kind == types.Int) {
+			return // SoA のハンドルはインデックス (整数) と相互に変換できる
 		}
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot convert %s to %s with `as` (use bitcast for bit reinterpretation)", from, to)})
 	case syntax.CastBit:

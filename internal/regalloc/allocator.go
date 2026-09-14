@@ -96,6 +96,10 @@ func CalcLiveRange(lmd *ir.Lambda) {
 
 		for _, v := range defines {
 			record(v, true, i)
+			if isPartialDef(v) {
+				// 変数の一部 (struct のフィールド / SoA のバイト分割) への書き込みは残りを保つので、使用でもある
+				record(v, false, i)
+			}
 		}
 		for _, v := range uses {
 			record(v, false, i)
@@ -114,6 +118,16 @@ func CalcLiveRange(lmd *ir.Lambda) {
 	for _, e := range udOrder {
 		e.v.LiveRange = lrc.CalcLiveRange(e.defines, e.uses)
 	}
+}
+
+// isPartialDef は Dst が変数の一部 (CastedValue の Offset つき、または元より小さい型) への書き込みか。
+func isPartialDef(v ir.Operand) bool {
+	cv, ok := v.(*ir.CastedValue)
+	if !ok {
+		return false
+	}
+	uv := ir.UnderlyingValue(cv)
+	return uv != nil && (ir.ValOffset(cv) != 0 || cv.Type.Size < uv.Type.Size)
 }
 
 // ---------------------------------------------------------------

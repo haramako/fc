@@ -35,6 +35,7 @@ type Program struct {
 	// CastKinds は v1 の `<T>x` の位置 → v2 で書くべき種類 (as / bitcast)。fcc migrate が使う
 	CastKinds map[syntax.Position]syntax.CastKind
 
+	soas        map[*types.Type]*soaInfo   // SoA コンテナ型 → フィールドごとの配列 (soa.go)
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
@@ -63,6 +64,7 @@ func NewProgram() *Program {
 		CastKinds:   map[syntax.Position]syntax.CastKind{},
 		macros:      map[*ir.Value]MacroFn{},
 		constMacros: map[*ir.Value]ConstMacroFn{},
+		soas:        map[*types.Type]*soaInfo{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)

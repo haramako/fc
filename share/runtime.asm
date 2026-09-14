@@ -242,10 +242,30 @@ __mul_8s = __mul_8
         rts
 .endproc
         
-;;; int16xint16=>int16 の掛け算
+;;; int16xint16=>int16 の掛け算 (下位 16 ビット。符号付きでも同じ)
 ;;;  reg(4,5) = reg(0,1) * reg(2,3)
-;;; TODO: 未実装
+;;; USING: reg[0,1,2,3,4,5] (入力は壊れる)、Y
 .proc __mul_16
+        lda #0
+        sta reg+4
+        sta reg+5
+        ldy #16
+@loop:
+        lsr reg+3               ; reg(2,3) >>= 1、押し出したビットが C
+        ror reg+2
+        bcc @skip
+        clc                     ; reg(4,5) += reg(0,1)
+        lda reg+4
+        adc reg+0
+        sta reg+4
+        lda reg+5
+        adc reg+1
+        sta reg+5
+@skip:
+        asl reg+0               ; reg(0,1) <<= 1
+        rol reg+1
+        dey
+        bne @loop
         rts
 .endproc
         

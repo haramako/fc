@@ -50,6 +50,8 @@ type Type struct {
 	Name     string  // Struct / SoaRef のモジュール修飾名 (mod.Name)
 	Soa      *Type   // SoaRef のコンテナ (`soa` 配列型)、Kind == Array で IsSoa
 	IsSoa    bool    // Array が SoA コンテナ (soa 宣言) か
+	IsConst  bool    // SoA コンテナが `soa const` (読み出しのみ) か
+	Path     string  // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
 	fastcall bool
 	str      string
 }
@@ -130,15 +132,25 @@ func (u *Universe) SetFields(t *Type, fields []Field) {
 	t.Size = off
 }
 
-// SoaArray は SoA コンテナの型 (`soa Name:[N]Elem`)。配列型だが IsSoa で区別し、要素はメモリ上で分散する。
-func (u *Universe) SoaArray(qualName string, elem *Type, length int) *Type {
-	return u.intern(&Type{Kind: Array, Base: elem, Length: length, Size: elem.Size * length, IsSoa: true, Name: qualName,
-		str: fmt.Sprintf("soa %s [%d]%s", qualName, length, elem.str)})
+// SoaArray は SoA コンテナの型 (`soa Name:[N]Elem`)。配列型だが IsSoa で区別し、要素はメモリ上で分散する
+// (フィールドごとの配列)。値としては添字で要素ハンドル (SoaRef) を得る以外の使い方はない。
+func (u *Universe) SoaArray(qualName string, elem *Type, length int, isConst bool) *Type {
+	str := "soa " + qualName
+	if isConst {
+		str = "soa const " + qualName
+	}
+	return u.intern(&Type{Kind: Array, Base: elem, Length: length, Size: elem.Size * length, IsSoa: true, IsConst: isConst,
+		Name: qualName, str: str})
 }
 
 // SoaRef は SoA コンテナの要素ハンドル (`*Name`。1 バイトのインデックス)。
-func (u *Universe) SoaRef(soa *Type) *Type {
-	return u.intern(&Type{Kind: SoaRef, Size: 1, Base: soa.Base, Soa: soa, Name: soa.Name, Length: -1, str: "*" + soa.Name})
+// base はハンドルが指す struct (最上位ならコンテナの要素型)、path は入れ子フィールドの名前の連結 ("" / "pos_")。
+func (u *Universe) SoaRef(soa, base *Type, path string) *Type {
+	str := "*" + soa.Name
+	if path != "" {
+		str += "." + strings.TrimSuffix(path, "_")
+	}
+	return u.intern(&Type{Kind: SoaRef, Size: 1, Base: base, Soa: soa, Name: soa.Name, Path: path, Length: -1, str: str})
 }
 
 // IntType は size バイトの整数型。
