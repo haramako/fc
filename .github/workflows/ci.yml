@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # ca65 / ld65 (cc65) が PATH にあること
+      - name: Install cc65 (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cc65
+
+      - name: Install cc65 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP\cc65.zip"
+          Invoke-WebRequest -Uri "https://sourceforge.net/projects/cc65/files/cc65-snapshot-win32.zip/download" -OutFile $zip -UserAgent "Mozilla/5.0"
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\cc65"
+          "$env:RUNNER_TEMP\cc65\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Check cc65
+        run: ca65 --version
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build fcc
+        run: go build -o fcc${{ runner.os == 'Windows' && '.exe' || '' }} ./cmd/fcc

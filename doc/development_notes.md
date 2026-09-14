@@ -59,6 +59,8 @@ go test ./...                                    # 全部 (golden + examples + N
 - **`fcc migrate`**: `fcc migrate [-t nes] [--lib DIR] [--textmap NAME=PATH] -w <main.fc>...`。作業ディレクトリと
   `--lib` の下のファイルだけを書き換え、再コンパイルして asm（正規化）が一致しなければ元に戻す（`--force` で受け入れ）。
   castle は `cd src && fcc migrate -t nes --textmap _T=../tmp/font/text.chr.txt --textmap _M=../tmp/font/misc_text.chr.txt -w main.fc`
+- **CI / リリース**（2026-09-14〜）: push ごとに `.github/workflows/ci.yml`（Linux + Windows、cc65 導入、`go vet` / `go test`）。
+  タグ `v*` を push すると goreleaser がバイナリを GitHub Releases に置く。`fcc version` でバージョンとリビジョン
 - **`fcc fmt`**（2026-09-12〜）: `fcc fmt -l <files>` で未整形のファイルを列挙、`-w` で上書き、`-d` で差分。
   正規形は [internal/syntax/printer.go](../internal/syntax/printer.go) 先頭のコメントと `TestFormatStyle` が定義。
   **リポジトリ内の .fc はまだ整形していない**（castle は製品コードなので一括整形はオーナー判断。整形しても asm は変わらない）

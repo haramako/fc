@@ -160,9 +160,11 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 
 ### Phase R5 — 継続的な足場（0.5日）
 
-- [ ] CI (GitHub Actions): cc65 導入 + `go vet` + `go test`（Linux/Windows）
-- [ ] goreleaser 等でマルチプラットフォームのリリースバイナリ（embed済み単体配布）
-- [ ] バージョン番号の導入（`fcc --version`）
+- [x] CI (GitHub Actions): cc65 導入 + `go vet` + `go test`（Linux/Windows）✅ 2026-09-14 `.github/workflows/ci.yml`
+      （Linux は apt の cc65、Windows は cc65-snapshot-win32.zip。MesenCE のテストは無ければ skip）
+- [x] goreleaser でマルチプラットフォームのリリースバイナリ（embed済み単体配布）✅ `.goreleaser.yaml` +
+      `release.yml`（タグ `v*` で linux/windows/darwin × amd64/arm64）。ローカルで goreleaser 未導入のため設定は CI で初回確認
+- [x] バージョン番号の導入（`fcc version` / `--version`）✅ `-X main.version` で埋め込み、無ければビルド情報から
 
 ---
 

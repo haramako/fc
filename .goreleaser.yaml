@@ -1,0 +1,40 @@
+# goreleaser: fcc の単体バイナリを各プラットフォーム向けに作る (fclib/ share/ は embed 済み)。
+#
+#   ローカルで試す:  goreleaser release --snapshot --clean
+#   リリース:        タグ v* を push すると .github/workflows/release.yml が走る
+version: 2
+
+project_name: fcc
+
+builds:
+  - id: fcc
+    main: ./cmd/fcc
+    binary: fcc
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: fcc
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE.txt
+      - doc/language_reference.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^doc:"

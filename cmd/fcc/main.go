@@ -22,6 +22,7 @@ Commands:
     run              build and run by emulator
     fmt              format source files (see fcc fmt -h)
     migrate          migrate fc 1 sources to fc 2 (see fcc migrate -h)
+    version          show version
 Options:
     -h, --help       show this message
     -o FILE          output file
@@ -49,6 +50,8 @@ func run() int {
 		return runFmt(args[1:])
 	case "migrate":
 		return runMigrate(args[1:])
+	case "version", "--version", "-v":
+		return runVersion()
 	}
 	fs := flag.NewFlagSet("fcc", flag.ExitOnError)
 	fs.Usage = func() { fmt.Print(usage) }
