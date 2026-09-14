@@ -1,0 +1,57 @@
+{
+  "function": {
+    "prefix": "function",
+    "body": ["function ${1:name}(${2:a:int}):${3:void}", "{", "\t$0", "}"],
+    "description": "関数"
+  },
+  "public function": {
+    "prefix": "pfunction",
+    "body": ["public function ${1:name}(${2:a:int}):${3:void}", "{", "\t$0", "}"],
+    "description": "公開関数"
+  },
+  "for": {
+    "prefix": "for",
+    "body": ["for (var ${1:i} = 0; $1 < ${2:n}; $1++) {", "\t$0", "}"],
+    "description": "C 型 for (v2)"
+  },
+  "while": {
+    "prefix": "while",
+    "body": ["while (${1:cond}) {", "\t$0", "}"]
+  },
+  "loop": {
+    "prefix": "loop",
+    "body": ["loop {", "\t$0", "}"],
+    "description": "無限ループ (v2)"
+  },
+  "if": {
+    "prefix": "if",
+    "body": ["if (${1:cond}) {", "\t$0", "}"]
+  },
+  "switch": {
+    "prefix": "switch",
+    "body": ["switch (${1:x}) {", "case ${2:0}:", "\t$0", "\tbreak;", "default:", "\tbreak;", "}"]
+  },
+  "struct": {
+    "prefix": "struct",
+    "body": ["struct ${1:Name} {", "\t${2:x}:${3:int};", "}"],
+    "description": "struct (v2)"
+  },
+  "soa": {
+    "prefix": "soa",
+    "body": ["soa ${1:Name}:[${2:8}]${3:Struct};"],
+    "description": "SoA コンテナ (v2)"
+  },
+  "use": {
+    "prefix": "use",
+    "body": ["use ${1:module};"]
+  },
+  "use from": {
+    "prefix": "usefrom",
+    "body": ["use * from ${1:module};"]
+  },
+  "fastcall": {
+    "prefix": "fastcall",
+    "body": ["function ${1:name}(${2:a:int}):${3:int} options(fastcall: true)", "{", "\t$0", "}"],
+    "description": "fastcall 関数"
+  }
+}

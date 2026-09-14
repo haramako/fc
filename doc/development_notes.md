@@ -63,6 +63,10 @@ go test ./...                                    # 全部 (golden + examples + N
 - **`fcc migrate`**: `fcc migrate [-t nes] [--lib DIR] [--textmap NAME=PATH] -w <main.fc>...`。作業ディレクトリと
   `--lib` の下のファイルだけを書き換え、再コンパイルして asm（正規化）が一致しなければ元に戻す（`--force` で受け入れ）。
   castle は `cd src && fcc migrate -t nes --textmap _T=../tmp/font/text.chr.txt --textmap _M=../tmp/font/misc_text.chr.txt -w main.fc`
+- **VS Code 拡張**（2026-09-15〜）: `editors/vscode/`。TextMate 文法 + `fcc fmt` / `fcc check` を呼ぶだけの薄い拡張
+  （LSP なし）。`npm install && npm run check-grammar`（文法をリポジトリの全 .fc でトークン化して検査）、
+  `npm run package` で VSIX、`code --install-extension fc-lang-*.vsix`。文法を足したら `syntaxes/fc.tmLanguage.json` と
+  `scripts/check-grammar.js` の期待値を更新する
 - **ca65 / ld65 の探索**（2026-09-14〜）: `internal/driver/tools.go` の `ToolPath`。`FC_CC65_BIN` → fcc の実行ファイルと
   同じディレクトリ（と `cc65/`, `bin/`）→ PATH の順。リリース（`release.yml`）は Linux amd64（cc65 をソースから静的ビルド）と
   Windows（公式スナップショットの 32 ビット exe）に ca65 / ld65 を同梱する。`fcc version` が解決先を表示する

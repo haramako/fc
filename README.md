@@ -67,6 +67,7 @@ internal/diag/    診断 (エラー) 型
 internal/ir/      中間表現 (Value / Op / Lambda / Module) とダンプ
 internal/sema/    意味解析 (構文木 → IR)、組み込みマクロ
 internal/regalloc/ レジスタ割付
+editors/vscode/  VS Code 拡張 (ハイライト / fcc fmt / fcc check。editors/vscode/README.md)
 internal/codegen/ IR → ca65 アセンブリ
 internal/driver/  パイプライン統括 (ca65 / ld65 の起動、リンク、emu 実行)。golden / examples テストもここ
 internal/r6502/   6502エミュレータ (emuターゲット実行用)

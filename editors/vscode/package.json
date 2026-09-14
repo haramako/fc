@@ -1,0 +1,111 @@
+{
+  "name": "fc-lang",
+  "displayName": "FC Language (NES compiler)",
+  "description": "Syntax highlighting, formatting (fcc fmt) and diagnostics (fcc check) for the fc language",
+  "version": "0.1.0",
+  "publisher": "haramako",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/haramako/fc.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters",
+    "Linters"
+  ],
+  "keywords": [
+    "fc",
+    "nes",
+    "famicom",
+    "6502",
+    "ca65"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onLanguage:fc"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "fc",
+        "aliases": [
+          "FC",
+          "fc"
+        ],
+        "extensions": [
+          ".fc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "fc",
+        "scopeName": "source.fc",
+        "path": "./syntaxes/fc.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "fc",
+        "path": "./snippets/fc.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "fc.check",
+        "title": "FC: Check (fcc check)"
+      },
+      {
+        "command": "fc.format",
+        "title": "FC: Format Document (fcc fmt)"
+      },
+      {
+        "command": "fc.showVersion",
+        "title": "FC: Show fcc version"
+      }
+    ],
+    "configuration": {
+      "title": "FC",
+      "properties": {
+        "fc.fccPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the fcc executable. Empty: use fcc on PATH, else bin/windows/fcc.exe or bin/linux/fcc under the workspace folder."
+        },
+        "fc.target": {
+          "type": "string",
+          "enum": [
+            "emu",
+            "nes"
+          ],
+          "default": "emu",
+          "description": "Target passed to fcc check (-t)."
+        },
+        "fc.mainFile": {
+          "type": "string",
+          "default": "",
+          "description": "Main module for fcc check, relative to the workspace folder (e.g. src/main.fc). Empty: main.fc next to the current file if it exists, otherwise the current file. Module resolution (`use`) is order dependent, so checking from the real main module gives the same result as the build."
+        },
+        "fc.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run fcc check when a .fc file is saved and show the result in the Problems panel."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check-grammar": "node scripts/check-grammar.js",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.0.0"
+  }
+}

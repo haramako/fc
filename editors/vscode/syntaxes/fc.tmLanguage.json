@@ -1,0 +1,223 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "FC",
+  "scopeName": "source.fc",
+  "fileTypes": ["fc"],
+  "patterns": [
+    { "include": "#pragma" },
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#labels" },
+    { "include": "#calls" },
+    { "include": "#operators" },
+    { "include": "#punctuation" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "pragma": {
+      "comment": "先頭行の `#fc 2`",
+      "match": "\\A(#fc)\\s+(\\d+)\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.version.fc" },
+        "2": { "name": "constant.numeric.version.fc" }
+      }
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.fc",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "captures": { "0": { "name": "punctuation.definition.comment.fc" } }
+        },
+        {
+          "name": "comment.line.double-slash.fc",
+          "begin": "//",
+          "end": "$",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.fc" } }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.triple.fc",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.fc" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.fc" } },
+          "patterns": [{ "include": "#string-escapes" }]
+        },
+        {
+          "name": "string.quoted.double.fc",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.fc" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.fc" } },
+          "patterns": [{ "include": "#string-escapes" }]
+        },
+        {
+          "comment": "単引用符の文字列はエスケープなし",
+          "name": "string.quoted.single.fc",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.fc" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.fc" } }
+        }
+      ]
+    },
+    "string-escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.fc",
+          "match": "\\\\(n|x[0-9A-Fa-f]{2})"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.fc", "match": "\\b0[xX][0-9A-Fa-f][0-9A-Fa-f_]*\\b" },
+        { "name": "constant.numeric.binary.fc", "match": "\\b0[bB][01][01_]*\\b" },
+        { "name": "constant.numeric.decimal.fc", "match": "\\b[0-9][0-9_]*\\b" }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "comment": "function name(...)",
+          "match": "\\b(function)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.fc" },
+            "2": { "name": "entity.name.function.fc" }
+          }
+        },
+        {
+          "comment": "struct Name / soa Name / soa const Name",
+          "match": "\\b(struct|soa)\\s+(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.struct.fc" },
+            "2": { "name": "storage.modifier.fc" },
+            "3": { "name": "entity.name.type.fc" }
+          }
+        },
+        {
+          "comment": "use mod; / use * from mod; / use a, b from mod; / use mod as x;",
+          "begin": "\\b(use)\\b",
+          "end": ";",
+          "beginCaptures": { "1": { "name": "keyword.control.import.fc" } },
+          "endCaptures": { "0": { "name": "punctuation.terminator.fc" } },
+          "patterns": [
+            { "match": "\\b(from|as)\\b", "name": "keyword.control.import.fc" },
+            { "match": "\\*", "name": "keyword.operator.wildcard.fc" },
+            { "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b", "name": "entity.name.namespace.fc" },
+            { "match": ",", "name": "punctuation.separator.fc" }
+          ]
+        },
+        {
+          "comment": "options(key: value, ...)",
+          "begin": "\\b(options)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": { "name": "keyword.other.options.fc" },
+            "2": { "name": "punctuation.section.parens.begin.fc" }
+          },
+          "endCaptures": { "0": { "name": "punctuation.section.parens.end.fc" } },
+          "patterns": [
+            { "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(:)", "captures": { "1": { "name": "variable.parameter.option.fc" }, "2": { "name": "punctuation.separator.key-value.fc" } } },
+            { "include": "#strings" },
+            { "include": "#numbers" },
+            { "match": "\\b(true|false)\\b", "name": "constant.language.fc" },
+            { "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b", "name": "variable.other.constant.fc" },
+            { "match": ",", "name": "punctuation.separator.fc" }
+          ]
+        },
+        {
+          "comment": "include(\"file\") / include kind(\"file\") / incbin(\"file\")",
+          "match": "\\b(include|incbin)\\b(?:\\s+([A-Za-z_][A-Za-z0-9_]*))?",
+          "captures": {
+            "1": { "name": "keyword.control.include.fc" },
+            "2": { "name": "entity.name.tag.include-kind.fc" }
+          }
+        },
+        {
+          "comment": "var / const 宣言の名前",
+          "match": "\\b(var|const)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.fc" },
+            "2": { "name": "variable.other.declaration.fc" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.flow.fc", "match": "\\b(if|else|elsif|loop|while|for|return|break|continue|switch|case|default)\\b" },
+        { "name": "storage.modifier.fc", "match": "\\b(public|private)\\b" },
+        { "name": "storage.type.fc", "match": "\\b(var|const|function|fn|struct|soa)\\b" },
+        { "name": "keyword.operator.cast.fc", "match": "\\b(as|bitcast|sizeof)\\b" },
+        { "name": "constant.language.fc", "match": "\\b(true|false|null)\\b" },
+        { "name": "keyword.other.fc", "match": "\\b(include|incbin|options|use|from)\\b" }
+      ]
+    },
+    "types": {
+      "patterns": [
+        { "name": "storage.type.primitive.fc", "match": "\\b(void|bool|int|uint|int8|uint8|sint|sint8|int16|uint16|sint16)\\b" },
+        {
+          "comment": "宣言の型 `: Name` / `: *Name` / `: [N]Name` / `: mod.Name` (基本型以外の名前を型として色付け)",
+          "match": "(:)\\s*((?:\\*|\\[[^\\]]*\\])*)\\s*(?:([A-Za-z_][A-Za-z0-9_]*)\\s*\\.\\s*)?([A-Z][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "punctuation.separator.type.fc" },
+            "2": { "name": "keyword.operator.type.fc" },
+            "3": { "name": "entity.name.namespace.fc" },
+            "4": { "name": "entity.name.type.fc" }
+          }
+        }
+      ]
+    },
+    "labels": {
+      "comment": "文ラベル (v2): `name:` の後に loop / while / for / switch",
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*(?=(loop|while|for|switch)\\b)",
+      "captures": {
+        "1": { "name": "entity.name.label.fc" },
+        "2": { "name": "punctuation.separator.label.fc" }
+      }
+    },
+    "calls": {
+      "comment": "呼び出し name( / mod.name(",
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+      "captures": { "1": { "name": "entity.name.function.call.fc" } }
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.assignment.compound.fc", "match": "(<<=|>>=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=)" },
+        { "name": "keyword.operator.comparison.fc", "match": "(==|!=|<=|>=|<|>)" },
+        { "name": "keyword.operator.logical.fc", "match": "(&&|\\|\\||!)" },
+        { "name": "keyword.operator.increment.fc", "match": "(\\+\\+|--)" },
+        { "name": "keyword.operator.arrow.fc", "match": "->" },
+        { "name": "keyword.operator.assignment.fc", "match": "=" },
+        { "name": "keyword.operator.arithmetic.fc", "match": "(<<|>>|[-+*/%&|^~])" }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.terminator.statement.fc", "match": ";" },
+        { "name": "punctuation.separator.comma.fc", "match": "," },
+        { "name": "punctuation.accessor.fc", "match": "\\." },
+        { "name": "punctuation.section.block.begin.fc", "match": "\\{" },
+        { "name": "punctuation.section.block.end.fc", "match": "\\}" },
+        { "name": "punctuation.section.brackets.fc", "match": "[\\[\\]]" },
+        { "name": "punctuation.section.parens.fc", "match": "[()]" }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        { "comment": "大文字だけの名前は定数扱い", "name": "variable.other.constant.fc", "match": "\\b[A-Z][A-Z0-9_]*\\b" },
+        { "name": "variable.other.fc", "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b" }
+      ]
+    }
+  }
+}
