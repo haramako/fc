@@ -5,6 +5,7 @@ package codegen
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -488,36 +489,60 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpLt:
-			labels := l.newLabels(2)
-			trueLabel, endLabel := labels[0], labels[1]
+			// a < b。フラグの意味 (LocCond のとき OpIf が見る):
+			//   符号なし: 多バイトの減算の借り = C クリア ⇔ a < b
+			//   符号付き: 減算結果の符号 (V でオーバーフローを補正) = N セット ⇔ a < b
+			// どちらか一方でも符号付きなら符号付き比較 (v1 は左辺しか見ておらず、多バイトや
+			// オーバーフローのある符号付き比較も壊れていた。2026-09-14 に書き直し)
+			labels := l.newLabels(3)
+			trueLabel, endLabel, skipLabel := labels[0], labels[1], labels[2]
 			size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
-			// Ruby版は `signed = op.In(0).type.signed or op.In(1).type.signed` で、
-			// `or` の優先順位により op.In(1) 側は代入に含まれない (バグの忠実な再現)
-			signed := ir.ValType(op.In(0)).Signed
-			for i := size - 1; i >= 0; i-- {
-				r.push(l.loadA(op.In(0), i))
-				r.push(fmt.Sprintf("cmp %s", l.byte(op.In(1), i)))
-				if signed && i == size-1 {
-					r.push(fmt.Sprintf("bmi %s", trueLabel))
+			signed := ir.ValType(op.In(0)).Signed || ir.ValType(op.In(1)).Signed
+			if os.Getenv("FC_TRACE_SIGNED") != "" && signed {
+				// 調査用: 符号付き比較の場所を列挙する
+				lit0, ok0 := ir.ValIntLiteral(op.In(0))
+				lit1, ok1 := ir.ValIntLiteral(op.In(1))
+				fmt.Fprintf(os.Stderr, "SIGNED_LT %s mixed=%v bigliteral=%v %s < %s\n", op.Pos,
+					ir.ValType(op.In(0)).Signed != ir.ValType(op.In(1)).Signed, ok0 && lit0 >= 128 || ok1 && lit1 >= 128,
+					ir.OperandString(op.In(0)), ir.OperandString(op.In(1)))
+			}
+			if lit, ok := ir.ValIntLiteral(op.In(1)); signed && ok && lit == 0 {
+				// a < 0 (符号付き) は a の最上位バイトの符号ビットそのもの
+				r.push(l.loadA(op.In(0), size-1))
+			} else {
+				r.push(l.loadA(op.In(0), 0))
+				if size == 1 && signed {
+					r.push("sec")
+					r.push(fmt.Sprintf("sbc %s", l.byte(op.In(1), 0)))
 				} else {
-					r.push(fmt.Sprintf("bcc %s", trueLabel))
+					r.push(fmt.Sprintf("cmp %s", l.byte(op.In(1), 0)))
+				}
+				for i := 1; i < size; i++ {
+					r.push(l.loadA(op.In(0), i))
+					r.push(fmt.Sprintf("sbc %s", l.byte(op.In(1), i)))
+				}
+				if signed {
+					r.push(fmt.Sprintf("bvc %s", skipLabel))
+					r.push("eor #$80")
+					r.push(skipLabel + ":")
 				}
 			}
-			if ir.ValLocation(op.Dst) == ir.LocCond {
-				r.lines = r.lines[:len(r.lines)-1] // 最後のbccを消す
-				if size != 1 {
+			if ir.ValLocation(op.Dst) != ir.LocCond {
+				// 値として 0 / 1 を作る
+				if signed {
+					r.push(fmt.Sprintf("bmi %s", trueLabel))
+					r.push("lda #0")
+					r.push(fmt.Sprintf("beq %s", endLabel)) // lda #0 で Z が立つ
 					r.push(trueLabel + ":")
+					r.push("lda #1")
+					r.push(endLabel + ":")
+				} else {
+					// A = C (a >= b) を反転
+					r.push("lda #0")
+					r.push("rol a")
+					r.push("eor #1")
 				}
-			} else {
-				// falseのとき
-				r.push("lda #0")
 				r.push(l.storeA(op.Dst, 0))
-				r.push(fmt.Sprintf("jmp %s", endLabel))
-				// trueのとき
-				r.push(trueLabel + ":")
-				r.push("lda #1")
-				r.push(l.storeA(op.Dst, 0))
-				r.push(endLabel + ":")
 			}
 
 		case ir.OpNot:

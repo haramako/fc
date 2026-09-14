@@ -115,8 +115,14 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 
 修正するもの（実バグ）:
 
-- [ ] **`:lt` の符号判定バグ**（`signed = a or b` の優先順位で op[2] しか見ていない）
-      → 符号付き比較のコード生成が正しくなる。**castle での実挙動に影響しうるため要テスト**
+- [x] **`:lt` の符号判定バグ**（`signed = a or b` の優先順位で op[2] しか見ていない）
+      → 符号付き比較のコード生成が正しくなる。✅ 2026-09-14 `<` のコード生成を書き直した:
+      片側でも符号付きなら符号付き比較、符号付きは `sbc` + V 補正（v1 は `cmp; bmi` でオーバーフロー時に誤り）、
+      多バイトは借りの連鎖（v1 は上位バイトの結果を下位で上書きしていて 16 ビット比較全般が誤り）、
+      `x < 0` は符号ビットだけ見る。fclib/math.fc の `x < 128`（符号なしのつもりの書き方）は `x >= 0` 等に直した。
+      **castle の実挙動は要手動検証**: 対象は [castle_signed_compare_sites.txt](castle_signed_compare_sites.txt)（86 箇所）。
+      内蔵エミュ / MesenCE の自動プレイは通る。my_process セグメントが満杯に近く、比較の符号付き部分が
+      伸びたため値を作る場合のコードを詰めた（`lda #0; rol a; eor #1`）
 - [ ] **非void関数の return 忘れが素通りする**（memo.txt: do_debug_selectで発症）
       → コンパイルエラー化（compile_lambda にコメントアウトされた raise が既にある）
 - [x] レキサ: `//\n`（空コメント）が次行を飲み込む（memo.txt にもバグとして記載）、
@@ -140,8 +146,8 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 | `c == 32;` の式文 | **修正済み**（2026-09-14） | `panic: invalid location none of {$N}`（test_bug.fc の既知バグと同じ経路。結果を使わない比較の tmp） |
 | void 関数を `if` に入れる | **エラー化**（2026-09-14: "expression has no value (void)"） | `panic: ValLocation: invalid value <nil>` |
 | `for` で `continue` がインデックスを進めない | **v2 で解消**（2026-09-14） | v2 の C 型 `for (init; cond; step)` では `continue` が step に飛ぶ。v1 の `for (i, from, to)` は互換のため癖を残す |
-| `var x:sint; x > 0` が符号なし比較 | **未修正**（`lt` 符号バグ） | `x = -1` で `x < 0` は正しく 1、`x > 0` が 1（誤）。オペランドの片側しか符号を見ていない非対称 |
-| `\|\|` で両方 false なのに then | **`lt` 符号バグの現れ** | `vy > 0 \|\| idx == -1` の `vy:sint = -1` が符号なし比較で真になる。`\|\|` 自体は正常 |
+| `var x:sint; x > 0` が符号なし比較 | **修正済み**（2026-09-14、`lt` の書き直し） | 検証対象は castle_signed_compare_sites.txt |
+| `\|\|` で両方 false なのに then | **修正済み**（`lt` 符号バグの現れだった） | `vy > 0 \|\| idx == -1` の `vy:sint = -1` が符号なし比較で真になっていた |
 | 帰り値がある関数で `return` なし | **未修正** | エラーにならず、実行すると暴走（`rts` が無く次の関数へ落ちる） |
 | switch の case 重複 | **未検出** | 先勝ちで黙って通る |
 | ケツカンマ | **未対応** | `[1, 2, 3,]` は parse error（追加的な文法変更で対応可） |

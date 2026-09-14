@@ -384,76 +384,76 @@ _80:
 @begin_82:
 	lda 0+<L+0
 	cmp #6
-	bcc @36
+	bcc @39
 	jmp @else_85
-@36:
+@39:
 @then_84:
 	lda 0+<L+0
 	cmp #1
-	bne @16
+	bne @19
 	lda #1
 	sta 0+<L+4
-	jmp @17
-@16:
-	lda #0
-	sta 0+<L+4
-@17:
-	lda 0+<L+4
-	beq @18
-	lda #0
-	sta 0+<L+4
-	jmp @19
-@18:
-	lda #1
-	sta 0+<L+4
+	jmp @20
 @19:
-	lda 0+<L+4
-	beq @then_90
+	lda #0
+	sta 0+<L+4
 @20:
-	lda 0+<L+0
-	cmp #2
-	bne @21
-	lda #1
+	lda 0+<L+4
+	beq @21
+	lda #0
 	sta 0+<L+4
 	jmp @22
 @21:
-	lda #0
+	lda #1
 	sta 0+<L+4
 @22:
 	lda 0+<L+4
-	beq @23
+	beq @then_90
+@23:
+	lda 0+<L+0
+	cmp #2
+	bne @24
+	lda #1
+	sta 0+<L+4
+	jmp @25
+@24:
 	lda #0
 	sta 0+<L+4
-	jmp @24
-@23:
-	lda #1
-	sta 0+<L+4
-@24:
-	lda 0+<L+4
-	beq @then_90
 @25:
-	lda 0+<L+0
-	cmp #3
-	bne @26
-	lda #1
+	lda 0+<L+4
+	beq @26
+	lda #0
 	sta 0+<L+4
 	jmp @27
 @26:
-	lda #0
+	lda #1
 	sta 0+<L+4
 @27:
 	lda 0+<L+4
-	beq @28
-	lda #0
-	sta 0+<L+4
-	jmp @29
+	beq @then_90
 @28:
+	lda 0+<L+0
+	cmp #3
+	bne @29
 	lda #1
 	sta 0+<L+4
+	jmp @30
 @29:
+	lda #0
+	sta 0+<L+4
+@30:
+	lda 0+<L+4
+	beq @31
+	lda #0
+	sta 0+<L+4
+	jmp @32
+@31:
+	lda #1
+	sta 0+<L+4
+@32:
 	lda 0+<L+4
 	beq @then_90
-@30:
+@33:
 	jmp @else_91
 @then_90:
 	clc
@@ -464,26 +464,26 @@ _80:
 @else_91:
 	lda 0+<L+0
 	cmp #4
-	bne @31
+	bne @34
 	lda #1
 	sta 0+<L+4
-	jmp @32
-@31:
-	lda #0
-	sta 0+<L+4
-@32:
-	lda 0+<L+4
-	beq @33
-	lda #0
-	sta 0+<L+4
-	jmp @34
-@33:
-	lda #1
-	sta 0+<L+4
+	jmp @35
 @34:
+	lda #0
+	sta 0+<L+4
+@35:
+	lda 0+<L+4
+	beq @36
+	lda #0
+	sta 0+<L+4
+	jmp @37
+@36:
+	lda #1
+	sta 0+<L+4
+@37:
 	lda 0+<L+4
 	beq @then_93
-@35:
+@38:
 	jmp @else_94
 @then_93:
 	clc

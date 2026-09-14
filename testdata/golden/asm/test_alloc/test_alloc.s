@@ -90,14 +90,14 @@ __MODULE_TEST_ALLOC__ = 1
 	lda #0
 	rol a
 	eor #1
-	beq @5
+	beq @6
 	lda #0
 	sta 0+<L+0
-	jmp @6
-@5:
+	jmp @7
+@6:
 	lda #1
 	sta 0+<L+0
-@6:
+@7:
 	lda 0+<L+0
 	sta <S+3,x
 	lda #.LOBYTE(_20)
@@ -120,14 +120,14 @@ __MODULE_TEST_ALLOC__ = 1
 	lda #0
 	rol a
 	eor #1
-	beq @9
+	beq @11
 	lda #0
 	sta 0+<L+0
-	jmp @10
-@9:
+	jmp @12
+@11:
 	lda #1
 	sta 0+<L+0
-@10:
+@12:
 	lda 0+<L+0
 	sta <S+3,x
 	lda #.LOBYTE(_26)

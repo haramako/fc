@@ -283,13 +283,8 @@ func allocateCond(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			case ir.OpLt:
 				v.Location = ir.LocCond
 				v.CondPositive = true
+				// codegen の OpLt: 符号なしは C クリア ⇔ 真、符号付きは (V 補正後の) N セット ⇔ 真。サイズによらない
 				if ir.ValType(op.Src[0]).Signed || ir.ValType(op.Src[1]).Signed {
-					if ir.ValType(op.Src[0]).Size > 1 || ir.ValType(op.Src[1]).Size > 1 {
-						// サイズ2以上の符号付き比較はフラグが特定できない。
-						// Ruby版は next の前に location/cond_positive を設定済みのまま残す
-						// (後で register_vars の割付により location は上書きされる)
-						continue
-					}
 					v.CondReg = ir.CondNegative
 				} else {
 					v.CondReg = ir.CondCarry

@@ -54,19 +54,22 @@ _math_rand_table:
 .segment "math"
 .proc _math_sin
 	lda 0+<FC_FASTCALL_REG+1
-	cmp #128
-	bpl @else_5
+	bmi @else_5
 @then_4:
 	lda 0+<FC_FASTCALL_REG+1
-	cmp #64
-	bpl @else_9
-@then_8:
+	sec
+	sbc #64
+	bvc @6
+	eor #$80
+@6:
+	bpl @else_10
+@then_9:
 	ldy 0+<FC_FASTCALL_REG+1
 	lda _math_sin_table+0,y
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-	jmp @end_10
-@else_9:
+	jmp @end_11
+@else_10:
 	sec
 	lda #127
 	sbc 0+<FC_FASTCALL_REG+1
@@ -75,13 +78,17 @@ _math_rand_table:
 	lda _math_sin_table+0,y
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-@end_10:
+@end_11:
 	jmp @end_6
 @else_5:
 	lda 0+<FC_FASTCALL_REG+1
-	cmp #192
-	bpl @else_18
-@then_17:
+	sec
+	sbc #192
+	bvc @9
+	eor #$80
+@9:
+	bpl @else_19
+@then_18:
 	sec
 	lda 0+<FC_FASTCALL_REG+1
 	sbc #128
@@ -94,8 +101,8 @@ _math_rand_table:
 	sbc 0+<FC_FASTCALL_REG+2
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-	jmp @end_19
-@else_18:
+	jmp @end_20
+@else_19:
 	sec
 	lda #255
 	sbc 0+<FC_FASTCALL_REG+1
@@ -108,7 +115,7 @@ _math_rand_table:
 	sbc 0+<FC_FASTCALL_REG+2
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-@end_19:
+@end_20:
 @end_6:
 	lda #0
 	sta 0+<FC_FASTCALL_REG+0
@@ -121,13 +128,11 @@ _math_rand_table:
 .segment "math"
 .proc _math_atan
 	lda 0+<FC_FASTCALL_REG+1
-	cmp #128
-	bpl @else_30
-@then_29:
+	bmi @else_31
+@then_30:
 	lda 0+<FC_FASTCALL_REG+2
-	cmp #128
-	bpl @else_34
-@then_33:
+	bmi @else_36
+@then_35:
 	lda 0+<FC_FASTCALL_REG+1
 	asl a
 	asl a
@@ -140,8 +145,8 @@ _math_rand_table:
 	lda _math_atan_table+0,y
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-	jmp @end_35
-@else_34:
+	jmp @end_37
+@else_36:
 	lda 0+<FC_FASTCALL_REG+1
 	asl a
 	asl a
@@ -158,13 +163,12 @@ _math_rand_table:
 	sbc 0+<FC_FASTCALL_REG+3
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-@end_35:
-	jmp @end_31
-@else_30:
+@end_37:
+	jmp @end_32
+@else_31:
 	lda 0+<FC_FASTCALL_REG+2
-	cmp #128
-	bpl @else_47
-@then_46:
+	bmi @else_50
+@then_49:
 	sec
 	lda #0
 	sbc 0+<FC_FASTCALL_REG+1
@@ -185,8 +189,8 @@ _math_rand_table:
 	sbc 0+<FC_FASTCALL_REG+3
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-	jmp @end_48
-@else_47:
+	jmp @end_51
+@else_50:
 	sec
 	lda #0
 	sbc 0+<FC_FASTCALL_REG+1
@@ -207,8 +211,8 @@ _math_rand_table:
 	adc 0+<FC_FASTCALL_REG+3
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-@end_48:
-@end_31:
+@end_51:
+@end_32:
 	lda #0
 	sta 0+<FC_FASTCALL_REG+0
 	rts
@@ -238,28 +242,31 @@ _math_rand_idx: .res 1
 .segment "math"
 .proc _math_sign
 	lda 0+<FC_FASTCALL_REG+1
-	cmp #0
-	bpl @else_66
-@then_65:
-	lda #255
-	sta 0+<FC_FASTCALL_REG+0
-	rts
-	jmp @end_67
-@else_66:
-	lda #0
-	cmp 0+<FC_FASTCALL_REG+1
 	bpl @else_70
 @then_69:
-	lda #1
+	lda #255
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 	jmp @end_71
 @else_70:
 	lda #0
+	sec
+	sbc 0+<FC_FASTCALL_REG+1
+	bvc @24
+	eor #$80
+@24:
+	bpl @else_74
+@then_73:
+	lda #1
 	sta 0+<FC_FASTCALL_REG+0
 	rts
+	jmp @end_75
+@else_74:
+	lda #0
+	sta 0+<FC_FASTCALL_REG+0
+	rts
+@end_75:
 @end_71:
-@end_67:
 .endproc
 	.export _math_abs
 	;;;=============================
@@ -268,18 +275,17 @@ _math_rand_idx: .res 1
 .segment "math"
 .proc _math_abs
 	lda 0+<FC_FASTCALL_REG+1
-	cmp #128
-	bmi @else_74
-@then_73:
+	bpl @else_78
+@then_77:
 	sec
 	lda #0
 	sbc 0+<FC_FASTCALL_REG+1
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-	jmp @end_75
-@else_74:
+	jmp @end_79
+@else_78:
 	lda 0+<FC_FASTCALL_REG+1
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-@end_75:
+@end_79:
 .endproc

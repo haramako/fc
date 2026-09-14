@@ -363,12 +363,9 @@ _35:
 	call _unittest_assert_equal, #5
 	lda 0+<S+0,x
 	cmp 0+<S+1,x
-	bcc @1
 	lda #0
-	jmp @2
-@1:
-	lda #1
-@2:
+	rol a
+	eor #1
 	sta <S+5,x
 	lda #.LOBYTE(_90)
 	sta <S+6,x
@@ -380,14 +377,14 @@ _35:
 	lda #0
 	rol a
 	eor #1
-	beq @5
+	beq @7
 	lda #0
 	sta 0+<L+0
-	jmp @6
-@5:
+	jmp @8
+@7:
 	lda #1
 	sta 0+<L+0
-@6:
+@8:
 	lda 0+<L+0
 	sta <S+5,x
 	lda #.LOBYTE(_95)
@@ -397,36 +394,13 @@ _35:
 	call _unittest_assert_true, #5
 	lda 0+<S+0,x
 	cmp 0+<S+1,x
-	bcc @7
 	lda #0
-	jmp @8
-@7:
-	lda #1
-@8:
+	rol a
+	eor #1
 	sta <S+5,x
 	lda #.LOBYTE(_99)
 	sta <S+6,x
 	lda #.HIBYTE(_99)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+1,x
-	lda #0
-	rol a
-	eor #1
-	beq @11
-	lda #0
-	sta 0+<L+0
-	jmp @12
-@11:
-	lda #1
-	sta 0+<L+0
-@12:
-	lda 0+<L+0
-	sta <S+5,x
-	lda #.LOBYTE(_104)
-	sta <S+6,x
-	lda #.HIBYTE(_104)
 	sta <S+7,x
 	call _unittest_assert_true, #5
 	lda 0+<S+1,x
@@ -444,6 +418,26 @@ _35:
 @16:
 	lda 0+<L+0
 	sta <S+5,x
+	lda #.LOBYTE(_104)
+	sta <S+6,x
+	lda #.HIBYTE(_104)
+	sta <S+7,x
+	call _unittest_assert_true, #5
+	lda 0+<S+1,x
+	cmp 0+<S+1,x
+	lda #0
+	rol a
+	eor #1
+	beq @20
+	lda #0
+	sta 0+<L+0
+	jmp @21
+@20:
+	lda #1
+	sta 0+<L+0
+@21:
+	lda 0+<L+0
+	sta <S+5,x
 	lda #.LOBYTE(_109)
 	sta <S+6,x
 	lda #.HIBYTE(_109)
@@ -453,14 +447,14 @@ _35:
 	cmp 0+<S+2,x
 	lda #0
 	rol a
-	beq @19
+	beq @25
 	lda #0
 	sta 0+<L+0
-	jmp @20
-@19:
+	jmp @26
+@25:
 	lda #1
 	sta 0+<L+0
-@20:
+@26:
 	lda 0+<L+0
 	sta <S+5,x
 	lda #.LOBYTE(_115)
@@ -473,14 +467,14 @@ _35:
 	lda #0
 	rol a
 	eor #1
-	beq @23
+	beq @30
 	lda #0
 	sta 0+<L+0
-	jmp @24
-@23:
+	jmp @31
+@30:
 	lda #1
 	sta 0+<L+0
-@24:
+@31:
 	lda 0+<L+0
 	sta <S+5,x
 	lda #.LOBYTE(_120)
@@ -492,14 +486,14 @@ _35:
 	cmp 0+<S+2,x
 	lda #0
 	rol a
-	beq @27
+	beq @35
 	lda #0
 	sta 0+<L+0
-	jmp @28
-@27:
+	jmp @36
+@35:
 	lda #1
 	sta 0+<L+0
-@28:
+@36:
 	lda 0+<L+0
 	sta <S+5,x
 	lda #.LOBYTE(_126)
@@ -509,12 +503,12 @@ _35:
 	call _unittest_assert_true, #5
 	lda 0+<S+1,x
 	cmp 0+<S+1,x
-	bne @29
+	bne @37
 	lda #1
-	jmp @30
-@29:
+	jmp @38
+@37:
 	lda #0
-@30:
+@38:
 	sta <S+5,x
 	lda #.LOBYTE(_130)
 	sta <S+6,x
@@ -523,20 +517,20 @@ _35:
 	call _unittest_assert_true, #5
 	lda 0+<S+1,x
 	cmp 0+<S+2,x
-	beq @35
+	beq @43
 	lda #0
-	jmp @36
-@35:
+	jmp @44
+@43:
 	lda #1
-@36:
-	beq @33
+@44:
+	beq @41
 	lda #0
 	sta 0+<L+0
-	jmp @34
-@33:
+	jmp @42
+@41:
 	lda #1
 	sta 0+<L+0
-@34:
+@42:
 	lda 0+<L+0
 	sta <S+5,x
 	lda #.LOBYTE(_135)
@@ -710,22 +704,22 @@ _157:
 	lda #246
 	sta 0+<S+6,x
 	lda 0+<S+6,x
-	bmi @37
+	bmi @45
 	lsr a
 	lsr a
-	jmp @38
-@37:
+	jmp @46
+@45:
 	lsr a
 	lsr a
 	ora #192
-@38:
+@46:
 	sta 0+<L+0
-	bpl @39
+	bpl @47
 	lda #255
-	jmp @40
-@39:
+	jmp @48
+@47:
 	lda #0
-@40:
+@48:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -743,12 +737,12 @@ _157:
 	lda 0+<S+6,x
 	asl a
 	sta 0+<L+0
-	bpl @41
+	bpl @49
 	lda #255
-	jmp @42
-@41:
+	jmp @50
+@49:
 	lda #0
-@42:
+@50:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -765,12 +759,12 @@ _157:
 	call _unittest_assert_equal, #7
 	lda 0+<S+0,x
 	sta 0+<L+0
-	bpl @43
+	bpl @51
 	lda #255
-	jmp @44
-@43:
+	jmp @52
+@51:
 	lda #0
-@44:
+@52:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -778,12 +772,12 @@ _157:
 	sta <S+8,x
 	lda 0+<S+0,x
 	sta 0+<L+0
-	bpl @45
+	bpl @53
 	lda #255
-	jmp @46
-@45:
+	jmp @54
+@53:
 	lda #0
-@46:
+@54:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+9,x
@@ -801,12 +795,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @47
+	bpl @55
 	lda #255
-	jmp @48
-@47:
+	jmp @56
+@55:
 	lda #0
-@48:
+@56:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -828,12 +822,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @49
+	bpl @57
 	lda #255
-	jmp @50
-@49:
+	jmp @58
+@57:
 	lda #0
-@50:
+@58:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -855,12 +849,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @51
+	bpl @59
 	lda #255
-	jmp @52
-@51:
+	jmp @60
+@59:
 	lda #0
-@52:
+@60:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -882,12 +876,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @53
+	bpl @61
 	lda #255
-	jmp @54
-@53:
+	jmp @62
+@61:
 	lda #0
-@54:
+@62:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -909,12 +903,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @55
+	bpl @63
 	lda #255
-	jmp @56
-@55:
+	jmp @64
+@63:
 	lda #0
-@56:
+@64:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -936,12 +930,12 @@ _157:
 	jsr __mul_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @57
+	bpl @65
 	lda #255
-	jmp @58
-@57:
+	jmp @66
+@65:
 	lda #0
-@58:
+@66:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -963,12 +957,12 @@ _157:
 	jsr __mul_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @59
+	bpl @67
 	lda #255
-	jmp @60
-@59:
+	jmp @68
+@67:
 	lda #0
-@60:
+@68:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -990,12 +984,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @61
+	bpl @69
 	lda #255
-	jmp @62
-@61:
+	jmp @70
+@69:
 	lda #0
-@62:
+@70:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1017,12 +1011,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<L+0
-	bpl @63
+	bpl @71
 	lda #255
-	jmp @64
-@63:
+	jmp @72
+@71:
 	lda #0
-@64:
+@72:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1040,12 +1034,12 @@ _157:
 	lda 0+<S+2,x
 	and 0+<S+1,x
 	sta 0+<L+0
-	bpl @65
+	bpl @73
 	lda #255
-	jmp @66
-@65:
+	jmp @74
+@73:
 	lda #0
-@66:
+@74:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1063,12 +1057,12 @@ _157:
 	lda 0+<S+0,x
 	ora 0+<S+1,x
 	sta 0+<L+0
-	bpl @67
+	bpl @75
 	lda #255
-	jmp @68
-@67:
+	jmp @76
+@75:
 	lda #0
-@68:
+@76:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1086,12 +1080,12 @@ _157:
 	lda 0+<S+2,x
 	eor 0+<S+1,x
 	sta 0+<L+0
-	bpl @69
+	bpl @77
 	lda #255
-	jmp @70
-@69:
+	jmp @78
+@77:
 	lda #0
-@70:
+@78:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1107,13 +1101,17 @@ _157:
 	sta <S+12,x
 	call _unittest_assert_equal, #7
 	lda 0+<S+1,x
-	cmp 0+<S+0,x
-	bmi @71
+	sec
+	sbc 0+<S+0,x
+	bvc @81
+	eor #$80
+@81:
+	bmi @79
 	lda #0
-	jmp @72
-@71:
+	beq @80
+@79:
 	lda #1
-@72:
+@80:
 	sta <S+7,x
 	lda #.LOBYTE(_236)
 	sta <S+8,x
@@ -1121,13 +1119,17 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
-	cmp #255
-	bmi @73
+	sec
+	sbc #255
+	bvc @84
+	eor #$80
+@84:
+	bmi @82
 	lda #0
-	jmp @74
-@73:
+	beq @83
+@82:
 	lda #1
-@74:
+@83:
 	sta <S+7,x
 	lda #.LOBYTE(_240)
 	sta <S+8,x
@@ -1135,13 +1137,17 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda #240
-	cmp 0+<S+1,x
-	bmi @75
+	sec
+	sbc 0+<S+1,x
+	bvc @87
+	eor #$80
+@87:
+	bmi @85
 	lda #0
-	jmp @76
-@75:
+	beq @86
+@85:
 	lda #1
-@76:
+@86:
 	sta <S+7,x
 	lda #.LOBYTE(_244)
 	sta <S+8,x
@@ -1149,13 +1155,17 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
-	cmp #1
-	bmi @77
+	sec
+	sbc #1
+	bvc @90
+	eor #$80
+@90:
+	bmi @88
 	lda #0
-	jmp @78
-@77:
+	beq @89
+@88:
 	lda #1
-@78:
+@89:
 	sta <S+7,x
 	lda #.LOBYTE(_248)
 	sta <S+8,x
@@ -1163,21 +1173,25 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda #1
-	cmp 0+<S+1,x
-	bmi @83
+	sec
+	sbc 0+<S+1,x
+	bvc @93
+	eor #$80
+@93:
+	bmi @96
 	lda #0
-	jmp @84
-@83:
+	jmp @97
+@96:
 	lda #1
-@84:
-	beq @81
+@97:
+	beq @94
 	lda #0
 	sta 0+<L+0
-	jmp @82
-@81:
+	jmp @95
+@94:
 	lda #1
 	sta 0+<L+0
-@82:
+@95:
 	lda 0+<L+0
 	sta <S+7,x
 	lda #.LOBYTE(_253)
@@ -1186,13 +1200,17 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda #1
-	cmp 0+<S+2,x
-	bcc @85
+	sec
+	sbc 0+<S+2,x
+	bvc @100
+	eor #$80
+@100:
+	bmi @98
 	lda #0
-	jmp @86
-@85:
+	beq @99
+@98:
 	lda #1
-@86:
+@99:
 	sta <S+7,x
 	lda #.LOBYTE(_257)
 	sta <S+8,x
@@ -1200,21 +1218,25 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
-	cmp 0+<S+1,x
-	bmi @91
+	sec
+	sbc 0+<S+1,x
+	bvc @103
+	eor #$80
+@103:
+	bmi @106
 	lda #0
-	jmp @92
-@91:
+	jmp @107
+@106:
 	lda #1
-@92:
-	beq @89
+@107:
+	beq @104
 	lda #0
 	sta 0+<L+0
-	jmp @90
-@89:
+	jmp @105
+@104:
 	lda #1
 	sta 0+<L+0
-@90:
+@105:
 	lda 0+<L+0
 	sta <S+7,x
 	lda #.LOBYTE(_262)
@@ -1223,13 +1245,17 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
-	cmp 0+<S+0,x
-	bmi @93
+	sec
+	sbc 0+<S+0,x
+	bvc @110
+	eor #$80
+@110:
+	bmi @108
 	lda #0
-	jmp @94
-@93:
+	beq @109
+@108:
 	lda #1
-@94:
+@109:
 	sta <S+7,x
 	lda #.LOBYTE(_266)
 	sta <S+8,x
@@ -1237,21 +1263,25 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
-	cmp 0+<S+1,x
-	bmi @99
+	sec
+	sbc 0+<S+1,x
+	bvc @113
+	eor #$80
+@113:
+	bmi @116
 	lda #0
-	jmp @100
-@99:
+	jmp @117
+@116:
 	lda #1
-@100:
-	beq @97
+@117:
+	beq @114
 	lda #0
 	sta 0+<L+0
-	jmp @98
-@97:
+	jmp @115
+@114:
 	lda #1
 	sta 0+<L+0
-@98:
+@115:
 	lda 0+<L+0
 	sta <S+7,x
 	lda #.LOBYTE(_271)
@@ -1260,77 +1290,12 @@ _157:
 	sta <S+9,x
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
-	cmp 0+<S+1,x
-	bmi @105
-	lda #0
-	jmp @106
-@105:
-	lda #1
-@106:
-	beq @103
-	lda #0
-	sta 0+<L+0
-	jmp @104
-@103:
-	lda #1
-	sta 0+<L+0
-@104:
-	lda 0+<L+0
-	sta <S+7,x
-	lda #.LOBYTE(_276)
-	sta <S+8,x
-	lda #.HIBYTE(_276)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
-	cmp 0+<S+2,x
-	bpl @111
-	lda #0
-	jmp @112
-@111:
-	lda #1
-@112:
-	beq @109
-	lda #0
-	sta 0+<L+0
-	jmp @110
-@109:
-	lda #1
-	sta 0+<L+0
-@110:
-	lda 0+<L+0
-	sta <S+7,x
-	lda #.LOBYTE(_282)
-	sta <S+8,x
-	lda #.HIBYTE(_282)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+2,x
-	cmp 0+<S+1,x
-	bmi @117
-	lda #0
-	jmp @118
-@117:
-	lda #1
-@118:
-	beq @115
-	lda #0
-	sta 0+<L+0
-	jmp @116
-@115:
-	lda #1
-	sta 0+<L+0
-@116:
-	lda 0+<L+0
-	sta <S+7,x
-	lda #.LOBYTE(_287)
-	sta <S+8,x
-	lda #.HIBYTE(_287)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
-	cmp 0+<S+2,x
-	bpl @123
+	sec
+	sbc 0+<S+1,x
+	bvc @120
+	eor #$80
+@120:
+	bmi @123
 	lda #0
 	jmp @124
 @123:
@@ -1346,6 +1311,87 @@ _157:
 @122:
 	lda 0+<L+0
 	sta <S+7,x
+	lda #.LOBYTE(_276)
+	sta <S+8,x
+	lda #.HIBYTE(_276)
+	sta <S+9,x
+	call _unittest_assert_true, #7
+	lda 0+<S+1,x
+	sec
+	sbc 0+<S+2,x
+	bvc @127
+	eor #$80
+@127:
+	bpl @130
+	lda #0
+	jmp @131
+@130:
+	lda #1
+@131:
+	beq @128
+	lda #0
+	sta 0+<L+0
+	jmp @129
+@128:
+	lda #1
+	sta 0+<L+0
+@129:
+	lda 0+<L+0
+	sta <S+7,x
+	lda #.LOBYTE(_282)
+	sta <S+8,x
+	lda #.HIBYTE(_282)
+	sta <S+9,x
+	call _unittest_assert_true, #7
+	lda 0+<S+2,x
+	sec
+	sbc 0+<S+1,x
+	bvc @134
+	eor #$80
+@134:
+	bmi @137
+	lda #0
+	jmp @138
+@137:
+	lda #1
+@138:
+	beq @135
+	lda #0
+	sta 0+<L+0
+	jmp @136
+@135:
+	lda #1
+	sta 0+<L+0
+@136:
+	lda 0+<L+0
+	sta <S+7,x
+	lda #.LOBYTE(_287)
+	sta <S+8,x
+	lda #.HIBYTE(_287)
+	sta <S+9,x
+	call _unittest_assert_true, #7
+	lda 0+<S+1,x
+	sec
+	sbc 0+<S+2,x
+	bvc @141
+	eor #$80
+@141:
+	bpl @144
+	lda #0
+	jmp @145
+@144:
+	lda #1
+@145:
+	beq @142
+	lda #0
+	sta 0+<L+0
+	jmp @143
+@142:
+	lda #1
+	sta 0+<L+0
+@143:
+	lda 0+<L+0
+	sta <S+7,x
 	lda #.LOBYTE(_293)
 	sta <S+8,x
 	lda #.HIBYTE(_293)
@@ -1353,12 +1399,12 @@ _157:
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
 	cmp 0+<S+1,x
-	bne @125
+	bne @146
 	lda #1
-	jmp @126
-@125:
+	jmp @147
+@146:
 	lda #0
-@126:
+@147:
 	sta <S+7,x
 	lda #.LOBYTE(_297)
 	sta <S+8,x
@@ -1367,20 +1413,20 @@ _157:
 	call _unittest_assert_true, #7
 	lda 0+<S+1,x
 	cmp 0+<S+2,x
-	beq @131
+	beq @152
 	lda #0
-	jmp @132
-@131:
+	jmp @153
+@152:
 	lda #1
-@132:
-	beq @129
+@153:
+	beq @150
 	lda #0
 	sta 0+<L+0
-	jmp @130
-@129:
+	jmp @151
+@150:
 	lda #1
 	sta 0+<L+0
-@130:
+@151:
 	lda 0+<L+0
 	sta <S+7,x
 	lda #.LOBYTE(_302)
@@ -1394,12 +1440,12 @@ _157:
 	asl a
 	asl a
 	sta 0+<L+0
-	bpl @133
+	bpl @154
 	lda #255
-	jmp @134
-@133:
+	jmp @155
+@154:
 	lda #0
-@134:
+@155:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1415,22 +1461,22 @@ _157:
 	sta <S+12,x
 	call _unittest_assert_equal, #7
 	lda 0+<S+6,x
-	bmi @135
+	bmi @156
 	lsr a
 	lsr a
-	jmp @136
-@135:
+	jmp @157
+@156:
 	lsr a
 	lsr a
 	ora #192
-@136:
+@157:
 	sta 0+<L+0
-	bpl @137
+	bpl @158
 	lda #255
-	jmp @138
-@137:
+	jmp @159
+@158:
 	lda #0
-@138:
+@159:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1448,12 +1494,12 @@ _157:
 	lda 0+<S+6,x
 	and #7
 	sta 0+<L+0
-	bpl @139
+	bpl @160
 	lda #255
-	jmp @140
-@139:
+	jmp @161
+@160:
 	lda #0
-@140:
+@161:
 	sta 1+<L+0
 	lda 0+<L+0
 	sta <S+7,x
@@ -1658,40 +1704,34 @@ _317:
 	lda #.HIBYTE(_336)
 	sta <S+15,x
 	call _unittest_assert_equal, #10
-	lda 1+<S+0,x
-	cmp 1+<S+2,x
-	bcc @141
 	lda 0+<S+0,x
 	cmp 0+<S+2,x
-	bcc @141
+	lda 1+<S+0,x
+	sbc 1+<S+2,x
 	lda #0
-	jmp @142
-@141:
-	lda #1
-@142:
+	rol a
+	eor #1
 	sta <S+10,x
 	lda #.LOBYTE(_340)
 	sta <S+11,x
 	lda #.HIBYTE(_340)
 	sta <S+12,x
 	call _unittest_assert_true, #10
-	lda 1+<S+2,x
-	cmp 1+<S+2,x
-	bcc @143
 	lda 0+<S+2,x
 	cmp 0+<S+2,x
-@143:
+	lda 1+<S+2,x
+	sbc 1+<S+2,x
 	lda #0
 	rol a
 	eor #1
-	beq @145
+	beq @168
 	lda #0
 	sta 0+<L+0
-	jmp @146
-@145:
+	jmp @169
+@168:
 	lda #1
 	sta 0+<L+0
-@146:
+@169:
 	lda 0+<L+0
 	sta <S+10,x
 	lda #.LOBYTE(_345)
@@ -1699,40 +1739,34 @@ _317:
 	lda #.HIBYTE(_345)
 	sta <S+12,x
 	call _unittest_assert_true, #10
-	lda 1+<S+0,x
-	cmp 1+<S+2,x
-	bcc @147
 	lda 0+<S+0,x
 	cmp 0+<S+2,x
-	bcc @147
+	lda 1+<S+0,x
+	sbc 1+<S+2,x
 	lda #0
-	jmp @148
-@147:
-	lda #1
-@148:
+	rol a
+	eor #1
 	sta <S+10,x
 	lda #.LOBYTE(_349)
 	sta <S+11,x
 	lda #.HIBYTE(_349)
 	sta <S+12,x
 	call _unittest_assert_true, #10
-	lda 1+<S+2,x
-	cmp 1+<S+2,x
-	bcc @149
 	lda 0+<S+2,x
 	cmp 0+<S+2,x
-@149:
+	lda 1+<S+2,x
+	sbc 1+<S+2,x
 	lda #0
 	rol a
 	eor #1
-	beq @151
+	beq @176
 	lda #0
 	sta 0+<L+0
-	jmp @152
-@151:
+	jmp @177
+@176:
 	lda #1
 	sta 0+<L+0
-@152:
+@177:
 	lda 0+<L+0
 	sta <S+10,x
 	lda #.LOBYTE(_354)
@@ -1740,23 +1774,21 @@ _317:
 	lda #.HIBYTE(_354)
 	sta <S+12,x
 	call _unittest_assert_true, #10
-	lda 1+<S+2,x
-	cmp 1+<S+2,x
-	bcc @153
 	lda 0+<S+2,x
 	cmp 0+<S+2,x
-@153:
+	lda 1+<S+2,x
+	sbc 1+<S+2,x
 	lda #0
 	rol a
 	eor #1
-	beq @155
+	beq @181
 	lda #0
 	sta 0+<L+0
-	jmp @156
-@155:
+	jmp @182
+@181:
 	lda #1
 	sta 0+<L+0
-@156:
+@182:
 	lda 0+<L+0
 	sta <S+10,x
 	lda #.LOBYTE(_359)
@@ -1764,22 +1796,20 @@ _317:
 	lda #.HIBYTE(_359)
 	sta <S+12,x
 	call _unittest_assert_true, #10
-	lda 1+<S+2,x
-	cmp 1+<S+4,x
-	bcc @157
 	lda 0+<S+2,x
 	cmp 0+<S+4,x
-@157:
+	lda 1+<S+2,x
+	sbc 1+<S+4,x
 	lda #0
 	rol a
-	beq @159
+	beq @186
 	lda #0
 	sta 0+<L+0
-	jmp @160
-@159:
+	jmp @187
+@186:
 	lda #1
 	sta 0+<L+0
-@160:
+@187:
 	lda 0+<L+0
 	sta <S+10,x
 	lda #.LOBYTE(_365)
@@ -1787,23 +1817,21 @@ _317:
 	lda #.HIBYTE(_365)
 	sta <S+12,x
 	call _unittest_assert_true, #10
-	lda 1+<S+4,x
-	cmp 1+<S+2,x
-	bcc @161
 	lda 0+<S+4,x
 	cmp 0+<S+2,x
-@161:
+	lda 1+<S+4,x
+	sbc 1+<S+2,x
 	lda #0
 	rol a
 	eor #1
-	beq @163
+	beq @191
 	lda #0
 	sta 0+<L+0
-	jmp @164
-@163:
+	jmp @192
+@191:
 	lda #1
 	sta 0+<L+0
-@164:
+@192:
 	lda 0+<L+0
 	sta <S+10,x
 	lda #.LOBYTE(_370)
@@ -1811,22 +1839,20 @@ _317:
 	lda #.HIBYTE(_370)
 	sta <S+12,x
 	call _unittest_assert_true, #10
-	lda 1+<S+2,x
-	cmp 1+<S+4,x
-	bcc @165
 	lda 0+<S+2,x
 	cmp 0+<S+4,x
-@165:
+	lda 1+<S+2,x
+	sbc 1+<S+4,x
 	lda #0
 	rol a
-	beq @167
+	beq @196
 	lda #0
 	sta 0+<L+0
-	jmp @168
-@167:
+	jmp @197
+@196:
 	lda #1
 	sta 0+<L+0
-@168:
+@197:
 	lda 0+<L+0
 	sta <S+10,x
 	lda #.LOBYTE(_376)
@@ -1836,15 +1862,15 @@ _317:
 	call _unittest_assert_true, #10
 	lda 0+<S+2,x
 	cmp 0+<S+2,x
-	bne @169
+	bne @198
 	lda 1+<S+2,x
 	cmp 1+<S+2,x
-	bne @169
+	bne @198
 	lda #1
-	jmp @170
-@169:
+	jmp @199
+@198:
 	lda #0
-@170:
+@199:
 	sta <S+10,x
 	lda #.LOBYTE(_380)
 	sta <S+11,x
@@ -1853,24 +1879,24 @@ _317:
 	call _unittest_assert_true, #10
 	lda 0+<S+2,x
 	cmp 0+<S+4,x
-	bne @171
+	bne @200
 	lda 1+<S+2,x
 	cmp 1+<S+4,x
-@171:
-	beq @175
+@200:
+	beq @204
 	lda #0
-	jmp @176
-@175:
+	jmp @205
+@204:
 	lda #1
-@176:
-	beq @173
+@205:
+	beq @202
 	lda #0
 	sta 0+<L+0
-	jmp @174
-@173:
+	jmp @203
+@202:
 	lda #1
 	sta 0+<L+0
-@174:
+@203:
 	lda 0+<L+0
 	sta <S+10,x
 	lda #.LOBYTE(_385)
@@ -2031,40 +2057,34 @@ _397:
 	lda #.HIBYTE(_403)
 	sta <S+14,x
 	call _unittest_assert_equal, #9
-	lda 1+<S+3,x
-	cmp #0
-	bcc @177
 	lda 0+<S+3,x
 	cmp 0+<S+1,x
-	bcc @177
+	lda 1+<S+3,x
+	sbc #0
 	lda #0
-	jmp @178
-@177:
-	lda #1
-@178:
+	rol a
+	eor #1
 	sta <S+9,x
 	lda #.LOBYTE(_407)
 	sta <S+10,x
 	lda #.HIBYTE(_407)
 	sta <S+11,x
 	call _unittest_assert_true, #9
-	lda 1+<S+5,x
-	cmp #0
-	bcc @179
 	lda 0+<S+5,x
 	cmp 0+<S+1,x
-@179:
+	lda 1+<S+5,x
+	sbc #0
 	lda #0
 	rol a
 	eor #1
-	beq @181
+	beq @212
 	lda #0
 	sta 0+<L+0
-	jmp @182
-@181:
+	jmp @213
+@212:
 	lda #1
 	sta 0+<L+0
-@182:
+@213:
 	lda 0+<L+0
 	sta <S+9,x
 	lda #.LOBYTE(_412)
@@ -2072,40 +2092,34 @@ _397:
 	lda #.HIBYTE(_412)
 	sta <S+11,x
 	call _unittest_assert_true, #9
-	lda #0
-	cmp 1+<S+5,x
-	bcc @183
 	lda 0+<S+0,x
 	cmp 0+<S+5,x
-	bcc @183
 	lda #0
-	jmp @184
-@183:
-	lda #1
-@184:
+	sbc 1+<S+5,x
+	lda #0
+	rol a
+	eor #1
 	sta <S+9,x
 	lda #.LOBYTE(_416)
 	sta <S+10,x
 	lda #.HIBYTE(_416)
 	sta <S+11,x
 	call _unittest_assert_true, #9
-	lda #0
-	cmp 1+<S+5,x
-	bcc @185
 	lda 0+<S+1,x
 	cmp 0+<S+5,x
-@185:
+	lda #0
+	sbc 1+<S+5,x
 	lda #0
 	rol a
 	eor #1
-	beq @187
+	beq @220
 	lda #0
 	sta 0+<L+0
-	jmp @188
-@187:
+	jmp @221
+@220:
 	lda #1
 	sta 0+<L+0
-@188:
+@221:
 	lda 0+<L+0
 	sta <S+9,x
 	lda #.LOBYTE(_421)
@@ -2113,23 +2127,21 @@ _397:
 	lda #.HIBYTE(_421)
 	sta <S+11,x
 	call _unittest_assert_true, #9
-	lda #0
-	cmp 1+<S+5,x
-	bcc @189
 	lda 0+<S+1,x
 	cmp 0+<S+5,x
-@189:
+	lda #0
+	sbc 1+<S+5,x
 	lda #0
 	rol a
 	eor #1
-	beq @191
+	beq @225
 	lda #0
 	sta 0+<L+0
-	jmp @192
-@191:
+	jmp @226
+@225:
 	lda #1
 	sta 0+<L+0
-@192:
+@226:
 	lda 0+<L+0
 	sta <S+9,x
 	lda #.LOBYTE(_426)
@@ -2137,22 +2149,20 @@ _397:
 	lda #.HIBYTE(_426)
 	sta <S+11,x
 	call _unittest_assert_true, #9
-	lda #0
-	cmp 1+<S+7,x
-	bcc @193
 	lda 0+<S+1,x
 	cmp 0+<S+7,x
-@193:
+	lda #0
+	sbc 1+<S+7,x
 	lda #0
 	rol a
-	beq @195
+	beq @230
 	lda #0
 	sta 0+<L+0
-	jmp @196
-@195:
+	jmp @231
+@230:
 	lda #1
 	sta 0+<L+0
-@196:
+@231:
 	lda 0+<L+0
 	sta <S+9,x
 	lda #.LOBYTE(_432)
@@ -2160,23 +2170,21 @@ _397:
 	lda #.HIBYTE(_432)
 	sta <S+11,x
 	call _unittest_assert_true, #9
-	lda 1+<S+7,x
-	cmp #0
-	bcc @197
 	lda 0+<S+7,x
 	cmp 0+<S+1,x
-@197:
+	lda 1+<S+7,x
+	sbc #0
 	lda #0
 	rol a
 	eor #1
-	beq @199
+	beq @235
 	lda #0
 	sta 0+<L+0
-	jmp @200
-@199:
+	jmp @236
+@235:
 	lda #1
 	sta 0+<L+0
-@200:
+@236:
 	lda 0+<L+0
 	sta <S+9,x
 	lda #.LOBYTE(_437)
@@ -2184,22 +2192,20 @@ _397:
 	lda #.HIBYTE(_437)
 	sta <S+11,x
 	call _unittest_assert_true, #9
-	lda 1+<S+5,x
-	cmp #0
-	bcc @201
 	lda 0+<S+5,x
 	cmp 0+<S+2,x
-@201:
+	lda 1+<S+5,x
+	sbc #0
 	lda #0
 	rol a
-	beq @203
+	beq @240
 	lda #0
 	sta 0+<L+0
-	jmp @204
-@203:
+	jmp @241
+@240:
 	lda #1
 	sta 0+<L+0
-@204:
+@241:
 	lda 0+<L+0
 	sta <S+9,x
 	lda #.LOBYTE(_443)
@@ -2209,15 +2215,15 @@ _397:
 	call _unittest_assert_true, #9
 	lda 0+<S+5,x
 	cmp 0+<S+1,x
-	bne @205
+	bne @242
 	lda 1+<S+5,x
 	cmp #0
-	bne @205
+	bne @242
 	lda #1
-	jmp @206
-@205:
+	jmp @243
+@242:
 	lda #0
-@206:
+@243:
 	sta <S+9,x
 	lda #.LOBYTE(_447)
 	sta <S+10,x
@@ -2226,24 +2232,24 @@ _397:
 	call _unittest_assert_true, #9
 	lda 0+<S+5,x
 	cmp 0+<S+2,x
-	bne @207
+	bne @244
 	lda 1+<S+5,x
 	cmp #0
-@207:
-	beq @211
+@244:
+	beq @248
 	lda #0
-	jmp @212
-@211:
+	jmp @249
+@248:
 	lda #1
-@212:
-	beq @209
+@249:
+	beq @246
 	lda #0
 	sta 0+<L+0
-	jmp @210
-@209:
+	jmp @247
+@246:
 	lda #1
 	sta 0+<L+0
-@210:
+@247:
 	lda 0+<L+0
 	sta <S+9,x
 	lda #.LOBYTE(_452)
@@ -2291,7 +2297,7 @@ _452:
 	sta 0+<L+0
 	lda 0+<L+0
 	beq @end_455
-@213:
+@250:
 	lda 0+<S+0,x
 	sta 0+<L+0
 @end_455:
@@ -2310,19 +2316,19 @@ _452:
 	sta 0+<L+0
 	lda 0+<L+0
 	beq @end_460
-@214:
+@251:
 	lda 0+<S+1,x
 	sta 0+<L+0
 @end_460:
 	lda 0+<L+0
-	beq @215
+	beq @252
 	lda #0
 	sta 0+<L+2
-	jmp @216
-@215:
+	jmp @253
+@252:
 	lda #1
 	sta 0+<L+2
-@216:
+@253:
 	lda 0+<L+2
 	sta <S+2,x
 	lda #.LOBYTE(_463)
@@ -2338,19 +2344,19 @@ _452:
 	sta 0+<L+0
 	lda 0+<L+0
 	beq @end_466
-@217:
+@254:
 	lda 0+<S+0,x
 	sta 0+<L+0
 @end_466:
 	lda 0+<L+0
-	beq @218
+	beq @255
 	lda #0
 	sta 0+<L+2
-	jmp @219
-@218:
+	jmp @256
+@255:
 	lda #1
 	sta 0+<L+2
-@219:
+@256:
 	lda 0+<L+2
 	sta <S+2,x
 	lda #.LOBYTE(_469)
@@ -2366,19 +2372,19 @@ _452:
 	sta 0+<L+0
 	lda 0+<L+0
 	beq @end_472
-@220:
+@257:
 	lda 0+<S+1,x
 	sta 0+<L+0
 @end_472:
 	lda 0+<L+0
-	beq @221
+	beq @258
 	lda #0
 	sta 0+<L+2
-	jmp @222
-@221:
+	jmp @259
+@258:
 	lda #1
 	sta 0+<L+2
-@222:
+@259:
 	lda 0+<L+2
 	sta <S+2,x
 	lda #.LOBYTE(_475)
@@ -2393,17 +2399,17 @@ _452:
 	lda 0+<S+0,x
 	sta 0+<L+0
 	lda 0+<L+0
-	beq @223
+	beq @260
 	lda #0
 	sta 0+<L+2
-	jmp @224
-@223:
+	jmp @261
+@260:
 	lda #1
 	sta 0+<L+2
-@224:
+@261:
 	lda 0+<L+2
 	beq @end_478
-@225:
+@262:
 	lda 0+<S+1,x
 	sta 0+<L+0
 @end_478:
@@ -2421,17 +2427,17 @@ _452:
 	lda 0+<S+0,x
 	sta 0+<L+0
 	lda 0+<L+0
-	beq @226
+	beq @263
 	lda #0
 	sta 0+<L+2
-	jmp @227
-@226:
+	jmp @264
+@263:
 	lda #1
 	sta 0+<L+2
-@227:
+@264:
 	lda 0+<L+2
 	beq @end_484
-@228:
+@265:
 	lda 0+<S+1,x
 	sta 0+<L+0
 @end_484:
@@ -2449,17 +2455,17 @@ _452:
 	lda 0+<S+1,x
 	sta 0+<L+0
 	lda 0+<L+0
-	beq @229
+	beq @266
 	lda #0
 	sta 0+<L+2
-	jmp @230
-@229:
+	jmp @267
+@266:
 	lda #1
 	sta 0+<L+2
-@230:
+@267:
 	lda 0+<L+2
 	beq @end_490
-@231:
+@268:
 	lda 0+<S+0,x
 	sta 0+<L+0
 @end_490:
@@ -2477,29 +2483,29 @@ _452:
 	lda 0+<S+1,x
 	sta 0+<L+0
 	lda 0+<L+0
-	beq @232
+	beq @269
 	lda #0
 	sta 0+<L+2
-	jmp @233
-@232:
+	jmp @270
+@269:
 	lda #1
 	sta 0+<L+2
-@233:
+@270:
 	lda 0+<L+2
 	beq @end_496
-@234:
+@271:
 	lda 0+<S+1,x
 	sta 0+<L+0
 @end_496:
 	lda 0+<L+0
-	beq @235
+	beq @272
 	lda #0
 	sta 0+<L+2
-	jmp @236
-@235:
+	jmp @273
+@272:
 	lda #1
 	sta 0+<L+2
-@236:
+@273:
 	lda 0+<L+2
 	sta <S+2,x
 	lda #.LOBYTE(_500)
@@ -2580,14 +2586,14 @@ _500:
 	lda 0+<S+0,x
 	tay
 	lda 0+<S+1,x
-@237:
+@274:
 	cpy #0
-	beq @238
+	beq @275
 	clc
 	rol a
 	dey
-	jmp @237
-@238:
+	jmp @274
+@275:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2605,14 +2611,14 @@ _500:
 	lda 0+<S+2,x
 	tay
 	lda 0+<S+1,x
-@239:
+@276:
 	cpy #0
-	beq @240
+	beq @277
 	clc
 	rol a
 	dey
-	jmp @239
-@240:
+	jmp @276
+@277:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2630,14 +2636,14 @@ _500:
 	lda 0+<S+3,x
 	tay
 	lda 0+<S+1,x
-@241:
+@278:
 	cpy #0
-	beq @242
+	beq @279
 	clc
 	rol a
 	dey
-	jmp @241
-@242:
+	jmp @278
+@279:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2687,14 +2693,14 @@ _500:
 	lda 0+<S+0,x
 	tay
 	lda 0+<S+4,x
-@243:
+@280:
 	cpy #0
-	beq @244
+	beq @281
 	clc
 	ror a
 	dey
-	jmp @243
-@244:
+	jmp @280
+@281:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2712,14 +2718,14 @@ _500:
 	lda 0+<S+2,x
 	tay
 	lda 0+<S+4,x
-@245:
+@282:
 	cpy #0
-	beq @246
+	beq @283
 	clc
 	ror a
 	dey
-	jmp @245
-@246:
+	jmp @282
+@283:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2737,14 +2743,14 @@ _500:
 	lda 0+<S+3,x
 	tay
 	lda #255
-@247:
+@284:
 	cpy #0
-	beq @248
+	beq @285
 	clc
 	ror a
 	dey
-	jmp @247
-@248:
+	jmp @284
+@285:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x

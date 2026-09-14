@@ -216,7 +216,7 @@ _33:
 	sta 0+<S+1,x
 	lda 0+<S+0,x
 	beq @else_38
-@3:
+@4:
 @then_37:
 	jmp @end_36
 	jmp @end_39
@@ -293,12 +293,12 @@ _33:
 	sta 0+<L+0
 	lda 0+<L+0
 	cmp #0
-	bne @4
+	bne @5
 	lda #1
-	jmp @5
-@4:
-	lda #0
+	jmp @6
 @5:
+	lda #0
+@6:
 	sta <S+2,x
 	lda #.LOBYTE(_59)
 	sta <S+3,x
