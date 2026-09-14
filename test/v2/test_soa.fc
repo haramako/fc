@@ -14,8 +14,14 @@ struct Enemy {
 	tick:fn():int;
 }
 
-function tick1():int { return 1; }
-function tick2():int { return 2; }
+function tick1():int
+{
+	return 1;
+}
+function tick2():int
+{
+	return 2;
+}
 
 soa Enemies:[8]Enemy;
 soa const TABLE:[3]Enemy = [
