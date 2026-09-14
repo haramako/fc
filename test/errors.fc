@@ -25,7 +25,7 @@ use unknown; //! col=1
 //@can't return
 function hoge():void { return 1; } //! col=24
 
-//@Unexpected trailing garbage characters
+//@ca65 returns 1
 function hoge():void {
 	asm( "INVALID ASM" );
 }
