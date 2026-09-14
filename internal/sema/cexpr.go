@@ -67,7 +67,7 @@ const (
 	opIndex      cop = "index"
 	opRef        cop = "ref"
 	opDeref      cop = "deref"
-	opField      cop = "field" // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
+	opField      cop = "field"  // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
 	opBitNot     cop = "bitnot" // ~x
 )
 
