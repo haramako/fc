@@ -1431,15 +1431,36 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 
 				if lmdType.Fastcall() {
+					// 引数は FC_FASTCALL_REG に順に積むので、積んでいる途中で別の呼び出し (fastcall はもちろん、
+					// 普通の関数も中で fastcall を使いうる) が走ると壊れる。引数に呼び出しを含むときは
+					// 全部先に評価して一時変数に入れてから積む
+					argVals := make([]ir.Operand, len(args))
+					pre := false
+					for _, arg := range args {
+						if containsCall(arg) {
+							pre = true
+							break
+						}
+					}
+					if pre {
+						for i, arg := range args {
+							v := h.rval(h.withExpected(arg, lmdType.Params[i]))
+							h.compatible(lmdType.Params[i], ir.ValType(v))
+							argVals[i] = h.cast(v, lmdType.Params[i])
+						}
+					}
 					if h.fastCalling {
 						panic(&diag.Error{Msg: "cannot fastcall in fastcalling"})
 					}
 					h.fastCalling = true
 					h.emit(&ir.Op{Code: ir.OpPushFastcallResult, Type: lmdType.Base})
 					for i, arg := range args {
-						v := h.rval(h.withExpected(arg, lmdType.Params[i]))
-						h.compatible(lmdType.Params[i], ir.ValType(v))
-						v = h.cast(v, lmdType.Params[i])
+						v := argVals[i]
+						if !pre {
+							v = h.rval(h.withExpected(arg, lmdType.Params[i]))
+							h.compatible(lmdType.Params[i], ir.ValType(v))
+							v = h.cast(v, lmdType.Params[i])
+						}
 						h.emit(&ir.Op{Code: ir.OpPushFastcallArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
 					}
 					h.emit(&ir.Op{Code: ir.OpFastcall, Dst: r, Src: []ir.Operand{lmdV}})
@@ -1594,6 +1615,27 @@ func (h *Hlc) newLabels(names ...string) []string {
 
 func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
 	return h.addVar(ir.NewLocal(h.tmpName("$"), typ, ir.LTTemp))
+}
+
+// containsCall は式 (評価済みでもよい) に関数呼び出し (マクロ呼び出しも含む) が含まれるか。
+func containsCall(c *cexpr) bool {
+	if c == nil {
+		return false
+	}
+	if c.kind == cOp && c.op == opCall {
+		return true
+	}
+	for _, a := range c.args {
+		if containsCall(a) {
+			return true
+		}
+	}
+	for _, f := range c.flds {
+		if containsCall(f.val) {
+			return true
+		}
+	}
+	return false
 }
 
 // operandValue はオペランドを *ir.Value にする (CastedValue などは一時変数に写す)。マクロが cexpr の値として使うため。
