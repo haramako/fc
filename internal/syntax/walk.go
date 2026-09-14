@@ -95,6 +95,29 @@ func Children(node Node) []Node {
 		add(n.X)
 	case *OptionsStmt:
 		add(n.Options)
+	case *StructDecl:
+		add(n.Name)
+		for _, f := range n.Fields {
+			add(f)
+		}
+	case *FieldDecl:
+		add(n.Name)
+		add(n.Type)
+	case *SoaDecl:
+		add(n.Name)
+		add(n.Type)
+		add(n.Init)
+		add(n.Options)
+	case *StructLit:
+		add(n.Type)
+		for _, f := range n.Fields {
+			add(f)
+		}
+	case *FieldInit:
+		add(n.Key)
+		add(n.Value)
+	case *SizeofExpr:
+		add(n.Type)
 	case *UseDecl:
 		for _, id := range n.Names {
 			add(id)
@@ -141,6 +164,7 @@ func Children(node Node) []Node {
 		add(n.Type)
 		add(n.Body)
 	case *NamedType:
+		add(n.Module)
 		add(n.Name)
 	case *ArrayType:
 		if n.IsPrefix() { // [N]T
@@ -192,6 +216,8 @@ func isNilNode(n Node) bool {
 	case *DefaultClause:
 		return v == nil
 	case *IfStmt:
+		return v == nil
+	case *NamedType:
 		return v == nil
 	}
 	return false

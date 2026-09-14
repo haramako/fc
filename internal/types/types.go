@@ -21,11 +21,14 @@ const (
 	Pointer
 	Array
 	Func
+	Struct   // 構造体 (Fields)
+	TypeName // 型名を束縛した値の型 (Value.TypeRef が実際の型)
+	SoaRef   // SoA コンテナの要素ハンドル (実体は uint8 のインデックス。Base = 要素の struct 型、Soa = コンテナ)
 )
 
 var kindNames = [...]string{
 	Void: "void", Bool: "bool", Int: "int", Module: "module", Macro: "macro",
-	Pointer: "pointer", Array: "array", Func: "lambda",
+	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", TypeName: "typename", SoaRef: "soaref",
 }
 
 func (k Kind) String() string {
@@ -43,8 +46,29 @@ type Type struct {
 	Base     *Type // Pointer / Array の要素型、Func の戻り値型
 	Length   int   // Array の要素数。省略時 -1
 	Params   []*Type
+	Fields   []Field // Struct のフィールド (宣言順)
+	Name     string  // Struct / SoaRef のモジュール修飾名 (mod.Name)
+	Soa      *Type   // SoaRef のコンテナ (`soa` 配列型)、Kind == Array で IsSoa
+	IsSoa    bool    // Array が SoA コンテナ (soa 宣言) か
 	fastcall bool
 	str      string
+}
+
+// Field は struct のフィールド。
+type Field struct {
+	Name   string
+	Type   *Type
+	Offset int
+}
+
+// Field は名前でフィールドを探す。
+func (t *Type) Field(name string) (Field, bool) {
+	for _, f := range t.Fields {
+		if f.Name == name {
+			return f, true
+		}
+	}
+	return Field{}, false
 }
 
 // String は型の表示名 (`uint8`, `sint16`, `*uint8`, `[4]uint8`, `fastcall fn(uint8):void` など。v2 の前置形)。
@@ -82,6 +106,39 @@ func (u *Universe) Module() *Type {
 }
 func (u *Universe) Macro() *Type {
 	return u.intern(&Type{Kind: Macro, Size: 0, Length: -1, str: "macro"})
+}
+
+// TypeName は型名を束縛した値 (struct 宣言) の型。
+func (u *Universe) TypeName() *Type {
+	return u.intern(&Type{Kind: TypeName, Size: 0, Length: -1, str: "typename"})
+}
+
+// NewStruct は名前付き struct 型を作る (フィールドは SetFields で後から入れる。自己参照のため)。
+// qualName はモジュール修飾名 (mod.Name)。同名は同じ型。
+func (u *Universe) NewStruct(qualName string) *Type {
+	return u.intern(&Type{Kind: Struct, Name: qualName, Length: -1, str: "struct " + qualName})
+}
+
+// SetFields は struct のフィールドを確定し、オフセットとサイズを計算する (詰めて配置、アラインメントなし)。
+func (u *Universe) SetFields(t *Type, fields []Field) {
+	off := 0
+	for i := range fields {
+		fields[i].Offset = off
+		off += fields[i].Type.Size
+	}
+	t.Fields = fields
+	t.Size = off
+}
+
+// SoaArray は SoA コンテナの型 (`soa Name:[N]Elem`)。配列型だが IsSoa で区別し、要素はメモリ上で分散する。
+func (u *Universe) SoaArray(qualName string, elem *Type, length int) *Type {
+	return u.intern(&Type{Kind: Array, Base: elem, Length: length, Size: elem.Size * length, IsSoa: true, Name: qualName,
+		str: fmt.Sprintf("soa %s [%d]%s", qualName, length, elem.str)})
+}
+
+// SoaRef は SoA コンテナの要素ハンドル (`*Name`。1 バイトのインデックス)。
+func (u *Universe) SoaRef(soa *Type) *Type {
+	return u.intern(&Type{Kind: SoaRef, Size: 1, Base: soa.Base, Soa: soa, Name: soa.Name, Length: -1, str: "*" + soa.Name})
 }
 
 // IntType は size バイトの整数型。

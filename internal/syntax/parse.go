@@ -38,7 +38,6 @@ func Parse(src []byte, filename string) (*File, error) {
 	return f, nil
 }
 
-
 // checkVersion は文法バージョンごとの受理範囲を検査する (doc/v2_grammar.md §4.1)。
 // 文法ファイルは v1 ∪ v2 のスーパーセットなので、「そのバージョンに無い構文」をここで落とす。
 func checkVersion(f *File) error {
@@ -98,6 +97,26 @@ func checkVersion(f *File) error {
 			}
 			if f.Version < Version2 && n.Kind != CastLegacy {
 				fail(n.Pos(), "`as` / `bitcast` require fc 2")
+			}
+		case *StructDecl:
+			if f.Version < Version2 {
+				fail(n.Keyword, "`struct` requires fc 2")
+			}
+		case *SoaDecl:
+			if f.Version < Version2 {
+				fail(n.Keyword, "`soa` requires fc 2")
+			}
+		case *StructLit:
+			if f.Version < Version2 {
+				fail(n.Lbrace, "struct literals require fc 2")
+			}
+		case *SizeofExpr:
+			if f.Version < Version2 {
+				fail(n.Sizeof, "`sizeof` requires fc 2")
+			}
+		case *NamedType:
+			if f.Version < Version2 && n.Module != nil {
+				fail(n.Module.NamePos, "qualified type names (mod.T) require fc 2")
 			}
 		case *ArrayLit:
 			if f.Version < Version2 && n.Comma.IsValid() {
@@ -162,7 +181,7 @@ var kindToYacc = map[Kind]int{
 	KwLoop: kLOOP, KwWhile: kWHILE, KwFor: kFOR, KwReturn: kRETURN,
 	KwBreak: kBREAK, KwContinue: kCONTINUE, KwIncbin: kINCBIN,
 	KwSwitch: kSWITCH, KwCase: kCASE, KwDefault: kDEFAULT,
-	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwBitcast: kBITCAST,
+	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
 	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
 	LParen: '(', RParen: ')', LBrace: '{', RBrace: '}', Semicolon: ';', Colon: ':',

@@ -221,6 +221,36 @@ type UseDecl struct {
 	Semi      Pos
 }
 
+// StructDecl は `struct Name { fields }` (v2)。
+type StructDecl struct {
+	PublicPos Pos
+	Keyword   Pos
+	Name      *Ident
+	Lbrace    Pos
+	Fields    []*FieldDecl
+	Rbrace    Pos
+}
+
+// FieldDecl は struct のフィールド `name:type;`。
+type FieldDecl struct {
+	Name *Ident
+	Type TypeExpr
+	Semi Pos
+}
+
+// SoaDecl は `soa Name:[N]Struct [options];` / `soa const Name:[N]Struct = [...];` (v2)。
+// SoA コンテナ: 型 (Name) と唯一の実体を同時に宣言する。
+type SoaDecl struct {
+	PublicPos Pos
+	Keyword   Pos
+	Const     bool
+	Name      *Ident
+	Type      TypeExpr
+	Init      Expr     // const のときの初期値 (配列リテラル)。var なら nil
+	Options   *Options // nil なら省略
+	Semi      Pos
+}
+
 // IncludeDecl は `include [kind]("path") [options(...)];`。Kind は `macro` 等の修飾子。
 type IncludeDecl struct {
 	Include Pos
@@ -357,6 +387,29 @@ type ArrayLit struct {
 	Rbrack Pos
 }
 
+// StructLit は struct リテラル `Point{x: 1, y: 2}` / `Point{1, 2}` / `{1, 2}` (Type が nil、v2)。
+type StructLit struct {
+	Type   *NamedType // nil なら文脈 (配列の要素型・フィールドの型) から決まる
+	Lbrace Pos
+	Fields []*FieldInit
+	Rbrace Pos
+}
+
+// FieldInit は struct リテラルの 1 項目。Key が nil なら位置指定。
+type FieldInit struct {
+	Key   *Ident
+	Colon Pos
+	Value Expr
+}
+
+// SizeofExpr は `sizeof(T)` (v2)。T は型 (変数名を書いたらその型)。
+type SizeofExpr struct {
+	Sizeof Pos
+	Lparen Pos
+	Type   TypeExpr
+	Rparen Pos
+}
+
 // IncbinExpr は `incbin("path")`。
 type IncbinExpr struct {
 	Incbin Pos
@@ -376,9 +429,10 @@ type LambdaExpr struct {
 // 型式
 // ---------------------------------------------------------------
 
-// NamedType は型名 (`int`, `uint8`, `void` など)。
+// NamedType は型名 (`int`, `uint8`, `void`、struct 名)。Module があれば `mod.Name` (v2)。
 type NamedType struct {
-	Name *Ident
+	Module *Ident // nil なら非修飾
+	Name   *Ident
 }
 
 // ArrayType は `elem[len]` / `elem[]`。
@@ -548,6 +602,34 @@ func (s *OptionsStmt) End() Pos { return after(s.Semi, 1) }
 func (s *UseDecl) Pos() Pos { return firstValid(s.PublicPos, s.Use) }
 func (s *UseDecl) End() Pos { return after(s.Semi, 1) }
 
+func (s *StructDecl) Pos() Pos { return firstValid(s.PublicPos, s.Keyword) }
+func (s *StructDecl) End() Pos { return after(s.Rbrace, 1) }
+
+func (f *FieldDecl) Pos() Pos { return f.Name.Pos() }
+func (f *FieldDecl) End() Pos { return after(f.Semi, 1) }
+
+func (s *SoaDecl) Pos() Pos { return firstValid(s.PublicPos, s.Keyword) }
+func (s *SoaDecl) End() Pos { return after(s.Semi, 1) }
+
+func (e *StructLit) Pos() Pos {
+	if e.Type != nil {
+		return e.Type.Pos()
+	}
+	return e.Lbrace
+}
+func (e *StructLit) End() Pos { return after(e.Rbrace, 1) }
+
+func (f *FieldInit) Pos() Pos {
+	if f.Key != nil {
+		return f.Key.Pos()
+	}
+	return f.Value.Pos()
+}
+func (f *FieldInit) End() Pos { return f.Value.End() }
+
+func (e *SizeofExpr) Pos() Pos { return e.Sizeof }
+func (e *SizeofExpr) End() Pos { return after(e.Rparen, 1) }
+
 func (s *IncludeDecl) Pos() Pos { return s.Include }
 func (s *IncludeDecl) End() Pos { return after(s.Semi, 1) }
 
@@ -625,7 +707,12 @@ func (e *LambdaExpr) End() Pos {
 	return after(e.Semi, 1)
 }
 
-func (t *NamedType) Pos() Pos { return t.Name.Pos() }
+func (t *NamedType) Pos() Pos {
+	if t.Module != nil {
+		return t.Module.Pos()
+	}
+	return t.Name.Pos()
+}
 func (t *NamedType) End() Pos { return t.Name.End() }
 
 func (t *ArrayType) Pos() Pos {
@@ -710,6 +797,8 @@ func (*ExprStmt) stmtNode()     {}
 func (*OptionsStmt) stmtNode()  {}
 func (*UseDecl) stmtNode()      {}
 func (*IncludeDecl) stmtNode()  {}
+func (*StructDecl) stmtNode()   {}
+func (*SoaDecl) stmtNode()      {}
 func (*ScopeLabel) stmtNode()   {}
 func (*Block) stmtNode()        {}
 func (*EmptyStmt) stmtNode()    {}
@@ -726,6 +815,8 @@ func (*CallExpr) exprNode()   {}
 func (*IndexExpr) exprNode()  {}
 func (*ArrayLit) exprNode()   {}
 func (*IncbinExpr) exprNode() {}
+func (*StructLit) exprNode()  {}
+func (*SizeofExpr) exprNode() {}
 func (*LambdaExpr) exprNode() {}
 
 func (*NamedType) typeNode()   {}

@@ -35,11 +35,16 @@ package syntax
 	ident   *Ident
 	idents  []*Ident
 	use     *UseDecl
+	fields  []*FieldDecl
+	field   *FieldDecl
+	inits   []*FieldInit
+	init    *FieldInit
+	slit    *StructLit
 	optTok  *Token
 }
 
 %token <tok> NUMBER IDENT STRING
-%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kBITCAST
+%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kBITCAST kSTRUCT kSIZEOF kSOA
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!'
 
@@ -47,6 +52,13 @@ package syntax
 %type <stmt>    statement_i statement else_block opt_for_init opt_for_step simple_stmt incdec
 %type <optTok>  opt_scope
 %type <use>     use_target
+%type <fields>  field_decl_list
+%type <field>   field_decl
+%type <inits>   field_init_list field_inits
+%type <init>    field_init
+%type <slit>    struct_lit anon_struct_lit
+%type <expr>    lit_elem
+%type <exprs>   lit_elem_list
 %type <ident>   opt_as opt_ident
 %type <idents>  ident_list
 %type <deflt>   opt_default_block
@@ -120,11 +132,35 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
                                                 { $$ = funcDecl($1, $2, $3, $5, $8, $9, $10) }
          | options ';'                          { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} }
          | opt_scope kUSE use_target ';'        { u := $3; u.PublicPos = optPos($1); u.Use = $2.Pos; u.Semi = $4.Pos; $$ = u }
+         | opt_scope kSTRUCT IDENT '{' field_decl_list '}' { $$ = &StructDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Lbrace: $4.Pos, Fields: $5, Rbrace: $6.Pos} } /* v2 */
+         | opt_scope kSOA IDENT ':' type_decl opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Type: $5, Options: $6, Semi: $7.Pos} } /* v2 */
+         | opt_scope kSOA kCONST IDENT ':' type_decl '=' exp opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Name: ident($4), Type: $6, Init: $8, Options: $9, Semi: $10.Pos} } /* v2 */
          | kINCLUDE opt_ident '(' STRING ')' opt_options ';' { $$ = &IncludeDecl{Include: $1.Pos, Kind: $2, Path: strLit($4), Rparen: $5.Pos, Options: $6, Semi: $7.Pos} }
          | kPUBLIC ':'                          { $$ = &ScopeLabel{Keyword: $1.Pos, Public: true, Colon: $2.Pos} }
          | kPRIVATE ':'                         { $$ = &ScopeLabel{Keyword: $1.Pos, Public: false, Colon: $2.Pos} }
          | block                                { $$ = $1 }
          | ';'                                  { $$ = &EmptyStmt{Semi: $1.Pos} }
+
+/* struct のフィールド宣言 (v2) */
+field_decl_list: /* empty */ { $$ = []*FieldDecl{} }
+               | field_decl_list field_decl { $$ = append($1, $2) }
+field_decl: IDENT ':' type_decl ';' { $$ = &FieldDecl{Name: ident($1), Type: $3, Semi: $4.Pos} }
+
+/* struct リテラル (v2): Point{x: 1, y: 2} / Point{1, 2} / 要素型が分かる文脈では {1, 2} */
+struct_lit: IDENT '{' field_inits '}' { $$ = &StructLit{Type: &NamedType{Name: ident($1)}, Lbrace: $2.Pos, Fields: $3, Rbrace: $4.Pos} }
+anon_struct_lit: '{' field_inits '}' { $$ = &StructLit{Lbrace: $1.Pos, Fields: $2, Rbrace: $3.Pos} }
+field_inits: /* empty */ { $$ = []*FieldInit{} }
+           | field_init_list { $$ = $1 }
+           | field_init_list ',' { $$ = $1 }
+field_init_list: field_init { $$ = []*FieldInit{$1} }
+               | field_init_list ',' field_init { $$ = append($1, $3) }
+field_init: IDENT ':' lit_elem { $$ = &FieldInit{Key: ident($1), Colon: $2.Pos, Value: $3} }
+          | lit_elem { $$ = &FieldInit{Value: $1} }
+/* 配列リテラルの要素と struct リテラルの値: 式か、型名を省いた struct リテラル */
+lit_elem: exp
+        | anon_struct_lit { $$ = $1 }
+lit_elem_list: lit_elem { $$ = []Expr{$1} }
+             | lit_elem_list ',' lit_elem { $$ = append($1, $3) }
 
 /* C 型 for の各部 (v2) */
 opt_for_init: /* empty */ { $$ = nil }
@@ -217,7 +253,11 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | '&' exp %prec UMINUS   { $$ = unary($1, $2) }
    | exp '(' arg_list ')' opt_block { $$ = &CallExpr{Fun: $1, Lparen: $2.Pos, Args: $3.exprs, Comma: $3.comma, Rparen: $4.Pos, Block: $5} }
    | exp '[' exp ']'        { $$ = &IndexExpr{X: $1, Lbrack: $2.Pos, Index: $3, Rbrack: $4.Pos} }
-   | '[' arg_list ']'       { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2.exprs, Comma: $2.comma, Rbrack: $3.Pos} }
+   | '[' ']'                { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: []Expr{}, Rbrack: $2.Pos} }
+   | '[' lit_elem_list ']'  { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Rbrack: $3.Pos} }
+   | '[' lit_elem_list ',' ']' { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Comma: $3.Pos, Rbrack: $4.Pos} }
+   | struct_lit             { $$ = $1 }
+   | kSIZEOF '(' type_decl ')' { $$ = &SizeofExpr{Sizeof: $1.Pos, Lparen: $2.Pos, Type: $3, Rparen: $4.Pos} } /* v2 */
    | kINCBIN '(' STRING ')' { $$ = &IncbinExpr{Incbin: $1.Pos, Path: strLit($3), Rparen: $4.Pos} }
    | ARROW type_decl function_block { $$ = &LambdaExpr{Arrow: $1.Pos, Type: $2, Body: $3.Block, Semi: $3.Semi} }
    | NUMBER                 { $$ = &IntLit{ValuePos: $1.Pos, Value: $1.Int, Text: $1.Text} }
@@ -269,12 +309,14 @@ type_v2_prefix: '*' type_decl                        { $$ = &PointerType{Star: $
 
 /* v2 の前置形だけ (後置なし)。`x as T` の T に使う: 後ろに二項演算子が続いても曖昧にならない */
 type_v2: '*' type_v2                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
+       | IDENT '.' IDENT                    { $$ = &NamedType{Module: ident($1), Name: ident($3)} }
        | '[' exp ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
        | '[' ']' type_v2                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
        | kFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
-       | IDENT                              { $$ = &NamedType{Name: ident($1)} }
+       | IDENT %prec kAS                    { $$ = &NamedType{Name: ident($1)} } /* `x as m.T` の '.' は型の修飾として読む (shift) */
 
-type_post: type_post '[' exp ']'           { $$ = &ArrayType{Elem: $1, Lbrack: $2.Pos, Len: $3, Rbrack: $4.Pos} }
+type_post: IDENT '.' IDENT                 { $$ = &NamedType{Module: ident($1), Name: ident($3)} } /* v2: 他モジュールの型 */
+         | type_post '[' exp ']'           { $$ = &ArrayType{Elem: $1, Lbrack: $2.Pos, Len: $3, Rbrack: $4.Pos} }
          | type_post '[' ']'               { $$ = &ArrayType{Elem: $1, Lbrack: $2.Pos, Rbrack: $3.Pos} }
          | type_post '*'                   { $$ = &PointerType{Elem: $1, Star: $2.Pos} }
          | type_post '(' arg_decl_list ')' { $$ = &FuncType{Result: $1, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos} }

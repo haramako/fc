@@ -463,6 +463,57 @@ func (p *printer) stmt(s Stmt) {
 		}
 		p.tokAt(s.Semi, ";")
 
+	case *StructDecl:
+		if s.PublicPos.IsValid() {
+			p.tokAt(s.PublicPos, "public")
+			p.space()
+		}
+		p.tokAt(s.Keyword, "struct")
+		p.space()
+		p.ident(s.Name)
+		p.space()
+		p.tokAt(s.Lbrace, "{")
+		p.indent++
+		for _, f := range s.Fields {
+			p.newline()
+			p.blankOK = true
+			p.ident(f.Name)
+			p.tok(":")
+			p.typeExpr(f.Type)
+			p.tokAt(f.Semi, ";")
+		}
+		p.flushComments(s.Rbrace)
+		p.indent--
+		p.newline()
+		p.blankOK = false
+		p.tokAt(s.Rbrace, "}")
+
+	case *SoaDecl:
+		if s.PublicPos.IsValid() {
+			p.tokAt(s.PublicPos, "public")
+			p.space()
+		}
+		p.tokAt(s.Keyword, "soa")
+		p.space()
+		if s.Const {
+			p.tok("const")
+			p.space()
+		}
+		p.ident(s.Name)
+		p.tok(":")
+		p.typeExpr(s.Type)
+		if s.Init != nil {
+			p.space()
+			p.tok("=")
+			p.space()
+			p.expr(s.Init)
+		}
+		if s.Options != nil {
+			p.space()
+			p.options(s.Options)
+		}
+		p.tokAt(s.Semi, ";")
+
 	case *IncludeDecl:
 		p.tokAt(s.Include, "include")
 		if s.Kind != nil {
@@ -674,6 +725,18 @@ func (p *printer) expr(e Expr) {
 		p.tokAt(e.Lbrack, "[")
 		p.exprList(e.Elems, e.Comma, e.Rbrack)
 		p.tokAt(e.Rbrack, "]")
+	case *StructLit:
+		if e.Type != nil {
+			p.typeExpr(e.Type)
+		}
+		p.tokAt(e.Lbrace, "{")
+		p.fieldInits(e.Fields, e.Rbrace)
+		p.tokAt(e.Rbrace, "}")
+	case *SizeofExpr:
+		p.tokAt(e.Sizeof, "sizeof")
+		p.tokAt(e.Lparen, "(")
+		p.typeExpr(e.Type)
+		p.tokAt(e.Rparen, ")")
 	case *IncbinExpr:
 		p.tokAt(e.Incbin, "incbin")
 		p.tok("(")
@@ -690,6 +753,39 @@ func (p *printer) expr(e Expr) {
 		}
 	default:
 		panic("unknown expression")
+	}
+}
+
+// fieldInits は struct リテラルの項目列 (exprList と同じ改行規則。末尾カンマは複数行のときだけ)。
+func (p *printer) fieldInits(list []*FieldInit, close Pos) {
+	if len(list) == 0 {
+		return
+	}
+	multiline := false
+	prevLine := p.lastLine
+	p.indent++
+	for i, f := range list {
+		if i > 0 {
+			p.tok(",")
+		}
+		if f.Pos().Line > prevLine {
+			p.newline()
+			multiline = true
+		} else if i > 0 {
+			p.space()
+		}
+		if f.Key != nil {
+			p.ident(f.Key)
+			p.tokAt(f.Colon, ":")
+			p.space()
+		}
+		p.expr(f.Value)
+		prevLine = f.End().Line
+	}
+	p.indent--
+	if multiline && close.Line > prevLine {
+		p.tok(",")
+		p.newline()
 	}
 }
 
@@ -762,6 +858,10 @@ func (p *printer) typeExpr(t TypeExpr) {
 func (p *printer) typeExprV2(t TypeExpr) {
 	switch t := t.(type) {
 	case *NamedType:
+		if t.Module != nil {
+			p.ident(t.Module)
+			p.tok(".")
+		}
 		p.ident(t.Name)
 	case *ArrayType:
 		p.tokAt(t.Lbrack, "[")

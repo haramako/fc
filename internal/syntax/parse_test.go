@@ -237,6 +237,12 @@ func TestVersionPragma(t *testing.T) {
 		{"var x = bitcast<int>(y);\n", "`as` / `bitcast` require fc 2"},
 		{"function f():void { g(1,); }\n", "trailing comma requires fc 2"},
 		{"#fc 2\nconst a = [,];\n", "parse error"},
+		{"struct P { x:int; }\n", "`struct` requires fc 2"},
+		{"soa P:P[4];\n", "`soa` requires fc 2"},
+		{"var p = P{1, 2};\n", "struct literals require fc 2"},
+		{"var n = sizeof(int);\n", "`sizeof` requires fc 2"},
+		{"var t:m.T;\n", "qualified type names (mod.T) require fc 2"},
+		{"#fc 2\nstruct P { x:int }\n", "parse error"},
 	}
 	for _, b := range bad {
 		_, err := Parse([]byte(b.src), "t.fc")

@@ -118,7 +118,7 @@ var keywords = map[string]Kind{
 	"break": KwBreak, "continue": KwContinue, "incbin": KwIncbin,
 	"switch": KwSwitch, "case": KwCase, "default": KwDefault,
 	"use": KwUse, "as": KwAs, "from": KwFrom, "public": KwPublic, "private": KwPrivate,
-	"fn": KwFn, "bitcast": KwBitcast,
+	"fn": KwFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
 }
 
 // Ruby の \s 相当
