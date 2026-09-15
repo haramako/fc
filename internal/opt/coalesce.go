@@ -51,3 +51,68 @@ func coalesceCopies(lmd *ir.Lambda) {
 		ops[i+1] = nil
 	}
 }
+
+// chainInPlace は `x = (x op1 a) op2 b` の中間の一時変数を x 自身にする:
+//
+//	op1 t = x, a; op2 x = t, b    (t は一時変数で op2 でだけ使う。b は x を参照しない)
+//	→ op1 x = x, a; op2 x = x, b
+//
+// `crc = (crc << 1) ^ k` のような形。coalesceCopies の後に走らせる (op2 の Dst が x になっている必要がある)。
+func chainInPlace(lmd *ir.Lambda) {
+	ud := ir.BuildUseDef(lmd)
+	ops := lmd.Ops
+	for i, op := range ops {
+		if op == nil || i+1 >= len(ops) || ops[i+1] == nil || op.Dst == nil || len(op.Src) == 0 {
+			continue
+		}
+		if !readsBeforeWrite(op.Code) {
+			continue
+		}
+		next := ops[i+1]
+		if next.Dst == nil || len(next.Src) == 0 || !readsBeforeWrite(next.Code) {
+			continue
+		}
+		t, ok := op.Dst.(*ir.Value)
+		if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 || t.Type.Size < 2 {
+			continue // 1 バイトは t が A に置かれる (lda; op; op; sta) 方が速いので対象外
+		}
+		if u, single := ud.SingleUse(t); !single || u != i+1 || next.Src[0] != ir.Operand(t) {
+			continue
+		}
+		x := next.Dst
+		if _, isValue := x.(*ir.Value); !isValue || ir.ValType(x) != t.Type || ir.ValType(op.Src[0]) != t.Type {
+			continue
+		}
+		if !sameStorage(op.Src[0], x) {
+			continue
+		}
+		for _, b := range next.Src[1:] {
+			if sameStorage(b, x) {
+				continue
+			}
+		}
+		op.Dst = x
+		next.Src[0] = x
+	}
+}
+
+// readsBeforeWrite は「全ての入力を読んでから結果を書く」ことが codegen で保証されている命令か
+// (Dst と Src が同じ場所でもよい)。
+func readsBeforeWrite(c ir.OpCode) bool {
+	switch c {
+	case ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
+		ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpBitNot, ir.OpNot, ir.OpEq, ir.OpLt,
+		ir.OpSignExtension, ir.OpIndex, ir.OpPget, ir.OpIndexPget, ir.OpFieldPget:
+		return true
+	}
+	return false
+}
+
+// sameStorage は同じ変数 (の同じ位置) を指すか。
+func sameStorage(a, b ir.Operand) bool {
+	ua, ub := ir.UnderlyingValue(a), ir.UnderlyingValue(b)
+	if ua == nil || ub == nil || ua != ub {
+		return false
+	}
+	return ir.ValOffset(a) == ir.ValOffset(b)
+}

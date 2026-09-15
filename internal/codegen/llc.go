@@ -26,10 +26,11 @@ type Llc struct {
 	curLambda     *ir.Lambda // 処理中の関数 (エラー位置の補完用)
 	curOp         *ir.Op     // 処理中の命令 (エラー位置の補完用)
 	zero          *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
+	types         *types.Universe
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
-	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0)}
+	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0), types: u}
 }
 
 // asmLines は文字列 / nil / ネストした配列を保持する行バッファ。
@@ -195,7 +196,7 @@ func anyList(ss []string) []any {
 func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
 	l.curOp = nil
-	opt.Optimize(lmd, l.OptimizeLevel)
+	opt.Optimize(lmd, l.OptimizeLevel, l.types)
 	l.allocRegister(lmd)
 	ops := lmd.Ops
 

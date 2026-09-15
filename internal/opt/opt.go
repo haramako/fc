@@ -10,10 +10,11 @@ import (
 	"strings"
 
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/types"
 )
 
 // Optimize は関数 1 つの IR を書き換える。level 0 なら何もしない。
-func Optimize(lmd *ir.Lambda, level int) {
+func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 	if level <= 0 || len(lmd.Ops) == 0 {
 		return
 	}
@@ -21,6 +22,8 @@ func Optimize(lmd *ir.Lambda, level int) {
 	compact(lmd)
 	coalesceCopies(lmd)
 	compact(lmd)
+	chainInPlace(lmd)
+	narrowBitTest(lmd, u)
 	simplifyJumps(lmd)
 	compact(lmd)
 }

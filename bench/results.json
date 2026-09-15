@@ -10,8 +10,8 @@
     "out": "sum=663"
   },
   "crc16": {
-    "cycles": 4884804,
-    "size": 349,
+    "cycles": 3245624,
+    "size": 327,
     "out": "crc16=16501"
   },
   "crc8": {
@@ -20,8 +20,8 @@
     "out": "crc8=149"
   },
   "entities": {
-    "cycles": 1685633,
-    "size": 1437,
+    "cycles": 1687082,
+    "size": 1441,
     "out": "sum=20554"
   },
   "fib": {
