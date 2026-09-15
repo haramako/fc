@@ -14,7 +14,9 @@
 	.global _mmc3_pbank_bak         ; mmc3 モジュールから include するので .import でなく .global (定義側なら export になる)
 	.global farcall
 
-.segment "CODE"
+;;; 注意: .segment は書かない。include したモジュール (mmc3) のセグメントに置かれる。
+;;; farcall 自身は必ず固定バンク ($C000 以上) に置くこと。切替バンク (例えば CODE → $8000 の切替領域) に置くと
+;;; 切替の瞬間に自分自身がアンマップされて暴走する。
 
 farcall:
 	lda FC_FARCALL+1

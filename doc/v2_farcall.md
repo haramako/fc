@@ -93,6 +93,9 @@ emu ターゲットには「切替せず jsr するだけ」の実装を置く�
 - そのスロットの今のバンク（castle なら `mmc3.pbank_bak`）と比べて、同じなら `jmp (FC_FARCALL)`（呼び先の `rts` が呼び出し元へ戻る）
 - 違えば今のバンクをハードウェアスタックに退避 → 切替 → `jsr` で間接ジャンプ → 復帰 → `rts`。退避がスタックなので入れ子も動く
 - IRQ ハンドラもバンクを切るなら、レジスタ書き込みの前後を `sei` / `cli` で囲む（`set_pbank` と同じ）
+- **`farcall` 自身は固定バンクに置く**。参考実装は `.segment` を書かず、include したモジュール（mmc3 → ROML）のセグメントに
+  入る。`.segment "CODE"` などを書くと、castle では CODE が切替領域（ROM20、$8000）なので、切替の瞬間に自分自身が
+  アンマップされて暴走する（初回適用時に踏んだ。§3.6）
 
 MMC3 用の参考実装（castle の `mmc3.fc` の `pbank_bak` / `BANK_SELECT` を使う）:
 
@@ -180,6 +183,8 @@ farcall:
 - トランポリンを fc のモジュール（mmc3.fc）から `include` すると、そのモジュールの asm には fc が `.global farcall` を出し、
   include した側が `.export`/`.global farcall` していれば定義側として export になる。参考実装の `_mmc3_pbank_bak` も
   同じ理由で `.import` でなく `.global`
+- 参考実装に `.segment "CODE"` を書いていたら、castle の CODE は ROM20（$8000 の切替領域）なので `farcall` が $8000 に
+  置かれ、起動直後から暴走した。map ファイルの `farcall` の番地が $C000 以上であることを確認する
 - far call の呼び出し側は near より **12 バイト大きい**（`FC_FARCALL` への 3 回の `lda`/`sta`）。castle は 155 箇所が far になり、
   そのうち約 100 箇所が `en1〜8 → en`（常に slot 1 にマップされている）で、ROM15 (en7) / ROM16 (my_process) が溢れた。
   `en.fc` に `options(near: true)` を付けるのが現実的（バンクが満杯なので）。将来、呼び出し側を 6 バイトにする
@@ -188,7 +193,8 @@ farcall:
 ## 6. castle での移行
 
 1. `ld65.cfg` の切替 ROM（ROM0〜ROM19 など）に `bank = N` を付ける（N は `PBANK_*` と同じ値）
-2. `farcall` を用意する（参考実装をコピーするか `src/mmc3.asm` などに置いて `include`）
+2. `farcall` を用意する（参考実装をコピーするか `src/mmc3.asm` などに置いて `include`）。`.segment` は書かず mmc3 の
+   セグメント（ROML、固定）に入れる
 3. `bg.fc` の `fetch_area` 系ラッパーは不要になる（残しても動く）。`set_pbank` の手動切替はデータ参照のためだけに残る
 4. `fcc check` の far call 一覧で、熱い経路が far になっていないか確認。必要なら `options(near: true)`
 
