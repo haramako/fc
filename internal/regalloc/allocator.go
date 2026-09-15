@@ -64,39 +64,18 @@ func CalcLiveRange(lmd *ir.Lambda) {
 
 	flow := make([][]int, 0, len(lmd.Ops))
 	for i, op := range lmd.Ops {
-		var uses, defines []ir.Operand
 		var node []int
 		switch op.Code {
-		case ir.OpLabel, ir.OpAsm, ir.OpPushResult, ir.OpPushFastcallResult:
-			// DO NOTHING
-		case ir.OpIf:
-			uses = append(uses, op.Src[0])
+		case ir.OpIf, ir.OpJump:
 			node = append(node, labels[op.Label])
-		case ir.OpJump:
-			node = append(node, labels[op.Label])
-		case ir.OpReturn:
-			uses = append(uses, op.In(0))
-		case ir.OpPushArg, ir.OpPushFastcallArg:
-			uses = append(uses, op.Src[0])
-		case ir.OpLoad, ir.OpUminus, ir.OpNot, ir.OpBitNot, ir.OpSignExtension, ir.OpRef, ir.OpCall, ir.OpFastcall:
-			defines = append(defines, op.Dst)
-			uses = append(uses, op.Src[0])
-		case ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
-			ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpEq, ir.OpLt,
-			ir.OpShiftLeft, ir.OpShiftRight, ir.OpIndex, ir.OpPget:
-			defines = append(defines, op.Dst)
-			uses = append(uses, op.Src...)
-		case ir.OpPset:
-			uses = append(uses, op.Src[0], op.Src[1])
-		default:
-			panic(fmt.Sprintf("invalid op %v", ir.DumpOp(op, nil)))
 		}
+		defines, uses := ir.DefUse(op)
 
 		flow = append(flow, node)
 
 		for _, v := range defines {
 			record(v, true, i)
-			if isPartialDef(v) {
+			if ir.IsPartialDef(v) {
 				// 変数の一部 (struct のフィールド / SoA のバイト分割) への書き込みは残りを保つので、使用でもある
 				record(v, false, i)
 			}
@@ -118,16 +97,6 @@ func CalcLiveRange(lmd *ir.Lambda) {
 	for _, e := range udOrder {
 		e.v.LiveRange = lrc.CalcLiveRange(e.defines, e.uses)
 	}
-}
-
-// isPartialDef は Dst が変数の一部 (CastedValue の Offset つき、または元より小さい型) への書き込みか。
-func isPartialDef(v ir.Operand) bool {
-	cv, ok := v.(*ir.CastedValue)
-	if !ok {
-		return false
-	}
-	uv := ir.UnderlyingValue(cv)
-	return uv != nil && (ir.ValOffset(cv) != 0 || cv.Type.Size < uv.Type.Size)
 }
 
 // ---------------------------------------------------------------
@@ -300,18 +269,25 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			if !isSameValue(op.Dst, v) {
 				continue
 			}
+			// 結果を A に残す命令 (codegen が storeA で書く) であること
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
-				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpPget) {
+				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpPget,
+				ir.OpIndexPget, ir.OpFieldPget) {
 				continue
 			}
 
+			// 直後の命令が最初の入力を最初に A へ読む (loadA) ものであること
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
 			switch nextOp.Code {
 			case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpEq, ir.OpLt, ir.OpPget, ir.OpSub, ir.OpPushArg,
 				ir.OpIf, ir.OpReturn:
-				// 最初の入力オペランドが v であること (旧実装の op[2] / if・return では op[1] に相当)
 				if !isSameValue(nextOp.In(0), v) {
+					continue
+				}
+			case ir.OpShiftLeft, ir.OpShiftRight:
+				// 定数シフトは In(0) を先に A へ読む (変数シフトは先に In(1) を Y へ読むので A が壊れる)
+				if _, lit := ir.ValIntLiteral(nextOp.In(1)); !lit || !isSameValue(nextOp.In(0), v) {
 					continue
 				}
 			default:

@@ -95,10 +95,10 @@ _math_rand_table:
 	sta 0+<FC_FASTCALL_REG+2
 	ldy 0+<FC_FASTCALL_REG+2
 	lda _math_sin_table+0,y
-	sta 0+<FC_FASTCALL_REG+2
+	sta 0+<FC_FASTCALL_REG+3
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+2
+	sbc 0+<FC_FASTCALL_REG+3
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 	jmp @end_20
@@ -109,10 +109,10 @@ _math_rand_table:
 	sta 0+<FC_FASTCALL_REG+2
 	ldy 0+<FC_FASTCALL_REG+2
 	lda _math_sin_table+0,y
-	sta 0+<FC_FASTCALL_REG+2
+	sta 0+<FC_FASTCALL_REG+3
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+2
+	sbc 0+<FC_FASTCALL_REG+3
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 @end_20:
@@ -157,10 +157,10 @@ _math_rand_table:
 	sta 0+<FC_FASTCALL_REG+3
 	ldy 0+<FC_FASTCALL_REG+3
 	lda _math_atan_table+0,y
-	sta 0+<FC_FASTCALL_REG+3
+	sta 0+<FC_FASTCALL_REG+4
 	sec
 	lda #128
-	sbc 0+<FC_FASTCALL_REG+3
+	sbc 0+<FC_FASTCALL_REG+4
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 @end_37:
@@ -183,10 +183,10 @@ _math_rand_table:
 	sta 0+<FC_FASTCALL_REG+3
 	ldy 0+<FC_FASTCALL_REG+3
 	lda _math_atan_table+0,y
-	sta 0+<FC_FASTCALL_REG+3
+	sta 0+<FC_FASTCALL_REG+4
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+3
+	sbc 0+<FC_FASTCALL_REG+4
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 	jmp @end_51
@@ -205,10 +205,10 @@ _math_rand_table:
 	sta 0+<FC_FASTCALL_REG+3
 	ldy 0+<FC_FASTCALL_REG+3
 	lda _math_atan_table+0,y
-	sta 0+<FC_FASTCALL_REG+3
+	sta 0+<FC_FASTCALL_REG+4
 	clc
 	lda #128
-	adc 0+<FC_FASTCALL_REG+3
+	adc 0+<FC_FASTCALL_REG+4
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 @end_51:
@@ -290,4 +290,4 @@ _math_rand_idx: .res 1
 @end_79:
 .endproc
 	.import FC_FASTCALL_REG_SIZE
-	.assert FC_FASTCALL_REG_SIZE >= 6, error, "fastcall functions of module math need 6 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"
+	.assert FC_FASTCALL_REG_SIZE >= 5, error, "fastcall functions of module math need 5 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

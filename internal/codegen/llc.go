@@ -12,6 +12,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/opt"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/types"
 )
@@ -194,12 +195,9 @@ func anyList(ss []string) []any {
 func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
 	l.curOp = nil
+	opt.Optimize(lmd, l.OptimizeLevel)
 	l.allocRegister(lmd)
 	ops := lmd.Ops
-	if l.OptimizeLevel > 0 {
-		ops = l.optimizePointer(lmd, ops)
-	}
-	lmd.Ops = ops
 
 	r := &asmLines{}
 
@@ -1351,90 +1349,6 @@ func (l *Llc) allocRegister(lmd *ir.Lambda) {
 		}
 		lmd.FrameSize = size
 	}
-}
-
-// ---------------------------------------------------------------
-// オプティマイザ
-// ---------------------------------------------------------------
-
-// optimizePointer は index->pget, index->pset の組み合わせを合成する。
-func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
-	ops = append([]*ir.Op{}, ops...)
-
-	// add(ポインタ, 定数) + pget/pset の最適化 (struct のフィールドをポインタ経由で触る): ldy #off; lda (reg),y
-	for i, op := range ops {
-		if op == nil || op.Code != ir.OpAdd || i+1 >= len(ops) || ops[i+1] == nil {
-			continue
-		}
-		nextOp := ops[i+1]
-		ptr, off := op.Src[0], op.Src[1]
-		k, isLit := ir.ValIntLiteral(off)
-		tmp := ir.UnderlyingValue(op.Dst)
-		if !isLit || k < 0 || k > 255 || ir.ValType(ptr).Kind != types.Pointer || ir.ValType(ptr).Size != 2 ||
-			tmp == nil || tmp.LocalType != ir.LTTemp || tmp.LiveRange == nil || tmp.LiveRange.Max-tmp.LiveRange.Min != 1 {
-			continue
-		}
-		switch nextOp.Code {
-		case ir.OpPget:
-			if isSameOperand(op.Dst, nextOp.Src[0]) && k+ir.ValType(nextOp.Dst).Size <= 256 {
-				ops[i] = &ir.Op{Code: ir.OpFieldPget, Dst: nextOp.Dst, Src: []ir.Operand{ptr, off}, Pos: nextOp.Pos}
-				ops[i+1] = nil
-			}
-		case ir.OpPset:
-			if isSameOperand(op.Dst, nextOp.Src[0]) && k+ir.ValType(op.Dst).Base.Size <= 256 {
-				ops[i] = &ir.Op{Code: ir.OpFieldPset, Src: []ir.Operand{ptr, off, nextOp.Src[1]}, Type: ir.ValType(op.Dst).Base, Pos: nextOp.Pos}
-				ops[i+1] = nil
-			}
-		}
-	}
-
-	// index + pget/pset の最適化
-	for i, op := range ops {
-		if op == nil || op.Code != ir.OpIndex {
-			continue
-		}
-		if i+1 >= len(ops) {
-			continue
-		}
-		nextOp := ops[i+1]
-		if nextOp == nil {
-			continue
-		}
-		arr, idx := op.Src[0], op.Src[1]
-		if es := ir.ValType(arr).Base.Size; es != 1 && es != 2 {
-			continue // struct の配列 (要素サイズが 1・2 以外) は sym+i,y の形にできない
-		}
-		switch nextOp.Code {
-		case ir.OpPget:
-			if isSameOperand(op.Dst, nextOp.Src[0]) && // 同じ変数を連続で使っていて
-				ir.ValKind(arr) == ir.KindGlobal && // 単純なシンボルで
-				ir.ValType(arr).Kind == types.Array && // 配列 (グローバルのポインタ変数は sym+i,y では読めない)
-				ir.ValLocalType(op.Dst) == ir.LTTemp && // その変数をそこでしか使っていない
-				ir.ValType(idx).Size == 1 { // インデックスのサイズが1byte
-				ops[i] = &ir.Op{Code: ir.OpIndexPget, Dst: nextOp.Dst, Src: []ir.Operand{arr, idx}, Pos: nextOp.Pos}
-				ops[i+1] = nil
-			}
-		case ir.OpPset:
-			if isSameOperand(op.Dst, nextOp.Src[0]) &&
-				ir.ValKind(arr) == ir.KindGlobal &&
-				ir.ValType(arr).Kind == types.Array &&
-				ir.ValLocalType(op.Dst) == ir.LTTemp &&
-				ir.ValType(idx).Size == 1 {
-				ops[i] = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, nextOp.Src[1]}, Pos: nextOp.Pos}
-				ops[i+1] = nil
-			}
-		}
-	}
-	return ops
-}
-
-// isSameOperand は同じ値を指すか (ir.CastedValue は元の値で比べる)。
-func isSameOperand(a, b ir.Operand) bool {
-	ua, ub := ir.UnderlyingValue(a), ir.UnderlyingValue(b)
-	if ua != nil && ub != nil {
-		return ua == ub
-	}
-	return a == b
 }
 
 // ---------------------------------------------------------------

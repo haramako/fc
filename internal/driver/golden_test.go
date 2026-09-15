@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/opt"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 	"os"
@@ -193,6 +194,7 @@ func allocLambdas(hlc *sema.Program) string {
 			if d.Kind != ir.DefCode || d.Lambda.Extern {
 				continue
 			}
+			opt.Optimize(d.Lambda, 2)
 			regalloc.AllocateRegister(d.Lambda, regalloc.DefaultLimits)
 			regalloc.DeleteUnuse(d.Lambda)
 			b.WriteString(ir.DumpAllocLambda(mod.Id, d.Sym, d.Lambda))

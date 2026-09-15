@@ -404,19 +404,19 @@ _test_var_FUNC_TABLE:
 	asl a
 	tay
 	lda _test_var_FUNC_TABLE+0,y
-	sta 0+<L+2
+	sta 0+<L+0
 	lda _test_var_FUNC_TABLE+1,y
-	sta 1+<L+2
+	sta 1+<L+0
 	lda #10
 	sta <S+1,x
-	lda 0+<L+2
+	lda 0+<L+0
 	sta <reg+0
-	lda 1+<L+2
+	lda 1+<L+0
 	sta <reg+1
 	jsr jsr_reg
 	lda <0+S+0,x
-	sta 0+<L+0
-	lda 0+<L+0
+	sta 0+<L+2
+	lda 0+<L+2
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -433,19 +433,19 @@ _test_var_FUNC_TABLE:
 	asl a
 	tay
 	lda _test_var_FUNC_TABLE+0,y
-	sta 0+<L+2
+	sta 0+<L+0
 	lda _test_var_FUNC_TABLE+1,y
-	sta 1+<L+2
+	sta 1+<L+0
 	lda #10
 	sta <S+1,x
-	lda 0+<L+2
+	lda 0+<L+0
 	sta <reg+0
-	lda 1+<L+2
+	lda 1+<L+0
 	sta <reg+1
 	jsr jsr_reg
 	lda <0+S+0,x
-	sta 0+<L+0
-	lda 0+<L+0
+	sta 0+<L+2
+	lda 0+<L+2
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
