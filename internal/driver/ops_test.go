@@ -146,3 +146,36 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestPointerSelfRead: 読み先がポインタ自身 (`p = p.next`、`q = q[1]`、`pq = *pq`) でも壊れない
+// (ゼロページのポインタは (p),y で直接読むが、下位バイトを書いてから上位バイトを読むと壊れるので reg 経由に戻す)。
+func TestPointerSelfRead(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `struct Node { value:int; next:*Node; }
+var nodes:[3]Node;
+var table:[3]*Node;
+function main():void
+{
+	nodes[0] = {1, &nodes[1]};
+	nodes[1] = {2, &nodes[2]};
+	nodes[2] = {3, null};
+	table[0] = &nodes[2];
+	table[1] = &nodes[1];
+	var s = 0;
+	var p = &nodes[0];
+	while (p != null) {
+		s += p.value;
+		p = p.next;
+	}
+	var q = table as **Node;
+	q = bitcast<**Node>(q[1]);
+	var pq = &table[0];
+	pq = bitcast<**Node>(*pq);
+	printf(s, " ", bitcast<*Node>(q).value, " ", bitcast<*Node>(pq).value, "\n");
+	exit(0);
+}
+`)
+	if want := "6 2 3\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

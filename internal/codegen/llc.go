@@ -708,34 +708,32 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpPget:
-			r.push(l.loadA(op.In(0), 0))
-			r.push("sta <reg+0")
-			r.push(l.loadA(op.In(0), 1))
-			r.push("sta <reg+1")
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				r.push(fmt.Sprintf("ldy #%d", i))
-				r.push("lda (reg),y")
-				r.push(l.storeA(op.Dst, i))
-			}
+			r.push(l.pointerRead(op.In(0), 0, op.Dst, ir.ValType(op.Dst).Size))
 
 		case ir.OpPset:
-			r.push(l.loadA(op.In(0), 0))
-			r.push("sta <reg+0")
-			r.push(l.loadA(op.In(0), 1))
-			r.push("sta <reg+1")
-			for i := 0; i < ir.ValType(op.In(0)).Base.Size; i++ {
-				r.push(l.loadA(op.In(1), i))
-				r.push(fmt.Sprintf("ldy #%d", i))
-				r.push("sta (reg),y")
-			}
+			r.push(l.pointerWrite(op.In(0), 0, op.In(1), ir.ValType(op.In(0)).Base.Size))
 
 			// 最適化後のオペレータ
 		case ir.OpIndexPget:
 			if !isByteInt(ir.ValType(op.In(1))) {
 				panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 			}
-			if ir.ValType(op.In(0)).Kind != types.Array {
-				panic("index_pget with non-array")
+			if ir.ValType(op.In(0)).Kind == types.Pointer {
+				// ポインタ + 添字: ldy idx; lda (p),y
+				base, setup := l.pointerBase(op.In(0))
+				if ir.ValType(op.Dst).Size > 1 && sameStorage(op.In(0), op.Dst) {
+					base, setup = "reg", []any{l.loadA(op.In(0), 0), "sta <reg+0", l.loadA(op.In(0), 1), "sta <reg+1"}
+				}
+				r.push(setup)
+				r.push(l.loadYIdx(op.In(1), op.In(0)))
+				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+					if i > 0 {
+						r.push("iny")
+					}
+					r.push(fmt.Sprintf("lda (%s),y", base))
+					r.push(l.storeA(op.Dst, i))
+				}
+				break
 			}
 			r.push(l.loadYIdx(op.In(1), op.In(0)))
 			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
@@ -747,8 +745,18 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if !isByteInt(ir.ValType(op.In(1))) {
 				panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 			}
-			if ir.ValType(op.In(0)).Kind != types.Array {
-				panic("index_pset with non-array")
+			if ir.ValType(op.In(0)).Kind == types.Pointer {
+				base, setup := l.pointerBase(op.In(0))
+				r.push(setup)
+				r.push(l.loadYIdx(op.In(1), op.In(0)))
+				for i := 0; i < ir.ValType(op.In(0)).Base.Size; i++ {
+					if i > 0 {
+						r.push("iny")
+					}
+					r.push(l.loadA(op.In(2), i))
+					r.push(fmt.Sprintf("sta (%s),y", base))
+				}
+				break
 			}
 			r.push(l.loadYIdx(op.In(1), op.In(0)))
 			for i := 0; i < ir.ValType(op.In(2)).Size; i++ {
@@ -759,27 +767,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		case ir.OpFieldPget:
 			// ポインタ + 定数オフセット経由の読み出し (struct のフィールド)
 			off, _ := ir.ValIntLiteral(op.In(1))
-			r.push(l.loadA(op.In(0), 0))
-			r.push("sta <reg+0")
-			r.push(l.loadA(op.In(0), 1))
-			r.push("sta <reg+1")
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				r.push(fmt.Sprintf("ldy #%d", off+i))
-				r.push("lda (reg),y")
-				r.push(l.storeA(op.Dst, i))
-			}
+			r.push(l.pointerRead(op.In(0), off, op.Dst, ir.ValType(op.Dst).Size))
 
 		case ir.OpFieldPset:
 			off, _ := ir.ValIntLiteral(op.In(1))
-			r.push(l.loadA(op.In(0), 0))
-			r.push("sta <reg+0")
-			r.push(l.loadA(op.In(0), 1))
-			r.push("sta <reg+1")
-			for i := 0; i < op.Type.Size; i++ { // Type はフィールドの型 (値が小さいリテラルでもフィールド全体を書く)
-				r.push(l.loadA(op.In(2), i))
-				r.push(fmt.Sprintf("ldy #%d", off+i))
-				r.push("sta (reg),y")
-			}
+			r.push(l.pointerWrite(op.In(0), off, op.In(2), op.Type.Size)) // Type はフィールドの型 (値が小さいリテラルでもフィールド全体を書く)
 
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))

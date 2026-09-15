@@ -42,27 +42,14 @@ _test_cast_a1:
 	lda #0
 	asl a
 	tay
-	sty <reg+0
-	clc
-	lda 0+<L+2
-	adc <reg+0
+	lda (L+2),y
 	sta 0+<L+0
-	lda 1+<L+2
-	adc #0
+	iny
+	lda (L+2),y
 	sta 1+<L+0
 	lda 0+<L+0
-	sta <reg+0
-	lda 1+<L+0
-	sta <reg+1
-	ldy #0
-	lda (reg),y
-	sta 0+<L+2
-	ldy #1
-	lda (reg),y
-	sta 1+<L+2
-	lda 0+<L+2
 	sta <S+0,x
-	lda 1+<L+2
+	lda 1+<L+0
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -80,27 +67,14 @@ _test_cast_a1:
 	lda #0
 	asl a
 	tay
-	sty <reg+0
-	clc
-	lda 0+<L+0
-	adc <reg+0
+	lda (L+0),y
 	sta 0+<L+2
-	lda 1+<L+0
-	adc #0
+	iny
+	lda (L+0),y
 	sta 1+<L+2
 	lda 0+<L+2
-	sta <reg+0
-	lda 1+<L+2
-	sta <reg+1
-	ldy #0
-	lda (reg),y
-	sta 0+<L+0
-	ldy #1
-	lda (reg),y
-	sta 1+<L+0
-	lda 0+<L+0
 	sta <S+0,x
-	lda 1+<L+0
+	lda 1+<L+2
 	sta <S+1,x
 	ldy #0
 	lda _test_cast_a1+0,y

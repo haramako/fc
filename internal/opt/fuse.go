@@ -9,7 +9,7 @@ import (
 //
 //	add t = p + #k; pget d = *t      → field_pget d = *(p + k)      ldy #k; lda (p),y
 //	add t = p + #k; pset *t = v      → field_pset *(p + k) = v
-//	index t = &a[i]; pget d = *t     → index_pget d = a[i]          lda a,y
+//	index t = &a[i]; pget d = *t     → index_pget d = a[i]          lda a,y (a が配列) / ldy i; lda (p),y (a がポインタ)
 //	index t = &a[i]; pset *t = v     → index_pset a[i] = v
 //
 // t はその場でしか使わない一時変数のときだけ。
@@ -55,8 +55,9 @@ func fusePointer(lmd *ir.Lambda) {
 			if es := ir.ValType(arr).Base.Size; es != 1 && es != 2 {
 				continue // struct の配列 (要素サイズが 1・2 以外) は sym+i,y の形にできない
 			}
-			if ir.ValKind(arr) != ir.KindGlobal || // 単純なシンボルで
-				ir.ValType(arr).Kind != types.Array || // 配列 (グローバルのポインタ変数は sym+i,y では読めない)
+			isArray := ir.ValKind(arr) == ir.KindGlobal && ir.ValType(arr).Kind == types.Array // グローバル配列: sym+i,y
+			isPtr := ir.ValType(arr).Kind == types.Pointer                                     // ポインタ変数: ldy i; lda (p),y
+			if (!isArray && !isPtr) ||
 				ir.ValLocalType(op.Dst) != ir.LTTemp || // その変数をそこでしか使っていない
 				ir.ValType(idx).Size != 1 { // インデックスのサイズが 1 バイト
 				continue

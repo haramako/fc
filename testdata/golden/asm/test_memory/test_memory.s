@@ -39,13 +39,9 @@ _test_memory_buf2: .res 512
 	lda <reg+1
 	adc #.HIBYTE(_test_memory_buf1)
 	sta 1+<L+0
-	lda 0+<L+0
-	sta <reg+0
-	lda 1+<L+0
-	sta <reg+1
 	lda #4
 	ldy #0
-	sta (reg),y
+	sta (L+0),y
 	lda #1
 	sta <reg+0
 	lda #1
@@ -57,13 +53,9 @@ _test_memory_buf2: .res 512
 	lda <reg+1
 	adc #.HIBYTE(_test_memory_buf1)
 	sta 1+<L+0
-	lda 0+<L+0
-	sta <reg+0
-	lda 1+<L+0
-	sta <reg+1
 	lda #5
 	ldy #0
-	sta (reg),y
+	sta (L+0),y
 	lda #255
 	sta <reg+0
 	lda #1
@@ -75,13 +67,9 @@ _test_memory_buf2: .res 512
 	lda <reg+1
 	adc #.HIBYTE(_test_memory_buf1)
 	sta 1+<L+0
-	lda 0+<L+0
-	sta <reg+0
-	lda 1+<L+0
-	sta <reg+1
 	lda #6
 	ldy #0
-	sta (reg),y
+	sta (L+0),y
 	lda #.LOBYTE(_test_memory_buf2)
 	sta <S+0,x
 	lda #.HIBYTE(_test_memory_buf2)
@@ -159,12 +147,8 @@ _test_memory_buf2: .res 512
 	lda <reg+1
 	adc #.HIBYTE(_test_memory_buf2)
 	sta 1+<L+0
-	lda 0+<L+0
-	sta <reg+0
-	lda 1+<L+0
-	sta <reg+1
 	ldy #0
-	lda (reg),y
+	lda (L+0),y
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -188,12 +172,8 @@ _test_memory_buf2: .res 512
 	lda <reg+1
 	adc #.HIBYTE(_test_memory_buf2)
 	sta 1+<L+0
-	lda 0+<L+0
-	sta <reg+0
-	lda 1+<L+0
-	sta <reg+1
 	ldy #0
-	lda (reg),y
+	lda (L+0),y
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -217,12 +197,8 @@ _test_memory_buf2: .res 512
 	lda <reg+1
 	adc #.HIBYTE(_test_memory_buf2)
 	sta 1+<L+0
-	lda 0+<L+0
-	sta <reg+0
-	lda 1+<L+0
-	sta <reg+1
 	ldy #0
-	lda (reg),y
+	lda (L+0),y
 	sta <S+0,x
 	lda #0
 	sta <S+1,x

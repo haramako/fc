@@ -236,13 +236,9 @@ _49:
 	lda 0+<L+0
 	adc #1
 	sta 0+<L+3
-	lda 0+<L+1
-	sta <reg+0
-	lda 1+<L+1
-	sta <reg+1
 	lda 0+<L+3
 	ldy #0
-	sta (reg),y
+	sta (L+1),y
 	clc
 	lda 0+<L+0
 	adc #1
@@ -260,13 +256,9 @@ _49:
 	lda 0+<L+0
 	adc #1
 	sta 0+<L+3
-	lda 0+<L+1
-	sta <reg+0
-	lda 1+<L+1
-	sta <reg+1
 	lda 0+<L+3
 	ldy #0
-	sta (reg),y
+	sta (L+1),y
 	clc
 	lda 0+<L+0
 	adc #1
@@ -284,13 +276,9 @@ _49:
 	lda 0+<L+0
 	adc #1
 	sta 0+<L+3
-	lda 0+<L+1
-	sta <reg+0
-	lda 1+<L+1
-	sta <reg+1
 	lda 0+<L+3
 	ldy #0
-	sta (reg),y
+	sta (L+1),y
 	ldy #0
 	lda _test_var_array+0,y
 	sta <S+0,x

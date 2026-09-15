@@ -2993,12 +2993,7 @@ _test_op_gw: .res 2
 	sta 1+<S+0,x
 	lda #99
 	sta 0+_test_op_gi
-	lda 0+<S+0,x
-	sta <reg+0
-	lda 1+<S+0,x
-	sta <reg+1
-	ldy #0
-	lda (reg),y
+	lda (S+0,x)
 	sta <S+11,x
 	lda #0
 	sta <S+12,x
@@ -3011,13 +3006,8 @@ _test_op_gw: .res 2
 	lda #.HIBYTE(_561)
 	sta <S+16,x
 	call _unittest_assert_equal, #11
-	lda 0+<S+0,x
-	sta <reg+0
-	lda 1+<S+0,x
-	sta <reg+1
 	lda #98
-	ldy #0
-	sta (reg),y
+	sta (S+0,x)
 	lda 0+_test_op_gi
 	sta <S+11,x
 	lda #0
@@ -3101,12 +3091,7 @@ _test_op_gw: .res 2
 	sta 0+<S+5,x
 	lda 1+<L+0
 	sta 1+<S+5,x
-	lda 0+<S+5,x
-	sta <reg+0
-	lda 1+<S+5,x
-	sta <reg+1
-	ldy #0
-	lda (reg),y
+	lda (S+5,x)
 	sta <S+11,x
 	lda #0
 	sta <S+12,x
@@ -3121,12 +3106,7 @@ _test_op_gw: .res 2
 	call _unittest_assert_equal, #11
 	lda #98
 	sta 0+<S+4,x
-	lda 0+<S+5,x
-	sta <reg+0
-	lda 1+<S+5,x
-	sta <reg+1
-	ldy #0
-	lda (reg),y
+	lda (S+5,x)
 	sta <S+11,x
 	lda #0
 	sta <S+12,x

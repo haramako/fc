@@ -149,6 +149,68 @@ func (l *Llc) storeA(v ir.Operand, n int) any {
 	return fmt.Sprintf("sta %s", l.byte(v, n))
 }
 
+// pointerBase はポインタ値 v を (P),y の形で参照するための P を返す。
+//   - ゼロページ (レジスタ領域 / fastcall 領域) にあるポインタ変数: そのまま "(L+4),y" で使える → ("L+4", 0 命令)
+//   - それ以外 (フレーム / グローバル / 即値など): reg にコピーしてから "(reg),y" → ("reg", コピー命令)
+func (l *Llc) pointerBase(v ir.Operand) (string, []any) {
+	if isValueOrCasted(v) && ir.ValKind(v) == ir.KindLocal && ir.ValType(v).Size == 2 {
+		switch ir.ValLocation(v) {
+		case ir.LocReg, ir.LocFastcallReg:
+			return strings.TrimPrefix(l.toAsm(v), "<"), nil
+		}
+	}
+	return "reg", []any{l.loadA(v, 0), "sta <reg+0", l.loadA(v, 1), "sta <reg+1"}
+}
+
+// pointerRead は *(p + off) から size バイトを dst に読む。
+// p がゼロページなら (p),y、フレーム上で 1 バイト・オフセット 0 なら (S+n,x)、それ以外は reg にコピーして (reg),y。
+func (l *Llc) pointerRead(p ir.Operand, off int, dst ir.Operand, size int) []any {
+	var r []any
+	if fp, ok := l.framePointer(p); ok && off == 0 && size == 1 {
+		return []any{fmt.Sprintf("lda %s", fp), l.storeA(dst, 0)}
+	}
+	base, setup := l.pointerBase(p)
+	if size > 1 && sameStorage(p, dst) {
+		// p = p.next のように読み先がポインタ自身: 下位バイトを書いた後に上位バイトを読むと壊れるので reg 経由
+		base, setup = "reg", []any{l.loadA(p, 0), "sta <reg+0", l.loadA(p, 1), "sta <reg+1"}
+	}
+	r = append(r, setup)
+	for i := 0; i < size; i++ {
+		r = append(r, fmt.Sprintf("ldy #%d", off+i), fmt.Sprintf("lda (%s),y", base), l.storeA(dst, i))
+	}
+	return r
+}
+
+// pointerWrite は val の size バイトを *(p + off) に書く (pointerRead の逆)。
+func (l *Llc) pointerWrite(p ir.Operand, off int, val ir.Operand, size int) []any {
+	var r []any
+	if fp, ok := l.framePointer(p); ok && off == 0 && size == 1 {
+		return []any{l.loadA(val, 0), fmt.Sprintf("sta %s", fp)}
+	}
+	base, setup := l.pointerBase(p)
+	r = append(r, setup)
+	for i := 0; i < size; i++ {
+		r = append(r, l.loadA(val, i), fmt.Sprintf("ldy #%d", off+i), fmt.Sprintf("sta (%s),y", base))
+	}
+	return r
+}
+
+// sameStorage は 2 つのオペランドが同じ変数 (の一部) を指すか。
+func sameStorage(a, b ir.Operand) bool {
+	if ua, ub := ir.UnderlyingValue(a), ir.UnderlyingValue(b); ua != nil && ub != nil {
+		return ua == ub
+	}
+	return false
+}
+
+// framePointer はポインタ値 v がフレーム上の変数なら "(S+n,x)" (indexed indirect) で 1 バイト目を直接参照できる。
+func (l *Llc) framePointer(v ir.Operand) (string, bool) {
+	if isValueOrCasted(v) && ir.ValKind(v) == ir.KindLocal && ir.ValType(v).Size == 2 && ir.ValLocation(v) == ir.LocFrame {
+		return fmt.Sprintf("(S+%d,x)", ir.ValAddress(v)), true
+	}
+	return "", false
+}
+
 func (l *Llc) toAsm(v ir.Operand) string {
 	if isValueOrCasted(v) {
 		switch ir.ValKind(v) {
