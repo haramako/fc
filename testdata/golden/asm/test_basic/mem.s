@@ -38,8 +38,6 @@ __MODULE_MEM__ = 1
 	ldy 0+<FC_FASTCALL_REG+5
 	lda (FC_FASTCALL_REG+3),y
 	sta 0+<FC_FASTCALL_REG+6
-	ldy 0+<FC_FASTCALL_REG+5
-	lda 0+<FC_FASTCALL_REG+6
 	sta (FC_FASTCALL_REG+1),y
 	lda 0+<FC_FASTCALL_REG+6
 	bne @end_19

@@ -152,7 +152,6 @@ _27:
 	ldy #1
 	lda #1
 	sta _test_var_array+0,y
-	ldy #1
 	lda _test_var_array+0,y
 	sta <S+1,x
 	lda #0
@@ -189,7 +188,6 @@ _27:
 	ldy 0+<S+0,x
 	lda #2
 	sta _test_var_array+0,y
-	ldy 0+<S+0,x
 	lda _test_var_array+0,y
 	sta <S+1,x
 	lda #0

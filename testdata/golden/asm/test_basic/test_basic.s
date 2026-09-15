@@ -271,7 +271,6 @@ _32:
 	dex
 	lda <0+S+1,x
 	sta 0+<L+0
-	cmp #0
 	bne @5
 	lda #1
 	jmp @6

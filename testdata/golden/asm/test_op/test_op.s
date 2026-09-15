@@ -193,7 +193,6 @@ _35:
 	call _unittest_assert_equal, #5
 	lda 0+<S+3,x
 	sta <reg+0+0
-	lda 0+<S+3,x
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
@@ -702,7 +701,6 @@ _157:
 	sta 0+<S+5,x
 	lda #246
 	sta 0+<S+6,x
-	lda 0+<S+6,x
 	bmi @45
 	lsr a
 	lsr a
@@ -924,7 +922,6 @@ _157:
 	call _unittest_assert_equal, #7
 	lda 0+<S+4,x
 	sta <reg+0+0
-	lda 0+<S+4,x
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
@@ -2216,7 +2213,6 @@ _397:
 	cmp 0+<S+1,x
 	bne @242
 	lda 1+<S+5,x
-	cmp #0
 	bne @242
 	lda #1
 	jmp @243
@@ -2477,7 +2473,6 @@ _452:
 	sta 0+<L+0
 	lda 0+<S+1,x
 	bne @skip_498
-	lda 0+<S+1,x
 	beq @end_496
 @267:
 @skip_498:
