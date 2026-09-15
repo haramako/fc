@@ -748,8 +748,12 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 			if ir.ValType(op.In(0)).Kind == types.Pointer {
 				base, setup := l.pointerBase(op.In(0))
-				r.push(setup)
-				r.push(l.loadYIdx(op.In(1), op.In(0)))
+				pre := append(setup, l.loadYIdx(op.In(1), op.In(0))...)
+				if ir.ValType(op.In(0)).Base.Size == 1 && len(setup) == 0 {
+					r.push(pre) // ldy だけなら A は壊れない
+				} else {
+					r.push(l.keepA(op.In(2), pre))
+				}
 				for i := 0; i < ir.ValType(op.In(0)).Base.Size; i++ {
 					if i > 0 {
 						r.push("iny")
@@ -759,7 +763,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				}
 				break
 			}
-			r.push(l.loadYIdx(op.In(1), op.In(0)))
+			if ir.ValType(op.In(0)).Base.Size == 1 {
+				r.push(l.loadYIdx(op.In(1), op.In(0)))
+			} else {
+				r.push(l.keepA(op.In(2), l.loadYIdx(op.In(1), op.In(0)))) // lda idx; asl; tay は A を壊す
+			}
 			for i := 0; i < ir.ValType(op.In(2)).Size; i++ {
 				r.push(l.loadA(op.In(2), i))
 				r.push(fmt.Sprintf("sta %s+%d,y", l.toAsm(op.In(0)), i))

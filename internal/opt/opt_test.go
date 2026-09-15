@@ -167,6 +167,50 @@ func TestFusePointer(t *testing.T) {
 	check(t, lmd, "field_pget d = p, #3", "index_pset arr, i, v")
 }
 
+func TestSinkAddress(t *testing.T) {
+	arr := ir.NewGlobal("arr", tu.ArrayOf(u8(), 10), "_arr")
+	i, v, w := local("i", u8()), tmp("v", u8()), tmp("w", u8())
+	tp := tmp("t", tu.PointerTo(u8()))
+	// hlc の `a[i] += 1`: 左辺のアドレスが先に出る → pset の直前へ → fusePointer で index_pset に
+	build := func() *ir.Lambda {
+		return lambda(
+			&ir.Op{Code: ir.OpIndex, Dst: tp, Src: []ir.Operand{arr, i}},
+			&ir.Op{Code: ir.OpIndexPget, Dst: v, Src: []ir.Operand{arr, i}},
+			&ir.Op{Code: ir.OpAdd, Dst: w, Src: []ir.Operand{v, lit(1, u8())}},
+			&ir.Op{Code: ir.OpPset, Src: []ir.Operand{tp, w}},
+		)
+	}
+	lmd := build()
+	sinkAddress(lmd)
+	check(t, lmd, "index_pget v = arr, i", "add w = v, #1", "index t = arr, i", "pset t, w")
+	fusePointer(lmd)
+	compact(lmd)
+	check(t, lmd, "index_pget v = arr, i", "add w = v, #1", "index_pset arr, i, w")
+
+	// 間で添字が書き換わるなら動かさない
+	lmd = build()
+	lmd.Ops[2] = &ir.Op{Code: ir.OpAdd, Dst: i, Src: []ir.Operand{i, lit(1, u8())}}
+	sinkAddress(lmd)
+	check(t, lmd, "index t = arr, i", "index_pget v = arr, i", "add i = i, #1", "pset t, w")
+
+	// ラベルをまたがない
+	lmd = build()
+	lmd.Ops[2] = &ir.Op{Code: ir.OpLabel, Label: "L"}
+	sinkAddress(lmd)
+	check(t, lmd, "index t = arr, i", "index_pget v = arr, i", "label L", "pset t, w")
+
+	// グローバルのポインタ変数 + 定数は呼び出しをまたがない (呼び出し先が書き換えるかもしれない)
+	gp := ir.NewGlobal("gp", tu.PointerTo(u8()), "_gp")
+	fn := ir.NewGlobal("f", tu.Func(nil, tu.Void(), false), "_f")
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: tp, Src: []ir.Operand{gp, lit(2, u8())}},
+		&ir.Op{Code: ir.OpCall, Src: []ir.Operand{fn}},
+		&ir.Op{Code: ir.OpPset, Src: []ir.Operand{tp, w}},
+	)
+	sinkAddress(lmd)
+	check(t, lmd, "add t = gp, #2", "call nil = f", "pset t, w")
+}
+
 func TestNarrowBitTest(t *testing.T) {
 	x, tv := local("x", u16()), tmp("t", u16())
 	lmd := lambda(

@@ -296,6 +296,15 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				if _, lit := ir.ValIntLiteral(nextOp.In(1)); !lit || !isSameValue(nextOp.In(0), v) {
 					continue
 				}
+			case ir.OpPset:
+				// 書く値が A (ポインタの準備が A を使うときは codegen が reg に退避する)
+				if !isSameValue(nextOp.In(1), v) {
+					continue
+				}
+			case ir.OpIndexPset, ir.OpFieldPset:
+				if !isSameValue(nextOp.In(2), v) {
+					continue
+				}
 			default:
 				continue
 			}

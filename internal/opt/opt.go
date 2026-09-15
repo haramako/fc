@@ -18,6 +18,7 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 	if level <= 0 || len(lmd.Ops) == 0 {
 		return
 	}
+	sinkAddress(lmd)
 	fusePointer(lmd)
 	compact(lmd)
 	coalesceCopies(lmd)

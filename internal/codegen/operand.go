@@ -191,11 +191,27 @@ func (l *Llc) pointerWrite(p ir.Operand, off int, val ir.Operand, size int) []an
 		return []any{l.loadA(val, 0), fmt.Sprintf("sta %s", fp)}
 	}
 	base, setup := l.pointerBase(p)
-	r = append(r, setup)
+	r = append(r, l.keepA(val, setup))
 	for i := 0; i < size; i++ {
 		r = append(r, l.loadA(val, i), fmt.Sprintf("ldy #%d", off+i), fmt.Sprintf("sta (%s),y", base))
 	}
 	return r
+}
+
+// inA は値が A レジスタに置かれているか。
+func inA(v ir.Operand) bool {
+	return isValueOrCasted(v) && ir.ValKind(v) == ir.KindLocal && ir.ValLocation(v) == ir.LocA
+}
+
+// keepA は書く値 val が A にあり、その前に出す準備 pre (ポインタの reg へのコピーなど) が A を壊すとき、
+// A を reg+2 に退避して pre の後で戻す (pre が空なら pre のまま)。
+func (l *Llc) keepA(val ir.Operand, pre []any) []any {
+	if len(pre) == 0 || !inA(val) {
+		return pre
+	}
+	r := []any{"sta <reg+2"}
+	r = append(r, pre...)
+	return append(r, "lda <reg+2")
 }
 
 // sameByte は 2 つのメモリ上のオペランドの i バイト目が同じ場所か (アドレス表記が同じ)。A / 即値なら false。

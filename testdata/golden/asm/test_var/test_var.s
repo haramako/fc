@@ -223,56 +223,22 @@ _49:
 .proc _test_var_test_array
 	lda #0
 	sta 0+<L+0
-	ldy 0+<L+0
-	sty <reg+0
 	clc
-	lda #.LOBYTE(_test_var_array)
-	adc <reg+0
-	sta 0+<L+1
-	lda #.HIBYTE(_test_var_array)
-	adc #0
-	sta 1+<L+1
-	clc
-	lda 0+<L+0
 	adc #1
-	sta 0+<L+3
-	lda 0+<L+3
-	ldy #0
-	sta (L+1),y
+	ldy 0+<L+0
+	sta _test_var_array+0,y
 	inc 0+<L+0
-	ldy 0+<L+0
-	sty <reg+0
-	clc
-	lda #.LOBYTE(_test_var_array)
-	adc <reg+0
-	sta 0+<L+1
-	lda #.HIBYTE(_test_var_array)
-	adc #0
-	sta 1+<L+1
 	clc
 	lda 0+<L+0
 	adc #1
-	sta 0+<L+3
-	lda 0+<L+3
-	ldy #0
-	sta (L+1),y
+	ldy 0+<L+0
+	sta _test_var_array+0,y
 	inc 0+<L+0
-	ldy 0+<L+0
-	sty <reg+0
-	clc
-	lda #.LOBYTE(_test_var_array)
-	adc <reg+0
-	sta 0+<L+1
-	lda #.HIBYTE(_test_var_array)
-	adc #0
-	sta 1+<L+1
 	clc
 	lda 0+<L+0
 	adc #1
-	sta 0+<L+3
-	lda 0+<L+3
-	ldy #0
-	sta (L+1),y
+	ldy 0+<L+0
+	sta _test_var_array+0,y
 	ldy #0
 	lda _test_var_array+0,y
 	sta <S+0,x
