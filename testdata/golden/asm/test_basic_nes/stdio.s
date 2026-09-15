@@ -74,11 +74,8 @@ _2:
 	dex
 	lda #200
 	sta 0+_nes_PPU_CTRL1
-@begin_10:
-	lda #1
-	beq @else_13
-@1:
-@then_12:
+	jmp @begin_10
+@body_12:
 	inx
 	jsr _stdio_wait_vsync
 	dex
@@ -90,12 +87,9 @@ _2:
 	sta 0+_nes_PPU_CTRL1
 	lda #10
 	sta 0+_nes_PPU_CTRL2
-	jmp @end_14
-@else_13:
-	jmp @end_11
-@end_14:
-	jmp @begin_10
-@end_11:
+@begin_10:
+	lda #1
+	bne @body_12
 	rts
 _6:
 		.byte 101,120,105,116,40,0

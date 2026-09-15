@@ -72,11 +72,9 @@ _6:
 	lda #1
 	cmp 0+<S+1,x
 	bcc @else_10
-@then_9:
 	lda #1
 	sta 0+<S+0,x
 	rts
-	jmp @end_11
 @else_10:
 	sec
 	lda 0+<S+1,x
@@ -109,7 +107,6 @@ _6:
 	adc 0+<L+0
 	sta 0+<S+0,x
 	rts
-@end_11:
 .endproc
 	.export _test_basic_test_function
 	;;;=============================
@@ -210,47 +207,38 @@ _33:
 	lda #1
 	sta 0+<S+0,x
 	lda #0
-	sta 0+<S+1,x
-@begin_35:
-	lda #1
-	sta 0+<S+1,x
-	lda 0+<S+0,x
-	beq @else_38
-@4:
-@then_37:
-	jmp @end_36
-	jmp @end_39
-@else_38:
+	sta 0+<L+0
+	jmp @begin_35
 @end_39:
 	lda #0
-	sta <S+2,x
+	sta <S+1,x
 	lda #.LOBYTE(_41)
-	sta <S+3,x
+	sta <S+2,x
 	lda #.HIBYTE(_41)
-	sta <S+4,x
-	inx
+	sta <S+3,x
 	inx
 	jsr _unittest_assert_true
 	dex
-	dex
-	jmp @begin_35
-@end_36:
-	lda 0+<S+1,x
-	sta <S+2,x
-	lda #0
-	sta <S+3,x
+@begin_35:
 	lda #1
-	sta <S+4,x
+	sta 0+<L+0
+	lda 0+<S+0,x
+	beq @end_39
+@4:
+	lda 0+<L+0
+	sta <S+1,x
 	lda #0
-	sta <S+5,x
+	sta <S+2,x
+	lda #1
+	sta <S+3,x
+	lda #0
+	sta <S+4,x
 	lda #.LOBYTE(_44)
-	sta <S+6,x
+	sta <S+5,x
 	lda #.HIBYTE(_44)
-	sta <S+7,x
-	inx
+	sta <S+6,x
 	inx
 	jsr _unittest_assert_equal
-	dex
 	dex
 	lda #0
 	lda #255
@@ -258,38 +246,34 @@ _33:
 	lda #255
 	sta 1+<L+0
 	lda 0+<L+0
-	sta <S+2,x
+	sta <S+1,x
 	lda 1+<L+0
+	sta <S+2,x
+	lda #255
 	sta <S+3,x
 	lda #255
 	sta <S+4,x
-	lda #255
-	sta <S+5,x
 	lda #.LOBYTE(_48)
-	sta <S+6,x
+	sta <S+5,x
 	lda #.HIBYTE(_48)
-	sta <S+7,x
-	inx
+	sta <S+6,x
 	inx
 	jsr _unittest_assert_equal
 	dex
-	dex
 	lda #.LOBYTE(_54)
-	sta <S+3,x
+	sta <S+2,x
 	lda #.HIBYTE(_54)
-	sta <S+4,x
+	sta <S+3,x
 	lda #.LOBYTE(_56)
-	sta <S+5,x
+	sta <S+4,x
 	lda #.HIBYTE(_56)
-	sta <S+6,x
+	sta <S+5,x
 	lda #6
-	sta <S+7,x
-	inx
+	sta <S+6,x
 	inx
 	jsr _mem_compare
 	dex
-	dex
-	lda <0+S+2,x
+	lda <0+S+1,x
 	sta 0+<L+0
 	lda 0+<L+0
 	cmp #0
@@ -299,15 +283,13 @@ _33:
 @5:
 	lda #0
 @6:
-	sta <S+2,x
+	sta <S+1,x
 	lda #.LOBYTE(_59)
-	sta <S+3,x
+	sta <S+2,x
 	lda #.HIBYTE(_59)
-	sta <S+4,x
-	inx
+	sta <S+3,x
 	inx
 	jsr _unittest_assert_true
-	dex
 	dex
 	rts
 _41:

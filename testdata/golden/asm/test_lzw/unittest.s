@@ -21,7 +21,6 @@ __MODULE_UNITTEST__ = 1
 	lda 0+<L+0
 	beq @else_2
 @3:
-@then_1:
 	lda #.LOBYTE(_7)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_7)
@@ -70,7 +69,6 @@ _12:
 	cmp 1+<S+2,x
 @4:
 	beq @else_15
-@then_14:
 	lda #.LOBYTE(_23)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_23)

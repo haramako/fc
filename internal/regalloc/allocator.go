@@ -66,7 +66,7 @@ func CalcLiveRange(lmd *ir.Lambda) {
 	for i, op := range lmd.Ops {
 		var node []int
 		switch op.Code {
-		case ir.OpIf, ir.OpJump:
+		case ir.OpIf, ir.OpIfTrue, ir.OpJump:
 			node = append(node, labels[op.Label])
 		}
 		defines, uses := ir.DefUse(op)
@@ -281,7 +281,7 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			switch nextOp.Code {
 			case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpEq, ir.OpLt, ir.OpPget, ir.OpSub, ir.OpPushArg,
-				ir.OpIf, ir.OpReturn:
+				ir.OpIf, ir.OpIfTrue, ir.OpReturn:
 				if !isSameValue(nextOp.In(0), v) {
 					continue
 				}
@@ -323,7 +323,7 @@ func allocateCond(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
 			switch nextOp.Code {
-			case ir.OpIf, ir.OpNot:
+			case ir.OpIf, ir.OpIfTrue, ir.OpNot:
 				if !isSameValue(nextOp.In(0), v) {
 					continue
 				}

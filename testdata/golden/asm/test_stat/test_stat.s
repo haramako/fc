@@ -13,7 +13,6 @@ _test_stat_I10 = 10
 	lda #1
 	beq @else_2
 @1:
-@then_1:
 	lda #1
 	sta 0+<L+0
 	lda 0+<L+0
@@ -35,7 +34,6 @@ _test_stat_I10 = 10
 	lda #0
 	beq @else_8
 @2:
-@then_7:
 	jmp @end_9
 @else_8:
 	lda #2
@@ -61,9 +59,8 @@ _test_stat_I10 = 10
 	lda 0+<L+0
 	bne @3
 	lda 1+<L+0
-	beq @else_14
+	beq @end_15
 @3:
-@then_13:
 	lda #0
 	sta <S+0,x
 	lda #0
@@ -77,21 +74,15 @@ _test_stat_I10 = 10
 	lda #.HIBYTE(_17)
 	sta <S+5,x
 	jsr _unittest_assert_equal
-	jmp @end_15
-@else_14:
 @end_15:
 	lda #1
 	sta 0+<L+0
 	lda #0
 	sta 1+<L+0
 	lda 0+<L+0
-	bne @4
+	bne @end_21
 	lda 1+<L+0
-	beq @else_20
-@4:
-@then_19:
-	jmp @end_21
-@else_20:
+	bne @end_21
 	lda #0
 	sta <S+0,x
 	lda #0
@@ -111,13 +102,9 @@ _test_stat_I10 = 10
 	lda #1
 	sta 1+<L+0
 	lda 0+<L+0
-	bne @5
+	bne @end_27
 	lda 1+<L+0
-	beq @else_26
-@5:
-@then_25:
-	jmp @end_27
-@else_26:
+	bne @end_27
 	lda #0
 	sta <S+0,x
 	lda #0
@@ -134,23 +121,20 @@ _test_stat_I10 = 10
 @end_27:
 	lda #0
 	beq @else_32
-@6:
-@then_31:
+@4:
 	lda #0
 	sta 0+<L+0
 	jmp @end_33
 @else_32:
 	lda #1
 	beq @else_35
-@7:
-@then_34:
+@5:
 	lda #1
 	sta 0+<L+0
-	jmp @end_36
+	jmp @end_33
 @else_35:
 	lda #2
 	sta 0+<L+0
-@end_36:
 @end_33:
 	lda 0+<L+0
 	sta <S+0,x
@@ -194,14 +178,7 @@ _38:
 	sta 0+<S+0,x
 	lda 0+<S+0,x
 	cmp #3
-	bne @else_43
-@then_42:
-	jmp @end_41
-	jmp @end_44
-@else_43:
-@end_44:
-	jmp @begin_40
-@end_41:
+	bne @begin_40
 	lda 0+<S+0,x
 	sta <S+1,x
 	lda #0
@@ -226,15 +203,7 @@ _38:
 	sta 0+<S+0,x
 	lda 0+<S+0,x
 	cmp #3
-	bcs @else_54
-@then_53:
-	jmp @begin_50
-	jmp @end_55
-@else_54:
-@end_55:
-	jmp @end_51
-	jmp @begin_50
-@end_51:
+	bcc @begin_50
 	lda 0+<S+0,x
 	sta <S+1,x
 	lda #0
@@ -250,7 +219,6 @@ _38:
 	inx
 	jsr _unittest_assert_equal
 	dex
-@begin_60:
 	lda #1
 	sta 0+<L+0
 	lda 0+<L+0
@@ -268,9 +236,6 @@ _38:
 	inx
 	jsr _unittest_assert_equal
 	dex
-	jmp @end_61
-	jmp @begin_60
-@end_61:
 	rts
 _48:
 		.byte 98,114,101,97,107,0
@@ -291,11 +256,8 @@ _63:
 	sta 0+<S+1,x
 	lda #0
 	sta 0+<S+0,x
-@begin_65:
-	lda 0+<S+0,x
-	cmp #10
-	bcs @else_68
-@then_67:
+	jmp @begin_65
+@body_67:
 	lda #1
 	sta 0+<L+0
 	lda 0+<L+0
@@ -323,12 +285,10 @@ _63:
 	lda 0+<S+0,x
 	adc #1
 	sta 0+<S+0,x
-	jmp @end_69
-@else_68:
-	jmp @end_66
-@end_69:
-	jmp @begin_65
-@end_66:
+@begin_65:
+	lda 0+<S+0,x
+	cmp #10
+	bcc @body_67
 	lda 0+<S+0,x
 	sta <S+2,x
 	lda #0
@@ -381,15 +341,32 @@ _80:
 	sta 0+<L+1
 	lda #0
 	sta 0+<L+0
-@begin_82:
-	lda 0+<L+0
-	cmp #6
-	bcc @39
-	jmp @else_85
-@39:
-@then_84:
+	jmp @begin_82
+@body_95:
 	lda 0+<L+0
 	cmp #1
+	bne @14
+	lda #1
+	sta 0+<L+2
+	jmp @15
+@14:
+	lda #0
+	sta 0+<L+2
+@15:
+	lda 0+<L+2
+	beq @16
+	lda #0
+	sta 0+<L+2
+	jmp @17
+@16:
+	lda #1
+	sta 0+<L+2
+@17:
+	lda 0+<L+2
+	beq @then_90
+@18:
+	lda 0+<L+0
+	cmp #2
 	bne @19
 	lda #1
 	sta 0+<L+2
@@ -411,7 +388,7 @@ _80:
 	beq @then_90
 @23:
 	lda 0+<L+0
-	cmp #2
+	cmp #3
 	bne @24
 	lda #1
 	sta 0+<L+2
@@ -430,31 +407,7 @@ _80:
 	sta 0+<L+2
 @27:
 	lda 0+<L+2
-	beq @then_90
-@28:
-	lda 0+<L+0
-	cmp #3
-	bne @29
-	lda #1
-	sta 0+<L+2
-	jmp @30
-@29:
-	lda #0
-	sta 0+<L+2
-@30:
-	lda 0+<L+2
-	beq @31
-	lda #0
-	sta 0+<L+2
-	jmp @32
-@31:
-	lda #1
-	sta 0+<L+2
-@32:
-	lda 0+<L+2
-	beq @then_90
-@33:
-	jmp @else_91
+	bne @else_91
 @then_90:
 	clc
 	lda 0+<L+1
@@ -464,28 +417,25 @@ _80:
 @else_91:
 	lda 0+<L+0
 	cmp #4
-	bne @34
+	bne @28
 	lda #1
 	sta 0+<L+2
-	jmp @35
-@34:
+	jmp @29
+@28:
 	lda #0
 	sta 0+<L+2
-@35:
+@29:
 	lda 0+<L+2
-	beq @36
+	beq @30
 	lda #0
 	sta 0+<L+2
-	jmp @37
-@36:
+	jmp @31
+@30:
 	lda #1
 	sta 0+<L+2
-@37:
+@31:
 	lda 0+<L+2
-	beq @then_93
-@38:
-	jmp @else_94
-@then_93:
+	bne @else_94
 	clc
 	lda 0+<L+1
 	adc #10
@@ -501,12 +451,12 @@ _80:
 	lda 0+<L+0
 	adc #1
 	sta 0+<L+0
-	jmp @end_86
-@else_85:
-	jmp @end_83
-@end_86:
-	jmp @begin_82
-@end_83:
+@begin_82:
+	lda 0+<L+0
+	cmp #6
+	bcs @35
+	jmp @body_95
+@35:
 	lda #56
 	sta <S+0,x
 	lda #0

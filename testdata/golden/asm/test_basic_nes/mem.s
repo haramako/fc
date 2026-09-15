@@ -15,6 +15,12 @@ __MODULE_MEM__ = 1
 .proc _mem_strlen
 	lda #0
 	sta 0+<FC_FASTCALL_REG+3
+	jmp @begin_1
+@body_3:
+	clc
+	lda 0+<FC_FASTCALL_REG+3
+	adc #1
+	sta 0+<FC_FASTCALL_REG+3
 @begin_1:
 	ldy 0+<FC_FASTCALL_REG+3
 	sty <reg+0
@@ -31,19 +37,7 @@ __MODULE_MEM__ = 1
 	sta <reg+1
 	ldy #0
 	lda (reg),y
-	beq @else_4
-@1:
-@then_3:
-	clc
-	lda 0+<FC_FASTCALL_REG+3
-	adc #1
-	sta 0+<FC_FASTCALL_REG+3
-	jmp @end_5
-@else_4:
-	jmp @end_2
-@end_5:
-	jmp @begin_1
-@end_2:
+	bne @body_3
 	lda 0+<FC_FASTCALL_REG+3
 	sta 0+<FC_FASTCALL_REG+0
 	rts
@@ -56,13 +50,8 @@ __MODULE_MEM__ = 1
 .proc _mem_strcpy
 	lda #0
 	sta 0+<FC_FASTCALL_REG+5
-@begin_9:
-	lda #1
-	bne @6
-	jmp @else_12
-@6:
-@2:
-@then_11:
+	jmp @begin_9
+@body_20:
 	ldy 0+<FC_FASTCALL_REG+5
 	sty <reg+0
 	clc
@@ -96,34 +85,30 @@ __MODULE_MEM__ = 1
 	ldy #0
 	sta (reg),y
 	lda 0+<FC_FASTCALL_REG+6
-	beq @3
+	beq @1
 	lda #0
 	sta 0+<FC_FASTCALL_REG+7
-	jmp @4
-@3:
+	jmp @2
+@1:
 	lda #1
 	sta 0+<FC_FASTCALL_REG+7
-@4:
+@2:
 	lda 0+<FC_FASTCALL_REG+7
-	beq @else_18
-@5:
-@then_17:
+	beq @end_19
+@3:
 	lda 0+<FC_FASTCALL_REG+5
 	sta 0+<FC_FASTCALL_REG+0
 	rts
-	jmp @end_19
-@else_18:
 @end_19:
 	clc
 	lda 0+<FC_FASTCALL_REG+5
 	adc #1
 	sta 0+<FC_FASTCALL_REG+5
-	jmp @end_13
-@else_12:
-	jmp @end_10
-@end_13:
-	jmp @begin_9
-@end_10:
+@begin_9:
+	lda #1
+	beq @4
+	jmp @body_20
+@4:
 .endproc
 	.import FC_FASTCALL_REG_SIZE
 	.assert FC_FASTCALL_REG_SIZE >= 9, error, "fastcall functions of module mem need 9 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

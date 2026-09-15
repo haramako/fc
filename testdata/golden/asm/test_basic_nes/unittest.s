@@ -21,7 +21,6 @@ __MODULE_UNITTEST__ = 1
 	lda 0+<L+0
 	beq @else_2
 @3:
-@then_1:
 	lda #.LOBYTE(_7)
 	sta <S+3,x
 	lda #.HIBYTE(_7)
@@ -102,7 +101,6 @@ _12:
 	bne @6
 	jmp @else_15
 @6:
-@then_14:
 	lda #.LOBYTE(_23)
 	sta <S+6,x
 	lda #.HIBYTE(_23)

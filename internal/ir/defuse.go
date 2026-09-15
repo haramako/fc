@@ -10,7 +10,7 @@ import "fmt"
 func DefUse(op *Op) (defs, uses []Operand) {
 	switch op.Code {
 	case OpLabel, OpJump, OpAsm, OpPushResult, OpPushFastcallResult:
-	case OpIf, OpPushArg, OpPushFastcallArg:
+	case OpIf, OpIfTrue, OpPushArg, OpPushFastcallArg:
 		uses = op.Src[:1]
 	case OpReturn:
 		if len(op.Src) > 0 {
@@ -74,7 +74,7 @@ func BuildCFG(lmd *Lambda) *CFG {
 		switch op.Code {
 		case OpLabel:
 			leader[i] = true
-		case OpIf, OpJump, OpReturn:
+		case OpIf, OpIfTrue, OpJump, OpReturn:
 			leader[i+1] = true
 		}
 	}
@@ -110,7 +110,7 @@ func BuildCFG(lmd *Lambda) *CFG {
 			succs = []*Block{next()}
 		case last.Code == OpJump:
 			succs = []*Block{c.byLabel[last.Label]}
-		case last.Code == OpIf:
+		case last.Code == OpIf || last.Code == OpIfTrue:
 			succs = []*Block{next(), c.byLabel[last.Label]}
 		case last.Code == OpReturn:
 		default:

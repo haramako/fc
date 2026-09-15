@@ -5,6 +5,10 @@
 package opt
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/haramako/fc/internal/ir"
 )
 
@@ -14,7 +18,24 @@ func Optimize(lmd *ir.Lambda, level int) {
 		return
 	}
 	fusePointer(lmd)
+	simplifyJumps(lmd)
 	compact(lmd)
+}
+
+// newLabel は関数内で使われていないラベル名 (@name_N。N は既存のラベル番号の最大 + 1)。
+func newLabel(lmd *ir.Lambda, name string) string {
+	n := 0
+	for _, op := range lmd.Ops {
+		if op == nil || op.Code != ir.OpLabel {
+			continue
+		}
+		if i := strings.LastIndex(op.Label, "_"); i >= 0 {
+			if k, err := strconv.Atoi(op.Label[i+1:]); err == nil && k > n {
+				n = k
+			}
+		}
+	}
+	return fmt.Sprintf("@%s_%d", name, n+1)
 }
 
 // compact は削除済み (nil) の命令を取り除く。

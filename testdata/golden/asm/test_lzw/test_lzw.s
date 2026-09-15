@@ -20,11 +20,8 @@ __MODULE_TEST_LZW__ = 1
 	sta 0+_lzw_bpos
 	lda #0
 	sta 0+<S+0,x
-@begin_4:
-	lda 0+<S+0,x
-	cmp #8
-	bcs @else_7
-@then_6:
+	jmp @begin_4
+@body_6:
 	lda #3
 	sta <FC_FASTCALL_REG+2
 	jsr _lzw_read_bit
@@ -51,12 +48,10 @@ __MODULE_TEST_LZW__ = 1
 	lda 0+<S+0,x
 	adc #1
 	sta 0+<S+0,x
-	jmp @end_8
-@else_7:
-	jmp @end_5
-@end_8:
-	jmp @begin_4
-@end_5:
+@begin_4:
+	lda 0+<S+0,x
+	cmp #8
+	bcc @body_6
 	rts
 _2:
 		.byte 5,57,119

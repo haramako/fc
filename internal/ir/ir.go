@@ -21,6 +21,7 @@ const (
 	opInvalid            OpCode = iota
 	OpLabel                     // Label:
 	OpIf                        // if Src[0] == 0 then goto Label
+	OpIfTrue                    // if Src[0] != 0 then goto Label (opt のループ回転・分岐反転が作る)
 	OpJump                      // goto Label
 	OpReturn                    // return [Src[0]]
 	OpPushResult                // 戻り値領域を予約 (Type)
@@ -59,7 +60,7 @@ const (
 )
 
 var opCodeNames = [...]string{
-	OpLabel: "label", OpIf: "if", OpJump: "jump", OpReturn: "return",
+	OpLabel: "label", OpIf: "if", OpIfTrue: "if_true", OpJump: "jump", OpReturn: "return",
 	OpPushResult: "push_result", OpPushArg: "push_arg", OpCall: "call",
 	OpPushFastcallResult: "push_fastcall_result", OpPushFastcallArg: "push_fastcall_arg", OpFastcall: "fastcall",
 	OpLoad: "load", OpSignExtension: "sign_extension",
@@ -93,7 +94,7 @@ type Op struct {
 	Code  OpCode
 	Dst   Operand         // 結果の格納先 (無い命令、または削除された戻り値では nil)
 	Src   []Operand       // 入力
-	Label string          // OpLabel / OpIf / OpJump の飛び先
+	Label string          // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
 	Type  *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
 	Text  string          // OpAsm のアセンブラ行
 	Far   bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
@@ -115,7 +116,7 @@ func (op *Op) positional() []any {
 	switch op.Code {
 	case OpLabel, OpJump:
 		r = append(r, op.Label)
-	case OpIf:
+	case OpIf, OpIfTrue:
 		r = append(r, op.Src[0], op.Label)
 	case OpReturn:
 		if len(op.Src) > 0 {

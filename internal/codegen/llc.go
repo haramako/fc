@@ -232,24 +232,38 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		case ir.OpLabel:
 			r.push(op.Label + ":")
 
-		case ir.OpIf:
+		case ir.OpIf, ir.OpIfTrue:
+			// OpIf は値が 0 のとき、OpIfTrue は 0 でないときに Label へ
+			onTrue := op.Code == ir.OpIfTrue
 			if ir.ValLocation(op.In(0)) == ir.LocCond {
-				// コンディションレジスタの場合
+				// コンディションレジスタの場合。CondPositive のとき「真 ⇔ フラグがセット」、ただし C だけは
+				// 「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)
 				v := ir.UnderlyingValue(op.In(0))
+				trueIsSet := v.CondPositive
+				if v.CondReg == ir.CondCarry {
+					trueIsSet = !v.CondPositive
+				}
+				jumpIfSet := trueIsSet == onTrue
 				var asmOp string
 				switch v.CondReg {
 				case ir.CondZero:
-					asmOp = ifElse(v.CondPositive, "bne", "beq")
+					asmOp = ifElse(jumpIfSet, "beq", "bne")
 				case ir.CondCarry:
-					asmOp = ifElse(v.CondPositive, "bcs", "bcc")
+					asmOp = ifElse(jumpIfSet, "bcs", "bcc")
 				case ir.CondNegative:
-					asmOp = ifElse(v.CondPositive, "bpl", "bmi")
+					asmOp = ifElse(jumpIfSet, "bmi", "bpl")
 				default:
 					panic("invalid cond_reg")
 				}
 				r.push(fmt.Sprintf("%s %s", asmOp, op.Label))
+			} else if onTrue {
+				// 値のどれかのバイトが 0 でなければ飛ぶ
+				for i := 0; i < ir.ValType(op.In(0)).Size; i++ {
+					r.push(l.loadA(op.In(0), i))
+					r.push(fmt.Sprintf("bne %s", op.Label))
+				}
 			} else {
-				// コンディションレジスタでない場合
+				// 全バイトが 0 なら飛ぶ
 				thenLabel := l.newLabel()
 				size := ir.ValType(op.In(0)).Size
 				for i := 0; i < size; i++ {
