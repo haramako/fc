@@ -5,7 +5,6 @@ package driver
 //	go test ./internal/fc -run xxx -bench BenchmarkCastle -benchmem
 
 import (
-	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/sema"
 	"io"
 	"io/fs"
@@ -64,7 +63,7 @@ func BenchmarkCastleFrontend(b *testing.B) {
 		if err != nil {
 			b.Fatalf("コンパイル失敗: %v", err)
 		}
-		llc := codegen.NewLlc(2, prog.Types)
+		llc := newLlcForGolden(prog)
 		for _, mod := range prog.Modules.List() {
 			if _, _, err := llc.Compile(mod); err != nil {
 				b.Fatal(err)

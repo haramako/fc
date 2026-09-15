@@ -1,5 +1,6 @@
 #fc 2
 options(mapper: "MMC3", fastcall_reg: 16); // fastcall_reg: ZP に空きが無いので 16 のまま (data.asm の FC_FASTCALL_REG_SIZE と一致)
+options(static_zp: 64, static_ram: 256);   // 静的フレームの領域 (data.asm の FC_SZP_SIZE / FC_SRAM_SIZE と一致)
 options(bank: -1);
 
 //

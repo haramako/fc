@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/ir"
-	"github.com/haramako/fc/internal/opt"
-	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 	"os"
 	"path/filepath"
@@ -185,18 +183,25 @@ func TestGoldenIR(t *testing.T) {
 	}
 }
 
+// newLlcForGolden は driver と同じ順で全関数の割付と静的フレームの配置まで済ませた Llc を返す。
+func newLlcForGolden(hlc *sema.Program) *codegen.Llc {
+	llc := codegen.NewLlc(2, hlc.Types)
+	if _, err := llc.PrepareProgram(hlc.Modules.List(), DefaultStaticZp, DefaultStaticRam); err != nil {
+		panic(err)
+	}
+	return llc
+}
+
 // allocLambdas は LLC と同じ順序 (モジュール順 × defs内のcode順、extern除外) で
 // 割付+delete_unuse を実行し、ダンプを返す。
 func allocLambdas(hlc *sema.Program) string {
 	var b strings.Builder
+	newLlcForGolden(hlc)
 	for _, mod := range hlc.Modules.List() {
 		for _, d := range mod.Defs {
 			if d.Kind != ir.DefCode || d.Lambda.Extern {
 				continue
 			}
-			opt.Optimize(d.Lambda, 2, hlc.Types)
-			regalloc.AllocateRegister(d.Lambda, regalloc.DefaultLimits)
-			regalloc.DeleteUnuse(d.Lambda)
 			b.WriteString(ir.DumpAllocLambda(mod.Id, d.Sym, d.Lambda))
 		}
 	}
@@ -235,7 +240,7 @@ func TestGoldenAsm(t *testing.T) {
 			t.Parallel()
 			srcName, target := goldenKeyInfo(name)
 			hlc := compileForGolden(t, srcName, target)
-			llc := codegen.NewLlc(2, hlc.Types)
+			llc := newLlcForGolden(hlc)
 			for _, mod := range hlc.Modules.List() {
 				asm, inc, err := llc.Compile(mod)
 				if err != nil {

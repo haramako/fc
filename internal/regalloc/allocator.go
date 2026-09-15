@@ -121,6 +121,10 @@ var DefaultLimits = Limits{Reg: 16, FastcallReg: 32}
 //   - レジスタ領域に入りきらない変数 → 普通の関数はフレームへあふれさせる (1 サイクル遅いだけ)。
 //     fastcall はスタックを使えないので frame size over
 func AllocateRegister(lmd *ir.Lambda, lim Limits) {
+	if lmd.ABI == ir.ABIStatic {
+		allocateStatic(lmd)
+		return
+	}
 	CalcLiveRange(lmd)
 
 	// ref(&演算子)を受けた変数を集める
@@ -222,6 +226,63 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 	}
 
 	lmd.FrameSize = frameSize
+}
+
+// allocateStatic は静的フレーム (doc/v2_frame_alloc.md §6-2): 戻り値 (0)、引数、アドレスを取られた変数・配列・struct
+// (専用の場所)、残りのローカルを live range で詰めたもの、の順に 1 つのフレームに置く。呼び先のフレームは重ならないので
+// 呼び出しをまたぐかどうかは関係ない。フレームは 256 バイトまで。
+func allocateStatic(lmd *ir.Lambda) {
+	CalcLiveRange(lmd)
+	refered := map[*ir.Value]bool{}
+	for _, op := range lmd.Ops {
+		if op != nil && op.Code == ir.OpRef {
+			refered[ir.UnderlyingValue(op.Src[0])] = true
+		}
+	}
+	frameSize := lmd.Type.Base.Size
+	place := func(v *ir.Value) {
+		v.Location = ir.LocStatic
+		v.Address = frameSize
+		frameSize += v.Type.Size
+	}
+	for _, v := range lmd.Vars {
+		switch v.LocalType {
+		case ir.LTResult:
+			lmd.Result.Location = ir.LocStatic
+			lmd.Result.Address = 0
+		case ir.LTArg:
+			place(v)
+		}
+	}
+	var packVars []*allocEntry
+	for _, v := range lmd.Vars {
+		switch {
+		case v.LocalType == ir.LTResult || v.LocalType == ir.LTArg:
+		case refered[v] || (v.Kind == ir.KindLocal && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct)):
+			place(v) // ポインタで触られうるので他と共有しない
+		case v.LiveRange != nil:
+			packVars = append(packVars, &allocEntry{key: v, liveRange: v.LiveRange})
+		default:
+			v.Location = ir.LocUnused
+			v.Unuse = true
+		}
+	}
+	packVars = allocateCond(lmd, packVars)
+	packVars = allocateA(lmd, packVars)
+	packer := newBytePacker(max(0, 256-frameSize))
+	used := 0
+	for _, e := range packVars {
+		v := e.key
+		addr, ok := packer.place(v.Type.Size, e.liveRange)
+		if !ok {
+			panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s: static frame exceeds 256 bytes (split the function or reduce locals)", lmd)})
+		}
+		v.Location = ir.LocStatic
+		v.Address = frameSize + addr
+		used = max(used, addr+v.Type.Size)
+	}
+	lmd.FrameSize = frameSize + used
+	lmd.ZpUsed = 0
 }
 
 // bytePacker はレジスタ領域へのバイト単位の詰め込み。バイトごとに、そこを使っている変数の live range を持つ。

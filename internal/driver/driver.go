@@ -58,14 +58,16 @@ type BuildOptions struct {
 
 // Result はビルドの結果。
 type Result struct {
-	ExitCode int            // Run 指定時のプログラムの終了コード (それ以外は 0)
-	Out      string         // 出力ファイル (CompileOnly なら "")
-	MapFile  string         // ld65 のマップファイル (CompileOnly なら "")
-	Objects  []string       // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
-	BuildDir string         // 中間生成物ディレクトリ
-	Warnings []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
-	FarCalls []sema.FarCall // far call になった呼び出し (options(farcall: true) のとき。fcc build -d で表示)
-	Cycles   int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
+	ExitCode  int            // Run 指定時のプログラムの終了コード (それ以外は 0)
+	Out       string         // 出力ファイル (CompileOnly なら "")
+	MapFile   string         // ld65 のマップファイル (CompileOnly なら "")
+	Objects   []string       // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
+	BuildDir  string         // 中間生成物ディレクトリ
+	Warnings  []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
+	FarCalls  []sema.FarCall // far call になった呼び出し (options(farcall: true) のとき。fcc build -d で表示)
+	Cycles    int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
+	StaticZp  int            // 静的フレームの使用量 (ゼロページ側 FC_SZP / RAM 側 FC_SRAM)
+	StaticRam int
 }
 
 type Compiler struct {
@@ -177,6 +179,15 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	llc.Limits.FastcallReg = c.fastcallRegSize()
 	llc.FarCall = prog.FarCallEnabled()
 	result.FarCalls = prog.FarCalls
+	// フレームの静的割付 (doc/v2_frame_alloc.md §6-4): 呼び出し規約の決定 → 全関数の最適化と割付 → 配置 → _frames.inc
+	plan, perr := llc.PrepareProgram(prog.Modules.List(), c.staticZpSize(), c.staticRamSize())
+	if perr != nil {
+		return nil, perr
+	}
+	if err := os.WriteFile(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n")), 0o666); err != nil {
+		return nil, err
+	}
+	result.StaticZp, result.StaticRam = plan.ZpUsed, plan.RamUsed
 	for _, mod := range prog.Modules.List() {
 		if mod.FromFcm {
 			continue
@@ -407,6 +418,34 @@ func (c *Compiler) farcallAsm() string {
 	return p
 }
 
+// staticZpSize / staticRamSize は静的フレームの領域の大きさ (options(static_zp: N) / options(static_ram: N)。
+// base.asm の FC_SZP / FC_SRAM の .res と一致させる。doc/v2_frame_alloc.md §6-5)。
+func (c *Compiler) staticZpSize() int {
+	if n, ok := c.prog.Options.Int("static_zp"); ok {
+		if n < 0 || n > 256 {
+			panic(&diag.Error{Msg: fmt.Sprintf("options(static_zp: %d): must be 0..256", n)})
+		}
+		return n
+	}
+	return DefaultStaticZp
+}
+
+func (c *Compiler) staticRamSize() int {
+	if n, ok := c.prog.Options.Int("static_ram"); ok {
+		if n < 0 || n > 8192 {
+			panic(&diag.Error{Msg: fmt.Sprintf("options(static_ram: %d): must be 0..8192", n)})
+		}
+		return n
+	}
+	return DefaultStaticRam
+}
+
+// 静的フレームの領域の既定の大きさ (fc が生成する base.asm と一致)。
+const (
+	DefaultStaticZp  = 64
+	DefaultStaticRam = 512
+)
+
 // fastcallRegSize は FC_FASTCALL_REG の大きさ (options(fastcall_reg: N)。既定は regalloc.DefaultLimits)。
 func (c *Compiler) fastcallRegSize() int {
 	if n, ok := c.prog.Options.Int("fastcall_reg"); ok {
@@ -427,6 +466,12 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\t.export FC_FARCALL\n" +
 		"\t.export FC_FASTCALL_REG_SIZE : absolute\n" +
 		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", c.fastcallRegSize()) +
+		"\t.exportzp FC_SZP\n" +
+		"\t.export FC_SRAM\n" +
+		"\t.export FC_SZP_SIZE : absolute\n" +
+		"\t.export FC_SRAM_SIZE : absolute\n" +
+		fmt.Sprintf("FC_SZP_SIZE = %d\n", c.staticZpSize()) +
+		fmt.Sprintf("FC_SRAM_SIZE = %d\n", c.staticRamSize()) +
 		"\t.exportzp L \t\t\t\t\t; TODO: そのうち消すこと\n" +
 		"\t.exportzp reg\n" +
 		"\t.exportzp S\n" +
@@ -439,9 +484,11 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"FC_LOCAL: .res $10\n" +
 		"FC_REG: .res $10\n" +
 		"FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE\n" +
+		"FC_SZP: .res FC_SZP_SIZE\n" + // 静的フレーム (ゼロページ側)
 		"\n" +
 		".segment \"BSS\"\n" +
 		"FC_FARCALL: .res 3\n" +
+		"FC_SRAM: .res FC_SRAM_SIZE\n" + // 静的フレーム (RAM 側)
 		"\n" +
 		".segment \"FC_STACK\": zeropage\n" +
 		"\t\n" +

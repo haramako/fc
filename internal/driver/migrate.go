@@ -226,6 +226,9 @@ func (c *Compiler) compileToAsm(dir, target, main string, trace func(string, ir.
 		return nil, nil, err
 	}
 	llc := codegen.NewLlc(2, prog.Types)
+	if _, err := llc.PrepareProgram(prog.Modules.List(), DefaultStaticZp, DefaultStaticRam); err != nil {
+		return nil, nil, err
+	}
 	asm := map[string]string{}
 	for _, mod := range prog.Modules.List() {
 		if mod.FromFcm {

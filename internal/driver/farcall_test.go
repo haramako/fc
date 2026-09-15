@@ -66,11 +66,12 @@ func TestFarCall(t *testing.T) {
 	mainAsm, _ := os.ReadFile(filepath.Join(dir, "b", "_main.s"))
 	far1Asm, _ := os.ReadFile(filepath.Join(dir, "b", "_far1.s"))
 	m, f := string(mainAsm), string(far1Asm)
-	// main → far1.add / far1.nested: call farcall、far1.fadd: jsr farcall、far1.nearf: 直接、fixed1.twice: 直接
-	if strings.Count(m, "call farcall") != 3 || strings.Count(m, "jsr farcall") != 2 {
+	// main → far1.add / far1.nested / far1.fadd: jsr farcall (main は静的フレームなので X を進める call マクロは使わない)、
+	// far1.nearf: 直接、fixed1.twice: 直接
+	if strings.Count(m, "call farcall") != 0 || strings.Count(m, "jsr farcall") != 5 {
 		t.Errorf("main.s: call farcall=%d jsr farcall=%d\n%s", strings.Count(m, "call farcall"), strings.Count(m, "jsr farcall"), m)
 	}
-	if !strings.Contains(m, "call _far1_nearf, ") || !strings.Contains(m, "call _fixed1_twice, ") {
+	if !strings.Contains(m, "jsr _far1_nearf") || !strings.Contains(m, "jsr _fixed1_twice") {
 		t.Errorf("main.s: nearf / twice は直接呼ぶべき")
 	}
 	if !strings.Contains(m, "lda #<.bank(_far1_add)") || !strings.Contains(m, "sta FC_FARCALL+2") || !strings.Contains(m, ".global farcall") {

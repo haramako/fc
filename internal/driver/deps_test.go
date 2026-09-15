@@ -32,10 +32,11 @@ func TestImportDirection(t *testing.T) {
 		"ir":       {"syntax", "types", "diag"},
 		"regalloc": {"ir", "types", "diag"},
 		"opt":      {"ir", "types"},
-		"codegen":  {"ir", "types", "diag", "regalloc", "opt"},
+		"codegen":  {"ir", "types", "diag", "regalloc", "opt", "frames"},
 		"sema":     {"syntax", "types", "ir", "diag"},
 		"migrate":  {"syntax", "ir"},
-		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "regalloc", "opt", "r6502", "migrate"},
+		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "regalloc", "opt", "r6502", "migrate", "frames"},
+		"frames":   {"ir", "diag", "types"},
 	}
 	for pkg, ok := range allowed {
 		okSet := map[string]bool{}

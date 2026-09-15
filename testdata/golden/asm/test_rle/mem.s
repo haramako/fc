@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_MEM__ = 1
 .segment "mem"
 	.include "mem.asm"
@@ -14,16 +15,16 @@ __MODULE_MEM__ = 1
 .segment "mem"
 .proc _mem_strlen
 	lda #0
-	sta 0+<FC_FASTCALL_REG+3
+	sta 0+<F_mem_strlen+3
 	jmp @begin_1
 @body_3:
-	inc 0+<FC_FASTCALL_REG+3
+	inc 0+<F_mem_strlen+3
 @begin_1:
-	ldy 0+<FC_FASTCALL_REG+3
-	lda (FC_FASTCALL_REG+1),y
+	ldy 0+<F_mem_strlen+3
+	lda (F_mem_strlen+1),y
 	bne @body_3
-	lda 0+<FC_FASTCALL_REG+3
-	sta 0+<FC_FASTCALL_REG+0
+	lda 0+<F_mem_strlen+3
+	sta 0+<F_mem_strlen+0
 	rts
 .endproc
 	.export _mem_strcpy
@@ -33,20 +34,18 @@ __MODULE_MEM__ = 1
 .segment "mem"
 .proc _mem_strcpy
 	lda #0
-	sta 0+<FC_FASTCALL_REG+5
+	sta 0+<F_mem_strcpy+5
 @then_11:
-	ldy 0+<FC_FASTCALL_REG+5
-	lda (FC_FASTCALL_REG+3),y
-	sta 0+<FC_FASTCALL_REG+6
-	sta (FC_FASTCALL_REG+1),y
-	lda 0+<FC_FASTCALL_REG+6
+	ldy 0+<F_mem_strcpy+5
+	lda (F_mem_strcpy+3),y
+	sta 0+<F_mem_strcpy+6
+	sta (F_mem_strcpy+1),y
+	lda 0+<F_mem_strcpy+6
 	bne @end_19
-	lda 0+<FC_FASTCALL_REG+5
-	sta 0+<FC_FASTCALL_REG+0
+	lda 0+<F_mem_strcpy+5
+	sta 0+<F_mem_strcpy+0
 	rts
 @end_19:
-	inc 0+<FC_FASTCALL_REG+5
+	inc 0+<F_mem_strcpy+5
 	jmp @then_11
 .endproc
-	.import FC_FASTCALL_REG_SIZE
-	.assert FC_FASTCALL_REG_SIZE >= 7, error, "fastcall functions of module mem need 7 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

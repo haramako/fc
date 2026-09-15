@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_UNITTEST__ = 1
 .segment "unittest"
 	.include "_stdio.inc"
@@ -9,63 +10,33 @@ __MODULE_UNITTEST__ = 1
 	;;;=============================
 .segment "unittest"
 .proc _unittest_assert_true
-	lda 0+<S+0,x
+	lda 0+<F_unittest_assert_true+0
 	bne @else_2
 	lda #.LOBYTE(_6)
-	sta <S+3,x
+	sta <S+0,x
 	lda #.HIBYTE(_6)
-	sta <S+4,x
-	inx
-	inx
-	inx
+	sta <S+1,x
 	jsr _stdio_print
-	dex
-	dex
-	dex
-	lda 0+<S+1,x
-	sta <S+3,x
-	lda 1+<S+1,x
-	sta <S+4,x
-	inx
-	inx
-	inx
+	lda 0+<F_unittest_assert_true+1
+	sta <S+0,x
+	lda 1+<F_unittest_assert_true+1
+	sta <S+1,x
 	jsr _stdio_print
-	dex
-	dex
-	dex
 	lda #.LOBYTE(_8)
-	sta <S+3,x
+	sta <S+0,x
 	lda #.HIBYTE(_8)
-	sta <S+4,x
-	inx
-	inx
-	inx
+	sta <S+1,x
 	jsr _stdio_print
-	dex
-	dex
-	dex
 	lda #1
-	sta <S+3,x
-	inx
-	inx
-	inx
+	sta <F_stdio_exit+0
 	jsr _stdio_exit
-	dex
-	dex
-	dex
 	jmp @end_3
 @else_2:
 	lda #.LOBYTE(_11)
-	sta <S+3,x
+	sta <S+0,x
 	lda #.HIBYTE(_11)
-	sta <S+4,x
-	inx
-	inx
-	inx
+	sta <S+1,x
 	jsr _stdio_print
-	dex
-	dex
-	dex
 @end_3:
 	rts
 _6:
@@ -82,60 +53,58 @@ _11:
 	;;;=============================
 .segment "unittest"
 .proc _unittest_assert_equal
-	lda 0+<S+0,x
-	cmp 0+<S+2,x
+	lda 0+<F_unittest_assert_equal+0
+	cmp 0+<F_unittest_assert_equal+2
 	bne @1
-	lda 1+<S+0,x
-	cmp 1+<S+2,x
+	lda 1+<F_unittest_assert_equal+0
+	cmp 1+<F_unittest_assert_equal+2
 @1:
-	bne @3
-	jmp @else_14
-@3:
+	beq @else_14
 	lda #.LOBYTE(_21)
-	sta <S+6,x
+	sta <S+0,x
 	lda #.HIBYTE(_21)
-	sta <S+7,x
-	call _stdio_print, #6
-	lda 0+<S+4,x
-	sta <S+6,x
-	lda 1+<S+4,x
-	sta <S+7,x
-	call _stdio_print, #6
+	sta <S+1,x
+	jsr _stdio_print
+	lda 0+<F_unittest_assert_equal+4
+	sta <S+0,x
+	lda 1+<F_unittest_assert_equal+4
+	sta <S+1,x
+	jsr _stdio_print
 	lda #.LOBYTE(_23)
-	sta <S+6,x
+	sta <S+0,x
 	lda #.HIBYTE(_23)
-	sta <S+7,x
-	call _stdio_print, #6
-	lda 0+<S+2,x
-	sta <S+6,x
-	lda 1+<S+2,x
-	sta <S+7,x
-	call _stdio_print_int16, #6
+	sta <S+1,x
+	jsr _stdio_print
+	lda 0+<F_unittest_assert_equal+2
+	sta <S+0,x
+	lda 1+<F_unittest_assert_equal+2
+	sta <S+1,x
+	jsr _stdio_print_int16
 	lda #.LOBYTE(_25)
-	sta <S+6,x
+	sta <S+0,x
 	lda #.HIBYTE(_25)
-	sta <S+7,x
-	call _stdio_print, #6
-	lda 0+<S+0,x
-	sta <S+6,x
-	lda 1+<S+0,x
-	sta <S+7,x
-	call _stdio_print_int16, #6
+	sta <S+1,x
+	jsr _stdio_print
+	lda 0+<F_unittest_assert_equal+0
+	sta <S+0,x
+	lda 1+<F_unittest_assert_equal+0
+	sta <S+1,x
+	jsr _stdio_print_int16
 	lda #.LOBYTE(_27)
-	sta <S+6,x
+	sta <S+0,x
 	lda #.HIBYTE(_27)
-	sta <S+7,x
-	call _stdio_print, #6
+	sta <S+1,x
+	jsr _stdio_print
 	lda #1
-	sta <S+6,x
-	call _stdio_exit, #6
+	sta <F_stdio_exit+0
+	jsr _stdio_exit
 	jmp @end_15
 @else_14:
 	lda #.LOBYTE(_30)
-	sta <S+6,x
+	sta <S+0,x
 	lda #.HIBYTE(_30)
-	sta <S+7,x
-	call _stdio_print, #6
+	sta <S+1,x
+	jsr _stdio_print
 @end_15:
 	rts
 _21:

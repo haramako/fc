@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_TEST_CAST__ = 1
 .segment "test_cast"
 	.include "_unittest.inc"
@@ -15,76 +16,76 @@ _test_cast_a1:
 .segment "test_cast"
 .proc _test_cast_test_cast
 	lda #255
-	sta 0+<L+0
+	sta 0+<F_test_cast_test_cast+0
 	lda #255
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+0,x
+	sta 1+<F_test_cast_test_cast+0
+	lda 0+<F_test_cast_test_cast+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #255
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_3)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_3)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #.LOBYTE(_test_cast_a1)
-	sta 0+<L+0
+	sta 0+<F_test_cast_test_cast+0
 	lda #.HIBYTE(_test_cast_a1)
-	sta 1+<L+0
-	lda 0+<L+0
-	sta 0+<L+2
-	lda 1+<L+0
-	sta 1+<L+2
+	sta 1+<F_test_cast_test_cast+0
+	lda 0+<F_test_cast_test_cast+0
+	sta 0+<F_test_cast_test_cast+2
+	lda 1+<F_test_cast_test_cast+0
+	sta 1+<F_test_cast_test_cast+2
 	lda #0
 	asl a
 	tay
-	lda (L+2),y
-	sta 0+<L+0
+	lda (F_test_cast_test_cast+2),y
+	sta 0+<F_test_cast_test_cast+0
 	iny
-	lda (L+2),y
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+0,x
-	lda 1+<L+0
-	sta <S+1,x
+	lda (F_test_cast_test_cast+2),y
+	sta 1+<F_test_cast_test_cast+0
+	lda 0+<F_test_cast_test_cast+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_cast_test_cast+0
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #1
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_8)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_8)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda 0+_test_cast_a1
-	sta 0+<L+0
+	sta 0+<F_test_cast_test_cast+0
 	lda 1+_test_cast_a1
-	sta 1+<L+0
+	sta 1+<F_test_cast_test_cast+0
 	lda #0
 	asl a
 	tay
-	lda (L+0),y
-	sta 0+<L+2
+	lda (F_test_cast_test_cast+0),y
+	sta 0+<F_test_cast_test_cast+2
 	iny
-	lda (L+0),y
-	sta 1+<L+2
-	lda 0+<L+2
-	sta <S+0,x
-	lda 1+<L+2
-	sta <S+1,x
+	lda (F_test_cast_test_cast+0),y
+	sta 1+<F_test_cast_test_cast+2
+	lda 0+<F_test_cast_test_cast+2
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_cast_test_cast+2
+	sta <F_unittest_assert_equal+1
 	ldy #0
 	lda _test_cast_a1+0,y
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_15)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_15)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
 _3:
@@ -102,18 +103,18 @@ _15:
 .proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_18)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_18)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_cast_test_cast
 	lda #.LOBYTE(_21)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_21)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _18:

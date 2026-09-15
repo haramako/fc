@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_STDIO__ = 1
 .segment "stdio"
 _stdio_EMU_ADDR = 65520
@@ -12,9 +13,9 @@ _stdio_EMU_EXIT = 65535
 	;;;=============================
 .segment "stdio"
 .proc _stdio_print_int16
-	lda 0+<FC_FASTCALL_REG+0
+	lda 0+<F_stdio_print_int16+0
 	sta 0+_stdio_EMU_DATA
-	lda 1+<FC_FASTCALL_REG+0
+	lda 1+<F_stdio_print_int16+0
 	sta 1+_stdio_EMU_DATA
 	lda #2
 	sta 0+_stdio_EMU_PRINT
@@ -26,9 +27,9 @@ _stdio_EMU_EXIT = 65535
 	;;;=============================
 .segment "stdio"
 .proc _stdio_print
-	lda 0+<FC_FASTCALL_REG+0
+	lda 0+<F_stdio_print+0
 	sta 0+_stdio_EMU_ADDR
-	lda 1+<FC_FASTCALL_REG+0
+	lda 1+<F_stdio_print+0
 	sta 1+_stdio_EMU_ADDR
 	lda #1
 	sta 0+_stdio_EMU_PRINT
@@ -40,15 +41,15 @@ _stdio_EMU_EXIT = 65535
 	;;;=============================
 .segment "stdio"
 .proc _stdio_puts
-	lda 0+<S+0,x
-	sta <FC_FASTCALL_REG+0
-	lda 1+<S+0,x
-	sta <FC_FASTCALL_REG+1
+	lda 0+<F_stdio_puts+0
+	sta <F_stdio_print+0
+	lda 1+<F_stdio_puts+0
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_2)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_2)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	rts
 _2:
@@ -60,7 +61,7 @@ _2:
 	;;;=============================
 .segment "stdio"
 .proc _stdio_exit
-	lda 0+<FC_FASTCALL_REG+0
+	lda 0+<F_stdio_exit+0
 	sta 0+_stdio_EMU_EXIT
 	rts
 .endproc
@@ -110,5 +111,3 @@ _stdio_interrupt = _interrupt
 	rts
 .endproc
 _stdio_interrupt_irq = _interrupt_irq
-	.import FC_FASTCALL_REG_SIZE
-	.assert FC_FASTCALL_REG_SIZE >= 2, error, "fastcall functions of module stdio need 2 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

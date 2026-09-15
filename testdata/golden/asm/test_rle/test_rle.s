@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_TEST_RLE__ = 1
 .segment "test_rle"
 	.include "_unittest.inc"
@@ -23,139 +24,113 @@ _test_rle_dest: .res 128
 .segment "test_rle"
 .proc _test_rle_test_rle
 	lda #.LOBYTE(_test_rle_dest)
-	sta <S+4,x
-	lda #.HIBYTE(_test_rle_dest)
-	sta <S+5,x
-	lda #.LOBYTE(_test_rle_src)
-	sta <S+6,x
-	lda #.HIBYTE(_test_rle_src)
-	sta <S+7,x
-	inx
-	inx
-	jsr _rle_unpack
-	dex
-	dex
-	lda <0+S+2,x
-	sta 0+<S+0,x
-	lda <1+S+2,x
-	sta 1+<S+0,x
-	lda 0+<S+0,x
 	sta <S+2,x
-	lda 1+<S+0,x
-	sta <S+3,x
-	lda #8
-	sta <S+4,x
-	lda #0
-	sta <S+5,x
-	lda #.LOBYTE(_5)
-	sta <S+6,x
-	lda #.HIBYTE(_5)
-	sta <S+7,x
-	inx
-	inx
-	jsr _unittest_assert_equal
-	dex
-	dex
-	lda #.LOBYTE(_test_rle_dest)
-	sta <S+3,x
 	lda #.HIBYTE(_test_rle_dest)
+	sta <S+3,x
+	lda #.LOBYTE(_test_rle_src)
 	sta <S+4,x
-	lda #.LOBYTE(_10)
+	lda #.HIBYTE(_test_rle_src)
 	sta <S+5,x
+	jsr _rle_unpack
+	lda <0+S+0,x
+	sta 0+<F_test_rle_test_rle+0
+	lda <1+S+0,x
+	sta 1+<F_test_rle_test_rle+0
+	lda 0+<F_test_rle_test_rle+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_rle_test_rle+0
+	sta <F_unittest_assert_equal+1
+	lda #8
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_5)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_5)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #.LOBYTE(_test_rle_dest)
+	sta <S+1,x
+	lda #.HIBYTE(_test_rle_dest)
+	sta <S+2,x
+	lda #.LOBYTE(_10)
+	sta <S+3,x
 	lda #.HIBYTE(_10)
-	sta <S+6,x
-	lda 0+<S+0,x
-	sta <S+7,x
-	inx
-	inx
+	sta <S+4,x
+	lda 0+<F_test_rle_test_rle+0
+	sta <S+5,x
 	jsr _mem_compare
-	dex
-	dex
-	lda <0+S+2,x
-	sta 0+<L+0
+	lda <0+S+0,x
+	sta 0+<F_test_rle_test_rle+2
 	bne @1
 	lda #1
+	sta 0+<F_test_rle_test_rle+3
 	jmp @2
 @1:
 	lda #0
+	sta 0+<F_test_rle_test_rle+3
 @2:
-	sta <S+2,x
+	lda 0+<F_test_rle_test_rle+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_13)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_13)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #.LOBYTE(_test_rle_dest)
-	sta <S+4,x
-	lda #.HIBYTE(_test_rle_dest)
-	sta <S+5,x
-	lda #.LOBYTE(_test_rle_src2)
-	sta <S+6,x
-	lda #.HIBYTE(_test_rle_src2)
-	sta <S+7,x
-	inx
-	inx
-	jsr _rle_unpack
-	dex
-	dex
-	lda <0+S+2,x
-	sta 0+<S+0,x
-	lda <1+S+2,x
-	sta 1+<S+0,x
-	lda 0+<S+0,x
 	sta <S+2,x
-	lda 1+<S+0,x
-	sta <S+3,x
-	lda #8
-	sta <S+4,x
-	lda #0
-	sta <S+5,x
-	lda #.LOBYTE(_17)
-	sta <S+6,x
-	lda #.HIBYTE(_17)
-	sta <S+7,x
-	inx
-	inx
-	jsr _unittest_assert_equal
-	dex
-	dex
-	lda #.LOBYTE(_test_rle_dest)
-	sta <S+3,x
 	lda #.HIBYTE(_test_rle_dest)
+	sta <S+3,x
+	lda #.LOBYTE(_test_rle_src2)
 	sta <S+4,x
-	lda #.LOBYTE(_22)
+	lda #.HIBYTE(_test_rle_src2)
 	sta <S+5,x
+	jsr _rle_unpack
+	lda <0+S+0,x
+	sta 0+<F_test_rle_test_rle+0
+	lda <1+S+0,x
+	sta 1+<F_test_rle_test_rle+0
+	lda 0+<F_test_rle_test_rle+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_rle_test_rle+0
+	sta <F_unittest_assert_equal+1
+	lda #8
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_17)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_17)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #.LOBYTE(_test_rle_dest)
+	sta <S+1,x
+	lda #.HIBYTE(_test_rle_dest)
+	sta <S+2,x
+	lda #.LOBYTE(_22)
+	sta <S+3,x
 	lda #.HIBYTE(_22)
-	sta <S+6,x
-	lda 0+<S+0,x
-	sta <S+7,x
-	inx
-	inx
+	sta <S+4,x
+	lda 0+<F_test_rle_test_rle+0
+	sta <S+5,x
 	jsr _mem_compare
-	dex
-	dex
-	lda <0+S+2,x
-	sta 0+<L+0
+	lda <0+S+0,x
+	sta 0+<F_test_rle_test_rle+0
 	bne @3
 	lda #1
+	sta 0+<F_test_rle_test_rle+1
 	jmp @4
 @3:
 	lda #0
+	sta 0+<F_test_rle_test_rle+1
 @4:
-	sta <S+2,x
+	lda 0+<F_test_rle_test_rle+1
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_25)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_25)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	rts
 _5:
 		.byte 108,101,110,0
@@ -178,18 +153,18 @@ _25:
 .proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_28)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_28)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_rle_test_rle
 	lda #.LOBYTE(_31)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_31)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _28:

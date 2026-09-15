@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/opt"
 	"github.com/haramako/fc/internal/regalloc"
@@ -27,6 +28,7 @@ type Llc struct {
 	curOp         *ir.Op     // 処理中の命令 (エラー位置の補完用)
 	zero          *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
 	types         *types.Universe
+	Lambdas       map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
@@ -97,6 +99,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	asm := &asmLines{}
 	asm.push("\t.setcpu \"6502\"")
 	asm.push("\t.include \"macro.inc\"")
+	asm.push("\t.include \"_frames.inc\"") // 静的フレームの配置 (frames.Place が生成)
 	asm.push(fmt.Sprintf("__MODULE_%s__ = 1", strings.ToUpper(mod.Id)))
 
 	inc.push(fmt.Sprintf(".ifndef __MODULE_%s__", strings.ToUpper(mod.Id)))
@@ -159,7 +162,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	// fastcall 関数が使う FC_FASTCALL_REG の大きさを、base.asm (プロジェクトが自前で持つこともある) の .res とリンク時に突き合わせる
 	fastcallNeed := 0
 	for _, d := range mod.Defs {
-		if d.Kind == ir.DefCode && !d.Lambda.Extern && d.Lambda.Type.Fastcall() {
+		if d.Kind == ir.DefCode && !d.Lambda.Extern && d.Lambda.ABI == ir.ABIFastcall {
 			fastcallNeed = max(fastcallNeed, d.Lambda.ZpUsed)
 		}
 	}
@@ -192,12 +195,53 @@ func anyList(ss []string) []any {
 	return r
 }
 
-// CompileLambda は関数1つ分のアセンブリを生成する。
-func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
-	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
+// Prepare は関数 1 つの最適化とレジスタ割付 (frames.Analyze の後、frames.Place の前に全関数について呼ぶ)。
+func (l *Llc) Prepare(lmd *ir.Lambda) {
+	l.curLambda = lmd
 	l.curOp = nil
 	opt.Optimize(lmd, l.OptimizeLevel, l.types)
 	l.allocRegister(lmd)
+}
+
+// PrepareProgram はコード生成の前にプログラム全体で 1 回行う処理 (doc/v2_frame_alloc.md §6-4):
+// 呼び出し規約の決定 (frames.Analyze) → 全関数の最適化と割付 (Prepare) → 静的フレームの配置 (frames.Place)。
+// 戻り値の Plan.Inc を `_frames.inc` として書き、各モジュールの asm が include する。
+func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frames.Plan, error) {
+	graph, err := frames.Analyze(mods)
+	if err != nil {
+		return nil, err
+	}
+	l.Lambdas = graph.ByID
+	if err := l.PrepareAll(graph.Lambdas); err != nil {
+		return nil, err
+	}
+	return frames.Place(graph, staticZp, staticRam)
+}
+
+// PrepareAll は全関数の Prepare (エラーは関数の位置を補完して返す)。
+func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if ce, ok := r.(*diag.Error); ok {
+				if !ce.Pos.IsValid() && l.curLambda != nil {
+					ce.Pos = l.curLambda.Pos
+				}
+				err = ce
+				return
+			}
+			panic(r)
+		}
+	}()
+	for _, lmd := range lmds {
+		l.Prepare(lmd)
+	}
+	return nil
+}
+
+// CompileLambda は関数1つ分のアセンブリを生成する (Prepare 済みであること)。
+func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
+	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
+	l.curOp = nil
 	ops := lmd.Ops
 
 	r := &asmLines{}
@@ -213,8 +257,16 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	}
 	r.push(fmt.Sprintf(".proc %s", mangle(sym)))
 
+	if lmd.Entry {
+		// アドレスを取られた関数: 呼び出し側はスタック (X の指す位置) に引数を積むので、自分のフレームに写す
+		for k := lmd.Type.Base.Size; k < lmd.Type.Base.Size+argBytes(lmd); k++ {
+			r.push(fmt.Sprintf("lda <S+%d,x", k), fmt.Sprintf("sta %s", staticAddr(lmd, k)))
+		}
+	}
+
 	pushArgSize := 0
 	pushFastcallArgSize := 0
+	var calls []*pendingCall // 積んでいる途中の呼び出し (内側が末尾)
 
 	for opNo, op := range ops {
 		if op == nil {
@@ -285,81 +337,110 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if op.In(0) != nil {
 				r.push(l.load(lmd.Result, op.In(0)))
 			}
+			if lmd.Entry && lmd.Type.Base.Size > 0 {
+				// 呼び出し側はスタック (X の指す位置) から戻り値を読む
+				for i := 0; i < lmd.Type.Base.Size; i++ {
+					r.push(fmt.Sprintf("lda %s", staticAddr(lmd, i)), fmt.Sprintf("sta <S+%d,x", i))
+				}
+			}
 			r.push("rts")
 
-		case ir.OpPushResult:
-			pushArgSize += op.Type.Size
+		case ir.OpPushResult, ir.OpPushFastcallResult:
+			// 呼び出しの開始。呼び先の種類 (static / stack / fastcall) で引数の置き場所が決まる (IR の flavor は見ない)
+			pc := l.resolveCall(ops, opNo)
+			calls = append(calls, pc)
+			switch pc.kind {
+			case ckStack:
+				pushArgSize += op.Type.Size
+			case ckFastcallReg:
+				pushFastcallArgSize += op.Type.Size
+			}
 
-		case ir.OpPushArg:
+		case ir.OpPushArg, ir.OpPushFastcallArg:
+			pc := calls[len(calls)-1]
 			for i := 0; i < op.Type.Size; i++ {
 				r.push(l.loadA(op.In(0), i))
-				r.push(fmt.Sprintf("sta <S+%d,x", lmd.FrameSize+pushArgSize))
-				pushArgSize++
-			}
-
-		case ir.OpCall:
-			for _, a := range ir.ValType(op.In(0)).Params {
-				pushArgSize -= a.Size
-			}
-			pushArgSize -= ir.ValType(op.In(0)).Base.Size
-
-			if op.Far {
-				// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いて farcall (ターゲット側のトランポリン) を呼ぶ
-				r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
-				r.push(l.callSubroutine("farcall", lmd.FrameSize+pushArgSize))
-			} else if ir.ValKind(op.In(0)) == ir.KindLiteral {
-				// 関数を直に呼ぶ
-				r.push(l.callSubroutine(mangle(ir.ValLiteral(op.In(0)).Symbol), lmd.FrameSize+pushArgSize))
-			} else {
-				// 関数ポインタから呼ぶ
-				r.push(l.loadA(op.In(0), 0))
-				r.push("sta <reg+0")
-				r.push(l.loadA(op.In(0), 1))
-				r.push("sta <reg+1")
-				r.push(l.callSubroutine("jsr_reg", lmd.FrameSize+pushArgSize))
-			}
-
-			// 帰り値を格納する
-			if op.Dst != nil {
-				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-					r.push(fmt.Sprintf("lda <%d+S+%d,x", i, lmd.FrameSize))
-					r.push(l.storeA(op.Dst, i))
+				switch pc.kind {
+				case ckStatic:
+					r.push(fmt.Sprintf("sta %s", staticAddr(pc.callee, pc.argOff)))
+					pc.argOff++
+				case ckStack:
+					r.push(fmt.Sprintf("sta <S+%d,x", l.stackBase(lmd)+pushArgSize))
+					pushArgSize++
+				case ckFastcallReg:
+					r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", pushFastcallArgSize))
+					pushFastcallArgSize++
 				}
 			}
 
-		case ir.OpPushFastcallResult:
-			pushFastcallArgSize += op.Type.Size
-
-		case ir.OpPushFastcallArg:
-			for i := 0; i < op.Type.Size; i++ {
-				r.push(l.loadA(op.In(0), i))
-				r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", pushFastcallArgSize))
-				pushFastcallArgSize++
+		case ir.OpCall, ir.OpFastcall:
+			pc := calls[len(calls)-1]
+			calls = calls[:len(calls)-1]
+			fnType := ir.ValType(op.In(0))
+			var sym string
+			if ir.ValKind(op.In(0)) == ir.KindLiteral {
+				sym = mangle(ir.ValLiteral(op.In(0)).Symbol)
 			}
-
-		case ir.OpFastcall:
-			pushFastcallArgSize = 0
-
-			if op.Far {
-				r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
-				r.push("jsr farcall")
-			} else if ir.ValKind(op.In(0)) == ir.KindLiteral {
-				// 関数を直に呼ぶ
-				r.push(fmt.Sprintf("jsr %s", mangle(ir.ValLiteral(op.In(0)).Symbol)))
-			} else {
-				// 関数ポインタから呼ぶ
-				r.push(l.loadA(op.In(0), 0))
-				r.push("sta <reg+0")
-				r.push(l.loadA(op.In(0), 1))
-				r.push("sta <reg+1")
-				r.push("jsr jsr_reg")
-			}
-
-			// 帰り値を格納する
-			if op.Dst != nil {
-				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-					r.push(fmt.Sprintf("lda <%d+FC_FASTCALL_REG", i))
-					r.push(l.storeA(op.Dst, i))
+			switch pc.kind {
+			case ckStatic:
+				// 引数は呼び先のフレームに書いてある。static / entry の関数からは jsr、stack の関数からは X を進めて呼ぶ
+				if op.Far {
+					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
+					r.push(l.jsrOrCall(lmd, "farcall", lmd.FrameSize))
+				} else {
+					r.push(l.jsrOrCall(lmd, sym, lmd.FrameSize))
+				}
+				if op.Dst != nil {
+					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+						r.push(fmt.Sprintf("lda %s", staticAddr(pc.callee, i)))
+						r.push(l.storeA(op.Dst, i))
+					}
+				}
+			case ckStack:
+				for _, a := range fnType.Params {
+					pushArgSize -= a.Size
+				}
+				pushArgSize -= fnType.Base.Size
+				base := l.stackBase(lmd) + pushArgSize
+				if op.Far {
+					// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いて farcall (ターゲット側のトランポリン) を呼ぶ
+					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
+					r.push(l.jsrOrCall(lmd, "farcall", base))
+				} else if sym != "" {
+					r.push(l.jsrOrCall(lmd, sym, base))
+				} else {
+					// 関数ポインタから呼ぶ
+					r.push(l.loadA(op.In(0), 0))
+					r.push("sta <reg+0")
+					r.push(l.loadA(op.In(0), 1))
+					r.push("sta <reg+1")
+					r.push(l.jsrOrCall(lmd, "jsr_reg", base))
+				}
+				if op.Dst != nil {
+					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+						r.push(fmt.Sprintf("lda <%d+S+%d,x", i, base))
+						r.push(l.storeA(op.Dst, i))
+					}
+				}
+			case ckFastcallReg:
+				pushFastcallArgSize = 0
+				if op.Far {
+					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
+					r.push("jsr farcall")
+				} else if sym != "" {
+					r.push(fmt.Sprintf("jsr %s", sym))
+				} else {
+					r.push(l.loadA(op.In(0), 0))
+					r.push("sta <reg+0")
+					r.push(l.loadA(op.In(0), 1))
+					r.push("sta <reg+1")
+					r.push("jsr jsr_reg")
+				}
+				if op.Dst != nil {
+					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+						r.push(fmt.Sprintf("lda <%d+FC_FASTCALL_REG", i))
+						r.push(l.storeA(op.Dst, i))
+					}
 				}
 			}
 
@@ -634,10 +715,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push(l.loadYIdx(op.In(1), op.In(0)))
 					r.push("sty <reg+0")
 					r.push("clc")
-					r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.toAsm(op.In(0))))
+					r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))))
 					r.push("adc <reg+0")
 					r.push(l.storeA(op.Dst, 0))
-					r.push(fmt.Sprintf("lda #.HIBYTE(%s)", l.toAsm(op.In(0))))
+					r.push(fmt.Sprintf("lda #.HIBYTE(%s)", l.addrExpr(op.In(0))))
 					r.push("adc #0")
 					r.push(l.storeA(op.Dst, 1))
 				} else if ir.ValType(op.In(0)).Kind == types.Pointer {
@@ -682,10 +763,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					} else {
 						r.push("lda <reg+0")
 						r.push("clc")
-						r.push(fmt.Sprintf("adc #.LOBYTE(%s)", l.toAsm(op.In(0))))
+						r.push(fmt.Sprintf("adc #.LOBYTE(%s)", l.addrExpr(op.In(0))))
 						r.push(l.storeA(op.Dst, 0))
 						r.push("lda <reg+1")
-						r.push(fmt.Sprintf("adc #.HIBYTE(%s)", l.toAsm(op.In(0))))
+						r.push(fmt.Sprintf("adc #.HIBYTE(%s)", l.addrExpr(op.In(0))))
 						r.push(l.storeA(op.Dst, 1))
 					}
 				} else {
@@ -702,9 +783,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push("lda #0")
 				r.push(l.storeA(op.Dst, 1))
 			} else {
-				r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.toAsm(op.In(0))))
+				r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))))
 				r.push(l.storeA(op.Dst, 0))
-				r.push(fmt.Sprintf("lda #.HIBYTE(%s)", l.toAsm(op.In(0))))
+				r.push(fmt.Sprintf("lda #.HIBYTE(%s)", l.addrExpr(op.In(0))))
 				r.push(l.storeA(op.Dst, 1))
 			}
 

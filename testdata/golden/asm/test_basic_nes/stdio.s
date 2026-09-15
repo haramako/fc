@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_STDIO__ = 1
 .segment "stdio"
 	.include "_nes.inc"
@@ -23,24 +24,16 @@ _stdio_print_addr: .res 2
 	;;;=============================
 .segment "stdio"
 .proc _stdio_puts
-	lda 0+<S+0,x
-	sta <S+2,x
-	lda 1+<S+0,x
-	sta <S+3,x
-	inx
-	inx
+	lda 0+<F_stdio_puts+0
+	sta <S+0,x
+	lda 1+<F_stdio_puts+0
+	sta <S+1,x
 	jsr _stdio_print
-	dex
-	dex
 	lda #.LOBYTE(_2)
-	sta <S+2,x
+	sta <S+0,x
 	lda #.HIBYTE(_2)
-	sta <S+3,x
-	inx
-	inx
+	sta <S+1,x
 	jsr _stdio_print
-	dex
-	dex
 	rts
 _2:
 		.byte 10,0
@@ -52,32 +45,24 @@ _2:
 .segment "stdio"
 .proc _stdio_exit
 	lda #.LOBYTE(_6)
-	sta <S+1,x
+	sta <S+0,x
 	lda #.HIBYTE(_6)
-	sta <S+2,x
-	inx
-	jsr _stdio_print
-	dex
-	lda 0+<S+0,x
 	sta <S+1,x
+	jsr _stdio_print
+	lda 0+<F_stdio_exit+0
+	sta <S+0,x
 	lda #0
-	sta <S+2,x
-	inx
-	jsr _stdio_print_int16
-	dex
-	lda #.LOBYTE(_8)
 	sta <S+1,x
+	jsr _stdio_print_int16
+	lda #.LOBYTE(_8)
+	sta <S+0,x
 	lda #.HIBYTE(_8)
-	sta <S+2,x
-	inx
+	sta <S+1,x
 	jsr _stdio_print
-	dex
 	lda #200
 	sta 0+_nes_PPU_CTRL1
 @then_12:
-	inx
 	jsr _stdio_wait_vsync
-	dex
 	lda #0
 	sta 0+_nes_PPU_SCROLL
 	lda #0

@@ -85,7 +85,9 @@ options(org: 0xa000);         // 配置アドレス
 options(mapper: "MMC3");      // iNES マッパ（"MMC0" / "MMC3" / 番号）— メインモジュールで
 options(bank_count: 4);       // PRG バンク数 — メインモジュールで
 options(char_banks: 1);       // CHR バンク数 — メインモジュールで
-options(fastcall_reg: 32);    // fastcall 関数が使うゼロページ領域 FC_FASTCALL_REG の大きさ（既定 32、16〜128）— メインモジュールで
+options(fastcall_reg: 32);    // extern の fastcall 関数が使うゼロページ領域 FC_FASTCALL_REG の大きさ（既定 32、16〜128）— メインモジュールで
+options(static_zp: 64);       // 静的フレーム（§4.5）のゼロページ側 FC_SZP の大きさ（既定 64、0〜256）— メインモジュールで
+options(static_ram: 512);     // 静的フレームの RAM 側 FC_SRAM の大きさ（既定 512、0〜8192）— メインモジュールで
 options(farcall: true);       // far call（§4.4）を有効にする — メインモジュールで
 options(near: true);          // このモジュールは常にマップされている扱い（far call の対象にしない）
 ```
@@ -229,17 +231,41 @@ function f():void options(segment: "game") { ... }     // 配置セグメント
 - 引数・戻り値の型は必須。`void` 関数は `return;`、それ以外は `return expr;`。
   非 void 関数は本体が必ず `return` で終わらなければならない（最後の文が `return`、両枝が `return` で終わる
   `if`/`else`、`break` の無い `loop`・`while (1)`・`for (;;)`、`default` 付きで全 case が `return` で終わる `switch`）
-- `fastcall`: 引数をスタックではなくレジスタ/ゼロページで渡す。fastcall 関数の中から他の関数は呼べない
-  （呼び出す側の引数には fastcall を含めて何でも書ける: `add(inc(x), f(y))`）。
-  引数・戻り値・ローカル・一時変数の全部がゼロページの `FC_FASTCALL_REG`（既定 32 バイト、`options(fastcall_reg: N)`）に
-  入らなければならず、超えると `frame size over`（必要量が出る）。普通の関数はレジスタ領域（16 バイト）に入りきらない
-  変数がフレーム（スタック）に置かれるだけで制限はない。
+- `fastcall`: **本体を持つ関数では意味を持たない**（非再帰の関数は全部静的フレーム §4.5 になる。互換のため受理する。
+  以前の「中から他の関数を呼べない」制限も無い）。本体の無い extern 関数（asm 定義）に付けると、引数・戻り値を
+  ゼロページの `FC_FASTCALL_REG`（既定 32 バイト、`options(fastcall_reg: N)`）で渡す規約になる。
   base.asm を自前で持つプロジェクトは `FC_FASTCALL_REG: .res N` と `FC_FASTCALL_REG_SIZE = N`（`.export … : absolute`）を
   合わせる（不足はリンク時の `.assert` で検出される）
+- `options(abi: "stack")`: 静的フレームにせず、スタック（`S+n,x`）の規約のままにする（§4.5）
+- `options(interrupt: true)`: 割り込みハンドラから呼ばれる関数（§4.5）
+- `options(zeropage: false)`: 静的フレームを RAM 側に置く
 - `options(symbol: "...")`: 生成するシンボル名を固定する（割り込みベクタなど）
 - `options(near: true)`: far call（§4.4）の対象にしない（呼ぶ側はマップ済みと仮定して `jsr` する）
 
 ### 4.4 far call（バンクをまたぐ呼び出し）
+
+### 4.5 呼び出し規約と静的フレーム
+
+fc で本体を持つ関数のうち**再帰しないもの**は、引数・戻り値・ローカルを固定アドレスのフレーム（`F_<sym>`）に持つ。
+同時に活性になりえない関数（呼び出しグラフで一方から他方へ届かない関数どうし）のフレームは重ねて置かれるので、
+使う領域は「呼び出しの連鎖 1 本分の合計」程度で済む。領域はゼロページ側 `FC_SZP`（`options(static_zp: N)`。
+呼び出しの深い関数から順に入るだけ入る）と RAM 側 `FC_SRAM`（`options(static_ram: N)`）。
+base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .res M` と `FC_SZP_SIZE` / `FC_SRAM_SIZE` の
+`.export … : absolute` を合わせる（不足はリンク時の `.assert` で検出される。配置は `.fc-build/_frames.inc`）。
+
+| 種類 | 対象 | 引数の渡し方 |
+|---|---|---|
+| static | 本体を持つ非再帰の関数（既定） | 呼び出し側が `F_g+k` に直接書き `jsr` |
+| entry | static のうち、アドレスを取られた関数（関数ポインタ・`const` の表・インラインアセンブラからの参照）と `options(interrupt: true)` | スタック経由（下の stack と同じ）。プロローグで自分のフレームに写す |
+| stack | 再帰する関数、`options(abi: "stack")`、本体の無い extern 関数 | X が指すスタック `S+k,x`。呼び出し側が stack 関数なら X を進める `call` マクロ |
+| fastcall | extern で `fastcall` 指定 | `FC_FASTCALL_REG` |
+
+再帰の判定は呼び出しグラフの閉路で、関数ポインタ経由の呼び出しは「同じ関数型でアドレスを取られた関数の全部」
+への呼び出しとみなす。`bitcast` で関数ポインタの型を変えて呼ぶ再帰は検出できない（`options(abi: "stack")` を付ける）。
+`options(interrupt: true)` の関数から届く関数は全部 static でなければならず（X が何を指すか分からないため）、
+そのフレームは他のどの関数とも重ねない。
+
+### 4.6 far call
 
 MMC3 のように PRG が切替バンクに分かれているとき、メインモジュールに `options(farcall: true)` を書くと、
 **切替バンク（`options(bank: N)`、N ≥ 0）にある別モジュールの関数**への呼び出しを、コンパイラが自動で

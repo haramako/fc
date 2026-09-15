@@ -52,6 +52,15 @@
 FC_FASTCALL_REG_SIZE = $10
 	.export FC_FASTCALL_REG_SIZE : absolute
 
+;; fc の静的フレーム (doc/v2_frame_alloc.md §6)。mmc3.fc の options(static_zp: 64, static_ram: 512) と一致させる。
+;; スタックは再帰関数と asm 定義の関数だけが使うので半分 ($40) にして、残りを静的フレームに充てる
+FC_SZP_SIZE = $40
+FC_SRAM_SIZE = $100						; RAM 側は WRAM (BSS_EX) に置く。実際の必要量は数十バイト
+	.export FC_SZP_SIZE : absolute
+	.export FC_SRAM_SIZE : absolute
+	.exportzp FC_SZP
+	.export FC_SRAM
+
 .segment "FC_ZEROPAGE": zeropage
 	
 FC_LOCAL: .res $10
@@ -61,9 +70,13 @@ FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE
 .segment "BSS"
 FC_FARCALL: .res 3						; far call の呼び先アドレスとバンク (fc が使う。ZP でなくてよい)
 
+.segment "BSS_EX"
+FC_SRAM: .res FC_SRAM_SIZE				; 静的フレーム (RAM 側。ZP に入りきらない関数のフレーム)
+
 .segment "FC_STACK": zeropage
-	
-FC_STACK: .res $80
+
+FC_STACK: .res $40
+FC_SZP: .res FC_SZP_SIZE				; 静的フレーム (ゼロページ側)
 
 	L = FC_LOCAL
 	reg = FC_REG

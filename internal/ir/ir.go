@@ -179,11 +179,12 @@ const (
 	LocA                           // A レジスタ
 	LocCond                        // コンディションフラグ (CondReg)
 	LocFastcallReg                 // fastcall 用レジスタ (FC_FASTCALL_REG+addr)
+	LocStatic                      // 静的フレーム (F_<sym>+addr。doc/v2_frame_alloc.md §6)
 )
 
 var locationNames = [...]string{
 	LocNone: "", LocFrame: "frame", LocReg: "reg", LocMem: "mem", LocUnused: "none",
-	LocA: "a", LocCond: "cond", LocFastcallReg: "fastcall_reg",
+	LocA: "a", LocCond: "cond", LocFastcallReg: "fastcall_reg", LocStatic: "static",
 }
 
 func (l Location) String() string {

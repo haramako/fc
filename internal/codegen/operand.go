@@ -56,9 +56,9 @@ func (l *Llc) load(to, from ir.Operand) []any {
 			r = append(r, "lda #0")
 			r = append(r, fmt.Sprintf("sta %s", l.byte(to, 1)))
 		} else {
-			r = append(r, fmt.Sprintf("lda #.LOBYTE(%s)", l.toAsm(from)))
+			r = append(r, fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(from)))
 			r = append(r, fmt.Sprintf("sta %s", l.byte(to, 0)))
-			r = append(r, fmt.Sprintf("lda #.HIBYTE(%s)", l.toAsm(from)))
+			r = append(r, fmt.Sprintf("lda #.HIBYTE(%s)", l.addrExpr(from)))
 			r = append(r, fmt.Sprintf("sta %s", l.byte(to, 1)))
 		}
 	} else {
@@ -133,6 +133,14 @@ func (l *Llc) loadA(v ir.Operand, n int) any {
 	return fmt.Sprintf("lda %s", l.byte(v, n))
 }
 
+// addrExpr は配列・変数の先頭アドレスの式 (`#.LOBYTE(...)` の中身)。静的フレーム上のローカルは `F_f+addr`。
+func (l *Llc) addrExpr(v ir.Operand) string {
+	if isValueOrCasted(v) && ir.ValKind(v) == ir.KindLocal && ir.ValLocation(v) == ir.LocStatic {
+		return fmt.Sprintf("%s+%d", l.curLambda.FrameSym(), ir.ValAddress(v))
+	}
+	return l.toAsm(v)
+}
+
 func isValueOrCasted(v ir.Operand) bool {
 	switch v.(type) {
 	case *ir.Value, *ir.CastedValue:
@@ -160,6 +168,10 @@ func (l *Llc) pointerBase(v ir.Operand) (string, []any) {
 		switch ir.ValLocation(v) {
 		case ir.LocReg, ir.LocFastcallReg:
 			return strings.TrimPrefix(l.toAsm(v), "<"), nil
+		case ir.LocStatic:
+			if l.curLambda.FrameZp {
+				return strings.TrimPrefix(l.toAsm(v), "<"), nil
+			}
 		}
 	}
 	return "reg", []any{l.loadA(v, 0), "sta <reg+0", l.loadA(v, 1), "sta <reg+1"}
@@ -257,6 +269,8 @@ func (l *Llc) toAsm(v ir.Operand) string {
 				return fmt.Sprintf("<L+%d", ir.ValAddress(v))
 			case ir.LocFastcallReg:
 				return fmt.Sprintf("<FC_FASTCALL_REG+%d", ir.ValAddress(v))
+			case ir.LocStatic:
+				return staticAddr(l.curLambda, ir.ValAddress(v))
 			default:
 				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
 			}
@@ -284,8 +298,15 @@ func (l *Llc) toAsm(v ir.Operand) string {
 }
 
 // mangle は名前をアセンブラ用の表現に変更する。
-func mangle(str string) string {
-	return strings.ReplaceAll(str, "$", "_D")
+func mangle(str string) string { return ir.Mangle(str) }
+
+// argBytes は引数の合計バイト数。
+func argBytes(lmd *ir.Lambda) int {
+	n := 0
+	for _, p := range lmd.Type.Params {
+		n += p.Size
+	}
+	return n
 }
 
 // byte は値からn番目のbyteを取得する。
@@ -297,9 +318,9 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 		}
 		switch n {
 		case 0:
-			return fmt.Sprintf("#.LOBYTE(%s)", l.toAsm(pa.From))
+			return fmt.Sprintf("#.LOBYTE(%s)", l.addrExpr(pa.From))
 		case 1:
-			return fmt.Sprintf("#.HIBYTE(%s)", l.toAsm(pa.From))
+			return fmt.Sprintf("#.HIBYTE(%s)", l.addrExpr(pa.From))
 		default:
 			panic("invalid byte index for ir.PointeredArray")
 		}

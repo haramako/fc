@@ -1,4 +1,4 @@
-(alloc-lambda test_basic _test_basic_test_nesasm_limit _test_basic_test_nesasm_limit frame_size=0
+(alloc-lambda test_basic _test_basic_test_nesasm_limit _test_basic_test_nesasm_limit frame_size=0 abi=static
  (vars
   (var 0 toooooooooooooooooooooooooooooooooooooooo_long_id local #"uint8" pub loc=a)
   (var 1 $4 local #"uint8" lt=temp loc=none unuse)
@@ -11,11 +11,11 @@
   0003 (:return)
  )
 )
-(alloc-lambda test_basic _test_basic_add _test_basic_add frame_size=3
+(alloc-lambda test_basic _test_basic_add _test_basic_add frame_size=3 abi=static
  (vars
-  (var 0 $result local #"uint8" lt=result loc=frame addr=0)
-  (var 1 a local #"uint8" lt=arg loc=frame addr=1)
-  (var 2 b local #"uint8" lt=arg loc=frame addr=2)
+  (var 0 $result local #"uint8" lt=result loc=static addr=0)
+  (var 1 a local #"uint8" lt=arg loc=static addr=1)
+  (var 2 b local #"uint8" lt=arg loc=static addr=2)
   (var 3 $8 local #"uint8" lt=temp loc=none unuse)
  )
  (ops
@@ -23,7 +23,7 @@
   0001 (:return {l0 $result})
  )
 )
-(alloc-lambda test_basic _test_basic_fib _test_basic_fib frame_size=3
+(alloc-lambda test_basic _test_basic_fib _test_basic_fib frame_size=3 abi=stack
  (vars
   (var 0 $result local #"uint8" lt=result loc=frame addr=0)
   (var 1 n local #"uint8" lt=arg loc=frame addr=1)
@@ -51,43 +51,43 @@
   0013 (:return {l0 $result})
  )
 )
-(alloc-lambda test_basic _test_basic_test_function _test_basic_test_function frame_size=0
+(alloc-lambda test_basic _test_basic_test_function _test_basic_test_function frame_size=1 abi=static
  (vars
-  (var 0 $19 local #"uint8" lt=temp loc=reg addr=0)
-  (var 1 $23 local #"uint8" lt=temp loc=reg addr=0)
-  (var 2 $27 local #"uint8" lt=temp loc=reg addr=0)
-  (var 3 $31 local #"uint8" lt=temp loc=reg addr=0)
+  (var 0 $19 local #"uint8" lt=temp loc=static addr=0)
+  (var 1 $23 local #"uint8" lt=temp loc=static addr=0)
+  (var 2 $27 local #"uint8" lt=temp loc=static addr=0)
+  (var 3 $31 local #"uint8" lt=temp loc=static addr=0)
  )
  (ops
-  0000 (:push_result #"void")
-  0001 (:push_result #"uint8")
-  0002 (:push_arg #"uint8" {lit nil 3 #"uint8"})
-  0003 (:push_arg #"uint8" {lit nil 5 #"uint8"})
-  0004 (:call {l0 $19} {lit add :_test_basic_add #"fn(uint8,uint8):uint8"})
+  0000 (:push_result #"uint8")
+  0001 (:push_arg #"uint8" {lit nil 3 #"uint8"})
+  0002 (:push_arg #"uint8" {lit nil 5 #"uint8"})
+  0003 (:call {l0 $19} {lit add :_test_basic_add #"fn(uint8,uint8):uint8"})
+  0004 (:push_result #"void")
   0005 (:push_arg #"uint16" {l0 $19})
   0006 (:push_arg #"uint16" {lit nil 8 #"uint8"})
   0007 (:push_arg #"*uint8" {pa {g $21 #"[6]uint8" :_20}})
   0008 (:call nil {lit assert_equal :_unittest_assert_equal #"fn(uint16,uint16,*uint8):void"})
-  0009 (:push_result #"void")
-  0010 (:push_result #"uint8")
-  0011 (:push_arg #"uint8" {lit nil 1 #"uint8"})
-  0012 (:call {l1 $23} {lit fib :_test_basic_fib #"fn(uint8):uint8"})
+  0009 (:push_result #"uint8")
+  0010 (:push_arg #"uint8" {lit nil 1 #"uint8"})
+  0011 (:call {l1 $23} {lit fib :_test_basic_fib #"fn(uint8):uint8"})
+  0012 (:push_result #"void")
   0013 (:push_arg #"uint16" {l1 $23})
   0014 (:push_arg #"uint16" {lit nil 1 #"uint8"})
   0015 (:push_arg #"*uint8" {pa {g $25 #"[7]uint8" :_24}})
   0016 (:call nil {lit assert_equal :_unittest_assert_equal #"fn(uint16,uint16,*uint8):void"})
-  0017 (:push_result #"void")
-  0018 (:push_result #"uint8")
-  0019 (:push_arg #"uint8" {lit nil 3 #"uint8"})
-  0020 (:call {l2 $27} {lit fib :_test_basic_fib #"fn(uint8):uint8"})
+  0017 (:push_result #"uint8")
+  0018 (:push_arg #"uint8" {lit nil 3 #"uint8"})
+  0019 (:call {l2 $27} {lit fib :_test_basic_fib #"fn(uint8):uint8"})
+  0020 (:push_result #"void")
   0021 (:push_arg #"uint16" {l2 $27})
   0022 (:push_arg #"uint16" {lit nil 3 #"uint8"})
   0023 (:push_arg #"*uint8" {pa {g $29 #"[7]uint8" :_28}})
   0024 (:call nil {lit assert_equal :_unittest_assert_equal #"fn(uint16,uint16,*uint8):void"})
-  0025 (:push_result #"void")
-  0026 (:push_result #"uint8")
-  0027 (:push_arg #"uint8" {lit nil 11 #"uint8"})
-  0028 (:call {l3 $31} {lit fib :_test_basic_fib #"fn(uint8):uint8"})
+  0025 (:push_result #"uint8")
+  0026 (:push_arg #"uint8" {lit nil 11 #"uint8"})
+  0027 (:call {l3 $31} {lit fib :_test_basic_fib #"fn(uint8):uint8"})
+  0028 (:push_result #"void")
   0029 (:push_arg #"uint16" {l3 $31})
   0030 (:push_arg #"uint16" {lit nil 144 #"uint8"})
   0031 (:push_arg #"*uint8" {pa {g $33 #"[8]uint8" :_32}})
@@ -95,13 +95,13 @@
   0033 (:return)
  )
 )
-(alloc-lambda test_basic _test_basic_test_misc _test_basic_test_misc frame_size=1
+(alloc-lambda test_basic _test_basic_test_misc _test_basic_test_misc frame_size=2 abi=static
  (vars
-  (var 0 i local #"uint8" pub loc=frame addr=0)
-  (var 1 n local #"uint8" pub loc=reg addr=0)
-  (var 2 x local #"uint16" pub loc=reg addr=0)
-  (var 3 $52 local #"uint8" lt=temp loc=reg addr=0)
-  (var 4 $57 local #"uint8" lt=temp loc=a)
+  (var 0 i local #"uint8" pub loc=static addr=0)
+  (var 1 n local #"uint8" pub loc=static addr=1)
+  (var 2 x local #"uint16" pub loc=static addr=0)
+  (var 3 $52 local #"uint8" lt=temp loc=static addr=0)
+  (var 4 $57 local #"uint8" lt=temp loc=static addr=1)
  )
  (ops
   0000 (:load {l0 i} {lit nil 1 #"uint8"})
@@ -127,24 +127,24 @@
   0020 (:push_arg #"uint16" {lit nil -1 #"sint8"})
   0021 (:push_arg #"*uint8" {pa {g $48 #"[5]uint8" :_47}})
   0022 (:call nil {lit assert_equal :_unittest_assert_equal #"fn(uint16,uint16,*uint8):void"})
-  0023 (:push_result #"void")
-  0024 (:push_result #"uint8")
-  0025 (:push_arg #"*uint8" {pa {g $54 #"[6]uint8" :_53}})
-  0026 (:push_arg #"*uint8" {pa {g $56 #"[6]uint8" :_55}})
-  0027 (:push_arg #"uint8" {lit nil 6 #"uint8"})
-  0028 (:call {l3 $52} {lit compare :_mem_compare #"fn(*uint8,*uint8,uint8):uint8"})
-  0029 (:eq {l4 $57} {l3 $52} {lit nil 0 #"uint8"})
+  0023 (:push_result #"uint8")
+  0024 (:push_arg #"*uint8" {pa {g $54 #"[6]uint8" :_53}})
+  0025 (:push_arg #"*uint8" {pa {g $56 #"[6]uint8" :_55}})
+  0026 (:push_arg #"uint8" {lit nil 6 #"uint8"})
+  0027 (:call {l3 $52} {lit compare :_mem_compare #"fn(*uint8,*uint8,uint8):uint8"})
+  0028 (:eq {l4 $57} {l3 $52} {lit nil 0 #"uint8"})
+  0029 (:push_result #"void")
   0030 (:push_arg #"uint8" {l4 $57})
   0031 (:push_arg #"*uint8" {pa {g $59 #"[12]uint8" :_58}})
   0032 (:call nil {lit assert_true :_unittest_assert_true #"fn(uint8,*uint8):void"})
   0033 (:return)
  )
 )
-(alloc-lambda test_basic _test_basic_add_fastcall _test_basic_add_fastcall frame_size=3
+(alloc-lambda test_basic _test_basic_add_fastcall _test_basic_add_fastcall frame_size=3 abi=static
  (vars
-  (var 0 $result local #"uint8" lt=result loc=fastcall_reg addr=0)
-  (var 1 a local #"uint8" lt=arg loc=fastcall_reg addr=1)
-  (var 2 b local #"uint8" lt=arg loc=fastcall_reg addr=2)
+  (var 0 $result local #"uint8" lt=result loc=static addr=0)
+  (var 1 a local #"uint8" lt=arg loc=static addr=1)
+  (var 2 b local #"uint8" lt=arg loc=static addr=2)
   (var 3 $60 local #"uint8" lt=temp loc=none unuse)
  )
  (ops
@@ -152,16 +152,16 @@
   0001 (:return {l0 $result})
  )
 )
-(alloc-lambda test_basic _test_basic_test_fastcall _test_basic_test_fastcall frame_size=0
+(alloc-lambda test_basic _test_basic_test_fastcall _test_basic_test_fastcall frame_size=1 abi=static
  (vars
-  (var 0 $62 local #"uint8" lt=temp loc=reg addr=0)
+  (var 0 $62 local #"uint8" lt=temp loc=static addr=0)
  )
  (ops
-  0000 (:push_result #"void")
-  0001 (:push_fastcall_result #"uint8")
-  0002 (:push_fastcall_arg #"uint8" {lit nil 1 #"uint8"})
-  0003 (:push_fastcall_arg #"uint8" {lit nil 2 #"uint8"})
-  0004 (:fastcall {l0 $62} {lit add_fastcall :_test_basic_add_fastcall #"fastcall fn(uint8,uint8):uint8"})
+  0000 (:push_fastcall_result #"uint8")
+  0001 (:push_fastcall_arg #"uint8" {lit nil 1 #"uint8"})
+  0002 (:push_fastcall_arg #"uint8" {lit nil 2 #"uint8"})
+  0003 (:fastcall {l0 $62} {lit add_fastcall :_test_basic_add_fastcall #"fastcall fn(uint8,uint8):uint8"})
+  0004 (:push_result #"void")
   0005 (:push_arg #"uint16" {l0 $62})
   0006 (:push_arg #"uint16" {lit nil 3 #"uint8"})
   0007 (:push_arg #"*uint8" {pa {g $64 #"[13]uint8" :_63}})
@@ -169,7 +169,7 @@
   0009 (:return)
  )
 )
-(alloc-lambda test_basic _main _main frame_size=0
+(alloc-lambda test_basic _main _main frame_size=0 abi=static entry
  (vars
  )
  (ops
@@ -213,10 +213,10 @@
   0037 (:return)
  )
 )
-(alloc-lambda unittest _unittest_assert_true _unittest_assert_true frame_size=3
+(alloc-lambda unittest _unittest_assert_true _unittest_assert_true frame_size=3 abi=static
  (vars
-  (var 0 a local #"uint8" lt=arg loc=frame addr=0)
-  (var 1 message local #"*uint8" lt=arg loc=frame addr=1)
+  (var 0 a local #"uint8" lt=arg loc=static addr=0)
+  (var 1 message local #"*uint8" lt=arg loc=static addr=1)
  )
  (ops
   0000 (:if_true {l0 a} "@else_2")
@@ -241,11 +241,11 @@
   0019 (:return)
  )
 )
-(alloc-lambda unittest _unittest_assert_equal _unittest_assert_equal frame_size=6
+(alloc-lambda unittest _unittest_assert_equal _unittest_assert_equal frame_size=6 abi=static
  (vars
-  (var 0 a local #"uint16" lt=arg loc=frame addr=0)
-  (var 1 b local #"uint16" lt=arg loc=frame addr=2)
-  (var 2 message local #"*uint8" lt=arg loc=frame addr=4)
+  (var 0 a local #"uint16" lt=arg loc=static addr=0)
+  (var 1 b local #"uint16" lt=arg loc=static addr=2)
+  (var 2 message local #"*uint8" lt=arg loc=static addr=4)
   (var 3 $16 local #"uint8" lt=temp loc=cond cond=zero,true)
  )
  (ops
@@ -284,9 +284,9 @@
   0032 (:return)
  )
 )
-(alloc-lambda stdio _stdio_print_int16 _stdio_print_int16 frame_size=2
+(alloc-lambda stdio _stdio_print_int16 _stdio_print_int16 frame_size=2 abi=static
  (vars
-  (var 0 n local #"uint16" lt=arg loc=fastcall_reg addr=0)
+  (var 0 n local #"uint16" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:load {g EMU_DATA #"uint16" :_stdio_EMU_DATA} {l0 n})
@@ -294,9 +294,9 @@
   0002 (:return)
  )
 )
-(alloc-lambda stdio _stdio_print _stdio_print frame_size=2
+(alloc-lambda stdio _stdio_print _stdio_print frame_size=2 abi=static
  (vars
-  (var 0 str local #"*uint8" lt=arg loc=fastcall_reg addr=0)
+  (var 0 str local #"*uint8" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:load {g EMU_ADDR #"*uint8" :_stdio_EMU_ADDR} {l0 str})
@@ -304,9 +304,9 @@
   0002 (:return)
  )
 )
-(alloc-lambda stdio _stdio_puts _stdio_puts frame_size=2
+(alloc-lambda stdio _stdio_puts _stdio_puts frame_size=2 abi=static
  (vars
-  (var 0 str local #"*uint8" lt=arg loc=frame addr=0)
+  (var 0 str local #"*uint8" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:push_fastcall_result #"void")
@@ -318,16 +318,16 @@
   0006 (:return)
  )
 )
-(alloc-lambda stdio _stdio_exit _stdio_exit frame_size=1
+(alloc-lambda stdio _stdio_exit _stdio_exit frame_size=1 abi=static
  (vars
-  (var 0 code local #"uint8" lt=arg loc=fastcall_reg addr=0)
+  (var 0 code local #"uint8" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:load {g EMU_EXIT #"uint8" :_stdio_EMU_EXIT} {l0 code})
   0001 (:return)
  )
 )
-(alloc-lambda stdio _stdio_bench_start _stdio_bench_start frame_size=0
+(alloc-lambda stdio _stdio_bench_start _stdio_bench_start frame_size=0 abi=static
  (vars
  )
  (ops
@@ -335,7 +335,7 @@
   0001 (:return)
  )
 )
-(alloc-lambda stdio _stdio_bench_end _stdio_bench_end frame_size=0
+(alloc-lambda stdio _stdio_bench_end _stdio_bench_end frame_size=0 abi=static
  (vars
  )
  (ops
@@ -343,32 +343,32 @@
   0001 (:return)
  )
 )
-(alloc-lambda stdio _stdio_init _stdio_init frame_size=0
+(alloc-lambda stdio _stdio_init _stdio_init frame_size=0 abi=static
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt _interrupt frame_size=0
+(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static entry
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0
+(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static entry
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda mem _mem_strlen _mem_strlen frame_size=3
+(alloc-lambda mem _mem_strlen _mem_strlen frame_size=4 abi=static
  (vars
-  (var 0 $result local #"uint8" lt=result loc=fastcall_reg addr=0)
-  (var 1 str local #"*uint8" lt=arg loc=fastcall_reg addr=1)
-  (var 2 n local #"uint8" loc=fastcall_reg addr=3)
+  (var 0 $result local #"uint8" lt=result loc=static addr=0)
+  (var 1 str local #"*uint8" lt=arg loc=static addr=1)
+  (var 2 n local #"uint8" loc=static addr=3)
   (var 3 $6 local #"*uint8" lt=temp loc=none unuse)
   (var 4 $7 local #"uint8" lt=temp loc=a)
   (var 5 $8 local #"uint8" lt=temp loc=none unuse)
@@ -384,15 +384,15 @@
   0007 (:return {l2 n})
  )
 )
-(alloc-lambda mem _mem_strcpy _mem_strcpy frame_size=5
+(alloc-lambda mem _mem_strcpy _mem_strcpy frame_size=7 abi=static
  (vars
-  (var 0 $result local #"uint8" lt=result loc=fastcall_reg addr=0)
-  (var 1 to local #"*uint8" lt=arg loc=fastcall_reg addr=1)
-  (var 2 str local #"*uint8" lt=arg loc=fastcall_reg addr=3)
-  (var 3 i local #"uint8" loc=fastcall_reg addr=5)
+  (var 0 $result local #"uint8" lt=result loc=static addr=0)
+  (var 1 to local #"*uint8" lt=arg loc=static addr=1)
+  (var 2 str local #"*uint8" lt=arg loc=static addr=3)
+  (var 3 i local #"uint8" loc=static addr=5)
   (var 4 $14 local #"*uint8" lt=temp loc=none unuse)
   (var 5 $15 local #"uint8" lt=temp loc=none unuse)
-  (var 6 c local #"uint8" loc=fastcall_reg addr=6)
+  (var 6 c local #"uint8" loc=static addr=6)
   (var 7 $16 local #"*uint8" lt=temp loc=none unuse)
   (var 8 $20 local #"uint8" lt=temp loc=none unuse)
  )

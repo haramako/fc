@@ -62,8 +62,8 @@ func classify(arg string) operandKind {
 		return opIndirect
 	case strings.HasPrefix(arg, "#"):
 		return opImmediate
-	case strings.Contains(arg, "<"):
-		return opLocal
+	case strings.Contains(arg, "<"), strings.HasPrefix(strings.TrimLeft(arg, "0123456789+"), "F_"):
+		return opLocal // ゼロページの局所 / RAM 上の静的フレーム (I/O レジスタではないので追跡してよい)
 	case strings.Contains(arg, ","):
 		return opGlobalIndexed
 	}
@@ -117,6 +117,7 @@ func peepholeA(lines []string) []string {
 		if k := strings.IndexAny(t, " \t"); k >= 0 {
 			mnem, arg = t[:k], strings.TrimSpace(t[k+1:])
 		}
+		arg = strings.TrimPrefix(arg, "0+") // `0+<L+2` (byte の表記) と `<L+2` は同じ場所
 		kind := classify(arg)
 		trackable := kind == opLocal
 		switch mnem {
@@ -191,6 +192,10 @@ func peepholeA(lines []string) []string {
 			s.flagsFromA = true // A の値を写すので N/Z は A を反映する
 		case "bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
 			// 分岐: 落ちてくる側では状態はそのまま (飛び先はラベルで空になる)
+		case "adc", "sbc", "and", "ora", "eor", "txa", "tya", "pla":
+			// A を書き、N/Z は A から立つ
+			s.a = aState{}
+			s.flagsFromA = true
 		default:
 			// A を書く (adc / sbc / and / ora / eor / pla / txa / tya ...)、
 			// jmp / jsr / rts / call マクロ / farcall など: 何も分からない。

@@ -58,7 +58,9 @@ function main():void
 	}
 }
 
-func TestFastcallRegLimit(t *testing.T) {
+// TestFastcallStatic: fc で本体を持つ fastcall 関数は静的フレーム (FC_FASTCALL_REG の 16 バイト制限は extern だけ) なので、
+// ローカルが多くてもコンパイルでき、呼び出しは呼び先のフレーム F_<sym> に直接書く。
+func TestFastcallStatic(t *testing.T) {
 	t.Parallel()
 	src := `#fc 2
 options(fastcall_reg: 16);
@@ -79,20 +81,17 @@ function main():void { fc(1, 2, 3); }
 	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
-	if err == nil || !strings.Contains(err.Error(), "frame size over") || !strings.Contains(err.Error(), "only 16") {
-		t.Errorf("got %v", err)
+	if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}); err != nil {
+		t.Fatalf("got %v", err)
 	}
-	// base.s の .res と .assert が生成される
-	if err := os.WriteFile(filepath.Join(dir, "u.fc"), []byte("#fc 2\nuse * from stdio;\nfunction fc(a:int):int options(fastcall: true) { return a; }\nfunction main():void { fc(1); exit(0); }\n"), 0o666); err != nil {
-		t.Fatal(err)
+	mod, _ := os.ReadFile(filepath.Join(dir, "b", "_t.s"))
+	frames, _ := os.ReadFile(filepath.Join(dir, "b", "_frames.inc"))
+	if !strings.Contains(string(mod), "sta <F_t_fc+3") || !strings.Contains(string(frames), "F_t_fc = FC_SZP+") {
+		t.Errorf("_t.s / _frames.inc:\n%s\n%s", mod, frames)
 	}
-	if _, err := NewCompiler(absRepoRoot).Build("u.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b2"), Out: filepath.Join(dir, "u.bin")}); err != nil {
-		t.Fatal(err)
-	}
-	base, _ := os.ReadFile(filepath.Join(dir, "b2", "base.s"))
-	mod, _ := os.ReadFile(filepath.Join(dir, "b2", "_u.s"))
-	if !strings.Contains(string(base), "FC_FASTCALL_REG_SIZE = 32") || !strings.Contains(string(mod), ".assert FC_FASTCALL_REG_SIZE >= 2,") {
-		t.Errorf("base.s / _u.s:\n%s\n%s", base, mod)
+	// base.s に静的フレームの領域と大きさが出る
+	base, _ := os.ReadFile(filepath.Join(dir, "b", "base.s"))
+	if len(base) > 0 && !strings.Contains(string(base), "FC_SZP_SIZE = 64") {
+		t.Errorf("base.s:\n%s", base)
 	}
 }

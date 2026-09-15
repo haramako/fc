@@ -33,13 +33,16 @@
 結果（bench/README.md の第 2 弾の経過）: `entities` -24%、`plasma` -30%、`oam` -22%、`bgdecode` -15%、`fib` -7%、
 `textprint` -4%。v0.0.2 比では `entities` -29%、`oam` -46%、`plasma` -49%、`bgdecode` -37%。
 
-### 第 3 弾: フレームの静的割付（B）
+### 第 3 弾: フレームの静的割付（B）✅ 2026-09-16（ブランチ `feature/static-frame`）
 
-[v2_frame_alloc.md](v2_frame_alloc.md) §4。`calls` / `entities`（`solid` の呼び出し）と castle 全体の呼び出しコスト
-（`call` マクロ 25 サイクル → `jsr` 6、`S+n,x` 4 → 3 サイクル）に効く。**`fib` は再帰なので B の対象外**（スタック方式のまま）。
-castle の frame size over の根本対策でもある。決めること: Q3（間接呼び出しは共通引数バッファ + プロローグコピー）、
-Q4（fastcall を静的フレームに統合）。別ブランチで 1〜2 週。castle 側は `ppu.asm`（`S+2,x` で引数を読む 5 箇所）を
-`abi: "stack"` にするか書き換え。
+[v2_frame_alloc.md](v2_frame_alloc.md) §6。bench: `calls` -21%、`entities` -21%、`textprint` -10%、`plasma` -10%。
+castle は 440 関数中 349 が static（ゼロページ 56 バイト + RAM 18 バイト）。残りは再帰の連鎖（イベント / メニュー系）で
+stack のまま（`call` マクロ 307 箇所）。
+
+- [ ] castle の再帰の連鎖（`event_run_*` → … → `event_run_*`）を切る。`options(abi:)` の指定や、間接呼び出しの辺を
+      もっと絞る（今は同じ関数型の Entry 全部）ことで static にできる関数が増える
+- [ ] `fcc build -d` で配置の要約（static / stack の内訳、ZP / RAM の使用量、stack に残った理由）を表示する
+- [ ] Entry 関数（アドレスを取られた関数）の直接呼び出しも `F_g` に直接書く（今はプロローグコピー経由で統一）
 
 ### 第 4 弾（B の後）
 
@@ -74,5 +77,7 @@ Q4（fastcall を静的フレームに統合）。別ブランチで 1〜2 週�
       `fcc migrate`、`include("*.rb")` の互換処理（`internal/sema/macros.go`、`internal/migrate/`）が v1 と一緒に消える
 - [ ] `memo.txt`（初期の TODO メモ。ほとんど済み）の整理
 - [ ] `examples/castle` と実プロジェクト `C:\Work\castle` の同期（`tools/sync_examples.ps1`）と公開可否
-- [ ] castle 側: far call のラッパ撤去（v2_farcall.md §6）、en.fc の soa 化の実験、NSD 呼び出しのトランポリン統合
+- [ ] castle 側: far call のラッパ撤去（v2_farcall.md §6）、en.fc の soa 化の実験、NSD 呼び出しのトランポリン統合、
+      **静的フレームの領域**（`data.asm` の `FC_SZP` / `FC_SRAM`、`mmc3.fc` の `options(static_zp:, static_ram:)`。
+      examples/castle と同じ変更を実プロジェクトに）
 - [ ] ca65 / ld65 は当面維持（内製アセンブラはやらない。2026-09-14 決定）

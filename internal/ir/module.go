@@ -5,6 +5,7 @@ package ir
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/syntax"
@@ -247,7 +248,38 @@ type Lambda struct {
 	Asm       []string
 	FrameSize int
 	ZpUsed    int // レジスタ割付後: 普通の関数は L の使用バイト数、fastcall は FC_FASTCALL_REG の使用バイト数 (引数・戻り値込み)
+
+	// 呼び出し規約とフレームの配置 (internal/frames が決める。doc/v2_frame_alloc.md §6)
+	ABI       ABI
+	Entry     bool // static のうち、アドレスを取られた関数 (呼び出し側はスタック経由で渡し、プロローグで自分のフレームに写す)
+	Interrupt bool // options(interrupt: true): 割り込みから呼ばれる (フレームは全関数と重ねない)
+	FrameZp   bool // static: フレームがゼロページ (FC_SZP) にある
+	FrameBase int  // static: 領域内のオフセット (配置後)
 }
+
+// ABI は関数の呼び出し規約 (doc/v2_frame_alloc.md §6-1)。
+type ABI uint8
+
+const (
+	ABIStack    ABI = iota // S+n,x のフレーム (再帰、options(abi: "stack")、extern)
+	ABIFastcall            // FC_FASTCALL_REG (extern の fastcall)
+	ABIStatic              // 固定アドレスのフレーム F_<sym>
+)
+
+var abiNames = [...]string{ABIStack: "stack", ABIFastcall: "fastcall", ABIStatic: "static"}
+
+func (a ABI) String() string {
+	if int(a) < len(abiNames) {
+		return abiNames[a]
+	}
+	return fmt.Sprintf("ABI(%d)", int(a))
+}
+
+// FrameSym は静的フレームのアセンブラシンボル (F + マングルした Id。`_fib_fib` → `F_fib_fib`)。
+func (l *Lambda) FrameSym() string { return "F" + Mangle(l.Id) }
+
+// Mangle は名前をアセンブラ用の表現に変更する ($ → _D)。
+func Mangle(str string) string { return strings.ReplaceAll(str, "$", "_D") }
 
 // Switchable はこのモジュールが切替バンクに載っているか (`options(bank: N)` で N >= 0。`options(near: true)` なら固定扱い)。
 // doc/v2_farcall.md §3.2

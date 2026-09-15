@@ -70,7 +70,7 @@ type Value struct {
 // HasAddress は Address が有効な置き場所かを返す。
 func (v *Value) HasAddress() bool {
 	switch v.Location {
-	case LocFrame, LocReg, LocFastcallReg:
+	case LocFrame, LocReg, LocFastcallReg, LocStatic:
 		return true
 	}
 	return false

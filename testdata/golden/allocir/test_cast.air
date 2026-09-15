@@ -1,13 +1,13 @@
-(alloc-lambda test_cast _test_cast_test_cast _test_cast_test_cast frame_size=0
+(alloc-lambda test_cast _test_cast_test_cast _test_cast_test_cast frame_size=4 abi=static
  (vars
-  (var 0 w local #"uint16" pub loc=reg addr=0)
-  (var 1 a local #"*uint8" pub loc=reg addr=0)
-  (var 2 a2 local #"*uint16" pub loc=reg addr=2)
+  (var 0 w local #"uint16" pub loc=static addr=0)
+  (var 1 a local #"*uint8" pub loc=static addr=0)
+  (var 2 a2 local #"*uint16" pub loc=static addr=2)
   (var 3 $6 local #"*uint16" lt=temp loc=none unuse)
-  (var 4 $7 local #"uint16" lt=temp loc=reg addr=0)
-  (var 5 i local #"*uint16" pub loc=reg addr=0)
+  (var 4 $7 local #"uint16" lt=temp loc=static addr=0)
+  (var 5 i local #"*uint16" pub loc=static addr=0)
   (var 6 $11 local #"*uint16" lt=temp loc=none unuse)
-  (var 7 $12 local #"uint16" lt=temp loc=reg addr=2)
+  (var 7 $12 local #"uint16" lt=temp loc=static addr=2)
   (var 8 $13 local #"*uint8" lt=temp loc=none unuse)
   (var 9 $14 local #"uint8" lt=temp loc=a)
  )
@@ -37,7 +37,7 @@
   0022 (:return)
  )
 )
-(alloc-lambda test_cast _main _main frame_size=0
+(alloc-lambda test_cast _main _main frame_size=0 abi=static entry
  (vars
  )
  (ops
@@ -57,10 +57,10 @@
   0013 (:return)
  )
 )
-(alloc-lambda unittest _unittest_assert_true _unittest_assert_true frame_size=3
+(alloc-lambda unittest _unittest_assert_true _unittest_assert_true frame_size=3 abi=static
  (vars
-  (var 0 a local #"uint8" lt=arg loc=frame addr=0)
-  (var 1 message local #"*uint8" lt=arg loc=frame addr=1)
+  (var 0 a local #"uint8" lt=arg loc=static addr=0)
+  (var 1 message local #"*uint8" lt=arg loc=static addr=1)
  )
  (ops
   0000 (:if_true {l0 a} "@else_2")
@@ -85,11 +85,11 @@
   0019 (:return)
  )
 )
-(alloc-lambda unittest _unittest_assert_equal _unittest_assert_equal frame_size=6
+(alloc-lambda unittest _unittest_assert_equal _unittest_assert_equal frame_size=6 abi=static
  (vars
-  (var 0 a local #"uint16" lt=arg loc=frame addr=0)
-  (var 1 b local #"uint16" lt=arg loc=frame addr=2)
-  (var 2 message local #"*uint8" lt=arg loc=frame addr=4)
+  (var 0 a local #"uint16" lt=arg loc=static addr=0)
+  (var 1 b local #"uint16" lt=arg loc=static addr=2)
+  (var 2 message local #"*uint8" lt=arg loc=static addr=4)
   (var 3 $16 local #"uint8" lt=temp loc=cond cond=zero,true)
  )
  (ops
@@ -128,9 +128,9 @@
   0032 (:return)
  )
 )
-(alloc-lambda stdio _stdio_print_int16 _stdio_print_int16 frame_size=2
+(alloc-lambda stdio _stdio_print_int16 _stdio_print_int16 frame_size=2 abi=static
  (vars
-  (var 0 n local #"uint16" lt=arg loc=fastcall_reg addr=0)
+  (var 0 n local #"uint16" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:load {g EMU_DATA #"uint16" :_stdio_EMU_DATA} {l0 n})
@@ -138,9 +138,9 @@
   0002 (:return)
  )
 )
-(alloc-lambda stdio _stdio_print _stdio_print frame_size=2
+(alloc-lambda stdio _stdio_print _stdio_print frame_size=2 abi=static
  (vars
-  (var 0 str local #"*uint8" lt=arg loc=fastcall_reg addr=0)
+  (var 0 str local #"*uint8" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:load {g EMU_ADDR #"*uint8" :_stdio_EMU_ADDR} {l0 str})
@@ -148,9 +148,9 @@
   0002 (:return)
  )
 )
-(alloc-lambda stdio _stdio_puts _stdio_puts frame_size=2
+(alloc-lambda stdio _stdio_puts _stdio_puts frame_size=2 abi=static
  (vars
-  (var 0 str local #"*uint8" lt=arg loc=frame addr=0)
+  (var 0 str local #"*uint8" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:push_fastcall_result #"void")
@@ -162,16 +162,16 @@
   0006 (:return)
  )
 )
-(alloc-lambda stdio _stdio_exit _stdio_exit frame_size=1
+(alloc-lambda stdio _stdio_exit _stdio_exit frame_size=1 abi=static
  (vars
-  (var 0 code local #"uint8" lt=arg loc=fastcall_reg addr=0)
+  (var 0 code local #"uint8" lt=arg loc=static addr=0)
  )
  (ops
   0000 (:load {g EMU_EXIT #"uint8" :_stdio_EMU_EXIT} {l0 code})
   0001 (:return)
  )
 )
-(alloc-lambda stdio _stdio_bench_start _stdio_bench_start frame_size=0
+(alloc-lambda stdio _stdio_bench_start _stdio_bench_start frame_size=0 abi=static
  (vars
  )
  (ops
@@ -179,7 +179,7 @@
   0001 (:return)
  )
 )
-(alloc-lambda stdio _stdio_bench_end _stdio_bench_end frame_size=0
+(alloc-lambda stdio _stdio_bench_end _stdio_bench_end frame_size=0 abi=static
  (vars
  )
  (ops
@@ -187,21 +187,21 @@
   0001 (:return)
  )
 )
-(alloc-lambda stdio _stdio_init _stdio_init frame_size=0
+(alloc-lambda stdio _stdio_init _stdio_init frame_size=0 abi=static
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt _interrupt frame_size=0
+(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static entry
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0
+(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static entry
  (vars
  )
  (ops

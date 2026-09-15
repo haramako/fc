@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_MATH__ = 1
 .segment "math"
 	.export _math_atan_table
@@ -53,7 +54,7 @@ _math_rand_table:
 	;;;=============================
 .segment "math"
 .proc _math_sin
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_sin+1
 	bmi @else_5
 	sec
 	sbc #64
@@ -61,21 +62,21 @@ _math_rand_table:
 	eor #$80
 @6:
 	bpl @else_9
-	ldy 0+<FC_FASTCALL_REG+1
+	ldy 0+<F_math_sin+1
 	lda _math_sin_table+0,y
-	sta 0+<FC_FASTCALL_REG+0
+	sta 0+<F_math_sin+0
 	rts
 @else_9:
 	sec
 	lda #127
-	sbc 0+<FC_FASTCALL_REG+1
-	sta 0+<FC_FASTCALL_REG+2
-	ldy 0+<FC_FASTCALL_REG+2
+	sbc 0+<F_math_sin+1
+	sta 0+<F_math_sin+2
+	ldy 0+<F_math_sin+2
 	lda _math_sin_table+0,y
-	sta 0+<FC_FASTCALL_REG+0
+	sta 0+<F_math_sin+0
 	rts
 @else_5:
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_sin+1
 	sec
 	sbc #192
 	bvc @9
@@ -83,29 +84,29 @@ _math_rand_table:
 @9:
 	bpl @else_18
 	sec
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_sin+1
 	sbc #128
-	sta 0+<FC_FASTCALL_REG+2
-	ldy 0+<FC_FASTCALL_REG+2
+	sta 0+<F_math_sin+2
+	ldy 0+<F_math_sin+2
 	lda _math_sin_table+0,y
-	sta 0+<FC_FASTCALL_REG+3
+	sta 0+<F_math_sin+3
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+3
-	sta 0+<FC_FASTCALL_REG+0
+	sbc 0+<F_math_sin+3
+	sta 0+<F_math_sin+0
 	rts
 @else_18:
 	sec
 	lda #255
-	sbc 0+<FC_FASTCALL_REG+1
-	sta 0+<FC_FASTCALL_REG+2
-	ldy 0+<FC_FASTCALL_REG+2
+	sbc 0+<F_math_sin+1
+	sta 0+<F_math_sin+2
+	ldy 0+<F_math_sin+2
 	lda _math_sin_table+0,y
-	sta 0+<FC_FASTCALL_REG+3
+	sta 0+<F_math_sin+3
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+3
-	sta 0+<FC_FASTCALL_REG+0
+	sbc 0+<F_math_sin+3
+	sta 0+<F_math_sin+0
 	rts
 .endproc
 	.export _math_atan
@@ -114,82 +115,80 @@ _math_rand_table:
 	;;;=============================
 .segment "math"
 .proc _math_atan
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_atan+1
 	bmi @else_30
-	lda 0+<FC_FASTCALL_REG+2
+	lda 0+<F_math_atan+2
 	bmi @else_34
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_atan+1
 	asl a
 	asl a
 	asl a
 	asl a
 	clc
-	adc 0+<FC_FASTCALL_REG+2
-	sta 0+<FC_FASTCALL_REG+3
-	ldy 0+<FC_FASTCALL_REG+3
+	adc 0+<F_math_atan+2
+	sta 0+<F_math_atan+3
+	ldy 0+<F_math_atan+3
 	lda _math_atan_table+0,y
-	sta 0+<FC_FASTCALL_REG+0
+	sta 0+<F_math_atan+0
 	rts
 @else_34:
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_atan+1
 	asl a
 	asl a
 	asl a
 	asl a
 	sec
-	sbc 0+<FC_FASTCALL_REG+2
-	sta 0+<FC_FASTCALL_REG+3
-	ldy 0+<FC_FASTCALL_REG+3
+	sbc 0+<F_math_atan+2
+	sta 0+<F_math_atan+3
+	ldy 0+<F_math_atan+3
 	lda _math_atan_table+0,y
-	sta 0+<FC_FASTCALL_REG+4
+	sta 0+<F_math_atan+4
 	sec
 	lda #128
-	sbc 0+<FC_FASTCALL_REG+4
-	sta 0+<FC_FASTCALL_REG+0
+	sbc 0+<F_math_atan+4
+	sta 0+<F_math_atan+0
 	rts
 @else_30:
-	lda 0+<FC_FASTCALL_REG+2
+	lda 0+<F_math_atan+2
 	bmi @else_47
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+1
-	sta 0+<FC_FASTCALL_REG+3
-	lda 0+<FC_FASTCALL_REG+3
+	sbc 0+<F_math_atan+1
+	sta 0+<F_math_atan+3
 	asl a
 	asl a
 	asl a
 	asl a
 	clc
-	adc 0+<FC_FASTCALL_REG+2
-	sta 0+<FC_FASTCALL_REG+3
-	ldy 0+<FC_FASTCALL_REG+3
+	adc 0+<F_math_atan+2
+	sta 0+<F_math_atan+3
+	ldy 0+<F_math_atan+3
 	lda _math_atan_table+0,y
-	sta 0+<FC_FASTCALL_REG+4
+	sta 0+<F_math_atan+4
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+4
-	sta 0+<FC_FASTCALL_REG+0
+	sbc 0+<F_math_atan+4
+	sta 0+<F_math_atan+0
 	rts
 @else_47:
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+1
-	sta 0+<FC_FASTCALL_REG+3
-	lda 0+<FC_FASTCALL_REG+3
+	sbc 0+<F_math_atan+1
+	sta 0+<F_math_atan+3
 	asl a
 	asl a
 	asl a
 	asl a
 	sec
-	sbc 0+<FC_FASTCALL_REG+2
-	sta 0+<FC_FASTCALL_REG+3
-	ldy 0+<FC_FASTCALL_REG+3
+	sbc 0+<F_math_atan+2
+	sta 0+<F_math_atan+3
+	ldy 0+<F_math_atan+3
 	lda _math_atan_table+0,y
-	sta 0+<FC_FASTCALL_REG+4
+	sta 0+<F_math_atan+4
 	clc
 	lda #128
-	adc 0+<FC_FASTCALL_REG+4
-	sta 0+<FC_FASTCALL_REG+0
+	adc 0+<F_math_atan+4
+	sta 0+<F_math_atan+0
 	rts
 .endproc
 	.export _math_rand_idx
@@ -204,7 +203,7 @@ _math_rand_idx: .res 1
 	inc 0+_math_rand_idx
 	ldy 0+_math_rand_idx
 	lda _math_rand_table+0,y
-	sta 0+<FC_FASTCALL_REG+0
+	sta 0+<F_math_rand+0
 	rts
 .endproc
 	.export _math_sign
@@ -213,25 +212,25 @@ _math_rand_idx: .res 1
 	;;;=============================
 .segment "math"
 .proc _math_sign
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_sign+1
 	bpl @else_66
 	lda #255
-	sta 0+<FC_FASTCALL_REG+0
+	sta 0+<F_math_sign+0
 	rts
 @else_66:
 	lda #0
 	sec
-	sbc 0+<FC_FASTCALL_REG+1
+	sbc 0+<F_math_sign+1
 	bvc @24
 	eor #$80
 @24:
 	bpl @else_70
 	lda #1
-	sta 0+<FC_FASTCALL_REG+0
+	sta 0+<F_math_sign+0
 	rts
 @else_70:
 	lda #0
-	sta 0+<FC_FASTCALL_REG+0
+	sta 0+<F_math_sign+0
 	rts
 .endproc
 	.export _math_abs
@@ -240,17 +239,15 @@ _math_rand_idx: .res 1
 	;;;=============================
 .segment "math"
 .proc _math_abs
-	lda 0+<FC_FASTCALL_REG+1
+	lda 0+<F_math_abs+1
 	bpl @else_74
 	sec
 	lda #0
-	sbc 0+<FC_FASTCALL_REG+1
-	sta 0+<FC_FASTCALL_REG+0
+	sbc 0+<F_math_abs+1
+	sta 0+<F_math_abs+0
 	rts
 @else_74:
-	lda 0+<FC_FASTCALL_REG+1
-	sta 0+<FC_FASTCALL_REG+0
+	lda 0+<F_math_abs+1
+	sta 0+<F_math_abs+0
 	rts
 .endproc
-	.import FC_FASTCALL_REG_SIZE
-	.assert FC_FASTCALL_REG_SIZE >= 5, error, "fastcall functions of module math need 5 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"

@@ -171,3 +171,71 @@ driver が全モジュールの要約から配置を計算し `frames.s`（`F_ma
 - Q2: B をやるか、やるならいつ（castle が動く状態を保ったまま別ブランチで進める前提）
 - Q3: B の間接呼び出しの規約（共通引数バッファ + プロローグコピー）でよいか
 - Q4: B で fastcall を「静的フレーム」に統合してよいか（`options(fastcall: true)` は互換のため受理し続ける）
+
+---
+
+## 6. B の実装設計（2026-09-16。Q3 = 共通引数バッファ + プロローグコピー、Q4 = fastcall 統合、で決定）
+
+ブランチ `feature/static-frame`。**実装済み（2026-09-16）**。実装は `internal/frames`（解析と配置）、`regalloc.allocateStatic`、
+codegen の `call.go`（呼び出しの種類）、driver の `PrepareProgram`。結果は bench/README.md の第 3 弾の経過。
+
+実装で決めた細部（§6-1〜6-5 からの差分）:
+
+- 間接呼び出しの辺は**同じ関数型の Entry にだけ**張る（全 Entry に張ると `main` のように asm から参照される関数が
+  自分への辺を持って再帰扱いになる）。`bitcast` で関数ポインタの型を変えて呼ぶと辺が漏れる（そういう再帰があれば
+  フレームが重なる。`options(abi: "stack")` で逃げる）
+- 引数に呼び出しを含むときは、全部評価してから積む（兄弟のフレームは重なりうるので、呼び先の引数領域に書き始めた後で
+  別の関数を呼べない）。含まないときは評価しながら積む（`sub t; push_arg t` が隣り合い t が A に割り付く）
+- Entry 関数（アドレスを取られた関数）は直接呼ばれるときもスタック経由で統一（プロローグで写す。数十サイクル）
+- castle: 440 関数中 349 が static、ゼロページ 56 バイト + RAM 18 バイト（RAM 側は WRAM `BSS_EX`）。残りはイベント / メニュー系の
+  再帰の連鎖で stack のまま。実プロジェクト側は `data.asm` に `FC_SZP` / `FC_SRAM` と `_SIZE` の export を足し、
+  `mmc3.fc` に `options(static_zp: 64, static_ram: 256)` を書く（examples/castle と同じ）
+
+### 6-1 関数の種類（ABI）
+
+全モジュールの意味解析の後、コード生成の前に、プログラム全体の呼び出しグラフから各関数の種類を決める
+（`internal/frames`）。
+
+| 種類 | 対象 | フレーム | 呼び出し側の引数・戻り値 |
+|---|---|---|---|
+| **static** | fc で本体を持つ関数の既定（fastcall 指定も含む: Q4） | 固定アドレス `F_<sym>`（0: 戻り値、続いて引数、ローカル） | `sta F_g+k` で直接書き、`jsr g`、`lda F_g+0` |
+| **entry** | static のうち、**アドレスを取られた関数**（関数ポインタ・const 表・インラインアセンブラからの参照）と `options(interrupt: true)` | 固定アドレス。**プロローグで `S+1..,x` から引数を写し、return で `S+0,x` に戻り値を書く**（Q3 の「共通バッファ」= X が指すスタック領域） | stack と同じ（呼び先が分からない間接呼び出しと同じ手順で呼べる） |
+| **stack** | 再帰（呼び出しグラフの閉路に属する関数。間接呼び出しは entry 全部への辺）、`options(abi: "stack")`、extern（asm 定義） | 今のまま `S+n,x` | 今のまま（`S+FrameSize+k,x` に書いて `call`） |
+| **fastcall** | extern で fastcall 指定のもの（NSD の glルーなど asm 側が FC_FASTCALL_REG を読む） | FC_FASTCALL_REG | 今のまま |
+
+X の扱い: **stack 関数の中では X = 自分のフレームの底、static / entry 関数の中では X = スタックの空き先頭**。
+呼び出し側の種類で X の操作が決まる（stack 関数は今までどおり `call g, #FrameSize` で X を進めて戻す。
+static / entry 関数は X を触らず `jsr`）。呼び先の種類で引数の置き場所が決まる（static なら `F_g+k`、
+stack / entry なら `S+k,x`（呼び出し側が static のとき）/ `S+FrameSize+k,x`（stack のとき））。
+far call も同じ（`FC_FARCALL` を用意して `jsr farcall` / `call farcall, #FrameSize`）。
+
+割り込み（`options(interrupt: true)`）: X が何を指しているか分からないので、そこから届く関数は全部 static で
+なければならない（stack / entry が届いたらエラー）。フレームは他の全関数と重ねない（castle は割り込みから
+`null_func` しか呼ばないので今は該当なし。asm の `_interrupt` から fc を呼ぶときに使う）。
+
+### 6-2 レジスタ割付
+
+static / entry: 戻り値・引数の後ろに、全ローカル（`L` に置いていたものも）を live range で詰めて（`bytePacker`、上限なし）
+`FrameSize` を決める。`Location = static`、`Address` = フレーム内オフセット。呼び出しをまたぐ変数の区別は要らない
+（呼び先のフレームは重ならない）。A / コンディションの割付は今のまま。stack / fastcall: 今のまま。
+
+### 6-3 配置（`_frames.inc`）
+
+- 衝突: f と g が同時に活性になりうる ⇔ 呼び出しグラフで一方から他方へ届く（推移閉包）。割り込み関数の部分木は全部と衝突
+- 領域は ZP（`FC_SZP`、`options(static_zp: N)`）と RAM（`FC_SRAM`、`options(static_ram: M)`）の 2 つ。ZP の候補は
+  **深さ（根からの最長距離）の深い順**（葉に近いほど呼ばれる回数が多い、という近似）、同じ深さならフレームの小さい順。
+  順に「衝突する配置済みの関数と重ならない最小のオフセット」に置き、ZP に入らなければ RAM。`options(zeropage: false)` で RAM を強制
+- 出力は `.fc-build/_frames.inc`: `.importzp FC_SZP` / `.import FC_SRAM` と `F_<sym> = FC_SZP+off` の並び。
+  全モジュールの asm が include する。使用量は `.assert FC_SZP_SIZE >= n` で base.asm の `.res` と突き合わせる
+- codegen は ZP の関数では `<F_f+n`（`(F_f+n),y` の直接参照も可）、RAM の関数では `F_f+n`（ポインタは reg 経由）
+
+### 6-4 コンパイルの順序（driver）
+
+sema（全モジュール）→ opt + 種類の決定 + regalloc（全関数）→ 配置 → `_frames.inc` → codegen（全モジュール）→ ca65 → ld65。
+golden テストの alloc-IR も同じ順で作る。
+
+### 6-5 base.asm
+
+`FC_LOCAL`（L）は stack 関数のために残す。`FC_SZP: .res N` / `FC_SRAM: .res M` を足し、`FC_SZP_SIZE` / `FC_SRAM_SIZE` を export。
+fc が生成する base.asm の既定: L 16、reg 16、FC_FASTCALL_REG 32、S 64（static 化でスタックはほぼ使わない）、
+FC_SZP 128、FC_SRAM 512（BSS）。castle は `data.asm` に同じものを足す（ZP の空きが無いのでスタック $80 を削って充てる）。

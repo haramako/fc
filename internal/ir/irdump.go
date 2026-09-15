@@ -317,7 +317,8 @@ func dumpLambda(lmd *Lambda) []string {
 func DumpAllocLambda(modId string, sym string, lmd *Lambda) string {
 	ctx := makeCtx(lmd)
 	var r []string
-	r = append(r, fmt.Sprintf("(alloc-lambda %s %s %s frame_size=%d", modId, sym, lmd.Id, lmd.FrameSize))
+	r = append(r, fmt.Sprintf("(alloc-lambda %s %s %s frame_size=%d abi=%s%s", modId, sym, lmd.Id, lmd.FrameSize, lmd.ABI,
+		map[bool]string{true: " entry", false: ""}[lmd.Entry]))
 	r = append(r, " (vars")
 	for i, v := range lmd.Vars {
 		r = append(r, "  "+dumpVar(v, i, ctx, true))

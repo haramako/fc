@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/sema"
 )
 
@@ -43,7 +42,7 @@ func TestGoldenV2(t *testing.T) {
 			if err != nil {
 				t.Fatalf("コンパイル失敗: %v", err)
 			}
-			llc := codegen.NewLlc(2, prog.Types)
+			llc := newLlcForGolden(prog)
 			for _, mod := range prog.Modules.List() {
 				asm, inc, err := llc.Compile(mod)
 				if err != nil {

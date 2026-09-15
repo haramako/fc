@@ -1610,55 +1610,44 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				if len(args) != len(lmdType.Params) {
 					panic(&diag.Error{Msg: fmt.Sprintf("%s expects %d argument(s) but %d given", describe(lmdV), len(lmdType.Params), len(args))})
 				}
-				if h.lmd.Type.Fastcall() {
-					panic(&diag.Error{Msg: "cannot call function from fastcall"})
+				// 引数に呼び出しを含むときは、全部評価してから積む。積んでいる途中で別の呼び出しが走ると、呼び先の引数領域
+				// (FC_FASTCALL_REG や、静的フレームなら呼び先と重なりうる兄弟のフレーム) が壊れるので。後ろの引数に
+				// 呼び出しがあるときは、先に評価した値を一時変数に写して左から右の評価順を保つ。
+				// 呼び出しを含まなければ評価しながら積む (`sub t; push_arg t` が隣り合い、t が A に割り付く)
+				pre := containsCallAny(args)
+				evalArg := func(i int) ir.Operand {
+					v := h.rval(h.withExpected(args[i], lmdType.Params[i]))
+					h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
+					return h.cast(v, lmdType.Params[i])
 				}
-
+				argVals := make([]ir.Operand, len(args))
+				if pre {
+					for i := range args {
+						v := evalArg(i)
+						if containsCallAny(args[i+1:]) {
+							v = h.freeze(v)
+						}
+						argVals[i] = v
+					}
+				}
+				pushCode, argCode, callCode := ir.OpPushResult, ir.OpPushArg, ir.OpCall
 				if lmdType.Fastcall() {
-					// 引数は FC_FASTCALL_REG に順に積むので、積んでいる途中で別の呼び出し (fastcall はもちろん、
-					// 普通の関数も中で fastcall を使いうる) が走ると壊れる。引数に呼び出しを含むときは
-					// 全部先に評価して一時変数に入れてから積む
-					argVals := make([]ir.Operand, len(args))
-					pre := false
-					for _, arg := range args {
-						if containsCall(arg) {
-							pre = true
-							break
-						}
-					}
-					if pre {
-						for i, arg := range args {
-							v := h.rval(h.withExpected(arg, lmdType.Params[i]))
-							h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
-							argVals[i] = h.cast(v, lmdType.Params[i])
-						}
-					}
 					if h.fastCalling {
 						panic(&diag.Error{Msg: "cannot fastcall in fastcalling"})
 					}
 					h.fastCalling = true
-					h.emit(&ir.Op{Code: ir.OpPushFastcallResult, Type: lmdType.Base})
-					for i, arg := range args {
-						v := argVals[i]
-						if !pre {
-							v = h.rval(h.withExpected(arg, lmdType.Params[i]))
-							h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
-							v = h.cast(v, lmdType.Params[i])
-						}
-						h.emit(&ir.Op{Code: ir.OpPushFastcallArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
-					}
-					h.emit(&ir.Op{Code: ir.OpFastcall, Dst: r, Src: []ir.Operand{lmdV}, Far: h.isFarCall(lmdV)})
-					h.fastCalling = false
-				} else {
-					h.emit(&ir.Op{Code: ir.OpPushResult, Type: lmdType.Base})
-					for i, arg := range args {
-						v := h.rval(h.withExpected(arg, lmdType.Params[i]))
-						h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
-						v = h.cast(v, lmdType.Params[i])
-						h.emit(&ir.Op{Code: ir.OpPushArg, Type: lmdType.Params[i], Src: []ir.Operand{v}})
-					}
-					h.emit(&ir.Op{Code: ir.OpCall, Dst: r, Src: []ir.Operand{lmdV}, Far: h.isFarCall(lmdV)})
+					pushCode, argCode, callCode = ir.OpPushFastcallResult, ir.OpPushFastcallArg, ir.OpFastcall
 				}
+				h.emit(&ir.Op{Code: pushCode, Type: lmdType.Base})
+				for i := range args {
+					v := argVals[i]
+					if !pre {
+						v = evalArg(i)
+					}
+					h.emit(&ir.Op{Code: argCode, Type: lmdType.Params[i], Src: []ir.Operand{v}})
+				}
+				h.emit(&ir.Op{Code: callCode, Dst: r, Src: []ir.Operand{lmdV}, Far: h.isFarCall(lmdV)})
+				h.fastCalling = false
 			}
 
 		case opRef: // &演算子
@@ -1896,6 +1885,28 @@ func containsCall(c *cexpr) bool {
 		}
 	}
 	return false
+}
+
+// containsCallAny は式のどれかが関数呼び出しを含むか。
+func containsCallAny(cs []*cexpr) bool {
+	for _, c := range cs {
+		if containsCall(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// freeze は値を「今の値」に固定する (変数なら一時変数に写す。一時変数・リテラルはそのまま)。
+func (h *Hlc) freeze(v ir.Operand) ir.Operand {
+	if val, ok := v.(*ir.Value); ok {
+		if val.Kind == ir.KindLiteral || (val.Kind == ir.KindLocal && val.LocalType == ir.LTTemp) {
+			return v
+		}
+	}
+	tmp := h.newTmp(ir.ValType(v))
+	h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{v}})
+	return tmp
 }
 
 // hoistCalls は式の中の関数呼び出しを今ここで評価し、その値 (cValue) に置き換えた式を返す (呼び出しが無ければそのまま)。

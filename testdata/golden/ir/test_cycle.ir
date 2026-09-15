@@ -27,9 +27,9 @@
   )
   (ops
    0000 (:load {g cycle_var #"uint8" :_test_cycle_cycle_var} {lit CYCLE_CONST 99 #"uint8"})
-   0001 (:push_result #"void")
-   0002 (:push_result #"uint8")
-   0003 (:call {l0 $2} {lit hoge :_cycle_use_hoge #"fn():uint8"})
+   0001 (:push_result #"uint8")
+   0002 (:call {l0 $2} {lit hoge :_cycle_use_hoge #"fn():uint8"})
+   0003 (:push_result #"void")
    0004 (:push_arg #"uint16" {l0 $2})
    0005 (:push_arg #"uint16" {lit nil 99 #"uint8"})
    0006 (:push_arg #"*uint8" {pa {g $4 #"[10]uint8" :_3}})

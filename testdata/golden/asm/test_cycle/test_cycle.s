@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_TEST_CYCLE__ = 1
 .segment "test_cycle"
 	.include "_unittest.inc"
@@ -16,19 +17,19 @@ _test_cycle_cycle_var: .res 1
 	lda #99
 	sta 0+_test_cycle_cycle_var
 	jsr _cycle_use_hoge
-	lda <0+S+0,x
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_cycle_use_hoge+0
+	sta 0+<F_test_cycle_test_cycle_use+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #99
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_3)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_3)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
 _3:
@@ -42,18 +43,18 @@ _3:
 .proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_6)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_6)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_cycle_test_cycle_use
 	lda #.LOBYTE(_9)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_9)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _6:

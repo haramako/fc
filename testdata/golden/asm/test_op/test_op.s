@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_TEST_OP__ = 1
 .segment "test_op"
 	.include "_unittest.inc"
@@ -10,100 +11,100 @@ __MODULE_TEST_OP__ = 1
 .segment "test_op"
 .proc _test_op_test_const_op
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_2)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_2)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #8
-	sta <S+0,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #8
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_5)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_5)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_8)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_8)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_11)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_11)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_14)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_14)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_17)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_17)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_20)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_20)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_23)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_23)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_26)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_26)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_29)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_29)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_32)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_32)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	lda #1
-	sta <S+0,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_35)
-	sta <S+1,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_35)
-	sta <S+2,x
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 	rts
 _2:
@@ -138,383 +139,383 @@ _35:
 .segment "test_op"
 .proc _test_op_test_int_op
 	lda #1
-	sta 0+<S+0,x
+	sta 0+<F_test_op_test_int_op+0
 	lda #2
-	sta 0+<S+1,x
+	sta 0+<F_test_op_test_int_op+1
 	lda #3
-	sta 0+<S+2,x
+	sta 0+<F_test_op_test_int_op+2
 	lda #5
-	sta 0+<S+3,x
+	sta 0+<F_test_op_test_int_op+3
 	lda #10
-	sta 0+<S+4,x
+	sta 0+<F_test_op_test_int_op+4
 	lda #0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_39)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_39)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+0,x
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
-	lda 0+<S+0,x
-	sta <S+7,x
+	sta <F_unittest_assert_equal+1
+	lda 0+<F_test_op_test_int_op+0
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_42)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_42)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+1,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+1
 	sta <reg+0+0
-	lda 0+<S+2,x
+	lda 0+<F_test_op_test_int_op+2
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #6
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_46)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_46)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+3,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+3
 	sta <reg+0+0
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #25
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_50)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_50)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+3,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+3
 	sta <reg+0+0
 	lda #60
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #44
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_54)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_54)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+4,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+4
 	sta <reg+0+0
-	lda 0+<S+2,x
+	lda 0+<F_test_op_test_int_op+2
 	sta <reg+2+0
 	jsr __div_8
 	lda <reg+4+0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #3
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_58)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_58)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #255
 	sta <reg+0+0
-	lda 0+<S+4,x
+	lda 0+<F_test_op_test_int_op+4
 	sta <reg+2+0
 	jsr __div_8
 	lda <reg+4+0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #25
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_62)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_62)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #255
 	sta <reg+0+0
-	lda 0+<S+4,x
+	lda 0+<F_test_op_test_int_op+4
 	sta <reg+2+0
 	jsr __mod_8
 	lda <reg+4+0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #5
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_66)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_66)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	clc
-	lda 0+<S+4,x
-	adc 0+<S+4,x
+	lda 0+<F_test_op_test_int_op+4
+	adc 0+<F_test_op_test_int_op+4
 	sec
-	sbc 0+<S+3,x
-	sta 0+<L+0
-	lda 0+<S+1,x
+	sbc 0+<F_test_op_test_int_op+3
+	sta 0+<F_test_op_test_int_op+5
+	lda 0+<F_test_op_test_int_op+1
 	sta <reg+0+0
-	lda 0+<L+0
+	lda 0+<F_test_op_test_int_op+5
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
-	sta 0+<L+1
+	sta 0+<F_test_op_test_int_op+3
 	sta <reg+0+0
-	lda 0+<S+2,x
+	lda 0+<F_test_op_test_int_op+2
 	sta <reg+2+0
 	jsr __div_8
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+5
 	lda #18
 	sta <reg+0+0
-	lda 0+<L+0
+	lda 0+<F_test_op_test_int_op+5
 	sta <reg+2+0
 	jsr __mod_8
 	lda <reg+4+0
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #8
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_74)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_74)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+2,x
-	and 0+<S+1,x
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+2
+	and 0+<F_test_op_test_int_op+1
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #2
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_78)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_78)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+0,x
-	ora 0+<S+1,x
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+0
+	ora 0+<F_test_op_test_int_op+1
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #3
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_82)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_82)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+2,x
-	eor 0+<S+1,x
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+2
+	eor 0+<F_test_op_test_int_op+1
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_86)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_86)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+0,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+0
+	cmp 0+<F_test_op_test_int_op+1
 	lda #0
 	rol a
 	eor #1
-	sta <S+5,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_90)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_90)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+1
+	cmp 0+<F_test_op_test_int_op+1
 	lda #0
 	rol a
 	eor #1
 	beq @7
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 	jmp @8
 @7:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 @8:
-	lda 0+<L+0
-	sta <S+5,x
+	lda 0+<F_test_op_test_int_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_95)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_95)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+0,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+0
+	cmp 0+<F_test_op_test_int_op+1
 	lda #0
 	rol a
 	eor #1
-	sta <S+5,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_99)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_99)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+1
+	cmp 0+<F_test_op_test_int_op+1
 	lda #0
 	rol a
 	eor #1
 	beq @15
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 	jmp @16
 @15:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 @16:
-	lda 0+<L+0
-	sta <S+5,x
+	lda 0+<F_test_op_test_int_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_104)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_104)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+1
+	cmp 0+<F_test_op_test_int_op+1
 	lda #0
 	rol a
 	eor #1
 	beq @20
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 	jmp @21
 @20:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 @21:
-	lda 0+<L+0
-	sta <S+5,x
+	lda 0+<F_test_op_test_int_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_109)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_109)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+1
+	cmp 0+<F_test_op_test_int_op+2
 	lda #0
 	rol a
 	beq @25
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 	jmp @26
 @25:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 @26:
-	lda 0+<L+0
-	sta <S+5,x
+	lda 0+<F_test_op_test_int_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_115)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_115)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+2,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+2
+	cmp 0+<F_test_op_test_int_op+1
 	lda #0
 	rol a
 	eor #1
 	beq @30
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 	jmp @31
 @30:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 @31:
-	lda 0+<L+0
-	sta <S+5,x
+	lda 0+<F_test_op_test_int_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_120)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_120)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+1
+	cmp 0+<F_test_op_test_int_op+2
 	lda #0
 	rol a
 	beq @35
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 	jmp @36
 @35:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+3
 @36:
-	lda 0+<L+0
-	sta <S+5,x
+	lda 0+<F_test_op_test_int_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_126)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_126)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+1
+	cmp 0+<F_test_op_test_int_op+1
 	bne @37
 	lda #1
 	jmp @38
 @37:
 	lda #0
 @38:
-	sta <S+5,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_130)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_130)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+1,x
-	cmp 0+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+1
+	cmp 0+<F_test_op_test_int_op+2
 	beq @43
 	lda #0
 	jmp @44
@@ -523,106 +524,106 @@ _35:
 @44:
 	beq @41
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+1
 	jmp @42
 @41:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int_op+1
 @42:
-	lda 0+<L+0
-	sta <S+5,x
+	lda 0+<F_test_op_test_int_op+1
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_135)
-	sta <S+6,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_135)
-	sta <S+7,x
-	call _unittest_assert_true, #5
-	lda 0+<S+4,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int_op+4
 	asl a
 	asl a
 	asl a
 	asl a
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #160
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_139)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_139)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+4,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+4
 	lsr a
 	lsr a
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #2
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_143)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_143)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+4,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+4
 	and #7
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #2
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_147)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_147)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #1
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_150)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_150)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+0,x
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int_op+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_153)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_153)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	sec
 	lda #0
-	sbc 0+<S+0,x
-	sta <S+5,x
+	sbc 0+<F_test_op_test_int_op+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #255
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_157)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_157)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	rts
 _39:
 		.byte 42,48,0
@@ -688,19 +689,19 @@ _157:
 .segment "test_op"
 .proc _test_op_test_int8_op
 	lda #255
-	sta 0+<S+0,x
+	sta 0+<F_test_op_test_int8_op+0
 	lda #254
-	sta 0+<S+1,x
+	sta 0+<F_test_op_test_int8_op+1
 	lda #3
-	sta 0+<S+2,x
+	sta 0+<F_test_op_test_int8_op+2
 	lda #253
-	sta 0+<S+3,x
+	sta 0+<F_test_op_test_int8_op+3
 	lda #251
-	sta 0+<S+4,x
+	sta 0+<F_test_op_test_int8_op+4
 	lda #10
-	sta 0+<S+5,x
+	sta 0+<F_test_op_test_int8_op+5
 	lda #246
-	sta 0+<S+6,x
+	sta 0+<F_test_op_test_int8_op+6
 	bmi @45
 	lsr a
 	lsr a
@@ -710,395 +711,395 @@ _157:
 	lsr a
 	ora #192
 @46:
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @47
 	lda #255
 	jmp @48
 @47:
 	lda #0
 @48:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #253
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_162)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_162)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+6,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+6
 	asl a
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @49
 	lda #255
 	jmp @50
 @49:
 	lda #0
 @50:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #236
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_167)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_167)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+0,x
-	sta 0+<L+0
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @51
 	lda #255
 	jmp @52
 @51:
 	lda #0
 @52:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
-	lda 0+<S+0,x
-	sta 0+<L+0
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
+	lda 0+<F_test_op_test_int8_op+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @53
 	lda #255
 	jmp @54
 @53:
 	lda #0
 @54:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+9,x
-	lda 1+<L+0
-	sta <S+10,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+2
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_172)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_172)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+5
 	sta <reg+0+0
-	lda 0+<S+2,x
+	lda 0+<F_test_op_test_int8_op+2
 	sta <reg+2+0
 	jsr __div_8s
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @55
 	lda #255
 	jmp @56
 @55:
 	lda #0
 @56:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #3
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_177)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_177)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+6,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+6
 	sta <reg+0+0
-	lda 0+<S+2,x
+	lda 0+<F_test_op_test_int8_op+2
 	sta <reg+2+0
 	jsr __div_8s
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @57
 	lda #255
 	jmp @58
 @57:
 	lda #0
 @58:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #252
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_182)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_182)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+5
 	sta <reg+0+0
-	lda 0+<S+3,x
+	lda 0+<F_test_op_test_int8_op+3
 	sta <reg+2+0
 	jsr __div_8s
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @59
 	lda #255
 	jmp @60
 @59:
 	lda #0
 @60:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #252
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_187)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_187)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+6,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+6
 	sta <reg+0+0
-	lda 0+<S+3,x
+	lda 0+<F_test_op_test_int8_op+3
 	sta <reg+2+0
 	jsr __div_8s
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @61
 	lda #255
 	jmp @62
 @61:
 	lda #0
 @62:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #3
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_192)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_192)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+5
 	sta <reg+0+0
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_int8_op+1
 	sta <reg+2+0
 	jsr __div_8s
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @63
 	lda #255
 	jmp @64
 @63:
 	lda #0
 @64:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #251
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_197)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_197)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+4,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+4
 	sta <reg+0+0
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+7
 	bpl @65
 	lda #255
 	jmp @66
 @65:
 	lda #0
 @66:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+7
+	lda 0+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+7
+	sta <F_unittest_assert_equal+1
 	lda #25
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_202)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_202)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+4,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+4
 	sta <reg+0+0
 	lda #60
 	sta <reg+2+0
 	jsr __mul_8
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+3
 	bpl @67
 	lda #255
 	jmp @68
 @67:
 	lda #0
 @68:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+3
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+1
 	lda #212
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_207)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_207)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+5,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+5
 	sta <reg+0+0
-	lda 0+<S+2,x
+	lda 0+<F_test_op_test_int8_op+2
 	sta <reg+2+0
 	jsr __div_8s
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+3
 	bpl @69
 	lda #255
 	jmp @70
 @69:
 	lda #0
 @70:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+3
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+1
 	lda #3
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_212)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_212)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #255
 	sta <reg+0+0
-	lda 0+<S+5,x
+	lda 0+<F_test_op_test_int8_op+5
 	sta <reg+2+0
 	jsr __div_8s
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+3
 	bpl @71
 	lda #255
 	jmp @72
 @71:
 	lda #0
 @72:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+3
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+1
 	lda #255
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_217)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_217)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+2,x
-	and 0+<S+1,x
-	sta 0+<L+0
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+2
+	and 0+<F_test_op_test_int8_op+1
+	sta 0+<F_test_op_test_int8_op+3
 	bpl @73
 	lda #255
 	jmp @74
 @73:
 	lda #0
 @74:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+3
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+1
 	lda #2
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_222)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_222)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+0,x
-	ora 0+<S+1,x
-	sta 0+<L+0
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+0
+	ora 0+<F_test_op_test_int8_op+1
+	sta 0+<F_test_op_test_int8_op+3
 	bpl @75
 	lda #255
 	jmp @76
 @75:
 	lda #0
 @76:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+3
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+1
 	lda #255
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_227)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_227)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+2,x
-	eor 0+<S+1,x
-	sta 0+<L+0
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+2
+	eor 0+<F_test_op_test_int8_op+1
+	sta 0+<F_test_op_test_int8_op+3
 	bpl @77
 	lda #255
 	jmp @78
 @77:
 	lda #0
 @78:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+3
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_equal+1
 	lda #253
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_232)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_232)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+1
 	sec
-	sbc 0+<S+0,x
+	sbc 0+<F_test_op_test_int8_op+0
 	bvc @81
 	eor #$80
 @81:
@@ -1108,13 +1109,13 @@ _157:
 @79:
 	lda #1
 @80:
-	sta <S+7,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_236)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_236)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
 	sbc #255
 	bvc @84
@@ -1126,15 +1127,15 @@ _157:
 @82:
 	lda #1
 @83:
-	sta <S+7,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_240)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_240)
-	sta <S+9,x
-	call _unittest_assert_true, #7
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
 	lda #240
 	sec
-	sbc 0+<S+1,x
+	sbc 0+<F_test_op_test_int8_op+1
 	bvc @87
 	eor #$80
 @87:
@@ -1144,13 +1145,13 @@ _157:
 @85:
 	lda #1
 @86:
-	sta <S+7,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_244)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_244)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
 	sbc #1
 	bvc @90
@@ -1162,15 +1163,15 @@ _157:
 @88:
 	lda #1
 @89:
-	sta <S+7,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_248)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_248)
-	sta <S+9,x
-	call _unittest_assert_true, #7
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
 	lda #1
 	sec
-	sbc 0+<S+1,x
+	sbc 0+<F_test_op_test_int8_op+1
 	bvc @93
 	eor #$80
 @93:
@@ -1182,22 +1183,22 @@ _157:
 @97:
 	beq @94
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+3
 	jmp @95
 @94:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+3
 @95:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_253)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_253)
-	sta <S+9,x
-	call _unittest_assert_true, #7
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
 	lda #1
 	sec
-	sbc 0+<S+2,x
+	sbc 0+<F_test_op_test_int8_op+2
 	bvc @100
 	eor #$80
 @100:
@@ -1207,15 +1208,15 @@ _157:
 @98:
 	lda #1
 @99:
-	sta <S+7,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_257)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_257)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
-	sbc 0+<S+1,x
+	sbc 0+<F_test_op_test_int8_op+1
 	bvc @103
 	eor #$80
 @103:
@@ -1227,22 +1228,22 @@ _157:
 @107:
 	beq @104
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+3
 	jmp @105
 @104:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+3
 @105:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_262)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_262)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
-	sbc 0+<S+0,x
+	sbc 0+<F_test_op_test_int8_op+0
 	bvc @110
 	eor #$80
 @110:
@@ -1252,15 +1253,15 @@ _157:
 @108:
 	lda #1
 @109:
-	sta <S+7,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_266)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_266)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
-	sbc 0+<S+1,x
+	sbc 0+<F_test_op_test_int8_op+1
 	bvc @113
 	eor #$80
 @113:
@@ -1272,22 +1273,22 @@ _157:
 @117:
 	beq @114
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	jmp @115
 @114:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 @115:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_271)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_271)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
-	sbc 0+<S+1,x
+	sbc 0+<F_test_op_test_int8_op+1
 	bvc @120
 	eor #$80
 @120:
@@ -1299,22 +1300,22 @@ _157:
 @124:
 	beq @121
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	jmp @122
 @121:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 @122:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_276)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_276)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
-	sbc 0+<S+2,x
+	sbc 0+<F_test_op_test_int8_op+2
 	bvc @127
 	eor #$80
 @127:
@@ -1326,22 +1327,22 @@ _157:
 @131:
 	beq @128
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	jmp @129
 @128:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 @129:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_282)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_282)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+2
 	sec
-	sbc 0+<S+1,x
+	sbc 0+<F_test_op_test_int8_op+1
 	bvc @134
 	eor #$80
 @134:
@@ -1353,22 +1354,22 @@ _157:
 @138:
 	beq @135
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	jmp @136
 @135:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 @136:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_287)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_287)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
 	sec
-	sbc 0+<S+2,x
+	sbc 0+<F_test_op_test_int8_op+2
 	bvc @141
 	eor #$80
 @141:
@@ -1380,35 +1381,35 @@ _157:
 @145:
 	beq @142
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	jmp @143
 @142:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 @143:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_293)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_293)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
+	cmp 0+<F_test_op_test_int8_op+1
 	bne @146
 	lda #1
 	jmp @147
 @146:
 	lda #0
 @147:
-	sta <S+7,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_297)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_297)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+1,x
-	cmp 0+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+1
+	cmp 0+<F_test_op_test_int8_op+2
 	beq @152
 	lda #0
 	jmp @153
@@ -1417,46 +1418,46 @@ _157:
 @153:
 	beq @150
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	jmp @151
 @150:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 @151:
-	lda 0+<L+0
-	sta <S+7,x
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_302)
-	sta <S+8,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_302)
-	sta <S+9,x
-	call _unittest_assert_true, #7
-	lda 0+<S+6,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8_op+6
 	asl a
 	asl a
 	asl a
 	asl a
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	bpl @154
 	lda #255
 	jmp @155
 @154:
 	lda #0
 @155:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+0
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_equal+1
 	lda #96
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_307)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_307)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+6,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+6
 	bmi @156
 	lsr a
 	lsr a
@@ -1466,50 +1467,50 @@ _157:
 	lsr a
 	ora #192
 @157:
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	bpl @158
 	lda #255
 	jmp @159
 @158:
 	lda #0
 @159:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+0
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_equal+1
 	lda #253
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_312)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_312)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
-	lda 0+<S+6,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8_op+6
 	and #7
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8_op+0
 	bpl @160
 	lda #255
 	jmp @161
 @160:
 	lda #0
 @161:
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+7,x
-	lda 1+<L+0
-	sta <S+8,x
+	sta 1+<F_test_op_test_int8_op+0
+	lda 0+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8_op+0
+	sta <F_unittest_assert_equal+1
 	lda #6
-	sta <S+9,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_317)
-	sta <S+11,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_317)
-	sta <S+12,x
-	call _unittest_assert_equal, #7
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	rts
 _162:
 		.byte 45,49,48,47,52,0
@@ -1585,299 +1586,299 @@ _317:
 .segment "test_op"
 .proc _test_op_test_int16_op
 	lda #1
-	sta 0+<S+0,x
+	sta 0+<F_test_op_test_int16_op+0
 	lda #0
-	sta 1+<S+0,x
+	sta 1+<F_test_op_test_int16_op+0
 	lda #2
-	sta 0+<S+2,x
+	sta 0+<F_test_op_test_int16_op+2
 	lda #0
-	sta 1+<S+2,x
+	sta 1+<F_test_op_test_int16_op+2
 	lda #3
-	sta 0+<S+4,x
+	sta 0+<F_test_op_test_int16_op+4
 	lda #0
-	sta 1+<S+4,x
+	sta 1+<F_test_op_test_int16_op+4
 	lda #10
-	sta 0+<S+6,x
+	sta 0+<F_test_op_test_int16_op+6
 	lda #0
-	sta 1+<S+6,x
+	sta 1+<F_test_op_test_int16_op+6
 	lda #16
-	sta 0+<S+8,x
+	sta 0+<F_test_op_test_int16_op+8
 	lda #39
-	sta 1+<S+8,x
-	lda 0+<S+0,x
-	sta <S+10,x
-	lda 1+<S+0,x
-	sta <S+11,x
-	lda 0+<S+0,x
-	sta <S+12,x
-	lda 1+<S+0,x
-	sta <S+13,x
+	sta 1+<F_test_op_test_int16_op+8
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+1
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+2
+	lda 1+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_320)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_320)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
-	lda 0+<S+8,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int16_op+8
 	sta <reg+0+0
 	lda #10
 	sta <reg+2+0
-	lda 1+<S+8,x
+	lda 1+<F_test_op_test_int16_op+8
 	sta <reg+0+1
 	lda #0
 	sta <reg+2+1
 	jsr __div_16
 	lda <reg+4+0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+10
 	lda <reg+4+1
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+10,x
-	lda 1+<L+0
-	sta <S+11,x
+	sta 1+<F_test_op_test_int16_op+10
+	lda 0+<F_test_op_test_int16_op+10
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+10
+	sta <F_unittest_assert_equal+1
 	lda #232
-	sta <S+12,x
+	sta <F_unittest_assert_equal+2
 	lda #3
-	sta <S+13,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_324)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_324)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
-	lda 0+<S+4,x
-	and 0+<S+2,x
-	sta 0+<L+0
-	lda 1+<S+4,x
-	and 1+<S+2,x
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+10,x
-	lda 1+<L+0
-	sta <S+11,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int16_op+4
+	and 0+<F_test_op_test_int16_op+2
+	sta 0+<F_test_op_test_int16_op+8
+	lda 1+<F_test_op_test_int16_op+4
+	and 1+<F_test_op_test_int16_op+2
+	sta 1+<F_test_op_test_int16_op+8
+	lda 0+<F_test_op_test_int16_op+8
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+8
+	sta <F_unittest_assert_equal+1
 	lda #2
-	sta <S+12,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+13,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_328)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_328)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
-	lda 0+<S+0,x
-	ora 0+<S+2,x
-	sta 0+<L+0
-	lda 1+<S+0,x
-	ora 1+<S+2,x
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+10,x
-	lda 1+<L+0
-	sta <S+11,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int16_op+0
+	ora 0+<F_test_op_test_int16_op+2
+	sta 0+<F_test_op_test_int16_op+8
+	lda 1+<F_test_op_test_int16_op+0
+	ora 1+<F_test_op_test_int16_op+2
+	sta 1+<F_test_op_test_int16_op+8
+	lda 0+<F_test_op_test_int16_op+8
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+8
+	sta <F_unittest_assert_equal+1
 	lda #3
-	sta <S+12,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+13,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_332)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_332)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
-	lda 0+<S+4,x
-	eor 0+<S+2,x
-	sta 0+<L+0
-	lda 1+<S+4,x
-	eor 1+<S+2,x
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+10,x
-	lda 1+<L+0
-	sta <S+11,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int16_op+4
+	eor 0+<F_test_op_test_int16_op+2
+	sta 0+<F_test_op_test_int16_op+8
+	lda 1+<F_test_op_test_int16_op+4
+	eor 1+<F_test_op_test_int16_op+2
+	sta 1+<F_test_op_test_int16_op+8
+	lda 0+<F_test_op_test_int16_op+8
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+8
+	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <S+12,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+13,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_336)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_336)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
-	lda 0+<S+0,x
-	cmp 0+<S+2,x
-	lda 1+<S+0,x
-	sbc 1+<S+2,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int16_op+0
+	cmp 0+<F_test_op_test_int16_op+2
+	lda 1+<F_test_op_test_int16_op+0
+	sbc 1+<F_test_op_test_int16_op+2
 	lda #0
 	rol a
 	eor #1
-	sta <S+10,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_340)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_340)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+2,x
-	cmp 0+<S+2,x
-	lda 1+<S+2,x
-	sbc 1+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+2
+	cmp 0+<F_test_op_test_int16_op+2
+	lda 1+<F_test_op_test_int16_op+2
+	sbc 1+<F_test_op_test_int16_op+2
 	lda #0
 	rol a
 	eor #1
 	beq @168
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+8
 	jmp @169
 @168:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+8
 @169:
-	lda 0+<L+0
-	sta <S+10,x
+	lda 0+<F_test_op_test_int16_op+8
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_345)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_345)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+0,x
-	cmp 0+<S+2,x
-	lda 1+<S+0,x
-	sbc 1+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+0
+	cmp 0+<F_test_op_test_int16_op+2
+	lda 1+<F_test_op_test_int16_op+0
+	sbc 1+<F_test_op_test_int16_op+2
 	lda #0
 	rol a
 	eor #1
-	sta <S+10,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_349)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_349)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+2,x
-	cmp 0+<S+2,x
-	lda 1+<S+2,x
-	sbc 1+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+2
+	cmp 0+<F_test_op_test_int16_op+2
+	lda 1+<F_test_op_test_int16_op+2
+	sbc 1+<F_test_op_test_int16_op+2
 	lda #0
 	rol a
 	eor #1
 	beq @176
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 	jmp @177
 @176:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 @177:
-	lda 0+<L+0
-	sta <S+10,x
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_354)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_354)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+2,x
-	cmp 0+<S+2,x
-	lda 1+<S+2,x
-	sbc 1+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+2
+	cmp 0+<F_test_op_test_int16_op+2
+	lda 1+<F_test_op_test_int16_op+2
+	sbc 1+<F_test_op_test_int16_op+2
 	lda #0
 	rol a
 	eor #1
 	beq @181
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 	jmp @182
 @181:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 @182:
-	lda 0+<L+0
-	sta <S+10,x
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_359)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_359)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+2,x
-	cmp 0+<S+4,x
-	lda 1+<S+2,x
-	sbc 1+<S+4,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+2
+	cmp 0+<F_test_op_test_int16_op+4
+	lda 1+<F_test_op_test_int16_op+2
+	sbc 1+<F_test_op_test_int16_op+4
 	lda #0
 	rol a
 	beq @186
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 	jmp @187
 @186:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 @187:
-	lda 0+<L+0
-	sta <S+10,x
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_365)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_365)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+4,x
-	cmp 0+<S+2,x
-	lda 1+<S+4,x
-	sbc 1+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+4
+	cmp 0+<F_test_op_test_int16_op+2
+	lda 1+<F_test_op_test_int16_op+4
+	sbc 1+<F_test_op_test_int16_op+2
 	lda #0
 	rol a
 	eor #1
 	beq @191
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 	jmp @192
 @191:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 @192:
-	lda 0+<L+0
-	sta <S+10,x
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_370)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_370)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+2,x
-	cmp 0+<S+4,x
-	lda 1+<S+2,x
-	sbc 1+<S+4,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+2
+	cmp 0+<F_test_op_test_int16_op+4
+	lda 1+<F_test_op_test_int16_op+2
+	sbc 1+<F_test_op_test_int16_op+4
 	lda #0
 	rol a
 	beq @196
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 	jmp @197
 @196:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 @197:
-	lda 0+<L+0
-	sta <S+10,x
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_376)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_376)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+2,x
-	cmp 0+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+2
+	cmp 0+<F_test_op_test_int16_op+2
 	bne @198
-	lda 1+<S+2,x
-	cmp 1+<S+2,x
+	lda 1+<F_test_op_test_int16_op+2
+	cmp 1+<F_test_op_test_int16_op+2
 	bne @198
 	lda #1
 	jmp @199
 @198:
 	lda #0
 @199:
-	sta <S+10,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_380)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_380)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+2,x
-	cmp 0+<S+4,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+2
+	cmp 0+<F_test_op_test_int16_op+4
 	bne @200
-	lda 1+<S+2,x
-	cmp 1+<S+4,x
+	lda 1+<F_test_op_test_int16_op+2
+	cmp 1+<F_test_op_test_int16_op+4
 @200:
 	beq @204
 	lda #0
@@ -1887,84 +1888,84 @@ _317:
 @205:
 	beq @202
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 	jmp @203
 @202:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int16_op+0
 @203:
-	lda 0+<L+0
-	sta <S+10,x
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_385)
-	sta <S+11,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_385)
-	sta <S+12,x
-	call _unittest_assert_true, #10
-	lda 0+<S+6,x
-	sta 0+<L+0
-	lda 1+<S+6,x
-	sta 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	lda 0+<L+0
-	sta <S+10,x
-	lda 1+<L+0
-	sta <S+11,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int16_op+6
+	sta 0+<F_test_op_test_int16_op+0
+	lda 1+<F_test_op_test_int16_op+6
+	sta 1+<F_test_op_test_int16_op+0
+	asl 0+<F_test_op_test_int16_op+0
+	rol 1+<F_test_op_test_int16_op+0
+	asl 0+<F_test_op_test_int16_op+0
+	rol 1+<F_test_op_test_int16_op+0
+	asl 0+<F_test_op_test_int16_op+0
+	rol 1+<F_test_op_test_int16_op+0
+	asl 0+<F_test_op_test_int16_op+0
+	rol 1+<F_test_op_test_int16_op+0
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+1
 	lda #160
-	sta <S+12,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+13,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_389)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_389)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
-	lda 0+<S+6,x
-	sta 0+<L+0
-	lda 1+<S+6,x
-	sta 1+<L+0
-	lsr 1+<L+0
-	ror 0+<L+0
-	lsr 1+<L+0
-	ror 0+<L+0
-	lda 0+<L+0
-	sta <S+10,x
-	lda 1+<L+0
-	sta <S+11,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int16_op+6
+	sta 0+<F_test_op_test_int16_op+0
+	lda 1+<F_test_op_test_int16_op+6
+	sta 1+<F_test_op_test_int16_op+0
+	lsr 1+<F_test_op_test_int16_op+0
+	ror 0+<F_test_op_test_int16_op+0
+	lsr 1+<F_test_op_test_int16_op+0
+	ror 0+<F_test_op_test_int16_op+0
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+1
 	lda #2
-	sta <S+12,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+13,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_393)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_393)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
-	lda 0+<S+6,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int16_op+6
 	and #7
-	sta 0+<L+0
-	lda 1+<S+6,x
+	sta 0+<F_test_op_test_int16_op+0
+	lda 1+<F_test_op_test_int16_op+6
 	and #0
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+10,x
-	lda 1+<L+0
-	sta <S+11,x
+	sta 1+<F_test_op_test_int16_op+0
+	lda 0+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int16_op+0
+	sta <F_unittest_assert_equal+1
 	lda #2
-	sta <S+12,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+13,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_397)
-	sta <S+14,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_397)
-	sta <S+15,x
-	call _unittest_assert_equal, #10
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	rts
 _320:
 		.byte 110,117,109,0
@@ -2010,225 +2011,225 @@ _397:
 .segment "test_op"
 .proc _test_op_test_int8x16_op
 	lda #1
-	sta 0+<S+0,x
+	sta 0+<F_test_op_test_int8x16_op+0
 	lda #2
-	sta 0+<S+1,x
+	sta 0+<F_test_op_test_int8x16_op+1
 	lda #3
-	sta 0+<S+2,x
+	sta 0+<F_test_op_test_int8x16_op+2
 	lda #1
-	sta 0+<S+3,x
+	sta 0+<F_test_op_test_int8x16_op+3
 	lda #0
-	sta 1+<S+3,x
+	sta 1+<F_test_op_test_int8x16_op+3
 	lda #2
-	sta 0+<S+5,x
+	sta 0+<F_test_op_test_int8x16_op+5
 	lda #0
-	sta 1+<S+5,x
+	sta 1+<F_test_op_test_int8x16_op+5
 	lda #3
-	sta 0+<S+7,x
+	sta 0+<F_test_op_test_int8x16_op+7
 	lda #0
-	sta 1+<S+7,x
-	lda 0+<S+3,x
-	sta <S+9,x
-	lda 1+<S+3,x
-	sta <S+10,x
-	lda 0+<S+0,x
-	sta <S+11,x
+	sta 1+<F_test_op_test_int8x16_op+7
+	lda 0+<F_test_op_test_int8x16_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_int8x16_op+3
+	sta <F_unittest_assert_equal+1
+	lda 0+<F_test_op_test_int8x16_op+0
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+12,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_400)
-	sta <S+13,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_400)
-	sta <S+14,x
-	call _unittest_assert_equal, #9
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #8
-	sta <S+9,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+10,x
+	sta <F_unittest_assert_equal+1
 	lda #8
-	sta <S+11,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+12,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_403)
-	sta <S+13,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_403)
-	sta <S+14,x
-	call _unittest_assert_equal, #9
-	lda 0+<S+3,x
-	cmp 0+<S+1,x
-	lda 1+<S+3,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_int8x16_op+3
+	cmp 0+<F_test_op_test_int8x16_op+1
+	lda 1+<F_test_op_test_int8x16_op+3
 	sbc #0
 	lda #0
 	rol a
 	eor #1
-	sta <S+9,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_407)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_407)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+5,x
-	cmp 0+<S+1,x
-	lda 1+<S+5,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+5
+	cmp 0+<F_test_op_test_int8x16_op+1
+	lda 1+<F_test_op_test_int8x16_op+5
 	sbc #0
 	lda #0
 	rol a
 	eor #1
 	beq @212
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+3
 	jmp @213
 @212:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+3
 @213:
-	lda 0+<L+0
-	sta <S+9,x
+	lda 0+<F_test_op_test_int8x16_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_412)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_412)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+0,x
-	cmp 0+<S+5,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+0
+	cmp 0+<F_test_op_test_int8x16_op+5
 	lda #0
-	sbc 1+<S+5,x
+	sbc 1+<F_test_op_test_int8x16_op+5
 	lda #0
 	rol a
 	eor #1
-	sta <S+9,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_416)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_416)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+1,x
-	cmp 0+<S+5,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+1
+	cmp 0+<F_test_op_test_int8x16_op+5
 	lda #0
-	sbc 1+<S+5,x
+	sbc 1+<F_test_op_test_int8x16_op+5
 	lda #0
 	rol a
 	eor #1
 	beq @220
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 	jmp @221
 @220:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 @221:
-	lda 0+<L+0
-	sta <S+9,x
+	lda 0+<F_test_op_test_int8x16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_421)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_421)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+1,x
-	cmp 0+<S+5,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+1
+	cmp 0+<F_test_op_test_int8x16_op+5
 	lda #0
-	sbc 1+<S+5,x
+	sbc 1+<F_test_op_test_int8x16_op+5
 	lda #0
 	rol a
 	eor #1
 	beq @225
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 	jmp @226
 @225:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 @226:
-	lda 0+<L+0
-	sta <S+9,x
+	lda 0+<F_test_op_test_int8x16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_426)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_426)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+1,x
-	cmp 0+<S+7,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+1
+	cmp 0+<F_test_op_test_int8x16_op+7
 	lda #0
-	sbc 1+<S+7,x
+	sbc 1+<F_test_op_test_int8x16_op+7
 	lda #0
 	rol a
 	beq @230
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 	jmp @231
 @230:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 @231:
-	lda 0+<L+0
-	sta <S+9,x
+	lda 0+<F_test_op_test_int8x16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_432)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_432)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+7,x
-	cmp 0+<S+1,x
-	lda 1+<S+7,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+7
+	cmp 0+<F_test_op_test_int8x16_op+1
+	lda 1+<F_test_op_test_int8x16_op+7
 	sbc #0
 	lda #0
 	rol a
 	eor #1
 	beq @235
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 	jmp @236
 @235:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 @236:
-	lda 0+<L+0
-	sta <S+9,x
+	lda 0+<F_test_op_test_int8x16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_437)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_437)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+5,x
-	cmp 0+<S+2,x
-	lda 1+<S+5,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+5
+	cmp 0+<F_test_op_test_int8x16_op+2
+	lda 1+<F_test_op_test_int8x16_op+5
 	sbc #0
 	lda #0
 	rol a
 	beq @240
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 	jmp @241
 @240:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 @241:
-	lda 0+<L+0
-	sta <S+9,x
+	lda 0+<F_test_op_test_int8x16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_443)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_443)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+5,x
-	cmp 0+<S+1,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+5
+	cmp 0+<F_test_op_test_int8x16_op+1
 	bne @242
-	lda 1+<S+5,x
+	lda 1+<F_test_op_test_int8x16_op+5
 	bne @242
 	lda #1
 	jmp @243
 @242:
 	lda #0
 @243:
-	sta <S+9,x
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_447)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_447)
-	sta <S+11,x
-	call _unittest_assert_true, #9
-	lda 0+<S+5,x
-	cmp 0+<S+2,x
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
+	lda 0+<F_test_op_test_int8x16_op+5
+	cmp 0+<F_test_op_test_int8x16_op+2
 	bne @244
-	lda 1+<S+5,x
+	lda 1+<F_test_op_test_int8x16_op+5
 	cmp #0
 @244:
 	beq @248
@@ -2239,19 +2240,19 @@ _397:
 @249:
 	beq @246
 	lda #0
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 	jmp @247
 @246:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_int8x16_op+0
 @247:
-	lda 0+<L+0
-	sta <S+9,x
+	lda 0+<F_test_op_test_int8x16_op+0
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_452)
-	sta <S+10,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_452)
-	sta <S+11,x
-	call _unittest_assert_true, #9
+	sta <F_unittest_assert_true+2
+	jsr _unittest_assert_true
 	rts
 _400:
 		.byte 110,117,109,0
@@ -2285,220 +2286,188 @@ _452:
 .segment "test_op"
 .proc _test_op_test_logical_op
 	lda #1
-	sta 0+<S+0,x
+	sta 0+<F_test_op_test_logical_op+0
 	lda #0
-	sta 0+<S+1,x
+	sta 0+<F_test_op_test_logical_op+1
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+0,x
+	sta 0+<F_test_op_test_logical_op+2
+	lda 0+<F_test_op_test_logical_op+0
 	beq @end_455
 @250:
-	lda 0+<S+0,x
+	lda 0+<F_test_op_test_logical_op+0
 	beq @end_455
 @251:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+2
 @end_455:
-	lda 0+<L+0
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+2
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_457)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_457)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+0,x
+	sta 0+<F_test_op_test_logical_op+2
+	lda 0+<F_test_op_test_logical_op+0
 	beq @end_460
 @252:
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_logical_op+1
 	beq @end_460
 @253:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+2
 @end_460:
-	lda 0+<L+0
+	lda 0+<F_test_op_test_logical_op+2
 	beq @254
 	lda #0
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+3
 	jmp @255
 @254:
 	lda #1
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+3
 @255:
-	lda 0+<L+1
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_463)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_463)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+1,x
+	sta 0+<F_test_op_test_logical_op+2
+	lda 0+<F_test_op_test_logical_op+1
 	beq @end_466
 @256:
-	lda 0+<S+0,x
+	lda 0+<F_test_op_test_logical_op+0
 	beq @end_466
 @257:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+2
 @end_466:
-	lda 0+<L+0
+	lda 0+<F_test_op_test_logical_op+2
 	beq @258
 	lda #0
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+3
 	jmp @259
 @258:
 	lda #1
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+3
 @259:
-	lda 0+<L+1
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_469)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_469)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+1,x
+	sta 0+<F_test_op_test_logical_op+2
+	lda 0+<F_test_op_test_logical_op+1
 	beq @end_472
 @260:
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_logical_op+1
 	beq @end_472
 @261:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+2
 @end_472:
-	lda 0+<L+0
+	lda 0+<F_test_op_test_logical_op+2
 	beq @262
 	lda #0
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+3
 	jmp @263
 @262:
 	lda #1
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+3
 @263:
-	lda 0+<L+1
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+3
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_475)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_475)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+0,x
+	sta 0+<F_test_op_test_logical_op+2
+	lda 0+<F_test_op_test_logical_op+0
 	bne @skip_480
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_logical_op+1
 	beq @end_478
 @264:
 @skip_480:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+2
 @end_478:
-	lda 0+<L+0
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+2
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_481)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_481)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+0,x
+	sta 0+<F_test_op_test_logical_op+2
+	lda 0+<F_test_op_test_logical_op+0
 	bne @skip_486
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_logical_op+1
 	beq @end_484
 @265:
 @skip_486:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+2
 @end_484:
-	lda 0+<L+0
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+2
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_487)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_487)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+1,x
+	sta 0+<F_test_op_test_logical_op+2
+	lda 0+<F_test_op_test_logical_op+1
 	bne @skip_492
-	lda 0+<S+0,x
+	lda 0+<F_test_op_test_logical_op+0
 	beq @end_490
 @266:
 @skip_492:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+2
 @end_490:
-	lda 0+<L+0
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+2
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_493)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_493)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	lda #0
-	sta 0+<L+0
-	lda 0+<S+1,x
+	sta 0+<F_test_op_test_logical_op+0
+	lda 0+<F_test_op_test_logical_op+1
 	bne @skip_498
 	beq @end_496
 @267:
 @skip_498:
 	lda #1
-	sta 0+<L+0
+	sta 0+<F_test_op_test_logical_op+0
 @end_496:
-	lda 0+<L+0
+	lda 0+<F_test_op_test_logical_op+0
 	beq @268
 	lda #0
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+1
 	jmp @269
 @268:
 	lda #1
-	sta 0+<L+1
+	sta 0+<F_test_op_test_logical_op+1
 @269:
-	lda 0+<L+1
-	sta <S+2,x
+	lda 0+<F_test_op_test_logical_op+1
+	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_500)
-	sta <S+3,x
+	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_500)
-	sta <S+4,x
-	inx
-	inx
+	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	dex
-	dex
 	rts
 _457:
 		.byte 84,38,38,84,0
@@ -2524,48 +2493,48 @@ _500:
 .segment "test_op"
 .proc _test_op_test_shift_op
 	lda #0
-	sta 0+<S+0,x
+	sta 0+<F_test_op_test_shift_op+0
 	lda #1
-	sta 0+<S+1,x
+	sta 0+<F_test_op_test_shift_op+1
 	lda #2
-	sta 0+<S+2,x
+	sta 0+<F_test_op_test_shift_op+2
 	lda #7
-	sta 0+<S+3,x
+	sta 0+<F_test_op_test_shift_op+3
 	lda #20
-	sta 0+<S+4,x
+	sta 0+<F_test_op_test_shift_op+4
 	lda #4
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #4
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_503)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_503)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+1,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+1
 	clc
 	rol a
 	clc
 	rol a
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #4
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_507)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_507)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+0,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+0
 	tay
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_shift_op+1
 @270:
 	cpy #0
 	beq @271
@@ -2574,23 +2543,23 @@ _500:
 	dey
 	jmp @270
 @271:
-	sta 0+<L+0
-	lda 0+<L+0
-	sta <S+5,x
+	sta 0+<F_test_op_test_shift_op+5
+	lda 0+<F_test_op_test_shift_op+5
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_511)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_511)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+2,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+2
 	tay
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_shift_op+1
 @272:
 	cpy #0
 	beq @273
@@ -2599,23 +2568,23 @@ _500:
 	dey
 	jmp @272
 @273:
-	sta 0+<L+0
-	lda 0+<L+0
-	sta <S+5,x
+	sta 0+<F_test_op_test_shift_op+5
+	lda 0+<F_test_op_test_shift_op+5
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #4
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_515)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_515)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+3,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+3
 	tay
-	lda 0+<S+1,x
+	lda 0+<F_test_op_test_shift_op+1
 @274:
 	cpy #0
 	beq @275
@@ -2624,53 +2593,53 @@ _500:
 	dey
 	jmp @274
 @275:
-	sta 0+<L+0
-	lda 0+<L+0
-	sta <S+5,x
+	sta 0+<F_test_op_test_shift_op+5
+	lda 0+<F_test_op_test_shift_op+5
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #128
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_519)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_519)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #5
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #5
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_522)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_522)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+4,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+4
 	clc
 	ror a
 	clc
 	ror a
-	sta <S+5,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #5
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_526)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_526)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+0,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+0
 	tay
-	lda 0+<S+4,x
+	lda 0+<F_test_op_test_shift_op+4
 @276:
 	cpy #0
 	beq @277
@@ -2679,23 +2648,23 @@ _500:
 	dey
 	jmp @276
 @277:
-	sta 0+<L+0
-	lda 0+<L+0
-	sta <S+5,x
+	sta 0+<F_test_op_test_shift_op+1
+	lda 0+<F_test_op_test_shift_op+1
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #20
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_530)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_530)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+2,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+2
 	tay
-	lda 0+<S+4,x
+	lda 0+<F_test_op_test_shift_op+4
 @278:
 	cpy #0
 	beq @279
@@ -2704,21 +2673,21 @@ _500:
 	dey
 	jmp @278
 @279:
-	sta 0+<L+0
-	lda 0+<L+0
-	sta <S+5,x
+	sta 0+<F_test_op_test_shift_op+0
+	lda 0+<F_test_op_test_shift_op+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #5
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_534)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_534)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
-	lda 0+<S+3,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op+3
 	tay
 	lda #255
 @280:
@@ -2729,20 +2698,20 @@ _500:
 	dey
 	jmp @280
 @281:
-	sta 0+<L+0
-	lda 0+<L+0
-	sta <S+5,x
+	sta 0+<F_test_op_test_shift_op+0
+	lda 0+<F_test_op_test_shift_op+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+6,x
+	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <S+7,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_538)
-	sta <S+9,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_538)
-	sta <S+10,x
-	call _unittest_assert_equal, #5
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	rts
 _503:
 		.byte 60,60,0
@@ -2772,116 +2741,116 @@ _538:
 .segment "test_op"
 .proc _test_op_test_shift_op16
 	lda #1
-	sta 0+<S+0,x
+	sta 0+<F_test_op_test_shift_op16+0
 	lda #0
-	sta 1+<S+0,x
+	sta 1+<F_test_op_test_shift_op16+0
 	lda #2
-	sta 0+<S+2,x
+	sta 0+<F_test_op_test_shift_op16+2
 	lda #0
-	sta 1+<S+2,x
+	sta 1+<F_test_op_test_shift_op16+2
 	lda #20
-	sta 0+<S+4,x
+	sta 0+<F_test_op_test_shift_op16+4
 	lda #0
-	sta 1+<S+4,x
+	sta 1+<F_test_op_test_shift_op16+4
 	lda #4
-	sta <S+6,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+7,x
+	sta <F_unittest_assert_equal+1
 	lda #4
-	sta <S+8,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+9,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_541)
-	sta <S+10,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_541)
-	sta <S+11,x
-	call _unittest_assert_equal, #6
-	lda 0+<S+0,x
-	sta 0+<L+0
-	lda 1+<S+0,x
-	sta 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	lda 0+<L+0
-	sta <S+6,x
-	lda 1+<L+0
-	sta <S+7,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op16+0
+	sta 0+<F_test_op_test_shift_op16+6
+	lda 1+<F_test_op_test_shift_op16+0
+	sta 1+<F_test_op_test_shift_op16+6
+	asl 0+<F_test_op_test_shift_op16+6
+	rol 1+<F_test_op_test_shift_op16+6
+	asl 0+<F_test_op_test_shift_op16+6
+	rol 1+<F_test_op_test_shift_op16+6
+	lda 0+<F_test_op_test_shift_op16+6
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_shift_op16+6
+	sta <F_unittest_assert_equal+1
 	lda #4
-	sta <S+8,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+9,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_545)
-	sta <S+10,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_545)
-	sta <S+11,x
-	call _unittest_assert_equal, #6
-	lda 0+<S+2,x
-	sta 0+<L+0
-	lda 1+<S+2,x
-	sta 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	asl 0+<L+0
-	rol 1+<L+0
-	lda 0+<L+0
-	sta <S+6,x
-	lda 1+<L+0
-	sta <S+7,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op16+2
+	sta 0+<F_test_op_test_shift_op16+0
+	lda 1+<F_test_op_test_shift_op16+2
+	sta 1+<F_test_op_test_shift_op16+0
+	asl 0+<F_test_op_test_shift_op16+0
+	rol 1+<F_test_op_test_shift_op16+0
+	asl 0+<F_test_op_test_shift_op16+0
+	rol 1+<F_test_op_test_shift_op16+0
+	asl 0+<F_test_op_test_shift_op16+0
+	rol 1+<F_test_op_test_shift_op16+0
+	asl 0+<F_test_op_test_shift_op16+0
+	rol 1+<F_test_op_test_shift_op16+0
+	asl 0+<F_test_op_test_shift_op16+0
+	rol 1+<F_test_op_test_shift_op16+0
+	asl 0+<F_test_op_test_shift_op16+0
+	rol 1+<F_test_op_test_shift_op16+0
+	asl 0+<F_test_op_test_shift_op16+0
+	rol 1+<F_test_op_test_shift_op16+0
+	lda 0+<F_test_op_test_shift_op16+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_shift_op16+0
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+8,x
+	sta <F_unittest_assert_equal+2
 	lda #1
-	sta <S+9,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_549)
-	sta <S+10,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_549)
-	sta <S+11,x
-	call _unittest_assert_equal, #6
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #5
-	sta <S+6,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+7,x
+	sta <F_unittest_assert_equal+1
 	lda #5
-	sta <S+8,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+9,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_552)
-	sta <S+10,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_552)
-	sta <S+11,x
-	call _unittest_assert_equal, #6
-	lda 0+<S+4,x
-	sta 0+<L+0
-	lda 1+<S+4,x
-	sta 1+<L+0
-	lsr 1+<L+0
-	ror 0+<L+0
-	lsr 1+<L+0
-	ror 0+<L+0
-	lda 0+<L+0
-	sta <S+6,x
-	lda 1+<L+0
-	sta <S+7,x
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda 0+<F_test_op_test_shift_op16+4
+	sta 0+<F_test_op_test_shift_op16+0
+	lda 1+<F_test_op_test_shift_op16+4
+	sta 1+<F_test_op_test_shift_op16+0
+	lsr 1+<F_test_op_test_shift_op16+0
+	ror 0+<F_test_op_test_shift_op16+0
+	lsr 1+<F_test_op_test_shift_op16+0
+	ror 0+<F_test_op_test_shift_op16+0
+	lda 0+<F_test_op_test_shift_op16+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_shift_op16+0
+	sta <F_unittest_assert_equal+1
 	lda #5
-	sta <S+8,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+9,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_556)
-	sta <S+10,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_556)
-	sta <S+11,x
-	call _unittest_assert_equal, #6
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	rts
 _541:
 		.byte 60,60,0
@@ -2907,205 +2876,189 @@ _test_op_gw: .res 2
 .segment "test_op"
 .proc _test_op_test_pointer_op
 	lda #.LOBYTE(_test_op_gi)
-	sta 0+<L+0
+	sta 0+<F_test_op_test_pointer_op+3
 	lda #.HIBYTE(_test_op_gi)
-	sta 1+<L+0
-	lda 0+<L+0
-	sta 0+<S+0,x
-	lda 1+<L+0
-	sta 1+<S+0,x
+	sta 1+<F_test_op_test_pointer_op+3
+	lda 0+<F_test_op_test_pointer_op+3
+	sta 0+<F_test_op_test_pointer_op+5
+	lda 1+<F_test_op_test_pointer_op+3
+	sta 1+<F_test_op_test_pointer_op+5
 	lda #99
 	sta 0+_test_op_gi
-	lda (S+0,x)
-	sta <S+11,x
+	ldy #0
+	lda (F_test_op_test_pointer_op+5),y
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+12,x
+	sta <F_unittest_assert_equal+1
 	lda #99
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_561)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_561)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #98
-	sta (S+0,x)
+	ldy #0
+	sta (F_test_op_test_pointer_op+5),y
 	lda 0+_test_op_gi
-	sta <S+11,x
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+12,x
+	sta <F_unittest_assert_equal+1
 	lda #98
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_564)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_564)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #.LOBYTE(_test_op_gw)
-	sta 0+<L+0
+	sta 0+<F_test_op_test_pointer_op+3
 	lda #.HIBYTE(_test_op_gw)
-	sta 1+<L+0
-	lda 0+<L+0
-	sta 0+<S+2,x
-	lda 1+<L+0
-	sta 1+<S+2,x
+	sta 1+<F_test_op_test_pointer_op+3
+	lda 0+<F_test_op_test_pointer_op+3
+	sta 0+<F_test_op_test_pointer_op+5
+	lda 1+<F_test_op_test_pointer_op+3
+	sta 1+<F_test_op_test_pointer_op+5
 	lda #15
 	sta 0+_test_op_gw
 	lda #39
 	sta 1+_test_op_gw
-	lda 0+<S+2,x
-	sta <reg+0
-	lda 1+<S+2,x
-	sta <reg+1
 	ldy #0
-	lda (reg),y
-	sta 0+<L+0
+	lda (F_test_op_test_pointer_op+5),y
+	sta 0+<F_test_op_test_pointer_op+3
 	ldy #1
-	lda (reg),y
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+11,x
-	lda 1+<L+0
-	sta <S+12,x
+	lda (F_test_op_test_pointer_op+5),y
+	sta 1+<F_test_op_test_pointer_op+3
+	lda 0+<F_test_op_test_pointer_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_pointer_op+3
+	sta <F_unittest_assert_equal+1
 	lda #15
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #39
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_569)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_569)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
-	lda 0+<S+2,x
-	sta <reg+0
-	lda 1+<S+2,x
-	sta <reg+1
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #14
 	ldy #0
-	sta (reg),y
+	sta (F_test_op_test_pointer_op+5),y
 	lda #39
 	ldy #1
-	sta (reg),y
+	sta (F_test_op_test_pointer_op+5),y
 	lda 0+_test_op_gw
-	sta <S+11,x
+	sta <F_unittest_assert_equal+0
 	lda 1+_test_op_gw
-	sta <S+12,x
+	sta <F_unittest_assert_equal+1
 	lda #14
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #39
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_572)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_572)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #99
-	sta 0+<S+4,x
-	txa
-	clc
-	adc #.LOBYTE(S+4)
-	sta 0+<L+0
+	sta 0+<F_test_op_test_pointer_op+0
+	lda #.LOBYTE(F_test_op_test_pointer_op+0)
+	sta 0+<F_test_op_test_pointer_op+3
+	lda #.HIBYTE(F_test_op_test_pointer_op+0)
+	sta 1+<F_test_op_test_pointer_op+3
+	lda 0+<F_test_op_test_pointer_op+3
+	sta 0+<F_test_op_test_pointer_op+5
+	lda 1+<F_test_op_test_pointer_op+3
+	sta 1+<F_test_op_test_pointer_op+5
+	ldy #0
+	lda (F_test_op_test_pointer_op+5),y
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta 1+<L+0
-	lda 0+<L+0
-	sta 0+<S+5,x
-	lda 1+<L+0
-	sta 1+<S+5,x
-	lda (S+5,x)
-	sta <S+11,x
-	lda #0
-	sta <S+12,x
+	sta <F_unittest_assert_equal+1
 	lda #99
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_577)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_577)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #98
-	sta 0+<S+4,x
-	lda (S+5,x)
-	sta <S+11,x
+	sta 0+<F_test_op_test_pointer_op+0
+	ldy #0
+	lda (F_test_op_test_pointer_op+5),y
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+12,x
+	sta <F_unittest_assert_equal+1
 	lda #98
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_581)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_581)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #15
-	sta 0+<S+7,x
+	sta 0+<F_test_op_test_pointer_op+1
 	lda #39
-	sta 1+<S+7,x
-	txa
-	clc
-	adc #.LOBYTE(S+7)
-	sta 0+<L+0
-	lda #0
-	sta 1+<L+0
-	lda 0+<L+0
-	sta 0+<S+9,x
-	lda 1+<L+0
-	sta 1+<S+9,x
-	lda 0+<S+9,x
-	sta <reg+0
-	lda 1+<S+9,x
-	sta <reg+1
+	sta 1+<F_test_op_test_pointer_op+1
+	lda #.LOBYTE(F_test_op_test_pointer_op+1)
+	sta 0+<F_test_op_test_pointer_op+3
+	lda #.HIBYTE(F_test_op_test_pointer_op+1)
+	sta 1+<F_test_op_test_pointer_op+3
+	lda 0+<F_test_op_test_pointer_op+3
+	sta 0+<F_test_op_test_pointer_op+5
+	lda 1+<F_test_op_test_pointer_op+3
+	sta 1+<F_test_op_test_pointer_op+5
 	ldy #0
-	lda (reg),y
-	sta 0+<L+0
+	lda (F_test_op_test_pointer_op+5),y
+	sta 0+<F_test_op_test_pointer_op+3
 	ldy #1
-	lda (reg),y
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+11,x
-	lda 1+<L+0
-	sta <S+12,x
+	lda (F_test_op_test_pointer_op+5),y
+	sta 1+<F_test_op_test_pointer_op+3
+	lda 0+<F_test_op_test_pointer_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_pointer_op+3
+	sta <F_unittest_assert_equal+1
 	lda #15
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #39
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_586)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_586)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	lda #14
-	sta 0+<S+7,x
+	sta 0+<F_test_op_test_pointer_op+1
 	lda #39
-	sta 1+<S+7,x
-	lda 0+<S+9,x
-	sta <reg+0
-	lda 1+<S+9,x
-	sta <reg+1
+	sta 1+<F_test_op_test_pointer_op+1
 	ldy #0
-	lda (reg),y
-	sta 0+<L+0
+	lda (F_test_op_test_pointer_op+5),y
+	sta 0+<F_test_op_test_pointer_op+3
 	ldy #1
-	lda (reg),y
-	sta 1+<L+0
-	lda 0+<L+0
-	sta <S+11,x
-	lda 1+<L+0
-	sta <S+12,x
+	lda (F_test_op_test_pointer_op+5),y
+	sta 1+<F_test_op_test_pointer_op+3
+	lda 0+<F_test_op_test_pointer_op+3
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_op_test_pointer_op+3
+	sta <F_unittest_assert_equal+1
 	lda #14
-	sta <S+13,x
+	sta <F_unittest_assert_equal+2
 	lda #39
-	sta <S+14,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_590)
-	sta <S+15,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_590)
-	sta <S+16,x
-	call _unittest_assert_equal, #11
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	rts
 _561:
 		.byte 38,120,0
@@ -3132,109 +3085,109 @@ _590:
 .proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_593)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_593)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_const_op
 	lda #.LOBYTE(_596)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_596)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_599)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_599)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_int_op
 	lda #.LOBYTE(_602)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_602)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_605)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_605)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_int8_op
 	lda #.LOBYTE(_608)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_608)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_611)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_611)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_int16_op
 	lda #.LOBYTE(_614)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_614)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_617)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_617)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_int8x16_op
 	lda #.LOBYTE(_620)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_620)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_623)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_623)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_logical_op
 	lda #.LOBYTE(_626)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_626)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_629)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_629)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_shift_op
 	lda #.LOBYTE(_632)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_632)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_635)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_635)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_shift_op16
 	lda #.LOBYTE(_638)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_638)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_641)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_641)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_op_test_pointer_op
 	lda #.LOBYTE(_644)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_644)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	lda #1
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _593:

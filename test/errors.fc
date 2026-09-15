@@ -42,11 +42,6 @@ function hoge():void {
 	var i = i1 % 0; //! col=10
 }
 
-//@cannot call function from fastcall
-function hoge():void options(fastcall:true){
-	hoge(); //! col=2
-}
-
 
 //@counter2 not found \(did you mean counter\?\)
 var counter:int;

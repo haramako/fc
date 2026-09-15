@@ -1,5 +1,6 @@
 	.setcpu "6502"
 	.include "macro.inc"
+	.include "_frames.inc"
 __MODULE_TEST_MATH__ = 1
 .segment "test_math"
 	.include "_unittest.inc"
@@ -11,212 +12,212 @@ __MODULE_TEST_MATH__ = 1
 .segment "test_math"
 .proc _test_math_test_sin
 	lda #0
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @1
 	lda #255
 	jmp @2
 @1:
 	lda #0
 @2:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_4)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_4)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #63
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @3
 	lda #255
 	jmp @4
 @3:
 	lda #0
 @4:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #127
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_9)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_9)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #64
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @5
 	lda #255
 	jmp @6
 @5:
 	lda #0
 @6:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #127
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_14)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_14)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #127
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @7
 	lda #255
 	jmp @8
 @7:
 	lda #0
 @8:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_19)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_19)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #128
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @9
 	lda #255
 	jmp @10
 @9:
 	lda #0
 @10:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_24)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_24)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #191
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @11
 	lda #255
 	jmp @12
 @11:
 	lda #0
 @12:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #129
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_29)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_29)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #192
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @13
 	lda #255
 	jmp @14
 @13:
 	lda #0
 @14:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #129
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_34)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_34)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #255
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_sin+0
+	sta 0+<F_test_math_test_sin+1
 	bpl @15
 	lda #255
 	jmp @16
 @15:
 	lda #0
 @16:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_sin+1
+	lda 0+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_sin+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_39)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_39)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
 _4:
@@ -243,212 +244,212 @@ _39:
 .segment "test_math"
 .proc _test_math_test_cos
 	lda #64
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @17
 	lda #255
 	jmp @18
 @17:
 	lda #0
 @18:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #127
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_44)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_44)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #127
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @19
 	lda #255
 	jmp @20
 @19:
 	lda #0
 @20:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_49)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_49)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #128
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @21
 	lda #255
 	jmp @22
 @21:
 	lda #0
 @22:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_54)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_54)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #191
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @23
 	lda #255
 	jmp @24
 @23:
 	lda #0
 @24:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #129
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_59)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_59)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #192
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @25
 	lda #255
 	jmp @26
 @25:
 	lda #0
 @26:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #129
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #255
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_64)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_64)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #255
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @27
 	lda #255
 	jmp @28
 @27:
 	lda #0
 @28:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_69)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_69)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #0
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @29
 	lda #255
 	jmp @30
 @29:
 	lda #0
 @30:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_74)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_74)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #63
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_sin+1
 	jsr _math_sin
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta 0+<L+1
+	lda <F_math_sin+0
+	sta 0+<F_test_math_test_cos+0
+	sta 0+<F_test_math_test_cos+1
 	bpl @31
 	lda #255
 	jmp @32
 @31:
 	lda #0
 @32:
-	sta 1+<L+1
-	lda 0+<L+1
-	sta <S+0,x
-	lda 1+<L+1
-	sta <S+1,x
+	sta 1+<F_test_math_test_cos+1
+	lda 0+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_math_test_cos+1
+	sta <F_unittest_assert_equal+1
 	lda #127
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_79)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_79)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
 _44:
@@ -475,156 +476,156 @@ _79:
 .segment "test_math"
 .proc _test_math_test_atan
 	lda #0
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #1
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #0
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_83)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_83)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #1
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #1
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #32
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_87)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_87)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #1
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #0
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #63
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_91)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_91)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #1
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #255
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #96
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_95)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_95)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #0
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #255
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #128
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_99)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_99)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #255
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #255
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #160
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_103)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_103)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #255
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #0
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #193
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_107)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_107)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #255
-	sta <FC_FASTCALL_REG+1
+	sta <F_math_atan+1
 	lda #1
-	sta <FC_FASTCALL_REG+2
+	sta <F_math_atan+2
 	jsr _math_atan
-	lda <0+FC_FASTCALL_REG
-	sta 0+<L+0
-	sta <S+0,x
+	lda <F_math_atan+0
+	sta 0+<F_test_math_test_atan+0
+	sta <F_unittest_assert_equal+0
 	lda #0
-	sta <S+1,x
+	sta <F_unittest_assert_equal+1
 	lda #224
-	sta <S+2,x
+	sta <F_unittest_assert_equal+2
 	lda #0
-	sta <S+3,x
+	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_111)
-	sta <S+4,x
+	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_111)
-	sta <S+5,x
+	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
 _83:
@@ -652,40 +653,40 @@ _111:
 .proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_114)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_114)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_math_test_sin
 	lda #.LOBYTE(_117)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_117)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_120)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_120)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_math_test_cos
 	lda #.LOBYTE(_123)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_123)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #.LOBYTE(_126)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_126)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	jsr _test_math_test_atan
 	lda #.LOBYTE(_129)
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_print+0
 	lda #.HIBYTE(_129)
-	sta <FC_FASTCALL_REG+1
+	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <FC_FASTCALL_REG+0
+	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _114:
