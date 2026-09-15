@@ -67,33 +67,33 @@ __MODULE_MEM__ = 1
 	sta <reg+1
 	ldy #0
 	lda (reg),y
-	sta 0+<FC_FASTCALL_REG+6
+	sta 0+<FC_FASTCALL_REG+8
 	ldy 0+<FC_FASTCALL_REG+5
 	sty <reg+0
 	clc
 	lda 0+<FC_FASTCALL_REG+1
 	adc <reg+0
-	sta 0+<FC_FASTCALL_REG+7
+	sta 0+<FC_FASTCALL_REG+6
 	lda 1+<FC_FASTCALL_REG+1
 	adc #0
-	sta 1+<FC_FASTCALL_REG+7
-	lda 0+<FC_FASTCALL_REG+7
-	sta <reg+0
-	lda 1+<FC_FASTCALL_REG+7
-	sta <reg+1
+	sta 1+<FC_FASTCALL_REG+6
 	lda 0+<FC_FASTCALL_REG+6
+	sta <reg+0
+	lda 1+<FC_FASTCALL_REG+6
+	sta <reg+1
+	lda 0+<FC_FASTCALL_REG+8
 	ldy #0
 	sta (reg),y
-	lda 0+<FC_FASTCALL_REG+6
+	lda 0+<FC_FASTCALL_REG+8
 	beq @1
 	lda #0
-	sta 0+<FC_FASTCALL_REG+7
+	sta 0+<FC_FASTCALL_REG+6
 	jmp @2
 @1:
 	lda #1
-	sta 0+<FC_FASTCALL_REG+7
+	sta 0+<FC_FASTCALL_REG+6
 @2:
-	lda 0+<FC_FASTCALL_REG+7
+	lda 0+<FC_FASTCALL_REG+6
 	beq @end_19
 @3:
 	lda 0+<FC_FASTCALL_REG+5

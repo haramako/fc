@@ -1468,6 +1468,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			} else {
 				left, right = l2, r2
 			}
+			if k, lit := ir.ValIntLiteral(right); lit && k == 0 && (e.op == opDiv || e.op == opMod) {
+				panic(&diag.Error{Msg: "div by 0"})
+			}
 			tmp := h.newTmp(typ)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp

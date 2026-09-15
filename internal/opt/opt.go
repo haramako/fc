@@ -18,6 +18,9 @@ func Optimize(lmd *ir.Lambda, level int) {
 		return
 	}
 	fusePointer(lmd)
+	compact(lmd)
+	coalesceCopies(lmd)
+	compact(lmd)
 	simplifyJumps(lmd)
 	compact(lmd)
 }

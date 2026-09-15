@@ -554,7 +554,7 @@ func DeleteUnuse(lmd *ir.Lambda) {
 			// 残すと結果の一時変数に場所が割り付かず、コード生成で落ちる
 			ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
 			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot,
-			ir.OpIndex, ir.OpRef, ir.OpSignExtension:
+			ir.OpIndex, ir.OpRef, ir.OpSignExtension, ir.OpIndexPget, ir.OpFieldPget:
 			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
 				lmd.Ops[i] = nil
 			}

@@ -586,15 +586,14 @@
 (alloc-lambda math _math_rand _math_rand frame_size=1
  (vars
   (var 0 $result local #"uint8" lt=result loc=fastcall_reg addr=0)
-  (var 1 $66 local #"uint8" lt=temp loc=a)
+  (var 1 $66 local #"uint8" lt=temp loc=none unuse)
   (var 2 $67 local #"*uint8" lt=temp loc=none unuse)
   (var 3 $68 local #"uint8" lt=temp loc=a)
  )
  (ops
-  0000 (:add {l1 $66} {g rand_idx #"uint8" :_math_rand_idx} {lit nil 1 #"uint8"})
-  0001 (:load {g rand_idx #"uint8" :_math_rand_idx} {l1 $66})
-  0002 (:index_pget {l3 $68} {g rand_table #"[256]uint8" :_math_rand_table} {g rand_idx #"uint8" :_math_rand_idx})
-  0003 (:return {l3 $68})
+  0000 (:add {g rand_idx #"uint8" :_math_rand_idx} {g rand_idx #"uint8" :_math_rand_idx} {lit nil 1 #"uint8"})
+  0001 (:index_pget {l3 $68} {g rand_table #"[256]uint8" :_math_rand_table} {g rand_idx #"uint8" :_math_rand_idx})
+  0002 (:return {l3 $68})
  )
 )
 (alloc-lambda math _math_sign _math_sign frame_size=2

@@ -81,7 +81,8 @@ func TestErrorsFC(t *testing.T) {
 	}
 }
 
-// TestLlcErrorPosition: コード生成時のエラーは生成元の式の位置を指す (位置を持たない命令では関数の宣言位置)。
+// TestLlcErrorPosition: 0 除算のエラーは式の位置を指す (意味解析で検出。以前はコード生成で検出していたが、
+// 最適化で命令が消えると検出できなくなるので前に移した)。
 func TestLlcErrorPosition(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.fc")
@@ -91,11 +92,10 @@ func TestLlcErrorPosition(t *testing.T) {
 	}
 	compiler := NewCompiler(absRepoRoot)
 	_, err := compiler.Build("t.fc", &BuildOptions{Target: "emu", CompileOnly: true, Dir: dir})
-	ce, ok := err.(*diag.Error)
-	if !ok {
+	var ce *diag.Error
+	if !errors.As(err, &ce) {
 		t.Fatalf("CompileError であるべき: %v", err)
 	}
-	// LLC で検出されるエラーは、生成元の式 (`x / 0`) の位置を指す (ir.Op.Pos)
 	if !strings.Contains(ce.Msg, "div by 0") || ce.Pos.Line != 5 || ce.Pos.Col != 7 {
 		t.Errorf("got %+v", ce)
 	}
