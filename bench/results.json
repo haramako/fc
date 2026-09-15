@@ -10,14 +10,14 @@
     "out": "sum=663"
   },
   "crc16": {
-    "cycles": 2232330,
-    "size": 512,
-    "out": "crc16=49989"
+    "cycles": 9110810,
+    "size": 676,
+    "out": "crc16=16501"
   },
   "crc8": {
-    "cycles": 1996301,
-    "size": 318,
-    "out": "crc8=114"
+    "cycles": 4178215,
+    "size": 488,
+    "out": "crc8=149"
   },
   "entities": {
     "cycles": 1801048,
@@ -50,9 +50,9 @@
     "out": "sum=15293"
   },
   "sieve": {
-    "cycles": 8968956,
-    "size": 491,
-    "out": "primes=309"
+    "cycles": 35532746,
+    "size": 503,
+    "out": "count=1900"
   },
   "textprint": {
     "cycles": 7700371,

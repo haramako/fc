@@ -1,33 +1,34 @@
 #fc 2
-// A: エラトステネスの篩 (c-bench-64 / millfork-benchmarks の sieve 相当)。
-// 2048 個のバイトフラグ。添字が 1 バイトなのでポインタを進めて触る。10 回繰り返す。
+// A: エラトステネスの篩。c-bench-64 (thred/c-bench-64) の sieve.c と同じアルゴリズム・同じ規模
+// (8191 個のバイトフラグで 1〜16384 の素数を数える。10 回繰り返す。答え 1900) なので、公開されている
+// 他のコンパイラの秒数 (C64 ≒ 1 MHz) と比べられる。添字が 1 バイトなのでポインタを進めて触る。
 use * from stdio;
 
-const N:int16 = 2048;
-var flags:[2048]int options(segment: "BSS_EX");
+const SIZE:int16 = 8191;
+var flags:[8191]int options(segment: "BSS_EX");
 
 function sieve():int16
 {
-	var count:int16 = 0;
+	var count:int16 = 1;
 	var p = flags as *int;
 	var i:int16;
-	for (i = 0; i < N; i++) {
+	for (i = 0; i < SIZE; i++) {
 		*p = 1;
 		p += 1;
 	}
 	p = flags as *int;
-	p += 2;
-	for (i = 2; i < N; i++) {
+	for (i = 0; i < SIZE; i++) {
 		if (*p) {
-			count++;
-			var k = i + i;
+			var prime = i + i + 3;
+			var k = i + prime;
 			var q = p;
-			q += i;
-			while (k < N) {
+			q += prime;
+			while (k < SIZE) {
 				*q = 0;
-				q += i;
-				k += i;
+				q += prime;
+				k += prime;
 			}
+			count++;
 		}
 		p += 1;
 	}
@@ -42,6 +43,6 @@ function main():void
 		count = sieve();
 	}
 	bench_end();
-	printf("primes=", count, "\n");
+	printf("count=", count, "\n");
 	exit(0);
 }

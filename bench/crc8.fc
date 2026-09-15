@@ -1,48 +1,47 @@
 #fc 2
-// A: CRC-8 (多項式 0x07、テーブル無しのビット演算)。256 バイトのバッファを 16 回。
+// A: CRC-8/GSM-A (多項式 0x1d、テーブル無しのビット演算)。c-bench-64 の crc8.c と同じ処理を 8192 バイトに
+// (向こうは C64 の Kernal ROM。ここでは擬似乱数で埋めたバッファ。データはビット分岐の成否にしか効かない)。
 // 1 バイト演算・シフト・分岐のループ。
 use * from stdio;
 
-var buf:[256]int;
+const LEN:int16 = 8192;
+var buf:[8192]int options(segment: "BSS_EX");
 
-function crc8(p:*int):int
+function crc8(p:*int, length:int16):int
 {
 	var crc = 0;
-	var i = 0;
-	loop {
-		var b = p[i] ^ crc;
-		for (var k = 0; k < 8; k++) {
-			if (b & 0x80) {
-				b = (b << 1) ^ 0x07;
+	var i:int16;
+	for (i = 0; i < length; i++) {
+		crc ^= *p;
+		for (var j = 8; j; j--) {
+			if (crc & 0x80) {
+				crc = (crc << 1) ^ 0x1d;
 			} else {
-				b = b << 1;
+				crc = crc << 1;
 			}
 		}
-		crc = b;
-		i++;
-		if (i == 0) {
-			break;
-		}
+		p += 1;
 	}
 	return crc;
 }
 
+function fill():void
+{
+	var p = buf as *int;
+	var x:int16 = 0x1234;
+	var i:int16;
+	for (i = 0; i < LEN; i++) {
+		x = x * 5 + 0x3d;
+		*p = (x >> 8) as int;
+		p += 1;
+	}
+}
+
 function main():void
 {
-	var i = 0;
-	loop {
-		buf[i] = (i * 7) ^ 0x5a;
-		i++;
-		if (i == 0) {
-			break;
-		}
-	}
-	var crc = 0;
+	fill();
 	bench_start();
-	for (var n = 0; n < 16; n++) {
-		crc = crc8(buf);
-		buf[0] = crc;
-	}
+	var crc = crc8(buf, LEN);
 	bench_end();
 	printf("crc8=", crc, "\n");
 	exit(0);

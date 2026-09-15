@@ -79,7 +79,11 @@ func TestBench(t *testing.T) {
 		}
 		fmt.Fprintf(&table, "%-12s %12d %12d %+7.1f%%   %8d %8d %+6.1f%%\n", n, g.Cycles, w.Cycles, pct(g.Cycles, w.Cycles), g.Size, w.Size, pct(int64(g.Size), int64(w.Size)))
 		if g.Out != w.Out {
-			t.Errorf("%s: 出力が変わった (コンパイラのバグの可能性): got %q want %q", n, g.Out, w.Out)
+			if *update {
+				t.Logf("%s: 出力を更新: %q → %q", n, w.Out, g.Out)
+			} else {
+				t.Errorf("%s: 出力が変わった (コンパイラのバグの可能性): got %q want %q", n, g.Out, w.Out)
+			}
 		}
 		if g.Cycles != w.Cycles || g.Size != w.Size {
 			changed = true
