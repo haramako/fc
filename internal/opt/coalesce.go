@@ -83,13 +83,8 @@ func chainInPlace(lmd *ir.Lambda) {
 		if _, isValue := x.(*ir.Value); !isValue || ir.ValType(x) != t.Type || ir.ValType(op.Src[0]) != t.Type {
 			continue
 		}
-		if !sameStorage(op.Src[0], x) {
-			continue
-		}
-		for _, b := range next.Src[1:] {
-			if sameStorage(b, x) {
-				continue
-			}
+		if !sameStorage(op.Src[0], x) || readsValue(next.Src[1:], x) {
+			continue // op2 の他の入力が x を読むなら、x を先に書き換えてはいけない (`x = (x << 1) ^ x`)
 		}
 		op.Dst = x
 		next.Src[0] = x
@@ -104,6 +99,17 @@ func readsBeforeWrite(c ir.OpCode) bool {
 		ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpBitNot, ir.OpNot, ir.OpEq, ir.OpLt,
 		ir.OpSignExtension, ir.OpIndex, ir.OpPget, ir.OpIndexPget, ir.OpFieldPget:
 		return true
+	}
+	return false
+}
+
+// readsValue は srcs のどれかが x と同じ変数を (一部でも) 読むか。
+func readsValue(srcs []ir.Operand, x ir.Operand) bool {
+	ux := ir.UnderlyingValue(x)
+	for _, s := range srcs {
+		if ux != nil && ir.UnderlyingValue(s) == ux {
+			return true
+		}
 	}
 	return false
 }

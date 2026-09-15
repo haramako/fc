@@ -1,7 +1,7 @@
 package codegen
 
-// LLC: 中間コード (ir.go) → ca65 アセンブリ。lib/fc/llc.rb 由来。
-// 行の生成順・インデント規則・extend_jump のサイズ表まで旧実装と同一。
+// LLC: 中間コード (ir.go) → ca65 アセンブリ。命令選択 (llc.go / arith.go / operand.go / call.go / data.go) と
+// asm テキストの後処理 (peephole.go、extendjump.go)。IR→IR の最適化は internal/opt、置き場所の決定は internal/regalloc。
 
 import (
 	"fmt"

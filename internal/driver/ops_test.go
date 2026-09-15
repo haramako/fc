@@ -179,3 +179,24 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestChainSelfOperand: `x = (x op1 a) op2 x` の 2 つ目の x は演算前の値 (opt.chainInPlace が中間の一時変数を
+// x 自身に置き換えるのは、後の演算が x を読まないときだけ)。
+func TestChainSelfOperand(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `function main():void
+{
+	var x:int16 = 5;
+	var y:int16 = 6;
+	var z:int16 = 7;
+	x = (x << 1) ^ x;
+	y = (y + 1) - y;
+	z = (z + 1) + 2;
+	printf(x, " ", y, " ", z, "\n");
+	exit(0);
+}
+`)
+	if want := "15 1 10\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

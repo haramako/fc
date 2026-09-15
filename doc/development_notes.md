@@ -7,9 +7,9 @@ fc を開発するときに知っておくべきこと。残っている仕事�
 
 ## ブランチ運用
 
-- 開発は **`agent/golang`** で行う。**安定するまで master へはマージしない**
-  （一度マージしたが取り消し済み。master = 8358b15 のまま）
-- **`feature/v2`**（2026-09-12〜）: 文法 v2 / struct・soa / far call / ベンチなど。master へのマージは安定してから
+- 開発は **`feature/v2`**（2026-09-12〜。文法 v2 / struct・soa / far call / ベンチ / 最適化）で行う。
+  **安定するまで master へはマージしない**（一度マージしたが取り消し済み。master = 8358b15 のまま）。
+  `agent/golang` は Go 移植のブランチで、feature/v2 の親
 - タグ: `v0.0.2`（2026-09-15、最適化前のベースライン）、`ruby-frozen`（Go 移植前の Ruby 版。
   `fclib/math.fc` / `share/runtime.asm` の sin / atan / rand / 乗算テーブルは `misc/table.rb` の生成物でタグから参照できる）、
   `go-strict-clone`（移植直後の基準点）
@@ -101,7 +101,9 @@ go test ./...                                    # 全部 (golden + examples + N
   (2) `p = p.next` のように読み先がポインタ自身のとき `(p),y` で直接読むと下位バイトを書いた後に上位を読んで壊れる、
   (3) A の値の追跡でグローバル変数を追うと `options(address:)` の I/O レジスタ（`$2002` は読むたびに変わる）まで
   消してしまい castle が止まる（内蔵 NES ランナーでは再現せず、`TestMesenPlayCastle` で発覚）。**castle を変える最適化は
-  Mesen のテストまで通してからコミットする**
+  Mesen のテストまで通してからコミットする**、(4) 「x を先に書き換えてよい」型のパス（chainInPlace）は後続の命令の
+  **全ての**入力が x を読まないことを確かめる（`x = (x << 1) ^ x` が壊れていた。golden / bench に出ない形だったので
+  `internal/driver/ops_test.go` に小さな実行テストを足して守る）
 - **生成コードのベンチマーク**（2026-09-15〜）: `go test ./bench`。[bench/](../bench/README.md) の 12 本の .fc を emu で走らせ、
   `stdio.bench_start` / `bench_end` で囲んだ区間のサイクル数（`r6502.Cpu.Cycles`。ページクロス・分岐成立込みで決定的）と
   モジュールのセグメントサイズを `bench/results.json` と比べる。出力（チェックサム）の違いはコンパイラのバグ、

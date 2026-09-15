@@ -1,8 +1,8 @@
 package regalloc
 
-// レジスタ割付。lib/fc/allocator.rb 由来。
-// use_define / register_vars は挿入順を保つ必要がある (割付の結果が順序に依存する)。
-// ir.CastedValue は Delegator のため下位の ir.Value と同一キーに合流する (ir.UnderlyingValue)。
+// レジスタ割付 (opt の後、codegen の前)。
+// udOrder / registerVars は挿入順を保つ必要がある (割付の結果が順序に依存する)。
+// ir.CastedValue は下位の ir.Value と同一キーに合流する (ir.UnderlyingValue)。
 
 import (
 	"fmt"
