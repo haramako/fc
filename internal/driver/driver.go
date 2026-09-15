@@ -65,6 +65,7 @@ type Result struct {
 	BuildDir string         // 中間生成物ディレクトリ
 	Warnings []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
 	FarCalls []sema.FarCall // far call になった呼び出し (options(farcall: true) のとき。fcc build -d で表示)
+	Cycles   int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
 }
 
 type Compiler struct {
@@ -220,11 +221,12 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	result.MapFile = c.link(objs, opt)
 
 	if opt.Run {
-		code, err := c.execute(opt.Out, opt.Stdout)
+		code, cycles, err := c.execute(opt.Out, opt.Stdout)
 		if err != nil {
 			return nil, err
 		}
 		result.ExitCode = code
+		result.Cycles = cycles
 	}
 	return result, nil
 }
@@ -353,15 +355,17 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 		b.WriteString("# memory config for ld65\n\nMEMORY {\n")
 		b.WriteString("  ZP: start = $00, size = $80, type = rw, define = yes;\n")
 		b.WriteString("  ZP_STACK: start = $80, size = $80, type = rw, define = yes;\n")
-		b.WriteString("  SRAM: start = $0200, size = $0500, type = rw, define = yes;\n")
+		b.WriteString("  SRAM: start = $0200, size = $0E00, type = rw, define = yes;\n")
 		b.WriteString("  ROMV: start = $1000, size = 3, type = rw, define = yes;\n")
-		b.WriteString("  ROM: start = $1003, size = $DFFD, file = %O, fill = no, define = yes, bank = 0;\n")
+		b.WriteString("  ROM: start = $1003, size = $6FFD, file = %O, fill = no, define = yes, bank = 0;\n")
+		b.WriteString("  SRAM_EX: start = $8000, size = $7F00, type = rw, define = yes;\n") // 大きな配列用 (options(segment: "BSS_EX"))
 		b.WriteString("  CHARS: start = $0000, size = $10000, type = rw, fill = no, define = yes;\n")
 		b.WriteString("}\n\nSEGMENTS {\n")
 		b.WriteString("  CODE: load = ROM, type = ro, define = yes;\n")
 		b.WriteString("  FC_RUNTIME: load = ROM, type = ro, define = yes;\n")
 		b.WriteString("  VECTORS: load = ROMV, type = rw;\n")
 		b.WriteString("  BSS: load = SRAM, type= bss, define = yes;\n")
+		b.WriteString("  BSS_EX: load = SRAM_EX, type= bss, define = yes, optional = yes;\n")
 		b.WriteString("  ZEROPAGE: load = ZP, type = zp;\n")
 		b.WriteString("  FC_ZEROPAGE: load = ZP, type = zp;\n")
 		b.WriteString("  FC_STACK: load = ZP_STACK, type = zp;\n")
@@ -568,13 +572,14 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // execute はビルド済みバイナリをエミュレータで実行する (Compiler#execute 相当)。
 // ホスト呼び出し規約 ($fff0〜$ffff): 1=print / 2=print_int / 3=print_int_sp、
 // $ffff が 255 以外になったら終了 (その値が終了コード)。
-func (c *Compiler) execute(filename string, out io.Writer) (int, error) {
+// 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
+func (c *Compiler) execute(filename string, out io.Writer) (int, int64, error) {
 	if c.target != "emu" {
-		return 0, nil // x6502 はスコープ外、nes は実行不可
+		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
 	}
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	const startAddr = 0x1000
 	mem := r6502.NewMemory()
@@ -585,6 +590,8 @@ func (c *Compiler) execute(filename string, out io.Writer) (int, error) {
 	cpu.Pc = startAddr
 	mem.Set(0xffff, 255)
 	mem.Set(0xfffe, 255)
+	var benchStart, benchCycles int64
+	benchUsed := false
 	for mem.Get(0xffff) == 255 {
 		cpu.StepSilent()
 		if mem.Get(0xfffe) != 255 {
@@ -603,9 +610,17 @@ func (c *Compiler) execute(filename string, out io.Writer) (int, error) {
 			case 3:
 				num := mem.Get(0xfff2) + (mem.Get(0xfff3) << 8)
 				fmt.Fprint(out, num, " ")
+			case 4:
+				benchStart = cpu.Cycles
+				benchUsed = true
+			case 5:
+				benchCycles += cpu.Cycles - benchStart
 			}
 			mem.Set(0xfffe, 255)
 		}
 	}
-	return mem.Get(0xffff), nil
+	if !benchUsed {
+		benchCycles = cpu.Cycles
+	}
+	return mem.Get(0xffff), benchCycles, nil
 }

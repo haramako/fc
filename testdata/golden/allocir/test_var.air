@@ -494,6 +494,22 @@
   0001 (:return)
  )
 )
+(alloc-lambda stdio _stdio_bench_start _stdio_bench_start frame_size=0
+ (vars
+ )
+ (ops
+  0000 (:load {g EMU_PRINT #"uint8" :_stdio_EMU_PRINT} {lit nil 4 #"uint8"})
+  0001 (:return)
+ )
+)
+(alloc-lambda stdio _stdio_bench_end _stdio_bench_end frame_size=0
+ (vars
+ )
+ (ops
+  0000 (:load {g EMU_PRINT #"uint8" :_stdio_EMU_PRINT} {lit nil 5 #"uint8"})
+  0001 (:return)
+ )
+)
 (alloc-lambda stdio _stdio_init _stdio_init frame_size=0
  (vars
  )

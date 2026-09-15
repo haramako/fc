@@ -64,6 +64,26 @@ _2:
 	sta 0+_stdio_EMU_EXIT
 	rts
 .endproc
+	.export _stdio_bench_start
+	;;;=============================
+	;;; function _stdio_bench_start
+	;;;=============================
+.segment "stdio"
+.proc _stdio_bench_start
+	lda #4
+	sta 0+_stdio_EMU_PRINT
+	rts
+.endproc
+	.export _stdio_bench_end
+	;;;=============================
+	;;; function _stdio_bench_end
+	;;;=============================
+.segment "stdio"
+.proc _stdio_bench_end
+	lda #5
+	sta 0+_stdio_EMU_PRINT
+	rts
+.endproc
 	.export _stdio_init
 	;;;=============================
 	;;; function _stdio_init

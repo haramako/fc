@@ -492,6 +492,8 @@
   (def _stdio_print code #"fastcall fn(*uint8):void" {lambda _stdio_print})
   (def _stdio_puts code #"fn(*uint8):void" {lambda _stdio_puts})
   (def _stdio_exit code #"fastcall fn(uint8):void" {lambda _stdio_exit})
+  (def _stdio_bench_start code #"fastcall fn():void" {lambda _stdio_bench_start})
+  (def _stdio_bench_end code #"fastcall fn():void" {lambda _stdio_bench_end})
   (def _stdio_init code #"fn():void" {lambda _stdio_init})
   (def _interrupt code #"fn():void" {lambda _interrupt})
   (def _stdio_interrupt equ #"fn():void" :_interrupt)
@@ -507,9 +509,11 @@
   (var 5 print literal #"fastcall fn(*uint8):void" val=:_stdio_print pub)
   (var 6 puts literal #"fn(*uint8):void" val=:_stdio_puts pub)
   (var 7 exit literal #"fastcall fn(uint8):void" val=:_stdio_exit pub)
-  (var 8 init literal #"fn():void" val=:_stdio_init pub)
-  (var 9 interrupt literal #"fn():void" val=:_interrupt pub)
-  (var 10 interrupt_irq literal #"fn():void" val=:_interrupt_irq pub)
+  (var 8 bench_start literal #"fastcall fn():void" val=:_stdio_bench_start pub)
+  (var 9 bench_end literal #"fastcall fn():void" val=:_stdio_bench_end pub)
+  (var 10 init literal #"fn():void" val=:_stdio_init pub)
+  (var 11 interrupt literal #"fn():void" val=:_interrupt pub)
+  (var 12 interrupt_irq literal #"fn():void" val=:_interrupt_irq pub)
  )
  (lambda _stdio_print_int16 #"fastcall fn(uint16):void" opt={id :print_int16 fastcall :true}
   (args ({l0 n}))
@@ -568,6 +572,30 @@
   )
   (ops
    0000 (:load {g EMU_EXIT #"uint8" :_stdio_EMU_EXIT} {l0 code})
+   0001 (:return)
+  )
+ )
+ (lambda _stdio_bench_start #"fastcall fn():void" opt={id :bench_start fastcall :true}
+  (args ())
+  (result nil)
+  (vars
+  )
+  (defs
+  )
+  (ops
+   0000 (:load {g EMU_PRINT #"uint8" :_stdio_EMU_PRINT} {lit nil 4 #"uint8"})
+   0001 (:return)
+  )
+ )
+ (lambda _stdio_bench_end #"fastcall fn():void" opt={id :bench_end fastcall :true}
+  (args ())
+  (result nil)
+  (vars
+  )
+  (defs
+  )
+  (ops
+   0000 (:load {g EMU_PRINT #"uint8" :_stdio_EMU_PRINT} {lit nil 5 #"uint8"})
    0001 (:return)
   )
  )

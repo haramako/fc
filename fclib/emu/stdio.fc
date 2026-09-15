@@ -31,6 +31,17 @@ public function exit(code:int):void options(fastcall: true)
 	EMU_EXIT = code;
 }
 
+// ベンチマーク区間 (bench/)。bench_start から bench_end までのサイクル数をエミュレータが合計する
+public function bench_start():void options(fastcall: true)
+{
+	EMU_PRINT = 4;
+}
+
+public function bench_end():void options(fastcall: true)
+{
+	EMU_PRINT = 5;
+}
+
 public function init():void {}
 
 public function interrupt():void options(symbol: '_interrupt') {}

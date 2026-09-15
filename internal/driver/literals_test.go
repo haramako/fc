@@ -100,3 +100,22 @@ func TestBoolNullVoidPtrErrors(t *testing.T) {
 		t.Errorf("v1 *void: %q", got)
 	}
 }
+
+// TestConstPointerArrayLiteral: `const P:*int = "..."` / `= [...]` は配列定数の宣言 (データそのものに名前を付ける)。
+// 以前はポインタ変数扱いになり、データの先頭 2 バイトをアドレスとして読んでいた。
+func TestConstPointerArrayLiteral(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `const A:*int = "HELLO";
+const B:*int16 = [1000, 2000];
+function first(p:*int):int { return p[0]; }
+function main():void
+{
+	printf(A[1], " ", first(A), " ", B[1], " ", sizeof(A), "\n");
+	exit(0);
+}
+`)
+	want := "69 72 2000 6\n"
+	if out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

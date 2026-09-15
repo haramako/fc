@@ -97,8 +97,15 @@ go test ./...                                    # 全部 (golden + examples + N
   コンパイル→実行して stdout・終了コードごと検証する**（assert 失敗 = exit 1 + ERROR 出力
   で必ず不一致になる）。テスト .fc を新規追加したら golden ディレクトリに空ファイルを置くか
   `-update` で生成する
-- 性能退行の検知: `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
+- 性能退行の検知 (コンパイラ自身の速度): `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
   （基準値は v2_plan.md の作業ログ）
+- **生成コードのベンチマーク**（2026-09-15〜）: `go test ./bench`。[bench/](../bench/README.md) の 12 本の .fc を emu で走らせ、
+  `stdio.bench_start` / `bench_end` で囲んだ区間のサイクル数（`r6502.Cpu.Cycles`。ページクロス・分岐成立込みで決定的）と
+  モジュールのセグメントサイズを `bench/results.json` と比べる。出力（チェックサム）の違いはコンパイラのバグ、
+  サイクル数・サイズの違いは最適化の効果か退行で、どちらも `-update` で受け入れる（golden と同じ運用）。
+  ベンチを書いたときに 16 ビットの除算・剰余のバグが 3 つ見つかった（`__mod_16` が stub、符号付き 16 ビットが符号無し除算、
+  2 のべき乗の符号付き除算の `cmp $80`）。**新しい種類のコードを書くときは Python などで同じ計算を再現して照合する**と
+  コンパイラのバグがすぐ見つかる
 - ca65 は既定で CPU 数だけ並列に走る。ca65 のエラー調査などで逐次にしたいときは `fc.Options.Jobs = 1`
   （CLI にはフラグ無し）
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は

@@ -1274,19 +1274,20 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 				}
 			}
 		case ir.OpDiv:
+			// 2 のべき乗の除算は右シフト。符号付きは算術シフト (床除算: __div_16s と同じ丸め)。
+			// 最上位バイトを lda して cmp #128 で C に符号を立ててから ror する
 			r = append(r, anyIfy(l.load(dst, s0)))
 			for k := 0; k < n; k++ {
 				for i := size - 1; i >= 0; i-- {
-					var rot string
-					if ir.ValType(dst).Signed {
-						rot = "ror"
-						if i == 0 {
-							r = append(r, "cmp $80")
+					if i == size-1 {
+						if ir.ValType(dst).Signed {
+							r = append(r, l.loadA(dst, i), "cmp #128", fmt.Sprintf("ror %s", l.byte(dst, i)))
+						} else {
+							r = append(r, fmt.Sprintf("lsr %s", l.byte(dst, i)))
 						}
 					} else {
-						rot = ifElse(i == size-1, "lsr", "ror")
+						r = append(r, fmt.Sprintf("ror %s", l.byte(dst, i)))
 					}
-					r = append(r, fmt.Sprintf("%s %s", rot, l.byte(dst, i)))
 				}
 			}
 		case ir.OpMod:
@@ -1304,15 +1305,12 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 			r = append(r, l.loadA(s1, i))
 			r = append(r, fmt.Sprintf("sta <reg+2+%d", i))
 		}
-		if ir.ValType(dst).Size == 1 {
-			if ir.ValType(dst).Signed {
-				r = append(r, fmt.Sprintf("jsr __%s_8s", op.Code.String()))
-			} else {
-				r = append(r, fmt.Sprintf("jsr __%s_8", op.Code.String()))
-			}
-		} else {
-			r = append(r, fmt.Sprintf("jsr __%s_16", op.Code.String()))
+		// __mul_8 / __div_8s / __mod_16s など (share/runtime.asm)。mul は符号で結果が変わらないので __mul_16 のみ
+		suffix := ifElse(ir.ValType(dst).Size == 1, "8", "16")
+		if ir.ValType(dst).Signed && op.Code != ir.OpMul {
+			suffix += "s"
 		}
+		r = append(r, fmt.Sprintf("jsr __%s_%s", op.Code.String(), suffix))
 		for i := 0; i < ir.ValType(dst).Size; i++ {
 			r = append(r, fmt.Sprintf("lda <reg+4+%d", i))
 			r = append(r, l.storeA(dst, i))

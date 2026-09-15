@@ -927,7 +927,7 @@ _157:
 	sta <reg+0+0
 	lda 0+<S+4,x
 	sta <reg+2+0
-	jsr __mul_8s
+	jsr __mul_8
 	lda <reg+4+0
 	sta 0+<L+0
 	bpl @65
@@ -954,7 +954,7 @@ _157:
 	sta <reg+0+0
 	lda #60
 	sta <reg+2+0
-	jsr __mul_8s
+	jsr __mul_8
 	lda <reg+4+0
 	sta 0+<L+0
 	bpl @67

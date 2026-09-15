@@ -91,3 +91,34 @@ function main():void
 		t.Errorf("重複 case (const): %q", got)
 	}
 }
+
+// TestDivMod16: 16 ビットの除算・剰余 (__div_16s / __mod_16 / __mod_16s と 2 のべき乗の算術シフト)。
+// 丸めは 8 ビットと同じ床除算 (商は負の無限大方向、余りの符号は除数に合わせる)。
+// bench/math16.fc を書いたときに __mod_16 が rts だけの stub、符号付き 16 ビットが符号無しの __div_16 を呼んでいた、
+// 2 のべき乗の符号付き除算が `cmp $80` (ゼロページ参照) を出していた、の 3 つが見つかった。
+func TestDivMod16(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var u:int16;
+var s:sint16;
+var a:sint8;
+function main():void
+{
+	u = 65236;
+	printf(u / 7, " ", u % 7, " ", u / 4, " ", u % 8, "\n");
+	s = -300;
+	printf(s / 4, " ", s / 3, " ", s % 4, " ", s % 3, " ", s % -7, " ", s / -7, "\n");
+	s = 300;
+	printf(s / 4, " ", s / 7, " ", s % 7, " ", s / -7, " ", s % -7, "\n");
+	s = -32768;
+	printf(s / 3, " ", s % 3, "\n");
+	a = -100;
+	printf(a / 7, " ", a % 7, " ", a / 4, " ", a % 4, "\n");
+	exit(0);
+}
+`)
+	// printf は 8 ビット値も 16 ビットに符号拡張して表示する (a / 7 = -15 → 65521)
+	want := "9319 3 16309 4\n65461 65436 0 0 65530 42\n75 42 6 65493 65535\n54613 1\n65521 5 65511 0\n"
+	if out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

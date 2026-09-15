@@ -870,6 +870,10 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			v.Name = name
 			newVal = h.addVar(v)
 		} else if v.Kind == ir.KindArrayLiteral {
+			if t.Kind == types.Pointer {
+				// const P:*T = [...] / "..." は配列定数の宣言 (ポインタ変数ではない)。データ自体を名前に束縛する
+				t = ir.ValType(v)
+			}
 			symbol := h.addDef(name, &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems})
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 		} else {

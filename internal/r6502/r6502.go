@@ -209,7 +209,9 @@ type Cpu struct {
 	// emu ターゲットの golden テストは false のまま使う。
 	Accurate bool
 
-	// Cycles は概算の消費サイクル数 (フレームタイミング用。正確ではない)。
+	// Cycles は消費サイクル数 (フレームタイミングとベンチマーク用)。
+	// 命令の基本サイクルにページクロス (abs,X / abs,Y / (zp),Y の読み出し) と分岐成立 (+1、ページをまたげば +2) を
+	// 加える。未定義命令と Accurate=false のときの zp,X ラップ無しは対象外。
 	Cycles int64
 }
 
@@ -295,14 +297,48 @@ func (c *Cpu) incPcByMode(mode Mode) {
 
 // StepSilent は step_silent 相当 (デバッグ出力なしの1ステップ実行)。
 func (c *Cpu) StepSilent() {
-	instr, mode := InstrMode(c.Mem.Get(c.Pc))
-	arg := c.decodeArg(mode, c.Mem.Get(c.Pc+1), c.Mem.Get(c.Pc+2))
-	c.Cycles += approxCycles(instr, mode)
+	pc := c.Pc
+	sec, thd := c.Mem.Get(pc+1), c.Mem.Get(pc+2)
+	instr, mode := InstrMode(c.Mem.Get(pc))
+	arg := c.decodeArg(mode, sec, thd)
+	c.Cycles += baseCycles(instr, mode)
+	if mode == Absx || mode == Absy || mode == Indy {
+		c.Cycles += c.pageCrossPenalty(instr, mode, sec, thd)
+	}
 	c.exec(instr, arg, mode)
+	if mode == Rel && c.Pc != pc+2 { // 分岐成立: +1、飛び先が別ページなら +2
+		c.Cycles++
+		if (c.Pc^(pc+2))&0xff00 != 0 {
+			c.Cycles++
+		}
+	}
 }
 
-// approxCycles は命令の概算サイクル数 (ページクロス・分岐成立ペナルティは無視)。
-func approxCycles(instr Instr, mode Mode) int64 {
+// pageCrossPenalty は abs,X / abs,Y / (zp),Y の読み出し命令で実効アドレスがページをまたいだときの +1。
+// 書き込み (STA) と read-modify-write は baseCycles が常にまたいだ分を含む。
+func (c *Cpu) pageCrossPenalty(instr Instr, mode Mode, sec, thd int) int64 {
+	switch instr {
+	case LDA, LDX, LDY, ADC, SBC, CMP, AND, ORA, EOR, NOP:
+	default:
+		return 0
+	}
+	var base, index int
+	switch mode {
+	case Absx:
+		base, index = (thd<<8)+sec, c.X
+	case Absy:
+		base, index = (thd<<8)+sec, c.Y
+	case Indy:
+		base, index = c.Mem.Get(0xff&sec)+(c.Mem.Get(0xff&(sec+1))<<8), c.Y
+	}
+	if (base+index)&0xff00 != base&0xff00 {
+		return 1
+	}
+	return 0
+}
+
+// baseCycles は命令の基本サイクル数 (ページクロス・分岐成立ペナルティを除く)。
+func baseCycles(instr Instr, mode Mode) int64 {
 	switch instr {
 	case BRK:
 		return 7
@@ -328,6 +364,13 @@ func approxCycles(instr Instr, mode Mode) int64 {
 			return 6
 		default:
 			return 7
+		}
+	case STA:
+		switch mode {
+		case Absx, Absy:
+			return 5
+		case Indy:
+			return 6
 		}
 	}
 	switch mode {

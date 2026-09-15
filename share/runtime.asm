@@ -19,8 +19,11 @@
 	.export __div_8
 	.export __div_8s
 	.export __div_16
+	.export __div_16s
 	.export __mod_8
+	.export __mod_8s
 	.export __mod_16
+	.export __mod_16s
 	
 .segment "FC_RUNTIME"
 
@@ -348,10 +351,9 @@ __mul_8s = __mul_8
 		rts
 .endproc
         
-;;; int16/int16=>int16 の割り算 
+;;; uint16/uint16=>uint16 の割り算
 ;;;  reg(4,5) = reg(0,1) / reg(2,3) ( 余り=reg(6,7))
-;;; USING: y, reg[0..8]
-;;; TODO: たぶん動いてない
+;;; USING: y, reg[0..7]
 .proc __div_16
 	txa
 	pha
@@ -395,6 +397,109 @@ __mul_8s = __mul_8
         rts
 .endproc
         
+.proc __mod_8s
+        jsr __div_8s
+        lda reg+5
+        sta reg+4
+        rts
+.endproc
+
+;;; uint16%uint16=>uint16 の割り算の余り
+;;;  reg(4,5) = reg(0,1) % reg(2,3)
+;;; USING: y, reg[0..7]
 .proc __mod_16
-        rts						; 未実装
+        jsr __div_16
+        lda reg+6
+        sta reg+4
+        lda reg+7
+        sta reg+5
+        rts
+.endproc
+
+;;; sint16/sint16=>sint16 の割り算 (__div_8s と同じ床除算: 商は負の無限大方向に丸め、余りの符号は除数に合わせる)
+;;;  reg(4,5) = reg(0,1) / reg(2,3) ( 余り=reg(6,7))
+;;; USING: y, reg[0..9]
+.proc __div_16s
+		lda #0
+		sta reg+8				; reg8 = 商の符号 (1 なら負)
+		sta reg+9				; reg9 = 除数の符号 (1 なら負)
+
+		lda reg+1				; if reg(0,1) < 0 then reg(0,1) = -reg(0,1); reg8 = 1
+		bpl @reg0_pos
+		sec
+		lda #0
+		sbc reg+0
+		sta reg+0
+		lda #0
+		sbc reg+1
+		sta reg+1
+		lda #1
+		sta reg+8
+@reg0_pos:
+
+		lda reg+3				; if reg(2,3) < 0 then reg(2,3) = -reg(2,3); reg9 = 1; reg8 = !reg8
+		bpl @reg2_pos
+		sec
+		lda #0
+		sbc reg+2
+		sta reg+2
+		lda #0
+		sbc reg+3
+		sta reg+3
+		lda #1
+		sta reg+9
+		eor reg+8
+		sta reg+8
+@reg2_pos:
+
+		jsr __div_16			; reg(4,5) = reg(0,1) / reg(2,3)、reg(6,7) = 余り
+
+		lda reg+8				; 商が負なら reg(4,5) = -reg(4,5)、余りがあれば商 -1、余り = 除数 - 余り
+		beq @else1
+		sec
+		lda #0
+		sbc reg+4
+		sta reg+4
+		lda #0
+		sbc reg+5
+		sta reg+5
+		lda reg+6
+		ora reg+7
+		beq @else1
+		sec
+		lda reg+2
+		sbc reg+6
+		sta reg+6
+		lda reg+3
+		sbc reg+7
+		sta reg+7
+		lda reg+4				; reg(4,5) -= 1
+		bne @dec_lo
+		dec reg+5
+@dec_lo:
+		dec reg+4
+@else1:
+		lda reg+9				; 除数が負なら余り = -余り
+		beq @else2
+		sec
+		lda #0
+		sbc reg+6
+		sta reg+6
+		lda #0
+		sbc reg+7
+		sta reg+7
+@else2:
+		rts
+.endproc
+
+;;; sint16%sint16=>sint16 の割り算の余り
+;;;  reg(4,5) = reg(0,1) % reg(2,3)
+;;; USING: y, reg[0..9]
+.proc __mod_16s
+        jsr __div_16s
+        lda reg+6
+        sta reg+4
+        lda reg+7
+        sta reg+5
+        rts
 .endproc
