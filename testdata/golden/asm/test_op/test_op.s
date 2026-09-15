@@ -2560,7 +2560,6 @@ _500:
 	rol a
 	clc
 	rol a
-	sta 0+<L+0
 	sta <S+5,x
 	lda #0
 	sta <S+6,x
@@ -2666,7 +2665,6 @@ _500:
 	ror a
 	clc
 	ror a
-	sta 0+<L+0
 	sta <S+5,x
 	lda #0
 	sta <S+6,x
@@ -2811,20 +2809,10 @@ _538:
 	sta 0+<L+0
 	lda 1+<S+0,x
 	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
 	lda 0+<L+0
 	sta <S+6,x
 	lda 1+<L+0
@@ -2842,55 +2830,20 @@ _538:
 	sta 0+<L+0
 	lda 1+<S+2,x
 	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
-	lda 0+<L+0
-	clc
-	rol a
-	sta 0+<L+0
-	lda 1+<L+0
-	rol a
-	sta 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
+	asl 0+<L+0
+	rol 1+<L+0
 	lda 0+<L+0
 	sta <S+6,x
 	lda 1+<L+0
@@ -2921,19 +2874,11 @@ _538:
 	sta 0+<L+0
 	lda 1+<S+4,x
 	sta 1+<L+0
-	clc
-	ror a
-	sta 1+<L+0
+	lsr 1+<L+0
+	ror 0+<L+0
+	lsr 1+<L+0
+	ror 0+<L+0
 	lda 0+<L+0
-	ror a
-	sta 0+<L+0
-	lda 1+<L+0
-	clc
-	ror a
-	sta 1+<L+0
-	lda 0+<L+0
-	ror a
-	sta 0+<L+0
 	sta <S+6,x
 	lda 1+<L+0
 	sta <S+7,x

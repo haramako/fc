@@ -225,3 +225,63 @@ func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
 	skip := l.newLabel()
 	return []any{"lda " + lo, "bne " + skip, "dec " + hi, skip + ":", "dec " + lo}, true
 }
+
+// shiftInMemory は定数シフトをメモリ上で行う (Dst がメモリにある 1 / 2 バイトのとき)。
+//
+//	1 バイト:  asl x / lsr x                 (lda; clc; rol a; sta の 10 サイクルが 5 に)
+//	2 バイト:  asl lo; rol hi / lsr hi; ror lo (バイトごとに lda / sta していた 20 サイクルが 10 に)
+//	          8 以上は先にバイトを動かす (<< 8 は hi = lo; lo = 0)
+//
+// 符号付きの右シフトは最上位バイトを A に読んで C に符号を立てる (lda hi; cmp #128; ror hi; ror lo)。
+// Dst が A / コンディション (LocA / LocCond) なら対象外。In(0) が Dst と別の場所ならまず load でコピーする。
+func (l *Llc) shiftInMemory(op *ir.Op, n int, signed bool) ([]any, bool) {
+	size := ir.ValType(op.Dst).Size
+	if size > 2 || !isValueOrCasted(op.Dst) || ir.ValKind(op.Dst) == ir.KindLiteral {
+		return nil, false
+	}
+	if ir.ValKind(op.Dst) == ir.KindLocal {
+		switch ir.ValLocation(op.Dst) {
+		case ir.LocA, ir.LocCond:
+			return nil, false
+		}
+	}
+	left := op.Code == ir.OpShiftLeft
+	if size == 1 && !l.sameByte(op.Dst, op.In(0), 0) {
+		return nil, false // 1 バイトで別の場所へ: A 経由 (lda; clc; rol a; sta) の方が短い
+	}
+	var r []any
+	r = append(r, anyIfy(l.load(op.Dst, op.In(0))))
+	if size == 1 {
+		x := l.byte(op.Dst, 0)
+		for k := 0; k < n; k++ {
+			if signed && !left {
+				r = append(r, "lda "+x, "cmp #128", "ror "+x)
+			} else if left {
+				r = append(r, "asl "+x)
+			} else {
+				r = append(r, "lsr "+x)
+			}
+		}
+		return r, true
+	}
+	lo, hi := l.byte(op.Dst, 0), l.byte(op.Dst, 1)
+	for n >= 8 && !(signed && !left) {
+		if left {
+			r = append(r, "lda "+lo, "sta "+hi, "lda #0", "sta "+lo)
+		} else {
+			r = append(r, "lda "+hi, "sta "+lo, "lda #0", "sta "+hi)
+		}
+		n -= 8
+	}
+	for k := 0; k < n; k++ {
+		switch {
+		case left:
+			r = append(r, "asl "+lo, "rol "+hi)
+		case signed:
+			r = append(r, "lda "+hi, "cmp #128", "ror "+hi, "ror "+lo)
+		default:
+			r = append(r, "lsr "+hi, "ror "+lo)
+		}
+	}
+	return r, true
+}

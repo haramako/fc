@@ -69,6 +69,9 @@ func (l *Llc) load(to, from ir.Operand) []any {
 			}
 		}
 		for i := 0; i < ir.ValType(to).Size; i++ {
+			if l.sameByte(to, from, i) {
+				continue // 自分自身への代入 (x = x) は何もしない
+			}
 			r = append(r, l.loadA(from, i))
 			r = append(r, l.storeA(to, i))
 		}
@@ -193,6 +196,22 @@ func (l *Llc) pointerWrite(p ir.Operand, off int, val ir.Operand, size int) []an
 		r = append(r, l.loadA(val, i), fmt.Sprintf("ldy #%d", off+i), fmt.Sprintf("sta (%s),y", base))
 	}
 	return r
+}
+
+// sameByte は 2 つのメモリ上のオペランドの i バイト目が同じ場所か (アドレス表記が同じ)。A / 即値なら false。
+func (l *Llc) sameByte(a, b ir.Operand, i int) bool {
+	for _, v := range []ir.Operand{a, b} {
+		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral {
+			return false
+		}
+		if ir.ValKind(v) == ir.KindLocal {
+			switch ir.ValLocation(v) {
+			case ir.LocA, ir.LocCond:
+				return false
+			}
+		}
+	}
+	return l.byte(a, i) == l.byte(b, i)
 }
 
 // sameStorage は 2 つのオペランドが同じ変数 (の一部) を指すか。

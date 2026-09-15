@@ -272,8 +272,14 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			// 結果を A に残す命令 (codegen が storeA で書く) であること
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpPget,
-				ir.OpIndexPget, ir.OpFieldPget) {
+				ir.OpIndexPget, ir.OpFieldPget, ir.OpShiftLeft, ir.OpShiftRight) {
 				continue
+			}
+			if codeIn(op.Code, ir.OpShiftLeft, ir.OpShiftRight) {
+				// 定数シフトだけ (変数シフトは Y を使うループで A に残らない)
+				if _, lit := ir.ValIntLiteral(op.In(1)); !lit {
+					continue
+				}
 			}
 
 			// 直後の命令が最初の入力を最初に A へ読む (loadA) ものであること

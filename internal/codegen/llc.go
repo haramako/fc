@@ -413,7 +413,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
 			if n, ok := ir.ValIntLiteral(op.In(1)); ok {
 				// 定数の場合
-				if ir.ValType(op.Dst).Size == 1 {
+				if lines, ok := l.shiftInMemory(op, n, signed); ok {
+					r.push(lines)
+				} else if ir.ValType(op.Dst).Size == 1 {
 					// サイズが1
 					r.push(l.loadA(op.In(0), 0))
 					for k := 0; k < n; k++ {
