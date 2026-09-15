@@ -605,8 +605,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.IfStmt:
 		labels := h.newLabels("then", "else", "end")
 		thenLabel, elseLabel, endLabel := labels[0], labels[1], labels[2]
-		cond := h.rval(toC(s.Cond))
-		h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{cond}, Label: elseLabel})
+		h.compileCond(toC(s.Cond), elseLabel, false)
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
 		h.inScope(func() { h.compileStatement(s.Then) })
 		h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
@@ -1363,6 +1362,67 @@ func (h *Hlc) rval(c *cexpr) ir.Operand {
 	return v
 }
 
+// compileCond は条件文脈 (if / while の条件、値として使う && / ||) の式を分岐に落とす:
+// 式が真 (jumpIfTrue) / 偽 (!jumpIfTrue) なら label へ飛ぶ。
+//
+// `!` は飛ぶ向きの反転、`&&` / `||` は短絡の分岐、`!=` / `<=` / `>=` は `==` / `<` の反転にして、
+// 0 / 1 の値をメモリに作らない。比較の一時変数は定義の直後で使うのでコンディションフラグに割り付く
+// (regalloc.allocateCond) → `cmp; bne L`。定数の条件は jump か何も出さない。
+func (h *Hlc) compileCond(c *cexpr, label string, jumpIfTrue bool) {
+	defer h.enterExpr(c.pos)()
+	e := h.constEval(c)
+	if e.kind == cOp {
+		switch e.op {
+		case opNot:
+			h.compileCond(e.args[0], label, !jumpIfTrue)
+			return
+		case opLand:
+			if jumpIfTrue {
+				skip := h.newLabel("skip")
+				h.compileCond(e.args[0], skip, false)
+				h.compileCond(e.args[1], label, true)
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: skip})
+			} else {
+				h.compileCond(e.args[0], label, false)
+				h.compileCond(e.args[1], label, false)
+			}
+			return
+		case opLor:
+			if jumpIfTrue {
+				h.compileCond(e.args[0], label, true)
+				h.compileCond(e.args[1], label, true)
+			} else {
+				skip := h.newLabel("skip")
+				h.compileCond(e.args[0], skip, true)
+				h.compileCond(e.args[1], label, false)
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: skip})
+			}
+			return
+		case opNe:
+			h.compileCond(cop2(opEq, e.args[0], e.args[1]), label, !jumpIfTrue)
+			return
+		case opLe:
+			h.compileCond(cop2(opLt, e.args[1], e.args[0]), label, !jumpIfTrue)
+			return
+		case opGe:
+			h.compileCond(cop2(opLt, e.args[0], e.args[1]), label, !jumpIfTrue)
+			return
+		}
+	}
+	v := h.rval(e)
+	if n, ok := ir.ValIntLiteral(v); ok {
+		if (n != 0) == jumpIfTrue {
+			h.emit(&ir.Op{Code: ir.OpJump, Label: label})
+		}
+		return
+	}
+	code := ir.OpIf
+	if jumpIfTrue {
+		code = ir.OpIfTrue
+	}
+	h.emit(&ir.Op{Code: code, Src: []ir.Operand{v}, Label: label})
+}
+
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
 func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	defer h.enterExpr(c.pos)()
@@ -1516,27 +1576,14 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				r = h.rval(cop2(opNot, cop2(opLt, left, right)))
 			}
 
-		case opLand:
+		case opLand, opLor:
+			// 値として使う `a && b` / `a || b` は 0 / 1 (条件文脈では compileCond が分岐に展開する)
 			endLabel := h.newLabel("end")
 			rr := h.newTmp(h.prog.Types.IntType(1, false))
-			left := h.rval(e.args[0])
-			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{left}})
-			h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{rr}, Label: endLabel})
-			right := h.rval(e.args[1])
-			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{right}})
-			h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
-			r = rr
-
-		case opLor:
-			endLabel := h.newLabel("end")
-			rr := h.newTmp(h.prog.Types.IntType(1, false))
-			r2 := h.newTmp(h.prog.Types.IntType(1, false))
-			left := h.rval(e.args[0])
-			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{left}})
-			h.emit(&ir.Op{Code: ir.OpNot, Dst: r2, Src: []ir.Operand{rr}})
-			h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{r2}, Label: endLabel})
-			right := h.rval(e.args[1])
-			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{right}})
+			u8 := h.prog.Types.IntType(1, false)
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{ir.NewIntLiteral("", u8, 0)}})
+			h.compileCond(e, endLabel, false)
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{ir.NewIntLiteral("", u8, 1)}})
 			h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 			r = rr
 

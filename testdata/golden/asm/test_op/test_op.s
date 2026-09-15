@@ -2292,11 +2292,15 @@ _452:
 	sta 0+<S+0,x
 	lda #0
 	sta 0+<S+1,x
-	lda 0+<S+0,x
+	lda #0
 	sta 0+<L+0
+	lda 0+<S+0,x
 	beq @end_455
 @250:
 	lda 0+<S+0,x
+	beq @end_455
+@251:
+	lda #1
 	sta 0+<L+0
 @end_455:
 	lda 0+<L+0
@@ -2310,22 +2314,26 @@ _452:
 	jsr _unittest_assert_true
 	dex
 	dex
-	lda 0+<S+0,x
+	lda #0
 	sta 0+<L+0
+	lda 0+<S+0,x
 	beq @end_460
-@251:
+@252:
 	lda 0+<S+1,x
+	beq @end_460
+@253:
+	lda #1
 	sta 0+<L+0
 @end_460:
 	lda 0+<L+0
-	beq @252
+	beq @254
 	lda #0
 	sta 0+<L+1
-	jmp @253
-@252:
+	jmp @255
+@254:
 	lda #1
 	sta 0+<L+1
-@253:
+@255:
 	lda 0+<L+1
 	sta <S+2,x
 	lda #.LOBYTE(_463)
@@ -2337,40 +2345,17 @@ _452:
 	jsr _unittest_assert_true
 	dex
 	dex
-	lda 0+<S+1,x
+	lda #0
 	sta 0+<L+0
+	lda 0+<S+1,x
 	beq @end_466
-@254:
+@256:
 	lda 0+<S+0,x
+	beq @end_466
+@257:
+	lda #1
 	sta 0+<L+0
 @end_466:
-	lda 0+<L+0
-	beq @255
-	lda #0
-	sta 0+<L+1
-	jmp @256
-@255:
-	lda #1
-	sta 0+<L+1
-@256:
-	lda 0+<L+1
-	sta <S+2,x
-	lda #.LOBYTE(_469)
-	sta <S+3,x
-	lda #.HIBYTE(_469)
-	sta <S+4,x
-	inx
-	inx
-	jsr _unittest_assert_true
-	dex
-	dex
-	lda 0+<S+1,x
-	sta 0+<L+0
-	beq @end_472
-@257:
-	lda 0+<S+1,x
-	sta 0+<L+0
-@end_472:
 	lda 0+<L+0
 	beq @258
 	lda #0
@@ -2382,6 +2367,37 @@ _452:
 @259:
 	lda 0+<L+1
 	sta <S+2,x
+	lda #.LOBYTE(_469)
+	sta <S+3,x
+	lda #.HIBYTE(_469)
+	sta <S+4,x
+	inx
+	inx
+	jsr _unittest_assert_true
+	dex
+	dex
+	lda #0
+	sta 0+<L+0
+	lda 0+<S+1,x
+	beq @end_472
+@260:
+	lda 0+<S+1,x
+	beq @end_472
+@261:
+	lda #1
+	sta 0+<L+0
+@end_472:
+	lda 0+<L+0
+	beq @262
+	lda #0
+	sta 0+<L+1
+	jmp @263
+@262:
+	lda #1
+	sta 0+<L+1
+@263:
+	lda 0+<L+1
+	sta <S+2,x
 	lda #.LOBYTE(_475)
 	sta <S+3,x
 	lda #.HIBYTE(_475)
@@ -2391,20 +2407,15 @@ _452:
 	jsr _unittest_assert_true
 	dex
 	dex
-	lda 0+<S+0,x
-	sta 0+<L+0
-	beq @260
 	lda #0
-	sta 0+<L+1
-	jmp @261
-@260:
-	lda #1
-	sta 0+<L+1
-@261:
-	lda 0+<L+1
-	beq @end_478
-@262:
+	sta 0+<L+0
+	lda 0+<S+0,x
+	bne @skip_480
 	lda 0+<S+1,x
+	beq @end_478
+@264:
+@skip_480:
+	lda #1
 	sta 0+<L+0
 @end_478:
 	lda 0+<L+0
@@ -2418,20 +2429,15 @@ _452:
 	jsr _unittest_assert_true
 	dex
 	dex
-	lda 0+<S+0,x
-	sta 0+<L+0
-	beq @263
 	lda #0
-	sta 0+<L+1
-	jmp @264
-@263:
-	lda #1
-	sta 0+<L+1
-@264:
-	lda 0+<L+1
+	sta 0+<L+0
+	lda 0+<S+0,x
+	bne @skip_486
+	lda 0+<S+1,x
 	beq @end_484
 @265:
-	lda 0+<S+1,x
+@skip_486:
+	lda #1
 	sta 0+<L+0
 @end_484:
 	lda 0+<L+0
@@ -2445,20 +2451,15 @@ _452:
 	jsr _unittest_assert_true
 	dex
 	dex
-	lda 0+<S+1,x
-	sta 0+<L+0
-	beq @266
 	lda #0
-	sta 0+<L+1
-	jmp @267
-@266:
-	lda #1
-	sta 0+<L+1
-@267:
-	lda 0+<L+1
-	beq @end_490
-@268:
+	sta 0+<L+0
+	lda 0+<S+1,x
+	bne @skip_492
 	lda 0+<S+0,x
+	beq @end_490
+@266:
+@skip_492:
+	lda #1
 	sta 0+<L+0
 @end_490:
 	lda 0+<L+0
@@ -2472,31 +2473,26 @@ _452:
 	jsr _unittest_assert_true
 	dex
 	dex
-	lda 0+<S+1,x
-	sta 0+<L+0
-	beq @269
 	lda #0
-	sta 0+<L+1
-	jmp @270
-@269:
-	lda #1
-	sta 0+<L+1
-@270:
-	lda 0+<L+1
-	beq @end_496
-@271:
+	sta 0+<L+0
 	lda 0+<S+1,x
+	bne @skip_498
+	lda 0+<S+1,x
+	beq @end_496
+@267:
+@skip_498:
+	lda #1
 	sta 0+<L+0
 @end_496:
 	lda 0+<L+0
-	beq @272
+	beq @268
 	lda #0
 	sta 0+<L+1
-	jmp @273
-@272:
+	jmp @269
+@268:
 	lda #1
 	sta 0+<L+1
-@273:
+@269:
 	lda 0+<L+1
 	sta <S+2,x
 	lda #.LOBYTE(_500)
@@ -2575,14 +2571,14 @@ _500:
 	lda 0+<S+0,x
 	tay
 	lda 0+<S+1,x
-@274:
+@270:
 	cpy #0
-	beq @275
+	beq @271
 	clc
 	rol a
 	dey
-	jmp @274
-@275:
+	jmp @270
+@271:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2600,14 +2596,14 @@ _500:
 	lda 0+<S+2,x
 	tay
 	lda 0+<S+1,x
-@276:
+@272:
 	cpy #0
-	beq @277
+	beq @273
 	clc
 	rol a
 	dey
-	jmp @276
-@277:
+	jmp @272
+@273:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2625,14 +2621,14 @@ _500:
 	lda 0+<S+3,x
 	tay
 	lda 0+<S+1,x
-@278:
+@274:
 	cpy #0
-	beq @279
+	beq @275
 	clc
 	rol a
 	dey
-	jmp @278
-@279:
+	jmp @274
+@275:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2680,14 +2676,14 @@ _500:
 	lda 0+<S+0,x
 	tay
 	lda 0+<S+4,x
-@280:
+@276:
 	cpy #0
-	beq @281
+	beq @277
 	clc
 	ror a
 	dey
-	jmp @280
-@281:
+	jmp @276
+@277:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2705,14 +2701,14 @@ _500:
 	lda 0+<S+2,x
 	tay
 	lda 0+<S+4,x
-@282:
+@278:
 	cpy #0
-	beq @283
+	beq @279
 	clc
 	ror a
 	dey
-	jmp @282
-@283:
+	jmp @278
+@279:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x
@@ -2730,14 +2726,14 @@ _500:
 	lda 0+<S+3,x
 	tay
 	lda #255
-@284:
+@280:
 	cpy #0
-	beq @285
+	beq @281
 	clc
 	ror a
 	dey
-	jmp @284
-@285:
+	jmp @280
+@281:
 	sta 0+<L+0
 	lda 0+<L+0
 	sta <S+5,x

@@ -20,8 +20,8 @@
     "out": "crc8=149"
   },
   "entities": {
-    "cycles": 1513945,
-    "size": 1351,
+    "cycles": 1454469,
+    "size": 1173,
     "out": "sum=20554"
   },
   "fib": {
@@ -40,8 +40,8 @@
     "out": "sum=8921"
   },
   "oam": {
-    "cycles": 3692344,
-    "size": 1462,
+    "cycles": 3571562,
+    "size": 1412,
     "out": "sum=25008"
   },
   "plasma": {
@@ -55,8 +55,8 @@
     "out": "count=1900"
   },
   "textprint": {
-    "cycles": 5863692,
-    "size": 822,
+    "cycles": 5779027,
+    "size": 769,
     "out": "sum=9948"
   }
 }

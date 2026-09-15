@@ -11,9 +11,6 @@ _test_stat_I10 = 10
 .segment "test_stat"
 .proc _test_stat_test_if
 	lda #1
-	beq @else_2
-@1:
-	lda #1
 	sta 0+<L+0
 	sta <S+0,x
 	lda #0
@@ -27,14 +24,6 @@ _test_stat_I10 = 10
 	lda #.HIBYTE(_5)
 	sta <S+5,x
 	jsr _unittest_assert_equal
-	jmp @end_3
-@else_2:
-@end_3:
-	lda #0
-	beq @else_8
-@2:
-	jmp @end_9
-@else_8:
 	lda #2
 	sta 0+<L+0
 	sta <S+0,x
@@ -49,16 +38,15 @@ _test_stat_I10 = 10
 	lda #.HIBYTE(_11)
 	sta <S+5,x
 	jsr _unittest_assert_equal
-@end_9:
 	lda #0
 	sta 0+<L+0
 	lda #0
 	sta 1+<L+0
 	lda 0+<L+0
-	bne @3
+	bne @1
 	lda 1+<L+0
 	beq @end_15
-@3:
+@1:
 	lda #0
 	sta <S+0,x
 	lda #0
@@ -100,9 +88,9 @@ _test_stat_I10 = 10
 	lda #1
 	sta 1+<L+0
 	lda 0+<L+0
-	bne @end_27
+	bne @then_34
 	lda 1+<L+0
-	bne @end_27
+	bne @then_34
 	lda #0
 	sta <S+0,x
 	lda #0
@@ -116,25 +104,9 @@ _test_stat_I10 = 10
 	lda #.HIBYTE(_29)
 	sta <S+5,x
 	jsr _unittest_assert_equal
-@end_27:
-	lda #0
-	beq @else_32
-@4:
-	lda #0
-	sta 0+<L+0
-	jmp @end_33
-@else_32:
-	lda #1
-	beq @else_35
-@5:
+@then_34:
 	lda #1
 	sta 0+<L+0
-	jmp @end_33
-@else_35:
-	lda #2
-	sta 0+<L+0
-@end_33:
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x

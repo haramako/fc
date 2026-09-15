@@ -10,20 +10,10 @@ __MODULE_UNITTEST__ = 1
 .segment "unittest"
 .proc _unittest_assert_true
 	lda 0+<S+0,x
-	beq @1
-	lda #0
-	sta 0+<L+0
-	jmp @2
-@1:
-	lda #1
-	sta 0+<L+0
-@2:
-	lda 0+<L+0
-	beq @else_2
-@3:
-	lda #.LOBYTE(_7)
+	bne @else_2
+	lda #.LOBYTE(_6)
 	sta <S+3,x
-	lda #.HIBYTE(_7)
+	lda #.HIBYTE(_6)
 	sta <S+4,x
 	inx
 	inx
@@ -43,9 +33,9 @@ __MODULE_UNITTEST__ = 1
 	dex
 	dex
 	dex
-	lda #.LOBYTE(_9)
+	lda #.LOBYTE(_8)
 	sta <S+3,x
-	lda #.HIBYTE(_9)
+	lda #.HIBYTE(_8)
 	sta <S+4,x
 	inx
 	inx
@@ -65,9 +55,9 @@ __MODULE_UNITTEST__ = 1
 	dex
 	jmp @end_3
 @else_2:
-	lda #.LOBYTE(_12)
+	lda #.LOBYTE(_11)
 	sta <S+3,x
-	lda #.HIBYTE(_12)
+	lda #.HIBYTE(_11)
 	sta <S+4,x
 	inx
 	inx
@@ -78,12 +68,12 @@ __MODULE_UNITTEST__ = 1
 	dex
 @end_3:
 	rts
-_7:
+_6:
 		.byte 10,69,82,82,79,82,58,32,0
-_9:
+_8:
 		.byte 32,32,101,120,112,101,99,116,115,32,116,114,117,101,32,98
 		.byte 117,116,32,102,97,108,115,101,10,0
-_12:
+_11:
 		.byte 46,0
 .endproc
 	.export _unittest_assert_equal
@@ -94,16 +84,16 @@ _12:
 .proc _unittest_assert_equal
 	lda 0+<S+0,x
 	cmp 0+<S+2,x
-	bne @4
+	bne @1
 	lda 1+<S+0,x
 	cmp 1+<S+2,x
-@4:
-	bne @6
-	jmp @else_15
-@6:
-	lda #.LOBYTE(_23)
+@1:
+	bne @3
+	jmp @else_14
+@3:
+	lda #.LOBYTE(_21)
 	sta <S+6,x
-	lda #.HIBYTE(_23)
+	lda #.HIBYTE(_21)
 	sta <S+7,x
 	call _stdio_print, #6
 	lda 0+<S+4,x
@@ -111,9 +101,9 @@ _12:
 	lda 1+<S+4,x
 	sta <S+7,x
 	call _stdio_print, #6
-	lda #.LOBYTE(_25)
+	lda #.LOBYTE(_23)
 	sta <S+6,x
-	lda #.HIBYTE(_25)
+	lda #.HIBYTE(_23)
 	sta <S+7,x
 	call _stdio_print, #6
 	lda 0+<S+2,x
@@ -121,9 +111,9 @@ _12:
 	lda 1+<S+2,x
 	sta <S+7,x
 	call _stdio_print_int16, #6
-	lda #.LOBYTE(_27)
+	lda #.LOBYTE(_25)
 	sta <S+6,x
-	lda #.HIBYTE(_27)
+	lda #.HIBYTE(_25)
 	sta <S+7,x
 	call _stdio_print, #6
 	lda 0+<S+0,x
@@ -131,31 +121,31 @@ _12:
 	lda 1+<S+0,x
 	sta <S+7,x
 	call _stdio_print_int16, #6
-	lda #.LOBYTE(_29)
+	lda #.LOBYTE(_27)
 	sta <S+6,x
-	lda #.HIBYTE(_29)
+	lda #.HIBYTE(_27)
 	sta <S+7,x
 	call _stdio_print, #6
 	lda #1
 	sta <S+6,x
 	call _stdio_exit, #6
-	jmp @end_16
-@else_15:
-	lda #.LOBYTE(_32)
+	jmp @end_15
+@else_14:
+	lda #.LOBYTE(_30)
 	sta <S+6,x
-	lda #.HIBYTE(_32)
+	lda #.HIBYTE(_30)
 	sta <S+7,x
 	call _stdio_print, #6
-@end_16:
+@end_15:
 	rts
-_23:
+_21:
 		.byte 10,69,82,82,79,82,58,32,0
-_25:
+_23:
 		.byte 32,32,101,120,112,101,99,116,115,32,0
-_27:
+_25:
 		.byte 32,32,98,117,116,32,0
-_29:
+_27:
 		.byte 10,0
-_32:
+_30:
 		.byte 46,0
 .endproc

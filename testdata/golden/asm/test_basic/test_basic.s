@@ -128,9 +128,9 @@ _6:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_21)
+	lda #.LOBYTE(_20)
 	sta <S+4,x
-	lda #.HIBYTE(_21)
+	lda #.HIBYTE(_20)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #1
@@ -145,9 +145,9 @@ _6:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_25)
+	lda #.LOBYTE(_24)
 	sta <S+4,x
-	lda #.HIBYTE(_25)
+	lda #.HIBYTE(_24)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #3
@@ -162,9 +162,9 @@ _6:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_29)
+	lda #.LOBYTE(_28)
 	sta <S+4,x
-	lda #.HIBYTE(_29)
+	lda #.HIBYTE(_28)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	lda #11
@@ -179,19 +179,19 @@ _6:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_33)
+	lda #.LOBYTE(_32)
 	sta <S+4,x
-	lda #.HIBYTE(_33)
+	lda #.HIBYTE(_32)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	rts
-_21:
+_20:
 		.byte 97,100,100,40,41,0
-_25:
+_24:
 		.byte 102,105,98,40,49,41,0
-_29:
+_28:
 		.byte 102,105,98,40,51,41,0
-_33:
+_32:
 		.byte 102,105,98,40,49,49,41,0
 .endproc
 	.export _test_basic_test_misc
@@ -204,22 +204,22 @@ _33:
 	sta 0+<S+0,x
 	lda #0
 	sta 0+<L+0
-	jmp @begin_35
-@end_39:
+	jmp @begin_34
+@end_38:
 	lda #0
 	sta <S+1,x
-	lda #.LOBYTE(_41)
+	lda #.LOBYTE(_40)
 	sta <S+2,x
-	lda #.HIBYTE(_41)
+	lda #.HIBYTE(_40)
 	sta <S+3,x
 	inx
 	jsr _unittest_assert_true
 	dex
-@begin_35:
+@begin_34:
 	lda #1
 	sta 0+<L+0
 	lda 0+<S+0,x
-	beq @end_39
+	beq @end_38
 @4:
 	lda 0+<L+0
 	sta <S+1,x
@@ -229,9 +229,9 @@ _33:
 	sta <S+3,x
 	lda #0
 	sta <S+4,x
-	lda #.LOBYTE(_44)
+	lda #.LOBYTE(_43)
 	sta <S+5,x
-	lda #.HIBYTE(_44)
+	lda #.HIBYTE(_43)
 	sta <S+6,x
 	inx
 	jsr _unittest_assert_equal
@@ -249,20 +249,20 @@ _33:
 	sta <S+3,x
 	lda #255
 	sta <S+4,x
-	lda #.LOBYTE(_48)
+	lda #.LOBYTE(_47)
 	sta <S+5,x
-	lda #.HIBYTE(_48)
+	lda #.HIBYTE(_47)
 	sta <S+6,x
 	inx
 	jsr _unittest_assert_equal
 	dex
-	lda #.LOBYTE(_54)
+	lda #.LOBYTE(_53)
 	sta <S+2,x
-	lda #.HIBYTE(_54)
+	lda #.HIBYTE(_53)
 	sta <S+3,x
-	lda #.LOBYTE(_56)
+	lda #.LOBYTE(_55)
 	sta <S+4,x
-	lda #.HIBYTE(_56)
+	lda #.HIBYTE(_55)
 	sta <S+5,x
 	lda #6
 	sta <S+6,x
@@ -279,25 +279,25 @@ _33:
 	lda #0
 @6:
 	sta <S+1,x
-	lda #.LOBYTE(_59)
+	lda #.LOBYTE(_58)
 	sta <S+2,x
-	lda #.HIBYTE(_59)
+	lda #.HIBYTE(_58)
 	sta <S+3,x
 	inx
 	jsr _unittest_assert_true
 	dex
 	rts
-_41:
+_40:
 		.byte 108,111,111,112,32,98,114,101,97,107,0
-_44:
+_43:
 		.byte 108,111,111,112,0
-_48:
+_47:
 		.byte 99,97,115,116,0
-_54:
+_53:
 		.byte 104,111,10,103,101,0
-_56:
+_55:
 		.byte 104,111,10,103,101,0
-_59:
+_58:
 		.byte 104,101,114,101,32,115,116,114,105,110,103,0
 .endproc
 	.export _test_basic_add_fastcall
@@ -332,13 +332,13 @@ _59:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_64)
+	lda #.LOBYTE(_63)
 	sta <S+4,x
-	lda #.HIBYTE(_64)
+	lda #.HIBYTE(_63)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	rts
-_64:
+_63:
 		.byte 97,100,100,95,102,97,115,116,99,97,108,108,0
 .endproc
 	.export _main
@@ -348,70 +348,70 @@ _64:
 .segment "test_basic"
 .proc _main
 	jsr _stdio_init
-	lda #.LOBYTE(_67)
+	lda #.LOBYTE(_66)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_67)
+	lda #.HIBYTE(_66)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_basic_test_nesasm_limit
-	lda #.LOBYTE(_70)
+	lda #.LOBYTE(_69)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_70)
+	lda #.HIBYTE(_69)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	lda #.LOBYTE(_73)
+	lda #.LOBYTE(_72)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_73)
+	lda #.HIBYTE(_72)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_basic_test_function
-	lda #.LOBYTE(_76)
+	lda #.LOBYTE(_75)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_76)
+	lda #.HIBYTE(_75)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	lda #.LOBYTE(_79)
+	lda #.LOBYTE(_78)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_79)
+	lda #.HIBYTE(_78)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_basic_test_misc
-	lda #.LOBYTE(_82)
+	lda #.LOBYTE(_81)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_82)
+	lda #.HIBYTE(_81)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	lda #.LOBYTE(_85)
+	lda #.LOBYTE(_84)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_85)
+	lda #.HIBYTE(_84)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_basic_test_fastcall
-	lda #.LOBYTE(_88)
+	lda #.LOBYTE(_87)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_88)
+	lda #.HIBYTE(_87)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #0
 	sta <FC_FASTCALL_REG+0
 	jsr _stdio_exit
 	rts
-_67:
+_66:
 		.byte 116,101,115,116,95,110,101,115,97,115,109,95,108,105,109,105
 		.byte 116,58,0
-_70:
+_69:
 		.byte 10,0
-_73:
+_72:
 		.byte 116,101,115,116,95,102,117,110,99,116,105,111,110,58,0
-_76:
+_75:
 		.byte 10,0
-_79:
+_78:
 		.byte 116,101,115,116,95,109,105,115,99,58,0
-_82:
+_81:
 		.byte 10,0
-_85:
+_84:
 		.byte 116,101,115,116,95,102,97,115,116,99,97,108,108,58,0
-_88:
+_87:
 		.byte 10,0
 .endproc
 _test_basic_main = _main

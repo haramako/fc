@@ -34,8 +34,7 @@ __MODULE_MEM__ = 1
 .proc _mem_strcpy
 	lda #0
 	sta 0+<FC_FASTCALL_REG+5
-	jmp @begin_9
-@body_20:
+@then_11:
 	ldy 0+<FC_FASTCALL_REG+5
 	lda (FC_FASTCALL_REG+3),y
 	sta 0+<FC_FASTCALL_REG+6
@@ -43,25 +42,13 @@ __MODULE_MEM__ = 1
 	lda 0+<FC_FASTCALL_REG+6
 	sta (FC_FASTCALL_REG+1),y
 	lda 0+<FC_FASTCALL_REG+6
-	beq @1
-	lda #0
-	sta 0+<FC_FASTCALL_REG+7
-	jmp @2
-@1:
-	lda #1
-	sta 0+<FC_FASTCALL_REG+7
-@2:
-	lda 0+<FC_FASTCALL_REG+7
-	beq @end_19
-@3:
+	bne @end_19
 	lda 0+<FC_FASTCALL_REG+5
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 @end_19:
 	inc 0+<FC_FASTCALL_REG+5
-@begin_9:
-	lda #1
-	bne @body_20
+	jmp @then_11
 .endproc
 	.import FC_FASTCALL_REG_SIZE
-	.assert FC_FASTCALL_REG_SIZE >= 8, error, "fastcall functions of module mem need 8 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"
+	.assert FC_FASTCALL_REG_SIZE >= 7, error, "fastcall functions of module mem need 7 bytes of FC_FASTCALL_REG (raise .res of FC_FASTCALL_REG and FC_FASTCALL_REG_SIZE in base.asm)"
