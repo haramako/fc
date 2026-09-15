@@ -17,10 +17,7 @@ __MODULE_MEM__ = 1
 	sta 0+<FC_FASTCALL_REG+3
 	jmp @begin_1
 @body_3:
-	clc
-	lda 0+<FC_FASTCALL_REG+3
-	adc #1
-	sta 0+<FC_FASTCALL_REG+3
+	inc 0+<FC_FASTCALL_REG+3
 @begin_1:
 	ldy 0+<FC_FASTCALL_REG+3
 	lda (FC_FASTCALL_REG+1),y
@@ -61,10 +58,7 @@ __MODULE_MEM__ = 1
 	sta 0+<FC_FASTCALL_REG+0
 	rts
 @end_19:
-	clc
-	lda 0+<FC_FASTCALL_REG+5
-	adc #1
-	sta 0+<FC_FASTCALL_REG+5
+	inc 0+<FC_FASTCALL_REG+5
 @begin_9:
 	lda #1
 	bne @body_20

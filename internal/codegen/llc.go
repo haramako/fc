@@ -379,23 +379,21 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			r.push(endLabel + ":")
 			r.push(l.storeA(op.Dst, 1))
 
-		case ir.OpAdd:
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				if i == 0 {
-					r.push("clc")
-				}
-				r.push(l.loadA(op.In(0), i))
-				r.push(fmt.Sprintf("adc %s", l.byte(op.In(1), i)))
-				r.push(l.storeA(op.Dst, i))
+		case ir.OpAdd, ir.OpSub:
+			if lines, ok := l.incDec(op); ok {
+				r.push(lines)
+				break
 			}
-
-		case ir.OpSub:
+			carry, alu := "clc", "adc"
+			if op.Code == ir.OpSub {
+				carry, alu = "sec", "sbc"
+			}
 			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 				if i == 0 {
-					r.push("sec")
+					r.push(carry)
 				}
 				r.push(l.loadA(op.In(0), i))
-				r.push(fmt.Sprintf("sbc %s", l.byte(op.In(1), i)))
+				r.push(fmt.Sprintf("%s %s", alu, l.byte(op.In(1), i)))
 				r.push(l.storeA(op.Dst, i))
 			}
 
@@ -799,6 +797,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 
 	lines = append(lines, ".endproc")
 
+	if l.OptimizeLevel > 0 {
+		lines = peepholeA(lines)
+	}
 	lines = l.extendJump(lines)
 
 	lmd.Asm = lines

@@ -15,7 +15,6 @@ _test_stat_I10 = 10
 @1:
 	lda #1
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -38,7 +37,6 @@ _test_stat_I10 = 10
 @else_8:
 	lda #2
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -172,10 +170,7 @@ _38:
 	lda #0
 	sta 0+<S+0,x
 @begin_40:
-	clc
-	lda 0+<S+0,x
-	adc #1
-	sta 0+<S+0,x
+	inc 0+<S+0,x
 	lda 0+<S+0,x
 	cmp #3
 	bne @begin_40
@@ -197,10 +192,7 @@ _38:
 	lda #0
 	sta 0+<S+0,x
 @begin_50:
-	clc
-	lda 0+<S+0,x
-	adc #1
-	sta 0+<S+0,x
+	inc 0+<S+0,x
 	lda 0+<S+0,x
 	cmp #3
 	bcc @begin_50
@@ -221,7 +213,6 @@ _38:
 	dex
 	lda #1
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+1,x
 	lda #0
 	sta <S+2,x
@@ -260,7 +251,6 @@ _63:
 @body_67:
 	lda #1
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
@@ -281,10 +271,7 @@ _63:
 	lda 0+<S+1,x
 	adc 0+<S+0,x
 	sta 0+<S+1,x
-	clc
-	lda 0+<S+0,x
-	adc #1
-	sta 0+<S+0,x
+	inc 0+<S+0,x
 @begin_65:
 	lda 0+<S+0,x
 	cmp #10
@@ -447,10 +434,7 @@ _80:
 	adc #20
 	sta 0+<L+1
 @end_89:
-	clc
-	lda 0+<L+0
-	adc #1
-	sta 0+<L+0
+	inc 0+<L+0
 @begin_82:
 	lda 0+<L+0
 	cmp #6

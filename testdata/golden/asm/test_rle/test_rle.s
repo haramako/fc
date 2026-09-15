@@ -77,7 +77,6 @@ _test_rle_dest: .res 128
 	dex
 	lda <0+S+2,x
 	sta 0+<L+0
-	lda 0+<L+0
 	cmp #0
 	bne @1
 	lda #1
@@ -150,7 +149,6 @@ _test_rle_dest: .res 128
 	dex
 	lda <0+S+2,x
 	sta 0+<L+0
-	lda 0+<L+0
 	cmp #0
 	bne @3
 	lda #1

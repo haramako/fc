@@ -178,3 +178,50 @@ func pow2(n int) int {
 // ---------------------------------------------------------------
 // レジスター割り当て
 // ---------------------------------------------------------------
+
+// incDec は `x = x ± 1` (x はメモリ上の 1 / 2 バイトの変数) を inc / dec で出す。
+//
+//	1 バイト: inc x                          (5 サイクル。clc; lda; adc #1; sta の 10 から)
+//	2 バイト +1: inc x; bne @s; inc x+1; @s:  (7〜13 サイクル。18 から)
+//	2 バイト -1: lda x; bne @s; dec x+1; @s: dec x
+//
+// 結果を A に置く割付 (LocA) のときは A に値が要るので使わない。
+func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
+	k, lit := ir.ValIntLiteral(op.In(1))
+	size := ir.ValType(op.Dst).Size
+	if !lit || k != 1 || size > 2 || !isValueOrCasted(op.Dst) || !isValueOrCasted(op.In(0)) {
+		return nil, false
+	}
+	for _, v := range []ir.Operand{op.Dst, op.In(0)} {
+		if ir.ValKind(v) == ir.KindLiteral {
+			return nil, false
+		}
+		if ir.ValKind(v) == ir.KindLocal {
+			switch ir.ValLocation(v) {
+			case ir.LocA, ir.LocCond:
+				return nil, false
+			}
+		}
+	}
+	for i := 0; i < size; i++ {
+		if l.byte(op.Dst, i) != l.byte(op.In(0), i) {
+			return nil, false
+		}
+	}
+	lo, hi := l.byte(op.Dst, 0), ""
+	if size == 2 {
+		hi = l.byte(op.Dst, 1)
+	}
+	if op.Code == ir.OpAdd {
+		if size == 1 {
+			return []any{"inc " + lo}, true
+		}
+		skip := l.newLabel()
+		return []any{"inc " + lo, "bne " + skip, "inc " + hi, skip + ":"}, true
+	}
+	if size == 1 {
+		return []any{"dec " + lo}, true
+	}
+	skip := l.newLabel()
+	return []any{"lda " + lo, "bne " + skip, "dec " + hi, skip + ":", "dec " + lo}, true
+}

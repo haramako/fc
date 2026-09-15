@@ -18,7 +18,6 @@ _test_cycle_cycle_var: .res 1
 	jsr _cycle_use_hoge
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x

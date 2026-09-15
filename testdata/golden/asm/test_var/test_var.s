@@ -239,10 +239,7 @@ _49:
 	lda 0+<L+3
 	ldy #0
 	sta (L+1),y
-	clc
-	lda 0+<L+0
-	adc #1
-	sta 0+<L+0
+	inc 0+<L+0
 	ldy 0+<L+0
 	sty <reg+0
 	clc
@@ -259,10 +256,7 @@ _49:
 	lda 0+<L+3
 	ldy #0
 	sta (L+1),y
-	clc
-	lda 0+<L+0
-	adc #1
-	sta 0+<L+0
+	inc 0+<L+0
 	ldy 0+<L+0
 	sty <reg+0
 	clc
@@ -375,7 +369,6 @@ _test_var_FUNC_TABLE:
 	jsr jsr_reg
 	lda <0+S+0,x
 	sta 0+<L+2
-	lda 0+<L+2
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -404,7 +397,6 @@ _test_var_FUNC_TABLE:
 	jsr jsr_reg
 	lda <0+S+0,x
 	sta 0+<L+2
-	lda 0+<L+2
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -433,7 +425,6 @@ _test_var_FUNC_TABLE:
 	jsr jsr_reg
 	lda <0+S+0,x
 	sta 0+<L+2
-	lda 0+<L+2
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -451,7 +442,6 @@ _test_var_FUNC_TABLE:
 	jsr _test_var__D2
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -469,7 +459,6 @@ _test_var_FUNC_TABLE:
 	jsr _test_var__D96
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -564,7 +553,6 @@ _111:
 	jsr _test_var_segmented_function
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x

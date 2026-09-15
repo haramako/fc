@@ -96,7 +96,6 @@ _test_memory_buf2: .res 512
 	jsr _mem_compare
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -224,7 +223,6 @@ _test_memory_buf2: .res 512
 	jsr _mem_compare
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -253,7 +251,6 @@ _test_memory_buf2: .res 512
 	jsr _mem_compare
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -299,9 +296,7 @@ _38:
 	jsr _mem_strcpy
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
-	lda 0+<L+1
 	sta <S+0,x
 	lda #0
 	sta <S+1,x

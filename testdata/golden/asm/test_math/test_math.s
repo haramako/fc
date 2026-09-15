@@ -15,7 +15,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @1
 	lda #255
@@ -42,7 +41,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @3
 	lda #255
@@ -69,7 +67,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @5
 	lda #255
@@ -96,7 +93,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @7
 	lda #255
@@ -123,7 +119,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @9
 	lda #255
@@ -150,7 +145,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @11
 	lda #255
@@ -177,7 +171,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @13
 	lda #255
@@ -204,7 +197,6 @@ __MODULE_TEST_MATH__ = 1
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @15
 	lda #255
@@ -255,7 +247,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @17
 	lda #255
@@ -282,7 +273,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @19
 	lda #255
@@ -309,7 +299,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @21
 	lda #255
@@ -336,7 +325,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @23
 	lda #255
@@ -363,7 +351,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @25
 	lda #255
@@ -390,7 +377,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @27
 	lda #255
@@ -417,7 +403,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @29
 	lda #255
@@ -444,7 +429,6 @@ _39:
 	jsr _math_sin
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta 0+<L+1
 	bpl @31
 	lda #255
@@ -497,7 +481,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -517,7 +500,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -537,7 +519,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -557,7 +538,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -577,7 +557,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -597,7 +576,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -617,7 +595,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -637,7 +614,6 @@ _79:
 	jsr _math_atan
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x

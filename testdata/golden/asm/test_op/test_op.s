@@ -294,7 +294,6 @@ _35:
 	jsr __mul_8
 	lda <reg+4+0
 	sta 0+<L+1
-	lda 0+<L+1
 	sta <reg+0+0
 	lda 0+<S+2,x
 	sta <reg+2+0
@@ -2295,7 +2294,6 @@ _452:
 	sta 0+<S+1,x
 	lda 0+<S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @end_455
 @250:
 	lda 0+<S+0,x
@@ -2314,7 +2312,6 @@ _452:
 	dex
 	lda 0+<S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @end_460
 @251:
 	lda 0+<S+1,x
@@ -2342,7 +2339,6 @@ _452:
 	dex
 	lda 0+<S+1,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @end_466
 @254:
 	lda 0+<S+0,x
@@ -2370,7 +2366,6 @@ _452:
 	dex
 	lda 0+<S+1,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @end_472
 @257:
 	lda 0+<S+1,x
@@ -2398,7 +2393,6 @@ _452:
 	dex
 	lda 0+<S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @260
 	lda #0
 	sta 0+<L+1
@@ -2426,7 +2420,6 @@ _452:
 	dex
 	lda 0+<S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @263
 	lda #0
 	sta 0+<L+1
@@ -2454,7 +2447,6 @@ _452:
 	dex
 	lda 0+<S+1,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @266
 	lda #0
 	sta 0+<L+1
@@ -2482,7 +2474,6 @@ _452:
 	dex
 	lda 0+<S+1,x
 	sta 0+<L+0
-	lda 0+<L+0
 	beq @269
 	lda #0
 	sta 0+<L+1
@@ -2570,7 +2561,6 @@ _500:
 	clc
 	rol a
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+5,x
 	lda #0
 	sta <S+6,x
@@ -2677,7 +2667,6 @@ _500:
 	clc
 	ror a
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+5,x
 	lda #0
 	sta <S+6,x
@@ -2932,7 +2921,6 @@ _538:
 	sta 0+<L+0
 	lda 1+<S+4,x
 	sta 1+<L+0
-	lda 1+<L+0
 	clc
 	ror a
 	sta 1+<L+0
@@ -2946,7 +2934,6 @@ _538:
 	lda 0+<L+0
 	ror a
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+6,x
 	lda 1+<L+0
 	sta <S+7,x

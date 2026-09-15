@@ -55,7 +55,6 @@ _math_rand_table:
 .proc _math_sin
 	lda 0+<FC_FASTCALL_REG+1
 	bmi @else_5
-	lda 0+<FC_FASTCALL_REG+1
 	sec
 	sbc #64
 	bvc @6
@@ -202,10 +201,7 @@ _math_rand_idx: .res 1
 	;;;=============================
 .segment "math"
 .proc _math_rand
-	clc
-	lda 0+_math_rand_idx
-	adc #1
-	sta 0+_math_rand_idx
+	inc 0+_math_rand_idx
 	ldy 0+_math_rand_idx
 	lda _math_rand_table+0,y
 	sta 0+<FC_FASTCALL_REG+0

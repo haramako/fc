@@ -44,10 +44,7 @@ __MODULE_TEST_LZW__ = 1
 	inx
 	jsr _unittest_assert_equal
 	dex
-	clc
-	lda 0+<S+0,x
-	adc #1
-	sta 0+<S+0,x
+	inc 0+<S+0,x
 @begin_4:
 	lda 0+<S+0,x
 	cmp #8
@@ -155,7 +152,6 @@ _28:
 	jsr _lzw_read_vln
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -171,7 +167,6 @@ _28:
 	jsr _lzw_read_vln
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -289,7 +284,6 @@ _test_lzw_buf: .res 256
 	jsr _mem_strlen
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+4,x
 	lda #0
 	sta <S+5,x
@@ -319,7 +313,6 @@ _test_lzw_buf: .res 256
 	dex
 	lda <0+S+2,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+2,x
 	lda #0
 	sta <S+3,x

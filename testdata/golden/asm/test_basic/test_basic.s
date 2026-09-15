@@ -121,7 +121,6 @@ _6:
 	jsr _test_basic_add
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -139,7 +138,6 @@ _6:
 	jsr _test_basic_fib
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -157,7 +155,6 @@ _6:
 	jsr _test_basic_fib
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -175,7 +172,6 @@ _6:
 	jsr _test_basic_fib
 	lda <0+S+0,x
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
@@ -275,7 +271,6 @@ _33:
 	dex
 	lda <0+S+1,x
 	sta 0+<L+0
-	lda 0+<L+0
 	cmp #0
 	bne @5
 	lda #1
@@ -330,7 +325,6 @@ _59:
 	jsr _test_basic_add_fastcall
 	lda <0+FC_FASTCALL_REG
 	sta 0+<L+0
-	lda 0+<L+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
