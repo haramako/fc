@@ -13,35 +13,25 @@
 - [x] ポインタ参照で `L`（ZP）を `reg` に写さず `(L+n),y` を直接使う ✅ 2026-09-16
 - [x] ジャンプの連鎖・分岐の反転・ループの回転 ✅ 2026-09-16
 - [x] `dec` / `inc`、メモリ上の定数シフト ✅ 2026-09-16
+
 ### 第 2 弾（sema / opt / ピープホール。フレームの配置に依存しない。目安 3〜4 日）
 
 2026-09-16 に `entities`（castle の `en.process` 相当）の生成コードをレビューして見つけた無駄の順。
 括弧は castle（36 モジュール、452 関数）での出現数。どれもフレームの配置（B）と独立なので B より先に入れる。
 
-- [ ] **switch** — `eq t; not t; if_true t` を switch 全体で共有する一時変数で出すため cond 割付が効かず、
-      case 1 つの判定が約 30 サイクル（`cmp #k; bne next` なら 5）。case ごとに新しい一時変数で `eq t; if t goto next`
-      に（switch 102 / case 273）。sema、小
-- [ ] **`&&` / `||` と `if` の条件の直接分岐化** — 今は共有一時変数に 0/1 を書いてラベルの後で読むので cond 割付が効かず
-      `lda #1; sta; jmp; lda #0; sta; lda; beq` になる。条件文脈のコンパイル（`compileCond(expr, falseLabel)`）で
-      `!` / `&&` / `||` / 比較をそのまま分岐にする（`&&`/`||` 290、if 963）。sema、中
-- [ ] **アドレス計算を使用位置へ寄せる（sink）** — `p.x += 1` / SoA の `e.anim++` は左辺の `index` / `add` が右辺の
-      読み出しより先に出るので `pset` と融合できず、2 バイトのポインタを作って `ldy #0; sta (p),y` で書いている
-      （`sta anim,y` で済む）。同じブロック内で入力が書き換えられていなければ、単一使用の純粋な命令を使用位置の直前へ。opt、小〜中
-- [ ] **A 割付の消費側に `pset` / `index_pset` / `field_pset` の値オペランド**を追加（`-e.vx` が `sta L+3; lda L+3` を挟む）。
-      codegen が Y を先に読む形（要素 1 バイト、ゼロページのポインタ）に限る。regalloc、小
-- [ ] **`return <式>` の直接計算** — `add t = a, b; return t` → 結果領域へ直接（`return` を coalesceCopies の対象に。36 箇所 +
-      `return f(x)`）。opt、小
-- [ ] **Y の追跡ピープホール** — `ldy 0+<S+0,x` の重複（`update` で 10 回、`oam` に ldy 39 個）。A の追跡と同じ構造
-      （ラベル・jsr・iny/dey・tay・その場所への書き込みで無効化）。codegen、小〜中
-- [ ] **フラグの再利用** — `lda / and / adc …; cmp #0; beq` の `cmp #0` 除去、`dec x; lda x; bne` → `dec x; bne`
-      （ラベルをまたがない範囲）。codegen、小
-- [ ] **extend_jump の精密化** — 今は分岐 5 バイト・不明命令 10 バイトの安全側の 1 パス推定で、大きい関数では届く分岐も
-      `beq @n; jmp L; @n:` に伸びる（+3 バイト、成立時 +2 サイクル）。実サイズで固定点まで反復。codegen、小
-- [ ] 足回り: **`internal/opt` に単体テストが無い**（golden と bench でしか検証していない。`chainInPlace` の
-      `x = (x << 1) ^ x` のバグ（2026-09-16 修正）は単体テストがあれば防げた）。パスごとに IR を組んで確かめるテストを
-      第 2 弾の最初に足す
+- [x] switch の case 判定を `eq t; if t goto next`（`cmp #k; bne`）に ✅ 2026-09-16
+- [x] `&&` / `||` と `if` の条件の直接分岐化（`compileCond`） ✅ 2026-09-16
+- [x] アドレス計算を使用位置へ寄せる（`sinkAddress`）、`pset` 系の値の A 割付 ✅ 2026-09-16
+- [x] `return <式>` の直接計算 ✅ 2026-09-16
+- [x] Y の追跡ピープホール、`lda` 直後の `cmp #0` ✅ 2026-09-16
+- [x] extend_jump の精密化（実サイズで固定点まで） ✅ 2026-09-16
+- [x] `internal/opt` の単体テスト ✅ 2026-09-16
+- [ ] `dec x; lda x; bne` → `dec x; bne`（A が分岐の先で死んでいることの確認が要る。asm テキストでは分からないので
+      codegen が `if` の直前の演算を見て出す方が筋がいい）
+- [ ] `lda #k` の即値も A の追跡に含める（`lda #0` の重複。SoA の scatter で多い）
 
-期待値: castle 形のベンチ（`entities` / `oam` / `textprint` / `bgdecode`）で 2〜3 割。castle 本体は switch と `&&` の分が大きい。
+結果（bench/README.md の第 2 弾の経過）: `entities` -24%、`plasma` -30%、`oam` -22%、`bgdecode` -15%、`fib` -7%、
+`textprint` -4%。v0.0.2 比では `entities` -29%、`oam` -46%、`plasma` -49%、`bgdecode` -37%。
 
 ### 第 3 弾: フレームの静的割付（B）
 
