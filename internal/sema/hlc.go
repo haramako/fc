@@ -741,7 +741,6 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.SwitchStmt:
 		// TODO: jumptableを使った実装をいれる
 		cond := h.rval(toC(s.Tag))
-		tmp := h.newTmp(h.prog.Types.IntType(1, false))
 		endLabel := h.newLabel("end")
 		// v2: ラベルなし break は switch を抜ける。v1 では switch は break の対象外 (外側のループを抜ける)
 		isV2 := h.module.Version >= syntax.Version2
@@ -754,7 +753,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		for _, c := range s.Cases {
 			labels := h.newLabels("then", "else")
 			thenLabel, elseLabel := labels[0], labels[1]
-			for _, v := range c.Values {
+			// 値ごとに `eq t; if_true t goto then`、最後の値だけ `eq t; if t goto else` (一致しなければ次の case へ)。
+			// t は値ごとに新しい一時変数にする (定義 1 つ + 直後で使用、でコンディションフラグに割り付く: cmp; bne)
+			for k, v := range c.Values {
 				cv := h.constEvalOperand(toC(v))
 				if n, ok := ir.ValIntLiteral(cv); ok {
 					if seen[n] {
@@ -762,12 +763,17 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 					}
 					seen[n] = true
 				}
+				tmp := h.newTmp(h.prog.Types.IntType(1, false))
 				h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, cv}})
-				h.emit(&ir.Op{Code: ir.OpNot, Dst: tmp, Src: []ir.Operand{tmp}})
-				h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: thenLabel})
+				if k < len(c.Values)-1 {
+					h.emit(&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{tmp}, Label: thenLabel})
+				} else {
+					h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: elseLabel})
+				}
 			}
-			h.emit(&ir.Op{Code: ir.OpJump, Label: elseLabel})
-			h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
+			if len(c.Values) > 1 {
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
+			}
 			h.compileStmts(c.Body)
 			h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
 			h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})

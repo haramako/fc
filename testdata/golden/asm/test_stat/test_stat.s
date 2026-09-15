@@ -329,118 +329,42 @@ _80:
 	lda #0
 	sta 0+<L+0
 	jmp @begin_82
-@body_95:
+@body_97:
 	lda 0+<L+0
 	cmp #1
-	bne @14
-	lda #1
-	sta 0+<L+2
-	jmp @15
-@14:
-	lda #0
-	sta 0+<L+2
-@15:
-	lda 0+<L+2
-	beq @16
-	lda #0
-	sta 0+<L+2
-	jmp @17
-@16:
-	lda #1
-	sta 0+<L+2
-@17:
-	lda 0+<L+2
-	beq @then_90
-@18:
+	beq @then_89
 	lda 0+<L+0
 	cmp #2
-	bne @19
-	lda #1
-	sta 0+<L+2
-	jmp @20
-@19:
-	lda #0
-	sta 0+<L+2
-@20:
-	lda 0+<L+2
-	beq @21
-	lda #0
-	sta 0+<L+2
-	jmp @22
-@21:
-	lda #1
-	sta 0+<L+2
-@22:
-	lda 0+<L+2
-	beq @then_90
-@23:
+	beq @then_89
 	lda 0+<L+0
 	cmp #3
-	bne @24
-	lda #1
-	sta 0+<L+2
-	jmp @25
-@24:
-	lda #0
-	sta 0+<L+2
-@25:
-	lda 0+<L+2
-	beq @26
-	lda #0
-	sta 0+<L+2
-	jmp @27
-@26:
-	lda #1
-	sta 0+<L+2
-@27:
-	lda 0+<L+2
-	bne @else_91
-@then_90:
+	bne @else_90
+@then_89:
 	clc
 	lda 0+<L+1
 	adc 0+<L+0
 	sta 0+<L+1
-	jmp @end_89
-@else_91:
+	jmp @end_88
+@else_90:
 	lda 0+<L+0
 	cmp #4
-	bne @28
-	lda #1
-	sta 0+<L+2
-	jmp @29
-@28:
-	lda #0
-	sta 0+<L+2
-@29:
-	lda 0+<L+2
-	beq @30
-	lda #0
-	sta 0+<L+2
-	jmp @31
-@30:
-	lda #1
-	sta 0+<L+2
-@31:
-	lda 0+<L+2
-	bne @else_94
+	bne @else_96
 	clc
 	lda 0+<L+1
 	adc #10
 	sta 0+<L+1
-	jmp @end_89
-@else_94:
+	jmp @end_88
+@else_96:
 	clc
 	lda 0+<L+1
 	adc #20
 	sta 0+<L+1
-@end_89:
+@end_88:
 	inc 0+<L+0
 @begin_82:
 	lda 0+<L+0
 	cmp #6
-	bcs @35
-	jmp @body_95
-@35:
+	bcc @body_97
 	lda #56
 	sta <S+0,x
 	lda #0
@@ -449,13 +373,13 @@ _80:
 	sta <S+2,x
 	lda #0
 	sta <S+3,x
-	lda #.LOBYTE(_99)
+	lda #.LOBYTE(_102)
 	sta <S+4,x
-	lda #.HIBYTE(_99)
+	lda #.HIBYTE(_102)
 	sta <S+5,x
 	jsr _unittest_assert_equal
 	rts
-_99:
+_102:
 		.byte 115,119,105,116,99,104,0
 .endproc
 	.export _main
@@ -465,69 +389,69 @@ _99:
 .segment "test_stat"
 .proc _main
 	jsr _stdio_init
-	lda #.LOBYTE(_102)
-	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_102)
-	sta <FC_FASTCALL_REG+1
-	jsr _stdio_print
-	jsr _test_stat_test_if
 	lda #.LOBYTE(_105)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_105)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
+	jsr _test_stat_test_if
 	lda #.LOBYTE(_108)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_108)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	jsr _test_stat_test_loop
 	lda #.LOBYTE(_111)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_111)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
+	jsr _test_stat_test_loop
 	lda #.LOBYTE(_114)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_114)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	jsr _test_stat_test_for
 	lda #.LOBYTE(_117)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_117)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
+	jsr _test_stat_test_for
 	lda #.LOBYTE(_120)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_120)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	jsr _test_stat_test_switch
 	lda #.LOBYTE(_123)
 	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_123)
+	sta <FC_FASTCALL_REG+1
+	jsr _stdio_print
+	jsr _test_stat_test_switch
+	lda #.LOBYTE(_126)
+	sta <FC_FASTCALL_REG+0
+	lda #.HIBYTE(_126)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #0
 	sta <FC_FASTCALL_REG+0
 	jsr _stdio_exit
 	rts
-_102:
-		.byte 116,101,115,116,95,105,102,58,0
 _105:
-		.byte 10,0
+		.byte 116,101,115,116,95,105,102,58,0
 _108:
-		.byte 116,101,115,116,95,108,111,111,112,58,0
+		.byte 10,0
 _111:
-		.byte 10,0
+		.byte 116,101,115,116,95,108,111,111,112,58,0
 _114:
-		.byte 116,101,115,116,95,102,111,114,58,0
-_117:
 		.byte 10,0
+_117:
+		.byte 116,101,115,116,95,102,111,114,58,0
 _120:
-		.byte 116,101,115,116,95,115,119,105,116,99,104,58,0
+		.byte 10,0
 _123:
+		.byte 116,101,115,116,95,115,119,105,116,99,104,58,0
+_126:
 		.byte 10,0
 .endproc
 _test_stat_main = _main

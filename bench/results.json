@@ -20,8 +20,8 @@
     "out": "crc8=149"
   },
   "entities": {
-    "cycles": 1687082,
-    "size": 1441,
+    "cycles": 1513945,
+    "size": 1351,
     "out": "sum=20554"
   },
   "fib": {
