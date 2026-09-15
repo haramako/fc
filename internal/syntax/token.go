@@ -1,7 +1,7 @@
 // Package syntax は fc 言語の字句解析・構文解析・構文木を提供する。
 //
 // このパッケージは他の internal パッケージ (sema, ir, types) に依存しない
-// (doc/v2_plan.md C3)。フォーマッタ等の純粋な構文ツールがここだけで動くこと。
+// (doc/archive/v2_plan.md C3)。フォーマッタ等の純粋な構文ツールがここだけで動くこと。
 package syntax
 
 import "fmt"

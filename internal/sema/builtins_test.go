@@ -24,7 +24,7 @@ func TestBuiltins(t *testing.T) {
 	})
 	t.Run("include rb is an error in v2", func(t *testing.T) {
 		err := compileFiles(t, map[string]string{"t.fc": "#fc 2\nuse * from stdio;\ninclude(\"stdio.rb\");\nfunction main():void {}\n"}, "t.fc")
-		if err == nil || !strings.Contains(err.Error(), "Ruby macros are not supported in fc 2") {
+		if err == nil || !strings.Contains(err.Error(), "macros are not supported in fc 2") {
 			t.Errorf("got %v", err)
 		}
 	})

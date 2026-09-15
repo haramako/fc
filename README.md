@@ -3,8 +3,7 @@
 NES(ファミコン)用のコンパイラです。C風の独自言語 (FC言語) を ca65 アセンブリにコンパイルし、
 ld65 でリンクして NES ROM (.nes) または実験用バイナリ (emu ターゲット) を生成します。
 
-本体は Go で実装されています (元の Ruby 実装からの移植。Ruby 版は削除済みで、
-タグ `ruby-frozen` から参照できます: `git show ruby-frozen:ruby/lib/fc/hlc.rb` など)。
+本体は Go で実装されています。
 
 ## 必要なもの
 
@@ -87,9 +86,9 @@ doc/              ドキュメント
 |---|---|
 | [doc/development_notes.md](doc/development_notes.md) | **開発時にまず読む**: 環境・ブランチ運用・テストの回し方・ハマりどころ |
 | [doc/language_reference.md](doc/language_reference.md) | FC言語の仕様 |
-| [doc/go_evolution_plan.md](doc/go_evolution_plan.md) | 今後の計画（Goらしい設計への転換・機能追加）と作業ログ |
-| [doc/go_port_plan.md](doc/go_port_plan.md) | Ruby→Go 移植の記録（アーカイブ） |
-| [doc/go_port_dump_format.md](doc/go_port_dump_format.md) | golden ダンプ正規形の仕様 |
+| [doc/roadmap.md](doc/roadmap.md) | 残っている仕事（最適化・言語機能・ツール） |
+| [bench/README.md](bench/README.md) | 生成コードのベンチマークと他コンパイラとの比較 |
+| [doc/golden_dump_format.md](doc/golden_dump_format.md) | golden ダンプ正規形の仕様 |
 | [doc/optimization.md](doc/optimization.md) / [doc/register_allocation.md](doc/register_allocation.md) | 最適化・レジスタ割付の解説 |
 | [examples/README.md](examples/README.md) | サンプルの構成・同期方法・エミュレータテスト |
 

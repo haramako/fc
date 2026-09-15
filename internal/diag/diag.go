@@ -10,7 +10,7 @@ import (
 
 // Error はコンパイルエラー。
 //
-// エラー処理の規約 (doc/v2_plan.md R2 / C6):
+// エラー処理の規約 (doc/archive/v2_plan.md R2 / C6):
 //   - 内部では panic(&diag.Error{...}) で投げてよい。意味解析は文ごとに回復して Program.Errors に集め
 //     (複数エラー報告)、次の文へ進む。回復点の最外は sema.CompileModule / CompileBodies と codegen.Llc.Compile で、
 //     そこで Pos が未設定なら処理中の位置を補完する。パッケージ外へは error 値 (1 件なら *Error、複数なら ErrorList) として返る

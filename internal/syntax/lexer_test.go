@@ -211,7 +211,7 @@ func TestKindString(t *testing.T) {
 	}
 }
 
-// TestLexerErrors: v1 の Ruby 版が黙って通していた不正なリテラルはエラーにする (doc/v2_grammar.md §3.9)。
+// TestLexerErrors: 不正なリテラルはエラーにする (doc/v2_grammar.md §3.9)。
 func TestLexerErrors(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{"0b2", "invalid digit '2' in base 2 literal"},

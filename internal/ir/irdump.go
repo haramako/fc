@@ -1,7 +1,7 @@
 package ir
 
 // IR / alloc-IR のダンプ (golden 比較用)。形式は移植期の tools/dumper.rb に由来する。
-// R1-e で内部表現が型付きになった際、Ruby の Symbol/String の区別に由来していた
+// 内部表現が型付きになった際、シンボルと文字列の区別に由来していた
 // `:name` / `"name"` の出し分けはシンボルをすべて `:name` に統一した (golden は再生成済み)。
 
 import (

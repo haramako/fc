@@ -48,7 +48,7 @@ type BuildOptions struct {
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / base.o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
-	// CLI はどちらも既定のままなので外部挙動は従来どおり (doc/v2_plan.md G6)。
+	// CLI はどちらも既定のままなので外部挙動は従来どおり (doc/archive/v2_plan.md G6)。
 	Dir      string
 	BuildDir string
 
@@ -236,7 +236,7 @@ func (c *Compiler) libPath(target string) []string {
 	return []string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target))}
 }
 
-// makeBase は base.asm.erb 相当の base.s を生成してアセンブルする。
+// makeBase は base.s (ランタイムの土台: ZP のレジスタ・スタック・FC_FARCALL などの定義) を生成してアセンブルする。
 func (c *Compiler) makeBase() {
 	opts := c.prog.Options
 	inesmap := 0
@@ -418,7 +418,7 @@ func (c *Compiler) fastcallRegSize() int {
 	return regalloc.DefaultLimits.FastcallReg
 }
 
-// baseAsmTemplate は share/<target>/base.asm.erb 相当。
+// baseAsmTemplate は base.s の雛形。
 func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) string {
 	header := "\t.exportzp FC_LOCAL\n" +
 		"\t.exportzp FC_REG\n" +

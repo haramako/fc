@@ -25,11 +25,10 @@ func TestTextConverter(t *testing.T) {
 		}
 	})
 
-	t.Run("tr表のずれの再現", func(t *testing.T) {
-		// Ruby の tr はソース15文字:宛先14文字のため、\→＊, *→＝, =→＠, @→＠ になる
-		tc2 := NewTextConverter("＊＝＠．")
+	t.Run("記号の全角化", func(t *testing.T) {
+		tc2 := NewTextConverter("＊＝＠．＼")
 		got := tc2.Conv(`\*=@.`)
-		want := []int{0, 1, 2, 2, 3}
+		want := []int{4, 0, 1, 2, 3}
 		if !eqInts(got, want) {
 			t.Errorf("got %v want %v", got, want)
 		}

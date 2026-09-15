@@ -16,7 +16,7 @@ import (
 //	_<N> / __<N> 配列リテラルのデータブロック (関数内は _<N>、モジュールレベルは _<mod>__<N>)
 var reGenLabel = regexp.MustCompile(`@[a-z]+_\d+|@\d+|_D\d+|__\d+\b|(?:^|[^\w])_\d+\b`)
 
-// normalizeLabels は連番識別子を出現順の通し番号に置き換える (採番方式の変更を吸収する: doc/v2_plan.md R3-c)。
+// normalizeLabels は連番識別子を出現順の通し番号に置き換える (採番方式の変更を吸収する: doc/archive/v2_plan.md R3-c)。
 func normalizeLabels(s string) string {
 	seen := map[string]int{}
 	return reGenLabel.ReplaceAllStringFunc(s, func(m string) string {

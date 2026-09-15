@@ -31,7 +31,7 @@ func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
 	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0)}
 }
 
-// asmLines は文字列/ nil / ネストした配列を保持する行バッファ (Ruby の Array 相当)。
+// asmLines は文字列 / nil / ネストした配列を保持する行バッファ。
 type asmLines struct {
 	lines []any
 }
@@ -930,8 +930,7 @@ func isValueOrCasted(v ir.Operand) bool {
 	return false
 }
 
-// storeA は Aレジスタからのストア。
-// (Ruby版は ir.CastedValue の location==:a を考慮しない — 忠実に再現)
+// storeA は A レジスタからのストア (置き場所が A の値なら何も出さない)。
 func (l *Llc) storeA(v ir.Operand, n int) any {
 	if uv, ok := v.(*ir.Value); ok && uv.Location == ir.LocA {
 		if n != 0 {
@@ -1429,7 +1428,7 @@ func (l *Llc) optimizePointer(lmd *ir.Lambda, ops []*ir.Op) []*ir.Op {
 	return ops
 }
 
-// isSameOperand は Ruby の == (ir.CastedValue は Delegator 経由で from と比較) 相当。
+// isSameOperand は同じ値を指すか (ir.CastedValue は元の値で比べる)。
 func isSameOperand(a, b ir.Operand) bool {
 	ua, ub := ir.UnderlyingValue(a), ir.UnderlyingValue(b)
 	if ua != nil && ub != nil {

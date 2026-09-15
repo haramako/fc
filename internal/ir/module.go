@@ -134,7 +134,7 @@ func (m *Module) AddUse(mi *ModuleInterface) {
 	m.Uses = append(m.Uses, mi)
 }
 
-// ModuleInterface は importer から見えるモジュールの外面 (doc/v2_plan.md C4)。
+// ModuleInterface は importer から見えるモジュールの外面 (doc/archive/v2_plan.md C4)。
 // 宣言の検索と識別だけを提供し、Lambda 本体や IR には触れさせない。
 // F-mod (分割コンパイル) ではこれをシリアライズしたものが `use` の入力になる。
 //

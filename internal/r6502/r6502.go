@@ -1,6 +1,5 @@
-// Package r6502 は lib/r6502 (Ruby製6502エミュレータ) の厳密移植。
-// 実機と異なる挙動 (zpx のページクロス非マスク、indx の二重参照など) も
-// Ruby 版の演算子優先順位どおりに再現している。
+// Package r6502 は 6502 エミュレータ (emu ターゲットの実行、ベンチマークのサイクル計測、内蔵 NES ランナー)。
+// 公式命令のみ。アドレッシングは実機準拠 (zp,X / zp,Y はページ内でラップ、(zp,X) はゼロページ内で間接)。
 package r6502
 
 // Bus はCPUから見えるメモリ空間。Memory のほか、NESのメモリマップ実装
@@ -204,11 +203,6 @@ type Cpu struct {
 	// フラグ (0/1)
 	C, Z, I, D, B, V, N int
 
-	// Accurate を true にすると、Ruby版の再現である誤った挙動
-	// (zpx/zpy のページクロス非マスク、indx の二重参照) を実機準拠に直す。
-	// emu ターゲットの golden テストは false のまま使う。
-	Accurate bool
-
 	// Cycles は消費サイクル数 (フレームタイミングとベンチマーク用)。
 	// 命令の基本サイクルにページクロス (abs,X / abs,Y / (zp),Y の読み出し) と分岐成立 (+1、ページをまたげば +2) を
 	// 加える。未定義命令と Accurate=false のときの zp,X ラップ無しは対象外。
@@ -232,8 +226,7 @@ func InstrMode(opcode int) (Instr, Mode) {
 	return im.instr, im.mode
 }
 
-// decodeArg は Cpu#decode_arg 相当 (Ruby版の演算子優先順位の癖も再現)。
-// arg なし(imp/acc)は hasArg=false。
+// decodeArg はアドレッシングモードに従ってオペランド (即値・実効アドレス・相対オフセット) を求める。
 func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 	switch mode {
 	case Imp:
@@ -243,15 +236,9 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 	case Zp:
 		return secWord
 	case Zpx:
-		if c.Accurate {
-			return 0xff & (secWord + c.X)
-		}
-		return secWord + c.X // マスクなし (Ruby版と同じ)
+		return 0xff & (secWord + c.X)
 	case Zpy:
-		if c.Accurate {
-			return 0xff & (secWord + c.Y)
-		}
-		return secWord + c.Y
+		return 0xff & (secWord + c.Y)
 	case Rel:
 		if secWord <= 127 {
 			return secWord
@@ -270,11 +257,7 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 	case Indx:
 		lb := c.Mem.Get(0xff & (c.X + secWord))
 		hb := c.Mem.Get(0xff & (c.X + secWord + 1))
-		if c.Accurate {
-			return (hb << 8) + lb
-		}
-		// Ruby版は最後にもう一度 mem.get する (実機と異なる挙動の再現)
-		return c.Mem.Get((hb << 8) + lb)
+		return (hb << 8) + lb
 	case Indy:
 		lb := c.Mem.Get(0xff & secWord)
 		hb := c.Mem.Get(0xff & (secWord + 1))
@@ -473,7 +456,7 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 			tens := ((0xf0 & x) >> 4) - ((0xf0 & y) >> 4)
 			r0 := ones + 10*tens - (1 - c.C)
 			c.C = b2i(r0 >= 0)
-			r := rubyIntMod(r0, 100)
+			r := floorMod(r0, 100)
 			c.Z = b2i(r == 0)
 			c.A = r + 6*(r/10)
 			c.N = (0x80 & c.A) >> 7
@@ -868,8 +851,6 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		// bit 5
 		c.V = 0x1 & (flags >> 6)
 		c.N = 0x1 & (flags >> 7)
-		// 注: Ruby版は hi/lo を逆順に取り出すバグがあった (fc の emuターゲットでは
-		// rti は一度も実行されないため露見しない)。実機準拠 (flags→lo→hi) に修正。
 		lo := m.Get(0x0100 + c.S + 1)
 		c.S += 1
 		hi := m.Get(0x0100 + c.S + 1)
@@ -895,8 +876,8 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 	}
 }
 
-// rubyIntMod は Ruby の % (floor剰余)。
-func rubyIntMod(a, b int) int {
+// floorMod は床剰余 (結果の符号は除数に従う。10 進モードの桁の補正用)。
+func floorMod(a, b int) int {
 	m := a % b
 	if m != 0 && (m < 0) != (b < 0) {
 		m += b

@@ -18,7 +18,7 @@ import (
 //
 //	go test ./internal/fc -run 'TestGolden|TestExample' -update
 //
-// (移植期は Ruby 版オラクルの tools/gen_golden.rb で生成していた。形式は doc/go_port_dump_format.md)
+// (形式は doc/golden_dump_format.md)
 
 var update = flag.Bool("update", false, "golden を現在の出力で書き換える")
 

@@ -46,8 +46,8 @@ func countOps(ir, op string) int {
 	return strings.Count(ir, " (:"+op+" ")
 }
 
-// TestHlcCompoundAssignEvaluatesLhsTwice: `a[i] += 8` は旧実装の脱糖 (load X (add X 8)) に従い、
-// 左辺の index を 2 回計算する (Ruby 由来の挙動。R1-c の純関数化後も維持)。
+// TestHlcCompoundAssignEvaluatesLhsTwice: `a[i] += 8` は (load X (add X 8)) に脱糖され、左辺の index を 2 回計算する
+// (index_pget / index_pset に融合されるので速い。左辺に呼び出しがあるときだけ 1 回にする: TestCompoundAssignCallOnce)。
 func TestHlcCompoundAssignEvaluatesLhsTwice(t *testing.T) {
 	ir := mustCompileSrc(t, `
 var a:int[4];
@@ -64,7 +64,7 @@ function main():void { var i:int; i = 1; a[i] += 8; }
 	}
 }
 
-// TestHlcConstFold: 定数式は畳み込まれ、Ruby の floor 除算・真偽値 0/1 に従う。
+// TestHlcConstFold: 定数式は畳み込まれ、床除算・真偽値 0/1 に従う。
 func TestHlcConstFold(t *testing.T) {
 	ir := mustCompileSrc(t, `
 const A = (7 + 3) * 2;

@@ -1,7 +1,6 @@
 package driver
 
-// 性能退行の検知用ベンチマーク (doc/v2_plan.md R0-5)。
-// 基準値は v2_plan.md の作業ログに記録し、各フェーズ末に再計測する。
+// コンパイラ自身の速度のベンチマーク (生成コードの性能は bench/ で測る)。
 //
 //	go test ./internal/fc -run xxx -bench BenchmarkCastle -benchmem
 

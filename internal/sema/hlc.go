@@ -115,7 +115,7 @@ func (h *Hlc) findBreakable(kw string, label *syntax.Ident) breakable {
 	panic(&diag.Error{Msg: fmt.Sprintf("cannot %s without loop", kw)})
 }
 
-// MacroFn は Go 組み込みマクロ (Ruby 版 fclib/*.rb の defmacro 相当)。
+// MacroFn は組み込みマクロ (printf / unittest_run_tests / textmap など。builtins.go)。
 // args は評価済みの実引数、block は呼び出しの後置ブロック。
 type MacroFn func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult
 
@@ -520,7 +520,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.module.IncludeAsms = append(h.module.IncludeAsms, filename)
 		case "macro":
 			if h.module.Version >= syntax.Version2 {
-				panic(&diag.Error{Msg: fmt.Sprintf("include(%q): Ruby macros are not supported in fc 2 (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
+				panic(&diag.Error{Msg: fmt.Sprintf("include(%q): .rb macros are not supported in fc 2 (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
 			}
 			// 既知の .rb はファイルが無くても受理する (組み込みで代替済み。fclib/*.rb はリポジトリから削除した)
 			reg, ok := macroFiles[filename]
@@ -529,7 +529,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", ref)})
 			}
 			if filename == "macro.rb" {
-				h.warn("include(%q): Ruby macros are deprecated; in fc 2 use `const _T = textmap(\"...\")` (fcc migrate --textmap)", filename)
+				h.warn("include(%q): .rb macros are deprecated; in fc 2 use `const _T = textmap(\"...\")` (fcc migrate --textmap)", filename)
 			} else {
 				h.warn("include(%q) is no longer needed (printf / unittest_run_tests / cos are built in); remove it or run fcc migrate", filename)
 			}
@@ -1118,14 +1118,13 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	panic(fmt.Sprintf("invalid op %v", c.op))
 }
 
-// IntValue は値から型を推定した整数リテラル (Value.new_int 相当)。
-// 旧実装の境界 (-128 が sint16 になる) をそのまま保存する。
+// IntValue は値から型を推定した整数リテラル: 0〜255 → uint8、256 以上 → uint16、-128〜-1 → sint8、-129 以下 → sint16。
 func (h *Hlc) IntValue(n int) *ir.Value {
 	var t *types.Type
 	switch {
 	case n >= 256:
 		t = h.prog.Types.IntType(2, false)
-	case n < -127:
+	case n < -128:
 		t = h.prog.Types.IntType(2, true)
 	case n < 0:
 		t = h.prog.Types.IntType(1, true)
@@ -1141,12 +1140,11 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 	for i, p := range params {
 		argTypes[i] = p.Type
 	}
-	// 旧実装は truthy(opt[:fastcall]) で、値が何であれキーがあれば fastcall 扱い
 	typ := h.prog.Types.Func(argTypes, baseType, opts.Has("fastcall"))
 	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil, Body: body}
 }
 
-// foldIntOp は整数リテラル同士の演算を畳み込む (Ruby の整数演算と真偽値→0/1 に準拠)。
+// foldIntOp は整数リテラル同士の演算を畳み込む (除算・剰余は床除算、比較・論理演算の結果は 0/1。実行時の演算と同じ規則)。
 func foldIntOp(op cop, v1, v2 int) int {
 	b2i := func(b bool) int {
 		if b {
@@ -1193,9 +1191,13 @@ func foldIntOp(op cop, v1, v2 int) int {
 		return ^v1
 	case opUminus:
 		return -v1
-	case opShiftLeft:
-		return ir.Shl(v1, v2)
-	case opShiftRight:
+	case opShiftLeft, opShiftRight:
+		if v2 < 0 {
+			panic(&diag.Error{Msg: fmt.Sprintf("shift count %d is negative", v2)})
+		}
+		if op == opShiftLeft {
+			return ir.Shl(v1, v2)
+		}
 		return ir.Shr(v1, v2)
 	}
 	panic("unreachable")
@@ -1416,6 +1418,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		switch e.op {
 
 		case opLoad:
+			if rhs := e.args[1]; rhs.kind == cOp && len(rhs.args) == 2 && rhs.args[0] == e.args[0] && containsCall(e.args[0]) {
+				// 複合代入 `X op= v` は (load X (op X v)) に脱糖されていて X を 2 回評価する。X に関数呼び出しが
+				// あるとき (`a[f()] += 1`) は呼び出しを先に 1 回だけ評価して値に置き換えてから続ける
+				lhs := h.hoistCalls(e.args[0])
+				e = &cexpr{kind: cOp, op: opLoad, args: []*cexpr{lhs, cop2(rhs.op, lhs, rhs.args[1])}, pos: e.pos}
+			}
 			if lhs := e.args[0]; lhs.kind == cOp && lhs.op == opField {
 				// struct のフィールドへの代入。SoA の 2 バイト以上のフィールドは 1 つのポインタで表せないのでここで扱う
 				fr := h.fieldRef(lhs.args[0], lhs.name)
@@ -1834,6 +1842,29 @@ func containsCall(c *cexpr) bool {
 	return false
 }
 
+// hoistCalls は式の中の関数呼び出しを今ここで評価し、その値 (cValue) に置き換えた式を返す (呼び出しが無ければそのまま)。
+func (h *Hlc) hoistCalls(c *cexpr) *cexpr {
+	if !containsCall(c) {
+		return c
+	}
+	if c.kind == cOp && c.op == opCall {
+		return cv(h.operandValue(h.rval(c)))
+	}
+	n := *c
+	n.args = make([]*cexpr, len(c.args))
+	for i, a := range c.args {
+		n.args[i] = h.hoistCalls(a)
+	}
+	if len(c.flds) > 0 {
+		n.flds = make([]cfield, len(c.flds))
+		for i, f := range c.flds {
+			n.flds[i] = f
+			n.flds[i].val = h.hoistCalls(f.val)
+		}
+	}
+	return &n
+}
+
 // operandValue はオペランドを *ir.Value にする (CastedValue などは一時変数に写す)。マクロが cexpr の値として使うため。
 func (h *Hlc) operandValue(v ir.Operand) *ir.Value {
 	if val, ok := v.(*ir.Value); ok {
@@ -1976,9 +2007,7 @@ func (h *Hlc) tryMakeCompatible(a, b ir.Operand) (typ *types.Type, ra, rb ir.Ope
 	return
 }
 
-// ReadSource はソースファイルを読み込む。
-// Ruby版は File.read (テキストモード) で読むため、Windows では CRLF→LF 変換が行われる。
-// 同じ挙動になるよう常に CRLF→LF 変換する (golden は Windows で生成されている)。
+// ReadSource はソースファイルを読み込む。改行は CRLF → LF に正規化する (文字列リテラル内の改行が OS で変わらないように)。
 func ReadSource(path string) ([]byte, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

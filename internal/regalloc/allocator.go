@@ -1,7 +1,7 @@
 package regalloc
 
 // レジスタ割付。lib/fc/allocator.rb 由来。
-// use_define / register_vars は Ruby の Hash と同じく挿入順を保つ必要がある。
+// use_define / register_vars は挿入順を保つ必要がある (割付の結果が順序に依存する)。
 // ir.CastedValue は Delegator のため下位の ir.Value と同一キーに合流する (ir.UnderlyingValue)。
 
 import (
@@ -164,7 +164,7 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 
 	// live range を求め、{callをまたぐ|refを受ける|引数}だったら、フレームスタック上に確保する
 	frameSize := lmd.Type.Base.Size // 帰り値分を予約しておく
-	var registerVars []*allocEntry  // 挿入順を保つ (Ruby の Hash 相当)
+	var registerVars []*allocEntry  // 挿入順を保つ
 	fastcall := lmd.Type.Fastcall()
 	frameLoc := ir.LocFrame
 	if fastcall {
@@ -389,7 +389,7 @@ func allocateCond(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 }
 
 func isSameValue(opElem ir.Operand, v *ir.Value) bool {
-	// Ruby の op[1] == v (ir.CastedValue は Delegator の == で from と比較される)
+	// ir.CastedValue は元の値で比べる
 	return opElem != nil && ir.UnderlyingValue(opElem) == v
 }
 
@@ -564,7 +564,7 @@ func (l *LiveRangeCalculator) CalcLiveRange(defines, uses []int) *ir.LiveRange {
 }
 
 // ---------------------------------------------------------------
-// 使っていない変数の削除 (Ruby版では Llc#delete_unuse)
+// 使っていない変数の削除
 // ---------------------------------------------------------------
 
 func DeleteUnuse(lmd *ir.Lambda) {

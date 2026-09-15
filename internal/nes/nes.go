@@ -1,7 +1,7 @@
 // Package nes は fc が生成した NES ROM の「大雑把な動作確認」用ヘッドレスランナー。
 //
 // 目的はスモークテストであり、正確なNESエミュレーションではない:
-//   - CPU: internal/r6502 (Accurateモード) + 概算サイクル
+//   - CPU: internal/r6502 + サイクル数によるスキャンラインのタイミング
 //   - PPU: レジスタ挙動の近似 (vblankフラグ / NMI / VRAM・パレット・OAMの記録)。
 //     レンダリングパイプラインはなく、Screenshot() が nametable から静的に絵を起こす
 //   - マッパー: NROM(0) と MMC3(4)。MMC3 の scanline IRQ はスキャンライン数の概算で駆動
@@ -117,7 +117,6 @@ func New(rom []byte) (*Machine, error) {
 		m.updateMmc3Banks()
 	}
 	m.Cpu = r6502.NewCpu(m)
-	m.Cpu.Accurate = true
 	return m, nil
 }
 

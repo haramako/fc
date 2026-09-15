@@ -1,6 +1,6 @@
 package ir
 
-// 中間表現 (IR) の型定義 (doc/v2_plan.md R1-d)。
+// 中間表現 (IR) の型定義 (doc/archive/v2_plan.md R1-d)。
 //
 // HLC が生成し、レジスタ割付 (allocator.go) とコード生成 (llc.go) が消費する。
 // 旧実装では命令は []any (先頭が opcode のシンボル、以降が位置引数) だった。ここでは

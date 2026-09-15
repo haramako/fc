@@ -1,4 +1,4 @@
-// fcc は FC コンパイラの CLI (Ruby 版 bin/fcc 互換)。
+// fcc は FC コンパイラの CLI。
 //
 //	Usage: fcc <command> [options] <src.fc> ...
 //	  command: build(b) / compile(c) / run / fmt / migrate
@@ -27,7 +27,6 @@ Options:
     -h, --help       show this message
     -o FILE          output file
     -e               run by interpreter
-    -S               output asm file
     -d, --debug      show debug info
     -t, --target     target platform ( nes, emu )
     -O LEVEL         optimize level (0-2)
@@ -38,7 +37,7 @@ func main() {
 }
 
 func run() int {
-	// bin/fcc と同じく <command> が先頭に来る
+	// <command> が先頭に来る
 	args := os.Args[1:]
 	if len(args) == 0 {
 		fmt.Print(usage)
@@ -59,8 +58,6 @@ func run() int {
 	fs.Usage = func() { fmt.Print(usage) }
 	out := fs.String("o", "", "output file")
 	runFlag := fs.Bool("e", false, "run by interpreter")
-	// -S / -d は Ruby 版との互換のため受理する (出力には影響しない)
-	fs.Bool("S", false, "output asm file")
 	debugFlag := fs.Bool("d", false, "show debug info")
 	fs.BoolVar(debugFlag, "debug", false, "show debug info")
 	target := fs.String("t", "", "target platform ( nes, emu )")

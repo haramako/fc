@@ -1,23 +1,18 @@
 # 開発メモ（環境・運用・ハマりどころ）
 
-Go移植後の fc を開発するときに知っておくべきこと。
-計画・経緯は [go_port_plan.md](go_port_plan.md)（移植、完了）と
-[go_evolution_plan.md](go_evolution_plan.md)（今後の進化計画）を参照。
+fc を開発するときに知っておくべきこと。残っている仕事は [roadmap.md](roadmap.md)、
+言語仕様は [language_reference.md](language_reference.md)。
+（2026-09 以前の計画書・作業ログは [archive/](archive/)。fc はもともと Ruby で書かれていて 2026-08〜09 に Go に
+移植した。Ruby 版はタグ `ruby-frozen` に残っている。Ruby 版との互換は以後考慮しない）
 
 ## ブランチ運用
 
 - 開発は **`agent/golang`** で行う。**安定するまで master へはマージしない**
   （一度マージしたが取り消し済み。master = 8358b15 のまま）
-- **`feature/v2`**（2026-09-12、`agent/golang` 45c2d78 から分岐）: Go らしい実装への転換
-  （R0〜R3）と、その後の文法 v2 / フォーマッタ / モジュール単位コンパイル。
-  作業指示書は [v2_plan.md](v2_plan.md)。厳密クローンの基準点は `agent/golang` に残る
-- タグ:
-  - `ruby-frozen` — 移植前の Ruby 版オリジナル。**Ruby 資産は 2026-09-12 にリポジトリから削除**した
-    （`ruby/`, `test/test-all`, `tools/gen_golden.rb`, `tools/dumper.rb`, `misc/table.rb`）。
-    Go ソースのコメントにある `lib/fc/llc.rb:689` のような出典は `git show ruby-frozen:ruby/lib/fc/llc.rb` で読む。
-    `fclib/*.rb` と `examples/castle/src/macro.rb` も 2026-09-14 の v2 移行で削除（`printf` 等は組み込み、`_T`/`_M` は `textmap`）。
-    `fclib/math.fc` / `share/runtime.asm` の sin/atan/rand/乗算テーブルは `misc/table.rb` の生成物（タグから参照可）
-  - `go-strict-clone` — 厳密クローン完了・castle 動作確認済みの基準点
+- **`feature/v2`**（2026-09-12〜）: 文法 v2 / struct・soa / far call / ベンチなど。master へのマージは安定してから
+- タグ: `v0.0.2`（2026-09-15、最適化前のベースライン）、`ruby-frozen`（Go 移植前の Ruby 版。
+  `fclib/math.fc` / `share/runtime.asm` の sin / atan / rand / 乗算テーブルは `misc/table.rb` の生成物でタグから参照できる）、
+  `go-strict-clone`（移植直後の基準点）
 - **push 注意**: origin は公開の github.com/haramako/fc。
   `examples/castle` は製品コード（ゲームテキスト・リソース含む）なので、
   **push する前に公開可否の判断が必要**
@@ -89,8 +84,8 @@ go test ./...                                    # 全部 (golden + examples + N
   正規形は [internal/syntax/printer.go](../internal/syntax/printer.go) 先頭のコメントと `TestFormatStyle` が定義。
   **リポジトリ内の .fc はまだ整形していない**（castle は製品コードなので一括整形はオーナー判断。整形しても asm は変わらない）
 - golden の再生成（feature/v2 以降）: **`go test ./internal/driver -run 'TestGolden|TestExample' -update`**。
-  Go 自身の出力で上書きする（形式は [go_port_dump_format.md](go_port_dump_format.md)）。**意図しない差分を `-update` で消さない**
-  （運用ルールは [v2_plan.md](v2_plan.md) §0.1 G2）。ast golden は廃止済み
+  Go 自身の出力で上書きする（形式は [golden_dump_format.md](golden_dump_format.md)）。**意図しない差分を `-update` で消さない**
+  （`-update` の前に差分を読んで、意図した変化だけを受け入れる）
 - golden は `.gitattributes` で `eol=lf` に固定してあり、`-update` 後に `git status` がクリーンなら
   出力が完全一致している
 - **fc ソースのテスト（`test/test_*.fc` の assert 群）は TestGoldenStdout が
@@ -98,7 +93,6 @@ go test ./...                                    # 全部 (golden + examples + N
   で必ず不一致になる）。テスト .fc を新規追加したら golden ディレクトリに空ファイルを置くか
   `-update` で生成する
 - 性能退行の検知 (コンパイラ自身の速度): `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
-  （基準値は v2_plan.md の作業ログ）
 - **生成コードのベンチマーク**（2026-09-15〜）: `go test ./bench`。[bench/](../bench/README.md) の 12 本の .fc を emu で走らせ、
   `stdio.bench_start` / `bench_end` で囲んだ区間のサイクル数（`r6502.Cpu.Cycles`。ページクロス・分岐成立込みで決定的）と
   モジュールのセグメントサイズを `bench/results.json` と比べる。出力（チェックサム）の違いはコンパイラのバグ、

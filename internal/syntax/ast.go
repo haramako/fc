@@ -1,6 +1,6 @@
 package syntax
 
-// 型付き構文木 (doc/v2_plan.md R1-b)。
+// 型付き構文木 (doc/archive/v2_plan.md R1-b)。
 //
 // 設計原則:
 //   - 全ノードが Pos()/End() を持つ (C1: ロスレス。フォーマッタがコメントと共に元の構造を復元できる)

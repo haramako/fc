@@ -1,7 +1,7 @@
 // Package types は fc 言語の型と、その同一性 (インターン) を管理する。
 //
 // 型は Universe 経由で作る。同じ構造の型は同じ *Type になるので、ポインタ比較で同一性を判定できる。
-// Universe はコンパイラのインスタンスごとに 1 つ持つ (パッケージレベルの可変状態を持たない: doc/v2_plan.md R1-g)。
+// Universe はコンパイラのインスタンスごとに 1 つ持つ (パッケージレベルの可変状態を持たない: doc/archive/v2_plan.md R1-g)。
 package types
 
 import (

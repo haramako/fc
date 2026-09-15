@@ -31,8 +31,7 @@ go test ./internal/fc -run "TestExampleMiku|TestExampleCastle"
 ```
 
 ビルド結果の ROM を `testdata/golden/examples/{miku,castle}.nes` とバイト比較する。
-スナップショットは取り込み時点（タグ `go-strict-clone` 直後）のビルド結果で、
-**実プロジェクト側で Ruby 版 fc のビルドとバイト一致することを確認済み**のもの。
+スナップショットは現行の fcc のビルド結果（`-update` で更新する）。
 
 コード生成を意図的に変更したときは、差分を確認したうえでスナップショットを
 新しいビルド結果で置き換えること。
@@ -86,8 +85,8 @@ internal/nes のスモークの既知の制限: タイミングは概算のた�
 ## 生成物リソースの方針（fs_data.bin 等）
 
 `castle/res/fs_data.bin`・`castle/tmp/*.bin`・`castle/tmp/font/*`（フォント表）は
-実プロジェクトのツールチェーン（map.json / xlsx / テキスト → tools/converter.rb）が
-生成するもの。再生成には castle 側の Ruby ツール一式が必要なため、
+実プロジェクトのツールチェーン（map.json / xlsx / テキスト → castle 側の変換ツール）が
+生成するもの。再生成には castle 側のツール一式が必要なため、
 **examples では出来合いの生成物をスナップショットとして許容する**。
 
 - ソース内文字列（`_T(...)` 等）の変更には追従しない。文字列とフォント表・

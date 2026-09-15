@@ -1,9 +1,7 @@
 package sema
 
-// castle プロジェクトの src/macro.rb が使う NesTools::TextConverter
-// (nes_tools/lib/nes_tools/text_converter.rb) のうち、マクロに必要な部分の移植。
-// conv() の tr 対応表はソース15文字に対して宛先14文字でずれている
-// (\→＊, *→＝, =→＠, @→＠) が、Ruby 版の挙動を忠実に再現している。
+// textmap / _T マクロのテキスト変換: 文字列を全角に正規化し (英数字・記号 → 全角、濁点の分解)、
+// 文字表 (フォントの .chr.txt) の添字列にする。表にない文字は末尾に追加される。
 
 import (
 	"strings"
@@ -25,15 +23,12 @@ var convertChar = map[rune]string{
 	'パ': "゜ハ", 'ピ': "゜ヒ", 'プ': "゜フ", 'ペ': "゜ヘ", 'ポ': "゜ホ",
 }
 
-// trFullwidth は conv() の tr(...) 相当。
-// 'A-Za-z0-9.\-[](),:/";\\*=@' → 'Ａ-Ｚａ-ｚ０-９．−［］（），：／”；＊＝＠'
-// 記号部はソースが1文字多く、Ruby の tr は宛先を最終文字でパディングするため
-// 末尾4文字の対応がずれる (忠実に再現)。
+// trFullwidth は ASCII の英数字と記号を全角にする。
 func trFullwidth(s string) string {
 	symbolMap := map[rune]rune{
 		'.': '．', '-': '−', '[': '［', ']': '］', '(': '（', ')': '）',
 		',': '，', ':': '：', '/': '／', '"': '”', ';': '；',
-		'\\': '＊', '*': '＝', '=': '＠', '@': '＠',
+		'\\': '＼', '*': '＊', '=': '＝', '@': '＠',
 	}
 	var b strings.Builder
 	for _, c := range s {
@@ -80,7 +75,7 @@ func (tc *TextConverter) registerChar(c rune) *tcEntry {
 	}
 	var e *tcEntry
 	if len(tc.using) >= 256 {
-		// Ruby版と同じく、あふれた文字は 255 になる (エラーにしない)
+		// 表があふれた文字は 255 になる (エラーにしない)
 		e = &tcEntry{index: 255, count: 1}
 	} else {
 		e = &tcEntry{index: len(tc.using), count: 1}
@@ -90,7 +85,7 @@ func (tc *TextConverter) registerChar(c rune) *tcEntry {
 }
 
 // Conv は conv(str) 相当。文字コード列を返す。
-// 表にない文字は新規登録される (Ruby版と同じ破壊的挙動)。
+// 表にない文字は新規登録される (表の末尾に追加。フォントに無い文字はエラーにせず、表示が化けるだけ)。
 func (tc *TextConverter) Conv(str string) []int {
 	str = strings.ReplaceAll(str, "\r", "")
 	str = trFullwidth(str)

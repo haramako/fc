@@ -1,7 +1,7 @@
 # フレーム割付の見直し（frame size over の解消と静的フレーム）
 
 2026-09-14 検討メモ（レビュー用）。対象: `frame size over` の緩和、fastcall の 16 バイト制限、
-go_evolution_plan.md F3「スタックフレーム制約の緩和」。
+archive/go_evolution_plan.md F3「スタックフレーム制約の緩和」。
 
 ---
 

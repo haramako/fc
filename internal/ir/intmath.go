@@ -1,6 +1,6 @@
 package ir
 
-// fc 言語の定数演算の整数セマンティクス (Ruby 由来: floor 除算・floor 剰余・負のシフト量は逆方向)。
+// fc 言語の整数セマンティクス (定数畳み込みと実行時で共通): 除算・剰余は床 (商は負の無限大方向、余りの符号は除数に従う)。
 
 // FloorDiv は floor 除算。
 func FloorDiv(a, b int) int {
@@ -20,18 +20,12 @@ func FloorMod(a, b int) int {
 	return m
 }
 
-// Shl は左シフト (負の量は右シフト)。
+// Shl は左シフト (b >= 0)。
 func Shl(a, b int) int {
-	if b < 0 {
-		return Shr(a, -b)
-	}
 	return a << uint(b)
 }
 
-// Shr は右シフト (負の量は左シフト)。
+// Shr は算術右シフト (b >= 0)。
 func Shr(a, b int) int {
-	if b < 0 {
-		return Shl(a, -b)
-	}
 	return a >> uint(b)
 }

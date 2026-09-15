@@ -10,14 +10,14 @@ import (
 )
 
 func TestIntValue(t *testing.T) {
-	// Value.new_int の型推定 (Ruby: n<-127 は sint16 という境界も含めて)
+	// 整数リテラルの型推定 (-128 は sint8 に収まる)
 	h := &Hlc{prog: NewProgram()}
 	cases := []struct {
 		n    int
 		want string
 	}{
 		{0, "uint8"}, {255, "uint8"}, {256, "uint16"}, {70000, "uint16"},
-		{-1, "sint8"}, {-127, "sint8"}, {-128, "sint16"}, {-255, "sint16"},
+		{-1, "sint8"}, {-127, "sint8"}, {-128, "sint8"}, {-129, "sint16"}, {-255, "sint16"},
 	}
 	for _, c := range cases {
 		v := h.IntValue(c.n)

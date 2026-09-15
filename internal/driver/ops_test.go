@@ -122,3 +122,27 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestCompoundAssignCallOnce: 複合代入の左辺に関数呼び出しがあっても 1 回しか呼ばない (`a[f()] += 8`、`g().v += 5`)。
+// 左辺が単純なときは index を 2 回計算する脱糖のまま (index_pget / index_pset に融合される)。
+func TestCompoundAssignCallOnce(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `struct P { v:int; }
+var a:[4]int;
+var ps:[2]P;
+var calls:int;
+function f():int { calls++; return 1; }
+function g():*P { calls++; return &ps[1]; }
+function main():void
+{
+	a[f()] += 8;
+	a[f()] |= 1;
+	g().v += 5;
+	printf(calls, " ", a[1], " ", ps[1].v, "\n");
+	exit(0);
+}
+`)
+	if want := "3 9 5\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

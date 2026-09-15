@@ -22,7 +22,7 @@ var macroFiles = map[string]func(h *Hlc){
 
 // castle プロジェクトの src/macro.rb (テキスト変換マクロ _T / _M)。
 // VERSION_STR は 2026-09-13 に廃止 (castle 側を固定文字列 _M("VERSION 0.5.0") にした)。
-// Ruby版と同じく、フォント文字表 (../tmp/font/*.chr.txt) は登録時に読む。
+// フォント文字表 (../tmp/font/*.chr.txt) は登録時に読む。
 // パスはソースの検索パス (先頭はソースディレクトリ) 基準。
 func registerCastleMacros(h *Hlc) {
 	readText := func(path string) string {

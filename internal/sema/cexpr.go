@@ -4,7 +4,7 @@ package sema
 //
 // 構文木 (syntax.Expr) をそのまま定数評価の対象にせず、一度この形に変換してから評価する。
 // 理由は 2 つ:
-//   - 構文木は不変に保つ (C1)。旧実装 (Ruby 由来) は定数評価が AST を破壊的に書き換えていた
+//   - 構文木は不変に保つ (C1)。定数評価は cexpr の側で行い、構文木には触らない
 //   - マクロの展開結果は「評価済みの値 (*ir.Value) を葉に持つ式」であり、構文木では表せない
 //
 // constEval の入力 (未評価) と出力 (評価済み: 葉は cValue、演算ノードの子は評価済み) の両方を表す。
@@ -203,7 +203,8 @@ func toC0(e syntax.Expr) *cexpr {
 	case *syntax.AssignExpr:
 		lhs := toC(e.Lhs)
 		if op, ok := compoundOps[e.Op]; ok {
-			// 複合代入の脱糖 (load X (op X rhs))。X は同一ノードを共有する (cmemo で 1 回だけ評価される)
+			// 複合代入の脱糖 (load X (op X rhs))。X は同一ノードを共有する (定数評価は cmemo で 1 回。
+			// 実行時の評価は 2 回になるので、X に呼び出しがあれば hlc.go の opLoad で先に評価する)
 			return cop2(opLoad, lhs, cop2(op, lhs, toC(e.Rhs)))
 		}
 		return cop2(opLoad, lhs, toC(e.Rhs))

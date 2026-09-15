@@ -3,7 +3,7 @@ package sema
 // Program はプログラム全体 (全モジュール) にまたがる意味解析の状態。
 // 個々のモジュールの解析は Hlc (モジュール単位のコンテキスト) が行い、モジュール横断の
 // 情報 (型のインターン表・モジュール一覧・グローバル options・組み込みマクロ) だけをここに置く
-// (doc/v2_plan.md C4: モジュール単位の sema)。
+// (doc/archive/v2_plan.md C4: モジュール単位の sema)。
 //
 // コンパイルは 2 相:
 //  1. CompileModule — モジュールのトップレベル文 (宣言・use・include・options) を処理する。
@@ -240,7 +240,7 @@ func (l *Loader) abs(ref string) string {
 // File は libPath 上でファイルを探す。
 func (l *Loader) File(name string) (ref, abs string, err error) {
 	for _, p := range l.libPath {
-		ref = joinRubyPath(p, name)
+		ref = joinPath(p, name)
 		abs = l.abs(ref)
 		if _, err := os.Stat(abs); err == nil {
 			return ref, abs, nil
@@ -249,8 +249,8 @@ func (l *Loader) File(name string) (ref, abs string, err error) {
 	return "", "", &diag.Error{Msg: fmt.Sprintf("file %s not found", name)}
 }
 
-// joinRubyPath は Ruby の Pathname#+ 相当 ('.' + f は f になる)。
-func joinRubyPath(p, f string) string {
+// joinPath は検索パス p とファイル名を '/' でつなぐ (p が "." なら f そのもの。生成物に埋め込む参照形なので filepath は使わない)。
+func joinPath(p, f string) string {
 	if p == "." {
 		return f
 	}

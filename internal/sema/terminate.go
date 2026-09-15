@@ -1,6 +1,6 @@
 package sema
 
-// 非 void 関数の「return 忘れ」の検査 (doc/go_evolution_plan.md R4)。
+// 非 void 関数の「return 忘れ」の検査 (doc/archive/go_evolution_plan.md R4)。
 //
 // v1 のコンパイラは非 void 関数が return せずに終端へ到達しても何も言わず、実行時は rts が無いので
 // 次の関数へ落ちて暴走する。Go と同じ「終端文」の規則で、本体の最後が必ず return で終わることを

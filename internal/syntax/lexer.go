@@ -9,14 +9,8 @@ import (
 
 // Lexer は fc ソースの字句解析器。
 //
-// 字句規則は旧レキサ (internal/fc/lexer.go、Ruby 版 parser_ext.rb の厳密移植) と
-// 同一のトークン列を生成する。Ruby 由来の癖 (数値リテラルの部分パース、`0b2` の容認、
-// `\xZZ` → 0 等) も保存する (doc/v2_plan.md §2.5)。旧レキサと意図的に異なる点:
-//
-//   - コメントを捨てずに Comments() で位置付きで返す (フォーマッタ用)
-//   - `//` コメントは行末まで。空の `//` が次行を飲み込まない
-//   - 空のブロックコメント `/**/` を受理する
-//   - 位置 (行・列) は文字列リテラル内の改行も正確に数える
+// v1 / v2 共通。コメントは捨てずに Comments() で位置付きで返す (フォーマッタ用)。
+// 不正な数値リテラル (`0b2`, `0xZZ`) と不正なエスケープ (`\xZZ`) はエラー。
 type Lexer struct {
 	src      []byte
 	filename string
@@ -126,12 +120,12 @@ var keywords = map[string]Kind{
 // v2Keywords は v2 で足した予約語のうち、v1 では識別子として使えていたもの (v1 のソースを壊さない)。
 var v2Keywords = map[Kind]bool{KwTrue: true, KwFalse: true, KwNull: true}
 
-// Ruby の \s 相当
+// 空白文字 (スペース・タブ・改行など)
 func isSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v'
 }
 
-// Ruby の \w 相当 (ASCII)
+// 識別子を構成する文字 (ASCII の英数字と _)
 func isWord(c byte) bool {
 	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
@@ -272,8 +266,8 @@ func (l *Lexer) Next() (Token, error) {
 //
 //	0x[0-9a-fA-F_]+   16 進    0b[01_]+   2 進    [0-9_]+   10 進
 //
-// `_` は桁の間の区切りとして許す (`1_000`, `0xab_cd`)。基数に合わない桁 (`0b2`, `0xZZ`) はエラー
-// (v1 の Ruby 版は無効な桁を黙って 0 扱いにしていた)。`12ab` は 12 の後に識別子 ab (C と同じく分かれる)。
+// `_` は桁の間の区切りとして許す (`1_000`, `0xab_cd`)。基数に合わない桁 (`0b2`, `0xZZ`) はエラー。
+// `12ab` は 12 の後に識別子 ab (C と同じく分かれる)。
 func scanNumber(s []byte) (n int, val int, msg string) {
 	base := 10
 	if len(s) >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X') {
@@ -307,33 +301,6 @@ func scanNumber(s []byte) (n int, val int, msg string) {
 		return n, 0, fmt.Sprintf("base %d literal needs digits", base)
 	}
 	return n, val, ""
-}
-
-// rubyToI は Ruby の String#to_i(base) 相当 (符号なし部分文字列用)。
-// 先頭から有効な数字を読み、無効文字で停止する。'_' は前後が数字の場合のみ区切りとして許す。
-func rubyToI(s []byte, base int) int {
-	n := 0
-	i := 0
-	for i < len(s) {
-		c := s[i]
-		if c == '_' {
-			if i == 0 || digitVal(s[i-1], base) < 0 {
-				break
-			}
-			if i+1 >= len(s) || digitVal(s[i+1], base) < 0 {
-				break
-			}
-			i++
-			continue
-		}
-		d := digitVal(c, base)
-		if d < 0 {
-			break
-		}
-		n = n*base + d
-		i++
-	}
-	return n
 }
 
 func digitVal(c byte, base int) int {
@@ -392,7 +359,7 @@ func scanString(s []byte) (n int, val string, msg string) {
 }
 
 // unescape はエスケープを解釈する。\n → 改行、\xNN → バイト (NN は 16 進 2 桁。それ以外はエラー)。
-// 他の `\` はそのまま残す (v1 の Ruby 版と同じ)。
+// 他の `\` はそのまま残す。
 func unescape(s []byte) (string, string) {
 	var out []byte
 	i := 0

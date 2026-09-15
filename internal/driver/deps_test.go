@@ -1,6 +1,6 @@
 package driver
 
-// パッケージ間の import 方向を固定する (doc/v2_plan.md R3-a / C3)。
+// パッケージ間の import 方向を固定する (doc/archive/v2_plan.md R3-a / C3)。
 // 特に syntax は他の internal パッケージに依存しないこと (フォーマッタが sema 無しで動くため)。
 
 import (

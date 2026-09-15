@@ -137,7 +137,7 @@ func (v *Value) Assignable() bool {
 	return v.Kind == KindLocal || v.Kind == KindGlobal
 }
 
-// CastedValue は reinterpret_cast 相当。Ruby では Delegator で @from に委譲される。
+// CastedValue は reinterpret_cast 相当 (元の値 From を別の型として見る。Offset で struct のフィールドも表す)。
 type CastedValue struct {
 	From   Operand // *Value または *CastedValue
 	Type   *types.Type
@@ -210,7 +210,7 @@ func OperandString(v Operand) string {
 
 // ---------------------------------------------------------------
 // オペランドの属性アクセス
-// Ruby では CastedValue(Delegator) がメソッドを @from に委譲し、PointeredArray は kind のみ委譲する。
+// CastedValue は From の値を、PointeredArray は From の kind だけを引き継ぐ。
 // ---------------------------------------------------------------
 
 // UnderlyingValue は CastedValue の委譲チェーンをたどって *Value を返す (PointeredArray は nil)。

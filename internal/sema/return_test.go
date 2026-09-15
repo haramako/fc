@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestMissingReturn: 非 void 関数は必ず return で終わる (終端文の規則。doc/go_evolution_plan.md R4)。
+// TestMissingReturn: 非 void 関数は必ず return で終わる (終端文の規則。doc/archive/go_evolution_plan.md R4)。
 func TestMissingReturn(t *testing.T) {
 	wrap := func(body string) map[string]string {
 		return map[string]string{"t.fc": "#fc 2\nvar x:int;\n" + body + "\nfunction main():void {}\n"}
