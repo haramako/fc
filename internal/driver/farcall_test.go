@@ -169,7 +169,7 @@ func TestFarCallSegmentOption(t *testing.T) {
 		names = append(names, fc.Caller+"->"+fc.Callee)
 	}
 	// main → in_main: near、main → in_far2: far、main → far2.g: far、in_main → far2.g: far、in_far2 → far2.g: near
-	if got := strings.Join(names, " "); got != "_far1_in_main->_far2_g _main->_far1_in_far2 _main->_far2_g" {
+	if got := strings.Join(names, " "); got != "_main->_far1_in_far2 _main->_far2_g _far1_in_main->_far2_g" {
 		t.Errorf("FarCalls: %s", got)
 	}
 }
