@@ -1,0 +1,79 @@
+#fc 2
+// B: 16 ビット演算。castle の my.fc / boxelev.fc の物理 (8.8 固定小数の位置・速度、重力、跳ね返り) と
+// 距離計算 (|dx| + |dy|)、定数の乗除。64 個のオブジェクトを 100 フレーム。
+use * from stdio;
+
+const NUM = 64;
+var px:[64]sint16;
+var py:[64]sint16;
+var vx:[64]sint16;
+var vy:[64]sint16;
+var dist:[64]int16;
+
+const GRAVITY:sint16 = 24;
+const FLOOR:sint16 = 100 * 256; // 8.8 固定小数 (sint16 に収まる範囲で)
+const RIGHT:sint16 = 120 * 256;
+
+function step():void
+{
+	for (var i = 0; i < NUM; i++) {
+		var x = px[i] + vx[i];
+		var y = py[i] + vy[i];
+		var v = vy[i] + GRAVITY;
+		if (y >= FLOOR) {
+			y = FLOOR;
+			v = -(v * 3 / 4); // 反発
+		}
+		if (x < 0) {
+			x = 0;
+			vx[i] = -vx[i];
+		} elsif (x >= RIGHT) {
+			x = RIGHT;
+			vx[i] = -vx[i];
+		}
+		px[i] = x;
+		py[i] = y;
+		vy[i] = v;
+		// 画面中央からのマンハッタン距離 (ピクセル単位)
+		var dx = (x >> 8) - 60;
+		var dy = (y >> 8) - 50;
+		if (dx < 0) {
+			dx = -dx;
+		}
+		if (dy < 0) {
+			dy = -dy;
+		}
+		dist[i] = (dx + dy) as int16;
+	}
+}
+
+function init():void
+{
+	for (var i = 0; i < NUM; i++) {
+		px[i] = (i as sint16) * 400 + 128;
+		py[i] = (i as sint16 & 7) * 20 * 256;
+		vx[i] = (i as sint16 & 3) * 96 - 144;
+		vy[i] = 0;
+	}
+}
+
+function checksum():int16
+{
+	var sum:int16 = 0;
+	for (var i = 0; i < NUM; i++) {
+		sum += (px[i] >> 8) as int16 + (py[i] >> 8) as int16 + dist[i] / 7;
+	}
+	return sum;
+}
+
+function main():void
+{
+	init();
+	bench_start();
+	for (var n = 0; n < 100; n++) {
+		step();
+	}
+	bench_end();
+	printf("sum=", checksum(), "\n");
+	exit(0);
+}

@@ -1,0 +1,79 @@
+#fc 2
+// B: 関数呼び出しのオーバーヘッド。castle は小さな関数の呼び出しが多い (en の共通処理、ppu.put など)。
+// 通常呼び出し (引数 3 個)、fastcall、関数ポインタ表の分岐 (en_vtbl の PROCESS[t](i) 相当)、4 段の入れ子。
+// それぞれ 500 回。
+use * from stdio;
+
+function add3(a:int, b:int, c:int):int
+{
+	return a + b + c;
+}
+
+function add3f(a:int, b:int, c:int):int options(fastcall: true)
+{
+	return a + b + c;
+}
+
+function op0(a:int):int
+{
+	return a + 1;
+}
+function op1(a:int):int
+{
+	return a ^ 0x55;
+}
+function op2(a:int):int
+{
+	return a >> 1;
+}
+function op3(a:int):int
+{
+	return a * 3;
+}
+const OPS:[4]fn(int):int = [op0, op1, op2, op3];
+
+function d4(a:int):int
+{
+	return a + 4;
+}
+function d3(a:int):int
+{
+	return d4(a) + 3;
+}
+function d2(a:int):int
+{
+	return d3(a) + 2;
+}
+function d1(a:int):int
+{
+	return d2(a) + 1;
+}
+
+function main():void
+{
+	var sum:int16 = 0;
+	var acc = 0;
+	bench_start();
+	for (var i:int16 = 0; i < 500; i++) {
+		acc = add3(acc, i as int, 7);
+	}
+	sum += acc as int16;
+	acc = 0;
+	for (var i:int16 = 0; i < 500; i++) {
+		acc = add3f(acc, i as int, 7);
+	}
+	sum += acc as int16;
+	acc = 0;
+	for (var i:int16 = 0; i < 500; i++) {
+		acc = OPS[(i as int) & 3](acc);
+	}
+	sum += acc as int16;
+	acc = 0;
+	for (var i:int16 = 0; i < 500; i++) {
+		acc = d1(acc);
+	}
+	sum += acc as int16;
+	bench_end();
+	printf("sum=", sum, "\n");
+	exit(0);
+}

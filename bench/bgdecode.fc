@@ -1,0 +1,126 @@
+#fc 2
+// B: 背景の列デコード。castle の bg.fc (fetch_area / scroll) 相当。
+// RLE 圧縮された 30 タイルの列を展開 → 属性テーブル (2x2 タイルごとに 2 ビット) を組み立て →
+// PPU 転送バッファ (アドレス 2 バイト + 長さ + データ) に詰める。64 列を 4 周。
+use * from stdio;
+
+const COLS = 64;
+const ROWS = 30;
+
+var packed:[1024]int options(segment: "BSS_EX"); // [count, tile] の並び。列ごとの開始位置は col_ofs
+var col_ofs:[64]int16;
+var column:[30]int;
+var attr:[8]int;
+var vram_buf:[64]int;
+
+// 列を作る: 上に空 (0)、途中に地面 (0x40〜)、下に土 (0x80〜) と、ときどき柱
+function make_data():void
+{
+	var p = packed as *int;
+	var ofs:int16 = 0;
+	for (var c = 0; c < COLS; c++) {
+		col_ofs[c] = ofs;
+		var sky = 8 + (c & 7);
+		var n = 0;
+		p[n] = sky;
+		p[n + 1] = 0;
+		n += 2;
+		if ((c & 3) == 1) {
+			p[n] = 1;
+			p[n + 1] = 0x21; // 柱の頭
+			n += 2;
+			p[n] = ROWS - sky - 3;
+			p[n + 1] = 0x22;
+			n += 2;
+		} else {
+			p[n] = 2;
+			p[n + 1] = 0x40 + (c & 1);
+			n += 2;
+			p[n] = ROWS - sky - 4;
+			p[n + 1] = 0x80 + (c & 3);
+			n += 2;
+		}
+		p[n] = 2;
+		p[n + 1] = 0xc0;
+		n += 2;
+		p[n] = 0; // 終端
+		n += 1;
+		p += n;
+		ofs += n as int16;
+	}
+}
+
+function decode(c:int):void
+{
+	var p = packed as *int;
+	p += col_ofs[c];
+	var row = 0;
+	loop {
+		var cnt = *p;
+		if (cnt == 0) {
+			break;
+		}
+		var tile = p[1];
+		p += 2;
+		while (cnt > 0) {
+			column[row] = tile;
+			row++;
+			cnt--;
+		}
+	}
+}
+
+// 属性: 2 行ごとにタイルの上位 2 ビットをパレット番号として 2x2 ブロックの左右に入れる (列 c の偶奇で左右)
+function make_attr(c:int):void
+{
+	var shift = (c & 1) << 1;
+	for (var i = 0; i < 8; i++) {
+		var r = i << 2;
+		var top = column[r] >> 6;
+		var bottom = 0;
+		if (r + 2 < ROWS) {
+			bottom = column[r + 2] >> 6;
+		}
+		attr[i] = (attr[i] & ~(0x33 << shift)) | (top << shift) | (bottom << (shift + 4));
+	}
+}
+
+function emit(c:int):int
+{
+	// $2000 + c: 縦書きモードで 30 バイト
+	var addr:int16 = 0x2000 + c as int16;
+	vram_buf[0] = (addr >> 8) as int;
+	vram_buf[1] = addr as int;
+	vram_buf[2] = ROWS;
+	for (var i = 0; i < ROWS; i++) {
+		vram_buf[3 + i] = column[i];
+	}
+	var n = 3 + ROWS;
+	vram_buf[n] = 0x23;
+	vram_buf[n + 1] = 0xc0 + (c >> 2);
+	vram_buf[n + 2] = 8;
+	for (var i = 0; i < 8; i++) {
+		vram_buf[n + 3 + i] = attr[i];
+	}
+	return n + 11;
+}
+
+function main():void
+{
+	make_data();
+	var sum:int16 = 0;
+	bench_start();
+	for (var n = 0; n < 4; n++) {
+		for (var c = 0; c < COLS; c++) {
+			decode(c);
+			make_attr(c);
+			var len = emit(c);
+			for (var i = 0; i < len; i++) {
+				sum += vram_buf[i] as int16;
+			}
+		}
+	}
+	bench_end();
+	printf("sum=", sum, "\n");
+	exit(0);
+}

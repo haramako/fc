@@ -1,0 +1,48 @@
+#fc 2
+// A: 単方向リスト (millfork-benchmarks の linkedlist 相当)。
+// 200 ノードを配列プールに作り、辿って 16 ビットの値を合計する。20 回。
+// struct のポインタ経由フィールド参照 (ldy #off; lda (p),y) の性能。
+use * from stdio;
+
+struct Node {
+	val:int16;
+	next:*Node;
+}
+
+var pool:[200]Node;
+var head:*Node;
+
+function build():void
+{
+	for (var i = 0; i < 199; i++) {
+		pool[i].val = (i as int16) * 3 + 1;
+		pool[i].next = &pool[i + 1];
+	}
+	pool[199].val = 600;
+	pool[199].next = null;
+	head = &pool[0];
+}
+
+function sum():int16
+{
+	var s:int16 = 0;
+	var p = head;
+	while (p != null) {
+		s += p.val;
+		p = p.next;
+	}
+	return s;
+}
+
+function main():void
+{
+	build();
+	var s:int16 = 0;
+	bench_start();
+	for (var n = 0; n < 20; n++) {
+		s += sum();
+	}
+	bench_end();
+	printf("sum=", s, "\n");
+	exit(0);
+}

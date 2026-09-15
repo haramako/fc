@@ -1,0 +1,95 @@
+#fc 2
+// B: テキスト描画。castle の text.fc (print / print_num) 相当。
+// 文字列を文字コード表で タイル番号に変換しながら幅で折り返して 32x4 のバッファに置く。
+// 数値 (16 ビット) は 10000/1000/100/10 の引き算で 10 進に変換する。200 回。
+use * from stdio;
+
+const WIDTH = 20;
+var buf:[128]int; // 32x4
+
+// ASCII → タイル番号 (0x20〜0x5f)。スペースは 0、英大文字は 1〜、数字は 0x30〜
+const CHARMAP:[64]int = [
+	0, 0x3f, 0x3e, 0x3d, 0x3c, 0x3b, 0x3a, 0x39, 0x38, 0x37, 0x36, 0x35, 0x34, 0x33, 0x32, 0x31,
+	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x2f, 0x2e, 0x2d, 0x2c, 0x2b, 0x2a,
+	0x29, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+	16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 0x28, 0x27, 0x26, 0x25, 0x24,
+];
+
+const MSG:*int = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG AND RUNS AWAY WITH 12 GOLD";
+
+// 幅 width で折り返して描く。行の先頭は p、次の行は p + 32。描いた文字数を返す
+function print(p:*int, str:*int, width:int):int
+{
+	var i = 0;
+	var col = 0;
+	var n = 0;
+	loop {
+		var c = str[i];
+		if (c == 0) {
+			break;
+		}
+		i++;
+		if (col >= width) {
+			p += 32;
+			col = 0;
+			if (c == 0x20) { // 行頭の空白は捨てる
+				continue;
+			}
+		}
+		p[col] = CHARMAP[(c - 0x20) & 63];
+		col++;
+		n++;
+	}
+	return n;
+}
+
+function print_num(p:*int, n:int16):int
+{
+	var col = 0;
+	var started = 0;
+	var d:int16 = 10000;
+	while (d > 0) {
+		var digit = 0;
+		while (n >= d) {
+			n -= d;
+			digit++;
+		}
+		if (digit || started || d == 1) {
+			p[col] = 0x30 + digit;
+			col++;
+			started = 1;
+		}
+		d /= 10;
+	}
+	return col;
+}
+
+function checksum():int16
+{
+	var sum:int16 = 0;
+	for (var i = 0; i < 128; i++) {
+		sum += buf[i] as int16;
+	}
+	return sum;
+}
+
+function main():void
+{
+	var sum:int16 = 0;
+	bench_start();
+	for (var n:int16 = 0; n < 200; n++) {
+		for (var i = 0; i < 128; i++) {
+			buf[i] = 0;
+		}
+		var count = print(buf, MSG, WIDTH);
+		var p = buf as *int;
+		p += 96;
+		var w = print_num(p, n * 37 + count as int16);
+		p += w + 1;
+		print_num(p, count as int16);
+		sum += checksum();
+	}
+	bench_end();
+	printf("sum=", sum, "\n");
+	exit(0);
+}

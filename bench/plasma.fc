@@ -1,0 +1,72 @@
+#fc 2
+// A: plasma (cc65 samples/plasma.c 由来、millfork-benchmarks の plasma 相当)。
+// sin テーブル引き + バイト加算で 32x30 の画面バッファを埋める。50 フレーム。
+// NES のエフェクト処理に一番近い形 (テーブル参照、バイト演算、行ポインタの更新)。
+use * from stdio;
+use math;
+
+const W = 32;
+const H = 30;
+var screen:[960]int options(segment: "BSS_EX");
+var xbuf:[32]int;
+var ybuf:[30]int;
+var c1A:int, c1B:int, c2A:int, c2B:int;
+
+function sin8(x:int):int
+{
+	return (math.sin(x as sint8) as int) + 128;
+}
+
+function doplasma():void
+{
+	var c1a = c1A;
+	var c1b = c1B;
+	for (var i = 0; i < H; i++) {
+		ybuf[i] = sin8(c1a) + sin8(c1b);
+		c1a += 4;
+		c1b += 9;
+	}
+	c1A += 3;
+	c1B -= 5;
+	var c2a = c2A;
+	var c2b = c2B;
+	for (var i = 0; i < W; i++) {
+		xbuf[i] = sin8(c2a) + sin8(c2b);
+		c2a += 3;
+		c2b += 7;
+	}
+	c2A += 2;
+	c2B -= 3;
+	var p = screen as *int;
+	for (var y = 0; y < H; y++) {
+		var yb = ybuf[y];
+		for (var x = 0; x < W; x++) {
+			p[x] = (xbuf[x] + yb) >> 3;
+		}
+		p += W;
+	}
+}
+
+function checksum():int16
+{
+	var sum:int16 = 0;
+	var p = screen as *int;
+	for (var y = 0; y < H; y++) {
+		for (var x = 0; x < W; x++) {
+			sum += p[x] as int16;
+		}
+		p += W;
+	}
+	return sum;
+}
+
+function main():void
+{
+	bench_start();
+	for (var n = 0; n < 50; n++) {
+		doplasma();
+	}
+	bench_end();
+	printf("sum=", checksum(), "\n");
+	exit(0);
+}

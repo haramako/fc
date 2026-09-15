@@ -1,0 +1,48 @@
+#fc 2
+// A: CRC-16 CCITT (多項式 0x1021、テーブル無し)。256 バイトのバッファを 8 回。
+// 16 ビット値のシフト・XOR・比較のループ。
+use * from stdio;
+
+var buf:[256]int;
+
+function crc16(p:*int):int16
+{
+	var crc:int16 = 0xffff;
+	var i = 0;
+	loop {
+		crc ^= (p[i] as int16) << 8;
+		for (var k = 0; k < 8; k++) {
+			if (crc & 0x8000) {
+				crc = (crc << 1) ^ 0x1021;
+			} else {
+				crc = crc << 1;
+			}
+		}
+		i++;
+		if (i == 0) {
+			break;
+		}
+	}
+	return crc;
+}
+
+function main():void
+{
+	var i = 0;
+	loop {
+		buf[i] = (i * 13) ^ 0xa5;
+		i++;
+		if (i == 0) {
+			break;
+		}
+	}
+	var crc:int16 = 0;
+	bench_start();
+	for (var n = 0; n < 8; n++) {
+		crc = crc16(buf);
+		buf[0] = crc as int;
+	}
+	bench_end();
+	printf("crc16=", crc, "\n");
+	exit(0);
+}

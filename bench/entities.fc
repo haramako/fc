@@ -1,0 +1,124 @@
+#fc 2
+// B: 個体 (敵) の更新ループ。castle の en.process 相当で、ゲームの最重要ホットパス。
+// SoA コンテナの 32 体を毎フレーム: 状態機械 (switch) → 移動 → 16x15 タイルマップとの衝突で反射 → アニメ更新。
+// 100 フレーム。
+use * from stdio;
+
+struct Enemy {
+	x:int;
+	y:int;
+	vx:sint8;
+	vy:sint8;
+	anim:int;
+	hp:int;
+	state:int;
+	type:int;
+}
+
+soa Enemies:[32]Enemy;
+
+const MAP_W = 16;
+var map:[240]int; // 16x15、1 = 壁
+
+const STATE_IDLE = 0;
+const STATE_MOVE = 1;
+const STATE_DEAD = 2;
+
+var seed:int16;
+
+function rand():int
+{
+	seed = seed * 5 + 0x3d;
+	return (seed >> 8) as int;
+}
+
+function solid(x:int, y:int):int
+{
+	return map[(y & 0xf0) + (x >> 4)];
+}
+
+function update(e:*Enemies):void
+{
+	switch (e.state) {
+	case STATE_IDLE:
+		e.anim++;
+		if ((e.anim & 15) == 0) {
+			e.state = STATE_MOVE;
+		}
+	case STATE_MOVE:
+		var nx = e.x + e.vx as int;
+		if (solid(nx, e.y)) {
+			e.vx = -e.vx;
+		} else {
+			e.x = nx;
+		}
+		var ny = e.y + e.vy as int;
+		if (solid(e.x, ny)) {
+			e.vy = -e.vy;
+		} else {
+			e.y = ny;
+		}
+		e.anim++;
+		if (e.type == 1 && (e.anim & 63) == 0) {
+			e.hp -= 1;
+		}
+		if (e.hp == 0) {
+			e.state = STATE_DEAD;
+		}
+	case STATE_DEAD:
+		e.hp = 3;
+		e.state = STATE_IDLE;
+	}
+}
+
+function process():void
+{
+	var last = &Enemies[31];
+	var e = &Enemies[0];
+	while (e <= last) {
+		update(e);
+		e++;
+	}
+}
+
+function init():void
+{
+	// 外周が壁、内側に柱
+	for (var i = 0; i < 240; i++) {
+		var x = i & 15;
+		var y = i >> 4;
+		map[i] = (x == 0 || x == 15 || y == 0 || y == 14 || ((x & 3) == 2 && (y & 3) == 2)) as int;
+	}
+	seed = 12345;
+	for (var i = 0; i < 32; i++) {
+		Enemies[i].x = 16 + (rand() % 224);
+		Enemies[i].y = 16 + (rand() % 208);
+		Enemies[i].vx = ((rand() & 3) as sint8) - 2;
+		Enemies[i].vy = ((rand() & 3) as sint8) - 1;
+		Enemies[i].anim = rand();
+		Enemies[i].hp = 3;
+		Enemies[i].state = STATE_IDLE;
+		Enemies[i].type = i & 1;
+	}
+}
+
+function checksum():int16
+{
+	var sum:int16 = 0;
+	for (var i = 0; i < 32; i++) {
+		sum += Enemies[i].x as int16 + (Enemies[i].y as int16) * 3 + Enemies[i].anim as int16 + Enemies[i].hp as int16;
+	}
+	return sum;
+}
+
+function main():void
+{
+	init();
+	bench_start();
+	for (var n = 0; n < 100; n++) {
+		process();
+	}
+	bench_end();
+	printf("sum=", checksum(), "\n");
+	exit(0);
+}

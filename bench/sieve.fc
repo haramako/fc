@@ -1,0 +1,47 @@
+#fc 2
+// A: エラトステネスの篩 (c-bench-64 / millfork-benchmarks の sieve 相当)。
+// 2048 個のバイトフラグ。添字が 1 バイトなのでポインタを進めて触る。10 回繰り返す。
+use * from stdio;
+
+const N:int16 = 2048;
+var flags:[2048]int options(segment: "BSS_EX");
+
+function sieve():int16
+{
+	var count:int16 = 0;
+	var p = flags as *int;
+	var i:int16;
+	for (i = 0; i < N; i++) {
+		*p = 1;
+		p += 1;
+	}
+	p = flags as *int;
+	p += 2;
+	for (i = 2; i < N; i++) {
+		if (*p) {
+			count++;
+			var k = i + i;
+			var q = p;
+			q += i;
+			while (k < N) {
+				*q = 0;
+				q += i;
+				k += i;
+			}
+		}
+		p += 1;
+	}
+	return count;
+}
+
+function main():void
+{
+	var count:int16 = 0;
+	bench_start();
+	for (var n = 0; n < 10; n++) {
+		count = sieve();
+	}
+	bench_end();
+	printf("primes=", count, "\n");
+	exit(0);
+}

@@ -1,0 +1,127 @@
+#fc 2
+// B: スプライト (OAM) の構築。castle の my.draw / en の描画相当。
+// 24 個のオブジェクト (2x2 のメタスプライト、左右反転あり) から 256 バイトの OAM バッファを毎フレーム作る。
+// 画面外のオブジェクトはスキップし、残りの OAM は Y=$F8 で隠す。100 フレーム。
+use * from stdio;
+
+struct Obj {
+	x:int;
+	y:int;
+	tile:int;
+	flip:int;
+	vx:sint8;
+	visible:int;
+}
+
+const NUM = 24;
+var objs:[24]Obj;
+var oam:[256]int;
+var oam_pos:int;
+
+// 2x2 メタスプライトのオフセット (x, y) とタイル番号の差分
+const OFS_X:[4]int = [0, 8, 0, 8];
+const OFS_X_FLIP:[4]int = [8, 0, 8, 0];
+const OFS_Y:[4]int = [0, 0, 8, 8];
+const TILE_OFS:[4]int = [0, 1, 16, 17];
+
+function put_meta(x:int, y:int, tile:int, flip:int, pal:int):void
+{
+	var p = oam as *int;
+	p += oam_pos;
+	var attr = pal;
+	if (flip) {
+		attr |= 0x40;
+	}
+	for (var i = 0; i < 4; i++) {
+		var ox:int;
+		if (flip) {
+			ox = OFS_X_FLIP[i];
+		} else {
+			ox = OFS_X[i];
+		}
+		p[0] = y + OFS_Y[i] - 1;
+		p[1] = tile + TILE_OFS[i];
+		p[2] = attr;
+		p[3] = x + ox;
+		p += 4;
+	}
+	oam_pos += 16;
+}
+
+function draw():void
+{
+	oam_pos = 0;
+	for (var i = 0; i < NUM; i++) {
+		var o = &objs[i];
+		if (!o.visible) {
+			continue;
+		}
+		if (o.y >= 232) {
+			continue;
+		}
+		put_meta(o.x, o.y, o.tile, o.flip, i & 3);
+	}
+	// 残りを隠す
+	var p = oam as *int;
+	p += oam_pos;
+	while (oam_pos != 0) {
+		*p = 0xf8;
+		p += 4;
+		oam_pos += 4;
+	}
+}
+
+function move():void
+{
+	for (var i = 0; i < NUM; i++) {
+		var o = &objs[i];
+		o.x += o.vx as int;
+		if (o.x < 8 || o.x > 240) {
+			o.vx = -o.vx;
+			o.flip = !o.flip;
+		}
+		o.tile = (o.tile & 0xfc) | ((o.x >> 3) & 3); // 歩きアニメ
+	}
+}
+
+function init():void
+{
+	for (var i = 0; i < NUM; i++) {
+		objs[i].x = 16 + i * 9;
+		objs[i].y = 40 + (i * 37 & 127);
+		objs[i].tile = (i & 3) << 5;
+		objs[i].flip = i & 1;
+		objs[i].vx = ((i & 3) as sint8) - 1;
+		objs[i].visible = ((i % 3) != 2) as int; // 16 個が可視 (OAM は 64 スプライト = 16 個分)
+	}
+	objs[7].y = 240; // 画面外
+}
+
+function checksum():int16
+{
+	var sum:int16 = 0;
+	var i = 0;
+	loop {
+		sum += oam[i] as int16;
+		i++;
+		if (i == 0) {
+			break;
+		}
+	}
+	return sum;
+}
+
+function main():void
+{
+	init();
+	var sum:int16 = 0;
+	bench_start();
+	for (var n = 0; n < 100; n++) {
+		move();
+		draw();
+		sum += checksum();
+	}
+	bench_end();
+	printf("sum=", sum, "\n");
+	exit(0);
+}

@@ -1,0 +1,21 @@
+#fc 2
+// A: 再帰フィボナッチ (millfork-benchmarks の fib 相当)。fib(18) = 2584、呼び出し約 8,000 回。
+// 関数呼び出し・フレーム確保・戻り値の性能。
+use * from stdio;
+
+function fib(n:int):int16
+{
+	if (n < 2) {
+		return n as int16;
+	}
+	return fib(n - 1) + fib(n - 2);
+}
+
+function main():void
+{
+	bench_start();
+	var r = fib(18);
+	bench_end();
+	printf("fib=", r, "\n");
+	exit(0);
+}

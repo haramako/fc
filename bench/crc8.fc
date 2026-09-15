@@ -1,0 +1,49 @@
+#fc 2
+// A: CRC-8 (多項式 0x07、テーブル無しのビット演算)。256 バイトのバッファを 16 回。
+// 1 バイト演算・シフト・分岐のループ。
+use * from stdio;
+
+var buf:[256]int;
+
+function crc8(p:*int):int
+{
+	var crc = 0;
+	var i = 0;
+	loop {
+		var b = p[i] ^ crc;
+		for (var k = 0; k < 8; k++) {
+			if (b & 0x80) {
+				b = (b << 1) ^ 0x07;
+			} else {
+				b = b << 1;
+			}
+		}
+		crc = b;
+		i++;
+		if (i == 0) {
+			break;
+		}
+	}
+	return crc;
+}
+
+function main():void
+{
+	var i = 0;
+	loop {
+		buf[i] = (i * 7) ^ 0x5a;
+		i++;
+		if (i == 0) {
+			break;
+		}
+	}
+	var crc = 0;
+	bench_start();
+	for (var n = 0; n < 16; n++) {
+		crc = crc8(buf);
+		buf[0] = crc;
+	}
+	bench_end();
+	printf("crc8=", crc, "\n");
+	exit(0);
+}
