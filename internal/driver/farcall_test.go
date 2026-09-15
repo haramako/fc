@@ -143,3 +143,33 @@ func TestFarcallMMC3Assembles(t *testing.T) {
 	runTool(t, dir, "ca65", "stub.s", "-o", "stub.o")
 	runTool(t, dir, "ld65", "-C", "l.cfg", "-o", "out.bin", "farcall.o", "stub.o")
 }
+
+// TestFarCallSegmentOption: options(segment: X) で別モジュールのセグメントに置いた関数は、そのモジュールの置き場所として判定する。
+func TestFarCallSegmentOption(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"main.fc": "#fc 2\noptions(farcall: true);\nuse * from stdio;\nuse far1;\nuse far2;\n" +
+			"function main():void { printf(far1.in_main(1), \" \", far1.in_far2(2), \" \", far2.g(3), \"\n\"); exit(0); }\n",
+		"far1.fc": "#fc 2\noptions(bank: 1);\nuse far2;\n" +
+			"public function in_main(a:int):int options(segment: main) { return a + far2.g(a); }\n" + // main (固定) に置く: near で呼ばれ、far2.g への呼び出しは far
+			"public function in_far2(a:int):int options(segment: far2) { return far2.g(a) + 1; }\n", // far2 に置く: far で呼ばれ、far2.g は near
+		"far2.fc": "#fc 2\noptions(bank: 2);\npublic function g(a:int):int { return a * 10; }\n",
+	})
+	var out strings.Builder
+	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "11 21 30\n" {
+		t.Errorf("out=%q", out.String())
+	}
+	var names []string
+	for _, fc := range res.FarCalls {
+		names = append(names, fc.Caller+"->"+fc.Callee)
+	}
+	// main → in_main: near、main → in_far2: far、main → far2.g: far、in_main → far2.g: far、in_far2 → far2.g: near
+	if got := strings.Join(names, " "); got != "_far1_in_main->_far2_g _main->_far1_in_far2 _main->_far2_g" {
+		t.Errorf("FarCalls: %s", got)
+	}
+}

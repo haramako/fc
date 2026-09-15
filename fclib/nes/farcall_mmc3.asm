@@ -18,6 +18,8 @@
 
 farcall:
 	lda FC_FARCALL+1
+	cmp #$C0
+	bcs @fixed              ; $C000 以上は固定バンク: 切り替えずに飛ぶ (segment 指定で固定領域に置いた関数など)
 	cmp #$A0
 	bcs @slot1
 	ldy #0                  ; slot 0: pbank_bak+0, BANK_SELECT = 6
@@ -27,6 +29,7 @@ farcall:
 	lda _mmc3_pbank_bak,y
 	cmp FC_FARCALL+2
 	bne @switch
+@fixed:
 	jmp (FC_FARCALL)        ; 既にマップ済み: そのまま飛ぶ (呼び先の rts が呼び出し元へ戻る)
 @switch:
 	pha                     ; 今のバンクを退避

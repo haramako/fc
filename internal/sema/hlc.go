@@ -1783,11 +1783,30 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 		return false
 	}
 	callee, ok := h.prog.lambdas[lit.Symbol]
-	if !ok || callee.Module == nil || callee.Module == h.module || !callee.Module.Switchable() || callee.Options.Has("near") {
+	if !ok || callee.Options.Has("near") {
+		return false
+	}
+	// 置き場所はモジュールのセグメントだが、options(segment: X) で別のモジュールのセグメントに置いた関数はそちらに従う
+	// (X がモジュール名でなければ配置は手動なので near)
+	calleeAt := h.placementOf(callee)
+	callerAt := h.placementOf(h.lmd)
+	if calleeAt == nil || calleeAt == callerAt || !calleeAt.Switchable() {
 		return false
 	}
 	h.prog.FarCalls = append(h.prog.FarCalls, FarCall{Pos: h.curPos, Caller: h.lmd.Id, Callee: callee.Id})
 	return true
+}
+
+// placementOf は関数が置かれるモジュール (= セグメント)。options(segment: X) があれば X という id のモジュール、
+// X がモジュールでなければ nil (fc の管理外のセグメント)。
+func (h *Hlc) placementOf(lmd *ir.Lambda) *ir.Module {
+	if seg := lmd.Segment(); seg != "" {
+		if m, ok := h.prog.Modules.Get(seg); ok {
+			return m
+		}
+		return nil
+	}
+	return lmd.Module
 }
 
 // containsCall は式 (評価済みでもよい) に関数呼び出し (マクロ呼び出しも含む) が含まれるか。

@@ -51,6 +51,9 @@ fc が cfg を生成する構成（emu / nes 既定）では `bank = N` を自�
 - 呼び先が**切替バンクの別モジュール** → far call。呼び出し元が固定でも切替でも同じ（呼び出し元の code は呼び先の実行中に
   アンマップされてよい。戻りはトランポリンがバンクを戻してから `rts` する）
 - 呼び先の関数に `options(near: true)` があれば、呼ぶ側はマップ済みと仮定して `jsr`（opt-out。熱い経路用。責任は書いた人）
+- `options(segment: X)` で別のセグメントに置いた関数は、X がモジュール名ならそのモジュールの置き場所として判定する
+  （castle の `function chest_event() options(segment: my)` は `my` のバンク扱い、`segment: common` は固定）。
+  X がモジュール名でなければ配置は手動なので near
 
 同じ切替バンクの別モジュール同士（同じ ROM に 2 モジュール）や、`en`（slot 1）→ `en1`（slot 0）のように両方マップ済みの場合も
 far call になるが、トランポリンが**実行時にバンクを比べて切替を省く**ので +37 サイクルで済む（§5）。
@@ -99,6 +102,8 @@ MMC3 用の参考実装（castle の `mmc3.fc` の `pbank_bak` / `BANK_SELECT` �
 	.global farcall
 farcall:
 	lda FC_FARCALL+1
+	cmp #$C0
+	bcs @fixed              ; $C000 以上は固定バンク: 切り替えずに飛ぶ
 	cmp #$A0
 	bcs @slot1
 	ldy #0                  ; slot 0: pbank_bak+0, BANK_SELECT = 6
@@ -108,6 +113,7 @@ farcall:
 	lda _mmc3_pbank_bak,y
 	cmp FC_FARCALL+2
 	bne @switch
+@fixed:
 	jmp (FC_FARCALL)       ; 既にマップ済み: そのまま飛ぶ
 @switch:
 	pha                     ; 今のバンクを退避
