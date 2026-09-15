@@ -73,7 +73,7 @@ func TestFarCall(t *testing.T) {
 	if !strings.Contains(m, "call _far1_nearf, ") || !strings.Contains(m, "call _fixed1_twice, ") {
 		t.Errorf("main.s: nearf / twice は直接呼ぶべき")
 	}
-	if !strings.Contains(m, "lda #<.bank(_far1_add)") || !strings.Contains(m, "sta FC_FARCALL+2") || !strings.Contains(m, ".import farcall") {
+	if !strings.Contains(m, "lda #<.bank(_far1_add)") || !strings.Contains(m, "sta FC_FARCALL+2") || !strings.Contains(m, ".global farcall") {
 		t.Errorf("main.s: FC_FARCALL の設定が無い")
 	}
 	// far1 の中: 同じモジュール・固定バンクへの呼び出しは near
