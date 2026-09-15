@@ -2,11 +2,11 @@
  (vars
   (var 0 $result local #"uint8" lt=result loc=frame addr=0)
   (var 1 a local #"uint8" lt=arg loc=frame addr=1)
-  (var 2 $4 local #"uint8" lt=temp loc=a)
+  (var 2 $4 local #"uint8" lt=temp loc=none unuse)
  )
  (ops
-  0000 (:add {l2 $4} {l1 a} {lit nil 2 #"uint8"})
-  0001 (:return {l2 $4})
+  0000 (:add {l0 $result} {l1 a} {lit nil 2 #"uint8"})
+  0001 (:return {l0 $result})
  )
 )
 (alloc-lambda test_var _test_var_test_const _test_var_test_const frame_size=0
@@ -156,22 +156,22 @@
  (vars
   (var 0 $result local #"uint8" lt=result loc=frame addr=0)
   (var 1 a local #"uint8" lt=arg loc=frame addr=1)
-  (var 2 $74 local #"uint8" lt=temp loc=a)
+  (var 2 $74 local #"uint8" lt=temp loc=none unuse)
  )
  (ops
-  0000 (:add {l2 $74} {l1 a} {lit nil 1 #"uint8"})
-  0001 (:return {l2 $74})
+  0000 (:add {l0 $result} {l1 a} {lit nil 1 #"uint8"})
+  0001 (:return {l0 $result})
  )
 )
 (alloc-lambda test_var _test_var_mul2 _test_var_mul2 frame_size=2
  (vars
   (var 0 $result local #"uint8" lt=result loc=frame addr=0)
   (var 1 a local #"uint8" lt=arg loc=frame addr=1)
-  (var 2 $75 local #"uint8" lt=temp loc=a)
+  (var 2 $75 local #"uint8" lt=temp loc=none unuse)
  )
  (ops
-  0000 (:mul {l2 $75} {l1 a} {lit nil 2 #"uint8"})
-  0001 (:return {l2 $75})
+  0000 (:mul {l0 $result} {l1 a} {lit nil 2 #"uint8"})
+  0001 (:return {l0 $result})
  )
 )
 (alloc-lambda test_var _test_var_test_func_pointer _test_var_test_func_pointer frame_size=0
@@ -347,11 +347,11 @@
  (vars
   (var 0 $result local #"uint8" lt=result loc=frame addr=0)
   (var 1 a local #"uint8" lt=arg loc=frame addr=1)
-  (var 2 $153 local #"uint8" lt=temp loc=a)
+  (var 2 $153 local #"uint8" lt=temp loc=none unuse)
  )
  (ops
-  0000 (:add {l2 $153} {l1 a} {lit nil 2 #"uint8"})
-  0001 (:return {l2 $153})
+  0000 (:add {l0 $result} {l1 a} {lit nil 2 #"uint8"})
+  0001 (:return {l0 $result})
  )
 )
 (alloc-lambda unittest _unittest_assert_true _unittest_assert_true frame_size=3

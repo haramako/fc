@@ -101,6 +101,30 @@ func TestCoalesceCopies(t *testing.T) {
 	check(t, lmd, "add t8 = #1, #2", "load x = t8")
 }
 
+func TestCoalesceReturn(t *testing.T) {
+	a, b, tv := local("a", u16()), local("b", u16()), tmp("t", u16())
+	res := ir.NewLocal("$result", u16(), ir.LTResult)
+	lmd := lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: tv, Src: []ir.Operand{a, b}},
+		&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{tv}},
+	)
+	lmd.Result = res
+	coalesceCopies(lmd)
+	compact(lmd)
+	check(t, lmd, "add $result = a, b", "return $result")
+
+	// 型が違えば (return (a + b) as int) そのまま
+	t8 := tmp("t8", u8())
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: t8, Src: []ir.Operand{lit(1, u8()), lit(2, u8())}},
+		&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{t8}},
+	)
+	lmd.Result = res
+	coalesceCopies(lmd)
+	compact(lmd)
+	check(t, lmd, "add t8 = #1, #2", "return t8")
+}
+
 func TestChainInPlace(t *testing.T) {
 	x, k, tv := local("x", u16()), local("k", u16()), tmp("t", u16())
 	one := lit(1, u8())

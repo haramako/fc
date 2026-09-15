@@ -266,12 +266,8 @@ _test_lzw_buf: .res 256
 	dex
 	dex
 	lda <0+S+2,x
-	sta 0+<L+0
-	lda <1+S+2,x
-	sta 1+<L+0
-	lda 0+<L+0
 	sta 0+<S+0,x
-	lda 1+<L+0
+	lda <1+S+2,x
 	sta 1+<S+0,x
 	lda 0+<S+0,x
 	sta <S+2,x

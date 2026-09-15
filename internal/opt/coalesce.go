@@ -24,12 +24,22 @@ func coalesceCopies(lmd *ir.Lambda) {
 		switch op.Code {
 		case ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
 			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpBitNot, ir.OpNot, ir.OpEq, ir.OpLt,
-			ir.OpSignExtension, ir.OpIndex, ir.OpPget, ir.OpIndexPget, ir.OpFieldPget:
+			ir.OpSignExtension, ir.OpIndex, ir.OpPget, ir.OpIndexPget, ir.OpFieldPget, ir.OpCall, ir.OpFastcall:
 		default:
 			continue
 		}
 		next := ops[i+1]
-		if next.Code != ir.OpLoad {
+		var x ir.Operand
+		switch next.Code {
+		case ir.OpLoad:
+			x = next.Dst
+		case ir.OpReturn:
+			// `return a + b` / `return f(x)`: 結果を戻り値の領域に直接置く (return は何も写さなくなる)
+			if len(next.Src) == 0 || lmd.Result == nil {
+				continue
+			}
+			x = lmd.Result
+		default:
 			continue
 		}
 		t, ok := op.Dst.(*ir.Value)
@@ -39,7 +49,6 @@ func coalesceCopies(lmd *ir.Lambda) {
 		if u, single := ud.SingleUse(t); !single || u != i+1 || next.Src[0] != ir.Operand(t) {
 			continue
 		}
-		x := next.Dst
 		if ir.ValType(x) != t.Type || !ir.ValAssignable(x) {
 			continue
 		}
@@ -48,7 +57,11 @@ func coalesceCopies(lmd *ir.Lambda) {
 			continue
 		}
 		op.Dst = x // 位置は演算の方を残す (0 除算などのエラー位置)
-		ops[i+1] = nil
+		if next.Code == ir.OpReturn {
+			next.Src[0] = x
+		} else {
+			ops[i+1] = nil
+		}
 	}
 }
 
