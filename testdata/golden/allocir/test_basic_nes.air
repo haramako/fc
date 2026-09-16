@@ -169,7 +169,7 @@
   0009 (:return)
  )
 )
-(alloc-lambda test_basic _main _main frame_size=0 abi=static entry
+(alloc-lambda test_basic _main _main frame_size=0 abi=static
  (vars
  )
  (ops

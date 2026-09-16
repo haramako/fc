@@ -406,13 +406,11 @@ _70:
 		.byte 91,55,93,61,48,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_memory"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_73)
 	sta <F_stdio_print+0

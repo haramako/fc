@@ -94,13 +94,11 @@ _15:
 		.byte 97,115,32,117,105,110,116,42,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_cast"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_18)
 	sta <F_stdio_print+0

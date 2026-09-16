@@ -634,13 +634,11 @@ _111:
 		.byte 97,116,97,110,40,50,50,52,41,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_math"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_114)
 	sta <F_stdio_print+0

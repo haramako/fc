@@ -85,8 +85,8 @@ options(org: 0xa000);         // 配置アドレス
 options(mapper: "MMC3");      // iNES マッパ（"MMC0" / "MMC3" / 番号）— メインモジュールで
 options(bank_count: 4);       // PRG バンク数 — メインモジュールで
 options(char_banks: 1);       // CHR バンク数 — メインモジュールで
-options(fastcall_reg: 32);    // extern の fastcall 関数が使うゼロページ領域 FC_FASTCALL_REG の大きさ（既定 32、16〜128）— メインモジュールで
-options(static_zp: 64);       // 静的フレーム（§4.5）のゼロページ側 FC_SZP の大きさ（既定 64、0〜256）— メインモジュールで
+options(fastcall_reg: 16);    // extern の fastcall 関数が使うゼロページ領域 FC_FASTCALL_REG の大きさ（既定 16、16〜128）— メインモジュールで
+options(static_zp: 48);       // 静的フレーム（§4.5）のゼロページ側 FC_SZP の大きさ（既定 48、0〜256）— メインモジュールで
 options(static_ram: 512);     // 静的フレームの RAM 側 FC_SRAM の大きさ（既定 512、0〜8192）— メインモジュールで
 options(farcall: true);       // far call（§4.4）を有効にする — メインモジュールで
 options(near: true);          // このモジュールは常にマップされている扱い（far call の対象にしない）
@@ -233,7 +233,7 @@ function f():void options(segment: "game") { ... }     // 配置セグメント
   `if`/`else`、`break` の無い `loop`・`while (1)`・`for (;;)`、`default` 付きで全 case が `return` で終わる `switch`）
 - `fastcall`: **本体を持つ関数では意味を持たない**（非再帰の関数は全部静的フレーム §4.5 になる。互換のため受理する。
   以前の「中から他の関数を呼べない」制限も無い）。本体の無い extern 関数（asm 定義）に付けると、引数・戻り値を
-  ゼロページの `FC_FASTCALL_REG`（既定 32 バイト、`options(fastcall_reg: N)`）で渡す規約になる。
+  ゼロページの `FC_FASTCALL_REG`（既定 16 バイト、`options(fastcall_reg: N)`）で渡す規約になる。
   base.asm を自前で持つプロジェクトは `FC_FASTCALL_REG: .res N` と `FC_FASTCALL_REG_SIZE = N`（`.export … : absolute`）を
   合わせる（不足はリンク時の `.assert` で検出される）
 - `options(abi: "stack")`: 静的フレームにせず、スタック（`S+n,x`）の規約のままにする（§4.5）
@@ -250,6 +250,8 @@ fc で本体を持つ関数のうち**再帰しないもの**は、引数・戻�
 同時に活性になりえない関数（呼び出しグラフで一方から他方へ届かない関数どうし）のフレームは重ねて置かれるので、
 使う領域は「呼び出しの連鎖 1 本分の合計」程度で済む。領域はゼロページ側 `FC_SZP`（`options(static_zp: N)`。
 呼び出しの深い関数から順に入るだけ入る）と RAM 側 `FC_SRAM`（`options(static_ram: N)`）。
+fc が生成する base.asm のゼロページ配置は `$00-$0F` L（stack 関数のレジスタ領域）、`$10-$1F` reg、`$20-$2F` FC_FASTCALL_REG、
+`$30-$5F` FC_SZP、**`$60-$7F` は空き**（`options(address:)` の固定番地の変数に使える）、`$80-$FF` スタック S。
 base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .res M` と `FC_SZP_SIZE` / `FC_SRAM_SIZE` の
 `.export … : absolute` を合わせる（不足はリンク時の `.assert` で検出される。配置は `.fc-build/_frames.inc`）。
 

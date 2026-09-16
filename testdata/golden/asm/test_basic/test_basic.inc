@@ -23,6 +23,5 @@ _test_basic_SINT16 = -255
 	.import _test_basic_add_fastcall
 	.import _test_basic_test_fastcall
 	.import _main
-	.import _main__direct
 _test_basic_main = _main
 .endif

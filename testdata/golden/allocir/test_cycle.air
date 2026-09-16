@@ -14,7 +14,7 @@
   0008 (:return)
  )
 )
-(alloc-lambda test_cycle _main _main frame_size=0 abi=static entry
+(alloc-lambda test_cycle _main _main frame_size=0 abi=static
  (vars
  )
  (ops
@@ -171,14 +171,14 @@
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static entry
+(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static entry
+(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static
  (vars
  )
  (ops

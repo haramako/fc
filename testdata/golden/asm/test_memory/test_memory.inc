@@ -9,6 +9,5 @@ __MODULE_TEST_MEMORY__ = 1
 	.import _test_memory_test_strcpy
 	.import _test_memory_test_set
 	.import _main
-	.import _main__direct
 _test_memory_main = _main
 .endif

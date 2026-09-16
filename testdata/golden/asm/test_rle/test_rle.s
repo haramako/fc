@@ -146,13 +146,11 @@ _25:
 		.byte 99,104,101,99,107,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_rle"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_28)
 	sta <F_stdio_print+0

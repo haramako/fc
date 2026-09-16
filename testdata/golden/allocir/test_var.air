@@ -1,4 +1,4 @@
-(alloc-lambda test_var _test_var_$2 _test_var_$2 frame_size=2 abi=static entry
+(alloc-lambda test_var _test_var_$2 _test_var_$2 frame_size=2 abi=static
  (vars
   (var 0 $result local #"uint8" lt=result loc=static addr=0)
   (var 1 a local #"uint8" lt=arg loc=static addr=1)
@@ -283,7 +283,7 @@
   0007 (:return)
  )
 )
-(alloc-lambda test_var _main _main frame_size=0 abi=static entry
+(alloc-lambda test_var _main _main frame_size=0 abi=static
  (vars
  )
  (ops
@@ -491,14 +491,14 @@
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static entry
+(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static entry
+(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static
  (vars
  )
  (ops

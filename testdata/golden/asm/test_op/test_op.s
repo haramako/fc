@@ -3072,13 +3072,11 @@ _590:
 		.byte 42,112,105,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_op"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_593)
 	sta <F_stdio_print+0

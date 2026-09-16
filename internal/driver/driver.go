@@ -443,8 +443,12 @@ func (c *Compiler) staticRamSize() int {
 }
 
 // 静的フレームの領域の既定の大きさ (fc が生成する base.asm と一致)。
+//
+// fc が生成する base.asm のゼロページ配置: $00-$0F L (stack 関数のレジスタ領域)、$10-$1F reg、$20-$2F FC_FASTCALL_REG
+// (extern の fastcall 用、既定 16)、$30-$5F FC_SZP (静的フレーム、既定 48)、**$60-$7F は空き** (プログラムが
+// `options(address:)` で固定番地の変数を置く。miku の irq_setup など)、$80-$FF スタック S。
 const (
-	DefaultStaticZp  = 64
+	DefaultStaticZp  = 48
 	DefaultStaticRam = 512
 )
 
@@ -486,7 +490,7 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"FC_LOCAL: .res $10\n" +
 		"FC_REG: .res $10\n" +
 		"FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE\n" +
-		"FC_SZP: .res FC_SZP_SIZE\n" + // 静的フレーム (ゼロページ側)
+		"FC_SZP: .res FC_SZP_SIZE\n" + // 静的フレーム (ゼロページ側)。ここまでで $5F。$60-$7F はプログラムの固定番地用に空ける
 		"\n" +
 		".segment \"BSS\"\n" +
 		"FC_FARCALL: .res 3\n" +

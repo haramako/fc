@@ -99,12 +99,10 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 					tables[d.Sym] = append(tables[d.Sym], funcSym(e))
 				}
 			}
-			if d.Kind == ir.DefEqu && d.Equ != nil {
-				markOperand(d.Equ)
-				if d.Equ.IsInt {
-					unknownAssign[d.Sym] = true // options(address:) の変数は asm 側が書きうる
-				}
+			if d.Kind == ir.DefEqu && d.Equ != nil && d.Equ.IsInt {
+				unknownAssign[d.Sym] = true // options(address:) の変数は asm 側が書きうる
 			}
+			// DefEqu の関数シンボル (options(symbol:) の別名) は呼び出しに使う名前で、アドレスを取ったのではない
 		}
 	}
 	for i, lmd := range g.Lambdas {

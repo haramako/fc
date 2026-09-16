@@ -11,6 +11,5 @@ __MODULE_TEST_LZW__ = 1
 	.import _test_lzw_buf
 	.import _test_lzw_test_unpack
 	.import _main
-	.import _main__direct
 _test_lzw_main = _main
 .endif

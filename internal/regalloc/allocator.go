@@ -110,7 +110,8 @@ type Limits struct {
 }
 
 // DefaultLimits は既定の大きさ (options(fastcall_reg: N) で FastcallReg を変えられる)。
-var DefaultLimits = Limits{Reg: 16, FastcallReg: 32}
+// FC_FASTCALL_REG は extern の fastcall 関数だけが使う (本体を持つ関数は静的フレーム) ので 16 で足りる。
+var DefaultLimits = Limits{Reg: 16, FastcallReg: 16}
 
 // AllocateRegister は Fc.allocate_register 相当。
 // 変数の address, location, unuse が設定される。

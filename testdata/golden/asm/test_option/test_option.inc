@@ -5,6 +5,5 @@ __MODULE_TEST_OPTION__ = 1
 	.import _test_option_base_data
 	.import _test_option_test_address
 	.import _main
-	.import _main__direct
 _test_option_main = _main
 .endif

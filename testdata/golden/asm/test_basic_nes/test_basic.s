@@ -330,13 +330,11 @@ _63:
 		.byte 97,100,100,95,102,97,115,116,99,97,108,108,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_basic"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_66)
 	sta <S+0,x

@@ -123,13 +123,11 @@ _26:
 		.byte 97,100,100,47,60,61,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_alloc"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_29)
 	sta <F_stdio_print+0

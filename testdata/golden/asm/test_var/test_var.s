@@ -12,20 +12,15 @@ _test_var_array: .res 10
 _test_var_CONST:
 	.byte 0,1,2,3,4,5,6,7,8,9
 	.export _test_var__D2
-	.export _test_var__D2__direct
 	;;;=============================
 	;;; function _test_var_$2
 	;;;=============================
 .segment "test_var"
-_test_var__D2:
-	lda <S+1,x
-	sta <F_test_var__D2+1
-.proc _test_var__D2__direct
+.proc _test_var__D2
 	clc
 	lda 0+<F_test_var__D2+1
 	adc #2
 	sta 0+<F_test_var__D2+0
-	sta <S+0,x
 	rts
 .endproc
 _test_var_add2 = _test_var__D2
@@ -403,7 +398,7 @@ _test_var_FUNC_TABLE:
 	jsr _unittest_assert_equal
 	lda #1
 	sta <F_test_var__D2+1
-	jsr _test_var__D2__direct
+	jsr _test_var__D2
 	lda <F_test_var__D2+0
 	sta 0+<F_test_var_test_func_pointer+0
 	sta <F_unittest_assert_equal+0
@@ -535,13 +530,11 @@ _115:
 		.byte 111,110,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_var"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_118)
 	sta <F_stdio_print+0

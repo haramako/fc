@@ -25,13 +25,11 @@ __MODULE_TEST_BUG__ = 1
 	rts
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_bug"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_3)
 	sta <F_stdio_print+0

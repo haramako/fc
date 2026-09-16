@@ -5,6 +5,5 @@ __MODULE_TEST_CAST__ = 1
 	.import _test_cast_a1
 	.import _test_cast_test_cast
 	.import _main
-	.import _main__direct
 _test_cast_main = _main
 .endif

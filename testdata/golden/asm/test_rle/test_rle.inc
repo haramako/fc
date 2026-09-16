@@ -8,6 +8,5 @@ __MODULE_TEST_RLE__ = 1
 	.import _test_rle_dest
 	.import _test_rle_test_rle
 	.import _main
-	.import _main__direct
 _test_rle_main = _main
 .endif

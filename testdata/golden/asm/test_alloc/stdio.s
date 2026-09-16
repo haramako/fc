@@ -94,24 +94,20 @@ _2:
 	rts
 .endproc
 	.export _interrupt
-	.export _interrupt__direct
 	;;;=============================
 	;;; function _interrupt
 	;;;=============================
 .segment "stdio"
-_interrupt:
-.proc _interrupt__direct
+.proc _interrupt
 	rts
 .endproc
 _stdio_interrupt = _interrupt
 	.export _interrupt_irq
-	.export _interrupt_irq__direct
 	;;;=============================
 	;;; function _interrupt_irq
 	;;;=============================
 .segment "stdio"
-_interrupt_irq:
-.proc _interrupt_irq__direct
+.proc _interrupt_irq
 	rts
 .endproc
 _stdio_interrupt_irq = _interrupt_irq

@@ -329,13 +329,11 @@ _102:
 		.byte 115,119,105,116,99,104,0
 .endproc
 	.export _main
-	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_stat"
-_main:
-.proc _main__direct
+.proc _main
 	jsr _stdio_init
 	lda #.LOBYTE(_105)
 	sta <F_stdio_print+0

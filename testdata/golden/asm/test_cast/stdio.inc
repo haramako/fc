@@ -12,9 +12,7 @@ _stdio_EMU_EXIT = 65535
 	.import _stdio_bench_end
 	.import _stdio_init
 	.import _interrupt
-	.import _interrupt__direct
 _stdio_interrupt = _interrupt
 	.import _interrupt_irq
-	.import _interrupt_irq__direct
 _stdio_interrupt_irq = _interrupt_irq
 .endif
