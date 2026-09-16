@@ -181,14 +181,17 @@ codegen の `call.go`（呼び出しの種類）、driver の `PrepareProgram`�
 
 実装で決めた細部（§6-1〜6-5 からの差分）:
 
-- 間接呼び出しの辺は**同じ関数型の Entry にだけ**張る（全 Entry に張ると `main` のように asm から参照される関数が
-  自分への辺を持って再帰扱いになる）。`bitcast` で関数ポインタの型を変えて呼ぶと辺が漏れる（そういう再帰があれば
-  フレームが重なる。`options(abi: "stack")` で逃げる）
+- 間接呼び出しの飛び先は、**関数ポインタのグローバル変数経由ならその変数に代入された関数、const 表の要素経由なら
+  表の要素**に絞る（`frames.indirectTargets`）。それ以外（ローカル変数、struct のフィールド経由）は同じ関数型の Entry 全部。
+  型だけで絞っていたときは castle の `wait_vsync` → `on_wait_vsync()`（`fn():void`）がイベント系の関数全部への辺になり、
+  イベント → `wait_vsync` → イベントの偽の閉路で 88 関数が stack に落ちていた。変数が `options(address:)`（asm が書きうる）
+  か `&` を取られていれば「不明」として型ベースに戻す。`bitcast` で関数ポインタの型を変えて呼ぶと辺が漏れる（そういう
+  再帰があればフレームが重なる。`options(abi: "stack")` で逃げる）
+- Entry 関数を呼び先が分かって呼ぶときは、プロローグ（スタックからのコピー）の後ろの `_sym__direct` から入る
 - 引数に呼び出しを含むときは、全部評価してから積む（兄弟のフレームは重なりうるので、呼び先の引数領域に書き始めた後で
   別の関数を呼べない）。含まないときは評価しながら積む（`sub t; push_arg t` が隣り合い t が A に割り付く）
 - Entry 関数（アドレスを取られた関数）は直接呼ばれるときもスタック経由で統一（プロローグで写す。数十サイクル）
-- castle: 440 関数中 349 が static、ゼロページ 56 バイト + RAM 18 バイト（RAM 側は WRAM `BSS_EX`）。残りはイベント / メニュー系の
-  再帰の連鎖で stack のまま。実プロジェクト側は `data.asm` に `FC_SZP` / `FC_SRAM` と `_SIZE` の export を足し、
+- castle: 440 関数中 438 が static、ゼロページ 54 バイト（RAM 側 `BSS_EX` は 0）。stack は自己再帰の 2 つだけ。実プロジェクト側は `data.asm` に `FC_SZP` / `FC_SRAM` と `_SIZE` の export を足し、
   `mmc3.fc` に `options(static_zp: 64, static_ram: 256)` を書く（examples/castle と同じ）
 
 ### 6-1 関数の種類（ABI）

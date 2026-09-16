@@ -36,13 +36,12 @@
 ### 第 3 弾: フレームの静的割付（B）✅ 2026-09-16（ブランチ `feature/static-frame`）
 
 [v2_frame_alloc.md](v2_frame_alloc.md) §6。bench: `calls` -21%、`entities` -21%、`textprint` -10%、`plasma` -10%。
-castle は 440 関数中 349 が static（ゼロページ 56 バイト + RAM 18 バイト）。残りは再帰の連鎖（イベント / メニュー系）で
-stack のまま（`call` マクロ 307 箇所）。
+castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM 0）。stack は本当に自己再帰している 2 つだけ。
 
-- [ ] castle の再帰の連鎖（`event_run_*` → … → `event_run_*`）を切る。`options(abi:)` の指定や、間接呼び出しの辺を
-      もっと絞る（今は同じ関数型の Entry 全部）ことで static にできる関数が増える
-- [ ] `fcc build -d` で配置の要約（static / stack の内訳、ZP / RAM の使用量、stack に残った理由）を表示する
-- [ ] Entry 関数（アドレスを取られた関数）の直接呼び出しも `F_g` に直接書く（今はプロローグコピー経由で統一）
+- [x] 間接呼び出しの飛び先を「そのポインタ変数に代入された関数」「const 表の要素」に絞る（castle の偽の再帰 88 関数が消えた） ✅
+- [x] `fcc build -d` で配置の要約（種類ごとの数、ZP / RAM の使用量、stack に残った再帰の連鎖） ✅
+- [x] Entry 関数の直接呼び出しはプロローグを飛ばす（`__direct`） ✅
+- [ ] 関数ポインタのローカル変数・struct フィールド経由の呼び出しはまだ型ベース（同じ型の Entry 全部）
 
 ### 第 4 弾（B の後）
 

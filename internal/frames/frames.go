@@ -62,9 +62,19 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 
 	// アドレスを取られた関数 (Entry) と辺
 	entry := make([]bool, n)
-	var indirect [][]*types.Type // 関数ごとの、間接呼び出しの関数型 (辺は同じ型の Entry にだけ張る)
-	indirect = make([][]*types.Type, n)
+	indirect := make([][]*ir.Op, n) // 関数ごとの間接呼び出し (飛び先は後で絞る)
 	g.callees = make([][]int, n)
+	// 関数ポインタのグローバル変数に代入された関数と、関数ポインタの const 表の要素 (間接呼び出しの飛び先を絞るため)
+	assigned := map[string][]string{} // 変数のシンボル → 代入された関数のシンボル
+	unknownAssign := map[string]bool{} // リテラル以外が代入された (何が入るか分からない)
+	tables := map[string][]string{}   // const 表のシンボル → 要素の関数のシンボル ("" は関数以外)
+	funcSym := func(o ir.Operand) string {
+		v := ir.ValLiteral(o)
+		if v != nil && v.Kind == ir.KindLiteral && !v.IsInt && v.Symbol != "" {
+			return v.Symbol
+		}
+		return ""
+	}
 	markSym := func(sym string) {
 		if l, ok := g.ByID[sym]; ok {
 			if i, ok := g.index[l]; ok {
@@ -86,10 +96,14 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			if d.Kind == ir.DefBlock {
 				for _, e := range d.Elems {
 					markOperand(e)
+					tables[d.Sym] = append(tables[d.Sym], funcSym(e))
 				}
 			}
 			if d.Kind == ir.DefEqu && d.Equ != nil {
 				markOperand(d.Equ)
+				if d.Equ.IsInt {
+					unknownAssign[d.Sym] = true // options(address:) の変数は asm 側が書きうる
+				}
 			}
 		}
 	}
@@ -118,11 +132,27 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 						}
 					}
 				} else {
-					indirect[i] = append(indirect[i], ir.ValType(op.Src[0]))
+					indirect[i] = append(indirect[i], op)
 				}
 				for _, s := range op.Src[1:] {
 					markOperand(s)
 				}
+			case ir.OpLoad:
+				// 関数ポインタのグローバル変数への代入
+				if dv, ok := op.Dst.(*ir.Value); ok && dv.Kind == ir.KindGlobal && dv.Symbol != "" && dv.Type.Kind == types.Func {
+					if f := funcSym(op.Src[0]); f != "" {
+						assigned[dv.Symbol] = append(assigned[dv.Symbol], f)
+					} else {
+						unknownAssign[dv.Symbol] = true
+					}
+				}
+				markOperand(op.Src[0])
+			case ir.OpRef:
+				// アドレスを取られたグローバルの関数ポインタ変数はポインタ経由で何が入るか分からない
+				if v, ok := op.Src[0].(*ir.Value); ok && v.Kind == ir.KindGlobal && v.Symbol != "" {
+					unknownAssign[v.Symbol] = true
+				}
+				markOperand(op.Src[0])
 			case ir.OpAsm:
 				// インラインアセンブラが関数名を参照していれば、呼び出し規約が分からないので Entry 扱い
 				for _, w := range reAsmSym.FindAllString(op.Text, -1) {
@@ -142,8 +172,26 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			entries = append(entries, i)
 		}
 	}
-	for i := range g.Lambdas {
-		for _, t := range indirect[i] {
+	// 間接呼び出しの飛び先: 関数ポインタのグローバル変数ならそれに代入された関数、const 表の要素ならその表の要素、
+	// それ以外 (ローカル変数、struct のフィールド経由など) は同じ関数型でアドレスを取られた関数の全部
+	for i, lmd := range g.Lambdas {
+		if len(indirect[i]) == 0 {
+			continue
+		}
+		ud := ir.BuildUseDef(lmd)
+		for _, op := range indirect[i] {
+			syms, ok := indirectTargets(lmd, ud, op.Src[0], assigned, unknownAssign, tables)
+			if ok {
+				for _, s := range syms {
+					if l, ok := g.ByID[s]; ok {
+						if j, ok := g.index[l]; ok {
+							g.callees[i] = append(g.callees[i], j)
+						}
+					}
+				}
+				continue
+			}
+			t := ir.ValType(op.Src[0])
 			for _, j := range entries {
 				if g.Lambdas[j].Type == t {
 					g.callees[i] = append(g.callees[i], j)
@@ -219,6 +267,68 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 }
 
 var reAsmSym = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
+
+// indirectTargets は間接呼び出しの飛び先の関数 (シンボル) を絞れるなら返す。
+//   - グローバルの関数ポインタ変数 (直接、または `load t = g` の t): その変数に代入された関数 (リテラル以外の代入があれば不可)
+//   - const 表の要素 (`index_pget t = TABLE, i` / `index p = TABLE, i; pget t = p`): 表の要素 (関数以外の要素があれば不可)
+func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned map[string][]string, unknown map[string]bool, tables map[string][]string) ([]string, bool) {
+	fromGlobal := func(o ir.Operand) ([]string, bool) {
+		v, ok := o.(*ir.Value)
+		if !ok || v.Kind != ir.KindGlobal || v.Symbol == "" || v.Type.Kind != types.Func {
+			return nil, false
+		}
+		if unknown[v.Symbol] {
+			return nil, false
+		}
+		return assigned[v.Symbol], true
+	}
+	fromTable := func(o ir.Operand) ([]string, bool) {
+		v := ir.ValLiteral(o)
+		if v == nil || v.Kind != ir.KindGlobal || v.Symbol == "" {
+			return nil, false
+		}
+		elems, ok := tables[v.Symbol]
+		if !ok {
+			return nil, false
+		}
+		for _, e := range elems {
+			if e == "" {
+				return nil, false
+			}
+		}
+		return elems, true
+	}
+	if syms, ok := fromGlobal(callee); ok {
+		return syms, true
+	}
+	t, ok := callee.(*ir.Value)
+	if !ok || t.Kind != ir.KindLocal {
+		return nil, false
+	}
+	defs := ud.Defs[t]
+	if len(defs) != 1 {
+		return nil, false
+	}
+	def := lmd.Ops[defs[0]]
+	switch def.Code {
+	case ir.OpLoad:
+		if syms, ok := fromGlobal(def.Src[0]); ok {
+			return syms, true
+		}
+		if f := ir.ValLiteral(def.Src[0]); f != nil && f.Kind == ir.KindLiteral && !f.IsInt && f.Symbol != "" {
+			return []string{f.Symbol}, true
+		}
+	case ir.OpIndexPget:
+		return fromTable(def.Src[0])
+	case ir.OpPget:
+		if p, ok := def.Src[0].(*ir.Value); ok && p.Kind == ir.KindLocal {
+			if pd := ud.Defs[p]; len(pd) == 1 && lmd.Ops[pd[0]].Code == ir.OpIndex {
+				return fromTable(lmd.Ops[pd[0]].Src[0])
+			}
+		}
+	}
+	return nil, false
+}
 
 func optText(o ir.Options, key string) string {
 	v, _ := o.Get(key)
