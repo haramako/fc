@@ -105,6 +105,11 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			// DefEqu の関数シンボル (options(symbol:) の別名) は呼び出しに使う名前で、アドレスを取ったのではない
 		}
 	}
+	for _, m := range mods {
+		for _, sym := range m.AsmSymbols {
+			markSym(sym) // include した asm ファイルが参照する fc の関数は呼び出し規約が分からないので Entry
+		}
+	}
 	for i, lmd := range g.Lambdas {
 		if lmd.Options.Has("interrupt") {
 			lmd.Interrupt = true

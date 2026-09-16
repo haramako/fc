@@ -103,6 +103,7 @@ type Module struct {
 	Options        Options // options(...) 文で設定されたモジュール属性 (bank, org, ...)。値は定数評価済み
 	IncludeChrs    []string
 	IncludeAsms    []string
+	AsmSymbols     []string // include したアセンブラファイルが参照するシンボル (volatile と Entry の判定用)
 	IncludeHeaders []string
 	Uses           []*ModuleInterface // use したモジュール (出現順、重複なし)
 	Scope          *Scope

@@ -180,6 +180,38 @@ function main():void
 	}
 }
 
+// TestGlobalResident: ループ内でレジスタに常駐するグローバル変数は、呼び出し・ポインタ経由の書き込みの前後で
+// メモリと同期される (呼び先や別名経由の変更が反映され、ループを抜けた後の値も正しい)。
+func TestGlobalResident(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var g:int;
+var h:int;
+var arr:[4]int;
+function bump():void { g += 10; }
+function main():void
+{
+	var p = &h;
+	g = 0;
+	h = 0;
+	for (var i = 0; i < 4; i++) {
+		g += 1;       // レジスタに常駐しうる
+		bump();       // 呼び先が g を変える
+		g += 1;
+		h += 2;
+		*p = h + 100; // ポインタ経由で h を変える
+		h += 1;
+		arr[i] = g;
+	}
+	printf(g, " ", h, " ", arr[0], " ", arr[3], "\n");
+	exit(0);
+}
+`)
+	// g: 毎周 +12 → 48、h: (2+100... 毎周 h = (h+2)+100+1) → 103, 206, 309, 412 → 412 - 256 = 156 (8 ビット)
+	if want := "48 156 12 48\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
+
 // TestChainSelfOperand: `x = (x op1 a) op2 x` の 2 つ目の x は演算前の値 (opt.chainInPlace が中間の一時変数を
 // x 自身に置き換えるのは、後の演算が x を読まないときだけ)。
 func TestChainSelfOperand(t *testing.T) {

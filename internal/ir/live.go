@@ -1,5 +1,7 @@
 package ir
 
+import "github.com/haramako/fc/internal/types"
+
 // 命令ごとの生存解析 (ローカル変数)。regalloc の LiveRangeCalculator は結果を区間に潰すが、こちらは集合のまま持つ
 // (ループ内の A 常駐の判定に使う。doc/v2_regalloc.md)。
 
@@ -13,16 +15,42 @@ type Liveness struct {
 
 // BuildLiveness は標準の後ろ向きデータフロー (ブロック単位で反復してから命令単位に展開)。
 // 変数の一部への書き込み (IsPartialDef) は使用でもある。引数は入口で定義済み扱い。
-func BuildLiveness(lmd *Lambda) *Liveness {
+func BuildLiveness(lmd *Lambda) *Liveness { return buildLiveness(lmd, false) }
+
+// BuildLivenessWithGlobals はグローバルのスカラ変数 (配列でない) も対象にする。呼び出し・インラインアセンブラ・
+// ポインタ経由の書き込みは全グローバルを読んで書くとみなし、return は全グローバルを読むとみなす
+// (関数の外から見える値なので、ループ内でレジスタに置いた値はそこで書き戻す必要がある)。
+func BuildLivenessWithGlobals(lmd *Lambda) *Liveness { return buildLiveness(lmd, true) }
+
+// MayTouchGlobals は op が (オペランドに現れない) グローバル変数を読み書きしうるか。
+func MayTouchGlobals(op *Op) bool {
+	switch op.Code {
+	case OpCall, OpFastcall, OpAsm, OpPset, OpIndexPset, OpFieldPset:
+		return true
+	}
+	return false
+}
+
+func buildLiveness(lmd *Lambda, globals bool) *Liveness {
 	lv := &Liveness{index: map[*Value]int{}}
 	local := func(o Operand) *Value {
-		if o == nil || ValKind(o) != KindLocal {
+		if o == nil {
 			return nil
 		}
 		if pa, ok := o.(*PointeredArray); ok {
 			o = pa.From
 		}
-		return UnderlyingValue(o)
+		v := UnderlyingValue(o)
+		if v == nil {
+			return nil
+		}
+		if v.Kind == KindLocal {
+			return v
+		}
+		if globals && v.Kind == KindGlobal && v.Symbol != "" && v.Type.Kind != types.Array && v.Type.Kind != types.Func {
+			return v
+		}
+		return nil
 	}
 	add := func(v *Value) int {
 		if i, ok := lv.index[v]; ok {
@@ -53,6 +81,25 @@ func BuildLiveness(lmd *Lambda) *Liveness {
 		for _, u := range uses {
 			if v := local(u); v != nil {
 				opDU[i].uses = append(opDU[i].uses, add(v))
+			}
+		}
+	}
+	if globals {
+		// 呼び出しなどは全グローバルを読んで書く、return は全グローバルを読む
+		for i, op := range lmd.Ops {
+			if op == nil {
+				continue
+			}
+			if MayTouchGlobals(op) || op.Code == OpReturn {
+				for k, v := range lv.Vars {
+					if v.Kind != KindGlobal {
+						continue
+					}
+					opDU[i].uses = append(opDU[i].uses, k)
+					if op.Code != OpReturn {
+						opDU[i].defs = append(opDU[i].defs, k)
+					}
+				}
 			}
 		}
 	}

@@ -224,6 +224,7 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 // 呼び出し規約の決定 (frames.Analyze) → 全関数の最適化と割付 (Prepare) → 静的フレームの配置 (frames.Place)。
 // 戻り値の Plan.Inc を `_frames.inc` として書き、各モジュールの asm が include する。
 func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frames.Plan, error) {
+	markVolatile(mods)
 	graph, err := frames.Analyze(mods)
 	if err != nil {
 		return nil, err
@@ -234,6 +235,64 @@ func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frame
 	}
 	return frames.Place(graph, staticZp, staticRam)
 }
+
+// markVolatile は asm (include したファイルとインラインアセンブラ) から参照されるグローバル変数を volatile にする
+// (options(address:) と options(volatile: true) は sema が付けている)。割り込みや asm が書き換える変数をレジスタに
+// 置いたままにしないため (doc/language_reference.md §2)。
+func markVolatile(mods []*ir.Module) {
+	syms := map[string]bool{}
+	for _, m := range mods {
+		for _, s := range m.AsmSymbols {
+			syms[s] = true
+		}
+	}
+	for _, m := range mods {
+		for _, d := range m.Defs {
+			if d.Kind != ir.DefCode || d.Lambda.Extern {
+				continue
+			}
+			for _, op := range d.Lambda.Ops {
+				if op != nil && op.Code == ir.OpAsm {
+					for _, s := range reAsmSym.FindAllString(op.Text, -1) {
+						syms[s] = true
+					}
+				}
+			}
+		}
+	}
+	if len(syms) == 0 {
+		return
+	}
+	mark := func(o ir.Operand) {
+		if o == nil {
+			return
+		}
+		if pa, ok := o.(*ir.PointeredArray); ok {
+			o = pa.From
+		}
+		if v := ir.UnderlyingValue(o); v != nil && v.Kind == ir.KindGlobal && syms[v.Symbol] {
+			v.Volatile = true
+		}
+	}
+	for _, m := range mods {
+		for _, d := range m.Defs {
+			if d.Kind != ir.DefCode || d.Lambda.Extern {
+				continue
+			}
+			for _, op := range d.Lambda.Ops {
+				if op == nil {
+					continue
+				}
+				mark(op.Dst)
+				for _, s := range op.Src {
+					mark(s)
+				}
+			}
+		}
+	}
+}
+
+var reAsmSym = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
 
 // PrepareAll は全関数の Prepare (エラーは関数の位置を補完して返す)。
 func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {

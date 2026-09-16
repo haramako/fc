@@ -211,10 +211,19 @@ var a:int, b:int;              // まとめて宣言
 グローバル変数の属性:
 
 ```
-var vram:int options(address: 0x2007);        // 固定アドレス（メモリマップド I/O）
+var vram:int options(address: 0x2007);        // 固定アドレス（メモリマップド I/O。自動的に volatile）
+var flag:int options(volatile: true);         // 割り込みや asm が書き換える変数（下記）
 var buf:[256]int options(segment: "BSS_EX");  // 配置セグメント
 const REG:int options(address: "_reg_sym");   // アセンブラのシンボルに束縛（値なし const）
 ```
+
+**volatile**: 最適化はグローバル変数の値をループの間レジスタに置いたままにすることがある（§4.5 の常駐）。
+読むたび / 書くたびに意味がある変数はそれをしてはいけないので、次の変数は volatile として扱われ、常に
+メモリを読み書きする: (1) `options(address:)` の固定アドレス（メモリマップド I/O）、(2) インラインアセンブラや
+`include` したアセンブラファイルからシンボルで参照される変数（割り込みハンドラや asm ルーチンが書き換える）、
+(3) `options(volatile: true)` を付けた変数。関数呼び出し・ポインタ経由の書き込み・インラインアセンブラをまたぐ
+ときは volatile でなくてもメモリに書き戻して読み直すので、普通のグローバル変数は指定なしで正しく動く。
+明示が要るのは、fc からは見えない経路（別にアセンブルする asm、DMA など）で値が変わる変数だけ。
 
 ### 4.2 関数
 

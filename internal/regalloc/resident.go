@@ -355,6 +355,8 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	op := lmd.Ops[i]
 	d := Decision{A: ResFree, Y: ResFree, X: ResFree}
 	gain := 0
+	// グローバル変数の常駐: 呼び出し・asm・ポインタ経由の書き込みはその変数を触りうるので退避 / 復帰する
+	touches := func(v *ir.Value) bool { return v != nil && v.Kind == ir.KindGlobal && ir.MayTouchGlobals(op) }
 	// X (inx / cpx / ldx / stx は A も Y も使わない。lda a,x は A を使う)
 	xFriendly := false
 	if vX != nil {
@@ -366,7 +368,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 			} else {
 				d.X = ResClobber
 			}
-		} else if needsX(op) {
+		} else if needsX(op) || touches(vX) {
 			d.X = ResClobber
 		}
 	}
@@ -380,6 +382,8 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 		} else {
 			d.Y = ResClobber
 		}
+	} else if touches(vY) {
+		d.Y = ResClobber
 	}
 	// A
 	if vA != nil {
@@ -390,6 +394,8 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 			} else {
 				d.A = ResClobber
 			}
+		} else if touches(vA) {
+			d.A = ResClobber
 		} else if !freeA(op) && !(yFriendly && aFreeWithY(op)) && !(xFriendly && aFreeWithY(op)) {
 			if aLive && (vY == nil || !yLive) && yVariant(lmd, i) {
 				d.UseY = true // Y が空いているので Y で代用
@@ -425,7 +431,7 @@ func AllocateResident(lmd *ir.Lambda) {
 		// 内側から (小さいループから) 順に。外側のループの領域は、その中のループを除いたブロック
 		// (内側のループは、そこに入る辺で退避し出る辺で復帰する「通過する区間」として扱う)
 		sort.Slice(loops, func(i, j int) bool { return len(loops[i].Blocks) < len(loops[j].Blocks) })
-		lv := ir.BuildLiveness(lmd)
+		lv := ir.BuildLivenessWithGlobals(lmd)
 		done := false
 		for _, lp := range loops {
 			r := regionOf(lp, loops)
@@ -545,9 +551,20 @@ func candidates(lmd *ir.Lambda, cfg *ir.CFG, r region) []*ir.Value {
 					continue
 				}
 				v := ir.UnderlyingValue(o)
-				if v == nil || v.Kind != ir.KindLocal || seen[v] || v.Type.Size != 1 || v.Type.Kind != types.Int ||
-					v.LocalType == ir.LTResult || v.LocalType == ir.LTTemp || refered[v] || isResident(v) {
-					continue // 一時変数は定義の直後に使うものが大半で、既存の A 割付 (allocateA) が扱う
+				if v == nil || seen[v] || v.Type.Size != 1 || v.Type.Kind != types.Int || refered[v] || isResident(v) {
+					continue
+				}
+				switch v.Kind {
+				case ir.KindLocal:
+					if v.LocalType == ir.LTResult || v.LocalType == ir.LTTemp {
+						continue // 一時変数は定義の直後に使うものが大半で、既存の A 割付 (allocateA) が扱う
+					}
+				case ir.KindGlobal:
+					if v.Volatile || v.Symbol == "" {
+						continue // I/O レジスタ・asm が触る変数はレジスタに置いたままにできない
+					}
+				default:
+					continue
 				}
 				seen[v] = true
 				res = append(res, v)

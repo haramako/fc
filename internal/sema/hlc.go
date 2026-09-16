@@ -7,6 +7,7 @@ package sema
 // プログラム横断の状態と 2 相コンパイルの駆動は program.go。
 
 import (
+	"regexp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -518,6 +519,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		switch kind {
 		case "asm":
 			h.module.IncludeAsms = append(h.module.IncludeAsms, filename)
+			// asm が参照するシンボルを控える (fc の関数なら呼び出し規約を Entry に、変数なら volatile に)
+			if _, abs, err := h.deps.File(filename); err == nil {
+				if data, err := os.ReadFile(abs); err == nil {
+					h.module.AsmSymbols = append(h.module.AsmSymbols, reAsmSymbol.FindAllString(string(data), -1)...)
+				}
+			}
 		case "macro":
 			if h.module.Version >= syntax.Version2 {
 				panic(&diag.Error{Msg: fmt.Sprintf("include(%q): .rb macros are not supported in fc 2 (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
@@ -847,6 +854,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			symbol = h.addDef(name, &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg})
 		}
 		vv = h.addVar(ir.NewGlobal(name, typ, symbol))
+		vv.Volatile = opt.Has("address") || opt.Has("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
 	} else {
 		vv = h.addVar(ir.NewLocal(name, typ, ir.LTNone))
 	}
@@ -1886,6 +1894,8 @@ func containsCall(c *cexpr) bool {
 	}
 	return false
 }
+
+var reAsmSymbol = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
 
 // containsCallAny は式のどれかが関数呼び出しを含むか。
 func containsCallAny(cs []*cexpr) bool {

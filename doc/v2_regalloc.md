@@ -69,6 +69,12 @@ stack 系（stack / entry / extern）の呼び先には `ldx FC_SP` してから
 X の常駐は static 関数だけ（グローバル配列の添字 `lda a,x` / `sta a,x`、カウンタ `inx` / `cpx`。ポインタの添字は Y しか
 使えない）。同点なら Y を優先する。bench: bgdecode -4%、oam -3%、コストは fib +17%（再帰）、calls +4%（関数ポインタ経由）。
 
+**グローバル変数の常駐（§5）**: volatile でない 1 バイトのグローバル変数も候補にする。生存解析は
+`ir.BuildLivenessWithGlobals`（呼び出し・インラインアセンブラ・ポインタ経由の書き込みは全グローバルを読んで書く、
+return は全グローバルを読む、とみなす）。それらの命令は常駐変数の退避 / 復帰になる（`ir.MayTouchGlobals`）。
+volatile は sema（`options(address:)` / `options(volatile: true)`）と `codegen.markVolatile`（asm から参照されるシンボル。
+sema が `include` した asm ファイルを読んで `Module.AsmSymbols` に控える）が付ける。
+
 段取り:
 
 1. `ir.Dominators` / `ir.Loops`（`internal/ir/loops.go`）、命令ごとの生存集合 `ir.Liveness`（`internal/ir/live.go`）
