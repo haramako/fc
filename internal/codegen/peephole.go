@@ -41,6 +41,21 @@ func (s *peepState) reset() {
 	s.y = ""
 }
 
+// setsNZ は命令 (行) が N/Z を A 以外の (自分の) 結果で立てるか。直前の lda のフラグが要らないことの判定に使う
+// (分岐・sta・clc などは N/Z を保つので、その前の lda は消せない)。
+func setsNZ(line string) bool {
+	m := line
+	if k := strings.IndexAny(m, " \t"); k >= 0 {
+		m = m[:k]
+	}
+	switch m {
+	case "adc", "sbc", "and", "ora", "eor", "cmp", "cpx", "cpy", "asl", "lsr", "rol", "ror", "inc", "dec",
+		"inx", "iny", "dex", "dey", "ldx", "ldy", "lda", "tax", "tay", "txa", "tya", "pla":
+		return true
+	}
+	return false
+}
+
 // operandKind はオペランドの種類。
 //   - opIndirect: `(p),y` / `(S+n,x)`。どこを書くか分からない (ポインタ経由でゼロページの変数を書くこともある)
 //   - opGlobalIndexed: `sym+0,y` / `sym,x`。グローバル配列への参照。ゼロページの局所とは重ならない
@@ -131,8 +146,10 @@ func peepholeA(lines []string) []string {
 		}
 		switch mnem {
 		case "lda":
-			if (trackable || kind == opImmediate) && s.a[arg] && s.flagsFromA {
-				continue // A は既にこの値で、フラグもそれを反映している
+			if (trackable || kind == opImmediate) && s.a[arg] && (s.flagsFromA || setsNZ(next(i))) {
+				// A は既にこの値で、フラグもそれを反映している (または次の命令がフラグを別の値で立て直すので要らない。
+				// ラベルの直後の `sta x; sec; lda x; sbc #32` など)
+				continue
 			}
 			s.a = aState{}
 			if trackable || kind == opImmediate {

@@ -348,3 +348,44 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestIndexSmallStructArray: 配列全体が 256 バイト以内なら `&objs[i]` (要素が 3 バイト以上) の積を 8 ビットで計算する
+// (末尾の要素、要素 6 バイト / 5 バイト、256 バイトちょうどの配列)。
+func TestIndexSmallStructArray(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `struct Obj { x:int; y:int; tile:int; flip:int; pal:int; visible:int; }
+struct P5 { a:int; b:int16; c:int16; }
+var objs:[24]Obj;
+var ps:[51]P5;
+struct Q { a:int16; b:int16; }
+var exact:[64]Q;   // 256 バイトちょうど
+function main():void
+{
+	for (var i = 0; i < 24; i++) {
+		var o = &objs[i];
+		o.x = i * 3;
+		o.visible = i & 1;
+	}
+	for (var j = 0; j < 51; j++) {
+		var p = &ps[j];
+		p.b = (j as int16) * 100;
+	}
+	for (var k = 0; k < 64; k++) {
+		var q = &exact[k];
+		q.a = (k as int16) * 1000;
+		q.b = k as int16;
+	}
+	var s:int16 = 0;
+	for (var i = 0; i < 24; i++) {
+		var o = &objs[i];
+		s += o.x + o.visible;
+	}
+	printf(s, " ", objs[23].x, " ", ps[50].b, " ", ps[1].b, " ", exact[63].a, " ", exact[62].b, "\n");
+	exit(0);
+}
+`)
+	// s = 3*(0+..+23) + 12 = 828 + 12 = 840、objs[23].x = 69、ps[50].b = 5000、exact[63].a = 63000、exact[62].b = 62
+	if want := "840 69 5000 100 63000 62\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

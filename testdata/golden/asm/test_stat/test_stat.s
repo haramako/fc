@@ -288,7 +288,6 @@ _80:
 	stx 0+<F_test_stat_test_switch+0
 	sta 0+<F_test_stat_test_switch+1
 	clc
-	lda 0+<F_test_stat_test_switch+1
 	adc 0+<F_test_stat_test_switch+0
 	sta 0+<F_test_stat_test_switch+1
 	ldx 0+<F_test_stat_test_switch+0

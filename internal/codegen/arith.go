@@ -16,12 +16,27 @@ func (l *Llc) indexLarge(op *ir.Op) []any {
 	arr, idx := op.In(0), op.In(1)
 	size := ir.ValType(arr).Base.Size
 	r := []any{}
-	// reg+0,1 = idx (16 ビット)。reg+2,3 = 積
-	r = append(r, l.loadA(idx, 0), "sta <reg+0", l.loadA(idx, 1), "sta <reg+1")
 	top := 15
 	for top >= 0 && size&(1<<top) == 0 {
 		top--
 	}
+	if at := ir.ValType(arr); at.Kind == types.Array && at.Size > 0 && at.Size <= 256 && ir.ValType(idx).Size == 1 &&
+		ir.ValLocation(arr) != ir.LocFrame {
+		// 配列全体が 256 バイト以内で添字が 1 バイト: 積も 1 バイトに収まるので A だけで計算する
+		// (&objs[i] の struct 配列。16 ビットの積より 3 倍ほど速い)
+		r = append(r, l.loadA(idx, 0), "sta <reg+0")
+		for bit := top - 1; bit >= 0; bit-- {
+			r = append(r, "asl a")
+			if size&(1<<bit) != 0 {
+				r = append(r, "clc", "adc <reg+0")
+			}
+		}
+		r = append(r, "clc", fmt.Sprintf("adc #.LOBYTE(%s)", l.toAsm(arr)), l.storeA(op.Dst, 0),
+			fmt.Sprintf("lda #.HIBYTE(%s)", l.toAsm(arr)), "adc #0", l.storeA(op.Dst, 1))
+		return r
+	}
+	// reg+0,1 = idx (16 ビット)。reg+2,3 = 積
+	r = append(r, l.loadA(idx, 0), "sta <reg+0", l.loadA(idx, 1), "sta <reg+1")
 	r = append(r, "lda <reg+0", "sta <reg+2", "lda <reg+1", "sta <reg+3")
 	for bit := top - 1; bit >= 0; bit-- {
 		r = append(r, "asl <reg+2", "rol <reg+3")
