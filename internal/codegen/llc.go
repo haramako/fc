@@ -109,7 +109,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	asm.push("\t.setcpu \"6502\"")
 	asm.push("\t.include \"macro.inc\"")
 	asm.push("\t.include \"_frames.inc\"") // 静的フレームの配置 (frames.Place が生成)
-	asm.push("\t.importzp FC_SP")            // スタックの空き先頭 (base.asm)
+	asm.push("\t.importzp FC_SP")          // スタックの空き先頭 (base.asm)
 	asm.push(fmt.Sprintf("__MODULE_%s__ = 1", strings.ToUpper(mod.Id)))
 
 	inc.push(fmt.Sprintf(".ifndef __MODULE_%s__", strings.ToUpper(mod.Id)))
