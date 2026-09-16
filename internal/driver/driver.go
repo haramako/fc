@@ -42,7 +42,7 @@ type BuildOptions struct {
 	Target        string // emu / nes (デフォルト emu)
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
-	OptimizeLevel int    // -O (デフォルト 2)
+	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
 	CompileOnly   bool
 	Stdout        io.Writer
 
@@ -142,8 +142,11 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 			opt.Out = "a.bin"
 		}
 	}
-	if opt.OptimizeLevel == 0 {
-		opt.OptimizeLevel = 2
+	switch {
+	case opt.OptimizeLevel == 0:
+		opt.OptimizeLevel = 2 // 未指定
+	case opt.OptimizeLevel < 0:
+		opt.OptimizeLevel = 0 // -O 0
 	}
 	if opt.Stdout == nil {
 		opt.Stdout = os.Stdout

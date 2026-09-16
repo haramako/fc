@@ -31,7 +31,7 @@ type Options struct {
 	Target        string // TargetEmu (既定) / TargetNES
 	Out           string // 出力ファイル (既定: a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // ビルド後に emu で実行する (Target == TargetEmu のみ)
-	OptimizeLevel int    // 0〜2 (既定 2)
+	OptimizeLevel int    // 1〜2 (0 は既定の 2、-1 は最適化なし)
 	CompileOnly   bool   // アセンブル (.o) まで。リンクしない
 
 	// Dir はソースの基準ディレクトリ (use / include の相対パスの起点)。"" なら作業ディレクトリ。

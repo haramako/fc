@@ -13,7 +13,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+// castleCompileLimit はコンパイル時間の退行を捕まえる閾値 (手元で約 1.8 秒。常駐の候補探索が候補数の 3 乗になって
+// 55 秒になったのを見落としたことがある。doc/development_notes.md (11))。マシン差を見て目安の 5 倍。
+const castleCompileLimit = 10 * time.Second
 
 func runTool(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
@@ -65,12 +70,18 @@ func TestExampleCastle(t *testing.T) {
 	src := filepath.Join(dir, "src")
 
 	compiler := NewCompiler(absRepoRoot)
+	start := time.Now()
 	code, err := compiler.Build("main.fc", &BuildOptions{Target: "nes", CompileOnly: true, Dir: src})
+	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatalf("コンパイル失敗: %v", err)
 	}
 	if code != 0 {
 		t.Fatalf("コンパイル結果コード: %d", code)
+	}
+	t.Logf("castle のコンパイル (ca65 / ld65 を除く): %.2f 秒", elapsed.Seconds())
+	if elapsed > castleCompileLimit {
+		t.Errorf("castle のコンパイルに %.1f 秒かかった (上限 %v)。最適化パスの計算量の退行を疑う", elapsed.Seconds(), castleCompileLimit)
 	}
 
 	runTool(t, src, "ca65", "data.asm", "-o", ".fc-build/data.o")

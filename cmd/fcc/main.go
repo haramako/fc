@@ -72,7 +72,7 @@ func run() int {
 		Target:        *target,
 		Out:           *out,
 		Run:           *runFlag,
-		OptimizeLevel: *optLevel,
+		OptimizeLevel: optimizeLevel(*optLevel),
 	}
 	switch com {
 	case "run":
@@ -115,4 +115,12 @@ func run() int {
 		}
 	}
 	return res.ExitCode
+}
+
+// optimizeLevel は -O の値を driver の表現に (0 は「未指定」の意味なので、-O 0 は -1 で渡す)。
+func optimizeLevel(o int) int {
+	if o == 0 {
+		return -1
+	}
+	return o
 }

@@ -389,3 +389,34 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestOptimizeLevel0: `-O 0` (BuildOptions.OptimizeLevel = -1) でも正しいコードが出る (以前は「未指定」と区別されず、
+// 区別した途端に -O 0 用の簡易な割付器が静的フレームに対応していなくて壊れていた)。
+func TestOptimizeLevel0(t *testing.T) {
+	t.Parallel()
+	src := `var a:[4]int;
+var g:int16;
+function f(k:int):int16
+{
+	var s:int16 = 0;
+	for (var i = 0; i < 4; i++) {
+		a[i] = i + k;
+		s += a[i];
+	}
+	g = s * 3;
+	return s;
+}
+function main():void
+{
+	printf(f(2), " ", g, " ", a[3], "\n");
+	exit(0);
+}
+`
+	want := "14 42 5\n"
+	if out := runEmuLevel(t, src, -1); out != want {
+		t.Errorf("-O 0: got %q want %q", out, want)
+	}
+	if out := runEmuLevel(t, src, 1); out != want {
+		t.Errorf("-O 1: got %q want %q", out, want)
+	}
+}

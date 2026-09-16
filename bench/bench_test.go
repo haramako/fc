@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/haramako/fc/internal/driver"
 )
@@ -55,9 +56,16 @@ func TestBench(t *testing.T) {
 	}
 
 	got := map[string]Entry{}
+	start := time.Now()
 	for _, file := range files {
 		name := strings.TrimSuffix(filepath.Base(file), ".fc")
 		got[name] = run(t, repoRoot, benchDir, name)
+	}
+	// コンパイル時間の退行の番 (手元で 12 本のビルドと実行が 3〜4 秒。doc/development_notes.md (11))
+	elapsed := time.Since(start)
+	t.Logf("12 本のビルドと実行: %.2f 秒", elapsed.Seconds())
+	if elapsed > 30*time.Second {
+		t.Errorf("ビルドと実行に %.1f 秒かかった (通常 3〜4 秒)。コンパイラの計算量の退行を疑う", elapsed.Seconds())
 	}
 
 	names := make([]string, 0, len(got))

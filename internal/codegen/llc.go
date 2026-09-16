@@ -1153,21 +1153,10 @@ func (l *Llc) newLabels(n int) []string {
 }
 
 func (l *Llc) allocRegister(lmd *ir.Lambda) {
-	if l.OptimizeLevel > 0 {
-		regalloc.AllocateRegister(lmd, l.Limits)
-		regalloc.DeleteUnuse(lmd)
-	} else {
-		// 単純なバージョンのアロケータ(debug用)
-		size := 0
-		for _, v := range lmd.Vars {
-			if v.Kind == ir.KindLocal {
-				v.Location = ir.LocFrame
-				v.Address = size
-				size += v.Type.Size
-			}
-		}
-		lmd.FrameSize = size
-	}
+	// -O 0 でも同じ割付器を使う (静的フレーム (ABIStatic) の関数はフレームでなく F_f の固定番地に置く必要があり、
+	// 以前あった「全部フレーム」の簡易版は静的フレームの導入後は壊れていた)
+	regalloc.AllocateRegister(lmd, l.Limits)
+	regalloc.DeleteUnuse(lmd)
 }
 
 // ---------------------------------------------------------------
