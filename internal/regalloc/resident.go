@@ -8,6 +8,7 @@ package regalloc
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -354,23 +355,33 @@ func AllocateResident(lmd *ir.Lambda) {
 	if os.Getenv("FC_NO_RESIDENT") != "" {
 		return
 	}
-	for iter := 0; iter < 16; iter++ {
+	for iter := 0; iter < 32; iter++ {
 		cfg := ir.BuildCFG(lmd)
-		loops := ir.Innermost(cfg.Loops())
+		loops := cfg.Loops()
+		// 内側から (小さいループから) 順に。外側のループの領域は、その中のループを除いたブロック
+		// (内側のループは、そこに入る辺で退避し出る辺で復帰する「通過する区間」として扱う)
+		sort.Slice(loops, func(i, j int) bool { return len(loops[i].Blocks) < len(loops[j].Blocks) })
 		lv := ir.BuildLiveness(lmd)
 		done := false
 		for _, lp := range loops {
-			if hasResident(lmd, cfg, lp) {
+			r := regionOf(lp, loops)
+			if len(r) == 0 || hasResident(lmd, cfg, r) {
 				continue
 			}
-			vA, vY, gain := bestPair(lmd, cfg, lp, lv)
+			inner := region{} // 領域から除いた内側のループ (境界を毎周通る)
+			for b := range lp.Blocks {
+				if !r[b] {
+					inner[b] = true
+				}
+			}
+			vA, vY, gain := bestPair(lmd, cfg, r, inner, lv)
 			if vA == nil && vY == nil {
 				continue
 			}
 			if os.Getenv("FC_TRACE_RESIDENT") != "" {
 				fmt.Fprintf(os.Stderr, "resident: %s loop %s: A=%s Y=%s (gain %d/iter)\n", lmd.Id, lp.Header.Label, name(vA), name(vY), gain)
 			}
-			makeResident(lmd, cfg, lp, lv, vA, vY)
+			makeResident(lmd, cfg, r, lv, vA, vY)
 			done = true
 			break // IR が変わったので作り直す
 		}
@@ -380,6 +391,60 @@ func AllocateResident(lmd *ir.Lambda) {
 	}
 }
 
+// region は常駐の対象になるブロックの集合 (ループから、その中のループを除いたもの)。
+type region map[*ir.Block]bool
+
+// regionOf は lp のブロックから、lp に含まれる他のループのブロックを除いたもの。
+func regionOf(lp *ir.Loop, loops []*ir.Loop) region {
+	r := region{}
+	for b := range lp.Blocks {
+		r[b] = true
+	}
+	for _, other := range loops {
+		if other == lp || len(other.Blocks) >= len(lp.Blocks) {
+			continue
+		}
+		nested := true
+		for b := range other.Blocks {
+			if !lp.Blocks[b] {
+				nested = false
+				break
+			}
+		}
+		if nested {
+			for b := range other.Blocks {
+				delete(r, b)
+			}
+		}
+	}
+	return r
+}
+
+// entries / exits は領域に入る辺 (from は外、to は中) と出る辺 (from は中、to は外)。
+func (r region) entries() [][2]*ir.Block {
+	var e [][2]*ir.Block
+	for b := range r {
+		for _, p := range b.Preds {
+			if !r[p] {
+				e = append(e, [2]*ir.Block{p, b})
+			}
+		}
+	}
+	return e
+}
+
+func (r region) exits() [][2]*ir.Block {
+	var e [][2]*ir.Block
+	for b := range r {
+		for _, s := range b.Succs {
+			if !r[s] {
+				e = append(e, [2]*ir.Block{b, s})
+			}
+		}
+	}
+	return e
+}
+
 func name(v *ir.Value) string {
 	if v == nil {
 		return "-"
@@ -387,8 +452,8 @@ func name(v *ir.Value) string {
 	return v.Name
 }
 
-func hasResident(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop) bool {
-	for b := range lp.Blocks {
+func hasResident(lmd *ir.Lambda, cfg *ir.CFG, r region) bool {
+	for b := range r {
 		for _, i := range cfg.Ops(b) {
 			if lmd.Ops[i].Resident != nil || lmd.Ops[i].ResidentY != nil {
 				return true
@@ -399,16 +464,16 @@ func hasResident(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop) bool {
 }
 
 // candidates はループ内で使われる 1 バイトのローカル変数 (アドレスを取られたもの・結果・一時変数・配列は除く)。
-func candidates(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop) []*ir.Value {
+func candidates(lmd *ir.Lambda, cfg *ir.CFG, r region) []*ir.Value {
 	refered := map[*ir.Value]bool{}
 	for _, op := range lmd.Ops {
 		if op != nil && op.Code == ir.OpRef {
 			refered[ir.UnderlyingValue(op.Src[0])] = true
 		}
 	}
-	var r []*ir.Value
+	var res []*ir.Value
 	seen := map[*ir.Value]bool{}
-	for b := range lp.Blocks {
+	for b := range r {
 		for _, i := range cfg.Ops(b) {
 			defs, uses := ir.DefUse(lmd.Ops[i])
 			for _, o := range append(append([]ir.Operand{}, defs...), uses...) {
@@ -421,17 +486,17 @@ func candidates(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop) []*ir.Value {
 					continue // 一時変数は定義の直後に使うものが大半で、既存の A 割付 (allocateA) が扱う
 				}
 				seen[v] = true
-				r = append(r, v)
+				res = append(res, v)
 			}
 		}
 	}
-	return r
+	return res
 }
 
 // gainOf は (vA, vY) の組をループに常駐させたときの 1 周あたりの正味の得。
-func gainOf(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop, lv *ir.Liveness, vA, vY *ir.Value) int {
+func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, vY *ir.Value) int {
 	gain := 0
-	for b := range lp.Blocks {
+	for b := range r {
 		for _, i := range cfg.Ops(b) {
 			op := lmd.Ops[i]
 			aIn, aOut := vA != nil && lv.LiveIn(i, vA), vA != nil && lv.LiveOut(i, vA)
@@ -459,16 +524,41 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop, lv *ir.Liveness, vA, vY *i
 			}
 		}
 	}
+	// 領域の中のループ (通過する区間) との境界の写し。ループの入口 / 出口 (領域の外との境界) は 1 回だけなので数えない
+	first := func(b *ir.Block) int {
+		if o := cfg.Ops(b); len(o) > 0 {
+			return o[0]
+		}
+		return b.Start
+	}
+	for _, e := range r.entries() {
+		if inner[e[0]] {
+			for _, v := range []*ir.Value{vA, vY} {
+				if v != nil && lv.LiveIn(first(e[1]), v) {
+					gain -= 3
+				}
+			}
+		}
+	}
+	for _, e := range r.exits() {
+		if inner[e[1]] {
+			for _, v := range []*ir.Value{vA, vY} {
+				if v != nil && lv.LiveIn(first(e[1]), v) {
+					gain -= 3
+				}
+			}
+		}
+	}
 	return gain
 }
 
 // bestPair は正味の得 (1 周あたり) が最大の (A, Y) の組。入口 / 出口の写しがあるので 3 サイクル以上の得を要求する。
-func bestPair(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop, lv *ir.Liveness) (*ir.Value, *ir.Value, int) {
-	cands := candidates(lmd, cfg, lp)
+func bestPair(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness) (*ir.Value, *ir.Value, int) {
+	cands := candidates(lmd, cfg, r)
 	var bestA, bestY *ir.Value
 	best := 2
 	try := func(vA, vY *ir.Value) {
-		if g := gainOf(lmd, cfg, lp, lv, vA, vY); g > best {
+		if g := gainOf(lmd, cfg, r, inner, lv, vA, vY); g > best {
 			bestA, bestY, best = vA, vY, g
 		}
 	}
@@ -485,7 +575,7 @@ func bestPair(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop, lv *ir.Liveness) (*ir.Va
 }
 
 // makeResident はループ内の vA / vY を常駐の一時変数に置き換え、入口 / 出口の辺に写す命令を挿す。
-func makeResident(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop, lv *ir.Liveness, vA, vY *ir.Value) {
+func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY *ir.Value) {
 	ops := lmd.Ops
 	var rA, rY *ir.Value
 	if vA != nil {
@@ -507,7 +597,7 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop, lv *ir.Liveness, vA,
 		}
 		return o
 	}
-	for b := range lp.Blocks {
+	for b := range r {
 		for _, i := range cfg.Ops(b) {
 			op := ops[i]
 			// 可換な演算で vA が第 2 入力なら第 1 に
@@ -614,10 +704,11 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, lp *ir.Loop, lv *ir.Liveness, vA,
 		}
 		return r
 	}
-	for _, p := range cfg.Entries(lp) {
-		onEdge(p, lp.Header, entryOps(firstOp(lp.Header)))
+	for _, e := range r.entries() {
+		from, to := e[0], e[1]
+		onEdge(from, to, entryOps(firstOp(to)))
 	}
-	for _, e := range cfg.Exits(lp) {
+	for _, e := range r.exits() {
 		from, to := e[0], e[1]
 		onEdge(from, to, exitOps(firstOp(to)))
 	}
