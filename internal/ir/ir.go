@@ -104,9 +104,9 @@ type Op struct {
 	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
 
 	// ループ内の A 常駐 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md)
-	Resident *Value // この命令で A に置いたままにしている変数 (LocA、Home がメモリ側)。nil なら無し
-	ResIn    bool   // Resident が命令の入口で生きている (A に値がある)
-	ResOut   bool   // Resident が命令の出口で生きている
+	Resident  *Value // この命令で A に置いたままにしている変数 (LocA、Home がメモリ側)。nil なら無し
+	ResIn     bool   // Resident が命令の入口で生きている (A に値がある)
+	ResOut    bool   // Resident が命令の出口で生きている
 	ResidentY *Value // 同じく Y (LocY)
 	ResYIn    bool
 	ResYOut   bool
