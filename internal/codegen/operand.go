@@ -25,9 +25,10 @@ func ifElse(cond bool, a, b string) string {
 
 func anyIfy(v []any) []any { return v }
 
-func (l *Llc) loadYIdx(idx, ptr ir.Operand) []any {
+// loadYIdx は添字を Y に入れる。scaled なら添字はすでにバイト単位 (opt.scaleIndex)。
+func (l *Llc) loadYIdx(idx, ptr ir.Operand, scaled bool) []any {
 	r := []any{}
-	if ir.ValType(ptr).Base.Size == 1 {
+	if ir.ValType(ptr).Base.Size == 1 || scaled {
 		if l.inY(idx) {
 			// 添字が Y に常駐している
 		} else if l.inA(idx) {

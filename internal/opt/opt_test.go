@@ -373,3 +373,28 @@ func TestCarryBranch(t *testing.T) {
 	compact(lmd)
 	check(t, lmd, "and t = crc, #64", "if t else", "shift_left crc = crc, #1", "label else", "shift_left crc = crc, #1", "return")
 }
+
+func TestScaleIndex(t *testing.T) {
+	arr := ir.NewGlobal("arr", tu.ArrayOf(u16(), 10), "_arr")
+	b1 := ir.NewGlobal("b1", tu.ArrayOf(u8(), 10), "_b1")
+	i, v, w := local("i", u8()), tmp("v", u16()), tmp("w", u16())
+	lmd := lambda(
+		&ir.Op{Code: ir.OpIndexPget, Dst: v, Src: []ir.Operand{arr, i}},
+		&ir.Op{Code: ir.OpIndexPget, Dst: w, Src: []ir.Operand{arr, i}},
+		&ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{b1, i, lit(1, u8())}}, // 要素 1 バイトは対象外
+		&ir.Op{Code: ir.OpAdd, Dst: i, Src: []ir.Operand{i, lit(1, u8())}},   // i が変わったら 2 倍し直す
+		&ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, i, v}},
+		&ir.Op{Code: ir.OpLabel, Label: "L"}, // ブロックをまたいでは共有しない
+		&ir.Op{Code: ir.OpIndexPget, Dst: w, Src: []ir.Operand{arr, i}},
+	)
+	scaleIndex(lmd, tu)
+	check(t, lmd,
+		"shift_left i*2 = i, #1", "index_pget v = arr, i*2", "index_pget w = arr, i*2", "index_pset b1, i, #1",
+		"add i = i, #1", "shift_left i*2 = i, #1", "index_pset arr, i*2, v",
+		"label L", "shift_left i*2 = i, #1", "index_pget w = arr, i*2")
+	for _, op := range lmd.Ops {
+		if (op.Code == ir.OpIndexPget || op.Code == ir.OpIndexPset) && op.Scaled != (op.In(0) == arr) {
+			t.Errorf("Scaled が違う: %s", ir.DumpOp(op, nil))
+		}
+	}
+}

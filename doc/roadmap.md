@@ -54,6 +54,10 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] **X の開放**: スタックの空き先頭を X からゼロページ `FC_SP` に移し、X も常駐に使う（グローバル配列の添字とカウンタ） ✅ 2026-09-16
 - [x] **volatile** の仕様（`options(address:)`、asm から参照される変数、`options(volatile: true)`。language_reference §2）と
       グローバル変数の常駐（呼び出し・ポインタ経由の書き込み・asm の前後でメモリと同期。castle で 43 ループ） ✅ 2026-09-16
+- [x] 要素 2 バイトの配列の添字の 2 倍をブロック内で共有（`opt.scaleIndex`、`Op.Scaled`。`i*2` が Y に常駐して
+      `lda px,y` だけになる。math16 -4%） ✅ 2026-09-16
+- [ ] 関数全体を常駐の領域に（ループの外の直線コードで添字の引数 `e` を Y に。entities.update）
+- [ ] index_pget / index_pset の結果を演算のオペランドに融合（`lda px,y; adc vx,y`。math16 は 16 ビット値をフレームの一時変数経由で足している）
 - [ ] 2 バイト変数の上位 / 下位の分割（sieve の 16 ビットのポインタ）
 - [ ] ループの回転で条件が末尾に来た後の `dey; cpy #0; bne`（ラベルが間に入る）を `dey; bne` に（テストの複製）
 - [ ] SSA 化（Braun 方式）+ 定数伝播 / コピー伝播 / DCE。関数の到達解析（tree shaking、v2_idea.md）と同じ基盤。

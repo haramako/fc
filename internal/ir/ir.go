@@ -94,14 +94,15 @@ func (*PointeredArray) operandNode() {}
 
 // Op は IR の 1 命令。使うフィールドは OpCode ごとに決まっている (OpCode 定義のコメント参照)。
 type Op struct {
-	Code  OpCode
-	Dst   Operand         // 結果の格納先 (無い命令、または削除された戻り値では nil)
-	Src   []Operand       // 入力
-	Label string          // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
-	Type  *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
-	Text  string          // OpAsm のアセンブラ行
-	Far   bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
-	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
+	Code   OpCode
+	Dst    Operand         // 結果の格納先 (無い命令、または削除された戻り値では nil)
+	Src    []Operand       // 入力
+	Label  string          // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
+	Type   *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
+	Text   string          // OpAsm のアセンブラ行
+	Far    bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
+	Scaled bool            // OpIndexPget / OpIndexPset: 添字が要素単位でなくバイト単位 (opt.scaleIndex が付ける。codegen は asl しない)
+	Pos    syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
 
 	// ループ内の A 常駐 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md)
 	Resident  *Value // この命令で A に置いたままにしている変数 (LocA、Home がメモリ側)。nil なら無し
@@ -154,6 +155,9 @@ func (op *Op) positional() []any {
 		}
 		if op.Far {
 			r = append(r, "far")
+		}
+		if op.Scaled {
+			r = append(r, "scaled")
 		}
 	}
 	if op.Resident != nil {

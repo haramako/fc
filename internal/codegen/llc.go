@@ -915,7 +915,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				// インデックスのサイズが１
 				if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
 					// フレーム上のローカル配列: 先頭は S + addr + X (ゼロページなので上位は 0。OpRef と同じ)
-					r.push(l.loadYIdx(op.In(1), op.In(0)))
+					r.push(l.loadYIdx(op.In(1), op.In(0), false))
 					r.push("sty <reg+0")
 					r.push("txa")
 					r.push("clc")
@@ -926,7 +926,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push("lda #0")
 					r.push(l.storeA(op.Dst, 1))
 				} else if ir.ValType(op.In(0)).Kind == types.Array {
-					r.push(l.loadYIdx(op.In(1), op.In(0)))
+					r.push(l.loadYIdx(op.In(1), op.In(0), false))
 					r.push("sty <reg+0")
 					r.push("clc")
 					r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))))
@@ -936,7 +936,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push("adc #0")
 					r.push(l.storeA(op.Dst, 1))
 				} else if ir.ValType(op.In(0)).Kind == types.Pointer {
-					r.push(l.loadYIdx(op.In(1), op.In(0)))
+					r.push(l.loadYIdx(op.In(1), op.In(0), false))
 					r.push("sty <reg+0")
 					r.push("clc")
 					r.push(l.loadA(op.In(0), 0))
@@ -1021,7 +1021,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					base, setup = "reg", []any{l.loadA(op.In(0), 0), "sta <reg+0", l.loadA(op.In(0), 1), "sta <reg+1"}
 				}
 				r.push(setup)
-				r.push(l.loadYIdx(op.In(1), op.In(0)))
+				r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
 				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 					if i > 0 {
 						r.push("iny")
@@ -1032,12 +1032,14 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				break
 			}
 			if l.inX(op.In(1)) {
-				// 添字が X に常駐 (グローバル配列、要素 1 バイト)
-				r.push(fmt.Sprintf("lda %s+0,x", l.toAsm(op.In(0))))
-				r.push(l.storeA(op.Dst, 0))
+				// 添字が X に常駐 (グローバル配列、要素 1 バイトかバイト単位の添字)
+				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+					r.push(fmt.Sprintf("lda %s+%d,x", l.toAsm(op.In(0)), i))
+					r.push(l.storeA(op.Dst, i))
+				}
 				break
 			}
-			r.push(l.loadYIdx(op.In(1), op.In(0)))
+			r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
 			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 				r.push(fmt.Sprintf("lda %s+%d,y", l.toAsm(op.In(0)), i))
 				r.push(l.storeA(op.Dst, i))
@@ -1049,8 +1051,8 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 			if ir.ValType(op.In(0)).Kind == types.Pointer {
 				base, setup := l.pointerBase(op.In(0))
-				pre := append(setup, l.loadYIdx(op.In(1), op.In(0))...)
-				if ir.ValType(op.In(0)).Base.Size == 1 && len(setup) == 0 {
+				pre := append(setup, l.loadYIdx(op.In(1), op.In(0), op.Scaled)...)
+				if (ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled) && len(setup) == 0 {
 					r.push(pre) // ldy だけなら A は壊れない
 				} else {
 					r.push(l.keepA(op.In(2), pre))
@@ -1065,14 +1067,16 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				break
 			}
 			if l.inX(op.In(1)) {
-				r.push(l.loadA(op.In(2), 0))
-				r.push(fmt.Sprintf("sta %s+0,x", l.toAsm(op.In(0))))
+				for i := 0; i < ir.ValType(op.In(2)).Size; i++ {
+					r.push(l.loadA(op.In(2), i))
+					r.push(fmt.Sprintf("sta %s+%d,x", l.toAsm(op.In(0)), i))
+				}
 				break
 			}
-			if ir.ValType(op.In(0)).Base.Size == 1 {
-				r.push(l.loadYIdx(op.In(1), op.In(0)))
+			if ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled {
+				r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
 			} else {
-				r.push(l.keepA(op.In(2), l.loadYIdx(op.In(1), op.In(0)))) // lda idx; asl; tay は A を壊す
+				r.push(l.keepA(op.In(2), l.loadYIdx(op.In(1), op.In(0), op.Scaled))) // lda idx; asl; tay は A を壊す
 			}
 			for i := 0; i < ir.ValType(op.In(2)).Size; i++ {
 				r.push(l.loadA(op.In(2), i))

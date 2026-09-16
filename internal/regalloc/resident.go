@@ -215,17 +215,22 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 	return false, 0
 }
 
+// byteIndex は index_pget / index_pset の添字がそのまま Y / X に入る形か (要素 1 バイト、または opt.scaleIndex でバイト単位にした添字)。
+func byteIndex(op *ir.Op) bool {
+	return ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled
+}
+
 // friendlyY は v が Y に常駐しているとき、op を Y のまま実行できるか (添字と 1 バイトのカウンタの形)。
 func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 	op := lmd.Ops[i]
 	switch op.Code {
 	case ir.OpIndexPget:
 		// 要素 1 バイトの配列 / ゼロページのポインタの添字 (ldy が消える)
-		if isV(op.In(1), v) && !isV(op.Dst, v) && ir.ValType(op.In(0)).Base.Size == 1 {
+		if isV(op.In(1), v) && !isV(op.Dst, v) && byteIndex(op) {
 			return true, 3
 		}
 	case ir.OpIndexPset:
-		if isV(op.In(1), v) && !isV(op.In(2), v) && ir.ValType(op.In(0)).Base.Size == 1 {
+		if isV(op.In(1), v) && !isV(op.In(2), v) && byteIndex(op) {
 			return true, 3
 		}
 	case ir.OpAdd, ir.OpSub:
@@ -256,7 +261,7 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 	op := lmd.Ops[i]
 	globalArray := func(o ir.Operand) bool {
-		return ir.ValKind(o) == ir.KindGlobal && ir.ValType(o).Kind == types.Array && ir.ValType(o).Base.Size == 1
+		return ir.ValKind(o) == ir.KindGlobal && ir.ValType(o).Kind == types.Array && byteIndex(op)
 	}
 	switch op.Code {
 	case ir.OpIndexPget:
@@ -308,7 +313,7 @@ func needsY(op *ir.Op, vY *ir.Value) bool {
 		ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpCall, ir.OpFastcall, ir.OpAsm:
 		return true
 	case ir.OpIndexPget, ir.OpIndexPset:
-		return !isV(op.In(1), vY) || ir.ValType(op.In(0)).Base.Size != 1
+		return !isV(op.In(1), vY) || !byteIndex(op)
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		_, lit := ir.ValIntLiteral(op.Src[1])
 		return !lit

@@ -232,3 +232,47 @@ func TestChainSelfOperand(t *testing.T) {
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestScaledIndex: 要素 2 バイトの配列 / ポインタの添字は opt.scaleIndex がブロック内で 1 度だけ 2 倍する
+// (添字が書き換わったら作り直す。ループ内では 2 倍した添字が Y に常駐する。ポインタ経由でも同じ)。
+func TestScaledIndex(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var a:[8]int16;
+var b:[8]sint16;
+function fill(p:*int16, n:int):void
+{
+	for (var i = 0; i < n; i++) {
+		p[i] = (i as int16) * 300;
+	}
+}
+function main():void
+{
+	fill(a, 8);
+	for (var i = 0; i < 8; i++) {
+		b[i] = (a[i] as sint16) - 1000;
+	}
+	var s:int16 = 0;
+	for (var i = 0; i < 8; i++) {
+		s += a[i];
+		i++;
+		s += a[i];  // 添字が変わった後は 2 倍し直す
+		s += b[i] as int16;
+		a[i] = s;
+	}
+	var p = b as *sint16;
+	var j = 3;
+	p[j] = p[j] + p[j + 1];
+	printf(s, " ", a[7], " ", b[3], " ", a[6], " ", b[7], "\n");
+	exit(0);
+}
+`)
+	// a = 0,300,...,2100; b = a - 1000
+	// s: i=0: 0 → i=1: 300, +(300-1000=-700 → 64836) → s=300-700=-400 (65136); a[1]=65136
+	//    i=2: +600 → 200; i=3: +900 → 1100; +(-100) → 1000; a[3]=1000
+	//    i=4: +1200 → 2200; i=5: +1500 → 3700; +500 → 4200; a[5]=4200
+	//    i=6: +1800 → 6000; i=7: +2100 → 8100; +1100 → 9200; a[7]=9200
+	// p[3] = b[3] + b[4] = -100 + 200 = 100; a[6] = 1800; b[7] = 1100
+	if want := "9200 9200 100 1800 1100\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
