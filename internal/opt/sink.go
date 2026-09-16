@@ -65,7 +65,7 @@ func canSink(op *ir.Op, between []*ir.Op, refered map[*ir.Value]bool) bool {
 			continue
 		}
 		switch b.Code {
-		case ir.OpLabel, ir.OpIf, ir.OpIfTrue, ir.OpJump, ir.OpReturn, ir.OpAsm:
+		case ir.OpLabel, ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpJump, ir.OpReturn, ir.OpAsm:
 			return false
 		}
 		defs, _ := ir.DefUse(b)

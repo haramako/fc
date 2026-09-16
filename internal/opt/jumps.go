@@ -27,7 +27,33 @@ func simplifyJumps(lmd *ir.Lambda) {
 }
 
 func isBranch(op *ir.Op) bool {
-	return op != nil && (op.Code == ir.OpIf || op.Code == ir.OpIfTrue || op.Code == ir.OpJump)
+	return op != nil && (isCond(op) || op.Code == ir.OpJump)
+}
+
+// isCond は条件分岐 (if / if_true / if_carry / if_not_carry) か。
+func isCond(op *ir.Op) bool {
+	if op == nil {
+		return false
+	}
+	switch op.Code {
+	case ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry:
+		return true
+	}
+	return false
+}
+
+// invertCond は条件分岐の向きを反転する。
+func invertCond(op *ir.Op) {
+	switch op.Code {
+	case ir.OpIf:
+		op.Code = ir.OpIfTrue
+	case ir.OpIfTrue:
+		op.Code = ir.OpIf
+	case ir.OpIfCarry:
+		op.Code = ir.OpIfNotCarry
+	case ir.OpIfNotCarry:
+		op.Code = ir.OpIfCarry
+	}
 }
 
 // threadJumps は 1・2 (ジャンプの連鎖と直後への jump)。
@@ -136,18 +162,14 @@ func invertBranches(lmd *ir.Lambda) bool {
 	for bi := 0; bi+2 < len(cfg.Blocks); bi++ {
 		b, jb, lb := cfg.Blocks[bi], cfg.Blocks[bi+1], cfg.Blocks[bi+2]
 		last := cfg.Last(b)
-		if last == nil || (last.Code != ir.OpIf && last.Code != ir.OpIfTrue) {
+		if !isCond(last) {
 			continue
 		}
 		jops := cfg.Ops(jb)
 		if len(jops) != 1 || ops[jops[0]].Code != ir.OpJump || jb.Label != "" || lb.Label != last.Label {
 			continue
 		}
-		if last.Code == ir.OpIf {
-			last.Code = ir.OpIfTrue
-		} else {
-			last.Code = ir.OpIf
-		}
+		invertCond(last)
 		last.Label = ops[jops[0]].Label
 		ops[jops[0]] = nil
 		changed = true
@@ -178,7 +200,7 @@ func rotateLoops(lmd *ir.Lambda) bool {
 			continue
 		}
 		cond := cfg.Last(b0)
-		if cond == nil || (cond.Code != ir.OpIf && cond.Code != ir.OpIfTrue) {
+		if !isCond(cond) {
 			continue
 		}
 		end := cfg.BlockOf(cond.Label)
@@ -212,11 +234,7 @@ func rotateLoops(lmd *ir.Lambda) bool {
 			}
 		}
 		out = append(out, ops[b0.Start:b0.End]...)
-		if cond.Code == ir.OpIf {
-			cond.Code = ir.OpIfTrue
-		} else {
-			cond.Code = ir.OpIf
-		}
+		invertCond(cond)
 		cond.Label = bodyLabel
 		out = append(out, ops[end.Start:]...)
 		lmd.Ops = out

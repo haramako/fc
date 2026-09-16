@@ -28,9 +28,13 @@ func anyIfy(v []any) []any { return v }
 func (l *Llc) loadYIdx(idx, ptr ir.Operand) []any {
 	r := []any{}
 	if ir.ValType(ptr).Base.Size == 1 {
-		r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
+		if inA(idx) {
+			r = append(r, "tay") // 添字が A にある
+		} else {
+			r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
+		}
 	} else {
-		r = append(r, fmt.Sprintf("lda %s", l.byte(idx, 0)))
+		r = append(r, l.loadA(idx, 0))
 		for i := 0; i < ir.ValType(ptr).Base.Size-1; i++ {
 			r = append(r, "asl a")
 		}

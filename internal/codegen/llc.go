@@ -274,12 +274,16 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	pushArgSize := 0
 	pushFastcallArgSize := 0
 	var calls []*pendingCall // 積んでいる途中の呼び出し (内側が末尾)
+	var prevOp *ir.Op        // 直前に生成した命令 (フラグの再利用の判定用)
 
 	for opNo, op := range ops {
 		if op == nil {
 			continue
 		}
 		l.curOp = op
+		if opNo > 0 {
+			prevOp = ops[opNo-1]
+		}
 		// IRコメント (golden比較では除去されるため、Go版独自の形式でよい)
 		cm := ir.DumpOp(op, nil)
 		if len(cm) > 120 {
@@ -316,6 +320,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					panic("invalid cond_reg")
 				}
 				r.push(fmt.Sprintf("%s %s", asmOp, op.Label))
+			} else if l.flagsFromIncDec(prevOp, op.In(0)) {
+				// 直前の inc / dec が Z を残している (`dec x; bne L`)
+				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if onTrue {
 				// 値のどれかのバイトが 0 でなければ飛ぶ
 				for i := 0; i < ir.ValType(op.In(0)).Size; i++ {
@@ -336,6 +343,12 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				}
 				r.push(thenLabel + ":")
 			}
+
+		case ir.OpIfCarry:
+			r.push(fmt.Sprintf("bcs %s", op.Label))
+
+		case ir.OpIfNotCarry:
+			r.push(fmt.Sprintf("bcc %s", op.Label))
 
 		case ir.OpJump:
 			r.push(fmt.Sprintf("jmp %s", op.Label))

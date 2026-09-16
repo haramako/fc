@@ -70,8 +70,7 @@ _math_rand_table:
 	sec
 	lda #127
 	sbc 0+<F_math_sin+1
-	sta 0+<F_math_sin+2
-	ldy 0+<F_math_sin+2
+	tay
 	lda _math_sin_table+0,y
 	sta 0+<F_math_sin+0
 	rts
@@ -86,26 +85,24 @@ _math_rand_table:
 	sec
 	lda 0+<F_math_sin+1
 	sbc #128
-	sta 0+<F_math_sin+2
-	ldy 0+<F_math_sin+2
+	tay
 	lda _math_sin_table+0,y
-	sta 0+<F_math_sin+3
+	sta 0+<F_math_sin+2
 	sec
 	lda #0
-	sbc 0+<F_math_sin+3
+	sbc 0+<F_math_sin+2
 	sta 0+<F_math_sin+0
 	rts
 @else_18:
 	sec
 	lda #255
 	sbc 0+<F_math_sin+1
-	sta 0+<F_math_sin+2
-	ldy 0+<F_math_sin+2
+	tay
 	lda _math_sin_table+0,y
-	sta 0+<F_math_sin+3
+	sta 0+<F_math_sin+2
 	sec
 	lda #0
-	sbc 0+<F_math_sin+3
+	sbc 0+<F_math_sin+2
 	sta 0+<F_math_sin+0
 	rts
 .endproc
@@ -126,8 +123,7 @@ _math_rand_table:
 	asl a
 	clc
 	adc 0+<F_math_atan+2
-	sta 0+<F_math_atan+3
-	ldy 0+<F_math_atan+3
+	tay
 	lda _math_atan_table+0,y
 	sta 0+<F_math_atan+0
 	rts
@@ -139,13 +135,12 @@ _math_rand_table:
 	asl a
 	sec
 	sbc 0+<F_math_atan+2
-	sta 0+<F_math_atan+3
-	ldy 0+<F_math_atan+3
+	tay
 	lda _math_atan_table+0,y
-	sta 0+<F_math_atan+4
+	sta 0+<F_math_atan+3
 	sec
 	lda #128
-	sbc 0+<F_math_atan+4
+	sbc 0+<F_math_atan+3
 	sta 0+<F_math_atan+0
 	rts
 @else_30:
@@ -161,13 +156,12 @@ _math_rand_table:
 	asl a
 	clc
 	adc 0+<F_math_atan+2
-	sta 0+<F_math_atan+3
-	ldy 0+<F_math_atan+3
+	tay
 	lda _math_atan_table+0,y
-	sta 0+<F_math_atan+4
+	sta 0+<F_math_atan+3
 	sec
 	lda #0
-	sbc 0+<F_math_atan+4
+	sbc 0+<F_math_atan+3
 	sta 0+<F_math_atan+0
 	rts
 @else_47:
@@ -181,13 +175,12 @@ _math_rand_table:
 	asl a
 	sec
 	sbc 0+<F_math_atan+2
-	sta 0+<F_math_atan+3
-	ldy 0+<F_math_atan+3
+	tay
 	lda _math_atan_table+0,y
-	sta 0+<F_math_atan+4
+	sta 0+<F_math_atan+3
 	clc
 	lda #128
-	adc 0+<F_math_atan+4
+	adc 0+<F_math_atan+3
 	sta 0+<F_math_atan+0
 	rts
 .endproc

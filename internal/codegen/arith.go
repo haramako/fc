@@ -186,6 +186,18 @@ func pow2(n int) int {
 //	2 バイト -1: lda x; bne @s; dec x+1; @s: dec x
 //
 // 結果を A に置く割付 (LocA) のときは A に値が要るので使わない。
+// flagsFromIncDec は直前の命令が `inc x` / `dec x` (1 バイト、メモリ上) で、いま x を検査するなら Z フラグが
+// その値を反映しているか (`dec x; lda x; bne` の lda を省く)。
+func (l *Llc) flagsFromIncDec(prev *ir.Op, v ir.Operand) bool {
+	if prev == nil || (prev.Code != ir.OpAdd && prev.Code != ir.OpSub) || ir.ValType(v).Size != 1 {
+		return false
+	}
+	if _, ok := l.incDec(prev); !ok {
+		return false
+	}
+	return isValueOrCasted(v) && ir.ValKind(v) != ir.KindLiteral && l.byte(v, 0) == l.byte(prev.Dst, 0)
+}
+
 func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
 	k, lit := ir.ValIntLiteral(op.In(1))
 	size := ir.ValType(op.Dst).Size

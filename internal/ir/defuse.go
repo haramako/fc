@@ -9,7 +9,7 @@ import "fmt"
 // Dst が nil の命令 (戻り値を捨てた call など) は defs に含めない。
 func DefUse(op *Op) (defs, uses []Operand) {
 	switch op.Code {
-	case OpLabel, OpJump, OpAsm, OpPushResult, OpPushFastcallResult:
+	case OpLabel, OpJump, OpAsm, OpPushResult, OpPushFastcallResult, OpIfCarry, OpIfNotCarry:
 	case OpIf, OpIfTrue, OpPushArg, OpPushFastcallArg:
 		uses = op.Src[:1]
 	case OpReturn:
@@ -74,7 +74,7 @@ func BuildCFG(lmd *Lambda) *CFG {
 		switch op.Code {
 		case OpLabel:
 			leader[i] = true
-		case OpIf, OpIfTrue, OpJump, OpReturn:
+		case OpIf, OpIfTrue, OpIfCarry, OpIfNotCarry, OpJump, OpReturn:
 			leader[i+1] = true
 		}
 	}
@@ -110,7 +110,7 @@ func BuildCFG(lmd *Lambda) *CFG {
 			succs = []*Block{next()}
 		case last.Code == OpJump:
 			succs = []*Block{c.byLabel[last.Label]}
-		case last.Code == OpIf || last.Code == OpIfTrue:
+		case last.Code == OpIf || last.Code == OpIfTrue || last.Code == OpIfCarry || last.Code == OpIfNotCarry:
 			succs = []*Block{next(), c.byLabel[last.Label]}
 		case last.Code == OpReturn:
 		default:

@@ -25,6 +25,14 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 	compact(lmd)
 	chainInPlace(lmd)
 	narrowBitTest(lmd, u)
+	for n := 0; n < 20; n++ {
+		before := len(lmd.Ops)
+		carryBranch(lmd)
+		compact(lmd)
+		if len(lmd.Ops) == before {
+			break
+		}
+	}
 	simplifyJumps(lmd)
 	compact(lmd)
 }

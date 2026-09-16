@@ -22,6 +22,8 @@ const (
 	OpLabel                     // Label:
 	OpIf                        // if Src[0] == 0 then goto Label
 	OpIfTrue                    // if Src[0] != 0 then goto Label (opt のループ回転・分岐反転が作る)
+	OpIfCarry                   // if C then goto Label (直前の命令が残した C フラグ。opt.carryBranch が作る)
+	OpIfNotCarry                // if !C then goto Label
 	OpJump                      // goto Label
 	OpReturn                    // return [Src[0]]
 	OpPushResult                // 戻り値領域を予約 (Type)
@@ -60,7 +62,8 @@ const (
 )
 
 var opCodeNames = [...]string{
-	OpLabel: "label", OpIf: "if", OpIfTrue: "if_true", OpJump: "jump", OpReturn: "return",
+	OpLabel: "label", OpIf: "if", OpIfTrue: "if_true", OpIfCarry: "if_carry", OpIfNotCarry: "if_not_carry",
+	OpJump: "jump", OpReturn: "return",
 	OpPushResult: "push_result", OpPushArg: "push_arg", OpCall: "call",
 	OpPushFastcallResult: "push_fastcall_result", OpPushFastcallArg: "push_fastcall_arg", OpFastcall: "fastcall",
 	OpLoad: "load", OpSignExtension: "sign_extension",
@@ -114,7 +117,7 @@ func (op *Op) In(i int) Operand {
 func (op *Op) positional() []any {
 	var r []any
 	switch op.Code {
-	case OpLabel, OpJump:
+	case OpLabel, OpJump, OpIfCarry, OpIfNotCarry:
 		r = append(r, op.Label)
 	case OpIf, OpIfTrue:
 		r = append(r, op.Src[0], op.Label)

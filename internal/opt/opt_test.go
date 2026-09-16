@@ -47,7 +47,7 @@ func fmtOps(lmd *ir.Lambda) []string {
 			srcs = append(srcs, opnd(s))
 		}
 		switch op.Code {
-		case ir.OpLabel, ir.OpJump:
+		case ir.OpLabel, ir.OpJump, ir.OpIfCarry, ir.OpIfNotCarry:
 			r = append(r, fmt.Sprintf("%s %s", op.Code, op.Label))
 		case ir.OpIf, ir.OpIfTrue:
 			r = append(r, fmt.Sprintf("%s %s %s", op.Code, srcs[0], op.Label))
@@ -306,4 +306,70 @@ func TestSimplifyJumps(t *testing.T) {
 		"lt c = x, #10",
 		"if_true c @body_3",
 		"return")
+}
+
+func TestCarryBranch(t *testing.T) {
+	crc, k := local("crc", u8()), local("k", u8())
+	tv, t2 := tmp("t", u8()), tmp("t2", u8())
+	one := lit(1, u8())
+	// if (crc & 0x80) { crc = (crc << 1) ^ k } else { crc = crc << 1 }
+	lmd := lambda(
+		&ir.Op{Code: ir.OpAnd, Dst: tv, Src: []ir.Operand{crc, lit(0x80, u8())}},
+		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tv}, Label: "else"},
+		&ir.Op{Code: ir.OpShiftLeft, Dst: t2, Src: []ir.Operand{crc, one}},
+		&ir.Op{Code: ir.OpXor, Dst: crc, Src: []ir.Operand{t2, k}},
+		&ir.Op{Code: ir.OpJump, Label: "end"},
+		&ir.Op{Code: ir.OpLabel, Label: "else"},
+		&ir.Op{Code: ir.OpShiftLeft, Dst: crc, Src: []ir.Operand{crc, one}},
+		&ir.Op{Code: ir.OpLabel, Label: "end"},
+		&ir.Op{Code: ir.OpReturn},
+	)
+	carryBranch(lmd)
+	compact(lmd)
+	check(t, lmd,
+		"shift_left crc = crc, #1",
+		"if_not_carry else",
+		"xor crc = crc, k",
+		"jump end",
+		"label else",
+		"label end",
+		"return")
+
+	// 右シフトと最下位ビット (2 バイト)
+	x := local("x", u16())
+	tv16 := tmp("t16", u16())
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAnd, Dst: tv16, Src: []ir.Operand{x, lit(1, u16())}},
+		&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{tv16}, Label: "odd"},
+		&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}},
+		&ir.Op{Code: ir.OpJump, Label: "end"},
+		&ir.Op{Code: ir.OpLabel, Label: "odd"},
+		&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}},
+		&ir.Op{Code: ir.OpXor, Dst: x, Src: []ir.Operand{x, lit(0x1021, u16())}},
+		&ir.Op{Code: ir.OpLabel, Label: "end"},
+		&ir.Op{Code: ir.OpReturn},
+	)
+	carryBranch(lmd)
+	compact(lmd)
+	check(t, lmd,
+		"shift_right x = x, #1",
+		"if_carry odd",
+		"jump end",
+		"label odd",
+		"xor x = x, #4129",
+		"label end",
+		"return")
+
+	// マスクが別のビットなら何もしない
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAnd, Dst: tv, Src: []ir.Operand{crc, lit(0x40, u8())}},
+		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tv}, Label: "else"},
+		&ir.Op{Code: ir.OpShiftLeft, Dst: crc, Src: []ir.Operand{crc, one}},
+		&ir.Op{Code: ir.OpLabel, Label: "else"},
+		&ir.Op{Code: ir.OpShiftLeft, Dst: crc, Src: []ir.Operand{crc, one}},
+		&ir.Op{Code: ir.OpReturn},
+	)
+	carryBranch(lmd)
+	compact(lmd)
+	check(t, lmd, "and t = crc, #64", "if t else", "shift_left crc = crc, #1", "label else", "shift_left crc = crc, #1", "return")
 }

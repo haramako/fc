@@ -66,7 +66,7 @@ func CalcLiveRange(lmd *ir.Lambda) {
 	for i, op := range lmd.Ops {
 		var node []int
 		switch op.Code {
-		case ir.OpIf, ir.OpIfTrue, ir.OpJump:
+		case ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpJump:
 			node = append(node, labels[op.Label])
 		}
 		defines, uses := ir.DefUse(op)
@@ -347,6 +347,11 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			// 直後の命令が最初の入力を最初に A へ読む (loadA) ものであること
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
 			switch nextOp.Code {
+			case ir.OpIndexPget:
+				// 添字が A なら tay で Y に写す (codegen の loadYIdx)
+				if !isSameValue(nextOp.In(1), v) {
+					continue
+				}
 			case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpEq, ir.OpLt, ir.OpPget, ir.OpSub, ir.OpPushArg,
 				ir.OpIf, ir.OpIfTrue, ir.OpReturn:
@@ -363,7 +368,12 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				if !isSameValue(nextOp.In(1), v) {
 					continue
 				}
-			case ir.OpIndexPset, ir.OpFieldPset:
+			case ir.OpIndexPset:
+				// 添字 (tay) か書く値のどちらか
+				if !isSameValue(nextOp.In(1), v) && !isSameValue(nextOp.In(2), v) {
+					continue
+				}
+			case ir.OpFieldPset:
 				if !isSameValue(nextOp.In(2), v) {
 					continue
 				}
