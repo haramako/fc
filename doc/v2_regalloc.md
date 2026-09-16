@@ -1,4 +1,4 @@
-# レジスタ割付（第 4 弾）: ループ内の A 常駐
+# レジスタ割付（第 4 弾）: ループ内の A / Y 常駐
 
 2026-09-16 設計。目標は crc8 の内側ループを Oscar64 と同じ `asl a; bcc; eor #k` にすること、一般には
 「ループの中で毎回 `lda x … sta x` している 1 バイト変数を A に置いたまま回す」こと。
@@ -53,6 +53,13 @@ textprint -2%。castle は 28 ループが対象）
 - 常駐変数が死んでいる区間 (`ResOut == false`) では既存の A 割付をそのまま行う（止めると textprint が退行）
 - 退避先 (Home) の変数はループ内では vA の名前で使われて live range が途切れるので、専用の場所を与える
 - 調査用: `FC_NO_RESIDENT=1` で無効化、`FC_TRACE_RESIDENT=1` で選んだ変数と見積もりを表示
+- **Y の常駐**（同日、A と同じ枠組み）: 添字（`index_pget` / `index_pset` の `ldy i` が消える）とカウンタ（`iny` / `dey`、
+  `cpy`）を Y に。A と Y は同じループで両方使える（`Classify` が (vA, vY) の組で命令を分類し、`bestPair` が組の得で
+  選ぶ）。Y が塞がっている間は「A 占有時の Y 代用」ができないので、代用の代わりに A を退避する。Y の常駐変数を
+  扱う friendly な命令（`iny` / `cpy` / `ldy` / `sty`）は A を使わないので A 側は free。bench: plasma -17%、crc8 -15%、
+  textprint -9%、crc16 -9%、bgdecode / oam -6%。castle は 39 ループ
+- ピープホールの `ldy x` の重複除去は、直後が分岐（Y 代用の `ldy x; bne`）のときだけ「フラグも Y を反映している」
+  ことを要求する（常に要求したら entities が +6% 退行した）
 
 段取り:
 

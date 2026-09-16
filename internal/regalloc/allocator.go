@@ -151,8 +151,8 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 	}
 	homes := residentHomes(lmd)
 	for _, v := range lmd.Vars {
-		if v.Location == ir.LocA && v.Home != nil {
-			continue // ループ内で A に常駐 (AllocateResident が決めた)
+		if (v.Location == ir.LocA || v.Location == ir.LocY) && v.Home != nil {
+			continue // ループ内で A / Y に常駐 (AllocateResident が決めた)
 		}
 		if homes[v] {
 			toFrame(v) // 常駐変数の退避先。ループの中では別の名前 (vA) で使うので live range が無くても場所が要る
@@ -267,8 +267,8 @@ func allocateStatic(lmd *ir.Lambda) {
 	var packVars []*allocEntry
 	for _, v := range lmd.Vars {
 		switch {
-		case v.Location == ir.LocA && v.Home != nil:
-			// ループ内で A に常駐 (AllocateResident が決めた)。退避先は Home
+		case (v.Location == ir.LocA || v.Location == ir.LocY) && v.Home != nil:
+			// ループ内で A / Y に常駐 (AllocateResident が決めた)。退避先は Home
 		case v.LocalType == ir.LTResult || v.LocalType == ir.LTArg:
 		case homes[v]:
 			place(v) // 常駐変数の退避先 (ループの中では vA の名前で使うので live range が途切れる。専用の場所を与える)
@@ -303,7 +303,7 @@ func allocateStatic(lmd *ir.Lambda) {
 func residentHomes(lmd *ir.Lambda) map[*ir.Value]bool {
 	r := map[*ir.Value]bool{}
 	for _, v := range lmd.Vars {
-		if v.Location == ir.LocA && v.Home != nil {
+		if (v.Location == ir.LocA || v.Location == ir.LocY) && v.Home != nil {
 			r[v.Home] = true
 		}
 	}

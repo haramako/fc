@@ -9,7 +9,7 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// TestAllocateResident: crc8 の内側ループの形で crc が A に常駐し、入口 / 出口に写しが入る。
+// TestAllocateResident: crc8 の内側ループの形で crc が A に、カウンタ i が Y に常駐し、入口 / 出口に写しが入る。
 //
 //	0: load i = #8
 //	1: jump @begin
@@ -46,34 +46,45 @@ func TestAllocateResident(t *testing.T) {
 	for _, op := range lmd.Ops {
 		res := ""
 		if op.Resident != nil {
-			res = fmt.Sprintf(" [a=%s in=%v out=%v]", op.Resident.Name, op.ResIn, op.ResOut)
+			res += fmt.Sprintf(" [a in=%v out=%v]", op.ResIn, op.ResOut)
+		}
+		if op.ResidentY != nil {
+			res += fmt.Sprintf(" [y in=%v out=%v]", op.ResYIn, op.ResYOut)
 		}
 		got = append(got, ir.DumpOp(op, nil)+res)
 	}
 	want := []string{
 		`(:load {l? i #"uint8"} {lit nil 8 #"uint8"})`,
-		`(:load {l? crc@A #"uint8"} {l? crc #"uint8"} "a=crc@A") [a=crc@A in=false out=true]`,
+		`(:load {l? crc@A #"uint8"} {l? crc #"uint8"} "a=crc@A") [a in=false out=true]`,
+		`(:load {l? i@Y #"uint8"} {l? i #"uint8"} "y=i@Y") [y in=false out=true]`,
 		`(:jump "@begin")`,
-		`(:label "@body" "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:shift_left {l? crc@A #"uint8"} {l? crc@A #"uint8"} {lit nil 1 #"uint8"} "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:if_not_carry "@end" "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:xor {l? crc@A #"uint8"} {l? crc@A #"uint8"} {lit nil 29 #"uint8"} "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:label "@end" "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:sub {l? i #"uint8"} {l? i #"uint8"} {lit nil 1 #"uint8"} "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:label "@begin" "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:if_true {l? i #"uint8"} "@body" "a=crc@A") [a=crc@A in=true out=true]`,
-		`(:load {l? crc #"uint8"} {l? crc@A #"uint8"} "a=crc@A") [a=crc@A in=true out=false]`,
+		`(:label "@body" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:shift_left {l? crc@A #"uint8"} {l? crc@A #"uint8"} {lit nil 1 #"uint8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:if_not_carry "@end" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:xor {l? crc@A #"uint8"} {l? crc@A #"uint8"} {lit nil 29 #"uint8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:label "@end" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:sub {l? i@Y #"uint8"} {l? i@Y #"uint8"} {lit nil 1 #"uint8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:label "@begin" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:if_true {l? i@Y #"uint8"} "@body" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:load {l? crc #"uint8"} {l? crc@A #"uint8"} "a=crc@A") [a in=true out=false]`,
 		`(:return {l? crc #"uint8"})`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	// 分類: shift / xor は friendly、if_not_carry / sub (dec) / if_true (ldy; bne) / ラベルは free
-	classes := map[int]ResClass{4: ResFriendly, 5: ResFree, 6: ResFriendly, 8: ResFree, 10: ResFree}
-	vA := lmd.Ops[1].Dst.(*ir.Value)
-	for k, want := range classes {
-		if c, _ := ResidentClass(lmd, k, vA, lmd.Ops[k].ResOut); c != want {
-			t.Errorf("op %d: class %d, want %d", k, c, want)
+	// 分類: shift / xor は A friendly、sub (dey) / if_true (cpy) は Y friendly、if_not_carry / ラベルは free
+	rA := lmd.Ops[1].Dst.(*ir.Value)
+	rY := lmd.Ops[2].Dst.(*ir.Value)
+	want2 := map[int]Decision{
+		5:  {A: ResFriendly, Y: ResFree},
+		6:  {A: ResFree, Y: ResFree},
+		7:  {A: ResFriendly, Y: ResFree},
+		9:  {A: ResFree, Y: ResFriendly},
+		11: {A: ResFree, Y: ResFriendly},
+	}
+	for k, w := range want2 {
+		if d, _ := Classify(lmd, k, rA, rY, true, true, true); d != w {
+			t.Errorf("op %d: %+v, want %+v", k, d, w)
 		}
 	}
 }

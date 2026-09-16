@@ -28,7 +28,9 @@ func anyIfy(v []any) []any { return v }
 func (l *Llc) loadYIdx(idx, ptr ir.Operand) []any {
 	r := []any{}
 	if ir.ValType(ptr).Base.Size == 1 {
-		if l.inA(idx) {
+		if l.inY(idx) {
+			// 添字が Y に常駐している
+		} else if l.inA(idx) {
 			r = append(r, "tay") // 添字が A にある
 		} else {
 			r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
@@ -214,6 +216,15 @@ func (l *Llc) pointerWrite(p ir.Operand, off int, val ir.Operand, size int) []an
 	return r
 }
 
+// inY は値がいま Y レジスタにあるか (LocY。退避中 (resYMem) ならメモリ側 Home にある)。
+func (l *Llc) inY(v ir.Operand) bool {
+	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocY {
+		return false
+	}
+	uv := ir.UnderlyingValue(v)
+	return !(l.resYMem && uv.Home != nil && uv == l.resY)
+}
+
 // inA は値がいま A レジスタにあるか (LocA。ただしループ内の常駐変数を退避中 (resMem) ならメモリ側 Home にある)。
 func (l *Llc) inA(v ir.Operand) bool {
 	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocA {
@@ -237,7 +248,7 @@ func (l *Llc) keepA(val ir.Operand, pre []any) []any {
 // sameByte は 2 つのメモリ上のオペランドの i バイト目が同じ場所か (アドレス表記が同じ)。A / 即値なら false。
 func (l *Llc) sameByte(a, b ir.Operand, i int) bool {
 	for _, v := range []ir.Operand{a, b} {
-		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || ir.ValLocation(v) == ir.LocCond {
+		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || ir.ValLocation(v) == ir.LocCond {
 			return false
 		}
 	}
@@ -276,6 +287,11 @@ func (l *Llc) toAsm(v ir.Operand) string {
 			case ir.LocA:
 				if h := ir.UnderlyingValue(v).Home; h != nil && l.resMem {
 					return l.toAsm(h) // 常駐変数の退避中: メモリ側
+				}
+				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
+			case ir.LocY:
+				if h := ir.UnderlyingValue(v).Home; h != nil && l.resYMem {
+					return l.toAsm(h)
 				}
 				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
 			default:

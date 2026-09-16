@@ -30,10 +30,12 @@ type Llc struct {
 	types         *types.Universe
 	Lambdas       map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
 
-	// ループ内の A 常駐 (doc/v2_regalloc.md): 処理中の命令で A を占有している変数と、その扱い
-	res    *ir.Value // op.Resident
-	resMem bool      // 退避中: res をメモリ (Home) として参照する
-	aHeld  bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
+	// ループ内の A / Y 常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタを占有している変数と、その扱い
+	res     *ir.Value // op.Resident (A)
+	resMem  bool      // 退避中: res をメモリ (Home) として参照する
+	resY    *ir.Value // op.ResidentY
+	resYMem bool      // 退避中: resY をメモリ (Home) として参照する
+	aHeld   bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
@@ -299,20 +301,26 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		}
 		r.push(fmt.Sprintf("; %04d: %s", opNo, cm))
 
-		// A 常駐: この命令の扱い (friendly / A を使わない / 退避)
-		l.res, l.resMem, l.aHeld = op.Resident, false, false
-		restoreA := false
-		if op.Resident != nil {
-			switch class, _ := regalloc.ResidentClass(lmd, opNo, op.Resident, op.ResOut); class {
-			case regalloc.ResClobber:
+		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
+		l.res, l.resMem, l.resY, l.resYMem, l.aHeld = op.Resident, false, op.ResidentY, false, false
+		restoreA, restoreY := false, false
+		if op.Resident != nil || op.ResidentY != nil {
+			d, _ := regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+			if op.Resident != nil && d.A == regalloc.ResClobber {
 				if op.ResIn {
 					r.push("sta " + l.byte(op.Resident.Home, 0))
 				}
 				l.resMem = true
 				restoreA = op.ResOut
-			case regalloc.ResFree:
-				l.aHeld = true
 			}
+			if op.ResidentY != nil && d.Y == regalloc.ResClobber {
+				if op.ResYIn {
+					r.push("sty " + l.byte(op.ResidentY.Home, 0))
+				}
+				l.resYMem = true
+				restoreY = op.ResYOut
+			}
+			l.aHeld = d.UseY
 		}
 
 		switch op.Code {
@@ -350,6 +358,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			} else if l.inA(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
 				// A に常駐している値: フラグが A を反映しているとは限らない (直前が A の演算ならピープホールが cmp を消す)
 				r.push("cmp #0")
+				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
+			} else if l.inY(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
+				r.push("cpy #0")
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if l.aHeld && ir.ValType(op.In(0)).Size == 1 {
 				// A は常駐変数で塞がっている: Y で検査する
@@ -501,6 +512,19 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpLoad:
+			if l.inY(op.Dst) {
+				// Y に常駐する変数への代入: ldy x (A の一時変数なら tay)
+				if l.inA(op.In(0)) {
+					r.push("tay")
+				} else {
+					r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
+				}
+				break
+			}
+			if l.inY(op.In(0)) {
+				r.push(fmt.Sprintf("sty %s", l.byte(op.Dst, 0)))
+				break
+			}
 			if l.aHeld {
 				// A は常駐変数で塞がっている: Y で写す
 				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
@@ -654,6 +678,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpEq:
+			if l.inY(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
+				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
+				break
+			}
 			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
 				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
 				break
@@ -689,6 +717,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			//   符号付き: 減算結果の符号 (V でオーバーフローを補正) = N セット ⇔ a < b
 			// どちらか一方でも符号付きなら符号付き比較 (v1 は左辺しか見ておらず、多バイトや
 			// オーバーフローのある符号付き比較も壊れていた。2026-09-14 に書き直し)
+			if l.inY(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
+				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
+				break
+			}
 			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
 				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
 				break
@@ -949,7 +981,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		if restoreA {
 			r.push("lda " + l.byte(op.Resident.Home, 0))
 		}
-		l.res, l.resMem, l.aHeld = nil, false, false
+		if restoreY {
+			r.push("ldy " + l.byte(op.ResidentY.Home, 0))
+		}
+		l.res, l.resMem, l.resY, l.resYMem, l.aHeld = nil, false, nil, false, false
 	}
 
 	for _, d := range lmd.Defs {

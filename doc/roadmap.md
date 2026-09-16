@@ -49,7 +49,7 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] `dec x` 直後の `if x` のフラグ再利用、A にある添字の `tay` ✅
 - [x] **最内ループの 1 バイト変数を A に常駐**（`regalloc.AllocateResident`。crc8 が `asl a; bcc; eor #29` に。
       castle では 28 のループが対象になった） ✅ 2026-09-16
-- [ ] Y の常駐: 添字変数を Y に置いたまま `iny` で回す（`lda a,y` / `sta (p),y` の `ldy i` が消える。sieve / oam / SoA のループ）
+- [x] Y の常駐: 添字 / カウンタを Y に置いたまま `iny` / `cpy` / `lda a,y` で回す（A と同時に可） ✅ 2026-09-16
 - [ ] 外側のループの常駐（内側で退避 / 復帰）、2 バイト変数の上位 / 下位の分割
 - [ ] ループの回転で条件が末尾に来た後の `dec i; lda i; bne`（ラベルが間に入る）を `dec i; bne` に（テストの複製）
 - [ ] SSA 化（Braun 方式）+ 定数伝播 / コピー伝播 / DCE。関数の到達解析（tree shaking、v2_idea.md）と同じ基盤

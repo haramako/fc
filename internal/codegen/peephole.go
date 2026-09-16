@@ -30,12 +30,14 @@ type aState map[string]bool
 type peepState struct {
 	a          aState
 	flagsFromA bool   // N/Z が A の値を反映しているか
+	flagsFromY bool   // N/Z が Y の値を反映しているか (ldy / iny / dey / tay の直後)
 	y          string // Y の値と等しいことが分かっている場所 / 即値 ("" なら不明)
 }
 
 func (s *peepState) reset() {
 	s.a = aState{}
 	s.flagsFromA = false
+	s.flagsFromY = false
 	s.y = ""
 }
 
@@ -121,6 +123,13 @@ func peepholeA(lines []string) []string {
 		kind := classify(arg)
 		trackable := kind == opLocal
 		switch mnem {
+		case "ldy", "iny", "dey", "tay", "sta", "sty", "stx", "clc", "sec", "cli", "sei", "cld", "nop", "txs",
+			"bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
+			// Y のフラグを保つ (ldy / iny / dey / tay は下で立てる)
+		default:
+			s.flagsFromY = false // フラグを別の値で立てる命令
+		}
+		switch mnem {
 		case "lda":
 			if (trackable || kind == opImmediate) && s.a[arg] && s.flagsFromA {
 				continue // A は既にこの値で、フラグもそれを反映している
@@ -132,11 +141,26 @@ func peepholeA(lines []string) []string {
 			s.flagsFromA = true
 		case "ldy":
 			if (trackable || kind == opImmediate) && s.y == arg {
-				continue // Y は既にこの値
+				// Y は既にこの値。直後が分岐 (ldy x; bne) ならフラグも Y を反映していることが要る
+				f := strings.Fields(next(i))
+				if s.flagsFromY || len(f) == 0 || !strings.HasPrefix(f[0], "b") {
+					continue
+				}
 			}
 			s.y = ""
 			if trackable || kind == opImmediate {
 				s.y = arg
+			}
+			s.flagsFromA = false
+			s.flagsFromY = true
+		case "cpy":
+			if arg == "#0" && s.flagsFromY {
+				if f := strings.Fields(next(i)); len(f) > 0 {
+					switch f[0] {
+					case "beq", "bne", "bmi", "bpl":
+						continue // N/Z は Y そのもの
+					}
+				}
 			}
 			s.flagsFromA = false
 		case "cmp":
@@ -176,7 +200,7 @@ func peepholeA(lines []string) []string {
 			}
 		case "clc", "sec", "cli", "sei", "cld", "nop", "txs":
 			// A も Y もメモリもフラグ (N/Z) も変えない
-		case "cpx", "cpy", "bit":
+		case "cpx", "bit":
 			// A も Y もメモリも変えないが N/Z は別の値になる
 			s.flagsFromA = false
 		case "ldx", "inx", "dex", "tax":
@@ -187,9 +211,11 @@ func peepholeA(lines []string) []string {
 		case "iny", "dey":
 			s.y = ""
 			s.flagsFromA = false
+			s.flagsFromY = true
 		case "tay":
 			s.y = ""
 			s.flagsFromA = true // A の値を写すので N/Z は A を反映する
+			s.flagsFromY = true
 		case "bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
 			// 分岐: 落ちてくる側では状態はそのまま (飛び先はラベルで空になる)
 		case "adc", "sbc", "and", "ora", "eor", "txa", "tya", "pla":

@@ -195,7 +195,10 @@ func (l *Llc) flagsFromIncDec(prev *ir.Op, v ir.Operand) bool {
 	if _, ok := l.incDec(prev); !ok {
 		return false
 	}
-	return isValueOrCasted(v) && ir.ValKind(v) != ir.KindLiteral && l.byte(v, 0) == l.byte(prev.Dst, 0)
+	if l.inY(v) {
+		return l.inY(prev.Dst) // iny / dey の直後の cpy #0 は要らない
+	}
+	return isValueOrCasted(v) && ir.ValKind(v) != ir.KindLiteral && !l.inY(prev.Dst) && l.byte(v, 0) == l.byte(prev.Dst, 0)
 }
 
 func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
@@ -204,8 +207,11 @@ func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
 	if !lit || k != 1 || size > 2 || !isValueOrCasted(op.Dst) || !isValueOrCasted(op.In(0)) {
 		return nil, false
 	}
+	if l.inY(op.Dst) && l.inY(op.In(0)) && size == 1 {
+		return []any{ifElse(op.Code == ir.OpAdd, "iny", "dey")}, true // Y に常駐するカウンタ
+	}
 	for _, v := range []ir.Operand{op.Dst, op.In(0)} {
-		if ir.ValKind(v) == ir.KindLiteral || l.inA(v) || ir.ValLocation(v) == ir.LocCond {
+		if ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || ir.ValLocation(v) == ir.LocCond {
 			return nil, false
 		}
 	}
@@ -245,7 +251,7 @@ func (l *Llc) shiftInMemory(op *ir.Op, n int, signed bool) ([]any, bool) {
 	if size > 2 || !isValueOrCasted(op.Dst) || ir.ValKind(op.Dst) == ir.KindLiteral {
 		return nil, false
 	}
-	if l.inA(op.Dst) || ir.ValLocation(op.Dst) == ir.LocCond {
+	if l.inA(op.Dst) || l.inY(op.Dst) || ir.ValLocation(op.Dst) == ir.LocCond {
 		return nil, false
 	}
 	left := op.Code == ir.OpShiftLeft

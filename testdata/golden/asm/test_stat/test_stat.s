@@ -136,12 +136,12 @@ _38:
 .proc _test_stat_test_loop
 	lda #0
 	sta 0+<F_test_stat_test_loop+0
+	ldy 0+<F_test_stat_test_loop+0
 @begin_40:
-	clc
-	adc #1
-	cmp #3
+	iny
+	cpy #3
 	bne @begin_40
-	sta 0+<F_test_stat_test_loop+0
+	sty 0+<F_test_stat_test_loop+0
 	lda 0+<F_test_stat_test_loop+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -157,12 +157,12 @@ _38:
 	jsr _unittest_assert_equal
 	lda #0
 	sta 0+<F_test_stat_test_loop+0
+	ldy 0+<F_test_stat_test_loop+0
 @begin_50:
-	clc
-	adc #1
-	cmp #3
+	iny
+	cpy #3
 	bcc @begin_50
-	sta 0+<F_test_stat_test_loop+0
+	sty 0+<F_test_stat_test_loop+0
 	lda 0+<F_test_stat_test_loop+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -229,8 +229,8 @@ _63:
 	sta 0+<F_test_stat_test_for+2
 	inc 0+<F_test_stat_test_for+1
 @begin_65:
-	ldy 0+<F_test_stat_test_for+1
-	cpy #10
+	lda 0+<F_test_stat_test_for+1
+	cmp #10
 	bcc @body_67
 	lda 0+<F_test_stat_test_for+1
 	sta <F_unittest_assert_equal+0

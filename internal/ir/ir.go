@@ -107,6 +107,9 @@ type Op struct {
 	Resident *Value // この命令で A に置いたままにしている変数 (LocA、Home がメモリ側)。nil なら無し
 	ResIn    bool   // Resident が命令の入口で生きている (A に値がある)
 	ResOut   bool   // Resident が命令の出口で生きている
+	ResidentY *Value // 同じく Y (LocY)
+	ResYIn    bool
+	ResYOut   bool
 }
 
 // In は i 番目の入力 (無ければ nil)。
@@ -153,6 +156,9 @@ func (op *Op) positional() []any {
 	if op.Resident != nil {
 		r = append(r, "a="+op.Resident.Name)
 	}
+	if op.ResidentY != nil {
+		r = append(r, "y="+op.ResidentY.Name)
+	}
 	return r
 }
 
@@ -191,11 +197,12 @@ const (
 	LocCond                        // コンディションフラグ (CondReg)
 	LocFastcallReg                 // fastcall 用レジスタ (FC_FASTCALL_REG+addr)
 	LocStatic                      // 静的フレーム (F_<sym>+addr。doc/v2_frame_alloc.md §6)
+	LocY                           // Y レジスタ (ループ内の常駐。doc/v2_regalloc.md)
 )
 
 var locationNames = [...]string{
 	LocNone: "", LocFrame: "frame", LocReg: "reg", LocMem: "mem", LocUnused: "none",
-	LocA: "a", LocCond: "cond", LocFastcallReg: "fastcall_reg", LocStatic: "static",
+	LocA: "a", LocCond: "cond", LocFastcallReg: "fastcall_reg", LocStatic: "static", LocY: "y",
 }
 
 func (l Location) String() string {
