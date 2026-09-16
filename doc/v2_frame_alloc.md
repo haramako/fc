@@ -241,6 +241,7 @@ golden テストの alloc-IR も同じ順で作る。
 
 `FC_LOCAL`（L）は stack 関数のために残す。`FC_SZP: .res N` / `FC_SRAM: .res M` を足し、`FC_SZP_SIZE` / `FC_SRAM_SIZE` を export。
 fc が生成する base.asm の既定（2026-09-16 確定）: `$00-$0F` L 16、`$10-$1F` reg 16、`$20-$2F` FC_FASTCALL_REG 16、
-`$30-$5F` FC_SZP 48、`$60-$7F` 空き（プログラムの `options(address:)` 用。miku の `irq_setup` が $62 にあり、
-FC_SZP を $40-$7F にしたら上書きされて NMI が暴走した）、`$80-$FF` S 128（再帰関数と extern が使う）。FC_SRAM 512（BSS）。
+`$30-$6F` FC_SZP 64、`$70-$7F` は `ZEROPAGE` セグメント用、`$80-$FF` S 128（再帰関数と extern が使う）。FC_SRAM 512（BSS）。
+`$00-$7F` は fc の領域で、プログラムが `options(address:)` で固定番地を置いてはいけない（miku の `irq_setup` が $62 にあり、
+FC_SZP と重なって NMI が暴走した → miku は固定番地をやめて BSS に。固定番地の ZP 変数が要るなら castle のように base.asm を自前で）。
 castle は `data.asm` に同じものを足す（ZP の空きが無いのでスタック $80 を削って充てる）。

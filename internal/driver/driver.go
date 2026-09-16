@@ -445,10 +445,11 @@ func (c *Compiler) staticRamSize() int {
 // 静的フレームの領域の既定の大きさ (fc が生成する base.asm と一致)。
 //
 // fc が生成する base.asm のゼロページ配置: $00-$0F L (stack 関数のレジスタ領域)、$10-$1F reg、$20-$2F FC_FASTCALL_REG
-// (extern の fastcall 用、既定 16)、$30-$5F FC_SZP (静的フレーム、既定 48)、**$60-$7F は空き** (プログラムが
-// `options(address:)` で固定番地の変数を置く。miku の irq_setup など)、$80-$FF スタック S。
+// (extern の fastcall 用、既定 16)、$30-$6F FC_SZP (静的フレーム、既定 64)、$70-$7F は `options(segment: "ZEROPAGE")` の
+// 変数用に空けておく、$80-$FF スタック S。$00-$7F に `options(address:)` で固定番地の変数を置くのは、base.asm を自前で
+// 持つプロジェクト (castle) だけにする (2026-09-16 決定。miku は固定番地をやめて BSS に)。
 const (
-	DefaultStaticZp  = 48
+	DefaultStaticZp  = 64
 	DefaultStaticRam = 512
 )
 
@@ -490,7 +491,7 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"FC_LOCAL: .res $10\n" +
 		"FC_REG: .res $10\n" +
 		"FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE\n" +
-		"FC_SZP: .res FC_SZP_SIZE\n" + // 静的フレーム (ゼロページ側)。ここまでで $5F。$60-$7F はプログラムの固定番地用に空ける
+		"FC_SZP: .res FC_SZP_SIZE\n" + // 静的フレーム (ゼロページ側)。ここまでで $6F。$70-$7F は ZEROPAGE セグメント用に空ける
 		"\n" +
 		".segment \"BSS\"\n" +
 		"FC_FARCALL: .res 3\n" +

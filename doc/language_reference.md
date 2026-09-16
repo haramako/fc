@@ -86,7 +86,7 @@ options(mapper: "MMC3");      // iNES マッパ（"MMC0" / "MMC3" / 番号）—
 options(bank_count: 4);       // PRG バンク数 — メインモジュールで
 options(char_banks: 1);       // CHR バンク数 — メインモジュールで
 options(fastcall_reg: 16);    // extern の fastcall 関数が使うゼロページ領域 FC_FASTCALL_REG の大きさ（既定 16、16〜128）— メインモジュールで
-options(static_zp: 48);       // 静的フレーム（§4.5）のゼロページ側 FC_SZP の大きさ（既定 48、0〜256）— メインモジュールで
+options(static_zp: 64);       // 静的フレーム（§4.5）のゼロページ側 FC_SZP の大きさ（既定 64、0〜256）— メインモジュールで
 options(static_ram: 512);     // 静的フレームの RAM 側 FC_SRAM の大きさ（既定 512、0〜8192）— メインモジュールで
 options(farcall: true);       // far call（§4.4）を有効にする — メインモジュールで
 options(near: true);          // このモジュールは常にマップされている扱い（far call の対象にしない）
@@ -251,7 +251,9 @@ fc で本体を持つ関数のうち**再帰しないもの**は、引数・戻�
 使う領域は「呼び出しの連鎖 1 本分の合計」程度で済む。領域はゼロページ側 `FC_SZP`（`options(static_zp: N)`。
 呼び出しの深い関数から順に入るだけ入る）と RAM 側 `FC_SRAM`（`options(static_ram: N)`）。
 fc が生成する base.asm のゼロページ配置は `$00-$0F` L（stack 関数のレジスタ領域）、`$10-$1F` reg、`$20-$2F` FC_FASTCALL_REG、
-`$30-$5F` FC_SZP、**`$60-$7F` は空き**（`options(address:)` の固定番地の変数に使える）、`$80-$FF` スタック S。
+`$30-$6F` FC_SZP、`$70-$7F` は `options(segment: "ZEROPAGE")` の変数用、`$80-$FF` スタック S。**`$00-$7F` に
+`options(address:)` で固定番地の変数を置いてはいけない**（fc の領域と重なる。固定番地の ZP 変数が要るプロジェクトは
+castle のように base.asm を自前で持つ）。
 base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .res M` と `FC_SZP_SIZE` / `FC_SRAM_SIZE` の
 `.export … : absolute` を合わせる（不足はリンク時の `.assert` で検出される。配置は `.fc-build/_frames.inc`）。
 

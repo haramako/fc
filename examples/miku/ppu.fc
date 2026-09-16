@@ -33,10 +33,10 @@ var interrupt_i:int;
 
 // IRQ関連
 var irq_counter:int;
-var irq_setup:fn():void options(address: 0x62);
-var irq_next:uint16 options(address: 0x64);
+var irq_setup:fn():void;   // 以前は ZP の固定番地 ($62) だったが、$00-$7F は fc の領域なので BSS に
+var irq_next:uint16;
 
-var on_vsync:fn():void options(address: 0x78);
+var on_vsync:fn():void;
 var locked:int;
 
 var on_wait_vsync:fn():void;

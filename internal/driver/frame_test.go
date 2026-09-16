@@ -91,7 +91,7 @@ function main():void { fc(1, 2, 3); }
 	}
 	// base.s に静的フレームの領域と大きさが出る
 	base, _ := os.ReadFile(filepath.Join(dir, "b", "base.s"))
-	if len(base) > 0 && !strings.Contains(string(base), "FC_SZP_SIZE = 48") {
+	if len(base) > 0 && !strings.Contains(string(base), "FC_SZP_SIZE = 64") {
 		t.Errorf("base.s:\n%s", base)
 	}
 }
