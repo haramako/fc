@@ -17,7 +17,7 @@ __MODULE_MEM__ = 1
 .proc _mem_strlen
 	lda #0
 	sta 0+<F_mem_strlen+3
-	ldy 0+<F_mem_strlen+3
+	tay
 	jmp @begin_1
 @body_3:
 	iny
@@ -37,7 +37,7 @@ __MODULE_MEM__ = 1
 .proc _mem_strcpy
 	lda #0
 	sta 0+<F_mem_strcpy+5
-	ldy 0+<F_mem_strcpy+5
+	tay
 @then_11:
 	lda (F_mem_strcpy+3),y
 	sta (F_mem_strcpy+1),y

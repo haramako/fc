@@ -12,8 +12,8 @@ _test_stat_I10 = 10
 	;;;=============================
 .segment "test_stat"
 .proc _test_stat_test_if
+	ldy #0
 	lda #1
-	sta 0+<F_test_stat_test_if+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -27,7 +27,7 @@ _test_stat_I10 = 10
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #2
-	sta 0+<F_test_stat_test_if+0
+	sta 0+<F_test_stat_test_if+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -41,8 +41,8 @@ _test_stat_I10 = 10
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #0
-	sta 0+<F_test_stat_test_if+0
-	sta 1+<F_test_stat_test_if+0
+	sta 0+<F_test_stat_test_if+2
+	sta 1+<F_test_stat_test_if+2
 	bne @1
 	beq @end_15
 @1:
@@ -60,12 +60,12 @@ _test_stat_I10 = 10
 	jsr _unittest_assert_equal
 @end_15:
 	lda #1
-	sta 0+<F_test_stat_test_if+0
+	sta 0+<F_test_stat_test_if+2
 	lda #0
-	sta 1+<F_test_stat_test_if+0
-	lda 0+<F_test_stat_test_if+0
+	sta 1+<F_test_stat_test_if+2
+	lda 0+<F_test_stat_test_if+2
 	bne @end_21
-	lda 1+<F_test_stat_test_if+0
+	lda 1+<F_test_stat_test_if+2
 	bne @end_21
 	lda #0
 	sta <F_unittest_assert_equal+0
@@ -81,12 +81,12 @@ _test_stat_I10 = 10
 	jsr _unittest_assert_equal
 @end_21:
 	lda #0
-	sta 0+<F_test_stat_test_if+0
+	sta 0+<F_test_stat_test_if+2
 	lda #1
-	sta 1+<F_test_stat_test_if+0
-	lda 0+<F_test_stat_test_if+0
+	sta 1+<F_test_stat_test_if+2
+	lda 0+<F_test_stat_test_if+2
 	bne @then_34
-	lda 1+<F_test_stat_test_if+0
+	lda 1+<F_test_stat_test_if+2
 	bne @then_34
 	lda #0
 	sta <F_unittest_assert_equal+0
@@ -102,7 +102,7 @@ _test_stat_I10 = 10
 	jsr _unittest_assert_equal
 @then_34:
 	lda #1
-	sta 0+<F_test_stat_test_if+0
+	sta 0+<F_test_stat_test_if+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -137,7 +137,7 @@ _38:
 .proc _test_stat_test_loop
 	lda #0
 	sta 0+<F_test_stat_test_loop+0
-	ldy 0+<F_test_stat_test_loop+0
+	tay
 @begin_40:
 	iny
 	cpy #3
@@ -158,12 +158,11 @@ _38:
 	jsr _unittest_assert_equal
 	lda #0
 	sta 0+<F_test_stat_test_loop+0
-	ldy 0+<F_test_stat_test_loop+0
 @begin_50:
-	iny
-	cpy #3
+	inc 0+<F_test_stat_test_loop+0
+	lda 0+<F_test_stat_test_loop+0
+	cmp #3
 	bcc @begin_50
-	sty 0+<F_test_stat_test_loop+0
 	lda 0+<F_test_stat_test_loop+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -177,8 +176,8 @@ _38:
 	lda #.HIBYTE(_58)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldy #0
 	lda #1
-	sta 0+<F_test_stat_test_loop+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -206,9 +205,9 @@ _63:
 .segment "test_stat"
 .proc _test_stat_test_for
 	lda #0
-	sta 0+<F_test_stat_test_for+1
-	sta 0+<F_test_stat_test_for+2
-	sta 0+<F_test_stat_test_for+1
+	sta 0+<F_test_stat_test_for+3
+	tay
+	sta 0+<F_test_stat_test_for+0
 	jmp @begin_65
 @body_67:
 	lda #1
@@ -225,15 +224,15 @@ _63:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	clc
-	lda 0+<F_test_stat_test_for+2
-	adc 0+<F_test_stat_test_for+1
-	sta 0+<F_test_stat_test_for+2
-	inc 0+<F_test_stat_test_for+1
+	lda 0+<F_test_stat_test_for+3
+	adc 0+<F_test_stat_test_for+0
+	sta 0+<F_test_stat_test_for+3
+	inc 0+<F_test_stat_test_for+0
 @begin_65:
-	lda 0+<F_test_stat_test_for+1
+	lda 0+<F_test_stat_test_for+0
 	cmp #10
 	bcc @body_67
-	lda 0+<F_test_stat_test_for+1
+	lda 0+<F_test_stat_test_for+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -246,7 +245,7 @@ _63:
 	lda #.HIBYTE(_77)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda 0+<F_test_stat_test_for+2
+	lda 0+<F_test_stat_test_for+3
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -276,7 +275,7 @@ _80:
 	lda #0
 	sta 0+<F_test_stat_test_switch+1
 	sta 0+<F_test_stat_test_switch+0
-	ldx 0+<F_test_stat_test_switch+0
+	tax
 	jmp @begin_82
 @body_97:
 	cpx #1

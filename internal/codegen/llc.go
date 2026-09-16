@@ -373,21 +373,21 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
 			d, _ := regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
 			if op.ResidentX != nil && d.X == regalloc.ResClobber {
-				if op.ResXIn {
+				if op.ResXIn && !op.ResidentX.Clean {
 					r.push("stx " + l.byte(op.ResidentX.Home, 0))
 				}
 				l.resXMem = true
 				restoreX = op.ResXOut
 			}
 			if op.Resident != nil && d.A == regalloc.ResClobber {
-				if op.ResIn {
+				if op.ResIn && !op.Resident.Clean {
 					r.push("sta " + l.byte(op.Resident.Home, 0))
 				}
 				l.resMem = true
 				restoreA = op.ResOut
 			}
 			if op.ResidentY != nil && d.Y == regalloc.ResClobber {
-				if op.ResYIn {
+				if op.ResYIn && !op.ResidentY.Clean {
 					r.push("sty " + l.byte(op.ResidentY.Home, 0))
 				}
 				l.resYMem = true

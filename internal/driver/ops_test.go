@@ -276,3 +276,75 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestResidentSignedCompare: A に常駐する符号付きの変数を比較 (sec; sbc; bvc; eor で A が壊れる) した後も使う
+// (math.sin の形。関数全体の領域で x が A に置かれ、比較の後の tab[x] が壊れた値を添字にしていた)。
+func TestResidentSignedCompare(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var tab:[4]int;
+function f(x:sint8):int
+{
+	if (x < 0) {
+		if (x < -2) {
+			return tab[x + 4] + 200;
+		}
+		return tab[x + 3] + 100;
+	}
+	if (x < 2) {
+		return tab[x];
+	}
+	return tab[x - 2] + 50;
+}
+function main():void
+{
+	tab[0] = 10; tab[1] = 20; tab[2] = 30; tab[3] = 40;
+	printf(f(-4), " ", f(-1), " ", f(1), " ", f(3), "\n");
+	exit(0);
+}
+`)
+	if want := "210 130 20 70\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
+
+// TestFunctionResident: ループの外 (関数の直線部分) でも引数などをレジスタに常駐させる。中のループが同じレジスタを
+// 使っても、境界の写しの順序 (外側の退避 → 内側の復帰、内側の退避 → 外側の復帰) が保たれる。
+// 領域内で書き換えられない変数 (k) は書き戻し無し (Clean)。
+func TestFunctionResident(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var a:[16]int;
+var b:[16]int;
+var c:[16]int;
+var g:int;
+function f(k:int, n:int):int
+{
+	b[k] = a[k] + 1;
+	c[k] = a[k] + b[k];
+	var s = 0;
+	for (var i = 0; i < n; i++) {
+		s += a[i];
+	}
+	c[k] = c[k] + s;
+	a[k] = b[k] + c[k];
+	g += a[k];
+	if (b[k] == 7) {
+		return b[k];
+	}
+	return a[k];
+}
+function main():void
+{
+	for (var i = 0; i < 16; i++) { a[i] = i * 2; }
+	g = 0;
+	var r1 = f(3, 4);
+	var r2 = f(6, 8);
+	printf(r1, " ", r2, " ", g, " ", a[3], " ", a[6], " ", c[6], "\n");
+	exit(0);
+}
+`)
+	// f(3,4): b[3]=7, c[3]=13, s=12, c[3]=25, a[3]=32, g=32 → 7。f(6,8): b[6]=13, c[6]=25, s=0+2+4+32+8+10+12+14=82,
+	// c[6]=107, a[6]=120, g=152 → 120
+	if want := "7 120 152 32 120 107\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

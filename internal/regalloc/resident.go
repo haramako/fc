@@ -186,7 +186,11 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 		}
 	case ir.OpEq, ir.OpLt:
 		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 {
-			return true, 3
+			// 符号付きの比較は sec; sbc; bvc; eor で A を壊す (cmp と違って) ので、v がその後も要るなら A のままではできない
+			signed := op.Code == ir.OpLt && (ir.ValType(op.Src[0]).Signed || ir.ValType(op.Src[1]).Signed)
+			if !signed || !liveOut {
+				return true, 3
+			}
 		}
 	case ir.OpIndexPget:
 		if isV(op.Dst, v) && ir.ValType(op.In(1)).Size == 1 && !isV(op.In(1), v) {
@@ -310,7 +314,7 @@ func needsX(op *ir.Op) bool {
 func needsY(op *ir.Op, vY *ir.Value) bool {
 	switch op.Code {
 	case ir.OpPget, ir.OpPset, ir.OpFieldPget, ir.OpFieldPset, ir.OpIndex,
-		ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpCall, ir.OpFastcall, ir.OpAsm:
+		ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpCall, ir.OpFastcall, ir.OpAsm, ir.OpReturn: // return: グローバルの書き戻しのため
 		return true
 	case ir.OpIndexPget, ir.OpIndexPset:
 		return !isV(op.In(1), vY) || !byteIndex(op)
@@ -424,12 +428,14 @@ func aFreeWithY(op *ir.Op) bool {
 	return false
 }
 
-// AllocateResident は最内ループごとに A / Y に常駐させる変数を選んで IR を書き換える (opt の後、AllocateRegister の前)。
+// AllocateResident はループごと (内側から) と、最後にループの外 (関数の直線部分) に A / Y / X に常駐させる変数を選んで
+// IR を書き換える (opt の後、AllocateRegister の前)。
 // 調査用: 環境変数 FC_NO_RESIDENT で無効化、FC_TRACE_RESIDENT で選んだ変数と見積もりを stderr に出す。
 func AllocateResident(lmd *ir.Lambda) {
 	if os.Getenv("FC_NO_RESIDENT") != "" {
 		return
 	}
+	funcTried := false
 	for iter := 0; iter < 32; iter++ {
 		cfg := ir.BuildCFG(lmd)
 		loops := cfg.Loops()
@@ -460,10 +466,46 @@ func AllocateResident(lmd *ir.Lambda) {
 			done = true
 			break // IR が変わったので作り直す
 		}
+		if !done && !funcTried {
+			// ループの外 (関数の直線部分) を 1 つの領域に。入口は関数の先頭 (1 回)、出口は return (退避で書き戻す)、
+			// ループは通過する区間 (境界の辺で退避 / 復帰。ループ側の写しとの順序は onEdge が保つ)
+			funcTried = true
+			r, inner := region{}, region{}
+			for _, b := range cfg.Blocks {
+				r[b] = true
+			}
+			for _, lp := range loops {
+				for b := range lp.Blocks {
+					delete(r, b)
+					inner[b] = true
+				}
+			}
+			vA, vY, vX, gain := bestPair(lmd, cfg, r, inner, lv, lmd.ABI != ir.ABIStack)
+			if vA != nil || vY != nil || vX != nil {
+				if os.Getenv("FC_TRACE_RESIDENT") != "" {
+					fmt.Fprintf(os.Stderr, "resident: %s func: A=%s Y=%s X=%s (gain %d)\n", lmd.Id, name(vA), name(vY), name(vX), gain)
+				}
+				makeResident(lmd, cfg, r, lv, vA, vY, vX)
+				done = true
+			}
+		}
 		if !done {
 			return
 		}
 	}
+}
+
+// isResCopy は別の常駐の入口 / 出口の写し (load temp = home / load home = temp)。領域が重なるとき (外側のループ、関数全体) は
+// 印を付けず、この領域の写しはその前 (退避) / 後 (復帰) に置く。
+func isResCopy(op *ir.Op) bool {
+	if op == nil || op.Code != ir.OpLoad {
+		return false
+	}
+	d, s := ir.UnderlyingValue(op.Dst), ir.UnderlyingValue(op.Src[0])
+	if d == nil || s == nil {
+		return false
+	}
+	return (isResident(d) && d.Home == s) || (isResident(s) && s.Home == d)
 }
 
 // region は常駐の対象になるブロックの集合 (ループから、その中のループを除いたもの)。
@@ -495,10 +537,20 @@ func regionOf(lp *ir.Loop, loops []*ir.Loop) region {
 	return r
 }
 
+// blocks は領域のブロックを Index 順に (map の順序で出力が変わらないように)。
+func (r region) blocks() []*ir.Block {
+	var bs []*ir.Block
+	for b := range r {
+		bs = append(bs, b)
+	}
+	sort.Slice(bs, func(i, j int) bool { return bs[i].Index < bs[j].Index })
+	return bs
+}
+
 // entries / exits は領域に入る辺 (from は外、to は中) と出る辺 (from は中、to は外)。
 func (r region) entries() [][2]*ir.Block {
 	var e [][2]*ir.Block
-	for b := range r {
+	for _, b := range r.blocks() {
 		for _, p := range b.Preds {
 			if !r[p] {
 				e = append(e, [2]*ir.Block{p, b})
@@ -510,7 +562,7 @@ func (r region) entries() [][2]*ir.Block {
 
 func (r region) exits() [][2]*ir.Block {
 	var e [][2]*ir.Block
-	for b := range r {
+	for _, b := range r.blocks() {
 		for _, s := range b.Succs {
 			if !r[s] {
 				e = append(e, [2]*ir.Block{b, s})
@@ -546,9 +598,14 @@ func candidates(lmd *ir.Lambda, cfg *ir.CFG, r region) []*ir.Value {
 			refered[ir.UnderlyingValue(op.Src[0])] = true
 		}
 	}
+	for _, v := range lmd.Vars {
+		if v.Home != nil {
+			refered[v.Home] = true // 別の領域 (内側のループ) ですでに常駐している変数は、その写しと干渉するので除く
+		}
+	}
 	var res []*ir.Value
 	seen := map[*ir.Value]bool{}
-	for b := range r {
+	for _, b := range r.blocks() { // 出現順 (同点のときの選択が実行ごとに変わらないように)
 		for _, i := range cfg.Ops(b) {
 			defs, uses := ir.DefUse(lmd.Ops[i])
 			for _, o := range append(append([]ir.Operand{}, defs...), uses...) {
@@ -579,9 +636,29 @@ func candidates(lmd *ir.Lambda, cfg *ir.CFG, r region) []*ir.Value {
 	return res
 }
 
+// readOnly は領域内に v の定義が無い (Home が常に最新で、退避の書き戻しが要らない) か。
+func readOnly(lmd *ir.Lambda, cfg *ir.CFG, r region, v *ir.Value) bool {
+	if v == nil {
+		return true
+	}
+	for b := range r {
+		for _, i := range cfg.Ops(b) {
+			defs, _ := ir.DefUse(lmd.Ops[i])
+			for _, d := range defs {
+				if ir.UnderlyingValue(d) == v {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
 // gainOf は (vA, vY) の組をループに常駐させたときの 1 周あたりの正味の得。
 func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, vY, vX *ir.Value) int {
 	gain := 0
+	cleanA, cleanY, cleanX := readOnly(lmd, cfg, r, vA), readOnly(lmd, cfg, r, vY), readOnly(lmd, cfg, r, vX)
+	clean := map[*ir.Value]bool{vA: cleanA, vY: cleanY, vX: cleanX}
 	for b := range r {
 		for _, i := range cfg.Ops(b) {
 			op := lmd.Ops[i]
@@ -594,7 +671,7 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 			d, g := Classify(lmd, i, vA, vY, vX, aIn || aOut, aOut, yIn || yOut)
 			gain += g
 			if d.X == ResClobber {
-				if xIn {
+				if xIn && !cleanX {
 					gain -= 3
 				}
 				if xOut {
@@ -602,7 +679,7 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 				}
 			}
 			if d.A == ResClobber {
-				if aIn {
+				if aIn && !cleanA {
 					gain -= 3
 				}
 				if aOut {
@@ -610,7 +687,7 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 				}
 			}
 			if d.Y == ResClobber {
-				if yIn {
+				if yIn && !cleanY {
 					gain -= 3
 				}
 				if yOut {
@@ -638,9 +715,17 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 	for _, e := range r.exits() {
 		if inner[e[1]] {
 			for _, v := range []*ir.Value{vA, vY, vX} {
-				if v != nil && lv.LiveIn(first(e[1]), v) {
+				if v != nil && lv.LiveIn(first(e[1]), v) && !clean[v] {
 					gain -= 3
 				}
+			}
+		}
+	}
+	// 関数全体の領域: 先頭で引数などを写す (1 回)。return での書き戻しは退避 (Classify) として数えられている
+	if entry := cfg.Blocks[0]; r[entry] {
+		for _, v := range []*ir.Value{vA, vY, vX} {
+			if v != nil && lv.LiveIn(first(entry), v) {
+				gain -= 3
 			}
 		}
 	}
@@ -688,17 +773,17 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 	var rA, rY, rX *ir.Value
 	if vX != nil {
 		rX = ir.NewLocal(vX.Name+"@X", vX.Type, ir.LTTemp)
-		rX.Location, rX.Home = ir.LocX, vX
+		rX.Location, rX.Home, rX.Clean = ir.LocX, vX, readOnly(lmd, cfg, r, vX)
 		lmd.Vars = append(lmd.Vars, rX)
 	}
 	if vA != nil {
 		rA = ir.NewLocal(vA.Name+"@A", vA.Type, ir.LTTemp)
-		rA.Location, rA.Home = ir.LocA, vA
+		rA.Location, rA.Home, rA.Clean = ir.LocA, vA, readOnly(lmd, cfg, r, vA)
 		lmd.Vars = append(lmd.Vars, rA)
 	}
 	if vY != nil {
 		rY = ir.NewLocal(vY.Name+"@Y", vY.Type, ir.LTTemp)
-		rY.Location, rY.Home = ir.LocY, vY
+		rY.Location, rY.Home, rY.Clean = ir.LocY, vY, readOnly(lmd, cfg, r, vY)
 		lmd.Vars = append(lmd.Vars, rY)
 	}
 	replace := func(o ir.Operand) ir.Operand {
@@ -716,6 +801,9 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 	for b := range r {
 		for _, i := range cfg.Ops(b) {
 			op := ops[i]
+			if isResCopy(op) {
+				continue // 内側のループの写し (その常駐の印のまま)
+			}
 			// 可換な演算で vA が第 2 入力なら第 1 に
 			switch op.Code {
 			case ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor:
@@ -775,8 +863,10 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		labelNo++
 		return fmt.Sprintf("@res_%d", labelNo)
 	}
-	// 辺 (from → to) に命令を挿す。to は from の直後 (fallthrough)、jump の飛び先、または条件分岐の飛び先
-	onEdge := func(from, to *ir.Block, mk []*ir.Op) {
+	// 辺 (from → to) に命令を挿す。to は from の直後 (fallthrough)、jump の飛び先、または条件分岐の飛び先。
+	// 同じ辺に内側のループの写しがすでにあれば、退避 (spill) はその前、復帰はその後に置く
+	// (内側に入る辺: この領域を退避してから内側を復帰、内側から出る辺: 内側を退避してからこの領域を復帰)
+	onEdge := func(from, to *ir.Block, mk []*ir.Op, spill bool) {
 		if len(mk) == 0 {
 			return
 		}
@@ -785,9 +875,19 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		if li >= 0 {
 			last = ops[li]
 		}
+		backOver := func(pos int) int { // pos の手前にある写しの前へ
+			for pos > 0 && isResCopy(ops[pos-1]) {
+				pos--
+			}
+			return pos
+		}
 		switch {
 		case last != nil && last.Code == ir.OpJump && last.Label == to.Label:
-			before[li] = append(before[li], mk...)
+			pos := li
+			if spill {
+				pos = backOver(pos)
+			}
+			before[pos] = append(before[pos], mk...)
 		case last != nil && isCondBranch(last) && last.Label == to.Label && to.Index != from.Index+1:
 			// 条件分岐の飛び先: 辺を分割して末尾に新しいブロック
 			l := newLabel()
@@ -798,9 +898,23 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		default:
 			// fallthrough (from の直後が to)。from の末尾に足す (条件分岐の落ちる側なら分岐の後 = to の手前)
 			if li >= 0 {
-				after[li] = append(after[li], mk...)
+				pos := li + 1
+				if !spill {
+					for pos < len(ops) && isResCopy(ops[pos]) {
+						pos++
+					}
+				}
+				if pos < len(ops) {
+					before[pos] = append(before[pos], mk...)
+				} else {
+					after[li] = append(after[li], mk...)
+				}
 			} else {
-				before[firstOp(to)] = append(before[firstOp(to)], mk...)
+				pos := firstOp(to)
+				if spill {
+					pos = backOver(pos)
+				}
+				before[pos] = append(before[pos], mk...)
 			}
 		}
 	}
@@ -817,26 +931,31 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		}
 		return r
 	}
-	exitOps := func(at int) []*ir.Op {
+	exitOps := func(at int) []*ir.Op { // 書き戻し (Clean なら Home が最新なので不要)
 		var r []*ir.Op
-		if vA != nil && lv.LiveIn(at, vA) {
+		if vA != nil && lv.LiveIn(at, vA) && !rA.Clean {
 			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vA, Src: []ir.Operand{rA}, Resident: rA, ResIn: true})
 		}
-		if vY != nil && lv.LiveIn(at, vY) {
+		if vY != nil && lv.LiveIn(at, vY) && !rY.Clean {
 			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vY, Src: []ir.Operand{rY}, ResidentY: rY, ResYIn: true})
 		}
-		if vX != nil && lv.LiveIn(at, vX) {
+		if vX != nil && lv.LiveIn(at, vX) && !rX.Clean {
 			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vX, Src: []ir.Operand{rX}, ResidentX: rX, ResXIn: true})
 		}
 		return r
 	}
 	for _, e := range r.entries() {
 		from, to := e[0], e[1]
-		onEdge(from, to, entryOps(firstOp(to)))
+		onEdge(from, to, entryOps(firstOp(to)), false)
 	}
 	for _, e := range r.exits() {
 		from, to := e[0], e[1]
-		onEdge(from, to, exitOps(firstOp(to)))
+		onEdge(from, to, exitOps(firstOp(to)), true)
+	}
+	// 関数全体の領域: 先頭で写す (return での書き戻しは退避として codegen が出す)
+	if entry := cfg.Blocks[0]; r[entry] {
+		at := firstOp(entry)
+		before[at] = append(entryOps(at), before[at]...)
 	}
 	var out []*ir.Op
 	for i, op := range ops {

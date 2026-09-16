@@ -1,14 +1,15 @@
-(alloc-lambda test_basic _test_basic_test_nesasm_limit _test_basic_test_nesasm_limit frame_size=0 abi=static
+(alloc-lambda test_basic _test_basic_test_nesasm_limit _test_basic_test_nesasm_limit frame_size=1 abi=static
  (vars
-  (var 0 toooooooooooooooooooooooooooooooooooooooo_long_id local #"uint8" pub loc=a)
+  (var 0 toooooooooooooooooooooooooooooooooooooooo_long_id local #"uint8" pub loc=static addr=0)
   (var 1 $4 local #"uint8" lt=temp loc=none unuse)
   (var 2 i local #"*uint8" pub loc=none unuse)
+  (var 3 toooooooooooooooooooooooooooooooooooooooo_long_id@Y local #"uint8" lt=temp loc=y)
  )
  (ops
-  0000 (:load {l0 toooooooooooooooooooooooooooooooooooooooo_long_id} {lit nil 0 #"uint8"})
-  0001 (:add {l0 toooooooooooooooooooooooooooooooooooooooo_long_id} {l0 toooooooooooooooooooooooooooooooooooooooo_long_id} {lit nil 1 #"uint8"})
+  0000 (:load {l3 toooooooooooooooooooooooooooooooooooooooo_long_id@Y} {lit nil 0 #"uint8"} "y=toooooooooooooooooooooooooooooooooooooooo_long_id@Y")
+  0001 (:add {l3 toooooooooooooooooooooooooooooooooooooooo_long_id@Y} {l3 toooooooooooooooooooooooooooooooooooooooo_long_id@Y} {lit nil 1 #"uint8"} "y=toooooooooooooooooooooooooooooooooooooooo_long_id@Y")
   0002 nil
-  0003 (:return)
+  0003 (:return "y=toooooooooooooooooooooooooooooooooooooooo_long_id@Y")
  )
 )
 (alloc-lambda test_basic _test_basic_add _test_basic_add frame_size=3 abi=static

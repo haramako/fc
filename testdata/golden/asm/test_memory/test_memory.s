@@ -24,7 +24,7 @@ _test_memory_buf2: .res 512
 	ldy #0
 	lda #1
 	sta _test_memory_buf1+0,y
-	ldy #1
+	tay
 	lda #2
 	sta _test_memory_buf1+0,y
 	ldy #255

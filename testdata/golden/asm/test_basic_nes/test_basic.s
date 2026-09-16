@@ -43,9 +43,8 @@ _test_basic_ARRAY:
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_test_nesasm_limit
-	lda #0
-	clc
-	adc #1
+	ldy #0
+	iny
 	rts
 _6:
 		.byte 116,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111

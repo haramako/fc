@@ -63,6 +63,7 @@ type Value struct {
 
 	// 以下はレジスタ割付で設定される
 	Home         *Value // Location == LocA / LocY / LocX でループ内に常駐する一時変数のメモリ側 (退避先。regalloc.AllocateResident)
+	Clean        bool   // Home と常に一致する (領域内で書き換えられない。引数など) ので、レジスタを壊す命令の前の退避 (書き戻し) が要らない
 	Location     Location
 	Address      int // Location が LocFrame / LocReg / LocFastcallReg のとき有効
 	Unuse        bool

@@ -151,6 +151,12 @@ func peepholeA(lines []string) []string {
 			if trackable || kind == opImmediate {
 				s.y = arg
 			}
+			if (trackable || kind == opImmediate) && s.a[arg] {
+				// A が既にこの値 (sta x; ldy x): tay (3 → 2 サイクル)。A は変わらずフラグは A = Y を反映する
+				line = strings.Replace(line, t, "tay", 1)
+				s.flagsFromY = true
+				break
+			}
 			s.flagsFromA = false
 			s.flagsFromY = true
 		case "cpy":
@@ -204,6 +210,11 @@ func peepholeA(lines []string) []string {
 			// A も Y もメモリも変えないが N/Z は別の値になる
 			s.flagsFromA = false
 		case "ldx", "inx", "dex", "tax":
+			if mnem == "ldx" && (trackable || kind == opImmediate) && s.a[arg] {
+				// A が既にこの値 (sta x; ldx x): tax (3 → 2 サイクル)
+				line = strings.Replace(line, t, "tax", 1)
+				mnem = "tax"
+			}
 			// X が変わるとフレーム (`<S+n,x`) の指す先が変わるので、",x" を含む追跡は捨てる
 			for k := range s.a {
 				if strings.Contains(k, ",x") {

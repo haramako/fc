@@ -75,6 +75,22 @@ return は全グローバルを読む、とみなす）。それらの命令は�
 volatile は sema（`options(address:)` / `options(volatile: true)`）と `codegen.markVolatile`（asm から参照されるシンボル。
 sema が `include` した asm ファイルを読んで `Module.AsmSymbols` に控える）が付ける。
 
+**関数全体の領域（§6、2026-09-16）**: ループごとの割付が終わった後、ループに含まれないブロック全部を 1 つの領域にして
+同じ `bestPair` / `makeResident` を通す（入口は関数の先頭で 1 回、return はグローバルの書き戻しのため `needsY` /
+`needsX` / A の clobber 扱い、中のループは「通過する区間」）。castle は 134 関数で引数などが A / Y / X に乗る
+（`en.check_hit_rect` は y2 を Y、x2 を X に置いて `cpy` / `cpx` で比べる）。細部:
+
+- 領域が重なるとき（外側のループ、関数全体）、内側の写し `load i@Y = i` / `load i = i@Y` には印を付けず
+  （`isResCopy`）、この領域の写しは同じ辺で **退避は内側の復帰の前、復帰は内側の退避の後** に置く（`onEdge` の
+  `spill`）。内側で常駐している変数（Home）は候補から外す
+- 領域内で書き換えられない変数（引数など）は `Value.Clean`: レジスタを壊す命令の前の退避（書き戻し）も
+  ループ境界の書き戻しも出さない（Home が常に最新。復帰だけ）
+- **friendly の判定はその命令がレジスタを壊さないことまで含める**: 符号付きの `lt` は `sec; sbc; bvc; eor` で A を壊す
+  （`cmp` と違って）ので、変数がその後も生きているなら friendly ではない（math.sin で `x < 64` の後の `tab[x]` が
+  壊れた値を添字にしていた。plasma の出力チェックで発覚）
+- 要素 2 バイトの配列 / ポインタの添字は `opt.scaleIndex` がブロック内で 1 度だけ 2 倍して `Op.Scaled` を付けるので、
+  その `i*2` も Y / X の常駐の対象（`byteIndex`。math16 -4.5%）
+
 段取り:
 
 1. `ir.Dominators` / `ir.Loops`（`internal/ir/loops.go`）、命令ごとの生存集合 `ir.Liveness`（`internal/ir/live.go`）

@@ -157,9 +157,7 @@ _27:
 	lda #.HIBYTE(_38)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #2
-	sta 0+<F_test_var_test_pointer+0
-	ldy 0+<F_test_var_test_pointer+0
+	ldy #2
 	lda _test_var_CONST+0,y
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -172,6 +170,7 @@ _27:
 	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_43)
 	sta <F_unittest_assert_equal+5
+	sty 0+<F_test_var_test_pointer+0
 	jsr _unittest_assert_equal
 	ldy 0+<F_test_var_test_pointer+0
 	lda #2
