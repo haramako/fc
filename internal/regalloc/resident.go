@@ -742,18 +742,48 @@ func bestPair(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, all
 			bestA, bestY, bestX, best = vA, vY, vX, g
 		}
 	}
-	withNil := append([]*ir.Value{nil}, cands...)
+	// 組み合わせは候補数の 3 乗になる (関数全体の領域では候補が 20 を超えて castle のコンパイルが 55 秒になった) ので、
+	// まずレジスタごとに単独の得を見て上位だけを残す (得が無い変数は組にしても得にならない)
+	const keep = 4
+	top := func(reg int) []*ir.Value {
+		type sc struct {
+			v *ir.Value
+			g int
+		}
+		var scs []sc
+		for _, v := range cands {
+			var g int
+			switch reg {
+			case 0:
+				g = gainOf(lmd, cfg, r, inner, lv, v, nil, nil)
+			case 1:
+				g = gainOf(lmd, cfg, r, inner, lv, nil, v, nil)
+			default:
+				g = gainOf(lmd, cfg, r, inner, lv, nil, nil, v)
+			}
+			if g > 0 {
+				scs = append(scs, sc{v, g})
+			}
+		}
+		sort.SliceStable(scs, func(i, j int) bool { return scs[i].g > scs[j].g })
+		res := []*ir.Value{nil}
+		for i := 0; i < len(scs) && i < keep; i++ {
+			res = append(res, scs[i].v)
+		}
+		return res
+	}
+	as, ys := top(0), top(1)
 	xs := []*ir.Value{nil}
 	if allowX {
-		xs = withNil
+		xs = top(2)
 	}
 	// 同点なら Y を優先する (X はポインタの添字に使えない) ので、Y を最も内側で回す
-	for _, a := range withNil {
+	for _, a := range as {
 		for _, x := range xs {
 			if x != nil && x == a {
 				continue
 			}
-			for _, y := range withNil {
+			for _, y := range ys {
 				if y != nil && (y == a || y == x) {
 					continue
 				}

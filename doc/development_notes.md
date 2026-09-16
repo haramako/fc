@@ -122,7 +122,11 @@ go test ./...                                    # 全部 (golden + examples + N
   （符号付きの `lt` は `cmp` でなく `sec; sbc` で A を壊す）。bench は出力（チェックサム）も照合するので、こういう
   壊れ方はそこで捕まる。**ベンチの表だけ grep して出力の行を落とさない**こと、
   (10) `allocateA`（一時変数を A に残す）は「定義の直後に **第 1 入力** として使う」形にしか効かない。IR を作る側
-  （sema / opt）は可換な演算なら直前の一時変数を第 1 入力に置く（`opt.commuteTemp`。これだけで entities / oam が -4%）
+  （sema / opt）は可換な演算なら直前の一時変数を第 1 入力に置く（`opt.commuteTemp`。これだけで entities / oam が -4%）、
+  (11) **コンパイル時間も見る**。常駐の候補の組み合わせ探索（A × Y × X で候補数の 3 乗）は、関数全体を領域にした
+  途端に castle のコンパイルが 1.7 秒 → 55 秒になった（`TestExampleCastle` が 50 秒になっていたのに気づかなかった）。
+  レジスタごとに単独の得で上位 4 つに絞ってから組み合わせる（`bestPair`）ことで 1.8 秒。目安: castle（440 関数、
+  約 1.2 万行）の `fcc compile` は 2 秒以内、`go test ./internal/driver` の castle は 3 秒以内
 - **生成コードのベンチマーク**（2026-09-15〜）: `go test ./bench`。[bench/](../bench/README.md) の 12 本の .fc を emu で走らせ、
   `stdio.bench_start` / `bench_end` で囲んだ区間のサイクル数（`r6502.Cpu.Cycles`。ページクロス・分岐成立込みで決定的）と
   モジュールのセグメントサイズを `bench/results.json` と比べる。出力（チェックサム）の違いはコンパイラのバグ、
