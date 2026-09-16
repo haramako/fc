@@ -178,10 +178,8 @@ _math_rand_table:
 	sbc 0+<F_math_atan+2
 	tay
 	lda _math_atan_table+0,y
-	sta 0+<F_math_atan+3
 	clc
-	lda #128
-	adc 0+<F_math_atan+3
+	adc #128
 	sta 0+<F_math_atan+0
 	rts
 .endproc

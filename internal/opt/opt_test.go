@@ -398,3 +398,27 @@ func TestScaleIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestCommuteTemp(t *testing.T) {
+	tab := ir.NewGlobal("tab", tu.ArrayOf(u8(), 4), "_tab")
+	i, y, d := local("i", u8()), local("y", u8()), local("d", u8())
+	t1, t2, t3 := tmp("t1", u8()), tmp("t2", u8()), tmp("t3", u8())
+	w := local("w", u16())
+	lmd := lambda(
+		&ir.Op{Code: ir.OpIndexPget, Dst: t1, Src: []ir.Operand{tab, i}},
+		&ir.Op{Code: ir.OpAdd, Dst: d, Src: []ir.Operand{y, t1}}, // 入れ替える
+		&ir.Op{Code: ir.OpIndexPget, Dst: t2, Src: []ir.Operand{tab, i}},
+		&ir.Op{Code: ir.OpSub, Dst: d, Src: []ir.Operand{y, t2}}, // sub は可換でない
+		&ir.Op{Code: ir.OpIndexPget, Dst: t3, Src: []ir.Operand{tab, i}},
+		&ir.Op{Code: ir.OpLoad, Dst: y, Src: []ir.Operand{lit(1, u8())}},
+		&ir.Op{Code: ir.OpAnd, Dst: d, Src: []ir.Operand{y, t3}}, // 直前の定義でない
+		&ir.Op{Code: ir.OpIndexPget, Dst: t1, Src: []ir.Operand{tab, i}},
+		&ir.Op{Code: ir.OpAdd, Dst: w, Src: []ir.Operand{w, t1}}, // サイズが違う
+	)
+	commuteTemp(lmd)
+	check(t, lmd,
+		"index_pget t1 = tab, i", "add d = t1, y",
+		"index_pget t2 = tab, i", "sub d = y, t2",
+		"index_pget t3 = tab, i", "load y = #1", "and d = y, t3",
+		"index_pget t1 = tab, i", "add w = w, t1")
+}

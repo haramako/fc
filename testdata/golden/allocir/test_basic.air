@@ -48,7 +48,7 @@
   0009 (:sub {l6 $16} {l1 n} {lit nil 2 #"uint8"})
   0010 (:push_arg #"uint8" {l6 $16})
   0011 (:call {l5 $15} {lit fib :_test_basic_fib #"fn(uint8):uint8"})
-  0012 (:add {l0 $result} {l3 $13} {l5 $15})
+  0012 (:add {l0 $result} {l5 $15} {l3 $13})
   0013 (:return {l0 $result})
  )
 )

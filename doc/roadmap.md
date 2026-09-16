@@ -60,7 +60,9 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       bench には効かず。ついでに符号付き `lt` が A を壊すのに friendly だったバグを修正） ✅ 2026-09-16
 - [x] 配列全体が 256 バイト以内の `&objs[i]`（要素 3 バイト以上）の積を 8 ビットで（`indexLarge`。oam -11%） ✅ 2026-09-16
 - [x] ピープホール: `sta x; ldy x` → `tay`、`ldx x` → `tax`、次の命令が N/Z を立て直すなら `sta x; …; lda x` の lda を消す ✅ 2026-09-16
-- [ ] index_pget / index_pset の結果を演算のオペランドに融合（`lda px,y; adc vx,y`。math16 は 16 ビット値をフレームの一時変数経由で足している）
+- [x] 可換な演算の第 2 入力が直前の一時変数なら入れ替え（`opt.commuteTemp`。allocateA は第 1 入力しか A に置かない。
+      entities / oam -4%、crc8 -3.5%） ✅ 2026-09-16
+- [ ] index_pget / index_pset の結果を演算のオペランドに融合（残るのは `x - tab[i]`、`x < tab[i]` の非可換な形）（`lda px,y; adc vx,y`。math16 は 16 ビット値をフレームの一時変数経由で足している）
 - [ ] 2 バイト変数の上位 / 下位の分割（sieve の 16 ビットのポインタ）
 - [ ] ループの回転で条件が末尾に来た後の `dey; cpy #0; bne`（ラベルが間に入る）を `dey; bne` に（テストの複製）
 - [ ] SSA 化（Braun 方式）+ 定数伝播 / コピー伝播 / DCE。関数の到達解析（tree shaking、v2_idea.md）と同じ基盤。

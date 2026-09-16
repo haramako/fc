@@ -535,7 +535,7 @@
   (var 22 $57 local #"sint8" lt=temp loc=a)
   (var 23 $58 local #"sint8" lt=temp loc=a)
   (var 24 $59 local #"*uint8" lt=temp loc=none unuse)
-  (var 25 $60 local #"uint8" lt=temp loc=static addr=3)
+  (var 25 $60 local #"uint8" lt=temp loc=a)
   (var 26 $61 local #"uint8" lt=temp loc=none unuse)
  )
  (ops
@@ -567,7 +567,7 @@
   0025 (:mul {l22 $57} {l21 $56} {lit nil 16 #"uint8"})
   0026 (:sub {l23 $58} {l22 $57} {l2 x})
   0027 (:index_pget {l25 $60} {g atan_table #"[256]uint8" :_math_atan_table} {l23 $58})
-  0028 (:add {l0 $result} {lit nil 128 #"uint8"} {l25 $60})
+  0028 (:add {l0 $result} {l25 $60} {lit nil 128 #"uint8"})
   0029 (:return {l0 $result})
  )
 )

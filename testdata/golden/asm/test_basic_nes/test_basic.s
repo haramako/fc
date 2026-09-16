@@ -110,8 +110,7 @@ _6:
 	lda <0+S+3,x
 	sta 0+<L+0
 	clc
-	lda 0+<S+2,x
-	adc 0+<L+0
+	adc 0+<S+2,x
 	sta 0+<S+0,x
 	lda FC_SP
 	sec
