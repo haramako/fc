@@ -13,5 +13,6 @@ __MODULE_TEST_OP__ = 1
 	.import _test_op_gw
 	.import _test_op_test_pointer_op
 	.import _main
+	.import _main__direct
 _test_op_main = _main
 .endif

@@ -65,7 +65,6 @@ _2:
 	jsr _stdio_wait_vsync
 	lda #0
 	sta 0+_nes_PPU_SCROLL
-	lda #0
 	sta 0+_nes_PPU_SCROLL
 	lda #200
 	sta 0+_nes_PPU_CTRL1

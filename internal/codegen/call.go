@@ -35,6 +35,9 @@ type pendingCall struct {
 	argOff int // ckStatic: 次の引数バイトのフレーム内オフセット
 }
 
+// directSym は Entry 関数をプロローグ (スタックからの引数コピー) を飛ばして直接呼ぶときの入口シンボル。
+func directSym(sym string) string { return sym + "__direct" }
+
 // resolveCall は push_result (添字 i) に対応する call を探して、呼び出しの種類を決める。
 func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
 	depth := 0
@@ -65,7 +68,8 @@ func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
 		if callee, ok := l.Lambdas[v.Symbol]; ok {
 			pc.callee = callee
 			switch {
-			case callee.ABI == ir.ABIStatic && !callee.Entry:
+			case callee.ABI == ir.ABIStatic:
+				// Entry でも呼び先が分かっていればフレームに直接書き、プロローグの後ろ (__direct) から入る
 				pc.kind = ckStatic
 				pc.argOff = callee.Type.Base.Size
 			case callee.ABI == ir.ABIFastcall:

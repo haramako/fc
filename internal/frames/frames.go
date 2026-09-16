@@ -23,6 +23,7 @@ type Graph struct {
 	index   map[*ir.Lambda]int    // Lambdas の添字
 	callees [][]int               // 直接呼び出しの辺 (Lambdas の添字)
 	depth   []int                 // 根からの最長距離 (static の部分グラフ上)
+	cycles  [][]int               // 再帰の連鎖 (閉路を含む強連結成分。Lambdas の添字)
 }
 
 // Analyze は各関数の ABI を決める。
@@ -152,7 +153,8 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	}
 
 	// 再帰 (閉路) の検出: Tarjan の SCC
-	inCycle := tarjanCycles(n, g.callees)
+	inCycle, cycles := tarjanCycles(n, g.callees)
+	g.cycles = cycles
 	for i, lmd := range g.Lambdas {
 		switch {
 		case lmd.Options.Has("abi") && optText(lmd.Options, "abi") == "stack":
@@ -241,8 +243,8 @@ func (g *Graph) reachable(i int) []int {
 	return r
 }
 
-// tarjanCycles は閉路に属する節 (自己ループを含む) を返す。
-func tarjanCycles(n int, edges [][]int) []bool {
+// tarjanCycles は閉路に属する節 (自己ループを含む) と、閉路を含む強連結成分の一覧を返す。
+func tarjanCycles(n int, edges [][]int) ([]bool, [][]int) {
 	index := make([]int, n)
 	low := make([]int, n)
 	onStack := make([]bool, n)
@@ -252,6 +254,7 @@ func tarjanCycles(n int, edges [][]int) []bool {
 	var stack []int
 	counter := 0
 	inCycle := make([]bool, n)
+	var cycles [][]int
 	var strong func(v int)
 	strong = func(v int) {
 		index[v] = counter
@@ -288,6 +291,7 @@ func tarjanCycles(n int, edges [][]int) []bool {
 				for _, w := range scc {
 					inCycle[w] = true
 				}
+				cycles = append(cycles, scc)
 			}
 		}
 	}
@@ -296,13 +300,14 @@ func tarjanCycles(n int, edges [][]int) []bool {
 			strong(v)
 		}
 	}
-	return inCycle
+	return inCycle, cycles
 }
 
 // Plan は配置の結果。
 type Plan struct {
 	ZpUsed, RamUsed int
 	Inc             []string // _frames.inc の行
+	Report          []string // 配置の要約 (fcc build -d で表示)
 }
 
 type placed struct {
@@ -434,7 +439,43 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 	}
 	inc = append(inc, ".endif", "")
 	plan.Inc = inc
+	plan.Report = g.report(plan, len(zp), len(ram))
 	return plan, nil
+}
+
+// report は配置の要約: 種類ごとの数、領域の使用量、stack に残った理由 (再帰の連鎖と options)。
+func (g *Graph) report(plan *Plan, nZp, nRam int) []string {
+	var static, entry, stack, empty int
+	var forced []string
+	for _, lmd := range g.Lambdas {
+		switch {
+		case lmd.ABI == ir.ABIStatic && lmd.FrameSize == 0:
+			empty++
+		case lmd.ABI == ir.ABIStatic && lmd.Entry:
+			entry++
+		case lmd.ABI == ir.ABIStatic:
+			static++
+		default:
+			stack++
+			if lmd.Options.Has("abi") {
+				forced = append(forced, lmd.Id)
+			}
+		}
+	}
+	r := []string{fmt.Sprintf("frames: static %d (entry %d, no frame %d), stack %d; FC_SZP %d bytes (%d functions), FC_SRAM %d bytes (%d functions)",
+		static+entry+empty, entry, empty, stack, plan.ZpUsed, nZp, plan.RamUsed, nRam)}
+	for _, c := range g.cycles {
+		names := make([]string, 0, len(c))
+		for _, i := range c {
+			names = append(names, g.Lambdas[i].Id)
+		}
+		sort.Strings(names)
+		r = append(r, fmt.Sprintf("  recursive (stack): %s", strings.Join(names, " ")))
+	}
+	if len(forced) > 0 {
+		r = append(r, fmt.Sprintf("  options(abi: \"stack\"): %s", strings.Join(forced, " ")))
+	}
+	return r
 }
 
 // Summary は配置の要約 (デバッグ表示用)。

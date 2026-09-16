@@ -68,6 +68,7 @@ type Result struct {
 	Cycles    int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
 	StaticZp  int            // 静的フレームの使用量 (ゼロページ側 FC_SZP / RAM 側 FC_SRAM)
 	StaticRam int
+	Frames    []string // 静的フレームの配置の要約 (fcc build -d で表示)
 }
 
 type Compiler struct {
@@ -188,6 +189,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		return nil, err
 	}
 	result.StaticZp, result.StaticRam = plan.ZpUsed, plan.RamUsed
+	result.Frames = plan.Report
 	for _, mod := range prog.Modules.List() {
 		if mod.FromFcm {
 			continue

@@ -17,9 +17,7 @@ _test_cast_a1:
 .proc _test_cast_test_cast
 	lda #255
 	sta 0+<F_test_cast_test_cast+0
-	lda #255
 	sta 1+<F_test_cast_test_cast+0
-	lda 0+<F_test_cast_test_cast+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -96,11 +94,13 @@ _15:
 		.byte 97,115,32,117,105,110,116,42,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_cast"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_18)
 	sta <F_stdio_print+0

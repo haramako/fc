@@ -45,9 +45,7 @@ _test_memory_buf2: .res 512
 	sta (F_test_memory_test_copy+0),y
 	lda #1
 	sta <reg+0
-	lda #1
 	sta <reg+1
-	lda <reg+0
 	clc
 	adc #.LOBYTE(_test_memory_buf1)
 	sta 0+<F_test_memory_test_copy+0
@@ -98,9 +96,7 @@ _test_memory_buf2: .res 512
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_9)
 	sta <F_unittest_assert_equal+4
@@ -161,9 +157,7 @@ _test_memory_buf2: .res 512
 	jsr _unittest_assert_equal
 	lda #1
 	sta <reg+0
-	lda #1
 	sta <reg+1
-	lda <reg+0
 	clc
 	adc #.LOBYTE(_test_memory_buf2)
 	sta 0+<F_test_memory_test_copy+0
@@ -225,9 +219,7 @@ _test_memory_buf2: .res 512
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_33)
 	sta <F_unittest_assert_equal+4
@@ -333,9 +325,7 @@ _45:
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_50)
 	sta <F_unittest_assert_equal+4
@@ -347,9 +337,7 @@ _45:
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_55)
 	sta <F_unittest_assert_equal+4
@@ -398,9 +386,7 @@ _45:
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_70)
 	sta <F_unittest_assert_equal+4
@@ -420,11 +406,13 @@ _70:
 		.byte 91,55,93,61,48,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_memory"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_73)
 	sta <F_stdio_print+0

@@ -236,15 +236,10 @@ _32:
 	lda #0
 	lda #255
 	sta 0+<F_test_basic_test_misc+0
-	lda #255
 	sta 1+<F_test_basic_test_misc+0
-	lda 0+<F_test_basic_test_misc+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_basic_test_misc+0
 	sta <F_unittest_assert_equal+1
-	lda #255
 	sta <F_unittest_assert_equal+2
-	lda #255
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_47)
 	sta <F_unittest_assert_equal+4
@@ -335,11 +330,13 @@ _63:
 		.byte 97,100,100,95,102,97,115,116,99,97,108,108,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_basic"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_66)
 	sta <F_stdio_print+0

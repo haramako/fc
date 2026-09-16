@@ -102,6 +102,11 @@ func run() int {
 		return 1
 	}
 	printWarnings(res.Warnings)
+	if *debugFlag {
+		for _, line := range res.Frames {
+			fmt.Fprintln(os.Stderr, line)
+		}
+	}
 	if *debugFlag && len(res.FarCalls) > 0 {
 		// far call (別バンクへの呼び出し) の一覧: 熱い経路が far になっていないかの確認用 (doc/v2_farcall.md §4)
 		fmt.Fprintf(os.Stderr, "far calls: %d\n", len(res.FarCalls))

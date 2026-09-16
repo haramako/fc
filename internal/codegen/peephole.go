@@ -122,12 +122,12 @@ func peepholeA(lines []string) []string {
 		trackable := kind == opLocal
 		switch mnem {
 		case "lda":
-			if trackable && s.a[arg] && s.flagsFromA {
+			if (trackable || kind == opImmediate) && s.a[arg] && s.flagsFromA {
 				continue // A は既にこの値で、フラグもそれを反映している
 			}
 			s.a = aState{}
-			if trackable {
-				s.a[arg] = true
+			if trackable || kind == opImmediate {
+				s.a[arg] = true // 即値は変わらないので無効化は要らない
 			}
 			s.flagsFromA = true
 		case "ldy":

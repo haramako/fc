@@ -41,16 +41,12 @@ _test_stat_I10 = 10
 	jsr _unittest_assert_equal
 	lda #0
 	sta 0+<F_test_stat_test_if+0
-	lda #0
 	sta 1+<F_test_stat_test_if+0
-	lda 0+<F_test_stat_test_if+0
 	bne @1
-	lda 1+<F_test_stat_test_if+0
 	beq @end_15
 @1:
 	lda #0
 	sta <F_unittest_assert_equal+0
-	lda #0
 	sta <F_unittest_assert_equal+1
 	lda #1
 	sta <F_unittest_assert_equal+2
@@ -72,7 +68,6 @@ _test_stat_I10 = 10
 	bne @end_21
 	lda #0
 	sta <F_unittest_assert_equal+0
-	lda #0
 	sta <F_unittest_assert_equal+1
 	lda #1
 	sta <F_unittest_assert_equal+2
@@ -94,7 +89,6 @@ _test_stat_I10 = 10
 	bne @then_34
 	lda #0
 	sta <F_unittest_assert_equal+0
-	lda #0
 	sta <F_unittest_assert_equal+1
 	lda #1
 	sta <F_unittest_assert_equal+2
@@ -210,9 +204,7 @@ _63:
 .proc _test_stat_test_for
 	lda #0
 	sta 0+<F_test_stat_test_for+0
-	lda #0
 	sta 0+<F_test_stat_test_for+1
-	lda #0
 	sta 0+<F_test_stat_test_for+0
 	jmp @begin_65
 @body_67:
@@ -281,7 +273,6 @@ _80:
 .proc _test_stat_test_switch
 	lda #0
 	sta 0+<F_test_stat_test_switch+1
-	lda #0
 	sta 0+<F_test_stat_test_switch+0
 	jmp @begin_82
 @body_97:
@@ -338,11 +329,13 @@ _102:
 		.byte 115,119,105,116,99,104,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_stat"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_105)
 	sta <F_stdio_print+0

@@ -7,5 +7,6 @@ _test_stat_I10 = 10
 	.import _test_stat_test_for
 	.import _test_stat_test_switch
 	.import _main
+	.import _main__direct
 _test_stat_main = _main
 .endif

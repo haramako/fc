@@ -6,5 +6,6 @@ __MODULE_TEST_MATH__ = 1
 	.import _test_math_test_cos
 	.import _test_math_test_atan
 	.import _main
+	.import _main__direct
 _test_math_main = _main
 .endif

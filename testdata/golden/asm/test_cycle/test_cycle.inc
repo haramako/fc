@@ -5,5 +5,6 @@ __MODULE_TEST_CYCLE__ = 1
 	.import _test_cycle_cycle_var
 	.import _test_cycle_test_cycle_use
 	.import _main
+	.import _main__direct
 _test_cycle_main = _main
 .endif

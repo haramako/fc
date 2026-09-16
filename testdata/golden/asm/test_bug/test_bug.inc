@@ -5,5 +5,6 @@ __MODULE_TEST_BUG__ = 1
 	.import _test_bug_hoge
 	.import _test_bug_test_pointer_access
 	.import _main
+	.import _main__direct
 _test_bug_main = _main
 .endif

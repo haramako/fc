@@ -36,11 +36,13 @@ _3:
 		.byte 99,121,99,108,101,32,117,115,101,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_cycle"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_6)
 	sta <F_stdio_print+0

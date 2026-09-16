@@ -153,6 +153,10 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			if lmd.Extern {
 				continue
 			}
+			if lmd.Entry {
+				inc.push(fmt.Sprintf("\t.import %s", directSym(mangle(d.Sym))))
+				asm.push(fmt.Sprintf("\t.export %s", directSym(mangle(d.Sym))))
+			}
 			asm.push(anyList(l.CompileLambda(d.Sym, lmd)))
 		default:
 			panic(fmt.Sprintf("invalid def kind %s", d.Kind))
@@ -255,13 +259,16 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	} else {
 		r.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
 	}
-	r.push(fmt.Sprintf(".proc %s", mangle(sym)))
-
 	if lmd.Entry {
-		// アドレスを取られた関数: 呼び出し側はスタック (X の指す位置) に引数を積むので、自分のフレームに写す
+		// アドレスを取られた関数: 関数ポインタ経由の呼び出し側はスタック (X の指す位置) に引数を積むので、
+		// 自分のフレームに写してから本体 (__direct。呼び先が分かっている呼び出しはここから入る) へ
+		r.push(mangle(sym) + ":")
 		for k := lmd.Type.Base.Size; k < lmd.Type.Base.Size+argBytes(lmd); k++ {
 			r.push(fmt.Sprintf("lda <S+%d,x", k), fmt.Sprintf("sta %s", staticAddr(lmd, k)))
 		}
+		r.push(fmt.Sprintf(".proc %s", directSym(mangle(sym))))
+	} else {
+		r.push(fmt.Sprintf(".proc %s", mangle(sym)))
 	}
 
 	pushArgSize := 0
@@ -384,11 +391,15 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			switch pc.kind {
 			case ckStatic:
 				// 引数は呼び先のフレームに書いてある。static / entry の関数からは jsr、stack の関数からは X を進めて呼ぶ
+				target := sym
+				if pc.callee.Entry {
+					target = directSym(sym) // プロローグ (スタックからのコピー) を飛ばす
+				}
 				if op.Far {
-					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
+					r.push(l.farCallSetup(target))
 					r.push(l.jsrOrCall(lmd, "farcall", lmd.FrameSize))
 				} else {
-					r.push(l.jsrOrCall(lmd, sym, lmd.FrameSize))
+					r.push(l.jsrOrCall(lmd, target, lmd.FrameSize))
 				}
 				if op.Dst != nil {
 					for i := 0; i < ir.ValType(op.Dst).Size; i++ {

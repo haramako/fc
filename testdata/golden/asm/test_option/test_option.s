@@ -50,11 +50,13 @@ _10:
 		.byte 97,115,109,95,115,121,109,98,111,108,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_option"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_13)
 	sta <F_stdio_print+0

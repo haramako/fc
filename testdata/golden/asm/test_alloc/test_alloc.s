@@ -24,9 +24,7 @@ __MODULE_TEST_ALLOC__ = 1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_4)
 	sta <F_unittest_assert_equal+4
@@ -125,11 +123,13 @@ _26:
 		.byte 97,100,100,47,60,61,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_alloc"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_29)
 	sta <F_stdio_print+0

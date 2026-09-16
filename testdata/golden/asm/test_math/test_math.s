@@ -30,7 +30,6 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_4)
 	sta <F_unittest_assert_equal+4
@@ -108,7 +107,6 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_19)
 	sta <F_unittest_assert_equal+4
@@ -134,7 +132,6 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_24)
 	sta <F_unittest_assert_equal+4
@@ -212,7 +209,6 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_39)
 	sta <F_unittest_assert_equal+4
@@ -288,7 +284,6 @@ _39:
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_49)
 	sta <F_unittest_assert_equal+4
@@ -314,7 +309,6 @@ _39:
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_54)
 	sta <F_unittest_assert_equal+4
@@ -392,7 +386,6 @@ _39:
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_69)
 	sta <F_unittest_assert_equal+4
@@ -418,7 +411,6 @@ _39:
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_74)
 	sta <F_unittest_assert_equal+4
@@ -485,9 +477,7 @@ _79:
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_83)
 	sta <F_unittest_assert_equal+4
@@ -496,7 +486,6 @@ _79:
 	jsr _unittest_assert_equal
 	lda #1
 	sta <F_math_atan+1
-	lda #1
 	sta <F_math_atan+2
 	jsr _math_atan
 	lda <F_math_atan+0
@@ -572,7 +561,6 @@ _79:
 	jsr _unittest_assert_equal
 	lda #255
 	sta <F_math_atan+1
-	lda #255
 	sta <F_math_atan+2
 	jsr _math_atan
 	lda <F_math_atan+0
@@ -646,11 +634,13 @@ _111:
 		.byte 97,116,97,110,40,50,50,52,41,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_math"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_114)
 	sta <F_stdio_print+0

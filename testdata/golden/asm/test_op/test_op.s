@@ -150,11 +150,8 @@ _35:
 	sta 0+<F_test_op_test_int_op+4
 	lda #0
 	sta <F_unittest_assert_equal+0
-	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_39)
 	sta <F_unittest_assert_equal+4
@@ -1021,7 +1018,6 @@ _157:
 	sta <F_unittest_assert_equal+1
 	lda #255
 	sta <F_unittest_assert_equal+2
-	lda #255
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_217)
 	sta <F_unittest_assert_equal+4
@@ -1067,7 +1063,6 @@ _157:
 	sta <F_unittest_assert_equal+1
 	lda #255
 	sta <F_unittest_assert_equal+2
-	lda #255
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_227)
 	sta <F_unittest_assert_equal+4
@@ -2289,7 +2284,6 @@ _452:
 	sta 0+<F_test_op_test_logical_op+0
 	lda #0
 	sta 0+<F_test_op_test_logical_op+1
-	lda #0
 	sta 0+<F_test_op_test_logical_op+2
 	lda 0+<F_test_op_test_logical_op+0
 	beq @end_455
@@ -3078,11 +3072,13 @@ _590:
 		.byte 42,112,105,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_op"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_593)
 	sta <F_stdio_print+0

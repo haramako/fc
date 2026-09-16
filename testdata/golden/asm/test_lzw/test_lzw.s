@@ -19,7 +19,6 @@ __MODULE_TEST_LZW__ = 1
 	sta 1+_lzw_addr
 	lda #0
 	sta 0+_lzw_bpos
-	lda #0
 	sta 0+<F_test_lzw_test_read_bit+0
 	jmp @begin_4
 @body_6:
@@ -79,7 +78,6 @@ _12:
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_20)
 	sta <F_unittest_assert_equal+4
@@ -99,7 +97,6 @@ _12:
 	sta <F_unittest_assert_equal+1
 	lda #255
 	sta <F_unittest_assert_equal+2
-	lda #255
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_24)
 	sta <F_unittest_assert_equal+4
@@ -119,7 +116,6 @@ _12:
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_28)
 	sta <F_unittest_assert_equal+4
@@ -304,9 +300,7 @@ _test_lzw_buf: .res 256
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda #0
 	sta <F_unittest_assert_equal+2
-	lda #0
 	sta <F_unittest_assert_equal+3
 	lda #.LOBYTE(_62)
 	sta <F_unittest_assert_equal+4
@@ -325,11 +319,13 @@ _62:
 		.byte 99,111,109,112,97,114,101,0
 .endproc
 	.export _main
+	.export _main__direct
 	;;;=============================
 	;;; function _main
 	;;;=============================
 .segment "test_lzw"
-.proc _main
+_main:
+.proc _main__direct
 	jsr _stdio_init
 	lda #.LOBYTE(_65)
 	sta <F_stdio_print+0
