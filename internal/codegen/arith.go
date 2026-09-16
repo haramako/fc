@@ -205,14 +205,8 @@ func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
 		return nil, false
 	}
 	for _, v := range []ir.Operand{op.Dst, op.In(0)} {
-		if ir.ValKind(v) == ir.KindLiteral {
+		if ir.ValKind(v) == ir.KindLiteral || l.inA(v) || ir.ValLocation(v) == ir.LocCond {
 			return nil, false
-		}
-		if ir.ValKind(v) == ir.KindLocal {
-			switch ir.ValLocation(v) {
-			case ir.LocA, ir.LocCond:
-				return nil, false
-			}
 		}
 	}
 	for i := 0; i < size; i++ {
@@ -251,11 +245,8 @@ func (l *Llc) shiftInMemory(op *ir.Op, n int, signed bool) ([]any, bool) {
 	if size > 2 || !isValueOrCasted(op.Dst) || ir.ValKind(op.Dst) == ir.KindLiteral {
 		return nil, false
 	}
-	if ir.ValKind(op.Dst) == ir.KindLocal {
-		switch ir.ValLocation(op.Dst) {
-		case ir.LocA, ir.LocCond:
-			return nil, false
-		}
+	if l.inA(op.Dst) || ir.ValLocation(op.Dst) == ir.LocCond {
+		return nil, false
 	}
 	left := op.Code == ir.OpShiftLeft
 	if size == 1 && !l.sameByte(op.Dst, op.In(0), 0) {

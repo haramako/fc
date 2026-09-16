@@ -43,10 +43,16 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] Entry 関数の直接呼び出しはプロローグを飛ばす（`__direct`） ✅
 - [ ] 関数ポインタのローカル変数・struct フィールド経由の呼び出しはまだ型ベース（同じ型の Entry 全部）
 
-### 第 4 弾（B の後）
+### 第 4 弾（レジスタ割付。[v2_regalloc.md](v2_regalloc.md)）
 
-- [ ] SSA 化（Braun 方式）+ 定数伝播 / コピー伝播 / DCE、**A / X / Y を跨ぐレジスタ割付**（crc を A に置いたまま
-      `asl; bcc; eor` を回す Oscar64 の水準。残る 2〜6 倍差の本体）。関数の到達解析（tree shaking、v2_idea.md）と同じ基盤
+- [x] 最上位 / 最下位ビットの検査 + 両枝の 1 ビットシフトを C フラグ分岐に（`carryBranch`、`if_carry`） ✅ 2026-09-16
+- [x] `dec x` 直後の `if x` のフラグ再利用、A にある添字の `tay` ✅
+- [x] **最内ループの 1 バイト変数を A に常駐**（`regalloc.AllocateResident`。crc8 が `asl a; bcc; eor #29` に。
+      castle では 28 のループが対象になった） ✅ 2026-09-16
+- [ ] Y の常駐: 添字変数を Y に置いたまま `iny` で回す（`lda a,y` / `sta (p),y` の `ldy i` が消える。sieve / oam / SoA のループ）
+- [ ] 外側のループの常駐（内側で退避 / 復帰）、2 バイト変数の上位 / 下位の分割
+- [ ] ループの回転で条件が末尾に来た後の `dec i; lda i; bne`（ラベルが間に入る）を `dec i; bne` に（テストの複製）
+- [ ] SSA 化（Braun 方式）+ 定数伝播 / コピー伝播 / DCE。関数の到達解析（tree shaking、v2_idea.md）と同じ基盤
 - [ ] 書き換えルールの DSL（Go コンパイラの rulegen の縮小版）— パスが 10 個を超えて手書きの照合が辛くなってから
 - [ ] デッドストア除去、live range の精度（穴あき区間の共有）
 - [ ] マクロベンチ: `examples/castle` を `internal/nes` で走らせて 1 フレームあたりのサイクル数

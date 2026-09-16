@@ -59,6 +59,7 @@ type Value struct {
 	LocalType LocalType
 
 	// 以下はレジスタ割付で設定される
+	Home         *Value // Location == LocA でループ内に常駐する一時変数のメモリ側 (退避先。regalloc.AllocateResident)
 	Location     Location
 	Address      int // Location が LocFrame / LocReg / LocFastcallReg のとき有効
 	Unuse        bool

@@ -28,7 +28,7 @@ func anyIfy(v []any) []any { return v }
 func (l *Llc) loadYIdx(idx, ptr ir.Operand) []any {
 	r := []any{}
 	if ir.ValType(ptr).Base.Size == 1 {
-		if inA(idx) {
+		if l.inA(idx) {
 			r = append(r, "tay") // 添字が A にある
 		} else {
 			r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
@@ -121,7 +121,7 @@ func (l *Llc) loadA(v ir.Operand, n int) any {
 			panic("invalid cond_reg")
 		}
 	}
-	if isValueOrCasted(v) && ir.ValLocation(v) == ir.LocA {
+	if l.inA(v) {
 		if n != 0 {
 			return "lda #0"
 		}
@@ -155,7 +155,7 @@ func isValueOrCasted(v ir.Operand) bool {
 
 // storeA は A レジスタからのストア (置き場所が A の値なら何も出さない)。
 func (l *Llc) storeA(v ir.Operand, n int) any {
-	if uv, ok := v.(*ir.Value); ok && uv.Location == ir.LocA {
+	if l.inA(v) {
 		if n != 0 {
 			panic("store_a with n != 0")
 		}
@@ -214,15 +214,19 @@ func (l *Llc) pointerWrite(p ir.Operand, off int, val ir.Operand, size int) []an
 	return r
 }
 
-// inA は値が A レジスタに置かれているか。
-func inA(v ir.Operand) bool {
-	return isValueOrCasted(v) && ir.ValKind(v) == ir.KindLocal && ir.ValLocation(v) == ir.LocA
+// inA は値がいま A レジスタにあるか (LocA。ただしループ内の常駐変数を退避中 (resMem) ならメモリ側 Home にある)。
+func (l *Llc) inA(v ir.Operand) bool {
+	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocA {
+		return false
+	}
+	uv := ir.UnderlyingValue(v)
+	return !(l.resMem && uv.Home != nil && uv == l.res)
 }
 
 // keepA は書く値 val が A にあり、その前に出す準備 pre (ポインタの reg へのコピーなど) が A を壊すとき、
 // A を reg+2 に退避して pre の後で戻す (pre が空なら pre のまま)。
 func (l *Llc) keepA(val ir.Operand, pre []any) []any {
-	if len(pre) == 0 || !inA(val) {
+	if len(pre) == 0 || !l.inA(val) {
 		return pre
 	}
 	r := []any{"sta <reg+2"}
@@ -233,14 +237,8 @@ func (l *Llc) keepA(val ir.Operand, pre []any) []any {
 // sameByte は 2 つのメモリ上のオペランドの i バイト目が同じ場所か (アドレス表記が同じ)。A / 即値なら false。
 func (l *Llc) sameByte(a, b ir.Operand, i int) bool {
 	for _, v := range []ir.Operand{a, b} {
-		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral {
+		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || ir.ValLocation(v) == ir.LocCond {
 			return false
-		}
-		if ir.ValKind(v) == ir.KindLocal {
-			switch ir.ValLocation(v) {
-			case ir.LocA, ir.LocCond:
-				return false
-			}
 		}
 	}
 	return l.byte(a, i) == l.byte(b, i)
@@ -275,6 +273,11 @@ func (l *Llc) toAsm(v ir.Operand) string {
 				return fmt.Sprintf("<FC_FASTCALL_REG+%d", ir.ValAddress(v))
 			case ir.LocStatic:
 				return staticAddr(l.curLambda, ir.ValAddress(v))
+			case ir.LocA:
+				if h := ir.UnderlyingValue(v).Home; h != nil && l.resMem {
+					return l.toAsm(h) // 常駐変数の退避中: メモリ側
+				}
+				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
 			default:
 				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
 			}

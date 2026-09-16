@@ -102,6 +102,11 @@ type Op struct {
 	Text  string          // OpAsm のアセンブラ行
 	Far   bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
 	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
+
+	// ループ内の A 常駐 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md)
+	Resident *Value // この命令で A に置いたままにしている変数 (LocA、Home がメモリ側)。nil なら無し
+	ResIn    bool   // Resident が命令の入口で生きている (A に値がある)
+	ResOut   bool   // Resident が命令の出口で生きている
 }
 
 // In は i 番目の入力 (無ければ nil)。
@@ -144,6 +149,9 @@ func (op *Op) positional() []any {
 		if op.Far {
 			r = append(r, "far")
 		}
+	}
+	if op.Resident != nil {
+		r = append(r, "a="+op.Resident.Name)
 	}
 	return r
 }

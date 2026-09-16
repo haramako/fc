@@ -34,18 +34,16 @@ __MODULE_MEM__ = 1
 .segment "mem"
 .proc _mem_strcpy
 	lda #0
-	sta 0+<F_mem_strcpy+5
-@then_11:
-	ldy 0+<F_mem_strcpy+5
-	lda (F_mem_strcpy+3),y
 	sta 0+<F_mem_strcpy+6
+@then_11:
+	ldy 0+<F_mem_strcpy+6
+	lda (F_mem_strcpy+3),y
 	sta (F_mem_strcpy+1),y
-	lda 0+<F_mem_strcpy+6
 	bne @end_19
-	lda 0+<F_mem_strcpy+5
+	lda 0+<F_mem_strcpy+6
 	sta 0+<F_mem_strcpy+0
 	rts
 @end_19:
-	inc 0+<F_mem_strcpy+5
+	inc 0+<F_mem_strcpy+6
 	jmp @then_11
 .endproc

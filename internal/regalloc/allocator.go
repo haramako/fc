@@ -149,7 +149,15 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 		v.Location = frameLoc
 		frameSize += v.Type.Size
 	}
+	homes := residentHomes(lmd)
 	for _, v := range lmd.Vars {
+		if v.Location == ir.LocA && v.Home != nil {
+			continue // ループ内で A に常駐 (AllocateResident が決めた)
+		}
+		if homes[v] {
+			toFrame(v) // 常駐変数の退避先。ループの中では別の名前 (vA) で使うので live range が無くても場所が要る
+			continue
+		}
 		beyondCall := false
 		if v.LiveRange != nil {
 			for i := v.LiveRange.Min + 1; i <= v.LiveRange.Max-1; i++ {
@@ -255,10 +263,15 @@ func allocateStatic(lmd *ir.Lambda) {
 			place(v)
 		}
 	}
+	homes := residentHomes(lmd)
 	var packVars []*allocEntry
 	for _, v := range lmd.Vars {
 		switch {
+		case v.Location == ir.LocA && v.Home != nil:
+			// ループ内で A に常駐 (AllocateResident が決めた)。退避先は Home
 		case v.LocalType == ir.LTResult || v.LocalType == ir.LTArg:
+		case homes[v]:
+			place(v) // 常駐変数の退避先 (ループの中では vA の名前で使うので live range が途切れる。専用の場所を与える)
 		case refered[v] || (v.Kind == ir.KindLocal && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct)):
 			place(v) // ポインタで触られうるので他と共有しない
 		case v.LiveRange != nil:
@@ -284,6 +297,17 @@ func allocateStatic(lmd *ir.Lambda) {
 	}
 	lmd.FrameSize = frameSize + used
 	lmd.ZpUsed = 0
+}
+
+// residentHomes はループ内で A に常駐する変数の退避先 (Home) の集合。
+func residentHomes(lmd *ir.Lambda) map[*ir.Value]bool {
+	r := map[*ir.Value]bool{}
+	for _, v := range lmd.Vars {
+		if v.Location == ir.LocA && v.Home != nil {
+			r[v.Home] = true
+		}
+	}
+	return r
 }
 
 // bytePacker はレジスタ領域へのバイト単位の詰め込み。バイトごとに、そこを使っている変数の live range を持つ。
@@ -330,6 +354,9 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			op := lmd.Ops[v.LiveRange.Min]
 			if !isSameValue(op.Dst, v) {
 				continue
+			}
+			if op.ResOut {
+				continue // ループ内の常駐変数がこの命令の後も A を塞いでいる
 			}
 			// 結果を A に残す命令 (codegen が storeA で書く) であること
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,

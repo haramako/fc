@@ -29,6 +29,11 @@ type Llc struct {
 	zero          *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
 	types         *types.Universe
 	Lambdas       map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
+
+	// ループ内の A 常駐 (doc/v2_regalloc.md): 処理中の命令で A を占有している変数と、その扱い
+	res    *ir.Value // op.Resident
+	resMem bool      // 退避中: res をメモリ (Home) として参照する
+	aHeld  bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
@@ -204,6 +209,9 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 	l.curLambda = lmd
 	l.curOp = nil
 	opt.Optimize(lmd, l.OptimizeLevel, l.types)
+	if l.OptimizeLevel > 0 {
+		regalloc.AllocateResident(lmd)
+	}
 	l.allocRegister(lmd)
 }
 
@@ -291,6 +299,22 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		}
 		r.push(fmt.Sprintf("; %04d: %s", opNo, cm))
 
+		// A 常駐: この命令の扱い (friendly / A を使わない / 退避)
+		l.res, l.resMem, l.aHeld = op.Resident, false, false
+		restoreA := false
+		if op.Resident != nil {
+			switch class, _ := regalloc.ResidentClass(lmd, opNo, op.Resident, op.ResOut); class {
+			case regalloc.ResClobber:
+				if op.ResIn {
+					r.push("sta " + l.byte(op.Resident.Home, 0))
+				}
+				l.resMem = true
+				restoreA = op.ResOut
+			case regalloc.ResFree:
+				l.aHeld = true
+			}
+		}
+
 		switch op.Code {
 
 		case ir.OpLabel:
@@ -322,6 +346,14 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(fmt.Sprintf("%s %s", asmOp, op.Label))
 			} else if l.flagsFromIncDec(prevOp, op.In(0)) {
 				// 直前の inc / dec が Z を残している (`dec x; bne L`)
+				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
+			} else if l.inA(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
+				// A に常駐している値: フラグが A を反映しているとは限らない (直前が A の演算ならピープホールが cmp を消す)
+				r.push("cmp #0")
+				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
+			} else if l.aHeld && ir.ValType(op.In(0)).Size == 1 {
+				// A は常駐変数で塞がっている: Y で検査する
+				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if onTrue {
 				// 値のどれかのバイトが 0 でなければ飛ぶ
@@ -469,6 +501,15 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpLoad:
+			if l.aHeld {
+				// A は常駐変数で塞がっている: Y で写す
+				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+					if !l.sameByte(op.Dst, op.In(0), i) {
+						r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), i)), fmt.Sprintf("sty %s", l.byte(op.Dst, i)))
+					}
+				}
+				break
+			}
 			r.push(l.load(op.Dst, op.In(0)))
 
 		case ir.OpSignExtension:
@@ -525,12 +566,14 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					// サイズが1
 					r.push(l.loadA(op.In(0), 0))
 					for k := 0; k < n; k++ {
-						if signed {
-							r.push("cmp #128")
-						} else {
-							r.push("clc")
+						switch {
+						case signed && op.Code == ir.OpShiftRight:
+							r.push("cmp #128", "ror a") // 算術シフト (符号を C に立ててから回す)
+						case op.Code == ir.OpShiftLeft:
+							r.push("asl a")
+						default:
+							r.push("lsr a")
 						}
-						r.push(fmt.Sprintf("%s a", rotate))
 					}
 					r.push(l.storeA(op.Dst, 0))
 				} else {
@@ -594,6 +637,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if ir.ValType(op.Dst).Kind != types.Int {
 				panic(&diag.Error{Msg: fmt.Sprintf("cannot negate non-integer type %s", ir.ValType(op.Dst))})
 			}
+			if l.inA(op.In(0)) && ir.ValType(op.Dst).Size == 1 {
+				// A にある値の 2 の補数
+				r.push("eor #255", "clc", "adc #1", l.storeA(op.Dst, 0))
+				break
+			}
 			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 				if i == 0 {
 					r.push("sec")
@@ -606,6 +654,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpEq:
+			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
+				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
+				break
+			}
 			labels := l.newLabels(2)
 			falseLabel, endLabel := labels[0], labels[1]
 			size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
@@ -637,6 +689,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			//   符号付き: 減算結果の符号 (V でオーバーフローを補正) = N セット ⇔ a < b
 			// どちらか一方でも符号付きなら符号付き比較 (v1 は左辺しか見ておらず、多バイトや
 			// オーバーフローのある符号付き比較も壊れていた。2026-09-14 に書き直し)
+			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
+				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
+				break
+			}
 			labels := l.newLabels(3)
 			trueLabel, endLabel, skipLabel := labels[0], labels[1], labels[2]
 			size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
@@ -890,6 +946,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
+		if restoreA {
+			r.push("lda " + l.byte(op.Resident.Home, 0))
+		}
+		l.res, l.resMem, l.aHeld = nil, false, false
 	}
 
 	for _, d := range lmd.Defs {

@@ -2510,10 +2510,8 @@ _500:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda 0+<F_test_op_test_shift_op+1
-	clc
-	rol a
-	clc
-	rol a
+	asl a
+	asl a
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -2615,10 +2613,8 @@ _500:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda 0+<F_test_op_test_shift_op+4
-	clc
-	ror a
-	clc
-	ror a
+	lsr a
+	lsr a
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
