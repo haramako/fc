@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_STDIO__ = 1
 .segment "stdio"
 	.include "_nes.inc"
@@ -24,15 +25,19 @@ _stdio_print_addr: .res 2
 	;;;=============================
 .segment "stdio"
 .proc _stdio_puts
+	ldx FC_SP
 	lda 0+<F_stdio_puts+0
 	sta <S+0,x
 	lda 1+<F_stdio_puts+0
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda #.LOBYTE(_2)
 	sta <S+0,x
 	lda #.HIBYTE(_2)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	rts
 _2:
@@ -44,24 +49,32 @@ _2:
 	;;;=============================
 .segment "stdio"
 .proc _stdio_exit
+	ldx FC_SP
 	lda #.LOBYTE(_6)
 	sta <S+0,x
 	lda #.HIBYTE(_6)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda 0+<F_stdio_exit+0
 	sta <S+0,x
 	lda #0
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print_int16
+	ldx FC_SP
 	lda #.LOBYTE(_8)
 	sta <S+0,x
 	lda #.HIBYTE(_8)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	lda #200
 	sta 0+_nes_PPU_CTRL1
 @then_12:
+	ldx FC_SP
+	ldx FC_SP
 	jsr _stdio_wait_vsync
 	lda #0
 	sta 0+_nes_PPU_SCROLL
@@ -84,6 +97,7 @@ _8:
 .proc _stdio_init
 	lda #253
 	sta 0+_stdio_vsync_flag
+	ldx FC_SP
 	lda #0
 	sta <S+0,x
 	lda #63
@@ -94,6 +108,7 @@ _8:
 	sta <S+3,x
 	lda #16
 	sta <S+4,x
+	ldx FC_SP
 	jsr _stdio_ppu_put
 	lda #0
 	sta 0+_stdio_print_addr

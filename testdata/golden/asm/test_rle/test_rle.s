@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_TEST_RLE__ = 1
 .segment "test_rle"
 	.include "_unittest.inc"
@@ -23,6 +24,7 @@ _test_rle_dest: .res 128
 	;;;=============================
 .segment "test_rle"
 .proc _test_rle_test_rle
+	ldx FC_SP
 	lda #.LOBYTE(_test_rle_dest)
 	sta <S+2,x
 	lda #.HIBYTE(_test_rle_dest)
@@ -31,7 +33,9 @@ _test_rle_dest: .res 128
 	sta <S+4,x
 	lda #.HIBYTE(_test_rle_src)
 	sta <S+5,x
+	ldx FC_SP
 	jsr _rle_unpack
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_rle_test_rle+0
 	lda <1+S+0,x
@@ -49,6 +53,7 @@ _test_rle_dest: .res 128
 	lda #.HIBYTE(_5)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #.LOBYTE(_test_rle_dest)
 	sta <S+1,x
 	lda #.HIBYTE(_test_rle_dest)
@@ -59,7 +64,9 @@ _test_rle_dest: .res 128
 	sta <S+4,x
 	lda 0+<F_test_rle_test_rle+0
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_compare
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_rle_test_rle+2
 	bne @1
@@ -77,6 +84,7 @@ _test_rle_dest: .res 128
 	lda #.HIBYTE(_13)
 	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
+	ldx FC_SP
 	lda #.LOBYTE(_test_rle_dest)
 	sta <S+2,x
 	lda #.HIBYTE(_test_rle_dest)
@@ -85,7 +93,9 @@ _test_rle_dest: .res 128
 	sta <S+4,x
 	lda #.HIBYTE(_test_rle_src2)
 	sta <S+5,x
+	ldx FC_SP
 	jsr _rle_unpack
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_rle_test_rle+0
 	lda <1+S+0,x
@@ -103,6 +113,7 @@ _test_rle_dest: .res 128
 	lda #.HIBYTE(_17)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #.LOBYTE(_test_rle_dest)
 	sta <S+1,x
 	lda #.HIBYTE(_test_rle_dest)
@@ -113,7 +124,9 @@ _test_rle_dest: .res 128
 	sta <S+4,x
 	lda 0+<F_test_rle_test_rle+0
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_compare
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_rle_test_rle+0
 	bne @3

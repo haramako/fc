@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_STDIO__ = 1
 .segment "stdio"
 _stdio_EMU_ADDR = 65520

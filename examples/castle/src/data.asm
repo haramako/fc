@@ -59,6 +59,7 @@ FC_SRAM_SIZE = $100						; RAM 側は WRAM (BSS_EX) に置く。実際の必要�
 	.export FC_SZP_SIZE : absolute
 	.export FC_SRAM_SIZE : absolute
 	.exportzp FC_SZP
+	.exportzp FC_SP
 	.export FC_SRAM
 
 .segment "FC_ZEROPAGE": zeropage
@@ -75,7 +76,8 @@ FC_SRAM: .res FC_SRAM_SIZE				; 静的フレーム (RAM 側。ZP に入りきら
 
 .segment "FC_STACK": zeropage
 
-FC_STACK: .res $40
+FC_STACK: .res $3F
+FC_SP: .res 1							; スタックの空き先頭 (S からのオフセット。X の代わり)
 FC_SZP: .res FC_SZP_SIZE				; 静的フレーム (ゼロページ側)
 
 	L = FC_LOCAL

@@ -474,6 +474,7 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\t.export FC_FASTCALL_REG_SIZE : absolute\n" +
 		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", c.fastcallRegSize()) +
 		"\t.exportzp FC_SZP\n" +
+		"\t.exportzp FC_SP\n" +
 		"\t.export FC_SRAM\n" +
 		"\t.export FC_SZP_SIZE : absolute\n" +
 		"\t.export FC_SRAM_SIZE : absolute\n" +
@@ -491,7 +492,8 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"FC_LOCAL: .res $10\n" +
 		"FC_REG: .res $10\n" +
 		"FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE\n" +
-		"FC_SZP: .res FC_SZP_SIZE\n" + // 静的フレーム (ゼロページ側)。ここまでで $6F。$70-$7F は ZEROPAGE セグメント用に空ける
+		"FC_SZP: .res FC_SZP_SIZE\n" + // 静的フレーム (ゼロページ側)。ここまでで $6F
+		"FC_SP: .res 1\n" + // スタックの空き先頭 (S からのオフセット。X の代わり)。$70-$7E は ZEROPAGE セグメント用に空ける
 		"\n" +
 		".segment \"BSS\"\n" +
 		"FC_FARCALL: .res 3\n" +

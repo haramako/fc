@@ -216,6 +216,15 @@ func (l *Llc) pointerWrite(p ir.Operand, off int, val ir.Operand, size int) []an
 	return r
 }
 
+// inX は値がいま X レジスタにあるか (LocX。退避中 (resXMem) ならメモリ側 Home にある)。
+func (l *Llc) inX(v ir.Operand) bool {
+	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocX {
+		return false
+	}
+	uv := ir.UnderlyingValue(v)
+	return !(l.resXMem && uv.Home != nil && uv == l.resX)
+}
+
 // inY は値がいま Y レジスタにあるか (LocY。退避中 (resYMem) ならメモリ側 Home にある)。
 func (l *Llc) inY(v ir.Operand) bool {
 	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocY {
@@ -248,7 +257,7 @@ func (l *Llc) keepA(val ir.Operand, pre []any) []any {
 // sameByte は 2 つのメモリ上のオペランドの i バイト目が同じ場所か (アドレス表記が同じ)。A / 即値なら false。
 func (l *Llc) sameByte(a, b ir.Operand, i int) bool {
 	for _, v := range []ir.Operand{a, b} {
-		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || ir.ValLocation(v) == ir.LocCond {
+		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || l.inX(v) || ir.ValLocation(v) == ir.LocCond {
 			return false
 		}
 	}
@@ -291,6 +300,11 @@ func (l *Llc) toAsm(v ir.Operand) string {
 				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
 			case ir.LocY:
 				if h := ir.UnderlyingValue(v).Home; h != nil && l.resYMem {
+					return l.toAsm(h)
+				}
+				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
+			case ir.LocX:
+				if h := ir.UnderlyingValue(v).Home; h != nil && l.resXMem {
 					return l.toAsm(h)
 				}
 				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))

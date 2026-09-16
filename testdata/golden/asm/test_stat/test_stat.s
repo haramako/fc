@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_TEST_STAT__ = 1
 .segment "test_stat"
 	.include "_unittest.inc"
@@ -273,24 +274,28 @@ _80:
 .segment "test_stat"
 .proc _test_stat_test_switch
 	lda #0
-	sta 0+<F_test_stat_test_switch+0
 	sta 0+<F_test_stat_test_switch+1
+	sta 0+<F_test_stat_test_switch+0
+	ldx 0+<F_test_stat_test_switch+0
 	jmp @begin_82
 @body_97:
-	ldy 0+<F_test_stat_test_switch+1
-	cpy #1
+	cpx #1
 	beq @then_89
-	cpy #2
+	cpx #2
 	beq @then_89
-	cpy #3
+	cpx #3
 	bne @else_90
 @then_89:
+	stx 0+<F_test_stat_test_switch+0
+	sta 0+<F_test_stat_test_switch+1
 	clc
-	adc 0+<F_test_stat_test_switch+1
+	lda 0+<F_test_stat_test_switch+1
+	adc 0+<F_test_stat_test_switch+0
+	sta 0+<F_test_stat_test_switch+1
+	ldx 0+<F_test_stat_test_switch+0
 	jmp @end_88
 @else_90:
-	ldy 0+<F_test_stat_test_switch+1
-	cpy #4
+	cpx #4
 	bne @else_96
 	clc
 	adc #10
@@ -299,17 +304,16 @@ _80:
 	clc
 	adc #20
 @end_88:
-	inc 0+<F_test_stat_test_switch+1
+	inx
 @begin_82:
-	ldy 0+<F_test_stat_test_switch+1
-	cpy #6
+	cpx #6
 	bcc @body_97
-	sta 0+<F_test_stat_test_switch+0
+	sta 0+<F_test_stat_test_switch+1
 	lda #56
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
-	lda 0+<F_test_stat_test_switch+0
+	lda 0+<F_test_stat_test_switch+1
 	sta <F_unittest_assert_equal+2
 	lda #0
 	sta <F_unittest_assert_equal+3

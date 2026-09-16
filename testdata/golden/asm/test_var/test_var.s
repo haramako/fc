@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_TEST_VAR__ = 1
 .segment "test_var"
 	.include "_unittest.inc"
@@ -286,6 +287,8 @@ _test_var_add1:
 	lda 0+<F_test_var_add1+1
 	adc #1
 	sta 0+<F_test_var_add1+0
+	ldx FC_SP
+	lda <F_test_var_add1+0
 	sta <S+0,x
 	rts
 .endproc
@@ -302,6 +305,8 @@ _test_var_mul2:
 	lda 0+<F_test_var_mul2+1
 	asl a
 	sta 0+<F_test_var_mul2+0
+	ldx FC_SP
+	lda <F_test_var_mul2+0
 	sta <S+0,x
 	rts
 .endproc
@@ -319,13 +324,16 @@ _test_var_FUNC_TABLE:
 	sta 0+<F_test_var_test_func_pointer+0
 	lda #.HIBYTE(_test_var_add1)
 	sta 1+<F_test_var_test_func_pointer+0
+	ldx FC_SP
 	lda #10
 	sta <S+1,x
 	lda 0+<F_test_var_test_func_pointer+0
 	sta <reg+0
 	lda 1+<F_test_var_test_func_pointer+0
 	sta <reg+1
+	ldx FC_SP
 	jsr jsr_reg
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_var_test_func_pointer+2
 	sta <F_unittest_assert_equal+0
@@ -347,13 +355,16 @@ _test_var_FUNC_TABLE:
 	sta 0+<F_test_var_test_func_pointer+0
 	lda _test_var_FUNC_TABLE+1,y
 	sta 1+<F_test_var_test_func_pointer+0
+	ldx FC_SP
 	lda #10
 	sta <S+1,x
 	lda 0+<F_test_var_test_func_pointer+0
 	sta <reg+0
 	lda 1+<F_test_var_test_func_pointer+0
 	sta <reg+1
+	ldx FC_SP
 	jsr jsr_reg
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_var_test_func_pointer+2
 	sta <F_unittest_assert_equal+0
@@ -375,13 +386,16 @@ _test_var_FUNC_TABLE:
 	sta 0+<F_test_var_test_func_pointer+0
 	lda _test_var_FUNC_TABLE+1,y
 	sta 1+<F_test_var_test_func_pointer+0
+	ldx FC_SP
 	lda #10
 	sta <S+1,x
 	lda 0+<F_test_var_test_func_pointer+0
 	sta <reg+0
 	lda 1+<F_test_var_test_func_pointer+0
 	sta <reg+1
+	ldx FC_SP
 	jsr jsr_reg
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_var_test_func_pointer+2
 	sta <F_unittest_assert_equal+0

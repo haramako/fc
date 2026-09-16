@@ -204,9 +204,15 @@ func peepholeA(lines []string) []string {
 			// A も Y もメモリも変えないが N/Z は別の値になる
 			s.flagsFromA = false
 		case "ldx", "inx", "dex", "tax":
-			// X が変わるとフレーム (`<S+n,x`) の指す先が変わるので、A / Y の追跡は捨てる
-			s.a = aState{}
-			s.y = ""
+			// X が変わるとフレーム (`<S+n,x`) の指す先が変わるので、",x" を含む追跡は捨てる
+			for k := range s.a {
+				if strings.Contains(k, ",x") {
+					delete(s.a, k)
+				}
+			}
+			if strings.Contains(s.y, ",x") {
+				s.y = ""
+			}
 			s.flagsFromA = mnem == "tax" // tax は A の値を写すので N/Z は A を反映する
 		case "iny", "dey":
 			s.y = ""

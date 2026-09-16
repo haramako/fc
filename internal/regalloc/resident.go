@@ -25,10 +25,10 @@ const (
 	ResFree                     // 変数を触らずレジスタも壊さない
 )
 
-// Decision は命令 1 つの扱い (A と Y)。
+// Decision は命令 1 つの扱い (A / Y / X)。
 type Decision struct {
-	A, Y ResClass
-	UseY bool // A が常駐変数で塞がっているので、この命令は Y で代用する (ldy / sty / cpy)
+	A, Y, X ResClass
+	UseY    bool // A が常駐変数で塞がっているので、この命令は Y で代用する (ldy / sty / cpy)
 }
 
 // isIncDec は codegen の incDec と同じ条件 (x = x ± 1、1〜2 バイト、メモリ上)。
@@ -69,7 +69,7 @@ func inReg(o ir.Operand) bool {
 		return false
 	}
 	switch ir.ValLocation(o) {
-	case ir.LocA, ir.LocY, ir.LocCond:
+	case ir.LocA, ir.LocY, ir.LocX, ir.LocCond:
 		return true
 	}
 	return false
@@ -252,6 +252,55 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 	return false, 0
 }
 
+// friendlyX は v が X に常駐しているとき、op を X のまま実行できるか (グローバル配列の添字と 1 バイトのカウンタ)。
+func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
+	op := lmd.Ops[i]
+	globalArray := func(o ir.Operand) bool {
+		return ir.ValKind(o) == ir.KindGlobal && ir.ValType(o).Kind == types.Array && ir.ValType(o).Base.Size == 1
+	}
+	switch op.Code {
+	case ir.OpIndexPget:
+		if isV(op.In(1), v) && !isV(op.Dst, v) && globalArray(op.In(0)) {
+			return true, 3 // lda a,x
+		}
+	case ir.OpIndexPset:
+		if isV(op.In(1), v) && !isV(op.In(2), v) && globalArray(op.In(0)) {
+			return true, 3 // sta a,x
+		}
+	case ir.OpAdd, ir.OpSub:
+		if isIncDec(op) && isV(op.Dst, v) {
+			return true, 3 // inx / dex
+		}
+	case ir.OpIf, ir.OpIfTrue:
+		if isV(op.Src[0], v) {
+			return true, 2 // cpx #0
+		}
+	case ir.OpEq, ir.OpLt:
+		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
+			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed)) {
+			return true, 3 // cpx k
+		}
+	case ir.OpLoad:
+		if isV(op.Dst, v) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
+			return true, 3 // ldx x
+		}
+		if isV(op.Src[0], v) && isMemByte(op.Dst) {
+			return true, 3 // stx x
+		}
+	}
+	return false, 0
+}
+
+// needsX は op の codegen が X を使うか (stack 系の呼び出しは X = FC_SP にする。ランタイムの乗除算も X を壊しうる)。
+func needsX(op *ir.Op) bool {
+	switch op.Code {
+	case ir.OpPushResult, ir.OpPushArg, ir.OpCall, ir.OpPushFastcallResult, ir.OpPushFastcallArg, ir.OpFastcall,
+		ir.OpReturn, ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpAsm:
+		return true
+	}
+	return false
+}
+
 // needsY は op の codegen が (常駐変数としてでなく) Y を作業用に使うか。
 func needsY(op *ir.Op, vY *ir.Value) bool {
 	switch op.Code {
@@ -299,13 +348,28 @@ func yVariant(lmd *ir.Lambda, i int) bool {
 	return false
 }
 
-// Classify は vA が A に、vY が Y に常駐しているときの lmd.Ops[i] の扱い (どちらも nil 可)。
+// Classify は vA が A に、vY が Y に、vX が X に常駐しているときの lmd.Ops[i] の扱い (どれも nil 可)。
 // aLive / yLive はその命令の入口または出口で変数が生きている (レジスタが塞がっている) か。
-// 戻り値の gain は friendly で節約できるサイクル数の目安 (A と Y の合計)。
-func Classify(lmd *ir.Lambda, i int, vA, vY *ir.Value, aLive, aOut, yLive bool) (Decision, int) {
+// 戻り値の gain は friendly で節約できるサイクル数の目安 (合計)。
+func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bool) (Decision, int) {
 	op := lmd.Ops[i]
-	d := Decision{A: ResFree, Y: ResFree}
+	d := Decision{A: ResFree, Y: ResFree, X: ResFree}
 	gain := 0
+	// X (inx / cpx / ldx / stx は A も Y も使わない。lda a,x は A を使う)
+	xFriendly := false
+	if vX != nil {
+		if involves(op, vX) {
+			if ok, save := friendlyX(lmd, i, vX); ok {
+				d.X = ResFriendly
+				xFriendly = true
+				gain += save
+			} else {
+				d.X = ResClobber
+			}
+		} else if needsX(op) {
+			d.X = ResClobber
+		}
+	}
 	// Y (先に決める: Y のまま実行できる命令 (iny / cpy / ldy / sty / lda a,y) は A を使わない)
 	yFriendly := false
 	if vY != nil && involves(op, vY) {
@@ -326,7 +390,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY *ir.Value, aLive, aOut, yLive bool) 
 			} else {
 				d.A = ResClobber
 			}
-		} else if !freeA(op) && !(yFriendly && aFreeWithY(op)) {
+		} else if !freeA(op) && !(yFriendly && aFreeWithY(op)) && !(xFriendly && aFreeWithY(op)) {
 			if aLive && (vY == nil || !yLive) && yVariant(lmd, i) {
 				d.UseY = true // Y が空いているので Y で代用
 			} else {
@@ -374,14 +438,14 @@ func AllocateResident(lmd *ir.Lambda) {
 					inner[b] = true
 				}
 			}
-			vA, vY, gain := bestPair(lmd, cfg, r, inner, lv)
-			if vA == nil && vY == nil {
+			vA, vY, vX, gain := bestPair(lmd, cfg, r, inner, lv, lmd.ABI != ir.ABIStack)
+			if vA == nil && vY == nil && vX == nil {
 				continue
 			}
 			if os.Getenv("FC_TRACE_RESIDENT") != "" {
-				fmt.Fprintf(os.Stderr, "resident: %s loop %s: A=%s Y=%s (gain %d/iter)\n", lmd.Id, lp.Header.Label, name(vA), name(vY), gain)
+				fmt.Fprintf(os.Stderr, "resident: %s loop %s: A=%s Y=%s X=%s (gain %d/iter)\n", lmd.Id, lp.Header.Label, name(vA), name(vY), name(vX), gain)
 			}
-			makeResident(lmd, cfg, r, lv, vA, vY)
+			makeResident(lmd, cfg, r, lv, vA, vY, vX)
 			done = true
 			break // IR が変わったので作り直す
 		}
@@ -455,7 +519,7 @@ func name(v *ir.Value) string {
 func hasResident(lmd *ir.Lambda, cfg *ir.CFG, r region) bool {
 	for b := range r {
 		for _, i := range cfg.Ops(b) {
-			if lmd.Ops[i].Resident != nil || lmd.Ops[i].ResidentY != nil {
+			if lmd.Ops[i].Resident != nil || lmd.Ops[i].ResidentY != nil || lmd.Ops[i].ResidentX != nil {
 				return true
 			}
 		}
@@ -482,7 +546,7 @@ func candidates(lmd *ir.Lambda, cfg *ir.CFG, r region) []*ir.Value {
 				}
 				v := ir.UnderlyingValue(o)
 				if v == nil || v.Kind != ir.KindLocal || seen[v] || v.Type.Size != 1 || v.Type.Kind != types.Int ||
-					v.LocalType == ir.LTResult || v.LocalType == ir.LTTemp || refered[v] || v.Location == ir.LocA || v.Location == ir.LocY {
+					v.LocalType == ir.LTResult || v.LocalType == ir.LTTemp || refered[v] || isResident(v) {
 					continue // 一時変数は定義の直後に使うものが大半で、既存の A 割付 (allocateA) が扱う
 				}
 				seen[v] = true
@@ -494,18 +558,27 @@ func candidates(lmd *ir.Lambda, cfg *ir.CFG, r region) []*ir.Value {
 }
 
 // gainOf は (vA, vY) の組をループに常駐させたときの 1 周あたりの正味の得。
-func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, vY *ir.Value) int {
+func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, vY, vX *ir.Value) int {
 	gain := 0
 	for b := range r {
 		for _, i := range cfg.Ops(b) {
 			op := lmd.Ops[i]
 			aIn, aOut := vA != nil && lv.LiveIn(i, vA), vA != nil && lv.LiveOut(i, vA)
 			yIn, yOut := vY != nil && lv.LiveIn(i, vY), vY != nil && lv.LiveOut(i, vY)
-			if !aIn && !aOut && !yIn && !yOut && !involves(op, vA) && !involves(op, vY) {
+			xIn, xOut := vX != nil && lv.LiveIn(i, vX), vX != nil && lv.LiveOut(i, vX)
+			if !aIn && !aOut && !yIn && !yOut && !xIn && !xOut && !involves(op, vA) && !involves(op, vY) && !involves(op, vX) {
 				continue
 			}
-			d, g := Classify(lmd, i, vA, vY, aIn || aOut, aOut, yIn || yOut)
+			d, g := Classify(lmd, i, vA, vY, vX, aIn || aOut, aOut, yIn || yOut)
 			gain += g
+			if d.X == ResClobber {
+				if xIn {
+					gain -= 3
+				}
+				if xOut {
+					gain -= 3
+				}
+			}
 			if d.A == ResClobber {
 				if aIn {
 					gain -= 3
@@ -533,7 +606,7 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 	}
 	for _, e := range r.entries() {
 		if inner[e[0]] {
-			for _, v := range []*ir.Value{vA, vY} {
+			for _, v := range []*ir.Value{vA, vY, vX} {
 				if v != nil && lv.LiveIn(first(e[1]), v) {
 					gain -= 3
 				}
@@ -542,7 +615,7 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 	}
 	for _, e := range r.exits() {
 		if inner[e[1]] {
-			for _, v := range []*ir.Value{vA, vY} {
+			for _, v := range []*ir.Value{vA, vY, vX} {
 				if v != nil && lv.LiveIn(first(e[1]), v) {
 					gain -= 3
 				}
@@ -553,31 +626,49 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 }
 
 // bestPair は正味の得 (1 周あたり) が最大の (A, Y) の組。入口 / 出口の写しがあるので 3 サイクル以上の得を要求する。
-func bestPair(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness) (*ir.Value, *ir.Value, int) {
+func bestPair(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, allowX bool) (*ir.Value, *ir.Value, *ir.Value, int) {
 	cands := candidates(lmd, cfg, r)
-	var bestA, bestY *ir.Value
+	var bestA, bestY, bestX *ir.Value
 	best := 2
-	try := func(vA, vY *ir.Value) {
-		if g := gainOf(lmd, cfg, r, inner, lv, vA, vY); g > best {
-			bestA, bestY, best = vA, vY, g
+	try := func(vA, vY, vX *ir.Value) {
+		if g := gainOf(lmd, cfg, r, inner, lv, vA, vY, vX); g > best {
+			bestA, bestY, bestX, best = vA, vY, vX, g
 		}
 	}
-	for _, a := range cands {
-		try(a, nil)
-		try(nil, a)
-		for _, y := range cands {
-			if y != a {
-				try(a, y)
+	withNil := append([]*ir.Value{nil}, cands...)
+	xs := []*ir.Value{nil}
+	if allowX {
+		xs = withNil
+	}
+	// 同点なら Y を優先する (X はポインタの添字に使えない) ので、Y を最も内側で回す
+	for _, a := range withNil {
+		for _, x := range xs {
+			if x != nil && x == a {
+				continue
+			}
+			for _, y := range withNil {
+				if y != nil && (y == a || y == x) {
+					continue
+				}
+				if a == nil && y == nil && x == nil {
+					continue
+				}
+				try(a, y, x)
 			}
 		}
 	}
-	return bestA, bestY, best
+	return bestA, bestY, bestX, best
 }
 
 // makeResident はループ内の vA / vY を常駐の一時変数に置き換え、入口 / 出口の辺に写す命令を挿す。
-func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY *ir.Value) {
+func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY, vX *ir.Value) {
 	ops := lmd.Ops
-	var rA, rY *ir.Value
+	var rA, rY, rX *ir.Value
+	if vX != nil {
+		rX = ir.NewLocal(vX.Name+"@X", vX.Type, ir.LTTemp)
+		rX.Location, rX.Home = ir.LocX, vX
+		lmd.Vars = append(lmd.Vars, rX)
+	}
 	if vA != nil {
 		rA = ir.NewLocal(vA.Name+"@A", vA.Type, ir.LTTemp)
 		rA.Location, rA.Home = ir.LocA, vA
@@ -594,6 +685,9 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		}
 		if isV(o, vY) {
 			return rY
+		}
+		if isV(o, vX) {
+			return rX
 		}
 		return o
 	}
@@ -614,6 +708,10 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			if vY != nil {
 				op.ResidentY = rY
 				op.ResYIn, op.ResYOut = lv.LiveIn(i, vY), lv.LiveOut(i, vY)
+			}
+			if vX != nil {
+				op.ResidentX = rX
+				op.ResXIn, op.ResXOut = lv.LiveIn(i, vX), lv.LiveOut(i, vX)
 			}
 			for k := range op.Src {
 				op.Src[k] = replace(op.Src[k])
@@ -692,6 +790,9 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		if vY != nil && lv.LiveIn(at, vY) {
 			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rY, Src: []ir.Operand{vY}, ResidentY: rY, ResYOut: true})
 		}
+		if vX != nil && lv.LiveIn(at, vX) {
+			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rX, Src: []ir.Operand{vX}, ResidentX: rX, ResXOut: true})
+		}
 		return r
 	}
 	exitOps := func(at int) []*ir.Op {
@@ -701,6 +802,9 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		}
 		if vY != nil && lv.LiveIn(at, vY) {
 			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vY, Src: []ir.Operand{rY}, ResidentY: rY, ResYIn: true})
+		}
+		if vX != nil && lv.LiveIn(at, vX) {
+			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vX, Src: []ir.Operand{rX}, ResidentX: rX, ResXIn: true})
 		}
 		return r
 	}

@@ -255,13 +255,14 @@ fc が生成する base.asm のゼロページ配置は `$00-$0F` L（stack 関�
 `options(address:)` で固定番地の変数を置いてはいけない**（fc の領域と重なる。固定番地の ZP 変数が要るプロジェクトは
 castle のように base.asm を自前で持つ）。
 base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .res M` と `FC_SZP_SIZE` / `FC_SRAM_SIZE` の
-`.export … : absolute` を合わせる（不足はリンク時の `.assert` で検出される。配置は `.fc-build/_frames.inc`）。
+`.export … : absolute`、それにスタックの空き先頭 `FC_SP: .res 1`（`.exportzp`）を合わせる（不足はリンク時の `.assert` で
+検出される。配置は `.fc-build/_frames.inc`）。
 
 | 種類 | 対象 | 引数の渡し方 |
 |---|---|---|
 | static | 本体を持つ非再帰の関数（既定） | 呼び出し側が `F_g+k` に直接書き `jsr` |
 | entry | static のうち、アドレスを取られた関数（関数ポインタ・`const` の表・インラインアセンブラからの参照）と `options(interrupt: true)` | スタック経由（下の stack と同じ）。プロローグで自分のフレームに写す |
-| stack | 再帰する関数、`options(abi: "stack")`、本体の無い extern 関数 | X が指すスタック `S+k,x`。呼び出し側が stack 関数なら X を進める `call` マクロ |
+| stack | 再帰する関数、`options(abi: "stack")`、本体の無い extern 関数 | スタック `S+k,x`（呼び出し側が `ldx FC_SP` で X をスタックの空き先頭にしてから書く）。extern 関数は X を保存すること |
 | fastcall | extern で `fastcall` 指定 | `FC_FASTCALL_REG` |
 
 再帰の判定は呼び出しグラフの閉路で、関数ポインタ経由の呼び出しは「同じ関数型でアドレスを取られた関数の全部」

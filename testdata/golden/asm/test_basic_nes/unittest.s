@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_UNITTEST__ = 1
 .segment "unittest"
 	.include "_stdio.inc"
@@ -12,30 +13,38 @@ __MODULE_UNITTEST__ = 1
 .proc _unittest_assert_true
 	lda 0+<F_unittest_assert_true+0
 	bne @else_2
+	ldx FC_SP
 	lda #.LOBYTE(_6)
 	sta <S+0,x
 	lda #.HIBYTE(_6)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda 0+<F_unittest_assert_true+1
 	sta <S+0,x
 	lda 1+<F_unittest_assert_true+1
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda #.LOBYTE(_8)
 	sta <S+0,x
 	lda #.HIBYTE(_8)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	lda #1
 	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	jmp @end_3
 @else_2:
+	ldx FC_SP
 	lda #.LOBYTE(_11)
 	sta <S+0,x
 	lda #.HIBYTE(_11)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 @end_3:
 	rts
@@ -59,51 +68,69 @@ _11:
 	lda 1+<F_unittest_assert_equal+0
 	cmp 1+<F_unittest_assert_equal+2
 @1:
-	beq @else_14
+	bne @3
+	jmp @else_14
+@3:
+	ldx FC_SP
 	lda #.LOBYTE(_21)
 	sta <S+0,x
 	lda #.HIBYTE(_21)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda 0+<F_unittest_assert_equal+4
 	sta <S+0,x
 	lda 1+<F_unittest_assert_equal+4
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda #.LOBYTE(_23)
 	sta <S+0,x
 	lda #.HIBYTE(_23)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda 0+<F_unittest_assert_equal+2
 	sta <S+0,x
 	lda 1+<F_unittest_assert_equal+2
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print_int16
+	ldx FC_SP
 	lda #.LOBYTE(_25)
 	sta <S+0,x
 	lda #.HIBYTE(_25)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda 0+<F_unittest_assert_equal+0
 	sta <S+0,x
 	lda 1+<F_unittest_assert_equal+0
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print_int16
+	ldx FC_SP
 	lda #.LOBYTE(_27)
 	sta <S+0,x
 	lda #.HIBYTE(_27)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	lda #1
 	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	jmp @end_15
 @else_14:
+	ldx FC_SP
 	lda #.LOBYTE(_30)
 	sta <S+0,x
 	lda #.HIBYTE(_30)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 @end_15:
 	rts

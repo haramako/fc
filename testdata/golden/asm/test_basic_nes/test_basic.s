@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_TEST_BASIC__ = 1
 .segment "test_basic"
 	.include "_unittest.inc"
@@ -70,43 +71,53 @@ _6:
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_fib
+	txa
+	clc
+	adc #3
+	sta FC_SP
 	lda #1
 	cmp 0+<S+1,x
 	bcc @else_10
 	lda #1
 	sta 0+<S+0,x
+	lda FC_SP
+	sec
+	sbc #3
+	sta FC_SP
 	rts
 @else_10:
 	sec
 	lda 0+<S+1,x
 	sbc #1
 	sta <S+4,x
-	inx
-	inx
-	inx
+	ldx FC_SP
 	jsr _test_basic_fib
-	dex
-	dex
-	dex
+	lda FC_SP
+	sec
+	sbc #3
+	tax
 	lda <0+S+3,x
 	sta 0+<S+2,x
 	sec
 	lda 0+<S+1,x
 	sbc #2
 	sta <S+4,x
-	inx
-	inx
-	inx
+	ldx FC_SP
 	jsr _test_basic_fib
-	dex
-	dex
-	dex
+	lda FC_SP
+	sec
+	sbc #3
+	tax
 	lda <0+S+3,x
 	sta 0+<L+0
 	clc
 	lda 0+<S+2,x
 	adc 0+<L+0
 	sta 0+<S+0,x
+	lda FC_SP
+	sec
+	sbc #3
+	sta FC_SP
 	rts
 .endproc
 	.export _test_basic_test_function
@@ -134,9 +145,12 @@ _6:
 	lda #.HIBYTE(_20)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #1
 	sta <S+1,x
+	ldx FC_SP
 	jsr _test_basic_fib
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_basic_test_function+0
 	sta <F_unittest_assert_equal+0
@@ -151,9 +165,12 @@ _6:
 	lda #.HIBYTE(_24)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #3
 	sta <S+1,x
+	ldx FC_SP
 	jsr _test_basic_fib
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_basic_test_function+0
 	sta <F_unittest_assert_equal+0
@@ -168,9 +185,12 @@ _6:
 	lda #.HIBYTE(_28)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #11
 	sta <S+1,x
+	ldx FC_SP
 	jsr _test_basic_fib
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_basic_test_function+0
 	sta <F_unittest_assert_equal+0
@@ -215,10 +235,11 @@ _32:
 	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
 @begin_34:
-	lda #1
-	ldy 0+<F_test_basic_test_misc+1
+	ldy #1
+	lda 0+<F_test_basic_test_misc+1
 	beq @end_38
-	sta 0+<F_test_basic_test_misc+0
+@4:
+	sty 0+<F_test_basic_test_misc+0
 	lda 0+<F_test_basic_test_misc+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -245,6 +266,7 @@ _32:
 	lda #.HIBYTE(_47)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #.LOBYTE(_53)
 	sta <S+1,x
 	lda #.HIBYTE(_53)
@@ -255,17 +277,19 @@ _32:
 	sta <S+4,x
 	lda #6
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_compare
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_basic_test_misc+1
-	bne @4
+	bne @5
 	lda #1
 	sta 0+<F_test_basic_test_misc+2
-	jmp @5
-@4:
+	jmp @6
+@5:
 	lda #0
 	sta 0+<F_test_basic_test_misc+2
-@5:
+@6:
 	lda 0+<F_test_basic_test_misc+2
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_58)
@@ -335,49 +359,65 @@ _63:
 .segment "test_basic"
 .proc _main
 	jsr _stdio_init
+	ldx FC_SP
 	lda #.LOBYTE(_66)
 	sta <S+0,x
 	lda #.HIBYTE(_66)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	jsr _test_basic_test_nesasm_limit
+	ldx FC_SP
 	lda #.LOBYTE(_69)
 	sta <S+0,x
 	lda #.HIBYTE(_69)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda #.LOBYTE(_72)
 	sta <S+0,x
 	lda #.HIBYTE(_72)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	jsr _test_basic_test_function
+	ldx FC_SP
 	lda #.LOBYTE(_75)
 	sta <S+0,x
 	lda #.HIBYTE(_75)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda #.LOBYTE(_78)
 	sta <S+0,x
 	lda #.HIBYTE(_78)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	jsr _test_basic_test_misc
+	ldx FC_SP
 	lda #.LOBYTE(_81)
 	sta <S+0,x
 	lda #.HIBYTE(_81)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
+	ldx FC_SP
 	lda #.LOBYTE(_84)
 	sta <S+0,x
 	lda #.HIBYTE(_84)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	jsr _test_basic_test_fastcall
+	ldx FC_SP
 	lda #.LOBYTE(_87)
 	sta <S+0,x
 	lda #.HIBYTE(_87)
 	sta <S+1,x
+	ldx FC_SP
 	jsr _stdio_print
 	lda #0
 	sta <F_stdio_exit+0

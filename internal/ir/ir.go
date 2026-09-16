@@ -110,6 +110,9 @@ type Op struct {
 	ResidentY *Value // 同じく Y (LocY)
 	ResYIn    bool
 	ResYOut   bool
+	ResidentX *Value // 同じく X (LocX)
+	ResXIn    bool
+	ResXOut   bool
 }
 
 // In は i 番目の入力 (無ければ nil)。
@@ -159,6 +162,9 @@ func (op *Op) positional() []any {
 	if op.ResidentY != nil {
 		r = append(r, "y="+op.ResidentY.Name)
 	}
+	if op.ResidentX != nil {
+		r = append(r, "x="+op.ResidentX.Name)
+	}
 	return r
 }
 
@@ -198,11 +204,12 @@ const (
 	LocFastcallReg                 // fastcall 用レジスタ (FC_FASTCALL_REG+addr)
 	LocStatic                      // 静的フレーム (F_<sym>+addr。doc/v2_frame_alloc.md §6)
 	LocY                           // Y レジスタ (ループ内の常駐。doc/v2_regalloc.md)
+	LocX                           // X レジスタ (同上。static 関数だけ)
 )
 
 var locationNames = [...]string{
 	LocNone: "", LocFrame: "frame", LocReg: "reg", LocMem: "mem", LocUnused: "none",
-	LocA: "a", LocCond: "cond", LocFastcallReg: "fastcall_reg", LocStatic: "static", LocY: "y",
+	LocA: "a", LocCond: "cond", LocFastcallReg: "fastcall_reg", LocStatic: "static", LocY: "y", LocX: "x",
 }
 
 func (l Location) String() string {

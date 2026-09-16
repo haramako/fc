@@ -76,14 +76,14 @@ func TestAllocateResident(t *testing.T) {
 	rA := lmd.Ops[1].Dst.(*ir.Value)
 	rY := lmd.Ops[2].Dst.(*ir.Value)
 	want2 := map[int]Decision{
-		5:  {A: ResFriendly, Y: ResFree},
-		6:  {A: ResFree, Y: ResFree},
-		7:  {A: ResFriendly, Y: ResFree},
-		9:  {A: ResFree, Y: ResFriendly},
-		11: {A: ResFree, Y: ResFriendly},
+		5:  {A: ResFriendly, Y: ResFree, X: ResFree},
+		6:  {A: ResFree, Y: ResFree, X: ResFree},
+		7:  {A: ResFriendly, Y: ResFree, X: ResFree},
+		9:  {A: ResFree, Y: ResFriendly, X: ResFree},
+		11: {A: ResFree, Y: ResFriendly, X: ResFree},
 	}
 	for k, w := range want2 {
-		if d, _ := Classify(lmd, k, rA, rY, true, true, true); d != w {
+		if d, _ := Classify(lmd, k, rA, rY, nil, true, true, true); d != w {
 			t.Errorf("op %d: %+v, want %+v", k, d, w)
 		}
 	}

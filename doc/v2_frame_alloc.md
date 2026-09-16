@@ -206,7 +206,10 @@ codegen の `call.go`（呼び出しの種類）、driver の `PrepareProgram`�
 | **stack** | 再帰（呼び出しグラフの閉路に属する関数。間接呼び出しは entry 全部への辺）、`options(abi: "stack")`、extern（asm 定義） | 今のまま `S+n,x` | 今のまま（`S+FrameSize+k,x` に書いて `call`） |
 | **fastcall** | extern で fastcall 指定のもの（NSD の glルーなど asm 側が FC_FASTCALL_REG を読む） | FC_FASTCALL_REG | 今のまま |
 
-X の扱い: **stack 関数の中では X = 自分のフレームの底、static / entry 関数の中では X = スタックの空き先頭**。
+X の扱い（2026-09-16 に変更。v2_regalloc.md §4）: スタックの空き先頭はゼロページの **`FC_SP`** が持ち、X はレジスタとして自由。
+stack 関数の中では X = 自分のフレームの底（呼び出しの後で `FC_SP - FrameSize` から戻す）、static / entry 関数は
+stack 系の呼び先を呼ぶ直前に `ldx FC_SP` する。以下は変更前の記述:
+~~**stack 関数の中では X = 自分のフレームの底、static / entry 関数の中では X = スタックの空き先頭**。~~
 呼び出し側の種類で X の操作が決まる（stack 関数は今までどおり `call g, #FrameSize` で X を進めて戻す。
 static / entry 関数は X を触らず `jsr`）。呼び先の種類で引数の置き場所が決まる（static なら `F_g+k`、
 stack / entry なら `S+k,x`（呼び出し側が static のとき）/ `S+FrameSize+k,x`（stack のとき））。

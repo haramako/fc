@@ -2,6 +2,7 @@
 	.import _interrupt
 	.import _interrupt_irq
 	.import _main
+	.importzp FC_SP
 	.import runtime_init
 
 	.importzp L
@@ -51,6 +52,7 @@
 	ldx #255						; initialize stack and frame
 	txs
 	ldx #0
+	stx FC_SP						; スタックの空き先頭 (S+0)
 
 	jsr _main
     jmp *

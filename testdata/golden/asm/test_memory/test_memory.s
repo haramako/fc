@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_TEST_MEMORY__ = 1
 .segment "test_memory"
 	.include "_unittest.inc"
@@ -67,6 +68,7 @@ _test_memory_buf2: .res 512
 	sta 1+<F_test_memory_test_copy+0
 	lda #6
 	sta (F_test_memory_test_copy+0),y
+	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf2)
 	sta <S+0,x
 	lda #.HIBYTE(_test_memory_buf2)
@@ -79,7 +81,9 @@ _test_memory_buf2: .res 512
 	sta <S+4,x
 	lda #0
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_copy
+	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf1)
 	sta <S+1,x
 	lda #.HIBYTE(_test_memory_buf1)
@@ -90,7 +94,9 @@ _test_memory_buf2: .res 512
 	sta <S+4,x
 	lda #2
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_compare
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_memory_test_copy+0
 	sta <F_unittest_assert_equal+0
@@ -103,6 +109,7 @@ _test_memory_buf2: .res 512
 	lda #.HIBYTE(_9)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf2)
 	sta <S+0,x
 	lda #.HIBYTE(_test_memory_buf2)
@@ -115,6 +122,7 @@ _test_memory_buf2: .res 512
 	sta <S+4,x
 	lda #2
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_copy
 	ldy #255
 	lda _test_memory_buf2+0,y
@@ -203,6 +211,7 @@ _test_memory_buf2: .res 512
 	lda #.HIBYTE(_29)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf1)
 	sta <S+1,x
 	lda #.HIBYTE(_test_memory_buf1)
@@ -213,7 +222,9 @@ _test_memory_buf2: .res 512
 	sta <S+4,x
 	lda #0
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_compare
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_memory_test_copy+0
 	sta <F_unittest_assert_equal+0
@@ -229,6 +240,7 @@ _test_memory_buf2: .res 512
 	ldy #255
 	lda #0
 	sta _test_memory_buf2+0,y
+	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf1)
 	sta <S+1,x
 	lda #.HIBYTE(_test_memory_buf1)
@@ -239,7 +251,9 @@ _test_memory_buf2: .res 512
 	sta <S+4,x
 	lda #0
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_compare
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_memory_test_copy+0
 	sta <F_unittest_assert_equal+0

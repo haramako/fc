@@ -98,26 +98,38 @@ func (l *Llc) stackBase(lmd *ir.Lambda) int {
 	return 0
 }
 
-// jsrOrCall は呼び出し側の種類に応じて jsr するか X を進める call マクロを使うか。
-func (l *Llc) jsrOrCall(lmd *ir.Lambda, addr string, frameSize int) any {
-	if lmd.ABI == ir.ABIStack {
-		return l.callSubroutine(addr, frameSize)
-	}
-	return fmt.Sprintf("jsr %s", addr)
+// スタックの空き先頭はゼロページの FC_SP が持つ (doc/v2_regalloc.md §4)。X はレジスタとして自由に使える。
+//   - static / entry 関数: X を使わない (使うのはループ内の常駐)。stack 系の呼び先には `ldx FC_SP` してから
+//     S+k,x に引数を書いて jsr し、戻り値を読む前にもう一度 `ldx FC_SP` (呼び先が X を壊しうる)
+//   - stack (再帰) 関数: X = 自分のフレームの底。入口で FC_SP = X + FrameSize、return で戻す。呼び出しの後は
+//     X を FC_SP - FrameSize から戻す (呼び先が X を壊しうる)
+
+// callStackish は S+k,x に引数を積む呼び先 (stack / entry / extern) を呼ぶ。
+func (l *Llc) callStackish(lmd *ir.Lambda, addr string) []any {
+	r := []any{"ldx FC_SP", fmt.Sprintf("jsr %s", addr)}
+	return append(r, l.restoreX(lmd)...)
 }
 
-// callSubroutine はスタックポインタ(X)を進めて jsr する。
-func (l *Llc) callSubroutine(addr string, frameSize int) any {
-	if frameSize <= 4 {
-		r := []string{}
-		for i := 0; i < frameSize; i++ {
-			r = append(r, "inx")
+// callStatic は静的フレームの呼び先を呼ぶ (引数はフレームに書いてある)。
+func (l *Llc) callStatic(lmd *ir.Lambda, addr string) []any {
+	return append([]any{fmt.Sprintf("jsr %s", addr)}, l.restoreX(lmd)...)
+}
+
+// restoreX は stack 関数が呼び出しの後で X (フレームの底) を FC_SP から戻す。static 関数は何もしない。
+func (l *Llc) restoreX(lmd *ir.Lambda) []any {
+	if lmd.ABI != ir.ABIStack || lmd.FrameSize == 0 {
+		if lmd.ABI == ir.ABIStack {
+			return []any{"ldx FC_SP"}
 		}
-		r = append(r, fmt.Sprintf("jsr %s", addr))
-		for i := 0; i < frameSize; i++ {
-			r = append(r, "dex")
-		}
-		return r
+		return nil
 	}
-	return fmt.Sprintf("call %s, #%d", addr, frameSize)
+	return []any{"lda FC_SP", "sec", fmt.Sprintf("sbc #%d", lmd.FrameSize), "tax"}
+}
+
+// loadSP は static 関数が stack 系の呼び先の引数 / 戻り値を S+k,x で触る前に X をスタックの空き先頭にする。
+func (l *Llc) loadSP(lmd *ir.Lambda) any {
+	if lmd.ABI == ir.ABIStack {
+		return nil // 自分の X (フレームの底) からの相対で書く
+	}
+	return "ldx FC_SP"
 }

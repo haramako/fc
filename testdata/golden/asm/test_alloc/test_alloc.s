@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_TEST_ALLOC__ = 1
 .segment "test_alloc"
 	.include "_unittest.inc"

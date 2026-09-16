@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_NES__ = 1
 .segment "nes"
 _nes_PPU_CTRL1 = 8192

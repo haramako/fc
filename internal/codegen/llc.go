@@ -35,6 +35,8 @@ type Llc struct {
 	resMem  bool      // 退避中: res をメモリ (Home) として参照する
 	resY    *ir.Value // op.ResidentY
 	resYMem bool      // 退避中: resY をメモリ (Home) として参照する
+	resX    *ir.Value // op.ResidentX
+	resXMem bool      // 退避中: resX をメモリ (Home) として参照する
 	aHeld   bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
 }
 
@@ -107,6 +109,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	asm.push("\t.setcpu \"6502\"")
 	asm.push("\t.include \"macro.inc\"")
 	asm.push("\t.include \"_frames.inc\"") // 静的フレームの配置 (frames.Place が生成)
+	asm.push("\t.importzp FC_SP")            // スタックの空き先頭 (base.asm)
 	asm.push(fmt.Sprintf("__MODULE_%s__ = 1", strings.ToUpper(mod.Id)))
 
 	inc.push(fmt.Sprintf(".ifndef __MODULE_%s__", strings.ToUpper(mod.Id)))
@@ -280,6 +283,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	} else {
 		r.push(fmt.Sprintf(".proc %s", mangle(sym)))
 	}
+	if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
+		// stack 関数: X = フレームの底 (呼び出し側が FC_SP にした)。空き先頭をフレームの後ろへ
+		r.push("txa", "clc", fmt.Sprintf("adc #%d", lmd.FrameSize), "sta FC_SP")
+	}
 
 	pushArgSize := 0
 	pushFastcallArgSize := 0
@@ -302,10 +309,17 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		r.push(fmt.Sprintf("; %04d: %s", opNo, cm))
 
 		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
-		l.res, l.resMem, l.resY, l.resYMem, l.aHeld = op.Resident, false, op.ResidentY, false, false
-		restoreA, restoreY := false, false
-		if op.Resident != nil || op.ResidentY != nil {
-			d, _ := regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = op.Resident, false, op.ResidentY, false, op.ResidentX, false, false
+		restoreA, restoreY, restoreX := false, false, false
+		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
+			d, _ := regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+			if op.ResidentX != nil && d.X == regalloc.ResClobber {
+				if op.ResXIn {
+					r.push("stx " + l.byte(op.ResidentX.Home, 0))
+				}
+				l.resXMem = true
+				restoreX = op.ResXOut
+			}
 			if op.Resident != nil && d.A == regalloc.ResClobber {
 				if op.ResIn {
 					r.push("sta " + l.byte(op.Resident.Home, 0))
@@ -362,6 +376,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			} else if l.inY(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
 				r.push("cpy #0")
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
+			} else if l.inX(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
+				r.push("cpx #0")
+				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if l.aHeld && ir.ValType(op.In(0)).Size == 1 {
 				// A は常駐変数で塞がっている: Y で検査する
 				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
@@ -401,10 +418,14 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(l.load(lmd.Result, op.In(0)))
 			}
 			if lmd.Entry && lmd.Type.Base.Size > 0 {
-				// 呼び出し側はスタック (X の指す位置) から戻り値を読む
+				// 呼び出し側はスタック (FC_SP の指す位置) から戻り値を読む。本体が X を使ったかもしれないので戻す
+				r.push("ldx FC_SP")
 				for i := 0; i < lmd.Type.Base.Size; i++ {
 					r.push(fmt.Sprintf("lda %s", staticAddr(lmd, i)), fmt.Sprintf("sta <S+%d,x", i))
 				}
+			}
+			if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
+				r.push("lda FC_SP", "sec", fmt.Sprintf("sbc #%d", lmd.FrameSize), "sta FC_SP") // 空き先頭を戻す
 			}
 			r.push("rts")
 
@@ -415,6 +436,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			switch pc.kind {
 			case ckStack:
 				pushArgSize += op.Type.Size
+				r.push(l.loadSP(lmd)) // 引数 (S+k,x) の前に X をスタックの空き先頭に
 			case ckFastcallReg:
 				pushFastcallArgSize += op.Type.Size
 			}
@@ -453,9 +475,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				}
 				if op.Far {
 					r.push(l.farCallSetup(target))
-					r.push(l.jsrOrCall(lmd, "farcall", lmd.FrameSize))
+					r.push(l.callStatic(lmd, "farcall"))
 				} else {
-					r.push(l.jsrOrCall(lmd, target, lmd.FrameSize))
+					r.push(l.callStatic(lmd, target))
 				}
 				if op.Dst != nil {
 					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
@@ -472,18 +494,19 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				if op.Far {
 					// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いて farcall (ターゲット側のトランポリン) を呼ぶ
 					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
-					r.push(l.jsrOrCall(lmd, "farcall", base))
+					r.push(l.callStackish(lmd, "farcall"))
 				} else if sym != "" {
-					r.push(l.jsrOrCall(lmd, sym, base))
+					r.push(l.callStackish(lmd, sym))
 				} else {
 					// 関数ポインタから呼ぶ
 					r.push(l.loadA(op.In(0), 0))
 					r.push("sta <reg+0")
 					r.push(l.loadA(op.In(0), 1))
 					r.push("sta <reg+1")
-					r.push(l.jsrOrCall(lmd, "jsr_reg", base))
+					r.push(l.callStackish(lmd, "jsr_reg"))
 				}
 				if op.Dst != nil {
+					r.push(l.loadSP(lmd)) // 呼び先が X を壊したかもしれない
 					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 						r.push(fmt.Sprintf("lda <%d+S+%d,x", i, base))
 						r.push(l.storeA(op.Dst, i))
@@ -523,6 +546,18 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 			if l.inY(op.In(0)) {
 				r.push(fmt.Sprintf("sty %s", l.byte(op.Dst, 0)))
+				break
+			}
+			if l.inX(op.Dst) {
+				if l.inA(op.In(0)) {
+					r.push("tax")
+				} else {
+					r.push(fmt.Sprintf("ldx %s", l.byte(op.In(0), 0)))
+				}
+				break
+			}
+			if l.inX(op.In(0)) {
+				r.push(fmt.Sprintf("stx %s", l.byte(op.Dst, 0)))
 				break
 			}
 			if l.aHeld {
@@ -682,6 +717,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
 				break
 			}
+			if l.inX(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
+				r.push(fmt.Sprintf("cpx %s", l.byte(op.In(1), 0)))
+				break
+			}
 			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
 				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
 				break
@@ -719,6 +758,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			// オーバーフローのある符号付き比較も壊れていた。2026-09-14 に書き直し)
 			if l.inY(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
 				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
+				break
+			}
+			if l.inX(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
+				r.push(fmt.Sprintf("cpx %s", l.byte(op.In(1), 0)))
 				break
 			}
 			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
@@ -929,6 +972,12 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				}
 				break
 			}
+			if l.inX(op.In(1)) {
+				// 添字が X に常駐 (グローバル配列、要素 1 バイト)
+				r.push(fmt.Sprintf("lda %s+0,x", l.toAsm(op.In(0))))
+				r.push(l.storeA(op.Dst, 0))
+				break
+			}
 			r.push(l.loadYIdx(op.In(1), op.In(0)))
 			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 				r.push(fmt.Sprintf("lda %s+%d,y", l.toAsm(op.In(0)), i))
@@ -954,6 +1003,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push(l.loadA(op.In(2), i))
 					r.push(fmt.Sprintf("sta (%s),y", base))
 				}
+				break
+			}
+			if l.inX(op.In(1)) {
+				r.push(l.loadA(op.In(2), 0))
+				r.push(fmt.Sprintf("sta %s+0,x", l.toAsm(op.In(0))))
 				break
 			}
 			if ir.ValType(op.In(0)).Base.Size == 1 {
@@ -984,7 +1038,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		if restoreY {
 			r.push("ldy " + l.byte(op.ResidentY.Home, 0))
 		}
-		l.res, l.resMem, l.resY, l.resYMem, l.aHeld = nil, false, nil, false, false
+		if restoreX {
+			r.push("ldx " + l.byte(op.ResidentX.Home, 0))
+		}
+		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
 	}
 
 	for _, d := range lmd.Defs {

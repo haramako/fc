@@ -1,6 +1,7 @@
 	.setcpu "6502"
 	.include "macro.inc"
 	.include "_frames.inc"
+	.importzp FC_SP
 __MODULE_TEST_LZW__ = 1
 .segment "test_lzw"
 	.include "_lzw.inc"
@@ -247,6 +248,7 @@ _test_lzw_buf: .res 256
 	;;;=============================
 .segment "test_lzw"
 .proc _test_lzw_test_unpack
+	ldx FC_SP
 	lda #.LOBYTE(_test_lzw_buf)
 	sta <S+2,x
 	lda #.HIBYTE(_test_lzw_buf)
@@ -255,7 +257,9 @@ _test_lzw_buf: .res 256
 	sta <S+4,x
 	lda #.HIBYTE(PACKED)
 	sta <S+5,x
+	ldx FC_SP
 	jsr _lzw_unpack
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_lzw_test_unpack+0
 	lda <1+S+0,x
@@ -284,6 +288,7 @@ _test_lzw_buf: .res 256
 	lda #.HIBYTE(_58)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldx FC_SP
 	lda #.LOBYTE(_test_lzw_buf)
 	sta <S+1,x
 	lda #.HIBYTE(_test_lzw_buf)
@@ -294,7 +299,9 @@ _test_lzw_buf: .res 256
 	sta <S+4,x
 	lda 0+<F_test_lzw_test_unpack+0
 	sta <S+5,x
+	ldx FC_SP
 	jsr _mem_compare
+	ldx FC_SP
 	lda <0+S+0,x
 	sta 0+<F_test_lzw_test_unpack+0
 	sta <F_unittest_assert_equal+0

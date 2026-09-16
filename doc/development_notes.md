@@ -97,7 +97,7 @@ go test ./...                                    # 全部 (golden + examples + N
   sema（全モジュール）→ `codegen.PrepareProgram`（`frames.Analyze` で ABI を決める → 全関数の opt + regalloc →
   `frames.Place` で配置）→ `_frames.inc` を書く → 各モジュールの codegen → ca65。**codegen を直接呼ぶテストは
   `PrepareProgram` を先に呼ぶ**（golden の `newLlcForGolden`）。castle など base.asm を自前で持つプロジェクトは
-  `FC_SZP` / `FC_SRAM` と `_SIZE` の export を足す（examples/castle/src/data.asm）
+  `FC_SZP` / `FC_SRAM` と `_SIZE` の export、スタックの空き先頭 `FC_SP` を足す（examples/castle/src/data.asm）
 - **最適化のパイプライン**（2026-09-16〜）: sema（IR 生成）→ `internal/opt`（IR→IR。`ir.BuildCFG` / `ir.BuildUseDef` の上に
   書く小さなパスの列: ポインタ融合、コピー除去、ジャンプ整理、ループ回転…）→ `internal/regalloc` → `internal/codegen`
   （命令選択 + asm テキストのピープホール `peephole.go`）。パスを足したら `go test ./bench -v` で効果を見て、
