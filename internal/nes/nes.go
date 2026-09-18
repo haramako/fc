@@ -62,7 +62,8 @@ type Machine struct {
 	idlePc    int // 待ちループの lda のアドレス (最初にフラグを読んだ lda abs; bne の形の命令)
 	FrameBusy []int64
 
-	// 関数ごとのプロファイル (ProfileSymbols をアドレス順に与えると、命令のサイクルを PC を含む区間のシンボルに積む)
+	// 関数ごとのプロファイル (ProfileSymbols の区間 (ROM ファイル内のオフセット) に命令のサイクルを積む。
+	// バンク切り替えで同じアドレスに別の関数が来るので、PC でなく現在のバンクを反映した ROM オフセットで引く)
 	ProfileSymbols []ProfileSymbol
 	ProfileCycles  []int64 // ProfileSymbols と同じ並び
 
@@ -450,7 +451,7 @@ func (m *Machine) runFrame() {
 				idle += m.Cpu.Cycles - before
 			}
 			if len(m.ProfileSymbols) > 0 {
-				if k := m.symbolAt(pc); k >= 0 {
+				if k := m.symbolAt(m.RomOffset(pc)); k >= 0 {
 					m.ProfileCycles[k] += m.Cpu.Cycles - before
 				}
 			}
@@ -473,26 +474,43 @@ func (m *Machine) runFrame() {
 	}
 }
 
-// ProfileSymbol はプロファイル用の区間の先頭 (ld65 のマップのシンボル)。
+// ProfileSymbol はプロファイル用の区間の先頭 (ld65 の --dbgfile のシンボル。Offset は ROM ファイル内のオフセット:
+// seg の ooffs + (val - seg の start))。
 type ProfileSymbol struct {
-	Name string
-	Addr int
+	Name   string
+	Offset int
+}
+
+// RomOffset は CPU アドレス pc が (現在のバンクで) 指す ROM ファイル内のオフセット (iNES ヘッダ 16 バイト込み)。
+// PRG の外 (RAM など) は -1。
+func (m *Machine) RomOffset(pc int) int {
+	if pc < 0x8000 {
+		return -1
+	}
+	if m.mapper == 4 {
+		bank := (pc - 0x8000) / 0x2000
+		return 16 + m.prgOffsets[bank] + (pc-0x8000)&0x1fff
+	}
+	return 16 + (pc-0x8000)%len(m.prg)
 }
 
 // SetProfile はプロファイルの区間を設定する (アドレス順に並べ替える)。
 func (m *Machine) SetProfile(syms []ProfileSymbol) {
-	sort.Slice(syms, func(i, j int) bool { return syms[i].Addr < syms[j].Addr })
+	sort.Slice(syms, func(i, j int) bool { return syms[i].Offset < syms[j].Offset })
 	m.ProfileSymbols = syms
 	m.ProfileCycles = make([]int64, len(syms))
 }
 
-// symbolAt は pc を含む区間 (Addr <= pc の最後のシンボル) の添字 (-1 なら無し)。
-func (m *Machine) symbolAt(pc int) int {
+// symbolAt は ROM オフセット off を含む区間 (Offset <= off の最後のシンボル) の添字 (-1 なら無し)。
+func (m *Machine) symbolAt(off int) int {
+	if off < 0 {
+		return -1
+	}
 	syms := m.ProfileSymbols
 	lo, hi := 0, len(syms)
 	for lo < hi {
 		mid := (lo + hi) / 2
-		if syms[mid].Addr <= pc {
+		if syms[mid].Offset <= off {
 			lo = mid + 1
 		} else {
 			hi = mid

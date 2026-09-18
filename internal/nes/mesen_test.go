@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,6 +98,12 @@ func copyTree(t *testing.T, src, dst string) {
 // internal/fc の TestExampleCastle と `go test ./...` で並列に走るため、
 // リポジトリ内の .fc-build を共有すると競合する。
 func buildCastleWithMap(t *testing.T) (romPath, mapPath string) {
+	romPath, mapPath, _ = buildCastle(t)
+	return
+}
+
+// buildCastle は castle をビルドして ROM、ld65 のマップファイル、--dbgfile (プロファイル用) のパスを返す。
+func buildCastle(t *testing.T) (romPath, mapPath, dbgPath string) {
 	t.Helper()
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -119,14 +126,46 @@ func buildCastleWithMap(t *testing.T) (romPath, mapPath string) {
 	tmp := t.TempDir()
 	romPath = filepath.Join(tmp, "castle.nes")
 	mapPath = filepath.Join(tmp, "castle.map")
-	args := []string{"-o", romPath, "-vm", "-m", mapPath, "-C", "ld65.cfg"}
+	dbgPath = filepath.Join(tmp, "castle.dbg")
+	args := []string{"-o", romPath, "-vm", "-m", mapPath, "--dbgfile", dbgPath, "-C", "ld65.cfg"}
 	for _, o := range objs {
 		rel, _ := filepath.Rel(dir, o)
 		args = append(args, filepath.ToSlash(rel))
 	}
 	args = append(args, "res/sound/bgm.o", "res/sound/castle.o", "nsd/lib/NSD.lib")
 	runTool(t, dir, "ld65", args...)
-	return romPath, mapPath
+	return romPath, mapPath, dbgPath
+}
+
+// parseLd65Dbg は ld65 の --dbgfile からコードのシンボル (ラベル) の ROM ファイル内オフセットを読む
+// (seg の ooffs + (val - seg の start)。出力ファイルに置かれる ro セグメントだけ)。
+func parseLd65Dbg(t *testing.T, dbgPath string) []ProfileSymbol {
+	t.Helper()
+	b, err := os.ReadFile(dbgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type seg struct{ start, ooffs int }
+	segs := map[string]seg{}
+	reSeg := regexp.MustCompile(`^seg\s+id=(\d+),.*start=0x([0-9A-Fa-f]+),.*ooffs=(\d+)`)
+	reSym := regexp.MustCompile(`^sym\s+id=\d+,name="([^"]+)",.*val=0x([0-9A-Fa-f]+),seg=(\d+),type=lab`)
+	var syms []ProfileSymbol
+	for _, line := range strings.Split(string(b), "\n") {
+		if m := reSeg.FindStringSubmatch(line); m != nil {
+			start, _ := strconv.ParseInt(m[2], 16, 32)
+			ooffs, _ := strconv.Atoi(m[3])
+			segs[m[1]] = seg{int(start), ooffs}
+		} else if m := reSym.FindStringSubmatch(line); m != nil {
+			if s, ok := segs[m[3]]; ok {
+				val, _ := strconv.ParseInt(m[2], 16, 32)
+				syms = append(syms, ProfileSymbol{Name: m[1], Offset: s.ooffs + int(val) - s.start})
+			}
+		}
+	}
+	if len(syms) == 0 {
+		t.Fatalf("%s にコードのシンボルが無い", dbgPath)
+	}
+	return syms
 }
 
 // parseLd65MapAll は ld65 のマップファイルの全シンボル→アドレスの表。
