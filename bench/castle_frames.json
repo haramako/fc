@@ -1,0 +1,20 @@
+{
+  "field": {
+    "frames": 1080,
+    "avg": 10219,
+    "max": 29872,
+    "over": 2
+  },
+  "start": {
+    "frames": 300,
+    "avg": 7995,
+    "max": 29870,
+    "over": 9
+  },
+  "title": {
+    "frames": 180,
+    "avg": 6748,
+    "max": 29870,
+    "over": 5
+  }
+}

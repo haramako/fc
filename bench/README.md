@@ -48,6 +48,14 @@ castle（`examples/castle`）のホットパスと同じ形の処理。数字の
 | `calls` | en_vtbl の `PROCESS[t](i)` など | 通常呼び出し / fastcall / 関数ポインタ表 / 4 段の入れ子、各 500 回 |
 | `math16` | `my.fc` / `boxelev.fc` の物理 | 8.8 固定小数の位置・速度・重力・跳ね返り、距離、定数の乗除。64 個 × 100 フレーム |
 
+## castle の 1 フレーム（マクロベンチ）
+
+`go test ./internal/nes -run CastleFrameCycles -v`。examples/castle を内蔵 NES ランナーで自動プレイ（タイトル →
+A で開始 → フィールドで右移動とジャンプ。入力の時刻は固定）し、フレームごとの **busy サイクル = フレーム長（29,868）−
+vsync 待ちループ（`while (vsync_flag) {}` の `lda; bne`）の時間** を局面ごとに集計して `castle_frames.json` と比べる。
+NMI の中の仕事（VRAM 転送など）も busy に入る。`over` は待ちループに入らなかった（1 フレームに収まらなかった）フレーム数。
+ゲーム形ベンチ 9 本が拾えない「実ゲームの重さ」を見るためのもので、意図した変化は `-update` で受け入れる。
+
 ## 他のコンパイラとの概算比較（2026-09-15）
 
 c-bench-64 の公開結果（C64 実機相当の VICE、TOD クロックで 0.1 秒単位）と、fc のサイクル数を C64 の

@@ -69,7 +69,8 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       グローバルの読み書きの省略・移動は volatile でない変数だけ
 - [ ] 書き換えルールの DSL（Go コンパイラの rulegen の縮小版）— パスが 10 個を超えて手書きの照合が辛くなってから
 - [ ] デッドストア除去、live range の精度（穴あき区間の共有）
-- [ ] マクロベンチ: `examples/castle` を `internal/nes` で走らせて 1 フレームあたりのサイクル数
+- [x] マクロベンチ: `examples/castle` を `internal/nes` で自動プレイし、局面ごとの 1 フレームの busy サイクル
+      （フレーム長 − vsync 待ち）を `bench/castle_frames.json` と比べる（`TestCastleFrameCycles`） ✅ 2026-09-19
 
 ## 言語機能
 

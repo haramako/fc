@@ -144,6 +144,10 @@ go test ./...                                    # 全部 (golden + examples + N
   ベンチを書いたときに 16 ビットの除算・剰余のバグが 3 つ見つかった（`__mod_16` が stub、符号付き 16 ビットが符号無し除算、
   2 のべき乗の符号付き除算の `cmp $80`）。**新しい種類のコードを書くときは Python などで同じ計算を再現して照合する**と
   コンパイラのバグがすぐ見つかる
+- **castle のマクロベンチ**（2026-09-19）: `go test ./internal/nes -run CastleFrameCycles -v`。内蔵 NES ランナーが
+  `_ppu_vsync_flag` を読む `lda; bne` の待ちループを idle と数え、局面ごとの 1 フレームの busy サイクルを
+  `bench/castle_frames.json` と比べる（`-update` で更新。[bench/README.md](../bench/README.md)）。bench/ の 12 本と
+  違って実ゲームの 1 フレームの重さが見える（フィールドで約 10,200 サイクル = 34%）。最適化の効果は両方で見る
 - ca65 は既定で CPU 数だけ並列に走る。ca65 のエラー調査などで逐次にしたいときは `fc.Options.Jobs = 1`
   （CLI にはフラグ無し）
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は

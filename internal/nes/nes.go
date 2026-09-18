@@ -54,6 +54,13 @@ type Machine struct {
 	Cpu   *r6502.Cpu
 	Stats Stats
 
+	// フレームごとの CPU 使用量 (castle のマクロベンチ。bench/README.md)。IdleFlag に vsync 待ちのフラグ
+	// (castle の `_ppu_vsync_flag`) のアドレスを与えると、そのフラグを読む `lda abs; bne` の待ちループを idle と数え、
+	// フレームごとの busy サイクル (フレーム長 − idle) を FrameBusy に積む
+	IdleFlag  int
+	idlePc    int // 待ちループの lda のアドレス (最初にフラグを読んだ lda abs; bne の形の命令)
+	FrameBusy []int64
+
 	prg    []byte
 	chr    []byte
 	ram    [0x800]byte
@@ -142,6 +149,9 @@ func (m *Machine) Get(addr int) int {
 	addr &= 0xffff
 	switch {
 	case addr < 0x2000:
+		if addr == m.IdleFlag && m.idlePc == 0 && m.IdleFlag != 0 {
+			m.noteIdleLoop()
+		}
 		return int(m.ram[addr&0x7ff])
 	case addr < 0x4000:
 		return m.readPpuReg(addr & 7)
@@ -419,6 +429,7 @@ func (m *Machine) RunFrames(n int) (err error) {
 
 func (m *Machine) runFrame() {
 	frameStart := m.Cpu.Cycles
+	idle := int64(0)
 	for scanline := 0; scanline < scanlinesPerFrame; scanline++ {
 		target := frameStart + int64((scanline+1)*cyclesPerScanline)
 		for m.Cpu.Cycles < target {
@@ -427,8 +438,12 @@ func (m *Machine) runFrame() {
 				m.Stats.IrqCount++
 				m.Cpu.IRQ()
 			}
+			pc, before := m.Cpu.Pc, m.Cpu.Cycles
 			m.Cpu.StepSilent()
 			m.Stats.Instructions++
+			if m.idlePc != 0 && pc >= m.idlePc && pc < m.idlePc+5 {
+				idle += m.Cpu.Cycles - before
+			}
 		}
 		if scanline < 240 && m.renderingEnabled() && m.mapper == 4 {
 			m.mmc3ClockScanline()
@@ -443,6 +458,20 @@ func (m *Machine) runFrame() {
 		}
 	}
 	m.status &= 0x7f
+	if m.IdleFlag != 0 {
+		m.FrameBusy = append(m.FrameBusy, m.Cpu.Cycles-frameStart-idle)
+	}
+}
+
+// FrameCycles は 1 フレームの CPU サイクル数 (このランナーの概算値)。
+const FrameCycles = scanlinesPerFrame * cyclesPerScanline
+
+// noteIdleLoop は IdleFlag を読んでいる命令が `lda abs; bne -5` (fc の `while (flag) {}`) なら、その位置を待ちループとして覚える。
+func (m *Machine) noteIdleLoop() {
+	pc := m.Cpu.Pc
+	if m.Get(pc) == 0xAD && m.Get(pc+3) == 0xD0 && m.Get(pc+4) == 0xFB {
+		m.idlePc = pc
+	}
 }
 
 // ---------------------------------------------------------------
