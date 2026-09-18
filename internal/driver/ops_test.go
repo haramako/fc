@@ -649,3 +649,44 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestStepLoop: Y / X に常駐する添字の `i += k` (k ≤ 4) は iny × k、ループの出口のラベルが外側の if の終端と同じでも
+// ループは回転する (castle の ppu.wait_vsync_with_flag のスプライト消去ループ)。
+func TestStepLoop(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var buf:[64]int;
+var flag:int;
+function clear(start:int, f:int):void
+{
+	if (f != 2) {
+		if (!flag) {
+			for (var i = start; i < 64; i += 4) {
+				buf[i] = 255;
+			}
+		} else {
+			for (var i = 0; i <= start; i += 3) {
+				buf[i] = 7;
+			}
+		}
+	}
+	for (var j = 62; j > 40; j -= 2) {
+		buf[j] += 1;
+	}
+}
+function main():void
+{
+	var s:int16 = 0;
+	clear(20, 0);
+	flag = 1;
+	clear(12, 0);
+	clear(0, 2);
+	for (var i = 0; i < 64; i++) { s += buf[i]; }
+	printf(buf[20], " ", buf[21], " ", buf[24], " ", buf[12], " ", buf[13], " ", buf[62], " ", buf[41], " ", s, "\n");
+	exit(0);
+}
+`)
+	// 期待値は Python で同じ計算を再現して求めた (development_notes.md)
+	if want := "255 0 255 7 0 3 0 1593\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

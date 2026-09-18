@@ -34,16 +34,34 @@ type Decision struct {
 
 // isIncDec は codegen の incDec と同じ条件 (x = x ± 1、1〜2 バイト、メモリ上)。
 func isIncDec(op *ir.Op) bool {
+	return isStep(op, 1)
+}
+
+// isStep は `x = x ± k` (k は 1〜maxK の定数、1〜2 バイト) の形か。Y / X に常駐する 1 バイトの添字なら iny × k で回せる
+// (StepMax まで。castle の 4 バイト飛びのスプライト消去ループ)。
+func isStep(op *ir.Op, maxK int) bool {
 	if op.Code != ir.OpAdd && op.Code != ir.OpSub || len(op.Src) != 2 {
 		return false
 	}
 	k, lit := ir.ValIntLiteral(op.Src[1])
-	if !lit || k != 1 || ir.ValType(op.Dst).Size > 2 {
+	if !lit || k < 1 || k > maxK || ir.ValType(op.Dst).Size > 2 {
 		return false
 	}
 	d, s := ir.UnderlyingValue(op.Dst), ir.UnderlyingValue(op.Src[0])
 	return d != nil && d == s && ir.ValOffset(op.Dst) == ir.ValOffset(op.Src[0]) && ir.ValType(op.Dst).Size == ir.ValType(op.Src[0]).Size
 }
+
+// stepGain は isStep な命令を iny × k にしたときの得: k = 1 は inc x (5) → iny (2) で 3、k ≥ 2 は lda; clc; adc #k; sta (10) → 2k。
+func stepGain(op *ir.Op) int {
+	k, _ := ir.ValIntLiteral(op.Src[1])
+	if k == 1 {
+		return 3
+	}
+	return 10 - 2*k
+}
+
+// StepMax は Y / X に常駐する添字の `i += k` を iny × k にする k の上限 (k 回で 2k サイクル。5 以上は tya; clc; adc; tay の 8 と変わらない)。
+const StepMax = 4
 
 // isMemShift は codegen の shiftInMemory と同じ条件 (定数シフト、2 バイト以下、1 バイトなら x = x << n の形)。
 func isMemShift(op *ir.Op) bool {
@@ -239,8 +257,8 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 			return true, 3
 		}
 	case ir.OpAdd, ir.OpSub:
-		if isIncDec(op) && isV(op.Dst, v) {
-			return true, 3 // inc x (5) → iny (2)
+		if isStep(op, StepMax) && isV(op.Dst, v) {
+			return true, stepGain(op) // inc x (5) → iny (2)。i += k: lda; clc; adc #k; sta (10) → iny × k (2k)
 		}
 	case ir.OpIf, ir.OpIfTrue:
 		if isV(op.Src[0], v) {
@@ -278,8 +296,8 @@ func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 			return true, 3 // sta a,x
 		}
 	case ir.OpAdd, ir.OpSub:
-		if isIncDec(op) && isV(op.Dst, v) {
-			return true, 3 // inx / dex
+		if isStep(op, StepMax) && isV(op.Dst, v) {
+			return true, stepGain(op) // inx / dex × k
 		}
 	case ir.OpIf, ir.OpIfTrue:
 		if isV(op.Src[0], v) {
@@ -332,7 +350,7 @@ func freeA(op *ir.Op) bool {
 	case ir.OpLabel, ir.OpJump, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpPushResult, ir.OpPushFastcallResult:
 		return true
 	case ir.OpAdd, ir.OpSub:
-		return isIncDec(op)
+		return isIncDec(op) || (isStep(op, StepMax) && (ir.ValLocation(op.Dst) == ir.LocY || ir.ValLocation(op.Dst) == ir.LocX))
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		return isMemShift(op)
 	case ir.OpIf, ir.OpIfTrue:

@@ -5,6 +5,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/types"
 )
 
@@ -222,14 +223,18 @@ func (l *Llc) flagsFromIncDec(prev *ir.Op, v ir.Operand) bool {
 func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
 	k, lit := ir.ValIntLiteral(op.In(1))
 	size := ir.ValType(op.Dst).Size
-	if !lit || k != 1 || size > 2 || !isValueOrCasted(op.Dst) || !isValueOrCasted(op.In(0)) {
+	if !lit || k < 1 || k > regalloc.StepMax || size > 2 || !isValueOrCasted(op.Dst) || !isValueOrCasted(op.In(0)) {
 		return nil, false
 	}
+	// Y / X に常駐する添字: i += k は iny × k (k ≤ StepMax。regalloc.isStep と同じ条件)
 	if l.inY(op.Dst) && l.inY(op.In(0)) && size == 1 {
-		return []any{ifElse(op.Code == ir.OpAdd, "iny", "dey")}, true // Y に常駐するカウンタ
+		return repeatInstr(ifElse(op.Code == ir.OpAdd, "iny", "dey"), k), true
 	}
 	if l.inX(op.Dst) && l.inX(op.In(0)) && size == 1 {
-		return []any{ifElse(op.Code == ir.OpAdd, "inx", "dex")}, true // X に常駐するカウンタ
+		return repeatInstr(ifElse(op.Code == ir.OpAdd, "inx", "dex"), k), true
+	}
+	if k != 1 {
+		return nil, false
 	}
 	for _, v := range []ir.Operand{op.Dst, op.In(0)} {
 		if ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || l.inX(v) || ir.ValLocation(v) == ir.LocCond {
@@ -257,6 +262,14 @@ func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
 	}
 	skip := l.newLabel()
 	return []any{"lda " + lo, "bne " + skip, "dec " + hi, skip + ":", "dec " + lo}, true
+}
+
+func repeatInstr(s string, n int) []any {
+	r := make([]any, n)
+	for i := range r {
+		r[i] = s
+	}
+	return r
 }
 
 // shiftInMemory は定数シフトをメモリ上で行う (Dst がメモリにある 1 / 2 バイトのとき)。

@@ -220,15 +220,22 @@ func rotateLoops(lmd *ir.Lambda) bool {
 		if end == nil || end.Index <= b0.Index+1 {
 			continue
 		}
-		back := cfg.Blocks[end.Index-1]
-		bj := cfg.Last(back)
-		if bj == nil || bj.Code != ir.OpJump || bj.Label != b0.Label {
+		// 戻りの辺: jump L_begin で終わる最後のブロック (L_end の直前とは限らない。ループの出口のラベルが外側の if の
+		// 終端と同じラベルに畳まれていると、L_end は別のコードの後ろにある)
+		var back *ir.Block
+		for _, b := range cfg.Blocks[b0.Index+1 : end.Index] {
+			if l := cfg.Last(b); l != nil && l.Code == ir.OpJump && l.Label == b0.Label {
+				back = b
+			}
+		}
+		if back == nil {
 			continue
 		}
-		// B0 に流れ込むのは直前からの fallthrough と jump L_begin だけ (if の飛び先には使われていない)
+		bj := cfg.Last(back)
+		// B0 に流れ込むのは直前からの fallthrough と本体からの jump L_begin だけ (if の飛び先には使われていない)
 		ok := true
 		for _, p := range b0.Preds {
-			if l := cfg.Last(p); p.Index != b0.Index-1 && (l == nil || l.Code != ir.OpJump || l.Label != b0.Label) {
+			if l := cfg.Last(p); p.Index != b0.Index-1 && (l == nil || l.Code != ir.OpJump || l.Label != b0.Label || p.Index > back.Index) {
 				ok = false
 			}
 		}
@@ -249,7 +256,10 @@ func rotateLoops(lmd *ir.Lambda) bool {
 		out = append(out, ops[b0.Start:b0.End]...)
 		invertCond(cond)
 		cond.Label = bodyLabel
-		out = append(out, ops[end.Start:]...)
+		if back.Index+1 != end.Index {
+			out = append(out, &ir.Op{Code: ir.OpJump, Label: end.Label, Pos: cond.Pos}) // 落ちる先が L_end でないなら飛ぶ
+		}
+		out = append(out, ops[back.End:]...)
 		lmd.Ops = out
 		return true // CFG が変わったので作り直す
 	}
