@@ -93,7 +93,7 @@
   (vars
    (var 0 $result local #"uint8" lt=result)
    (var 1 n local #"uint8" lt=arg)
-   (var 2 $12 local #"uint8" lt=temp)
+   (var 2 $12 local #"ubool8" lt=temp)
    (var 3 $13 local #"uint8" lt=temp)
    (var 4 $14 local #"uint8" lt=temp)
    (var 5 $15 local #"uint8" lt=temp)
@@ -182,7 +182,7 @@
    (var 1 n local #"uint8" pub)
    (var 2 x local #"uint16" pub)
    (var 3 $52 local #"uint8" lt=temp)
-   (var 4 $57 local #"uint8" lt=temp)
+   (var 4 $57 local #"ubool8" lt=temp)
   )
   (defs
    (def _40 block #"[11]uint8" ({lit nil 108 #"uint8"} {lit nil 111 #"uint8"} {lit nil 111 #"uint8"} {lit nil 112 #"uint8"} {lit nil 32 #"uint8"} {lit nil 98 #"uint8"} {lit nil 114 #"uint8"} {lit nil 101 #"uint8"} {lit nil 97 #"uint8"} {lit nil 107 #"uint8"} {lit nil 0 #"uint8"}))
@@ -386,7 +386,7 @@
    (var 0 a local #"uint16" lt=arg)
    (var 1 b local #"uint16" lt=arg)
    (var 2 message local #"*uint8" lt=arg)
-   (var 3 $16 local #"uint8" lt=temp)
+   (var 3 $16 local #"ubool8" lt=temp)
   )
   (defs
    (def _21 block #"[9]uint8" ({lit nil 10 #"uint8"} {lit nil 69 #"uint8"} {lit nil 82 #"uint8"} {lit nil 82 #"uint8"} {lit nil 79 #"uint8"} {lit nil 82 #"uint8"} {lit nil 58 #"uint8"} {lit nil 32 #"uint8"} {lit nil 0 #"uint8"}))

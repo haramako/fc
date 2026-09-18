@@ -613,7 +613,7 @@ func candidates(lmd *ir.Lambda, cfg *ir.CFG, r region) []*ir.Value {
 					continue
 				}
 				v := ir.UnderlyingValue(o)
-				if v == nil || seen[v] || v.Type.Size != 1 || v.Type.Kind != types.Int || refered[v] || isResident(v) {
+				if v == nil || seen[v] || v.Type.Size != 1 || (v.Type.Kind != types.Int && v.Type.Kind != types.Bool) || refered[v] || isResident(v) {
 					continue
 				}
 				switch v.Kind {

@@ -28,7 +28,7 @@
  (vars
   (var 0 $result local #"uint8" lt=result loc=frame addr=0)
   (var 1 n local #"uint8" lt=arg loc=frame addr=1)
-  (var 2 $12 local #"uint8" lt=temp loc=cond cond=carry,true)
+  (var 2 $12 local #"ubool8" lt=temp loc=cond cond=carry,true)
   (var 3 $13 local #"uint8" lt=temp loc=frame addr=2)
   (var 4 $14 local #"uint8" lt=temp loc=a)
   (var 5 $15 local #"uint8" lt=temp loc=reg addr=0)
@@ -102,7 +102,7 @@
   (var 1 n local #"uint8" pub loc=static addr=0)
   (var 2 x local #"uint16" pub loc=static addr=1)
   (var 3 $52 local #"uint8" lt=temp loc=static addr=1)
-  (var 4 $57 local #"uint8" lt=temp loc=static addr=2)
+  (var 4 $57 local #"ubool8" lt=temp loc=static addr=2)
   (var 5 n@Y local #"uint8" lt=temp loc=y)
  )
  (ops
@@ -249,7 +249,7 @@
   (var 0 a local #"uint16" lt=arg loc=static addr=0)
   (var 1 b local #"uint16" lt=arg loc=static addr=2)
   (var 2 message local #"*uint8" lt=arg loc=static addr=4)
-  (var 3 $16 local #"uint8" lt=temp loc=cond cond=zero,true)
+  (var 3 $16 local #"ubool8" lt=temp loc=cond cond=zero,true)
  )
  (ops
   0000 (:eq {l3 $16} {l0 a} {l1 b})

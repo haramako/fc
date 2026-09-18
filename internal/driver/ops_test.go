@@ -420,3 +420,32 @@ function main():void
 		t.Errorf("-O 1: got %q want %q", out, want)
 	}
 }
+
+// TestBoolCompareResult: 比較・論理演算の結果は bool (0 / 1)。uint8 と互換なので整数の引数・戻り値・代入・算術に
+// そのまま使え、`var f = a < b` の f (bool) も if / & / 加算に使える。定数畳み込みも同じ。
+func TestBoolCompareResult(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var tab:[4]int;
+var g:int;
+function isBig(x:int):int { return x > 100; }
+function count(b:bool):void { g += b; }
+function main():void
+{
+	var a = 5;
+	var f = a < 7;          // bool
+	var h = a == 5 && a != 6;
+	var n = !f;
+	var k:int = (a > 1) + (a > 2) + (a > 9); // 2
+	tab[f] = 9;             // 添字にも使える (1)
+	count(a < 3);
+	count(f);
+	count(true);
+	const C = 3 < 4;
+	printf(f, " ", h, " ", n, " ", k, " ", tab[1], " ", isBig(200), " ", isBig(2), " ", g, " ", C, " ", (f == h), " ", f & 1, "\n");
+	exit(0);
+}
+`)
+	if want := "1 1 0 2 9 1 0 2 1 1 1\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

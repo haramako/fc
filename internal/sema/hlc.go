@@ -1079,7 +1079,12 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				if len(args) > 1 {
 					v2 = args[1].val.Int
 				}
-				return cv(h.IntValue(foldIntOp(c.op, v1, v2)))
+				n := foldIntOp(c.op, v1, v2)
+				switch c.op {
+				case opEq, opNe, opLt, opGt, opLe, opGe, opLand, opLor, opNot:
+					return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), n)) // 比較・論理演算の定数畳み込みも bool
+				}
+				return cv(h.IntValue(n))
 			}
 			return &cexpr{kind: cOp, op: c.op, args: args}
 
@@ -1520,7 +1525,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 		case opNot, opUminus, opBitNot:
 			left := h.rval(e.args[0])
-			tmp := h.newTmp(ir.ValType(left))
+			typ := ir.ValType(left)
+			if e.op == opNot {
+				typ = h.prog.Types.Bool() // `!x` は 0 / 1
+			}
+			tmp := h.newTmp(typ)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}})
 			r = tmp
 
@@ -1565,7 +1574,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
 			}
 			_, left, right = h.makeCompatible(left, right)
-			tmp := h.newTmp(h.prog.Types.IntType(1, false))
+			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。language_reference.md §2)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 
@@ -1587,11 +1596,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		case opLand, opLor:
 			// 値として使う `a && b` / `a || b` は 0 / 1 (条件文脈では compileCond が分岐に展開する)
 			endLabel := h.newLabel("end")
-			rr := h.newTmp(h.prog.Types.IntType(1, false))
-			u8 := h.prog.Types.IntType(1, false)
-			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{ir.NewIntLiteral("", u8, 0)}})
+			boolT := h.prog.Types.Bool()
+			rr := h.newTmp(boolT)
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{ir.NewIntLiteral("", boolT, 0)}})
 			h.compileCond(e, endLabel, false)
-			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{ir.NewIntLiteral("", u8, 1)}})
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: rr, Src: []ir.Operand{ir.NewIntLiteral("", boolT, 1)}})
 			h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 			r = rr
 
@@ -1763,7 +1772,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if ir.ValType(left).Base.Kind == types.Void {
 				panic(&diag.Error{Msg: "cannot index *void (bitcast to a typed pointer first)"})
 			}
-			if ir.ValType(right).Kind != types.Int {
+			if ir.ValType(right).Kind != types.Int && ir.ValType(right).Kind != types.Bool {
 				panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(right))})
 			}
 			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))

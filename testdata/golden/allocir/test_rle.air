@@ -3,10 +3,10 @@
   (var 0 $3 local #"uint16" lt=temp loc=none unuse)
   (var 1 len local #"uint16" pub loc=static addr=0)
   (var 2 $9 local #"uint8" lt=temp loc=static addr=2)
-  (var 3 $12 local #"uint8" lt=temp loc=static addr=3)
+  (var 3 $12 local #"ubool8" lt=temp loc=static addr=3)
   (var 4 $15 local #"uint16" lt=temp loc=none unuse)
   (var 5 $21 local #"uint8" lt=temp loc=static addr=0)
-  (var 6 $24 local #"uint8" lt=temp loc=static addr=1)
+  (var 6 $24 local #"ubool8" lt=temp loc=static addr=1)
  )
  (ops
   0000 (:push_result #"uint16")
@@ -103,7 +103,7 @@
   (var 0 a local #"uint16" lt=arg loc=static addr=0)
   (var 1 b local #"uint16" lt=arg loc=static addr=2)
   (var 2 message local #"*uint8" lt=arg loc=static addr=4)
-  (var 3 $16 local #"uint8" lt=temp loc=cond cond=zero,true)
+  (var 3 $16 local #"ubool8" lt=temp loc=cond cond=zero,true)
  )
  (ops
   0000 (:eq {l3 $16} {l0 a} {l1 b})

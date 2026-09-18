@@ -73,7 +73,7 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 
 ## 言語機能
 
-- [ ] bool を比較演算の結果型にする（今は `uint8`。language_reference.md §2）
+- [x] bool を比較・論理演算の結果型に（`uint8` と互換なので既存コードの変更は不要。添字にも使える。定数畳み込みも bool） ✅ 2026-09-19
 - [ ] グローバル変数の初期化（今は "can't init global variable"。DATA セグメント + 起動時コピー）
 - [ ] const の二重配列・ポインタ配列
 - [ ] switch のジャンプテーブル

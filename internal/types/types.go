@@ -245,7 +245,7 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 	if b.Kind == Bad {
 		return a
 	}
-	// bool は uint8 と互換 (比較の結果は uint8 のまま。true / false は bool)
+	// bool は uint8 と互換 (比較・論理演算の結果と true / false は bool。整数と混ぜれば uint8)
 	if a.Kind == Bool {
 		a = u.IntType(1, false)
 	}

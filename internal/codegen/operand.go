@@ -13,7 +13,7 @@ import (
 
 // isByteInt は 1 バイトの整数型か (旧実装の `type == int || type == sint8`)。SoA のハンドル (1 バイトのインデックス) も含む。
 func isByteInt(t *types.Type) bool {
-	return (t.Kind == types.Int || t.Kind == types.SoaRef) && t.Size == 1
+	return (t.Kind == types.Int || t.Kind == types.Bool || t.Kind == types.SoaRef) && t.Size == 1
 }
 
 func ifElse(cond bool, a, b string) string {
