@@ -42,6 +42,35 @@ func frameStat(busy []int64) FrameStat {
 	return st
 }
 
+// logProfile はフィールドの局面で時間を使った関数の上位を出す (待ちループの関数は除く。-v で見る)。
+func logProfile(t *testing.T, m *Machine, st FrameStat) {
+	type ent struct {
+		name string
+		cyc  int64
+	}
+	var ents []ent
+	var total int64
+	for k, s := range m.ProfileSymbols {
+		c := m.ProfileCycles[k]
+		if c == 0 || s.Name == "_ppu_wait_vsync_with_flag" {
+			continue
+		}
+		ents = append(ents, ent{s.Name, c})
+		total += c
+	}
+	sort.Slice(ents, func(i, j int) bool { return ents[i].cyc > ents[j].cyc })
+	var b strings.Builder
+	fmt.Fprintf(&b, "field の関数別 (1 フレームあたり、待ちループを除く busy %d の内訳):\n", st.Avg)
+	for i, e := range ents {
+		if i >= 25 {
+			break
+		}
+		per := e.cyc / int64(st.Frames)
+		fmt.Fprintf(&b, "  %-40s %7d  %5.1f%%\n", e.name, per, float64(e.cyc)*100/float64(total))
+	}
+	t.Log(b.String())
+}
+
 func TestCastleFrameCycles(t *testing.T) {
 	rom, mapPath := buildCastleWithMap(t)
 	syms := parseLd65Map(t, mapPath, "_ppu_vsync_flag")
@@ -50,6 +79,14 @@ func TestCastleFrameCycles(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.IdleFlag = syms["_ppu_vsync_flag"]
+	// 関数ごとのプロファイル (マップの全シンボル。__direct は本体に合算する)
+	var profile []ProfileSymbol
+	for name, addr := range parseLd65MapAll(t, mapPath) {
+		if addr >= 0x8000 && !strings.HasSuffix(name, "__direct") {
+			profile = append(profile, ProfileSymbol{Name: name, Addr: addr})
+		}
+	}
+	m.SetProfile(profile)
 	run := func(n int) {
 		if err := m.RunFrames(n); err != nil {
 			t.Fatal(err)
@@ -67,6 +104,9 @@ func TestCastleFrameCycles(t *testing.T) {
 	run(10)
 	m.SetButtons(0)
 	measure("start", func() { run(300) })
+	for k := range m.ProfileCycles {
+		m.ProfileCycles[k] = 0 // フィールドだけを見る
+	}
 	measure("field", func() {
 		for cycle := 0; cycle < 6; cycle++ {
 			m.SetButtons(ButtonRight)
@@ -81,6 +121,7 @@ func TestCastleFrameCycles(t *testing.T) {
 	if m.idlePc == 0 {
 		t.Fatal("vsync 待ちループ (lda _ppu_vsync_flag; bne) が見つからなかった")
 	}
+	logProfile(t, m, got["field"])
 
 	path := filepath.Join("..", "..", "bench", "castle_frames.json")
 	want := map[string]FrameStat{}

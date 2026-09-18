@@ -129,8 +129,8 @@ func buildCastleWithMap(t *testing.T) (romPath, mapPath string) {
 	return romPath, mapPath
 }
 
-// parseLd65Map は ld65 のマップファイルからシンボル→アドレスの表を作る。
-func parseLd65Map(t *testing.T, mapPath string, symbols ...string) map[string]int {
+// parseLd65MapAll は ld65 のマップファイルの全シンボル→アドレスの表。
+func parseLd65MapAll(t *testing.T, mapPath string) map[string]int {
 	t.Helper()
 	b, err := os.ReadFile(mapPath)
 	if err != nil {
@@ -144,6 +144,13 @@ func parseLd65Map(t *testing.T, mapPath string, symbols ...string) map[string]in
 			all[m[1]] = int(n)
 		}
 	}
+	return all
+}
+
+// parseLd65Map は ld65 のマップファイルからシンボル→アドレスの表を作る。
+func parseLd65Map(t *testing.T, mapPath string, symbols ...string) map[string]int {
+	t.Helper()
+	all := parseLd65MapAll(t, mapPath)
 	r := map[string]int{}
 	for _, s := range symbols {
 		addr, ok := all[s]

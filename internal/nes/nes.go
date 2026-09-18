@@ -17,6 +17,7 @@ import (
 	"image/color"
 	"image/png"
 	"os"
+	"sort"
 
 	"github.com/haramako/fc/internal/r6502"
 )
@@ -60,6 +61,10 @@ type Machine struct {
 	IdleFlag  int
 	idlePc    int // 待ちループの lda のアドレス (最初にフラグを読んだ lda abs; bne の形の命令)
 	FrameBusy []int64
+
+	// 関数ごとのプロファイル (ProfileSymbols をアドレス順に与えると、命令のサイクルを PC を含む区間のシンボルに積む)
+	ProfileSymbols []ProfileSymbol
+	ProfileCycles  []int64 // ProfileSymbols と同じ並び
 
 	prg    []byte
 	chr    []byte
@@ -444,6 +449,11 @@ func (m *Machine) runFrame() {
 			if m.idlePc != 0 && pc >= m.idlePc && pc < m.idlePc+5 {
 				idle += m.Cpu.Cycles - before
 			}
+			if len(m.ProfileSymbols) > 0 {
+				if k := m.symbolAt(pc); k >= 0 {
+					m.ProfileCycles[k] += m.Cpu.Cycles - before
+				}
+			}
 		}
 		if scanline < 240 && m.renderingEnabled() && m.mapper == 4 {
 			m.mmc3ClockScanline()
@@ -461,6 +471,34 @@ func (m *Machine) runFrame() {
 	if m.IdleFlag != 0 {
 		m.FrameBusy = append(m.FrameBusy, m.Cpu.Cycles-frameStart-idle)
 	}
+}
+
+// ProfileSymbol はプロファイル用の区間の先頭 (ld65 のマップのシンボル)。
+type ProfileSymbol struct {
+	Name string
+	Addr int
+}
+
+// SetProfile はプロファイルの区間を設定する (アドレス順に並べ替える)。
+func (m *Machine) SetProfile(syms []ProfileSymbol) {
+	sort.Slice(syms, func(i, j int) bool { return syms[i].Addr < syms[j].Addr })
+	m.ProfileSymbols = syms
+	m.ProfileCycles = make([]int64, len(syms))
+}
+
+// symbolAt は pc を含む区間 (Addr <= pc の最後のシンボル) の添字 (-1 なら無し)。
+func (m *Machine) symbolAt(pc int) int {
+	syms := m.ProfileSymbols
+	lo, hi := 0, len(syms)
+	for lo < hi {
+		mid := (lo + hi) / 2
+		if syms[mid].Addr <= pc {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return lo - 1
 }
 
 // FrameCycles は 1 フレームの CPU サイクル数 (このランナーの概算値)。
