@@ -8,6 +8,7 @@ package regalloc
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -304,7 +305,7 @@ func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 func needsX(op *ir.Op) bool {
 	switch op.Code {
 	case ir.OpPushResult, ir.OpPushArg, ir.OpCall, ir.OpPushFastcallResult, ir.OpPushFastcallArg, ir.OpFastcall,
-		ir.OpReturn, ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpAsm:
+		ir.OpReturn, ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpAsm, ir.OpSwitch:
 		return true
 	}
 	return false
@@ -922,6 +923,17 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			// 条件分岐の飛び先: 辺を分割して末尾に新しいブロック
 			l := newLabel()
 			last.Label = l
+			tail = append(tail, &ir.Op{Code: ir.OpLabel, Label: l})
+			tail = append(tail, mk...)
+			tail = append(tail, &ir.Op{Code: ir.OpJump, Label: to.Label})
+		case last != nil && last.Code == ir.OpSwitch && to.Label != "" && slices.Contains(last.Labels, to.Label):
+			// ジャンプテーブルの飛び先: 表の項目を新しいブロックに向ける
+			l := newLabel()
+			for k, x := range last.Labels {
+				if x == to.Label {
+					last.Labels[k] = l
+				}
+			}
 			tail = append(tail, &ir.Op{Code: ir.OpLabel, Label: l})
 			tail = append(tail, mk...)
 			tail = append(tail, &ir.Op{Code: ir.OpJump, Label: to.Label})

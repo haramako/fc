@@ -68,6 +68,12 @@ func (l *Llc) extendJump(asm []string) []string {
 		if m := reEjInstr.FindStringSubmatch(line); m != nil {
 			instrs[i] = instr{size: instrSize(m[1], strings.TrimSpace(m[2]))}
 		}
+		// ジャンプテーブルのデータ (.byte / .word の並び)
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, ".byte ") {
+			instrs[i] = instr{size: strings.Count(t, ",") + 1}
+		} else if strings.HasPrefix(t, ".word ") {
+			instrs[i] = instr{size: 2 * (strings.Count(t, ",") + 1)}
+		}
 	}
 
 	// 届かない分岐を長くしながら固定点まで

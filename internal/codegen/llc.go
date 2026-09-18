@@ -505,6 +505,36 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		case ir.OpJump:
 			r.push(fmt.Sprintf("jmp %s", op.Label))
 
+		case ir.OpSwitch:
+			// ジャンプテーブル: 飛び先 - 1 を下位 / 上位の表に並べ、pha; pha; rts で飛ぶ。範囲外は次の命令へ落ちる。
+			// 飛ぶ側の経路では常駐レジスタをここで復帰する (共通の復帰は落ちる側にしか効かない)
+			minV, _ := ir.ValIntLiteral(op.In(1))
+			labels := l.newLabels(3)
+			lo, hi, fall := labels[0], labels[1], labels[2]
+			r.push(l.loadA(op.In(0), 0))
+			if minV&255 != 0 {
+				r.push("sec", fmt.Sprintf("sbc #%d", minV&255))
+			}
+			r.push(fmt.Sprintf("cmp #%d", len(op.Labels)), fmt.Sprintf("bcs %s", fall), "tax",
+				fmt.Sprintf("lda %s,x", hi), "pha", fmt.Sprintf("lda %s,x", lo), "pha")
+			if restoreX {
+				r.push("ldx " + l.byte(op.ResidentX.Home, 0))
+			}
+			if restoreY {
+				r.push("ldy " + l.byte(op.ResidentY.Home, 0))
+			}
+			if restoreA {
+				r.push("lda " + l.byte(op.Resident.Home, 0))
+			}
+			r.push("rts")
+			los := make([]string, len(op.Labels))
+			his := make([]string, len(op.Labels))
+			for k, t := range op.Labels {
+				los[k] = fmt.Sprintf("<(%s-1)", t)
+				his[k] = fmt.Sprintf(">(%s-1)", t)
+			}
+			r.push(lo+":", ".byte "+strings.Join(los, ","), hi+":", ".byte "+strings.Join(his, ","), fall+":")
+
 		case ir.OpReturn:
 			if op.In(0) != nil {
 				r.push(l.load(lmd.Result, op.In(0)))

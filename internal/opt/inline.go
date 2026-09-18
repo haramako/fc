@@ -251,6 +251,12 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) []*ir.Op {
 		}
 		no.Dst = mapOperand(op.Dst)
 		no.Label = label(op.Label)
+		if len(op.Labels) > 0 {
+			no.Labels = make([]string, len(op.Labels))
+			for k, l := range op.Labels {
+				no.Labels[k] = label(l)
+			}
+		}
 		out = append(out, &no)
 	}
 	out = append(out, &ir.Op{Code: ir.OpLabel, Label: end, Pos: call.Pos})

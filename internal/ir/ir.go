@@ -9,6 +9,7 @@ package ir
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
@@ -25,6 +26,7 @@ const (
 	OpIfCarry                   // if C then goto Label (直前の命令が残した C フラグ。opt.carryBranch が作る)
 	OpIfNotCarry                // if !C then goto Label
 	OpJump                      // goto Label
+	OpSwitch                    // Src[0] (1 バイト) - Src[1] (即値) を添字に Labels[k] へ (ジャンプテーブル)。範囲外は次の命令へ
 	OpReturn                    // return [Src[0]]
 	OpPushResult                // 戻り値領域を予約 (Type)
 	OpPushArg                   // 引数を積む (Type, Src[0])
@@ -62,7 +64,7 @@ const (
 )
 
 var opCodeNames = [...]string{
-	OpLabel: "label", OpIf: "if", OpIfTrue: "if_true", OpIfCarry: "if_carry", OpIfNotCarry: "if_not_carry",
+	OpLabel: "label", OpIf: "if", OpIfTrue: "if_true", OpIfCarry: "if_carry", OpIfNotCarry: "if_not_carry", OpSwitch: "switch",
 	OpJump: "jump", OpReturn: "return",
 	OpPushResult: "push_result", OpPushArg: "push_arg", OpCall: "call",
 	OpPushFastcallResult: "push_fastcall_result", OpPushFastcallArg: "push_fastcall_arg", OpFastcall: "fastcall",
@@ -98,6 +100,7 @@ type Op struct {
 	Dst    Operand         // 結果の格納先 (無い命令、または削除された戻り値では nil)
 	Src    []Operand       // 入力
 	Label  string          // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
+	Labels []string        // OpSwitch の飛び先 (添字順)
 	Type   *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
 	Text   string          // OpAsm のアセンブラ行
 	Far    bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
@@ -133,6 +136,8 @@ func (op *Op) positional() []any {
 		r = append(r, op.Label)
 	case OpIf, OpIfTrue:
 		r = append(r, op.Src[0], op.Label)
+	case OpSwitch:
+		r = append(r, op.Src[0], op.Src[1], strings.Join(op.Labels, " "))
 	case OpReturn:
 		if len(op.Src) > 0 {
 			r = append(r, op.Src[0])

@@ -88,6 +88,15 @@ func threadJumps(lmd *ir.Lambda) bool {
 	for _, b := range cfg.Blocks {
 		for _, i := range cfg.Ops(b) {
 			op := ops[i]
+			if op != nil && op.Code == ir.OpSwitch {
+				for k, l := range op.Labels {
+					if nl := resolve(l); nl != l {
+						op.Labels[k] = nl
+						changed = true
+					}
+				}
+				continue
+			}
 			if !isBranch(op) {
 				continue
 			}
@@ -123,6 +132,10 @@ func removeUnreachable(lmd *ir.Lambda) bool {
 		for _, i := range cfg.Ops(b) {
 			if isBranch(ops[i]) {
 				refs[ops[i].Label]++
+			} else if ops[i] != nil && ops[i].Code == ir.OpSwitch {
+				for _, l := range ops[i].Labels {
+					refs[l]++
+				}
 			}
 		}
 	}

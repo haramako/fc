@@ -386,7 +386,7 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				}
 			case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpEq, ir.OpLt, ir.OpPget, ir.OpSub, ir.OpPushArg,
-				ir.OpIf, ir.OpIfTrue, ir.OpReturn:
+				ir.OpIf, ir.OpIfTrue, ir.OpReturn, ir.OpSwitch:
 				if !isSameValue(nextOp.In(0), v) {
 					continue
 				}

@@ -546,3 +546,106 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestConstPointerArray: ポインタの配列の const (`[N]*T`): 要素は文字列リテラル、配列定数の名前、null。
+// 二重配列の const (`[2][3]int`) と合わせて、定数添字・変数添字の両方で読める。
+func TestConstPointerArray(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `const A:[2][3]int = [[1, 2, 3], [4, 5, 6]];
+const W:[2][2]int16 = [[1000, 2], [3, 40000]];
+const S1:*int = "ab";
+const T2:[]int = [7, 8, 9];
+const PS:[3]*int = [S1, T2, "xyz"];
+const NAMES:[2]*int = ["hello", "hi"];
+function len(p:*int):int { var n = 0; while (p[n]) { n++; } return n; }
+function main():void
+{
+	var i = 1;
+	var j = 2;
+	printf(A[1][2], " ", A[i][0], " ", W[1][1], " ", W[i][0], "\n");
+	printf(PS[0][1], " ", PS[i][2], " ", PS[j][0], " ", len(NAMES[0]), " ", len(NAMES[i]), "\n");
+	exit(0);
+}
+`)
+	if want := "6 4 40000 3\n98 9 120 5 2\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+	got := compileErr(t, "var v:int;\nconst P:[1]*int = [&v];\n")
+	if !strings.Contains(got, "constant address required") && !strings.Contains(got, "constant value required") {
+		t.Errorf("非定数の要素: %q", got)
+	}
+}
+
+// TestSwitchJumpTable: 10 個以上の整数の case が密に並ぶ switch はジャンプテーブル (`switch` 命令) になる。
+// 隙間・範囲外は default、複数の値の case、最小値が 0 でない / 負の値、ループ内 (常駐レジスタと共存)、
+// case 内の break、default 無し。比較の連鎖 (case が少ない) と結果が一致する。
+func TestSwitchJumpTable(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var tab:[16]int;
+function f(x:int):int
+{
+	switch (x) {
+	case 0: return 10;
+	case 1: return 11;
+	case 2, 3: return 12;
+	case 4: return 14;
+	case 6: return 16;
+	case 7: return 17;
+	case 8: return 18;
+	case 9: return 19;
+	case 10: return 20;
+	case 11: return 21;
+	case 12: return 22;
+	default: return 99;
+	}
+}
+function g(x:sint):int
+{
+	var r = 0;
+	switch (x) {
+	case -3: r = 1;
+	case -2: r = 2;
+	case -1: r = 3;
+	case 0: r = 4;
+	case 1: r = 5;
+	case 2: r = 6;
+	case 3: r = 7;
+	case 4: r = 8;
+	case 5: r = 9; break;
+	case 6: r = 10;
+	case 7: r = 11;
+	}
+	return r + 100;
+}
+function main():void
+{
+	var s:int16 = 0;
+	for (var i = 0; i < 16; i++) {
+		tab[i] = i;
+		switch (tab[i]) {
+		case 1: s += 1;
+		case 2: s += 2;
+		case 3: s += 3;
+		case 4: s += 4;
+		case 5: s += 5;
+		case 6: s += 6;
+		case 7: s += 7;
+		case 8: s += 8;
+		case 9: s += 9;
+		case 10: s += 10;
+		case 11: s += 11;
+		default: s += 100;
+		}
+		s += tab[i];
+	}
+	printf(f(0), " ", f(3), " ", f(5), " ", f(12), " ", f(13), " ", f(200), "\n");
+	printf(g(-3), " ", g(0), " ", g(5), " ", g(7), " ", g(8), " ", g(-4), "\n");
+	printf(s, "\n");
+	exit(0);
+}
+`)
+	// s: 1..11 の和 66 + default 5 回 (0, 12..15) × 100 + 0..15 の和 120 = 686
+	if want := "10 12 99 22 99 99\n101 104 109 111 100 100\n686\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

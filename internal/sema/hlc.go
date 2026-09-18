@@ -289,6 +289,31 @@ func (h *Hlc) compatibleAssign(what string, to, from *types.Type) *types.Type {
 	return r
 }
 
+
+// pointerElems はポインタ配列の const (`[N]*T`) の要素をアドレス (シンボルのリテラル) にする。
+// 文字列 / 配列リテラルは無名の配列定数に切り出し、配列定数の名前 (グローバル) はそのシンボル、関数や整数 (null の 0) はそのまま。
+func (h *Hlc) pointerElems(name string, arr *ir.Value, ptr *types.Type) *ir.Value {
+	elems := make([]ir.Operand, len(arr.Elems))
+	for i, e := range arr.Elems {
+		ev := ir.ValLiteral(e)
+		switch {
+		case ev != nil && ev.Kind == ir.KindArrayLiteral:
+			if !ev.IsString {
+				h.compatibleAssign(fmt.Sprintf("element %d of `%s`", i, name), ptr, ev.Type)
+			}
+			sym := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: ev.Type, Elems: ev.Elems})
+			elems[i] = ir.NewSymbolLiteral("", ptr, sym)
+		case ev != nil && ev.Kind == ir.KindGlobal && ev.Type.Kind == types.Array && ev.Symbol != "":
+			h.compatibleAssign(fmt.Sprintf("element %d of `%s`", i, name), ptr, ev.Type)
+			elems[i] = ir.NewSymbolLiteral("", ptr, ev.Symbol)
+		case ev != nil && ev.Kind == ir.KindLiteral:
+			elems[i] = e // 関数のシンボル、整数 (null)
+		default:
+			panic(&diag.Error{Msg: fmt.Sprintf("element %d of `%s`: constant address required (string, array constant, or function)", i, name)})
+		}
+	}
+	return ir.NewArrayLiteral(arr.Name, h.prog.Types.ArrayOf(ptr, len(elems)), elems)
+}
 // guessType は宣言型 typ (省略可) と初期値 val から変数の型を決める。
 func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Type {
 	if typ != nil {
@@ -333,6 +358,9 @@ func (h *Hlc) readFile(name string) []byte {
 // ---------------------------------------------------------------
 // Lambdaのコンパイル
 // ---------------------------------------------------------------
+
+// switchTableMin はジャンプテーブルにする case の数の下限 (比較の連鎖と表の損益分岐点。language_reference.md §5)。
+const switchTableMin = 10
 
 func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 	oldLmd := h.lmd
@@ -745,7 +773,6 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.lval(toC(s.X))
 
 	case *syntax.SwitchStmt:
-		// TODO: jumptableを使った実装をいれる
 		cond := h.rval(toC(s.Tag))
 		endLabel := h.newLabel("end")
 		// v2: ラベルなし break は switch を抜ける。v1 では switch は break の対象外 (外側のループを抜ける)
@@ -755,34 +782,78 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		} else {
 			h.pendingLabel = nil
 		}
+		// case の値を先に評価する (重複の検出と、ジャンプテーブルにするかの判断)
 		seen := map[int]bool{} // case の値の重複検出 (先勝ちで黙って通っていた)
-		for _, c := range s.Cases {
-			labels := h.newLabels("then", "else")
-			thenLabel, elseLabel := labels[0], labels[1]
-			// 値ごとに `eq t; if_true t goto then`、最後の値だけ `eq t; if t goto else` (一致しなければ次の case へ)。
-			// t は値ごとに新しい一時変数にする (定義 1 つ + 直後で使用、でコンディションフラグに割り付く: cmp; bne)
-			for k, v := range c.Values {
+		vals := make([][]ir.Operand, len(s.Cases))
+		allInt, n, minV, maxV := true, 0, 0, 0
+		for ci, c := range s.Cases {
+			for _, v := range c.Values {
 				cv := h.constEvalOperand(toC(v))
-				if n, ok := ir.ValIntLiteral(cv); ok {
-					if seen[n] {
-						panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d", n), Pos: syntax.At(h.module.Path, v.Pos())})
+				if k, ok := ir.ValIntLiteral(cv); ok {
+					if seen[k] {
+						panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d", k), Pos: syntax.At(h.module.Path, v.Pos())})
 					}
-					seen[n] = true
-				}
-				tmp := h.newTmp(h.prog.Types.IntType(1, false))
-				h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, cv}})
-				if k < len(c.Values)-1 {
-					h.emit(&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{tmp}, Label: thenLabel})
+					seen[k] = true
+					if n == 0 || k < minV {
+						minV = k
+					}
+					if n == 0 || k > maxV {
+						maxV = k
+					}
+					n++
 				} else {
-					h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: elseLabel})
+					allInt = false
+				}
+				vals[ci] = append(vals[ci], cv)
+			}
+		}
+		// ジャンプテーブル (switchTableMin 個以上の整数の case が密に並ぶとき。language_reference.md §5):
+		//   switch tag, min, [label...]; jump default; case...: ...; jump end; default: ...; end:
+		// 1 バイトのタグだけ (飛び先 - 1 を pha; pha; rts で飛ぶ。比較の連鎖は平均 3 + 5N/2 サイクル、表は約 33 で一定)
+		if allInt && n >= switchTableMin && ir.ValType(cond).Size == 1 && maxV-minV+1 <= 2*n && maxV-minV+1 <= 255 {
+			defaultLabel := h.newLabel("default")
+			caseLabels := make([]string, len(s.Cases))
+			table := make([]string, maxV-minV+1)
+			for k := range table {
+				table[k] = defaultLabel
+			}
+			for ci := range s.Cases {
+				caseLabels[ci] = h.newLabel("case")
+				for _, cv := range vals[ci] {
+					k, _ := ir.ValIntLiteral(cv)
+					table[k-minV] = caseLabels[ci]
 				}
 			}
-			if len(c.Values) > 1 {
-				h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
+			h.emit(&ir.Op{Code: ir.OpSwitch, Src: []ir.Operand{cond, h.IntValue(minV)}, Labels: table})
+			h.emit(&ir.Op{Code: ir.OpJump, Label: defaultLabel})
+			for ci, c := range s.Cases {
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: caseLabels[ci]})
+				h.compileStmts(c.Body)
+				h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
 			}
-			h.compileStmts(c.Body)
-			h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
-			h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: defaultLabel})
+		} else {
+			for ci, c := range s.Cases {
+				labels := h.newLabels("then", "else")
+				thenLabel, elseLabel := labels[0], labels[1]
+				// 値ごとに `eq t; if_true t goto then`、最後の値だけ `eq t; if t goto else` (一致しなければ次の case へ)。
+				// t は値ごとに新しい一時変数にする (定義 1 つ + 直後で使用、でコンディションフラグに割り付く: cmp; bne)
+				for k, cv := range vals[ci] {
+					tmp := h.newTmp(h.prog.Types.IntType(1, false))
+					h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, cv}})
+					if k < len(vals[ci])-1 {
+						h.emit(&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{tmp}, Label: thenLabel})
+					} else {
+						h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: elseLabel})
+					}
+				}
+				if len(vals[ci]) > 1 {
+					h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
+				}
+				h.compileStmts(c.Body)
+				h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
+			}
 		}
 		if s.Default != nil {
 			h.compileStmts(s.Default.Body)
@@ -886,6 +957,12 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			if t.Kind == types.Pointer {
 				// const P:*T = [...] / "..." は配列定数の宣言 (ポインタ変数ではない)。データ自体を名前に束縛する
 				t = ir.ValType(v)
+			}
+			if declType != nil && declType.Kind == types.Array && declType.Base.Kind == types.Pointer {
+				// const PS:[N]*T = ["...", other_const, ...]: ポインタの配列。要素の文字列 / 配列リテラルは無名の配列定数に
+				// 切り出してそのアドレス、配列定数の名前はそのアドレスにする (.word で並ぶ)
+				v = h.pointerElems(name, v, declType.Base)
+				t = h.guessType(name, declType, v)
 			}
 			symbol := h.addDef(name, &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems})
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))

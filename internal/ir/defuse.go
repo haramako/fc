@@ -12,6 +12,8 @@ func DefUse(op *Op) (defs, uses []Operand) {
 	case OpLabel, OpJump, OpAsm, OpPushResult, OpPushFastcallResult, OpIfCarry, OpIfNotCarry:
 	case OpIf, OpIfTrue, OpPushArg, OpPushFastcallArg:
 		uses = op.Src[:1]
+	case OpSwitch:
+		uses = op.Src
 	case OpReturn:
 		if len(op.Src) > 0 {
 			uses = op.Src[:1]
@@ -74,7 +76,7 @@ func BuildCFG(lmd *Lambda) *CFG {
 		switch op.Code {
 		case OpLabel:
 			leader[i] = true
-		case OpIf, OpIfTrue, OpIfCarry, OpIfNotCarry, OpJump, OpReturn:
+		case OpIf, OpIfTrue, OpIfCarry, OpIfNotCarry, OpJump, OpReturn, OpSwitch:
 			leader[i+1] = true
 		}
 	}
@@ -112,6 +114,15 @@ func BuildCFG(lmd *Lambda) *CFG {
 			succs = []*Block{c.byLabel[last.Label]}
 		case last.Code == OpIf || last.Code == OpIfTrue || last.Code == OpIfCarry || last.Code == OpIfNotCarry:
 			succs = []*Block{next(), c.byLabel[last.Label]}
+		case last.Code == OpSwitch:
+			succs = []*Block{next()}
+			seen := map[string]bool{}
+			for _, l := range last.Labels {
+				if !seen[l] {
+					seen[l] = true
+					succs = append(succs, c.byLabel[l])
+				}
+			}
 		case last.Code == OpReturn:
 		default:
 			succs = []*Block{next()}
