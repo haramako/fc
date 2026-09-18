@@ -23,9 +23,10 @@ func (l *Llc) farCallSetup(sym string) []any {
 type callKind uint8
 
 const (
-	ckStack       callKind = iota // S+k,x に積む (stack / entry / 関数ポインタ経由)
-	ckStatic                      // 呼び先の静的フレーム F_g+k に直接書く
-	ckFastcallReg                 // FC_FASTCALL_REG に積む (extern の fastcall)
+	ckStack  callKind = iota // S+k,x に積む (stack / entry / 関数ポインタ経由)
+	ckStatic                 // 呼び先の静的フレーム F_g+k に直接書く
+	ckFastcallReg
+	ckCc65 // cc65 の __fastcall__: 引数は FC_FASTCALL_REG に置いてから A / X に、戻り値は A / X (doc/language_reference.md §4.5)                 // FC_FASTCALL_REG に積む (extern の fastcall)
 )
 
 // pendingCall は push_result から call までの 1 つの呼び出し。
@@ -74,6 +75,8 @@ func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
 				pc.argOff = callee.Type.Base.Size
 			case callee.ABI == ir.ABIFastcall:
 				pc.kind = ckFastcallReg
+			case callee.ABI == ir.ABICc65:
+				pc.kind = ckCc65
 			default:
 				pc.kind = ckStack
 			}

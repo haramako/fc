@@ -252,6 +252,11 @@ function f():void options(segment: "game") { ... }     // 配置セグメント
 - `options(zeropage: false)`: 静的フレームを RAM 側に置く
 - `options(symbol: "...")`: 生成するシンボル名を固定する（割り込みベクタなど）
 - `options(near: true)`: far call（§4.4）の対象にしない（呼ぶ側はマップ済みと仮定して `jsr` する）
+- `options(abi: "cc65")`: 本体の無い extern 関数を **cc65 の `__fastcall__` 規約**で呼ぶ（NSD など cc65 向けの asm
+  ライブラリ用）。引数は 0 か 1 個で、1 バイトなら A、2 バイトなら A（下位）/ X（上位）で渡す。戻り値は void か
+  1 バイト（A）/ 2 バイト（A/X）。2 個以上の引数は cc65 のパラメータスタックが要るので不可。呼び先は A/X/Y を壊してよい。
+  アドレスは取れない（関数ポインタ不可）。別バンクからは呼べない（far call のトランポリンが A/Y を壊す。常にマップされて
+  いるなら `near: true` を付ける）
 - `options(inline: true)`: 呼び出しをその場に展開する（`jsr`/`rts` と引数の受け渡しが消え、展開先で最適化される。
   `abs` / `rand` / 数命令の I/O ラッパ向け）。本体を持ち、再帰でなく、`interrupt` でないこと。展開しない呼び出しも
   ある（結果は同じ）: 別のモジュールの関数で本体に呼び出しを含むもの（far call の判定が呼び先のモジュール基準なので）、
@@ -279,6 +284,7 @@ base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .r
 | entry | static のうち、アドレスを取られた関数（関数ポインタ・`const` の表・インラインアセンブラからの参照）と `options(interrupt: true)` | スタック経由（下の stack と同じ）。プロローグで自分のフレームに写す |
 | stack | 再帰する関数、`options(abi: "stack")`、本体の無い extern 関数 | スタック `S+k,x`（呼び出し側が `ldx FC_SP` で X をスタックの空き先頭にしてから書く）。extern 関数は X を保存すること |
 | fastcall | extern で `fastcall` 指定 | `FC_FASTCALL_REG` |
+| cc65 | extern で `options(abi: "cc65")` | 唯一の引数を A（1 バイト）/ A,X（2 バイト）、戻り値を A / A,X（cc65 の `__fastcall__`。§4.2） |
 
 再帰の判定は呼び出しグラフの閉路で、関数ポインタ経由の呼び出しは「同じ関数型でアドレスを取られた関数の全部」
 への呼び出しとみなす。`bitcast` で関数ポインタの型を変えて呼ぶ再帰は検出できない（`options(abi: "stack")` を付ける）。

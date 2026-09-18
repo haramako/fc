@@ -266,9 +266,10 @@ const (
 	ABIStack    ABI = iota // S+n,x のフレーム (再帰、options(abi: "stack")、extern)
 	ABIFastcall            // FC_FASTCALL_REG (extern の fastcall)
 	ABIStatic              // 固定アドレスのフレーム F_<sym>
+	ABICc65                // cc65 の __fastcall__ (extern。最後の = 唯一の引数と戻り値を A / X で渡す。options(abi: "cc65"))
 )
 
-var abiNames = [...]string{ABIStack: "stack", ABIFastcall: "fastcall", ABIStatic: "static"}
+var abiNames = [...]string{ABIStack: "stack", ABIFastcall: "fastcall", ABIStatic: "static", ABICc65: "cc65"}
 
 func (a ABI) String() string {
 	if int(a) < len(abiNames) {

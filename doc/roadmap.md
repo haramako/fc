@@ -77,7 +77,9 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [ ] グローバル変数の初期化（今は "can't init global variable"。DATA セグメント + 起動時コピー）
 - [x] const の二重配列（すでに動いていた）・ポインタ配列（`[N]*T`。要素の文字列 / 配列リテラルは無名の配列定数に切り出す） ✅ 2026-09-19
 - [x] switch のジャンプテーブル（IR の `switch` 命令。整数の case が 10 個以上で密なとき。`pha; pha; rts`） ✅ 2026-09-19
-- [ ] cc65 の呼び出し規約（`__fastcall__`）の extern 関数（v2_idea.md。NSD などの asm ライブラリ向け）
+- [x] cc65 の呼び出し規約（`__fastcall__`）の extern 関数: `options(abi: "cc65")`（引数 0〜1 個を A / A,X、戻り値 A / A,X。
+      関数ポインタ不可、別バンク不可） ✅ 2026-09-19。castle の sound.asm のグルー（nsd_begin/nsd_end のバンク切り替え）は
+      NSD 側の都合なので残る
 - [x] インライン関数: `options(inline: true)`（IR レベルで呼び出し側に展開。castle は `math.abs` 55 か所、`rand` 53 か所、
       `ppu.lock`/`unlock`/`wait_vsync` 90 か所が数命令の関数）✅ 2026-09-19。**goto は入れない**: castle の状態機械は
       `switch (state)` + 配列に持つ状態を毎フレーム回す形（en*.fc、my.fc）、イベント（event.fc）は `wait_vsync` で

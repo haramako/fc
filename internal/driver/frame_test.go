@@ -152,3 +152,89 @@ function main():void
 		t.Errorf("-d の要約に unused が無い: %q", res.Frames)
 	}
 }
+
+// TestCc65Abi: options(abi: "cc65") の extern 関数 (cc65 の __fastcall__ 規約): 引数 0〜1 個を A (1 バイト) / A,X (2 バイト) で
+// 渡し、戻り値を A / A,X で受ける。呼び先は X / Y を壊す (static / stack の両方の呼び出し側から)。
+func TestCc65Abi(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	asm := `; cc65 __fastcall__ 規約のテスト用 (fc の t モジュールに include される)
+.export _t_dbl, _t_add16, _t_seven, _t_store
+_t_dbl:      ; int dbl(int x): A = x → x * 2
+	asl a
+	ldx #77      ; X / Y を壊す
+	ldy #66
+	rts
+_t_add16:    ; int16 add16(int16 v): A/X = v → v + 0x0101
+	clc
+	adc #1
+	pha
+	txa
+	adc #1
+	tax
+	pla
+	ldy #66
+	rts
+_t_seven:    ; int seven(): 7
+	lda #7
+	ldx #77
+	rts
+_t_store:    ; void store(int v)
+	sta _t_g
+	ldx #77
+	ldy #66
+	rts
+`
+	src := `#fc 2
+use * from stdio;
+include("cc65.asm");
+var g:int;
+function dbl(x:int):int options(abi: "cc65");
+function add16(v:int16):int16 options(abi: "cc65");
+function seven():int options(abi: "cc65");
+function store(v:int):void options(abi: "cc65");
+function rec(n:int):int16 options(abi: "stack")
+{
+	if (n == 0) { return 0; }
+	var d = dbl(n);
+	return add16(rec(n - 1)) + d;
+}
+function main():void
+{
+	var a:[4]int;
+	for (var i = 0; i < 4; i++) { a[i] = dbl(i + 1) + seven(); }
+	store(a[3]);
+	var w = add16(0x1234);
+	printf(a[0], " ", a[3], " ", g, " ", w, " ", rec(3), "\n");
+	exit(0);
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "cc65.asm"), []byte(asm), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+	if err != nil {
+		t.Fatalf("ビルド失敗: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("終了コード %d: %s", code, out.String())
+	}
+	// dbl(i+1)+7: 9, 15; g = 15; 0x1234 + 0x101 = 4917; rec(3) = ((0+257+2)+257+4)+257+6 = 783
+	if want := "9 15 15 4917 783\n"; out.String() != want {
+		t.Errorf("got %q\nwant %q", out.String(), want)
+	}
+
+	for _, c := range []struct{ src, want string }{
+		{"function f(a:int, b:int):void options(abi: \"cc65\");\nfunction main():void { f(1, 2); }\n", "at most one argument"},
+		{"function f(a:int):void options(abi: \"cc65\") { }\nfunction main():void { f(1); }\n", "is for extern functions"},
+		{"var p:fn(int):void;\nfunction f(a:int):void options(abi: \"cc65\");\nfunction main():void { p = f; }\n", "cannot take the address"},
+	} {
+		if got := compileErr(t, c.src); !strings.Contains(got, c.want) {
+			t.Errorf("%q: got %q, want %q", c.src, got, c.want)
+		}
+	}
+}

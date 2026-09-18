@@ -52,12 +52,28 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 	}
 	for _, lmd := range externs {
-		if lmd.Type.Fastcall() {
+		switch {
+		case optText(lmd.Options, "abi") == "cc65":
+			if err := checkCc65(lmd); err != nil {
+				return nil, err
+			}
+			lmd.ABI = ir.ABICc65
+			lmd.ZpUsed = max(lmd.Type.Base.Size, 1)
+			for _, p := range lmd.Type.Params {
+				lmd.ZpUsed = max(lmd.ZpUsed, p.Size)
+			}
+		case lmd.Type.Fastcall():
 			lmd.ABI = ir.ABIFastcall
-		} else {
+		default:
 			lmd.ABI = ir.ABIStack
 		}
 	}
+	for _, lmd := range g.Lambdas {
+		if optText(lmd.Options, "abi") == "cc65" {
+			return nil, &diag.Error{Msg: fmt.Sprintf("%s: options(abi: \"cc65\") is for extern functions (declared without a body)", lmd.Name), Pos: lmd.Pos}
+		}
+	}
+	var addrErr error
 	n := len(g.Lambdas)
 
 	// アドレスを取られた関数 (Entry) と辺
@@ -89,6 +105,10 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		v := ir.ValLiteral(o)
 		if v != nil && v.Kind == ir.KindLiteral && !v.IsInt && v.Symbol != "" {
 			markSym(v.Symbol)
+			// fc のコードでアドレスを取った cc65 規約の関数 (asm からの参照は定義そのものなので構わない)
+			if l, ok := g.ByID[v.Symbol]; ok && l.Extern && l.ABI == ir.ABICc65 && addrErr == nil {
+				addrErr = &diag.Error{Msg: fmt.Sprintf("%s: cannot take the address of a cc65 abi function (its arguments are passed in A/X, not on the stack)", l.Name), Pos: l.Pos}
+			}
 		}
 	}
 	for _, m := range mods {
@@ -168,6 +188,9 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 				markOperand(op.Dst)
 			}
 		}
+	}
+	if addrErr != nil {
+		return nil, addrErr
 	}
 	var entries []int
 	for i := range g.Lambdas {
@@ -368,6 +391,29 @@ func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned 
 func optText(o ir.Options, key string) string {
 	v, _ := o.Get(key)
 	return v.Text()
+}
+
+// checkCc65 は options(abi: "cc65") の extern 関数の制約: 引数は 0 か 1 個で 1〜2 バイト (A / A,X で渡す)、
+// 戻り値は void か 1〜2 バイト (A / A,X)、fastcall と併用しない。2 個以上の引数は cc65 のパラメータスタックが要るので対象外。
+func checkCc65(lmd *ir.Lambda) error {
+	bad := func(msg string) error {
+		return &diag.Error{Msg: fmt.Sprintf("%s: options(abi: \"cc65\"): %s", lmd.Name, msg), Pos: lmd.Pos}
+	}
+	if lmd.Type.Fastcall() {
+		return bad("cannot combine with fastcall")
+	}
+	if len(lmd.Type.Params) > 1 {
+		return bad("at most one argument (the last argument of a cc65 __fastcall__ function is passed in A/X; the others need the cc65 parameter stack, which fc does not have)")
+	}
+	for _, p := range lmd.Type.Params {
+		if p.Size < 1 || p.Size > 2 {
+			return bad(fmt.Sprintf("argument must be 1 or 2 bytes (got %s)", p))
+		}
+	}
+	if s := lmd.Type.Base.Size; s > 2 {
+		return bad(fmt.Sprintf("result must be void, 1 or 2 bytes (got %s)", lmd.Type.Base))
+	}
+	return nil
 }
 
 // reachable は i から (0 回以上の辺で) 届く関数の添字 (i 自身は閉路があるときだけ含む)。

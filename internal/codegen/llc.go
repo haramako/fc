@@ -179,7 +179,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	// fastcall 関数が使う FC_FASTCALL_REG の大きさを、base.asm (プロジェクトが自前で持つこともある) の .res とリンク時に突き合わせる
 	fastcallNeed := 0
 	for _, d := range mod.Defs {
-		if d.Kind == ir.DefCode && !d.Lambda.Extern && d.Lambda.ABI == ir.ABIFastcall {
+		if d.Kind == ir.DefCode && ((!d.Lambda.Extern && d.Lambda.ABI == ir.ABIFastcall) || d.Lambda.ABI == ir.ABICc65) {
 			fastcallNeed = max(fastcallNeed, d.Lambda.ZpUsed)
 		}
 	}
@@ -577,6 +577,8 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				case ckFastcallReg:
 					r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", pushFastcallArgSize))
 					pushFastcallArgSize++
+				case ckCc65:
+					r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", i)) // 呼ぶ直前に A / X へ (引数は 1 つだけ)
 				}
 			}
 
@@ -633,6 +635,29 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 						r.push(fmt.Sprintf("lda <%d+S+%d,x", i, base))
 						r.push(l.storeA(op.Dst, i))
 					}
+				}
+			case ckCc65:
+				// cc65 の __fastcall__: 引数を A (下位) / X (上位) に載せて jsr。戻り値は A / X (呼び先は A/X/Y を壊す)
+				for _, p := range fnType.Params {
+					r.push("lda <FC_FASTCALL_REG+0")
+					if p.Size == 2 {
+						r.push("ldx <FC_FASTCALL_REG+1")
+					}
+				}
+				r.push(fmt.Sprintf("jsr %s", sym))
+				if op.Dst != nil {
+					size := ir.ValType(op.Dst).Size
+					r.push("sta <FC_FASTCALL_REG+0")
+					if size == 2 {
+						r.push("stx <FC_FASTCALL_REG+1")
+					}
+					r.push(l.restoreX(lmd)...)
+					for i := 0; i < size; i++ {
+						r.push(fmt.Sprintf("lda <FC_FASTCALL_REG+%d", i))
+						r.push(l.storeA(op.Dst, i))
+					}
+				} else {
+					r.push(l.restoreX(lmd)...)
 				}
 			case ckFastcallReg:
 				pushFastcallArgSize = 0

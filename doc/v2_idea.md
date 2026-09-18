@@ -18,7 +18,8 @@
 - interbank call を実装する ✅ 2026-09-15（far call。呼ぶ側の構文は無しで自動。doc/v2_farcall.md）
   - `add(1,2)` のかわりに bank(3).add(1,2)
 
-- cc65 の呼び出し規約（`__fastcall__`）の extern 関数を直接呼べるようにする（2026-09-15 案）。
+- cc65 の呼び出し規約（`__fastcall__`）の extern 関数を直接呼べるようにする（2026-09-15 案）✅ 2026-09-19 `options(abi: "cc65")`
+  （下の案のとおり。far call との組み合わせはエラーにして `near: true` を促す）。
   NSD（castle の `nsd/include/nsd.inc`）のように asm ライブラリが cc65 の規約で書かれていて、今は `sound.asm` で
   A/X に詰め替えるグルーを手書きしている。案: `function nsd_play_bgm(p:*void):void options(abi: "cc65");`
   - 対応範囲: 引数 0〜1 個（最後の引数を A (8bit) / A,X (16bit: A=下位, X=上位) で渡す）、戻り値 void / 8bit (A) / 16bit (A,X)。
