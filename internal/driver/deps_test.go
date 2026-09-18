@@ -31,7 +31,7 @@ func TestImportDirection(t *testing.T) {
 		"diag":     {"syntax"},
 		"ir":       {"syntax", "types", "diag"},
 		"regalloc": {"ir", "types", "diag"},
-		"opt":      {"ir", "types"},
+		"opt":      {"ir", "types", "diag"},
 		"codegen":  {"ir", "types", "diag", "regalloc", "opt", "frames"},
 		"sema":     {"syntax", "types", "ir", "diag"},
 		"migrate":  {"syntax", "ir"},

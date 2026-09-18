@@ -224,6 +224,11 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 // 呼び出し規約の決定 (frames.Analyze) → 全関数の最適化と割付 (Prepare) → 静的フレームの配置 (frames.Place)。
 // 戻り値の Plan.Inc を `_frames.inc` として書き、各モジュールの asm が include する。
 func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frames.Plan, error) {
+	if l.OptimizeLevel > 0 {
+		if err := opt.InlineProgram(mods); err != nil {
+			return nil, err
+		}
+	}
 	markVolatile(mods)
 	graph, err := frames.Analyze(mods)
 	if err != nil {

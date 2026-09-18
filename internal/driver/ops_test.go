@@ -449,3 +449,58 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestInlineFunction: options(inline: true) の関数は呼び出し側に展開される (引数・途中の return・void・入れ子・
+// 別モジュールの葉関数)。展開しない形 (別の呼び出しの引数の中) も結果は同じ。
+func TestInlineFunction(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var g:int;
+var tab:[4]int;
+function abs8(i:sint):int options(inline: true)
+{
+	if (i < 0) {
+		return -i;
+	}
+	return i;
+}
+function bump(n:int):void options(inline: true)
+{
+	g += n;
+	if (g > 100) {
+		g = 0;
+		return;
+	}
+	tab[0] += 1;
+}
+function twice(i:sint):int options(inline: true)
+{
+	return abs8(i) + abs8(i);   // inline の中の inline
+}
+function sum3(a:int, b:int, c:int):int { return a + b + c; }
+function main():void
+{
+	var x:sint = -7;
+	var a = abs8(x);
+	var b = abs8(5);
+	bump(50);
+	bump(60);       // ここで g = 0 に
+	bump(3);
+	var c = twice(-4);
+	var d = sum3(abs8(-1), abs8(-2), abs8(x)); // 引数の中 (評価順が保たれる)
+	printf(a, " ", b, " ", g, " ", tab[0], " ", c, " ", d, "\n");
+	exit(0);
+}
+`)
+	if want := "7 5 3 2 8 10\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+
+	got := compileErr(t, "function f(i:int):int options(inline: true) { if (i) { return f(i - 1); } return 0; }\nfunction main():void { f(1); }\n")
+	if !strings.Contains(got, "is recursive") {
+		t.Errorf("再帰の inline: %q", got)
+	}
+	got = compileErr(t, "function f():void options(inline: true, symbol: \"_ext\");\nfunction main():void { f(); }\n")
+	if !strings.Contains(got, "has no body") {
+		t.Errorf("extern の inline: %q", got)
+	}
+}

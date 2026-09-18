@@ -129,6 +129,11 @@ go test ./...                                    # 全部 (golden + examples + N
   約 1.2 万行）の `fcc compile` は 2 秒以内、`go test ./internal/driver` の castle は 3 秒以内。
   **番をしているテスト**: `TestExampleCastle` はコンパイル時間をログに出し 10 秒を超えると fail、`go test ./bench` は
   12 本のビルドと実行が 30 秒を超えると fail（どちらも通常の 5 倍以上の余裕）
+- **インライン展開**（`opt.InlineProgram`、2026-09-19）は `codegen.PrepareProgram` の最初（`frames.Analyze` の前）に
+  プログラム全体で 1 回。IR の呼び出し列 `push_result; push_arg…; call` を、呼び先の変数・ラベルを付け替えた本体で
+  置き換える（`return v` は `load 結果 = v; jump 終端`）。far call の `Far` フラグは sema が呼び先のモジュール基準で
+  付けているので、**呼び出しを含む本体は別モジュールに写さない**（葉関数だけ）。他の呼び出しの引数の中も展開しない
+  （fastcall の引数領域）。fclib の `math.abs` / `rand` / `sign` が `options(inline: true)`（castle で 110 か所）
 - `fcc -O 0` は最適化パス・常駐・ピープホールを切る（`BuildOptions.OptimizeLevel` は 0 が「未指定 = 2」、-1 が -O 0）。
   レジスタ割付は -O 0 でも同じ `regalloc.AllocateRegister`（静的フレームの関数は固定番地に置く必要があるので、
   「全部フレーム」の簡易版は使えない）。`TestOptimizeLevel0` が番

@@ -422,3 +422,44 @@ func TestCommuteTemp(t *testing.T) {
 		"index_pget t3 = tab, i", "load y = #1", "and d = y, t3",
 		"index_pget t1 = tab, i", "add w = w, t1")
 }
+
+func TestInlineProgram(t *testing.T) {
+	// f(a) = a + 1 (inline)。main: t = f(x); g(f(y)) の 2 番目は g の引数の中なので展開しない
+	a, x, y, t1, t2 := local("a", u8()), local("x", u8()), local("y", u8()), tmp("t1", u8()), tmp("t2", u8())
+	fres := ir.NewLocal("$result", u8(), ir.LTResult)
+	f := &ir.Lambda{Id: "_f", Name: "f", Options: ir.Options{{Key: "inline", Value: ir.OptionValue{Kind: ir.OptInt, Int: 1}}},
+		Args: []*ir.Value{a}, Result: fres, Vars: []*ir.Value{fres, a}, Type: tu.Func([]*types.Type{u8()}, u8(), false)}
+	f.Ops = []*ir.Op{
+		{Code: ir.OpAdd, Dst: fres, Src: []ir.Operand{a, lit(1, u8())}},
+		{Code: ir.OpReturn, Src: []ir.Operand{fres}},
+	}
+	fsym := ir.NewSymbolLiteral("f", f.Type, "_f")
+	gsym := ir.NewSymbolLiteral("g", tu.Func([]*types.Type{u8()}, tu.Void(), false), "_g")
+	m := lambda(
+		&ir.Op{Code: ir.OpPushResult, Type: u8()},
+		&ir.Op{Code: ir.OpPushArg, Type: u8(), Src: []ir.Operand{x}},
+		&ir.Op{Code: ir.OpCall, Dst: t1, Src: []ir.Operand{fsym}},
+		&ir.Op{Code: ir.OpPushResult, Type: tu.Void()},
+		&ir.Op{Code: ir.OpPushResult, Type: u8()},
+		&ir.Op{Code: ir.OpPushArg, Type: u8(), Src: []ir.Operand{y}},
+		&ir.Op{Code: ir.OpCall, Dst: t2, Src: []ir.Operand{fsym}},
+		&ir.Op{Code: ir.OpPushArg, Type: u8(), Src: []ir.Operand{t2}},
+		&ir.Op{Code: ir.OpCall, Src: []ir.Operand{gsym}},
+	)
+	m.Id, m.Name = "_main", "main"
+	mod := &ir.Module{Defs: []*ir.Def{{Kind: ir.DefCode, Lambda: f}, {Kind: ir.DefCode, Lambda: m}}}
+	f.Module, m.Module = mod, mod
+	if err := InlineProgram([]*ir.Module{mod}); err != nil {
+		t.Fatal(err)
+	}
+	check(t, m,
+		"load f0.a = x", "add f0.$result = f0.a, #1", "label @i0_end", "load t1 = f0.$result",
+		"push_result nil = ", "push_result nil = ", "push_arg nil = y", "call t2 = f", "push_arg nil = t2", "call nil = g")
+
+	// 再帰はエラー
+	r := &ir.Lambda{Id: "_r", Name: "r", Options: f.Options, Type: f.Type, Module: mod}
+	r.Ops = []*ir.Op{{Code: ir.OpPushResult, Type: u8()}, {Code: ir.OpCall, Src: []ir.Operand{ir.NewSymbolLiteral("r", r.Type, "_r")}}, {Code: ir.OpReturn}}
+	if err := InlineProgram([]*ir.Module{{Defs: []*ir.Def{{Kind: ir.DefCode, Lambda: r}}}}); err == nil || !strings.Contains(err.Error(), "recursive") {
+		t.Errorf("再帰: %v", err)
+	}
+}

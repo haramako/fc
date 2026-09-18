@@ -501,7 +501,7 @@
    0043 (:return {lit nil 0 #"uint8"})
   )
  )
- (lambda _math_rand #"fastcall fn():uint8" opt={id :rand fastcall :true}
+ (lambda _math_rand #"fastcall fn():uint8" opt={id :rand fastcall :true inline :true}
   (args ())
   (result {l0 $result})
   (vars
@@ -520,7 +520,7 @@
    0004 (:return {l3 $64})
   )
  )
- (lambda _math_sign #"fastcall fn(sint8):uint8" opt={id :sign fastcall :true}
+ (lambda _math_sign #"fastcall fn(sint8):uint8" opt={id :sign fastcall :true inline :true}
   (args ({l1 i}))
   (result {l0 $result})
   (vars
@@ -549,7 +549,7 @@
    0014 (:label "@end_67")
   )
  )
- (lambda _math_abs #"fastcall fn(sint8):uint8" opt={id :abs fastcall :true}
+ (lambda _math_abs #"fastcall fn(sint8):uint8" opt={id :abs fastcall :true inline :true}
   (args ({l1 i}))
   (result {l0 $result})
   (vars

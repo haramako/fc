@@ -55,13 +55,13 @@ public function atan(y:sint8, x:sint8):int8 options(fastcall: true)
 }
 
 public var rand_idx:int;
-public function rand():int options(fastcall: true)
+public function rand():int options(fastcall: true, inline: true)
 {
 	rand_idx += 1;
 	return rand_table[rand_idx];
 }
 
-public function sign(i:sint):int options(fastcall: true)
+public function sign(i:sint):int options(fastcall: true, inline: true)
 {
 	if (i < 0) {
 		return -1;
@@ -72,7 +72,7 @@ public function sign(i:sint):int options(fastcall: true)
 	}
 }
 
-public function abs(i:sint):int options(fastcall: true)
+public function abs(i:sint):int options(fastcall: true, inline: true)
 {
 	if (i < 0) {
 		return -i;

@@ -78,7 +78,10 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [ ] const の二重配列・ポインタ配列
 - [ ] switch のジャンプテーブル
 - [ ] cc65 の呼び出し規約（`__fastcall__`）の extern 関数（v2_idea.md。NSD などの asm ライブラリ向け）
-- [ ] インライン関数 / goto（イベント処理の状態機械）— 要否を再検討してから
+- [x] インライン関数: `options(inline: true)`（IR レベルで呼び出し側に展開。castle は `math.abs` 55 か所、`rand` 53 か所、
+      `ppu.lock`/`unlock`/`wait_vsync` 90 か所が数命令の関数）✅ 2026-09-19。**goto は入れない**: castle の状態機械は
+      `switch (state)` + 配列に持つ状態を毎フレーム回す形（en*.fc、my.fc）、イベント（event.fc）は `wait_vsync` で
+      ブロックする直列コードで、どちらも関数内ジャンプは要らない。ラベル付き `break`/`continue`（§5.2）で足りる
 - [ ] 使われない関数を出力しない（tree shaking、v2_idea.md）
 
 ## ツール・開発体験
