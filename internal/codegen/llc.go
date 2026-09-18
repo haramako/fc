@@ -453,6 +453,28 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				// A は常駐変数で塞がっている: Y で検査する
 				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
+			} else if restoreA {
+				// A に常駐している変数を壊して検査し、飛び先でも A が要る: 飛ぶ側の経路でも復帰する
+				// (この後の共通の復帰は落ちてくる側にしか効かない)。条件を反転して飛ばない側を @f に逃がし、
+				// 飛ぶ側は `lda home; jmp L` を通す
+				size := ir.ValType(op.In(0)).Size
+				labels := l.newLabels(2)
+				fall, taken := labels[0], labels[1]
+				for i := 0; i < size; i++ {
+					r.push(l.loadA(op.In(0), i))
+					switch {
+					case onTrue && i < size-1:
+						r.push(fmt.Sprintf("bne %s", taken)) // どれかのバイトが 0 でなければ飛ぶ
+					case onTrue:
+						r.push(fmt.Sprintf("beq %s", fall))
+					default:
+						r.push(fmt.Sprintf("bne %s", fall)) // 全バイトが 0 なら飛ぶ
+					}
+				}
+				r.push(taken + ":")
+				r.push("lda " + l.byte(op.Resident.Home, 0))
+				r.push(fmt.Sprintf("jmp %s", op.Label))
+				r.push(fall + ":")
 			} else if onTrue {
 				// 値のどれかのバイトが 0 でなければ飛ぶ
 				for i := 0; i < ir.ValType(op.In(0)).Size; i++ {

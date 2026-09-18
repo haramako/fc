@@ -504,3 +504,45 @@ function main():void
 		t.Errorf("extern の inline: %q", got)
 	}
 }
+
+// TestResidentBranchRestore: A に常駐する変数を壊して検査する分岐 (2 バイトの `if (flag)`) は、飛ぶ側の経路でも
+// A を復帰する (以前は落ちてくる側にしか復帰が無く、else 側で A = flag の上位バイトのまま計算していた)。
+func TestResidentBranchRestore(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var tab:[8]int;
+var flag:int16;
+function calc():int
+{
+	var s = 0;
+	for (var i = 0; i < 8; i++) {
+		s += tab[i];
+		s ^= 5;
+		s += 1;
+		s = s << 1;
+		s -= 3;
+		s ^= tab[i];
+		if (flag) {
+			s += 2;
+		} else {
+			s += 3;
+		}
+		s += tab[i];
+		s ^= 1;
+	}
+	return s;
+}
+function main():void
+{
+	for (var i = 0; i < 8; i++) { tab[i] = i * 3; }
+	flag = 0;
+	var a = calc();
+	flag = 256;
+	var b = calc();
+	printf(a, " ", b, "\n");
+	exit(0);
+}
+`)
+	if want := "189 140\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
