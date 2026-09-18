@@ -246,16 +246,34 @@ func rotateLoops(lmd *ir.Lambda) bool {
 		bodyLabel := newLabel(lmd, "body")
 		var out []*ir.Op
 		out = append(out, ops[:b0.Start]...)
-		out = append(out, &ir.Op{Code: ir.OpJump, Label: b0.Label, Pos: cond.Pos})
-		out = append(out, &ir.Op{Code: ir.OpLabel, Label: bodyLabel, Pos: cond.Pos})
-		for i := b0.End; i < back.End; i++ {
-			if ops[i] != bj {
-				out = append(out, ops[i])
+		if dup := cloneCond(lmd, cfg, b0); dup != nil {
+			// 条件が短い (比較 1 つ + 分岐) ときは、入口の条件はそのまま残して本体の末尾に条件の写しを置く (テストの複製):
+			//   L_begin: <cond>; if c goto L_end; L_body: <body>; <cond'>; if_true c' goto L_body; [jump L_end]
+			// 末尾の条件の直前にラベルが無いので、`dey` の直後の `cpy #0` がピープホールで消える (crc8 / crc16 の内側ループ)。
+			// 入口の jump も要らない
+			out = append(out, ops[b0.Start:b0.End]...)
+			out = append(out, &ir.Op{Code: ir.OpLabel, Label: bodyLabel, Pos: cond.Pos})
+			for i := b0.End; i < back.End; i++ {
+				if ops[i] != bj {
+					out = append(out, ops[i])
+				}
 			}
+			last := dup[len(dup)-1]
+			invertCond(last)
+			last.Label = bodyLabel
+			out = append(out, dup...)
+		} else {
+			out = append(out, &ir.Op{Code: ir.OpJump, Label: b0.Label, Pos: cond.Pos})
+			out = append(out, &ir.Op{Code: ir.OpLabel, Label: bodyLabel, Pos: cond.Pos})
+			for i := b0.End; i < back.End; i++ {
+				if ops[i] != bj {
+					out = append(out, ops[i])
+				}
+			}
+			out = append(out, ops[b0.Start:b0.End]...)
+			invertCond(cond)
+			cond.Label = bodyLabel
 		}
-		out = append(out, ops[b0.Start:b0.End]...)
-		invertCond(cond)
-		cond.Label = bodyLabel
 		if back.Index+1 != end.Index {
 			out = append(out, &ir.Op{Code: ir.OpJump, Label: end.Label, Pos: cond.Pos}) // 落ちる先が L_end でないなら飛ぶ
 		}
@@ -264,4 +282,59 @@ func rotateLoops(lmd *ir.Lambda) bool {
 		return true // CFG が変わったので作り直す
 	}
 	return false
+}
+
+// cloneCond はループの条件ブロック (ラベル + 条件 + 分岐) の写し (ラベル抜き)。条件が「分岐だけ」か「比較 / 演算 1 つ + 分岐」
+// で、定義する一時変数が分岐でしか使われないときだけ (それ以外は nil)。一時変数は新しく作る (同じ一時変数を 2 度定義すると
+// live range がループ全体に伸びて A / コンディションフラグへの割付が外れる)。
+func cloneCond(lmd *ir.Lambda, cfg *ir.CFG, b0 *ir.Block) []*ir.Op {
+	var body []*ir.Op
+	for _, i := range cfg.Ops(b0) {
+		if lmd.Ops[i].Code != ir.OpLabel {
+			body = append(body, lmd.Ops[i])
+		}
+	}
+	if len(body) < 1 || len(body) > 2 || !isCond(body[len(body)-1]) {
+		return nil
+	}
+	if last := body[len(body)-1]; len(last.Src) > 0 && ir.ValType(last.Src[0]).Size != 1 {
+		return nil
+	}
+	rename := map[*ir.Value]*ir.Value{}
+	if len(body) == 2 {
+		def := body[0]
+		switch def.Code {
+		case ir.OpEq, ir.OpLt, ir.OpAnd, ir.OpLoad:
+		default:
+			return nil
+		}
+		t, ok := def.Dst.(*ir.Value)
+		if !ok || t.LocalType != ir.LTTemp || body[1].Src[0] != ir.Operand(t) {
+			return nil
+		}
+		for _, o := range def.Src {
+			if ir.ValType(o).Size != 1 {
+				return nil // 2 バイトの比較の写しは大きいだけで速くならない (cmp の連鎖にフラグの再利用は無い)
+			}
+		}
+		nt := ir.NewLocal(t.Name+"'", t.Type, ir.LTTemp)
+		lmd.Vars = append(lmd.Vars, nt)
+		rename[t] = nt
+	}
+	var out []*ir.Op
+	for _, op := range body {
+		no := *op
+		no.Src = make([]ir.Operand, len(op.Src))
+		for k, o := range op.Src {
+			if v, ok := o.(*ir.Value); ok && rename[v] != nil {
+				o = rename[v]
+			}
+			no.Src[k] = o
+		}
+		if v, ok := op.Dst.(*ir.Value); ok && rename[v] != nil {
+			no.Dst = rename[v]
+		}
+		out = append(out, &no)
+	}
+	return out
 }

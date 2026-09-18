@@ -20,8 +20,10 @@ __MODULE_TEST_LZW__ = 1
 	sta 1+_lzw_addr
 	lda #0
 	sta 0+_lzw_bpos
-	sta 0+<F_test_lzw_test_read_bit+0
-	jmp @begin_4
+	tay
+	cpy #8
+	bcs @end_5
+	sty 0+<F_test_lzw_test_read_bit+0
 @body_6:
 	lda #3
 	sta <FC_FASTCALL_REG+2
@@ -44,10 +46,10 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	inc 0+<F_test_lzw_test_read_bit+0
-@begin_4:
 	lda 0+<F_test_lzw_test_read_bit+0
 	cmp #8
 	bcc @body_6
+@end_5:
 	rts
 _2:
 		.byte 5,57,119

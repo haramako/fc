@@ -207,8 +207,9 @@ _63:
 	lda #0
 	sta 0+<F_test_stat_test_for+3
 	tay
+	cmp #10
+	bcs @end_66
 	sta 0+<F_test_stat_test_for+0
-	jmp @begin_65
 @body_67:
 	lda #1
 	sta <F_unittest_assert_equal+0
@@ -228,11 +229,11 @@ _63:
 	adc 0+<F_test_stat_test_for+0
 	sta 0+<F_test_stat_test_for+3
 	inc 0+<F_test_stat_test_for+0
-@begin_65:
 	lda 0+<F_test_stat_test_for+0
 	cmp #10
 	bcc @body_67
 	lda 0+<F_test_stat_test_for+0
+@end_66:
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -275,8 +276,9 @@ _80:
 	lda #0
 	sta 0+<F_test_stat_test_switch+1
 	sta 0+<F_test_stat_test_switch+0
+	cmp #6
+	bcs @end_83
 	tax
-	jmp @begin_82
 @body_97:
 	cpx #1
 	beq @then_89
@@ -303,10 +305,10 @@ _80:
 	adc #20
 @end_88:
 	inx
-@begin_82:
 	cpx #6
 	bcc @body_97
 	sta 0+<F_test_stat_test_switch+1
+@end_83:
 	lda #56
 	sta <F_unittest_assert_equal+0
 	lda #0
