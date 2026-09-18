@@ -91,7 +91,7 @@ func TestCLIUsageAndVersion(t *testing.T) {
 	if code, out, _ := runCLI(t, "version"); code != 0 || !strings.Contains(out, "fcc") {
 		t.Errorf("version: code=%d out=%q", code, out)
 	}
-	for _, sub := range []string{"fmt", "migrate", "check"} {
+	for _, sub := range []string{"fmt", "check"} {
 		if code, out, _ := runCLI(t, sub); code != 0 || !strings.Contains(out, "Usage: fcc "+sub) {
 			t.Errorf("%s without file: code=%d out=%q", sub, code, out)
 		}
@@ -188,37 +188,5 @@ func TestCLIFmt(t *testing.T) {
 	}
 	if code, _, errOut := runCLI(t, "fmt", "none.fc"); code != 1 || errOut == "" {
 		t.Errorf("fmt missing: code=%d err=%q", code, errOut)
-	}
-}
-
-func TestCLIMigrate(t *testing.T) {
-	setup(t)
-	v1 := "use * from stdio;\nvar a:int;\nfunction main():void { a = 1; exit(0); }\n"
-	write(t, "main.fc", v1)
-
-	// -w なしは対象を列挙するだけで書き換えない
-	code, out, _ := runCLI(t, "migrate", "main.fc")
-	if code != 0 || !strings.Contains(out, "main.fc") {
-		t.Errorf("migrate dry run: code=%d out=%q", code, out)
-	}
-	if b, _ := os.ReadFile("main.fc"); string(b) != v1 {
-		t.Errorf("dry run が書き換えた: %q", b)
-	}
-	code, out, _ = runCLI(t, "migrate", "-w", "--visibility", "preserve", "main.fc")
-	if code != 0 || !strings.Contains(out, "migrated 1 files") {
-		t.Errorf("migrate -w: code=%d out=%q", code, out)
-	}
-	if b, _ := os.ReadFile("main.fc"); !strings.HasPrefix(string(b), "#fc 2\n") {
-		t.Errorf("migrate -w の結果: %q", b)
-	}
-
-	if code, _, errOut := runCLI(t, "migrate", "--visibility", "bogus", "main.fc"); code != 1 || !strings.Contains(errOut, "unknown visibility") {
-		t.Errorf("bad visibility: code=%d err=%q", code, errOut)
-	}
-	if code, _, errOut := runCLI(t, "migrate", "--textmap", "x", "main.fc"); code != 1 || !strings.Contains(errOut, "NAME=PATH") {
-		t.Errorf("bad textmap: code=%d err=%q", code, errOut)
-	}
-	if code, _, errOut := runCLI(t, "migrate", "-w", "none.fc"); code != 1 || errOut == "" {
-		t.Errorf("missing main: code=%d err=%q", code, errOut)
 	}
 }

@@ -5,6 +5,7 @@ package driver
 import (
 	"sort"
 
+	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
@@ -45,9 +46,30 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 	if target == "" {
 		target = "emu"
 	}
-	prog, _, err := c.compileToAsm(opt.Dir, target, filename, nil)
+	prog, err := c.compileNoWrite(opt.Dir, target, filename)
 	if err != nil {
 		return nil, err
 	}
 	return collectWarnings(prog), nil
+}
+
+// compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。
+func (c *Compiler) compileNoWrite(dir, target, main string) (*sema.Program, error) {
+	prog := sema.NewProgram()
+	if err := sema.CompileProgram(prog, dir, c.libPath(target), main); err != nil {
+		return nil, err
+	}
+	llc := codegen.NewLlc(2, prog.Types)
+	if _, err := llc.PrepareProgram(prog.Modules.List(), DefaultStaticZp, DefaultStaticRam); err != nil {
+		return nil, err
+	}
+	for _, mod := range prog.Modules.List() {
+		if mod.FromFcm {
+			continue
+		}
+		if _, _, err := llc.Compile(mod); err != nil {
+			return nil, err
+		}
+	}
+	return prog, nil
 }

@@ -104,8 +104,8 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 
 ## 整理・判断待ち
 
-- [ ] **v1 パーサの削除時期**: castle / miku は v2 に移行済み。`test/*.fc`（v1）と `test/v2/`（v2）の二重管理、
-      `fcc migrate`、`include("*.rb")` の互換処理（`internal/sema/macros.go`、`internal/migrate/`）が v1 と一緒に消える
+- [x] **v1 パーサの削除**: `fcc migrate` / `internal/migrate` / `.rb` マクロの互換 / `test/*.fc` の v1 版を削除。
+      `#fc 2` は任意に、`#fc 1` はエラー。v1 だけの構文は「v2 ではこう書く」のエラーのまま残す ✅ 2026-09-19
 - [ ] `memo.txt`（初期の TODO メモ。ほとんど済み）の整理
 - [ ] `examples/castle` と実プロジェクト `C:\Work\castle` の同期（`tools/sync_examples.ps1`）と公開可否
 - [ ] castle 側: far call のラッパ撤去（v2_farcall.md §6）、en.fc の soa 化の実験、NSD 呼び出しのトランポリン統合、

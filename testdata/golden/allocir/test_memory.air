@@ -103,7 +103,7 @@
 (alloc-lambda test_memory _test_memory_test_strcpy _test_memory_test_strcpy frame_size=1 abi=static
  (vars
   (var 0 $41 local #"uint8" lt=temp loc=none unuse)
-  (var 1 n local #"uint8" pub loc=static addr=0)
+  (var 1 n local #"uint8" loc=static addr=0)
  )
  (ops
   0000 (:push_fastcall_result #"uint8")

@@ -188,14 +188,14 @@ func TestStructErrors(t *testing.T) {
 	}
 }
 
-// TestV2StructProgram は test/v2/test_struct.fc (unittest 形式) を emu で実行する。
+// TestV2StructProgram は test/test_struct.fc (unittest 形式) を emu で実行する。
 func TestV2StructProgram(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	var out strings.Builder
 	code, err := NewCompiler(absRepoRoot).Build("test_struct.fc", &BuildOptions{
 		Target: "emu", Out: filepath.Join(tmp, "a.bin"), Run: true, Stdout: &out,
-		Dir: testV2Dir(), BuildDir: filepath.Join(tmp, "build"),
+		Dir: testDir(), BuildDir: filepath.Join(tmp, "build"),
 	})
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)

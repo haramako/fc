@@ -7,10 +7,10 @@ package sema
 // プログラム横断の状態と 2 相コンパイルの駆動は program.go。
 
 import (
-	"regexp"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"bytes"
@@ -289,7 +289,6 @@ func (h *Hlc) compatibleAssign(what string, to, from *types.Type) *types.Type {
 	return r
 }
 
-
 // pointerElems はポインタ配列の const (`[N]*T`) の要素をアドレス (シンボルのリテラル) にする。
 // 文字列 / 配列リテラルは無名の配列定数に切り出し、配列定数の名前 (グローバル) はそのシンボル、関数や整数 (null の 0) はそのまま。
 func (h *Hlc) pointerElems(name string, arr *ir.Value, ptr *types.Type) *ir.Value {
@@ -314,6 +313,7 @@ func (h *Hlc) pointerElems(name string, arr *ir.Value, ptr *types.Type) *ir.Valu
 	}
 	return ir.NewArrayLiteral(arr.Name, h.prog.Types.ArrayOf(ptr, len(elems)), elems)
 }
+
 // guessType は宣言型 typ (省略可) と初期値 val から変数の型を決める。
 func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Type {
 	if typ != nil {
@@ -383,8 +383,8 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 
 		if lmd.Body != nil {
 			h.compileStmts(lmd.Body.Stmts)
-			if lmd.Type.Base.Kind != types.Void && !terminates(lmd.Body, h.module.Version < syntax.Version2) {
-				// 終端に落ちると rts が無く次の関数へ流れて暴走する (v1 は黙って通していた)
+			if lmd.Type.Base.Kind != types.Void && !terminates(lmd.Body) {
+				// 終端に落ちると rts が無く次の関数へ流れて暴走する (fc 1 は黙って通していた)
 				panic(&diag.Error{Msg: fmt.Sprintf("missing return at end of function %s (returns %s)", lmd.Name, lmd.Type.Base),
 					Pos: syntax.Position{Filename: lmd.Pos.Filename, Line: lmd.Body.Rbrace.Line, Col: lmd.Body.Rbrace.Col}})
 			}
@@ -477,9 +477,9 @@ func (h *Hlc) mustInModule() {
 	}
 }
 
-// scopeIsPublic は宣言の可視性を決める (文に public が付いていればそれ、なければモジュールの現在値)。
+// scopeIsPublic は宣言の可視性 (`public` が付いていれば公開。既定は private)。
 func (h *Hlc) scopeIsPublic(publicPos syntax.Pos) bool {
-	return publicPos.IsValid() || h.module.CurrentPublic
+	return publicPos.IsValid()
 }
 
 func (h *Hlc) compileStatement(s syntax.Stmt) {
@@ -554,21 +554,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				}
 			}
 		case "macro":
-			if h.module.Version >= syntax.Version2 {
-				panic(&diag.Error{Msg: fmt.Sprintf("include(%q): .rb macros are not supported in fc 2 (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
-			}
-			// 既知の .rb はファイルが無くても受理する (組み込みで代替済み。fclib/*.rb はリポジトリから削除した)
-			reg, ok := macroFiles[filename]
-			if !ok {
-				ref, _ := h.resolveFile(filename)
-				panic(&diag.Error{Msg: fmt.Sprintf("macro file %s is not supported by go port", ref)})
-			}
-			if filename == "macro.rb" {
-				h.warn("include(%q): .rb macros are deprecated; in fc 2 use `const _T = textmap(\"...\")` (fcc migrate --textmap)", filename)
-			} else {
-				h.warn("include(%q) is no longer needed (printf / unittest_run_tests / cos are built in); remove it or run fcc migrate", filename)
-			}
-			reg(h)
+			panic(&diag.Error{Msg: fmt.Sprintf("include(%q): .rb macros are not supported (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
 		case "chr":
 			ref, _ := h.resolveFile(filename)
 			h.module.IncludeChrs = append(h.module.IncludeChrs, ref)
@@ -582,8 +568,8 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		id := s.Module.Name
 		m := h.useModule(id)
 		h.module.AddUse(m)
-		// 再輸出: v1 は常に (glob も束縛も public)、v2 は `public use` のときだけ (doc/v2_grammar.md §3.2)
-		reexport := h.module.Version < syntax.Version2 || s.PublicPos.IsValid()
+		// 再輸出は `public use` のときだけ (doc/v2_grammar.md §3.2)
+		reexport := s.PublicPos.IsValid()
 		switch {
 		case s.FromAll:
 			h.scope.Use(m, reexport)
@@ -775,13 +761,8 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.SwitchStmt:
 		cond := h.rval(toC(s.Tag))
 		endLabel := h.newLabel("end")
-		// v2: ラベルなし break は switch を抜ける。v1 では switch は break の対象外 (外側のループを抜ける)
-		isV2 := h.module.Version >= syntax.Version2
-		if isV2 {
-			h.pushBreakable(breakable{isSwitch: true, breakLabel: endLabel})
-		} else {
-			h.pendingLabel = nil
-		}
+		// ラベルなし break は switch を抜ける
+		h.pushBreakable(breakable{isSwitch: true, breakLabel: endLabel})
 		// case の値を先に評価する (重複の検出と、ジャンプテーブルにするかの判断)
 		seen := map[int]bool{} // case の値の重複検出 (先勝ちで黙って通っていた)
 		vals := make([][]ir.Operand, len(s.Cases))
@@ -859,13 +840,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.compileStmts(s.Default.Body)
 		}
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
-		if isV2 {
-			h.popBreakable()
-		}
-
-		// TODO: 一時的に、public/privateの切り替えを可能にしている。そのうち消すこと
-	case *syntax.ScopeLabel:
-		h.module.CurrentPublic = s.Public
+		h.popBreakable()
 
 	default:
 		panic(fmt.Sprintf("unknown statement %T", s))
@@ -1312,9 +1287,6 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 		elem := h.typeOf(t.Elem)
 		if elem.IsSoa {
 			return h.prog.Types.SoaRef(elem, elem.Base, "") // `*Points`: SoA の要素ハンドル
-		}
-		if elem.Kind == types.Void && h.module.Version < syntax.Version2 {
-			panic(&diag.Error{Msg: "`*void` requires fc 2"})
 		}
 		return h.prog.Types.PointerTo(elem)
 	case *syntax.ArrayType:

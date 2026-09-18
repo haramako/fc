@@ -43,9 +43,4 @@ func TestMissingReturn(t *testing.T) {
 			t.Errorf("%s: got %v, want missing return", src, err)
 		}
 	}
-	// v1: switch の中の break はループを抜けるので、loop { switch { break } } は終端文にならない
-	err := compileFiles(t, map[string]string{"t.fc": "var x:int;\nfunction f():int { loop() { switch (x) { case 1: break; } } }\nfunction main():void {}\n"}, "t.fc")
-	if err == nil || !strings.Contains(err.Error(), "missing return") {
-		t.Errorf("v1 switch break: got %v", err)
-	}
 }

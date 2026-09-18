@@ -50,7 +50,7 @@ func countOps(ir, op string) int {
 // (index_pget / index_pset に融合されるので速い。左辺に呼び出しがあるときだけ 1 回にする: TestCompoundAssignCallOnce)。
 func TestHlcCompoundAssignEvaluatesLhsTwice(t *testing.T) {
 	ir := mustCompileSrc(t, `
-var a:int[4];
+var a:[4]int;
 function main():void { var i:int; i = 1; a[i] += 8; }
 `)
 	if n := countOps(ir, "index"); n != 2 {
@@ -76,7 +76,7 @@ const F = 1 << 3 | 2;
 function main():void {}
 `)
 	for _, want := range []string{
-		"(def _t_A equ", "val=20", "val=-4", "val=2", "val=1 ", "val=10",
+		"(def _t_A equ", "val=20", "val=-4", "val=2", "val=1)", "val=10",
 	} {
 		if !strings.Contains(ir, want) {
 			t.Errorf("IR に %q が無い\n%s", want, ir)
@@ -90,11 +90,11 @@ func TestHlcWhileForDesugar(t *testing.T) {
 var s:int;
 function main():void {
   var i:int;
-  for (i, 0, 3) { s = s + i; }
+  for (i = 0; i < 3; i++) { s = s + i; }
   while (i) { i = i - 1; }
 }
 `)
-	// for: load(i,0), while→ lt + if + jump(break) ; while: if + jump
+	// for: load(i,0), lt + if ; while: if
 	if n := countOps(ir, "lt"); n != 1 {
 		t.Errorf("lt ops = %d, want 1\n%s", n, ir)
 	}
@@ -111,8 +111,8 @@ func TestHlcErrors(t *testing.T) {
 		{"function main():void { break; }", "cannot break without loop"},
 		{"function f():int { return; }\nfunction main():void {}", "can't return without value"},
 		{"var x:int;\nconst a = x + 1;\nfunction main():void {}", "must be constant"},
-		{"function main():void { var a:int; var b:int[a+1]; }", "array size must be constant"},
-		{"function main():void { var p:int*; p = &1; }", "cannot take the address of 1"},
+		{"function main():void { var a:int; var b:[a+1]int; }", "array size must be constant"},
+		{"function main():void { var p:*int; p = &1; }", "cannot take the address of 1"},
 		{"function main():void { var a:int; *a = 1; }", "is not a pointer"},
 		{"function main():void { var a:int; a[0] = 1; }", "is not a pointer or array"},
 	}
@@ -146,7 +146,7 @@ func TestHlcErrorPosition(t *testing.T) {
 		// 未定義識別子: その識別子の位置 (5 行 7 列)
 		{"function main():void\n{\n  var a:int;\n  a = 1 +\n      hoge;\n}\n", 5, 7},
 		// 型不一致: 代入式の位置 (`a = p` の a)
-		{"function main():void\n{\n  var a:int; var p:int*;\n  a = p;\n}\n", 4, 3},
+		{"function main():void\n{\n  var a:int; var p:*int;\n  a = p;\n}\n", 4, 3},
 		// 文レベルのエラー: 文の先頭
 		{"function main():void\n{\n  break;\n}\n", 3, 3},
 		// 式の評価後に文レベルで検出されるエラー (var の初期化禁止): 文の先頭
@@ -167,7 +167,7 @@ func TestHlcErrorPosition(t *testing.T) {
 	}
 }
 
-// compileFiles は複数ファイルを同じディレクトリに置いて main をコンパイルする (v1/v2 混在のテスト用)。
+// compileFiles は複数ファイルを同じディレクトリに置いて main をコンパイルする。
 func compileFiles(t *testing.T, files map[string]string, main string) error {
 	t.Helper()
 	dir := t.TempDir()
@@ -195,11 +195,9 @@ func mustCompileFiles(t *testing.T, files map[string]string, main string) string
 	return ir.DumpProgram(prog.Options, prog.Modules.List())
 }
 
-// TestVisibilityV2: v2 モジュールはデフォルト private、ドット参照は public のみ、再輸出は public use (doc/v2_grammar.md §3.2)。
-// 規則は宣言側モジュールのバージョンで決まり、v1 モジュールは従来どおり。
+// TestVisibilityV2: モジュールはデフォルト private、ドット参照は public のみ、再輸出は public use (doc/v2_grammar.md §3.2)。
 func TestVisibilityV2(t *testing.T) {
 	m2 := "#fc 2\nvar a:int;\npublic var b:int;\n"
-	m1 := "var a:int;\n"
 	cases := []struct {
 		name  string
 		files map[string]string
@@ -209,16 +207,10 @@ func TestVisibilityV2(t *testing.T) {
 		{"v2 glob hides private", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse * from m;\nfunction main():void { a = 1; }\n"}, "a not found"},
 		{"v2 dot sees public", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse m;\nfunction main():void { m.b = 1; }\n"}, ""},
 		{"v2 dot hides private", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse m;\nfunction main():void { m.a = 1; }\n"}, "m.a is private"},
-		{"v1 dot reaches private from v2", map[string]string{"m.fc": m1, "t.fc": "#fc 2\nuse m;\nfunction main():void { m.a = 1; }\n"}, ""},
-		{"v1 default public via glob", map[string]string{"m.fc": m1, "t.fc": "#fc 2\nuse * from m;\nfunction main():void { a = 1; }\n"}, ""},
-		{"v2 private from v1 dot", map[string]string{"m.fc": m2, "t.fc": "use m;\nfunction main():void { m.a = 1; }\n"}, "m.a is private"},
 		{"v2 binding not reexported", map[string]string{"m.fc": m2, "c.fc": "#fc 2\nuse m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { m.b = 1; }\n"}, "m not found"},
 		{"v2 public use reexports binding", map[string]string{"m.fc": m2, "c.fc": "#fc 2\npublic use m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { m.b = 1; }\n"}, ""},
 		{"v2 glob not reexported", map[string]string{"m.fc": m2, "c.fc": "#fc 2\nuse * from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, "b not found"},
 		{"v2 public glob reexports", map[string]string{"m.fc": m2, "c.fc": "#fc 2\npublic use * from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, ""},
-		{"v1 binding reexported as before", map[string]string{"m.fc": m2, "c.fc": "use m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { m.b = 1; }\n"}, ""},
-		{"v1 glob reexported as before", map[string]string{"m.fc": m2, "c.fc": "use * from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, ""},
-		{"public use needs fc 2", map[string]string{"m.fc": m2, "t.fc": "public use m;\nfunction main():void {}\n"}, "`public use` requires fc 2"},
 		{"selective import", map[string]string{"m.fc": "#fc 2\npublic var b:int;\npublic function f():void {}\n", "t.fc": "#fc 2\nuse b, f from m;\nfunction main():void { b = 1; f(); }\n"}, ""},
 		{"selective import of private", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse a from m;\nfunction main():void {}\n"}, "m.a is private"},
 		{"selective import of missing", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse zz from m;\nfunction main():void {}\n"}, "zz not found in module m"},
@@ -226,7 +218,6 @@ func TestVisibilityV2(t *testing.T) {
 		{"selective import vs own declaration (S2)", map[string]string{"m.fc": m2, "t.fc": "#fc 2\nuse b from m;\nvar b:int;\nfunction main():void {}\n"}, "b already imported"},
 		{"selective import not reexported", map[string]string{"m.fc": m2, "c.fc": "#fc 2\nuse b from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, "b not found"},
 		{"public selective import reexported", map[string]string{"m.fc": m2, "c.fc": "#fc 2\npublic use b from m;\n", "t.fc": "#fc 2\nuse * from c;\nfunction main():void { b = 1; }\n"}, ""},
-		{"selective import needs fc 2", map[string]string{"m.fc": m2, "t.fc": "use b from m;\nfunction main():void {}\n"}, "requires fc 2"},
 		{"v2 public function visible", map[string]string{"m.fc": "#fc 2\npublic function f():void {}\nfunction g():void {}\n", "t.fc": "#fc 2\nuse * from m;\nfunction main():void { f(); }\n"}, ""},
 		{"v2 private function hidden", map[string]string{"m.fc": "#fc 2\npublic function f():void {}\nfunction g():void {}\n", "t.fc": "#fc 2\nuse * from m;\nfunction main():void { g(); }\n"}, "g not found"},
 	}

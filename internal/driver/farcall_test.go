@@ -174,3 +174,17 @@ func TestFarCallSegmentOption(t *testing.T) {
 		t.Errorf("FarCalls: %s", got)
 	}
 }
+
+// writeFiles は複数のファイルを dir に書く。
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, src := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

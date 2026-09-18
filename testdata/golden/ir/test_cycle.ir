@@ -11,10 +11,10 @@
   (def _test_cycle_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 cycle_use global #"module" val=mod:cycle_use pub)
+  (var 0 cycle_use global #"module" val=mod:cycle_use)
   (var 1 cycle_var global #"uint8" val=:_test_cycle_cycle_var pub)
-  (var 2 test_cycle_use literal #"fn():void" val=:_test_cycle_test_cycle_use pub)
-  (var 3 main literal #"fn():void" val=:_main pub)
+  (var 2 test_cycle_use literal #"fn():void" val=:_test_cycle_test_cycle_use)
+  (var 3 main literal #"fn():void" val=:_main)
  )
  (lambda _test_cycle_test_cycle_use #"fn():void" opt={id :test_cycle_use}
   (args ())
@@ -333,7 +333,7 @@
   (def _cycle_use_hoge code #"fn():uint8" {lambda _cycle_use_hoge})
  )
  (vars
-  (var 0 tc global #"module" val=mod:test_cycle pub)
+  (var 0 tc global #"module" val=mod:test_cycle)
   (var 1 CYCLE_CONST literal #"uint8" val=99 pub)
   (var 2 hoge literal #"fn():uint8" val=:_cycle_use_hoge pub)
  )

@@ -27,7 +27,6 @@ func Parse(src []byte, filename string) (*File, error) {
 	}
 	f := &File{
 		Filename: filename,
-		Version:  lx.lex.Version(),
 		Pragma:   lx.lex.Pragma(),
 		Stmts:    lx.result,
 		Comments: lx.lex.Comments(),
@@ -39,8 +38,8 @@ func Parse(src []byte, filename string) (*File, error) {
 	return f, nil
 }
 
-// checkVersion は文法バージョンごとの受理範囲を検査する (doc/v2_grammar.md §4.1)。
-// 文法ファイルは v1 ∪ v2 のスーパーセットなので、「そのバージョンに無い構文」をここで落とす。
+// checkVersion は fc 1 だけにあった構文を落とす (文法ファイルは fc 1 の名残の規則も受理するので、ここで
+// 「fc 2 ではこう書く」と案内する。fc 1 自体は 2026-09 に削除した)。
 func checkVersion(f *File) error {
 	var err *Error
 	fail := func(pos Pos, msg string) {
@@ -49,11 +48,8 @@ func checkVersion(f *File) error {
 		}
 	}
 	checkTypeForm := func(prefix bool, pos Pos) {
-		if f.Version >= Version2 && !prefix {
+		if !prefix {
 			fail(pos, "postfix types (int*, int[4], void(int)) are written prefix in fc 2 (*int, [4]int, fn(int):void)")
-		}
-		if f.Version < Version2 && prefix {
-			fail(pos, "prefix types (*int, [4]int, fn(int):void) require fc 2")
 		}
 	}
 	Inspect(f, func(n Node) bool {
@@ -62,29 +58,14 @@ func checkVersion(f *File) error {
 		}
 		switch n := n.(type) {
 		case *ScopeLabel:
-			if f.Version >= Version2 {
-				fail(n.Keyword, "public:/private: labels are not allowed in fc 2 (declarations are private by default; mark exports with `public`)")
-			}
-		case *UseDecl:
-			if f.Version < Version2 && n.PublicPos.IsValid() {
-				fail(n.PublicPos, "`public use` requires fc 2 (add `#fc 2` to the first line)")
-			}
-			if f.Version < Version2 && len(n.Names) > 0 {
-				fail(n.Names[0].NamePos, "`use a, b from mod;` requires fc 2 (add `#fc 2` to the first line)")
-			}
+			fail(n.Keyword, "public:/private: labels are not allowed in fc 2 (declarations are private by default; mark exports with `public`)")
 		case *LoopStmt:
-			if f.Version >= Version2 && n.Rparen.IsValid() {
+			if n.Rparen.IsValid() {
 				fail(n.Loop, "`loop()` is written `loop` in fc 2")
 			}
-			if f.Version < Version2 && !n.Rparen.IsValid() {
-				fail(n.Loop, "`loop { ... }` requires fc 2 (write `loop() { ... }` in fc 1)")
-			}
 		case *ForStmt:
-			if f.Version >= Version2 && n.IsV1() {
+			if n.IsV1() {
 				fail(n.For, "`for (i, from, to)` is written `for (i = from; i < to; i++)` in fc 2")
-			}
-			if f.Version < Version2 && !n.IsV1() {
-				fail(n.For, "C-style `for (init; cond; step)` requires fc 2")
 			}
 		case *ArrayType:
 			checkTypeForm(n.IsPrefix(), n.Lbrack)
@@ -93,75 +74,22 @@ func checkVersion(f *File) error {
 		case *FuncType:
 			checkTypeForm(n.IsPrefix(), n.Lparen)
 		case *CastExpr:
-			if f.Version >= Version2 && n.Kind == CastLegacy {
+			if n.Kind == CastLegacy {
 				fail(n.Lt, "`<T>x` is written `x as T` (numeric conversion) or `bitcast<T>(x)` (bit reinterpretation) in fc 2")
 			}
-			if f.Version < Version2 && n.Kind != CastLegacy {
-				fail(n.Pos(), "`as` / `bitcast` require fc 2")
-			}
-		case *AssignExpr:
-			if f.Version < Version2 && n.Op.IsCompoundAssign() && n.Op != AddEq && n.Op != SubEq {
-				fail(n.OpPos, fmt.Sprintf("`%s` requires fc 2", n.Op))
-			}
-		case *UnaryExpr:
-			if f.Version < Version2 && n.Op == Tilde {
-				fail(n.OpPos, "`~` requires fc 2")
-			}
-		case *StructDecl:
-			if f.Version < Version2 {
-				fail(n.Keyword, "`struct` requires fc 2")
-			}
-		case *SoaDecl:
-			if f.Version < Version2 {
-				fail(n.Keyword, "`soa` requires fc 2")
-			}
-		case *StructLit:
-			if f.Version < Version2 {
-				fail(n.Lbrace, "struct literals require fc 2")
-			}
-		case *SizeofExpr:
-			if f.Version < Version2 {
-				fail(n.Sizeof, "`sizeof` requires fc 2")
-			}
-		case *NamedType:
-			if f.Version < Version2 && n.Module != nil {
-				fail(n.Module.NamePos, "qualified type names (mod.T) require fc 2")
-			}
-		case *ArrayLit:
-			if f.Version < Version2 && n.Comma.IsValid() {
-				fail(n.Comma, "trailing comma requires fc 2")
-			}
-		case *CallExpr:
-			if f.Version < Version2 && n.Comma.IsValid() {
-				fail(n.Comma, "trailing comma requires fc 2")
-			}
 		case *IncDecStmt:
-			if f.Version < Version2 {
-				fail(n.OpPos, "`++` / `--` require fc 2")
-			}
 			// `y = x++` は文法上 `(y = x)++` に読めてしまう。++/-- は文なので代入の中では使えない
 			if _, ok := n.X.(*AssignExpr); ok {
 				fail(n.OpPos, "`++` / `--` is a statement and cannot be used inside an expression")
 			}
 		case *LabeledStmt:
-			if f.Version < Version2 {
-				fail(n.Label.NamePos, "statement labels require fc 2")
-			}
 			switch n.Stmt.(type) {
 			case *LoopStmt, *WhileStmt, *ForStmt, *SwitchStmt:
 			default:
 				fail(n.Label.NamePos, "a label must be placed on loop / while / for / switch")
 			}
-		case *BreakStmt:
-			if f.Version < Version2 && n.Label != nil {
-				fail(n.Label.NamePos, "`break label;` requires fc 2")
-			}
-		case *ContinueStmt:
-			if f.Version < Version2 && n.Label != nil {
-				fail(n.Label.NamePos, "`continue label;` requires fc 2")
-			}
 		case *IncludeDecl:
-			if f.Version >= Version2 && n.Kind != nil {
+			if n.Kind != nil {
 				fail(n.Kind.NamePos, fmt.Sprintf("include %s(...) is not allowed in fc 2 (the kind is decided by the file extension)", n.Kind.Name))
 			}
 		}

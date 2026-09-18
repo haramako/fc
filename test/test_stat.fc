@@ -1,3 +1,4 @@
+#fc 2
 use * from unittest;
 
 include("character.chr");
@@ -51,13 +52,14 @@ function test_if():void
 function test_loop():void
 {
 	var i = 0;
-	loop()
+	loop {
 		if ((i += 1) == 3)
 			break;
+	}
 	assert_equal(i, 3, 'break');
 
 	i = 0;
-	loop() {
+	loop {
 		i += 1;
 		if (i < 3) {
 			continue;
@@ -67,7 +69,7 @@ function test_loop():void
 	assert_equal(i, 3, 'continue');
 
 	var override = 0;
-	loop() {
+	loop {
 		var override = 1;
 		assert_equal(override, 1, "scope");
 		break;
@@ -79,7 +81,7 @@ function test_for():void
 	var i = 0;
 	var n = 0;
 	var override = 0;
-	for (i, 0, I10) {
+	for (i = 0; i < I10; i++) {
 		var override = 1;
 		assert_equal(override, 1, "scope");
 		n += i;
@@ -92,7 +94,7 @@ function test_switch():void
 {
 	var i:int;
 	var sum = 0;
-	for (i, 0, 6) {
+	for (i = 0; i < 6; i++) {
 		switch (i) {
 		case 1, 2, 3:
 			sum += i;

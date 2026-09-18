@@ -1,11 +1,12 @@
+#fc 2
 use * from unittest;
 use mem;
 
 include("character.chr");
 
 //const asm_symbol:int options(address: 0x0123);
-const base_data:int[] = [1, 2, 3];
-const asm_symbol:int[] options(address: "_test_option_base_data");
+const base_data:[]int = [1, 2, 3];
+const asm_symbol:[]int options(address: "_test_option_base_data");
 
 function test_address():void
 {

@@ -12,10 +12,10 @@
   (def _test_math_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 test_sin literal #"fn():void" val=:_test_math_test_sin pub)
-  (var 1 test_cos literal #"fn():void" val=:_test_math_test_cos pub)
-  (var 2 test_atan literal #"fn():void" val=:_test_math_test_atan pub)
-  (var 3 main literal #"fn():void" val=:_main pub)
+  (var 0 test_sin literal #"fn():void" val=:_test_math_test_sin)
+  (var 1 test_cos literal #"fn():void" val=:_test_math_test_cos)
+  (var 2 test_atan literal #"fn():void" val=:_test_math_test_atan)
+  (var 3 main literal #"fn():void" val=:_main)
  )
  (lambda _test_math_test_sin #"fn():void" opt={id :test_sin}
   (args ())

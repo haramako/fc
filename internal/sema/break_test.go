@@ -7,8 +7,7 @@ import (
 )
 
 // TestBreakV2: break / continue とラベル (doc/v2_grammar.md §3.7)。
-//   - v1: break はループのみ (switch は抜けない)
-//   - v2: ラベルなし break は最も内側のループまたは switch、continue はループ。`break L;` / `continue L;`
+// ラベルなし break は最も内側のループまたは switch、continue はループ。`break L;` / `continue L;`
 func TestBreakV2(t *testing.T) {
 	body := func(version int, stmts string) map[string]string {
 		pragma := ""
@@ -18,12 +17,6 @@ func TestBreakV2(t *testing.T) {
 		return map[string]string{"t.fc": pragma + "function main():void {\nvar x:int;\nvar y:int;\n" + stmts + "\n}\n"}
 	}
 
-	t.Run("v1: break in switch leaves the loop", func(t *testing.T) {
-		ir := mustCompileFiles(t, body(1, "loop() { switch (x) { case 1: break; } y = 1; }"), "t.fc")
-		if got, want := firstJump(ir), lastEndLabel(ir); got != want {
-			t.Errorf("v1 の break はループの end (%s) へ飛ぶべき: %s\n%s", want, got, ir)
-		}
-	})
 	t.Run("v2: break in switch leaves the switch", func(t *testing.T) {
 		ir := mustCompileFiles(t, body(2, "loop { switch (x) { case 1: break; } y = 1; }"), "t.fc")
 		if got, loopEnd := firstJump(ir), lastEndLabel(ir); got == loopEnd || !strings.HasPrefix(got, "@end_") {
@@ -62,14 +55,6 @@ func TestBreakV2(t *testing.T) {
 			err := compileFiles(t, body(2, c.src), "t.fc")
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("%q: got %v, want /%s/", c.src, err, c.want)
-			}
-		}
-	})
-	t.Run("v1: v2 syntax rejected", func(t *testing.T) {
-		for _, src := range []string{"loop { break; }", "a: loop() { break; }", "loop() { break a; }"} {
-			err := compileFiles(t, body(1, src), "t.fc")
-			if err == nil || !strings.Contains(err.Error(), "fc 2") {
-				t.Errorf("%q: got %v", src, err)
 			}
 		}
 	})

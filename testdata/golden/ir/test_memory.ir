@@ -15,14 +15,14 @@
   (def _test_memory_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 mem global #"module" val=mod:mem pub)
-  (var 1 str global #"[12]uint8" val=:_test_memory_str pub)
-  (var 2 buf1 global #"[512]uint8" val=:_test_memory_buf1 pub)
-  (var 3 buf2 global #"[512]uint8" val=:_test_memory_buf2 pub)
-  (var 4 test_copy literal #"fn():void" val=:_test_memory_test_copy pub)
-  (var 5 test_strcpy literal #"fn():void" val=:_test_memory_test_strcpy pub)
-  (var 6 test_set literal #"fn():void" val=:_test_memory_test_set pub)
-  (var 7 main literal #"fn():void" val=:_main pub)
+  (var 0 mem global #"module" val=mod:mem)
+  (var 1 str global #"[12]uint8" val=:_test_memory_str)
+  (var 2 buf1 global #"[512]uint8" val=:_test_memory_buf1)
+  (var 3 buf2 global #"[512]uint8" val=:_test_memory_buf2)
+  (var 4 test_copy literal #"fn():void" val=:_test_memory_test_copy)
+  (var 5 test_strcpy literal #"fn():void" val=:_test_memory_test_strcpy)
+  (var 6 test_set literal #"fn():void" val=:_test_memory_test_set)
+  (var 7 main literal #"fn():void" val=:_main)
  )
  (lambda _test_memory_test_copy #"fn():void" opt={id :test_copy}
   (args ())
@@ -147,7 +147,7 @@
   (result nil)
   (vars
    (var 0 $41 local #"uint8" lt=temp)
-   (var 1 n local #"uint8" pub)
+   (var 1 n local #"uint8")
   )
   (defs
    (def _42 block #"[6]uint8" ({lit nil 65 #"uint8"} {lit nil 66 #"uint8"} {lit nil 67 #"uint8"} {lit nil 68 #"uint8"} {lit nil 69 #"uint8"} {lit nil 0 #"uint8"}))

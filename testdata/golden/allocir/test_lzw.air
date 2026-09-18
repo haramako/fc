@@ -1,6 +1,6 @@
 (alloc-lambda test_lzw _test_lzw_test_read_bit _test_lzw_test_read_bit frame_size=3 abi=static
  (vars
-  (var 0 x local #"uint8" pub loc=static addr=0)
+  (var 0 x local #"uint8" loc=static addr=0)
   (var 1 $9 local #"ubool8" lt=temp loc=cond cond=carry,true)
   (var 2 $11 local #"uint16" lt=temp loc=static addr=1)
   (var 3 $14 local #"uint8" lt=temp loc=none unuse)
@@ -118,10 +118,10 @@
 )
 (alloc-lambda test_lzw _test_lzw_test_unpack _test_lzw_test_unpack frame_size=5 abi=static
  (vars
-  (var 0 PACKED global #"[14]uint8" val=:PACKED pub loc=none unuse)
-  (var 1 UNPACKED global #"[25]uint8" val=:UNPACKED pub loc=none unuse)
+  (var 0 PACKED global #"[14]uint8" val=:PACKED loc=none unuse)
+  (var 1 UNPACKED global #"[25]uint8" val=:UNPACKED loc=none unuse)
   (var 2 $54 local #"uint16" lt=temp loc=none unuse)
-  (var 3 len local #"uint16" pub loc=static addr=0)
+  (var 3 len local #"uint16" loc=static addr=0)
   (var 4 $56 local #"uint16" lt=temp loc=static addr=2)
   (var 5 $57 local #"uint8" lt=temp loc=static addr=4)
   (var 6 $61 local #"uint8" lt=temp loc=static addr=0)

@@ -1,3 +1,4 @@
+#fc 2
 use * from unittest;
 
 include("character.chr");
@@ -249,13 +250,13 @@ function test_pointer_op():void
 	assert_equal(gw, 9998, "*pw");
 
 	var i = 99;
-	var pi:int* = &i;
+	var pi:*int = &i;
 	assert_equal(*pi, 99, "&pi");
 	i = 98;
 	assert_equal(*pi, 98, "*pi");
 
 	var w:int16 = 9999;
-	var pw:int16* = &w;
+	var pw:*int16 = &w;
 	assert_equal(*pw, 9999, "&pi");
 	w = 9998;
 	assert_equal(*pw, 9998, "*pi");

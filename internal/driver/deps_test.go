@@ -34,8 +34,7 @@ func TestImportDirection(t *testing.T) {
 		"opt":      {"ir", "types", "diag"},
 		"codegen":  {"ir", "types", "diag", "regalloc", "opt", "frames"},
 		"sema":     {"syntax", "types", "ir", "diag"},
-		"migrate":  {"syntax", "ir"},
-		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "regalloc", "opt", "r6502", "migrate", "frames"},
+		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "regalloc", "opt", "r6502", "frames"},
 		"frames":   {"ir", "diag", "types"},
 	}
 	for pkg, ok := range allowed {

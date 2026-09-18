@@ -1,7 +1,7 @@
 // fcc は FC コンパイラの CLI。
 //
 //	Usage: fcc <command> [options] <src.fc> ...
-//	  command: build(b) / compile(c) / run / fmt / migrate
+//	  command: build(b) / compile(c) / run / fmt / check
 package main
 
 import (
@@ -20,7 +20,6 @@ Commands:
     compile, c       compile to object files only
     run              build and run by emulator
     fmt              format source files (see fcc fmt -h)
-    migrate          migrate fc 1 sources to fc 2 (see fcc migrate -h)
     check            compile without producing files and report errors / warnings
     version          show version
 Options:
@@ -47,8 +46,6 @@ func run() int {
 	switch com {
 	case "fmt":
 		return runFmt(args[1:])
-	case "migrate":
-		return runMigrate(args[1:])
 	case "version", "--version", "-v":
 		return runVersion()
 	case "check":

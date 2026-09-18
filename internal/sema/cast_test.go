@@ -42,20 +42,10 @@ func TestCastV2(t *testing.T) {
 			t.Errorf("%s: got %v, want /%s/", c.src, err, c.want)
 		}
 	}
-	// as の符号拡張は sign_extension 命令になる。v1 の <int16>s (ビット読み替え) には無い
+	// as の符号拡張は sign_extension 命令になる
 	ir := mustCompileFiles(t, v2("var x:int16 = s as int16;"), "t.fc")
 	if !strings.Contains(ir, "sign_extension") {
 		t.Errorf("s as int16 が符号拡張になっていない:\n%s", ir)
 	}
-	ir = mustCompileFiles(t, map[string]string{"t.fc": "var s:sint8;\nfunction main():void {\nvar x:int16 = <int16>s;\n}\n"}, "t.fc")
-	if strings.Contains(ir, "sign_extension") {
-		t.Errorf("v1 の <int16>s が符号拡張になっている:\n%s", ir)
-	}
-	// v1 ファイルでは as / bitcast は使えない
-	for _, src := range []string{"var x = s as int;", "var x = bitcast<uint16>(p);"} {
-		err := compileFiles(t, map[string]string{"t.fc": "var p:int*;\nvar s:sint8;\nfunction main():void {\n" + src + "\n}\n"}, "t.fc")
-		if err == nil || !strings.Contains(err.Error(), "`as` / `bitcast` require fc 2") {
-			t.Errorf("v1 %s: got %v", src, err)
-		}
-	}
+
 }

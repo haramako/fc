@@ -1,8 +1,9 @@
+#fc 2
 use * from unittest;
 use math;
 include("character.chr");
 
-function hoge(p:int*):void {}
+function hoge(p:*int):void {}
 
 // bug: to_asm: invalid location none of {$7}
 function test_pointer_access():void

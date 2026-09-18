@@ -18,33 +18,26 @@ type Lexer struct {
 	line     int // 現在行 (1 始まり)
 	lineOff  int // 現在行の先頭オフセット
 	comments []Comment
-	version  int    // 先頭行の `#fc N` プラグマ (無ければ Version1)
-	pragma   string // プラグマの原文 (行末の改行を含まない。無ければ "")
+	pragma   string // 先頭行の `#fc 2` プラグマの原文 (行末の改行を含まない。無ければ "")
 	verErr   *Error // プラグマの構文エラー (最初の Next で返す)
 }
 
-// 文法バージョン。
-const (
-	Version1 = 1 // 宣言なし
-	Version2 = 2 // `#fc 2`
-)
+// Version は文法バージョン。fc 1 (2026-09 まで) は削除した。`#fc 2` の宣言は任意 (無くても fc 2)。
+const Version = 2
 
 // NewLexer はレキサを作る。src の CRLF は呼び出し側で正規化済みであることを想定するが、
 // '\r' は空白として扱うので残っていても動作する。
 func NewLexer(src []byte, filename string) *Lexer {
-	l := &Lexer{src: src, filename: filename, line: 1, version: Version1}
+	l := &Lexer{src: src, filename: filename, line: 1}
 	l.scanPragma()
 	return l
 }
 
-// Version は文法バージョン (先頭行の `#fc N`。無ければ Version1)。
-func (l *Lexer) Version() int { return l.version }
-
 // Pragma は先頭行のプラグマの原文 (無ければ "")。
 func (l *Lexer) Pragma() string { return l.pragma }
 
-// scanPragma は先頭行の `#fc N` を読む。`#fc` で始まらなければ何もしない
-// (それ以外の `#` は通常の字句解析でエラーになる)。
+// scanPragma は先頭行の `#fc 2` を読む。`#fc` で始まらなければ何もしない
+// (それ以外の `#` は通常の字句解析でエラーになる)。`#fc 1` は fc 1 のソース (もう扱えない) なのでエラー。
 func (l *Lexer) scanPragma() {
 	if !bytes.HasPrefix(l.src, []byte("#fc")) {
 		return
@@ -61,8 +54,9 @@ func (l *Lexer) scanPragma() {
 		ver, _ = strconv.Atoi(fields[1])
 	}
 	switch ver {
-	case Version1, Version2:
-		l.version = ver
+	case Version:
+	case 1:
+		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: "fc 1 sources are no longer supported (migrate with `fcc migrate` of fc 0.1 and write `#fc 2`)"}
 	default:
 		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: fmt.Sprintf("invalid version pragma %q (expected \"#fc 2\")", line)}
 	}
@@ -237,11 +231,8 @@ func (l *Lexer) Next() (Token, error) {
 			n++
 		}
 		if kind, ok := keywords[string(rest[:n])]; ok {
-			if kind == KwPrivate && l.version >= Version2 {
-				// v2 に `private` は無い (宣言はデフォルトで private。v1 の `private:` ラベルのためだけの予約語)
-				return tok(Identifier, n), nil
-			}
-			if v2Keywords[kind] && l.version < Version2 {
+			if kind == KwPrivate {
+				// `private` は予約語ではない (宣言はデフォルトで private。fc 1 の `private:` ラベルの名残)
 				return tok(Identifier, n), nil
 			}
 			return tok(kind, n), nil

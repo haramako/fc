@@ -1,3 +1,4 @@
+#fc 2
 use * from unittest;
 use stdio;
 
@@ -8,14 +9,14 @@ const a1 = [0, 1, 2, 3];
 function test_cast():void
 {
 	var w:uint16 = 65535;
-	assert_equal(<int>w, 255, 'as int');
+	assert_equal(w as int, 255, 'as int');
 
-	var a:uint8* = a1;
-	var a2:uint16* = <uint16*>a;
+	var a:*uint8 = a1;
+	var a2:*uint16 = bitcast<*uint16>(a);
 	assert_equal(a2[0], 256, '[] as uint16');
 
-	var i:uint16*;
-	i = <uint16*>a1;
+	var i:*uint16;
+	i = bitcast<*uint16>(a1);
 
 	assert_equal(i[0], a1[0], "as uint*");
 }

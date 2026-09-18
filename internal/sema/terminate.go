@@ -17,7 +17,7 @@ import (
 //   - loop / while (1) / 条件なし for: 中にそのループを抜ける break が無い
 //   - switch: default があり、全 case と default の最後の文が終端文
 //   - ラベル付き文: 中の文
-func terminates(s syntax.Stmt, v1 bool) bool {
+func terminates(s syntax.Stmt) bool {
 	switch s := s.(type) {
 	case *syntax.ReturnStmt:
 		return true
@@ -25,36 +25,36 @@ func terminates(s syntax.Stmt, v1 bool) bool {
 		if len(s.Stmts) == 0 {
 			return false
 		}
-		return terminates(s.Stmts[len(s.Stmts)-1], v1)
+		return terminates(s.Stmts[len(s.Stmts)-1])
 	case *syntax.IfStmt:
-		return s.Else != nil && terminates(s.Then, v1) && terminates(s.Else, v1)
+		return s.Else != nil && terminates(s.Then) && terminates(s.Else)
 	case *syntax.LoopStmt:
-		return !hasBreakFor(s.Body, nil, v1)
+		return !hasBreakFor(s.Body, nil)
 	case *syntax.WhileStmt:
 		// while (1) は無限ループ
-		return isTrueLiteral(s.Cond) && !hasBreakFor(s.Body, nil, v1)
+		return isTrueLiteral(s.Cond) && !hasBreakFor(s.Body, nil)
 	case *syntax.ForStmt:
-		return !s.IsV1() && (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil, v1)
+		return !s.IsV1() && (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
 	case *syntax.SwitchStmt:
 		if s.Default == nil {
 			return false
 		}
 		for _, c := range s.Cases {
-			if len(c.Body) == 0 || !terminates(c.Body[len(c.Body)-1], v1) {
+			if len(c.Body) == 0 || !terminates(c.Body[len(c.Body)-1]) {
 				return false
 			}
 		}
-		return len(s.Default.Body) > 0 && terminates(s.Default.Body[len(s.Default.Body)-1], v1)
+		return len(s.Default.Body) > 0 && terminates(s.Default.Body[len(s.Default.Body)-1])
 	case *syntax.LabeledStmt:
 		switch inner := s.Stmt.(type) {
 		case *syntax.LoopStmt:
-			return !hasBreakFor(inner.Body, s.Label, v1)
+			return !hasBreakFor(inner.Body, s.Label)
 		case *syntax.WhileStmt:
-			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label, v1)
+			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label)
 		case *syntax.ForStmt:
-			return !inner.IsV1() && (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label, v1)
+			return !inner.IsV1() && (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
 		}
-		return terminates(s.Stmt, v1)
+		return terminates(s.Stmt)
 	}
 	return false
 }
@@ -75,8 +75,7 @@ func isTrueLiteral(e syntax.Expr) bool {
 
 // hasBreakFor は body の中に「このループを抜ける break」があるか
 // (ラベルなしで間にループ/switch を挟まないもの、または label を指すもの)。
-// v1 では switch の中の break もループを抜けるので、switch は挟まないものとして扱う。
-func hasBreakFor(body syntax.Stmt, label *syntax.Ident, v1 bool) bool {
+func hasBreakFor(body syntax.Stmt, label *syntax.Ident) bool {
 	found := false
 	var walk func(n syntax.Node, nested bool)
 	walk = func(n syntax.Node, nested bool) {
@@ -92,9 +91,7 @@ func hasBreakFor(body syntax.Stmt, label *syntax.Ident, v1 bool) bool {
 		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt:
 			nested = true
 		case *syntax.SwitchStmt:
-			if !v1 {
-				nested = true
-			}
+			nested = true
 		case *syntax.LambdaExpr:
 			return
 		}

@@ -143,9 +143,9 @@ public var a:int = 1, b = 2 options(address: 0x10);
 function f(x:int):void options(bank:1) { if (x) a += 1; elsif (b) {} else b -= 1; }
 use * from common;
 use mem as m;
-include macro("x.rb");
+include("x.rb");
 switch (a) { case 1, 2: break; default: continue; }
-var p:int*[4](int, y:int) = -> void { };
+var p:fn(int, y:int):[4]*int = -> void { };
 `
 	f, err := Parse([]byte(src), "s.fc")
 	if err != nil {
@@ -180,14 +180,14 @@ var p:int*[4](int, y:int) = -> void { };
 		t.Errorf("use: %+v %+v", u1, u2)
 	}
 	inc := f.Stmts[4].(*IncludeDecl)
-	if inc.Kind.Name != "macro" || inc.Path.Value != "x.rb" {
+	if inc.Kind != nil || inc.Path.Value != "x.rb" {
 		t.Errorf("include: %+v", inc)
 	}
 	sw := f.Stmts[5].(*SwitchStmt)
 	if len(sw.Cases) != 1 || len(sw.Cases[0].Values) != 2 || sw.Default == nil {
 		t.Errorf("switch: %+v", sw)
 	}
-	// int*[4](int, y:int) → FuncType(ArrayType(PointerType(int)))
+	// fn(int, y:int):[4]*int → FuncType(ArrayType(PointerType(int)))
 	pt := f.Stmts[6].(*VarDecl).Specs[0]
 	ft := pt.Type.(*FuncType)
 	at := ft.Result.(*ArrayType)
@@ -200,52 +200,40 @@ var p:int*[4](int, y:int) = -> void { };
 	}
 }
 
-// TestVersionPragma: 先頭行の `#fc N` プラグマと、バージョンごとの受理範囲。
+// TestVersionPragma: 先頭行の `#fc 2` プラグマ (任意) と、fc 1 の名残の構文の案内。
 func TestVersionPragma(t *testing.T) {
 	f, err := Parse([]byte("#fc 2\nvar a:int;\n"), "t.fc")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Version != Version2 || f.Pragma != "#fc 2" {
-		t.Errorf("version=%d pragma=%q", f.Version, f.Pragma)
+	if f.Pragma != "#fc 2" {
+		t.Errorf("pragma=%q", f.Pragma)
 	}
 	if got := f.Stmts[0].Pos(); got.Line != 2 || got.Col != 1 {
 		t.Errorf("first statement at %v, want 2:1", got)
 	}
 	f, err = Parse([]byte("var a:int;\n"), "t.fc")
-	if err != nil || f.Version != Version1 || f.Pragma != "" {
-		t.Errorf("v1: err=%v version=%d pragma=%q", err, f.Version, f.Pragma)
+	if err != nil || f.Pragma != "" {
+		t.Errorf("no pragma: err=%v pragma=%q", err, f.Pragma)
 	}
 
 	bad := []struct{ src, msg string }{
+		{"#fc 1\nvar a:int;\n", "fc 1 sources are no longer supported"},
 		{"#fc 3\n", "invalid version pragma"},
 		{"#fc\n", "invalid version pragma"},
 		{"#fc 2 extra\n", "invalid version pragma"},
 		{"var a:int;\n#fc 2\n", "invalid token"},
 		{"#fc 2\npublic:\nvar a:int;\n", "labels are not allowed in fc 2"},
-		{"#fc 2\nprivate:\nvar a:int;\n", "a label must be placed on"}, // v2 では private は予約語でない
-		{"var a:int;\nfunction f():void { a |= 1; }\n", "`|=` requires fc 2"},
-		{"var a:int;\nfunction f():void { a <<= 1; }\n", "`<<=` requires fc 2"},
-		{"var a:int;\nfunction f():void { a = ~a; }\n", "`~` requires fc 2"},
+		{"#fc 2\nprivate:\nvar a:int;\n", "a label must be placed on"}, // private は予約語でない
 		{"#fc 2\ninclude macro(\"x.rb\");\n", "include macro(...) is not allowed in fc 2"},
-		{"const a = [1, 2,];\n", "trailing comma requires fc 2"},
 		{"#fc 2\nvar a:int*;\n", "postfix types (int*, int[4], void(int)) are written prefix in fc 2"},
 		{"#fc 2\nvar a:int[4];\n", "postfix types"},
 		{"#fc 2\nvar a:void(int);\n", "postfix types"},
 		{"#fc 2\nvar a:[4]int*;\n", "postfix types"},
 		{"#fc 2\nvar x = <int>y;\n", "`<T>x` is written `x as T`"},
-		{"var a:*int;\n", "prefix types (*int, [4]int, fn(int):void) require fc 2"},
-		{"var a:[4]int;\n", "prefix types"},
-		{"var a:fn(int):void;\n", "prefix types"},
-		{"var x = y as int;\n", "`as` / `bitcast` require fc 2"},
-		{"var x = bitcast<int>(y);\n", "`as` / `bitcast` require fc 2"},
-		{"function f():void { g(1,); }\n", "trailing comma requires fc 2"},
+		{"function f():void { loop() { } }\n", "`loop()` is written `loop` in fc 2"},
+		{"function f():void { for (i, 0, 4) { } }\n", "`for (i, from, to)` is written"},
 		{"#fc 2\nconst a = [,];\n", "parse error"},
-		{"struct P { x:int; }\n", "`struct` requires fc 2"},
-		{"soa P:P[4];\n", "`soa` requires fc 2"},
-		{"var p = P{1, 2};\n", "struct literals require fc 2"},
-		{"var n = sizeof(int);\n", "`sizeof` requires fc 2"},
-		{"var t:m.T;\n", "qualified type names (mod.T) require fc 2"},
 		{"#fc 2\nstruct P { x:int }\n", "parse error"},
 	}
 	for _, b := range bad {
@@ -254,8 +242,8 @@ func TestVersionPragma(t *testing.T) {
 			t.Errorf("%q: got %v, want /%s/", b.src, err, b.msg)
 		}
 	}
-	// v1 では従来どおり受理する
-	for _, ok := range []string{"private:\nvar a:int;\n", "include macro(\"x.rb\");\n"} {
+	// プラグマが無くても fc 2 として受理する
+	for _, ok := range []string{"var a:*int;\n", "const a = [1, 2,];\n", "var x = y as int;\n", "struct P { x:int; }\n"} {
 		if _, err := Parse([]byte(ok), "t.fc"); err != nil {
 			t.Errorf("%q: %v", ok, err)
 		}

@@ -3,8 +3,6 @@ package driver
 // v2 の true / false / null と *void。
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -60,19 +58,6 @@ function main():void
 	}
 }
 
-// compileErrV1 は fc 1 のソースをコンパイルしてエラーメッセージを返す (成功なら "")。
-func compileErrV1(t *testing.T, dir, src string) string {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 func TestBoolNullVoidPtrErrors(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ src, want string }{
@@ -89,15 +74,6 @@ func TestBoolNullVoidPtrErrors(t *testing.T) {
 		if !strings.Contains(got, c.want) {
 			t.Errorf("%q:\n  got  %q\n  want /%s/", c.src, got, c.want)
 		}
-	}
-	// v1 では true / false / null は識別子のまま、*void は使えない
-	v1 := "var null:int;\nvar true:int;\nfunction main():void { true = null; }\n"
-	dir := t.TempDir()
-	if got := compileErrV1(t, dir, v1); got != "" {
-		t.Errorf("v1 identifiers: %q", got)
-	}
-	if got := compileErrV1(t, dir, "var p:void*;\n"); !strings.Contains(got, "`*void` requires fc 2") {
-		t.Errorf("v1 *void: %q", got)
 	}
 }
 

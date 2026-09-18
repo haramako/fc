@@ -11,10 +11,10 @@
   (def _test_bug_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 math global #"module" val=mod:math pub)
-  (var 1 hoge literal #"fn(*uint8):void" val=:_test_bug_hoge pub)
-  (var 2 test_pointer_access literal #"fn():void" val=:_test_bug_test_pointer_access pub)
-  (var 3 main literal #"fn():void" val=:_main pub)
+  (var 0 math global #"module" val=mod:math)
+  (var 1 hoge literal #"fn(*uint8):void" val=:_test_bug_hoge)
+  (var 2 test_pointer_access literal #"fn():void" val=:_test_bug_test_pointer_access)
+  (var 3 main literal #"fn():void" val=:_main)
  )
  (lambda _test_bug_hoge #"fn(*uint8):void" opt={id :hoge}
   (args ({l0 p}))

@@ -1,16 +1,17 @@
+#fc 2
 use * from unittest;
 use mem;
 
 include("character.chr");
 include("test_basic.asm");
 
-public var hoge:int;
+var hoge:int;
 
 var i1:int;
 const CONST = 2;
-var a1:int[4];
-var a2:int[CONST];
-const a3:int[] = [1, 2];
+var a1:[4]int;
+var a2:[CONST]int;
+const a3:[]int = [1, 2];
 const s1 = "hoge";
 const c = 1 + 0x01 + 0b01;
 
@@ -28,7 +29,7 @@ function test_nesasm_limit():void
 	var toooooooooooooooooooooooooooooooooooooooo_long_id:int = 0;
 	toooooooooooooooooooooooooooooooooooooooo_long_id = toooooooooooooooooooooooooooooooooooooooo_long_id + 1;
 	// 長い文字列がエラーになる( NESASMの１行80文字制限のため )
-	var i:int* = "toooooooooooooooooooooooooooooooooooooooooooooooooo_long_string";
+	var i:*int = "toooooooooooooooooooooooooooooooooooooooooooooooooo_long_string";
 }
 
 function add(a:int, b:int):int
@@ -59,7 +60,7 @@ function test_misc():void
 	// loop
 	var i = 1;
 	var n = 0;
-	loop() {
+	loop {
 		n = 1;
 		if (i) {
 			break;

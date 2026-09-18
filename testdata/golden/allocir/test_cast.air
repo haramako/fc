@@ -1,11 +1,11 @@
 (alloc-lambda test_cast _test_cast_test_cast _test_cast_test_cast frame_size=4 abi=static
  (vars
-  (var 0 w local #"uint16" pub loc=static addr=0)
-  (var 1 a local #"*uint8" pub loc=static addr=0)
-  (var 2 a2 local #"*uint16" pub loc=static addr=2)
+  (var 0 w local #"uint16" loc=static addr=0)
+  (var 1 a local #"*uint8" loc=static addr=0)
+  (var 2 a2 local #"*uint16" loc=static addr=2)
   (var 3 $6 local #"*uint16" lt=temp loc=none unuse)
   (var 4 $7 local #"uint16" lt=temp loc=static addr=0)
-  (var 5 i local #"*uint16" pub loc=static addr=0)
+  (var 5 i local #"*uint16" loc=static addr=0)
   (var 6 $11 local #"*uint16" lt=temp loc=none unuse)
   (var 7 $12 local #"uint16" lt=temp loc=static addr=2)
   (var 8 $13 local #"*uint8" lt=temp loc=none unuse)

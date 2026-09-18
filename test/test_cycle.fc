@@ -1,7 +1,8 @@
+#fc 2
 use * from unittest;
 
 use cycle_use;
-var cycle_var:int;
+public var cycle_var:int;
 
 include("character.chr");
 

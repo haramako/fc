@@ -47,17 +47,14 @@ go test ./...                                    # 全部 (golden + examples + N
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
 
-- **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`。仕様は [language_reference.md](language_reference.md)、設計の経緯は
-  [v2_grammar.md](v2_grammar.md)。**fclib は v2 に移行済み**、`test/*.fc` は v1 のまま残し（v1 パーサの回帰）、
-  v2 版を `test/v2/` に置いて `TestGoldenV2` で同じ golden に一致させている。`test/v2/` は `test/*.fc` を
-  変えたら `fcc migrate` で作り直す（`cd test/v2 && cp ../test_*.fc ../cycle_use.fc . && fcc migrate -w test_*.fc`）
+- **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](language_reference.md)、設計の経緯は
+  [v2_grammar.md](v2_grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、
+  `test/*.fc` の v1 版）。`test/*.fc` は v2 だけ。`syntax.File` / `ir.Module` にバージョンは無く、v1 だけの構文は
+  `syntax.checkVersion` が「v2 ではこう書く」のエラーにする
 - **struct / soa**（2026-09-14〜、v2 のみ）: 設計と実装メモは [v2_types_struct.md](v2_types_struct.md)、仕様は
   [language_reference.md](language_reference.md) §2.1 / §2.2。テストは `internal/driver/struct_test.go` / `soa_test.go`
-  （小さなプログラムを emu で実行）と `test/v2/test_struct.fc` / `test_soa.fc`（unittest 形式。golden は無く、実行結果で判定）。
+  （小さなプログラムを emu で実行）と `test/test_struct.fc` / `test_soa.fc`（unittest 形式。golden は無く、実行結果で判定）。
   `share/runtime.asm` の `__mul_16`（16 ビット乗算）は長らく `rts` だけの未実装で、このとき実装した（`j * 100` が 0 になっていた）
-- **`fcc migrate`**: `fcc migrate [-t nes] [--lib DIR] [--textmap NAME=PATH] -w <main.fc>...`。作業ディレクトリと
-  `--lib` の下のファイルだけを書き換え、再コンパイルして asm（正規化）が一致しなければ元に戻す（`--force` で受け入れ）。
-  castle は `cd src && fcc migrate -t nes --textmap _T=../tmp/font/text.chr.txt --textmap _M=../tmp/font/misc_text.chr.txt -w main.fc`
 - **far call**（2026-09-15〜）: `options(farcall: true)` で有効。判定は `sema.Hlc.isFarCall`（呼び先モジュールの
   `ir.Module.Switchable()` = `bank` ≥ 0 かつ `near` 無し）、`ir.Op.Far`、codegen の `farCallSetup`（`.bank()` を使うので
   ld65.cfg の MEMORY に `bank = N` が要る。fc 生成の cfg は自動）。トランポリンは `fclib/<target>/farcall.asm`

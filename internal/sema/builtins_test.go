@@ -24,13 +24,8 @@ func TestBuiltins(t *testing.T) {
 	})
 	t.Run("include rb is an error in v2", func(t *testing.T) {
 		err := compileFiles(t, map[string]string{"t.fc": "#fc 2\nuse * from stdio;\ninclude(\"stdio.rb\");\nfunction main():void {}\n"}, "t.fc")
-		if err == nil || !strings.Contains(err.Error(), "macros are not supported in fc 2") {
+		if err == nil || !strings.Contains(err.Error(), ".rb macros are not supported") {
 			t.Errorf("got %v", err)
-		}
-	})
-	t.Run("include rb is ignored in v1", func(t *testing.T) {
-		if err := compileFiles(t, map[string]string{"t.fc": "use * from stdio;\ninclude(\"stdio.rb\");\nfunction main():void { printf(\"a\"); }\n"}, "t.fc"); err != nil {
-			t.Error(err)
 		}
 	})
 	t.Run("textmap", func(t *testing.T) {

@@ -152,11 +152,11 @@ function main():void
 	}
 }
 
-// TestCheckWarnings: fcc check / ビルド結果の警告 (構文検査 + v1 の include("*.rb"))。
+// TestCheckWarnings: fcc check / ビルド結果の警告 (構文検査)。
 func TestCheckWarnings(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	src := "use * from stdio;\ninclude(\"stdio.rb\");\nfunction main():void\n{\n\tvar a = 1;\n\tif (a & 2 == 0) {}\n}\n"
+	src := "use * from stdio;\nfunction main():void\n{\n\tvar a = 1;\n\tif (a & 2 == 0) {}\n}\n"
 	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}
@@ -165,8 +165,7 @@ func TestCheckWarnings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ws) != 2 || !strings.Contains(ws[0].Msg, "no longer needed") || ws[0].Pos.Line != 2 ||
-		!strings.Contains(ws[1].Msg, "binds looser") || ws[1].Pos.Line != 6 {
+	if len(ws) != 1 || !strings.Contains(ws[0].Msg, "binds looser") || ws[0].Pos.Line != 5 {
 		t.Errorf("warnings: %+v", ws)
 	}
 	// Build の結果にも同じ警告が付く
@@ -174,7 +173,7 @@ func TestCheckWarnings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Warnings) != 2 {
+	if len(res.Warnings) != 1 {
 		t.Errorf("build warnings: %+v", res.Warnings)
 	}
 }

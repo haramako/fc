@@ -11,12 +11,12 @@
 )
 (alloc-lambda test_var _test_var_test_const _test_var_test_const frame_size=0 abi=static
  (vars
-  (var 0 INT literal #"uint8" val=1 pub loc=none unuse)
-  (var 1 UINT literal #"sint8" val=-2 pub loc=none unuse)
-  (var 2 INT16 literal #"uint16" val=65535 pub loc=none unuse)
-  (var 3 UINT16 literal #"sint16" val=-65536 pub loc=none unuse)
-  (var 4 ARRAY global #"[3]uint8" val=:ARRAY pub loc=none unuse)
-  (var 5 STRING global #"[5]uint8" val=:STRING pub loc=none unuse)
+  (var 0 INT literal #"uint8" val=1 loc=none unuse)
+  (var 1 UINT literal #"sint8" val=-2 loc=none unuse)
+  (var 2 INT16 literal #"uint16" val=65535 loc=none unuse)
+  (var 3 UINT16 literal #"sint16" val=-65536 loc=none unuse)
+  (var 4 ARRAY global #"[3]uint8" val=:ARRAY loc=none unuse)
+  (var 5 STRING global #"[5]uint8" val=:STRING loc=none unuse)
   (var 6 $20 local #"*uint8" lt=temp loc=none unuse)
   (var 7 $21 local #"uint8" lt=temp loc=a)
   (var 8 $25 local #"*uint8" lt=temp loc=none unuse)
@@ -65,7 +65,7 @@
   (var 2 $34 local #"*uint8" lt=temp loc=none unuse)
   (var 3 $36 local #"*uint8" lt=temp loc=none unuse)
   (var 4 $37 local #"uint8" lt=temp loc=a)
-  (var 5 i local #"uint8" pub loc=static addr=0)
+  (var 5 i local #"uint8" loc=static addr=0)
   (var 6 $41 local #"*uint8" lt=temp loc=none unuse)
   (var 7 $42 local #"uint8" lt=temp loc=a)
   (var 8 $45 local #"*uint8" lt=temp loc=none unuse)
@@ -106,7 +106,7 @@
 )
 (alloc-lambda test_var _test_var_test_array _test_var_test_array frame_size=1 abi=static
  (vars
-  (var 0 i local #"uint8" pub loc=static addr=0)
+  (var 0 i local #"uint8" loc=static addr=0)
   (var 1 $51 local #"*uint8" lt=temp loc=none unuse)
   (var 2 $52 local #"uint8" lt=temp loc=a)
   (var 3 $53 local #"uint8" lt=temp loc=none unuse)
@@ -177,7 +177,7 @@
 )
 (alloc-lambda test_var _test_var_test_func_pointer _test_var_test_func_pointer frame_size=3 abi=static
  (vars
-  (var 0 f local #"fn(uint8):uint8" pub loc=static addr=0)
+  (var 0 f local #"fn(uint8):uint8" loc=static addr=0)
   (var 1 $77 local #"uint8" lt=temp loc=static addr=2)
   (var 2 $81 local #"*fn(uint8):uint8" lt=temp loc=none unuse)
   (var 3 $82 local #"fn(uint8):uint8" lt=temp loc=static addr=0)
@@ -237,7 +237,7 @@
 )
 (alloc-lambda test_var _test_var_test_escape _test_var_test_escape frame_size=2 abi=static
  (vars
-  (var 0 STR global #"[3]sint8" val=:STR pub loc=none unuse)
+  (var 0 STR global #"[3]sint8" val=:STR loc=none unuse)
   (var 1 $103 local #"*sint8" lt=temp loc=none unuse)
   (var 2 $104 local #"sint8" lt=temp loc=a)
   (var 3 $105 local #"uint16" lt=temp loc=static addr=0)

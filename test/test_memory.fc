@@ -1,11 +1,12 @@
+#fc 2
 use * from unittest;
 use mem;
 
 include("character.chr");
 
-var str:int[12];
-var buf1:int[512];
-var buf2:int[512];
+var str:[12]int;
+var buf1:[512]int;
+var buf2:[512]int;
 
 function test_copy():void
 {

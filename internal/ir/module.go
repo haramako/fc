@@ -97,7 +97,6 @@ func (o Options) Has(key string) bool {
 type Module struct {
 	Id             string
 	Path           string
-	Version        int // 文法バージョン (syntax.Version1 / Version2)。可視性などの規則はこれで切り替える
 	Vars           []*Value
 	Lambdas        []*Lambda
 	Options        Options // options(...) 文で設定されたモジュール属性 (bank, org, ...)。値は定数評価済み
@@ -107,8 +106,7 @@ type Module struct {
 	IncludeHeaders []string
 	Uses           []*ModuleInterface // use したモジュール (出現順、重複なし)
 	Scope          *Scope
-	CurrentPublic  bool // public: / private: ラベルの現在値
-	Seq            int  // コンパイラ生成名 (一時変数 $N、ラベル @x_N、無名関数) の連番。モジュール内で閉じる (C5)
+	Seq            int // コンパイラ生成名 (一時変数 $N、ラベル @x_N、無名関数) の連番。モジュール内で閉じる (C5)
 	FromFcm        bool
 	Depends        []string
 	Defs           []*Def
@@ -118,11 +116,9 @@ func NewModule(id, path string, globalScope *Scope) *Module {
 	scope := NewScope(globalScope)
 	scope.Owner = id
 	return &Module{
-		Id:            id,
-		Path:          path,
-		Version:       syntax.Version1,
-		Scope:         scope,
-		CurrentPublic: true,
+		Id:    id,
+		Path:  path,
+		Scope: scope,
 	}
 }
 
@@ -144,20 +140,18 @@ func (m *Module) AddUse(mi *ModuleInterface) {
 //   - `use * from mod;` (LookupPublic) はどちらのバージョンでも public だけを取り込む
 //   - `mod.name` のドット参照 (Lookup) は v1 モジュールでは private にも届き、v2 では public のみ (規則 S7)
 type ModuleInterface struct {
-	Id      string
-	Version int
-	scope   *Scope
+	Id    string
+	scope *Scope
 }
 
 // Interface はこのモジュールの外面を返す。
 func (m *Module) Interface() *ModuleInterface {
-	return &ModuleInterface{Id: m.Id, Version: m.Version, scope: m.Scope}
+	return &ModuleInterface{Id: m.Id, scope: m.Scope}
 }
 
-// Lookup はドット参照 `mod.name` 用に宣言を探す (無ければ nil)。
-// v1 モジュールなら private にも届く。v2 モジュールなら public のみ。
+// Lookup はドット参照 `mod.name` 用に公開宣言を探す (無ければ nil)。
 func (mi *ModuleInterface) Lookup(name string) *Value {
-	return mi.scope.Find(name, mi.Version < syntax.Version2)
+	return mi.scope.Find(name, false)
 }
 
 // LookupPublic は `use * from` 用に公開宣言だけを探す (無ければ nil)。

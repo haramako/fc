@@ -10,9 +10,6 @@ func TestForV2(t *testing.T) {
 	v2 := func(body string) map[string]string {
 		return map[string]string{"t.fc": "#fc 2\nfunction main():void {\nvar x:int;\nvar y:int;\n" + body + "\n}\n"}
 	}
-	v1 := func(body string) map[string]string {
-		return map[string]string{"t.fc": "function main():void {\nvar x:int;\nvar y:int;\n" + body + "\n}\n"}
-	}
 	// ops は IR ダンプの ops 部分だけ (var の番号やラベル名は同じ形になるはず)
 	ops := func(ir string) string {
 		i := strings.Index(ir, "(ops")
@@ -22,13 +19,6 @@ func TestForV2(t *testing.T) {
 		return ir[i:]
 	}
 
-	t.Run("same code as v1 for", func(t *testing.T) {
-		old := mustCompileFiles(t, v1("for (x, 0, 10) { y = y + x; }"), "t.fc")
-		cfor := mustCompileFiles(t, v2("for (x = 0; x < 10; x++) { y = y + x; }"), "t.fc")
-		if ops(old) != ops(cfor) {
-			t.Errorf("v1 の for と C 型 for の IR が違う\n--- v1\n%s--- v2\n%s", ops(old), ops(cfor))
-		}
-	})
 	t.Run("continue goes to step", func(t *testing.T) {
 		ir := mustCompileFiles(t, v2("for (x = 0; x < 10; x++) { if (x == 2) { continue; } y = y + 1; }"), "t.fc")
 		// continue の jump 先は @step_N で、その直後に x = x + 1 が来る
@@ -86,14 +76,6 @@ func TestForV2(t *testing.T) {
 		err := compileFiles(t, v2("for (x, 0, 3) { }"), "t.fc")
 		if err == nil || !strings.Contains(err.Error(), "is written `for (i = from; i < to; i++)` in fc 2") {
 			t.Errorf("got %v", err)
-		}
-	})
-	t.Run("v1 rejects v2 syntax", func(t *testing.T) {
-		for _, src := range []string{"for (x = 0; x < 3; x++) { }", "x++;"} {
-			err := compileFiles(t, v1(src), "t.fc")
-			if err == nil || !strings.Contains(err.Error(), "fc 2") {
-				t.Errorf("%q: got %v", src, err)
-			}
 		}
 	})
 }

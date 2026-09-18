@@ -1,8 +1,8 @@
 (alloc-lambda test_basic _test_basic_test_nesasm_limit _test_basic_test_nesasm_limit frame_size=1 abi=static
  (vars
-  (var 0 toooooooooooooooooooooooooooooooooooooooo_long_id local #"uint8" pub loc=static addr=0)
+  (var 0 toooooooooooooooooooooooooooooooooooooooo_long_id local #"uint8" loc=static addr=0)
   (var 1 $4 local #"uint8" lt=temp loc=none unuse)
-  (var 2 i local #"*uint8" pub loc=none unuse)
+  (var 2 i local #"*uint8" loc=none unuse)
   (var 3 toooooooooooooooooooooooooooooooooooooooo_long_id@Y local #"uint8" lt=temp loc=y)
  )
  (ops
@@ -98,9 +98,9 @@
 )
 (alloc-lambda test_basic _test_basic_test_misc _test_basic_test_misc frame_size=3 abi=static
  (vars
-  (var 0 i local #"uint8" pub loc=static addr=1)
-  (var 1 n local #"uint8" pub loc=static addr=0)
-  (var 2 x local #"uint16" pub loc=static addr=1)
+  (var 0 i local #"uint8" loc=static addr=1)
+  (var 1 n local #"uint8" loc=static addr=0)
+  (var 2 x local #"uint16" loc=static addr=1)
   (var 3 $52 local #"uint8" lt=temp loc=static addr=1)
   (var 4 $57 local #"ubool8" lt=temp loc=static addr=2)
   (var 5 n@Y local #"uint8" lt=temp loc=y)

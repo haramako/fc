@@ -10,16 +10,16 @@
   (def _test_alloc_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 test_a_alloc literal #"fn():void" val=:_test_alloc_test_a_alloc pub)
-  (var 1 main literal #"fn():void" val=:_main pub)
+  (var 0 test_a_alloc literal #"fn():void" val=:_test_alloc_test_a_alloc)
+  (var 1 main literal #"fn():void" val=:_main)
  )
  (lambda _test_alloc_test_a_alloc #"fn():void" opt={id :test_a_alloc}
   (args ())
   (result nil)
   (vars
-   (var 0 i1 local #"uint8" pub)
-   (var 1 i2 local #"uint8" pub)
-   (var 2 i3 local #"uint8" pub)
+   (var 0 i1 local #"uint8")
+   (var 1 i2 local #"uint8")
+   (var 2 i3 local #"uint8")
    (var 3 $2 local #"uint8" lt=temp)
    (var 4 $3 local #"uint8" lt=temp)
    (var 5 $7 local #"uint8" lt=temp)

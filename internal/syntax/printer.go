@@ -33,15 +33,12 @@ func Format(src []byte, filename string) ([]byte, error) {
 
 // Print は構文木を整形して出力する。f.Comments の位置を使ってコメントを差し込む。
 func Print(f *File) []byte {
-	p := &printer{comments: f.Comments, version: f.Version}
-	if f.Version >= Version2 {
-		p.write(fmt.Sprintf("#fc %d", f.Version))
-		// ソースにプラグマ行があれば 1 行目として扱う (直後の空行を保つ)。
-		// 合成されたプラグマ (migrate) ならソースの 1 行目はまだ出力していない
-		if f.Pragma != "" {
-			p.lastLine = 1
-			p.blankOK = true
-		}
+	p := &printer{comments: f.Comments}
+	if f.Pragma != "" {
+		// `#fc 2` は正規化して 1 行目に (直後の空行を保つ)。無いソースには足さない
+		p.write(fmt.Sprintf("#fc %d", Version))
+		p.lastLine = 1
+		p.blankOK = true
 		p.newline()
 	}
 	p.stmtList(f.Stmts, true)
@@ -66,7 +63,6 @@ type printer struct {
 	lastByte  byte
 
 	afterComment bool // 直前に出力したのがコメント
-	version      int  // 印字する文法バージョン (型の形が違う)
 }
 
 // ---------------------------------------------------------------
@@ -833,34 +829,9 @@ func (p *printer) exprList(list []Expr, comma, close Pos) {
 // 型
 // ---------------------------------------------------------------
 
-// typeExpr は型を印字する。v2 は前置形 (`[4]*int`, `fn(int):void`)、v1 は後置形 (`int*[4]`, `void(int)`)。
-// AST は同じなので、印字する形はファイルのバージョンで決める (migrate はバージョンを変えるだけでよい)。
+// typeExpr は型を印字する (前置形: `[4]*int`, `fn(int):void`)。
 func (p *printer) typeExpr(t TypeExpr) {
-	if p.version >= Version2 {
-		p.typeExprV2(t)
-		return
-	}
-	switch t := t.(type) {
-	case *NamedType:
-		p.ident(t.Name)
-	case *ArrayType:
-		p.typeExpr(t.Elem)
-		p.tokAt(t.Lbrack, "[")
-		if t.Len != nil {
-			p.expr(t.Len)
-		}
-		p.tokAt(t.Rbrack, "]")
-	case *PointerType:
-		p.typeExpr(t.Elem)
-		p.tokAt(t.Star, "*")
-	case *FuncType:
-		p.typeExpr(t.Result)
-		p.tokAt(t.Lparen, "(")
-		p.params(t.Params)
-		p.tokAt(t.Rparen, ")")
-	default:
-		panic("unknown type")
-	}
+	p.typeExprV2(t)
 }
 
 func (p *printer) typeExprV2(t TypeExpr) {

@@ -1,3 +1,4 @@
+#fc 2
 use lzw;
 use mem;
 use * from unittest;
@@ -8,7 +9,7 @@ function test_read_bit():void
 	lzw.addr = [0b00000101, 0b00111001, 0b01110111];
 	lzw.bpos = 0;
 	var x:int;
-	for (x, 0, 8) {
+	for (x = 0; x < 8; x++) {
 		assert_equal(lzw.read_bit(3), x, "read_bit");
 	}
 }
@@ -38,7 +39,7 @@ function test_read_vln16():void
 	assert_equal(lzw.read_vln16(), 0b1000000000000001, "read_vln16(1)");
 }
 
-var buf:int[256];
+var buf:[256]int;
 function test_unpack():void
 {
 	const PACKED = [12, 82, 44, 182, 203, 101, 190, 64, 51, 40, 200, 145, 37, 192];

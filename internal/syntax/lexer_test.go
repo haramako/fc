@@ -72,7 +72,7 @@ func TestTokenize(t *testing.T) {
 				{KwWhile, "while"}, {KwFor, "for"}, {KwReturn, "return"}, {KwBreak, "break"},
 				{KwContinue, "continue"}, {KwIncbin, "incbin"}, {KwSwitch, "switch"}, {KwCase, "case"},
 				{KwDefault, "default"}, {KwUse, "use"}, {KwAs, "as"}, {KwFrom, "from"}, {KwPublic, "public"},
-				{KwPrivate, "private"}}},
+				{Identifier, "private"}}}, // private は予約語ではない (fc 1 の名残)
 		{"identifiers", "foo _bar baz9 If Function",
 			[]tok{{Identifier, "foo"}, {Identifier, "_bar"}, {Identifier, "baz9"}, {Identifier, "If"}, {Identifier, "Function"}}},
 		{"decimal", "0 42 1_000 007",
