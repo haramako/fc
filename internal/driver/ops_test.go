@@ -765,3 +765,37 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestFuseIndexedOperand: `x - tab[i]` / `x < tab[i]` の第 2 入力を直前の index_pget と融合する (sta t; lda x; sbc t →
+// lda x; sbc tab,y)。可換な演算は opt.commuteTemp で第 1 入力になるので対象外。結果が他でも使われるなら融合しない。
+func TestFuseIndexedOperand(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var tab:[8]int;
+var stab:[8]sint8;
+function f(x:int, i:int):int
+{
+	var d = x - tab[i];
+	var lt = 0;
+	if (x < tab[i]) { lt = 1; }
+	var t = tab[i];
+	var e = x - t + t;   // t は 2 回使う: 融合しない
+	return d + lt * 10 + e;
+}
+function g(x:sint8, i:int):int
+{
+	if (x < stab[i]) { return 1; }   // 符号付き
+	return 0;
+}
+function main():void
+{
+	for (var i = 0; i < 8; i++) { tab[i] = i * 3; stab[i] = (i as sint8) - 4; }
+	printf(f(10, 2), " ", f(5, 3), " ", g(-2, 1), " ", g(-2, 6), " ", g(3, 7), "\n");
+	exit(0);
+}
+`)
+	// f(10,2): d = 4, lt = 0, e = 10 → 14。f(5,3): d = 5-9 = 252, lt = 1, e = 5 → 252+10+5 = 267 → 11 (8 ビット)
+	// g(-2,1): stab[1] = -3 → -2 < -3 は偽 → 0。g(-2,6): stab[6] = 2 → 1。g(3,7): stab[7] = 3 → 0
+	if want := "14 11 0 1 0\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

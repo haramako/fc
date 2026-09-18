@@ -38,6 +38,12 @@ type Llc struct {
 	resX    *ir.Value // op.ResidentX
 	resXMem bool      // 退避中: resX をメモリ (Home) として参照する
 	aHeld   bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
+
+	// 添字付きオペランドの融合: `sub d = x, t` / `lt d = x, t` の t が直前の index_pget (グローバルの 1 バイト配列) の結果なら、
+	// index_pget は Y (または X) を用意するだけにして、t を `tab+0,y` として読む (sta t; lda x; sbc t → lda x; sbc tab,y)。
+	// 可換な演算は opt.commuteTemp が t を第 1 入力にするので、ここは非可換な sub / lt の第 2 入力だけ
+	fused   map[*ir.Value]string // t → オペランドの表記
+	fusedAt int                  // 融合した index_pget の命令番号 (直後の命令でだけ有効)
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
@@ -202,6 +208,37 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	inc.push(".endif")
 
 	return asm.flatten(), inc.flatten(), nil
+}
+
+// fusableIndex は ops[i] (index_pget、グローバル配列) の結果を直後の sub / lt の第 2 入力に融合できるか。
+// 結果は 1 バイトの一時変数で、その命令でしか使われない (live range が直後まで)。添字は Y に入れる (X に常駐していれば X)。
+// 直後の命令の第 1 入力が A に常駐している / 添字が A にある組み合わせは、tay が A を壊すので除く。
+func (l *Llc) fusableIndex(ops []*ir.Op, i int) (string, bool) {
+	op := ops[i]
+	if i+1 >= len(ops) || ops[i+1] == nil || ir.ValType(op.In(0)).Kind != types.Array || ir.ValKind(op.In(0)) != ir.KindGlobal {
+		return "", false
+	}
+	if ir.ValType(op.In(0)).Base.Size != 1 && !op.Scaled {
+		return "", false
+	}
+	t, ok := op.Dst.(*ir.Value)
+	if !ok || t.LocalType != ir.LTTemp || t.Type.Size != 1 || t.LiveRange == nil || t.LiveRange.Max != i+1 || ir.ValLocation(t) == ir.LocA {
+		return "", false
+	}
+	next := ops[i+1]
+	if next.Code != ir.OpSub && next.Code != ir.OpLt || len(next.Src) != 2 || next.Src[1] != ir.Operand(t) || next.Src[0] == ir.Operand(t) {
+		return "", false
+	}
+	if ir.ValType(next.Src[0]).Size != 1 {
+		return "", false
+	}
+	if l.inA(op.In(1)) {
+		return "", false
+	}
+	if l.inX(op.In(1)) {
+		return "x", true
+	}
+	return "y", true
 }
 
 func anyList(ss []string) []any {
@@ -378,6 +415,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		}
 		r.push(fmt.Sprintf("; %04d: %s", opNo, cm))
 
+		if l.fused != nil && opNo != l.fusedAt+1 {
+			l.fused = nil
+		}
 		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = op.Resident, false, op.ResidentY, false, op.ResidentX, false, false
 		restoreA, restoreY, restoreX := false, false, false
@@ -1131,6 +1171,15 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push(fmt.Sprintf("lda (%s),y", base))
 					r.push(l.storeA(op.Dst, i))
 				}
+				break
+			}
+			if reg, ok := l.fusableIndex(ops, opNo); ok {
+				// 直後の sub / lt の第 2 入力に融合: 添字をレジスタに用意して、結果の一時変数を `tab+0,y` として読ませる
+				if reg == "y" {
+					r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
+				}
+				l.fused = map[*ir.Value]string{op.Dst.(*ir.Value): fmt.Sprintf("%s+0,%s", l.toAsm(op.In(0)), reg)}
+				l.fusedAt = opNo
 				break
 			}
 			if l.inX(op.In(1)) {

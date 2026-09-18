@@ -349,6 +349,13 @@ func argBytes(lmd *ir.Lambda) int {
 
 // byte は値からn番目のbyteを取得する。
 func (l *Llc) byte(v ir.Operand, n int) string {
+	if l.fused != nil && n == 0 {
+		if tv, ok := v.(*ir.Value); ok {
+			if s, ok := l.fused[tv]; ok {
+				return s // 直前の index_pget と融合した添字付きオペランド (tab+0,y)
+			}
+		}
+	}
 	if pa, ok := v.(*ir.PointeredArray); ok {
 		if ir.ValLocation(pa.From) == ir.LocFrame {
 			// 即値では表せない (loadA が扱う)。ここに来るのは未対応の経路
