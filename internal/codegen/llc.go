@@ -766,7 +766,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
 			if n, ok := ir.ValIntLiteral(op.In(1)); ok {
 				// 定数の場合
-				if lines, ok := l.shiftInMemory(op, n, signed); ok {
+				if lines, ok := l.shiftByte(op, n, signed); ok {
+					r.push(lines) // 2 バイトの 8 以上のシフトはバイトの移動 (8.8 固定小数の `x >> 8` など)
+				} else if lines, ok := l.shiftInMemory(op, n, signed); ok {
 					r.push(lines)
 				} else if ir.ValType(op.Dst).Size == 1 {
 					// サイズが1

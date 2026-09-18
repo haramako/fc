@@ -1,7 +1,7 @@
 {
   "bgdecode": {
-    "cycles": 1593197,
-    "size": 835,
+    "cycles": 1579117,
+    "size": 827,
     "out": "sum=47712"
   },
   "calls": {
@@ -10,18 +10,18 @@
     "out": "sum=663"
   },
   "crc16": {
-    "cycles": 2336056,
-    "size": 295,
+    "cycles": 2245944,
+    "size": 279,
     "out": "crc16=16501"
   },
   "crc8": {
     "cycles": 1171848,
-    "size": 255,
+    "size": 247,
     "out": "crc8=149"
   },
   "entities": {
     "cycles": 905401,
-    "size": 806,
+    "size": 799,
     "out": "sum=20554"
   },
   "fib": {
@@ -35,8 +35,8 @@
     "out": "sum=18392"
   },
   "math16": {
-    "cycles": 4125232,
-    "size": 1171,
+    "cycles": 2689037,
+    "size": 939,
     "out": "sum=8921"
   },
   "oam": {

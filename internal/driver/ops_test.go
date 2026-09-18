@@ -690,3 +690,33 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestShiftByte: 2 バイト値の 8 以上の定数シフトはバイトの移動 (符号付き >> 8 は符号を埋める。9 以上、16 以上、その場)。
+func TestShiftByte(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var u:int16;
+var s:sint16;
+function main():void
+{
+	u = 0xa5c3;
+	s = -300;   // 0xfed4
+	var a = u >> 8;
+	var b = u << 8;
+	var c = s >> 8;      // -2 (0xfffe)
+	var d = u >> 10;
+	var e = u << 9;
+	var f = u >> 16;
+	var g = (s >> 8) as sint8;
+	var h = (u >> 8) as int + 1;
+	s = s >> 8;          // その場
+	u = u << 8;
+	printf(a, " ", b, " ", c, " ", d, " ", e, " ", f, " ", g, " ", h, " ", s, " ", u, "\n");
+	exit(0);
+}
+`)
+	// a = 0xa5 = 165, b = 0xc300 = 49920, c = 0xfffe = 65534, d = 0x29 = 41, e = 0x8600 = 34304, f = 0,
+	// g = -2 → 65534 (8 ビットも符号拡張して表示), h = 166, s = 65534, u = 49920
+	if want := "165 49920 65534 41 34304 0 65534 166 65534 49920\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

@@ -272,6 +272,45 @@ func repeatInstr(s string, n int) []any {
 	return r
 }
 
+// shiftByte は 2 バイト値の 8 以上の定数シフトをバイトの移動にする (以前は 1 ビットずつ n 回回していて `x >> 8` が 120 サイクル):
+//
+//	x << 8+m: hi = lo << m, lo = 0        x >> 8+m (符号なし): lo = hi >> m, hi = 0
+//	x >> 8 (符号付き): lo = hi, hi = 符号 (lda hi; sta lo; asl a; lda #0; sbc #0; eor #$ff)
+func (l *Llc) shiftByte(op *ir.Op, n int, signed bool) ([]any, bool) {
+	size := ir.ValType(op.Dst).Size
+	if size != 2 || n < 8 || !isValueOrCasted(op.Dst) || ir.ValKind(op.Dst) == ir.KindLiteral || ir.ValType(op.In(0)).Size != 2 {
+		return nil, false
+	}
+	if l.inA(op.Dst) || l.inY(op.Dst) || l.inX(op.Dst) || ir.ValLocation(op.Dst) == ir.LocCond {
+		return nil, false
+	}
+	if n >= 16 {
+		if signed && op.Code == ir.OpShiftRight {
+			return nil, false
+		}
+		return []any{"lda #0", l.storeA(op.Dst, 0), l.storeA(op.Dst, 1)}, true
+	}
+	m := n - 8
+	if op.Code == ir.OpShiftLeft {
+		r := []any{l.loadA(op.In(0), 0)}
+		for k := 0; k < m; k++ {
+			r = append(r, "asl a")
+		}
+		return append(r, l.storeA(op.Dst, 1), "lda #0", l.storeA(op.Dst, 0)), true
+	}
+	if !signed {
+		r := []any{l.loadA(op.In(0), 1)}
+		for k := 0; k < m; k++ {
+			r = append(r, "lsr a")
+		}
+		return append(r, l.storeA(op.Dst, 0), "lda #0", l.storeA(op.Dst, 1)), true
+	}
+	if m != 0 {
+		return nil, false // 符号付きの 9 以上は稀 (1 ビットずつ)
+	}
+	return []any{l.loadA(op.In(0), 1), l.storeA(op.Dst, 0), "asl a", "lda #0", "sbc #0", "eor #255", l.storeA(op.Dst, 1)}, true
+}
+
 // shiftInMemory は定数シフトをメモリ上で行う (Dst がメモリにある 1 / 2 バイトのとき)。
 //
 //	1 バイト:  asl x / lsr x                 (lda; clc; rol a; sta の 10 サイクルが 5 に)
