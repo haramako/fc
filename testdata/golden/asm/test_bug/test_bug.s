@@ -6,14 +6,6 @@ __MODULE_TEST_BUG__ = 1
 .segment "test_bug"
 	.include "_unittest.inc"
 	.include "_math.inc"
-	.export _test_bug_hoge
-	;;;=============================
-	;;; function _test_bug_hoge
-	;;;=============================
-.segment "test_bug"
-.proc _test_bug_hoge
-	rts
-.endproc
 	.export _test_bug_test_pointer_access
 	;;;=============================
 	;;; function _test_bug_test_pointer_access

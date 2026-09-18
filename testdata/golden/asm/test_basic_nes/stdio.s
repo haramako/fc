@@ -19,30 +19,6 @@ _stdio_print_addr: .res 2
 	.export _stdio_wait_vsync
 	.export _stdio_print
 	.export _stdio_ppu_put
-	.export _stdio_puts
-	;;;=============================
-	;;; function _stdio_puts
-	;;;=============================
-.segment "stdio"
-.proc _stdio_puts
-	ldx FC_SP
-	lda 0+<F_stdio_puts+0
-	sta <S+0,x
-	lda 1+<F_stdio_puts+0
-	sta <S+1,x
-	ldx FC_SP
-	jsr _stdio_print
-	ldx FC_SP
-	lda #.LOBYTE(_2)
-	sta <S+0,x
-	lda #.HIBYTE(_2)
-	sta <S+1,x
-	ldx FC_SP
-	jsr _stdio_print
-	rts
-_2:
-		.byte 10,0
-.endproc
 	.export _stdio_exit
 	;;;=============================
 	;;; function _stdio_exit

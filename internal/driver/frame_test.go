@@ -3,6 +3,7 @@ package driver
 // レジスタ割付 (doc/v2_frame_alloc.md §3): バイト単位の詰め込み、フレームへのあふれ、fastcall 領域の大きさ。
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,5 +94,61 @@ function main():void { fc(1, 2, 3); }
 	base, _ := os.ReadFile(filepath.Join(dir, "b", "base.s"))
 	if len(base) > 0 && !strings.Contains(string(base), "FC_SZP_SIZE = 64") {
 		t.Errorf("base.s:\n%s", base)
+	}
+}
+
+// TestUnusedFunctions: main / 割り込み / options(symbol:) / 関数ポインタ (代入・const 表) / asm から辿れない関数は
+// 出力しない (frames.Analyze の tree shaking)。届く関数 (使われない関数からだけ呼ばれるものは届かない) だけが .s に残る。
+func TestUnusedFunctions(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := `#fc 2
+use * from stdio;
+var fp:fn():void;
+function dead():void { dead2(); }
+function dead2():void { }
+public function dead_public():void { }
+function live():void { }
+function by_pointer():void { }
+function by_table():void { }
+const TAB:[1]fn():void = [by_table];
+function by_asm():void { }
+function by_symbol():void options(symbol: "_from_asm") { }
+function main():void
+{
+	live();
+	fp = by_pointer;
+	fp();
+	TAB[0]();
+	asm("jsr _t_by_asm");
+	exit(0);
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, _ := os.ReadFile(filepath.Join(dir, "b", "_t.s"))
+	for _, want := range []string{"_t_live", "_t_by_pointer", "_t_by_table", "_t_by_asm", "_from_asm", "_main"} {
+		if !strings.Contains(string(mod), ".proc "+want) {
+			t.Errorf("%s が出力されていない", want)
+		}
+	}
+	for _, dead := range []string{"_t_dead", "_t_dead2", "_t_dead_public"} {
+		if strings.Contains(string(mod), dead) {
+			t.Errorf("%s が出力されている (使われない)", dead)
+		}
+	}
+	found := false
+	for _, line := range res.Frames {
+		if strings.Contains(line, "unused (not emitted)") && strings.Contains(line, "_t_dead2") && !strings.Contains(line, "_t_live") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("-d の要約に unused が無い: %q", res.Frames)
 	}
 }

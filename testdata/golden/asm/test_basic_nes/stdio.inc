@@ -8,7 +8,6 @@ __MODULE_STDIO__ = 1
 	.import _stdio_wait_vsync
 	.import _stdio_print
 	.import _stdio_ppu_put
-	.import _stdio_puts
 	.import _stdio_exit
 	.import _stdio_init
 	.import _interrupt

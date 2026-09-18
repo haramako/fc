@@ -283,6 +283,15 @@ base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .r
 `options(interrupt: true)` の関数から届く関数は全部 static でなければならず（X が何を指すか分からないため）、
 そのフレームは他のどの関数とも重ねない。
 
+### 4.7 使われない関数の除去
+
+`main`、`options(interrupt: true)` / `options(symbol: ...)` の関数、アドレスを取られた関数（関数ポインタへの代入、
+`const` の表、`include` した asm やインラインアセンブラからの参照）から呼び出しをどう辿っても届かない関数は、
+コンパイルはされるが**出力されない**（コードも静的フレームも消える。`public` でも同じ: プログラム全体で判断する）。
+`fcc build -d` の要約に `unused (not emitted): N functions: ...` と出る。asm 側から `jsr` したい fc の関数は
+`options(symbol:)` を付けるか、asm ファイルを `include` してその中で参照する。出力されない関数のインラインアセンブラは
+ca65 に渡らないので、その中の誤りは検出されない（fc の型検査などは通常どおり行われる）。
+
 ### 4.6 far call
 
 MMC3 のように PRG が切替バンクに分かれているとき、メインモジュールに `options(farcall: true)` を書くと、

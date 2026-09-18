@@ -82,7 +82,8 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       `ppu.lock`/`unlock`/`wait_vsync` 90 か所が数命令の関数）✅ 2026-09-19。**goto は入れない**: castle の状態機械は
       `switch (state)` + 配列に持つ状態を毎フレーム回す形（en*.fc、my.fc）、イベント（event.fc）は `wait_vsync` で
       ブロックする直列コードで、どちらも関数内ジャンプは要らない。ラベル付き `break`/`continue`（§5.2）で足りる
-- [ ] 使われない関数を出力しない（tree shaking、v2_idea.md）
+- [x] 使われない関数を出力しない（tree shaking。`frames.Analyze` の到達解析で `Lambda.Unused`。コード・静的フレーム・
+      `.export` を出さない。`fcc build -d` に一覧） ✅ 2026-09-19
 
 ## ツール・開発体験
 

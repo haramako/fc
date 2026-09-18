@@ -9,26 +9,6 @@ __MODULE_MEM__ = 1
 	.export _mem_zero
 	.export _mem_copy
 	.export _mem_compare
-	.export _mem_strlen
-	;;;=============================
-	;;; function _mem_strlen
-	;;;=============================
-.segment "mem"
-.proc _mem_strlen
-	lda #0
-	sta 0+<F_mem_strlen+3
-	tay
-	jmp @begin_1
-@body_3:
-	iny
-@begin_1:
-	lda (F_mem_strlen+1),y
-	bne @body_3
-	sty 0+<F_mem_strlen+3
-	lda 0+<F_mem_strlen+3
-	sta 0+<F_mem_strlen+0
-	rts
-.endproc
 	.export _mem_strcpy
 	;;;=============================
 	;;; function _mem_strcpy

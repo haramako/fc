@@ -157,9 +157,12 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			asm.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
 			asm.push(l.emitBlock(d.Sym, d.Type, d.Elems))
 		case ir.DefCode:
+			lmd := d.Lambda
+			if lmd.Unused {
+				continue // どこからも届かない関数は出力しない (frames.Analyze)
+			}
 			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
-			lmd := d.Lambda
 			if lmd.Extern {
 				continue
 			}
@@ -314,6 +317,9 @@ func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {
 		}
 	}()
 	for _, lmd := range lmds {
+		if lmd.Unused {
+			continue
+		}
 		l.Prepare(lmd)
 	}
 	return nil

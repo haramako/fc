@@ -65,9 +65,9 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	indirect := make([][]*ir.Op, n) // 関数ごとの間接呼び出し (飛び先は後で絞る)
 	g.callees = make([][]int, n)
 	// 関数ポインタのグローバル変数に代入された関数と、関数ポインタの const 表の要素 (間接呼び出しの飛び先を絞るため)
-	assigned := map[string][]string{} // 変数のシンボル → 代入された関数のシンボル
+	assigned := map[string][]string{}  // 変数のシンボル → 代入された関数のシンボル
 	unknownAssign := map[string]bool{} // リテラル以外が代入された (何が入るか分からない)
-	tables := map[string][]string{}   // const 表のシンボル → 要素の関数のシンボル ("" は関数以外)
+	tables := map[string][]string{}    // const 表のシンボル → 要素の関数のシンボル ("" は関数以外)
 	funcSym := func(o ir.Operand) string {
 		v := ir.ValLiteral(o)
 		if v != nil && v.Kind == ir.KindLiteral && !v.IsInt && v.Symbol != "" {
@@ -201,6 +201,38 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 				}
 			}
 		}
+	}
+
+	// 使われない関数 (tree shaking): main、割り込み、options(symbol:) (asm から呼ばれる名前)、アドレスを取られた /
+	// asm から参照される関数 (entry) から呼び出しの辺で届かない関数は出力しない (フレームも割り付けない)
+	reached := make([]bool, n)
+	var work []int
+	hasMain := false
+	for i, lmd := range g.Lambdas {
+		if entry[i] || lmd.Id == "_main" || lmd.Options.Has("symbol") {
+			reached[i] = true
+			work = append(work, i)
+		}
+		hasMain = hasMain || lmd.Id == "_main"
+	}
+	if !hasMain {
+		// main の無いプログラム (ライブラリだけの検査、frames の単体テスト) では何も削らない
+		for i := range reached {
+			reached[i] = true
+		}
+	}
+	for len(work) > 0 {
+		i := work[len(work)-1]
+		work = work[:len(work)-1]
+		for _, j := range g.callees[i] {
+			if !reached[j] {
+				reached[j] = true
+				work = append(work, j)
+			}
+		}
+	}
+	for i, lmd := range g.Lambdas {
+		lmd.Unused = !reached[i]
 	}
 
 	// 再帰 (閉路) の検出: Tarjan の SCC
@@ -459,7 +491,7 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 
 	var order []int
 	for i, lmd := range g.Lambdas {
-		if lmd.ABI == ir.ABIStatic {
+		if lmd.ABI == ir.ABIStatic && !lmd.Unused {
 			order = append(order, i)
 		}
 	}
@@ -559,8 +591,12 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 // report は配置の要約: 種類ごとの数、領域の使用量、stack に残った理由 (再帰の連鎖と options)。
 func (g *Graph) report(plan *Plan, nZp, nRam int) []string {
 	var static, entry, stack, empty int
-	var forced []string
+	var forced, unused []string
 	for _, lmd := range g.Lambdas {
+		if lmd.Unused {
+			unused = append(unused, lmd.Id)
+			continue
+		}
 		switch {
 		case lmd.ABI == ir.ABIStatic && lmd.FrameSize == 0:
 			empty++
@@ -587,6 +623,10 @@ func (g *Graph) report(plan *Plan, nZp, nRam int) []string {
 	}
 	if len(forced) > 0 {
 		r = append(r, fmt.Sprintf("  options(abi: \"stack\"): %s", strings.Join(forced, " ")))
+	}
+	if len(unused) > 0 {
+		sort.Strings(unused)
+		r = append(r, fmt.Sprintf("  unused (not emitted): %d functions: %s", len(unused), strings.Join(unused, " ")))
 	}
 	return r
 }

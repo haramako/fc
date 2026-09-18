@@ -5,5 +5,4 @@ __MODULE_MEM__ = 1
 	.import _mem_copy
 	.import _mem_compare
 	.import _mem_strlen
-	.import _mem_strcpy
 .endif

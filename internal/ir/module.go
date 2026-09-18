@@ -254,6 +254,7 @@ type Lambda struct {
 	ABI       ABI
 	Entry     bool // static のうち、アドレスを取られた関数 (呼び出し側はスタック経由で渡し、プロローグで自分のフレームに写す)
 	Interrupt bool // options(interrupt: true): 割り込みから呼ばれる (フレームは全関数と重ねない)
+	Unused    bool // main / 割り込み / asm / 関数ポインタからどう辿っても届かない (出力しない。frames.Analyze が決める)
 	FrameZp   bool // static: フレームがゼロページ (FC_SZP) にある
 	FrameBase int  // static: 領域内のオフセット (配置後)
 }

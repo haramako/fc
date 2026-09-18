@@ -26,7 +26,8 @@ use unknown; //! col=1
 function hoge():void { return 1; } //! col=24
 
 //@ca65 returns 1
-function hoge():void {
+// options(symbol:) が無いと main から届かず出力されない (使われない関数の asm は ca65 に渡らない)
+function hoge():void options(symbol: "_hoge_asm") {
 	asm( "INVALID ASM" );
 }
 

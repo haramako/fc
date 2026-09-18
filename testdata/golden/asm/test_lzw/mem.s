@@ -29,24 +29,3 @@ __MODULE_MEM__ = 1
 	sta 0+<F_mem_strlen+0
 	rts
 .endproc
-	.export _mem_strcpy
-	;;;=============================
-	;;; function _mem_strcpy
-	;;;=============================
-.segment "mem"
-.proc _mem_strcpy
-	lda #0
-	sta 0+<F_mem_strcpy+5
-	tay
-@then_11:
-	lda (F_mem_strcpy+3),y
-	sta (F_mem_strcpy+1),y
-	bne @end_19
-	sty 0+<F_mem_strcpy+5
-	lda 0+<F_mem_strcpy+5
-	sta 0+<F_mem_strcpy+0
-	rts
-@end_19:
-	iny
-	jmp @then_11
-.endproc
