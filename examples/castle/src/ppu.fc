@@ -73,10 +73,16 @@ public function wait_vsync_with_flag(flag:int):void
 {
 	//PPU_CTRL2 = 0b00011111; // for debug (profiling)
 	if (flag != 2) {
+		// 未使用のスロットを隠す。消すのは Y 座標 (先頭の 1 バイト) だけでよい (255 で非表示)。
+		// 以前は mem.set で 4 バイト全部を埋めていて、1 フレームの 24% (約 2,400 サイクル) を使っていた
 		if (!gr_sprite_dir) {
-			mem.set(&gr_sprite_buf[gr_sprite_idx], 255, SPRITE_IDX_MAX - gr_sprite_idx);
+			for (var i = gr_sprite_idx; i < SPRITE_IDX_MAX; i += 4) {
+				gr_sprite_buf[i] = 255;
+			}
 		} else {
-			mem.set(&gr_sprite_buf[SPRITE_IDX_MIN], 255, gr_sprite_idx + 3 - SPRITE_IDX_MIN);
+			for (var i = SPRITE_IDX_MIN; i <= gr_sprite_idx; i += 4) {
+				gr_sprite_buf[i] = 255;
+			}
 		}
 	}
 	vsync_flag = flag;

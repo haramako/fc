@@ -62,6 +62,8 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] ピープホール: `sta x; ldy x` → `tay`、`ldx x` → `tax`、次の命令が N/Z を立て直すなら `sta x; …; lda x` の lda を消す ✅ 2026-09-16
 - [x] 可換な演算の第 2 入力が直前の一時変数なら入れ替え（`opt.commuteTemp`。allocateA は第 1 入力しか A に置かない。
       entities / oam -4%、crc8 -3.5%） ✅ 2026-09-16
+- [ ] Y / X に常駐する添字の `i += k`（k ≤ 4）を `iny` × k に（castle の ppu.wait_vsync_with_flag のスプライト消去ループ:
+      今は A 常駐で 26 サイクル/スロット、Y なら 15。マクロベンチで見つかった形）
 - [ ] index_pget / index_pset の結果を演算のオペランドに融合（残るのは `x - tab[i]`、`x < tab[i]` の非可換な形）（`lda px,y; adc vx,y`。math16 は 16 ビット値をフレームの一時変数経由で足している）
 - [ ] 2 バイト変数の上位 / 下位の分割（sieve の 16 ビットのポインタ）
 - [ ] ループの回転で条件が末尾に来た後の `dey; cpy #0; bne`（ラベルが間に入る）を `dey; bne` に（テストの複製）

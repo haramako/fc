@@ -1,19 +1,19 @@
 {
   "field": {
     "frames": 1080,
-    "avg": 10219,
+    "avg": 9290,
     "max": 29872,
     "over": 2
   },
   "start": {
     "frames": 300,
-    "avg": 7995,
-    "max": 29870,
+    "avg": 7398,
+    "max": 29873,
     "over": 9
   },
   "title": {
     "frames": 180,
-    "avg": 6748,
+    "avg": 5838,
     "max": 29870,
     "over": 5
   }
