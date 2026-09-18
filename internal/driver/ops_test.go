@@ -720,3 +720,48 @@ function main():void
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
+
+// TestSplitWords: 2 バイトの変数を上位 / 下位に分ける最適化 (opt.splitWords) の実行結果: シフト (rolc / rorc で C を通す)、
+// xor / and / or、<< 8 / >> 8、if、分解できない使用 (加算・引数・戻り値) の前後の実体化。CRC-16 の形と、混ぜた形。
+func TestSplitWords(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var data:[4]int;
+function crc16(n:int):int16
+{
+	var crc:int16 = 0xffff;
+	for (var i = 0; i < n; i++) {
+		crc ^= (data[i] as int16) << 8;
+		for (var j = 8; j; j--) {
+			if (crc & 0x8000) {
+				crc = (crc << 1) ^ 0x1021;
+			} else {
+				crc = crc << 1;
+			}
+		}
+	}
+	return crc;
+}
+function mix(a:int16):int16
+{
+	var x:int16 = a;
+	for (var k = 0; k < 3; k++) {
+		x = x >> 1;          // 符号なしの右回転
+		x |= 0x8001;
+		x &= 0xf7ff;
+		x += 3;              // 分解できない: 実体化
+		if (x) { x ^= 0x0100; }
+	}
+	return x + ((x >> 8) & 0x00ff);
+}
+function main():void
+{
+	data[0] = 0x31; data[1] = 0x32; data[2] = 0x33; data[3] = 0x34;
+	printf(crc16(4), " ", crc16(0), " ", mix(0x1234), " ", mix(0), "\n");
+	exit(0);
+}
+`)
+	// 期待値は Python で同じ計算を再現して求めた
+	if want := "21321 65535 57965 58023\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}

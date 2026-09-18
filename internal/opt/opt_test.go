@@ -463,3 +463,48 @@ func TestInlineProgram(t *testing.T) {
 		t.Errorf("再帰: %v", err)
 	}
 }
+
+func TestSplitWords(t *testing.T) {
+	// crc = 0; loop { crc = crc << 1; if_carry: crc ^= 0x1021 }; crc ^= (b as int16) << 8; return crc
+	crc, b, t8 := local("crc", u16()), local("b", u8()), tmp("t8", u16())
+	lmd := lambda(
+		&ir.Op{Code: ir.OpLoad, Dst: crc, Src: []ir.Operand{lit(0, u8())}},
+		&ir.Op{Code: ir.OpLabel, Label: "L"},
+		&ir.Op{Code: ir.OpShiftLeft, Dst: crc, Src: []ir.Operand{crc, lit(1, u8())}},
+		&ir.Op{Code: ir.OpIfNotCarry, Label: "E"},
+		&ir.Op{Code: ir.OpXor, Dst: crc, Src: []ir.Operand{crc, lit(0x1021, u16())}},
+		&ir.Op{Code: ir.OpLabel, Label: "E"},
+		&ir.Op{Code: ir.OpShiftLeft, Dst: t8, Src: []ir.Operand{ir.NewCastedValue(b, u16(), 0), lit(8, u8())}},
+		&ir.Op{Code: ir.OpXor, Dst: crc, Src: []ir.Operand{t8, crc}},
+		&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{b}, Label: "L"},
+		&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{crc}},
+	)
+	lmd.Vars = []*ir.Value{crc, b, t8}
+	splitWords(lmd, tu)
+	compact(lmd)
+	check(t, lmd,
+		"load crc.lo = #0", "load crc.hi = #0",
+		"label L",
+		"shift_left crc.lo = crc.lo, #1", "rolc crc.hi = crc.hi",
+		"if_not_carry E",
+		"xor crc.lo = crc.lo, #33", "xor crc.hi = crc.hi, #16",
+		"label E",
+		"load t8.hi = b.0:1", // t8.lo = 0 は使われないので消える
+		"xor crc.hi = t8.hi, crc.hi",
+		"if_true b L",
+		"load crc.0:1 = crc.lo", "load crc.1:1 = crc.hi", // return は実体化
+		"return crc")
+
+	// 分解できない使用 (add) がループ内で多ければ分けない
+	x := local("x", u16())
+	lmd = lambda(
+		&ir.Op{Code: ir.OpLabel, Label: "L"},
+		&ir.Op{Code: ir.OpAdd, Dst: x, Src: []ir.Operand{x, lit(3, u8())}},
+		&ir.Op{Code: ir.OpXor, Dst: x, Src: []ir.Operand{x, lit(0x0101, u16())}},
+		&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{b}, Label: "L"},
+	)
+	lmd.Vars = []*ir.Value{x, b}
+	splitWords(lmd, tu)
+	compact(lmd)
+	check(t, lmd, "label L", "add x = x, #3", "xor x = x, #257", "if_true b L")
+}

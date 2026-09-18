@@ -18,7 +18,7 @@ func DefUse(op *Op) (defs, uses []Operand) {
 		if len(op.Src) > 0 {
 			uses = op.Src[:1]
 		}
-	case OpLoad, OpUminus, OpNot, OpBitNot, OpSignExtension, OpRef, OpCall, OpFastcall:
+	case OpLoad, OpUminus, OpNot, OpBitNot, OpSignExtension, OpRef, OpCall, OpFastcall, OpRolC, OpRorC:
 		if op.Dst != nil {
 			defs = []Operand{op.Dst}
 		}

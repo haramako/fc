@@ -761,6 +761,18 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		case ir.OpMul, ir.OpDiv, ir.OpMod:
 			r.push(l.mulDivMod(op))
 
+		case ir.OpRolC, ir.OpRorC:
+			// C を通す 1 バイトの回転 (直前の shift_left / shift_right / rolc が残した C を受ける。間に C を変える命令は無い)
+			mn := ifElse(op.Code == ir.OpRolC, "rol", "ror")
+			if l.inA(op.Dst) && l.inA(op.In(0)) {
+				r.push(mn + " a")
+			} else if isValueOrCasted(op.Dst) && !l.inA(op.Dst) && !l.inY(op.Dst) && !l.inX(op.Dst) &&
+				ir.ValLocation(op.Dst) != ir.LocCond && l.byte(op.Dst, 0) == l.byte(op.In(0), 0) {
+				r.push(mn + " " + l.byte(op.Dst, 0))
+			} else {
+				r.push(l.loadA(op.In(0), 0), mn+" a", l.storeA(op.Dst, 0))
+			}
+
 		case ir.OpShiftLeft, ir.OpShiftRight:
 			signed := ir.ValType(op.In(0)).Signed
 			rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")

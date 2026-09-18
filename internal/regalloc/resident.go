@@ -199,6 +199,10 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 		if isV(op.Src[0], v) && isV(op.Dst, v) {
 			return true, 3
 		}
+	case ir.OpRolC, ir.OpRorC:
+		if isV(op.Src[0], v) && isV(op.Dst, v) {
+			return true, 3 // rol mem (5) → rol a (2)
+		}
 	case ir.OpIf, ir.OpIfTrue:
 		if isV(op.Src[0], v) {
 			return true, 1 // lda v (3) → cmp #0 (2)
@@ -353,6 +357,8 @@ func freeA(op *ir.Op) bool {
 		return isIncDec(op) || (isStep(op, StepMax) && (ir.ValLocation(op.Dst) == ir.LocY || ir.ValLocation(op.Dst) == ir.LocX))
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		return isMemShift(op)
+	case ir.OpRolC, ir.OpRorC:
+		return ir.UnderlyingValue(op.Dst) == ir.UnderlyingValue(op.Src[0]) && isMemByte(op.Dst) // rol mem
 	case ir.OpIf, ir.OpIfTrue:
 		// コンディションの一時変数なら分岐だけ
 		return ir.ValLocalType(op.Src[0]) == ir.LTTemp && !isMemByte(op.Src[0])

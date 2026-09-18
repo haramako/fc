@@ -35,6 +35,8 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 			break
 		}
 	}
+	splitWords(lmd, u)
+	compact(lmd)
 	simplifyJumps(lmd)
 	compact(lmd)
 }

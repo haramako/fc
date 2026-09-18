@@ -46,6 +46,8 @@ const (
 	OpMod                       //
 	OpShiftLeft                 //
 	OpShiftRight                //
+	OpRolC                      // Dst = Src[0] を C を通して左に 1 回転 (1 バイト。直前の shift_left / rolc の C を受ける。opt.splitWords が作る)
+	OpRorC                      // 同じく右回転
 	OpUminus                    // Dst = -Src[0]
 	OpEq                        // Dst = (Src[0] == Src[1])
 	OpLt                        // Dst = (Src[0] < Src[1])
@@ -70,7 +72,7 @@ var opCodeNames = [...]string{
 	OpPushFastcallResult: "push_fastcall_result", OpPushFastcallArg: "push_fastcall_arg", OpFastcall: "fastcall",
 	OpLoad: "load", OpSignExtension: "sign_extension",
 	OpAdd: "add", OpSub: "sub", OpAnd: "and", OpOr: "or", OpXor: "xor",
-	OpMul: "mul", OpDiv: "div", OpMod: "mod", OpShiftLeft: "shift_left", OpShiftRight: "shift_right",
+	OpMul: "mul", OpDiv: "div", OpMod: "mod", OpShiftLeft: "shift_left", OpShiftRight: "shift_right", OpRolC: "rolc", OpRorC: "rorc",
 	OpUminus: "uminus", OpEq: "eq", OpLt: "lt", OpNot: "not", OpBitNot: "bitnot", OpAsm: "asm",
 	OpIndex: "index", OpRef: "ref", OpPget: "pget", OpPset: "pset",
 	OpIndexPget: "index_pget", OpIndexPset: "index_pset",

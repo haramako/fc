@@ -366,7 +366,7 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			// 結果を A に残す命令 (codegen が storeA で書く) であること
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpPget,
-				ir.OpIndexPget, ir.OpFieldPget, ir.OpShiftLeft, ir.OpShiftRight) {
+				ir.OpIndexPget, ir.OpFieldPget, ir.OpShiftLeft, ir.OpShiftRight, ir.OpRolC, ir.OpRorC) {
 				continue
 			}
 			if codeIn(op.Code, ir.OpShiftLeft, ir.OpShiftRight) {
@@ -673,7 +673,7 @@ func DeleteUnuse(lmd *ir.Lambda) {
 			// 残すと結果の一時変数に場所が割り付かず、コード生成で落ちる
 			ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
 			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot,
-			ir.OpIndex, ir.OpRef, ir.OpSignExtension, ir.OpIndexPget, ir.OpFieldPget:
+			ir.OpIndex, ir.OpRef, ir.OpSignExtension, ir.OpIndexPget, ir.OpFieldPget, ir.OpRolC, ir.OpRorC:
 			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
 				lmd.Ops[i] = nil
 			}

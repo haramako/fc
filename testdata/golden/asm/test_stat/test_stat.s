@@ -42,10 +42,9 @@ _test_stat_I10 = 10
 	jsr _unittest_assert_equal
 	lda #0
 	sta 0+<F_test_stat_test_if+2
-	sta 1+<F_test_stat_test_if+2
-	bne @1
+	sta 0+<F_test_stat_test_if+3
+	ora 0+<F_test_stat_test_if+3
 	beq @end_15
-@1:
 	lda #0
 	sta <F_unittest_assert_equal+0
 	sta <F_unittest_assert_equal+1
@@ -62,10 +61,9 @@ _test_stat_I10 = 10
 	lda #1
 	sta 0+<F_test_stat_test_if+2
 	lda #0
-	sta 1+<F_test_stat_test_if+2
+	sta 0+<F_test_stat_test_if+3
 	lda 0+<F_test_stat_test_if+2
-	bne @end_21
-	lda 1+<F_test_stat_test_if+2
+	ora 0+<F_test_stat_test_if+3
 	bne @end_21
 	lda #0
 	sta <F_unittest_assert_equal+0
@@ -83,10 +81,9 @@ _test_stat_I10 = 10
 	lda #0
 	sta 0+<F_test_stat_test_if+2
 	lda #1
-	sta 1+<F_test_stat_test_if+2
+	sta 0+<F_test_stat_test_if+3
 	lda 0+<F_test_stat_test_if+2
-	bne @then_34
-	lda 1+<F_test_stat_test_if+2
+	ora 0+<F_test_stat_test_if+3
 	bne @then_34
 	lda #0
 	sta <F_unittest_assert_equal+0

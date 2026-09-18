@@ -100,3 +100,24 @@ sema が `include` した asm ファイルを読んで `Module.AsmSymbols` に�
    `AllocateRegister` の前に呼ぶ）
 3. codegen の A 占有モード（friendly / Y 版 / 退避）
 4. bench で確認（crc8 / crc16 / sieve / plasma / oam）、castle は Mesen まで
+
+## 7. 2 バイト変数の上位 / 下位の分割（`opt.splitWords`、2026-09-19）
+
+A / Y / X は 1 バイトなので、16 ビットの値はそのままでは常駐できない。2 バイトのローカル変数 v のうち、使われ方が
+バイトごとに分解できるものを 1 バイトの変数 `v.lo` / `v.hi` に分け、以降は 1 バイトの命令の並びとして扱う
+（残りの機構はそのまま: `crc.lo` が A に常駐して `asl a; rol crc.hi; bcc …; eor #$21` になる）。
+
+- 分解できる命令: 定数 / 2 バイト変数 / 1 バイト値（ゼロ拡張）の `load`、`xor` / `and` / `or`、`v = v << 1`
+  （`shift_left v.lo; rolc v.hi`: C を通す 1 バイトの回転 `rolc` / `rorc` を IR に追加）、符号なしの `v = v >> 1`、
+  `<< 8` / `>> 8`（バイトの移動）、`if v`（`or t = lo, hi; if t`）
+- それ以外の使用（加算・比較・引数・戻り値・ポインタ経由）は **実体化**: v のスロットは残し、読む前に `v.0 = lo; v.1 = hi`、
+  書いた後に `lo = v.0; hi = v.1` を挟む
+- 分けるのは、ループ内を重み 4 で数えて「分解できる命令 − 実体化」が正の変数だけ。一時変数は全部分解できるときだけ
+  （`xor v = v, t` の t が分けられるかは t 次第なので、分けない変数を除きながら固定点まで）
+- 分けた後の 1 バイトの一時変数を定数 / コピー伝播して恒等演算を消す（`propagateBytes`）。`crc ^= (x as int16) << 8` は
+  `t.lo = 0; t.hi = x; crc.lo ^= t.lo; crc.hi ^= t.hi` → `crc.hi ^= x` になる。使われなくなった一時変数の load も消す
+  （残すと隣の一時変数の A 割付（定義の直後の使用）を止める）
+- `rolc` / `rorc` は直前の命令の C を受けるので、間に C を変える命令を入れてはいけない（sink の障壁。常駐の退避 / 復帰の
+  `sta` / `lda` は C を変えない）。regalloc では `rol mem` は A を使わない（free）、A の変数なら `rol a`（friendly）
+- bench: crc16 -13%（2.25M → 1.96M。内側ループが `asl a; rol hi; bcc; …; dey; bne`）。他は変化なし（castle は 8 ビットの
+  座標なので対象が無い）
