@@ -26,9 +26,8 @@
 - [x] Y の追跡ピープホール、`lda` 直後の `cmp #0` ✅ 2026-09-16
 - [x] extend_jump の精密化（実サイズで固定点まで） ✅ 2026-09-16
 - [x] `internal/opt` の単体テスト ✅ 2026-09-16
-- [ ] `dec x; lda x; bne` → `dec x; bne`（A が分岐の先で死んでいることの確認が要る。asm テキストでは分からないので
-      codegen が `if` の直前の演算を見て出す方が筋がいい）
-- [ ] `lda #k` の即値も A の追跡に含める（`lda #0` の重複。SoA の scatter で多い）
+- [x] `dec x; lda x; bne` → `dec x; bne`（codegen の `flagsFromIncDec`。第 4 弾で実装） ✅ 2026-09-16
+- [x] `lda #k` の即値も A の追跡に含める（ピープホールの即値追跡。第 4 弾で実装） ✅ 2026-09-16
 
 結果（bench/README.md の第 2 弾の経過）: `entities` -24%、`plasma` -30%、`oam` -22%、`bgdecode` -15%、`fib` -7%、
 `textprint` -4%。v0.0.2 比では `entities` -29%、`oam` -46%、`plasma` -49%、`bgdecode` -37%。
