@@ -37,14 +37,15 @@ _stdio_EMU_EXIT = 65535
 	rts
 .endproc
 	.export _stdio_exit
+	.export _stdio_exit__frame
 	;;;=============================
 	;;; function _stdio_exit
 	;;;=============================
 .segment "stdio"
 .proc _stdio_exit
 	sta <F_stdio_exit+0
-		.export _stdio_exit__frame
-_stdio_exit__frame:
+	.endproc
+.proc _stdio_exit__frame
 	lda 0+<F_stdio_exit+0
 	sta 0+_stdio_EMU_EXIT
 	rts

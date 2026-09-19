@@ -50,14 +50,15 @@ _math_rand_table:
 	.byte 220,110,100,43,166,79,209,166,2,223,56,255,82,126,73,37
 	.byte 77,58,116,11,237,92,43,202,33,108,29,60,228,47,206,114
 	.export _math_sin
+	.export _math_sin__frame
 	;;;=============================
 	;;; function _math_sin
 	;;;=============================
 .segment "math"
 .proc _math_sin
 	sta <F_math_sin+1
-		.export _math_sin__frame
-_math_sin__frame:
+	.endproc
+.proc _math_sin__frame
 	lda 0+<F_math_sin+1
 	bmi @else_5
 	sec

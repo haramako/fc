@@ -104,8 +104,9 @@ func threadJumps(lmd *ir.Lambda) bool {
 				op.Label = l
 				changed = true
 			}
-			// 直後のブロックへの jump は不要
-			if op.Code == ir.OpJump && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label == op.Label {
+			// 直後のブロックへの jump / 条件分岐は不要 (`||` の片側が定数に畳まれると `if_true c goto next` が残る。
+			// 残すと飛ぶ辺と落ちる辺が同じブロックに入り、常駐の入口の写しが片方の辺にしか付かなかった。fuzz で発覚)
+			if (op.Code == ir.OpJump || isCond(op)) && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label == op.Label {
 				ops[i] = nil
 				changed = true
 			}

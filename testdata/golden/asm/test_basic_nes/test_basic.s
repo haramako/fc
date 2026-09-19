@@ -51,14 +51,15 @@ _6:
 		.byte 111,111,111,95,108,111,110,103,95,115,116,114,105,110,103,0
 .endproc
 	.export _test_basic_add
+	.export _test_basic_add__frame
 	;;;=============================
 	;;; function _test_basic_add
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_add
 	sta <F_test_basic_add+2
-		.export _test_basic_add__frame
-_test_basic_add__frame:
+	.endproc
+.proc _test_basic_add__frame
 	clc
 	lda 0+<F_test_basic_add+1
 	adc 0+<F_test_basic_add+2
@@ -287,14 +288,15 @@ _58:
 		.byte 104,101,114,101,32,115,116,114,105,110,103,0
 .endproc
 	.export _test_basic_add_fastcall
+	.export _test_basic_add_fastcall__frame
 	;;;=============================
 	;;; function _test_basic_add_fastcall
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_add_fastcall
 	sta <F_test_basic_add_fastcall+2
-		.export _test_basic_add_fastcall__frame
-_test_basic_add_fastcall__frame:
+	.endproc
+.proc _test_basic_add_fastcall__frame
 	clc
 	lda 0+<F_test_basic_add_fastcall+1
 	adc 0+<F_test_basic_add_fastcall+2

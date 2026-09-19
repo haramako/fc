@@ -713,6 +713,42 @@ function main():void
 	}
 }
 
+// `if (A || 定数の真)` の片側が畳まれて `if_true c goto next` (飛び先 = 落ちる先 = ループの入口) が残ると、
+// 常駐レジスタの入口の写しが落ちる辺にしか付かず、飛ぶ辺から入ったときに X が未設定だった (fuzz で発覚)。
+// simplifyJumps が直後への条件分岐を消し、regalloc は両方の辺に写しを置く
+func TestResidentEntryBothEdges(t *testing.T) {
+	t.Parallel()
+	src := `var g1:int16;
+var g2:int;
+var a0:[16]int;
+var a2:[16]int16;
+function f0():int
+{
+	var l1:sint16 = 5;
+	var q0:*int16 = &a2[2];
+	var l5:int = 0;
+	if ((((g1) as int) < (g2 / 2)) || (((l1 || (~((*q0) as sint16))) as int))) {
+		while ((((((q0[1] as sint) << 2) && (-l1)) as int16)) && l5 < 5) {
+			l5++;
+			a0[2] = 2;
+		}
+	}
+	return l5;
+}
+function main():void
+{
+	a2[2] = 1397; a2[3] = 7; g2 = 9;
+	printf(f0(), " ", a0[2], "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "5 2\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 定数との乗算のシフト・加減算への展開 (opt.expandMul): 1 バイト / 2 バイト、符号付き、2^n - 1、Dst が入力と同じ
 func TestExpandMulRun(t *testing.T) {
 	t.Parallel()

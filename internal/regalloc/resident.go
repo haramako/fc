@@ -602,12 +602,15 @@ func (r region) blocks() []*ir.Block {
 }
 
 // entries / exits は領域に入る辺 (from は外、to は中) と出る辺 (from は中、to は外)。
+// entries / exits は領域に入る辺 / 出る辺 (同じ 2 ブロック間に飛ぶ辺と落ちる辺の両方があっても 1 つ。onEdge が両方に置く)。
 func (r region) entries() [][2]*ir.Block {
 	var e [][2]*ir.Block
+	seen := map[[2]*ir.Block]bool{}
 	for _, b := range r.blocks() {
 		for _, p := range b.Preds {
-			if !r[p] {
-				e = append(e, [2]*ir.Block{p, b})
+			if k := [2]*ir.Block{p, b}; !r[p] && !seen[k] {
+				seen[k] = true
+				e = append(e, k)
 			}
 		}
 	}
@@ -616,10 +619,12 @@ func (r region) entries() [][2]*ir.Block {
 
 func (r region) exits() [][2]*ir.Block {
 	var e [][2]*ir.Block
+	seen := map[[2]*ir.Block]bool{}
 	for _, b := range r.blocks() {
 		for _, s := range b.Succs {
-			if !r[s] {
-				e = append(e, [2]*ir.Block{b, s})
+			if k := [2]*ir.Block{b, s}; !r[s] && !seen[k] {
+				seen[k] = true
+				e = append(e, k)
 			}
 		}
 	}
@@ -979,13 +984,6 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 				pos = backOver(pos)
 			}
 			before[pos] = append(before[pos], mk...)
-		case last != nil && isCondBranch(last) && last.Label == to.Label && to.Index != from.Index+1:
-			// 条件分岐の飛び先: 辺を分割して末尾に新しいブロック
-			l := newLabel()
-			last.Label = l
-			tail = append(tail, &ir.Op{Code: ir.OpLabel, Label: l})
-			tail = append(tail, mk...)
-			tail = append(tail, &ir.Op{Code: ir.OpJump, Label: to.Label})
 		case last != nil && last.Code == ir.OpSwitch && to.Label != "" && slices.Contains(last.Labels, to.Label):
 			// ジャンプテーブルの飛び先: 表の項目を新しいブロックに向ける
 			l := newLabel()
@@ -997,6 +995,18 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			tail = append(tail, &ir.Op{Code: ir.OpLabel, Label: l})
 			tail = append(tail, mk...)
 			tail = append(tail, &ir.Op{Code: ir.OpJump, Label: to.Label})
+		case last != nil && isCondBranch(last) && last.Label == to.Label:
+			// 条件分岐の飛び先: 辺を分割して末尾に新しいブロック
+			l := newLabel()
+			last.Label = l
+			tail = append(tail, &ir.Op{Code: ir.OpLabel, Label: l})
+			tail = append(tail, mk...)
+			tail = append(tail, &ir.Op{Code: ir.OpJump, Label: to.Label})
+			if to.Index != from.Index+1 {
+				break
+			}
+			// 落ちる先も同じブロック (`if c goto next`。simplifyJumps が消すが念のため): 落ちる側にも置く
+			fallthrough
 		default:
 			// fallthrough (from の直後が to)。from の末尾に足す (条件分岐の落ちる側なら分岐の後 = to の手前)
 			if li >= 0 {

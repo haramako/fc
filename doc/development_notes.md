@@ -75,7 +75,13 @@ go test ./...                                    # 全部 (golden + examples + N
   左でも `cmp #128; rol` で符号を回し込む（`-109 << 1` が 39。`TestShiftVarSigned`。-O 0 でも同じ結果なので差分では
   出ず、SSA の定数畳み込みと食い違って発覚）。その次の 1000 本で 2 件: regalloc が cast を挟んだ一時変数の `if`
   （`if ((!x) as int16)`）を「コンディションの一時変数」と見て A を壊さない扱いにしていた（`TestResidentIfCast`）、
-  SSA の定数の読み出しが cast の連鎖の内側の切り詰めを無視していた（`((l0 as int) as sint16)`。`castBits`）
+  SSA の定数の読み出しが cast の連鎖の内側の切り詰めを無視していた（`((l0 as int) as sint16)`。`castBits`）。
+  次の 1000 本で 1 件: `if (A || 定数)` の片側が畳まれて残った `if_true c goto next`（飛び先 = 落ちる先 = ループの入口）で、
+  常駐の入口の写しが落ちる辺にしか付かなかった（simplifyJumps が直後への条件分岐を消し、`onEdge` は両方の辺に置く。
+  `TestResidentEntryBothEdges`）
+- **ca65 の `.proc` の中のラベルは同じファイルの別の `.proc` から見えない**（2026-09-20）: レジスタ渡しの `sym__frame`
+  を `.proc` の中に置いて `.export` したら、同じモジュール内の呼び出しで未定義になった（castle の text で発覚。
+  fc のテストは他モジュールからの参照しか無かった）。関数の途中に入口を作るときは `.endproc` で閉じて別の `.proc` にする
 
 - **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](language_reference.md)、設計の経緯は
   [v2_grammar.md](v2_grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、

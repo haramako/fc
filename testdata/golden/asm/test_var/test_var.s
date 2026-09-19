@@ -13,14 +13,15 @@ _test_var_array: .res 10
 _test_var_CONST:
 	.byte 0,1,2,3,4,5,6,7,8,9
 	.export _test_var__D2
+	.export _test_var__D2__frame
 	;;;=============================
 	;;; function _test_var_$2
 	;;;=============================
 .segment "test_var"
 .proc _test_var__D2
 	sta <F_test_var__D2+1
-		.export _test_var__D2__frame
-_test_var__D2__frame:
+	.endproc
+.proc _test_var__D2__frame
 	clc
 	lda 0+<F_test_var__D2+1
 	adc #2
@@ -267,6 +268,7 @@ _72:
 .endproc
 	.export _test_var_add1
 	.export _test_var_add1__direct
+	.export _test_var_add1__frame
 	;;;=============================
 	;;; function _test_var_add1
 	;;;=============================
@@ -275,8 +277,8 @@ _test_var_add1:
 	lda <S+1,x
 .proc _test_var_add1__direct
 	sta <F_test_var_add1+1
-		.export _test_var_add1__frame
-_test_var_add1__frame:
+	.endproc
+.proc _test_var_add1__frame
 	clc
 	lda 0+<F_test_var_add1+1
 	adc #1
@@ -288,6 +290,7 @@ _test_var_add1__frame:
 .endproc
 	.export _test_var_mul2
 	.export _test_var_mul2__direct
+	.export _test_var_mul2__frame
 	;;;=============================
 	;;; function _test_var_mul2
 	;;;=============================
@@ -296,8 +299,8 @@ _test_var_mul2:
 	lda <S+1,x
 .proc _test_var_mul2__direct
 	sta <F_test_var_mul2+1
-		.export _test_var_mul2__frame
-_test_var_mul2__frame:
+	.endproc
+.proc _test_var_mul2__frame
 	lda 0+<F_test_var_mul2+1
 	asl a
 	sta 0+<F_test_var_mul2+0
@@ -642,14 +645,15 @@ _151:
 .endproc
 _test_var_main = _main
 	.export _test_var__D96
+	.export _test_var__D96__frame
 	;;;=============================
 	;;; function _test_var_$96
 	;;;=============================
 .segment "test_var"
 .proc _test_var__D96
 	sta <F_test_var__D96+1
-		.export _test_var__D96__frame
-_test_var__D96__frame:
+	.endproc
+.proc _test_var__D96__frame
 	clc
 	lda 0+<F_test_var__D96+1
 	adc #2

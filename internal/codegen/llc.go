@@ -185,7 +185,8 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 				asm.push(fmt.Sprintf("\t.export %s", directSym(mangle(d.Sym))))
 			}
 			if lmd.RegArg {
-				inc.push(fmt.Sprintf("\t.import %s", frameSym(mangle(d.Sym)))) // .export は .proc の中 (CompileLambda)
+				inc.push(fmt.Sprintf("\t.import %s", frameSym(mangle(d.Sym))))
+				asm.push(fmt.Sprintf("\t.export %s", frameSym(mangle(d.Sym))))
 			}
 			asm.push(anyList(l.CompileLambda(d.Sym, lmd)))
 		default:
@@ -448,10 +449,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		r.push(fmt.Sprintf(".proc %s", mangle(sym)))
 	}
 	if lmd.RegArg {
-		// レジスタ渡しの入口: A の最後の引数をフレームに写す。フレームに書いて呼ぶ側 (far call など) はこの後ろから入る
+		// レジスタ渡しの入口: A の最後の引数をフレームに写す。フレームに書いて呼ぶ側 (far call など) はこの後ろの
+		// `sym__frame` から入る。.proc の中のラベルは同じファイルの別の .proc から見えない (castle の text モジュールで
+		// 未定義になった) ので、入口の .proc を閉じて本体を別の .proc `sym__frame` にする (.endproc はコードを出さないので
+		// そのまま落ちる)
 		r.push(fmt.Sprintf("sta %s", staticAddr(lmd, regArgOffset(lmd))))
-		r.push(fmt.Sprintf("\t.export %s", frameSym(mangle(sym))))
-		r.push(frameSym(mangle(sym)) + ":")
+		r.push(".endproc")
+		r.push(fmt.Sprintf(".proc %s", frameSym(mangle(sym))))
 	}
 	if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
 		// stack 関数: X = フレームの底 (呼び出し側が FC_SP にした)。空き先頭をフレームの後ろへ
