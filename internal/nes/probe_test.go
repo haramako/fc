@@ -6,7 +6,7 @@ package nes
 //     FC_PROBE_DBG (/ _B) の dbgfile で番地 → 名前。FC_PROBE_PREFIX=_my_,_en_ で比べる変数を絞る。FC_PROBE_WATCH=名前,... で
 //     終わりに値を出す。
 //   TestProbePlay: TestMesenPlayCastle と同じ筋書きを内蔵ランナーで走らせ、エリアと状態の推移を出す。
-//   TestProbeSwitch: 踏むスイッチのあるエリア (FC_PROBE_AREA、既定 de) に飛んでスイッチの上に落ち、沈むかを見る
+//   TestProbeSwitch: 踏むスイッチのあるエリア (FC_PROBE_AREA、既定 26。スイッチが 2 つあり en[0] でない) に飛んでスイッチの上に落ち、沈むかを見る
 //     (チェックポイント 0 のエリアを ROM 上で書き換えて任意のエリアから始める例)。
 // 例: FC_PROBE_ROM_A=a.nes FC_PROBE_ROM_B=b.nes FC_PROBE_DBG=a.dbg FC_PROBE_DBG_B=b.dbg go test ./internal/nes -run TestProbeDiff -v
 
@@ -284,7 +284,7 @@ func TestProbePlay(t *testing.T) {
 	}
 }
 
-// TestProbeSwitch は踏むスイッチ (en TYPE_SWITCH=13) のあるエリアに飛び (FC_PROBE_AREA、既定 0x62)、スイッチの上に
+// TestProbeSwitch は踏むスイッチ (en TYPE_SWITCH=13) のあるエリアに飛び (FC_PROBE_AREA、既定 0x26)、スイッチの上に
 // 落ちて my.state が ON_ENEMY (4) になり flags が立つかを見る。チェックポイント 0 の [area, x, y] を ROM 上で書き換える。
 func TestProbeSwitch(t *testing.T) {
 	rom := os.Getenv("FC_PROBE_ROM_A")
