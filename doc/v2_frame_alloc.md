@@ -263,5 +263,33 @@ castle は呼び出しだらけ（`en8_slime_process` → `bg_cell_type` ×3 な
   `allocateA` の producer に call / fastcall を足した）。stack 関数（再帰）から呼ぶときは X を戻すのに A を使うので読む
 - 判定は `frames.Analyze`（`Lambda.RegArg` / `RegResult`。interrupt 関数は除く）。extern / fastcall / cc65 は変えない
 
-効果: calls −6.5%、plasma −3.2%、entities −2.6%、castle フレーム −0.8〜1.1%。2 つ目の引数を Y で渡すのは次の候補
-（Y は添字の常駐に使うので入口で `sty` が要り、得は 1 呼び出し 3〜4 サイクル）。
+効果: calls −6.5%、plasma −3.2%、entities −2.6%、castle フレーム −0.8〜1.1%。
+
+### 7.1 最後から 2 つ目の引数を Y で（2026-09-20）
+
+- **RegArgY**: 最後から 2 つ目の引数が 1 バイトなら Y で受け取る（`Lambda.RegArgY`。RegArg とは独立: 最後の引数が
+  2 バイトなら Y だけ）。入口は `sty F_g+ky; sta F_g+ka` で始まり、本体はその直後に続く。**本体の先頭では常に A / Y に引数が
+  ある**ようにして、ピープホールが本体の先頭の `lda F_g+ka` / `ldy F_g+ky` を消す（castle の `bg.cell(x, y)` 系はこれで
+  添字の `ldy` が消える）。そのため、レジスタに置けなかった呼び出し側のための入口は「フレームから読んで同じ `sty` / `sta`
+  に落ちる」形で前に置く: `sym__frame: lda F_g+ka`（両方フレーム）→ `sym__a: ldy F_g+ky`（Y だけフレーム）→
+  `sym` / `sym__direct: sty; sta; 本体`。入口ごとに `.proc` を閉じる（`.proc` の中のラベルは別の `.proc` から見えない）。
+  Entry 関数はスタックからのコピーの後 `ldy <S+ky,x; lda <S+ka,x` で `__direct` へ落ち、`__frame` / `__a` からは
+  `jmp __direct` で本体へ
+- **呼び出し側**（`codegen.markArgY`、最適化の後・割付の前に `push_arg.ArgY` を付ける）: 呼び先が static で far でなく、
+  最後の引数の `push_arg` が `call` の直前で、**Y の引数の `push_arg` から `call` までの間の命令が Y を使わない**
+  （演算・load・比較・定数シフト。添字・ポインタ・乗除算・入れ子の呼び出しは不可 → `__a` から入る）。Y に置く `push_arg`
+  から `call` までの命令には `HoldY` を付け、regalloc はそれを Y を壊す命令と見る。codegen は保持中は Y の常駐変数を
+  メモリ側 (`resYMem`) で扱い、`ArgY` の `push_arg` で退避（`sty home`）、間の命令と `call` では退避も復帰もせず、`call` の
+  後で復帰する。A の代用に Y を使う判定（`UseY`）も保持中は切る。**A の最後の引数も同じ**: A に置いた `push_arg` の
+  後で A の常駐を復帰しない（復帰の `lda` で引数が消える）、`call` では退避しない（`push_arg` が常駐変数そのものなら
+  そこで書き戻す）。この 2 つは Y を入れる前の A 渡しにも潜在していた穴
+- `push_arg` を間の命令の下に沈めて Y に置ける呼び出しを増やす案は試して戻した: 間の演算（最後の引数の式）の結果が
+  A に残らなくなり（`sta t; ldy v; lda t`）、`__a` の入口 (+6) より損（oam +0.7%）。Y の値を直接 `ldy` できる
+  （A の連鎖を壊さない）ときだけ得になる
+- `fastcall: true` の関数（本体あり = static、フレームが FC_FASTCALL_REG）の呼び出しは `push_fastcall_arg` / `fastcall`
+  なので、markArgY はその形も見る（castle の hot な関数はほぼこれ。最初 `push_arg` だけ見ていて castle が +0.8% 退行した）
+
+効果: calls −2.4%、castle フレーム −0.5%（field 8615→8574、area33_jump 14186→14123）、ROM +18 バイト。far call は
+トランポリンが A / Y を壊すので `__frame` から入る（far call にもレジスタで渡すなら、トランポリンの速い経路を X だけで
+書き（`ldx` / `cpx`）、切替の経路で A / Y をスタックに退避する形にでき、FC_FARCALL の設定を引数の読み出しの前に出す必要が
+ある。castle 側の `farcall` も書き換えるので別の機会に）。

@@ -7,5 +7,6 @@ __MODULE_MATH__ = 1
 	.import _math_sin__frame
 	.import _math_atan
 	.import _math_atan__frame
+	.import _math_atan__a
 	.import _math_rand_idx
 .endif

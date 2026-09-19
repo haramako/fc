@@ -55,10 +55,11 @@ _math_rand_table:
 	;;; function _math_sin
 	;;;=============================
 .segment "math"
+.proc _math_sin__frame
+	lda <F_math_sin+1
+	.endproc
 .proc _math_sin
 	sta <F_math_sin+1
-	.endproc
-.proc _math_sin__frame
 	lda 0+<F_math_sin+1
 	bmi @else_5
 	sec
@@ -113,14 +114,20 @@ _math_rand_table:
 .endproc
 	.export _math_atan
 	.export _math_atan__frame
+	.export _math_atan__a
 	;;;=============================
 	;;; function _math_atan
 	;;;=============================
 .segment "math"
-.proc _math_atan
-	sta <F_math_atan+2
-	.endproc
 .proc _math_atan__frame
+	lda <F_math_atan+2
+	.endproc
+.proc _math_atan__a
+	ldy <F_math_atan+1
+	.endproc
+.proc _math_atan
+	sty <F_math_atan+1
+	sta <F_math_atan+2
 	lda 0+<F_math_atan+1
 	bmi @else_30
 	lda 0+<F_math_atan+2

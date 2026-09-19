@@ -42,6 +42,7 @@ type Llc struct {
 	resMem  bool      // 退避中: res をメモリ (Home) として参照する
 	resY    *ir.Value // op.ResidentY
 	resYMem bool      // 退避中: resY をメモリ (Home) として参照する
+	holdA   bool      // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
 	resX    *ir.Value // op.ResidentX
 	resXMem bool      // 退避中: resX をメモリ (Home) として参照する
 	aHeld   bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
@@ -184,9 +185,13 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 				inc.push(fmt.Sprintf("\t.import %s", directSym(mangle(d.Sym))))
 				asm.push(fmt.Sprintf("\t.export %s", directSym(mangle(d.Sym))))
 			}
-			if lmd.RegArg {
+			if lmd.RegArg || lmd.RegArgY {
 				inc.push(fmt.Sprintf("\t.import %s", frameSym(mangle(d.Sym))))
 				asm.push(fmt.Sprintf("\t.export %s", frameSym(mangle(d.Sym))))
+			}
+			if lmd.RegArg && lmd.RegArgY {
+				inc.push(fmt.Sprintf("\t.import %s", aSym(mangle(d.Sym))))
+				asm.push(fmt.Sprintf("\t.export %s", aSym(mangle(d.Sym))))
 			}
 			asm.push(anyList(l.CompileLambda(d.Sym, lmd)))
 		default:
@@ -304,6 +309,7 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 	l.curLambda = lmd
 	l.curOp = nil
 	opt.Optimize(lmd, l.OptimizeLevel, l.types)
+	markArgY(lmd, l.Lambdas) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
 	if l.OptimizeLevel > 0 {
 		regalloc.AllocateResident(lmd)
 	}
@@ -434,6 +440,27 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	} else {
 		r.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
 	}
+	if lmd.RegArg || lmd.RegArgY {
+		// レジスタ渡しの入口 (doc/v2_frame_alloc.md §7): 呼び出し側は最後の引数を A、その前を Y に置いて `sym` / `sym__direct`
+		// から入り、`sty` / `sta` でフレームに写す。レジスタに置けなかった引数はフレームに書いてあるので、その前の入口
+		// (`sym__frame`: 両方フレーム、`sym__a`: Y だけフレーム) がレジスタに読んでから同じ `sty` / `sta` に落ちる
+		// (本体の先頭では常に A / Y に引数があり、ピープホールが先頭の lda / ldy を消す)。.proc の中のラベルは同じファイルの
+		// 別の .proc から見えない (castle の text モジュールで未定義になった) ので、入口ごとに .proc を閉じる (.endproc は
+		// コードを出さないのでそのまま落ちる)
+		if lmd.RegArg {
+			r.push(fmt.Sprintf(".proc %s", frameSym(mangle(sym))), fmt.Sprintf("lda %s", staticAddr(lmd, regArgOffset(lmd))), ".endproc")
+		}
+		if lmd.RegArgY {
+			name := frameSym(mangle(sym))
+			if lmd.RegArg {
+				name = aSym(mangle(sym))
+			}
+			r.push(fmt.Sprintf(".proc %s", name), fmt.Sprintf("ldy %s", staticAddr(lmd, regArgYOffset(lmd))), ".endproc")
+		}
+		if lmd.Entry {
+			r.push(fmt.Sprintf("jmp %s", directSym(mangle(sym)))) // 間にスタックからのコピーが入る
+		}
+	}
 	if lmd.Entry {
 		// アドレスを取られた関数: 関数ポインタ経由の呼び出し側はスタック (X の指す位置) に引数を積むので、
 		// 自分のフレームに写してから本体 (__direct。呼び先が分かっている呼び出しはここから入る) へ
@@ -443,20 +470,21 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(fmt.Sprintf("lda <S+%d,x", k)) // 最後の引数は A のまま __direct の sta へ
 				continue
 			}
+			if lmd.RegArgY && k == regArgYOffset(lmd) {
+				r.push(fmt.Sprintf("ldy <S+%d,x", k)) // その前の引数は Y のまま __direct の sty へ
+				continue
+			}
 			r.push(fmt.Sprintf("lda <S+%d,x", k), fmt.Sprintf("sta %s", staticAddr(lmd, k)))
 		}
 		r.push(fmt.Sprintf(".proc %s", directSym(mangle(sym))))
 	} else {
 		r.push(fmt.Sprintf(".proc %s", mangle(sym)))
 	}
+	if lmd.RegArgY {
+		r.push(fmt.Sprintf("sty %s", staticAddr(lmd, regArgYOffset(lmd)))) // Y の最後から 2 つ目の引数をフレームに
+	}
 	if lmd.RegArg {
-		// レジスタ渡しの入口: A の最後の引数をフレームに写す。フレームに書いて呼ぶ側 (far call など) はこの後ろの
-		// `sym__frame` から入る。.proc の中のラベルは同じファイルの別の .proc から見えない (castle の text モジュールで
-		// 未定義になった) ので、入口の .proc を閉じて本体を別の .proc `sym__frame` にする (.endproc はコードを出さないので
-		// そのまま落ちる)
-		r.push(fmt.Sprintf("sta %s", staticAddr(lmd, regArgOffset(lmd))))
-		r.push(".endproc")
-		r.push(fmt.Sprintf(".proc %s", frameSym(mangle(sym))))
+		r.push(fmt.Sprintf("sta %s", staticAddr(lmd, regArgOffset(lmd)))) // A の最後の引数をフレームに
 	}
 	if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
 		// stack 関数: X = フレームの底 (呼び出し側が FC_SP にした)。空き先頭をフレームの後ろへ
@@ -501,19 +529,26 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				l.resXMem = true
 				restoreX = op.ResXOut
 			}
-			if op.Resident != nil && d.A == regalloc.ResClobber {
-				if op.ResIn && !op.Resident.Clean {
+			// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
+			// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
+			// A の最後の引数も同じ (push_arg で退避、call では退避しない)
+			holdY := op.ArgY || op.HoldY
+			if holdY && d.UseY {
+				d.UseY, d.A = false, regalloc.ResClobber
+			}
+			if op.Resident != nil && (d.A == regalloc.ResClobber || l.holdA) {
+				if op.ResIn && !op.Resident.Clean && !l.holdA {
 					r.push("sta " + l.byte(op.Resident.Home, 0))
 				}
 				l.resMem = true
 				restoreA = op.ResOut
 			}
-			if op.ResidentY != nil && d.Y == regalloc.ResClobber {
-				if op.ResYIn && !op.ResidentY.Clean {
+			if op.ResidentY != nil && (d.Y == regalloc.ResClobber || holdY) {
+				if op.ResYIn && !op.ResidentY.Clean && !op.HoldY {
 					r.push("sty " + l.byte(op.ResidentY.Home, 0))
 				}
 				l.resYMem = true
-				restoreY = op.ResYOut
+				restoreY = op.ResYOut && !op.ArgY && !(op.HoldY && !isCallOp(op))
 			}
 			l.aHeld = d.UseY
 		}
@@ -669,6 +704,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 
 		case ir.OpPushArg, ir.OpPushFastcallArg:
 			pc := calls[len(calls)-1]
+			if op.ArgY && pc.kind == ckStatic && !pc.far && pc.callee.RegArgY && pc.argOff == regArgYOffset(pc.callee) {
+				// 最後から 2 つ目の引数は Y に置いて呼ぶ (markArgY: 直後が最後の引数の push_arg、その直後が call)
+				r.push(l.loadY(op.In(0))...)
+				pc.inY = true
+				pc.argOff++
+				break
+			}
 			for i := 0; i < op.Type.Size; i++ {
 				r.push(l.loadA(op.In(0), i))
 				switch pc.kind {
@@ -676,6 +718,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					if pc.callee.RegArg && !pc.far && pc.argOff == regArgOffset(pc.callee) && nextOp(ops, opNo) == pc.callOp {
 						pc.inA = true // 最後の引数は A のまま呼ぶ (直後が call のときだけ)
 						pc.argOff++
+						// A の常駐変数は call まで A に戻さない (復帰の lda で引数が消える)。この引数が常駐変数そのもの
+						// (friendly: 退避していない) なら、call で退避しない代わりにここで書き戻す
+						if op.Resident != nil && op.ResIn && !op.Resident.Clean && !l.resMem {
+							r.push("sta " + l.byte(op.Resident.Home, 0))
+						}
+						restoreA = false
+						l.holdA = true
 						break
 					}
 					r.push(fmt.Sprintf("sta %s", staticAddr(pc.callee, pc.argOff)))
@@ -694,6 +743,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		case ir.OpCall, ir.OpFastcall:
 			pc := calls[len(calls)-1]
 			calls = calls[:len(calls)-1]
+			l.holdA = false // A / Y の引数の保持はここまで (常駐の退避の抑制はこの命令の前で見た)
 			fnType := ir.ValType(op.In(0))
 			var sym string
 			if ir.ValKind(op.In(0)) == ir.KindLiteral {
@@ -706,8 +756,14 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				if pc.callee.Entry {
 					target = directSym(sym) // プロローグ (スタックからのコピー) を飛ばす
 				}
-				if pc.callee.RegArg && !pc.inA {
-					target = frameSym(sym) // 最後の引数もフレームに書いた: 入口の sta を飛ばす
+				if pc.inY && pc.callee.RegArg && !pc.inA {
+					panic("Y argument in register but A argument in frame") // markArgY が保証する (直後が最後の引数、その直後が call)
+				}
+				switch {
+				case (pc.callee.RegArg && !pc.inA) || (pc.callee.RegArgY && !pc.inY && !pc.callee.RegArg):
+					target = frameSym(sym) // レジスタ渡しの引数もフレームに書いた: 入口の sty / sta を飛ばす
+				case pc.callee.RegArgY && !pc.inY:
+					target = aSym(sym) // Y の引数だけフレームに書いた (A の引数は A): sty だけ飛ばす
 				}
 				if op.Far {
 					r.push(l.farCallSetup(target))

@@ -107,6 +107,8 @@ type Op struct {
 	Text   string          // OpAsm のアセンブラ行
 	Far    bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
 	Scaled bool            // OpIndexPget / OpIndexPset: 添字が要素単位でなくバイト単位 (opt.scaleIndex が付ける。codegen は asl しない)
+	ArgY   bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
+	HoldY  bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
 	Pos    syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
 
 	// ループ内の A 常駐 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md)

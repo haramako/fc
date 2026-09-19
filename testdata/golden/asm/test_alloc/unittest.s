@@ -6,11 +6,16 @@ __MODULE_UNITTEST__ = 1
 .segment "unittest"
 	.include "_stdio.inc"
 	.export _unittest_assert_true
+	.export _unittest_assert_true__frame
 	;;;=============================
 	;;; function _unittest_assert_true
 	;;;=============================
 .segment "unittest"
+.proc _unittest_assert_true__frame
+	ldy <F_unittest_assert_true+0
+	.endproc
 .proc _unittest_assert_true
+	sty <F_unittest_assert_true+0
 	lda 0+<F_unittest_assert_true+0
 	bne @else_2
 	lda #.LOBYTE(_6)

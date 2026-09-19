@@ -254,8 +254,11 @@ type Lambda struct {
 	// レジスタ渡し (static だけ。doc/v2_frame_alloc.md §7): RegArg は最後の引数 (1 バイト) を A で受け取る (呼び出し側が
 	// A に置いて `sym` / `sym__direct` から入り、入口の `sta` でフレームに写す。フレームに書いた呼び出し (far call、
 	// 引数と call の間に他の命令がある) は `sta` の後ろの `sym__frame` から入る)。RegResult は 1 バイトの戻り値を
-	// フレームに書いたうえで A にも置いて返す (呼び出し側はフレームを読まない)
+	// フレームに書いたうえで A にも置いて返す (呼び出し側はフレームを読まない)。RegArgY は最後から 2 つ目の引数 (1 バイト) を
+	// Y で受け取る (入口の `sty`。A と両方あるときの入口は `sty; sym__a: sta; sym__frame:` の順で、呼び出し側は
+	// レジスタに置けた引数に応じて入る場所を選ぶ)
 	RegArg    bool
+	RegArgY   bool
 	RegResult bool
 }
 

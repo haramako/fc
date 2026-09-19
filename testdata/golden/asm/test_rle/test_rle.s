@@ -82,7 +82,7 @@ _test_rle_dest: .res 128
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_13)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	ldx FC_SP
 	lda #.LOBYTE(_test_rle_dest)
 	sta <S+2,x
@@ -141,7 +141,7 @@ _test_rle_dest: .res 128
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_25)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	rts
 _5:
 		.byte 108,101,110,0

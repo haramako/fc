@@ -377,9 +377,14 @@ func needsY(op *ir.Op, vY *ir.Value) bool {
 		return true
 	case ir.OpIndexPget, ir.OpIndexPset:
 		return !isV(op.In(1), vY) || !byteIndex(op)
+	case ir.OpPushArg, ir.OpPushFastcallArg:
+		return op.ArgY || op.HoldY // 呼び先の Y 渡しの引数を Y に読む / 保持中 (codegen.markArgY)
+	case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpRolC, ir.OpRorC,
+		ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot:
+		return op.HoldY
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		_, lit := ir.ValIntLiteral(op.Src[1])
-		return !lit
+		return !lit || op.HoldY
 	}
 	return false
 }

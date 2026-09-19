@@ -191,6 +191,13 @@ go test ./...                                    # 全部 (golden + examples + N
   `mod` / `sub`）まで消していた。梯子・敵との当たり・セーブポイントが「たまに効かない」という形で実プロジェクトの
   プレイで発覚（単体テストは引数が変数か定数だけだった）。今は push_arg をその場で引数への代入に置き換え、間の命令は
   残す（`TestInlineFunction` の e / f が番）
+- **Y での引数渡し**（2026-09-20、v2_frame_alloc.md §7.1）: 最後から 2 つ目の 1 バイト引数は Y。呼び出し側は
+  `push_arg` から `call` までの間の命令が Y を使わないときだけ（`codegen.markArgY` → `ArgY` / `HoldY`）。**ハマった点**:
+  (1) 最初は `push_arg` / `call` だけ見ていて、castle の hot な関数（`fastcall: true` = `push_fastcall_arg` / `fastcall`）が
+  全部 `__a` の入口に落ちて +0.8% 退行した。(2) `push_arg` を間の命令の下に沈める案は A の連鎖（演算の結果を A のまま
+  渡す）を壊して損。(3) 常駐の復帰（`ldy home` / `lda home`）が引数を置いた `push_arg` の直後に出ると引数が消える:
+  保持中は退避も復帰もしない（A 渡しにも潜在していた）。効果の測り方は castle のフレーム（`go test ./internal/nes -run
+  CastleFrame -v`）が一番敏感で、bench は calls 以外ほぼ動かない
 - **自動インライン**（2026-09-20）: 印が無くても小さい関数（12 命令以下、ループ・呼び出し・asm・`&f`・配列 / struct の
   ローカル無し）は同じ仕組みで展開する（6 命令以下は無条件、それより大きいものは呼び出し 2 か所まで。`opt.autoInlinable`）。
   **テストで「この関数が出力される」ことを見るときは `options(noinline: true)` を付ける**（`TestUnusedFunctions` /

@@ -55,10 +55,11 @@ _math_rand_table:
 	;;; function _math_sin
 	;;;=============================
 .segment "math"
+.proc _math_sin__frame
+	lda <F_math_sin+1
+	.endproc
 .proc _math_sin
 	sta <F_math_sin+1
-	.endproc
-.proc _math_sin__frame
 	lda 0+<F_math_sin+1
 	bmi @else_5
 	sec

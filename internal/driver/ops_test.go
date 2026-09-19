@@ -1601,3 +1601,43 @@ function main():void
 		t.Errorf("収まらない値がエラーにならない: %q", got)
 	}
 }
+
+// TestRegArgY: static 関数の最後から 2 つ目の 1 バイト引数は Y で渡す (doc/v2_frame_alloc.md §7)。呼び出し側は
+// 「push_arg の間の命令が Y を使わない」ときだけ Y に置き (演算は可、添字・入れ子の呼び出しは不可 → `__a` から入る)、
+// 呼び先は `sty` で写す。関数ポインタ経由 (Entry) はスタックから `ldy` して `__direct` へ。最後の引数が 2 バイトなら Y だけ。
+func TestRegArgY(t *testing.T) {
+	t.Parallel()
+	src := `var g:int;
+var tab:[8]int;
+function f(a:int, b:int, c:int):int options(noinline: true) { return tab[b] + a + c; }
+function h(a:int16, b:int, c:int16):int16 options(noinline: true) { return a + (b as int16) + c; }
+function k(b:int):int options(noinline: true) { return b + 1; }
+function main():void
+{
+	var s:int = 0;
+	var i:int;
+	var p:fn(int, int, int):int = f;
+	for (i = 0; i < 8; i++) {
+		tab[i] = i * 3;
+	}
+	for (i = 0; i < 8; i++) {
+		s += f(1, i, tab[i]);
+		s += f(2, i, i & 3);
+		s += f(3, i, k(i));
+		s += f(tab[i], i, 4);
+		g = i;
+		s += f(5, g, g ^ 1);
+		s += (h(100, i, 1000) & 0xff) as int;
+		s += p(6, i, 2);
+	}
+	printf(s, " ", g, "\n");
+	exit(0);
+}
+`
+	// 1 周: (6i+1) + (3i+2+(i&3)) + (4i+4) + (6i+4) + (3i+5+(i^1)) + (76+i) + (3i+8) → 合計 1568 → 8 ビットで 32
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "32 7\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

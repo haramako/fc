@@ -150,12 +150,12 @@ type SizeEntry struct {
 
 // Sizes は ROM に置かれるセグメントのラベルを、次のラベルまで (最後は セグメントの末尾まで) の大きさで数える。
 // fc の関数はモジュール名のセグメントに `_mod_name:` で並ぶので、関数 + その後ろの定数表が 1 つの大きさになる
-// (ラベルの無い定数表は直前の関数に含まれる)。`@` のローカルラベルと `__direct` / `__frame` (関数の途中の入口) は飛ばす。
+// (ラベルの無い定数表は直前の関数に含まれる)。`@` のローカルラベルと `__direct` / `__a` / `__frame` (関数の途中の入口) は飛ばす。
 func (d *DbgFile) Sizes() []SizeEntry {
 	bySeg := map[int][]DbgSymbol{}
 	for _, s := range d.Symbols {
 		seg := d.Segments[s.Seg]
-		if !s.Lab || seg == nil || seg.Ooffs < 0 || !isMlbLabel(s.Name) || strings.HasSuffix(s.Name, "__direct") || strings.HasSuffix(s.Name, "__frame") {
+		if !s.Lab || seg == nil || seg.Ooffs < 0 || !isMlbLabel(s.Name) || strings.HasSuffix(s.Name, "__direct") || strings.HasSuffix(s.Name, "__frame") || strings.HasSuffix(s.Name, "__a") {
 			continue
 		}
 		bySeg[s.Seg] = append(bySeg[s.Seg], s)

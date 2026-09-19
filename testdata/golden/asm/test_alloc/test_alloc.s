@@ -40,21 +40,21 @@ __MODULE_TEST_ALLOC__ = 1
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_14)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_20)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_20)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_26)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_26)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	rts
 _4:
 		.byte 97,100,100,47,115,117,98,0

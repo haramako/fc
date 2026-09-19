@@ -238,7 +238,7 @@ _32:
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_58)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	rts
 _40:
 		.byte 108,111,111,112,32,98,114,101,97,107,0

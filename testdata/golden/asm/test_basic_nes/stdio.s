@@ -25,10 +25,11 @@ _stdio_print_addr: .res 2
 	;;; function _stdio_exit
 	;;;=============================
 .segment "stdio"
+.proc _stdio_exit__frame
+	lda <F_stdio_exit+0
+	.endproc
 .proc _stdio_exit
 	sta <F_stdio_exit+0
-	.endproc
-.proc _stdio_exit__frame
 	ldx FC_SP
 	lda #.LOBYTE(_6)
 	sta <S+0,x

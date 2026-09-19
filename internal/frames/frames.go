@@ -280,6 +280,9 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 				if np := len(lmd.Type.Params); np > 0 && lmd.Type.Params[np-1].Size == 1 {
 					lmd.RegArg = true
 				}
+				if np := len(lmd.Type.Params); np > 1 && lmd.Type.Params[np-2].Size == 1 {
+					lmd.RegArgY = true
+				}
 				if lmd.Type.Base.Size == 1 {
 					lmd.RegResult = true
 				}

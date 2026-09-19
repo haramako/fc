@@ -18,12 +18,12 @@ _test_var_CONST:
 	;;; function _test_var_$2
 	;;;=============================
 .segment "test_var"
+.proc _test_var__D2__frame
+	lda <F_test_var__D2+1
+	.endproc
 .proc _test_var__D2
 	sta <F_test_var__D2+1
-	.endproc
-.proc _test_var__D2__frame
 	clc
-	lda 0+<F_test_var__D2+1
 	adc #2
 	sta 0+<F_test_var__D2+0
 	rts
@@ -273,14 +273,15 @@ _72:
 	;;; function _test_var_add1
 	;;;=============================
 .segment "test_var"
+.proc _test_var_add1__frame
+	lda <F_test_var_add1+1
+	.endproc
+	jmp _test_var_add1__direct
 _test_var_add1:
 	lda <S+1,x
 .proc _test_var_add1__direct
 	sta <F_test_var_add1+1
-	.endproc
-.proc _test_var_add1__frame
 	clc
-	lda 0+<F_test_var_add1+1
 	adc #1
 	sta 0+<F_test_var_add1+0
 	ldx FC_SP
@@ -295,13 +296,14 @@ _test_var_add1:
 	;;; function _test_var_mul2
 	;;;=============================
 .segment "test_var"
+.proc _test_var_mul2__frame
+	lda <F_test_var_mul2+1
+	.endproc
+	jmp _test_var_mul2__direct
 _test_var_mul2:
 	lda <S+1,x
 .proc _test_var_mul2__direct
 	sta <F_test_var_mul2+1
-	.endproc
-.proc _test_var_mul2__frame
-	lda 0+<F_test_var_mul2+1
 	asl a
 	sta 0+<F_test_var_mul2+0
 	ldx FC_SP

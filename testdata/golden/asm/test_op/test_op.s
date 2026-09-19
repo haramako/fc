@@ -43,70 +43,70 @@ __MODULE_TEST_OP__ = 1
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_8)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_11)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_11)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_14)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_14)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_17)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_17)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_20)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_20)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_23)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_23)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_26)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_26)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_29)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_29)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_32)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_32)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_35)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_35)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	rts
 _2:
 		.byte 110,117,109,0
@@ -298,70 +298,70 @@ _35:
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_90)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_95)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_95)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_99)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_99)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_104)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_104)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_109)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_109)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_115)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_115)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_120)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_120)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_126)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_126)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_130)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_130)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_135)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_135)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #160
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -696,105 +696,105 @@ _157:
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_236)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_240)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_240)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_244)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_244)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_248)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_248)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_253)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_253)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_257)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_257)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_262)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_262)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_266)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_266)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_271)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_271)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_276)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_276)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_282)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_282)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_287)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_287)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_293)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_293)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_297)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_297)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_302)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_302)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #96
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -979,70 +979,70 @@ _317:
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_340)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_345)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_345)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_349)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_349)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_354)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_354)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_359)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_359)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_365)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_365)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_370)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_370)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_376)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_376)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_380)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_380)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_385)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_385)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #160
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -1158,70 +1158,70 @@ _397:
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_407)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_412)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_412)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_416)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_416)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_421)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_421)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_426)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_426)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_432)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_432)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_437)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_437)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_443)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_443)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_447)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_447)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_452)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_452)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	rts
 _400:
 		.byte 110,117,109,0
@@ -1260,56 +1260,56 @@ _452:
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_457)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_463)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_463)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_469)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_469)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_475)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_475)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_481)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_481)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_487)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_487)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_493)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_493)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	lda #1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_500)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_500)
 	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
+	jsr _unittest_assert_true__frame
 	rts
 _457:
 		.byte 84,38,38,84,0

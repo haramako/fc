@@ -37,14 +37,136 @@ type pendingCall struct {
 	callOp *ir.Op // 対応する call
 	far    bool   // far call (トランポリンが A を壊すのでレジスタ渡しは使えない)
 	inA    bool   // ckStatic: 最後の引数を A に置いた (フレームには書いていない)
+	inY    bool   // ckStatic: 最後から 2 つ目の引数を Y に置いた (push_arg の ArgY)
 }
 
 // directSym は Entry 関数をプロローグ (スタックからの引数コピー) を飛ばして直接呼ぶときの入口シンボル
-// (RegArg なら最後の引数を A に置いて入る)。
+// (RegArg / RegArgY なら最後の引数を A / その前を Y に置いて入る)。
 func directSym(sym string) string { return sym + "__direct" }
 
-// frameSym は RegArg の関数を、最後の引数もフレームに書いてから呼ぶときの入口 (入口の `sta` の後ろ)。
+// frameSym は RegArg / RegArgY の関数を、レジスタ渡しの引数もフレームに書いてから呼ぶときの入口 (入口の `sty` / `sta` の後ろ)。
 func frameSym(sym string) string { return sym + "__frame" }
+
+// aSym は RegArg と RegArgY の両方ある関数を、Y の引数はフレームに書き、A の引数だけ A に置いて呼ぶときの入口
+// (`sty` の後ろ、`sta` の前)。
+func aSym(sym string) string { return sym + "__a" }
+
+// markArgY は lmd の呼び出しのうち、最後から 2 つ目の引数を Y で渡せるもの (push_arg の ArgY) に印を付ける
+// (最適化の後、割付の前。regalloc は印の付いた push_arg を Y を壊す命令と見て、Y の常駐をその前で書き戻す)。
+// 条件: 呼び先が分かっていて static で RegArgY、far でなく、最後の引数の push_arg の直後が call で、その 2 つの push_arg の
+// 間の命令 (最後の引数の式) が Y を使わない (最後の引数の読み出しは変数か cast か定数)。
+func markArgY(lmd *ir.Lambda, lambdas map[string]*ir.Lambda) {
+	type pending struct {
+		callOp *ir.Op
+		args   []int
+	}
+	var stack []*pending
+	ops := lmd.Ops
+	for i, op := range ops {
+		if op == nil {
+			continue
+		}
+		switch op.Code {
+		case ir.OpPushResult, ir.OpPushFastcallResult:
+			stack = append(stack, &pending{})
+		case ir.OpPushArg, ir.OpPushFastcallArg:
+			if len(stack) > 0 {
+				p := stack[len(stack)-1]
+				p.args = append(p.args, i)
+			}
+		case ir.OpCall, ir.OpFastcall:
+			if len(stack) == 0 {
+				continue
+			}
+			p := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if op.Far {
+				continue // far call はトランポリンが A / Y を壊す
+			}
+			v := ir.ValLiteral(op.Src[0])
+			if v == nil || v.Kind != ir.KindLiteral || v.Symbol == "" {
+				continue
+			}
+			callee, ok := lambdas[v.Symbol]
+			if !ok || callee.ABI != ir.ABIStatic || !callee.RegArgY {
+				continue
+			}
+			np := len(callee.Type.Params)
+			if len(p.args) != np {
+				continue
+			}
+			iy, il := p.args[np-2], p.args[np-1]
+			py, pl := ops[iy], ops[il]
+			if !isPushArg(py) || !isPushArg(pl) || nextOp(ops, il) != op {
+				continue
+			}
+			if !isValueOrCasted(py.In(0)) || !isValueOrCasted(pl.In(0)) || py.Type.Size != 1 {
+				continue
+			}
+			// 間の命令 (最後の引数の式の計算) は Y を使わないものだけ (push_arg をその下に沈めると、間の演算の結果が A に
+			// 残らなくなって (sta t; ldy; lda t) 損: oam で +0.7%)
+			ok = true
+			for j := iy + 1; j < il && ok; j++ {
+				if ops[j] != nil && !keepsY(ops[j]) {
+					ok = false
+				}
+			}
+			if !ok {
+				continue
+			}
+			py.ArgY = true
+			for j := iy + 1; j <= i; j++ {
+				if ops[j] != nil {
+					ops[j].HoldY = true
+				}
+			}
+		}
+	}
+}
+
+// keepsY は op の codegen が Y を使わないか (Y に呼び出しの引数を保持したまま実行できる。常駐変数は保持中はメモリ側で扱う
+// ので、常駐の friendly な形 (iny / cpy / lda a,y) は考えなくてよい)。分岐・ラベル・呼び出し・添字・ポインタ・乗除算・
+// 変数シフト・asm は使う。
+func keepsY(op *ir.Op) bool {
+	switch op.Code {
+	case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpRolC, ir.OpRorC,
+		ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot:
+		for _, o := range op.Src {
+			if !isValueOrCasted(o) {
+				return false
+			}
+		}
+		return true
+	case ir.OpShiftLeft, ir.OpShiftRight:
+		_, lit := ir.ValIntLiteral(op.Src[1])
+		return lit && isValueOrCasted(op.Src[0])
+	case ir.OpPushArg, ir.OpPushFastcallArg:
+		return !op.ArgY && isValueOrCasted(op.Src[0])
+	}
+	return false
+}
+
+// isPushArg は push_arg (static の呼び先なら fastcall の印の付いた関数の呼び出しも同じ形)。
+func isPushArg(op *ir.Op) bool { return op.Code == ir.OpPushArg || op.Code == ir.OpPushFastcallArg }
+
+// isCallOp は call / fastcall。
+func isCallOp(op *ir.Op) bool { return op.Code == ir.OpCall || op.Code == ir.OpFastcall }
+
+// loadY は 1 バイトの値を Y に読む (Y にある値なら何もしない。A にある値や融合した添字付きオペランドは A 経由で tay)。
+func (l *Llc) loadY(v ir.Operand) []any {
+	switch {
+	case l.inY(v):
+		return nil
+	case l.inX(v):
+		return []any{"txa", "tay"}
+	case l.inA(v) || ir.ValLocation(v) == ir.LocCond:
+		return []any{l.loadA(v, 0), "tay"}
+	}
+	if tv, ok := v.(*ir.Value); ok && l.fused != nil && l.fused[tv] != "" {
+		return []any{l.loadA(v, 0), "tay"} // `tab+0,y` は ldy では読めない
+	}
+	return []any{fmt.Sprintf("ldy %s", l.byte(v, 0))}
+}
 
 // resolveCall は push_result (添字 i) に対応する call を探して、呼び出しの種類を決める。
 func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {

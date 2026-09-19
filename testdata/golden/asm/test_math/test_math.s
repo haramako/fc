@@ -436,8 +436,7 @@ _79:
 	;;;=============================
 .segment "test_math"
 .proc _test_math_test_atan
-	lda #0
-	sta <F_math_atan+1
+	ldy #0
 	lda #1
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
@@ -452,8 +451,8 @@ _79:
 	lda #.HIBYTE(_83)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldy #1
 	lda #1
-	sta <F_math_atan+1
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
 	lda 0+<F_test_math_test_atan+0
@@ -469,8 +468,7 @@ _79:
 	lda #.HIBYTE(_87)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #1
-	sta <F_math_atan+1
+	ldy #1
 	lda #0
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
@@ -487,8 +485,7 @@ _79:
 	lda #.HIBYTE(_91)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #1
-	sta <F_math_atan+1
+	ldy #1
 	lda #255
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
@@ -505,8 +502,7 @@ _79:
 	lda #.HIBYTE(_95)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #0
-	sta <F_math_atan+1
+	ldy #0
 	lda #255
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
@@ -523,8 +519,8 @@ _79:
 	lda #.HIBYTE(_99)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
+	ldy #255
 	lda #255
-	sta <F_math_atan+1
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
 	lda 0+<F_test_math_test_atan+0
@@ -540,8 +536,7 @@ _79:
 	lda #.HIBYTE(_103)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #255
-	sta <F_math_atan+1
+	ldy #255
 	lda #0
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
@@ -558,8 +553,7 @@ _79:
 	lda #.HIBYTE(_107)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #255
-	sta <F_math_atan+1
+	ldy #255
 	lda #1
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
