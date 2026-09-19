@@ -1,6 +1,9 @@
 package opt
 
-import "github.com/haramako/fc/internal/ir"
+import (
+	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/types"
+)
 
 // coalesceCopies は一時変数を経由するコピーを消す:
 //
@@ -49,7 +52,7 @@ func coalesceCopies(lmd *ir.Lambda) {
 		if u, single := ud.SingleUse(t); !single || u != i+1 || next.Src[0] != ir.Operand(t) {
 			continue
 		}
-		if ir.ValType(x) != t.Type || !ir.ValAssignable(x) {
+		if !sameBits(op.Code, ir.ValType(x), t.Type) || !ir.ValAssignable(x) {
 			continue
 		}
 		// x が変数の一部 (CastedValue) なら、書き込み先として codegen が扱える単純な形に限る
@@ -63,6 +66,18 @@ func coalesceCopies(lmd *ir.Lambda) {
 			ops[i+1] = nil
 		}
 	}
+}
+
+// sameBits は op の結果を型 want の変数に直接書いてよいか: 同じ型か、同じサイズの整数で op の結果が Dst の符号に
+// よらないもの (`var dir:sint8 = p1[i]` (uint8 の配列) の load を消す)。div / mod は Dst の符号で __div_8s などを選ぶので不可。
+func sameBits(code ir.OpCode, want, have *types.Type) bool {
+	if want == have {
+		return true
+	}
+	if want.Size != have.Size || !isIntLike(want) || !isIntLike(have) || code == ir.OpDiv || code == ir.OpMod {
+		return false
+	}
+	return true
 }
 
 // chainInPlace は `x = (x op1 a) op2 b` の中間の一時変数を x 自身にする:

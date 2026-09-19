@@ -65,6 +65,9 @@ func propagateSSA(lmd *ir.Lambda) {
 			return
 		}
 		changed := s.rewrite()
+		if s.simplify() {
+			changed = true
+		}
 		compact(lmd)
 		s = buildSSA(lmd)
 		if s == nil {
@@ -639,6 +642,99 @@ func rebase(o ir.Operand, y *ir.Value) ir.Operand {
 		return ir.NewCastedValue(rebase(cv.From, y), cv.Type, cv.Offset)
 	}
 	return y
+}
+
+// simplify は演算の連鎖の代数的な簡約 (符号なしの整数だけ):
+//
+//	mul d = (div y, 2^k), 2^k   → and d = y, ~(2^k-1)   (`y / 16 * 16`。castle の bg.cell_type / my.get_cell)
+//	and d = (and y, m2), m      → and d = y, m & m2
+//	or  d = (or y, m2), m       → or  d = y, m | m2
+//	shift d = (shift y, j), k   → shift d = y, j + k   (同じ向き)
+//
+// 中間の版 x の定義から y を取るので、使用位置でも y が同じ版でなければならない (valueAt)。x は他で使われていれば残る。
+func (s *ssaForm) simplify() bool {
+	changed := false
+	for i, op := range s.lmd.Ops {
+		if op == nil || s.blockOf[i] == nil || s.defAt[i] == nil || len(op.Src) != 2 {
+			continue
+		}
+		dt := ir.ValType(op.Dst)
+		if !isIntLike(dt) || dt.Signed {
+			continue
+		}
+		// 第 1 入力の版の定義 (演算)。mul は可換なので定数を第 2 入力に寄せる
+		if op.Code == ir.OpMul {
+			if _, lit := ir.ValIntLiteral(op.Src[0]); lit {
+				op.Src[0], op.Src[1] = op.Src[1], op.Src[0]
+				if len(s.useAt[i]) == 2 {
+					s.useAt[i][0], s.useAt[i][1] = s.useAt[i][1], s.useAt[i][0]
+				}
+			}
+		}
+		m, ok := ir.ValIntLiteral(op.Src[1])
+		if !ok {
+			continue
+		}
+		us := s.useAt[i]
+		if len(us) == 0 || us[0] == nil {
+			continue
+		}
+		x := resolve(us[0])
+		if x.def < 0 {
+			continue
+		}
+		def := s.lmd.Ops[x.def]
+		if len(def.Src) != 2 || ir.ValType(def.Dst) != ir.ValType(op.Src[0]) || ir.ValType(def.Dst).Signed {
+			continue
+		}
+		m2, ok := ir.ValIntLiteral(def.Src[1])
+		if !ok {
+			continue
+		}
+		y := s.sameOperandAt(x.def, 0, i)
+		if y == nil || ir.ValType(y) != ir.ValType(def.Src[0]) || ir.ValType(y).Size != dt.Size || ir.ValType(y).Signed {
+			continue
+		}
+		bits := 8 * dt.Size
+		var code ir.OpCode
+		var k int
+		switch {
+		case op.Code == ir.OpMul && def.Code == ir.OpDiv && m == m2 && m > 0 && m&(m-1) == 0:
+			code, k = ir.OpAnd, bitsOf(^(m-1), dt.Size)
+		case op.Code == ir.OpAnd && def.Code == ir.OpAnd:
+			code, k = ir.OpAnd, bitsOf(m&m2, dt.Size)
+		case op.Code == ir.OpOr && def.Code == ir.OpOr:
+			code, k = ir.OpOr, bitsOf(m|m2, dt.Size)
+		case (op.Code == ir.OpShiftLeft || op.Code == ir.OpShiftRight) && def.Code == op.Code && m >= 0 && m2 >= 0 && m+m2 < bits:
+			code, k = op.Code, m+m2
+		default:
+			continue
+		}
+		s.lmd.Ops[i] = &ir.Op{Code: code, Dst: op.Dst, Src: []ir.Operand{y, ir.NewIntLiteral("", ir.ValType(op.Src[1]), k)}, Pos: op.Pos}
+		changed = true
+	}
+	return changed
+}
+
+// sameOperandAt は命令 def の入力 k が、命令 i の位置でも同じ値として読めるならその入力を返す
+// (リテラル、または同じ版のローカル変数。グローバルは間で書き換わりうるので不可)。
+func (s *ssaForm) sameOperandAt(def, k, i int) ir.Operand {
+	o := s.lmd.Ops[def].Src[k]
+	if _, lit := ir.ValIntLiteral(o); lit {
+		return o
+	}
+	us := s.useAt[def]
+	if k >= len(us) || us[k] == nil {
+		return nil
+	}
+	v := ir.UnderlyingValue(o)
+	if resolve(us[k]) != s.valueAt(v, i) {
+		return nil
+	}
+	if op := s.lmd.Ops[i]; op.Dst != nil && ir.UnderlyingValue(op.Dst) == v && !readsBeforeWrite(op.Code) {
+		return nil
+	}
+	return o
 }
 
 // eliminateDead は使われない版の定義 (副作用の無い命令) を消す。

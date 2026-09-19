@@ -282,6 +282,10 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 		regalloc.AllocateResident(lmd)
 	}
 	l.allocRegister(lmd)
+	if os.Getenv("FC_DUMP_IR") != "" {
+		// 調査用: 最適化と割付の後の IR を stderr に出す (golden の allocir と同じ形式)
+		fmt.Fprint(os.Stderr, ir.DumpAllocLambda(lmd.Module.Id, lmd.Id, lmd))
+	}
 }
 
 // PrepareProgram はコード生成の前にプログラム全体で 1 回行う処理 (doc/v2_frame_alloc.md §6-4):

@@ -177,6 +177,35 @@ func TestSSAFoldBranch(t *testing.T) {
 	)
 }
 
+// 代数の簡約: `y / 16 * 16` → `y & 0xf0`、and の連鎖、シフトの連鎖。中間の版が他でも使われていれば残る
+func TestSSASimplify(t *testing.T) {
+	y, t1, t2, t3, t4, t5 := local("y", u8()), tmp("t1", u8()), tmp("t2", u8()), tmp("t3", u8()), tmp("t4", u8()), tmp("t5", u8())
+	lmd := lambda(
+		op(ir.OpDiv, t1, y, lit(16, u8())),
+		op(ir.OpMul, t2, lit(16, u8()), t1),
+		pushArg(u8(), t2),
+		op(ir.OpAnd, t3, y, lit(0x3c, u8())),
+		op(ir.OpAnd, t4, t3, lit(0x0f, u8())),
+		pushArg(u8(), t4),
+		pushArg(u8(), t3),
+		op(ir.OpShiftRight, t5, t1, lit(2, u8())),
+		pushArg(u8(), t5),
+	)
+	lmd.Args = []*ir.Value{y}
+	propagateSSA(lmd)
+	check(t, lmd,
+		"div t1 = y, #16",
+		"and t2 = y, #240",
+		"push_arg nil = t2",
+		"and t3 = y, #60",
+		"and t4 = y, #12",
+		"push_arg nil = t4",
+		"push_arg nil = t3",
+		"shift_right t5 = t1, #2",
+		"push_arg nil = t5",
+	)
+}
+
 // アドレスを取られた変数・一部だけ書かれる変数は対象外
 func TestSSAExcluded(t *testing.T) {
 	x, w, p, tv := local("x", u8()), local("w", u16()), local("p", tu.PointerTo(u8())), tmp("t", u8())
