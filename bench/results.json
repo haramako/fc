@@ -5,18 +5,18 @@
     "out": "sum=47712"
   },
   "calls": {
-    "cycles": 216093,
-    "size": 472,
+    "cycles": 208334,
+    "size": 466,
     "out": "sum=663"
   },
   "crc16": {
     "cycles": 1672526,
-    "size": 400,
+    "size": 402,
     "out": "crc16=16501"
   },
   "crc8": {
     "cycles": 819598,
-    "size": 276,
+    "size": 278,
     "out": "crc8=149"
   },
   "entities": {
@@ -31,17 +31,17 @@
   },
   "linkedlist": {
     "cycles": 326326,
-    "size": 518,
+    "size": 522,
     "out": "sum=18392"
   },
   "math16": {
-    "cycles": 2689037,
-    "size": 942,
+    "cycles": 2541817,
+    "size": 1083,
     "out": "sum=8921"
   },
   "oam": {
     "cycles": 2129088,
-    "size": 1054,
+    "size": 1055,
     "out": "sum=25008"
   },
   "plasma": {
@@ -55,8 +55,8 @@
     "out": "count=1900"
   },
   "textprint": {
-    "cycles": 4465525,
-    "size": 659,
+    "cycles": 4380325,
+    "size": 702,
     "out": "sum=9948"
   }
 }

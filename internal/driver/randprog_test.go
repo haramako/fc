@@ -34,11 +34,20 @@ type rpType struct {
 
 var rpTypes = []rpType{{"int", 1, false}, {"sint", 1, true}, {"int16", 2, false}, {"sint16", 2, true}}
 
-// rpVar は見えている変数 (グローバル、引数、ローカル)。
+// rpVar は見えている変数 (グローバル、引数、ローカル)。ポインタ (ptr) は 16 要素の配列の中を指し、typ は要素の型。
+// fresh なポインタは添字 0〜7 を指していて `p[e & 7]` で読み書きできる。ループでずらしている間は `*p` だけ。
 type rpVar struct {
 	name     string
 	typ      rpType
-	readOnly bool // ループ変数 (本体で書き換えると回数が保証できない)
+	readOnly bool // ループ変数 (本体で書き換えると回数が保証できない)、ループでずらしているポインタ
+	ptr      bool
+	fresh    bool
+}
+
+// rpField は struct のフィールド。
+type rpField struct {
+	name string
+	typ  rpType
 }
 
 // rpFunc は生成した関数。
@@ -76,12 +85,64 @@ func (s *rpStmt) render(b *strings.Builder) {
 type rpGen struct {
 	r       *rand.Rand
 	globals []rpVar
-	arrays  []rpVar // 要素型
+	arrays  []rpVar // グローバル配列 (16 要素。要素型)
+	larrays []rpVar // 今の関数のローカル配列 (16 要素)
+	fields  []rpField
+	sptr    string // 今の関数の struct へのポインタ (`ps`。"" なら無し)
 	funcs   []*rpFunc
-	scope   []rpVar // 今の関数で見えるローカル (引数含む)
+	scope   []rpVar // 今の関数で見えるローカル (引数含む。ポインタも)
 	loops   int     // ループの入れ子の深さ (break / continue を出せるか)
 	nLocal  int
 	cur     *rpFunc
+}
+
+// arraysAll は見えている配列 (グローバル + 今の関数のローカル)。
+func (g *rpGen) arraysAll() []rpVar { return append(append([]rpVar{}, g.arrays...), g.larrays...) }
+
+// ptrs は見えているポインタ変数。
+func (g *rpGen) ptrs() []rpVar {
+	var r []rpVar
+	for _, v := range g.scope {
+		if v.ptr {
+			r = append(r, v)
+		}
+	}
+	return r
+}
+
+// scalars は見えている整数の変数。
+func (g *rpGen) scalars() []rpVar {
+	var r []rpVar
+	for _, v := range g.vars() {
+		if !v.ptr {
+			r = append(r, v)
+		}
+	}
+	return r
+}
+
+// setPtr はスコープのポインタ変数の状態を変える。
+func (g *rpGen) setPtr(name string, readOnly, fresh bool) {
+	for i := range g.scope {
+		if g.scope[i].name == name {
+			g.scope[i].readOnly, g.scope[i].fresh = readOnly, fresh
+		}
+	}
+}
+
+// arrayRef は配列の要素へのポインタ `&a[e & 7]` (添字は 0〜7)。
+func (g *rpGen) arrayRef(a rpVar) string { return fmt.Sprintf("&%s[%s]", a.name, g.index()) }
+
+// fieldRef は struct のフィールドの参照 (グローバルの s0、配列 sa の要素、ポインタ ps 経由)。
+func (g *rpGen) fieldRef() (string, rpType) {
+	f := g.fields[g.pick(len(g.fields))]
+	switch {
+	case g.sptr != "" && g.chance(0.4):
+		return fmt.Sprintf("%s.%s", g.sptr, f.name), f.typ
+	case g.chance(0.5):
+		return fmt.Sprintf("sa[(%s & 3)].%s", g.expr(rpTypes[0], 1), f.name), f.typ
+	}
+	return "s0." + f.name, f.typ
 }
 
 func (g *rpGen) pick(n int) int        { return g.r.Intn(n) }
@@ -173,16 +234,31 @@ func (g *rpGen) expr(t rpType, depth int) string {
 		// 呼び出し (前に作った関数だけ。再帰なし)
 		if n := g.callable(); n > 0 {
 			f := g.funcs[g.pick(n)]
-			args := make([]string, len(f.params))
-			for i, p := range f.params {
-				args[i] = g.expr(p.typ, depth-1)
-			}
-			return cast(fmt.Sprintf("%s(%s)", f.name, strings.Join(args, ", ")), f.ret, t)
+			return cast(fmt.Sprintf("%s(%s)", f.name, g.args(f, depth-1)), f.ret, t)
 		}
 		return g.leaf(t)
 	default:
 		return g.leaf(t)
 	}
+}
+
+// args は呼び出しの実引数 (ポインタの引数には同じ要素型の配列の要素へのポインタ)。
+func (g *rpGen) args(f *rpFunc, depth int) string {
+	args := make([]string, len(f.params))
+	for i, p := range f.params {
+		if p.ptr {
+			var as []rpVar
+			for _, a := range g.arraysAll() {
+				if a.typ == p.typ {
+					as = append(as, a)
+				}
+			}
+			args[i] = g.arrayRef(as[g.pick(len(as))]) // genProgram が全ての型のグローバル配列を作るので必ずある
+		} else {
+			args[i] = g.expr(p.typ, depth)
+		}
+	}
+	return strings.Join(args, ", ")
 }
 
 // callable は今の関数から呼べる関数の数 (自分より前に定義したもの)。
@@ -200,16 +276,31 @@ func (g *rpGen) callable() int {
 	return n
 }
 
-// leaf は変数・配列の要素・リテラル。
+// leaf は変数・配列の要素・ポインタ経由・struct のフィールド・リテラル。
 func (g *rpGen) leaf(t rpType) string {
-	vs := g.vars()
-	switch g.pick(4) {
+	vs := g.scalars()
+	switch g.pick(6) {
 	case 0:
 		return g.lit(t)
 	case 1:
-		if len(g.arrays) > 0 {
-			a := g.arrays[g.pick(len(g.arrays))]
+		if as := g.arraysAll(); len(as) > 0 {
+			a := as[g.pick(len(as))]
 			return cast(fmt.Sprintf("%s[%s]", a.name, g.index()), a.typ, t)
+		}
+		fallthrough
+	case 2:
+		if ps := g.ptrs(); len(ps) > 0 {
+			p := ps[g.pick(len(ps))]
+			if p.fresh && g.chance(0.4) {
+				return cast(fmt.Sprintf("%s[%s]", p.name, g.index()), p.typ, t)
+			}
+			return cast("(*"+p.name+")", p.typ, t)
+		}
+		fallthrough
+	case 3:
+		if len(g.fields) > 0 {
+			e, ft := g.fieldRef()
+			return cast(e, ft, t)
 		}
 		fallthrough
 	default:
@@ -236,14 +327,29 @@ func (g *rpGen) index() string {
 	return fmt.Sprintf("(%s & 7)", g.expr(rpTypes[0], 1))
 }
 
-// lvalue は代入先 (変数か配列の要素) とその型。
+// lvalue は代入先 (変数、配列の要素、ポインタ経由、struct のフィールド) とその型。
 func (g *rpGen) lvalue() (string, rpType) {
-	if len(g.arrays) > 0 && g.chance(0.3) {
-		a := g.arrays[g.pick(len(g.arrays))]
-		return fmt.Sprintf("%s[%s]", a.name, g.index()), a.typ
+	switch g.pick(10) {
+	case 0, 1, 2:
+		if as := g.arraysAll(); len(as) > 0 {
+			a := as[g.pick(len(as))]
+			return fmt.Sprintf("%s[%s]", a.name, g.index()), a.typ
+		}
+	case 3, 4:
+		if ps := g.ptrs(); len(ps) > 0 {
+			p := ps[g.pick(len(ps))]
+			if p.fresh && g.chance(0.4) {
+				return fmt.Sprintf("%s[%s]", p.name, g.index()), p.typ
+			}
+			return "(*" + p.name + ")", p.typ
+		}
+	case 5:
+		if len(g.fields) > 0 {
+			return g.fieldRef()
+		}
 	}
 	var vs []rpVar
-	for _, v := range g.vars() {
+	for _, v := range g.scalars() {
 		if !v.readOnly {
 			vs = append(vs, v)
 		}
@@ -252,13 +358,111 @@ func (g *rpGen) lvalue() (string, rpType) {
 	return v.name, v.typ
 }
 
+// ptrLoop はポインタをずらしながら回るループ (誘導変数の統合・展開の対象になる形)。ポインタは 16 要素の配列の
+// 添字 j0 (0〜3) から始めて、本体の前で進める (最大の添字は 14) ので範囲を出ない。本体の間はそのポインタを `*p` でしか
+// 触らず、終わったら先頭に戻す (fresh に)。
+func (g *rpGen) ptrLoop(depth int) *rpStmt {
+	var ps []rpVar
+	for _, p := range g.ptrs() {
+		if !p.readOnly {
+			ps = append(ps, p)
+		}
+	}
+	if len(ps) == 0 {
+		lv, t := g.lvalue()
+		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
+	}
+	p := ps[g.pick(len(ps))]
+	var arr rpVar
+	for _, a := range g.arraysAll() {
+		if a.typ == p.typ {
+			arr = a
+		}
+	}
+	if arr.name == "" {
+		return rpSimple(fmt.Sprintf("%s = %s;", p.name, p.name))
+	}
+	j0 := g.pick(4)
+	g.setPtr(p.name, true, false)
+	g.loops++
+	var head, tail string
+	if g.chance(0.5) {
+		// for: p += 1 を毎周
+		i := g.newLocal(rpTypes[g.pick(2)])
+		g.scope[len(g.scope)-1].readOnly = true
+		n := g.pick(8) + 1
+		body := g.block(depth - 1)
+		g.scope = g.scope[:len(g.scope)-1]
+		g.loops--
+		g.setPtr(p.name, false, true)
+		// 歩幅の加算は本体の前 (本体の continue で飛ばされないように。添字は j0 + n ≤ 11)
+		head = fmt.Sprintf("%s = &%s[%d];\nfor (var %s:%s = 0; %s < %d; %s++) {\n%s += 1;\n", p.name, arr.name, j0, i.name, i.typ.name, i.name, n, i.name, p.name)
+		tail = fmt.Sprintf("}\n%s = &%s[0];", p.name, arr.name)
+		return &rpStmt{parts: []string{head, tail}, kids: [][]*rpStmt{body}}
+	}
+	// while: カウンタ k とポインタ q を同じ歩幅で
+	k := g.newLocal(rpTypes[g.pick(2)*2]) // int か int16
+	g.scope = g.scope[:len(g.scope)-1]
+	g.cur.locals = append(g.cur.locals, fmt.Sprintf("var %s:%s = 0;", k.name, k.typ.name))
+	step := fmt.Sprintf("%d", g.pick(3)+1)
+	if g.chance(0.4) {
+		sv := g.newLocal(rpTypes[0])
+		g.scope = g.scope[:len(g.scope)-1]
+		g.cur.locals = append(g.cur.locals, fmt.Sprintf("var %s:int = 1;", sv.name))
+		head = fmt.Sprintf("%s = ((%s & 3) | 1);\n", sv.name, g.expr(rpTypes[0], 2))
+		step = sv.name
+	}
+	n := g.pick(9) + 4 // 4〜12
+	body := g.block(depth - 1)
+	g.loops--
+	g.setPtr(p.name, false, true)
+	// 歩幅の加算は本体の前 (continue で飛ばされないように。添字は n - 1 + 3 ≤ 14)
+	head += fmt.Sprintf("%s = %d;\n%s = &%s[%d];\nwhile (%s < %d) {\n%s += %s;\n%s += %s;\n", k.name, j0, p.name, arr.name, j0, k.name, n, p.name, step, k.name, step)
+	tail = fmt.Sprintf("}\n%s = &%s[0];", p.name, arr.name)
+	return &rpStmt{parts: []string{head, tail}, kids: [][]*rpStmt{body}}
+}
+
 // stmt は文 1 つ (複数行のこともある)。depth はブロックの入れ子の残り。
 func (g *rpGen) stmt(depth int) *rpStmt {
-	k := g.pick(14)
+	k := g.pick(17)
 	if depth <= 0 && k >= 7 {
 		k = g.pick(7)
 	}
 	switch k {
+	case 14:
+		// ポインタを配列の要素に向け直す (添字 0〜7 → fresh)、または struct のポインタを向け直す
+		if ps := g.ptrs(); len(ps) > 0 && g.chance(0.7) {
+			p := ps[g.pick(len(ps))]
+			if !p.readOnly {
+				var as []rpVar
+				for _, a := range g.arraysAll() {
+					if a.typ == p.typ {
+						as = append(as, a)
+					}
+				}
+				if len(as) > 0 {
+					g.setPtr(p.name, false, true)
+					return rpSimple(fmt.Sprintf("%s = %s;", p.name, g.arrayRef(as[g.pick(len(as))])))
+				}
+			}
+		}
+		if g.sptr != "" {
+			return rpSimple(fmt.Sprintf("%s = &sa[(%s & 3)];", g.sptr, g.expr(rpTypes[0], 1)))
+		}
+		lv, t := g.lvalue()
+		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
+	case 15:
+		return g.ptrLoop(depth)
+	case 16:
+		// 減らしながらの for (展開の対象)
+		i := g.newLocal(rpTypes[0])
+		g.scope[len(g.scope)-1].readOnly = true
+		n := g.pick(8) + 1
+		g.loops++
+		body := g.block(depth - 1)
+		g.loops--
+		g.scope = g.scope[:len(g.scope)-1]
+		return &rpStmt{parts: []string{fmt.Sprintf("for (var %s:int = %d; %s; %s--) {\n", i.name, n, i.name, i.name), "}"}, kids: [][]*rpStmt{body}}
 	case 0, 1, 2:
 		lv, t := g.lvalue()
 		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
@@ -276,12 +480,8 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		// 呼び出しの結果を代入
 		if n := g.callable(); n > 0 {
 			f := g.funcs[g.pick(n)]
-			args := make([]string, len(f.params))
-			for i, p := range f.params {
-				args[i] = g.expr(p.typ, 2)
-			}
 			lv, t := g.lvalue()
-			return rpSimple(fmt.Sprintf("%s = %s;", lv, cast(fmt.Sprintf("%s(%s)", f.name, strings.Join(args, ", ")), f.ret, t)))
+			return rpSimple(fmt.Sprintf("%s = %s;", lv, cast(fmt.Sprintf("%s(%s)", f.name, g.args(f, 2)), f.ret, t)))
 		}
 		lv, t := g.lvalue()
 		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 2)))
@@ -407,8 +607,13 @@ func (g *rpGen) genFunc(name string) *rpFunc {
 	g.cur = f
 	g.scope = nil
 	g.nLocal = 0
+	g.larrays = nil
+	g.sptr = ""
 	for i := 0; i < g.pick(3); i++ {
 		p := rpVar{name: fmt.Sprintf("p%d", i), typ: g.typ()}
+		if g.chance(0.3) {
+			p.ptr, p.fresh = true, true // 呼ぶ側は &a[e & 7] を渡す
+		}
 		f.params = append(f.params, p)
 		g.scope = append(g.scope, p)
 	}
@@ -416,6 +621,7 @@ func (g *rpGen) genFunc(name string) *rpFunc {
 		v := g.newLocal(g.typ())
 		f.locals = append(f.locals, fmt.Sprintf("var %s:%s = %s;", v.name, v.typ.name, g.lit(v.typ)))
 	}
+	g.declareArraysAndPtrs(f)
 	depth := 2
 	if f.inline {
 		depth = 1 // inline の本体は小さめ
@@ -434,8 +640,13 @@ func (g *rpGen) genProgram() {
 	for i := 0; i < g.pick(4)+3; i++ {
 		g.globals = append(g.globals, rpVar{name: fmt.Sprintf("g%d", i), typ: g.typ()})
 	}
-	for i := 0; i < g.pick(3)+1; i++ {
-		g.arrays = append(g.arrays, rpVar{name: fmt.Sprintf("a%d", i), typ: g.typ()})
+	for i, t := range rpTypes { // 全ての型の配列を 1 つずつ (ポインタの引数の相手)
+		g.arrays = append(g.arrays, rpVar{name: fmt.Sprintf("a%d", i), typ: t})
+	}
+	if g.chance(0.7) {
+		for i := 0; i < g.pick(2)+2; i++ {
+			g.fields = append(g.fields, rpField{name: fmt.Sprintf("f%d", i), typ: g.typ()})
+		}
 	}
 	for i := 0; i < g.pick(3)+1; i++ {
 		g.genFunc(fmt.Sprintf("f%d", i))
@@ -448,18 +659,53 @@ func (g *rpGen) genProgram() {
 		m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s = %s;", v.name, g.lit(v.typ))))
 	}
 	for _, a := range g.arrays {
-		for i := 0; i < 8; i++ {
+		for i := 0; i < 16; i++ {
 			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s[%d] = %s;", a.name, i, g.lit(a.typ))))
+		}
+	}
+	for _, f := range g.fields {
+		m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("s0.%s = %s;", f.name, g.lit(f.typ))))
+		for i := 0; i < 4; i++ {
+			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("sa[%d].%s = %s;", i, f.name, g.lit(f.typ))))
 		}
 	}
 	for i := 0; i < g.pick(4); i++ {
 		v := g.newLocal(g.typ())
 		m.locals = append(m.locals, fmt.Sprintf("var %s:%s = %s;", v.name, v.typ.name, g.lit(v.typ)))
 	}
+	g.larrays = nil
+	g.sptr = ""
+	g.declareArraysAndPtrs(m)
 	for i := 0; i < g.pick(8)+4; i++ {
 		m.stmts = append(m.stmts, g.stmt(2))
 	}
 	g.funcs = append(g.funcs, m)
+}
+
+// declareArraysAndPtrs は関数のローカル配列 (16 要素。全部初期化)、配列へのポインタ、struct へのポインタを宣言する。
+func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
+	if f.inline {
+		return // inline の本体は小さく
+	}
+	if g.chance(0.4) {
+		a := rpVar{name: fmt.Sprintf("la%d", len(g.larrays)), typ: g.typ()}
+		g.larrays = append(g.larrays, a)
+		f.locals = append(f.locals, fmt.Sprintf("var %s:[16]%s;", a.name, a.typ.name))
+		for i := 0; i < 16; i++ {
+			f.stmts = append(f.stmts, rpSimple(fmt.Sprintf("%s[%d] = %s;", a.name, i, g.lit(a.typ))))
+		}
+	}
+	as := g.arraysAll()
+	for i := 0; i < g.pick(3); i++ {
+		a := as[g.pick(len(as))]
+		p := rpVar{name: fmt.Sprintf("q%d", i), typ: a.typ, ptr: true, fresh: true}
+		g.scope = append(g.scope, p)
+		f.locals = append(f.locals, fmt.Sprintf("var %s:*%s = &%s[%d];", p.name, a.typ.name, a.name, g.pick(8)))
+	}
+	if len(g.fields) > 0 && g.chance(0.4) {
+		g.sptr = "ps"
+		f.locals = append(f.locals, fmt.Sprintf("var ps:*S = &sa[%d];", g.pick(4)))
+	}
 }
 
 // source はプログラムのソース (runEmu が `#fc 2` と stdio を頭に足す)。
@@ -469,7 +715,14 @@ func (g *rpGen) source() string {
 		fmt.Fprintf(&b, "var %s:%s;\n", v.name, v.typ.name)
 	}
 	for _, a := range g.arrays {
-		fmt.Fprintf(&b, "var %s:[8]%s;\n", a.name, a.typ.name)
+		fmt.Fprintf(&b, "var %s:[16]%s;\n", a.name, a.typ.name)
+	}
+	if len(g.fields) > 0 {
+		b.WriteString("struct S {\n")
+		for _, f := range g.fields {
+			fmt.Fprintf(&b, "\t%s:%s;\n", f.name, f.typ.name)
+		}
+		b.WriteString("}\nvar s0:S;\nvar sa:[4]S;\n")
 	}
 	for _, f := range g.funcs {
 		if f.name == "main" {
@@ -478,6 +731,9 @@ func (g *rpGen) source() string {
 			ps := make([]string, len(f.params))
 			for i, p := range f.params {
 				ps[i] = p.name + ":" + p.typ.name
+				if p.ptr {
+					ps[i] = p.name + ":*" + p.typ.name
+				}
 			}
 			var opts []string
 			if f.fastcall {
@@ -505,8 +761,14 @@ func (g *rpGen) source() string {
 				out = append(out, v.name, `" "`)
 			}
 			for _, a := range g.arrays {
-				for i := 0; i < 8; i++ {
+				for i := 0; i < 16; i++ {
 					out = append(out, fmt.Sprintf("%s[%d]", a.name, i), `" "`)
+				}
+			}
+			for _, f := range g.fields {
+				out = append(out, "s0."+f.name, `" "`)
+				for i := 0; i < 4; i++ {
+					out = append(out, fmt.Sprintf("sa[%d].%s", i, f.name), `" "`)
 				}
 			}
 			fmt.Fprintf(&b, "printf(%s, \"\\n\");\nexit(0);\n", strings.Join(out, ", "))

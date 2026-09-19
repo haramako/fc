@@ -22,6 +22,9 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 	if !ir.Disabled("ssa") {
 		propagateSSA(lmd)
 	}
+	if !ir.Disabled("mul") {
+		expandMul(lmd)
+	}
 	if !ir.Disabled("sink") {
 		sinkAddress(lmd)
 	}

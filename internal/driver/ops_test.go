@@ -623,6 +623,68 @@ function main():void
 //	(2) `a16[i] = 4`: 融合した index_pset が値の幅 (1 バイト) しか書かず上位バイトが残る
 //	(3) `(x8 as int16)` を splitWords がバイトに分けるとき、上位バイトとして隣の番地を読む (part3 の g1 が 46024 になる)
 //	(4) 使われない書き込み (`l0 = ...`) の位置が live range に入らず、ループ変数と番地を共有して無限ループ (part4、-O 0)
+// 定数との乗算のシフト・加減算への展開 (opt.expandMul): 1 バイト / 2 バイト、符号付き、2^n - 1、Dst が入力と同じ
+func TestExpandMulRun(t *testing.T) {
+	t.Parallel()
+	src := `var a:int;
+var b:sint;
+var c:int16;
+var d:sint16;
+function main():void
+{
+	a = 13; b = (-7); c = 1234; d = (-300);
+	var x:int = a * 10;
+	var y:sint = b * 7;
+	var z:int16 = c * 11;
+	var w:sint16 = d * 3;
+	a *= 3;
+	c *= 100;
+	printf(x, " ", y as int, " ", z, " ", w as int16, " ", a, " ", c, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "130 207 13574 64636 39 57864\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// ポインタの添字参照 (`(p),y`) の codegen 2 件 (拡張した fuzz で発覚):
+// (1) 要素 2 バイトの `iny` の後、添字が Y に常駐していれば Y を戻す (`q0[i] += 1` の index_pset が 1 バイトずれていた)
+// (2) フレームがゼロページでない関数では pointerBase がポインタを reg に写すが、添字が A にあると A を壊すので、
+//     先に添字を Y に置く。main の t2 はフレームを大きくして (印字用の一時変数) ゼロページから追い出した形
+func TestPointerIndexY(t *testing.T) {
+	t.Parallel()
+	src := `var a2:[16]int16;
+var a1:[16]sint;
+var g0:int;
+var r:int16;
+function t1(i:int):void
+{
+	var q0:*int16 = &a2[3];
+	q0[i] += 1;
+	r = a2[8];
+}
+function main():void
+{
+	var q0:*sint = &a1[3];
+	a2[8] = 2;
+	t1(5);
+	a1[3] = 1;
+	a1[0] = (((q0[(g0 & 7)] as int) as sint) * 1);
+	printf(r, " ", a1[0], " ", a1[1], " ", a1[2], " ", a1[3], " ", a1[4], " ", a1[5], " ", a1[6], " ", a1[7], " ", a1[8], " ", a1[9], " ", a1[10], " ", a1[11], " ", a1[12], " ", a1[13], " ", a1[14], " ", a1[15], " ", a2[0], " ", a2[1], " ", a2[2], " ", a2[3], " ", a2[4], " ", a2[5], " ", a2[6], " ", a2[7], " ", a2[8], " ", a2[9], " ", a2[10], " ", a2[11], "\n");
+	exit(0);
+}
+`
+	want := "3 1 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0\n"
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != want {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 常駐レジスタと「メモリ上の定数シフト」: 2 バイトの `>> 8` (バイトの移動) は A を使うので、A に常駐している変数
 // (x.hi@A) を先に退避しなければならない (regalloc.isMemShift が A-free と見なしていた。TestSplitWords の mix が
 // SSA のコピー伝播で形が変わって発覚)

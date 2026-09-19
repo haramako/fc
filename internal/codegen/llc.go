@@ -273,6 +273,18 @@ func anyList(ss []string) []any {
 	return r
 }
 
+// restoreY は要素 size バイトのポインタ参照 (`lda (p),y; iny; lda (p),y`) の後で、添字が Y に常駐しているなら Y を戻す
+// (`q0[i] += 1` の index_pset が index_pget の iny でずれた Y で書いていた。fuzz で発覚)。
+func (l *Llc) restoreY(idx ir.Operand, size int) []any {
+	var r []any
+	if l.inY(idx) {
+		for i := 1; i < size; i++ {
+			r = append(r, "dey")
+		}
+	}
+	return r
+}
+
 // Prepare は関数 1 つの最適化とレジスタ割付 (frames.Analyze の後、frames.Place の前に全関数について呼ぶ)。
 func (l *Llc) Prepare(lmd *ir.Lambda) {
 	l.curLambda = lmd
@@ -1201,8 +1213,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				if ir.ValType(op.Dst).Size > 1 && sameStorage(op.In(0), op.Dst) {
 					base, setup = "reg", []any{l.loadA(op.In(0), 0), "sta <reg+0", l.loadA(op.In(0), 1), "sta <reg+1"}
 				}
-				r.push(setup)
+				// 添字を先に Y へ (添字が A にあるとき、ポインタを reg に写す setup が A を壊す。fuzz で発覚)
 				r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
+				r.push(setup)
 				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 					if i > 0 {
 						r.push("iny")
@@ -1210,6 +1223,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push(fmt.Sprintf("lda (%s),y", base))
 					r.push(l.storeA(op.Dst, i))
 				}
+				r.push(l.restoreY(op.In(1), ir.ValType(op.Dst).Size))
 				break
 			}
 			if reg, ok := l.fusableIndex(ops, opNo); ok && !ir.Disabled("fuse-index") {
@@ -1241,7 +1255,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 			if ir.ValType(op.In(0)).Kind == types.Pointer {
 				base, setup := l.pointerBase(op.In(0))
-				pre := append(setup, l.loadYIdx(op.In(1), op.In(0), op.Scaled)...)
+				pre := append(l.loadYIdx(op.In(1), op.In(0), op.Scaled), setup...) // 添字を先に Y へ (index_pget と同じ)
 				if (ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled) && len(setup) == 0 {
 					r.push(pre) // ldy だけなら A は壊れない
 				} else {
@@ -1254,6 +1268,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push(l.loadA(op.In(2), i))
 					r.push(fmt.Sprintf("sta (%s),y", base))
 				}
+				r.push(l.restoreY(op.In(1), ir.ValType(op.In(0)).Base.Size))
 				break
 			}
 			// 書く幅は要素の大きさ (値が小さいリテラル `a16[i] = 4` でも上位バイトまで書く。fuzz で発覚)

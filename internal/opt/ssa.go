@@ -684,8 +684,8 @@ func (s *ssaForm) simplify() bool {
 			continue
 		}
 		def := s.lmd.Ops[x.def]
-		if len(def.Src) != 2 || ir.ValType(def.Dst) != ir.ValType(op.Src[0]) || ir.ValType(def.Dst).Signed {
-			continue
+		if def == nil || len(def.Src) != 2 || ir.ValType(def.Dst) != ir.ValType(op.Src[0]) || ir.ValType(def.Dst).Signed {
+			continue // def が nil: rewrite が消した `load x = x` (fuzz で発覚)
 		}
 		m2, ok := ir.ValIntLiteral(def.Src[1])
 		if !ok {
@@ -719,6 +719,9 @@ func (s *ssaForm) simplify() bool {
 // sameOperandAt は命令 def の入力 k が、命令 i の位置でも同じ値として読めるならその入力を返す
 // (リテラル、または同じ版のローカル変数。グローバルは間で書き換わりうるので不可)。
 func (s *ssaForm) sameOperandAt(def, k, i int) ir.Operand {
+	if s.lmd.Ops[def] == nil {
+		return nil
+	}
 	o := s.lmd.Ops[def].Src[k]
 	if _, lit := ir.ValIntLiteral(o); lit {
 		return o

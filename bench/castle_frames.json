@@ -1,26 +1,26 @@
 {
   "area33_idle": {
     "frames": 300,
-    "avg": 12338,
-    "max": 15558,
+    "avg": 12275,
+    "max": 15495,
     "over": 0
   },
   "area33_jump": {
     "frames": 540,
-    "avg": 14403,
+    "avg": 14372,
     "max": 19345,
     "over": 0
   },
   "field": {
     "frames": 1080,
-    "avg": 8749,
+    "avg": 8708,
     "max": 29871,
     "over": 2
   },
   "start": {
     "frames": 300,
-    "avg": 7029,
-    "max": 29873,
+    "avg": 6989,
+    "max": 29872,
     "over": 9
   },
   "title": {

@@ -62,7 +62,13 @@ go test ./...                                    # 全部 (golden + examples + N
   `l ^ l` の A 割付（-O 0）、入れ子の cast の codegen の byte、関数全体の常駐の退避と内側のループの写しの順序。
   単機能のテストは全部通っていたので、**組み合わせのバグはこれで探す**。未定義動作は生成しない（0 除算・範囲外の添字・
   2 バイト値の変数シフト・無限ループ・ループ変数への代入）。判定は emu なのでフレームの位相のような擬陽性は無い。
-  生成器の制限で「型エラー」になる形が出たら生成器の問題（`ビルド失敗 (生成器の問題)`）として直す
+  生成器の制限で「型エラー」になる形が出たら生成器の問題（`ビルド失敗 (生成器の問題)`）として直す。
+  **2026-09-20 に生成器を広げた**: 16 要素のローカル配列、配列へのポインタ（`&a[e & 7]` から始めて `*p` / `p[e & 7]`、
+  ポインタの引数）、ポインタをずらすループ（`for` で `p += 1`、`while (k < n)` で `q += s; k += s`。誘導変数の統合と
+  展開の形。添字が範囲を出ないように本体の前で進める）、減らす `for`、struct（グローバル `s0`、配列 `sa[4]`、
+  ポインタ `ps` 経由のフィールド）。初回の 30 本で 3 件: SSA の simplify が消した `load x = x` を参照して panic、
+  要素 2 バイトのポインタ参照の `iny` で Y に常駐する添字がずれる、フレームがゼロページでない関数でポインタを reg に
+  写すときに A の添字を壊す（`TestPointerIndexY`）
 
 - **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](language_reference.md)、設計の経緯は
   [v2_grammar.md](v2_grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、
@@ -155,7 +161,7 @@ go test ./...                                    # 全部 (golden + examples + N
   プレイで発覚（単体テストは引数が変数か定数だけだった）。今は push_arg をその場で引数への代入に置き換え、間の命令は
   残す（`TestInlineFunction` の e / f が番）
 - **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
-  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa induction unroll sink fuse coalesce chain narrow scale commute carry split rotate dup
+  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa mul induction unroll sink fuse coalesce chain narrow scale commute carry split rotate dup
   inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が
   無ければ Skip する調査用テストで、`TestProbeDiff` が 2 つの ROM（`FC_PROBE_ROM_A` / `_B`、`FC_PROBE_DBG` / `_B` の
   dbgfile で名前→番地）を同じ入力で並走させ、両方が vsync 待ちに入ったフレームだけゲームの状態（`FC_PROBE_PREFIX=_my_,_en_,...`
