@@ -45,7 +45,7 @@ go test ./...                                    # 全部 (golden + examples + N
 
 | 層 | テスト | 時間 | 何を保証するか |
 |---|---|---|---|
-| golden差分 | TestGolden*（internal/driver） | 数秒 | コンパイラ出力の全段階が基準と一致 |
+| golden差分 | TestGolden*（internal/driver） | 数秒 | コンパイラ出力の全段階が基準と一致（stdout は `-O 0` でも同じ: TestGoldenStdoutO0） |
 | ROMバイト一致 | TestExampleMiku / TestExampleCastle | 〜5秒 | 実プロジェクト2つのROMがスナップショットと一致 |
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
@@ -105,7 +105,8 @@ go test ./...                                    # 全部 (golden + examples + N
 - **fc ソースのテスト（`test/test_*.fc` の assert 群）は TestGoldenStdout が
   コンパイル→実行して stdout・終了コードごと検証する**（assert 失敗 = exit 1 + ERROR 出力
   で必ず不一致になる）。テスト .fc を新規追加したら golden ディレクトリに空ファイルを置くか
-  `-update` で生成する
+  `-update` で生成する。`-O 2` は SSA の定数伝播で演算をほとんど畳んでしまう（test_op はほぼ消える）ので、
+  同じプログラムを `-O 0` でも走らせる `TestGoldenStdoutO0` が codegen を検証する（golden は同じファイル）
 - 性能退行の検知 (コンパイラ自身の速度): `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
 - **フレームの静的割付**（2026-09-16〜、[v2_frame_alloc.md](v2_frame_alloc.md) §6）: コンパイルの順序は
   sema（全モジュール）→ `codegen.PrepareProgram`（`frames.Analyze` で ABI を決める → 全関数の opt + regalloc →
@@ -113,7 +114,8 @@ go test ./...                                    # 全部 (golden + examples + N
   `PrepareProgram` を先に呼ぶ**（golden の `newLlcForGolden`）。castle など base.asm を自前で持つプロジェクトは
   `FC_SZP` / `FC_SRAM` と `_SIZE` の export、スタックの空き先頭 `FC_SP` を足す（examples/castle/src/data.asm）
 - **最適化のパイプライン**（2026-09-16〜）: sema（IR 生成）→ `internal/opt`（IR→IR。`ir.BuildCFG` / `ir.BuildUseDef` の上に
-  書く小さなパスの列: ポインタ融合、コピー除去、ジャンプ整理、ループ回転…）→ `internal/regalloc` → `internal/codegen`
+  書く小さなパスの列: SSA の定数 / コピー伝播と DCE（先頭。[v2_ssa.md](v2_ssa.md)）、ポインタ融合、コピー除去、
+  ジャンプ整理、ループ回転…）→ `internal/regalloc` → `internal/codegen`
   （命令選択 + asm テキストのピープホール `peephole.go`）。パスを足したら `go test ./bench -v` で効果を見て、
   golden（asm / allocir）は差分を眺めてから `-update`。**ハマった点**: (1) 命令を融合したら regalloc の A 割付の
   対象リスト（`allocateA` の producer / consumer）と `DeleteUnuse` の対象にも足す（足さないと退行する）、
@@ -153,7 +155,7 @@ go test ./...                                    # 全部 (golden + examples + N
   プレイで発覚（単体テストは引数が変数か定数だけだった）。今は push_arg をその場で引数への代入に置き換え、間の命令は
   残す（`TestInlineFunction` の e / f が番）
 - **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
-  （`ir.Disabled`。名前は `internal/ir/disable.go`: sink fuse coalesce chain narrow scale commute carry split rotate dup
+  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa sink fuse coalesce chain narrow scale commute carry split rotate dup
   inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が
   無ければ Skip する調査用テストで、`TestProbeDiff` が 2 つの ROM（`FC_PROBE_ROM_A` / `_B`、`FC_PROBE_DBG` / `_B` の
   dbgfile で名前→番地）を同じ入力で並走させ、両方が vsync 待ちに入ったフレームだけゲームの状態（`FC_PROBE_PREFIX=_my_,_en_,...`

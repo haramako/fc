@@ -1057,10 +1057,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			} else if ir.ValLocation(op.Dst) != ir.LocCond {
 				labels := l.newLabels(2)
 				trueLabel, endLabel := labels[0], labels[1]
-				for i := 0; i < ir.ValType(op.In(0)).Size; i++ {
-					r.push(l.loadA(op.In(0), i))
-					r.push(fmt.Sprintf("beq %s", trueLabel))
+				// 全バイトが 0 のとき 1 (バイトごとに beq すると「どれかが 0」になってしまう。SSA の定数畳み込みとの
+				// 差分テストで発覚)
+				r.push(l.loadA(op.In(0), 0))
+				for i := 1; i < ir.ValType(op.In(0)).Size; i++ {
+					r.push(fmt.Sprintf("ora %s", l.byte(op.In(0), i)))
 				}
+				r.push(fmt.Sprintf("beq %s", trueLabel))
 				// falseのとき
 				r.push("lda #0")
 				r.push(l.storeA(op.Dst, 0))

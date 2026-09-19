@@ -12,7 +12,6 @@ _test_stat_I10 = 10
 	;;;=============================
 .segment "test_stat"
 .proc _test_stat_test_if
-	ldy #0
 	lda #1
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -27,7 +26,6 @@ _test_stat_I10 = 10
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #2
-	sta 0+<F_test_stat_test_if+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -40,66 +38,7 @@ _test_stat_I10 = 10
 	lda #.HIBYTE(_11)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #0
-	sta 0+<F_test_stat_test_if+2
-	sta 0+<F_test_stat_test_if+3
-	ora 0+<F_test_stat_test_if+3
-	beq @end_15
-	lda #0
-	sta <F_unittest_assert_equal+0
-	sta <F_unittest_assert_equal+1
 	lda #1
-	sta <F_unittest_assert_equal+2
-	lda #0
-	sta <F_unittest_assert_equal+3
-	lda #.LOBYTE(_17)
-	sta <F_unittest_assert_equal+4
-	lda #.HIBYTE(_17)
-	sta <F_unittest_assert_equal+5
-	jsr _unittest_assert_equal
-@end_15:
-	lda #1
-	sta 0+<F_test_stat_test_if+2
-	lda #0
-	sta 0+<F_test_stat_test_if+3
-	lda 0+<F_test_stat_test_if+2
-	ora 0+<F_test_stat_test_if+3
-	bne @end_21
-	lda #0
-	sta <F_unittest_assert_equal+0
-	sta <F_unittest_assert_equal+1
-	lda #1
-	sta <F_unittest_assert_equal+2
-	lda #0
-	sta <F_unittest_assert_equal+3
-	lda #.LOBYTE(_23)
-	sta <F_unittest_assert_equal+4
-	lda #.HIBYTE(_23)
-	sta <F_unittest_assert_equal+5
-	jsr _unittest_assert_equal
-@end_21:
-	lda #0
-	sta 0+<F_test_stat_test_if+2
-	lda #1
-	sta 0+<F_test_stat_test_if+3
-	lda 0+<F_test_stat_test_if+2
-	ora 0+<F_test_stat_test_if+3
-	bne @then_34
-	lda #0
-	sta <F_unittest_assert_equal+0
-	sta <F_unittest_assert_equal+1
-	lda #1
-	sta <F_unittest_assert_equal+2
-	lda #0
-	sta <F_unittest_assert_equal+3
-	lda #.LOBYTE(_29)
-	sta <F_unittest_assert_equal+4
-	lda #.HIBYTE(_29)
-	sta <F_unittest_assert_equal+5
-	jsr _unittest_assert_equal
-@then_34:
-	lda #1
-	sta 0+<F_test_stat_test_if+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -173,7 +112,6 @@ _38:
 	lda #.HIBYTE(_58)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #0
 	lda #1
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -202,8 +140,7 @@ _63:
 .segment "test_stat"
 .proc _test_stat_test_for
 	lda #0
-	sta 0+<F_test_stat_test_for+3
-	tay
+	sta 0+<F_test_stat_test_for+1
 	cmp #10
 	bcs @end_66
 	sta 0+<F_test_stat_test_for+0
@@ -222,9 +159,9 @@ _63:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	clc
-	lda 0+<F_test_stat_test_for+3
+	lda 0+<F_test_stat_test_for+1
 	adc 0+<F_test_stat_test_for+0
-	sta 0+<F_test_stat_test_for+3
+	sta 0+<F_test_stat_test_for+1
 	inc 0+<F_test_stat_test_for+0
 	lda 0+<F_test_stat_test_for+0
 	cmp #10
@@ -243,7 +180,7 @@ _63:
 	lda #.HIBYTE(_77)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda 0+<F_test_stat_test_for+3
+	lda 0+<F_test_stat_test_for+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1

@@ -623,6 +623,27 @@ function main():void
 //	(2) `a16[i] = 4`: 融合した index_pset が値の幅 (1 バイト) しか書かず上位バイトが残る
 //	(3) `(x8 as int16)` を splitWords がバイトに分けるとき、上位バイトとして隣の番地を読む (part3 の g1 が 46024 になる)
 //	(4) 使われない書き込み (`l0 = ...`) の位置が live range に入らず、ループ変数と番地を共有して無限ループ (part4、-O 0)
+// `!` の 2 バイトの入力: 全バイトが 0 のときだけ 1 (バイトごとに beq していて「どれかが 0」になっていた。
+// SSA の定数畳み込みとの差分テストで発覚)
+func TestNot16(t *testing.T) {
+	t.Parallel()
+	src := `function main():void
+{
+	var l1:int16 = 1;
+	var l2:int16 = 256;
+	var l3:int16 = 0;
+	var s:sint = 0 - ((!l1) as sint);
+	printf((!l1) as int, " ", (!l2) as int, " ", (!l3) as int, " ", s as int, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "0 0 1 0\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 func TestFuzzFound1(t *testing.T) {
 	t.Parallel()
 	src := `var g0:sint16;

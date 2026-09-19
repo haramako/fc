@@ -43,8 +43,6 @@ _test_basic_ARRAY:
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_test_nesasm_limit
-	ldy #0
-	iny
 	rts
 _6:
 		.byte 116,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111
@@ -220,25 +218,6 @@ _32:
 .segment "test_basic"
 .proc _test_basic_test_misc
 	lda #1
-	sta 0+<F_test_basic_test_misc+1
-	lda #0
-	sta 0+<F_test_basic_test_misc+0
-	jmp @begin_34
-@end_38:
-	lda #0
-	sta <F_unittest_assert_true+0
-	lda #.LOBYTE(_40)
-	sta <F_unittest_assert_true+1
-	lda #.HIBYTE(_40)
-	sta <F_unittest_assert_true+2
-	jsr _unittest_assert_true
-@begin_34:
-	ldy #1
-	lda 0+<F_test_basic_test_misc+1
-	beq @end_38
-@4:
-	sty 0+<F_test_basic_test_misc+0
-	lda 0+<F_test_basic_test_misc+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -253,8 +232,6 @@ _32:
 	jsr _unittest_assert_equal
 	lda #0
 	lda #255
-	sta 0+<F_test_basic_test_misc+1
-	sta 1+<F_test_basic_test_misc+1
 	sta <F_unittest_assert_equal+0
 	sta <F_unittest_assert_equal+1
 	sta <F_unittest_assert_equal+2
@@ -279,16 +256,16 @@ _32:
 	jsr _mem_compare
 	ldx FC_SP
 	lda <0+S+0,x
-	sta 0+<F_test_basic_test_misc+1
-	bne @5
+	sta 0+<F_test_basic_test_misc+0
+	bne @4
 	lda #1
-	sta 0+<F_test_basic_test_misc+2
-	jmp @6
-@5:
+	sta 0+<F_test_basic_test_misc+1
+	jmp @5
+@4:
 	lda #0
-	sta 0+<F_test_basic_test_misc+2
-@6:
-	lda 0+<F_test_basic_test_misc+2
+	sta 0+<F_test_basic_test_misc+1
+@5:
+	lda 0+<F_test_basic_test_misc+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_58)
 	sta <F_unittest_assert_true+1

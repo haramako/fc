@@ -1,12 +1,12 @@
 {
   "bgdecode": {
-    "cycles": 1579117,
-    "size": 827,
+    "cycles": 1569134,
+    "size": 731,
     "out": "sum=47712"
   },
   "calls": {
-    "cycles": 216095,
-    "size": 476,
+    "cycles": 216093,
+    "size": 472,
     "out": "sum=663"
   },
   "crc16": {
@@ -50,8 +50,8 @@
     "out": "sum=15293"
   },
   "sieve": {
-    "cycles": 18135585,
-    "size": 309,
+    "cycles": 17907696,
+    "size": 301,
     "out": "count=1900"
   },
   "textprint": {

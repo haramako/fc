@@ -17,8 +17,6 @@ _test_cast_a1:
 .segment "test_cast"
 .proc _test_cast_test_cast
 	lda #255
-	sta 0+<F_test_cast_test_cast+0
-	sta 1+<F_test_cast_test_cast+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1

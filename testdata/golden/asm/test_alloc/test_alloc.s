@@ -11,19 +11,8 @@ __MODULE_TEST_ALLOC__ = 1
 	;;;=============================
 .segment "test_alloc"
 .proc _test_alloc_test_a_alloc
-	lda #1
-	sta 0+<F_test_alloc_test_a_alloc+0
-	lda #2
-	sta 0+<F_test_alloc_test_a_alloc+1
-	lda #3
-	sta 0+<F_test_alloc_test_a_alloc+2
-	clc
-	lda 0+<F_test_alloc_test_a_alloc+0
-	adc 0+<F_test_alloc_test_a_alloc+1
-	sec
-	sbc 0+<F_test_alloc_test_a_alloc+2
-	sta <F_unittest_assert_equal+0
 	lda #0
+	sta <F_unittest_assert_equal+0
 	sta <F_unittest_assert_equal+1
 	sta <F_unittest_assert_equal+2
 	sta <F_unittest_assert_equal+3
@@ -32,11 +21,7 @@ __MODULE_TEST_ALLOC__ = 1
 	lda #.HIBYTE(_4)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	sec
-	lda 0+<F_test_alloc_test_a_alloc+0
-	sbc 0+<F_test_alloc_test_a_alloc+1
-	clc
-	adc 0+<F_test_alloc_test_a_alloc+2
+	lda #2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -49,54 +34,21 @@ __MODULE_TEST_ALLOC__ = 1
 	lda #.HIBYTE(_9)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	clc
-	lda 0+<F_test_alloc_test_a_alloc+0
-	adc 0+<F_test_alloc_test_a_alloc+1
-	cmp #3
-	bne @1
 	lda #1
-	jmp @2
-@1:
-	lda #0
-@2:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_14)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_14)
 	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	clc
-	lda 0+<F_test_alloc_test_a_alloc+0
-	adc 0+<F_test_alloc_test_a_alloc+1
-	cmp #3
-	bcc @6
 	lda #1
-	jmp @7
-@6:
-	lda #0
-@7:
-	sta 0+<F_test_alloc_test_a_alloc+2
-	lda 0+<F_test_alloc_test_a_alloc+2
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_20)
 	sta <F_unittest_assert_true+1
 	lda #.HIBYTE(_20)
 	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true
-	clc
-	lda 0+<F_test_alloc_test_a_alloc+0
-	adc 0+<F_test_alloc_test_a_alloc+1
-	sta 0+<F_test_alloc_test_a_alloc+2
-	lda #3
-	cmp 0+<F_test_alloc_test_a_alloc+2
-	bcc @11
 	lda #1
-	jmp @12
-@11:
-	lda #0
-@12:
-	sta 0+<F_test_alloc_test_a_alloc+0
-	lda 0+<F_test_alloc_test_a_alloc+0
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_26)
 	sta <F_unittest_assert_true+1

@@ -118,6 +118,12 @@ func compileForGolden(t *testing.T, srcName, target string) *sema.Program {
 // 中間生成物と出力は一時ディレクトリに置く (並列実行しても衝突しない)。
 func buildForGolden(t *testing.T, srcName, target string, run bool, stdout *strings.Builder) (int, string) {
 	t.Helper()
+	return buildForGoldenLevel(t, srcName, target, run, stdout, 0)
+}
+
+// buildForGoldenLevel は最適化レベルを指定する buildForGolden (0 は既定の 2、-1 は -O 0)。
+func buildForGoldenLevel(t *testing.T, srcName, target string, run bool, stdout *strings.Builder, level int) (int, string) {
+	t.Helper()
 	tmp := t.TempDir()
 	out := filepath.Join(tmp, "a.bin")
 	if target == "nes" {
@@ -125,7 +131,7 @@ func buildForGolden(t *testing.T, srcName, target string, run bool, stdout *stri
 	}
 	compiler := NewCompiler(absRepoRoot)
 	code, err := compiler.Build(srcName+".fc", &BuildOptions{
-		Target: target, Out: out, Run: run, Stdout: stdout,
+		Target: target, Out: out, Run: run, Stdout: stdout, OptimizeLevel: level,
 		Dir: testDir(), BuildDir: filepath.Join(tmp, "build"),
 	})
 	if err != nil {
@@ -291,6 +297,29 @@ func TestGoldenStdout(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			var out strings.Builder
 			code, _ := buildForGolden(t, srcName, target, true, &out)
+			compareGolden(t, "stdout/"+name+".txt", out.String())
+			compareGolden(t, "stdout/"+name+".exit", fmt.Sprintf("%d\n", code))
+		})
+	}
+}
+
+// 同じプログラムを -O 0 で実行しても stdout / 終了コードが同じ。-O 2 は定数を畳んでしまう (SSA の定数伝播で
+// test_op の演算はほとんど消える) ので、演算の codegen はこちらが検証する
+func TestGoldenStdoutO0(t *testing.T) {
+	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "stdout", "*.txt"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("golden stdout が見つからない: %v", err)
+	}
+	for _, m := range matches {
+		name := strings.TrimSuffix(filepath.Base(m), ".txt")
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			srcName, target := goldenKeyInfo(name)
+			var out strings.Builder
+			code, _ := buildForGoldenLevel(t, srcName, target, true, &out, -1)
+			if *update {
+				return // golden は -O 2 の実行 (TestGoldenStdout) が書く
+			}
 			compareGolden(t, "stdout/"+name+".txt", out.String())
 			compareGolden(t, "stdout/"+name+".exit", fmt.Sprintf("%d\n", code))
 		})

@@ -19,6 +19,9 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 		return
 	}
 	// 各パスは FC_DISABLE=名前 で切れる (ir.Disabled。調査用)
+	if !ir.Disabled("ssa") {
+		propagateSSA(lmd)
+	}
 	if !ir.Disabled("sink") {
 		sinkAddress(lmd)
 	}

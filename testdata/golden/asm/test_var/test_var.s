@@ -170,9 +170,8 @@ _27:
 	sta <F_unittest_assert_equal+4
 	lda #.HIBYTE(_43)
 	sta <F_unittest_assert_equal+5
-	sty 0+<F_test_var_test_pointer+0
 	jsr _unittest_assert_equal
-	ldy 0+<F_test_var_test_pointer+0
+	ldy #2
 	lda #2
 	sta _test_var_array+0,y
 	lda _test_var_array+0,y
@@ -204,23 +203,14 @@ _49:
 	;;;=============================
 .segment "test_var"
 .proc _test_var_test_array
-	lda #0
-	sta 0+<F_test_var_test_array+0
-	clc
-	adc #1
-	ldy 0+<F_test_var_test_array+0
+	ldy #0
+	lda #1
 	sta _test_var_array+0,y
-	inc 0+<F_test_var_test_array+0
-	clc
-	lda 0+<F_test_var_test_array+0
-	adc #1
-	ldy 0+<F_test_var_test_array+0
+	tay
+	lda #2
 	sta _test_var_array+0,y
-	inc 0+<F_test_var_test_array+0
-	clc
-	lda 0+<F_test_var_test_array+0
-	adc #1
-	ldy 0+<F_test_var_test_array+0
+	tay
+	lda #3
 	sta _test_var_array+0,y
 	ldy #0
 	lda _test_var_array+0,y
