@@ -623,6 +623,80 @@ function main():void
 //	(2) `a16[i] = 4`: 融合した index_pset が値の幅 (1 バイト) しか書かず上位バイトが残る
 //	(3) `(x8 as int16)` を splitWords がバイトに分けるとき、上位バイトとして隣の番地を読む (part3 の g1 が 46024 になる)
 //	(4) 使われない書き込み (`l0 = ...`) の位置が live range に入らず、ループ変数と番地を共有して無限ループ (part4、-O 0)
+// 常駐レジスタと「メモリ上の定数シフト」: 2 バイトの `>> 8` (バイトの移動) は A を使うので、A に常駐している変数
+// (x.hi@A) を先に退避しなければならない (regalloc.isMemShift が A-free と見なしていた。TestSplitWords の mix が
+// SSA のコピー伝播で形が変わって発覚)
+func TestResidentMemShift(t *testing.T) {
+	t.Parallel()
+	src := `function mix(a:int16):int16
+{
+	var x:int16 = a;
+	x |= 0x8001;
+	x &= 0xf7ff;
+	return x + ((x >> 8) & 0x00ff);
+}
+function main():void
+{
+	printf(mix(0x1234), " ", mix(0), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "37575 32897\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// 小さなループの完全展開 (opt.unrollLoops): crc8 の形、continue / break のある形、カウンタを本体で使う形、
+// 入れ子。-O 0 と結果を比べる
+func TestUnrollRun(t *testing.T) {
+	t.Parallel()
+	src := `var acc:int16;
+function crc8(p:*int, length:int):int
+{
+	var crc = 0;
+	var i:int;
+	for (i = 0; i < length; i++) {
+		crc ^= *p;
+		for (var j = 8; j; j--) {
+			if (crc & 0x80) {
+				crc = (crc << 1) ^ 0x1d;
+			} else {
+				crc = crc << 1;
+			}
+		}
+		p += 1;
+	}
+	return crc;
+}
+function tricky(n:int):int16
+{
+	var s:int16 = 0;
+	var j:int;
+	for (j = 0; j < 6; j++) {
+		if (j == 2) { continue; }
+		if (j == n) { break; }
+		s += (j as int16) * 10;
+		var k:int;
+		for (k = 3; k > 0; k--) { s += k; }
+	}
+	return s;
+}
+function main():void
+{
+	var data:[5]int;
+	data[0] = 1; data[1] = 2; data[2] = 3; data[3] = 250; data[4] = 7;
+	printf(crc8(&data[0], 5), " ", tricky(9), " ", tricky(4), " ", tricky(0), "\n");
+	exit(0);
+}
+`
+	want := runEmuLevel(t, src, -1)
+	if got := runEmuLevel(t, src, 0); got != want || len(want) < 5 {
+		t.Errorf("-O 0: %q, -O 2: %q", want, got)
+	}
+}
+
 // 誘導変数の統合 (opt.eliminateInduction): 比較にしか使われないカウンタをポインタの比較に置き換える。
 // 初期値が上限以上でループに入らない場合、歩幅が変数 (外側のループの比較で上限が分かる) の場合、初期値がリテラルの場合
 func TestInductionRun(t *testing.T) {

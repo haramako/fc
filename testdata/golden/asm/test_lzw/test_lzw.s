@@ -20,23 +20,37 @@ __MODULE_TEST_LZW__ = 1
 	sta 1+_lzw_addr
 	lda #0
 	sta 0+_lzw_bpos
-	tay
-	cpy #8
-	bcs @end_5
-	sty 0+<F_test_lzw_test_read_bit+0
-@body_6:
 	lda #3
 	sta <FC_FASTCALL_REG+2
 	jsr _lzw_read_bit
 	lda <0+FC_FASTCALL_REG
-	sta 0+<F_test_lzw_test_read_bit+1
+	sta 0+<F_test_lzw_test_read_bit+0
 	lda <1+FC_FASTCALL_REG
-	sta 1+<F_test_lzw_test_read_bit+1
-	lda 0+<F_test_lzw_test_read_bit+1
-	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_lzw_test_read_bit+1
-	sta <F_unittest_assert_equal+1
+	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #0
+	sta <F_unittest_assert_equal+2
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_12)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_12)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #3
+	sta <FC_FASTCALL_REG+2
+	jsr _lzw_read_bit
+	lda <0+FC_FASTCALL_REG
+	sta 0+<F_test_lzw_test_read_bit+0
+	lda <1+FC_FASTCALL_REG
+	sta 1+<F_test_lzw_test_read_bit+0
+	lda 0+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #1
 	sta <F_unittest_assert_equal+2
 	lda #0
 	sta <F_unittest_assert_equal+3
@@ -45,11 +59,126 @@ __MODULE_TEST_LZW__ = 1
 	lda #.HIBYTE(_12)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	inc 0+<F_test_lzw_test_read_bit+0
+	lda #3
+	sta <FC_FASTCALL_REG+2
+	jsr _lzw_read_bit
+	lda <0+FC_FASTCALL_REG
+	sta 0+<F_test_lzw_test_read_bit+0
+	lda <1+FC_FASTCALL_REG
+	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
-	cmp #8
-	bcc @body_6
-@end_5:
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #2
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_12)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_12)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #3
+	sta <FC_FASTCALL_REG+2
+	jsr _lzw_read_bit
+	lda <0+FC_FASTCALL_REG
+	sta 0+<F_test_lzw_test_read_bit+0
+	lda <1+FC_FASTCALL_REG
+	sta 1+<F_test_lzw_test_read_bit+0
+	lda 0+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #3
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_12)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_12)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #3
+	sta <FC_FASTCALL_REG+2
+	jsr _lzw_read_bit
+	lda <0+FC_FASTCALL_REG
+	sta 0+<F_test_lzw_test_read_bit+0
+	lda <1+FC_FASTCALL_REG
+	sta 1+<F_test_lzw_test_read_bit+0
+	lda 0+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #4
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_12)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_12)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #3
+	sta <FC_FASTCALL_REG+2
+	jsr _lzw_read_bit
+	lda <0+FC_FASTCALL_REG
+	sta 0+<F_test_lzw_test_read_bit+0
+	lda <1+FC_FASTCALL_REG
+	sta 1+<F_test_lzw_test_read_bit+0
+	lda 0+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #5
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_12)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_12)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #3
+	sta <FC_FASTCALL_REG+2
+	jsr _lzw_read_bit
+	lda <0+FC_FASTCALL_REG
+	sta 0+<F_test_lzw_test_read_bit+0
+	lda <1+FC_FASTCALL_REG
+	sta 1+<F_test_lzw_test_read_bit+0
+	lda 0+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #6
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_12)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_12)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
+	lda #3
+	sta <FC_FASTCALL_REG+2
+	jsr _lzw_read_bit
+	lda <0+FC_FASTCALL_REG
+	sta 0+<F_test_lzw_test_read_bit+0
+	lda <1+FC_FASTCALL_REG
+	sta 1+<F_test_lzw_test_read_bit+0
+	lda 0+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+0
+	lda 1+<F_test_lzw_test_read_bit+0
+	sta <F_unittest_assert_equal+1
+	lda #7
+	sta <F_unittest_assert_equal+2
+	lda #0
+	sta <F_unittest_assert_equal+3
+	lda #.LOBYTE(_12)
+	sta <F_unittest_assert_equal+4
+	lda #.HIBYTE(_12)
+	sta <F_unittest_assert_equal+5
+	jsr _unittest_assert_equal
 	rts
 _2:
 		.byte 5,57,119

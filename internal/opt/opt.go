@@ -41,6 +41,10 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 		propagateSSA(lmd)
 		compact(lmd)
 	}
+	if !ir.Disabled("ssa") && !ir.Disabled("unroll") && unrollLoops(lmd) {
+		propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
+		compact(lmd)
+	}
 	if !ir.Disabled("narrow") {
 		narrowBitTest(lmd, u)
 	}
@@ -68,6 +72,11 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 
 // newLabel は関数内で使われていないラベル名 (@name_N。N は既存のラベル番号の最大 + 1)。
 func newLabel(lmd *ir.Lambda, name string) string {
+	return fmt.Sprintf("@%s_%d", name, maxLabelNumber(lmd)+1)
+}
+
+// maxLabelNumber は関数内のラベルの末尾の番号 (`_N`) の最大 (無ければ 0)。
+func maxLabelNumber(lmd *ir.Lambda) int {
 	n := 0
 	for _, op := range lmd.Ops {
 		if op == nil || op.Code != ir.OpLabel {
@@ -79,7 +88,7 @@ func newLabel(lmd *ir.Lambda, name string) string {
 			}
 		}
 	}
-	return fmt.Sprintf("@%s_%d", name, n+1)
+	return n
 }
 
 // compact は削除済み (nil) の命令を取り除く。

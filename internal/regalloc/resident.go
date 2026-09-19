@@ -66,21 +66,31 @@ func stepGain(op *ir.Op) int {
 // StepMax は Y / X に常駐する添字の `i += k` を iny × k にする k の上限 (k 回で 2k サイクル。5 以上は tya; clc; adc; tay の 8 と変わらない)。
 const StepMax = 4
 
-// isMemShift は codegen の shiftInMemory と同じ条件 (定数シフト、2 バイト以下、1 バイトなら x = x << n の形)。
+// isMemShift は codegen の shiftInMemory が A を使わずに出せる形か (定数シフト、2 バイト以下、`x = x << n` のように
+// 結果と入力が同じ場所)。別の場所への写し (lda / sta)、2 バイトの 8 以上のシフト (バイトの移動)、符号付きの右シフト
+// (`lda hi; cmp #128`) は A を使うので含めない (x.hi を A に常駐させたまま `x >> 8` を出して A を壊していた。
+// SSA のコピー伝播で形が変わって発覚。TestResidentMemShift)。
 func isMemShift(op *ir.Op) bool {
 	if op.Code != ir.OpShiftLeft && op.Code != ir.OpShiftRight {
 		return false
 	}
-	if _, lit := ir.ValIntLiteral(op.Src[1]); !lit {
+	n, lit := ir.ValIntLiteral(op.Src[1])
+	if !lit {
 		return false
 	}
 	size := ir.ValType(op.Dst).Size
 	if size > 2 || ir.ValKind(op.Dst) == ir.KindLiteral {
 		return false
 	}
-	if size == 1 {
-		d, s := ir.UnderlyingValue(op.Dst), ir.UnderlyingValue(op.Src[0])
-		return d != nil && d == s && ir.ValOffset(op.Dst) == ir.ValOffset(op.Src[0])
+	d, s := ir.UnderlyingValue(op.Dst), ir.UnderlyingValue(op.Src[0])
+	if d == nil || d != s || ir.ValOffset(op.Dst) != ir.ValOffset(op.Src[0]) {
+		return false
+	}
+	if op.Code == ir.OpShiftRight && ir.ValType(op.Src[0]).Signed {
+		return false
+	}
+	if size == 2 && n >= 8 {
+		return false
 	}
 	return true
 }
