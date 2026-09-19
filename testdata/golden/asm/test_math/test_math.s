@@ -14,6 +14,7 @@ __MODULE_TEST_MATH__ = 1
 .proc _test_math_test_sin
 	lda #0
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @1
 	lda #255
@@ -36,6 +37,7 @@ __MODULE_TEST_MATH__ = 1
 	jsr _unittest_assert_equal
 	lda #63
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @3
 	lda #255
@@ -59,6 +61,7 @@ __MODULE_TEST_MATH__ = 1
 	jsr _unittest_assert_equal
 	lda #64
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @5
 	lda #255
@@ -82,6 +85,7 @@ __MODULE_TEST_MATH__ = 1
 	jsr _unittest_assert_equal
 	lda #127
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @7
 	lda #255
@@ -104,6 +108,7 @@ __MODULE_TEST_MATH__ = 1
 	jsr _unittest_assert_equal
 	lda #128
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @9
 	lda #255
@@ -126,6 +131,7 @@ __MODULE_TEST_MATH__ = 1
 	jsr _unittest_assert_equal
 	lda #191
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @11
 	lda #255
@@ -149,6 +155,7 @@ __MODULE_TEST_MATH__ = 1
 	jsr _unittest_assert_equal
 	lda #192
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @13
 	lda #255
@@ -172,6 +179,7 @@ __MODULE_TEST_MATH__ = 1
 	jsr _unittest_assert_equal
 	lda #255
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_sin+0
 	bpl @15
 	lda #255
@@ -218,6 +226,7 @@ _39:
 .proc _test_math_test_cos
 	lda #64
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @17
 	lda #255
@@ -241,6 +250,7 @@ _39:
 	jsr _unittest_assert_equal
 	lda #127
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @19
 	lda #255
@@ -263,6 +273,7 @@ _39:
 	jsr _unittest_assert_equal
 	lda #128
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @21
 	lda #255
@@ -285,6 +296,7 @@ _39:
 	jsr _unittest_assert_equal
 	lda #191
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @23
 	lda #255
@@ -308,6 +320,7 @@ _39:
 	jsr _unittest_assert_equal
 	lda #192
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @25
 	lda #255
@@ -331,6 +344,7 @@ _39:
 	jsr _unittest_assert_equal
 	lda #255
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @27
 	lda #255
@@ -353,6 +367,7 @@ _39:
 	jsr _unittest_assert_equal
 	lda #0
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @29
 	lda #255
@@ -375,6 +390,7 @@ _39:
 	jsr _unittest_assert_equal
 	lda #63
 	jsr _math_sin
+	cmp #0
 	sta 0+<F_test_math_test_cos+0
 	bpl @31
 	lda #255

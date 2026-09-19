@@ -79,6 +79,9 @@ go test ./...                                    # 全部 (golden + examples + N
   次の 1000 本で 1 件: `if (A || 定数)` の片側が畳まれて残った `if_true c goto next`（飛び先 = 落ちる先 = ループの入口）で、
   常駐の入口の写しが落ちる辺にしか付かなかった（simplifyJumps が直後への条件分岐を消し、`onEdge` は両方の辺に置く。
   `TestResidentEntryBothEdges`）
+- 種 160000〜 で 2 件: splitWords が途中で 1 バイトに狭めた cast の連鎖 `((p0 as int) as int16)` を分けた変数の上位で
+  読む（`plainWord`。`TestSplitNarrowWiden`）、sign_extension の入力が A にある（呼び出しの戻り値。call を A 割付の
+  producer にしてから）とき N が A を反映しないまま `bpl` していた（`TestSignExtendCallResult`）
 - **ca65 の `.proc` の中のラベルは同じファイルの別の `.proc` から見えない**（2026-09-20）: レジスタ渡しの `sym__frame`
   を `.proc` の中に置いて `.export` したら、同じモジュール内の呼び出しで未定義になった（castle の text で発覚。
   fc のテストは他モジュールからの参照しか無かった）。関数の途中に入口を作るときは `.endproc` で閉じて別の `.proc` にする

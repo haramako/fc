@@ -461,6 +461,7 @@ _99:
 .proc _test_var_test_escape
 	ldy #0
 	lda STR+0,y
+	cmp #0
 	sta 0+<F_test_var_test_escape+0
 	bpl @1
 	lda #255

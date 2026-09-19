@@ -749,6 +749,79 @@ function main():void
 	}
 }
 
+// splitWords: 途中で 1 バイトに狭めた cast の連鎖 `((p0 as int) as int16)` は下位バイトのゼロ拡張。分けた変数の上位を
+// 読んでいた (inline 関数の引数で発覚)
+func TestSplitNarrowWiden(t *testing.T) {
+	t.Parallel()
+	src := `var g0:sint16;
+var g1:int16;
+var g2:int;
+var a3:[16]int16;
+var la0:[16]sint;
+function f0(p0:*sint):int
+{
+	return ((((-11304) as int) <= ((g2 as sint16) as int)) as int);
+}
+function f1(p0:int16):int16 options(inline: true)
+{
+	return ((p0 as int) as int16);
+}
+function main():void
+{
+	g1 = 39181;
+	g0 = (f1(((f0(&la0[((f1((a3[((g2 + 54) & 7)] as int16)) as int) & 7)]) as int16) | g1)) as sint16);
+	printf(g0, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "13\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// sign_extension の入力が A にある (呼び出しの戻り値) とき、N フラグが A を反映していない (常駐 Y の復帰の ldy の後)
+// のに bpl していた (fuzz で発覚)
+func TestSignExtendCallResult(t *testing.T) {
+	t.Parallel()
+	src := `var g2:sint16;
+struct S { f0:int16; f1:int; f2:sint16; }
+var s0:S;
+function f0(p0:int16):sint16 options(fastcall: true)
+{
+	return (g2 + 0);
+}
+function f2():sint options(fastcall: true)
+{
+	return (f0(1) as sint);
+}
+function main():void
+{
+	var l1:int16 = 45050;
+	var g0:int = 0;
+	g2 = 7157;
+	for (var l6:int = 8; l6; l6--) {
+		g0 = (l1 as int);
+		switch ((l6 & 7)) {
+		case 0:
+			l1 = 3;
+			s0.f2 = (f2() as sint16);
+		default:
+			l1 = 0;
+		}
+	}
+	printf(s0.f2 as int16, " ", g0, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "65525 0\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 定数との乗算のシフト・加減算への展開 (opt.expandMul): 1 バイト / 2 バイト、符号付き、2^n - 1、Dst が入力と同じ
 func TestExpandMulRun(t *testing.T) {
 	t.Parallel()

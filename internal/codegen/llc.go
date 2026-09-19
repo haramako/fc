@@ -832,6 +832,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			plsLabel, endLabel := labels[0], labels[1]
 			// TODO: サイズ1->2以上の場合を実装すること、いまはそれしかないから十分だけど
 			r.push(l.loadA(op.In(0), 0))
+			if l.inA(op.In(0)) {
+				// 入力が A にある (呼び出しの戻り値など) と lda が出ず、N が A を反映しているとは限らない
+				// (常駐 Y の復帰の ldy の後だった。fuzz で発覚)。直前が A の演算ならピープホールが消す
+				r.push("cmp #0")
+			}
 			r.push(l.storeA(op.Dst, 0))
 			r.push(fmt.Sprintf("bpl %s", plsLabel))
 			r.push("lda #255")

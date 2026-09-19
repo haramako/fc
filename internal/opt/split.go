@@ -113,7 +113,7 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 		if n, ok := ir.ValIntLiteral(o); ok {
 			return ir.NewIntLiteral("", u8, (n>>(8*k))&255)
 		}
-		if v := ir.UnderlyingValue(o); v != nil && parts[v] != [2]*ir.Value{} && ir.ValOffset(o) == 0 && ir.ValType(o).Size == 2 {
+		if v := ir.UnderlyingValue(o); v != nil && parts[v] != [2]*ir.Value{} && plainWord(o) {
 			return parts[v][k]
 		}
 		if ir.ValType(o).Size == 1 { // 1 バイトの値のゼロ拡張
@@ -225,7 +225,25 @@ func wordVars(op *ir.Op, cands map[*ir.Value]bool) []*ir.Value {
 // isWord は o が候補の変数を 2 バイトのまま (オフセット 0、サイズ 2) 参照しているか。
 func isWord(o ir.Operand, cands map[*ir.Value]bool) bool {
 	v := ir.UnderlyingValue(o)
-	return v != nil && cands[v] && ir.ValOffset(o) == 0 && ir.ValType(o).Size == 2
+	return v != nil && cands[v] && plainWord(o)
+}
+
+// plainWord は o が 2 バイトの変数そのもの、またはそれを 2 バイトのまま読み替えた cast か (`((p0 as int) as int16)` のように
+// 途中で 1 バイトに狭めた連鎖は下位バイトのゼロ拡張なので違う: 分けた変数の上位を読んでいた。fuzz で発覚)。
+func plainWord(o ir.Operand) bool {
+	for {
+		switch x := o.(type) {
+		case *ir.Value:
+			return x.Type.Size == 2
+		case *ir.CastedValue:
+			if x.Offset != 0 || x.Type.Size != 2 {
+				return false
+			}
+			o = x.From
+		default:
+			return false
+		}
+	}
 }
 
 // wordOperand は o が分解に使える 2 バイト (または 1 バイト) の値か: 候補の変数、2 バイトのメモリ上の変数、定数、1 バイトの値。
