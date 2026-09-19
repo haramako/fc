@@ -155,7 +155,7 @@ go test ./...                                    # 全部 (golden + examples + N
   プレイで発覚（単体テストは引数が変数か定数だけだった）。今は push_arg をその場で引数への代入に置き換え、間の命令は
   残す（`TestInlineFunction` の e / f が番）
 - **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
-  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa sink fuse coalesce chain narrow scale commute carry split rotate dup
+  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa induction sink fuse coalesce chain narrow scale commute carry split rotate dup
   inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が
   無ければ Skip する調査用テストで、`TestProbeDiff` が 2 つの ROM（`FC_PROBE_ROM_A` / `_B`、`FC_PROBE_DBG` / `_B` の
   dbgfile で名前→番地）を同じ入力で並走させ、両方が vsync 待ちに入ったフレームだけゲームの状態（`FC_PROBE_PREFIX=_my_,_en_,...`

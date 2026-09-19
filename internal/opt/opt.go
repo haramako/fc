@@ -36,6 +36,11 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 	if !ir.Disabled("chain") {
 		chainInPlace(lmd)
 	}
+	if !ir.Disabled("ssa") && !ir.Disabled("induction") && eliminateInduction(lmd) {
+		// coalesce の後 (`i += s` が `add i = i, s` になってから)。消したカウンタの加算と初期化、lim の計算の定数を畳む
+		propagateSSA(lmd)
+		compact(lmd)
+	}
 	if !ir.Disabled("narrow") {
 		narrowBitTest(lmd, u)
 	}

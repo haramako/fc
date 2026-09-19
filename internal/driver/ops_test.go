@@ -623,6 +623,70 @@ function main():void
 //	(2) `a16[i] = 4`: 融合した index_pset が値の幅 (1 バイト) しか書かず上位バイトが残る
 //	(3) `(x8 as int16)` を splitWords がバイトに分けるとき、上位バイトとして隣の番地を読む (part3 の g1 が 46024 になる)
 //	(4) 使われない書き込み (`l0 = ...`) の位置が live range に入らず、ループ変数と番地を共有して無限ループ (part4、-O 0)
+// 誘導変数の統合 (opt.eliminateInduction): 比較にしか使われないカウンタをポインタの比較に置き換える。
+// 初期値が上限以上でループに入らない場合、歩幅が変数 (外側のループの比較で上限が分かる) の場合、初期値がリテラルの場合
+func TestInductionRun(t *testing.T) {
+	t.Parallel()
+	src := `var buf:[64]int;
+function fill(k0:int16, lim_unused:int):int16
+{
+	var p = &buf[0];
+	var k:int16 = k0;
+	var n:int16 = 0;
+	while (k < 40) {
+		*p = 7;
+		p += 1;
+		k += 1;
+		n += 1;
+	}
+	return n;
+}
+function sieve():int16
+{
+	var i:int16 = 0;
+	var p = &buf[0];
+	var count:int16 = 0;
+	for (i = 0; i < 64; i++) {
+		*p = 1;
+		p += 1;
+	}
+	p = &buf[0];
+	for (i = 0; i < 64; i++) {
+		if (*p) {
+			var prime:int16 = i + i + 3;
+			var k:int16 = i + prime;
+			var q = p;
+			q += prime;
+			while (k < 64) {
+				*q = 0;
+				q += prime;
+				k += prime;
+			}
+			count++;
+		}
+		p += 1;
+	}
+	return count;
+}
+function main():void
+{
+	var a = fill(38, 0);
+	var b = fill(45, 0);
+	var c = fill(0, 0);
+	var s:int16 = 0;
+	var i:int;
+	for (i = 0; i < 64; i++) { s += buf[i]; }
+	printf(a, " ", b, " ", c, " ", s, " ", sieve(), " ", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8], buf[9], "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "2 0 40 280 30 1110110110\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // `!` の 2 バイトの入力: 全バイトが 0 のときだけ 1 (バイトごとに beq していて「どれかが 0」になっていた。
 // SSA の定数畳み込みとの差分テストで発覚)
 func TestNot16(t *testing.T) {

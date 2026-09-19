@@ -11,12 +11,12 @@
   },
   "crc16": {
     "cycles": 1959236,
-    "size": 278,
+    "size": 279,
     "out": "crc16=16501"
   },
   "crc8": {
     "cycles": 1171848,
-    "size": 247,
+    "size": 248,
     "out": "crc8=149"
   },
   "entities": {
@@ -50,8 +50,8 @@
     "out": "sum=15293"
   },
   "sieve": {
-    "cycles": 17907696,
-    "size": 301,
+    "cycles": 15066125,
+    "size": 325,
     "out": "count=1900"
   },
   "textprint": {
