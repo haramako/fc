@@ -112,7 +112,7 @@ func peepholeA(lines []string) []string {
 	next := func(i int) string {
 		for j := i + 1; j < len(lines); j++ {
 			t := strings.TrimSpace(lines[j])
-			if t != "" && !strings.HasPrefix(t, ";") {
+			if t != "" && !strings.HasPrefix(t, ";") && !strings.HasPrefix(t, ".dbg") {
 				return t
 			}
 		}
@@ -120,8 +120,8 @@ func peepholeA(lines []string) []string {
 	}
 	for i, line := range lines {
 		t := strings.TrimSpace(line)
-		if t == "" || strings.HasPrefix(t, ";") {
-			out = append(out, line)
+		if t == "" || strings.HasPrefix(t, ";") || strings.HasPrefix(t, ".dbg") {
+			out = append(out, line) // .dbg (fcc build -g のソース位置) は命令の並びに影響しない
 			continue
 		}
 		if strings.HasSuffix(t, ":") || strings.HasPrefix(t, ".") {

@@ -21,12 +21,15 @@ Commands:
     run              build and run by emulator
     fmt              format source files (see fcc fmt -h)
     check            compile without producing files and report errors / warnings
+    size             show code size per function from an ld65 --dbgfile (see fcc size -h)
     version          show version
 Options:
     -h, --help       show this message
     -o FILE          output file
     -e               run by interpreter
-    -d, --debug      show debug info
+    -d, --debug      show debug info (frames, far calls)
+    -g               emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)
+    --size-report    show code size per segment / function (needs linking)
     -t, --target     target platform ( nes, emu )
     -O LEVEL         optimize level (0-2)
 `
@@ -50,6 +53,8 @@ func run() int {
 		return runVersion()
 	case "check":
 		return runCheck(args[1:])
+	case "size":
+		return runSize(args[1:])
 	}
 	fs := flag.NewFlagSet("fcc", flag.ExitOnError)
 	fs.Usage = func() { fmt.Print(usage) }
@@ -57,6 +62,8 @@ func run() int {
 	runFlag := fs.Bool("e", false, "run by interpreter")
 	debugFlag := fs.Bool("d", false, "show debug info")
 	fs.BoolVar(debugFlag, "debug", false, "show debug info")
+	gFlag := fs.Bool("g", false, "emit debug info for Mesen")
+	sizeFlag := fs.Bool("size-report", false, "show code size per segment / function")
 	target := fs.String("t", "", "target platform ( nes, emu )")
 	fs.StringVar(target, "target", "", "target platform ( nes, emu )")
 	optLevel := fs.Int("O", 2, "optimize level (0-2)")
@@ -70,6 +77,8 @@ func run() int {
 		Out:           *out,
 		Run:           *runFlag,
 		OptimizeLevel: optimizeLevel(*optLevel),
+		Debug:         *gFlag,
+		SizeReport:    *sizeFlag,
 	}
 	switch com {
 	case "run":
@@ -103,6 +112,9 @@ func run() int {
 		for _, line := range res.Frames {
 			fmt.Fprintln(os.Stderr, line)
 		}
+	}
+	for _, line := range res.SizeReport {
+		fmt.Println(line)
 	}
 	if *debugFlag && len(res.FarCalls) > 0 {
 		// far call (別バンクへの呼び出し) の一覧: 熱い経路が far になっていないかの確認用 (doc/v2_farcall.md §4)

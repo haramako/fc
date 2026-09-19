@@ -30,6 +30,13 @@ type Llc struct {
 	types         *types.Universe
 	Lambdas       map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
 
+	// DebugFile が nil でなければ、命令ごとに fc のソース位置を `.dbg line, "file", N` で .s に埋める (fcc build -g)。
+	// ld65 の --dbgfile に載り、Mesen が fc のソースをステップ実行できる。DebugFile は sema のファイル参照
+	// (Dir 相対) を .dbg に書く名前 (ROM の隣から辿れる相対パス) にする
+	DebugFile func(ref string) string
+	dbgFiles  map[string]bool // このモジュールで宣言済みの .dbg file
+	dbgLast   string          // 直前に出した .dbg line (同じ行の命令の間では出さない)
+
 	// ループ内の A / Y 常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタを占有している変数と、その扱い
 	res     *ir.Value // op.Resident (A)
 	resMem  bool      // 退避中: res をメモリ (Home) として参照する
@@ -112,6 +119,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 
 	inc := &asmLines{}
 	asm := &asmLines{}
+	l.dbgFiles, l.dbgLast = map[string]bool{}, ""
 	asm.push("\t.setcpu \"6502\"")
 	asm.push("\t.include \"macro.inc\"")
 	asm.push("\t.include \"_frames.inc\"") // 静的フレームの配置 (frames.Place が生成)
@@ -239,6 +247,22 @@ func (l *Llc) fusableIndex(ops []*ir.Op, i int) (string, bool) {
 		return "x", true
 	}
 	return "y", true
+}
+
+// dbgLine は ソース位置 pos の `.dbg line` (初出のファイルは `.dbg file` も)。同じ位置が続く間は空。
+func (l *Llc) dbgLine(file string, line int) []any {
+	name := l.DebugFile(file)
+	key := fmt.Sprintf("%s:%d", name, line)
+	if key == l.dbgLast {
+		return nil
+	}
+	l.dbgLast = key
+	var r []any
+	if !l.dbgFiles[name] {
+		l.dbgFiles[name] = true
+		r = append(r, fmt.Sprintf(".dbg file, \"%s\", 0, 0", name))
+	}
+	return append(r, fmt.Sprintf(".dbg line, \"%s\", %d", name, line))
 }
 
 func anyList(ss []string) []any {
@@ -414,6 +438,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			cm = cm[:120]
 		}
 		r.push(fmt.Sprintf("; %04d: %s", opNo, cm))
+		if l.DebugFile != nil && op.Pos.IsValid() && op.Code != ir.OpLabel {
+			r.push(l.dbgLine(op.Pos.Filename, op.Pos.Line))
+		}
 
 		if l.fused != nil && opNo != l.fusedAt+1 {
 			l.fused = nil
@@ -451,6 +478,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 
 		case ir.OpLabel:
 			r.push(op.Label + ":")
+			l.dbgLast = "" // 合流点の後は位置を出し直す
 
 		case ir.OpIf, ir.OpIfTrue:
 			// OpIf は値が 0 のとき、OpIfTrue は 0 でないときに Label へ

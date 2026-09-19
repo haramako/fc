@@ -32,6 +32,8 @@ type Options struct {
 	Run           bool   // ビルド後に emu で実行する (Target == TargetEmu のみ)
 	OptimizeLevel int    // 1〜2 (0 は既定の 2、-1 は最適化なし)
 	CompileOnly   bool   // アセンブル (.o) まで。リンクしない
+	Debug         bool   // Mesen 用のデバッグ情報 (.dbg に fc のソース行、.mlb のラベル) を ROM の隣に書く
+	SizeReport    bool   // 関数ごとのコードサイズ (Result.SizeReport)
 
 	// Dir はソースの基準ディレクトリ (use / include の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
@@ -111,6 +113,8 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		Run:           opt.Run,
 		OptimizeLevel: opt.OptimizeLevel,
 		CompileOnly:   opt.CompileOnly,
+		Debug:         opt.Debug,
+		SizeReport:    opt.SizeReport,
 		Dir:           opt.Dir,
 		BuildDir:      opt.BuildDir,
 		Jobs:          opt.Jobs,
@@ -130,4 +134,14 @@ func Format(src []byte, filename string) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// SizeReport は ld65 の --dbgfile (fcc build が ROM の隣に書く <out>.dbg、または自前のリンクで --dbgfile を指定したもの) から
+// セグメントと関数ごとのコードサイズの表示を作る (fcc size)。top は表示する関数の数 (0 なら全部)。
+func SizeReport(dbgFile string, top int) ([]string, error) {
+	d, err := driver.ParseDbgFile(dbgFile)
+	if err != nil {
+		return nil, err
+	}
+	return d.SizeReport(top), nil
 }

@@ -94,9 +94,10 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 
 ## ツール・開発体験
 
-- [ ] **デバッグ情報**: ca65 `-g` + ld65 `--dbgfile` を配線し、Mesen 向けのシンボル / ソース対応（.mlb / .dbg）を出す
+- [x] **デバッグ情報**: `fcc build -g` が ROM の隣に `.dbg`（fc のソース行入り）と `.mlb` を書く。Mesen が自動で読む
+      （development_notes「Mesen でのソースレベルデバッグ」） ✅ 2026-09-19
 - [ ] watch モード、LSP（VS Code 拡張は `fcc check` を呼ぶだけの薄い実装）
-- [ ] コードサイズレポート（関数単位の内訳、`fcc build --size-report`）
+- [x] コードサイズレポート（`fcc build --size-report`、`fcc size game.dbg`。dbgfile のラベルから関数ごとの大きさ） ✅ 2026-09-19
 - [ ] モジュール単位のキャッシュとインクリメンタルビルド（`ir.ModuleInterface` のシリアライズ、内容ハッシュ、
       依存グラフ。ca65 の並列アセンブルは済み）
 - [ ] TTY での診断の色付け

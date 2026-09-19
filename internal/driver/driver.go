@@ -45,6 +45,8 @@ type BuildOptions struct {
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
 	CompileOnly   bool
 	Stdout        io.Writer
+	Debug         bool // -g: fc のソース位置を .dbg line で埋め、ROM の隣に Mesen 用の .dbg / .mlb を書く
+	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / base.o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
@@ -58,17 +60,19 @@ type BuildOptions struct {
 
 // Result はビルドの結果。
 type Result struct {
-	ExitCode  int            // Run 指定時のプログラムの終了コード (それ以外は 0)
-	Out       string         // 出力ファイル (CompileOnly なら "")
-	MapFile   string         // ld65 のマップファイル (CompileOnly なら "")
-	Objects   []string       // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
-	BuildDir  string         // 中間生成物ディレクトリ
-	Warnings  []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
-	FarCalls  []sema.FarCall // far call になった呼び出し (options(farcall: true) のとき。fcc build -d で表示)
-	Cycles    int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
-	StaticZp  int            // 静的フレームの使用量 (ゼロページ側 FC_SZP / RAM 側 FC_SRAM)
-	StaticRam int
-	Frames    []string // 静的フレームの配置の要約 (fcc build -d で表示)
+	ExitCode   int            // Run 指定時のプログラムの終了コード (それ以外は 0)
+	Out        string         // 出力ファイル (CompileOnly なら "")
+	MapFile    string         // ld65 のマップファイル (CompileOnly なら "")
+	DbgFile    string         // ld65 の --dbgfile (CompileOnly なら "")。Debug なら Mesen 用の .mlb も隣に書く
+	Objects    []string       // fc ソースから生成したオブジェクトファイル (モジュール順 = リンク順)
+	BuildDir   string         // 中間生成物ディレクトリ
+	Warnings   []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
+	FarCalls   []sema.FarCall // far call になった呼び出し (options(farcall: true) のとき。fcc build -d で表示)
+	Cycles     int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
+	StaticZp   int            // 静的フレームの使用量 (ゼロページ側 FC_SZP / RAM 側 FC_SRAM)
+	StaticRam  int
+	Frames     []string // 静的フレームの配置の要約 (fcc build -d で表示)
+	SizeReport []string // 関数ごとのコードサイズ (fcc build --size-report で表示)
 }
 
 type Compiler struct {
@@ -180,6 +184,19 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 
 	// compile2 (中間コード -> アセンブラファイル)
 	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
+	if opt.Debug {
+		outDir := filepath.Dir(opt.Out)
+		llc.DebugFile = func(ref string) string {
+			abs := ref
+			if !filepath.IsAbs(abs) {
+				abs = filepath.Join(c.dir, ref)
+			}
+			if rel, err := filepath.Rel(outDir, abs); err == nil {
+				return filepath.ToSlash(rel)
+			}
+			return filepath.ToSlash(abs)
+		}
+	}
 	llc.Limits.FastcallReg = c.fastcallRegSize()
 	llc.FarCall = prog.FarCallEnabled()
 	result.FarCalls = prog.FarCalls
@@ -234,7 +251,25 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	c.makeBase()
 
 	result.Out = opt.Out
-	result.MapFile = c.link(objs, opt)
+	result.MapFile, result.DbgFile = c.link(objs, opt)
+	if opt.Debug || opt.SizeReport {
+		dbg, err := ParseDbgFile(result.DbgFile)
+		if err != nil {
+			return nil, err
+		}
+		if opt.Debug && opt.Target == "nes" {
+			battery := false
+			if b, err := os.ReadFile(opt.Out); err == nil && len(b) > 6 {
+				battery = b[6]&2 != 0
+			}
+			if err := dbg.WriteMlb(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out))+".mlb", battery); err != nil {
+				return nil, err
+			}
+		}
+		if opt.SizeReport {
+			result.SizeReport = dbg.SizeReport(40)
+		}
+	}
 
 	if opt.Run {
 		code, cycles, err := c.execute(opt.Out, opt.Stdout)
@@ -292,7 +327,7 @@ type bankInfo struct {
 }
 
 // link はオブジェクトファイルをリンクし、マップファイルのパスを返す。
-func (c *Compiler) link(objs []string, opt *BuildOptions) string {
+func (c *Compiler) link(objs []string, opt *BuildOptions) (mapFile, dbgFile string) {
 	opts := c.prog.Options
 
 	ineschr := 1
@@ -397,15 +432,16 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) string {
 		panic(err)
 	}
 
-	mapFile := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".map"
-	args := []string{"-m", mapFile, "-o", opt.Out, "-C", filepath.Join(c.buildDir, "ld65.cfg"),
+	mapFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".map"
+	dbgFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".dbg"
+	args := []string{"-m", mapFile, "--dbgfile", dbgFile, "-o", opt.Out, "-C", filepath.Join(c.buildDir, "ld65.cfg"),
 		filepath.Join(c.buildDir, "base.o"), filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
 	if c.farcallAsm() != "" {
 		args = append(args, filepath.Join(c.buildDir, "farcall.o"))
 	}
 	args = append(args, objs...)
 	c.sh("ld65", args...)
-	return mapFile
+	return mapFile, dbgFile
 }
 
 // farcallAsm は fc が用意する farcall トランポリン (doc/v2_farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では

@@ -180,6 +180,21 @@ go test ./...                                    # 全部 (golden + examples + N
 シンボルアドレスは ld65 のマップファイル（`-m`）から取得する
 （`tools/` 相当の処理は `internal/nes/mesen_test.go` の `parseLd65Map`）。
 
+### Mesen でのソースレベルデバッグ（`fcc build -g`、2026-09-19）
+
+`fcc build -t nes -g -o game.nes main.fc` は ROM の隣に **`game.dbg`**（ld65 の `--dbgfile`。fc のソース行を含む）と
+**`game.mlb`**（Mesen 2 形式のラベル: `NesPrgRom:<offset>:_mod_func`、`NesInternalRam:<addr>:_mod_var`）を書く。
+Mesen は ROM を開くとき同じ名前の `.dbg` / `.mlb` を自動で読むので、デバッガに関数名・変数名が付き、
+`.fc` の行でブレークポイントとステップ実行ができる（cc65 の C ソース対応と同じ仕組み: codegen が命令ごとに
+`.dbg line, "file", N` を出し、ca65 `-g` が `type=1` の行レコードにする）。`.dbg` のファイル名は ROM の隣からの
+相対パスなので、ROM とソースの位置関係を変えたら作り直す。`.dbg` は `-g` 無しでも常に書く（`--size-report` /
+`fcc size` / マクロベンチのプロファイルが使う）。自前で ld65 を呼ぶプロジェクト（castle）は `--dbgfile` を足し、
+`.mlb` は `fcc size` と同じ `driver.DbgFile.WriteMlb` で作れる（CLI は未提供）。
+
+### コードサイズ（`fcc build --size-report` / `fcc size game.dbg`）
+
+セグメントごとの合計と、関数（ラベル）ごとの大きさ（次のラベルまで。関数の後ろの定数表を含む）を大きい順に出す。
+
 ## 実プロジェクトのビルド構成（参考）
 
 - **fc-miku**: `fcc build -t nes miku.fc` だけで完結（fc 標準ドライバ）
