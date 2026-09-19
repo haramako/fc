@@ -184,6 +184,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 				inc.push(fmt.Sprintf("\t.import %s", directSym(mangle(d.Sym))))
 				asm.push(fmt.Sprintf("\t.export %s", directSym(mangle(d.Sym))))
 			}
+			if lmd.RegArg {
+				inc.push(fmt.Sprintf("\t.import %s", frameSym(mangle(d.Sym)))) // .export は .proc の中 (CompileLambda)
+			}
 			asm.push(anyList(l.CompileLambda(d.Sym, lmd)))
 		default:
 			panic(fmt.Sprintf("invalid def kind %s", d.Kind))
@@ -271,6 +274,16 @@ func anyList(ss []string) []any {
 		r[i] = s
 	}
 	return r
+}
+
+// nextOp は i の次の (nil でない) 命令。
+func nextOp(ops []*ir.Op, i int) *ir.Op {
+	for j := i + 1; j < len(ops); j++ {
+		if ops[j] != nil {
+			return ops[j]
+		}
+	}
+	return nil
 }
 
 // restoreY は要素 size バイトのポインタ参照 (`lda (p),y; iny; lda (p),y`) の後で、添字が Y に常駐しているなら Y を戻す
@@ -424,11 +437,21 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		// 自分のフレームに写してから本体 (__direct。呼び先が分かっている呼び出しはここから入る) へ
 		r.push(mangle(sym) + ":")
 		for k := lmd.Type.Base.Size; k < lmd.Type.Base.Size+argBytes(lmd); k++ {
+			if lmd.RegArg && k == regArgOffset(lmd) {
+				r.push(fmt.Sprintf("lda <S+%d,x", k)) // 最後の引数は A のまま __direct の sta へ
+				continue
+			}
 			r.push(fmt.Sprintf("lda <S+%d,x", k), fmt.Sprintf("sta %s", staticAddr(lmd, k)))
 		}
 		r.push(fmt.Sprintf(".proc %s", directSym(mangle(sym))))
 	} else {
 		r.push(fmt.Sprintf(".proc %s", mangle(sym)))
+	}
+	if lmd.RegArg {
+		// レジスタ渡しの入口: A の最後の引数をフレームに写す。フレームに書いて呼ぶ側 (far call など) はこの後ろから入る
+		r.push(fmt.Sprintf("sta %s", staticAddr(lmd, regArgOffset(lmd))))
+		r.push(fmt.Sprintf("\t.export %s", frameSym(mangle(sym))))
+		r.push(frameSym(mangle(sym)) + ":")
 	}
 	if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
 		// stack 関数: X = フレームの底 (呼び出し側が FC_SP にした)。空き先頭をフレームの後ろへ
@@ -616,6 +639,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
 				r.push("lda FC_SP", "sec", fmt.Sprintf("sbc #%d", lmd.FrameSize), "sta FC_SP") // 空き先頭を戻す
 			}
+			if lmd.RegResult {
+				r.push(fmt.Sprintf("lda %s", staticAddr(lmd, 0))) // 戻り値を A にも (直前が同じ lda / sta ならピープホールが消す)
+			}
 			r.push("rts")
 
 		case ir.OpPushResult, ir.OpPushFastcallResult:
@@ -636,6 +662,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(l.loadA(op.In(0), i))
 				switch pc.kind {
 				case ckStatic:
+					if pc.callee.RegArg && !pc.far && pc.argOff == regArgOffset(pc.callee) && nextOp(ops, opNo) == pc.callOp {
+						pc.inA = true // 最後の引数は A のまま呼ぶ (直後が call のときだけ)
+						pc.argOff++
+						break
+					}
 					r.push(fmt.Sprintf("sta %s", staticAddr(pc.callee, pc.argOff)))
 					pc.argOff++
 				case ckStack:
@@ -664,6 +695,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				if pc.callee.Entry {
 					target = directSym(sym) // プロローグ (スタックからのコピー) を飛ばす
 				}
+				if pc.callee.RegArg && !pc.inA {
+					target = frameSym(sym) // 最後の引数もフレームに書いた: 入口の sta を飛ばす
+				}
 				if op.Far {
 					r.push(l.farCallSetup(target))
 					r.push(l.callStatic(lmd, "farcall"))
@@ -671,9 +705,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					r.push(l.callStatic(lmd, target))
 				}
 				if op.Dst != nil {
-					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-						r.push(fmt.Sprintf("lda %s", staticAddr(pc.callee, i)))
-						r.push(l.storeA(op.Dst, i))
+					if pc.callee.RegResult && !op.Far && lmd.ABI != ir.ABIStack {
+						r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる (stack 関数は X を戻すのに A を使うので不可)
+					} else {
+						for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+							r.push(fmt.Sprintf("lda %s", staticAddr(pc.callee, i)))
+							r.push(l.storeA(op.Dst, i))
+						}
 					}
 				}
 			case ckStack:
@@ -908,10 +946,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(loopLabel + ":")
 				r.push("cpy #0")
 				r.push(fmt.Sprintf("beq %s", endLabel))
-				if signed {
-					r.push("cmp #128")
+				if signed && op.Code == ir.OpShiftRight {
+					r.push("cmp #128") // 算術右シフト: 符号を C に立ててから回す
 				} else {
-					r.push("clc")
+					r.push("clc") // 左シフトは符号付きでも C を 0 に (符号を回し込んで `-109 << n` が 39 になっていた。fuzz で発覚)
 				}
 				r.push(fmt.Sprintf("%s a", rotate))
 				r.push("dey")

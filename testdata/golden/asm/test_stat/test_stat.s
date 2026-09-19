@@ -312,7 +312,6 @@ _102:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _105:

@@ -25,6 +25,9 @@ _stdio_print_addr: .res 2
 	;;;=============================
 .segment "stdio"
 .proc _stdio_exit
+	sta <F_stdio_exit+0
+		.export _stdio_exit__frame
+_stdio_exit__frame:
 	ldx FC_SP
 	lda #.LOBYTE(_6)
 	sta <S+0,x

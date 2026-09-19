@@ -56,6 +56,9 @@ _6:
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_add
+	sta <F_test_basic_add+2
+		.export _test_basic_add__frame
+_test_basic_add__frame:
 	clc
 	lda 0+<F_test_basic_add+1
 	adc 0+<F_test_basic_add+2
@@ -106,7 +109,6 @@ _6:
 	sbc #3
 	tax
 	lda <0+S+3,x
-	sta 0+<L+0
 	clc
 	adc 0+<S+2,x
 	sta 0+<S+0,x
@@ -125,10 +127,9 @@ _6:
 	lda #3
 	sta <F_test_basic_add+1
 	lda #5
-	sta <F_test_basic_add+2
 	jsr _test_basic_add
-	lda <F_test_basic_add+0
 	sta 0+<F_test_basic_test_function+0
+	lda 0+<F_test_basic_test_function+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -256,16 +257,15 @@ _32:
 	jsr _mem_compare
 	ldx FC_SP
 	lda <0+S+0,x
-	sta 0+<F_test_basic_test_misc+0
 	bne @4
 	lda #1
-	sta 0+<F_test_basic_test_misc+1
+	sta 0+<F_test_basic_test_misc+0
 	jmp @5
 @4:
 	lda #0
-	sta 0+<F_test_basic_test_misc+1
+	sta 0+<F_test_basic_test_misc+0
 @5:
-	lda 0+<F_test_basic_test_misc+1
+	lda 0+<F_test_basic_test_misc+0
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_58)
 	sta <F_unittest_assert_true+1
@@ -292,6 +292,9 @@ _58:
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_add_fastcall
+	sta <F_test_basic_add_fastcall+2
+		.export _test_basic_add_fastcall__frame
+_test_basic_add_fastcall__frame:
 	clc
 	lda 0+<F_test_basic_add_fastcall+1
 	adc 0+<F_test_basic_add_fastcall+2
@@ -307,10 +310,9 @@ _58:
 	lda #1
 	sta <F_test_basic_add_fastcall+1
 	lda #2
-	sta <F_test_basic_add_fastcall+2
 	jsr _test_basic_add_fastcall
-	lda <F_test_basic_add_fastcall+0
 	sta 0+<F_test_basic_test_fastcall+0
+	lda 0+<F_test_basic_test_fastcall+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -395,7 +397,6 @@ _63:
 	ldx FC_SP
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _66:

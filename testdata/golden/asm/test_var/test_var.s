@@ -18,6 +18,9 @@ _test_var_CONST:
 	;;;=============================
 .segment "test_var"
 .proc _test_var__D2
+	sta <F_test_var__D2+1
+		.export _test_var__D2__frame
+_test_var__D2__frame:
 	clc
 	lda 0+<F_test_var__D2+1
 	adc #2
@@ -270,8 +273,10 @@ _72:
 .segment "test_var"
 _test_var_add1:
 	lda <S+1,x
-	sta <F_test_var_add1+1
 .proc _test_var_add1__direct
+	sta <F_test_var_add1+1
+		.export _test_var_add1__frame
+_test_var_add1__frame:
 	clc
 	lda 0+<F_test_var_add1+1
 	adc #1
@@ -289,8 +294,10 @@ _test_var_add1:
 .segment "test_var"
 _test_var_mul2:
 	lda <S+1,x
-	sta <F_test_var_mul2+1
 .proc _test_var_mul2__direct
+	sta <F_test_var_mul2+1
+		.export _test_var_mul2__frame
+_test_var_mul2__frame:
 	lda 0+<F_test_var_mul2+1
 	asl a
 	sta 0+<F_test_var_mul2+0
@@ -400,10 +407,9 @@ _test_var_FUNC_TABLE:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #1
-	sta <F_test_var__D2+1
 	jsr _test_var__D2
-	lda <F_test_var__D2+0
 	sta 0+<F_test_var_test_func_pointer+0
+	lda 0+<F_test_var_test_func_pointer+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -417,10 +423,9 @@ _test_var_FUNC_TABLE:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #1
-	sta <F_test_var__D96+1
 	jsr _test_var__D96
-	lda <F_test_var__D96+0
 	sta 0+<F_test_var_test_func_pointer+0
+	lda 0+<F_test_var_test_func_pointer+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -513,8 +518,8 @@ _111:
 .segment "test_var"
 .proc _test_var_test_segment_option
 	jsr _test_var_segmented_function
-	lda <F_test_var_segmented_function+0
 	sta 0+<F_test_var_test_segment_option+0
+	lda 0+<F_test_var_test_segment_option+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -606,7 +611,6 @@ _115:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _118:
@@ -643,6 +647,9 @@ _test_var_main = _main
 	;;;=============================
 .segment "test_var"
 .proc _test_var__D96
+	sta <F_test_var__D96+1
+		.export _test_var__D96__frame
+_test_var__D96__frame:
 	clc
 	lda 0+<F_test_var__D96+1
 	adc #2

@@ -400,7 +400,6 @@ _test_lzw_buf: .res 256
 	lda #.HIBYTE(UNPACKED)
 	sta <F_mem_strlen+2
 	jsr _mem_strlen
-	lda <F_mem_strlen+0
 	sta 0+<F_test_lzw_test_unpack+2
 	lda 0+<F_test_lzw_test_unpack+0
 	sta <F_unittest_assert_equal+0
@@ -515,7 +514,6 @@ _62:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _65:

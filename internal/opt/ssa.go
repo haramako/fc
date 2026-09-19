@@ -393,9 +393,8 @@ func (s *ssaForm) operandBits(i, k int) (int, bool) {
 	if !isIntLike(t) {
 		return 0, false
 	}
-	off := 8 * uint(ir.ValOffset(o))
 	if n, ok := ir.ValIntLiteral(o); ok {
-		return n >> off, true
+		return castBits(o, n), true
 	}
 	us := s.useAt[i]
 	if k >= len(us) || us[k] == nil {
@@ -405,7 +404,20 @@ func (s *ssaForm) operandBits(i, k int) (int, bool) {
 	if !s.konst(val) {
 		return 0, false
 	}
-	return bitsOf(val.bits>>off, t.Size), true
+	return castBits(o, val.bits), true
+}
+
+// castBits は値のビット列 base (変数ならそのサイズに切り詰めたもの、リテラルならその整数値) を、o の cast の連鎖で
+// 内側から順に読み替えたビット列。各段は Offset バイト目からその型の幅を取る (狭める cast は切り詰め、そこから広げる cast は
+// ゼロ拡張: `((l0 as int) as sint16)` は l0 の下位バイト。外側の型と合計のオフセットだけで読むと内側の切り詰めが
+// 消えてしまう。fuzz で発覚)。
+func castBits(o ir.Operand, base int) int {
+	cv, ok := o.(*ir.CastedValue)
+	if !ok {
+		return base
+	}
+	inner := castBits(cv.From, base)
+	return bitsOf(inner>>(8*uint(cv.Offset)), cv.Type.Size)
 }
 
 // operandInt は入力 k の値をその型で読んだもの。

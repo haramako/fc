@@ -68,16 +68,15 @@ _test_rle_dest: .res 128
 	jsr _mem_compare
 	ldx FC_SP
 	lda <0+S+0,x
-	sta 0+<F_test_rle_test_rle+2
 	bne @1
 	lda #1
-	sta 0+<F_test_rle_test_rle+3
+	sta 0+<F_test_rle_test_rle+2
 	jmp @2
 @1:
 	lda #0
-	sta 0+<F_test_rle_test_rle+3
+	sta 0+<F_test_rle_test_rle+2
 @2:
-	lda 0+<F_test_rle_test_rle+3
+	lda 0+<F_test_rle_test_rle+2
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_13)
 	sta <F_unittest_assert_true+1
@@ -128,16 +127,15 @@ _test_rle_dest: .res 128
 	jsr _mem_compare
 	ldx FC_SP
 	lda <0+S+0,x
-	sta 0+<F_test_rle_test_rle+0
 	bne @3
 	lda #1
-	sta 0+<F_test_rle_test_rle+1
+	sta 0+<F_test_rle_test_rle+0
 	jmp @4
 @3:
 	lda #0
-	sta 0+<F_test_rle_test_rle+1
+	sta 0+<F_test_rle_test_rle+0
 @4:
-	lda 0+<F_test_rle_test_rle+1
+	lda 0+<F_test_rle_test_rle+0
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_25)
 	sta <F_unittest_assert_true+1
@@ -177,7 +175,6 @@ _25:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _28:

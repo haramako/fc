@@ -13,7 +13,6 @@ __MODULE_TEST_BUG__ = 1
 .segment "test_bug"
 .proc _test_bug_test_pointer_access
 	lda #10
-	sta <F_math_sin+1
 	jsr _math_sin
 	rts
 .endproc
@@ -36,7 +35,6 @@ __MODULE_TEST_BUG__ = 1
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _3:

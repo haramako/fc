@@ -29,7 +29,6 @@ __MODULE_UNITTEST__ = 1
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #1
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	jmp @end_3
 @else_2:
@@ -97,7 +96,6 @@ _11:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #1
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	jmp @end_15
 @else_14:

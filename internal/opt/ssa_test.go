@@ -52,6 +52,19 @@ func TestSSAConstWrap(t *testing.T) {
 	check(t, lmd, "push_arg nil = #4", "push_arg nil = #-3")
 }
 
+// cast の連鎖: `((x as int) as sint16)` は下位バイトのゼロ拡張 (外側の型だけで読むと符号拡張してしまう)
+func TestSSAConstCastChain(t *testing.T) {
+	s16 := tu.IntType(2, true)
+	x, tv := local("x", u16()), tmp("t", s16)
+	lmd := lambda(
+		op(ir.OpLoad, x, lit(59037, u16())),
+		op(ir.OpXor, tv, ir.NewCastedValue(ir.NewCastedValue(x, u8(), 0), s16, 0), lit(0, s16)),
+		pushArg(u16(), tv),
+	)
+	propagateSSA(lmd)
+	check(t, lmd, "push_arg nil = #157")
+}
+
 // コピー伝播: `load x = a` の後の x は a に。a が書き換えられた後は伝播しない
 func TestSSACopy(t *testing.T) {
 	a, c, x, t1, t2 := local("a", u8()), local("c", u8()), local("x", u8()), tmp("t1", u8()), tmp("t2", u8())

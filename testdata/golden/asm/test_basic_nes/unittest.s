@@ -35,7 +35,6 @@ __MODULE_UNITTEST__ = 1
 	ldx FC_SP
 	jsr _stdio_print
 	lda #1
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	jmp @end_3
 @else_2:
@@ -68,9 +67,7 @@ _11:
 	lda 1+<F_unittest_assert_equal+0
 	cmp 1+<F_unittest_assert_equal+2
 @1:
-	bne @3
-	jmp @else_14
-@3:
+	beq @else_14
 	ldx FC_SP
 	lda #.LOBYTE(_21)
 	sta <S+0,x
@@ -121,7 +118,6 @@ _11:
 	ldx FC_SP
 	jsr _stdio_print
 	lda #1
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	jmp @end_15
 @else_14:

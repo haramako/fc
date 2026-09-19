@@ -347,6 +347,9 @@ func argBytes(lmd *ir.Lambda) int {
 	return n
 }
 
+// regArgOffset は A で受け取る最後の引数 (1 バイト) のフレーム内オフセット (RegArg のとき)。
+func regArgOffset(lmd *ir.Lambda) int { return lmd.Type.Base.Size + argBytes(lmd) - 1 }
+
 // byte は値からn番目のbyteを取得する。
 // castByteExists は cast の n バイト目が元の値の中にあるか (入れ子の cast は内側の型の大きさで順に絞る)。
 func castByteExists(v ir.Operand, n int) bool {

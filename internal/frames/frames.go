@@ -270,6 +270,14 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		default:
 			lmd.ABI = ir.ABIStatic
 			lmd.Entry = entry[i]
+			if !lmd.Interrupt && !lmd.Extern {
+				if np := len(lmd.Type.Params); np > 0 && lmd.Type.Params[np-1].Size == 1 {
+					lmd.RegArg = true
+				}
+				if lmd.Type.Base.Size == 1 {
+					lmd.RegResult = true
+				}
+			}
 		}
 	}
 

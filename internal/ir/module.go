@@ -251,6 +251,12 @@ type Lambda struct {
 	Unused    bool // main / 割り込み / asm / 関数ポインタからどう辿っても届かない (出力しない。frames.Analyze が決める)
 	FrameZp   bool // static: フレームがゼロページ (FC_SZP) にある
 	FrameBase int  // static: 領域内のオフセット (配置後)
+	// レジスタ渡し (static だけ。doc/v2_frame_alloc.md §7): RegArg は最後の引数 (1 バイト) を A で受け取る (呼び出し側が
+	// A に置いて `sym` / `sym__direct` から入り、入口の `sta` でフレームに写す。フレームに書いた呼び出し (far call、
+	// 引数と call の間に他の命令がある) は `sta` の後ろの `sym__frame` から入る)。RegResult は 1 バイトの戻り値を
+	// フレームに書いたうえで A にも置いて返す (呼び出し側はフレームを読まない)
+	RegArg    bool
+	RegResult bool
 }
 
 // ABI は関数の呼び出し規約 (doc/v2_frame_alloc.md §6-1)。

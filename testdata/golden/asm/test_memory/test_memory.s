@@ -299,8 +299,8 @@ _38:
 	lda #.HIBYTE(_42)
 	sta <F_mem_strcpy+4
 	jsr _mem_strcpy
-	lda <F_mem_strcpy+0
 	sta 0+<F_test_memory_test_strcpy+0
+	lda 0+<F_test_memory_test_strcpy+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -460,7 +460,6 @@ _70:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _73:

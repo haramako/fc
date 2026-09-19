@@ -382,7 +382,11 @@ func freeA(op *ir.Op) bool {
 	case ir.OpRolC, ir.OpRorC:
 		return ir.UnderlyingValue(op.Dst) == ir.UnderlyingValue(op.Src[0]) && isMemByte(op.Dst) // rol mem
 	case ir.OpIf, ir.OpIfTrue:
-		// コンディションの一時変数なら分岐だけ
+		// コンディションの一時変数なら分岐だけ。cast を挟んだ一時変数 (`if ((!x) as int16)`) はメモリから A に読むので不可
+		// (A に常駐した値を壊して飛んでいた。fuzz で発覚)
+		if _, plain := op.Src[0].(*ir.Value); !plain {
+			return false
+		}
 		return ir.ValLocalType(op.Src[0]) == ir.LTTemp && !isMemByte(op.Src[0])
 	}
 	return false

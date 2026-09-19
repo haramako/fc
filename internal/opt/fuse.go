@@ -69,7 +69,9 @@ func fusePointer(lmd *ir.Lambda) {
 					ops[i+1] = nil
 				}
 			case ir.OpPset:
-				if isSameOperand(op.Dst, next.Src[0]) {
+				// 書く幅は要素の大きさになるので、ポインタが要素の型 (struct の先頭フィールドへの cast ではない) のときだけ
+				// (`sa[i].f0 = 4` (S は 2 バイト) が隣のフィールドまで書いていた。fuzz で発覚)
+				if isSameOperand(op.Dst, next.Src[0]) && ir.ValType(next.Src[0]).Base.Size == ir.ValType(arr).Base.Size {
 					ops[i] = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, next.Src[1]}, Pos: next.Pos}
 					ops[i+1] = nil
 				}

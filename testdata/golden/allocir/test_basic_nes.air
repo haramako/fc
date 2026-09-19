@@ -27,7 +27,7 @@
   (var 2 $12 local #"ubool8" lt=temp loc=cond cond=carry,true)
   (var 3 $13 local #"uint8" lt=temp loc=frame addr=2)
   (var 4 $14 local #"uint8" lt=temp loc=a)
-  (var 5 $15 local #"uint8" lt=temp loc=reg addr=0)
+  (var 5 $15 local #"uint8" lt=temp loc=a)
   (var 6 $16 local #"uint8" lt=temp loc=a)
   (var 7 $17 local #"uint8" lt=temp loc=none unuse)
  )
@@ -92,13 +92,13 @@
   0033 (:return)
  )
 )
-(alloc-lambda test_basic _test_basic_test_misc _test_basic_test_misc frame_size=2 abi=static
+(alloc-lambda test_basic _test_basic_test_misc _test_basic_test_misc frame_size=1 abi=static
  (vars
   (var 0 i local #"uint8" loc=none unuse)
   (var 1 n local #"uint8" loc=none unuse)
   (var 2 x local #"uint16" loc=none unuse)
-  (var 3 $52 local #"uint8" lt=temp loc=static addr=0)
-  (var 4 $57 local #"ubool8" lt=temp loc=static addr=1)
+  (var 3 $52 local #"uint8" lt=temp loc=a)
+  (var 4 $57 local #"ubool8" lt=temp loc=static addr=0)
  )
  (ops
   0000 (:push_result #"void")

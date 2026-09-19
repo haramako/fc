@@ -7,6 +7,7 @@ _stdio_EMU_EXIT = 65535
 	.import _stdio_print_int16
 	.import _stdio_print
 	.import _stdio_exit
+	.import _stdio_exit__frame
 	.import _stdio_init
 	.import _interrupt
 _stdio_interrupt = _interrupt

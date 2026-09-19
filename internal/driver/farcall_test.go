@@ -74,7 +74,8 @@ func TestFarCall(t *testing.T) {
 	if !strings.Contains(m, "jsr _far1_nearf") || !strings.Contains(m, "jsr _fixed1_twice") {
 		t.Errorf("main.s: nearf / twice は直接呼ぶべき")
 	}
-	if !strings.Contains(m, "lda #<.bank(_far1_add)") || !strings.Contains(m, "sta FC_FARCALL+2") || !strings.Contains(m, ".global farcall") {
+	// far call の飛び先は入口の sta を飛ばす `_far1_add__frame` (レジスタ渡し。doc/v2_frame_alloc.md §7)
+	if !strings.Contains(m, "lda #<.bank(_far1_add__frame)") || !strings.Contains(m, "sta FC_FARCALL+2") || !strings.Contains(m, ".global farcall") {
 		t.Errorf("main.s: FC_FARCALL の設定が無い")
 	}
 	// far1 の中: 同じモジュール・固定バンクへの呼び出しは near

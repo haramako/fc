@@ -21,3 +21,4 @@ dist/
 *.dbg
 *.mlb
 !testdata/golden/**
+fcc2.exe

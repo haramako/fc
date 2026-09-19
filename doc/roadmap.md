@@ -77,7 +77,11 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       castle −0.7% / ROM +1.5 KB。v2_ssa.md §6） ✅ 2026-09-20
 - [x] 定数との乗算のシフト・加減算への展開（`opt.expandMul`。立っているビットが 3 つまで、または 2^n − 1。
       math16 −5.5%、calls −3.6%、textprint −1.9%、castle −0.5%） ✅ 2026-09-20
-- [x] fuzz の生成器にポインタ・ローカル配列・struct・ポインタをずらすループ（初回で codegen のバグ 2 件と SSA の panic 1 件） ✅ 2026-09-20
+- [x] fuzz の生成器にポインタ・ローカル配列・struct・ポインタをずらすループ（初回で codegen のバグ 2 件と SSA の panic 1 件、
+      次の 1000 本で fusePointer と splitWords の struct のバグ 2 件） ✅ 2026-09-20
+- [x] static 関数のレジスタ渡し（最後の 1 バイトの引数を A、1 バイトの戻り値を A。v2_frame_alloc.md §7。calls −6.5%、
+      plasma −3.2%、entities −2.6%、castle −1%） ✅ 2026-09-20
+- [ ] 2 つ目の引数を Y で渡す（入口で `sty`。得は 1 呼び出し 3〜4 サイクル）
 - [ ] SSA の上で: volatile でないグローバル / 配列要素の読み出しの前送り（呼び出し・ポインタ書き込み・asm を障壁に）、
       共通部分式、呼び出しをまたぐ mod/ref 解析。6502 では `lda a,y` と `lda t` の差が 1 サイクルで、値が定数になる場合以外は
       効果が薄い（v2_ssa.md §7）

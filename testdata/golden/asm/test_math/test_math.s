@@ -13,21 +13,18 @@ __MODULE_TEST_MATH__ = 1
 .segment "test_math"
 .proc _test_math_test_sin
 	lda #0
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @1
 	lda #255
 	jmp @2
 @1:
 	lda #0
 @2:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -38,21 +35,18 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #63
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @3
 	lda #255
 	jmp @4
 @3:
 	lda #0
 @4:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #127
 	sta <F_unittest_assert_equal+2
@@ -64,21 +58,18 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #64
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @5
 	lda #255
 	jmp @6
 @5:
 	lda #0
 @6:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #127
 	sta <F_unittest_assert_equal+2
@@ -90,21 +81,18 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #127
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @7
 	lda #255
 	jmp @8
 @7:
 	lda #0
 @8:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -115,21 +103,18 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #128
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @9
 	lda #255
 	jmp @10
 @9:
 	lda #0
 @10:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -140,21 +125,18 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #191
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @11
 	lda #255
 	jmp @12
 @11:
 	lda #0
 @12:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #129
 	sta <F_unittest_assert_equal+2
@@ -166,21 +148,18 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #192
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @13
 	lda #255
 	jmp @14
 @13:
 	lda #0
 @14:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #129
 	sta <F_unittest_assert_equal+2
@@ -192,21 +171,18 @@ __MODULE_TEST_MATH__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #255
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_sin+0
-	sta 0+<F_test_math_test_sin+1
 	bpl @15
 	lda #255
 	jmp @16
 @15:
 	lda #0
 @16:
-	sta 1+<F_test_math_test_sin+1
-	lda 0+<F_test_math_test_sin+1
+	sta 1+<F_test_math_test_sin+0
+	lda 0+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_sin+1
+	lda 1+<F_test_math_test_sin+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -241,21 +217,18 @@ _39:
 .segment "test_math"
 .proc _test_math_test_cos
 	lda #64
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @17
 	lda #255
 	jmp @18
 @17:
 	lda #0
 @18:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #127
 	sta <F_unittest_assert_equal+2
@@ -267,21 +240,18 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #127
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @19
 	lda #255
 	jmp @20
 @19:
 	lda #0
 @20:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -292,21 +262,18 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #128
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @21
 	lda #255
 	jmp @22
 @21:
 	lda #0
 @22:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -317,21 +284,18 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #191
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @23
 	lda #255
 	jmp @24
 @23:
 	lda #0
 @24:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #129
 	sta <F_unittest_assert_equal+2
@@ -343,21 +307,18 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #192
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @25
 	lda #255
 	jmp @26
 @25:
 	lda #0
 @26:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #129
 	sta <F_unittest_assert_equal+2
@@ -369,21 +330,18 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #255
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @27
 	lda #255
 	jmp @28
 @27:
 	lda #0
 @28:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -394,21 +352,18 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #0
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @29
 	lda #255
 	jmp @30
 @29:
 	lda #0
 @30:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #0
 	sta <F_unittest_assert_equal+2
@@ -419,21 +374,18 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #63
-	sta <F_math_sin+1
 	jsr _math_sin
-	lda <F_math_sin+0
 	sta 0+<F_test_math_test_cos+0
-	sta 0+<F_test_math_test_cos+1
 	bpl @31
 	lda #255
 	jmp @32
 @31:
 	lda #0
 @32:
-	sta 1+<F_test_math_test_cos+1
-	lda 0+<F_test_math_test_cos+1
+	sta 1+<F_test_math_test_cos+0
+	lda 0+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_math_test_cos+1
+	lda 1+<F_test_math_test_cos+0
 	sta <F_unittest_assert_equal+1
 	lda #127
 	sta <F_unittest_assert_equal+2
@@ -471,10 +423,9 @@ _79:
 	lda #0
 	sta <F_math_atan+1
 	lda #1
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -487,10 +438,9 @@ _79:
 	jsr _unittest_assert_equal
 	lda #1
 	sta <F_math_atan+1
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -506,10 +456,9 @@ _79:
 	lda #1
 	sta <F_math_atan+1
 	lda #0
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -525,10 +474,9 @@ _79:
 	lda #1
 	sta <F_math_atan+1
 	lda #255
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -544,10 +492,9 @@ _79:
 	lda #0
 	sta <F_math_atan+1
 	lda #255
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -562,10 +509,9 @@ _79:
 	jsr _unittest_assert_equal
 	lda #255
 	sta <F_math_atan+1
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -581,10 +527,9 @@ _79:
 	lda #255
 	sta <F_math_atan+1
 	lda #0
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -600,10 +545,9 @@ _79:
 	lda #255
 	sta <F_math_atan+1
 	lda #1
-	sta <F_math_atan+2
 	jsr _math_atan
-	lda <F_math_atan+0
 	sta 0+<F_test_math_test_atan+0
+	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -675,7 +619,6 @@ _111:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _114:

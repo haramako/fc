@@ -18,8 +18,8 @@ _test_cycle_cycle_var: .res 1
 	lda #99
 	sta 0+_test_cycle_cycle_var
 	jsr _cycle_use_hoge
-	lda <F_cycle_use_hoge+0
 	sta 0+<F_test_cycle_test_cycle_use+0
+	lda 0+<F_test_cycle_test_cycle_use+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -55,7 +55,6 @@ _3:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #0
-	sta <F_stdio_exit+0
 	jsr _stdio_exit
 	rts
 _6:

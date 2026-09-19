@@ -33,11 +33,18 @@ const (
 type pendingCall struct {
 	callee *ir.Lambda // 分かっているとき
 	kind   callKind
-	argOff int // ckStatic: 次の引数バイトのフレーム内オフセット
+	argOff int    // ckStatic: 次の引数バイトのフレーム内オフセット
+	callOp *ir.Op // 対応する call
+	far    bool   // far call (トランポリンが A を壊すのでレジスタ渡しは使えない)
+	inA    bool   // ckStatic: 最後の引数を A に置いた (フレームには書いていない)
 }
 
-// directSym は Entry 関数をプロローグ (スタックからの引数コピー) を飛ばして直接呼ぶときの入口シンボル。
+// directSym は Entry 関数をプロローグ (スタックからの引数コピー) を飛ばして直接呼ぶときの入口シンボル
+// (RegArg なら最後の引数を A に置いて入る)。
 func directSym(sym string) string { return sym + "__direct" }
+
+// frameSym は RegArg の関数を、最後の引数もフレームに書いてから呼ぶときの入口 (入口の `sta` の後ろ)。
+func frameSym(sym string) string { return sym + "__frame" }
 
 // resolveCall は push_result (添字 i) に対応する call を探して、呼び出しの種類を決める。
 func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
@@ -61,7 +68,7 @@ func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
 	if callOp == nil {
 		panic(&diag.Error{Msg: "push_result without call"})
 	}
-	pc := &pendingCall{kind: ckStack}
+	pc := &pendingCall{kind: ckStack, callOp: callOp, far: callOp.Far}
 	if ops[i].Code == ir.OpPushFastcallResult {
 		pc.kind = ckFastcallReg
 	}

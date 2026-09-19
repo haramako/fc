@@ -17,10 +17,12 @@ _test_basic_SINT16 = -255
 	.import _test_basic_ARRAY
 	.import _test_basic_test_nesasm_limit
 	.import _test_basic_add
+	.import _test_basic_add__frame
 	.import _test_basic_fib
 	.import _test_basic_test_function
 	.import _test_basic_test_misc
 	.import _test_basic_add_fastcall
+	.import _test_basic_add_fastcall__frame
 	.import _test_basic_test_fastcall
 	.import _main
 _test_basic_main = _main

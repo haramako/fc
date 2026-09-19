@@ -623,6 +623,96 @@ function main():void
 //	(2) `a16[i] = 4`: 融合した index_pset が値の幅 (1 バイト) しか書かず上位バイトが残る
 //	(3) `(x8 as int16)` を splitWords がバイトに分けるとき、上位バイトとして隣の番地を読む (part3 の g1 が 46024 になる)
 //	(4) 使われない書き込み (`l0 = ...`) の位置が live range に入らず、ループ変数と番地を共有して無限ループ (part4、-O 0)
+// struct まわりの 2 件 (拡張した fuzz で発覚):
+// (1) fusePointer: struct 配列の要素の先頭フィールドへの書き込み `sa[i].f0 = 4` を index_pset (書く幅 = 要素 2 バイト)
+//     にして隣のフィールド f1 を壊していた
+// (2) splitWords: 1 バイトのフィールドを 2 バイトに広げた cast `(s0.f1 as int16)` の下位バイトを、元の struct 変数の
+//     0 バイト目 (別のフィールド) として読んでいた
+func TestStructFieldWidths(t *testing.T) {
+	t.Parallel()
+	src := `struct S { f0:sint; f1:sint; }
+struct T { f0:int; f1:int; f2:int16; }
+var sa:[4]S;
+var s0:T;
+var g3:sint16;
+var g4:int;
+function main():void
+{
+	var i:int;
+	sa[0].f1 = 7;
+	for (i = 0; i < 2; i++) {
+		sa[((sa[0].f1 as int) - g4) & 3].f0 = 4;
+	}
+	s0.f1 = 202;
+	for (var j:int = 5; j; j--) {
+		g3 = (s0.f1 as int16) as sint16;
+	}
+	var w:sint16 = 0;
+	if (((s0.f1 as sint16) & (sa[0].f1 as sint16))) { w = 1; } else { w = 2; }
+	printf(sa[0].f0 as int, " ", sa[0].f1 as int, " ", sa[3].f0 as int, " ", sa[3].f1 as int, " ", g3, " ", w, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "0 7 4 0 202 1\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// 符号付き 1 バイトの変数シフト: 左シフトは C を 0 にして回す (`cmp #128; rol` は右の算術シフトだけ。
+// `-109 << 1` が 39 になっていた。SSA の定数畳み込みとの差分で発覚)
+func TestShiftVarSigned(t *testing.T) {
+	t.Parallel()
+	src := `var g:sint;
+var n:int;
+function main():void
+{
+	g = (-109); n = 1;
+	var a:sint = g << n;
+	n = 2;
+	var b:sint = g >> n;
+	var u:int = 200;
+	var c:int = u << n;
+	var d:int = u >> n;
+	printf(a as int, " ", b as int, " ", c, " ", d, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "38 228 32 50\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// A に常駐した変数と、cast を挟んだ一時変数の `if` (`if ((!x) as int16)`): regalloc が「コンディションの一時変数」と
+// 見なして A を壊さない扱いにしていたが、実際はメモリから A に読むので、常駐していた g3 を壊して飛んでいた (fuzz で発覚)
+func TestResidentIfCast(t *testing.T) {
+	t.Parallel()
+	src := `var g3:sint;
+var g4:int;
+var a3:[16]int16;
+function main():void
+{
+	var l3:int = 0;
+	while ((((!((g4 as sint16) + a3[((g4) & 7)])) as sint16)) && l3 < 4) {
+		l3++;
+		for (var l4:sint = 0; l4 < 5; l4++) {
+			g3 <<= 3; g3 ^= 66;
+		}
+	}
+	printf(g3 as int, " ", l3, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "210 4\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 定数との乗算のシフト・加減算への展開 (opt.expandMul): 1 バイト / 2 バイト、符号付き、2^n - 1、Dst が入力と同じ
 func TestExpandMulRun(t *testing.T) {
 	t.Parallel()

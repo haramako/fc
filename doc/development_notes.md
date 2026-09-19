@@ -68,7 +68,14 @@ go test ./...                                    # 全部 (golden + examples + N
   展開の形。添字が範囲を出ないように本体の前で進める）、減らす `for`、struct（グローバル `s0`、配列 `sa[4]`、
   ポインタ `ps` 経由のフィールド）。初回の 30 本で 3 件: SSA の simplify が消した `load x = x` を参照して panic、
   要素 2 バイトのポインタ参照の `iny` で Y に常駐する添字がずれる、フレームがゼロページでない関数でポインタを reg に
-  写すときに A の添字を壊す（`TestPointerIndexY`）
+  写すときに A の添字を壊す（`TestPointerIndexY`）。次の 1000 本で 2 件: fusePointer が struct 配列の先頭フィールドへの
+  書き込みを index_pset（書く幅 = 要素）にして隣のフィールドを壊す、splitWords が 1 バイトのフィールドを広げた cast の
+  下位を struct の 0 バイト目として読む（`TestStructFieldWidths`）。さらに次の 1000 本で 2 件: splitWords が 2 バイトの
+  フィールド `<int16+1>s0` の k バイト目を作るとき cast のオフセットを二重に足す、符号付き 1 バイトの変数シフトが
+  左でも `cmp #128; rol` で符号を回し込む（`-109 << 1` が 39。`TestShiftVarSigned`。-O 0 でも同じ結果なので差分では
+  出ず、SSA の定数畳み込みと食い違って発覚）。その次の 1000 本で 2 件: regalloc が cast を挟んだ一時変数の `if`
+  （`if ((!x) as int16)`）を「コンディションの一時変数」と見て A を壊さない扱いにしていた（`TestResidentIfCast`）、
+  SSA の定数の読み出しが cast の連鎖の内側の切り詰めを無視していた（`((l0 as int) as sint16)`。`castBits`）
 
 - **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](language_reference.md)、設計の経緯は
   [v2_grammar.md](v2_grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、

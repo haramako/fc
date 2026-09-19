@@ -9,6 +9,7 @@ __MODULE_STDIO__ = 1
 	.import _stdio_print
 	.import _stdio_ppu_put
 	.import _stdio_exit
+	.import _stdio_exit__frame
 	.import _stdio_init
 	.import _interrupt
 _stdio_interrupt = _interrupt

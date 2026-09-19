@@ -366,7 +366,8 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			// 結果を A に残す命令 (codegen が storeA で書く) であること
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpPget,
-				ir.OpIndexPget, ir.OpFieldPget, ir.OpShiftLeft, ir.OpShiftRight, ir.OpRolC, ir.OpRorC) {
+				ir.OpIndexPget, ir.OpFieldPget, ir.OpShiftLeft, ir.OpShiftRight, ir.OpRolC, ir.OpRorC,
+				ir.OpCall, ir.OpFastcall) { // 呼び出しの 1 バイトの戻り値も最後に A にある (RegResult なら lda 無しで)
 				continue
 			}
 			if codeIn(op.Code, ir.OpShiftLeft, ir.OpShiftRight) {
