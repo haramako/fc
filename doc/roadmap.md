@@ -109,7 +109,9 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       `#fc 2` は任意に、`#fc 1` はエラー。v1 だけの構文は「v2 ではこう書く」のエラーのまま残す ✅ 2026-09-19
 - [ ] `memo.txt`（初期の TODO メモ。ほとんど済み）の整理
 - [ ] `examples/castle` と実プロジェクト `C:\Work\castle` の同期（`tools/sync_examples.ps1`）と公開可否
-- [ ] castle 側: far call のラッパ撤去（v2_farcall.md §6）、en.fc の soa 化の実験、NSD 呼び出しのトランポリン統合、
-      **静的フレームの領域**（`data.asm` の `FC_SZP` / `FC_SRAM`、`mmc3.fc` の `options(static_zp:, static_ram:)`。
-      examples/castle と同じ変更を実プロジェクトに）
+- [ ] castle 側（**SSA が終わってからまとめて反映**。2026-09-19 決定）: examples/castle に入れた変更（`data.asm` の
+      `FC_SZP` / `FC_SRAM` / `FC_SP`、`mmc3.fc` の `options(static_zp:, static_ram:)`、`ppu.fc` のスプライト消去）、
+      `en.process` のバンク切り替えを「変わるときだけ」に、`bg.cell_type` / `bg.cell` の `options(inline: true)`、
+      NSD の `options(abi: "cc65")` 化、far call のラッパ撤去（v2_farcall.md §6）、en.fc の soa 化の実験。
+      その後 feature/static-frame → feature/v2 のマージ
 - [ ] ca65 / ld65 は当面維持（内製アセンブラはやらない。2026-09-14 決定）
