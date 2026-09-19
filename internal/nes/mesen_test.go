@@ -15,10 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -93,12 +90,12 @@ func copyTree(t *testing.T, src, dst string) {
 	}
 }
 
-// buildCastleWithMap は examples/castle をビルドし、ROM と ld65 マップのパスを返す。
+// buildCastleWithDbg は examples/castle をビルドし、ROM と ld65 の dbgfile のパスを返す。
 // examples/castle を一時ディレクトリに複製してからビルドする:
 // internal/fc の TestExampleCastle と `go test ./...` で並列に走るため、
 // リポジトリ内の .fc-build を共有すると競合する。
-func buildCastleWithMap(t *testing.T) (romPath, mapPath string) {
-	romPath, mapPath, _ = buildCastle(t)
+func buildCastleWithDbg(t *testing.T) (romPath, dbgPath string) {
+	romPath, _, dbgPath = buildCastle(t)
 	return
 }
 
@@ -113,53 +110,29 @@ func buildCastle(t *testing.T) (romPath, mapPath, dbgPath string) {
 	copyTree(t, filepath.Join(repoRoot, "examples", "castle"), dir)
 	src := filepath.Join(dir, "src")
 
+	// main.fc の options(base / linker_config / link) で自前の data.asm・ld65.cfg・NSD を指定しているので fcc build だけで ROM ができる
+	romPath = filepath.Join(dir, "castle.nes")
 	compiler := driver.NewCompiler(repoRoot)
-	if _, err := compiler.Build("main.fc", &driver.BuildOptions{Target: "nes", CompileOnly: true, Dir: src}); err != nil {
-		t.Fatalf("コンパイル失敗: %v", err)
+	res, err := compiler.BuildContext(context.Background(), "main.fc", &driver.BuildOptions{Target: "nes", Dir: src, Out: romPath})
+	if err != nil {
+		t.Fatalf("ビルド失敗: %v", err)
 	}
-	runTool(t, src, "ca65", "data.asm", "-o", ".fc-build/data.o")
-
-	objs, err := filepath.Glob(filepath.Join(src, ".fc-build", "*.o"))
-	if err != nil || len(objs) == 0 {
-		t.Fatalf("オブジェクトファイルが見つからない: %v", err)
-	}
-	tmp := t.TempDir()
-	romPath = filepath.Join(tmp, "castle.nes")
-	mapPath = filepath.Join(tmp, "castle.map")
-	dbgPath = filepath.Join(tmp, "castle.dbg")
-	args := []string{"-o", romPath, "-vm", "-m", mapPath, "--dbgfile", dbgPath, "-C", "ld65.cfg"}
-	for _, o := range objs {
-		rel, _ := filepath.Rel(dir, o)
-		args = append(args, filepath.ToSlash(rel))
-	}
-	args = append(args, "res/sound/bgm.o", "res/sound/castle.o", "nsd/lib/NSD.lib")
-	runTool(t, dir, "ld65", args...)
-	return romPath, mapPath, dbgPath
+	return romPath, res.MapFile, res.DbgFile
 }
 
 // parseLd65Dbg は ld65 の --dbgfile からコードのシンボル (ラベル) の ROM ファイル内オフセットを読む
 // (seg の ooffs + (val - seg の start)。出力ファイルに置かれる ro セグメントだけ)。
 func parseLd65Dbg(t *testing.T, dbgPath string) []ProfileSymbol {
 	t.Helper()
-	b, err := os.ReadFile(dbgPath)
+	d, err := driver.ParseDbgFile(dbgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	type seg struct{ start, ooffs int }
-	segs := map[string]seg{}
-	reSeg := regexp.MustCompile(`^seg\s+id=(\d+),.*start=0x([0-9A-Fa-f]+),.*ooffs=(\d+)`)
-	reSym := regexp.MustCompile(`^sym\s+id=\d+,name="([^"]+)",.*val=0x([0-9A-Fa-f]+),seg=(\d+),type=lab`)
 	var syms []ProfileSymbol
-	for _, line := range strings.Split(string(b), "\n") {
-		if m := reSeg.FindStringSubmatch(line); m != nil {
-			start, _ := strconv.ParseInt(m[2], 16, 32)
-			ooffs, _ := strconv.Atoi(m[3])
-			segs[m[1]] = seg{int(start), ooffs}
-		} else if m := reSym.FindStringSubmatch(line); m != nil {
-			if s, ok := segs[m[3]]; ok {
-				val, _ := strconv.ParseInt(m[2], 16, 32)
-				syms = append(syms, ProfileSymbol{Name: m[1], Offset: s.ooffs + int(val) - s.start})
-			}
+	for _, sym := range d.Symbols {
+		seg := d.Segments[sym.Seg]
+		if sym.Lab && seg != nil && seg.Ooffs >= 0 {
+			syms = append(syms, ProfileSymbol{Name: sym.Name, Offset: seg.Ooffs + sym.Val - seg.Start})
 		}
 	}
 	if len(syms) == 0 {
@@ -168,28 +141,26 @@ func parseLd65Dbg(t *testing.T, dbgPath string) []ProfileSymbol {
 	return syms
 }
 
-// parseLd65MapAll は ld65 のマップファイルの全シンボル→アドレスの表。
-func parseLd65MapAll(t *testing.T, mapPath string) map[string]int {
+// parseLd65MapAll は dbgfile (ld65 --dbgfile) の全シンボル→アドレス (CPU アドレス) の表 (マップファイルの -vm の代わり)。
+func parseLd65MapAll(t *testing.T, dbgPath string) map[string]int {
 	t.Helper()
-	b, err := os.ReadFile(mapPath)
+	d, err := driver.ParseDbgFile(dbgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	re := regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*)\s+([0-9A-Fa-f]{6})\s+[A-Z]{2,3}`)
 	all := map[string]int{}
-	for _, m := range re.FindAllStringSubmatch(string(b), -1) {
-		if _, ok := all[m[1]]; !ok {
-			n, _ := strconv.ParseInt(m[2], 16, 32)
-			all[m[1]] = int(n)
+	for _, sym := range d.Symbols {
+		if _, ok := all[sym.Name]; !ok {
+			all[sym.Name] = sym.Val
 		}
 	}
 	return all
 }
 
-// parseLd65Map は ld65 のマップファイルからシンボル→アドレスの表を作る。
-func parseLd65Map(t *testing.T, mapPath string, symbols ...string) map[string]int {
+// parseLd65Map は dbgfile からシンボル→アドレスの表を作る (無ければ失敗)。
+func parseLd65Map(t *testing.T, dbgPath string, symbols ...string) map[string]int {
 	t.Helper()
-	all := parseLd65MapAll(t, mapPath)
+	all := parseLd65MapAll(t, dbgPath)
 	r := map[string]int{}
 	for _, s := range symbols {
 		addr, ok := all[s]
@@ -269,8 +240,8 @@ func TestMesenPlayCastle(t *testing.T) {
 	}
 	ensureMesenSettings(t, mesen)
 
-	rom, mapPath := buildCastleWithMap(t)
-	addrs := parseLd65Map(t, mapPath, "_my_x", "_bg_cur_area")
+	rom, dbgPath := buildCastleWithDbg(t)
+	addrs := parseLd65Map(t, dbgPath, "_my_x", "_bg_cur_area")
 	t.Logf("シンボル: _my_x=$%04x _bg_cur_area=$%04x", addrs["_my_x"], addrs["_bg_cur_area"])
 
 	luaPath := filepath.Join(t.TempDir(), "play_castle.lua")

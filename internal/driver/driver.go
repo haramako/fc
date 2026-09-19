@@ -248,10 +248,10 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		return result, nil
 	}
 
-	c.makeBase()
+	baseObj := c.makeBase()
 
 	result.Out = opt.Out
-	result.MapFile, result.DbgFile = c.link(objs, opt)
+	result.MapFile, result.DbgFile = c.link(baseObj, objs, opt)
 	if opt.Debug || opt.SizeReport {
 		dbg, err := ParseDbgFile(result.DbgFile)
 		if err != nil {
@@ -288,8 +288,16 @@ func (c *Compiler) libPath(target string) []string {
 }
 
 // makeBase は base.s (ランタイムの土台: ZP のレジスタ・スタック・FC_FARCALL などの定義) を生成してアセンブルする。
-func (c *Compiler) makeBase() {
+// options(base: "data.asm") があれば生成せず、そのファイル (Dir 相対) をアセンブルする (castle のように ZP 配置や
+// iNES ヘッダを自前で持つプロジェクト。fc の領域 (L / reg / FC_FASTCALL_REG / FC_SZP / FC_SRAM / FC_SP / FC_FARCALL) を
+// 同じ名前で定義すること。doc/language_reference.md §1.5)。戻り値はリンクに渡すオブジェクト。
+func (c *Compiler) makeBase() string {
 	opts := c.prog.Options
+	if base, ok := opts.Get("base"); ok && base.Kind == ir.OptStr {
+		path := filepath.Join(c.dir, base.Str)
+		c.ca65(path)
+		return filepath.Join(c.buildDir, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".o")
+	}
 	inesmap := 0
 	if m, ok := opts.Get("mapper"); ok {
 		switch m.Kind {
@@ -320,6 +328,7 @@ func (c *Compiler) makeBase() {
 		panic(err)
 	}
 	c.ca65(filepath.Join(c.buildDir, "base.s"))
+	return filepath.Join(c.buildDir, "base.o")
 }
 
 type bankInfo struct {
@@ -327,8 +336,35 @@ type bankInfo struct {
 }
 
 // link はオブジェクトファイルをリンクし、マップファイルのパスを返す。
-func (c *Compiler) link(objs []string, opt *BuildOptions) (mapFile, dbgFile string) {
+func (c *Compiler) link(baseObj string, objs []string, opt *BuildOptions) (mapFile, dbgFile string) {
 	opts := c.prog.Options
+	cfgPath := filepath.Join(c.buildDir, "ld65.cfg")
+	if custom, ok := opts.Get("linker_config"); ok && custom.Kind == ir.OptStr {
+		// options(linker_config: "../ld65.cfg"): 自前のリンカ設定 (Dir 相対)。bank / org は配置に使われない (far call の判定だけ)
+		cfgPath = filepath.Join(c.dir, custom.Str)
+	} else {
+		c.writeLinkerConfig(opts, opt)
+	}
+	mapFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".map"
+	dbgFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".dbg"
+	args := []string{"-m", mapFile, "--dbgfile", dbgFile, "-o", opt.Out, "-C", cfgPath,
+		baseObj, filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
+	if c.farcallAsm() != "" {
+		args = append(args, filepath.Join(c.buildDir, "farcall.o"))
+	}
+	args = append(args, objs...)
+	if extra, ok := opts.Get("link"); ok && extra.Kind == ir.OptStr {
+		// options(link: "a.o b.o lib.lib"): 追加のオブジェクト / ライブラリ (空白区切り、Dir 相対)
+		for _, f := range strings.Fields(extra.Str) {
+			args = append(args, filepath.Join(c.dir, f))
+		}
+	}
+	c.sh("ld65", args...)
+	return mapFile, dbgFile
+}
+
+// writeLinkerConfig は fc の ld65.cfg (バンク構成は main の options(bank_count / char_banks) とモジュールの options(bank / org)) を書く。
+func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 
 	ineschr := 1
 	if cb, ok := opts.Int("char_banks"); ok {
@@ -431,17 +467,6 @@ func (c *Compiler) link(objs []string, opt *BuildOptions) (mapFile, dbgFile stri
 	if err := os.WriteFile(filepath.Join(c.buildDir, "ld65.cfg"), []byte(cfg), 0o666); err != nil {
 		panic(err)
 	}
-
-	mapFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".map"
-	dbgFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".dbg"
-	args := []string{"-m", mapFile, "--dbgfile", dbgFile, "-o", opt.Out, "-C", filepath.Join(c.buildDir, "ld65.cfg"),
-		filepath.Join(c.buildDir, "base.o"), filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
-	if c.farcallAsm() != "" {
-		args = append(args, filepath.Join(c.buildDir, "farcall.o"))
-	}
-	args = append(args, objs...)
-	c.sh("ld65", args...)
-	return mapFile, dbgFile
 }
 
 // farcallAsm は fc が用意する farcall トランポリン (doc/v2_farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では

@@ -84,8 +84,8 @@ func castleMachine(t *testing.T, rom string, syms map[string]int, profile []Prof
 }
 
 func TestCastleFrameCycles(t *testing.T) {
-	rom, mapPath, dbgPath := buildCastle(t)
-	syms := parseLd65MapAll(t, mapPath)
+	rom, _, dbgPath := buildCastle(t)
+	syms := parseLd65MapAll(t, dbgPath)
 	// 関数ごとのプロファイル (dbgfile のラベル。__direct と ca65 の無名ラベルは本体に合算する)
 	var profile []ProfileSymbol
 	for _, ps := range parseLd65Dbg(t, dbgPath) {

@@ -1,4 +1,8 @@
 #fc 2
+// ビルド: fcc build -t nes -o ../castle.nes main.fc (自前の base / ld65.cfg / NSD のライブラリを options で指定)
+options(base: "data.asm");
+options(linker_config: "../ld65.cfg");
+options(link: "../res/sound/bgm.o ../res/sound/castle.o ../nsd/lib/NSD.lib");
 include("main.asm");
 
 use * from common;

@@ -9,6 +9,7 @@ package driver
 // (詳細は examples/README.md)。
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,49 +59,30 @@ func TestExampleMiku(t *testing.T) {
 	compareROM(t, rom, filepath.Join("examples", "miku.nes"))
 }
 
-// TestExampleCastle は examples/castle (castle 由来) のビルド。
-// 実プロジェクトの Rakefile と同じ手順:
-//
-//	fcc compile -t nes main.fc → ca65 data.asm → ld65 (プロジェクト独自の ld65.cfg)
+// TestExampleCastle は examples/castle (castle 由来) のビルド。main.fc の options(base:) / options(linker_config:) /
+// options(link:) で自前の data.asm・ld65.cfg・NSD のライブラリを指定しているので、`fcc build -t nes main.fc` だけで
+// ROM ができる (以前は fcc compile → ca65 data.asm → ld65 を Rakefile が並べていた)。
 func TestExampleCastle(t *testing.T) {
 	t.Parallel()
-	// castle は .fc-build/ を ld65 の入力に使う実プロジェクト手順をなぞるので、ツリーごと一時ディレクトリに複製する
+	// castle は .fc-build/ を src の下に作る実プロジェクト手順なので、ツリーごと一時ディレクトリに複製する
 	dir := filepath.Join(t.TempDir(), "castle")
 	copyDir(t, filepath.Join(absRepoRoot, "examples", "castle"), dir)
 	src := filepath.Join(dir, "src")
+	rom := filepath.Join(dir, "castle.nes")
 
 	compiler := NewCompiler(absRepoRoot)
 	start := time.Now()
-	code, err := compiler.Build("main.fc", &BuildOptions{Target: "nes", CompileOnly: true, Dir: src})
+	res, err := compiler.BuildContext(context.Background(), "main.fc", &BuildOptions{Target: "nes", Dir: src, Out: rom})
 	elapsed := time.Since(start)
 	if err != nil {
-		t.Fatalf("コンパイル失敗: %v", err)
+		t.Fatalf("ビルド失敗: %v", err)
 	}
-	if code != 0 {
-		t.Fatalf("コンパイル結果コード: %d", code)
-	}
-	t.Logf("castle のコンパイル (ca65 / ld65 を除く): %.2f 秒", elapsed.Seconds())
+	t.Logf("castle のビルド (ca65 / ld65 込み): %.2f 秒", elapsed.Seconds())
 	if elapsed > castleCompileLimit {
-		t.Errorf("castle のコンパイルに %.1f 秒かかった (上限 %v)。最適化パスの計算量の退行を疑う", elapsed.Seconds(), castleCompileLimit)
+		t.Errorf("castle のビルドに %.1f 秒かかった (上限 %v)。最適化パスの計算量の退行を疑う", elapsed.Seconds(), castleCompileLimit)
 	}
-
-	runTool(t, src, "ca65", "data.asm", "-o", ".fc-build/data.o")
-
-	// リンク (実プロジェクトの Rakefile と同じ引数構成。obj はソート順 = Dir.glob 相当)
-	objs, err := filepath.Glob(filepath.Join(src, DefaultBuildDirName, "*.o"))
-	if err != nil || len(objs) == 0 {
-		t.Fatalf("オブジェクトファイルが見つからない: %v", err)
+	if res.DbgFile == "" {
+		t.Errorf("dbgfile が無い")
 	}
-	tmp := t.TempDir()
-	rom := filepath.Join(tmp, "castle.nes")
-	mapFile := filepath.Join(tmp, "castle.map")
-	args := []string{"-o", rom, "-vm", "-m", mapFile, "-C", "ld65.cfg"}
-	for _, o := range objs {
-		rel, _ := filepath.Rel(dir, o)
-		args = append(args, filepath.ToSlash(rel))
-	}
-	args = append(args, "res/sound/bgm.o", "res/sound/castle.o", "nsd/lib/NSD.lib")
-	runTool(t, dir, "ld65", args...)
-
 	compareROM(t, rom, filepath.Join("examples", "castle.nes"))
 }

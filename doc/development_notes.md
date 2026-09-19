@@ -192,7 +192,7 @@ Mesen は ROM を開くとき同じ名前の `.dbg` / `.mlb` を自動で読む�
 `.dbg line, "file", N` を出し、ca65 `-g` が `type=1` の行レコードにする）。`.dbg` のファイル名は ROM の隣からの
 相対パスなので、ROM とソースの位置関係を変えたら作り直す。`.dbg` は `-g` 無しでも常に書く（`--size-report` /
 `fcc size` / マクロベンチのプロファイルが使う）。自前で ld65 を呼ぶプロジェクト（castle）は `--dbgfile` を足し、
-`.mlb` は `fcc size` と同じ `driver.DbgFile.WriteMlb` で作れる（CLI は未提供）。
+`.mlb` は `fcc size` と同じ `driver.DbgFile.WriteMlb` で作れる（CLI は未提供。castle は `fcc build` に移ったので不要）。
 
 ### エディタ連携（`fcc watch`、`fcc check --json`、`tools/vscode-fc/`）
 
@@ -209,6 +209,8 @@ Mesen は ROM を開くとき同じ名前の `.dbg` / `.mlb` を自動で読む�
 ## 実プロジェクトのビルド構成（参考）
 
 - **fc-miku**: `fcc build -t nes miku.fc` だけで完結（fc 標準ドライバ）
-- **castle**: `fcc compile -t nes main.fc` → `ca65 data.asm` → 独自 `ld65.cfg` でリンク
-  （+ NSD サウンドドライバ、生成物リソースは「出来合い許容」ポリシー。
-  詳細は [../examples/README.md](../examples/README.md)）
+- **castle**: `fcc build -t nes -o ../castle.nes main.fc` だけ（2026-09-19〜。main.fc の `options(base: "data.asm")` /
+  `options(linker_config: "../ld65.cfg")` / `options(link: "... NSD.lib")` で自前の土台・リンカ設定・NSD を指定する。
+  以前は `fcc compile` → `ca65 data.asm` → `ld65` を Rakefile が並べていた。リンク順が Rakefile の glob 順から
+  fc の順 (base, runtime, モジュール順, 追加) に変わったので ROM のバイト列は変わる。
+  生成物リソースは「出来合い許容」ポリシー。詳細は [../examples/README.md](../examples/README.md)）

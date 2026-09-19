@@ -13,7 +13,7 @@
 | ディレクトリ | 由来 | ビルド方法 |
 |---|---|---|
 | `miku/` | `C:\Work\fc-miku` | `fcc build -t nes miku.fc`（fc標準ドライバのみでROM生成） |
-| `castle/` | `C:\Work\castle` | `fcc compile -t nes main.fc` → `ca65 data.asm` → 独自 `ld65.cfg` でリンク（実プロジェクトの Rakefile と同じ手順） |
+| `castle/` | `C:\Work\castle` | `cd src && fcc build -t nes -o ../castle.nes main.fc`（main.fc の `options(base / linker_config / link)` で自前の data.asm・ld65.cfg・NSD を指定。実プロジェクトの Rakefile はまだ `fcc compile` → `ca65` → `ld65` の手順） |
 
 castle は `textmap` によるテキスト変換（`_T`/`_M`、表は `tmp/font/*.chr.txt`）、独自リンカ設定、
 NSD サウンドドライバを含む、コンパイラ機能をほぼ全部通るサンプルになっている。

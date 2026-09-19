@@ -90,7 +90,15 @@ options(static_zp: 64);       // 静的フレーム（§4.5）のゼロページ
 options(static_ram: 512);     // 静的フレームの RAM 側 FC_SRAM の大きさ（既定 512、0〜8192）— メインモジュールで
 options(farcall: true);       // far call（§4.4）を有効にする — メインモジュールで
 options(near: true);          // このモジュールは常にマップされている扱い（far call の対象にしない）
+options(base: "data.asm");   // fc の base.s を生成せず、このファイル（Dir 相対）をアセンブルして土台にする — メインモジュールで
+options(linker_config: "../ld65.cfg"); // 自前のリンカ設定（Dir 相対）。fc は ld65.cfg を生成しない — メインモジュールで
+options(link: "../res/sound/bgm.o ../nsd/lib/NSD.lib"); // 追加でリンクするオブジェクト / ライブラリ（空白区切り、Dir 相対）— メインモジュールで
 ```
+
+`base` を自前で持つプロジェクトは、fc の領域（`L` / `reg` / `FC_FASTCALL_REG` / `FC_SZP` / `FC_SRAM` / `FC_SP` / `FC_FARCALL`、
+iNES ヘッダ、VECTORS）を同じ名前で定義する（examples/castle/src/data.asm が例。不足はリンク時の `.assert` で検出される）。
+この 3 つで、独自のバンク構成やサウンドドライバを持つプロジェクトも `fcc build -t nes -o game.nes main.fc` だけでビルドできる
+（`-g` / `--size-report` / `fcc watch` もそのまま使える）。
 
 `bank: N` は fc が ld65.cfg を生成する構成では配置先のバンク。自前の ld65.cfg を使う構成では配置に使われないが、
 far call の判定に「N ≥ 0 なら切替バンク、無しか負なら固定バンク」として使われる（§4.4）。
