@@ -22,6 +22,7 @@ Commands:
     fmt              format source files (see fcc fmt -h)
     check            compile without producing files and report errors / warnings
     size             show code size per function from an ld65 --dbgfile (see fcc size -h)
+    watch            rebuild whenever a source file changes (see fcc watch -h)
     version          show version
 Options:
     -h, --help       show this message
@@ -55,6 +56,8 @@ func run() int {
 		return runCheck(args[1:])
 	case "size":
 		return runSize(args[1:])
+	case "watch":
+		return runWatch(args[1:])
 	}
 	fs := flag.NewFlagSet("fcc", flag.ExitOnError)
 	fs.Usage = func() { fmt.Print(usage) }

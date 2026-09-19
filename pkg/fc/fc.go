@@ -63,6 +63,9 @@ func Errors(err error) []*Error { return diag.Errors(err) }
 // Warning は警告 (位置付き)。Result.Warnings / Check で返る。
 type Warning = diag.Warning
 
+// Position はソース位置 (file:line:col)。
+type Position = syntax.Position
+
 // CheckOptions は Check の設定。
 type CheckOptions struct {
 	Target string // TargetEmu (既定) / TargetNES
@@ -91,6 +94,9 @@ func New() (*Compiler, error) {
 	}
 	return &Compiler{c: driver.NewCompiler(home), cleanup: cleanup}, nil
 }
+
+// Home は FC_HOME (fclib/ share/ を含むディレクトリ)。
+func (c *Compiler) Home() string { return c.c.FCHome }
 
 // NewWithHome は FC_HOME (fclib/ share/ を含むディレクトリ) を指定してコンパイラを作る。
 func NewWithHome(fcHome string) *Compiler {

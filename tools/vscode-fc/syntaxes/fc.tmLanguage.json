@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "fc",
+  "scopeName": "source.fc",
+  "patterns": [
+    { "include": "#pragma" },
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "pragma": { "match": "\\A#fc\\s+\\d+", "name": "meta.preprocessor.fc" },
+    "comments": {
+      "patterns": [
+        { "match": "//.*$", "name": "comment.line.double-slash.fc" },
+        { "begin": "/\\*", "end": "\\*/", "name": "comment.block.fc" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "begin": "\"\"\"", "end": "\"\"\"", "name": "string.quoted.triple.fc" },
+        { "begin": "\"", "end": "\"", "name": "string.quoted.double.fc", "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.fc" }] }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "match": "\\b(if|else|elsif|while|for|loop|switch|case|default|break|continue|return)\\b", "name": "keyword.control.fc" },
+        { "match": "\\b(function|var|const|struct|soa|use|from|as|include|incbin|options|public|asm|sizeof|bitcast|textmap)\\b", "name": "keyword.other.fc" },
+        { "match": "->", "name": "keyword.operator.arrow.fc" }
+      ]
+    },
+    "types": {
+      "match": "\\b(int|uint|int8|uint8|sint|sint8|int16|uint16|sint16|bool|void|fn)\\b",
+      "name": "storage.type.fc"
+    },
+    "constants": { "match": "\\b(true|false|null)\\b", "name": "constant.language.fc" },
+    "numbers": {
+      "patterns": [
+        { "match": "\\b0x[0-9A-Fa-f_]+\\b", "name": "constant.numeric.hex.fc" },
+        { "match": "\\b0b[01_]+\\b", "name": "constant.numeric.binary.fc" },
+        { "match": "\\b\\d+\\b", "name": "constant.numeric.decimal.fc" }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        { "match": "\\b(function)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "keyword.other.fc" }, "2": { "name": "entity.name.function.fc" } } },
+        { "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()", "name": "entity.name.function.call.fc" }
+      ]
+    }
+  }
+}

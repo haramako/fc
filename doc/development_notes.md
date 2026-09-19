@@ -191,6 +191,14 @@ Mesen は ROM を開くとき同じ名前の `.dbg` / `.mlb` を自動で読む�
 `fcc size` / マクロベンチのプロファイルが使う）。自前で ld65 を呼ぶプロジェクト（castle）は `--dbgfile` を足し、
 `.mlb` は `fcc size` と同じ `driver.DbgFile.WriteMlb` で作れる（CLI は未提供）。
 
+### エディタ連携（`fcc watch`、`fcc check --json`、`tools/vscode-fc/`）
+
+`fcc watch [-t nes] [-o FILE] [-g] [-c] main.fc` はソースディレクトリと fclib の下の `.fc` / `.asm` / `.inc` / `.chr` /
+`.txt` / `.cfg` の更新時刻を 0.5 秒ごとに見て、変わったら再ビルドして結果を出す（外部ライブラリ無し）。
+`fcc check --json` は診断を 1 行 1 JSON（`file` / `line` / `col` / `severity` / `message`）で出す。
+`tools/vscode-fc/` はそれを使う VS Code 拡張（plain JS、ビルド不要。ハイライト + 保存時に Problems へ。
+`fc.mainFile` にプログラムの起点を書けばどのファイルを保存しても全体を検査する）。言語サーバは持たない。
+
 ### コードサイズ（`fcc build --size-report` / `fcc size game.dbg`）
 
 セグメントごとの合計と、関数（ラベル）ごとの大きさ（次のラベルまで。関数の後ろの定数表を含む）を大きい順に出す。

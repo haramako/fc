@@ -91,7 +91,7 @@ func TestCLIUsageAndVersion(t *testing.T) {
 	if code, out, _ := runCLI(t, "version"); code != 0 || !strings.Contains(out, "fcc") {
 		t.Errorf("version: code=%d out=%q", code, out)
 	}
-	for _, sub := range []string{"fmt", "check"} {
+	for _, sub := range []string{"fmt", "check", "size", "watch"} {
 		if code, out, _ := runCLI(t, sub); code != 0 || !strings.Contains(out, "Usage: fcc "+sub) {
 			t.Errorf("%s without file: code=%d out=%q", sub, code, out)
 		}
@@ -137,6 +137,15 @@ func TestCLIBuildRunCheck(t *testing.T) {
 	code, out, _ = runCLI(t, "check", "e.fc")
 	if code != 1 || !strings.Contains(out, "e.fc:2:") || !strings.Contains(out, "error:") {
 		t.Errorf("check error: code=%d out=%q", code, out)
+	}
+	// check --json: 1 行 1 診断の JSON (エディタ連携)
+	code, out, _ = runCLI(t, "check", "--json", "e.fc")
+	if code != 1 || !strings.Contains(out, `"severity":"error"`) || !strings.Contains(out, `"line":2`) || !strings.Contains(out, `"message":"x not found"`) {
+		t.Errorf("check --json: code=%d out=%q", code, out)
+	}
+	code, out, _ = runCLI(t, "check", "--json", "t.fc")
+	if code != 0 || !strings.Contains(out, `"severity":"warning"`) {
+		t.Errorf("check --json warning: code=%d out=%q", code, out)
 	}
 	code, out, _ = runCLI(t, "build", "e.fc")
 	if code != 1 || !strings.Contains(out, "error: x not found") {
