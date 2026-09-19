@@ -17,3 +17,7 @@ fcc.exe
 /fcc
 dist-cc65/
 dist/
+*.map
+*.dbg
+*.mlb
+!testdata/golden/**
