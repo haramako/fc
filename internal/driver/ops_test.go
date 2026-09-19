@@ -822,6 +822,32 @@ function main():void
 	}
 }
 
+// A に常駐したグローバルを return で返す `g0 = g1; return g0`: return を friendly (戻り値を A から書く) にすると
+// g0 の書き戻しが出ない (fuzz で発覚)
+func TestResidentGlobalReturn(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int;
+var g1:int;
+function f0(p0:sint):sint options(fastcall: true)
+{
+	g0 = g1;
+	return (g0 as sint);
+}
+function main():void
+{
+	g1 = 4;
+	var r:sint = f0(1);
+	printf(g0, " ", r as int, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "4 4\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 定数との乗算のシフト・加減算への展開 (opt.expandMul): 1 バイト / 2 バイト、符号付き、2^n - 1、Dst が入力と同じ
 func TestExpandMulRun(t *testing.T) {
 	t.Parallel()

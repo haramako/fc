@@ -250,8 +250,21 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 		if isV(op.In(2), v) {
 			return true, 3
 		}
-	case ir.OpPushArg, ir.OpPushFastcallArg, ir.OpReturn:
+	case ir.OpPushArg, ir.OpPushFastcallArg:
 		if isV(op.In(0), v) {
+			return true, 3
+		}
+	case ir.OpReturn:
+		if isV(op.In(0), v) {
+			// 戻り値を A から書く。ただしグローバルの常駐は return で書き戻さなければならないので friendly にしない
+			// (`g0 = g1; return g0` で g0 が書き戻されなかった。fuzz で発覚)
+			home := v
+			if v.Home != nil {
+				home = v.Home
+			}
+			if home.Kind == ir.KindGlobal {
+				return false, 0
+			}
 			return true, 3
 		}
 	}

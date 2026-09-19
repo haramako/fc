@@ -82,6 +82,8 @@ go test ./...                                    # 全部 (golden + examples + N
 - 種 160000〜 で 2 件: splitWords が途中で 1 バイトに狭めた cast の連鎖 `((p0 as int) as int16)` を分けた変数の上位で
   読む（`plainWord`。`TestSplitNarrowWiden`）、sign_extension の入力が A にある（呼び出しの戻り値。call を A 割付の
   producer にしてから）とき N が A を反映しないまま `bpl` していた（`TestSignExtendCallResult`）
+- 種 170000〜 で 1 件: A に常駐したグローバルを `return g0` で返すと、return が friendly（戻り値を A から書く）扱いで
+  g0 の書き戻しが出なかった（グローバルの常駐は return を clobber に。`TestResidentGlobalReturn`）
 - **ca65 の `.proc` の中のラベルは同じファイルの別の `.proc` から見えない**（2026-09-20）: レジスタ渡しの `sym__frame`
   を `.proc` の中に置いて `.export` したら、同じモジュール内の呼び出しで未定義になった（castle の text で発覚。
   fc のテストは他モジュールからの参照しか無かった）。関数の途中に入口を作るときは `.endproc` で閉じて別の `.proc` にする
