@@ -554,6 +554,69 @@ function main():void
 	}
 }
 
+// TestResidentCondRestore: 比較の結果がフラグ (次の if が見る) のとき、常駐レジスタの復帰 (ldx / ldy) が N / Z を壊さない。
+// sw の `on_idx == i` (i@X) は `cmp; ldx; bne` になって Z が消え、castle の踏むスイッチが効かなかった (i == 0 のときだけ動く)。
+// 今は可換なので cpx on_idx。f の 16 ビットの比較 (可換の形にできない) は復帰を php / plp で挟む。
+func TestResidentCondRestore(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `var tab:[8]int;
+var tab2:[8]int;
+var tab3:[8]int;
+var g:int16;
+var on_idx:int;
+var cnt:int;
+var cnt2:int;
+function sw(i:int):void
+{
+	var x = tab[i];
+	var y = tab2[i];
+	var z = tab3[i];
+	if (g == 4 && on_idx == i) {
+		if (y < tab3[i] + 8) {
+			y += 1;
+		}
+		cnt += i + 1; // どの i で一致したか (壊れると i == 0 で一致する)
+	} else {
+		if (y > tab3[i]) {
+			y -= 1;
+		}
+	}
+	tab[i] = x;
+	tab2[i] = y + z;
+}
+function f():void
+{
+	for (var i = 0; i < 8; i++) {
+		tab[i] = i;
+		tab2[i] = tab[i] + 1;
+		tab3[i] = tab2[i] + 1;
+		tab[i] = tab3[i] + 1;
+		tab2[i] = tab[i] + 1;
+		tab3[i] = tab2[i] + 1;
+		if (g == i) {
+			cnt2 += 1;
+		}
+		if (i == g) {
+			cnt2 += 10;
+		}
+	}
+}
+function main():void
+{
+	on_idx = 5;
+	g = 4;
+	for (var i = 0; i < 8; i++) { sw(i); }
+	g = 3;
+	f();
+	printf(cnt, " ", cnt2, "\n");
+	exit(0);
+}
+`)
+	if want := "6 11\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
+
 // TestConstPointerArray: ポインタの配列の const (`[N]*T`): 要素は文字列リテラル、配列定数の名前、null。
 // 二重配列の const (`[2][3]int`) と合わせて、定数添字・変数添字の両方で読める。
 func TestConstPointerArray(t *testing.T) {

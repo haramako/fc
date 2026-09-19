@@ -780,6 +780,7 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		// bit 5
 		c.V = 0x1 & (val >> 6)
 		c.N = 0x1 & (val >> 7)
+		c.S += 1
 		c.incPcByMode(mode)
 
 	case STA:

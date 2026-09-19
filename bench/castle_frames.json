@@ -13,14 +13,14 @@
   },
   "field": {
     "frames": 1080,
-    "avg": 9096,
-    "max": 29871,
+    "avg": 9123,
+    "max": 29869,
     "over": 2
   },
   "start": {
     "frames": 300,
     "avg": 7283,
-    "max": 29871,
+    "max": 29870,
     "over": 9
   },
   "title": {

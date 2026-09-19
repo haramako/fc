@@ -6,6 +6,8 @@ package nes
 //     FC_PROBE_DBG (/ _B) の dbgfile で番地 → 名前。FC_PROBE_PREFIX=_my_,_en_ で比べる変数を絞る。FC_PROBE_WATCH=名前,... で
 //     終わりに値を出す。
 //   TestProbePlay: TestMesenPlayCastle と同じ筋書きを内蔵ランナーで走らせ、エリアと状態の推移を出す。
+//   TestProbeSwitch: 踏むスイッチのあるエリア (FC_PROBE_AREA、既定 de) に飛んでスイッチの上に落ち、沈むかを見る
+//     (チェックポイント 0 のエリアを ROM 上で書き換えて任意のエリアから始める例)。
 // 例: FC_PROBE_ROM_A=a.nes FC_PROBE_ROM_B=b.nes FC_PROBE_DBG=a.dbg FC_PROBE_DBG_B=b.dbg go test ./internal/nes -run TestProbeDiff -v
 
 import (
@@ -277,6 +279,90 @@ func TestProbePlay(t *testing.T) {
 		cur := fmt.Sprintf("area=%d state=%d", m.Get(syms["_bg_cur_area"]), m.Get(syms["_my_state"]))
 		if cur != last {
 			t.Logf("f%d: %s x=%d y=%d", f, cur, m.Get(syms["_my_x"]), m.Get(syms["_my_y"]))
+			last = cur
+		}
+	}
+}
+
+// TestProbeSwitch は踏むスイッチ (en TYPE_SWITCH=13) のあるエリアに飛び (FC_PROBE_AREA、既定 0x62)、スイッチの上に
+// 落ちて my.state が ON_ENEMY (4) になり flags が立つかを見る。チェックポイント 0 の [area, x, y] を ROM 上で書き換える。
+func TestProbeSwitch(t *testing.T) {
+	rom := os.Getenv("FC_PROBE_ROM_A")
+	if rom == "" {
+		t.Skip()
+	}
+	d, err := driver.ParseDbgFile(os.Getenv("FC_PROBE_DBG"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	syms := map[string]int{}
+	var cpOffset = -1
+	for _, s := range d.Symbols {
+		if s.Lab && s.Val < 0x8000 {
+			if _, ok := syms[s.Name]; !ok {
+				syms[s.Name] = s.Val
+			}
+		}
+		if s.Name == "_resource_MAP_CHECKPOINT_DATA" && s.Lab {
+			seg := d.Segments[s.Seg]
+			if seg != nil && seg.Ooffs >= 0 {
+				cpOffset = seg.Ooffs + s.Val - seg.Start
+			}
+		}
+	}
+	if cpOffset < 0 {
+		t.Fatal("MAP_CHECKPOINT_DATA が無い")
+	}
+	b, err := os.ReadFile(rom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	area := 0x62
+	if v := os.Getenv("FC_PROBE_AREA"); v != "" {
+		fmt.Sscanf(v, "%x", &area)
+	}
+	t.Logf("checkpoint 0: area=%d x=%d y=%d → area=$%02x", b[cpOffset], b[cpOffset+1], b[cpOffset+2], area)
+	b[cpOffset] = byte(area)
+	m, err := New(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.IdleFlag = syms["_ppu_vsync_flag"]
+	run := func(n int) {
+		if err := m.RunFrames(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(180)
+	m.SetButtons(ButtonA)
+	run(10)
+	m.SetButtons(0)
+	run(300)
+	t.Logf("area=$%02x my=(%d,%d) state=%d", m.Get(syms["_bg_cur_area"]), m.Get(syms["_my_x"]), m.Get(syms["_my_y"]), m.Get(syms["_my_state"]))
+	sw := -1
+	for i := 0; i < 16; i++ {
+		ty := m.Get(syms["_en_type"] + i)
+		if ty != 0 {
+			t.Logf("en[%d] type=%d (%d,%d) p1=%d p2=%d", i, ty, m.Get(syms["_en_px"]+i), m.Get(syms["_en_py"]+i), m.Get(syms["_en_p1"]+i), m.Get(syms["_en_p2"]+i))
+		}
+		if ty == 13 && sw < 0 {
+			sw = i
+		}
+	}
+	if sw < 0 {
+		t.Fatal("スイッチが無い")
+	}
+	// スイッチの少し上に置いて落とす
+	m.Set(syms["_my_x"], m.Get(syms["_en_px"]+sw))
+	m.Set(syms["_my_y"], m.Get(syms["_en_py"]+sw)-40)
+	m.Set(syms["_my_state"], 2) // STATE_JUMP
+	flag := m.Get(syms["_en_p1"] + sw)
+	last := ""
+	for f := 0; f < 120; f++ {
+		run(1)
+		cur := fmt.Sprintf("my=(%d,%d) state=%d on_idx=%d sw_y=%d flag[%d]=%d", m.Get(syms["_my_x"]), m.Get(syms["_my_y"]), m.Get(syms["_my_state"]), m.Get(syms["_my_on_idx"]), m.Get(syms["_en_py"]+sw), flag, m.Get(syms["_my_flags"]+flag))
+		if cur != last {
+			t.Logf("f%d: %s", f, cur)
 			last = cur
 		}
 	}

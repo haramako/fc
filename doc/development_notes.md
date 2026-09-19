@@ -148,7 +148,15 @@ go test ./...                                    # 全部 (golden + examples + N
   正当に違うので、ゲームの状態の変数に絞る、(2) 配置が違う ROM 間では RAM を写せない（ポインタの値が違う）、
   (3) 内蔵ランナーの idle 検出（`lda; bne` の形）は旧コンパイラの待ちループには効かないので、`Machine.FrameWaited`
   （そのフレームでフラグが非 0 のまま読まれた）で「待ちに入った」を見る。今回の梯子バグはこの並走では見つからず
-  （パスを切っても同じバグが残る）、生成 asm を症状の行（`my_process.fc:93`）で読んで見つけた。**症状の行の `.s` を読む**のが早い
+  （パスを切っても同じバグが残る）、生成 asm を症状の行（`my_process.fc:93`）で読んで見つけた。**症状の行の `.s` を読む**のが早い。
+  2 件目（踏むスイッチが効かない）も同じ手順: 症状の関数 `en1.switch_process` の `.s` を読むと `cmp; ldx; bne` で、
+  比較の直後に挟まった常駐レジスタの復帰 `ldx` が Z を消していた（`on_idx == i` は i == 0 のときだけ動く）。
+  **比較の結果がフラグ（N / Z）のときの復帰は `php` / `plp` で挟む**（`ir.CondRestoreNeedsFlags`、C はロードで変わらないので
+  符号なしの `<` は挟まない。regalloc の gainOf も 7 サイクル引く）。可換な `==` は第 2 入力がレジスタでも `cpx` / `cpy` / `cmp`
+  1 命令にして復帰自体を無くした。`TestResidentCondRestore` が番。ついでに r6502 の `plp` が S を戻していなかった（`php` /
+  `plp` を出すコードが今まで無かった）。任意のエリアから始めるには `internal/nes/probe_test.go` の `TestProbeSwitch` のように
+  チェックポイント 0 の `[area, x, y]` を ROM 上で書き換える（fs の敵データは `res/fs_data.bin`。`ENEMY_BASE + area` の
+  ファイルの 7 バイト目から `[type, x, y, p1, p2, p3, slot]` × n）
 - `fcc -O 0` は最適化パス・常駐・ピープホールを切る（`BuildOptions.OptimizeLevel` は 0 が「未指定 = 2」、-1 が -O 0）。
   レジスタ割付は -O 0 でも同じ `regalloc.AllocateRegister`（静的フレームの関数は固定番地に置く必要があるので、
   「全部フレーム」の簡易版は使えない）。`TestOptimizeLevel0` が番

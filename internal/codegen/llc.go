@@ -950,6 +950,19 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(fmt.Sprintf("cpx %s", l.byte(op.In(1), 0)))
 				break
 			}
+			// 可換なので第 2 入力がレジスタにあっても同じ (`on_idx == i` の i@X → cpx on_idx)
+			if l.inY(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
+				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(0), 0)))
+				break
+			}
+			if l.inX(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
+				r.push(fmt.Sprintf("cpx %s", l.byte(op.In(0), 0)))
+				break
+			}
+			if l.inA(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
+				r.push(fmt.Sprintf("cmp %s", l.byte(op.In(0), 0)))
+				break
+			}
 			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
 				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
 				break
@@ -1274,14 +1287,26 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
-		if restoreA {
-			r.push("lda " + l.byte(op.Resident.Home, 0))
-		}
-		if restoreY {
-			r.push("ldy " + l.byte(op.ResidentY.Home, 0))
-		}
-		if restoreX {
-			r.push("ldx " + l.byte(op.ResidentX.Home, 0))
+		if restoreA || restoreY || restoreX {
+			// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
+			// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
+			// C (符号なしの lt) はロードで変わらないので挟まない
+			cond := ir.CondRestoreNeedsFlags(op)
+			if cond {
+				r.push("php")
+			}
+			if restoreA {
+				r.push("lda " + l.byte(op.Resident.Home, 0))
+			}
+			if restoreY {
+				r.push("ldy " + l.byte(op.ResidentY.Home, 0))
+			}
+			if restoreX {
+				r.push("ldx " + l.byte(op.ResidentX.Home, 0))
+			}
+			if cond {
+				r.push("plp")
+			}
 		}
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
 	}

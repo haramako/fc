@@ -267,3 +267,12 @@ func (k DefKind) String() string {
 	}
 	return fmt.Sprintf("DefKind(%d)", int(k))
 }
+
+// CondRestoreNeedsFlags は op の結果がコンディションレジスタの N / Z か (直後に常駐レジスタを lda / ldy / ldx で復帰すると
+// 壊れるので codegen は php / plp で挟み、regalloc はそのコストを見る)。C はロードで変わらないので含めない。
+func CondRestoreNeedsFlags(op *Op) bool {
+	if op.Dst == nil || ValLocation(op.Dst) != LocCond {
+		return false
+	}
+	return UnderlyingValue(op.Dst).CondReg != CondCarry
+}

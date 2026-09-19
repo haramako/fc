@@ -211,6 +211,9 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 			return true, 1 // lda v (3) → cmp #0 (2)
 		}
 	case ir.OpEq, ir.OpLt:
+		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
+			return true, 3 // 可換: cmp k
+		}
 		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 {
 			// 符号付きの比較は sec; sbc; bvc; eor で A を壊す (cmp と違って) ので、v がその後も要るなら A のままではできない
 			signed := op.Code == ir.OpLt && (ir.ValType(op.Src[0]).Signed || ir.ValType(op.Src[1]).Signed)
@@ -276,6 +279,9 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed)) {
 			return true, 3 // lda v; cmp k → cpy k
 		}
+		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
+			return true, 3 // 可換: cpy k
+		}
 	case ir.OpLoad:
 		if isV(op.Dst, v) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
 			return true, 3 // ldy x
@@ -314,6 +320,9 @@ func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
 			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed)) {
 			return true, 3 // cpx k
+		}
+		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
+			return true, 3 // 可換: cpx k
 		}
 	case ir.OpLoad:
 		if isV(op.Dst, v) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
@@ -698,12 +707,14 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 			}
 			d, g := Classify(lmd, i, vA, vY, vX, aIn || aOut, aOut, yIn || yOut)
 			gain += g
+			restored := false
 			if d.X == ResClobber {
 				if xIn && !cleanX {
 					gain -= 3
 				}
 				if xOut {
 					gain -= 3
+					restored = true
 				}
 			}
 			if d.A == ResClobber {
@@ -712,6 +723,7 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 				}
 				if aOut {
 					gain -= 3
+					restored = true
 				}
 			}
 			if d.Y == ResClobber {
@@ -720,7 +732,11 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 				}
 				if yOut {
 					gain -= 3
+					restored = true
 				}
+			}
+			if restored && ir.CondRestoreNeedsFlags(op) {
+				gain -= 7 // 結果が N / Z のフラグなので復帰を php / plp で挟む (codegen)
 			}
 		}
 	}
