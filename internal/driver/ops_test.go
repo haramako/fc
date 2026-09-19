@@ -848,6 +848,37 @@ function main():void
 	}
 }
 
+// 常駐レジスタへの差し替えで cast を落としていた: `(x as int) >= 0` の x (sint) が X に常駐すると比較が符号付きになる
+// (fuzz で発覚)
+func TestResidentKeepsCast(t *testing.T) {
+	t.Parallel()
+	src := `var g3:int;
+var a2:[16]int16;
+struct S { f0:int16; f1:int16; }
+var sa:[4]S;
+function f0(p0:int16):sint options(fastcall: true, inline: true)
+{
+	return (sa[((g3 >> 4) & 3)].f1 as sint);
+}
+function main():void
+{
+	var l2:int = 0;
+	sa[0].f1 = 33481;
+	while (((f0(1) as int) >= 0) && l2 < 3) {
+		l2++;
+		a2[7] = (f0(2) as int16);
+	}
+	printf(l2, " ", a2[7], "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "3 65481\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 定数との乗算のシフト・加減算への展開 (opt.expandMul): 1 バイト / 2 バイト、符号付き、2^n - 1、Dst が入力と同じ
 func TestExpandMulRun(t *testing.T) {
 	t.Parallel()

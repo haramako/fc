@@ -84,6 +84,8 @@ go test ./...                                    # 全部 (golden + examples + N
   producer にしてから）とき N が A を反映しないまま `bpl` していた（`TestSignExtendCallResult`）
 - 種 170000〜 で 1 件: A に常駐したグローバルを `return g0` で返すと、return が friendly（戻り値を A から書く）扱いで
   g0 の書き戻しが出なかった（グローバルの常駐は return を clobber に。`TestResidentGlobalReturn`）
+- 種 190000〜 で 1 件: 常駐レジスタへの差し替え（`makeResident` の replace）が cast を落としていて、`(x as int) >= 0` の x が
+  X に常駐すると比較が符号付きになった（cast を残す。`TestResidentKeepsCast`）
 - **ca65 の `.proc` の中のラベルは同じファイルの別の `.proc` から見えない**（2026-09-20）: レジスタ渡しの `sym__frame`
   を `.proc` の中に置いて `.export` したら、同じモジュール内の呼び出しで未定義になった（castle の text で発覚。
   fc のテストは他モジュールからの参照しか無かった）。関数の途中に入口を作るときは `.endproc` で閉じて別の `.proc` にする

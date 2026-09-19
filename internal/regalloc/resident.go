@@ -895,15 +895,24 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		rY.Location, rY.Home, rY.Clean = ir.LocY, vY, readOnly(lmd, cfg, r, vY)
 		lmd.Vars = append(lmd.Vars, rY)
 	}
+	// 常駐変数に差し替える。cast (`(x as int)` の符号の読み替え) は残す: 落とすと `lt` の符号が変わる
+	// (`(f() as int) >= 0` が符号付きの比較になって偽になった。fuzz で発覚)
+	var rebase func(o ir.Operand, nv *ir.Value) ir.Operand
+	rebase = func(o ir.Operand, nv *ir.Value) ir.Operand {
+		if cv, ok := o.(*ir.CastedValue); ok {
+			return ir.NewCastedValue(rebase(cv.From, nv), cv.Type, cv.Offset)
+		}
+		return nv
+	}
 	replace := func(o ir.Operand) ir.Operand {
 		if isV(o, vA) {
-			return rA
+			return rebase(o, rA)
 		}
 		if isV(o, vY) {
-			return rY
+			return rebase(o, rY)
 		}
 		if isV(o, vX) {
-			return rX
+			return rebase(o, rX)
 		}
 		return o
 	}
