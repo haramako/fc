@@ -122,6 +122,14 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 			}
 			return ir.NewIntLiteral("", u8, 0)
 		}
+		if v := ir.UnderlyingValue(o); v != nil && v.Type.Size == 1 {
+			// 1 バイトの変数を 2 バイトに広げた cast (`x as int16`): 上位は 0 (符号付きは wordOperand が弾く。
+			// cast の 1 バイト目を読むと隣のバイトを拾ってしまう。fuzz で発覚)
+			if k == 0 {
+				return ir.NewCastedValue(v, u8, 0)
+			}
+			return ir.NewIntLiteral("", u8, 0)
+		}
 		return ir.NewCastedValue(o, u8, ir.ValOffset(o)+k)
 	}
 	var out []*ir.Op
@@ -231,6 +239,10 @@ func wordOperand(o ir.Operand, cands map[*ir.Value]bool) bool {
 	}
 	if ir.ValType(o).Kind != types.Int {
 		return false
+	}
+	if v.Type.Size == 1 {
+		// 1 バイトの変数 (2 バイトに広げた cast も): 符号なしのゼロ拡張だけ (符号拡張はバイトに分けられない)
+		return ir.ValOffset(o) == 0 && (ir.ValType(o).Size == 1 || !v.Type.Signed)
 	}
 	if ir.ValType(o).Size == 1 {
 		return true

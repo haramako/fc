@@ -617,6 +617,165 @@ function main():void
 	}
 }
 
+// TestFuzzFound1: ランダムプログラムの差分テスト (randprog_test.go) で最初に見つかった 4 件 (2026-09-19)。-O 0 と -O 2 の両方で走らせる。
+//
+//	(1) `!((a < b) as int16)`: cast を挟んだ not の入力だけがコンディションレジスタになり codegen が panic
+//	(2) `a16[i] = 4`: 融合した index_pset が値の幅 (1 バイト) しか書かず上位バイトが残る
+//	(3) `(x8 as int16)` を splitWords がバイトに分けるとき、上位バイトとして隣の番地を読む (part3 の g1 が 46024 になる)
+//	(4) 使われない書き込み (`l0 = ...`) の位置が live range に入らず、ループ変数と番地を共有して無限ループ (part4、-O 0)
+func TestFuzzFound1(t *testing.T) {
+	t.Parallel()
+	src := `var g0:sint16;
+var g1:int16;
+var g2:sint;
+var g5:int;
+var a0:[8]sint16;
+var a1:[8]int;
+var b0:[8]sint;
+var b:sint;
+function f1(p0:int):int
+{
+	return ((a0[0] as int) & (g5 | 94));
+}
+function f0(p0:sint):int16 options(fastcall: true, inline: true)
+{
+	return (a1[((g1 as int) & 7)] as int16);
+}
+function f2(p0:sint16):int16 options(inline: true)
+{
+	return (((p0 as int) << 7) as int16);
+}
+function part3():int16
+{
+	var l0:int16 = 45981;
+	g0 = (-5613);
+	a1[3] = 200;
+	g1 = 0x0303;
+	switch ((((g0 as int) ^ ((l0 as int) >> 5)) & 7)) {
+	case 7, 5:
+		g1 = f0(g2);
+	default:
+	}
+	return g1;
+}
+function part4():int
+{
+	var l0:int = 3;
+	var l1:int16 = 4;
+	var cnt = 0;
+	if ((~(l1 as sint))) {
+		switch ((((l0 >> (l0 & 7)) % 209) & 7)) {
+		case 6:
+		case 3:
+			l0 = (f2((-(g2 >> 3))) as int);
+		}
+	}
+	for (var l6:int = 0; l6 < 7; l6++) {
+		for (var l7:int = 0; l7 < 4; l7++) {
+			var l8:int16 = l1;
+			l0 = (b0[6] as int); // 使われない書き込みが l6 / l7 の番地を壊していた
+			cnt++;
+		}
+	}
+	return cnt;
+}
+function main():void
+{
+	// (1)
+	g1 = 3;
+	var n1 = (!((g1 < 5) as int16)) as int;
+	var n2 = (!((g1 == 3) as int16)) as int;
+	var n3 = (!((g1 > 5) as int)) as int;
+	// (2)
+	b = -3;
+	a0[3] = 3525;
+	a0[4] = 3525;
+	if (a1[f1(0)] == 0) { a0[3] = 4; }
+	var i = 4;
+	a0[i] = b;
+	printf(n1, " ", n2, " ", n3, " ", a0[3], " ", a0[4], " ", part3(), " ", part4(), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if out, want := runEmuLevel(t, src, level), "0 0 1 4 65533 200 28\n"; out != want {
+			t.Errorf("level %d: got %q\nwant %q", level, out, want)
+		}
+	}
+}
+
+// TestFuzzFound2: 差分テストで見つかった 2 巡目の 3 件 (2026-09-19)。
+//
+//	part1 (-O 0): `l ^ l` の l を A に置く (allocateA) と 2 つ目の入力がメモリから読めず panic
+//	part2 (-O 0): `cast<sint16>(cast<uint16>(b8))` の 1 バイト目が b8 の隣の番地を読む (codegen の byte)
+//	part3: 関数全体の常駐 (l1@X) の退避が、内側のループの入口の写し (l0@X の tax) の後に出て l1 が壊れる
+//	part4: cast を挟んだ使用 `~(l1 as int16)` は常駐 (l1@Y) に置き換わらずメモリを読むのに、退避が出ていなかった
+func TestFuzzFound2(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int16;
+var g1:sint;
+var g3:int;
+var g4:int16;
+var a0:[8]sint16;
+var b1:[8]int16;
+var c1:[8]sint16;
+function f1(p0:sint, p1:int16):int options(inline: true)
+{
+	var l0:int = 241;
+	for (var l1:int = 0; l1 < 2; l1++) {
+		l0++;
+		b1[0] <<= 0; b1[((0 & l1) & 7)] ^= 61667;
+	}
+	return (((!p1) as int) / 39);
+}
+function part1():int
+{
+	var l6:int = g3;
+	g3 = (l6 ^ l6);
+	var l7:int = g3;
+	return (l7 & l7) + (l6 - l6);
+}
+function part2():sint16
+{
+	c1[5] = 4; // 下位 4 は >> 4 で 0 になり、!0 = 1。壊れると隣の番地 (この 4) が上位バイトに入って 1025 になる
+	a0[2] = (((!((c1[5] as int) >> 4)) as int16) as sint16);
+	return a0[2];
+}
+function part3():int16
+{
+	var l0:sint = 0;
+	var l1:int16 = 59596;
+	var l4:int = 0;
+	b1[1] = 1891;
+	for (var l2:sint = 0; l2 < 1; l2++) {
+	}
+	b1[((((b1[1] as int) || l0) as int) & 7)] = (((((a0[0] / (l1 | 1)) > ((b1[(((a0[(f1(0, g0) & 7)] as int) | 3) & 7)] as sint16) as int16)) as sint16) != ((f1(g1, 4) as sint16) ^ 0)) as int16);
+	l4++;
+	return b1[0] + l4;
+}
+function part4():void
+{
+	var l1:int = 3;
+	g3 = 27;
+	l1 = g3;
+	g4 = (~(l1 as int16));
+	printf(g4, "\n");
+}
+function main():void
+{
+	g3 = 5;
+	printf(part1(), " ", part2(), " ", part3(), " ");
+	part4();
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if out, want := runEmuLevel(t, src, level), "0 1 1 65508\n"; out != want {
+			t.Errorf("level %d: got %q\nwant %q", level, out, want)
+		}
+	}
+}
+
 // TestConstPointerArray: ポインタの配列の const (`[N]*T`): 要素は文字列リテラル、配列定数の名前、null。
 // 二重配列の const (`[2][3]int`) と合わせて、定数添字・変数添字の両方で読める。
 func TestConstPointerArray(t *testing.T) {

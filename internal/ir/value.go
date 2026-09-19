@@ -11,6 +11,9 @@ import (
 
 type LiveRange struct {
 	Min, Max int
+	// Writes は生存区間の外にある定義 (使われない書き込み) の位置。書き込みはメモリに起きるので、そこで生きている
+	// 別の変数と番地を共有できない (ループ変数と同じ番地に置かれた dead store で無限ループになった。fuzz で発覚)
+	Writes []int
 }
 
 // LocalType はローカル変数の役割 (レジスタ割付で使う)。

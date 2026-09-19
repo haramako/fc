@@ -403,10 +403,13 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	gain := 0
 	// グローバル変数の常駐: 呼び出し・asm・ポインタ経由の書き込みはその変数を触りうるので退避 / 復帰する
 	touches := func(v *ir.Value) bool { return v != nil && v.Kind == ir.KindGlobal && ir.MayTouchGlobals(op) }
+	// codegen から呼ばれるときの v はレジスタの一時変数 (Home が元の変数)。cast を挟んだ使用 (`~(l1 as int16)`) は
+	// makeResident が置き換えない (元の変数のメモリを読む) ので、Home を触る命令も「この命令に関わる」= 退避が要る
+	involved := func(v *ir.Value) bool { return involves(op, v) || v != nil && v.Home != nil && involves(op, v.Home) }
 	// X (inx / cpx / ldx / stx は A も Y も使わない。lda a,x は A を使う)
 	xFriendly := false
 	if vX != nil {
-		if involves(op, vX) {
+		if involved(vX) {
 			if ok, save := friendlyX(lmd, i, vX); ok {
 				d.X = ResFriendly
 				xFriendly = true
@@ -420,7 +423,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	}
 	// Y (先に決める: Y のまま実行できる命令 (iny / cpy / ldy / sty / lda a,y) は A を使わない)
 	yFriendly := false
-	if vY != nil && involves(op, vY) {
+	if vY != nil && involved(vY) {
 		if ok, save := friendlyY(lmd, i, vY); ok {
 			d.Y = ResFriendly
 			yFriendly = true
@@ -433,7 +436,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	}
 	// A
 	if vA != nil {
-		if involves(op, vA) {
+		if involved(vA) {
 			if ok, save := friendlyA(lmd, i, vA, aOut); ok {
 				d.A = ResFriendly
 				gain += save
@@ -984,7 +987,11 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			// fallthrough (from の直後が to)。from の末尾に足す (条件分岐の落ちる側なら分岐の後 = to の手前)
 			if li >= 0 {
 				pos := li + 1
-				if !spill {
+				if spill {
+					// from の末尾にある内側のループの入口の写し (ラベルの前に置かれている) より前に退避する
+					// (`tax` (内側の l0@X) の後に `stx` (この領域の l1) を出していた。fuzz で発覚)
+					pos = backOver(pos)
+				} else {
 					for pos < len(ops) && isResCopy(ops[pos]) {
 						pos++
 					}

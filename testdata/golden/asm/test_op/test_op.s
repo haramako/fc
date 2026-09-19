@@ -371,17 +371,13 @@ _35:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int_op+1
 	cmp 0+<F_test_op_test_int_op+1
-	lda #0
-	rol a
-	eor #1
-	beq @7
-	lda #0
-	sta 0+<F_test_op_test_int_op+3
+	bcc @7
+	lda #1
 	jmp @8
 @7:
-	lda #1
-	sta 0+<F_test_op_test_int_op+3
+	lda #0
 @8:
+	sta 0+<F_test_op_test_int_op+3
 	lda 0+<F_test_op_test_int_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_95)
@@ -402,17 +398,13 @@ _35:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int_op+1
 	cmp 0+<F_test_op_test_int_op+1
-	lda #0
-	rol a
-	eor #1
-	beq @15
-	lda #0
-	sta 0+<F_test_op_test_int_op+3
+	bcc @15
+	lda #1
 	jmp @16
 @15:
-	lda #1
-	sta 0+<F_test_op_test_int_op+3
+	lda #0
 @16:
+	sta 0+<F_test_op_test_int_op+3
 	lda 0+<F_test_op_test_int_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_104)
@@ -422,17 +414,13 @@ _35:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int_op+1
 	cmp 0+<F_test_op_test_int_op+1
-	lda #0
-	rol a
-	eor #1
-	beq @20
-	lda #0
-	sta 0+<F_test_op_test_int_op+3
+	bcc @20
+	lda #1
 	jmp @21
 @20:
-	lda #1
-	sta 0+<F_test_op_test_int_op+3
+	lda #0
 @21:
+	sta 0+<F_test_op_test_int_op+3
 	lda 0+<F_test_op_test_int_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_109)
@@ -442,16 +430,13 @@ _35:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int_op+1
 	cmp 0+<F_test_op_test_int_op+2
-	lda #0
-	rol a
-	beq @25
-	lda #0
-	sta 0+<F_test_op_test_int_op+3
+	bcs @25
+	lda #1
 	jmp @26
 @25:
-	lda #1
-	sta 0+<F_test_op_test_int_op+3
+	lda #0
 @26:
+	sta 0+<F_test_op_test_int_op+3
 	lda 0+<F_test_op_test_int_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_115)
@@ -461,17 +446,13 @@ _35:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int_op+2
 	cmp 0+<F_test_op_test_int_op+1
-	lda #0
-	rol a
-	eor #1
-	beq @30
-	lda #0
-	sta 0+<F_test_op_test_int_op+3
+	bcc @30
+	lda #1
 	jmp @31
 @30:
-	lda #1
-	sta 0+<F_test_op_test_int_op+3
+	lda #0
 @31:
+	sta 0+<F_test_op_test_int_op+3
 	lda 0+<F_test_op_test_int_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_120)
@@ -481,16 +462,13 @@ _35:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int_op+1
 	cmp 0+<F_test_op_test_int_op+2
-	lda #0
-	rol a
-	beq @35
-	lda #0
-	sta 0+<F_test_op_test_int_op+3
+	bcs @35
+	lda #1
 	jmp @36
 @35:
-	lda #1
-	sta 0+<F_test_op_test_int_op+3
+	lda #0
 @36:
+	sta 0+<F_test_op_test_int_op+3
 	lda 0+<F_test_op_test_int_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_126)
@@ -514,20 +492,13 @@ _35:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int_op+1
 	cmp 0+<F_test_op_test_int_op+2
-	beq @43
-	lda #0
-	jmp @44
-@43:
-	lda #1
-@44:
 	beq @41
-	lda #0
-	sta 0+<F_test_op_test_int_op+1
+	lda #1
 	jmp @42
 @41:
-	lda #1
-	sta 0+<F_test_op_test_int_op+1
+	lda #0
 @42:
+	sta 0+<F_test_op_test_int_op+1
 	lda 0+<F_test_op_test_int_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_135)
@@ -702,22 +673,22 @@ _157:
 	sta 0+<F_test_op_test_int8_op+7
 	ldy #129
 	lda 0+<F_test_op_test_int8_op+7
-	bmi @45
+	bmi @43
 	lsr a
 	lsr a
-	jmp @46
-@45:
+	jmp @44
+@43:
 	lsr a
 	lsr a
 	ora #192
-@46:
+@44:
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @47
+	bpl @45
 	lda #255
-	jmp @48
-@47:
+	jmp @46
+@45:
 	lda #0
-@48:
+@46:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -735,12 +706,12 @@ _157:
 	lda 0+<F_test_op_test_int8_op+7
 	asl a
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @49
+	bpl @47
 	lda #255
-	jmp @50
-@49:
+	jmp @48
+@47:
 	lda #0
-@50:
+@48:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -757,12 +728,12 @@ _157:
 	jsr _unittest_assert_equal
 	lda 0+<F_test_op_test_int8_op+1
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @51
+	bpl @49
 	lda #255
-	jmp @52
-@51:
+	jmp @50
+@49:
 	lda #0
-@52:
+@50:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -770,12 +741,12 @@ _157:
 	sta <F_unittest_assert_equal+1
 	lda 0+<F_test_op_test_int8_op+1
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @53
+	bpl @51
 	lda #255
-	jmp @54
-@53:
+	jmp @52
+@51:
 	lda #0
-@54:
+@52:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+2
@@ -793,12 +764,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @55
+	bpl @53
 	lda #255
-	jmp @56
-@55:
+	jmp @54
+@53:
 	lda #0
-@56:
+@54:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -820,12 +791,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @57
+	bpl @55
 	lda #255
-	jmp @58
-@57:
+	jmp @56
+@55:
 	lda #0
-@58:
+@56:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -847,12 +818,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @59
+	bpl @57
 	lda #255
-	jmp @60
-@59:
+	jmp @58
+@57:
 	lda #0
-@60:
+@58:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -874,12 +845,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @61
+	bpl @59
 	lda #255
-	jmp @62
-@61:
+	jmp @60
+@59:
 	lda #0
-@62:
+@60:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -901,12 +872,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @63
+	bpl @61
 	lda #255
-	jmp @64
-@63:
+	jmp @62
+@61:
 	lda #0
-@64:
+@62:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -927,12 +898,12 @@ _157:
 	jsr __mul_8
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+8
-	bpl @65
+	bpl @63
 	lda #255
-	jmp @66
-@65:
+	jmp @64
+@63:
 	lda #0
-@66:
+@64:
 	sta 1+<F_test_op_test_int8_op+8
 	lda 0+<F_test_op_test_int8_op+8
 	sta <F_unittest_assert_equal+0
@@ -954,12 +925,12 @@ _157:
 	jsr __mul_8
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+4
-	bpl @67
+	bpl @65
 	lda #255
-	jmp @68
-@67:
+	jmp @66
+@65:
 	lda #0
-@68:
+@66:
 	sta 1+<F_test_op_test_int8_op+4
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_equal+0
@@ -981,12 +952,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+4
-	bpl @69
+	bpl @67
 	lda #255
-	jmp @70
-@69:
+	jmp @68
+@67:
 	lda #0
-@70:
+@68:
 	sta 1+<F_test_op_test_int8_op+4
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_equal+0
@@ -1008,12 +979,12 @@ _157:
 	jsr __div_8s
 	lda <reg+4+0
 	sta 0+<F_test_op_test_int8_op+4
-	bpl @71
+	bpl @69
 	lda #255
-	jmp @72
-@71:
+	jmp @70
+@69:
 	lda #0
-@72:
+@70:
 	sta 1+<F_test_op_test_int8_op+4
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_equal+0
@@ -1030,12 +1001,12 @@ _157:
 	lda 0+<F_test_op_test_int8_op+3
 	and 0+<F_test_op_test_int8_op+2
 	sta 0+<F_test_op_test_int8_op+4
-	bpl @73
+	bpl @71
 	lda #255
-	jmp @74
-@73:
+	jmp @72
+@71:
 	lda #0
-@74:
+@72:
 	sta 1+<F_test_op_test_int8_op+4
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_equal+0
@@ -1053,12 +1024,12 @@ _157:
 	lda 0+<F_test_op_test_int8_op+1
 	ora 0+<F_test_op_test_int8_op+2
 	sta 0+<F_test_op_test_int8_op+4
-	bpl @75
+	bpl @73
 	lda #255
-	jmp @76
-@75:
+	jmp @74
+@73:
 	lda #0
-@76:
+@74:
 	sta 1+<F_test_op_test_int8_op+4
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_equal+0
@@ -1075,12 +1046,12 @@ _157:
 	lda 0+<F_test_op_test_int8_op+3
 	eor 0+<F_test_op_test_int8_op+2
 	sta 0+<F_test_op_test_int8_op+4
-	bpl @77
+	bpl @75
 	lda #255
-	jmp @78
-@77:
+	jmp @76
+@75:
 	lda #0
-@78:
+@76:
 	sta 1+<F_test_op_test_int8_op+4
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_equal+0
@@ -1098,15 +1069,15 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc 0+<F_test_op_test_int8_op+1
-	bvc @81
+	bvc @79
 	eor #$80
-@81:
-	bmi @79
-	lda #0
-	beq @80
 @79:
+	bmi @77
+	lda #0
+	beq @78
+@77:
 	lda #1
-@80:
+@78:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_236)
 	sta <F_unittest_assert_true+1
@@ -1116,15 +1087,15 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc #255
-	bvc @84
+	bvc @82
 	eor #$80
-@84:
-	bmi @82
-	lda #0
-	beq @83
 @82:
+	bmi @80
+	lda #0
+	beq @81
+@80:
 	lda #1
-@83:
+@81:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_240)
 	sta <F_unittest_assert_true+1
@@ -1134,15 +1105,15 @@ _157:
 	lda #240
 	sec
 	sbc 0+<F_test_op_test_int8_op+2
-	bvc @87
+	bvc @85
 	eor #$80
-@87:
-	bmi @85
-	lda #0
-	beq @86
 @85:
+	bmi @83
+	lda #0
+	beq @84
+@83:
 	lda #1
-@86:
+@84:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_244)
 	sta <F_unittest_assert_true+1
@@ -1152,15 +1123,15 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc #1
-	bvc @90
+	bvc @88
 	eor #$80
-@90:
-	bmi @88
-	lda #0
-	beq @89
 @88:
+	bmi @86
+	lda #0
+	beq @87
+@86:
 	lda #1
-@89:
+@87:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_248)
 	sta <F_unittest_assert_true+1
@@ -1170,23 +1141,16 @@ _157:
 	lda #1
 	sec
 	sbc 0+<F_test_op_test_int8_op+2
-	bvc @93
+	bvc @91
 	eor #$80
+@91:
+	bmi @92
+	lda #1
+	jmp @93
+@92:
+	lda #0
 @93:
-	bmi @96
-	lda #0
-	jmp @97
-@96:
-	lda #1
-@97:
-	beq @94
-	lda #0
 	sta 0+<F_test_op_test_int8_op+4
-	jmp @95
-@94:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+4
-@95:
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_253)
@@ -1197,15 +1161,15 @@ _157:
 	lda #1
 	sec
 	sbc 0+<F_test_op_test_int8_op+3
-	bvc @100
+	bvc @96
 	eor #$80
-@100:
-	bmi @98
+@96:
+	bmi @94
 	lda #0
-	beq @99
-@98:
+	beq @95
+@94:
 	lda #1
-@99:
+@95:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_257)
 	sta <F_unittest_assert_true+1
@@ -1215,23 +1179,16 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc 0+<F_test_op_test_int8_op+2
-	bvc @103
+	bvc @99
 	eor #$80
-@103:
-	bmi @106
-	lda #0
-	jmp @107
-@106:
+@99:
+	bmi @100
 	lda #1
-@107:
-	beq @104
+	jmp @101
+@100:
 	lda #0
+@101:
 	sta 0+<F_test_op_test_int8_op+4
-	jmp @105
-@104:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+4
-@105:
 	lda 0+<F_test_op_test_int8_op+4
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_262)
@@ -1242,15 +1199,15 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc 0+<F_test_op_test_int8_op+1
-	bvc @110
+	bvc @104
 	eor #$80
-@110:
-	bmi @108
+@104:
+	bmi @102
 	lda #0
-	beq @109
-@108:
+	beq @103
+@102:
 	lda #1
-@109:
+@103:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_266)
 	sta <F_unittest_assert_true+1
@@ -1260,23 +1217,16 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc 0+<F_test_op_test_int8_op+2
-	bvc @113
+	bvc @107
 	eor #$80
-@113:
-	bmi @116
-	lda #0
-	jmp @117
-@116:
+@107:
+	bmi @108
 	lda #1
-@117:
-	beq @114
+	jmp @109
+@108:
 	lda #0
+@109:
 	sta 0+<F_test_op_test_int8_op+1
-	jmp @115
-@114:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+1
-@115:
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_271)
@@ -1287,23 +1237,16 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc 0+<F_test_op_test_int8_op+2
-	bvc @120
+	bvc @112
 	eor #$80
-@120:
-	bmi @123
-	lda #0
-	jmp @124
-@123:
+@112:
+	bmi @113
 	lda #1
-@124:
-	beq @121
+	jmp @114
+@113:
 	lda #0
+@114:
 	sta 0+<F_test_op_test_int8_op+1
-	jmp @122
-@121:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+1
-@122:
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_276)
@@ -1314,23 +1257,16 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc 0+<F_test_op_test_int8_op+3
-	bvc @127
+	bvc @117
 	eor #$80
-@127:
-	bpl @130
-	lda #0
-	jmp @131
-@130:
+@117:
+	bpl @118
 	lda #1
-@131:
-	beq @128
+	jmp @119
+@118:
 	lda #0
+@119:
 	sta 0+<F_test_op_test_int8_op+1
-	jmp @129
-@128:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+1
-@129:
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_282)
@@ -1341,23 +1277,16 @@ _157:
 	lda 0+<F_test_op_test_int8_op+3
 	sec
 	sbc 0+<F_test_op_test_int8_op+2
-	bvc @134
+	bvc @122
 	eor #$80
-@134:
-	bmi @137
-	lda #0
-	jmp @138
-@137:
+@122:
+	bmi @123
 	lda #1
-@138:
-	beq @135
+	jmp @124
+@123:
 	lda #0
+@124:
 	sta 0+<F_test_op_test_int8_op+1
-	jmp @136
-@135:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+1
-@136:
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_287)
@@ -1368,23 +1297,16 @@ _157:
 	lda 0+<F_test_op_test_int8_op+2
 	sec
 	sbc 0+<F_test_op_test_int8_op+3
-	bvc @141
+	bvc @127
 	eor #$80
-@141:
-	bpl @144
-	lda #0
-	jmp @145
-@144:
+@127:
+	bpl @128
 	lda #1
-@145:
-	beq @142
+	jmp @129
+@128:
 	lda #0
+@129:
 	sta 0+<F_test_op_test_int8_op+1
-	jmp @143
-@142:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+1
-@143:
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_293)
@@ -1394,12 +1316,12 @@ _157:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int8_op+2
 	cmp 0+<F_test_op_test_int8_op+2
-	bne @146
+	bne @130
 	lda #1
-	jmp @147
-@146:
+	jmp @131
+@130:
 	lda #0
-@147:
+@131:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_297)
 	sta <F_unittest_assert_true+1
@@ -1408,20 +1330,13 @@ _157:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int8_op+2
 	cmp 0+<F_test_op_test_int8_op+3
-	beq @152
-	lda #0
-	jmp @153
-@152:
+	beq @134
 	lda #1
-@153:
-	beq @150
+	jmp @135
+@134:
 	lda #0
+@135:
 	sta 0+<F_test_op_test_int8_op+1
-	jmp @151
-@150:
-	lda #1
-	sta 0+<F_test_op_test_int8_op+1
-@151:
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_302)
@@ -1435,12 +1350,12 @@ _157:
 	asl a
 	asl a
 	sta 0+<F_test_op_test_int8_op+1
-	bpl @154
+	bpl @136
 	lda #255
-	jmp @155
-@154:
+	jmp @137
+@136:
 	lda #0
-@155:
+@137:
 	sta 1+<F_test_op_test_int8_op+1
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_equal+0
@@ -1456,22 +1371,22 @@ _157:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda 0+<F_test_op_test_int8_op+7
-	bmi @156
+	bmi @138
 	lsr a
 	lsr a
-	jmp @157
-@156:
+	jmp @139
+@138:
 	lsr a
 	lsr a
 	ora #192
-@157:
+@139:
 	sta 0+<F_test_op_test_int8_op+1
-	bpl @158
+	bpl @140
 	lda #255
-	jmp @159
-@158:
+	jmp @141
+@140:
 	lda #0
-@159:
+@141:
 	sta 1+<F_test_op_test_int8_op+1
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_equal+0
@@ -1489,12 +1404,12 @@ _157:
 	lda 0+<F_test_op_test_int8_op+7
 	and #7
 	sta 0+<F_test_op_test_int8_op+1
-	bpl @160
+	bpl @142
 	lda #255
-	jmp @161
-@160:
+	jmp @143
+@142:
 	lda #0
-@161:
+@143:
 	sta 1+<F_test_op_test_int8_op+1
 	lda 0+<F_test_op_test_int8_op+1
 	sta <F_unittest_assert_equal+0
@@ -1719,17 +1634,13 @@ _317:
 	cmp 0+<F_test_op_test_int16_op+5
 	lda 1+<F_test_op_test_int16_op+5
 	sbc 1+<F_test_op_test_int16_op+5
-	lda #0
-	rol a
-	eor #1
-	beq @168
-	lda #0
-	sta 0+<F_test_op_test_int16_op+11
-	jmp @169
-@168:
+	bcc @150
 	lda #1
+	jmp @151
+@150:
+	lda #0
+@151:
 	sta 0+<F_test_op_test_int16_op+11
-@169:
 	lda 0+<F_test_op_test_int16_op+11
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_345)
@@ -1754,17 +1665,13 @@ _317:
 	cmp 0+<F_test_op_test_int16_op+5
 	lda 1+<F_test_op_test_int16_op+5
 	sbc 1+<F_test_op_test_int16_op+5
-	lda #0
-	rol a
-	eor #1
-	beq @176
-	lda #0
-	sta 0+<F_test_op_test_int16_op+3
-	jmp @177
-@176:
+	bcc @158
 	lda #1
+	jmp @159
+@158:
+	lda #0
+@159:
 	sta 0+<F_test_op_test_int16_op+3
-@177:
 	lda 0+<F_test_op_test_int16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_354)
@@ -1776,17 +1683,13 @@ _317:
 	cmp 0+<F_test_op_test_int16_op+5
 	lda 1+<F_test_op_test_int16_op+5
 	sbc 1+<F_test_op_test_int16_op+5
-	lda #0
-	rol a
-	eor #1
-	beq @181
-	lda #0
-	sta 0+<F_test_op_test_int16_op+3
-	jmp @182
-@181:
+	bcc @163
 	lda #1
+	jmp @164
+@163:
+	lda #0
+@164:
 	sta 0+<F_test_op_test_int16_op+3
-@182:
 	lda 0+<F_test_op_test_int16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_359)
@@ -1798,16 +1701,13 @@ _317:
 	cmp 0+<F_test_op_test_int16_op+7
 	lda 1+<F_test_op_test_int16_op+5
 	sbc 1+<F_test_op_test_int16_op+7
-	lda #0
-	rol a
-	beq @186
-	lda #0
-	sta 0+<F_test_op_test_int16_op+3
-	jmp @187
-@186:
+	bcs @168
 	lda #1
+	jmp @169
+@168:
+	lda #0
+@169:
 	sta 0+<F_test_op_test_int16_op+3
-@187:
 	lda 0+<F_test_op_test_int16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_365)
@@ -1819,17 +1719,13 @@ _317:
 	cmp 0+<F_test_op_test_int16_op+5
 	lda 1+<F_test_op_test_int16_op+7
 	sbc 1+<F_test_op_test_int16_op+5
-	lda #0
-	rol a
-	eor #1
-	beq @191
-	lda #0
-	sta 0+<F_test_op_test_int16_op+3
-	jmp @192
-@191:
+	bcc @173
 	lda #1
+	jmp @174
+@173:
+	lda #0
+@174:
 	sta 0+<F_test_op_test_int16_op+3
-@192:
 	lda 0+<F_test_op_test_int16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_370)
@@ -1841,16 +1737,13 @@ _317:
 	cmp 0+<F_test_op_test_int16_op+7
 	lda 1+<F_test_op_test_int16_op+5
 	sbc 1+<F_test_op_test_int16_op+7
-	lda #0
-	rol a
-	beq @196
-	lda #0
-	sta 0+<F_test_op_test_int16_op+3
-	jmp @197
-@196:
+	bcs @178
 	lda #1
+	jmp @179
+@178:
+	lda #0
+@179:
 	sta 0+<F_test_op_test_int16_op+3
-@197:
 	lda 0+<F_test_op_test_int16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_376)
@@ -1860,15 +1753,15 @@ _317:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int16_op+5
 	cmp 0+<F_test_op_test_int16_op+5
-	bne @198
+	bne @180
 	lda 1+<F_test_op_test_int16_op+5
 	cmp 1+<F_test_op_test_int16_op+5
-	bne @198
+	bne @180
 	lda #1
-	jmp @199
-@198:
+	jmp @181
+@180:
 	lda #0
-@199:
+@181:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_380)
 	sta <F_unittest_assert_true+1
@@ -1877,24 +1770,17 @@ _317:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int16_op+5
 	cmp 0+<F_test_op_test_int16_op+7
-	bne @200
+	bne @182
 	lda 1+<F_test_op_test_int16_op+5
 	cmp 1+<F_test_op_test_int16_op+7
-@200:
-	beq @204
-	lda #0
-	jmp @205
-@204:
+@182:
+	beq @184
 	lda #1
-@205:
-	beq @202
+	jmp @185
+@184:
 	lda #0
+@185:
 	sta 0+<F_test_op_test_int16_op+3
-	jmp @203
-@202:
-	lda #1
-	sta 0+<F_test_op_test_int16_op+3
-@203:
 	lda 0+<F_test_op_test_int16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_385)
@@ -2075,17 +1961,13 @@ _397:
 	cmp 0+<F_test_op_test_int8x16_op+4
 	lda 1+<F_test_op_test_int8x16_op+8
 	sbc #0
-	lda #0
-	rol a
-	eor #1
-	beq @212
-	lda #0
-	sta 0+<F_test_op_test_int8x16_op+6
-	jmp @213
-@212:
+	bcc @192
 	lda #1
+	jmp @193
+@192:
+	lda #0
+@193:
 	sta 0+<F_test_op_test_int8x16_op+6
-@213:
 	lda 0+<F_test_op_test_int8x16_op+6
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_412)
@@ -2110,17 +1992,13 @@ _397:
 	cmp 0+<F_test_op_test_int8x16_op+8
 	lda #0
 	sbc 1+<F_test_op_test_int8x16_op+8
-	lda #0
-	rol a
-	eor #1
-	beq @220
-	lda #0
-	sta 0+<F_test_op_test_int8x16_op+3
-	jmp @221
-@220:
+	bcc @200
 	lda #1
+	jmp @201
+@200:
+	lda #0
+@201:
 	sta 0+<F_test_op_test_int8x16_op+3
-@221:
 	lda 0+<F_test_op_test_int8x16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_421)
@@ -2132,17 +2010,13 @@ _397:
 	cmp 0+<F_test_op_test_int8x16_op+8
 	lda #0
 	sbc 1+<F_test_op_test_int8x16_op+8
-	lda #0
-	rol a
-	eor #1
-	beq @225
-	lda #0
-	sta 0+<F_test_op_test_int8x16_op+3
-	jmp @226
-@225:
+	bcc @205
 	lda #1
+	jmp @206
+@205:
+	lda #0
+@206:
 	sta 0+<F_test_op_test_int8x16_op+3
-@226:
 	lda 0+<F_test_op_test_int8x16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_426)
@@ -2154,16 +2028,13 @@ _397:
 	cmp 0+<F_test_op_test_int8x16_op+10
 	lda #0
 	sbc 1+<F_test_op_test_int8x16_op+10
-	lda #0
-	rol a
-	beq @230
-	lda #0
-	sta 0+<F_test_op_test_int8x16_op+3
-	jmp @231
-@230:
+	bcs @210
 	lda #1
+	jmp @211
+@210:
+	lda #0
+@211:
 	sta 0+<F_test_op_test_int8x16_op+3
-@231:
 	lda 0+<F_test_op_test_int8x16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_432)
@@ -2175,17 +2046,13 @@ _397:
 	cmp 0+<F_test_op_test_int8x16_op+4
 	lda 1+<F_test_op_test_int8x16_op+10
 	sbc #0
-	lda #0
-	rol a
-	eor #1
-	beq @235
-	lda #0
-	sta 0+<F_test_op_test_int8x16_op+3
-	jmp @236
-@235:
+	bcc @215
 	lda #1
+	jmp @216
+@215:
+	lda #0
+@216:
 	sta 0+<F_test_op_test_int8x16_op+3
-@236:
 	lda 0+<F_test_op_test_int8x16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_437)
@@ -2197,16 +2064,13 @@ _397:
 	cmp 0+<F_test_op_test_int8x16_op+5
 	lda 1+<F_test_op_test_int8x16_op+8
 	sbc #0
-	lda #0
-	rol a
-	beq @240
-	lda #0
-	sta 0+<F_test_op_test_int8x16_op+3
-	jmp @241
-@240:
+	bcs @220
 	lda #1
+	jmp @221
+@220:
+	lda #0
+@221:
 	sta 0+<F_test_op_test_int8x16_op+3
-@241:
 	lda 0+<F_test_op_test_int8x16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_443)
@@ -2216,14 +2080,14 @@ _397:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int8x16_op+8
 	cmp 0+<F_test_op_test_int8x16_op+4
-	bne @242
+	bne @222
 	lda 1+<F_test_op_test_int8x16_op+8
-	bne @242
+	bne @222
 	lda #1
-	jmp @243
-@242:
+	jmp @223
+@222:
 	lda #0
-@243:
+@223:
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_447)
 	sta <F_unittest_assert_true+1
@@ -2232,24 +2096,17 @@ _397:
 	jsr _unittest_assert_true
 	lda 0+<F_test_op_test_int8x16_op+8
 	cmp 0+<F_test_op_test_int8x16_op+5
-	bne @244
+	bne @224
 	lda 1+<F_test_op_test_int8x16_op+8
 	cmp #0
-@244:
-	beq @248
-	lda #0
-	jmp @249
-@248:
+@224:
+	beq @226
 	lda #1
-@249:
-	beq @246
+	jmp @227
+@226:
 	lda #0
+@227:
 	sta 0+<F_test_op_test_int8x16_op+3
-	jmp @247
-@246:
-	lda #1
-	sta 0+<F_test_op_test_int8x16_op+3
-@247:
 	lda 0+<F_test_op_test_int8x16_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_452)
@@ -2296,10 +2153,10 @@ _452:
 	sta 0+<F_test_op_test_logical_op+2
 	lda 0+<F_test_op_test_logical_op+0
 	beq @end_455
-@250:
+@228:
 	lda 0+<F_test_op_test_logical_op+0
 	beq @end_455
-@251:
+@229:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+2
 @end_455:
@@ -2314,22 +2171,22 @@ _452:
 	sta 0+<F_test_op_test_logical_op+2
 	lda 0+<F_test_op_test_logical_op+0
 	beq @end_460
-@252:
+@230:
 	lda 0+<F_test_op_test_logical_op+1
 	beq @end_460
-@253:
+@231:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+2
 @end_460:
 	lda 0+<F_test_op_test_logical_op+2
-	beq @254
+	beq @232
 	lda #0
 	sta 0+<F_test_op_test_logical_op+3
-	jmp @255
-@254:
+	jmp @233
+@232:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+3
-@255:
+@233:
 	lda 0+<F_test_op_test_logical_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_463)
@@ -2341,22 +2198,22 @@ _452:
 	sta 0+<F_test_op_test_logical_op+2
 	lda 0+<F_test_op_test_logical_op+1
 	beq @end_466
-@256:
+@234:
 	lda 0+<F_test_op_test_logical_op+0
 	beq @end_466
-@257:
+@235:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+2
 @end_466:
 	lda 0+<F_test_op_test_logical_op+2
-	beq @258
+	beq @236
 	lda #0
 	sta 0+<F_test_op_test_logical_op+3
-	jmp @259
-@258:
+	jmp @237
+@236:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+3
-@259:
+@237:
 	lda 0+<F_test_op_test_logical_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_469)
@@ -2368,22 +2225,22 @@ _452:
 	sta 0+<F_test_op_test_logical_op+2
 	lda 0+<F_test_op_test_logical_op+1
 	beq @end_472
-@260:
+@238:
 	lda 0+<F_test_op_test_logical_op+1
 	beq @end_472
-@261:
+@239:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+2
 @end_472:
 	lda 0+<F_test_op_test_logical_op+2
-	beq @262
+	beq @240
 	lda #0
 	sta 0+<F_test_op_test_logical_op+3
-	jmp @263
-@262:
+	jmp @241
+@240:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+3
-@263:
+@241:
 	lda 0+<F_test_op_test_logical_op+3
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_475)
@@ -2397,7 +2254,7 @@ _452:
 	bne @skip_480
 	lda 0+<F_test_op_test_logical_op+1
 	beq @end_478
-@264:
+@242:
 @skip_480:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+2
@@ -2415,7 +2272,7 @@ _452:
 	bne @skip_486
 	lda 0+<F_test_op_test_logical_op+1
 	beq @end_484
-@265:
+@243:
 @skip_486:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+2
@@ -2433,7 +2290,7 @@ _452:
 	bne @skip_492
 	lda 0+<F_test_op_test_logical_op+0
 	beq @end_490
-@266:
+@244:
 @skip_492:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+2
@@ -2450,20 +2307,20 @@ _452:
 	lda 0+<F_test_op_test_logical_op+1
 	bne @skip_498
 	beq @end_496
-@267:
+@245:
 @skip_498:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+0
 @end_496:
 	lda 0+<F_test_op_test_logical_op+0
-	beq @268
+	beq @246
 	lda #0
 	sta 0+<F_test_op_test_logical_op+1
-	jmp @269
-@268:
+	jmp @247
+@246:
 	lda #1
 	sta 0+<F_test_op_test_logical_op+1
-@269:
+@247:
 	lda 0+<F_test_op_test_logical_op+1
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_500)
@@ -2536,14 +2393,14 @@ _500:
 	lda 0+<F_test_op_test_shift_op+0
 	tay
 	lda 0+<F_test_op_test_shift_op+1
-@270:
+@248:
 	cpy #0
-	beq @271
+	beq @249
 	clc
 	rol a
 	dey
-	jmp @270
-@271:
+	jmp @248
+@249:
 	sta 0+<F_test_op_test_shift_op+5
 	lda 0+<F_test_op_test_shift_op+5
 	sta <F_unittest_assert_equal+0
@@ -2561,14 +2418,14 @@ _500:
 	lda 0+<F_test_op_test_shift_op+2
 	tay
 	lda 0+<F_test_op_test_shift_op+1
-@272:
+@250:
 	cpy #0
-	beq @273
+	beq @251
 	clc
 	rol a
 	dey
-	jmp @272
-@273:
+	jmp @250
+@251:
 	sta 0+<F_test_op_test_shift_op+5
 	lda 0+<F_test_op_test_shift_op+5
 	sta <F_unittest_assert_equal+0
@@ -2586,14 +2443,14 @@ _500:
 	lda 0+<F_test_op_test_shift_op+3
 	tay
 	lda 0+<F_test_op_test_shift_op+1
-@274:
+@252:
 	cpy #0
-	beq @275
+	beq @253
 	clc
 	rol a
 	dey
-	jmp @274
-@275:
+	jmp @252
+@253:
 	sta 0+<F_test_op_test_shift_op+5
 	lda 0+<F_test_op_test_shift_op+5
 	sta <F_unittest_assert_equal+0
@@ -2639,14 +2496,14 @@ _500:
 	lda 0+<F_test_op_test_shift_op+0
 	tay
 	lda 0+<F_test_op_test_shift_op+4
-@276:
+@254:
 	cpy #0
-	beq @277
+	beq @255
 	clc
 	ror a
 	dey
-	jmp @276
-@277:
+	jmp @254
+@255:
 	sta 0+<F_test_op_test_shift_op+1
 	lda 0+<F_test_op_test_shift_op+1
 	sta <F_unittest_assert_equal+0
@@ -2664,14 +2521,14 @@ _500:
 	lda 0+<F_test_op_test_shift_op+2
 	tay
 	lda 0+<F_test_op_test_shift_op+4
-@278:
+@256:
 	cpy #0
-	beq @279
+	beq @257
 	clc
 	ror a
 	dey
-	jmp @278
-@279:
+	jmp @256
+@257:
 	sta 0+<F_test_op_test_shift_op+0
 	lda 0+<F_test_op_test_shift_op+0
 	sta <F_unittest_assert_equal+0
@@ -2689,14 +2546,14 @@ _500:
 	lda 0+<F_test_op_test_shift_op+3
 	tay
 	lda #255
-@280:
+@258:
 	cpy #0
-	beq @281
+	beq @259
 	clc
 	ror a
 	dey
-	jmp @280
-@281:
+	jmp @258
+@259:
 	sta 0+<F_test_op_test_shift_op+0
 	lda 0+<F_test_op_test_shift_op+0
 	sta <F_unittest_assert_equal+0

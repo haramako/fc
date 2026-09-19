@@ -43,6 +43,7 @@ type BuildOptions struct {
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
+	MaxCycles     int64  // Run 指定時 (emu) のサイクル数の上限 (0 は無制限)。超えたらエラー (差分テストの無限ループ対策)
 	CompileOnly   bool
 	Stdout        io.Writer
 	Debug         bool // -g: fc のソース位置を .dbg line で埋め、ROM の隣に Mesen 用の .dbg / .mlb を書く
@@ -272,7 +273,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 
 	if opt.Run {
-		code, cycles, err := c.execute(opt.Out, opt.Stdout)
+		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles)
 		if err != nil {
 			return nil, err
 		}
@@ -693,7 +694,7 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // ホスト呼び出し規約 ($fff0〜$ffff): 1=print / 2=print_int / 3=print_int_sp、
 // $ffff が 255 以外になったら終了 (その値が終了コード)。
 // 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
-func (c *Compiler) execute(filename string, out io.Writer) (int, int64, error) {
+func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int, int64, error) {
 	if c.target != "emu" {
 		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
 	}
@@ -714,6 +715,9 @@ func (c *Compiler) execute(filename string, out io.Writer) (int, int64, error) {
 	benchUsed := false
 	for mem.Get(0xffff) == 255 {
 		cpu.StepSilent()
+		if maxCycles > 0 && cpu.Cycles > maxCycles {
+			return 0, 0, fmt.Errorf("cycle limit exceeded (%d cycles, pc=$%04x)", maxCycles, cpu.Pc)
+		}
 		if mem.Get(0xfffe) != 255 {
 			switch mem.Get(0xfffe) {
 			case 1:

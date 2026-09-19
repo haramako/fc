@@ -376,8 +376,18 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				}
 			}
 
-			// 直後の命令が最初の入力を最初に A へ読む (loadA) ものであること
+			// 直後の命令が最初の入力を最初に A へ読む (loadA) ものであること。他の入力にも同じ変数があると
+			// (`l ^ l`) 2 つ目をメモリから読めないので不可 (-O 0 で残る形。fuzz で発覚)
 			nextOp := lmd.Ops[v.LiveRange.Min+1]
+			uses := 0
+			for _, in := range nextOp.Src {
+				if isSameValue(in, v) {
+					uses++
+				}
+			}
+			if uses > 1 {
+				continue
+			}
 			switch nextOp.Code {
 			case ir.OpIndexPget:
 				// 添字が A なら tay で Y に写す (codegen の loadYIdx)
@@ -568,11 +578,30 @@ func allocRanges(ranges []*ir.LiveRange) [][]int {
 }
 
 func overlapRange(r1, r2 *ir.LiveRange) bool {
-	return r1.Max >= r2.Min && r1.Min <= r2.Max
+	if r1.Max >= r2.Min && r1.Min <= r2.Max {
+		return true
+	}
+	for _, w := range r1.Writes {
+		if w >= r2.Min && w <= r2.Max {
+			return true
+		}
+	}
+	for _, w := range r2.Writes {
+		if w >= r1.Min && w <= r1.Max {
+			return true
+		}
+	}
+	return false
 }
 
 func joinRange(r1, r2 *ir.LiveRange) *ir.LiveRange {
-	return &ir.LiveRange{Min: min(r1.Min, r2.Min), Max: max(r1.Max, r2.Max)}
+	r := &ir.LiveRange{Min: min(r1.Min, r2.Min), Max: max(r1.Max, r2.Max)}
+	for _, w := range append(append([]int{}, r1.Writes...), r2.Writes...) {
+		if w < r.Min || w > r.Max {
+			r.Writes = append(r.Writes, w)
+		}
+	}
+	return r
 }
 
 // ---------------------------------------------------------------
@@ -655,7 +684,13 @@ func (l *LiveRangeCalculator) CalcLiveRange(defines, uses []int) *ir.LiveRange {
 	if minI == 1000000 {
 		return nil
 	}
-	return &ir.LiveRange{Min: minI, Max: maxI}
+	lr := &ir.LiveRange{Min: minI, Max: maxI}
+	for _, i := range defines {
+		if i < minI || i > maxI {
+			lr.Writes = append(lr.Writes, i) // 使われない書き込み (overlapRange が見る)
+		}
+	}
+	return lr
 }
 
 // ---------------------------------------------------------------

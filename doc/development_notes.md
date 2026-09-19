@@ -49,6 +49,20 @@ go test ./...                                    # 全部 (golden + examples + N
 | ROMバイト一致 | TestExampleMiku / TestExampleCastle | 〜5秒 | 実プロジェクト2つのROMがスナップショットと一致 |
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
+| 差分テスト | TestRandomPrograms（internal/driver） | 〜20秒 | ランダムな小プログラムを -O 0 / -O 2 で走らせて出力が一致 |
+
+- **ランダムプログラムの差分テスト**（`internal/driver/randprog_test.go`、2026-09-19〜）: Csmith と同じ考え方で、
+  4 つの整数型・配列・関数（fastcall / inline）・if / for / while / switch・全演算子を混ぜた小さなプログラムを生成し、
+  `-O 0` と `-O 2` の emu の出力を比べる（片方だけ panic / 止まらないのも検出）。既定は種 1〜30 で毎回同じ。
+  数を増やすには `go test ./internal/driver -run TestRandomPrograms -randn 1000 -randseed 5000`（1000 本で数分）。
+  食い違いは文の木を消して最小化してログに出す。式の中まで縮めるには `tools/reduce_fc.py prog.fc fcc.exe [panic]` の
+  「括弧の部分式を定数に置き換える」雑な delta debugging と、`FC_DISABLE` でのパスの切り分けを併用する。
+  **初日に 7 件見つかった**（`TestFuzzFound1` / `TestFuzzFound2` に固定）: cast を挟んだ `!` のコンディション、
+  融合した index_pset の書く幅、splitWords の cast の上位バイト、dead store と live range（無限ループ）、
+  `l ^ l` の A 割付（-O 0）、入れ子の cast の codegen の byte、関数全体の常駐の退避と内側のループの写しの順序。
+  単機能のテストは全部通っていたので、**組み合わせのバグはこれで探す**。未定義動作は生成しない（0 除算・範囲外の添字・
+  2 バイト値の変数シフト・無限ループ・ループ変数への代入）。判定は emu なのでフレームの位相のような擬陽性は無い。
+  生成器の制限で「型エラー」になる形が出たら生成器の問題（`ビルド失敗 (生成器の問題)`）として直す
 
 - **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](language_reference.md)、設計の経緯は
   [v2_grammar.md](v2_grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、

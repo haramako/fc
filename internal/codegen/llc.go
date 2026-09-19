@@ -486,24 +486,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if ir.ValLocation(op.In(0)) == ir.LocCond {
 				// コンディションレジスタの場合。CondPositive のとき「真 ⇔ フラグがセット」、ただし C だけは
 				// 「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)
-				v := ir.UnderlyingValue(op.In(0))
-				trueIsSet := v.CondPositive
-				if v.CondReg == ir.CondCarry {
-					trueIsSet = !v.CondPositive
-				}
-				jumpIfSet := trueIsSet == onTrue
-				var asmOp string
-				switch v.CondReg {
-				case ir.CondZero:
-					asmOp = ifElse(jumpIfSet, "beq", "bne")
-				case ir.CondCarry:
-					asmOp = ifElse(jumpIfSet, "bcs", "bcc")
-				case ir.CondNegative:
-					asmOp = ifElse(jumpIfSet, "bmi", "bpl")
-				default:
-					panic("invalid cond_reg")
-				}
-				r.push(fmt.Sprintf("%s %s", asmOp, op.Label))
+				r.push(fmt.Sprintf("%s %s", condJump(ir.UnderlyingValue(op.In(0)), onTrue), op.Label))
 			} else if l.flagsFromIncDec(prevOp, op.In(0)) {
 				// 直前の inc / dec が Z を残している (`dec x; bne L`)
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
@@ -1063,7 +1046,15 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 
 		case ir.OpNot:
-			if ir.ValLocation(op.Dst) != ir.LocCond {
+			if ir.ValLocation(op.Dst) != ir.LocCond && ir.ValLocation(op.In(0)) == ir.LocCond {
+				// 入力がフラグで結果は値 (`!((a < b) as int16)` のように cast を挟むと regalloc が入力だけ cond にする):
+				// フラグで分岐して 0 / 1 を作る (lda はフラグを変えるので先に分岐する)
+				labels := l.newLabels(2)
+				trueLabel, endLabel := labels[0], labels[1]
+				r.push(fmt.Sprintf("%s %s", condJump(ir.UnderlyingValue(op.In(0)), true), trueLabel))
+				r.push("lda #1", fmt.Sprintf("jmp %s", endLabel), trueLabel+":", "lda #0", endLabel+":")
+				r.push(l.storeA(op.Dst, 0))
+			} else if ir.ValLocation(op.Dst) != ir.LocCond {
 				labels := l.newLabels(2)
 				trueLabel, endLabel := labels[0], labels[1]
 				for i := 0; i < ir.ValType(op.In(0)).Size; i++ {
@@ -1258,19 +1249,21 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				}
 				break
 			}
+			// 書く幅は要素の大きさ (値が小さいリテラル `a16[i] = 4` でも上位バイトまで書く。fuzz で発覚)
+			elemSize := ir.ValType(op.In(0)).Base.Size
 			if l.inX(op.In(1)) {
-				for i := 0; i < ir.ValType(op.In(2)).Size; i++ {
+				for i := 0; i < elemSize; i++ {
 					r.push(l.loadA(op.In(2), i))
 					r.push(fmt.Sprintf("sta %s+%d,x", l.toAsm(op.In(0)), i))
 				}
 				break
 			}
-			if ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled {
+			if elemSize == 1 || op.Scaled {
 				r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
 			} else {
 				r.push(l.keepA(op.In(2), l.loadYIdx(op.In(1), op.In(0), op.Scaled))) // lda idx; asl; tay は A を壊す
 			}
-			for i := 0; i < ir.ValType(op.In(2)).Size; i++ {
+			for i := 0; i < elemSize; i++ {
 				r.push(l.loadA(op.In(2), i))
 				r.push(fmt.Sprintf("sta %s+%d,y", l.toAsm(op.In(0)), i))
 			}
@@ -1346,6 +1339,25 @@ var reIndentExempt = regexp.MustCompile(`^([.@_a-zA-Z0-9][_a-zA-Z0-9]+:|\.segmen
 func (l *Llc) newLabel() string {
 	l.labelCount++
 	return fmt.Sprintf("@%d", l.labelCount)
+}
+
+// condJump はコンディションレジスタの値 v が真 (onTrue) / 偽のときに飛ぶ分岐命令。CondPositive のとき「真 ⇔ フラグが
+// セット」、ただし C だけは「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)。
+func condJump(v *ir.Value, onTrue bool) string {
+	trueIsSet := v.CondPositive
+	if v.CondReg == ir.CondCarry {
+		trueIsSet = !v.CondPositive
+	}
+	jumpIfSet := trueIsSet == onTrue
+	switch v.CondReg {
+	case ir.CondZero:
+		return ifElse(jumpIfSet, "beq", "bne")
+	case ir.CondCarry:
+		return ifElse(jumpIfSet, "bcs", "bcc")
+	case ir.CondNegative:
+		return ifElse(jumpIfSet, "bmi", "bpl")
+	}
+	panic("invalid cond_reg")
 }
 
 func (l *Llc) newLabels(n int) []string {

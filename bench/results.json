@@ -36,12 +36,12 @@
   },
   "math16": {
     "cycles": 2689037,
-    "size": 939,
+    "size": 942,
     "out": "sum=8921"
   },
   "oam": {
-    "cycles": 2190928,
-    "size": 866,
+    "cycles": 2191027,
+    "size": 853,
     "out": "sum=25008"
   },
   "plasma": {

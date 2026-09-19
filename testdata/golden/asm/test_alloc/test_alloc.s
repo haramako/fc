@@ -69,17 +69,13 @@ __MODULE_TEST_ALLOC__ = 1
 	lda 0+<F_test_alloc_test_a_alloc+0
 	adc 0+<F_test_alloc_test_a_alloc+1
 	cmp #3
-	lda #0
-	rol a
-	eor #1
-	beq @6
-	lda #0
-	sta 0+<F_test_alloc_test_a_alloc+2
+	bcc @6
+	lda #1
 	jmp @7
 @6:
-	lda #1
-	sta 0+<F_test_alloc_test_a_alloc+2
+	lda #0
 @7:
+	sta 0+<F_test_alloc_test_a_alloc+2
 	lda 0+<F_test_alloc_test_a_alloc+2
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_20)
@@ -93,17 +89,13 @@ __MODULE_TEST_ALLOC__ = 1
 	sta 0+<F_test_alloc_test_a_alloc+2
 	lda #3
 	cmp 0+<F_test_alloc_test_a_alloc+2
-	lda #0
-	rol a
-	eor #1
-	beq @11
-	lda #0
-	sta 0+<F_test_alloc_test_a_alloc+0
+	bcc @11
+	lda #1
 	jmp @12
 @11:
-	lda #1
-	sta 0+<F_test_alloc_test_a_alloc+0
+	lda #0
 @12:
+	sta 0+<F_test_alloc_test_a_alloc+0
 	lda 0+<F_test_alloc_test_a_alloc+0
 	sta <F_unittest_assert_true+0
 	lda #.LOBYTE(_26)

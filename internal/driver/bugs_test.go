@@ -26,7 +26,7 @@ func runEmuLevel(t *testing.T, body string, level int) string {
 		t.Fatal(err)
 	}
 	var out strings.Builder
-	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, OptimizeLevel: level})
+	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, OptimizeLevel: level, MaxCycles: 50_000_000})
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}
