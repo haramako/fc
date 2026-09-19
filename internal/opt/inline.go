@@ -19,6 +19,9 @@ import (
 // (push_result と call の間。fastcall の引数領域を壊す)、自分自身。
 // エラー: extern / interrupt / 再帰の関数への options(inline: true)。
 func InlineProgram(mods []*ir.Module) error {
+	if ir.Disabled("inline") {
+		return nil
+	}
 	inl := map[string]*ir.Lambda{} // シンボル → inline 関数
 	for _, m := range mods {
 		for _, d := range m.Defs {
@@ -155,21 +158,35 @@ func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda) bool {
 		for i, j := 0, len(args)-1; i < j; i, j = i+1, j-1 {
 			args[i], args[j] = args[j], args[i]
 		}
-		expanded := expand(caller, callee, k, args)
-		// ops[p..k] を expanded で置き換える
-		out := make([]*ir.Op, 0, len(caller.Ops)+len(expanded))
+		argLoads, body := expand(caller, callee, k, args)
+		// ops[p..k] を置き換える: push_result は消し、push_arg はその場で引数の変数への代入に、それ以外 (引数の式の計算や
+		// 引数の中の別の呼び出し) はそのまま残し、call の位置に本体を置く
+		argAt := map[int]int{}
+		for i, j := range args {
+			argAt[j] = i
+		}
+		out := make([]*ir.Op, 0, len(caller.Ops)+len(body))
 		out = append(out, caller.Ops[:p]...)
-		out = append(out, expanded...)
+		for j := p + 1; j < k; j++ {
+			if i, ok := argAt[j]; ok {
+				out = append(out, argLoads[i])
+			} else {
+				out = append(out, caller.Ops[j])
+			}
+		}
+		out = append(out, body...)
+		next := len(out) - 1
 		out = append(out, caller.Ops[k+1:]...)
 		caller.Ops = out
-		k = p + len(expanded) - 1
+		k = next
 		done = true
 	}
 	return done
 }
 
-// expand は callee の本体を caller 用に写した命令列 (引数の代入 + 本体 + 終端ラベル + 戻り値の取り出し)。
-func expand(caller, callee *ir.Lambda, callIdx int, args []int) []*ir.Op {
+// expand は callee の本体を caller 用に写した命令列: 引数の代入 (push_arg ごとに 1 つ。呼び出し側がその push_arg の位置に
+// 置く) と、本体 + 終端ラベル + 戻り値の取り出し。
+func expand(caller, callee *ir.Lambda, callIdx int, args []int) (argLoads, body []*ir.Op) {
 	call := caller.Ops[callIdx]
 	// 展開ごとの番号 (変数名とラベルを、呼び出し側や前の展開と衝突させない)
 	n := 0
@@ -220,11 +237,11 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) []*ir.Op {
 	}
 	end := tag + "end"
 
-	var out []*ir.Op
 	for i, j := range args {
 		a := caller.Ops[j]
-		out = append(out, &ir.Op{Code: ir.OpLoad, Dst: vmap[callee.Args[i]], Src: []ir.Operand{a.Src[0]}, Pos: a.Pos})
+		argLoads = append(argLoads, &ir.Op{Code: ir.OpLoad, Dst: vmap[callee.Args[i]], Src: []ir.Operand{a.Src[0]}, Pos: a.Pos})
 	}
+	var out []*ir.Op
 	var result *ir.Value
 	if callee.Result != nil {
 		result = vmap[callee.Result]
@@ -263,5 +280,5 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) []*ir.Op {
 	if call.Dst != nil && result != nil {
 		out = append(out, &ir.Op{Code: ir.OpLoad, Dst: call.Dst, Src: []ir.Operand{result}, Pos: call.Pos})
 	}
-	return out
+	return argLoads, out
 }

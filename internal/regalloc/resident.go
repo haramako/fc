@@ -43,6 +43,9 @@ func isStep(op *ir.Op, maxK int) bool {
 	if op.Code != ir.OpAdd && op.Code != ir.OpSub || len(op.Src) != 2 {
 		return false
 	}
+	if maxK > 1 && ir.Disabled("step") {
+		maxK = 1
+	}
 	k, lit := ir.ValIntLiteral(op.Src[1])
 	if !lit || k < 1 || k > maxK || ir.ValType(op.Dst).Size > 2 {
 		return false
@@ -457,7 +460,7 @@ func aFreeWithY(op *ir.Op) bool {
 // IR を書き換える (opt の後、AllocateRegister の前)。
 // 調査用: 環境変数 FC_NO_RESIDENT で無効化、FC_TRACE_RESIDENT で選んだ変数と見積もりを stderr に出す。
 func AllocateResident(lmd *ir.Lambda) {
-	if os.Getenv("FC_NO_RESIDENT") != "" {
+	if ir.Disabled("resident") {
 		return
 	}
 	funcTried := false
@@ -491,7 +494,7 @@ func AllocateResident(lmd *ir.Lambda) {
 			done = true
 			break // IR が変わったので作り直す
 		}
-		if !done && !funcTried {
+		if !done && !funcTried && !ir.Disabled("func-resident") {
 			// ループの外 (関数の直線部分) を 1 つの領域に。入口は関数の先頭 (1 回)、出口は return (退避で書き戻す)、
 			// ループは通過する区間 (境界の辺で退避 / 復帰。ループ側の写しとの順序は onEdge が保つ)
 			funcTried = true

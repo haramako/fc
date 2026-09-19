@@ -846,7 +846,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
 			if n, ok := ir.ValIntLiteral(op.In(1)); ok {
 				// 定数の場合
-				if lines, ok := l.shiftByte(op, n, signed); ok {
+				if lines, ok := l.shiftByte(op, n, signed); ok && !ir.Disabled("shift8") {
 					r.push(lines) // 2 バイトの 8 以上のシフトはバイトの移動 (8.8 固定小数の `x >> 8` など)
 				} else if lines, ok := l.shiftInMemory(op, n, signed); ok {
 					r.push(lines)
@@ -1201,7 +1201,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				}
 				break
 			}
-			if reg, ok := l.fusableIndex(ops, opNo); ok {
+			if reg, ok := l.fusableIndex(ops, opNo); ok && !ir.Disabled("fuse-index") {
 				// 直後の sub / lt の第 2 入力に融合: 添字をレジスタに用意して、結果の一時変数を `tab+0,y` として読ませる
 				if reg == "y" {
 					r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
@@ -1307,7 +1307,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 
 	lines = append(lines, ".endproc")
 
-	if l.OptimizeLevel > 0 {
+	if l.OptimizeLevel > 0 && !ir.Disabled("peephole") {
 		lines = peepholeA(lines)
 	}
 	lines = l.extendJump(lines)

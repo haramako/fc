@@ -791,7 +791,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		// ジャンプテーブル (switchTableMin 個以上の整数の case が密に並ぶとき。language_reference.md §5):
 		//   switch tag, min, [label...]; jump default; case...: ...; jump end; default: ...; end:
 		// 1 バイトのタグだけ (飛び先 - 1 を pha; pha; rts で飛ぶ。比較の連鎖は平均 3 + 5N/2 サイクル、表は約 33 で一定)
-		if allInt && n >= switchTableMin && ir.ValType(cond).Size == 1 && maxV-minV+1 <= 2*n && maxV-minV+1 <= 255 {
+		if allInt && n >= switchTableMin && ir.ValType(cond).Size == 1 && maxV-minV+1 <= 2*n && maxV-minV+1 <= 255 && !ir.Disabled("switch") {
 			defaultLabel := h.newLabel("default")
 			caseLabels := make([]string, len(s.Cases))
 			table := make([]string, maxV-minV+1)

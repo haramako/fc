@@ -61,6 +61,8 @@ type Machine struct {
 	IdleFlag  int
 	idlePc    int // 待ちループの lda のアドレス (最初にフラグを読んだ lda abs; bne の形の命令)
 	FrameBusy []int64
+	// FrameWaited は今のフレームで IdleFlag が非 0 のまま読まれた (= 待ちに入った) か。runFrame の頭で消す
+	FrameWaited bool
 
 	// 関数ごとのプロファイル (ProfileSymbols の区間 (ROM ファイル内のオフセット) に命令のサイクルを積む。
 	// バンク切り替えで同じアドレスに別の関数が来るので、PC でなく現在のバンクを反映した ROM オフセットで引く)
@@ -155,8 +157,13 @@ func (m *Machine) Get(addr int) int {
 	addr &= 0xffff
 	switch {
 	case addr < 0x2000:
-		if addr == m.IdleFlag && m.idlePc == 0 && m.IdleFlag != 0 {
-			m.noteIdleLoop()
+		if addr == m.IdleFlag && m.IdleFlag != 0 {
+			if m.idlePc == 0 {
+				m.noteIdleLoop()
+			}
+			if m.ram[addr&0x7ff] != 0 {
+				m.FrameWaited = true
+			}
 		}
 		return int(m.ram[addr&0x7ff])
 	case addr < 0x4000:
@@ -436,6 +443,7 @@ func (m *Machine) RunFrames(n int) (err error) {
 func (m *Machine) runFrame() {
 	frameStart := m.Cpu.Cycles
 	idle := int64(0)
+	m.FrameWaited = false
 	for scanline := 0; scanline < scanlinesPerFrame; scanline++ {
 		target := frameStart + int64((scanline+1)*cyclesPerScanline)
 		for m.Cpu.Cycles < target {

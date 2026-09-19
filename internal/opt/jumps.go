@@ -206,6 +206,9 @@ func invertBranches(lmd *ir.Lambda) bool {
 //
 // にする。本体の中の continue (jump L_begin) はそのまま条件へ飛ぶ。
 func rotateLoops(lmd *ir.Lambda) bool {
+	if ir.Disabled("rotate") {
+		return false
+	}
 	cfg := ir.BuildCFG(lmd)
 	ops := lmd.Ops
 	for _, b0 := range cfg.Blocks {
@@ -246,7 +249,7 @@ func rotateLoops(lmd *ir.Lambda) bool {
 		bodyLabel := newLabel(lmd, "body")
 		var out []*ir.Op
 		out = append(out, ops[:b0.Start]...)
-		if dup := cloneCond(lmd, cfg, b0); dup != nil {
+		if dup := cloneCond(lmd, cfg, b0); dup != nil && !ir.Disabled("dup") {
 			// 条件が短い (比較 1 つ + 分岐) ときは、入口の条件はそのまま残して本体の末尾に条件の写しを置く (テストの複製):
 			//   L_begin: <cond>; if c goto L_end; L_body: <body>; <cond'>; if_true c' goto L_body; [jump L_end]
 			// 末尾の条件の直前にラベルが無いので、`dey` の直後の `cpy #0` がピープホールで消える (crc8 / crc16 の内側ループ)。

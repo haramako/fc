@@ -133,7 +133,22 @@ go test ./...                                    # 全部 (golden + examples + N
   プログラム全体で 1 回。IR の呼び出し列 `push_result; push_arg…; call` を、呼び先の変数・ラベルを付け替えた本体で
   置き換える（`return v` は `load 結果 = v; jump 終端`）。far call の `Far` フラグは sema が呼び先のモジュール基準で
   付けているので、**呼び出しを含む本体は別モジュールに写さない**（葉関数だけ）。他の呼び出しの引数の中も展開しない
-  （fastcall の引数領域）。fclib の `math.abs` / `rand` / `sign` が `options(inline: true)`（castle で 110 か所）
+  （fastcall の引数領域）。fclib の `math.abs` / `rand` / `sign` が `options(inline: true)`（castle で 110 か所）。
+  **ハマった点**: 最初は `push_result … call` の間を丸ごと本体で置き換えていて、引数の式の計算（`abs(x % 16 - 8)` の
+  `mod` / `sub`）まで消していた。梯子・敵との当たり・セーブポイントが「たまに効かない」という形で実プロジェクトの
+  プレイで発覚（単体テストは引数が変数か定数だけだった）。今は push_arg をその場で引数への代入に置き換え、間の命令は
+  残す（`TestInlineFunction` の e / f が番）
+- **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
+  （`ir.Disabled`。名前は `internal/ir/disable.go`: sink fuse coalesce chain narrow scale commute carry split rotate dup
+  inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が
+  無ければ Skip する調査用テストで、`TestProbeDiff` が 2 つの ROM（`FC_PROBE_ROM_A` / `_B`、`FC_PROBE_DBG` / `_B` の
+  dbgfile で名前→番地）を同じ入力で並走させ、両方が vsync 待ちに入ったフレームだけゲームの状態（`FC_PROBE_PREFIX=_my_,_en_,...`
+  の変数）を比べて最初に食い違う番地を出す。配置が同じ（同じソースでパスだけ切った）ROM 同士なら食い違いを A に合わせて続けられる。
+  **注意**: (1) 旧コンパイラの ROM と比べると PPU の転送バッファや `_pad_*` はフレームの位相（ロード中の 1 フレームのずれ）で
+  正当に違うので、ゲームの状態の変数に絞る、(2) 配置が違う ROM 間では RAM を写せない（ポインタの値が違う）、
+  (3) 内蔵ランナーの idle 検出（`lda; bne` の形）は旧コンパイラの待ちループには効かないので、`Machine.FrameWaited`
+  （そのフレームでフラグが非 0 のまま読まれた）で「待ちに入った」を見る。今回の梯子バグはこの並走では見つからず
+  （パスを切っても同じバグが残る）、生成 asm を症状の行（`my_process.fc:93`）で読んで見つけた。**症状の行の `.s` を読む**のが早い
 - `fcc -O 0` は最適化パス・常駐・ピープホールを切る（`BuildOptions.OptimizeLevel` は 0 が「未指定 = 2」、-1 が -O 0）。
   レジスタ割付は -O 0 でも同じ `regalloc.AllocateRegister`（静的フレームの関数は固定番地に置く必要があるので、
   「全部フレーム」の簡易版は使えない）。`TestOptimizeLevel0` が番

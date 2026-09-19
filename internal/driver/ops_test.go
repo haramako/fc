@@ -487,11 +487,18 @@ function main():void
 	bump(3);
 	var c = twice(-4);
 	var d = sum3(abs8(-1), abs8(-2), abs8(x)); // 引数の中 (評価順が保たれる)
-	printf(a, " ", b, " ", g, " ", tab[0], " ", c, " ", d, "\n");
+	// 引数が式 (push_result と push_arg の間に計算がある): 計算が消えない (castle の梯子判定 abs(x % 16 - 8) が壊れた)
+	var e = 0;
+	if ((g & 1) && sum3(1, 2, 3) & 2 && abs8(x % 16 - 8) <= 4) {
+		e = 1;
+	}
+	var f = abs8(g * 3 - 20) + abs8(x + 30);
+	printf(a, " ", b, " ", g, " ", tab[0], " ", c, " ", d, " ", e, " ", f, "\n");
 	exit(0);
 }
 `)
-	if want := "7 5 3 2 8 10\n"; out != want {
+	// x = -7 (249) → x % 16 - 8 = 9 - 8 = 1 → e = 1。g = 3 → |9 - 20| + |249 + 30 = 23| = 34
+	if want := "7 5 3 2 8 10 1 34\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 

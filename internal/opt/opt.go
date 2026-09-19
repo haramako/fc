@@ -18,16 +18,31 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 	if level <= 0 || len(lmd.Ops) == 0 {
 		return
 	}
-	sinkAddress(lmd)
-	fusePointer(lmd)
+	// 各パスは FC_DISABLE=名前 で切れる (ir.Disabled。調査用)
+	if !ir.Disabled("sink") {
+		sinkAddress(lmd)
+	}
+	if !ir.Disabled("fuse") {
+		fusePointer(lmd)
+	}
 	compact(lmd)
-	coalesceCopies(lmd)
+	if !ir.Disabled("coalesce") {
+		coalesceCopies(lmd)
+	}
 	compact(lmd)
-	chainInPlace(lmd)
-	narrowBitTest(lmd, u)
-	scaleIndex(lmd, u)
-	commuteTemp(lmd)
-	for n := 0; n < 20; n++ {
+	if !ir.Disabled("chain") {
+		chainInPlace(lmd)
+	}
+	if !ir.Disabled("narrow") {
+		narrowBitTest(lmd, u)
+	}
+	if !ir.Disabled("scale") {
+		scaleIndex(lmd, u)
+	}
+	if !ir.Disabled("commute") {
+		commuteTemp(lmd)
+	}
+	for n := 0; n < 20 && !ir.Disabled("carry"); n++ {
 		before := len(lmd.Ops)
 		carryBranch(lmd)
 		compact(lmd)
@@ -35,7 +50,9 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 			break
 		}
 	}
-	splitWords(lmd, u)
+	if !ir.Disabled("split") {
+		splitWords(lmd, u)
+	}
 	compact(lmd)
 	simplifyJumps(lmd)
 	compact(lmd)

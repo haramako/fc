@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,6 +52,12 @@ func findMesen() string {
 // 既存の settings.json には手を触れない。
 func ensureMesenSettings(t *testing.T, mesenPath string) {
 	t.Helper()
+	// Mesen は単一インスタンスなので、起動中 (手でプレイ中など) だと --testrunner が既存の窓に渡って exit 1 で終わる
+	if runtime.GOOS == "windows" {
+		if out, err := exec.Command("tasklist", "/FI", "IMAGENAME eq Mesen.exe", "/NH").Output(); err == nil && strings.Contains(string(out), "Mesen.exe") {
+			t.Skip("Mesen が起動中 (単一インスタンスなので testrunner が動かない)。閉じてから実行する")
+		}
+	}
 	p := filepath.Join(filepath.Dir(mesenPath), "settings.json")
 	if _, err := os.Stat(p); err == nil {
 		return
