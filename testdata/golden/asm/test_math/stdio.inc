@@ -4,11 +4,6 @@ _stdio_EMU_ADDR = 65520
 _stdio_EMU_DATA = 65522
 _stdio_EMU_PRINT = 65534
 _stdio_EMU_EXIT = 65535
-	.import _stdio_print_int16
-	.import _stdio_print
-	.import _stdio_exit
-	.import _stdio_exit__frame
-	.import _stdio_init
 	.import _interrupt
 _stdio_interrupt = _interrupt
 	.import _interrupt_irq

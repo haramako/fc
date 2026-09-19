@@ -111,7 +111,37 @@ oam −2.8%、castle フレーム −0.7%（24 ループ）。サイズは crc16
 シフト（バイトの移動）・符号付きの右シフトを含めていて、x.hi を A に常駐させたまま `x >> 8` が A を壊していた
 （TestSplitWords の mix が SSA のコピー伝播で形が変わって発覚。`TestResidentMemShift`）。
 
-## 7. 次にできること（この基盤の上で）
+## 7. 関数ポインタ表の呼び出しの直接化（`internal/opt/devirt.go`、2026-09-20）
+
+`TBL[i](args)`（TBL は const の表で要素が全部関数）を `switch i` + 直接呼び出しに書き換える。間接呼び出し
+（表からポインタを読んで `jmp (ptr)`、引数はスタック経由で呼び先の Entry プロローグがフレームに写す）が、ジャンプ
+テーブル + `jsr f__direct`（引数はフレームに直接、最後の引数は A、戻り値は A）になる。`InlineProgram` の後・
+`frames.Analyze` の前（直接の辺として呼び出しグラフに載る）。表は 16 要素まで、push と call の間に他の呼び出しが
+無い形だけ、far になる呼び先は `Far` を付ける。`calls` −5.6%（表経由の 500 回）。
+
+castle の `en_vtbl.PROCESS` は 83 要素なので対象外にした。83 の case を作ると 1 か所 800 バイト前後（2 か所で
+1.6 KB）で、得は 1 呼び出し 30 サイクル程度（16 体で 4%）。ROM を払うなら上限を上げれば効く。
+
+副産物: switch 命令のジャンプテーブルは添字に X を使っていたが、stack 関数（再帰）では X がフレームポインタなので
+壊れていた（devirtualization で再帰する関数に switch が入って発覚。stack 関数では Y を使い、regalloc は switch を
+Y の clobber と見る）。
+
+## 8. 小さな関数の自動インライン（`internal/opt/inline.go`、2026-09-20）
+
+`options(inline: true)` の仕組み（`InlineProgram`）に、印の無い関数も条件を満たせば載せる。条件（`autoInlinable`）:
+本体の命令数（ラベル・jump を除く）が 12 以下で、ループ・呼び出し・asm・アドレス取得（`&f`）・配列 / struct のローカルが
+無く、extern / interrupt / `segment` / `symbol` / `abi` の指定が無いもの。そのうち 6 命令以下なら呼び出し箇所がいくつ
+あっても展開し、それより大きいものは呼び出し箇所が 2 以下のときだけ（ROM を増やさないため）。`options(noinline: true)`
+で個別に止められる（テストで「関数が出力されること」を見るときに使う）。`FC_DISABLE=autoinline`。
+
+結果: `calls` −22%（`add8` などの小さな呼び先が全部消える）、`entities` −16%（`bounce` などの 1〜2 か所から呼ぶ
+関数。ROM は +43%）、castle は ROM +1.6 KB（0.7%）で field 8636→8615、area33_jump 14207→14186 サイクル。
+stdio の `bench_start` / `exit` などが main に入るので、bench の module 別サイズは +32 になるが ROM 全体は減る。
+
+副産物: const で別名を付けた関数（`const D2 = f;` の f）は inline で呼び出しが消えても出力が要る。`frames.Analyze`
+の到達判定に DefEqu の別名を根として足した（`_test_var__D2` が未定義になった）。
+
+## 9. 次にできること（この基盤の上で）
 
 - グローバル変数（volatile でない）と配列要素の読み出しの前送り: 呼び出し・ポインタ経由の書き込み・asm を障壁にして、
   `index_pset a[i] = t; … ; index_pget u = a[i]` の 2 つ目を t に（entities.update に 3 か所）。6502 では `lda a,y` と

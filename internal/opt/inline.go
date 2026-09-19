@@ -6,6 +6,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/types"
 )
 
 // InlineProgram は `options(inline: true)` の関数の呼び出しを、呼び出し側に本体を写して置き換える
@@ -40,6 +41,32 @@ func InlineProgram(mods []*ir.Module) error {
 			inl[lmd.Id] = lmd
 		}
 	}
+	if !ir.Disabled("autoinline") {
+		// 自動インライン: 印が無くても小さい関数 (autoInlinable) は展開する。呼び出し 1 回あたり 20〜30 サイクル
+		// (引数の受け渡し + jsr / rts + 戻り値) が消える。呼び出し箇所が多い関数は本体が特に小さいときだけ (ROM)
+		sites := map[string]int{}
+		for _, m := range mods {
+			for _, d := range m.Defs {
+				if d.Kind == ir.DefCode {
+					for _, op := range d.Lambda.Ops {
+						if sym := calleeSym(op); sym != "" {
+							sites[sym]++
+						}
+					}
+				}
+			}
+		}
+		for _, m := range mods {
+			for _, d := range m.Defs {
+				if d.Kind != ir.DefCode || inl[d.Sym] != nil {
+					continue
+				}
+				if n, ok := autoInlinable(d.Lambda); ok && (n <= autoInlineSmall || sites[d.Sym] <= autoInlineFewSites) {
+					inl[d.Lambda.Id] = d.Lambda
+				}
+			}
+		}
+	}
 	if len(inl) == 0 {
 		return nil
 	}
@@ -57,6 +84,48 @@ func InlineProgram(mods []*ir.Module) error {
 		}
 	}
 	return nil
+}
+
+const (
+	autoInlineMaxOps   = 12 // 自動インラインする本体の命令数の上限 (ラベル・jump を除く)
+	autoInlineSmall    = 6  // これ以下なら呼び出し箇所がいくつあっても展開する
+	autoInlineFewSites = 2  // それより大きい本体は呼び出し箇所がこれ以下のときだけ
+)
+
+// autoInlinable は印の無い関数を自動で展開してよいか (本体の命令数も返す): 本体が小さく、ループ・呼び出し・asm・
+// アドレス取得・配列 / struct のローカルが無く、interrupt / 再帰 / extern でないもの。
+func autoInlinable(lmd *ir.Lambda) (int, bool) {
+	if lmd.Extern || lmd.Options.Has("interrupt") || lmd.Options.Has("inline") || lmd.Options.Has("noinline") || len(lmd.Ops) == 0 {
+		return 0, false
+	}
+	if lmd.Options.Has("segment") || lmd.Options.Has("symbol") || lmd.Options.Has("abi") {
+		return 0, false // 置き場所や規約を指定した関数はそのまま
+	}
+	n := 0
+	for _, op := range lmd.Ops {
+		if op == nil {
+			continue
+		}
+		switch op.Code {
+		case ir.OpLabel, ir.OpJump:
+		case ir.OpAsm, ir.OpCall, ir.OpFastcall, ir.OpRef:
+			return 0, false
+		default:
+			n++
+		}
+	}
+	if n > autoInlineMaxOps {
+		return 0, false
+	}
+	for _, v := range lmd.Vars {
+		if v.Kind == ir.KindLocal && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct) {
+			return 0, false
+		}
+	}
+	if len(ir.BuildCFG(lmd).Loops()) > 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // callsTo は lmd の本体に sym への直接呼び出しがあるか。

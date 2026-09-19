@@ -37,35 +37,6 @@ _test_basic_SINT16 = -255
 .segment "test_basic"
 _test_basic_ARRAY:
 	.byte 0
-	.export _test_basic_test_nesasm_limit
-	;;;=============================
-	;;; function _test_basic_test_nesasm_limit
-	;;;=============================
-.segment "test_basic"
-.proc _test_basic_test_nesasm_limit
-	rts
-_6:
-		.byte 116,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111
-		.byte 111,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111
-		.byte 111,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111
-		.byte 111,111,111,95,108,111,110,103,95,115,116,114,105,110,103,0
-.endproc
-	.export _test_basic_add
-	.export _test_basic_add__frame
-	;;;=============================
-	;;; function _test_basic_add
-	;;;=============================
-.segment "test_basic"
-.proc _test_basic_add
-	sta <F_test_basic_add+2
-	.endproc
-.proc _test_basic_add__frame
-	clc
-	lda 0+<F_test_basic_add+1
-	adc 0+<F_test_basic_add+2
-	sta 0+<F_test_basic_add+0
-	rts
-.endproc
 	.export _test_basic_fib
 	;;;=============================
 	;;; function _test_basic_fib
@@ -125,12 +96,7 @@ _6:
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_test_function
-	lda #3
-	sta <F_test_basic_add+1
-	lda #5
-	jsr _test_basic_add
-	sta 0+<F_test_basic_test_function+0
-	lda 0+<F_test_basic_test_function+0
+	lda #8
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -287,34 +253,13 @@ _55:
 _58:
 		.byte 104,101,114,101,32,115,116,114,105,110,103,0
 .endproc
-	.export _test_basic_add_fastcall
-	.export _test_basic_add_fastcall__frame
-	;;;=============================
-	;;; function _test_basic_add_fastcall
-	;;;=============================
-.segment "test_basic"
-.proc _test_basic_add_fastcall
-	sta <F_test_basic_add_fastcall+2
-	.endproc
-.proc _test_basic_add_fastcall__frame
-	clc
-	lda 0+<F_test_basic_add_fastcall+1
-	adc 0+<F_test_basic_add_fastcall+2
-	sta 0+<F_test_basic_add_fastcall+0
-	rts
-.endproc
 	.export _test_basic_test_fastcall
 	;;;=============================
 	;;; function _test_basic_test_fastcall
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_test_fastcall
-	lda #1
-	sta <F_test_basic_add_fastcall+1
-	lda #2
-	jsr _test_basic_add_fastcall
-	sta 0+<F_test_basic_test_fastcall+0
-	lda 0+<F_test_basic_test_fastcall+0
+	lda #3
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -337,53 +282,91 @@ _63:
 	;;;=============================
 .segment "test_basic"
 .proc _main
-	jsr _stdio_init
 	lda #.LOBYTE(_66)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_66)
-	sta <F_stdio_print+1
-	jsr _stdio_print
-	jsr _test_basic_test_nesasm_limit
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_69)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_69)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_72)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_72)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_basic_test_function
 	lda #.LOBYTE(_75)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_75)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_78)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_78)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_basic_test_misc
 	lda #.LOBYTE(_81)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_81)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_84)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_84)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_basic_test_fastcall
 	lda #.LOBYTE(_87)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_87)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #0
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_EXIT
 	rts
 _66:
 		.byte 116,101,115,116,95,110,101,115,97,115,109,95,108,105,109,105

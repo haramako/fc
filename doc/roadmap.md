@@ -81,7 +81,14 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       次の 1000 本で fusePointer と splitWords の struct のバグ 2 件） ✅ 2026-09-20
 - [x] static 関数のレジスタ渡し（最後の 1 バイトの引数を A、1 バイトの戻り値を A。v2_frame_alloc.md §7。calls −6.5%、
       plasma −3.2%、entities −2.6%、castle −1%） ✅ 2026-09-20
+- [x] 関数ポインタ表の呼び出しの直接化（`opt.DevirtualizeProgram`。const の表 16 要素まで。calls −5.6%。v2_ssa.md §7。
+      castle の `en_vtbl.PROCESS` は 83 要素で対象外: 上限を上げれば 1.6 KB の ROM で −4%） ✅ 2026-09-20
+- [x] fuzz に far call・密な switch・const 表・関数ポインタ表（switch 命令の飛び先が live range の流れに無いバグ、
+      stack 関数の switch が X (フレームポインタ) を壊すバグ） ✅ 2026-09-20
 - [ ] 2 つ目の引数を Y で渡す（入口で `sty`。得は 1 呼び出し 3〜4 サイクル）
+- [x] 小さな static 関数の自動インライン（12 命令以下でループ・呼び出し無し。6 命令以下は無条件、それより大きいものは
+      呼び出し 2 か所まで。calls −22%、entities −16%、castle は ROM +1.6 KB で −0.2%。`options(noinline: true)` /
+      `FC_DISABLE=autoinline`。v2_ssa.md §8） ✅ 2026-09-20
 - [ ] SSA の上で: volatile でないグローバル / 配列要素の読み出しの前送り（呼び出し・ポインタ書き込み・asm を障壁に）、
       共通部分式、呼び出しをまたぐ mod/ref 解析。6502 では `lda a,y` と `lda t` の差が 1 サイクルで、値が定数になる場合以外は
       効果が薄い（v2_ssa.md §7）

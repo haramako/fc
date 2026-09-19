@@ -98,20 +98,29 @@ _15:
 	;;;=============================
 .segment "test_cast"
 .proc _main
-	jsr _stdio_init
 	lda #.LOBYTE(_18)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_18)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_cast_test_cast
 	lda #.LOBYTE(_21)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_21)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #0
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_EXIT
 	rts
 _18:
 		.byte 116,101,115,116,95,99,97,115,116,58,0

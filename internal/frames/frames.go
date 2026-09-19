@@ -83,6 +83,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	// 関数ポインタのグローバル変数に代入された関数と、関数ポインタの const 表の要素 (間接呼び出しの飛び先を絞るため)
 	assigned := map[string][]string{}  // 変数のシンボル → 代入された関数のシンボル
 	unknownAssign := map[string]bool{} // リテラル以外が代入された (何が入るか分からない)
+	aliased := map[string]bool{} // equ (const の別名) が参照する関数
 	tables := map[string][]string{}    // const 表のシンボル → 要素の関数のシンボル ("" は関数以外)
 	funcSym := func(o ir.Operand) string {
 		v := ir.ValLiteral(o)
@@ -122,7 +123,12 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			if d.Kind == ir.DefEqu && d.Equ != nil && d.Equ.IsInt {
 				unknownAssign[d.Sym] = true // options(address:) の変数は asm 側が書きうる
 			}
-			// DefEqu の関数シンボル (options(symbol:) の別名) は呼び出しに使う名前で、アドレスを取ったのではない
+			// DefEqu の関数シンボル (options(symbol:) の別名、`const f = ->fn ...`) は呼び出しに使う名前で、アドレスを
+			// 取ったのではない (Entry にはしない)。ただし equ の行がその関数を参照するので、出力はする (自動インラインで
+			// 呼び出しが全部消えても)
+			if d.Kind == ir.DefEqu && d.Equ != nil && !d.Equ.IsInt && d.Equ.Symbol != "" {
+				aliased[d.Equ.Symbol] = true
+			}
 		}
 	}
 	for _, m := range mods {
@@ -232,7 +238,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	var work []int
 	hasMain := false
 	for i, lmd := range g.Lambdas {
-		if entry[i] || lmd.Id == "_main" || lmd.Options.Has("symbol") {
+		if entry[i] || lmd.Id == "_main" || lmd.Options.Has("symbol") || aliased[lmd.Id] {
 			reached[i] = true
 			work = append(work, i)
 		}

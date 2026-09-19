@@ -22,20 +22,29 @@ __MODULE_TEST_BUG__ = 1
 	;;;=============================
 .segment "test_bug"
 .proc _main
-	jsr _stdio_init
 	lda #.LOBYTE(_3)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_3)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_bug_test_pointer_access
 	lda #.LOBYTE(_6)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_6)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #0
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_EXIT
 	rts
 _3:
 		.byte 116,101,115,116,95,112,111,105,110,116,101,114,95,97,99,99

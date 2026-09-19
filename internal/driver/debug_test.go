@@ -13,7 +13,7 @@ import (
 func TestDebugInfoAndSizeReport(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	src := "#fc 2\nuse * from stdio;\nvar tab:[4]int;\nfunction f(x:int):int\n{\n\treturn tab[x] + 1;\n}\nfunction main():void\n{\n\ttab[1] = 5;\n\tprintf(f(1), \"\n\");\n\texit(0);\n}\n"
+	src := "#fc 2\nuse * from stdio;\nvar tab:[4]int;\nfunction f(x:int):int options(noinline: true)\n{\n\treturn tab[x] + 1;\n}\nfunction main():void\n{\n\ttab[1] = 5;\n\tprintf(f(1), \"\n\");\n\texit(0);\n}\n"
 	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}

@@ -322,6 +322,7 @@ func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frame
 		if err := opt.InlineProgram(mods); err != nil {
 			return nil, err
 		}
+		opt.DevirtualizeProgram(mods, l.FarCall) // 表経由の呼び出しを直接に (frames.Analyze が直接の辺として見る)
 	}
 	markVolatile(mods)
 	graph, err := frames.Analyze(mods)
@@ -609,8 +610,14 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if minV&255 != 0 {
 				r.push("sec", fmt.Sprintf("sbc #%d", minV&255))
 			}
-			r.push(fmt.Sprintf("cmp #%d", len(op.Labels)), fmt.Sprintf("bcs %s", fall), "tax",
-				fmt.Sprintf("lda %s,x", hi), "pha", fmt.Sprintf("lda %s,x", lo), "pha")
+			// 表の添字は X。stack 関数 (再帰) では X がフレームポインタなので Y を使う (regalloc は switch を Y の clobber
+			// と見る)。devirtualization で再帰する関数に switch が入って発覚
+			ix := "x"
+			if lmd.ABI == ir.ABIStack {
+				ix = "y"
+			}
+			r.push(fmt.Sprintf("cmp #%d", len(op.Labels)), fmt.Sprintf("bcs %s", fall), "ta"+ix,
+				fmt.Sprintf("lda %s,%s", hi, ix), "pha", fmt.Sprintf("lda %s,%s", lo, ix), "pha")
 			if restoreX {
 				r.push("ldx " + l.byte(op.ResidentX.Home, 0))
 			}

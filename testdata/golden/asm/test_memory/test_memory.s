@@ -425,42 +425,71 @@ _70:
 	;;;=============================
 .segment "test_memory"
 .proc _main
-	jsr _stdio_init
 	lda #.LOBYTE(_73)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_73)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_memory_test_copy
 	lda #.LOBYTE(_76)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_76)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_79)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_79)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_memory_test_strcpy
 	lda #.LOBYTE(_82)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_82)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_85)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_85)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_memory_test_set
 	lda #.LOBYTE(_88)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_88)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #0
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_EXIT
 	rts
 _73:
 		.byte 116,101,115,116,95,99,111,112,121,58,0

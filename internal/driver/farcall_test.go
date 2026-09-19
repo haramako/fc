@@ -1,6 +1,7 @@
 package driver
 
 // far call (doc/v2_farcall.md): 別バンクのモジュールの関数への呼び出しを farcall トランポリン経由にする。
+// (小さい関数は自動インラインされて far call が消えるので、テストの関数は options(noinline: true))
 // emu の farcall はそのまま飛ぶだけなので、結果が正しいこと・生成コードが farcall を経由すること・
 // near になるべき呼び出しが直接 jsr のままであることを見る。
 
@@ -16,7 +17,7 @@ options(farcall: true);
 use * from stdio;
 use far1;
 use fixed1;
-public function fixed_add(a:int, b:int):int { return a + b; }
+public function fixed_add(a:int, b:int):int options(noinline: true) { return a + b; }
 function main():void
 {
 	var s = far1.add(1, 2);
@@ -33,9 +34,9 @@ const far1 = `#fc 2
 options(bank: 1);
 use fixed1;
 use main;
-public function add(a:int, b:int):int { return a + b; }
-public function fadd(a:int, b:int):int options(fastcall: true) { return a + b; }
-public function nearf(a:int):int options(near: true) { return a * 2; }
+public function add(a:int, b:int):int options(noinline: true) { return a + b; }
+public function fadd(a:int, b:int):int options(fastcall: true, noinline: true) { return a + b; }
+public function nearf(a:int):int options(near: true, noinline: true) { return a * 2; }
 public function nested(a:int):int
 {
 	// 同じモジュール内 (add) と固定バンク (fixed1.twice, main.fixed_add) は near、
@@ -45,7 +46,7 @@ public function nested(a:int):int
 `
 
 const fixed1 = `#fc 2
-public function twice(a:int):int { return a * 2; }
+public function twice(a:int):int options(noinline: true) { return a * 2; }
 `
 
 func TestFarCall(t *testing.T) {

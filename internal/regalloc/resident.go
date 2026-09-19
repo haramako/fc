@@ -372,7 +372,8 @@ func needsX(op *ir.Op) bool {
 func needsY(op *ir.Op, vY *ir.Value) bool {
 	switch op.Code {
 	case ir.OpPget, ir.OpPset, ir.OpFieldPget, ir.OpFieldPset, ir.OpIndex,
-		ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpCall, ir.OpFastcall, ir.OpAsm, ir.OpReturn: // return: グローバルの書き戻しのため
+		ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpCall, ir.OpFastcall, ir.OpAsm, ir.OpReturn, // return: グローバルの書き戻しのため
+		ir.OpSwitch: // stack 関数ではジャンプテーブルの添字に Y を使う (static では X)
 		return true
 	case ir.OpIndexPget, ir.OpIndexPset:
 		return !isV(op.In(1), vY) || !byteIndex(op)

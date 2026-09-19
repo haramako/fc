@@ -347,25 +347,10 @@ _test_var_FUNC_TABLE:
 	lda #.HIBYTE(_78)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #0
-	asl a
-	tay
-	lda _test_var_FUNC_TABLE+0,y
-	sta 0+<F_test_var_test_func_pointer+0
-	lda _test_var_FUNC_TABLE+1,y
-	sta 1+<F_test_var_test_func_pointer+0
-	ldx FC_SP
 	lda #10
-	sta <S+1,x
+	jsr _test_var_add1__direct
+	sta 0+<F_test_var_test_func_pointer+0
 	lda 0+<F_test_var_test_func_pointer+0
-	sta <reg+0
-	lda 1+<F_test_var_test_func_pointer+0
-	sta <reg+1
-	ldx FC_SP
-	jsr jsr_reg
-	ldx FC_SP
-	lda <0+S+0,x
-	sta 0+<F_test_var_test_func_pointer+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -378,25 +363,10 @@ _test_var_FUNC_TABLE:
 	lda #.HIBYTE(_84)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #1
-	asl a
-	tay
-	lda _test_var_FUNC_TABLE+0,y
-	sta 0+<F_test_var_test_func_pointer+0
-	lda _test_var_FUNC_TABLE+1,y
-	sta 1+<F_test_var_test_func_pointer+0
-	ldx FC_SP
 	lda #10
-	sta <S+1,x
+	jsr _test_var_mul2__direct
+	sta 0+<F_test_var_test_func_pointer+0
 	lda 0+<F_test_var_test_func_pointer+0
-	sta <reg+0
-	lda 1+<F_test_var_test_func_pointer+0
-	sta <reg+1
-	ldx FC_SP
-	jsr jsr_reg
-	ldx FC_SP
-	lda <0+S+0,x
-	sta 0+<F_test_var_test_func_pointer+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -409,10 +379,7 @@ _test_var_FUNC_TABLE:
 	lda #.HIBYTE(_90)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #1
-	jsr _test_var__D2
-	sta 0+<F_test_var_test_func_pointer+0
-	lda 0+<F_test_var_test_func_pointer+0
+	lda #3
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -425,10 +392,7 @@ _test_var_FUNC_TABLE:
 	lda #.HIBYTE(_94)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #1
-	jsr _test_var__D96
-	sta 0+<F_test_var_test_func_pointer+0
-	lda 0+<F_test_var_test_func_pointer+0
+	lda #3
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -547,75 +511,134 @@ _115:
 	;;;=============================
 .segment "test_var"
 .proc _main
-	jsr _stdio_init
 	lda #.LOBYTE(_118)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_118)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_var_test_const
 	lda #.LOBYTE(_121)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_121)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_124)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_124)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_var_test_pointer
 	lda #.LOBYTE(_127)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_127)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_130)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_130)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_var_test_array
 	lda #.LOBYTE(_133)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_133)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_136)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_136)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_var_test_func_pointer
 	lda #.LOBYTE(_139)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_139)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_142)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_142)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_var_test_escape
 	lda #.LOBYTE(_145)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_145)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #.LOBYTE(_148)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_148)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_var_test_segment_option
 	lda #.LOBYTE(_151)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_151)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #0
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_EXIT
 	rts
 _118:
 		.byte 116,101,115,116,95,99,111,110,115,116,58,0
@@ -645,21 +668,5 @@ _151:
 		.byte 10,0
 .endproc
 _test_var_main = _main
-	.export _test_var__D96
-	.export _test_var__D96__frame
-	;;;=============================
-	;;; function _test_var_$96
-	;;;=============================
-.segment "test_var"
-.proc _test_var__D96
-	sta <F_test_var__D96+1
-	.endproc
-.proc _test_var__D96__frame
-	clc
-	lda 0+<F_test_var__D96+1
-	adc #2
-	sta 0+<F_test_var__D96+0
-	rts
-.endproc
 .segment "CHARS"
 	.incbin "character.chr"

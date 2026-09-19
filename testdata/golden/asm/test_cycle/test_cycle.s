@@ -17,9 +17,7 @@ _test_cycle_cycle_var: .res 1
 .proc _test_cycle_test_cycle_use
 	lda #99
 	sta 0+_test_cycle_cycle_var
-	jsr _cycle_use_hoge
-	sta 0+<F_test_cycle_test_cycle_use+0
-	lda 0+<F_test_cycle_test_cycle_use+0
+	lda 0+_test_cycle_cycle_var
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -42,20 +40,29 @@ _3:
 	;;;=============================
 .segment "test_cycle"
 .proc _main
-	jsr _stdio_init
 	lda #.LOBYTE(_6)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_6)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	jsr _test_cycle_test_cycle_use
 	lda #.LOBYTE(_9)
-	sta <F_stdio_print+0
+	sta 0+<F_main+0
 	lda #.HIBYTE(_9)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_main+0
+	lda 0+<F_main+0
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_main+0
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 	lda #0
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_EXIT
 	rts
 _6:
 		.byte 116,101,115,116,95,99,121,99,108,101,95,117,115,101,58,0

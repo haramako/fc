@@ -108,7 +108,7 @@ var fp:fn():void;
 function dead():void { dead2(); }
 function dead2():void { }
 public function dead_public():void { }
-function live():void { }
+function live():void options(noinline: true) { }
 function by_pointer():void { }
 function by_table():void { }
 const TAB:[1]fn():void = [by_table];

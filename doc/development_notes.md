@@ -54,7 +54,11 @@ go test ./...                                    # 全部 (golden + examples + N
 - **ランダムプログラムの差分テスト**（`internal/driver/randprog_test.go`、2026-09-19〜）: Csmith と同じ考え方で、
   4 つの整数型・配列・関数（fastcall / inline）・if / for / while / switch・全演算子を混ぜた小さなプログラムを生成し、
   `-O 0` と `-O 2` の emu の出力を比べる（片方だけ panic / 止まらないのも検出）。既定は種 1〜30 で毎回同じ。
-  数を増やすには `go test ./internal/driver -run TestRandomPrograms -randn 1000 -randseed 5000`（1000 本で数分）。
+  数を増やすには `go test ./internal/driver -run TestRandomPrograms -randn 1000 -randseed 5000 -timeout 60m`（1000 本で
+  数分。2000 本は `go test` の既定の 10 分を超えるので `-timeout` が要る）。生成物は `t.TempDir()` (= `%TMP%`) に
+  1 本ごとに作って消すので、Windows Defender が重いときは `$env:TMP` を除外済みの専用フォルダ (`C:\Work\gotmp` など) に
+  して走らせる。サイクル数の上限は 20M で、`-O 0` だけが掛かったときは 10 倍で走らせ直す（far call と除算の入れ子で
+  `-O 0` が `-O 2` の 4 倍 (21M 対 5.7M) になった種があり、「片方だけ止まらない」の擬陽性で最小化に 4〜7 分かかっていた）。
   食い違いは文の木を消して最小化してログに出す。式の中まで縮めるには `tools/reduce_fc.py prog.fc fcc.exe [panic]` の
   「括弧の部分式を定数に置き換える」雑な delta debugging と、`FC_DISABLE` でのパスの切り分けを併用する。
   **初日に 7 件見つかった**（`TestFuzzFound1` / `TestFuzzFound2` に固定）: cast を挟んだ `!` のコンディション、
@@ -84,6 +88,13 @@ go test ./...                                    # 全部 (golden + examples + N
   producer にしてから）とき N が A を反映しないまま `bpl` していた（`TestSignExtendCallResult`）
 - 種 170000〜 で 1 件: A に常駐したグローバルを `return g0` で返すと、return が friendly（戻り値を A から書く）扱いで
   g0 の書き戻しが出なかった（グローバルの常駐は return を clobber に。`TestResidentGlobalReturn`）
+- **2026-09-20 に生成器をさらに広げた**: far call（`far1.fc` = `options(bank: 1)` のモジュールに関数を 1〜2 個置いて
+  main から `far1.ff0()`。main のグローバルは見えないので引数とローカルだけ）、密な switch（case 0〜11 で
+  ジャンプテーブル = `switch` 命令になる形）、const の表（`const ct0:[16]T = [...]`）、関数ポインタ表
+  （`const fp0:[N]fn(...):R = [t0, ...]` を `fp0[(e & (N-1))](args)` で呼ぶ。要素の関数は Entry になる）。
+  初回の 30 本で 1 件: regalloc の live range の流れ（`CalcLiveRange` の `flow`）に `switch` 命令の飛び先が無く、
+  飛び先で使う変数の生存区間が切れて直後の一時変数と番地を共有していた（`TestSwitchTableLiveRange`。
+  ジャンプテーブルは 2026-09-19 からあり、castle では偶然重なっていなかった）
 - 種 190000〜 で 1 件: 常駐レジスタへの差し替え（`makeResident` の replace）が cast を落としていて、`(x as int) >= 0` の x が
   X に常駐すると比較が符号付きになった（cast を残す。`TestResidentKeepsCast`）
 - **ca65 の `.proc` の中のラベルは同じファイルの別の `.proc` から見えない**（2026-09-20）: レジスタ渡しの `sym__frame`
@@ -180,8 +191,13 @@ go test ./...                                    # 全部 (golden + examples + N
   `mod` / `sub`）まで消していた。梯子・敵との当たり・セーブポイントが「たまに効かない」という形で実プロジェクトの
   プレイで発覚（単体テストは引数が変数か定数だけだった）。今は push_arg をその場で引数への代入に置き換え、間の命令は
   残す（`TestInlineFunction` の e / f が番）
+- **自動インライン**（2026-09-20）: 印が無くても小さい関数（12 命令以下、ループ・呼び出し・asm・`&f`・配列 / struct の
+  ローカル無し）は同じ仕組みで展開する（6 命令以下は無条件、それより大きいものは呼び出し 2 か所まで。`opt.autoInlinable`）。
+  **テストで「この関数が出力される」ことを見るときは `options(noinline: true)` を付ける**（`TestUnusedFunctions` /
+  `TestDebugInfoAndSizeReport` / `TestFarCall` は小さな関数が消えて落ちた）。const の別名（`const D2 = f`）で参照される
+  関数は呼び出しが全部展開されても出力が要る（`frames.Analyze` が DefEqu を根に足す）
 - **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
-  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa mul induction unroll sink fuse coalesce chain narrow scale commute carry split rotate dup
+  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa mul induction unroll devirt autoinline sink fuse coalesce chain narrow scale commute carry split rotate dup
   inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が
   無ければ Skip する調査用テストで、`TestProbeDiff` が 2 つの ROM（`FC_PROBE_ROM_A` / `_B`、`FC_PROBE_DBG` / `_B` の
   dbgfile で名前→番地）を同じ入力で並走させ、両方が vsync 待ちに入ったフレームだけゲームの状態（`FC_PROBE_PREFIX=_my_,_en_,...`

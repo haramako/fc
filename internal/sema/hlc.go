@@ -322,6 +322,34 @@ func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Typ
 	return ir.ValType(val)
 }
 
+// fitArrayLiteral は整数の配列リテラルを宣言の型 typ (`[N]T`、T は整数) に合わせる。要素の型は個々の値から推定して
+// 統合したもの (`[11902, -3]` は uint16 と sint8 で uint16) なので、宣言があればそちらを優先し、全要素が T に収まるなら
+// T の配列に作り直す。収まらない・整数の配列でないときはそのまま (compatibleAssign が報告する)。
+func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
+	if typ == nil || typ.Kind != types.Array || typ.Base.Kind != types.Int || v.Kind != ir.KindArrayLiteral {
+		return v
+	}
+	vt := ir.ValType(v)
+	if vt.Kind != types.Array || vt.Base.Kind != types.Int || vt.Base == typ.Base || (typ.Length >= 0 && typ.Length != len(v.Elems)) {
+		return v
+	}
+	lo, hi := 0, 1<<(8*typ.Base.Size)-1
+	if typ.Base.Signed {
+		lo, hi = -(hi+1)/2, (hi+1)/2-1
+	}
+	elems := make([]ir.Operand, len(v.Elems))
+	for i, e := range v.Elems {
+		n, ok := ir.ValIntLiteral(e)
+		if !ok || n < lo || n > hi {
+			return v
+		}
+		elems[i] = ir.NewIntLiteral("", typ.Base, n)
+	}
+	r := ir.NewArrayLiteral(v.Name, h.prog.Types.ArrayOf(typ.Base, len(elems)), elems)
+	r.IsString, r.Str = v.IsString, v.Str
+	return r
+}
+
 // ---------------------------------------------------------------
 // 依存モジュール
 // ---------------------------------------------------------------
@@ -867,7 +895,13 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	typ := h.typeEval(sp.Type)
 	var init ir.Operand
 	if sp.Init != nil {
-		init = h.rval(h.withExpected(toC(sp.Init), typ))
+		c := h.withExpected(toC(sp.Init), typ)
+		if typ != nil && typ.Kind == types.Array {
+			if e := h.constEval(c); e.kind == cValue && e.val.Kind == ir.KindArrayLiteral {
+				c = cv(h.fitArrayLiteral(e.val, typ))
+			}
+		}
+		init = h.rval(c)
 	}
 	if init != nil && h.lmd == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("can't init global variable %s (globals start as 0; assign it in a function, or use const)", name)})
@@ -922,7 +956,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 		if cv.kind != cValue {
 			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
 		}
-		v := cv.val
+		v := h.fitArrayLiteral(cv.val, declType)
 		t := h.guessType(name, declType, v)
 		if v.Type.Kind == types.Macro {
 			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)

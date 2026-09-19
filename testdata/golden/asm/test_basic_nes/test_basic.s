@@ -37,35 +37,6 @@ _test_basic_SINT16 = -255
 .segment "test_basic"
 _test_basic_ARRAY:
 	.byte 0
-	.export _test_basic_test_nesasm_limit
-	;;;=============================
-	;;; function _test_basic_test_nesasm_limit
-	;;;=============================
-.segment "test_basic"
-.proc _test_basic_test_nesasm_limit
-	rts
-_6:
-		.byte 116,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111
-		.byte 111,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111
-		.byte 111,111,111,111,111,111,111,111,111,111,111,111,111,111,111,111
-		.byte 111,111,111,95,108,111,110,103,95,115,116,114,105,110,103,0
-.endproc
-	.export _test_basic_add
-	.export _test_basic_add__frame
-	;;;=============================
-	;;; function _test_basic_add
-	;;;=============================
-.segment "test_basic"
-.proc _test_basic_add
-	sta <F_test_basic_add+2
-	.endproc
-.proc _test_basic_add__frame
-	clc
-	lda 0+<F_test_basic_add+1
-	adc 0+<F_test_basic_add+2
-	sta 0+<F_test_basic_add+0
-	rts
-.endproc
 	.export _test_basic_fib
 	;;;=============================
 	;;; function _test_basic_fib
@@ -125,12 +96,7 @@ _6:
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_test_function
-	lda #3
-	sta <F_test_basic_add+1
-	lda #5
-	jsr _test_basic_add
-	sta 0+<F_test_basic_test_function+0
-	lda 0+<F_test_basic_test_function+0
+	lda #8
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -287,34 +253,13 @@ _55:
 _58:
 		.byte 104,101,114,101,32,115,116,114,105,110,103,0
 .endproc
-	.export _test_basic_add_fastcall
-	.export _test_basic_add_fastcall__frame
-	;;;=============================
-	;;; function _test_basic_add_fastcall
-	;;;=============================
-.segment "test_basic"
-.proc _test_basic_add_fastcall
-	sta <F_test_basic_add_fastcall+2
-	.endproc
-.proc _test_basic_add_fastcall__frame
-	clc
-	lda 0+<F_test_basic_add_fastcall+1
-	adc 0+<F_test_basic_add_fastcall+2
-	sta 0+<F_test_basic_add_fastcall+0
-	rts
-.endproc
 	.export _test_basic_test_fastcall
 	;;;=============================
 	;;; function _test_basic_test_fastcall
 	;;;=============================
 .segment "test_basic"
 .proc _test_basic_test_fastcall
-	lda #1
-	sta <F_test_basic_add_fastcall+1
-	lda #2
-	jsr _test_basic_add_fastcall
-	sta 0+<F_test_basic_test_fastcall+0
-	lda 0+<F_test_basic_test_fastcall+0
+	lda #3
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -345,7 +290,6 @@ _63:
 	sta <S+1,x
 	ldx FC_SP
 	jsr _stdio_print
-	jsr _test_basic_test_nesasm_limit
 	ldx FC_SP
 	lda #.LOBYTE(_69)
 	sta <S+0,x

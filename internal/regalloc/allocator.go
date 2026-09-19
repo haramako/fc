@@ -68,6 +68,12 @@ func CalcLiveRange(lmd *ir.Lambda) {
 		switch op.Code {
 		case ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpJump:
 			node = append(node, labels[op.Label])
+		case ir.OpSwitch:
+			// ジャンプテーブルの飛び先も後続 (無いと飛び先で使う変数の live range が切れて、別の変数と番地を共有していた。
+			// fuzz の密な switch で発覚)
+			for _, l := range op.Labels {
+				node = append(node, labels[l])
+			}
 		}
 		defines, uses := ir.DefUse(op)
 

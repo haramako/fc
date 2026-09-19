@@ -57,6 +57,8 @@ type rpFunc struct {
 	ret      rpType
 	fastcall bool
 	inline   bool
+	far      bool      // 別バンクのモジュール far1 にある (main からは far call)
+	inTable  bool      // 関数ポインタ表 fp0 の要素 (アドレスを取られる: Entry 関数になる)
 	locals   []string  // 宣言
 	stmts    []*rpStmt // 本体
 	retExpr  string
@@ -88,7 +90,11 @@ type rpGen struct {
 	arrays  []rpVar // グローバル配列 (16 要素。要素型)
 	larrays []rpVar // 今の関数のローカル配列 (16 要素)
 	fields  []rpField
-	sptr    string // 今の関数の struct へのポインタ (`ps`。"" なら無し)
+	consts  []rpVar   // const の表 (16 要素。ROM)
+	fpTable []*rpFunc // 関数ポインタ表 fp0 の要素 (同じ型の関数 2 つか 4 つ。nil なら無し)
+	fpSig   rpFunc    // fp0 の要素の型 (params / ret)
+	hasFar  bool      // far1 モジュール (options(bank: 1)) がある
+	sptr    string    // 今の関数の struct へのポインタ (`ps`。"" なら無し)
 	funcs   []*rpFunc
 	scope   []rpVar // 今の関数で見えるローカル (引数含む。ポインタも)
 	loops   int     // ループの入れ子の深さ (break / continue を出せるか)
@@ -186,7 +192,7 @@ func (g *rpGen) expr(t rpType, depth int) string {
 	if depth <= 0 || g.chance(0.25) {
 		return g.leaf(t)
 	}
-	switch g.pick(12) {
+	switch g.pick(13) {
 	case 0, 1, 2:
 		op := []string{"+", "-", "*", "&", "|", "^"}[g.pick(6)]
 		return fmt.Sprintf("(%s %s %s)", g.expr(t, depth-1), op, g.expr(t, depth-1))
@@ -232,9 +238,15 @@ func (g *rpGen) expr(t rpType, depth int) string {
 		return cast(g.expr(u, depth-1), u, t)
 	case 10:
 		// 呼び出し (前に作った関数だけ。再帰なし)
-		if n := g.callable(); n > 0 {
-			f := g.funcs[g.pick(n)]
-			return cast(fmt.Sprintf("%s(%s)", f.name, g.args(f, depth-1)), f.ret, t)
+		if fs := g.callables(); len(fs) > 0 {
+			f := fs[g.pick(len(fs))]
+			return cast(fmt.Sprintf("%s(%s)", g.callName(f), g.args(f, depth-1)), f.ret, t)
+		}
+		return g.leaf(t)
+	case 11:
+		// 関数ポインタ表経由の呼び出し
+		if e, ok := g.fpCall(depth-1, t); ok {
+			return e
 		}
 		return g.leaf(t)
 	default:
@@ -253,7 +265,7 @@ func (g *rpGen) args(f *rpFunc, depth int) string {
 					as = append(as, a)
 				}
 			}
-			args[i] = g.arrayRef(as[g.pick(len(as))]) // genProgram が全ての型のグローバル配列を作るので必ずある
+			args[i] = g.arrayRef(as[g.pick(len(as))]) // genProgram が全ての型のグローバル配列を作るので必ずある (far1 の関数はポインタの引数を持たない)
 		} else {
 			args[i] = g.expr(p.typ, depth)
 		}
@@ -261,25 +273,48 @@ func (g *rpGen) args(f *rpFunc, depth int) string {
 	return strings.Join(args, ", ")
 }
 
-// callable は今の関数から呼べる関数の数 (自分より前に定義したもの)。
-func (g *rpGen) callable() int {
+// callables は今の関数から呼べる関数 (自分より前に定義したもの。far1 の関数からは far1 の関数だけ: main の関数は見えない)。
+func (g *rpGen) callables() []*rpFunc {
 	if g.cur != nil && g.cur.inline {
-		return 0 // inline 関数は呼び出しを持たない (入れ子の展開でコードが膨らみ ROM に入らなくなる)
+		return nil // inline 関数は呼び出しを持たない (入れ子の展開でコードが膨らみ ROM に入らなくなる)
 	}
-	n := 0
+	var r []*rpFunc
 	for _, f := range g.funcs {
 		if f == g.cur {
 			break
 		}
-		n++
+		if g.cur != nil && g.cur.far && !f.far {
+			continue
+		}
+		r = append(r, f)
 	}
-	return n
+	return r
+}
+
+// callName は今の関数から見た f の名前 (far1 の関数を main から呼ぶときは `far1.f`)。
+func (g *rpGen) callName(f *rpFunc) string {
+	if f.far && (g.cur == nil || !g.cur.far) {
+		return "far1." + f.name
+	}
+	return f.name
+}
+
+// callExpr は関数ポインタ表経由の呼び出し `fp0[(e & 3)](args)` (main のモジュールからだけ)。
+func (g *rpGen) fpCall(depth int, t rpType) (string, bool) {
+	if g.fpTable == nil || (g.cur != nil && (g.cur.far || g.cur.inline)) {
+		return "", false
+	}
+	args := make([]string, len(g.fpSig.params))
+	for i, p := range g.fpSig.params {
+		args[i] = g.expr(p.typ, depth)
+	}
+	return cast(fmt.Sprintf("fp0[(%s & %d)](%s)", g.expr(rpTypes[0], 1), len(g.fpTable)-1, strings.Join(args, ", ")), g.fpSig.ret, t), true
 }
 
 // leaf は変数・配列の要素・ポインタ経由・struct のフィールド・リテラル。
 func (g *rpGen) leaf(t rpType) string {
 	vs := g.scalars()
-	switch g.pick(6) {
+	switch g.pick(7) {
 	case 0:
 		return g.lit(t)
 	case 1:
@@ -301,6 +336,12 @@ func (g *rpGen) leaf(t rpType) string {
 		if len(g.fields) > 0 {
 			e, ft := g.fieldRef()
 			return cast(e, ft, t)
+		}
+		fallthrough
+	case 4:
+		if len(g.consts) > 0 {
+			c := g.consts[g.pick(len(g.consts))]
+			return cast(fmt.Sprintf("%s[%s]", c.name, g.index()), c.typ, t)
 		}
 		fallthrough
 	default:
@@ -478,10 +519,10 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		return rpSimple(fmt.Sprintf("%s <<= %d;", lv, g.pick(4)) + " " + fmt.Sprintf("%s ^= %s;", lv, g.lit(t)))
 	case 6:
 		// 呼び出しの結果を代入
-		if n := g.callable(); n > 0 {
-			f := g.funcs[g.pick(n)]
+		if fs := g.callables(); len(fs) > 0 {
+			f := fs[g.pick(len(fs))]
 			lv, t := g.lvalue()
-			return rpSimple(fmt.Sprintf("%s = %s;", lv, cast(fmt.Sprintf("%s(%s)", f.name, g.args(f, 2)), f.ret, t)))
+			return rpSimple(fmt.Sprintf("%s = %s;", lv, cast(fmt.Sprintf("%s(%s)", g.callName(f), g.args(f, 2)), f.ret, t)))
 		}
 		lv, t := g.lvalue()
 		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 2)))
@@ -520,11 +561,20 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		// switch (タグは 1 バイト)
 		// parts: "switch (tag) {\ncase 1:\n", (case 本体), "case 2:\n", (本体), …, "}"
 		tag := fmt.Sprintf("(%s & 7)", g.expr(rpTypes[0], 2))
+		nCase := g.pick(4) + 1
+		dense := depth >= 2 && g.chance(0.25) // 密な整数の case が 10 個以上: ジャンプテーブル (switch 命令) になる形
+		if dense {
+			tag = fmt.Sprintf("(%s & 15)", g.expr(rpTypes[0], 2))
+			nCase = g.pick(3) + 10
+		}
 		s := &rpStmt{parts: []string{fmt.Sprintf("switch (%s) {\n", tag)}}
 		used := map[int]bool{}
-		for k := 0; k < g.pick(4)+1; k++ {
+		for k := 0; k < nCase; k++ {
 			var vals []string
-			for m := 0; m < g.pick(2)+1; m++ {
+			if dense {
+				vals = append(vals, fmt.Sprintf("%d", k))
+			}
+			for m := 0; !dense && m < g.pick(2)+1; m++ {
 				v := g.pick(8)
 				if !used[v] {
 					used[v] = true
@@ -535,6 +585,9 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 				continue
 			}
 			body := g.block(depth - 1)
+			if dense {
+				body = body[:1] // ジャンプテーブルの形は case が多いので 1 文ずつ
+			}
 			if g.loops > 0 && g.chance(0.2) {
 				body = append(body, rpSimple("break;"))
 			}
@@ -599,25 +652,45 @@ func (g *rpGen) newLocal(t rpType) rpVar {
 	return v
 }
 
-// genFunc は関数を 1 つ作る。
-func (g *rpGen) genFunc(name string) *rpFunc {
-	f := &rpFunc{name: name, ret: g.typ()}
+// genFunc は関数を 1 つ作る。far なら far1 モジュール (main のグローバル・配列・struct・const は見えない。ポインタの引数無し)。
+// sig があれば関数ポインタ表の要素 (その型に合わせる。アドレスを取られるので inline / fastcall にしない)。
+func (g *rpGen) genFunc(name string, far bool, sig *rpFunc) *rpFunc {
+	f := &rpFunc{name: name, ret: g.typ(), far: far}
 	f.fastcall = g.chance(0.4)
-	f.inline = g.chance(0.3)
+	f.inline = g.chance(0.3) && !far
+	if sig != nil {
+		f.ret, f.fastcall, f.inline, f.inTable = sig.ret, false, false, true
+	}
 	g.cur = f
 	g.scope = nil
 	g.nLocal = 0
 	g.larrays = nil
 	g.sptr = ""
-	for i := 0; i < g.pick(3); i++ {
+	if far {
+		// main のものは見えない (中身は退避して、関数の後で戻す)
+		globals, arrays, fields, consts, fp := g.globals, g.arrays, g.fields, g.consts, g.fpTable
+		g.globals, g.arrays, g.fields, g.consts, g.fpTable = nil, nil, nil, nil, nil
+		defer func() { g.globals, g.arrays, g.fields, g.consts, g.fpTable = globals, arrays, fields, consts, fp }()
+	}
+	np := g.pick(3)
+	if sig != nil {
+		np = len(sig.params)
+	}
+	for i := 0; i < np; i++ {
 		p := rpVar{name: fmt.Sprintf("p%d", i), typ: g.typ()}
-		if g.chance(0.3) {
+		if sig != nil {
+			p.typ = sig.params[i].typ
+		} else if g.chance(0.3) && !far {
 			p.ptr, p.fresh = true, true // 呼ぶ側は &a[e & 7] を渡す
 		}
 		f.params = append(f.params, p)
 		g.scope = append(g.scope, p)
 	}
-	for i := 0; i < g.pick(3); i++ {
+	nl := g.pick(3)
+	if far {
+		nl++ // 変数が 1 つも無いと代入先が無い
+	}
+	for i := 0; i < nl; i++ {
 		v := g.newLocal(g.typ())
 		f.locals = append(f.locals, fmt.Sprintf("var %s:%s = %s;", v.name, v.typ.name, g.lit(v.typ)))
 	}
@@ -648,8 +721,27 @@ func (g *rpGen) genProgram() {
 			g.fields = append(g.fields, rpField{name: fmt.Sprintf("f%d", i), typ: g.typ()})
 		}
 	}
+	for i := 0; i < g.pick(3); i++ {
+		g.consts = append(g.consts, rpVar{name: fmt.Sprintf("ct%d", i), typ: g.typ(), readOnly: true})
+	}
+	if g.chance(0.5) {
+		g.hasFar = true
+		for i := 0; i < g.pick(2)+1; i++ {
+			g.genFunc(fmt.Sprintf("ff%d", i), true, nil)
+		}
+	}
 	for i := 0; i < g.pick(3)+1; i++ {
-		g.genFunc(fmt.Sprintf("f%d", i))
+		g.genFunc(fmt.Sprintf("f%d", i), false, nil)
+	}
+	if g.chance(0.5) {
+		// 関数ポインタ表: 同じ型の関数 2 つか 4 つ
+		g.fpSig = rpFunc{ret: g.typ()}
+		for i := 0; i < g.pick(3); i++ {
+			g.fpSig.params = append(g.fpSig.params, rpVar{typ: g.typ()})
+		}
+		for i := 0; i < 2+2*g.pick(2); i++ {
+			g.fpTable = append(g.fpTable, g.genFunc(fmt.Sprintf("t%d", i), false, &g.fpSig))
+		}
 	}
 	m := &rpFunc{name: "main"}
 	g.cur = m
@@ -696,7 +788,7 @@ func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
 		}
 	}
 	as := g.arraysAll()
-	for i := 0; i < g.pick(3); i++ {
+	for i := 0; i < g.pick(3) && len(as) > 0; i++ {
 		a := as[g.pick(len(as))]
 		p := rpVar{name: fmt.Sprintf("q%d", i), typ: a.typ, ptr: true, fresh: true}
 		g.scope = append(g.scope, p)
@@ -711,8 +803,23 @@ func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
 // source はプログラムのソース (runEmu が `#fc 2` と stdio を頭に足す)。
 func (g *rpGen) source() string {
 	var b strings.Builder
+	b.WriteString("#fc 2\n")
+	if g.hasFar {
+		b.WriteString("options(farcall: true);\n")
+	}
+	b.WriteString("use * from stdio;\n")
+	if g.hasFar {
+		b.WriteString("use far1;\n")
+	}
 	for _, v := range g.globals {
 		fmt.Fprintf(&b, "var %s:%s;\n", v.name, v.typ.name)
+	}
+	for _, c := range g.consts {
+		vals := make([]string, 16)
+		for i := range vals {
+			vals[i] = g.lit(c.typ)
+		}
+		fmt.Fprintf(&b, "const %s:[16]%s = [%s];\n", c.name, c.typ.name, strings.Join(vals, ", "))
 	}
 	for _, a := range g.arrays {
 		fmt.Fprintf(&b, "var %s:[16]%s;\n", a.name, a.typ.name)
@@ -725,29 +832,26 @@ func (g *rpGen) source() string {
 		b.WriteString("}\nvar s0:S;\nvar sa:[4]S;\n")
 	}
 	for _, f := range g.funcs {
-		if f.name == "main" {
-			b.WriteString("function main():void\n{\n")
-		} else {
-			ps := make([]string, len(f.params))
-			for i, p := range f.params {
-				ps[i] = p.name + ":" + p.typ.name
-				if p.ptr {
-					ps[i] = p.name + ":*" + p.typ.name
-				}
-			}
-			var opts []string
-			if f.fastcall {
-				opts = append(opts, "fastcall: true")
-			}
-			if f.inline {
-				opts = append(opts, "inline: true")
-			}
-			fmt.Fprintf(&b, "function %s(%s):%s", f.name, strings.Join(ps, ", "), f.ret.name)
-			if len(opts) > 0 {
-				fmt.Fprintf(&b, " options(%s)", strings.Join(opts, ", "))
-			}
-			b.WriteString("\n{\n")
+		if f.far {
+			continue // far1.fc に出す
 		}
+		if f.name == "main" && g.fpTable != nil {
+			// 関数ポインタ表 (要素の関数の後に置く)
+			ps := make([]string, len(g.fpSig.params))
+			for i, p := range g.fpSig.params {
+				ps[i] = p.typ.name
+			}
+			names := make([]string, len(g.fpTable))
+			for i, tf := range g.fpTable {
+				names[i] = tf.name
+			}
+			fmt.Fprintf(&b, "const fp0:[%d]fn(%s):%s = [%s];\n", len(names), strings.Join(ps, ", "), g.fpSig.ret.name, strings.Join(names, ", "))
+		}
+		if f.name != "main" {
+			g.writeFunc(&b, f, "")
+			continue
+		}
+		b.WriteString("function main():void\n{\n")
 		for _, l := range f.locals {
 			b.WriteString(l + "\n")
 		}
@@ -755,7 +859,7 @@ func (g *rpGen) source() string {
 			s.render(&b)
 			b.WriteString("\n")
 		}
-		if f.name == "main" {
+		{
 			var out []string
 			for _, v := range g.globals {
 				out = append(out, v.name, `" "`)
@@ -772,17 +876,79 @@ func (g *rpGen) source() string {
 				}
 			}
 			fmt.Fprintf(&b, "printf(%s, \"\\n\");\nexit(0);\n", strings.Join(out, ", "))
-		} else {
-			fmt.Fprintf(&b, "return %s;\n}\n", f.retExpr)
 		}
 	}
 	b.WriteString("}\n")
 	return b.String()
 }
 
+// writeFunc は main 以外の関数 1 つのソース。
+func (g *rpGen) writeFunc(b *strings.Builder, f *rpFunc, prefix string) {
+	ps := make([]string, len(f.params))
+	for i, p := range f.params {
+		ps[i] = p.name + ":" + p.typ.name
+		if p.ptr {
+			ps[i] = p.name + ":*" + p.typ.name
+		}
+	}
+	var opts []string
+	if f.fastcall {
+		opts = append(opts, "fastcall: true")
+	}
+	if f.inline {
+		opts = append(opts, "inline: true")
+	}
+	fmt.Fprintf(b, "%sfunction %s(%s):%s", prefix, f.name, strings.Join(ps, ", "), f.ret.name)
+	if len(opts) > 0 {
+		fmt.Fprintf(b, " options(%s)", strings.Join(opts, ", "))
+	}
+	b.WriteString("\n{\n")
+	for _, l := range f.locals {
+		b.WriteString(l + "\n")
+	}
+	for _, s := range f.stmts {
+		s.render(b)
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(b, "return %s;\n}\n", f.retExpr)
+}
+
+// farSource は far1 モジュール (options(bank: 1)) のソース。
+func (g *rpGen) farSource() string {
+	var b strings.Builder
+	b.WriteString("#fc 2\noptions(bank: 1);\n")
+	for _, f := range g.funcs {
+		if f.far {
+			g.writeFunc(&b, f, "public ")
+		}
+	}
+	return b.String()
+}
+
+// sources はビルドに要るファイル (t.fc と、あれば far1.fc)。
+func (g *rpGen) sources() map[string]string {
+	m := map[string]string{"t.fc": g.source()}
+	if g.hasFar {
+		m["far1.fc"] = g.farSource()
+	}
+	return m
+}
+
+// allSource は表示用 (far1.fc も繋げる)。
+func (g *rpGen) allSource() string {
+	s := g.source()
+	if g.hasFar {
+		s += "// ---- far1.fc ----\n" + g.farSource()
+	}
+	return s
+}
+
+// rpMaxCycles は 1 回の実行のサイクル数の上限 (-O 2 側。-O 0 は掛かったら 10 倍で走らせ直す)。
+const rpMaxCycles = 20_000_000
+
 // rpRun はソースを level でビルドして emu で走らせ、出力を返す (ビルドや終了コードの失敗は error。コンパイラの panic も
 // error にして、次の種に進めるようにする)。
-func rpRun(t *testing.T, src string, level int) (out string, err error) {
+func rpRun(t *testing.T, files map[string]string, level int, maxCycles int64) (out string, err error) {
 	t.Helper()
 	defer func() {
 		if r := recover(); r != nil {
@@ -790,11 +956,13 @@ func rpRun(t *testing.T, src string, level int) (out string, err error) {
 		}
 	}()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte("#fc 2\nuse * from stdio;\n"+src), 0o666); err != nil {
-		return "", err
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			return "", err
+		}
 	}
 	var o strings.Builder
-	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &o, OptimizeLevel: level, MaxCycles: 20_000_000})
+	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &o, OptimizeLevel: level, MaxCycles: maxCycles})
 	if err != nil {
 		return "", err
 	}
@@ -811,10 +979,15 @@ type rpResult struct {
 }
 
 // rpCheck は -O 0 と -O 2 で走らせて判定する。
-func rpCheck(t *testing.T, src string) rpResult {
-	o0, err0 := rpRun(t, src, -1)
-	o2, err2 := rpRun(t, src, 0)
+func rpCheck(t *testing.T, files map[string]string) rpResult {
+	o0, err0 := rpRun(t, files, -1, rpMaxCycles)
+	o2, err2 := rpRun(t, files, 0, rpMaxCycles)
 	hang := func(err error) bool { return err != nil && strings.HasPrefix(err.Error(), "cycle limit") }
+	if hang(err0) && err2 == nil {
+		// -O 0 だけ上限に掛かった: far call や除算の入れ子で -O 0 が -O 2 の 4 倍かかることがある (21M 対 5.7M) ので、
+		// 止まらないと決める前に上限を上げて走らせ直す (最小化の途中で毎回 20M サイクル走らせるのを避ける意味もある)
+		o0, err0 = rpRun(t, files, -1, rpMaxCycles*10)
+	}
 	if hang(err0) != hang(err2) && (err0 == nil || hang(err0)) && (err2 == nil || hang(err2)) {
 		// 片方だけ止まらない (もう片方は正常): 出力の食い違いと同じ扱い
 		return rpResult{"differs", fmt.Sprintf("-O 0: %s %v\n-O 2: %s %v", o0, err0, o2, err2)}
@@ -844,7 +1017,7 @@ func rpMinimize(t *testing.T, g *rpGen, kind string) {
 		for i := 0; i < len(*list); i++ {
 			saved := (*list)[i]
 			*list = append((*list)[:i:i], (*list)[i+1:]...)
-			if rpCheck(t, g.source()).kind == kind {
+			if rpCheck(t, g.sources()).kind == kind {
 				changed = true
 				i--
 				continue
@@ -880,22 +1053,22 @@ func TestRandomPrograms(t *testing.T) {
 			t.Parallel()
 			g := &rpGen{r: rand.New(rand.NewSource(seed))}
 			g.genProgram()
-			res := rpCheck(t, g.source())
+			res := rpCheck(t, g.sources())
 			switch res.kind {
 			case "ok":
 			case "error":
 				if strings.Contains(res.detail, "memory area overflow") {
 					t.Skipf("プログラムが大きすぎて ROM に入らない (seed %d)", seed)
 				}
-				t.Fatalf("ビルド失敗 (生成器の問題) (seed %d):\n%s\n%s", seed, g.source(), res.detail)
+				t.Fatalf("ビルド失敗 (生成器の問題) (seed %d):\n%s\n%s", seed, g.allSource(), res.detail)
 			case "hang":
 				// 両方のレベルで止まらない: 入れ子のループ × 呼び出しで単に重い (サイクルの上限を超える) のがほとんどで、
 				// 生成器の問題として飛ばす (コンパイラ共通のバグならほかの形でも出る)
 				t.Skipf("両方のレベルでサイクルの上限を超えた (seed %d)", seed)
 			default:
 				rpMinimize(t, g, res.kind)
-				res = rpCheck(t, g.source())
-				t.Errorf("%s (seed %d):\n%s\n%s", map[string]string{"differs": "-O 0 と -O 2 の出力が違う", "panic": "コンパイラが panic", "hang": "両方のレベルで止まらない"}[res.kind], seed, g.source(), res.detail)
+				res = rpCheck(t, g.sources())
+				t.Errorf("%s (seed %d):\n%s\n%s", map[string]string{"differs": "-O 0 と -O 2 の出力が違う", "panic": "コンパイラが panic", "hang": "両方のレベルで止まらない"}[res.kind], seed, g.allSource(), res.detail)
 			}
 		})
 	}

@@ -879,6 +879,79 @@ function main():void
 	}
 }
 
+// switch のジャンプテーブル (switch 命令) の飛び先が regalloc の live range の流れに入っていなかった: 飛び先で使う
+// 変数 (l0) の生存区間が switch の手前で切れ、直後の一時変数 (ポインタ) と番地を共有して壊れていた (fuzz で発覚)
+func TestSwitchTableLiveRange(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int16;
+var g2:int16;
+var g4:int;
+function main():void
+{
+	var l0:int16 = 1;
+	var la0:[16]int;
+	g0 = 61643;
+	la0[15] = 3;
+	switch ((((g0 as sint) as int) & 15)) {
+	case 0:
+	case 1:
+		l0 = ((g4 as int16) >> 5);
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 7:
+	case 8:
+	case 9:
+	case 10:
+	case 11:
+	default:
+		l0 = 2;
+	}
+	if (5 > (l0 as sint16)) {
+		g2 = g0;
+	}
+	printf(l0, " ", g2, " ", la0[15], "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "1 61643 3\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// 関数ポインタ表の呼び出しの直接化 (opt.DevirtualizeProgram): 表が const で要素が全部関数なら switch + 直接呼び出しに。
+// 範囲内の全要素、表の要素からの再帰的な表引き、戻り値の使用を -O 0 と比べる
+func TestDevirtRun(t *testing.T) {
+	t.Parallel()
+	src := `var g:int;
+var acc:int16;
+function t0(p0:sint):sint { return (p0 - 1) as sint; }
+function t1(p0:sint):sint { return (p0 * 3) as sint; }
+function t2(p0:sint):sint { g++; return p0; }
+function t3(p0:sint):sint { return fp0[(g & 1)](p0) | 4; }
+const fp0:[4]fn(sint):sint = [t0, t1, t2, t3];
+function main():void
+{
+	var i:int;
+	for (i = 0; i < 4; i++) {
+		acc += fp0[i](5) as sint16;
+	}
+	acc += fp0[(g & 3)](9) as sint16;
+	printf(acc, " ", g, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "66 1\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 定数との乗算のシフト・加減算への展開 (opt.expandMul): 1 バイト / 2 バイト、符号付き、2^n - 1、Dst が入力と同じ
 func TestExpandMulRun(t *testing.T) {
 	t.Parallel()
@@ -1503,5 +1576,28 @@ function main():void
 	// g(-2,1): stab[1] = -3 → -2 < -3 は偽 → 0。g(-2,6): stab[6] = 2 → 1。g(3,7): stab[7] = 3 → 0
 	if want := "14 11 0 1 0\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
+
+// TestArrayLiteralFitsDeclaredType: 整数の配列リテラルの要素の型は値から推定して統合する (`[11902, -3]` は uint16 と sint8 で
+// uint16) が、宣言の型があればそちらに合わせる (fuzz の const 表 `[16]sint16` で `cannot assign [16]uint16` になっていた)。
+// 収まらない値は今まで通りエラー。
+func TestArrayLiteralFitsDeclaredType(t *testing.T) {
+	t.Parallel()
+	out := runEmu(t, `const ct:[4]sint16 = [11902, 0, (-3), 3];
+const cs:[3]sint = [1, (-3), 3];
+function main():void
+{
+	var l:[4]sint16 = [300, (-2), 1, 0];
+	printf(ct[2] as int16, " ", cs[1] as sint, " ", l[1] as int16, " ", (ct[0] + ct[2]) as int16, "\n");
+	exit(0);
+}
+`)
+	// printf は 8 ビットの値も 16 ビットに符号拡張して表示する (-3 → 65533)
+	if want := "65533 65533 65534 11899\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+	if got := compileErr(t, "const bad:[2]sint = [200, 1];\nfunction main():void { exit(0); }\n"); !strings.Contains(got, "cannot assign [2]uint8 to [2]sint8") {
+		t.Errorf("収まらない値がエラーにならない: %q", got)
 	}
 }

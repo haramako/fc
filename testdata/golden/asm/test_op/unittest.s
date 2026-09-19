@@ -14,29 +14,44 @@ __MODULE_UNITTEST__ = 1
 	lda 0+<F_unittest_assert_true+0
 	bne @else_2
 	lda #.LOBYTE(_6)
-	sta <F_stdio_print+0
+	sta 0+<F_unittest_assert_true+3
 	lda #.HIBYTE(_6)
-	sta <F_stdio_print+1
-	jsr _stdio_print
-	lda 0+<F_unittest_assert_true+1
-	sta <F_stdio_print+0
-	lda 1+<F_unittest_assert_true+1
-	sta <F_stdio_print+1
-	jsr _stdio_print
-	lda #.LOBYTE(_8)
-	sta <F_stdio_print+0
-	lda #.HIBYTE(_8)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_unittest_assert_true+3
+	lda 0+<F_unittest_assert_true+3
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_true+3
+	sta 1+_stdio_EMU_ADDR
 	lda #1
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_PRINT
+	lda 0+<F_unittest_assert_true+1
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_true+1
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
+	lda #.LOBYTE(_8)
+	sta 0+<F_unittest_assert_true+3
+	lda #.HIBYTE(_8)
+	sta 1+<F_unittest_assert_true+3
+	lda 0+<F_unittest_assert_true+3
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_true+3
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
+	sta 0+_stdio_EMU_EXIT
 	jmp @end_3
 @else_2:
 	lda #.LOBYTE(_11)
-	sta <F_stdio_print+0
+	sta 0+<F_unittest_assert_true+3
 	lda #.HIBYTE(_11)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_unittest_assert_true+3
+	lda 0+<F_unittest_assert_true+3
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_true+3
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 @end_3:
 	rts
 _6:
@@ -59,51 +74,80 @@ _11:
 	lda 1+<F_unittest_assert_equal+0
 	cmp 1+<F_unittest_assert_equal+2
 @1:
-	beq @else_14
+	bne @3
+	jmp @else_14
+@3:
 	lda #.LOBYTE(_21)
-	sta <F_stdio_print+0
+	sta 0+<F_unittest_assert_equal+6
 	lda #.HIBYTE(_21)
-	sta <F_stdio_print+1
-	jsr _stdio_print
-	lda 0+<F_unittest_assert_equal+4
-	sta <F_stdio_print+0
-	lda 1+<F_unittest_assert_equal+4
-	sta <F_stdio_print+1
-	jsr _stdio_print
-	lda #.LOBYTE(_23)
-	sta <F_stdio_print+0
-	lda #.HIBYTE(_23)
-	sta <F_stdio_print+1
-	jsr _stdio_print
-	lda 0+<F_unittest_assert_equal+2
-	sta <F_stdio_print_int16+0
-	lda 1+<F_unittest_assert_equal+2
-	sta <F_stdio_print_int16+1
-	jsr _stdio_print_int16
-	lda #.LOBYTE(_25)
-	sta <F_stdio_print+0
-	lda #.HIBYTE(_25)
-	sta <F_stdio_print+1
-	jsr _stdio_print
-	lda 0+<F_unittest_assert_equal+0
-	sta <F_stdio_print_int16+0
-	lda 1+<F_unittest_assert_equal+0
-	sta <F_stdio_print_int16+1
-	jsr _stdio_print_int16
-	lda #.LOBYTE(_27)
-	sta <F_stdio_print+0
-	lda #.HIBYTE(_27)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_unittest_assert_equal+6
+	lda 0+<F_unittest_assert_equal+6
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_equal+6
+	sta 1+_stdio_EMU_ADDR
 	lda #1
-	jsr _stdio_exit
+	sta 0+_stdio_EMU_PRINT
+	lda 0+<F_unittest_assert_equal+4
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_equal+4
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
+	lda #.LOBYTE(_23)
+	sta 0+<F_unittest_assert_equal+6
+	lda #.HIBYTE(_23)
+	sta 1+<F_unittest_assert_equal+6
+	lda 0+<F_unittest_assert_equal+6
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_equal+6
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
+	lda 0+<F_unittest_assert_equal+2
+	sta 0+_stdio_EMU_DATA
+	lda 1+<F_unittest_assert_equal+2
+	sta 1+_stdio_EMU_DATA
+	lda #2
+	sta 0+_stdio_EMU_PRINT
+	lda #.LOBYTE(_25)
+	sta 0+<F_unittest_assert_equal+6
+	lda #.HIBYTE(_25)
+	sta 1+<F_unittest_assert_equal+6
+	lda 0+<F_unittest_assert_equal+6
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_equal+6
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
+	lda 0+<F_unittest_assert_equal+0
+	sta 0+_stdio_EMU_DATA
+	lda 1+<F_unittest_assert_equal+0
+	sta 1+_stdio_EMU_DATA
+	lda #2
+	sta 0+_stdio_EMU_PRINT
+	lda #.LOBYTE(_27)
+	sta 0+<F_unittest_assert_equal+6
+	lda #.HIBYTE(_27)
+	sta 1+<F_unittest_assert_equal+6
+	lda 0+<F_unittest_assert_equal+6
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_equal+6
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
+	sta 0+_stdio_EMU_EXIT
 	jmp @end_15
 @else_14:
 	lda #.LOBYTE(_30)
-	sta <F_stdio_print+0
+	sta 0+<F_unittest_assert_equal+6
 	lda #.HIBYTE(_30)
-	sta <F_stdio_print+1
-	jsr _stdio_print
+	sta 1+<F_unittest_assert_equal+6
+	lda 0+<F_unittest_assert_equal+6
+	sta 0+_stdio_EMU_ADDR
+	lda 1+<F_unittest_assert_equal+6
+	sta 1+_stdio_EMU_ADDR
+	lda #1
+	sta 0+_stdio_EMU_PRINT
 @end_15:
 	rts
 _21:
