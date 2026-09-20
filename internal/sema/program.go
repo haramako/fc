@@ -41,8 +41,9 @@ type Program struct {
 	collectDepth int
 	resolving    []*declaration
 
-	soas    map[*types.Type]*soaInfo // SoA コンテナ型 → フィールドごとの配列 (soa.go)
-	lambdas map[string]*ir.Lambda    // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
+	soas     map[*types.Type]*soaInfo         // SoA コンテナ型 → フィールドごとの配列 (soa.go)
+	lambdas  map[string]*ir.Lambda            // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
+	defaults map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
 	FarCalls    []FarCall
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
@@ -77,6 +78,7 @@ func NewProgram() *Program {
 		constMacros:  map[*ir.Value]ConstMacroFn{},
 		soas:         map[*types.Type]*soaInfo{},
 		lambdas:      map[string]*ir.Lambda{},
+		defaults:     map[*ir.Lambda]*functionDefaults{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)
@@ -137,6 +139,9 @@ func (p *Program) CompileBodies(mod *ir.Module, deps Resolver) (err error) {
 	defer h.recoverTo(&err)
 	// コンパイル中にネストしたlambdaが追加されることがあるため index ループ
 	for i := 0; i < len(mod.Lambdas); i++ {
+		if d := p.defaults[mod.Lambdas[i]]; d != nil {
+			d.resolve()
+		}
 		h.compileLambda(mod.Lambdas[i])
 	}
 	return nil

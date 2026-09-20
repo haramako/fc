@@ -645,7 +645,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if p.Type == nil {
 				panic(&diag.Error{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
 			}
-			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type}
+			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type, init: p.Init}
 		}
 		lam := &cexpr{kind: cLambda, pos: s.Pos(), lam: &lambdaLit{
 			name: s.Name.Name, params: params, result: s.Result, body: s.Body, options: parseOptions(s.Options),
@@ -1152,6 +1152,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		h.module.Lambdas = append(h.module.Lambdas, lmd)
 		h.addDefModule(&ir.Def{Sym: id, Kind: ir.DefCode, Type: lmd.Type, Lambda: lmd})
 		h.prog.lambdas[id] = lmd
+		h.registerDefaults(lmd, lam.params)
 		return cv(ir.NewSymbolLiteral("", lmd.Type, id))
 
 	case cDot:
@@ -1782,6 +1783,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			} else {
 				// 普通の関数コール
 				lmdType := ir.ValType(lmdV)
+				args = h.fillDefaultArgs(lmdV, args)
 				if lmdType.IsFarFunc() {
 					if !h.prog.FarCallEnabled() {
 						panic(&diag.Error{Msg: "farfn calls require options(farcall: true)"})

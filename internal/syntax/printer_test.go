@@ -16,6 +16,7 @@ func TestFormatStyle(t *testing.T) {
 		in   string
 		want string
 	}{
+		{"default arguments", "#fc 2\nfunction f(x:uint8,y:uint8=COUNT+1,p:*uint8=null):void{}\n", "#fc 2\nfunction f(x:uint8, y:uint8 = COUNT + 1, p:*uint8 = null):void {}\n"},
 		{"farfn types", "#fc 2\nvar p:farfn(uint8):void;\nvar t:[2]farfn(farfn():uint16):farfn():void;\n", "#fc 2\nvar p:farfn(uint8):void;\nvar t:[2]farfn(farfn():uint16):farfn():void;\n"},
 		{"decls",
 			"public   var a:int=1,b:int ;\nconst   c = 2;\n",

@@ -101,6 +101,7 @@ type cfield struct {
 type lambdaParam struct {
 	name string
 	typ  syntax.TypeExpr
+	init syntax.Expr // named function declaration's optional constant default
 }
 
 // lambdaLit は関数リテラル (関数宣言の脱糖結果、または `-> type { ... }`)。
