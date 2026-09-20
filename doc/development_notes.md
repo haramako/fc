@@ -118,6 +118,12 @@ go test ./...                                    # 全部 (golden + examples + N
   （復帰は前の領域の退避の後・次の領域の入口の写しの前: `isResSpill` で区別。`TestResidentEntryAfterRestore`）。
   失敗した種は `git worktree add /c/Work/fc_base <前のコミット>` で古い版と比べると、並行して入った他の変更の影響を
   切り分けられる
+- **バンク切替の fuzz**（`internal/driver/bank_test.go`、2026-09-21）: emu にはバンクが無いので、切替バンクをまたぐ
+  インライン化のバグ（表は元のバンクに残ってコードだけ移る）は既存の fuzz では見えなかった。nes ターゲット（MMC3、
+  `bank_count: 8` でバンク 0 と 4 が同じ $8000 に来る）の小さなプログラムを生成して内蔵 NES ランナーで走らせ、生成器が
+  計算した期待値と `-O 0` / `-O 2` を比べる（`TestRandomBankPrograms`。既定 8 本、`-randn 800` で 200 本 30 秒。
+  トランポリンは `fclib/nes/farcall_mmc3.asm` を `include` し、`_mmc3_pbank_bak` を `symbol:` の var で持つ）。
+  呼び出しの後で `pbank_bak` も見る（バンクの復帰）。ルールを切ると 8 本中 3 本が落ちることを確認済み
 - 3 かたまり目（種 434000〜、6 万本）で 1 件（2 本）: `x++` の直後の `if (x)` で x が A に常駐していると
   `flagsFromIncDec` が `byte()` で綴りを比べようとして codegen が panic（`invalid location a`）。A にある値は if の
   codegen が `cmp #0` で検査するので、A にある値では false に（`TestIfAfterIncResident`）

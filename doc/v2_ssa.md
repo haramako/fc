@@ -141,6 +141,15 @@ stdio の `bench_start` / `exit` などが main に入るので、bench の modu
 副産物: const で別名を付けた関数（`const D2 = f;` の f）は inline で呼び出しが消えても出力が要る。`frames.Analyze`
 の到達判定に DefEqu の別名を根として足した（`_test_var__D2` が未定義になった）。
 
+**バンクをまたぐ展開の条件**（2026-09-21）: 別モジュールへの展開は「本体に呼び出しが無い」だけでは足りず、本体が触る
+データが写した先から見えることが要る（`opt.dataReachable`）。RAM（`var` = DefBss、数値の `address:`）はどこからでも見える。
+ROM（const の表 = DefBlock、関数内の文字列などの `Lambda.Defs`）はその持ち主のモジュールが固定バンクか、写す先と同じ
+モジュールのときだけ。asm のシンボルに束縛したもの（DefExtern）と `segment:` 付きの caller は置き場所が分からないので不可。
+ポインタの指す先は呼び出しのままでも同じ条件なので見ない。切替バンクの表を読む小関数（明示 inline / 自動 inline）が
+別バンクに写ってコードだけ移り、far call のバンク切替も消えて別の表を読んでいた（castle の実機で発覚。emu の fuzz には
+バンクが無いので見えず、`internal/driver/bank_test.go` に MMC3 の内蔵 NES ランナーで走らせる `TestInlineAcrossBanks` と
+小さな fuzz `TestRandomBankPrograms` を足した）。
+
 ## 9. 添字の定数オフセットの畳み込み（`internal/opt/indexoff.go`、2026-09-20）
 
 `a[i + k]`（k は定数、a はグローバルの要素 1 バイトの配列）の `add t = i, #k; index_pget / index_pset a, t` を

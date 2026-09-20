@@ -70,6 +70,7 @@ func InlineProgram(mods []*ir.Module) error {
 	if len(inl) == 0 {
 		return nil
 	}
+	owners := defOwners(mods)
 	for _, m := range mods {
 		for _, d := range m.Defs {
 			if d.Kind != ir.DefCode || d.Lambda.Extern {
@@ -77,7 +78,7 @@ func InlineProgram(mods []*ir.Module) error {
 			}
 			// inline 関数が inline 関数を呼ぶ形は繰り返して展開する (相互再帰は回数で打ち切る)
 			for depth := 0; depth < 8; depth++ {
-				if !inlineCalls(d.Lambda, inl) {
+				if !inlineCalls(d.Lambda, inl, owners) {
 					break
 				}
 			}
@@ -176,8 +177,88 @@ func hasCalls(lmd *ir.Lambda) bool {
 	return false
 }
 
+// defOwner はモジュールレベルの定義 (シンボル) の置き場所: どのモジュールの、どの種類の定義か。
+type defOwner struct {
+	mod *ir.Module
+	def *ir.Def
+}
+
+// defOwners は全モジュールの定義をシンボルで引ける表にする (別モジュールへのインライン化で、本体が読むデータが
+// 写した先から見えるかの判定に使う)。
+func defOwners(mods []*ir.Module) map[string]defOwner {
+	owners := map[string]defOwner{}
+	for _, m := range mods {
+		for _, d := range m.Defs {
+			owners[d.Sym] = defOwner{mod: m, def: d}
+		}
+	}
+	return owners
+}
+
+// dataReachable は callee の本体を caller (別のモジュール) に写しても、本体が触るデータが全部見えるか。
+//   - RAM (var = DefBss、数値の address: = DefEqu) はバンクに関係なく見える
+//   - ROM (const の表 = DefBlock、関数内の文字列などの Defs) は、その持ち主のモジュールが固定バンク (Switchable でない) か、
+//     写す先と同じモジュールのときだけ見える。segment: 指定の const は置き場所が分からないので不可
+//   - asm のシンボルに束縛したもの (DefExtern、シンボルの address:) は置き場所が分からないので不可
+//   - 関数のアドレス (fn 型の値) は数値なので可。ポインタの指す先は呼び出しのままでも同じ条件なので見ない
+func dataReachable(callee, caller *ir.Lambda, owners map[string]defOwner) bool {
+	at := caller.Module
+	if caller.Options.Has("segment") {
+		at = nil // 置き場所が別 (sema の placementOf と同じく手動配置): 固定バンクのデータだけ
+	}
+	romOK := func(owner *ir.Module) bool { return !owner.Switchable() || owner == at }
+	for _, d := range callee.Defs {
+		if d.Kind == ir.DefBlock && !romOK(callee.Module) {
+			return false
+		}
+	}
+	check := func(o ir.Operand) bool {
+		for {
+			if pa, ok := o.(*ir.PointeredArray); ok {
+				o = pa.From
+				continue
+			}
+			break
+		}
+		v := ir.UnderlyingValue(o)
+		if v == nil || v.Kind != ir.KindGlobal || v.Symbol == "" {
+			return true
+		}
+		own, ok := owners[v.Symbol]
+		if !ok {
+			return false // 出どころが分からない
+		}
+		switch own.def.Kind {
+		case ir.DefBss:
+			return true
+		case ir.DefEqu:
+			return own.def.Equ != nil && own.def.Equ.IsInt
+		case ir.DefBlock:
+			return own.def.Segment == "" && romOK(own.mod)
+		}
+		return false // DefExtern など
+	}
+	for _, op := range callee.Ops {
+		if op == nil {
+			continue
+		}
+		defs, uses := ir.DefUse(op)
+		for _, o := range defs {
+			if !check(o) {
+				return false
+			}
+		}
+		for _, o := range uses {
+			if !check(o) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // inlineCalls は caller の中の inline 関数の呼び出しを 1 巡展開する (展開したら true)。
-func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda) bool {
+func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda, owners map[string]defOwner) bool {
 	done := false
 	for k := 0; k < len(caller.Ops); k++ {
 		op := caller.Ops[k]
@@ -185,8 +266,11 @@ func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda) bool {
 		if callee == nil || callee == caller {
 			continue
 		}
-		if callee.Module != caller.Module && hasCalls(callee) {
-			continue // far call の判定が呼び先のモジュール基準なので、呼び出しを含む本体は別モジュールに写せない
+		if callee.Module != caller.Module && (hasCalls(callee) || !dataReachable(callee, caller, owners)) {
+			// far call の判定が呼び先のモジュール基準なので、呼び出しを含む本体は別モジュールに写せない。
+			// 本体が読む ROM のデータ (const の表、文字列) が写した先から見えない (別の切替バンク) ときも写せない
+			// (コードだけ移って表は元のバンクに残り、farcall のバンク切替が消えて別の表を読んでいた)
+			continue
 		}
 		// この呼び出しの push_result と引数を探す (引数の評価の中の呼び出しは深さで飛ばす)
 		p, depth := -1, 0
