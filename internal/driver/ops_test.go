@@ -2037,3 +2037,101 @@ exit(0);
 		}
 	}
 }
+
+// TestIfAfterIncResident: `x++` の直後の `if (x)` で x が A に常駐していると、flagsFromIncDec が byte() で綴りを比べようとして
+// codegen が panic した (`invalid location a`。fuzz の種 481860 の最小化)。A にある値は if の codegen が cmp #0 で検査する。
+func TestIfAfterIncResident(t *testing.T) {
+	t.Parallel()
+	src := `var g0:sint;
+var g1:int;
+var g2:sint16;
+var g3:sint16;
+var g4:sint16;
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+var a3:[16]sint16;
+function f0():sint options(fastcall: true)
+{
+var la0:[16]sint16;
+la0[0] = 2;
+la0[1] = (-30304);
+la0[2] = 4;
+la0[3] = 5;
+la0[4] = 25447;
+la0[5] = 7;
+la0[6] = 3;
+la0[7] = 2;
+la0[8] = 7;
+la0[9] = 7;
+la0[10] = 3;
+la0[11] = 7;
+la0[12] = 8243;
+la0[13] = (-28091);
+la0[14] = (-8988);
+la0[15] = 1;
+return (g0 + (a2[(g1 & 7)] as sint));
+}
+function f1(p0:sint):sint
+{
+p0 += g0;
+g3++;
+return p0;
+}
+function f2(p0:int, p1:sint):sint options(fastcall: true)
+{
+var q0:*sint16 = &a3[6];
+var q1:*sint16 = &a3[4];
+return (((!((*q1) as sint)) as sint) & ((*q1) as sint));
+}
+function t0():sint16
+{
+var l0:int = 1;
+return 3;
+}
+function t1():sint16
+{
+var l0:sint = 4;
+var q0:*sint16 = &a3[5];
+var l5:int = 0;
+return (-13171);
+}
+const fp0:[2]fn():sint16 = [t0, t1];
+function main():void
+{
+var la0:[16]sint;
+la0[0] = 7;
+la0[1] = 1;
+la0[2] = 3;
+la0[3] = 1;
+la0[4] = 7;
+la0[5] = 6;
+la0[6] = (-100);
+la0[7] = (-89);
+la0[8] = (-23);
+la0[9] = 4;
+la0[10] = 6;
+la0[11] = 0;
+la0[12] = 63;
+la0[13] = 50;
+la0[14] = (-25);
+la0[15] = 2;
+if (((g4 || (g0 % (g0 | 1))) as int16)) {
+} elsif (((((g1 as int16) + 2) || (fp0[((g1 * g1) & 1)]() as sint)) as sint) < (-(g0 / (g0 | 1)))) {
+if (((a2[(((a1[((g1 + (g4 as int)) & 7)] as int) >> 5) & 7)] >> 6) ^ (fp0[((-(a3[6] as int)) & 1)]() as int16))) {
+} elsif (((((fp0[((g1 / 208) & 1)]() as sint) && f1(g0)) as int) >= (t1() as int)) || (g0)) {
+la0[5] = (g0 % 1);
+}
+} else {
+}
+printf(g0, " ", a0[0], "
+");
+exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "0 0\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

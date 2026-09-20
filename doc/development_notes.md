@@ -118,6 +118,9 @@ go test ./...                                    # 全部 (golden + examples + N
   （復帰は前の領域の退避の後・次の領域の入口の写しの前: `isResSpill` で区別。`TestResidentEntryAfterRestore`）。
   失敗した種は `git worktree add /c/Work/fc_base <前のコミット>` で古い版と比べると、並行して入った他の変更の影響を
   切り分けられる
+- 3 かたまり目（種 434000〜、6 万本）で 1 件（2 本）: `x++` の直後の `if (x)` で x が A に常駐していると
+  `flagsFromIncDec` が `byte()` で綴りを比べようとして codegen が panic（`invalid location a`）。A にある値は if の
+  codegen が `cmp #0` で検査するので、A にある値では false に（`TestIfAfterIncResident`）
 - **`symbol:` / `address:` の整理**（2026-09-20）: `symbol: "name"` は関数・変数・配列定数に共通の「シンボル名」で、
   定義があればその名前で出力（`.export`）、無ければ asm 側の定義の参照（`.global`。`ir.DefExtern`、本体なし関数も
   `.export` から `.global` に）。`address:` は数値の固定番地だけ（文字列は `symbol:` へ誘導するエラー）。castle の

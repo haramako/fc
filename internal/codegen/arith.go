@@ -211,6 +211,9 @@ func (l *Llc) flagsFromIncDec(prev *ir.Op, v ir.Operand) bool {
 	if _, ok := l.incDec(prev); !ok {
 		return false
 	}
+	if l.inA(v) || l.inA(prev.Dst) {
+		return false // A にある値は下の byte では比べられない (toAsm が panic)。if の codegen が cmp #0 で検査する (fuzz で発覚)
+	}
 	if l.inY(v) {
 		return l.inY(prev.Dst) // iny / dey の直後の cpy #0 は要らない
 	}
