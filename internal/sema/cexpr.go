@@ -272,6 +272,9 @@ func parseOptions(o *syntax.Options) ir.Options {
 	}
 	var r ir.Options
 	for _, e := range o.Entries {
+		if e.Key.Name == "bss" {
+			panic(&diag.Error{Msg: "bss is only allowed on modules and placement blocks; use segment on individual declarations"})
+		}
 		var v ir.OptionValue
 		switch x := e.Value.(type) {
 		case *syntax.IntLit:

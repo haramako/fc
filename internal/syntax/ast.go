@@ -274,6 +274,19 @@ type Block struct {
 	Rbrace Pos
 }
 
+// PlacementBlock groups global storage declarations without introducing a scope.
+// Keyword remains an identifier so existing variables/types named block still work.
+type PlacementBlock struct {
+	Keyword *Ident
+	Body    *Block
+	Options *Options
+	Semi    Pos
+}
+
+func (s *PlacementBlock) Pos() Pos { return s.Keyword.Pos() }
+func (s *PlacementBlock) End() Pos { return after(s.Semi, 1) }
+func (*PlacementBlock) stmtNode()  {}
+
 // EmptyStmt は単独の `;`。
 type EmptyStmt struct {
 	Semi Pos

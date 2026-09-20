@@ -30,6 +30,7 @@ type Hlc struct {
 	loops        []breakable   // 囲んでいるループ/switch (内側が末尾)
 	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
 	fastCalling  bool
+	groupBss     string // innermost placement block; module default is applied after declarations
 
 	module *ir.Module
 	lmd    *ir.Lambda
@@ -133,7 +134,7 @@ type macroResult struct {
 
 // updatePos は現在処理中の文の位置を記録する (CompileError に付与するため)。
 // 位置を持たない合成ノード (while/for の脱糖) では更新しない。
-func (h *Hlc) updatePos(s syntax.Stmt) {
+func (h *Hlc) updatePos(s syntax.Node) {
 	if p := s.Pos(); p.IsValid() {
 		h.curPos = syntax.At(h.module.Path, p)
 	}
@@ -516,6 +517,8 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 
 	switch s := s.(type) {
 
+	case *syntax.PlacementBlock:
+		h.compilePlacementBlock(s)
 	case *syntax.Block:
 		h.compileStmts(s.Stmts)
 
@@ -544,7 +547,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		}
 		for _, r := range raws {
 			val := optionValueOf(mustValue(h.constEval(toC(r.val))))
-			h.prog.Options.Set(r.key, val)
+			if r.key == "bss" {
+				h.updatePos(r.val)
+				validateBss(val)
+			} else {
+				h.prog.Options.Set(r.key, val)
+			}
 			h.module.Options.Set(r.key, val)
 		}
 
@@ -925,9 +933,12 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			}
 			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: ir.NewIntLiteral("", typ, addr.Int)})
 		} else {
-			seg := ""
+			seg := h.groupBss
 			if sv, ok := opt.Get("segment"); ok {
 				seg = sv.Text()
+				if seg == "" {
+					seg = "BSS"
+				} // explicit legacy default overrides inherited bss
 			}
 			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg}
 			if sym, ok := opt.Get("symbol"); ok {

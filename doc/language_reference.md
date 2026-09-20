@@ -80,6 +80,7 @@ include("font.chr");      // CHR データ（拡張子で判定）
 ファイルの先頭付近に書く。
 
 ```
+options(bss: "BSS_EX");       // このモジュールのグローバル変数・可変 soa の既定セグメント（§4.1）
 options(bank: -1);            // 配置バンク（負数は末尾から）
 options(org: 0xa000);         // 配置アドレス
 options(mapper: "MMC3");      // iNES マッパ（"MMC0" / "MMC3" / 番号）— メインモジュールで
@@ -229,6 +230,40 @@ var cnt:int options(symbol: "_counter");      // fc が確保する領域のシ�
 const TBL:[]int = [1, 2] options(symbol: "_tbl"); // 配列定数のシンボル名を固定
 const BGM0:[]int options(symbol: "_nsd_bgm_BGM0"); // 値なし: アセンブラ側の定義を参照（関数の本体なしと同じ規則）
 ```
+
+**BSS の一括指定**: モジュール全体は `options(bss: "...");`、一部の宣言は配置ブロックで指定する。
+
+```fc
+options(bss: "BSS_EX");
+var large:[256]int;                           // BSS_EX
+
+block {
+    public var a:int;                         // IRQ_DATA
+    var b:int;
+    block {
+        var c:int;                           // SCRATCH
+    } options(bss: "SCRATCH");
+    var small:int options(segment: "BSS");   // 個別指定を優先
+} options(bss: "IRQ_DATA");
+
+var other:int;                               // 再びモジュールの BSS_EX
+```
+
+優先順位は **個別宣言の `segment` > 最も内側のブロックの `bss` > モジュールの `bss` > `BSS`**。
+モジュールの指定はファイル全体に適用される（宣言より後に書いても同じ。複数指定は最後の値）。
+他モジュールへは伝播しない。個別宣言では引き続き `segment:` を使い、`bss:` は指定しない。
+ブロックでは `bss:` だけを受け付け、`segment:` などはエラーにする。
+
+配置ブロックはモジュール直下または別の配置ブロック内に置き、`var`・可変 `soa`・入れ子の配置ブロックを含められる。
+名前空間は増えず、内側の変数は通常のモジュール変数として参照する。`public` の意味も変わらない。
+`block` はこの構文でだけ特別扱いし、既存の同名変数・関数・型を禁止しない。
+ブロックの末尾には `;` が必要。関数・`const`・`soa const`・`use`・`include`・単独の `options` 文はブロックに入れられない。
+
+BSS 指定は固定アドレス変数、関数内ローカル、コード、ROM 定数の配置に影響しない。
+可変 `soa` は展開した各フィールド配列に継承する。配置ブロックは連続配置・ページ内配置を保証しない。
+`bss` には空でないセグメント名の文字列を指定する。制御文字・引用符・バックスラッシュは使えない。
+そのセグメントのメモリ領域は ld65.cfg で定義する（標準設定にない名前は自前の cfg が必要）。
+ゼロクリア・保存領域の扱い・リンカ設定は自動では変更しない。詳細は [V2 BSS 配置](v2_bss.md)。
 
 `options(symbol: "name")` は関数（§4.2）・変数・配列定数に共通で、「定義があればその名前で出力し、無ければ
 アセンブラ側の定義を参照する」。参照のときは fc が `.global name` を出すので、同じモジュールに `include` した asm で

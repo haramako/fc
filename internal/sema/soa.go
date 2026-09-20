@@ -82,9 +82,12 @@ func (h *Hlc) compileSoaDecl(s *syntax.SoaDecl) {
 		panic(&diag.Error{Msg: fmt.Sprintf("soa %s: length must be 1..256 (indexed by the Y register)", name)})
 	}
 	opt := parseOptions(s.Options)
-	seg := ""
+	seg := h.groupBss
 	if sv, ok := opt.Get("segment"); ok {
 		seg = sv.Text()
+		if seg == "" {
+			seg = "BSS"
+		} // explicit legacy default overrides inherited bss
 	}
 
 	soa := h.prog.Types.SoaArray(h.module.Id+"."+name, elem, n, s.Const)

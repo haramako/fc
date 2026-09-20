@@ -128,6 +128,10 @@ func Children(node Node) []Node {
 		add(n.Kind)
 		add(n.Path)
 		add(n.Options)
+	case *PlacementBlock:
+		add(n.Keyword)
+		add(n.Body)
+		add(n.Options)
 	case *Block:
 		addStmts(n.Stmts)
 	case *Ident, *IntLit, *StringLit, *BoolLit, *NullLit:

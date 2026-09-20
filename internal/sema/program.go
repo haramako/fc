@@ -107,6 +107,15 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}
 	defer h.recoverTo(&err)
 	h.compileStmts(file.Stmts)
+	// Apply the final module default to every unqualified global, including
+	// declarations before options(bss:...). Imported modules own their defaults.
+	if bss, ok := mod.Options.Get("bss"); ok {
+		for _, d := range mod.Defs {
+			if d.Kind == ir.DefBss && d.Segment == "" {
+				d.Segment = bss.Str
+			}
+		}
+	}
 	return mod, nil
 }
 

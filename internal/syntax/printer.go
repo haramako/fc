@@ -537,6 +537,13 @@ func (p *printer) stmt(s Stmt) {
 		p.tokAt(s.Colon, ":")
 		p.indent = saved
 
+	case *PlacementBlock:
+		p.ident(s.Keyword)
+		p.space()
+		p.block(s.Body)
+		p.space()
+		p.options(s.Options)
+		p.tokAt(s.Semi, ";")
 	case *Block:
 		p.block(s)
 

@@ -138,12 +138,44 @@ func (a *yyLexAdapter) Lex(lval *yySymType) int {
 		a.lexErr = err.(*Error)
 		return 0
 	}
+	previous := a.last
 	a.last = t
 	lval.tok = t
 	if t.Kind == EOF {
 		return 0
 	}
+	atStatement := !previous.Pos.IsValid() || previous.Kind == Semicolon || previous.Kind == LBrace || previous.Kind == RBrace
+	if atStatement && t.Kind == Identifier && t.Text == "block" && a.placementAhead() {
+		return kPLACEMENT
+	}
 	return kindToYacc[t.Kind]
+}
+
+// Recognize the contextual keyword only in block {...} options(...).
+// In particular, block remains usable as a variable, function or struct name.
+// Scan a copy: comments and error locations in the real lexer are untouched.
+func (a *yyLexAdapter) placementAhead() bool {
+	look := *a.lex
+	look.comments = nil
+	t, err := look.Next()
+	if err != nil || t.Kind != LBrace {
+		return false
+	}
+	depth := 1
+	for depth > 0 {
+		t, err = look.Next()
+		if err != nil || t.Kind == EOF {
+			return false
+		}
+		switch t.Kind {
+		case LBrace:
+			depth++
+		case RBrace:
+			depth--
+		}
+	}
+	t, err = look.Next()
+	return err == nil && t.Kind == KwOptions
 }
 
 func init() {
@@ -153,7 +185,7 @@ func init() {
 
 // tokenDisplay は goyacc のトークン名 (kFUNCTION, IDENT, LEQ, '(') → エラーメッセージ用の綴り。
 var tokenDisplay = func() map[string]string {
-	m := map[string]string{"$end": "end of file", "$unk": "invalid token"}
+	m := map[string]string{"$end": "end of file", "$unk": "invalid token", "kPLACEMENT": "block"}
 	m[yyTokname(yyTokIndex(kindToYacc[Identifier]))] = "identifier"
 	m[yyTokname(yyTokIndex(kindToYacc[Number]))] = "number"
 	m[yyTokname(yyTokIndex(kindToYacc[String]))] = "string"
