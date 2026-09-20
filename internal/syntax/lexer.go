@@ -107,7 +107,7 @@ var keywords = map[string]Kind{
 	"break": KwBreak, "continue": KwContinue, "incbin": KwIncbin,
 	"switch": KwSwitch, "case": KwCase, "default": KwDefault,
 	"use": KwUse, "as": KwAs, "from": KwFrom, "public": KwPublic, "private": KwPrivate,
-	"fn": KwFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
+	"fn": KwFn, "farfn": KwFarFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
 	"true": KwTrue, "false": KwFalse, "null": KwNull,
 }
 

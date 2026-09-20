@@ -178,6 +178,10 @@ func (h *Hlc) soaByteOf(st *types.Type, v ir.Operand, off int) ir.Operand {
 		}
 		el := ir.ValLiteral(e)
 		byteNo := off - f.Offset
+		// Retain the function symbol for Entry analysis and the bank range assertion.
+		if f.Type.IsFarFunc() {
+			return &ir.CastedValue{From: e, Type: uint8T, Offset: byteNo}
+		}
 		switch {
 		case el != nil && el.Kind == ir.KindLiteral && el.IsInt:
 			return ir.NewIntLiteral("", uint8T, ir.FloorMod(ir.Shr(el.Int, byteNo*8), 256))

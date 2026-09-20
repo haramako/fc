@@ -83,7 +83,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	// 関数ポインタのグローバル変数に代入された関数と、関数ポインタの const 表の要素 (間接呼び出しの飛び先を絞るため)
 	assigned := map[string][]string{}  // 変数のシンボル → 代入された関数のシンボル
 	unknownAssign := map[string]bool{} // リテラル以外が代入された (何が入るか分からない)
-	aliased := map[string]bool{} // equ (const の別名) が参照する関数
+	aliased := map[string]bool{}       // equ (const の別名) が参照する関数
 	tables := map[string][]string{}    // const 表のシンボル → 要素の関数のシンボル ("" は関数以外)
 	funcSym := func(o ir.Operand) string {
 		v := ir.ValLiteral(o)
@@ -99,11 +99,17 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			}
 		}
 	}
-	markOperand := func(o ir.Operand) {
+	var markOperand func(ir.Operand)
+	markOperand = func(o ir.Operand) {
 		if o == nil {
 			return
 		}
 		v := ir.ValLiteral(o)
+		if v != nil && v.Kind == ir.KindArrayLiteral {
+			for _, elem := range v.Elems {
+				markOperand(elem)
+			}
+		}
 		if v != nil && v.Kind == ir.KindLiteral && !v.IsInt && v.Symbol != "" {
 			markSym(v.Symbol)
 			// fc のコードでアドレスを取った cc65 規約の関数 (asm からの参照は定義そのものなので構わない)
@@ -128,6 +134,9 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			// 呼び出しが全部消えても)
 			if d.Kind == ir.DefEqu && d.Equ != nil && !d.Equ.IsInt && d.Equ.Symbol != "" {
 				aliased[d.Equ.Symbol] = true
+				if d.Equ.Type.IsFarFunc() {
+					markOperand(d.Equ)
+				}
 			}
 		}
 	}
@@ -154,6 +163,9 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			}
 			switch op.Code {
 			case ir.OpCall, ir.OpFastcall:
+				if ir.ValType(op.Src[0]).IsFarFunc() {
+					markOperand(op.Src[0])
+				}
 				if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
 					if l, ok := g.ByID[v.Symbol]; ok {
 						if j, ok := g.index[l]; ok {
@@ -225,7 +237,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			}
 			t := ir.ValType(op.Src[0])
 			for _, j := range entries {
-				if g.Lambdas[j].Type == t {
+				if g.Lambdas[j].Type == t || (t.IsFarFunc() && types.SameFuncSignature(g.Lambdas[j].Type, t)) {
 					g.callees[i] = append(g.callees[i], j)
 				}
 			}

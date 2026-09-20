@@ -474,7 +474,8 @@ type PointerType struct {
 
 // FuncType は関数型。v1 `result(params)` / v2 `fn(params):result` (Fn が有効)。
 type FuncType struct {
-	Fn     Pos // v2 の `fn` (v1 では無効)
+	Far    bool // farfn: address and linker bank
+	Fn     Pos  // v2 の `fn` (v1 では無効)
 	Result TypeExpr
 	Lparen Pos
 	Params []*Param

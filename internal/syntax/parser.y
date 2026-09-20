@@ -44,7 +44,7 @@ package syntax
 }
 
 %token <tok> NUMBER IDENT STRING kPLACEMENT
-%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
+%token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~'
@@ -324,6 +324,7 @@ type_v2_prefix: '*' type_decl                        { $$ = &PointerType{Star: $
               | '[' exp ']' type_decl                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
               | '[' ']' type_decl                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
               | kFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
+              | kFARFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Far: true, Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
 
 /* v2 の前置形だけ (後置なし)。`x as T` の T に使う: 後ろに二項演算子が続いても曖昧にならない */
 type_v2: '*' type_v2                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
@@ -331,6 +332,7 @@ type_v2: '*' type_v2                        { $$ = &PointerType{Star: $1.Pos, El
        | '[' exp ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
        | '[' ']' type_v2                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
        | kFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
+       | kFARFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Far: true, Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
        | IDENT %prec kAS                    { $$ = &NamedType{Name: ident($1)} } /* `x as m.T` の '.' は型の修飾として読む (shift) */
 
 type_post: IDENT '.' IDENT                 { $$ = &NamedType{Module: ident($1), Name: ident($3)} } /* v2: 他モジュールの型 */

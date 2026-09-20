@@ -143,6 +143,10 @@ func calleeSym(op *ir.Op) string {
 	if op == nil || (op.Code != ir.OpCall && op.Code != ir.OpFastcall) {
 		return ""
 	}
+	// Far pointers preserve mapping/restoration even when the symbol is known.
+	if ir.ValType(op.Src[0]).IsFarFunc() {
+		return ""
+	}
 	lit := ir.ValLiteral(op.Src[0])
 	if lit == nil || lit.Kind != ir.KindLiteral || lit.IsInt {
 		return ""

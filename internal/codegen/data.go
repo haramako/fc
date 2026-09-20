@@ -15,7 +15,7 @@ import (
 func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 	r := []any{}
 	r = append(r, mangle(sym)+":")
-	if typ.Kind == types.Struct || (typ.Kind == types.Array && (typ.Base.Kind == types.Struct || typ.Base.Kind == types.Array)) {
+	if typ.Kind == types.Struct || (typ.Kind == types.Array && (typ.Base.Kind == types.Struct || typ.Base.Kind == types.Array || typ.Base.IsFarFunc())) {
 		// struct / 入れ子の配列: 要素ごとに型に従って .byte / .word を出す
 		return append(r, l.emitData(typ, val)...)
 	}
@@ -35,6 +35,10 @@ func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 		e := min(s+16, len(val))
 		parts := make([]string, 0, e-s)
 		for _, elem := range val[s:e] {
+			if _, ok := elem.(*ir.CastedValue); ok && typ.Base.Size == 1 && ir.ValLiteral(elem).Type.IsFarFunc() {
+				parts = append(parts, strings.TrimPrefix(l.byte(elem, 0), "#"))
+				continue
+			}
 			lv := ir.ValLiteral(elem)
 			switch {
 			case lv != nil && lv.Kind == ir.KindLiteral && lv.IsInt:
@@ -54,6 +58,14 @@ func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 func (l *Llc) emitData(typ *types.Type, val []ir.Operand) []any {
 	r := []any{}
 	scalar := func(t *types.Type, v ir.Operand) {
+		if t.IsFarFunc() {
+			var bytes []string
+			for i := 0; i < 3; i++ {
+				bytes = append(bytes, strings.TrimPrefix(l.byte(v, i), "#"))
+			}
+			r = append(r, "\t.byte "+strings.Join(bytes, ","))
+			return
+		}
 		op, limit := ".byte", 256
 		if t.Size == 2 {
 			op, limit = ".word", 65536

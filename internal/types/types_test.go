@@ -70,3 +70,19 @@ func TestCompatible(t *testing.T) {
 		}
 	}
 }
+
+func TestFarFunc(t *testing.T) {
+	u := NewUniverse()
+	args := []*Type{u.IntType(1, false)}
+	near := u.Func(args, u.Void(), false)
+	far := u.FarFunc(args, u.Void())
+	if far.Size != 3 || far.String() != "farfn(uint8):void" || !far.IsFarFunc() || near.IsFarFunc() || far != u.FarFunc(args, u.Void()) {
+		t.Fatalf("far=%+v near=%+v", far, near)
+	}
+	if !SameFuncSignature(near, far) || SameFuncSignature(far, u.FarFunc(nil, u.Void())) {
+		t.Fatal("signature mismatch")
+	}
+	if u.Compatible(far, near) != nil || u.Compatible(near, far) != nil || u.Compatible(u.PointerTo(u.Void()), far) != nil {
+		t.Fatal("farfn must retain its representation")
+	}
+}

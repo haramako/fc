@@ -98,7 +98,7 @@ func devirtualizeOne(lmd *ir.Lambda, tables map[string][]string, lambdas map[str
 			continue
 		}
 		tbl, ok := op.Src[0].(*ir.Value)
-		if !ok || tbl.Kind != ir.KindGlobal || tbl.Symbol == "" || tbl.Type.Kind != types.Array || tbl.Type.Base.Kind != types.Func {
+		if !ok || tbl.Kind != ir.KindGlobal || tbl.Symbol == "" || tbl.Type.Kind != types.Array || tbl.Type.Base.Kind != types.Func || tbl.Type.Base.IsFarFunc() {
 			continue
 		}
 		syms := tables[tbl.Symbol]

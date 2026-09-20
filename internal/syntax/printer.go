@@ -860,7 +860,11 @@ func (p *printer) typeExprV2(t TypeExpr) {
 		p.tokAt(t.Star, "*")
 		p.typeExprV2(t.Elem)
 	case *FuncType:
-		p.tokAt(t.Fn, "fn")
+		if t.Far {
+			p.tokAt(t.Fn, "farfn")
+		} else {
+			p.tokAt(t.Fn, "fn")
+		}
 		p.tokAt(t.Lparen, "(")
 		p.params(t.Params)
 		p.tokAt(t.Rparen, ")")

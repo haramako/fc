@@ -54,6 +54,7 @@ type Type struct {
 	IsSoa    bool    // Array が SoA コンテナ (soa 宣言) か
 	IsConst  bool    // SoA コンテナが `soa const` (読み出しのみ) か
 	Path     string  // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
+	far      bool
 	fastcall bool
 	str      string
 }
@@ -80,6 +81,22 @@ func (t *Type) String() string { return t.str }
 
 // Fastcall は Func が fastcall 呼び出し規約かを返す。
 func (t *Type) Fastcall() bool { return t.fastcall }
+
+// IsFarFunc reports the three-byte address/bank function pointer representation.
+func (t *Type) IsFarFunc() bool { return t != nil && t.Kind == Func && t.far }
+
+// SameFuncSignature ignores only the near/far pointer representation.
+func SameFuncSignature(a, b *Type) bool {
+	if a == nil || b == nil || a.Kind != Func || b.Kind != Func || a.Base != b.Base || a.fastcall != b.fastcall || len(a.Params) != len(b.Params) {
+		return false
+	}
+	for i, p := range a.Params {
+		if p != b.Params[i] {
+			return false
+		}
+	}
+	return true
+}
 
 // Universe は型のインターン表。
 type Universe struct {
@@ -237,6 +254,13 @@ func (u *Universe) Func(params []*Type, result *Type, fastcall bool) *Type {
 	return u.intern(t)
 }
 
+// FarFunc はアドレスとバンクを保持する 3 バイトの関数ポインタ型。
+func (u *Universe) FarFunc(params []*Type, result *Type) *Type {
+	t := *u.Func(params, result, false)
+	t.far, t.Size, t.str = true, 3, "far"+t.str
+	return u.intern(&t)
+}
+
 // Compatible は a と b の互換型を返す (TypeUtil.compatible_type? 相当)。互換性がなければ nil。
 // 代入では a が代入先 (*void の規則だけ向きがある)。
 //   - 整数同士: サイズが大きい方。同サイズなら符号付きの方
@@ -263,8 +287,8 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 	if a == b {
 		return a
 	}
-	// *void (a 側 = 代入先) にはどのポインタ / 関数ポインタ / 配列も入る。逆 (*void → *T) は bitcast が要る
-	if a.Kind == Pointer && a.Base.Kind == Void && (b.Kind == Pointer || b.Kind == Func || b.Kind == Array) {
+	// *void (a 側 = 代入先) にはデータポインタ / near 関数ポインタ / 配列が入る。逆 (*void → *T) は bitcast が要る
+	if a.Kind == Pointer && a.Base.Kind == Void && (b.Kind == Pointer || (b.Kind == Func && !b.IsFarFunc()) || b.Kind == Array) {
 		return a
 	}
 	if a.Kind == Int && b.Kind == Int {

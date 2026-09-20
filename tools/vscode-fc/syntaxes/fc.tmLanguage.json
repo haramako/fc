@@ -34,7 +34,7 @@
       ]
     },
     "types": {
-      "match": "\\b(int|uint|int8|uint8|sint|sint8|int16|uint16|sint16|bool|void|fn)\\b",
+      "match": "\\b(int|uint|int8|uint8|sint|sint8|int16|uint16|sint16|bool|void|fn|farfn)\\b",
       "name": "storage.type.fc"
     },
     "constants": { "match": "\\b(true|false|null)\\b", "name": "constant.language.fc" },

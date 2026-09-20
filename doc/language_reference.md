@@ -147,6 +147,7 @@ far call の判定に「N ≥ 0 なら切替バンク、無しか負なら固定
 | `*T` | 2 | | ポインタ。`null`（v2）を入れられる（ポインタと関数ポインタのみ。SoA ハンドルには null なし） |
 | `*void` | 2 | | 何を指すか問わないポインタ（v2）。どのポインタ・関数ポインタ・配列も暗黙に入る。戻すには `bitcast<*T>(p)`。参照はがし・添字・算術は不可 |
 | `fn(T1, T2, ...):R` | 2 | | 関数型（値は関数のアドレス）。`fastcall` 属性は型の一部（表示名 `fastcall fn(...):R`） |
+| `farfn(T1, T2, ...):R` | 3 | | バンク付き関数ポインタ（アドレス下位・上位・バンク）。呼び出しには `options(farcall: true)` が必要 |
 | `Name` / `mod.Name` | フィールドの合計 | | struct（§2.1）。他モジュールの public な struct は `mod.Name`、または `use Name from mod;` |
 | `*Name`（Name は `soa`） | 1 | | SoA コンテナの要素ハンドル（§2.2）。2 バイトのポインタとは別物 |
 
@@ -402,10 +403,41 @@ bg_mmc.fetch_area(a, d);                        // 固定バンクから: farcal
   「そのまま飛ぶ」だけのものを用意する）。規約: `FC_FARCALL`（3 バイト: 呼び先アドレス、バンク）を読み、X と
   FC_FASTCALL_REG を壊さない。参考実装は同じバンクが既に入っていれば切り替えずに飛ぶ（+37 サイクル）、
   違えば退避・切替・復帰する（+100 サイクル程度）
-- 関数ポインタ経由の呼び出しは対象外（バンクは呼ぶ側の責任）。他バンクのデータ参照も対象外
+- 通常の `fn` 経由ではバンクは呼ぶ側が管理する。`farfn` 経由ではトランポリンで切替・復帰する。
+  どちらも他バンクのデータ参照や割り込みからの安全な再入は管理しない。
 - `fcc build -d` で far call になった箇所の一覧が出る
 
 設計の経緯は [v2_farcall.md](v2_farcall.md)。
+
+### 4.2.1 バンク付き関数ポインタ
+
+```fc
+options(farcall: true);
+use events;
+var callback:farfn(uint8):void;
+
+function setup():void {
+    callback = events.run;
+}
+function update():void {
+    if (callback != null) {
+        callback(1);
+    }
+}
+```
+
+関数シンボルを型の指定された文脈に入れると、リンク時にアドレスと `.bank(symbol)` を組にする。
+`var f = events.run;` とだけ書けば従来の 2 バイトの `fn`。既存の fn **変数**からバンクは復元できないため、
+farfn への暗黙変換はできない。farfn → fn / `*void` / 整数への暗黙変換も不可。
+
+配列、struct / SoA のフィールド、引数、戻り値、コピーに対応する。`==` / `!=` はバンクを含む 3 バイトを比較し、
+`null` は全バイト 0。null 呼び出しの実行時検査は行わない。算術・順序比較は不可。
+呼び先は引数より先に評価して保持し、引数の評価後に `FC_FARCALL` へ転送する。
+
+明示的な farfn は `near` 属性の有無によらず実配置のバンクを使う。バンク番号は 0..255（リンク時検査）。
+呼び出しは通常の stack / Entry ABI を使い、cc65 ABI / legacy fastcall の関数は格納できない。
+型の宣言やコピーだけなら `options(farcall: true)` は不要。
+詳細・制約・検証は [farcall 対応の関数ポインタ](v2_far_function_pointers.md)。
 
 ### 4.3 ラムダ
 

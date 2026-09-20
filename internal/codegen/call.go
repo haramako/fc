@@ -191,6 +191,11 @@ func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
 		panic(&diag.Error{Msg: "push_result without call"})
 	}
 	pc := &pendingCall{kind: ckStack, callOp: callOp, far: callOp.Far}
+	// Even a known farfn target uses its ordinary stack/Entry entry point.
+	if ir.ValType(callOp.Src[0]).IsFarFunc() {
+		pc.far = true
+		return pc
+	}
 	if ops[i].Code == ir.OpPushFastcallResult {
 		pc.kind = ckFastcallReg
 	}

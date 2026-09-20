@@ -415,6 +415,15 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 			return fmt.Sprintf("#.LOBYTE(%s)", mangle(lv.Symbol))
 		case 1:
 			return fmt.Sprintf("#.HIBYTE(%s)", mangle(lv.Symbol))
+		case 2:
+			if lv.Type.IsFarFunc() {
+				if l.farPointerSymbols == nil {
+					l.farPointerSymbols = map[string]bool{}
+				}
+				l.farPointerSymbols[lv.Symbol] = true
+				return fmt.Sprintf("#.LOBYTE(.BANK(%s))", mangle(lv.Symbol))
+			}
+			panic("third byte of a near symbol")
 		default:
 			panic("invalid byte index for symbol")
 		}

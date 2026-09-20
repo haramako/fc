@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,8 @@ import (
 )
 
 type Llc struct {
+	farPointerSymbols map[string]bool // Link-time bank range assertions for this module.
+
 	OptimizeLevel int
 	Limits        regalloc.Limits // レジスタ領域の大きさ (base.asm と一致させる)
 	FarCall       bool            // far call が有効 (各モジュールに farcall / FC_FARCALL の import を出す)
@@ -113,6 +116,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			panic(r)
 		}
 	}()
+	l.farPointerSymbols = map[string]bool{}
 	l.labelCount = 0
 	l.codeSegment = mod.Id
 	l.curLambda = nil
@@ -154,6 +158,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 				val = strconv.Itoa(d.Equ.Int)
 			} else {
 				val = mangle(d.Equ.Symbol)
+				if d.Equ.Type.IsFarFunc() {
+					l.farPointerSymbols[d.Equ.Symbol] = true
+				}
 			}
 			inc.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
 			asm.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
@@ -231,6 +238,15 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 		asm.push(fmt.Sprintf("\t.incbin \"%s\"", file))
 	}
 
+	var farSymbols []string
+	for sym := range l.farPointerSymbols {
+		farSymbols = append(farSymbols, sym)
+	}
+	sort.Strings(farSymbols)
+	for _, sym := range farSymbols {
+		asm.push(fmt.Sprintf(".assert .bank(%s) >= 0, lderror, \"farfn bank must be in 0..255\"", mangle(sym)))
+		asm.push(fmt.Sprintf(".assert .bank(%s) <= 255, lderror, \"farfn bank must be in 0..255\"", mangle(sym)))
+	}
 	inc.push(".endif")
 
 	return asm.flatten(), inc.flatten(), nil
@@ -811,7 +827,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				}
 				pushArgSize -= fnType.Base.Size
 				base := l.stackBase(lmd) + pushArgSize
-				if op.Far {
+				if fnType.IsFarFunc() {
+					for i := 0; i < 3; i++ {
+						r.push(l.loadA(op.In(0), i))
+						r.push(fmt.Sprintf("sta FC_FARCALL+%d", i))
+					}
+					r.push(l.callStackish(lmd, "farcall"))
+				} else if op.Far {
 					// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いて farcall (ターゲット側のトランポリン) を呼ぶ
 					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
 					r.push(l.callStackish(lmd, "farcall"))

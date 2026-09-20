@@ -34,10 +34,17 @@ func (h *Hlc) needsExpected(c *cexpr) bool {
 	return false
 }
 
-// withExpected は文脈の型 t (宣言の型、代入先の型、フィールドの型) を型名省略の struct リテラルに与えた式を返す。
+// withExpected supplies the context for null/struct/array literals and constructs
+// farfn values from function symbols. A runtime near pointer cannot supply a bank.
 // 元の式は変更しない (constEval のメモは cexpr のポインタで引くため、新しいノードを作る)。t が nil ならそのまま。
 func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
-	if t == nil || !h.needsExpected(c) {
+	if t != nil && t.IsFarFunc() && c.kind != cNull {
+		x := h.constEval(c)
+		if x.kind == cValue && x.val.Kind == ir.KindLiteral && !x.val.IsInt && x.val.Symbol != "" && types.SameFuncSignature(t, x.val.Type) {
+			return cv(ir.NewSymbolLiteral("", t, x.val.Symbol))
+		}
+	}
+	if t == nil || (!h.needsExpected(c) && c.kind != cArray) {
 		return c
 	}
 	switch c.kind {

@@ -1181,6 +1181,12 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			return cv(h.nullOf(ty).(*ir.Value)) // `null as *T`
 		}
 		if x.isLiteralInt() {
+			if ty.IsFarFunc() && !x.val.Type.IsFarFunc() {
+				panic(&diag.Error{Msg: "cannot construct farfn from an integer; assign a function symbol or null"})
+			}
+			if x.val.Type.IsFarFunc() {
+				h.checkCast(c.ck, x.val.Type, ty)
+			}
 			// 整数リテラルはサイズを持たないので、bitcast のサイズ検査はしない (`bitcast<*int>(0x2000)`, `bitcast<fn():int>(0)`)
 			h.recordCast(c, x.val.Type, ty)
 			if c.ck == syntax.CastAs {
@@ -1200,6 +1206,22 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			args[0] = h.constEval(c.args[0])
 			if len(c.args) > 1 {
 				args[1] = h.constEval(c.args[1])
+			}
+			for _, arg := range args {
+				if arg.kind != cValue || !arg.val.Type.IsFarFunc() {
+					continue
+				}
+				switch c.op {
+				case opEq, opNe:
+					if args[0].isLiteralInt() && args[1].isLiteralInt() {
+						h.compatible(args[0].val.Type, args[1].val.Type)
+					}
+				case opLand, opLor, opNot:
+				case opLt, opGt, opLe, opGe:
+					panic(&diag.Error{Msg: "ordered comparison is not supported on farfn"})
+				default:
+					panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
+				}
 			}
 			if args[0].isLiteralInt() && (len(args) == 1 || args[1].isLiteralInt()) {
 				v1 := args[0].val.Int
@@ -1385,6 +1407,9 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 				panic(&diag.Error{Msg: "named parameter is not allowed in function type"})
 			}
 			params[i] = h.typeOf(p.Type)
+		}
+		if t.Far {
+			return h.prog.Types.FarFunc(params, h.typeOf(t.Result))
 		}
 		return h.prog.Types.Func(params, h.typeOf(t.Result), false)
 	}
@@ -1650,6 +1675,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		case opNot, opUminus, opBitNot:
 			left := h.rval(e.args[0])
 			typ := ir.ValType(left)
+			if typ.IsFarFunc() && e.op != opNot {
+				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
+			}
 			if e.op == opNot {
 				typ = h.prog.Types.Bool() // `!x` は 0 / 1
 			}
@@ -1661,6 +1689,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			opAnd, opOr, opXor, opShiftLeft, opShiftRight:
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
+			if ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc() {
+				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
+			}
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
@@ -1692,7 +1723,13 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if a1.kind == cNull {
 				right = h.nullOf(ir.ValType(left))
 			} else {
-				right = h.rval(a1)
+				right = h.rval(h.withExpected(a1, ir.ValType(left)))
+			}
+			if v, ok := left.(*ir.Value); ok && ir.ValType(right).IsFarFunc() {
+				left = h.rval(h.withExpected(cv(v), ir.ValType(right)))
+			}
+			if e.op == opLt && (ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc()) {
+				panic(&diag.Error{Msg: "ordered comparison is not supported on farfn"})
 			}
 			if e.op == opEq && isVoidPtr(ir.ValType(right)) && !isVoidPtr(ir.ValType(left)) {
 				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
@@ -1745,6 +1782,13 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			} else {
 				// 普通の関数コール
 				lmdType := ir.ValType(lmdV)
+				if lmdType.IsFarFunc() {
+					if !h.prog.FarCallEnabled() {
+						panic(&diag.Error{Msg: "farfn calls require options(farcall: true)"})
+					}
+					// Snapshot the callee before argument evaluation (which can change it).
+					lmdV = h.freeze(lmdV)
+				}
 				if lmdType.Base.Kind != types.Void {
 					r = h.newTmp(lmdType.Base)
 				}
@@ -1915,7 +1959,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 // assign は代入 `left = rhs` (left は評価済みの左辺、lv は左辺値 (ポインタ) かどうか)。代入した値 (左辺) を返す。
 func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
-	if h.needsExpected(rhs) {
+	if h.needsExpected(rhs) || ir.ValType(left).IsFarFunc() || (lv && ir.ValType(left).Base.IsFarFunc()) {
 		// `p = {1, 2}`: 左辺の型で struct リテラルの型を決める
 		lt := ir.ValType(left)
 		if lv {
@@ -1971,8 +2015,16 @@ func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
 
 // isFarCall は呼び先 fn (関数のシンボルリテラル) が far call (farcall トランポリン経由) になるか (doc/v2_farcall.md §3.2):
 // options(farcall: true) が有効で、呼び先が別モジュールの切替バンクの関数で、options(near: true) が付いていないとき。
-// 関数ポインタ経由は対象外 (呼ぶ側の責任)。
+// farfn は明示的に far call を選ぶ。通常の fn は呼ぶ側がバンクを管理する。
 func (h *Hlc) isFarCall(fn ir.Operand) bool {
+	if ir.ValType(fn).IsFarFunc() {
+		target := "indirect " + ir.ValType(fn).String()
+		if lit := ir.ValLiteral(fn); lit != nil && lit.Kind == ir.KindLiteral && !lit.IsInt {
+			target = lit.Symbol
+		}
+		h.prog.FarCalls = append(h.prog.FarCalls, FarCall{Pos: h.curPos, Caller: h.lmd.Id, Callee: target})
+		return true
+	}
 	if !h.prog.FarCallEnabled() {
 		return false
 	}

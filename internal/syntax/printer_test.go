@@ -16,6 +16,7 @@ func TestFormatStyle(t *testing.T) {
 		in   string
 		want string
 	}{
+		{"farfn types", "#fc 2\nvar p:farfn(uint8):void;\nvar t:[2]farfn(farfn():uint16):farfn():void;\n", "#fc 2\nvar p:farfn(uint8):void;\nvar t:[2]farfn(farfn():uint16):farfn():void;\n"},
 		{"decls",
 			"public   var a:int=1,b:int ;\nconst   c = 2;\n",
 			"public var a:int = 1, b:int;\nconst c = 2;\n"},

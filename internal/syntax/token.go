@@ -79,6 +79,7 @@ const (
 	KwFrom
 	KwPublic
 	KwPrivate
+	KwFarFn   // farfn (bank-aware function pointer)
 	KwFn      // fn (v2: 関数型)
 	KwBitcast // bitcast (v2)
 	KwStruct  // struct (v2)
@@ -145,7 +146,7 @@ var kindNames = [...]string{
 	KwBreak: "break", KwContinue: "continue", KwIncbin: "incbin",
 	KwSwitch: "switch", KwCase: "case", KwDefault: "default",
 	KwUse: "use", KwAs: "as", KwFrom: "from", KwPublic: "public", KwPrivate: "private",
-	KwFn: "fn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null",
+	KwFn: "fn", KwFarFn: "farfn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
 	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
 	MulEq: "*=", DivEq: "/=", ModEq: "%=", AndEq: "&=", OrEq: "|=", XorEq: "^=", ShlEq: "<<=", ShrEq: ">>=",
