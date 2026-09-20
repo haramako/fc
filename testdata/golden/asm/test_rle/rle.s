@@ -5,4 +5,4 @@
 __MODULE_RLE__ = 1
 .segment "rle"
 	.include "rle.asm"
-	.export _rle_unpack
+	.global _rle_unpack

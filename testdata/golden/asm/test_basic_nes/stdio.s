@@ -15,10 +15,10 @@ _stdio_ppu_addr: .res 2
 	.export _stdio_print_addr
 .segment "BSS"
 _stdio_print_addr: .res 2
-	.export _stdio_print_int16
-	.export _stdio_wait_vsync
-	.export _stdio_print
-	.export _stdio_ppu_put
+	.global _stdio_print_int16
+	.global _stdio_wait_vsync
+	.global _stdio_print
+	.global _stdio_ppu_put
 	.export _stdio_exit
 	.export _stdio_exit__frame
 	;;;=============================
@@ -99,7 +99,7 @@ _8:
 pallet:
 		.byte 15,61,16,48,0,17,33,49,0,18,34,50,0,19,35,51
 .endproc
-	.export _interrupt
+	.global _interrupt
 _stdio_interrupt = _interrupt
-	.export _interrupt_irq
+	.global _interrupt_irq
 _stdio_interrupt_irq = _interrupt_irq

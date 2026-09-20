@@ -50,8 +50,8 @@ var cur_se_priority:int;
 const NSD_BUF_SIZE = 343;
 var nsd_buf:[NSD_BUF_SIZE]int;
 
-const bgm_table:[]*int options(address: "_sound_bgm_table");
-const se_table:[]*int options(address: "_sound_se_table");
+const bgm_table:[]*int options(symbol: "_sound_bgm_table");
+const se_table:[]*int options(symbol: "_sound_se_table");
 
 public function init():void
 {

@@ -259,9 +259,10 @@ const (
 	DefBss                      // 未初期化領域
 	DefBlock                    // 定数データブロック
 	DefCode                     // 関数
+	DefExtern                   // asm 側の定義の参照 (値なしの const の options(symbol:)。codegen は `.global` を出すだけ)
 )
 
-var defKindNames = [...]string{DefEqu: "equ", DefBss: "bss", DefBlock: "block", DefCode: "code"}
+var defKindNames = [...]string{DefEqu: "equ", DefBss: "bss", DefBlock: "block", DefCode: "code", DefExtern: "extern"}
 
 func (k DefKind) String() string {
 	if int(k) < len(defKindNames) && k > 0 {

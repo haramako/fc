@@ -171,16 +171,25 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
 			asm.push(l.emitBlock(d.Sym, d.Type, d.Elems))
+		case ir.DefExtern:
+			// asm 側の定義の参照 (値なしの const の options(symbol:)): `.global` は定義があれば export、無ければ import
+			// になるので、同じモジュールに include した asm で定義していても別のオブジェクトファイルでもよい
+			inc.push(fmt.Sprintf("\t.global %s", mangle(d.Sym)))
+			asm.push(fmt.Sprintf("\t.global %s", mangle(d.Sym)))
 		case ir.DefCode:
 			lmd := d.Lambda
 			if lmd.Unused {
 				continue // どこからも届かない関数は出力しない (frames.Analyze)
 			}
-			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
-			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			if lmd.Extern {
+				// 本体なし (asm 側の定義の参照): DefExtern と同じく `.global` (以前は `.export` で、同じモジュールに
+				// include した asm で定義したものしかリンクできなかった)
+				inc.push(fmt.Sprintf("\t.global %s", mangle(d.Sym)))
+				asm.push(fmt.Sprintf("\t.global %s", mangle(d.Sym)))
 				continue
 			}
+			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
+			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			if lmd.Entry {
 				inc.push(fmt.Sprintf("\t.import %s", directSym(mangle(d.Sym))))
 				asm.push(fmt.Sprintf("\t.export %s", directSym(mangle(d.Sym))))

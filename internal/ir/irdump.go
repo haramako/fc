@@ -209,6 +209,8 @@ func dumpDef(d *Def, ctx *irCtx) string {
 		vs = dumpElems(d.Elems, ctx)
 	case DefCode:
 		vs = fmt.Sprintf("{lambda %s}", d.Lambda.Id)
+	case DefExtern:
+		vs = "{extern}"
 	default:
 		panic(fmt.Sprintf("cannot dump def kind %s", d.Kind))
 	}

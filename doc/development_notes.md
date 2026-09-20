@@ -97,6 +97,11 @@ go test ./...                                    # 全部 (golden + examples + N
   ジャンプテーブルは 2026-09-19 からあり、castle では偶然重なっていなかった）
 - 種 190000〜 で 1 件: 常駐レジスタへの差し替え（`makeResident` の replace）が cast を落としていて、`(x as int) >= 0` の x が
   X に常駐すると比較が符号付きになった（cast を残す。`TestResidentKeepsCast`）
+- **`symbol:` / `address:` の整理**（2026-09-20）: `symbol: "name"` は関数・変数・配列定数に共通の「シンボル名」で、
+  定義があればその名前で出力（`.export`）、無ければ asm 側の定義の参照（`.global`。`ir.DefExtern`、本体なし関数も
+  `.export` から `.global` に）。`address:` は数値の固定番地だけ（文字列は `symbol:` へ誘導するエラー）。castle の
+  sound.asm にあった `.global _nsd_bgm_BGM0 …` はこれで要らなくなった。参照のシンボルが同じモジュールで定義されている
+  と `addDefModule` の重複除去で DefExtern が消える（= `.global` を出さない。それで正しい。`TestSymbolOption`）
 - **ca65 の `.proc` の中のラベルは同じファイルの別の `.proc` から見えない**（2026-09-20）: レジスタ渡しの `sym__frame`
   を `.proc` の中に置いて `.export` したら、同じモジュール内の呼び出しで未定義になった（castle の text で発覚。
   fc のテストは他モジュールからの参照しか無かった）。関数の途中に入口を作るときは `.endproc` で閉じて別の `.proc` にする

@@ -919,19 +919,25 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if h.lmd == nil {
 		var symbol string
 		if addr, ok := opt.Get("address"); ok {
-			var equ *ir.Value
-			if addr.Kind == ir.OptInt {
-				equ = ir.NewIntLiteral("", typ, addr.Int)
-			} else {
-				equ = ir.NewSymbolLiteral("", typ, addr.Str)
+			// 固定番地 (メモリマップド I/O)。asm のシンボルへの束縛は const の options(symbol:) で (§4.1)
+			if addr.Kind != ir.OptInt {
+				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address:) takes a number; to refer to an assembler symbol, declare a const with options(symbol: \"%s\")", name, addr.Str)})
 			}
-			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: equ})
+			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: ir.NewIntLiteral("", typ, addr.Int)})
 		} else {
 			seg := ""
 			if sv, ok := opt.Get("segment"); ok {
 				seg = sv.Text()
 			}
-			symbol = h.addDef(name, &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg})
+			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg}
+			if sym, ok := opt.Get("symbol"); ok {
+				// options(symbol: "name"): fc が確保する領域のシンボル名を固定する (asm から参照するとき)
+				d.Sym = sym.Text()
+				h.addDefModule(d)
+				symbol = d.Sym
+			} else {
+				symbol = h.addDef(name, d)
+			}
 		}
 		vv = h.addVar(ir.NewGlobal(name, typ, symbol))
 		vv.Volatile = opt.Has("address") || opt.Has("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
@@ -973,9 +979,20 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 				// const P:*T = [...] / "..." は配列定数の宣言 (ポインタ変数ではない)。データ自体を名前に束縛する
 				t = ir.ValType(v)
 			}
-			symbol := h.addDef(name, &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems})
+			d := &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems}
+			var symbol string
+			if sym, ok := opt.Get("symbol"); ok {
+				d.Sym = sym.Text() // シンボル名を固定 (asm から参照する表など)
+				h.addDefModule(d)
+				symbol = d.Sym
+			} else {
+				symbol = h.addDef(name, d)
+			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 		} else {
+			if opt.Has("symbol") {
+				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(symbol:) needs an array constant (or no value to refer to an assembler symbol)", name)})
+			}
 			var lit *ir.Value
 			if v.IsInt {
 				lit = ir.NewIntLiteral(name, t, v.Int)
@@ -988,11 +1005,17 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			}
 		}
 	} else {
-		// 値なしの const は address:"..." (文字列) が必須
+		// 値なしの const は asm 側の定義の参照: options(symbol: "...") が必須 (fc は `.global` を出す。同じモジュールに
+		// include した asm で定義していても、別のオブジェクトファイルでもよい)
 		if addr, ok := opt.Get("address"); ok && addr.Kind == ir.OptStr {
-			newVal = h.addVar(ir.NewGlobal(name, h.typeEval(typ), addr.Str))
+			panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address: \"...\") is now options(symbol: \"%s\")", name, addr.Str)})
+		}
+		if sym, ok := opt.Get("symbol"); ok {
+			t := h.typeEval(typ)
+			h.addDefModule(&ir.Def{Sym: sym.Text(), Kind: ir.DefExtern, Type: t})
+			newVal = h.addVar(ir.NewGlobal(name, t, sym.Text()))
 		} else {
-			panic(&diag.Error{Msg: fmt.Sprintf("cannot define const without value %s", name)})
+			panic(&diag.Error{Msg: fmt.Sprintf("cannot define const without value %s (a const defined in assembler needs options(symbol: \"...\"))", name)})
 		}
 	}
 	if h.scopeIsPublic(publicPos) {

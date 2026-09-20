@@ -1338,7 +1338,7 @@ const PS:[3]*int = [S1, T2, "xyz"];
 const NAMES:[2]*int = ["hello", "hi"];
 const PS2:[2]*int = [T2, T2];
 const PS3:[]*int = [T2, "ab"];
-const ADDR:[]int options(address: "_t_T2");
+const ADDR:[]int options(symbol: "_t_T2");
 const PS4:[2]*int = [ADDR, T2];
 function len(p:*int):int { var n = 0; while (p[n]) { n++; } return n; }
 function main():void
@@ -1695,6 +1695,48 @@ function main():void
 	for _, level := range []int{-1, 0} {
 		if got := runEmuLevel(t, src, level); got != "10 111 12 13 40 1300 186\n" {
 			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// TestSymbolOption: options(symbol:) は関数・変数・配列定数に共通の「シンボル名」。定義があればその名前で出力
+// (.export)、値なし const は asm 側の定義の参照で `.global` を出す (同じモジュールに include した asm でも別の
+// オブジェクトでもリンクできる)。address: は数値の固定番地だけ (文字列は symbol: へ誘導するエラー)。
+func TestSymbolOption(t *testing.T) {
+	t.Parallel()
+	src := `var cnt:int options(symbol: "_my_counter");
+const TBL:[]int = [5, 6, 7] options(symbol: "_my_tbl");
+const REF:[]int options(symbol: "_my_tbl");
+const RT:[]int options(symbol: "jsr_reg");
+function main():void
+{
+	cnt = REF[1] + TBL[2] + RT[0];
+	printf(cnt, "\n");
+	exit(0);
+}
+`
+	// REF は同じモジュールで定義した _my_tbl の参照 (定義があるので .global は出ない)、RT はランタイム (別オブジェクト) の
+	// jsr_reg (先頭は `jmp (reg)` = $6C = 108) を .global で参照する
+	if out := runEmu(t, src); out != "121\n" {
+		t.Errorf("got %q", out)
+	}
+	asm := compileAsm(t, src)
+	for _, want := range []string{".export _my_counter", ".export _my_tbl", "_my_tbl:", ".global jsr_reg"} {
+		if !strings.Contains(asm, want) {
+			t.Errorf("%q が無い:\n%s", want, asm)
+		}
+	}
+	if strings.Contains(asm, ".import _my_tbl") || strings.Contains(asm, ".import jsr_reg") {
+		t.Errorf("値なし const の参照は .global (import ではない):\n%s", asm)
+	}
+	for _, c := range []struct{ src, want string }{
+		{"const X:[]int options(address: \"_x\");\n", "options(symbol: \"_x\")"},
+		{"var v:int options(address: \"_x\");\n", "options(symbol: \"_x\")"},
+		{"const N:int = 5 options(symbol: \"_n\");\n", "needs an array constant"},
+		{"const X:[]int;\n", "options(symbol:"},
+	} {
+		if got := compileErr(t, c.src); !strings.Contains(got, c.want) {
+			t.Errorf("%q: got %q, want %q", c.src, got, c.want)
 		}
 	}
 }

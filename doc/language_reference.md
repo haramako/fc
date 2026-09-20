@@ -222,11 +222,18 @@ var a:int, b:int;              // まとめて宣言
 グローバル変数の属性:
 
 ```
-var vram:int options(address: 0x2007);        // 固定アドレス（メモリマップド I/O。自動的に volatile）
+var vram:int options(address: 0x2007);        // 固定アドレス（メモリマップド I/O。自動的に volatile。数値だけ）
 var flag:int options(volatile: true);         // 割り込みや asm が書き換える変数（下記）
 var buf:[256]int options(segment: "BSS_EX");  // 配置セグメント
-const REG:int options(address: "_reg_sym");   // アセンブラのシンボルに束縛（値なし const）
+var cnt:int options(symbol: "_counter");      // fc が確保する領域のシンボル名を固定（asm から参照する）
+const TBL:[]int = [1, 2] options(symbol: "_tbl"); // 配列定数のシンボル名を固定
+const BGM0:[]int options(symbol: "_nsd_bgm_BGM0"); // 値なし: アセンブラ側の定義を参照（関数の本体なしと同じ規則）
 ```
+
+`options(symbol: "name")` は関数（§4.2）・変数・配列定数に共通で、「定義があればその名前で出力し、無ければ
+アセンブラ側の定義を参照する」。参照のときは fc が `.global name` を出すので、同じモジュールに `include` した asm で
+定義したものでも別のオブジェクトファイル（NSD の BGM データなど）でもよく、asm 側に `.global` / `.export` を書く必要は
+ない。`address:` は数値の固定番地専用（以前の `address: "sym"` は `symbol: "sym"` に）。
 
 **volatile**: 最適化はグローバル変数の値をループの間レジスタに置いたままにすることがある（§4.5 の常駐）。
 読むたび / 書くたびに意味がある変数はそれをしてはいけないので、次の変数は volatile として扱われ、常に
@@ -259,7 +266,8 @@ function f():void options(segment: "game") { ... }     // 配置セグメント
 - `options(abi: "stack")`: 静的フレームにせず、スタック（`S+n,x`）の規約のままにする（§4.5）
 - `options(interrupt: true)`: 割り込みハンドラから呼ばれる関数（§4.5）
 - `options(zeropage: false)`: 静的フレームを RAM 側に置く
-- `options(symbol: "...")`: 生成するシンボル名を固定する（割り込みベクタなど）
+- `options(symbol: "...")`: 生成するシンボル名を固定する（割り込みベクタなど）。本体なしなら asm 側の定義の参照で、
+  fc が `.global` を出す（同じモジュールに `include` した asm でも別のオブジェクトファイルでもよい）
 - `options(near: true)`: far call（§4.4）の対象にしない（呼ぶ側はマップ済みと仮定して `jsr` する）
 - `options(abi: "cc65")`: 本体の無い extern 関数を **cc65 の `__fastcall__` 規約**で呼ぶ（NSD など cc65 向けの asm
   ライブラリ用）。引数は 0 か 1 個で、1 バイトなら A、2 バイトなら A（下位）/ X（上位）で渡す。戻り値は void か
