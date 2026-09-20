@@ -3,6 +3,7 @@ package driver
 // v2 で足した演算子 (複合代入、~) と switch の case の規則。
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -1737,6 +1738,179 @@ function main():void
 	} {
 		if got := compileErr(t, c.src); !strings.Contains(got, c.want) {
 			t.Errorf("%q: got %q, want %q", c.src, got, c.want)
+		}
+	}
+}
+
+// TestCompareOperandModes: cpx / cpy には添字付きのオペランドが無い。(1) stack 関数 (再帰) で Y に常駐する添字を
+// フレームの値 (`S+k,x`) と比べると `cpy S+k,x` を出していた、(2) X に常駐する値を index_pget の結果と比べるとき
+// 融合した `tab+0,y` を `cpx tab+0,y` にしていた (どちらも ca65 の Illegal addressing mode。fuzz で発覚)。
+func TestCompareOperandModes(t *testing.T) {
+	t.Parallel()
+	src := `var tab:[16]int;
+var seq:[8]int;
+var out:[8]int;
+var g:int;
+function r(n:int, lim:int):int
+{
+	if (n == 0) {
+		return 0;
+	}
+	var s = 0;
+	for (var i = 0; i < 16; i++) {
+		if (i == lim) {
+			s += 3;
+		}
+		tab[i] = tab[i] + s;
+	}
+	return s + r(n - 1, lim + 1);
+}
+function f():void
+{
+	var c = 0;
+	for (var j = 0; j < 8; j++) {
+		if (c < seq[j]) {
+			c += 1;
+		}
+		out[j] = c;
+	}
+	g = c;
+}
+function main():void
+{
+	seq[0] = 3; seq[1] = 1; seq[2] = 4; seq[3] = 1; seq[4] = 5; seq[5] = 9; seq[6] = 2; seq[7] = 6;
+	var v = r(3, 2);
+	f();
+	printf(v, " ", tab[0], " ", tab[2], " ", tab[3], " ", tab[5], " ", tab[15], " ", g, " ", out[0], " ", out[1], " ", out[2], " ", out[4], " ", out[7], "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "9 0 3 6 9 9 5 1 1 2 3 5\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+	asm := compileAsm(t, src)
+	if m := regexp.MustCompile(`(?m)^\s*cp[xy] .*,[xy]\s*$`).FindString(asm); m != "" {
+		t.Errorf("cpx / cpy に添字付きのオペランド: %q", m)
+	}
+}
+
+// TestResidentIf16: A に常駐する変数 (関数全体の常駐のグローバル) があるとき、2 バイトの一時変数を条件にした if
+// (`while ((g4 as sint16) << 5)`) は `lda lo; ora hi` で A を壊すのに freeA が「コンディションの一時変数」と見ていて、
+// 常駐の値が消えていた (fuzz で発覚。-O 2 だけ 32 / 0 になった)。
+func TestResidentIf16(t *testing.T) {
+	t.Parallel()
+	src := `var g1:int;
+var g4:int16;
+function t0():void
+{
+	var l3:int = 0;
+	while ((((g4 as sint16) << 5)) && l3 < 5) {
+		l3++;
+		for (var l4:int = 0; l4 < 6; l4++) {
+			g1 <<= 0; g1 ^= 131;
+		}
+	}
+}
+function main():void
+{
+	g4 = 1;
+	t0();
+	printf(g1, "\n");
+	g1 = 5;
+	g4 = 0;
+	t0();
+	printf(g1, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "0\n5\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// TestResidentExitEdgeOrder: 内側のループの出口の辺 (`if l7 < 5` の抜ける側) に、内側の常駐 (g2@X) の退避と、外側
+// (関数全体) の常駐 (g3@X) の復帰の両方が要るとき、後から処理した外側が辺をもう一度分割して手前にブロックを作り、
+// `ldx g3` が `stx g2` の前に来て g2 の値が消えていた (fuzz で発覚)。写しだけのブロックには復帰を写しの後ろに足す。
+func TestResidentExitEdgeOrder(t *testing.T) {
+	t.Parallel()
+	src := `var g1:int;
+var g2:int;
+var g3:int;
+var a3:[16]sint16;
+const ct0:[8]int = [3, 1, 4, 1, 5, 9, 2, 6];
+function f2(p0:*int):int
+{
+	var q0:*sint16 = &a3[1];
+	return (ct0[((((*q0) as int) * 2) & 7)] as int);
+}
+function main():void
+{
+	var l5:int = 0;
+	var a0:[4]int;
+	while (((f2(&a0[(g1 & 3)]) as int16)) && l5 < 5) {
+		l5++;
+		for (var l6:sint = 0; l6 < 7; l6++) {
+			g1++;
+			g1 = 187;
+		}
+	}
+	var l7:int = 0;
+	while (ct0[(g2 & 7)] && l7 < 5) {
+		l7++;
+		for (var l8:sint = 0; l8 < 7; l8++) {
+			g2++;
+			g2 = 187;
+		}
+	}
+	for (var l9:sint = 0; l9 < 7; l9++) {
+		g3++;
+		g3 = 187;
+	}
+	printf(g1, " ", g2, " ", g3, " ", l5, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "187 187 187 5\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// TestIfCallResultFlags: 呼び出しの 1 バイトの戻り値 (A) を cast を挟んだ if (`if ((f(x)) as sint16)`) で見るとき、
+// call の後に出る常駐レジスタの復帰 (`ldy home`) が N / Z を壊していて、値でなく Y のフラグで飛んでいた
+// (fuzz で発覚。A にある値の検査は `cmp #0` を出し、直前が A を書く命令ならピープホールが消す)。
+func TestIfCallResultFlags(t *testing.T) {
+	t.Parallel()
+	src := `function ff0(p0:int16):int options(noinline: true)
+{
+	return (-((!(p0 as sint)) as int));
+}
+function ff1(p0:int16, p1:sint16):int
+{
+	var l0:int16 = 29033;
+	if ((p0 < p0) || ((ff0((p0 + p0)) as sint16))) {
+		for (var l1:int = 4; l1; l1--) {
+			l0 <<= 1; l0 ^= 18036;
+		}
+	} elsif ((l0 != 61514) && ((7 ^ ((!(l0 as sint16)) as int16)))) {
+	} else {
+	}
+	return (l0 as int);
+}
+function main():void
+{
+	printf(ff1(25991, 0), " ", ff1(0, 1), " ", ff0(51982), " ", ff0(0), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "105 124 0 255\n" {
+			t.Errorf("level %d: got %q", level, got)
 		}
 	}
 }

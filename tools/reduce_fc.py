@@ -2,7 +2,7 @@
 #   python reduce.py prog.fc fcc.exe [O0|panic]
 # 1) 行を 1 つずつ消す (ブロックの { } は対で消す)、2) 括弧の部分式を定数に置き換える。症状が残る変更だけ採用。
 # 症状: 既定は「-O 0 と -O 2 の出力が違う」。第 3 引数 panic なら「どちらかのレベルで panic する」。
-import subprocess, sys, io
+import subprocess, sys, io, re
 
 src_path, fcc = sys.argv[1], sys.argv[2]
 mode = sys.argv[3] if len(sys.argv) > 3 else 'diff'
@@ -34,6 +34,8 @@ def try_lines(src):
     changed = False
     while i < len(lines):
         l = lines[i].strip()
+        if re.match(r'la\d+\[\d+\] = ', l):
+            i += 1; continue  # local array init: removing it makes uninitialized reads (UB)
         if l == '' or l.startswith('#fc') or l.startswith('use ') or l.startswith('function') or l.startswith('printf') or l.startswith('exit') or l in ('{', '}'):
             i += 1
             continue

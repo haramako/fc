@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -779,7 +780,10 @@ func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
 	if f.inline {
 		return // inline の本体は小さく
 	}
-	if g.chance(0.4) {
+	if g.chance(0.4) && (!f.inTable || os.Getenv("RP_TABLE_ARRAYS") != "") { // RP_TABLE_ARRAYS=1 で表の関数にも持たせる (以前の種の再現用)
+		// 表の関数は表経由で互いに呼び合う (再帰 = stack 関数) ので、ローカル配列 (32 バイト) を持たせると -O 0 で
+		// FC_STACK (128 バイト) をあふれてゼロページを壊す (種 312694: t1 64 + t2 27 + t3 36 バイトのフレームが重なり
+		// pc=$ffff で invalid opcode)。プログラムの問題であってコンパイラのバグではない
 		a := rpVar{name: fmt.Sprintf("la%d", len(g.larrays)), typ: g.typ()}
 		g.larrays = append(g.larrays, a)
 		f.locals = append(f.locals, fmt.Sprintf("var %s:[16]%s;", a.name, a.typ.name))
@@ -986,7 +990,7 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	if hang(err0) && err2 == nil {
 		// -O 0 だけ上限に掛かった: far call や除算の入れ子で -O 0 が -O 2 の 4 倍かかることがある (21M 対 5.7M) ので、
 		// 止まらないと決める前に上限を上げて走らせ直す (最小化の途中で毎回 20M サイクル走らせるのを避ける意味もある)
-		o0, err0 = rpRun(t, files, -1, rpMaxCycles*10)
+		o0, err0 = rpRun(t, files, -1, rpMaxCycles*50)
 	}
 	if hang(err0) != hang(err2) && (err0 == nil || hang(err0)) && (err2 == nil || hang(err2)) {
 		// 片方だけ止まらない (もう片方は正常): 出力の食い違いと同じ扱い
@@ -997,7 +1001,7 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	}
 	for _, err := range []error{err0, err2} {
 		if err != nil {
-			if strings.HasPrefix(err.Error(), "panic:") {
+			if strings.HasPrefix(err.Error(), "panic:") && !strings.Contains(err.Error(), "zero page index wrapped") {
 				return rpResult{"panic", err.Error()}
 			}
 			return rpResult{"error", err.Error()}
@@ -1009,6 +1013,9 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	return rpResult{"ok", ""}
 }
 
+// rpInitStmt はローカル配列の初期化文 (`la0[3] = 5;`)。最小化で消さない。
+var rpInitStmt = regexp.MustCompile(`^la[0-9]+\[[0-9]+\] = `)
+
 // rpMinimize は同じ種類の失敗が残る範囲で文を消す (どの深さの文も。消せなかった文はその中身を試す)。
 func rpMinimize(t *testing.T, g *rpGen, kind string) {
 	var visit func(list *[]*rpStmt) bool
@@ -1016,6 +1023,9 @@ func rpMinimize(t *testing.T, g *rpGen, kind string) {
 		changed := false
 		for i := 0; i < len(*list); i++ {
 			saved := (*list)[i]
+			if len(saved.parts) == 1 && rpInitStmt.MatchString(saved.parts[0]) {
+				continue // ローカル配列の初期化は消さない (消すと未初期化の読み出し = 未定義動作になって、レベルで値が違うのが当たり前になる)
+			}
 			*list = append((*list)[:i:i], (*list)[i+1:]...)
 			if rpCheck(t, g.sources()).kind == kind {
 				changed = true
@@ -1059,6 +1069,11 @@ func TestRandomPrograms(t *testing.T) {
 			case "error":
 				if strings.Contains(res.detail, "memory area overflow") {
 					t.Skipf("プログラムが大きすぎて ROM に入らない (seed %d)", seed)
+				}
+				if strings.Contains(res.detail, "zero page index wrapped") {
+					// 呼び出しの入れ子でフレームの合計が FC_STACK (128 バイト) を超えた (emu が S+k,x のページ越えで検出)。
+					// プログラムの問題 (生成器が表の関数にローカル配列を持たせないようにして減らした)
+					t.Skipf("ソフトウェアスタックがあふれた (seed %d)", seed)
 				}
 				t.Fatalf("ビルド失敗 (生成器の問題) (seed %d):\n%s\n%s", seed, g.allSource(), res.detail)
 			case "hang":

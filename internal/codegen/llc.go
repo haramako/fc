@@ -258,6 +258,11 @@ func (l *Llc) fusableIndex(ops []*ir.Op, i int) (string, bool) {
 	if ir.ValType(next.Src[0]).Size != 1 {
 		return "", false
 	}
+	if ir.ValLocation(next.Src[0]) == ir.LocX || ir.ValLocation(next.Src[0]) == ir.LocY || next.Resident != nil {
+		// cpx / cpy に添字付きのオペランドは無い (`cpx tab+0,y` を出していた。fuzz で発覚)。A に常駐変数があると
+		// 次の命令が Y で代用 (UseY: `ldy a; cpy b`) されることがあるので、それも融合しない (`cpy seq+0,y`)
+		return "", false
+	}
 	if l.inA(op.In(1)) {
 		return "", false
 	}
@@ -289,6 +294,16 @@ func anyList(ss []string) []any {
 		r[i] = s
 	}
 	return r
+}
+
+// testA は値の i バイト目を A に読んで N / Z を立てる。値がすでに A にある (loadA が何も出さない) ときは `cmp #0`
+// (直前が A を書いた命令ならピープホールが消す)。呼び出しの戻り値 (A) を if で見るとき、call の後の常駐の復帰 (`ldy home`)
+// がフラグを壊していた (`if ((f(x)) as sint16)`。fuzz で発覚)。
+func (l *Llc) testA(v ir.Operand, i int) any {
+	if code := l.loadA(v, i); code != nil {
+		return code
+	}
+	return "cmp #0"
 }
 
 // nextOp は i の次の (nil でない) 命令。
@@ -600,7 +615,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				labels := l.newLabels(2)
 				fall, taken := labels[0], labels[1]
 				for i := 0; i < size; i++ {
-					r.push(l.loadA(op.In(0), i))
+					r.push(l.testA(op.In(0), i))
 					switch {
 					case onTrue && i < size-1:
 						r.push(fmt.Sprintf("bne %s", taken)) // どれかのバイトが 0 でなければ飛ぶ
@@ -617,7 +632,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			} else if onTrue {
 				// 値のどれかのバイトが 0 でなければ飛ぶ
 				for i := 0; i < ir.ValType(op.In(0)).Size; i++ {
-					r.push(l.loadA(op.In(0), i))
+					r.push(l.testA(op.In(0), i))
 					r.push(fmt.Sprintf("bne %s", op.Label))
 				}
 			} else {
@@ -625,7 +640,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				thenLabel := l.newLabel()
 				size := ir.ValType(op.In(0)).Size
 				for i := 0; i < size; i++ {
-					r.push(l.loadA(op.In(0), i))
+					r.push(l.testA(op.In(0), i))
 					if i == size-1 {
 						r.push(fmt.Sprintf("beq %s", op.Label))
 					} else {

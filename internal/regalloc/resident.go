@@ -135,6 +135,12 @@ func isMemOrLit(o ir.Operand) bool {
 	return isMemByte(o) || ir.ValKind(o) == ir.KindLiteral || (ir.ValType(o).Size == 2 && (ir.ValKind(o) == ir.KindLocal || ir.ValKind(o) == ir.KindGlobal))
 }
 
+// cmpOperand は cpx / cpy の第 2 オペランドにできる値か: 即値かメモリだが、stack 関数のフレーム (`S+k,x`) は不可
+// (cpx / cpy に zp,X のモードは無い。`cpy 0+<S+6,x` を出していた。fuzz で発覚)。
+func cmpOperand(o ir.Operand) bool {
+	return isMemOrLit(o) && ir.ValLocation(o) != ir.LocFrame
+}
+
 // condPredicted は eq / lt の結果が直後の if でだけ使われる (コンディションフラグに割り付く) か。
 func condPredicted(lmd *ir.Lambda, i int) bool {
 	op := lmd.Ops[i]
@@ -298,11 +304,11 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 			return true, 2 // lda v; bne → cpy #0; bne (直前が iny / dey ならピープホールが cpy を消す)
 		}
 	case ir.OpEq, ir.OpLt:
-		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
+		if isV(op.Src[0], v) && condPredicted(lmd, i) && cmpOperand(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
 			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed)) {
 			return true, 3 // lda v; cmp k → cpy k
 		}
-		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
+		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && cmpOperand(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
 			return true, 3 // 可換: cpy k
 		}
 	case ir.OpLoad:
@@ -340,11 +346,11 @@ func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 			return true, 2 // cpx #0
 		}
 	case ir.OpEq, ir.OpLt:
-		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
+		if isV(op.Src[0], v) && condPredicted(lmd, i) && cmpOperand(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
 			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed)) {
 			return true, 3 // cpx k
 		}
-		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
+		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && cmpOperand(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
 			return true, 3 // 可換: cpx k
 		}
 	case ir.OpLoad:
@@ -406,7 +412,9 @@ func freeA(op *ir.Op) bool {
 		if _, plain := op.Src[0].(*ir.Value); !plain {
 			return false
 		}
-		return ir.ValLocalType(op.Src[0]) == ir.LTTemp && !isMemByte(op.Src[0])
+		// 2 バイトの一時変数 (`if ((g as sint16) << 5)`) はコンディションにはならず lda lo; ora hi で A を壊す
+		// (fuzz で発覚: A に常駐したグローバルがループの条件で消えた)
+		return ir.ValType(op.Src[0]).Size == 1 && ir.ValLocalType(op.Src[0]) == ir.LTTemp && !isMemByte(op.Src[0])
 	}
 	return false
 }
@@ -420,7 +428,7 @@ func yVariant(lmd *ir.Lambda, i int) bool {
 	case ir.OpIf, ir.OpIfTrue:
 		return isMemByte(op.Src[0])
 	case ir.OpEq, ir.OpLt:
-		return condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && isMemOrLit(op.Src[1]) &&
+		return condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && cmpOperand(op.Src[1]) &&
 			ir.ValType(op.Src[0]).Size == 1 && ir.ValType(op.Src[1]).Size == 1 &&
 			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed))
 	}
@@ -990,6 +998,30 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 	// 辺 (from → to) に命令を挿す。to は from の直後 (fallthrough)、jump の飛び先、または条件分岐の飛び先。
 	// 同じ辺に内側のループの写しがすでにあれば、退避 (spill) はその前、復帰はその後に置く
 	// (内側に入る辺: この領域を退避してから内側を復帰、内側から出る辺: 内側を退避してからこの領域を復帰)
+	// copyBlock は b が「ラベル; 常駐の写しだけ; jmp」のブロック (先の領域が辺を分割して作ったもの) なら、
+	// 最初の写しと jmp の位置を返す。
+	copyBlock := func(b *ir.Block) (first, jump int, ok bool) {
+		o := cfg.Ops(b)
+		if len(o) < 2 || ops[o[len(o)-1]].Code != ir.OpJump {
+			return 0, 0, false
+		}
+		first = -1
+		for _, i := range o[:len(o)-1] {
+			switch {
+			case ops[i].Code == ir.OpLabel:
+			case isResCopy(ops[i]):
+				if first < 0 {
+					first = i
+				}
+			default:
+				return 0, 0, false
+			}
+		}
+		if first < 0 {
+			return 0, 0, false
+		}
+		return first, o[len(o)-1], true
+	}
 	onEdge := func(from, to *ir.Block, mk []*ir.Op, spill bool) {
 		if len(mk) == 0 {
 			return
@@ -998,6 +1030,17 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		last := (*ir.Op)(nil)
 		if li >= 0 {
 			last = ops[li]
+		}
+		if first, jump, ok := copyBlock(to); ok {
+			// to は内側の領域がこの辺を分割して作った写しだけのブロック (写し; jmp 元の飛び先): 退避はその写しの前、
+			// 復帰は後 (jmp の前) に置く (もう一度分割して手前にブロックを作ると、内側の g2@X の退避の前にこの領域の
+			// g3@X の復帰が来て X が上書きされた。fuzz で発覚)
+			pos := jump
+			if spill {
+				pos = first
+			}
+			before[pos] = append(before[pos], mk...)
+			return
 		}
 		backOver := func(pos int) int { // pos の手前にある写しの前へ
 			for pos > 0 && isResCopy(ops[pos-1]) {

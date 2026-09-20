@@ -97,6 +97,20 @@ go test ./...                                    # 全部 (golden + examples + N
   ジャンプテーブルは 2026-09-19 からあり、castle では偶然重なっていなかった）
 - 種 190000〜 で 1 件: 常駐レジスタへの差し替え（`makeResident` の replace）が cast を落としていて、`(x as int) >= 0` の x が
   X に常駐すると比較が符号付きになった（cast を残す。`TestResidentKeepsCast`）
+- **長時間 fuzz（2026-09-20〜、種 310000〜）**: 2000 本 × 30 のかたまりで回す（1 かたまり約 2 時間。`scratchpad/fuzz/`
+  にログ）。最初の 6 万本で 20 件失敗、実バグ 6 件: `cpx tab+0,y` / `cpy S+k,x`（無いアドレッシングモード。
+  `TestCompareOperandModes`）、A 常駐があるときの Y 代用と融合の衝突、2 バイトの一時変数の if を freeA が
+  コンディション扱い（`TestResidentIf16`）、内側ループの出口の辺で退避と復帰の順序が逆（`TestResidentExitEdgeOrder`）、
+  call の戻り値 (A) の if の前の常駐復帰 `ldy` がフラグを壊す（`TestIfCallResultFlags`）。残りは**プログラム側**:
+  (1) ソフトウェアスタックのあふれ（表経由で再帰する関数がローカル配列 32 バイトを持つと -O 0 でフレームが重なり
+  ゼロページを壊す。pc=$ffff / 定数表の中で invalid opcode）→ emu ターゲットは zp,X / zp,Y のページ越えを検出して
+  panic（`r6502.Cpu.TrapZpWrap`）、runner は「ソフトウェアスタックがあふれた」で飛ばす、生成器は表の関数にローカル配列を
+  持たせない（`RP_TABLE_ARRAYS=1` で以前どおり）。(2) 最小化がローカル配列の初期化文を消して未初期化の読み出しを作る
+  擬陽性 → 最小化と `tools/reduce_fc.py` は `laN[k] = …` を残す（**最小化したプログラムで値が違っても、初期化が消えて
+  いないか先に見る**）。(3) -O 0 が 200M サイクルでも足りない重い種（再試行を 50 倍に）。**調べ方**: 失敗した種は
+  `go test -run TestRandomPrograms -randn 1 -randseed N`（旧生成器なら `RP_TABLE_ARRAYS=1`）で最小化し直し、
+  ログから `t.fc` / `far1.fc` を切り出して `fcc run` / `fcc run -O 0`、`FC_DISABLE=パス` で切り分け、
+  `FC_DUMP_IR=1` で IR、invalid opcode なら `FC_TRACE_PC=1` で直前の PC（`.dbg` の `sym … val=` で関数に当てる）
 - **`symbol:` / `address:` の整理**（2026-09-20）: `symbol: "name"` は関数・変数・配列定数に共通の「シンボル名」で、
   定義があればその名前で出力（`.export`）、無ければ asm 側の定義の参照（`.global`。`ir.DefExtern`、本体なし関数も
   `.export` から `.global` に）。`address:` は数値の固定番地だけ（文字列は `symbol:` へ誘導するエラー）。castle の

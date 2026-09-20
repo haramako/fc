@@ -709,11 +709,31 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int
 	}
 	cpu := r6502.NewCpu(mem)
 	cpu.Pc = startAddr
+	cpu.TrapZpWrap = true // FC_STACK (ZP 128 バイト) のあふれは S+k,x のページ越えとして見える
 	mem.Set(0xffff, 255)
 	mem.Set(0xfffe, 255)
 	var benchStart, benchCycles int64
 	benchUsed := false
+	var trace []int // FC_TRACE_PC=1: 直近の PC (invalid opcode の panic で表示する。調査用)
+	if os.Getenv("FC_TRACE_PC") != "" {
+		defer func() {
+			if r := recover(); r != nil {
+				var b strings.Builder
+				for _, pc := range trace {
+					fmt.Fprintf(&b, " $%04x", pc)
+				}
+				fmt.Fprintf(os.Stderr, "FC_TRACE_PC (last %d):%s\n", len(trace), b.String())
+				panic(r)
+			}
+		}()
+	}
 	for mem.Get(0xffff) == 255 {
+		if trace != nil || os.Getenv("FC_TRACE_PC") != "" {
+			trace = append(trace, cpu.Pc)
+			if len(trace) > 48 {
+				trace = trace[1:]
+			}
+		}
 		cpu.StepSilent()
 		if maxCycles > 0 && cpu.Cycles > maxCycles {
 			return 0, 0, fmt.Errorf("cycle limit exceeded (%d cycles, pc=$%04x)", maxCycles, cpu.Pc)

@@ -2,6 +2,11 @@
 // 公式命令のみ。アドレッシングは実機準拠 (zp,X / zp,Y はページ内でラップ、(zp,X) はゼロページ内で間接)。
 package r6502
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Bus はCPUから見えるメモリ空間。Memory のほか、NESのメモリマップ実装
 // (internal/nes) などを差し込める。
 type Bus interface {
@@ -194,6 +199,7 @@ var instrTable = map[int]instrMode{
 
 // Cpu は R6502::Cpu 相当。
 type Cpu struct {
+	TrapZpWrap bool // zp,X / zp,Y がページを越えたら panic (fc のコードは意図して使わない。emu ターゲットでソフトウェアスタックのあふれを検出する)
 	Mem Bus
 	Pc  int
 	S   int
@@ -236,8 +242,14 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 	case Zp:
 		return secWord
 	case Zpx:
+		if c.TrapZpWrap && secWord+c.X > 0xff {
+			panic(fmt.Sprintf("zero page index wrapped (software stack overflow?): $%02x,x with x=$%02x at pc=$%04x", secWord, c.X, c.Pc))
+		}
 		return 0xff & (secWord + c.X)
 	case Zpy:
+		if c.TrapZpWrap && secWord+c.Y > 0xff {
+			panic(fmt.Sprintf("zero page index wrapped (software stack overflow?): $%02x,y with y=$%02x at pc=$%04x", secWord, c.Y, c.Pc))
+		}
 		return 0xff & (secWord + c.Y)
 	case Rel:
 		if secWord <= 127 {
@@ -873,7 +885,11 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		c.Pc = 0xffff & ((hi << 8) + lo + 1)
 
 	default:
-		panic("invalid opcode")
+		st := []string{}
+		for i := 1; i <= 6; i++ {
+			st = append(st, fmt.Sprintf("%02x", m.Get(0x0100+((c.S+i)&0xff))))
+		}
+		panic(fmt.Sprintf("invalid opcode (instr %d, pc=$%04x, s=$%02x, stack=%s)", instr, c.Pc, c.S, strings.Join(st, " ")))
 	}
 }
 
