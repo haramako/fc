@@ -1,8 +1,10 @@
 package driver
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	fcdata "github.com/haramako/fc"
 )
@@ -46,7 +48,14 @@ func ResolveFCHome() (home string, cleanup func(), err error) {
 	// embed.FS を展開する
 	tmp, err := os.MkdirTemp("", "fc-home-")
 	if err != nil {
-		return "", nil, err
+		tempEnv := "TMPDIR"
+		if runtime.GOOS == "windows" {
+			tempEnv = "TMP and TEMP"
+		}
+		return "", nil, fmt.Errorf("failed to create a temporary directory for bundled FC libraries\n"+
+			"  parent: %s\n  cause: %w\n"+
+			"Set %s to a writable directory, or set FC_HOME to a directory containing fclib/ and share/.\n"+
+			"When running through an agent/shell tool, pass these variables to the fcc process.", os.TempDir(), err, tempEnv)
 	}
 	home, err = fcdata.Materialize(tmp)
 	if err != nil {

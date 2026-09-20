@@ -199,3 +199,25 @@ func TestCLIFmt(t *testing.T) {
 		t.Errorf("fmt missing: code=%d err=%q", code, errOut)
 	}
 }
+
+// Home resolution failures should reach stderr with actionable environment advice.
+func TestCLIHomeTempFailure(t *testing.T) {
+	dir := setup(t)
+	t.Setenv("FC_HOME", "")
+	blocked := filepath.Join(dir, "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, blocked)
+	}
+	code, out, stderr := runCLI(t, "build", "unused.fc")
+	if code != 1 || out != "" {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, stderr)
+	}
+	for _, want := range []string{"failed to create a temporary directory for bundled FC libraries", blocked, "cause:", "FC_HOME", "pass these variables"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q: %s", want, stderr)
+		}
+	}
+}

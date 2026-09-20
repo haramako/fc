@@ -1,6 +1,6 @@
 # FC V2: 配置指定・Mesen のスタック表示・一時ディレクトリの検討
 
-2026-09-20。ユーザーからの V2 向け検討依頼の記録。**§1 の BSS 指定は後続の依頼で実装し、main にマージ済み。§2〜§4 は検討・調査のみ。**
+2026-09-20。ユーザーからの V2 向け検討依頼の記録。**§1 の BSS 指定と §4 の一時ディレクトリ診断は実装済み。§2〜§3 は検討・調査のみ。**
 V3 の `@(...)` や型名変更とは分け、例は現行の `options(...)` で書く。未実装の構文例は仮案。
 
 ## 1. モジュール・宣言グループの BSS 指定（実装済み）
@@ -143,7 +143,7 @@ FC は既に `.dbg` と `.mlb` を出し、[WriteMlb](../internal/driver/dbgfile
 
 V2 の課題として残す。Mesen の fork / 使用版による差もあるため、実装前に対象バイナリを確認する。
 
-## 4. `C:\WINDOWS\fc-home-...` 作成失敗の報告
+## 4. `C:\WINDOWS\fc-home-...` 作成失敗の診断（実装済み）
 
 ### 分かったこと
 
@@ -173,9 +173,9 @@ Windows 配下へのファイル作成は試していない。環境変数の変
 **TMP が渡らないだけで必ず Windows になる、という説明は不正確。** 他の候補も未設定か、
 いずれかの値自体が Windows を指しているなどの追加条件が必要。元の Bash ツール環境は未再現。
 
-### 評価と対応候補
+### 評価と実装した対応
 
-分類は **環境依存の起動失敗 + fcc の診断の改善候補**。コンパイル対象のソースやコード生成のバグとは別。
+分類は **環境依存の起動失敗**。fcc に原因・失敗パス・対処を案内する診断を追加した。コンパイル対象のソースやコード生成のバグとは別。
 PowerShell / make なら常に安全とは言えず、子プロセスへ渡る環境と FC_HOME の解決結果で決まる。
 
 **ユーザー方針: AI の Bash ツール経由の問題として、AI が原因と対処を判断できるエラーメッセージを出せば十分。
@@ -183,22 +183,23 @@ PowerShell / make なら常に安全とは言えず、子プロセスへ渡る�
 
 - 当面は呼び出し環境で書き込み可能な TMP / TEMP を渡すか、実在する FC_HOME（例: `C:/Work/fc`）を明示する。
 - fcc のエラーに「同梱ライブラリ展開用ディレクトリの作成失敗」、選ばれた親ディレクトリ、
-  OS のエラー、FC_HOME または TMP / TEMP を指定する対処を加える案。全環境変数のダンプは不要。
+  OS のエラー、FC_HOME または一時ディレクトリ用の環境変数を指定する対処を追加した。Windows では TMP と TEMP、その他では TMPDIR を案内する。全環境変数は出力しない。
 - エラーに Bash が原因と断定して書かない。観測できた失敗パスと対処を示せば、AI が起動環境を修正できる。
-- 将来の実装確認は、失敗時のメッセージに原因・パス・対処が入り、既存の成功時の動作が変わらないことに絞る。
+- テストで作成失敗時のメッセージと CLI の終了コード・標準エラーを確認した。元の OS エラーはラップして保持する。
+- 正常時の展開・後片付け、および FC_HOME / カレントディレクトリの親から既存ライブラリが見つかる場合の動作もテストする。探索順序・自動フォールバックは変更していない。
 
-メッセージ例（未実装）:
+Windows でのメッセージ例:
 
 ```text
-fcc: failed to create a temporary directory for bundled FC libraries
+failed to create a temporary directory for bundled FC libraries
   parent: C:\WINDOWS
   cause: <original OS error>
-Set TMP or TEMP to a writable directory, or set FC_HOME to a directory containing fclib/ and share/.
+Set TMP and TEMP to a writable directory, or set FC_HOME to a directory containing fclib/ and share/.
 When running through an agent/shell tool, pass these variables to the fcc process.
 ```
 
 ## 残る検討
 
-BSS 指定は実装・マージ済み。一時ディレクトリの件はエラーメッセージの改善だけを候補とする。
+BSS 指定と一時ディレクトリ失敗時の診断は実装済み。一時ディレクトリの自動回復は追加しない。
 ページ内配置は、最終配置の検査と自動パディングを分けて設計する。
 farcall の標準スタック表示は FC のラベルだけで直るとは期待せず、対象 Mesen での再現と拡張箇所の確認から始める。
