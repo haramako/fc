@@ -957,6 +957,12 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
 		}
 		v := h.fitArrayLiteral(cv.val, declType)
+		if v.Kind == ir.KindArrayLiteral && declType != nil && declType.Kind == types.Array && declType.Base.Kind == types.Pointer {
+			// const PS:[N]*T = ["...", other_const, ...]: ポインタの配列。要素の文字列 / 配列リテラルは無名の配列定数に
+			// 切り出してそのアドレス、配列定数の名前 (address: で asm のシンボルに束縛したものも) はそのアドレスにする
+			// (.word で並ぶ)。型検査は変換した後の値で (要素が名前だけだと変換前は `[N][M]T` で `[N]*T` に合わない)
+			v = h.pointerElems(name, v, declType.Base)
+		}
 		t := h.guessType(name, declType, v)
 		if v.Type.Kind == types.Macro {
 			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
@@ -966,12 +972,6 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			if t.Kind == types.Pointer {
 				// const P:*T = [...] / "..." は配列定数の宣言 (ポインタ変数ではない)。データ自体を名前に束縛する
 				t = ir.ValType(v)
-			}
-			if declType != nil && declType.Kind == types.Array && declType.Base.Kind == types.Pointer {
-				// const PS:[N]*T = ["...", other_const, ...]: ポインタの配列。要素の文字列 / 配列リテラルは無名の配列定数に
-				// 切り出してそのアドレス、配列定数の名前はそのアドレスにする (.word で並ぶ)
-				v = h.pointerElems(name, v, declType.Base)
-				t = h.guessType(name, declType, v)
 			}
 			symbol := h.addDef(name, &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems})
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))

@@ -204,3 +204,21 @@ func TestV2StructProgram(t *testing.T) {
 		t.Errorf("code=%d\n%s", code, out.String())
 	}
 }
+
+// compileAsm は body (stdio 付き) をコンパイルして、生成された t モジュールのアセンブリ (_t.s) を返す。
+func compileAsm(t *testing.T, body string) string {
+	t.Helper()
+	dir := t.TempDir()
+	src := "#fc 2\nuse * from stdio;\n" + body
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}); err != nil {
+		t.Fatalf("コンパイル失敗: %v", err)
+	}
+	asm, err := os.ReadFile(filepath.Join(dir, "b", "_t.s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(asm)
+}

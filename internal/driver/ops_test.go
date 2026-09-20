@@ -1330,12 +1330,16 @@ function main():void
 // 二重配列の const (`[2][3]int`) と合わせて、定数添字・変数添字の両方で読める。
 func TestConstPointerArray(t *testing.T) {
 	t.Parallel()
-	out := runEmu(t, `const A:[2][3]int = [[1, 2, 3], [4, 5, 6]];
+	src := `const A:[2][3]int = [[1, 2, 3], [4, 5, 6]];
 const W:[2][2]int16 = [[1000, 2], [3, 40000]];
 const S1:*int = "ab";
 const T2:[]int = [7, 8, 9];
 const PS:[3]*int = [S1, T2, "xyz"];
 const NAMES:[2]*int = ["hello", "hi"];
+const PS2:[2]*int = [T2, T2];
+const PS3:[]*int = [T2, "ab"];
+const ADDR:[]int options(address: "_t_T2");
+const PS4:[2]*int = [ADDR, T2];
 function len(p:*int):int { var n = 0; while (p[n]) { n++; } return n; }
 function main():void
 {
@@ -1343,11 +1347,22 @@ function main():void
 	var j = 2;
 	printf(A[1][2], " ", A[i][0], " ", W[1][1], " ", W[i][0], "\n");
 	printf(PS[0][1], " ", PS[i][2], " ", PS[j][0], " ", len(NAMES[0]), " ", len(NAMES[i]), "\n");
+	printf(PS2[i][2], " ", PS3[i][1], " ", PS4[0][0], " ", len(PS3[1]), "\n");
 	exit(0);
 }
-`)
-	if want := "6 4 40000 3\n98 9 120 5 2\n"; out != want {
+`
+	out := runEmu(t, src)
+	// PS2 / PS3 / PS4: 要素が配列定数の名前だけ、長さ省略、address: で asm のシンボルに束縛した const
+	// (以前は変換前の型 [2][3]uint8 で `cannot assign` になっていた)
+	if want := "6 4 40000 3\n98 9 120 5 2\n9 98 7 2\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
+	}
+	// 表は .word で並ぶ (address: の const はそのシンボル、文字列は無名の配列定数)
+	asm := compileAsm(t, src)
+	for _, want := range []string{".word _t_T2,_t_T2", ".word _t_T2,_t__"} {
+		if !strings.Contains(asm, want) {
+			t.Errorf("%q が無い:\n%s", want, asm)
+		}
 	}
 	got := compileErr(t, "var v:int;\nconst P:[1]*int = [&v];\n")
 	if !strings.Contains(got, "constant address required") && !strings.Contains(got, "constant value required") {
