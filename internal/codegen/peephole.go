@@ -21,6 +21,9 @@ package codegen
 // options(address:) の I/O レジスタ ($2002 など。読むたびに値が変わる) と区別できないので追跡しない。
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -33,6 +36,30 @@ type peepState struct {
 	flagsFromY bool   // N/Z が Y の値を反映しているか (ldy / iny / dey / tay の直後)
 	y          string // Y の値と等しいことが分かっている場所 / 即値 ("" なら不明)
 }
+
+// canonAddr はオペランドの表記を正規化する: `k+<L+n` (byte の表記) と `<L+(n+k)` は同じ場所。別の綴りの同じ番地への
+// 書き込みで追跡が無効にならず (`sty 0+<F+6` の後の `sta 1+<F+5`)、必要な `ldy 0+<F+6` を消していた (fuzz で発覚)。
+func canonAddr(arg string) string {
+	m := addrOffsetRe.FindStringSubmatch(arg)
+	if m == nil {
+		return strings.TrimPrefix(arg, "0+")
+	}
+	k := 0
+	if m[1] != "" {
+		k, _ = strconv.Atoi(m[1])
+	}
+	n := 0
+	if m[4] != "" {
+		n, _ = strconv.Atoi(m[4])
+	}
+	if k+n == 0 {
+		return m[2] + m[3]
+	}
+	return fmt.Sprintf("%s%s+%d", m[2], m[3], k+n)
+}
+
+// addrOffsetRe: `k+<SYM+n` / `<SYM+n` / `SYM` (k, n は 10 進。`+0` は落とす)。
+var addrOffsetRe = regexp.MustCompile(`^(?:([0-9]+)\+)?(<?)([A-Za-z_][A-Za-z0-9_]*)(?:\+([0-9]+))?$`)
 
 func (s *peepState) reset() {
 	s.a = aState{}
@@ -134,7 +161,7 @@ func peepholeA(lines []string) []string {
 		if k := strings.IndexAny(t, " \t"); k >= 0 {
 			mnem, arg = t[:k], strings.TrimSpace(t[k+1:])
 		}
-		arg = strings.TrimPrefix(arg, "0+") // `0+<L+2` (byte の表記) と `<L+2` は同じ場所
+		arg = canonAddr(arg)
 		kind := classify(arg)
 		trackable := kind == opLocal
 		switch mnem {

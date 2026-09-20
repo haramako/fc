@@ -111,6 +111,13 @@ go test ./...                                    # 全部 (golden + examples + N
   `go test -run TestRandomPrograms -randn 1 -randseed N`（旧生成器なら `RP_TABLE_ARRAYS=1`）で最小化し直し、
   ログから `t.fc` / `far1.fc` を切り出して `fcc run` / `fcc run -O 0`、`FC_DISABLE=パス` で切り分け、
   `FC_DUMP_IR=1` で IR、invalid opcode なら `FC_TRACE_PC=1` で直前の PC（`.dbg` の `sym … val=` で関数に当てる）
+- 2 かたまり目（種 372000〜、6 万本）で 2 件: ピープホールが番地を綴りで追跡していて `1+<F+5` と `0+<F+6`（同じ番地）
+  を別物と見て、必要な `ldy` を消した（`canonAddr` で `k+<L+n` → `<L+(n+k)`、`+0` は落とす。`TestPeepholeAddressSpelling`。
+  最初は `<F+0` の綴りが揃わず calls +3% になった: 正規化は**全部の綴り**に掛ける）。内側の領域から次の内側の領域へ
+  移る辺で、外側の常駐の復帰 `ldx p1` が次の領域の入口の写し `ldx l3` の後ろに出て、X が p1 のままループに入った
+  （復帰は前の領域の退避の後・次の領域の入口の写しの前: `isResSpill` で区別。`TestResidentEntryAfterRestore`）。
+  失敗した種は `git worktree add /c/Work/fc_base <前のコミット>` で古い版と比べると、並行して入った他の変更の影響を
+  切り分けられる
 - **`symbol:` / `address:` の整理**（2026-09-20）: `symbol: "name"` は関数・変数・配列定数に共通の「シンボル名」で、
   定義があればその名前で出力（`.export`）、無ければ asm 側の定義の参照（`.global`。`ir.DefExtern`、本体なし関数も
   `.export` から `.global` に）。`address:` は数値の固定番地だけ（文字列は `symbol:` へ誘導するエラー）。castle の

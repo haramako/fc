@@ -1914,3 +1914,126 @@ function main():void
 		}
 	}
 }
+
+// TestPeepholeAddressSpelling: ピープホールはオペランドの綴りで番地を追跡するが、`1+<F+5` と `0+<F+6` は同じ番地。
+// 別の綴りへの書き込みで Y の追跡が無効にならず、2 バイト変数の上位 (Y に常駐) の必要な `ldy` を消していた
+// (fuzz で発覚。canonAddr で `k+<L+n` を `<L+(n+k)` に正規化する)。ループが展開されると形が変わって隠れるので 9 回。
+func TestPeepholeAddressSpelling(t *testing.T) {
+	t.Parallel()
+	src := `function ff0():int
+{
+	var l0:sint16 = 15109;
+	var l1:sint16 = 3;
+	for (var l2:int = 0; l2 < 9; l2++) {
+		l1 = l0;
+		if (((l1 as int16) ^ (~(l2 as int16))) <= ((!(51717 << 4)) as int16)) {
+			l0 |= l0;
+		} else {
+			l0 = (((l0 + (l2 as sint16)) >> 2) / 1);
+		}
+	}
+	return (l1 as int);
+}
+function main():void
+{
+	printf(ff0(), "\n");
+	exit(0);
+}
+`
+	// l0: 15109 → 3777 → 944 → 236 → 59 → 15 → 5 → 2 → 2 → 2 (l1 は 1 つ前の l0 = 2)
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "2\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// TestResidentEntryAfterRestore: fuzz (種 412944) の最小化。for の領域 (x=p1@X) を出て while の領域 (x=l3@X) に入る辺で、
+// 関数全体の常駐 p1@X の復帰 `ldx p1` が while の入口の写し `ldx l3` の後に出て、X が p1 のままループに入っていた
+// (a3[2]++ が走らない)。復帰は前の領域の退避の後、次の領域の入口の写しの前に (isResSpill)。
+func TestResidentEntryAfterRestore(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int;
+var g1:sint16;
+var g2:sint16;
+var g3:sint16;
+const ct0:[16]int = [98, 4, 156, 5, 3, 1, 3, 246, 157, 0, 81, 4, 160, 4, 1, 129];
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+var a3:[16]sint16;
+struct S {
+	f0:int16;
+	f1:sint;
+}
+var s0:S;
+var sa:[4]S;
+function f0(p0:sint, p1:sint):sint16 options(fastcall: true)
+{
+var l0:int = 0;
+var q0:*int = &a0[6];
+var ps:*S = &sa[1];
+var l2:int = 0;
+var l3:int = 0;
+for (var l1:int = 0; l1 < 4; l1++) {
+while ((((!(((*q0) as sint) / 5)) as int)) && l2 < 3) {
+l2++;
+g2 = ((g1 & g1) | (q0[(g0 & 7)] as sint16));
+}
+(*q0) = a0[((sa[(l0 & 3)].f1 as int) & 7)];
+a3[1] = (ct0[(l1 & 7)] as sint16);
+}
+while ((q0[2]) && l3 < 1) {
+l3++;
+a3[(ct0[(((ps.f0 && 4) as int) & 7)] & 7)]++;
+}
+if (((a2[4] as int) & ((p1 || (p0 as int)) as int)) == ((!((ct0[((*q0) & 7)] as sint) | (ct0[7] as sint))) as int)) {
+} else {
+for (var l4:int = 8; l4; l4--) {
+q0[(ct0[(((p1 || l0) as int) & 7)] & 7)] = 149;
+}
+}
+return (((q0[7] as sint16) << 0) ^ (a1[(ct0[2] & 7)] as sint16));
+}
+function f1():int16
+{
+var la0:[16]sint;
+la0[0] = 48;
+la0[1] = 5;
+la0[2] = 0;
+la0[3] = 3;
+la0[4] = 6;
+la0[5] = 109;
+la0[6] = (-13);
+la0[7] = 3;
+la0[8] = 5;
+la0[9] = 5;
+la0[10] = (-53);
+la0[11] = 7;
+la0[12] = 7;
+la0[13] = 95;
+la0[14] = 4;
+la0[15] = (-92);
+return (g3 as int16);
+}
+function main():void
+{
+var l0:int = 191;
+var q0:*sint = &a1[4];
+var l4:int = 0;
+a0[8] = 97;
+a1[3] = 3;
+while ((((!(f0((a2[(ct0[6] & 7)] as sint), a1[3]) as int)) as int16)) && l4 < 3) {
+l4++;
+}
+printf(a3[2], "
+");
+exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "4\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

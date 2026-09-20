@@ -1001,10 +1001,11 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	}
 	for _, err := range []error{err0, err2} {
 		if err != nil {
+			detail := fmt.Sprintf("-O 0: %v\n-O 2: %v", err0, err2) // 両方のレベルの結果 (片方が上限、片方が panic のことがある)
 			if strings.HasPrefix(err.Error(), "panic:") && !strings.Contains(err.Error(), "zero page index wrapped") {
-				return rpResult{"panic", err.Error()}
+				return rpResult{"panic", detail}
 			}
-			return rpResult{"error", err.Error()}
+			return rpResult{"error", detail}
 		}
 	}
 	if o0 != o2 {

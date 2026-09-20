@@ -589,6 +589,15 @@ func isResCopy(op *ir.Op) bool {
 	return (isResident(d) && d.Home == s) || (isResident(s) && s.Home == d)
 }
 
+// isResSpill は常駐の写しのうち、レジスタからメモリ (Home) へ書く退避か (逆はレジスタへの読み込み = 入口の写し / 復帰)。
+func isResSpill(op *ir.Op) bool {
+	if !isResCopy(op) {
+		return false
+	}
+	s := ir.UnderlyingValue(op.Src[0])
+	return isResident(s) && s.Home == ir.UnderlyingValue(op.Dst)
+}
+
 // region は常駐の対象になるブロックの集合 (ループから、その中のループを除いたもの)。
 type region map[*ir.Block]bool
 
@@ -1005,7 +1014,7 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		if len(o) < 2 || ops[o[len(o)-1]].Code != ir.OpJump {
 			return 0, 0, false
 		}
-		first = -1
+		first, firstLoad := -1, -1
 		for _, i := range o[:len(o)-1] {
 			switch {
 			case ops[i].Code == ir.OpLabel:
@@ -1013,12 +1022,19 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 				if first < 0 {
 					first = i
 				}
+				if firstLoad < 0 && !isResSpill(ops[i]) {
+					firstLoad = i
+				}
 			default:
 				return 0, 0, false
 			}
 		}
 		if first < 0 {
 			return 0, 0, false
+		}
+		// 復帰の置き場所: 内側の退避の後、内側の入口の写し (レジスタへの読み込み) があればその前、無ければ jmp の前
+		if firstLoad >= 0 {
+			return first, firstLoad, true
 		}
 		return first, o[len(o)-1], true
 	}
@@ -1087,7 +1103,10 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 					// (`tax` (内側の l0@X) の後に `stx` (この領域の l1) を出していた。fuzz で発覚)
 					pos = backOver(pos)
 				} else {
-					for pos < len(ops) && isResCopy(ops[pos]) {
+					// 復帰は、前の (内側の) 領域の退避の後、次の (内側の) 領域の入口の写し (レジスタへの読み込み) の前に
+					// (`ldx l3` (次の領域の入口) の後に `ldx p1` (この領域の復帰) を出して、X が p1 のままループに
+					// 入っていた。fuzz で発覚)
+					for pos < len(ops) && isResSpill(ops[pos]) {
 						pos++
 					}
 				}
