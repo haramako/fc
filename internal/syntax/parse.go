@@ -145,15 +145,29 @@ func (a *yyLexAdapter) Lex(lval *yySymType) int {
 		return 0
 	}
 	atStatement := !previous.Pos.IsValid() || previous.Kind == Semicolon || previous.Kind == LBrace || previous.Kind == RBrace
+	if t.Kind == Identifier && t.Text == "alias" && a.aliasAhead() {
+		return kALIAS
+	}
 	if atStatement && t.Kind == Identifier && t.Text == "block" && a.placementAhead() {
 		return kPLACEMENT
 	}
 	return kindToYacc[t.Kind]
 }
 
-// Recognize the contextual keyword only in block {...} options(...).
-// In particular, block remains usable as a variable, function or struct name.
-// Scan a copy: comments and error locations in the real lexer are untouched.
+// Recognize alias only before IDENT ':', preserving ordinary identifiers.
+// Scan a copy so comments and positions in the real lexer are untouched.
+func (a *yyLexAdapter) aliasAhead() bool {
+	look := *a.lex
+	look.comments = nil
+	t, err := look.Next()
+	if err != nil || t.Kind != Identifier {
+		return false
+	}
+	t, err = look.Next()
+	return err == nil && t.Kind == Colon
+}
+
+// Recognize block only in block {...} options(...), not as a reserved word.
 func (a *yyLexAdapter) placementAhead() bool {
 	look := *a.lex
 	look.comments = nil
@@ -185,7 +199,7 @@ func init() {
 
 // tokenDisplay は goyacc のトークン名 (kFUNCTION, IDENT, LEQ, '(') → エラーメッセージ用の綴り。
 var tokenDisplay = func() map[string]string {
-	m := map[string]string{"$end": "end of file", "$unk": "invalid token", "kPLACEMENT": "block"}
+	m := map[string]string{"$end": "end of file", "$unk": "invalid token", "kPLACEMENT": "block", "kALIAS": "alias"}
 	m[yyTokname(yyTokIndex(kindToYacc[Identifier]))] = "identifier"
 	m[yyTokname(yyTokIndex(kindToYacc[Number]))] = "number"
 	m[yyTokname(yyTokIndex(kindToYacc[String]))] = "string"

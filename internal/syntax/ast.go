@@ -61,6 +61,7 @@ type VarDecl struct {
 	PublicPos Pos // `public` の位置 (省略時は !IsValid())
 	Keyword   Pos // `var` / `const`
 	Const     bool
+	Alias     bool // typed storage alias; Init names its target
 	Specs     []*VarSpec
 	Semi      Pos
 }

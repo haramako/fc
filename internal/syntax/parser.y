@@ -43,7 +43,7 @@ package syntax
 	optTok  *Token
 }
 
-%token <tok> NUMBER IDENT STRING kPLACEMENT
+%token <tok> NUMBER IDENT STRING kPLACEMENT kALIAS
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
@@ -114,6 +114,7 @@ statement_list: statement_list statement_i { $$ = append($1, $2) }
 statement_i: statement
 
 statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPos($1), Keyword: $2.Pos, Specs: $3, Semi: $4.Pos} }
+         | opt_scope kALIAS IDENT ':' type_decl '=' exp ';' { $$ = &VarDecl{PublicPos: optPos($1), Keyword: $2.Pos, Alias: true, Specs: []*VarSpec{{Name: ident($3), Type: $5, Init: $7}}, Semi: $8.Pos} }
          | opt_scope kCONST var_decl_list ';'   { $$ = &VarDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Specs: $3, Semi: $4.Pos} }
          | kIF '(' exp ')' statement else_block { $$ = &IfStmt{If: $1.Pos, Lparen: $2.Pos, Cond: $3, Rparen: $4.Pos, Then: $5, Else: $6} }
          | kLOOP '(' ')' statement              { $$ = &LoopStmt{Loop: $1.Pos, Rparen: $3.Pos, Body: $4} }

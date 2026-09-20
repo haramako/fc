@@ -12,6 +12,7 @@
     { "include": "#keywords" },
     { "include": "#types" },
     { "include": "#labels" },
+    { "include": "#builtins" },
     { "include": "#calls" },
     { "include": "#operators" },
     { "include": "#punctuation" },
@@ -88,6 +89,24 @@
     "declarations": {
       "patterns": [
         {
+          "comment": "alias name:Type = storage; / public alias name:Type = mod.storage;",
+          "match": "\\b(alias)\\s+([A-Za-z_][A-Za-z0-9_]*)(?=\\s*:)",
+          "captures": {
+            "1": { "name": "storage.type.alias.fc" },
+            "2": { "name": "variable.other.declaration.fc" }
+          }
+        },
+        {
+          "comment": "alias は IDENT : が続く宣言位置だけで強調する（通常の識別子 alias を残す）",
+          "match": "\\b(alias)\\b(?=(?:\\s|/\\*.*?\\*/)+[A-Za-z_][A-Za-z0-9_]*(?:\\s|/\\*.*?\\*/)*:)",
+          "name": "storage.type.alias.fc"
+        },
+        {
+          "comment": "BSS 配置 block。block() や var block は識別子のまま",
+          "match": "\\bblock\\b(?=(?:\\s|/\\*.*?\\*/)*\\{)",
+          "name": "keyword.other.placement.fc"
+        },
+        {
           "comment": "function name(...)",
           "match": "\\b(function)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
@@ -111,6 +130,7 @@
           "beginCaptures": { "1": { "name": "keyword.control.import.fc" } },
           "endCaptures": { "0": { "name": "punctuation.terminator.fc" } },
           "patterns": [
+            { "include": "#comments" },
             { "match": "\\b(from|as)\\b", "name": "keyword.control.import.fc" },
             { "match": "\\*", "name": "keyword.operator.wildcard.fc" },
             { "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b", "name": "entity.name.namespace.fc" },
@@ -127,12 +147,9 @@
           },
           "endCaptures": { "0": { "name": "punctuation.section.parens.end.fc" } },
           "patterns": [
+            { "include": "#comments" },
             { "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(:)", "captures": { "1": { "name": "variable.parameter.option.fc" }, "2": { "name": "punctuation.separator.key-value.fc" } } },
-            { "include": "#strings" },
-            { "include": "#numbers" },
-            { "match": "\\b(true|false)\\b", "name": "constant.language.fc" },
-            { "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b", "name": "variable.other.constant.fc" },
-            { "match": ",", "name": "punctuation.separator.fc" }
+            { "include": "#option-expression" }
           ]
         },
         {
@@ -155,9 +172,9 @@
     },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.flow.fc", "match": "\\b(if|else|elsif|loop|while|for|return|break|continue|switch|case|default)\\b" },
+        { "name": "keyword.control.flow.fc", "match": "\\b(if|else|loop|while|for|return|break|continue|switch|case|default)\\b" },
         { "name": "storage.modifier.fc", "match": "\\b(public|private)\\b" },
-        { "name": "storage.type.fc", "match": "\\b(var|const|function|fn|struct|soa)\\b" },
+        { "name": "storage.type.fc", "match": "\\b(var|const|function|fn|farfn|struct|soa)\\b" },
         { "name": "keyword.operator.cast.fc", "match": "\\b(as|bitcast|sizeof)\\b" },
         { "name": "constant.language.fc", "match": "\\b(true|false|null)\\b" },
         { "name": "keyword.other.fc", "match": "\\b(include|incbin|options|use|from)\\b" }
@@ -191,9 +208,36 @@
       "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
       "captures": { "1": { "name": "entity.name.function.call.fc" } }
     },
+    "builtins": {
+      "comment": "組み込みマクロは予約語ではなく、呼び出しのときだけ強調する",
+      "match": "\\b(asm|printf|unittest_run_tests|cos|min|max|clamp|textmap)\\b(?=\\s*\\()",
+      "name": "support.function.builtin.fc"
+    },
+    "option-expression": {
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#strings" },
+        { "include": "#numbers" },
+        {
+          "begin": "\\(",
+          "end": "\\)",
+          "beginCaptures": { "0": { "name": "punctuation.section.parens.begin.fc" } },
+          "endCaptures": { "0": { "name": "punctuation.section.parens.end.fc" } },
+          "patterns": [{ "include": "#option-expression" }]
+        },
+        { "include": "#keywords" },
+        { "include": "#types" },
+        { "include": "#builtins" },
+        { "include": "#calls" },
+        { "include": "#operators" },
+        { "include": "#punctuation" },
+        { "include": "#identifiers" }
+      ]
+    },
     "operators": {
       "patterns": [
         { "name": "keyword.operator.assignment.compound.fc", "match": "(<<=|>>=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=)" },
+        { "name": "keyword.operator.shift.fc", "match": "(<<|>>)" },
         { "name": "keyword.operator.comparison.fc", "match": "(==|!=|<=|>=|<|>)" },
         { "name": "keyword.operator.logical.fc", "match": "(&&|\\|\\||!)" },
         { "name": "keyword.operator.increment.fc", "match": "(\\+\\+|--)" },
@@ -206,6 +250,7 @@
       "patterns": [
         { "name": "punctuation.terminator.statement.fc", "match": ";" },
         { "name": "punctuation.separator.comma.fc", "match": "," },
+        { "name": "punctuation.separator.type.fc", "match": ":" },
         { "name": "punctuation.accessor.fc", "match": "\\." },
         { "name": "punctuation.section.block.begin.fc", "match": "\\{" },
         { "name": "punctuation.section.block.end.fc", "match": "\\}" },

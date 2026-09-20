@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const vsctm = require('vscode-textmate');
 const oniguruma = require('vscode-oniguruma');
+const assert = require('assert/strict');
 
 const root = path.resolve(__dirname, '..');
 const repo = path.resolve(root, '..', '..');
@@ -62,8 +63,8 @@ const expectations = [
   ['soa const T:[4]Point = [];\n', 'T', 'entity.name.type.fc'],
   ['use * from stdio;\n', 'stdio', 'entity.name.namespace.fc'],
   ['use a, b from m;\n', 'from', 'keyword.control.import.fc'],
-  ['options(bank: -1, fastcall: true);\n', 'bank', 'variable.parameter.option.fc'],
-  ['options(bank: -1, fastcall: true);\n', 'true', 'constant.language.fc'],
+  ['options(bank: -1, inline: true);\n', 'bank', 'variable.parameter.option.fc'],
+  ['options(bank: -1, inline: true);\n', 'true', 'constant.language.fc'],
   ['var p:*Point;\n', 'Point', 'entity.name.type.fc'],
   ['var q:geo.Point;\n', 'geo', 'entity.name.namespace.fc'],
   ['var a:[4]int;\n', 'int', 'storage.type.primitive.fc'],
@@ -77,9 +78,44 @@ const expectations = [
   ['x = MAX;\n', 'MAX', 'variable.other.constant.fc'],
   ['case 1:\n', 'case', 'keyword.control.flow.fc'],
   ['include("main.asm");\n', 'include', 'keyword.control.include.fc'],
+  ['public alias work:Work = shared.memory;', 'alias', 'storage.type.alias.fc'],
+  ['public alias work:Work = shared.memory;', 'work', 'variable.other.declaration.fc'],
+  ['alias /* shared */ work:Work = memory;', 'alias', 'storage.type.alias.fc'],
+  ['alias work:[32]uint8 = memory;', 'uint8', 'storage.type.primitive.fc'],
+  ['function alias():void {}', 'alias', 'entity.name.function.fc'],
+  ['var alias:uint8; alias = 1;', 'alias', 'variable.other.fc'],
+  ['alias();', 'alias', 'entity.name.function.call.fc'],
+  ['block { var a:uint8; } options(bss: "BSS_EX");', 'block', 'keyword.other.placement.fc'],
+  ['block { var a:uint8; } options(bss: "BSS_EX");', 'bss', 'variable.parameter.option.fc'],
+  ['var block:uint8; block = 1;', 'block', 'variable.other.fc'],
+  ['block();', 'block', 'entity.name.function.call.fc'],
+  ['var handler:farfn(uint8):void;', 'farfn', 'storage.type.fc'],
+  ['var handler:fn(uint8):void;', 'fn', 'storage.type.fc'],
+  ['function draw(n:uint8 = 1 << 2):void {}', '<<', 'keyword.operator.shift.fc'],
+  ['function draw(n:uint8 = 4):void {}', '=', 'keyword.operator.assignment.fc'],
+  ['function draw(n:uint8 = 4):void {}', '4', 'constant.numeric.decimal.fc'],
+  ['const _T = textmap("font.txt");', 'textmap', 'support.function.builtin.fc'],
+  ['asm("lda #1");', 'asm', 'support.function.builtin.fc'],
+  ['var textmap:uint8;', 'textmap', 'variable.other.declaration.fc'],
+  ['options(address: (BASE + sizeof(Work)), bss: "BSS_EX");', 'bss', 'variable.parameter.option.fc'],
+  ['options(address: (BASE + sizeof(Work)), bss: "BSS_EX");', 'sizeof', 'keyword.operator.cast.fc'],
+  ['options(// bss: ignored\n bss: "BSS_EX");', ' bss: ignored', 'comment.line.double-slash.fc'],
+  ['use /* module */ shared;', ' module ', 'comment.block.fc'],
+  ['const MASK = 0xff >> 1;', '>>', 'keyword.operator.shift.fc'],
 ];
 
 (async () => {
+  // The tools/ extension has a different diagnostics entry point, but uses the
+  // exact same grammar/snippets/configuration as the packaged extension.
+  const otherRoot = path.join(repo, 'tools/vscode-fc');
+  for (const file of ['syntaxes/fc.tmLanguage.json', 'snippets/fc.json', 'language-configuration.json']) {
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, file), 'utf8')),
+      JSON.parse(fs.readFileSync(path.join(otherRoot, file), 'utf8')), `${file}: run npm run sync-language`);
+  }
+  for (const dir of [root, otherRoot]) {
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    assert(pkg.contributes.snippets.some((s) => s.language === 'fc' && s.path === './snippets/fc.json'));
+  }
   const registry = await loadRegistry();
   const grammar = await registry.loadGrammar('source.fc');
   if (!grammar) throw new Error('grammar not loaded');

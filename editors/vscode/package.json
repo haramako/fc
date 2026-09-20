@@ -2,7 +2,7 @@
   "name": "fc-lang",
   "displayName": "FC Language (NES compiler)",
   "description": "Syntax highlighting, formatting (fcc fmt) and diagnostics (fcc check) for the fc language",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "haramako",
   "license": "MIT",
   "repository": {
@@ -90,7 +90,7 @@
         "fc.mainFile": {
           "type": "string",
           "default": "",
-          "description": "Main module for fcc check, relative to the workspace folder (e.g. src/main.fc). Empty: main.fc next to the current file if it exists, otherwise the current file. Module resolution (`use`) is order dependent, so checking from the real main module gives the same result as the build."
+          "description": "Main module for fcc check, relative to the workspace folder (e.g. src/main.fc). Empty: main.fc next to the current file if it exists, otherwise the current file. Use the build entry point to check all reachable modules with the project settings."
         },
         "fc.checkOnSave": {
           "type": "boolean",
@@ -102,7 +102,8 @@
   },
   "scripts": {
     "check-grammar": "node scripts/check-grammar.js",
-    "package": "npx @vscode/vsce package --no-dependencies"
+    "package": "npm run check-grammar && npx @vscode/vsce package --no-dependencies",
+    "sync-language": "node scripts/sync-language.js"
   },
   "devDependencies": {
     "vscode-oniguruma": "^2.0.1",

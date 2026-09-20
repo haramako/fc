@@ -45,7 +45,7 @@ func validatePlacementChildren(s *syntax.PlacementBlock) {
 		allowed := false
 		switch d := child.(type) {
 		case *syntax.VarDecl:
-			allowed = !d.Const
+			allowed = !d.Const && !d.Alias
 		case *syntax.SoaDecl:
 			allowed = !d.Const
 		case *syntax.PlacementBlock, *syntax.EmptyStmt:

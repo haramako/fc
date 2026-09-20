@@ -21,3 +21,14 @@ castle のように `use` で辿るプログラムは、`fc.mainFile` を `src/m
 プログラム全体が検査され、他モジュールのエラーもそのファイルに付く。
 
 コマンド `fc: Check current file` で手動でも検査できる。fcc の出力は「fc」出力チャネルに残る。
+
+## 言語対応
+
+現行 v2 の alias、BSS 配置ブロック、farfn、デフォルト引数に対応するハイライトとスニペットを同梱。
+`alias` / `palias`、`bss` / `bssblock`、`farfn`、`functiondefault`、`inline` で挿入できる。
+診断には各機能に対応した最新の `fcc` を使う。検討段階の V3 構文は対象外。
+
+言語用のファイルは [editors/vscode](../../editors/vscode/) と共通。
+変更はそちらで行い、`npm run sync-language` で反映し、`npm run check-grammar` で検査する。
+VSIX パッケージとフォーマット機能が必要なら `editors/vscode/` 版を使用する。
+両者は同じ拡張 ID (`haramako.fc-lang`) のため、どちらか一方を導入する。

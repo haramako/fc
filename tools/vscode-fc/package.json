@@ -2,34 +2,81 @@
   "name": "fc-lang",
   "displayName": "fc (NES compiler)",
   "description": "Syntax highlighting and diagnostics for fc sources (runs `fcc check` on save)",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "haramako",
   "license": "MIT",
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Programming Languages", "Linters"],
-  "activationEvents": ["onLanguage:fc"],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:fc"
+  ],
   "main": "./extension.js",
   "contributes": {
-    "languages": [{
-      "id": "fc",
-      "aliases": ["fc", "FC"],
-      "extensions": [".fc"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "fc",
-      "scopeName": "source.fc",
-      "path": "./syntaxes/fc.tmLanguage.json"
-    }],
+    "languages": [
+      {
+        "id": "fc",
+        "aliases": [
+          "fc",
+          "FC"
+        ],
+        "extensions": [
+          ".fc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "fc",
+        "scopeName": "source.fc",
+        "path": "./syntaxes/fc.tmLanguage.json"
+      }
+    ],
     "configuration": {
       "title": "fc",
       "properties": {
-        "fc.fccPath": { "type": "string", "default": "fcc", "description": "Path to the fcc executable" },
-        "fc.target": { "type": "string", "enum": ["emu", "nes"], "default": "nes", "description": "Target passed to fcc check -t" },
-        "fc.checkOnSave": { "type": "boolean", "default": true, "description": "Run fcc check when a .fc file is saved" },
-        "fc.mainFile": { "type": "string", "default": "", "description": "Main file to check (relative to the workspace). Empty: check the saved file itself" }
+        "fc.fccPath": {
+          "type": "string",
+          "default": "fcc",
+          "description": "Path to the fcc executable"
+        },
+        "fc.target": {
+          "type": "string",
+          "enum": [
+            "emu",
+            "nes"
+          ],
+          "default": "nes",
+          "description": "Target passed to fcc check -t"
+        },
+        "fc.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run fcc check when a .fc file is saved"
+        },
+        "fc.mainFile": {
+          "type": "string",
+          "default": "",
+          "description": "Main file to check (relative to the workspace). Empty: check the saved file itself"
+        }
       }
     },
-    "commands": [{ "command": "fc.check", "title": "fc: Check current file" }]
+    "commands": [
+      {
+        "command": "fc.check",
+        "title": "fc: Check current file"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "fc",
+        "path": "./snippets/fc.json"
+      }
+    ]
   }
 }

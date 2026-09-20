@@ -41,9 +41,11 @@ type Program struct {
 	collectDepth int
 	resolving    []*declaration
 
-	soas     map[*types.Type]*soaInfo         // SoA コンテナ型 → フィールドごとの配列 (soa.go)
-	lambdas  map[string]*ir.Lambda            // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
-	defaults map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
+	soas           map[*types.Type]*soaInfo         // SoA コンテナ型 → フィールドごとの配列 (soa.go)
+	lambdas        map[string]*ir.Lambda            // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
+	storageAliases map[*ir.Value]*ir.Value          // declaration binding -> canonical mutable global
+	storageGlobals map[*ir.Value]bool               // actual global var declarations (not ROM constants)
+	defaults       map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
 	FarCalls    []FarCall
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
@@ -68,17 +70,19 @@ func (p *Program) SetTrace(fn func(origin string, ev ir.TraceEvent)) {
 // NewProgram は空のプログラム状態を作り、組み込みマクロを登録する。
 func NewProgram() *Program {
 	p := &Program{
-		declarations: map[*ir.Module]*moduleDecls{},
-		typeDecls:    map[*types.Type]*declaration{},
-		Types:        types.NewUniverse(),
-		Modules:      ir.NewModuleList(),
-		Sources:      map[string]*Source{},
-		CastKinds:    map[syntax.Position]syntax.CastKind{},
-		macros:       map[*ir.Value]MacroFn{},
-		constMacros:  map[*ir.Value]ConstMacroFn{},
-		soas:         map[*types.Type]*soaInfo{},
-		lambdas:      map[string]*ir.Lambda{},
-		defaults:     map[*ir.Lambda]*functionDefaults{},
+		declarations:   map[*ir.Module]*moduleDecls{},
+		typeDecls:      map[*types.Type]*declaration{},
+		Types:          types.NewUniverse(),
+		Modules:        ir.NewModuleList(),
+		Sources:        map[string]*Source{},
+		CastKinds:      map[syntax.Position]syntax.CastKind{},
+		macros:         map[*ir.Value]MacroFn{},
+		constMacros:    map[*ir.Value]ConstMacroFn{},
+		soas:           map[*types.Type]*soaInfo{},
+		lambdas:        map[string]*ir.Lambda{},
+		defaults:       map[*ir.Lambda]*functionDefaults{},
+		storageAliases: map[*ir.Value]*ir.Value{},
+		storageGlobals: map[*ir.Value]bool{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)

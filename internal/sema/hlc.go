@@ -653,7 +653,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileConstSpec(s.Name.Name, nil, lam, nil, s.PublicPos)
 
 	case *syntax.VarDecl:
-		if s.Const {
+		if s.Alias {
+			h.compileStorageAlias(s)
+		} else if s.Const {
 			for _, sp := range s.Specs {
 				var init *cexpr
 				if sp.Init != nil {
@@ -959,6 +961,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			}
 		}
 		vv = h.addVar(ir.NewGlobal(name, typ, symbol))
+		h.prog.storageGlobals[vv] = true
 		vv.Volatile = opt.Has("address") || opt.Has("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
 	} else {
 		vv = h.addVar(ir.NewLocal(name, typ, ir.LTNone))
@@ -980,6 +983,9 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 		cv := h.constEval(h.withExpected(val, declType))
 		if cv.kind != cValue {
 			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
+		}
+		if h.prog.storageAliases[cv.val] != nil {
+			panic(&diag.Error{Msg: fmt.Sprintf("const %s cannot read a storage alias at compile time", name)})
 		}
 		v := h.fitArrayLiteral(cv.val, declType)
 		if v.Kind == ir.KindArrayLiteral && declType != nil && declType.Kind == types.Array && declType.Base.Kind == types.Pointer {
@@ -1071,6 +1077,9 @@ func (h *Hlc) constEvalOperand(c *cexpr) ir.Operand {
 	r := h.constEval(c)
 	if r.kind != cValue {
 		panic(&diag.Error{Msg: "constant value required (got an expression that is evaluated at runtime)"})
+	}
+	if h.prog.storageAliases[r.val] != nil {
+		panic(&diag.Error{Msg: "cannot read a storage alias at compile time"})
 	}
 	return r.val
 }
@@ -1605,7 +1614,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		if e.val.Type.IsSoa {
 			panic(&diag.Error{Msg: fmt.Sprintf("soa %s can only be indexed (%s[i]) or used as a type (*%s)", e.val.Name, e.val.Name, e.val.Name)})
 		}
-		if e.val.Kind == ir.KindArrayLiteral {
+		if root := h.prog.storageAliases[e.val]; root != nil {
+			r = ir.NewCastedValue(root, e.val.Type, 0)
+		} else if e.val.Kind == ir.KindArrayLiteral {
 			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
 			r = ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
 		} else {
@@ -1985,6 +1996,16 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
 	right = h.cast(right, ir.ValType(left))
+	// A typed storage alias can expose overlapping struct subobjects. Preserve
+	// the complete RHS before writing when a forward byte copy would overlap.
+	if root := ir.UnderlyingValue(left); root != nil && root == ir.UnderlyingValue(right) {
+		a, b, size := ir.ValOffset(left), ir.ValOffset(right), ir.ValType(left).Size
+		if a != b && a < b+size && b < a+size {
+			snapshot := h.newTmp(ir.ValType(right))
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: snapshot, Src: []ir.Operand{right}})
+			right = snapshot
+		}
+	}
 	h.emit(&ir.Op{Code: ir.OpLoad, Dst: left, Src: []ir.Operand{right}})
 	return left
 }

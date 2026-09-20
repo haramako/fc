@@ -240,7 +240,9 @@ func (p *printer) stmt(s Stmt) {
 			p.tokAt(s.PublicPos, "public")
 			p.space()
 		}
-		if s.Const {
+		if s.Alias {
+			p.tokAt(s.Keyword, "alias")
+		} else if s.Const {
 			p.tokAt(s.Keyword, "const")
 		} else {
 			p.tokAt(s.Keyword, "var")
