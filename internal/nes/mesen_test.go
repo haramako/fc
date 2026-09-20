@@ -114,8 +114,15 @@ func buildCastle(t *testing.T) (romPath, mapPath, dbgPath string) {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(t.TempDir(), "castle")
-	copyTree(t, filepath.Join(repoRoot, "examples", "castle"), dir)
 	src := filepath.Join(dir, "src")
+	if real := os.Getenv("FC_CASTLE_DIR"); real != "" {
+		src = filepath.Join(real, "src")
+		if err := os.MkdirAll(dir, 0o777); err != nil {
+			t.Fatal(err)
+		} // 実プロジェクト (C:\Work\castle など) で測る (その場でビルドする)
+	} else {
+		copyTree(t, filepath.Join(repoRoot, "examples", "castle"), dir)
+	}
 
 	// main.fc の options(base / linker_config / link) で自前の data.asm・ld65.cfg・NSD を指定しているので fcc build だけで ROM ができる
 	romPath = filepath.Join(dir, "castle.nes")

@@ -197,7 +197,8 @@ go test ./...                                    # 全部 (golden + examples + N
   全部 `__a` の入口に落ちて +0.8% 退行した。(2) `push_arg` を間の命令の下に沈める案は A の連鎖（演算の結果を A のまま
   渡す）を壊して損。(3) 常駐の復帰（`ldy home` / `lda home`）が引数を置いた `push_arg` の直後に出ると引数が消える:
   保持中は退避も復帰もしない（A 渡しにも潜在していた）。効果の測り方は castle のフレーム（`go test ./internal/nes -run
-  CastleFrame -v`）が一番敏感で、bench は calls 以外ほぼ動かない
+  CastleFrame -v`）が一番敏感で、bench は calls 以外ほぼ動かない。`FC_CASTLE_DIR=C:\Work\castle` を付けると実プロジェクトをその場で
+  ビルドして測る（自動プレイはマップが違うので field だけ。json との比較は当然 FAIL するが内訳は出る）
 - **自動インライン**（2026-09-20）: 印が無くても小さい関数（12 命令以下、ループ・呼び出し・asm・`&f`・配列 / struct の
   ローカル無し）は同じ仕組みで展開する（6 命令以下は無条件、それより大きいものは呼び出し 2 か所まで。`opt.autoInlinable`）。
   **テストで「この関数が出力される」ことを見るときは `options(noinline: true)` を付ける**（`TestUnusedFunctions` /
