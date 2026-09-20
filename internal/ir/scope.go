@@ -16,8 +16,10 @@ type Scope struct {
 	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
 	aliases  map[string]scopeAlias // `use a, b from mod;` (v2) で束縛した名前
 	aliasOrd []string
-	uses     []scopeUse // `use * from mod;` で取り込んだモジュール (public のみ見える)
-	finding  bool       // useの相互参照による無限再帰の防止フラグ
+	uses     []scopeUse      // `use * from mod;` で取り込んだモジュール (public のみ見える)
+	finding  map[string]bool // glob traversal guard, per name (resolution may look up another name)
+	listing  bool
+	deferred map[string]deferredBinding
 }
 
 // scopeAlias は選択的インポート 1 件。他モジュールの宣言 (Value) をこのスコープの名前に束縛する。
@@ -84,11 +86,17 @@ func (s *Scope) emitTrace(ev TraceEvent) {
 // Find は id を探す。withPrivate が偽なら外から見える宣言 (public な宣言と再輸出された glob 取り込み) だけを見る。
 // 自スコープ → use したスコープ (public のみ) → 親スコープ の順。
 func (s *Scope) Find(id string, withPrivate bool) *Value {
-	if s.finding {
+	if d, ok := s.deferred[id]; ok && (withPrivate || d.public) {
+		d.resolve()
+	}
+	if s.finding[id] {
 		return nil
 	}
-	s.finding = true
-	defer func() { s.finding = false }()
+	if s.finding == nil {
+		s.finding = map[string]bool{}
+	}
+	s.finding[id] = true
+	defer delete(s.finding, id)
 	if val, ok := s.declares[id]; ok {
 		if withPrivate || val.Public {
 			if s.Owner != "" {
@@ -177,6 +185,9 @@ func editDistance(a, b string) int {
 
 // DeclaredHere はこのスコープ自身に id の宣言 (または束縛) があるか。
 func (s *Scope) DeclaredHere(id string) bool {
+	if _, ok := s.deferred[id]; ok {
+		return true
+	}
 	if _, ok := s.declares[id]; ok {
 		return true
 	}
@@ -193,7 +204,9 @@ func (s *Scope) Declare(val *Value) {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s already imported", val.Name)})
 	}
 	s.declares[val.Name] = val
-	s.order = append(s.order, val.Name)
+	if _, reserved := s.deferred[val.Name]; !reserved {
+		s.order = append(s.order, val.Name)
+	}
 }
 
 // Alias は他モジュールの宣言 val を name でこのスコープに束縛する (`use a, b from mod;`)。
@@ -209,7 +222,9 @@ func (s *Scope) Alias(name string, val *Value, reexport bool) {
 		s.aliases = map[string]scopeAlias{}
 	}
 	s.aliases[name] = scopeAlias{val: val, reexport: reexport}
-	s.aliasOrd = append(s.aliasOrd, name)
+	if _, reserved := s.deferred[name]; !reserved {
+		s.aliasOrd = append(s.aliasOrd, name)
+	}
 }
 
 // Use はモジュールの public な宣言をこのスコープから見えるようにする (`use * from mod;`)。
@@ -220,11 +235,11 @@ func (s *Scope) Use(mi *ModuleInterface, reexport bool) {
 
 // IdList はスコープから見えるIDの列挙 (自スコープの宣言順 → use 先 → 親)。
 func (s *Scope) IdList() []string {
-	if s.finding {
+	if s.listing {
 		return nil
 	}
-	s.finding = true
-	defer func() { s.finding = false }()
+	s.listing = true
+	defer func() { s.listing = false }()
 	var r []string
 	r = append(r, s.order...)
 	r = append(r, s.aliasOrd...)
@@ -235,4 +250,42 @@ func (s *Scope) IdList() []string {
 		r = append(r, s.Parent.IdList()...)
 	}
 	return r
+}
+
+type deferredBinding struct {
+	public, imported bool
+	resolve          func()
+}
+
+// Reserve records a declaration before its value is known. The resolver must
+// eventually bind it using Declare/Alias and call Complete, including on errors.
+// Reservation checks duplicates without forcing either declaration to evaluate.
+func (s *Scope) Reserve(name string, public, imported bool, resolve func()) {
+	if s.DeclaredHere(name) {
+		what := "defined"
+		if d, ok := s.deferred[name]; ok && d.imported {
+			what = "imported"
+		}
+		if _, ok := s.aliases[name]; ok {
+			what = "imported"
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("%s already %s", name, what)})
+	}
+	if s.deferred == nil {
+		s.deferred = map[string]deferredBinding{}
+	}
+	s.deferred[name] = deferredBinding{public, imported, resolve}
+	if imported {
+		s.aliasOrd = append(s.aliasOrd, name)
+	} else {
+		s.order = append(s.order, name)
+	}
+}
+func (s *Scope) Complete(name string) { delete(s.deferred, name) }
+
+// BoundHere checks actual bindings without evaluating a deferred declaration.
+func (s *Scope) BoundHere(name string) bool {
+	_, declared := s.declares[name]
+	_, aliased := s.aliases[name]
+	return declared || aliased
 }

@@ -20,7 +20,7 @@ func validateBss(v ir.OptionValue) {
 	}
 }
 
-func (h *Hlc) compilePlacementBlock(s *syntax.PlacementBlock) {
+func (h *Hlc) placementBss(s *syntax.PlacementBlock) string {
 	h.mustInModule()
 	for _, e := range s.Options.Entries {
 		if e.Key.Name != "bss" {
@@ -35,6 +35,10 @@ func (h *Hlc) compilePlacementBlock(s *syntax.PlacementBlock) {
 	h.updatePos(expr)
 	value := optionValueOf(mustValue(h.constEval(toC(expr))))
 	validateBss(value)
+	return value.Str
+}
+
+func validatePlacementChildren(s *syntax.PlacementBlock) {
 	// Restrict the initial form to storage declarations. In particular, module
 	// options and executable statements must not acquire block-local semantics.
 	for _, child := range s.Body.Stmts {
@@ -48,12 +52,17 @@ func (h *Hlc) compilePlacementBlock(s *syntax.PlacementBlock) {
 			allowed = true
 		}
 		if !allowed {
-			h.updatePos(child)
 			panic(&diag.Error{Msg: "placement blocks may only contain var, mutable soa, and nested placement blocks"})
 		}
 	}
+}
+
+func (h *Hlc) compilePlacementBlock(s *syntax.PlacementBlock) {
+	h.mustInModule()
+	value := h.placementBss(s)
+	validatePlacementChildren(s)
 	previous := h.groupBss
-	h.groupBss = value.Str
+	h.groupBss = value
 	defer func() { h.groupBss = previous }()
 	h.compileStmts(s.Body.Stmts)
 }

@@ -182,7 +182,7 @@ func (mi *ModuleInterface) LookupMust(name string) *Value {
 func (mi *ModuleInterface) Exports() []string {
 	var r []string
 	for _, id := range mi.scope.order {
-		if mi.scope.declares[id].Public {
+		if v := mi.scope.declares[id]; v != nil && v.Public {
 			r = append(r, id)
 		}
 	}

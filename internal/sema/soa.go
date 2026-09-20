@@ -132,8 +132,13 @@ func (h *Hlc) compileSoaDecl(s *syntax.SoaDecl) {
 	h.prog.soas[soa] = &soaInfo{leaves: leaves}
 
 	// コンテナの値 (型名も兼ねる)。シンボルは持たない (リーフの配列だけがメモリ上にある)
-	v := ir.NewTypeValue(name, soa, soa)
-	h.addVar(v)
+	var v *ir.Value
+	if h.prog.typeDecls[soa] != nil {
+		v = h.prog.typeDecls[soa].identity
+		h.module.Vars = append(h.module.Vars, v)
+	} else {
+		v = h.addVar(ir.NewTypeValue(name, soa, soa))
+	}
 	if h.scopeIsPublic(s.PublicPos) {
 		v.Public = true
 	}
@@ -192,6 +197,9 @@ func (h *Hlc) soaByteOf(st *types.Type, v ir.Operand, off int) ir.Operand {
 func (h *Hlc) soaOf(t *types.Type) *soaInfo {
 	if t.Kind == types.SoaRef {
 		t = t.Soa
+	}
+	if d := h.prog.typeDecls[t]; d != nil && d.state == resolutionFailed {
+		panic(&diag.Error{Suppressed: true})
 	}
 	info, ok := h.prog.soas[t]
 	if !ok {

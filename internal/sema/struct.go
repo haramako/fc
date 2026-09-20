@@ -71,6 +71,7 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 
 // litFieldType はリテラルの i 番目の項目 (キー付きなら名前で、なければ位置で) に対応するフィールドの型。
 func (h *Hlc) litFieldType(st *types.Type, f cfield, i int) *types.Type {
+	h.completeType(st)
 	if f.key != "" {
 		fd, ok := st.Field(f.key)
 		if !ok {
@@ -99,6 +100,7 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 	if ty.Kind != types.Struct {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a struct", ty)})
 	}
+	h.completeType(ty)
 	if ty.Size < 0 {
 		panic(&diag.Error{Msg: fmt.Sprintf("struct %s is not complete yet", ty.Name)})
 	}
@@ -209,6 +211,7 @@ func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
 	if ty == nil {
 		ty = h.typeEval(t)
 	}
+	h.completeType(ty)
 	if ty.Size < 0 {
 		panic(&diag.Error{Msg: fmt.Sprintf("sizeof(%s): size is not known", ty)})
 	}

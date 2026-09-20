@@ -66,6 +66,33 @@ public function reset():void { ... }
 - 自宣言と選択的インポートが同名ならエラー（`already imported` / `already defined`）
 - 関数内では、ブロックに入るごとにスコープができ、内側の宣言が外側を隠す
 
+#### 宣言順と依存関係
+
+トップレベルの `function`・`const`・`var`・`struct`・`soa` と `use` の束縛は、
+同じモジュール内で宣言より前から参照できる。`block { ... } options(bss: ...)` 内の変数も対象。
+相互 `use` でも、公開宣言を先に収集してから依存関係を解決する。
+
+```fc
+const HANDLERS = [draw];
+const SIZE = COUNT * sizeof(Item);
+var items:[COUNT]Item;
+
+function draw():void { /* ... */ }
+struct Item { x:uint8; y:uint8; }
+const COUNT = BASE + 1;
+const BASE = 3;
+```
+
+定数計算、`sizeof`、配列長（多次元配列・関数シグネチャを含む）は、必要な依存先から評価する。
+値やサイズの確定に循環があると、`cyclic declaration dependency` と依存経路を報告する。
+ポインタ・関数ポインタ・SoA ハンドルでつながる再帰型は、参照先の実体サイズが不要なので許される。
+例えば `struct Node { next:*Nodes; }` と `soa Nodes:[16]Node;` はどちらの順にも書ける。
+
+関数内のローカル宣言は従来どおり宣言以降で有効で、実行時の評価順も変わらない。
+同名の glob 取り込みの優先順位は引き続き `use` の記述順。
+`options` の上書きや `include` の並び、struct のフィールド順は意味を持ち、順序自由化の対象ではない。
+この機能は任意の関数をコンパイル時に実行する機能を追加するものではない。
+
 ### 1.4 `include` — アセンブラと CHR データ
 
 ```

@@ -5,11 +5,9 @@ package sema
 // 情報 (型のインターン表・モジュール一覧・グローバル options・組み込みマクロ) だけをここに置く
 // (doc/archive/v2_plan.md C4: モジュール単位の sema)。
 //
-// コンパイルは 2 相:
-//  1. CompileModule — モジュールのトップレベル文 (宣言・use・include・options) を処理する。
-//     `use X` に出会うと Resolver 経由で X を同じ相まで進める (再帰)。相互 use の途中で
-//     再訪したモジュールは処理途中の状態で返る (旧実装と同じ順序依存の部分可視性)
-//  2. CompileBodies — 全モジュールの宣言が揃った後、関数本体をコンパイルする
+// CompileModule first collects declarations and imports across the module graph,
+// then resolves types, constants and signatures on demand. CompileBodies runs
+// only after all top-level declarations have been resolved.
 
 import (
 	"fmt"
@@ -38,6 +36,11 @@ type Program struct {
 	// CastKinds は v1 の `<T>x` の位置 → v2 で書くべき種類 (as / bitcast)。fcc migrate が使う
 	CastKinds map[syntax.Position]syntax.CastKind
 
+	declarations map[*ir.Module]*moduleDecls
+	typeDecls    map[*types.Type]*declaration
+	collectDepth int
+	resolving    []*declaration
+
 	soas    map[*types.Type]*soaInfo // SoA コンテナ型 → フィールドごとの配列 (soa.go)
 	lambdas map[string]*ir.Lambda    // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
@@ -64,14 +67,16 @@ func (p *Program) SetTrace(fn func(origin string, ev ir.TraceEvent)) {
 // NewProgram は空のプログラム状態を作り、組み込みマクロを登録する。
 func NewProgram() *Program {
 	p := &Program{
-		Types:       types.NewUniverse(),
-		Modules:     ir.NewModuleList(),
-		Sources:     map[string]*Source{},
-		CastKinds:   map[syntax.Position]syntax.CastKind{},
-		macros:      map[*ir.Value]MacroFn{},
-		constMacros: map[*ir.Value]ConstMacroFn{},
-		soas:        map[*types.Type]*soaInfo{},
-		lambdas:     map[string]*ir.Lambda{},
+		declarations: map[*ir.Module]*moduleDecls{},
+		typeDecls:    map[*types.Type]*declaration{},
+		Types:        types.NewUniverse(),
+		Modules:      ir.NewModuleList(),
+		Sources:      map[string]*Source{},
+		CastKinds:    map[syntax.Position]syntax.CastKind{},
+		macros:       map[*ir.Value]MacroFn{},
+		constMacros:  map[*ir.Value]ConstMacroFn{},
+		soas:         map[*types.Type]*soaInfo{},
+		lambdas:      map[string]*ir.Lambda{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)
@@ -80,8 +85,8 @@ func NewProgram() *Program {
 
 // Resolver はモジュールの依存解決。driver (または Loader) が実装する。
 type Resolver interface {
-	// Module は `use name` の先を、トップレベル宣言まで処理した状態で返す。
-	// 処理途中 (相互 use) のモジュールはその状態のまま返す。
+	// Module loads `use name`. During graph collection, returned modules have
+	// reserved declarations; their values must not be requested until collection finishes.
 	Module(name string) (*ir.Module, error)
 	// File は include / incbin のファイル名を解決する。
 	// ref は生成物 (アセンブラの .incbin やエラー位置) に埋め込む参照形 (検索パスからの相対)、
@@ -106,13 +111,17 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}
 	defer h.recoverTo(&err)
-	h.compileStmts(file.Stmts)
-	// Apply the final module default to every unqualified global, including
-	// declarations before options(bss:...). Imported modules own their defaults.
-	if bss, ok := mod.Options.Get("bss"); ok {
-		for _, d := range mod.Defs {
-			if d.Kind == ir.DefBss && d.Segment == "" {
-				d.Segment = bss.Str
+	p.collectDepth++
+	defer func() { p.collectDepth-- }()
+	md := &moduleDecls{h: h}
+	p.declarations[mod] = md
+	md.collect(file.Stmts, nil)
+	md.loadImports()
+	if p.collectDepth == 1 {
+		md.resolve()
+		for _, m := range p.Modules.List() {
+			if ds := p.declarations[m]; ds != nil {
+				ds.resolve()
 			}
 		}
 	}

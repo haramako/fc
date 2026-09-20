@@ -355,7 +355,7 @@ func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
 // 依存モジュール
 // ---------------------------------------------------------------
 
-// useModule は `use name` の先の外面を Resolver から得る (相 1 まで処理済み)。
+// useModule obtains the interface; top-level names may still resolve on demand.
 // importer が触れるのは ModuleInterface だけ (C4)。
 func (h *Hlc) useModule(name string) *ir.ModuleInterface {
 	m, err := h.deps.Module(name)
@@ -472,10 +472,18 @@ func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 // declareBad はエラーになった宣言の名前を Bad 型で束縛する (未宣言のまま残すと使う側が全部 "not found" になる)。
 func (h *Hlc) declareBad(s syntax.Stmt) {
 	bad := func(id *syntax.Ident) {
-		if id == nil || h.scope.DeclaredHere(id.Name) {
+		if id == nil || h.scope.BoundHere(id.Name) {
 			return
 		}
-		h.addVar(ir.NewGlobal(id.Name, h.prog.Types.Bad(), "$bad"))
+		v := h.addVar(ir.NewGlobal(id.Name, h.prog.Types.Bad(), "$bad"))
+		switch s := s.(type) {
+		case *syntax.VarDecl:
+			v.Public = s.PublicPos.IsValid()
+		case *syntax.FuncDecl:
+			v.Public = s.PublicPos.IsValid()
+		case *syntax.UseDecl:
+			v.Public = s.PublicPos.IsValid()
+		}
 	}
 	switch s := s.(type) {
 	case *syntax.VarDecl:
@@ -1345,8 +1353,8 @@ func foldIntOp(op cop, v1, v2 int) int {
 // 型式の評価
 // ---------------------------------------------------------------
 
-// typeOf は型式を型にする (配列長は整数リテラルのときだけ有効。定数式は長さ省略扱い)。
-// これは旧実装 (評価前の AST を受け取る Type[]) の挙動で、最外の配列長を定数評価するのは typeEval。
+// typeOf resolves type identities and array lengths at every nesting depth.
+// A named struct does not require its layout until it is used by value.
 func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	switch t := t.(type) {
 	case *syntax.NamedType:
@@ -1354,15 +1362,22 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	case *syntax.PointerType:
 		elem := h.typeOf(t.Elem)
 		if elem.IsSoa {
-			return h.prog.Types.SoaRef(elem, elem.Base, "") // `*Points`: SoA の要素ハンドル
+			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
 		}
 		return h.prog.Types.PointerTo(elem)
 	case *syntax.ArrayType:
 		n := -1
-		if lit, ok := t.Len.(*syntax.IntLit); ok {
-			n = lit.Value
+		if t.Len != nil {
+			sv := h.constEval(toC(t.Len))
+			if sv.kind != cValue {
+				panic(&diag.Error{Msg: "array size must be constant"})
+			}
+			if sv.val.Kind == ir.KindLiteral && sv.val.IsInt {
+				n = sv.val.Int
+			}
 		}
-		return h.prog.Types.ArrayOf(h.typeOf(t.Elem), n)
+		elem := h.typeOf(t.Elem)
+		return h.prog.Types.ArrayOf(elem, n)
 	case *syntax.FuncType:
 		params := make([]*types.Type, len(t.Params))
 		for i, p := range t.Params {
@@ -1406,6 +1421,7 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 
 // checkComplete は変数・フィールド・配列要素に置ける型か検査する (void と未完成の struct は不可)。
 func (h *Hlc) checkComplete(t *types.Type, what string) {
+	h.completeType(t)
 	switch {
 	case t.Kind == types.Void:
 		panic(&diag.Error{Msg: fmt.Sprintf("%s cannot be void", what)})
@@ -1425,9 +1441,12 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 	if st.Size >= 0 {
 		panic(&diag.Error{Msg: fmt.Sprintf("struct %s already defined", name)})
 	}
-	tv := h.addVar(ir.NewTypeValue(name, h.prog.Types.TypeName(), st))
-	if h.scopeIsPublic(s.PublicPos) {
-		tv.Public = true
+	if h.prog.typeDecls[st] != nil {
+		// The identity was registered during collection, but retain Vars order.
+		h.module.Vars = append(h.module.Vars, h.prog.typeDecls[st].identity)
+	} else {
+		tv := h.addVar(ir.NewTypeValue(name, h.prog.Types.TypeName(), st))
+		tv.Public = h.scopeIsPublic(s.PublicPos)
 	}
 	fields := make([]types.Field, 0, len(s.Fields))
 	for _, f := range s.Fields {
@@ -1447,27 +1466,15 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 	h.prog.Types.SetFields(st, fields)
 }
 
-// typeEval は type_eval 相当。最外の配列長だけを定数評価する (内側の次元は整数リテラルのみ有効)。
+// typeEval resolves a type and requests the layout needed to use it by value.
 // nil (型省略) なら nil。
 func (h *Hlc) typeEval(t syntax.TypeExpr) *types.Type {
 	if t == nil {
 		return nil
 	}
-	if at, ok := t.(*syntax.ArrayType); ok {
-		n := -1
-		if at.Len != nil {
-			sv := h.constEval(toC(at.Len))
-			if sv.kind != cValue {
-				panic(&diag.Error{Msg: "array size must be constant"})
-			}
-			// 整数リテラル以外 (変数など) は長さ省略扱い (旧実装と同じ)
-			if sv.val.Kind == ir.KindLiteral && sv.val.IsInt {
-				n = sv.val.Int
-			}
-		}
-		return h.prog.Types.ArrayOf(h.typeOf(at.Elem), n)
-	}
-	return h.typeOf(t)
+	ty := h.typeOf(t)
+	h.completeType(ty)
+	return ty
 }
 
 // ---------------------------------------------------------------

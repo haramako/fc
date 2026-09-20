@@ -39,7 +39,8 @@ func (k Kind) String() string {
 	return fmt.Sprintf("Kind(%d)", int(k))
 }
 
-// Type は fc の型。Universe でインターンされるので、フィールドは変更しないこと。
+// Type is interned by Universe. Struct/SoA layout and dependent array sizes
+// are completed during declaration resolution; consumers must not modify them.
 type Type struct {
 	Kind     Kind
 	Size     int   // バイト数。長さ省略配列は -1
@@ -136,17 +137,22 @@ func (u *Universe) SetFields(t *Type, fields []Field) {
 	}
 	t.Fields = fields
 	t.Size = off
+	u.refreshArraySizes()
 }
 
 // SoaArray は SoA コンテナの型 (`soa Name:[N]Elem`)。配列型だが IsSoa で区別し、要素はメモリ上で分散する
 // (フィールドごとの配列)。値としては添字で要素ハンドル (SoaRef) を得る以外の使い方はない。
+// elem == nil reserves the identity; a later call with elem/length completes its layout.
 func (u *Universe) SoaArray(qualName string, elem *Type, length int, isConst bool) *Type {
 	str := "soa " + qualName
 	if isConst {
 		str = "soa const " + qualName
 	}
-	return u.intern(&Type{Kind: Array, Base: elem, Length: length, Size: elem.Size * length, IsSoa: true, IsConst: isConst,
-		Name: qualName, str: str})
+	t := u.intern(&Type{Kind: Array, Base: elem, Length: -1, Size: -1, IsSoa: true, IsConst: isConst, Name: qualName, str: str})
+	if elem != nil && length >= 0 {
+		t.Base, t.Length, t.Size = elem, length, elem.Size*length
+	}
+	return t
 }
 
 // SoaRef は SoA コンテナの要素ハンドル (`*Name`。1 バイトのインデックス)。
@@ -207,7 +213,9 @@ func (u *Universe) ArrayOf(base *Type, length int) *Type {
 	l := ""
 	if length >= 0 {
 		t.Length = length
-		t.Size = base.Size * length
+		if base.Size >= 0 {
+			t.Size = base.Size * length
+		}
 		l = fmt.Sprintf("%d", length)
 	}
 	t.str = fmt.Sprintf("[%s]%s", l, base.str)
@@ -279,4 +287,25 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 		return u.PointerTo(a.Base)
 	}
 	return nil
+}
+
+// Arrays may be interned through pointers before a struct's layout is known.
+// Refresh dependent array sizes when a struct becomes complete; pointer/function
+// sizes are fixed and therefore break recursive layout dependencies.
+func (u *Universe) refreshArraySizes() {
+	for {
+		changed := false
+		for _, t := range u.cache {
+			if t.Kind == Array && !t.IsSoa && t.Size < 0 && t.Length >= 0 && t.Base.Size >= 0 {
+				size := t.Length * t.Base.Size
+				if t.Size != size {
+					t.Size = size
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			return
+		}
+	}
 }
