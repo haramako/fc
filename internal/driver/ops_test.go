@@ -1641,3 +1641,45 @@ function main():void
 		}
 	}
 }
+
+// TestIndexOffsetRun: `a[i + k]` (k 定数、a はグローバルの要素 1 バイトの配列) は添字の加算を配列側に移す
+// (opt.foldIndexOffset: `sta a+k,y`)。畳めない形も混ぜる: 添字を定数側に書いた `a[3 + i]`、定義と使用の間で i が
+// 変わる、マスクを挟む `a[(i + 1) & 7]`、要素 2 バイトの配列、ラベルをまたぐ使用。
+func TestIndexOffsetRun(t *testing.T) {
+	t.Parallel()
+	src := `var a:[16]int;
+var w:[8]int16;
+function fill(i:int):void options(noinline: true)
+{
+	a[i] = 10;
+	a[i + 1] = a[i] + 1;
+	a[i + 2] = a[i + 1] + 1;
+	a[3 + i] = a[i + 2] + 1;
+	w[i + 1] = (a[i + 3] as int16) * 100;
+	var j = i;
+	var t = j + 4;
+	j = 0;
+	a[t] = a[j] + 40;
+	a[(i + 1) & 7] += 100;
+}
+function main():void
+{
+	fill(2);
+	var s:int16 = 0;
+	for (var i = 0; i < 8; i++) {
+		s += a[i] as int16;
+		if (i & 1) {
+			s += a[i + 8] as int16;
+		}
+	}
+	printf(a[2], " ", a[3], " ", a[4], " ", a[5], " ", a[6], " ", w[3], " ", s, "\n");
+	exit(0);
+}
+`
+	// a[2..5] = 10, 11, 12, 13; w[3] = 1300; a[6] = a[0] + 40 = 40; a[3] += 100 → 111; s = 10+111+12+13+40 = 186
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "10 111 12 13 40 1300 186\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

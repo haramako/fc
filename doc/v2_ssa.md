@@ -141,7 +141,22 @@ stdio の `bench_start` / `exit` などが main に入るので、bench の modu
 副産物: const で別名を付けた関数（`const D2 = f;` の f）は inline で呼び出しが消えても出力が要る。`frames.Analyze`
 の到達判定に DefEqu の別名を根として足した（`_test_var__D2` が未定義になった）。
 
-## 9. 次にできること（この基盤の上で）
+## 9. 添字の定数オフセットの畳み込み（`internal/opt/indexoff.go`、2026-09-20）
+
+`a[i + k]`（k は定数、a はグローバルの要素 1 バイトの配列）の `add t = i, #k; index_pget / index_pset a, t` を
+`index_pget / index_pset <k>a, i`（配列のオペランドを Offset k の CastedValue に）にして、codegen が `lda a+k,y` /
+`sta a+k,y` を出す。Y に置いた添字 i がそのまま使えるので `clc; lda i; adc #k; tay`（約 10 サイクル）が消え、castle の
+OAM への `buf[idx+1] … buf[idx+3]` が手書き asm の `iny` 相当になる。fusePointer の後（index + pget / pset が
+index_pget / index_pset になってから）。一時変数 t は定義 1 つ・使用が添字だけ、定義から使用まで直線で i が
+書き換わらないもの。使用が全部置き換わったら add を消す。
+
+言語の規則を 1 つ足した（language_reference.md §6）: 添字の式 `i + k` は 8 ビットで折り返さない（`i + k > 255` は範囲外の
+添字と同じ未定義）。折り返しを当てにするリングバッファは変数で進める（`j = i + k; a[j]`）。
+
+効果: bgdecode −11.7%、castle（実プロジェクト）field 8634→8520、`ppu.sprite_idx` 166→103 サイクル（fc に書き直して
+asm より遅くなっていた分が逆転）、ROM −323 バイト。
+
+## 10. 次にできること（この基盤の上で）
 
 - グローバル変数（volatile でない）と配列要素の読み出しの前送り: 呼び出し・ポインタ経由の書き込み・asm を障壁にして、
   `index_pset a[i] = t; … ; index_pget u = a[i]` の 2 つ目を t に（entities.update に 3 か所）。6502 では `lda a,y` と

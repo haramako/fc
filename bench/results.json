@@ -1,7 +1,7 @@
 {
   "bgdecode": {
-    "cycles": 1519970,
-    "size": 810,
+    "cycles": 1342562,
+    "size": 772,
     "out": "sum=47712"
   },
   "calls": {

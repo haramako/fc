@@ -87,6 +87,8 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       stack 関数の switch が X (フレームポインタ) を壊すバグ） ✅ 2026-09-20
 - [x] 最後から 2 つ目の引数を Y で渡す（`Lambda.RegArgY`、`codegen.markArgY`。本体の先頭で A / Y に引数がある形にして
       ピープホールが先頭の `ldy` / `lda` を消す。calls −2.4%、castle −0.5%。v2_frame_alloc.md §7.1） ✅ 2026-09-20
+- [x] `a[i + k]` の添字の加算を配列側に畳む（`opt.foldIndexOffset` → `sta a+k,y`。bgdecode −11.7%、castle の
+      `ppu.sprite_idx` が手書き asm より速く。添字の式は折り返さない規則を §6 に。v2_ssa.md §9） ✅ 2026-09-20
 - [ ] far call にもレジスタで渡す（トランポリンの速い経路を X だけで書き、切替の経路で A / Y をスタックに退避。
       FC_FARCALL の設定を引数の読み出しの前に。castle の `farcall` も書き換え。v2_frame_alloc.md §7.1）
 - [x] 小さな static 関数の自動インライン（12 命令以下でループ・呼び出し無し。6 命令以下は無条件、それより大きいものは

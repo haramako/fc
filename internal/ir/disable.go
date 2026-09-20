@@ -1,7 +1,7 @@
 package ir
 
 // 調査用: 環境変数 FC_DISABLE=名前,名前,... で最適化のパスを個別に切る (doc/development_notes.md (7): 退行やバグは
-// 切って比べる)。名前: ssa mul induction unroll devirt autoinline sink fuse coalesce chain narrow scale commute carry split rotate dup inline resident func-resident
+// 切って比べる)。名前: ssa mul indexoff induction unroll devirt autoinline sink fuse coalesce chain narrow scale commute carry split rotate dup inline resident func-resident
 // step shift8 fuse-index switch peephole。FC_NO_RESIDENT=1 は resident と同じ。
 
 import (

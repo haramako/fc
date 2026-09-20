@@ -32,6 +32,9 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 		fusePointer(lmd)
 	}
 	compact(lmd)
+	if !ir.Disabled("indexoff") && foldIndexOffset(lmd) {
+		compact(lmd) // fuse が index + pget / pset を index_pget / index_pset にした後
+	}
 	if !ir.Disabled("coalesce") {
 		coalesceCopies(lmd)
 	}
