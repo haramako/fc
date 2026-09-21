@@ -1179,8 +1179,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 					ir.ValLocation(op.Dst) == ir.LocCond)
 			}
 			if lit, ok := ir.ValIntLiteral(op.In(1)); signed && ok && lit == 0 {
-				// a < 0 (符号付き) は a の最上位バイトの符号ビットそのもの
-				r.push(l.loadA(op.In(0), size-1))
+				// a < 0 (符号付き) は a の最上位バイトの符号ビットそのもの。値が A にあるときは cmp #0 で N を立て直す
+				// (呼び出しの後の常駐の復帰 `ldx` が N を壊していた。fuzz で発覚。不要ならピープホールが消す)
+				r.push(l.testA(op.In(0), size-1))
 			} else {
 				r.push(l.loadA(op.In(0), 0))
 				if size == 1 && signed {

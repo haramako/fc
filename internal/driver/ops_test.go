@@ -2135,3 +2135,38 @@ exit(0);
 		}
 	}
 }
+
+// TestSignedLtZeroAfterCall: `x < 0` (符号付き) は x の最上位バイトの N フラグを見るが、x が呼び出し (除算のランタイム) の
+// 戻り値で A にあるとき、call の後の常駐の復帰 `ldx g1` が N を壊していた (fuzz の種 505615。ループが 5 回回って
+// g1 が 147 でなく 177 になった)。A にある値は cmp #0 で N を立て直す。
+func TestSignedLtZeroAfterCall(t *testing.T) {
+	t.Parallel()
+	src := `struct S {
+	f0:int16;
+	f1:sint;
+}
+var sa:[4]S;
+var a2:[16]int16;
+var g1:int;
+var g3:int;
+function main():void
+{
+	var ps:*S = &sa[2];
+	var l1:int = 0;
+	g1 = 147;
+	while ((((!(2 % 70)) as sint) > ((((a2[(g3 & 7)] as sint16) && ps.f0) as sint) / 47)) && l1 < 5) {
+		l1++;
+		for (var l3:int = 6; l3; l3--) {
+			g1++;
+		}
+	}
+	printf(g1, " ", l1, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "147 0\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

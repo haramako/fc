@@ -124,6 +124,10 @@ go test ./...                                    # 全部 (golden + examples + N
   計算した期待値と `-O 0` / `-O 2` を比べる（`TestRandomBankPrograms`。既定 8 本、`-randn 800` で 200 本 30 秒。
   トランポリンは `fclib/nes/farcall_mmc3.asm` を `include` し、`_mmc3_pbank_bak` を `symbol:` の var で持つ）。
   呼び出しの後で `pbank_bak` も見る（バンクの復帰）。ルールを切ると 8 本中 3 本が落ちることを確認済み
+- 4 かたまり目（種 496000〜、6 万本）で 1 件: 符号付きの `x < 0` は x の最上位バイトの N フラグを見るが、x が呼び出し
+  （除算のランタイム）の戻り値で A にあるとき、call の後の常駐の復帰 `ldx` が N を壊していた（`if` の戻り値検査と同じ
+  形。A にある値は `testA` で `cmp #0`。`TestSignedLtZeroAfterCall`）。**call の後に常駐の復帰が出るので、call の直後の
+  命令が「直前の lda のフラグ」を当てにする形は全部この穴がある**（if、符号付き `< 0`。残りは cmp / sbc を自分で出す）
 - 3 かたまり目（種 434000〜、6 万本）で 1 件（2 本）: `x++` の直後の `if (x)` で x が A に常駐していると
   `flagsFromIncDec` が `byte()` で綴りを比べようとして codegen が panic（`invalid location a`）。A にある値は if の
   codegen が `cmp #0` で検査するので、A にある値では false に（`TestIfAfterIncResident`）
