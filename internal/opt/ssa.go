@@ -588,7 +588,8 @@ func (s *ssaForm) rewrite() bool {
 		op = ops[i]
 		switch op.Code {
 		case ir.OpLoad:
-			if s.defAt[i] != nil && sameStorage(op.Dst, op.Src[0]) && ir.ValType(op.Dst) == ir.ValType(op.Src[0]) {
+			if s.defAt[i] != nil && sameStorage(op.Dst, op.Src[0]) && ir.ValType(op.Dst) == ir.ValType(op.Src[0]) &&
+				castFits(op.Src[0]) && castFits(op.Dst) {
 				dels = append(dels, i) // load x = x
 			}
 		case ir.OpIf, ir.OpIfTrue:
@@ -646,6 +647,22 @@ func (s *ssaForm) copySource(val *ssaVal, i int) *ir.Value {
 		return nil
 	}
 	return y
+}
+
+// castFits は o の cast の連鎖が、外側の各段が内側の幅に収まっている (= 元の変数の一部をそのまま読むのと同じ) か。
+// `((l1 as int) as int16)` は内側で 1 バイトに狭めてからゼロ拡張するので、型と場所が同じでも `load l1 = l1` ではない
+// (fuzz で発覚: 切り詰めが消えて 0x554 が 0x54 にならなかった)。
+func castFits(o ir.Operand) bool {
+	for {
+		cv, ok := o.(*ir.CastedValue)
+		if !ok {
+			return true
+		}
+		if cv.Offset+cv.Type.Size > ir.ValType(cv.From).Size {
+			return false
+		}
+		o = cv.From
+	}
 }
 
 // rebase は o (CastedValue の連鎖かもしれない) の元の変数を y に差し替えたものを返す。

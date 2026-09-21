@@ -46,6 +46,7 @@ type Llc struct {
 	resY    *ir.Value // op.ResidentY
 	resYMem bool      // 退避中: resY をメモリ (Home) として参照する
 	holdA   bool      // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
+	holdX   int       // stack 系の呼び出しの push_result (ldx FC_SP) から call まで (入れ子の深さ): X = FC_SP のまま。X の常駐はメモリ側で扱い、復帰しない
 	resX    *ir.Value // op.ResidentX
 	resXMem bool      // 退避中: resX をメモリ (Home) として参照する
 	aHeld   bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
@@ -562,12 +563,15 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		restoreA, restoreY, restoreX := false, false, false
 		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
 			d, _ := regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
-			if op.ResidentX != nil && d.X == regalloc.ResClobber {
-				if op.ResXIn && !op.ResidentX.Clean {
+			// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
+			// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
+			// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
+			if op.ResidentX != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
+				if op.ResXIn && !op.ResidentX.Clean && l.holdX == 0 {
 					r.push("stx " + l.byte(op.ResidentX.Home, 0))
 				}
 				l.resXMem = true
-				restoreX = op.ResXOut
+				restoreX = op.ResXOut && (l.holdX == 0 || (isCallOp(op) && l.holdX == 1))
 			}
 			// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
 			// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
@@ -738,6 +742,8 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			case ckStack:
 				pushArgSize += op.Type.Size
 				r.push(l.loadSP(lmd)) // 引数 (S+k,x) の前に X をスタックの空き先頭に
+				l.holdX++             // call まで X = FC_SP のまま (X の常駐はここで退避済み。復帰は call の後)
+				restoreX = false
 			case ckFastcallReg:
 				pushFastcallArgSize += op.Type.Size
 			}
@@ -784,6 +790,9 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			pc := calls[len(calls)-1]
 			calls = calls[:len(calls)-1]
 			l.holdA = false // A / Y の引数の保持はここまで (常駐の退避の抑制はこの命令の前で見た)
+			if pc.kind == ckStack && l.holdX > 0 {
+				l.holdX-- // X = FC_SP の保持はここまで (復帰の可否はこの命令の前で見た)
+			}
 			fnType := ir.ValType(op.In(0))
 			var sym string
 			if ir.ValKind(op.In(0)) == ir.KindLiteral {

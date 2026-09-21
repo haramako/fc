@@ -2208,3 +2208,106 @@ function main():void
 		}
 	}
 }
+
+// TestStackCallHoldsX: stack 系 (関数ポインタ経由) の呼び出しは push_result で `ldx FC_SP` して `sta <S+k,x` で引数を積むが、
+// X に常駐した変数の復帰 `ldx g1` が push_result の直後に出て X が戻り、引数が別の場所に書かれていた (fuzz の種 624354 の最小化。
+// t1 が p0 = 0 で呼ばれて a3[1] の積が狂う)。push_result から call まで X の常駐はメモリ側 (holdX)。
+func TestStackCallHoldsX(t *testing.T) {
+	t.Parallel()
+	src := `function ff0(p0:sint16, p1:sint16):int16 options(noinline: true) { var l0:sint = 6; return (l0 as int16); }
+var g0:sint16;
+var g1:sint;
+var g2:sint16;
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+var a3:[16]sint16;
+struct S {
+	f0:sint;
+	f1:sint16;
+	f2:sint16;
+}
+var s0:S;
+var sa:[4]S;
+function f0():int options(fastcall: true, inline: true)
+{
+g1 = 1;
+return (7 * (g1 as int));
+}
+function t0(p0:int16):sint
+{
+var l0:sint = 66;
+var l1:int = 103;
+var q0:*sint16 = &a3[4];
+var q1:*sint16 = &a3[7];
+return l0;
+}
+function t1(p0:int16):sint
+{
+var q0:*int16 = &a2[1];
+for (var l0:int = 0; l0 < 3; l0++) {
+switch ((6 & 7)) {
+case 7:
+case 0:
+case 5:
+case 1, 6:
+a3[1] *= (((*q0) as sint16) - ((!p0) as sint16));
+default:
+}
+}
+return ((((*q0) as sint) << 1) - (sa[((ff0(g2, g2) as int) & 3)].f2 as sint));
+}
+const fp0:[2]fn(int16):sint = [t0, t1];
+function main():void
+{
+var l0:sint16 = 1;
+var q0:*int16 = &a2[2];
+g1 = 3;
+a2[1] = 3;
+a2[2] = 7;
+a2[6] = 12861;
+a3[1] = (-29164);
+for (var l1:int = 0; l1 < 3; l1++) {
+if ((q0[((-(a2[((-l1) & 7)] as int)) & 7)] as sint16) == ((!fp0[((q0[(60 & 7)] as int) & 1)]((*q0))) as sint16)) { continue; }
+for (var l2:int = 0; l2 < 7; l2++) {
+var l3:sint16 = (((f0() as int16) == ((l2 && (q0[((a1[(((1 != g0) as int) & 7)] as int) & 7)] as sint16)) as int16)) as sint16);
+}
+}
+printf(a3[1] as int16, "
+");
+exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "60348\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// TestSSACastTruncateReload: `l1 = ((l1 as int) as int16)` は下位バイトへ切り詰めてからゼロ拡張するので `load l1 = l1` ではないのに、
+// SSA の書き換えが「同じ場所・同じ型」だけ見て消していた (fuzz の種 633553 の最小化。0x5542 >> 4 の 0x554 が 0x54 にならず、
+// 2 回目のシフトで 5 になるはずが 0x55 = 85 が返った)。
+func TestSSACastTruncateReload(t *testing.T) {
+	t.Parallel()
+	src := `function ff0(p0:sint16):int options(noinline: true)
+{
+	var l1:int16 = 21826;
+	for (var l3:sint = 0; l3 < 2; l3++) {
+		l1 = (l1 >> 4);
+		l1 = ((l1 as int) as int16);
+	}
+	return (l1 as int);
+}
+function main():void
+{
+	printf(ff0(1), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "5\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

@@ -124,6 +124,15 @@ go test ./...                                    # 全部 (golden + examples + N
   計算した期待値と `-O 0` / `-O 2` を比べる（`TestRandomBankPrograms`。既定 8 本、`-randn 800` で 200 本 30 秒。
   トランポリンは `fclib/nes/farcall_mmc3.asm` を `include` し、`_mmc3_pbank_bak` を `symbol:` の var で持つ）。
   呼び出しの後で `pbank_bak` も見る（バンクの復帰）。ルールを切ると 8 本中 3 本が落ちることを確認済み
+- 6 かたまり目（種 618000〜、6 万本）で 2 件、長時間 fuzz はここでいったん止めた（累計 37 万本で 14 件）:
+  (1) stack 系（関数ポインタ経由）の呼び出しは push_result で `ldx FC_SP` してから `sta <S+k,x` で引数を積むが、X に
+  常駐した変数の復帰 `ldx g1` が push_result の直後に出て X が戻り、引数が別の場所に書かれていた（push_result から
+  call までは X の常駐をメモリ側にする `holdX`。入れ子の深さで数える。`TestStackCallHoldsX`）。(2) SSA の書き換えが
+  `load l1 = ((l1 as int) as int16)` を「同じ場所・同じ型」だけ見て `load x = x` として消していた。内側で 1 バイトに
+  狭めてからゼロ拡張するので切り詰めが消える（cast の各段が内側の幅に収まるときだけ消す `castFits`。
+  `TestSSACastTruncateReload`）。**cast の連鎖の等価性は外側の型とオフセットの合計だけでは決まらない**（`castBits` と
+  同じ穴）。ほかに `frame size over` が -O 2 だけで出る種（展開・インラインでフレームが 256 バイトを超える。runner は
+  skip、roadmap に）
 - 5 かたまり目（種 556000〜、6 万本）で 1 件: 2 バイトの `g0 -= 1` は `lda lo; bne; dec hi; dec lo` で下位を見るので
   A を壊すのに、freeA が 1 バイトの dec と同じく「A を使わない」と見ていて、A に常駐した g1 が消えた（2 バイトの inc は
   `inc lo; bne; inc hi` で壊さない。`TestResidentDec16`）
