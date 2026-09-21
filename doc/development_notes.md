@@ -124,6 +124,9 @@ go test ./...                                    # 全部 (golden + examples + N
   計算した期待値と `-O 0` / `-O 2` を比べる（`TestRandomBankPrograms`。既定 8 本、`-randn 800` で 200 本 30 秒。
   トランポリンは `fclib/nes/farcall_mmc3.asm` を `include` し、`_mmc3_pbank_bak` を `symbol:` の var で持つ）。
   呼び出しの後で `pbank_bak` も見る（バンクの復帰）。ルールを切ると 8 本中 3 本が落ちることを確認済み
+- 5 かたまり目（種 556000〜、6 万本）で 1 件: 2 バイトの `g0 -= 1` は `lda lo; bne; dec hi; dec lo` で下位を見るので
+  A を壊すのに、freeA が 1 バイトの dec と同じく「A を使わない」と見ていて、A に常駐した g1 が消えた（2 バイトの inc は
+  `inc lo; bne; inc hi` で壊さない。`TestResidentDec16`）
 - 4 かたまり目（種 496000〜、6 万本）で 1 件: 符号付きの `x < 0` は x の最上位バイトの N フラグを見るが、x が呼び出し
   （除算のランタイム）の戻り値で A にあるとき、call の後の常駐の復帰 `ldx` が N を壊していた（`if` の戻り値検査と同じ
   形。A にある値は `testA` で `cmp #0`。`TestSignedLtZeroAfterCall`）。**call の後に常駐の復帰が出るので、call の直後の

@@ -2170,3 +2170,41 @@ function main():void
 		}
 	}
 }
+
+// TestResidentDec16: 2 バイトの `g0 -= 1` は `lda lo; bne; dec hi; dec lo` で下位を見るので A を壊すのに、freeA が
+// 1 バイトの dec と同じく「A を使わない」と見ていて、A に常駐した g1 が消えて a0[6] = g1 に g0 の下位が入った
+// (fuzz の種 576349)。2 バイトの inc は inc lo; bne; inc hi で壊さない。
+func TestResidentDec16(t *testing.T) {
+	t.Parallel()
+	src := `var g0:sint16;
+var g1:int;
+var a0:[16]int;
+var a2:[16]int16;
+function t0(p0:sint, p1:int16):int options(noinline: true)
+{
+	var l1:sint16 = 1;
+	var q1:*int16 = &a2[7];
+	for (var l2:sint = 0; l2 < 3; l2++) {
+		q1 = &a2[1];
+		for (var l3:sint = 0; l3 < 5; l3++) {
+			q1 += 1;
+			g0 -= l1;
+			a0[6] = g1;
+		}
+		q1 = &a2[0];
+	}
+	return (p0 as int) % 6;
+}
+function main():void
+{
+	var r:int = t0(5, 7);
+	printf(a0[6], " ", g0, " ", r, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "0 65521 5\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

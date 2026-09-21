@@ -401,7 +401,10 @@ func freeA(op *ir.Op) bool {
 	case ir.OpLabel, ir.OpJump, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpPushResult, ir.OpPushFastcallResult:
 		return true
 	case ir.OpAdd, ir.OpSub:
-		return isIncDec(op) || (isStep(op, StepMax) && (ir.ValLocation(op.Dst) == ir.LocY || ir.ValLocation(op.Dst) == ir.LocX))
+		// 2 バイトの dec は `lda lo; bne; dec hi` で下位を見るので A を壊す (inc は inc lo; bne; inc hi で壊さない。
+		// A に常駐した g1 が `g0 -= 1` (16 ビット) で消えていた。fuzz で発覚)
+		incDecFree := isIncDec(op) && (op.Code == ir.OpAdd || ir.ValType(op.Dst).Size == 1)
+		return incDecFree || (isStep(op, StepMax) && (ir.ValLocation(op.Dst) == ir.LocY || ir.ValLocation(op.Dst) == ir.LocX))
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		return isMemShift(op)
 	case ir.OpRolC, ir.OpRorC:
