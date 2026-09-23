@@ -2311,3 +2311,33 @@ function main():void
 		}
 	}
 }
+
+// TestIfLowByteAfterInc16: 2 バイトの `g++` は `inc lo; bne @s; inc hi` で、下位が 0 に折り返すと Z は上位を映す。
+// 直後の `if ((g as sint))` (下位バイトの検査) がその Z を使っていて、$00ff → $0100 で「0 でない」側に進んでいた
+// (fuzz の種 758109 の最小化)。
+func TestIfLowByteAfterInc16(t *testing.T) {
+	t.Parallel()
+	src := `var g2:int16;
+var m:int;
+function f():void options(noinline: true)
+{
+	g2++;
+	if ((g2 as sint)) {
+		m += 1;
+	}
+}
+function main():void
+{
+	g2 = 255;
+	f();
+	f();
+	printf(g2, " ", m, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "257 1\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}

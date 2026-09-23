@@ -211,6 +211,11 @@ func (l *Llc) flagsFromIncDec(prev *ir.Op, v ir.Operand) bool {
 	if _, ok := l.incDec(prev); !ok {
 		return false
 	}
+	if prev.Code == ir.OpAdd && ir.ValType(prev.Dst).Size == 2 && !l.inY(prev.Dst) && !l.inX(prev.Dst) {
+		// 2 バイトの inc は `inc lo; bne @s; inc hi` で、下位が 0 に折り返すと Z は上位を映す。下位バイトの検査
+		// (`if (g as sint)`) には使えない (fuzz の種 758109)。2 バイトの dec は最後が `dec lo` なので下位を映す
+		return false
+	}
 	if l.inA(v) || l.inA(prev.Dst) {
 		return false // A にある値は下の byte では比べられない (toAsm が panic)。if の codegen が cmp #0 で検査する (fuzz で発覚)
 	}
