@@ -52,6 +52,8 @@ type rpVar struct {
 	readOnly bool // ループ変数 (本体で書き換えると回数が保証できない)、ループでずらしているポインタ
 	ptr      bool
 	fresh    bool
+	sptr     bool // struct へのポインタの引数 `ps:*S` (呼ぶ側は &sa[e & 3] か &s0)
+	small    bool // 再帰の深さの引数 (呼ぶ側は `(e & 3)`)
 }
 
 // rpField は struct のフィールド。
@@ -68,7 +70,8 @@ type rpFunc struct {
 	fastcall bool
 	inline   bool
 	far      bool      // 別バンクのモジュール far1 にある (main からは far call)
-	inTable  bool      // 関数ポインタ表 fp0 の要素 (アドレスを取られる: Entry 関数になる)
+	inTable  bool      // 関数ポインタ表 fp0 / fq0 の要素 (アドレスを取られる: Entry 関数になる)
+	rec      bool      // 自分を呼ぶ関数 (stack ABI になる。深さは引数 n で 4 まで)
 	locals   []string  // 宣言
 	stmts    []*rpStmt // 本体
 	retExpr  string
@@ -103,6 +106,11 @@ type rpGen struct {
 	consts  []rpVar   // const の表 (16 要素。ROM)
 	fpTable []*rpFunc // 関数ポインタ表 fp0 の要素 (同じ型の関数 2 つか 4 つ。nil なら無し)
 	fpSig   rpFunc    // fp0 の要素の型 (params / ret)
+	fqTable []*rpFunc // far1 の関数の farfn 表 fq0 の要素 (同じ型の 2 つ。nil なら無し)
+	fqSig   rpFunc    // fq0 の要素の型
+	fnVar   bool      // main の関数ポインタのローカル変数 fv (fp0 の要素の型。今の関数が main のときだけ使う)
+	soa     bool      // soa E:[8]S がある (struct のフィールドがあるとき)
+	hptr    string    // 今の関数の soa の要素ハンドル (`h`。"" なら無し)
 	hasFar  bool      // far1 モジュール (options(bank: 1)) がある
 	sptr    string    // 今の関数の struct へのポインタ (`ps`。"" なら無し)
 	funcs   []*rpFunc
@@ -130,7 +138,7 @@ func (g *rpGen) ptrs() []rpVar {
 func (g *rpGen) scalars() []rpVar {
 	var r []rpVar
 	for _, v := range g.vars() {
-		if !v.ptr {
+		if !v.ptr && !v.sptr {
 			r = append(r, v)
 		}
 	}
@@ -153,6 +161,10 @@ func (g *rpGen) arrayRef(a rpVar) string { return fmt.Sprintf("&%s[%s]", a.name,
 func (g *rpGen) fieldRef() (string, rpType) {
 	f := g.fields[g.pick(len(g.fields))]
 	switch {
+	case g.hptr != "" && g.chance(0.25):
+		return fmt.Sprintf("%s.%s", g.hptr, f.name), f.typ
+	case g.soa && g.chance(0.3):
+		return fmt.Sprintf("E[%s].%s", g.index(), f.name), f.typ
 	case g.sptr != "" && g.chance(0.4):
 		return fmt.Sprintf("%s.%s", g.sptr, f.name), f.typ
 	case g.chance(0.5):
@@ -202,7 +214,10 @@ func (g *rpGen) expr(t rpType, depth int) string {
 	if depth <= 0 || g.chance(0.25) {
 		return g.leaf(t)
 	}
-	switch g.pick(13) {
+	switch g.pick(14) {
+	case 12:
+		// min / max (その場に比較と代入を出す組み込み)
+		return fmt.Sprintf("%s(%s, %s)", []string{"min", "max"}[g.pick(2)], g.expr(t, depth-1), g.expr(t, depth-1))
 	case 0, 1, 2:
 		op := []string{"+", "-", "*", "&", "|", "^"}[g.pick(6)]
 		return fmt.Sprintf("(%s %s %s)", g.expr(t, depth-1), op, g.expr(t, depth-1))
@@ -268,6 +283,17 @@ func (g *rpGen) expr(t rpType, depth int) string {
 func (g *rpGen) args(f *rpFunc, depth int) string {
 	args := make([]string, len(f.params))
 	for i, p := range f.params {
+		if p.sptr {
+			args[i] = "&s0"
+			if g.chance(0.6) {
+				args[i] = fmt.Sprintf("&sa[(%s & 3)]", g.expr(rpTypes[0], 1))
+			}
+			continue
+		}
+		if p.small {
+			args[i] = fmt.Sprintf("(%s & 3)", g.expr(rpTypes[0], 1))
+			continue
+		}
 		if p.ptr {
 			var as []rpVar
 			for _, a := range g.arraysAll() {
@@ -309,16 +335,28 @@ func (g *rpGen) callName(f *rpFunc) string {
 	return f.name
 }
 
-// callExpr は関数ポインタ表経由の呼び出し `fp0[(e & 3)](args)` (main のモジュールからだけ)。
+// fpCall は関数ポインタ経由の呼び出し (main のモジュールからだけ): 表 `fp0[(e & 3)](args)`、main のローカル変数
+// `fv(args)`、far1 の関数の farfn 表 `fq0[(e & 1)](args)` (バンクを切り替えるトランポリン経由)。
 func (g *rpGen) fpCall(depth int, t rpType) (string, bool) {
-	if g.fpTable == nil || (g.cur != nil && (g.cur.far || g.cur.inline)) {
+	if g.cur != nil && (g.cur.far || g.cur.inline) {
 		return "", false
 	}
-	args := make([]string, len(g.fpSig.params))
-	for i, p := range g.fpSig.params {
-		args[i] = g.expr(p.typ, depth)
+	callArgs := func(sig rpFunc) string {
+		args := make([]string, len(sig.params))
+		for i, p := range sig.params {
+			args[i] = g.expr(p.typ, depth)
+		}
+		return strings.Join(args, ", ")
 	}
-	return cast(fmt.Sprintf("fp0[(%s & %d)](%s)", g.expr(rpTypes[0], 1), len(g.fpTable)-1, strings.Join(args, ", ")), g.fpSig.ret, t), true
+	switch {
+	case g.fqTable != nil && g.chance(0.35):
+		return cast(fmt.Sprintf("fq0[(%s & %d)](%s)", g.expr(rpTypes[0], 1), len(g.fqTable)-1, callArgs(g.fqSig)), g.fqSig.ret, t), true
+	case g.fpTable == nil:
+		return "", false
+	case g.fnVar && g.cur != nil && g.cur.name == "main" && g.chance(0.4):
+		return cast(fmt.Sprintf("fv(%s)", callArgs(g.fpSig)), g.fpSig.ret, t), true
+	}
+	return cast(fmt.Sprintf("fp0[(%s & %d)](%s)", g.expr(rpTypes[0], 1), len(g.fpTable)-1, callArgs(g.fpSig)), g.fpSig.ret, t), true
 }
 
 // leaf は変数・配列の要素・ポインタ経由・struct のフィールド・リテラル。
@@ -475,11 +513,32 @@ func (g *rpGen) ptrLoop(depth int) *rpStmt {
 
 // stmt は文 1 つ (複数行のこともある)。depth はブロックの入れ子の残り。
 func (g *rpGen) stmt(depth int) *rpStmt {
-	k := g.pick(17)
+	k := g.pick(18)
 	if depth <= 0 && k >= 7 {
 		k = g.pick(7)
 	}
 	switch k {
+	case 17:
+		// struct の値のコピー (全フィールド。soa の要素の gather / scatter、ポインタ経由、重なりうる sa[i] = sa[j])
+		if len(g.fields) == 0 {
+			break
+		}
+		var srcs, dsts []string
+		srcs = append(srcs, "s0", fmt.Sprintf("sa[(%s & 3)]", g.expr(rpTypes[0], 1)))
+		dsts = append(dsts, "s0", fmt.Sprintf("sa[(%s & 3)]", g.expr(rpTypes[0], 1)))
+		if g.soa {
+			srcs = append(srcs, fmt.Sprintf("E[%s]", g.index()))
+			dsts = append(dsts, fmt.Sprintf("E[%s]", g.index()))
+		}
+		if g.sptr != "" {
+			srcs = append(srcs, "*"+g.sptr)
+			dsts = append(dsts, "*"+g.sptr)
+		}
+		if g.hptr != "" {
+			srcs = append(srcs, "*"+g.hptr)
+			dsts = append(dsts, "*"+g.hptr)
+		}
+		return rpSimple(fmt.Sprintf("%s = %s;", dsts[g.pick(len(dsts))], srcs[g.pick(len(srcs))]))
 	case 14:
 		// ポインタを配列の要素に向け直す (添字 0〜7 → fresh)、または struct のポインタを向け直す
 		if ps := g.ptrs(); len(ps) > 0 && g.chance(0.7) {
@@ -496,6 +555,12 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 					return rpSimple(fmt.Sprintf("%s = %s;", p.name, g.arrayRef(as[g.pick(len(as))])))
 				}
 			}
+		}
+		if g.hptr != "" && g.chance(0.4) {
+			return rpSimple(fmt.Sprintf("%s = &E[%s];", g.hptr, g.index()))
+		}
+		if g.fnVar && g.cur != nil && g.cur.name == "main" && g.chance(0.4) {
+			return rpSimple(fmt.Sprintf("fv = %s;", g.fpTable[g.pick(len(g.fpTable))].name))
 		}
 		if g.sptr != "" {
 			return rpSimple(fmt.Sprintf("%s = &sa[(%s & 3)];", g.sptr, g.expr(rpTypes[0], 1)))
@@ -549,8 +614,8 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		s.parts = append(s.parts, "}")
 		return s
 	case 9, 10:
-		// 回数つきの for (ループ変数は本体で使える)
-		i := g.newLocal(rpTypes[g.pick(2)])
+		// 回数つきの for (ループ変数は本体で使える。2 バイトや符号付きのカウンタも)
+		i := g.newLocal(g.typ())
 		g.scope[len(g.scope)-1].readOnly = true
 		n := g.pick(7) + 1
 		g.loops++
@@ -619,6 +684,8 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		lv, t := g.lvalue()
 		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
 	}
+	lv, t := g.lvalue()
+	return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
 }
 
 // cond は条件式 (比較か整数)。
@@ -676,6 +743,7 @@ func (g *rpGen) genFunc(name string, far bool, sig *rpFunc) *rpFunc {
 	g.nLocal = 0
 	g.larrays = nil
 	g.sptr = ""
+	g.hptr = ""
 	if far {
 		// main のものは見えない (中身は退避して、関数の後で戻す)
 		globals, arrays, fields, consts, fp := g.globals, g.arrays, g.fields, g.consts, g.fpTable
@@ -695,6 +763,13 @@ func (g *rpGen) genFunc(name string, far bool, sig *rpFunc) *rpFunc {
 		}
 		f.params = append(f.params, p)
 		g.scope = append(g.scope, p)
+	}
+	if !far && sig == nil && len(g.fields) > 0 && g.chance(0.25) {
+		// struct へのポインタの引数 (呼ぶ側は &s0 か &sa[e & 3])
+		p := rpVar{name: "ps", sptr: true}
+		f.params = append(f.params, p)
+		g.scope = append(g.scope, p)
+		g.sptr = "ps"
 	}
 	nl := g.pick(3)
 	if far {
@@ -718,6 +793,34 @@ func (g *rpGen) genFunc(name string, far bool, sig *rpFunc) *rpFunc {
 	return f
 }
 
+// genRec は自分を呼ぶ関数 `name(n:int, a:T):R` を作る (stack ABI になる)。深さ n は呼ぶ側が `(e & 3)` で渡し、
+// n == 0 で止まる (本体は n を書き換えない)。ローカル配列は持たせない (フレームが重なって FC_STACK をあふれる)。
+func (g *rpGen) genRec(name string) {
+	f := &rpFunc{name: name, ret: g.typ(), rec: true}
+	g.cur = f
+	g.scope = nil
+	g.nLocal = 0
+	g.larrays = nil
+	g.sptr = ""
+	g.hptr = ""
+	n := rpVar{name: "n", typ: rpTypes[0], readOnly: true, small: true}
+	a := rpVar{name: "a", typ: g.typ()}
+	f.params = []rpVar{n, a}
+	g.scope = append(g.scope, n, a)
+	for i := 0; i < g.pick(2); i++ {
+		v := g.newLocal(g.typ())
+		f.locals = append(f.locals, fmt.Sprintf("var %s:%s = %s;", v.name, v.typ.name, g.lit(v.typ)))
+	}
+	f.stmts = append(f.stmts, rpSimple(fmt.Sprintf("if (n == 0) { return %s; }", g.expr(f.ret, 2))))
+	for i := 0; i < g.pick(3)+1; i++ {
+		f.stmts = append(f.stmts, g.stmt(1))
+	}
+	op := []string{"+", "-", "^", "&", "|"}[g.pick(5)]
+	f.retExpr = fmt.Sprintf("(%s((n - 1), %s) %s %s)", name, g.expr(a.typ, 1), op, g.expr(f.ret, 1))
+	g.funcs = append(g.funcs, f)
+	g.cur = nil
+}
+
 // genProgram はプログラム全体を作る (main の文は最後に「全部を出力して exit」)。
 func (g *rpGen) genProgram() {
 	for i := 0; i < g.pick(4)+3; i++ {
@@ -731,6 +834,9 @@ func (g *rpGen) genProgram() {
 			g.fields = append(g.fields, rpField{name: fmt.Sprintf("f%d", i), typ: g.typ()})
 		}
 	}
+	if len(g.fields) > 0 && g.chance(0.4) {
+		g.soa = true // soa E:[8]S
+	}
 	for i := 0; i < g.pick(3); i++ {
 		g.consts = append(g.consts, rpVar{name: fmt.Sprintf("ct%d", i), typ: g.typ(), readOnly: true})
 	}
@@ -739,9 +845,22 @@ func (g *rpGen) genProgram() {
 		for i := 0; i < g.pick(2)+1; i++ {
 			g.genFunc(fmt.Sprintf("ff%d", i), true, nil)
 		}
+		if g.chance(0.4) {
+			// far1 の関数の farfn 表 (バンクを切り替えるトランポリン経由で呼ぶ)
+			g.fqSig = rpFunc{ret: g.typ()}
+			for i := 0; i < g.pick(3); i++ {
+				g.fqSig.params = append(g.fqSig.params, rpVar{typ: g.typ()})
+			}
+			for i := 0; i < 2; i++ {
+				g.fqTable = append(g.fqTable, g.genFunc(fmt.Sprintf("fq%d", i), true, &g.fqSig))
+			}
+		}
 	}
 	for i := 0; i < g.pick(3)+1; i++ {
 		g.genFunc(fmt.Sprintf("f%d", i), false, nil)
+	}
+	if g.chance(0.35) {
+		g.genRec("r0")
 	}
 	if g.chance(0.5) {
 		// 関数ポインタ表: 同じ型の関数 2 つか 4 つ
@@ -770,6 +889,18 @@ func (g *rpGen) genProgram() {
 		for i := 0; i < 4; i++ {
 			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("sa[%d].%s = %s;", i, f.name, g.lit(f.typ))))
 		}
+		for i := 0; g.soa && i < 8; i++ {
+			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("E[%d].%s = %s;", i, f.name, g.lit(f.typ))))
+		}
+	}
+	if g.fpTable != nil && g.chance(0.5) {
+		// 関数ポインタのローカル変数 (付け替えながら呼ぶ)
+		ps := make([]string, len(g.fpSig.params))
+		for i, p := range g.fpSig.params {
+			ps[i] = p.typ.name
+		}
+		m.locals = append(m.locals, fmt.Sprintf("var fv:fn(%s):%s = %s;", strings.Join(ps, ", "), g.fpSig.ret.name, g.fpTable[g.pick(len(g.fpTable))].name))
+		g.fnVar = true
 	}
 	for i := 0; i < g.pick(4); i++ {
 		v := g.newLocal(g.typ())
@@ -777,6 +908,7 @@ func (g *rpGen) genProgram() {
 	}
 	g.larrays = nil
 	g.sptr = ""
+	g.hptr = ""
 	g.declareArraysAndPtrs(m)
 	for i := 0; i < g.pick(8)+4; i++ {
 		m.stmts = append(m.stmts, g.stmt(2))
@@ -807,9 +939,13 @@ func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
 		g.scope = append(g.scope, p)
 		f.locals = append(f.locals, fmt.Sprintf("var %s:*%s = &%s[%d];", p.name, a.typ.name, a.name, g.pick(8)))
 	}
-	if len(g.fields) > 0 && g.chance(0.4) {
+	if len(g.fields) > 0 && g.sptr == "" && g.chance(0.4) {
 		g.sptr = "ps"
 		f.locals = append(f.locals, fmt.Sprintf("var ps:*S = &sa[%d];", g.pick(4)))
+	}
+	if g.soa && len(g.fields) > 0 && g.chance(0.35) {
+		g.hptr = "h" // soa の要素ハンドル (1 バイトの添字)
+		f.locals = append(f.locals, fmt.Sprintf("var h:*E = &E[%d];", g.pick(8)))
 	}
 }
 
@@ -843,6 +979,20 @@ func (g *rpGen) source() string {
 			fmt.Fprintf(&b, "\t%s:%s;\n", f.name, f.typ.name)
 		}
 		b.WriteString("}\nvar s0:S;\nvar sa:[4]S;\n")
+		if g.soa {
+			b.WriteString("soa E:[8]S;\n")
+		}
+	}
+	if g.fqTable != nil {
+		ps := make([]string, len(g.fqSig.params))
+		for i, p := range g.fqSig.params {
+			ps[i] = p.typ.name
+		}
+		names := make([]string, len(g.fqTable))
+		for i, f := range g.fqTable {
+			names[i] = "far1." + f.name
+		}
+		fmt.Fprintf(&b, "const fq0:[%d]farfn(%s):%s = [%s];\n", len(names), strings.Join(ps, ", "), g.fqSig.ret.name, strings.Join(names, ", "))
 	}
 	for _, f := range g.funcs {
 		if f.far {
@@ -887,6 +1037,9 @@ func (g *rpGen) source() string {
 				for i := 0; i < 4; i++ {
 					out = append(out, fmt.Sprintf("sa[%d].%s", i, f.name), `" "`)
 				}
+				for i := 0; g.soa && i < 8; i++ {
+					out = append(out, fmt.Sprintf("E[%d].%s", i, f.name), `" "`)
+				}
 			}
 			fmt.Fprintf(&b, "printf(%s, \"\\n\");\nexit(0);\n", strings.Join(out, ", "))
 		}
@@ -902,6 +1055,9 @@ func (g *rpGen) writeFunc(b *strings.Builder, f *rpFunc, prefix string) {
 		ps[i] = p.name + ":" + p.typ.name
 		if p.ptr {
 			ps[i] = p.name + ":*" + p.typ.name
+		}
+		if p.sptr {
+			ps[i] = p.name + ":*S"
 		}
 	}
 	var opts []string
