@@ -559,6 +559,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	pushArgSize := 0
 	pushFastcallArgSize := 0
 	var calls []*pendingCall // 積んでいる途中の呼び出し (内側が末尾)
+	verify := os.Getenv("FC_VERIFY_REGS") != "" // テストと fuzz で有効 (verifyRegs)
 
 	for opNo, op := range ops {
 		if op == nil {
@@ -581,8 +582,10 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = op.Resident, false, op.ResidentY, false, op.ResidentX, false, false
 		restoreA, restoreY, restoreX := false, false, false
+		opStart, holdAIn, holdXIn := len(r.lines), l.holdA, l.holdX
+		var d regalloc.Decision
 		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
-			d, _ := regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+			d, _ = regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
 			// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
 			// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
 			// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
@@ -615,6 +618,12 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				restoreY = op.ResYOut && !op.ArgY && !(op.HoldY && !isCallOp(op))
 			}
 			l.aHeld = d.UseY
+		}
+		bodyStart := len(r.lines)
+		keep := regsKept{
+			a: op.Resident != nil && !l.resMem && d.A == regalloc.ResFree,
+			y: op.ResidentY != nil && !l.resYMem && d.Y == regalloc.ResFree,
+			x: op.ResidentX != nil && !l.resXMem && d.X == regalloc.ResFree,
 		}
 
 		switch op.Code {
@@ -1485,6 +1494,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
+		bodyEnd := len(r.lines)
 		if restoreA || restoreY || restoreX {
 			// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
 			// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
@@ -1505,6 +1515,16 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if cond {
 				r.push("plp")
 			}
+		}
+		if verify {
+			// 呼び出しの引数の保持中 (A の最後の引数、Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない
+			hold := regsKept{
+				a: holdAIn && !isCallOp(op),
+				y: op.HoldY && !isCallOp(op),
+				x: holdXIn > 0 && !isCallOp(op) && op.Code != ir.OpPushResult,
+			}
+			l.verifyRegs(op, "常駐", keep, r.lines[bodyStart:bodyEnd])
+			l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
 		}
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
 	}
