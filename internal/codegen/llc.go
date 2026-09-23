@@ -316,11 +316,35 @@ func anyList(ss []string) []any {
 // testA は値の i バイト目を A に読んで N / Z を立てる。値がすでに A にある (loadA が何も出さない) ときは `cmp #0`
 // (直前が A を書いた命令ならピープホールが消す)。呼び出しの戻り値 (A) を if で見るとき、call の後の常駐の復帰 (`ldy home`)
 // がフラグを壊していた (`if ((f(x)) as sint16)`。fuzz で発覚)。
+//
+// 検査のためだけの lda には testMark を付ける。直前の命令がフラグをその場所の値で立てていれば (`dec x` の直後など)
+// ピープホールが消す。IR の命令の単位ではなく実際に出た命令列で判断するので、間に挟まる常駐の復帰や、2 バイトの inc の
+// 中の分岐 (`inc lo; bne @s; inc hi; @s:`) を見落とさない (codegen の flagsFromIncDec でこの形のバグが続いた)。
 func (l *Llc) testA(v ir.Operand, i int) any {
 	if code := l.loadA(v, i); code != nil {
-		return code
+		return markTest(code)
 	}
 	return "cmp #0"
+}
+
+// testMark は「フラグを立てるためだけのロード」の印 (行末のコメント)。ピープホールが消すか、最後に印だけ外す。
+const testMark = " ; tst"
+
+// markTest は code がメモリからの 1 命令の lda / ldy なら testMark を付ける。
+func markTest(code any) any {
+	s, ok := code.(string)
+	if !ok || !(strings.HasPrefix(s, "lda ") || strings.HasPrefix(s, "ldy ")) || strings.HasPrefix(s[4:], "#") {
+		return code
+	}
+	return s + testMark
+}
+
+// stripTestMarks は残った testMark を外す。
+func stripTestMarks(lines []string) []string {
+	for i, line := range lines {
+		lines[i] = strings.TrimSuffix(line, testMark)
+	}
+	return lines
 }
 
 // nextOp は i の次の (nil でない) 命令。
@@ -535,16 +559,12 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	pushArgSize := 0
 	pushFastcallArgSize := 0
 	var calls []*pendingCall // 積んでいる途中の呼び出し (内側が末尾)
-	var prevOp *ir.Op        // 直前に生成した命令 (フラグの再利用の判定用)
 
 	for opNo, op := range ops {
 		if op == nil {
 			continue
 		}
 		l.curOp = op
-		if opNo > 0 {
-			prevOp = ops[opNo-1]
-		}
 		// IRコメント (golden比較では除去されるため、Go版独自の形式でよい)
 		cm := ir.DumpOp(op, nil)
 		if len(cm) > 120 {
@@ -610,9 +630,6 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				// コンディションレジスタの場合。CondPositive のとき「真 ⇔ フラグがセット」、ただし C だけは
 				// 「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)
 				r.push(fmt.Sprintf("%s %s", condJump(ir.UnderlyingValue(op.In(0)), onTrue), op.Label))
-			} else if l.flagsFromIncDec(prevOp, op.In(0)) {
-				// 直前の inc / dec が Z を残している (`dec x; bne L`)
-				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if l.inA(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
 				// A に常駐している値: フラグが A を反映しているとは限らない (直前が A の演算ならピープホールが cmp を消す)
 				r.push("cmp #0")
@@ -625,7 +642,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if l.aHeld && ir.ValType(op.In(0)).Size == 1 {
 				// A は常駐変数で塞がっている: Y で検査する
-				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
+				r.push(markTest(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0))))
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if restoreA {
 				// A に常駐している変数を壊して検査し、飛び先でも A が要る: 飛ぶ側の経路でも復帰する
@@ -1516,6 +1533,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	if l.OptimizeLevel > 0 && !ir.Disabled("peephole") {
 		lines = peepholeA(lines)
 	}
+	lines = stripTestMarks(lines)
 	lines = l.extendJump(lines)
 
 	lmd.Asm = lines

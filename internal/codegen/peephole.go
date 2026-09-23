@@ -14,6 +14,8 @@ package codegen
 //   - メモリを書く命令は書いた先を集合から外す (Y が指す場所なら Y も忘れる)。間接・インデックス付きの書き込みと
 //     jsr / call はどこを書いたか分からないので全部外す (Y が即値ならそのまま)
 //   - ラベル (合流点) と分岐命令の後は空にする
+//   - 検査のためだけのロード (codegen が testMark を付けた `lda x` / `ldy x`) は、N/Z が既に x の値を映していて
+//     (直前が `inc x` / `dec x` で、間にフラグを変える命令もラベルも無い) 直後が beq / bne / bmi / bpl なら削除
 //
 // 対象は fc が生成する形だけ (オペランドは文字列として同じかどうかで比べる。`0+<L+0` と `<L+0` は別扱い)。
 // 副作用が無いことを確認済みの命令だけ扱い、知らない命令は全部を空にする。
@@ -34,7 +36,9 @@ type peepState struct {
 	a          aState
 	flagsFromA bool   // N/Z が A の値を反映しているか
 	flagsFromY bool   // N/Z が Y の値を反映しているか (ldy / iny / dey / tay の直後)
+	flagsFromX bool   // N/Z が X の値を反映しているか (ldx / inx / dex / tax の直後)
 	y          string // Y の値と等しいことが分かっている場所 / 即値 ("" なら不明)
+	flagsMem   string // N/Z がこのメモリ位置の値を映している (inc / dec の直後。"" なら不明)
 }
 
 // canonAddr はオペランドの表記を正規化する: `k+<L+n` (byte の表記) と `<L+(n+k)` は同じ場所。別の綴りの同じ番地への
@@ -65,7 +69,34 @@ func (s *peepState) reset() {
 	s.a = aState{}
 	s.flagsFromA = false
 	s.flagsFromY = false
+	s.flagsFromX = false
 	s.y = ""
+	s.flagsMem = ""
+}
+
+// keepsFlagsMem は命令が flagsMem (N/Z がそのメモリ位置の値を映していること) を保つか。
+// フラグを変えない命令のうち、その位置を書かないと分かるものだけ (インデックス付き・間接の書き込みはどこを書くか分からない)。
+func (s *peepState) keepsFlagsMem(mnem, arg string, kind operandKind) bool {
+	switch mnem {
+	case "bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs", "clc", "sec", "cli", "sei", "cld", "nop":
+		return true
+	case "sta", "stx", "sty":
+		return (kind == opLocal || kind == opOther) && !strings.Contains(arg, ",") && arg != s.flagsMem
+	}
+	return false
+}
+
+// branchOnNZ は行が N / Z だけを見る分岐か。
+func branchOnNZ(line string) bool {
+	f := strings.Fields(line)
+	if len(f) == 0 {
+		return false
+	}
+	switch f[0] {
+	case "beq", "bne", "bmi", "bpl":
+		return true
+	}
+	return false
 }
 
 // setsNZ は命令 (行) が N/Z を A 以外の (自分の) 結果で立てるか。直前の lda のフラグが要らないことの判定に使う
@@ -157,6 +188,8 @@ func peepholeA(lines []string) []string {
 			out = append(out, line)
 			continue
 		}
+		isTest := strings.HasSuffix(t, testMark)
+		t = strings.TrimSuffix(t, testMark)
 		mnem, arg := t, ""
 		if k := strings.IndexAny(t, " \t"); k >= 0 {
 			mnem, arg = t[:k], strings.TrimSpace(t[k+1:])
@@ -164,12 +197,33 @@ func peepholeA(lines []string) []string {
 		arg = canonAddr(arg)
 		kind := classify(arg)
 		trackable := kind == opLocal
+		if isTest && s.flagsMem != "" && arg == s.flagsMem && branchOnNZ(next(i)) {
+			continue // N/Z は既に arg の値 (`dec x; lda x; bne` の lda)。A / Y は変えないまま
+		}
+		setFlagsMem := "" // この命令の後で N/Z が映すメモリ位置 (下の switch の後で入れる)
+		if (mnem == "inc" || mnem == "dec") && arg != "a" && (kind == opLocal || kind == opOther) && !strings.Contains(arg, ",") {
+			setFlagsMem = arg
+		} else if !s.keepsFlagsMem(mnem, arg, kind) {
+			s.flagsMem = ""
+		}
 		switch mnem {
 		case "ldy", "iny", "dey", "tay", "sta", "sty", "stx", "clc", "sec", "cli", "sei", "cld", "nop", "txs",
 			"bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
 			// Y のフラグを保つ (ldy / iny / dey / tay は下で立てる)
 		default:
 			s.flagsFromY = false // フラグを別の値で立てる命令
+		}
+		switch mnem {
+		case "ldx", "inx", "dex", "tax", "sta", "sty", "stx", "clc", "sec", "cli", "sei", "cld", "nop", "txs",
+			"bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
+			// X のフラグを保つ (ldx / inx / dex / tax は下で立てる)
+		case "cpx":
+			if arg == "#0" && s.flagsFromX && branchOnNZ(next(i)) {
+				continue // N/Z は X そのもの (`dex; cpx #0; bne` の cpx)
+			}
+			s.flagsFromX = false
+		default:
+			s.flagsFromX = false
 		}
 		switch mnem {
 		case "lda":
@@ -269,6 +323,7 @@ func peepholeA(lines []string) []string {
 				s.y = ""
 			}
 			s.flagsFromA = mnem == "tax" // tax は A の値を写すので N/Z は A を反映する
+			s.flagsFromX = true
 		case "iny", "dey":
 			s.y = ""
 			s.flagsFromA = false
@@ -288,6 +343,9 @@ func peepholeA(lines []string) []string {
 			// jmp / jsr / rts / call マクロ / farcall など: 何も分からない。
 			// A を書く命令は N/Z を A から立てるが、jsr 等は分からないので安全側 (false)
 			s.reset()
+		}
+		if setFlagsMem != "" {
+			s.flagsMem = setFlagsMem
 		}
 		out = append(out, line)
 	}
