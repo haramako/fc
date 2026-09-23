@@ -1537,6 +1537,12 @@ func (h *Hlc) rval(c *cexpr) ir.Operand {
 		if ir.ValType(v).Kind == types.SoaRef {
 			return h.soaGather(v)
 		}
+		if b := ir.ValType(v).Base; b.Kind == types.Array {
+			// 配列の値はその番地 (ポインタ経由の配列フィールド `ta[i].arr` / `p.arr`): 要素へのポインタとして読み替える。
+			// 中身を pget すると、それを番地として添字を足して別の場所を壊していた (-O 0 / -O 2 とも同じ値なので差分の
+			// fuzz では見えず、生成器を広げるときの手計算で発覚)
+			return ir.NewCastedValue(v, h.prog.Types.PointerTo(b.Base), 0)
+		}
 		r := h.newTmp(ir.ValType(v).Base)
 		h.emit(&ir.Op{Code: ir.OpPget, Dst: r, Src: []ir.Operand{v}})
 		return r

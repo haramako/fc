@@ -243,3 +243,44 @@ function main():void
 		t.Errorf("want frame size over, got %q", msg)
 	}
 }
+
+// ポインタ経由の配列フィールド (`ta[i].arr[j]`、`p.arr[j]`) は、配列の中身でなく番地を添字の基にする。以前は rval が
+// 配列フィールドを pget して、その中身を番地として添字を足し、別の場所に書いていた (-O 0 / -O 2 とも同じ値なので
+// 差分の fuzz では見えず、生成器を広げるときの手計算で発覚)。
+func TestArrayFieldViaPointer(t *testing.T) {
+	t.Parallel()
+	src := `struct T {
+	x:int;
+	arr:[4]int16;
+}
+var ta:[2]T;
+var g0:int;
+function setp(p:*T, i:int, v:int16):void
+{
+	p.arr[i & 3] = v;
+}
+function sum(q:*int16, n:int):int16
+{
+	var s:int16 = 0;
+	for (var i:int = 0; i < n; i++) {
+		s += q[i];
+	}
+	return s;
+}
+function main():void
+{
+	ta[1].arr[(g0 & 3)] = 300;
+	ta[1].arr[2] = 500;
+	setp(&ta[0], 1, 1000);
+	var pp:*int16 = &ta[0].arr[3];
+	*pp = 7;
+	printf(ta[1].arr[0], " ", ta[1].arr[2], " ", ta[0].arr[1], " ", ta[0].arr[3], " ", sum(ta[1].arr, 4), " ", ta[0].x, " ", ta[1].x, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "300 500 1000 7 800 0 0\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
