@@ -130,7 +130,7 @@ func isShiftOne(lmd *ir.Lambda, ud *ir.UseDef, k int, x *ir.Value, code ir.OpCod
 		return nil, false
 	}
 	s := op.Src[0]
-	if ir.UnderlyingValue(s) != x || ir.ValOffset(s) != 0 || ir.ValType(s).Size != x.Type.Size {
+	if ir.UnderlyingValue(s) != x || ir.ValOffset(s) != 0 || ir.ValType(s).Size != x.Type.Size || !ir.PlainOperand(s) {
 		return nil, false
 	}
 	d, ok := op.Dst.(*ir.Value)

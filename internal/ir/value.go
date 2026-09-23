@@ -145,15 +145,61 @@ func (v *Value) Assignable() bool {
 	return v.Kind == KindLocal || v.Kind == KindGlobal
 }
 
-// CastedValue は reinterpret_cast 相当 (元の値 From を別の型として見る。Offset で struct のフィールドも表す)。
+// CastedValue は reinterpret_cast 相当: 元の値 From の Offset バイト目から Width バイトを読み、残りの上位バイトを 0 にして
+// (ゼロ拡張。符号拡張は sema が sign_extension を挟む) Type として見る。Offset で struct のフィールドも表す。
+//
+// 常に 1 段の正規形で、From は CastedValue ではない (NewCastedValue が入れ子を畳む)。以前は入れ子のまま持っていて、
+// `((l0 as int) as int16)` の「内側で 1 バイトに狭めてから広げる」を各パスが外側の型とオフセットの合計だけで読み、
+// 内側の切り詰めを落とすバグが fuzz で何度も出た (castBits / castFits / plainWord / splitWords / 常駐の差し替え)。
+// Width が内側の切り詰めを持つので、「元の変数の一部をそのまま読む」かは Width == Type.Size で分かる (Plain)。
 type CastedValue struct {
-	From   Operand // *Value または *CastedValue
+	From   Operand // *Value または *PointeredArray
 	Type   *types.Type
 	Offset int
+	Width  int // From から読むバイト数 (0〜Type.Size)。Type.Size より小さければ上位はゼロ拡張
 }
 
+// NewCastedValue は from を Offset バイト目から typ として見る cast を作る。from が cast なら 1 段に畳む
+// (外の cast が読めるのは内側の Width のうち Offset より後だけ)。
 func NewCastedValue(from Operand, typ *types.Type, offset int) *CastedValue {
-	return &CastedValue{From: from, Type: typ, Offset: offset}
+	if c, ok := from.(*CastedValue); ok {
+		return &CastedValue{From: c.From, Type: typ, Offset: c.Offset + offset, Width: clampWidth(c.Width-offset, typ)}
+	}
+	return &CastedValue{From: from, Type: typ, Offset: offset, Width: naturalWidth(from, typ, offset)}
+}
+
+// RebaseCast は cv の元の値を from に差し替えたもの (インライン展開・常駐・SSA の差し替え)。cv の Width (元の値で
+// 切り詰めた幅) は保ち、from が cast ならそれと畳む。
+func RebaseCast(cv *CastedValue, from Operand) *CastedValue {
+	r := NewCastedValue(from, cv.Type, cv.Offset)
+	if cv.Width < r.Width {
+		r.Width = cv.Width
+	}
+	return r
+}
+
+// naturalWidth は cast していない from を offset バイト目から typ として読むときの幅: 変数は自分の大きさまで、
+// リテラルは値のビット列を無限に持つので typ の幅全部 (codegen はリテラルの型に関係なく値のバイトを取り出す)。
+func naturalWidth(from Operand, typ *types.Type, offset int) int {
+	if v, ok := from.(*Value); ok && v.Kind == KindLiteral {
+		return typ.Size
+	}
+	return clampWidth(ValType(from).Size-offset, typ)
+}
+
+func clampWidth(w int, typ *types.Type) int {
+	return max(0, min(w, typ.Size))
+}
+
+// Plain は cv が元の値の一部をそのまま読むか (ゼロ拡張したバイトが無い)。
+func (c *CastedValue) Plain() bool { return c.Width == c.Type.Size }
+
+// PlainOperand は o が変数・リテラルそのもの、または元の値の一部をそのまま読む cast か。
+func PlainOperand(o Operand) bool {
+	if cv, ok := o.(*CastedValue); ok {
+		return cv.Plain()
+	}
+	return true
 }
 
 // PointeredArray は配列からポインタへ自動変換された値。
@@ -197,10 +243,20 @@ func (v *Value) Inspect() string {
 
 // String は CastedValue#to_s 相当。
 func (c *CastedValue) String() string {
-	if c.Offset == 0 {
-		return fmt.Sprintf("<%s>%s", c.Type, OperandString(c.From))
+	w := ""
+	if c.Truncated() {
+		w = fmt.Sprintf("/%d", c.Width)
 	}
-	return fmt.Sprintf("<%s+%d>%s", c.Type, c.Offset, OperandString(c.From))
+	if c.Offset == 0 {
+		return fmt.Sprintf("<%s%s>%s", c.Type, w, OperandString(c.From))
+	}
+	return fmt.Sprintf("<%s+%d%s>%s", c.Type, c.Offset, w, OperandString(c.From))
+}
+
+// Truncated は cv の Width が、元の値をそのまま cast したときの幅より狭いか (入れ子の cast を畳んで内側で切り詰めた)。
+// 表示とダンプだけが使う (golden を変えないため、畳まなくても同じ幅なら表示しない)。
+func (c *CastedValue) Truncated() bool {
+	return c.Width != naturalWidth(c.From, c.Type, c.Offset)
 }
 
 // String は PointeredArray#to_s 相当。

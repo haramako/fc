@@ -380,7 +380,7 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) (argLoads, body 
 			}
 			return x
 		case *ir.CastedValue:
-			return ir.NewCastedValue(mapOperand(x.From), x.Type, x.Offset)
+			return ir.RebaseCast(x, mapOperand(x.From))
 		case *ir.PointeredArray:
 			return ir.NewPointeredArray(mapOperand(x.From), x.Type)
 		}

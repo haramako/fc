@@ -1202,7 +1202,17 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			if c.ck == syntax.CastAs {
 				h.checkCast(c.ck, x.val.Type, ty)
 			}
-			return cv(ir.NewIntLiteral("", ty, x.val.Int))
+			n := x.val.Int
+			if c.ck == syntax.CastAs && ty.Kind == types.Int && ty.Size > 0 && ty.Size < 8 {
+				// 数値変換: 型の幅に切り詰めて、その符号で読む (`(300 as int) as int16` は 44。畳まない変数の cast と同じ。
+				// 以前は値をそのまま型だけ貼り替えていて、広げ直すと 300 のままだった)
+				bits := 8 * ty.Size
+				n = ir.FloorMod(n, 1<<bits)
+				if ty.Signed && n >= 1<<(bits-1) {
+					n -= 1 << bits
+				}
+			}
+			return cv(ir.NewIntLiteral("", ty, n))
 		}
 		return &cexpr{kind: cCast, args: []*cexpr{x}, typ: c.typ, ty: ty, ck: c.ck, pos: c.pos}
 

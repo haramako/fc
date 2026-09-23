@@ -128,6 +128,14 @@ go test ./...                                    # 全部 (golden + examples + N
   `g2++` は `inc lo; bne @s; inc hi` なので、下位が 0 に折り返すと Z は上位を映すのに、直後の `if ((g2 as sint))`
   （下位バイトの検査）が `flagsFromIncDec` でその Z を使っていた（2 バイトの inc の後は使わない。2 バイトの dec は最後が
   `dec lo` なので下位を映す。`TestIfLowByteAfterInc16`）
+- **cast の正規形**（2026-09-23、Linux に移ってから）: `ir.CastedValue` は常に 1 段で `{From, Type, Offset, Width}`
+  （From の Offset バイト目から Width バイトを読み、上位はゼロ拡張）。入れ子の cast は `ir.NewCastedValue` が畳む。
+  それまでは入れ子のまま持っていて、内側の切り詰めを各パスが読み落とすバグが fuzz で 8 件以上出ていた（`castBits` /
+  `castFits` / `plainWord` / splitWords / 常駐の差し替え）。「元の変数の一部をそのまま読むか」は `ir.PlainOperand`、
+  差し替えは `ir.RebaseCast`（元の幅を保つ）。ダンプは切り詰めたときだけ `{cast T off/width x}`。
+  正規化のついでに 2 件見つかった: 常駐の `isStep` / `isMemShift` が `g0 = ((g0 as int) as int16) + 1` を
+  「g0 のその場の inc」と見ていた（検査 `FC_VERIFY_REGS` がコンパイルエラーで捕まえる）、sema の定数の `as` が値を
+  切り詰めずに型だけ貼り替えていて `(300 as int) as int16` が 300 だった（`TestCastNarrowThenWiden`）
 - 6 かたまり目（種 618000〜、6 万本）で 2 件、長時間 fuzz はここでいったん止めた（累計 37 万本で 14 件）:
   (1) stack 系（関数ポインタ経由）の呼び出しは push_result で `ldx FC_SP` してから `sta <S+k,x` で引数を積むが、X に
   常駐した変数の復帰 `ldx g1` が push_result の直後に出て X が戻り、引数が別の場所に書かれていた（push_result から

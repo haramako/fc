@@ -782,6 +782,41 @@ function main():void
 	}
 }
 
+// 狭めてから広げ直す cast: 定数の `as` は型の幅に切り詰める (`(300 as int) as int16` が 300 のままだった。sema の
+// constEval が値を切り詰めずに型だけ貼り替えていた)。変数の `((g as int) as int16)` を同じ変数への `+ 1` / `<< 1` に
+// 使う形 (常駐の isStep / isMemShift が「x のその場の inc / シフト」と見ないこと。上位は 0 になる)。
+func TestCastNarrowThenWiden(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int16;
+var g1:int16;
+function main():void
+{
+	var m:int16 = ((300 as int) as int16);
+	var n:sint16 = ((255 as sint8) as sint16);
+	var k:int16 = 300;
+	var q:int16 = ((k as int) as int16);
+	printf(m, " ", n, " ", q, "\n");
+	g0 = 4660;
+	g0 = ((g0 as int) as int16) + 1;
+	g1 = 4660;
+	for (var i:int = 0; i < 3; i += 1) {
+		g1 = ((g1 as int) as int16) + 1;
+	}
+	var l:int16 = 4660;
+	for (var j:int = 0; j < 3; j += 1) {
+		l = ((l as int) as int16) << 1;
+	}
+	printf(g0, " ", g1, " ", l, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "44 65535 44\n53 55 416\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // sign_extension の入力が A にある (呼び出しの戻り値) とき、N フラグが A を反映していない (常駐 Y の復帰の ldy の後)
 // のに bpl していた (fuzz で発覚)
 func TestSignExtendCallResult(t *testing.T) {

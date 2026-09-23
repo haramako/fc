@@ -357,17 +357,6 @@ func regArgYOffset(lmd *ir.Lambda) int {
 }
 
 // byte は値からn番目のbyteを取得する。
-// castByteExists は cast の n バイト目が元の値の中にあるか (入れ子の cast は内側の型の大きさで順に絞る)。
-func castByteExists(v ir.Operand, n int) bool {
-	switch x := v.(type) {
-	case *ir.CastedValue:
-		return n+x.Offset < ir.ValType(x.From).Size && castByteExists(x.From, n+x.Offset)
-	case *ir.Value:
-		return n < x.Type.Size
-	}
-	return true
-}
-
 func (l *Llc) byte(v ir.Operand, n int) string {
 	if l.fused != nil && n == 0 {
 		if tv, ok := v.(*ir.Value); ok {
@@ -391,19 +380,16 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 		}
 	}
 	if cv, ok := v.(*ir.CastedValue); ok {
-		if lv := ir.ValLiteral(cv); lv != nil && lv.Kind == ir.KindLiteral {
-			// リテラルの一部 (struct のフィールド / SoA のバイト分割): リテラルそのものの n+offset バイト目
-			if n < cv.Type.Size {
-				return l.byte(lv, n+ir.ValOffset(cv))
-			}
+		// Width より上のバイトはゼロ拡張 (符号拡張は sign_extension の命令で行う)。`cast<sint16>(cast<uint16>(b8))` の
+		// 1 バイト目は b8 に無いので、隣の番地ではなく 0 (fuzz で発覚。Width は入れ子の cast の切り詰めを畳んだもの)
+		if n >= cv.Width {
 			return "#0"
 		}
-		// 存在するバイトかは cast の入れ子を順に剥いて見る: `cast<sint16>(cast<uint16>(b8))` の 1 バイト目は
-		// (外の cast では 2 バイトの中でも) 中の 1 バイトの b8 には無いので、隣の番地ではなく 0 (fuzz で発覚)
-		if n < cv.Type.Size && castByteExists(cv, n) {
-			return fmt.Sprintf("%d+%s", n, l.toAsm(cv))
+		if lv := ir.ValLiteral(cv); lv != nil && lv.Kind == ir.KindLiteral {
+			// リテラルの一部 (struct のフィールド / SoA のバイト分割): リテラルそのものの n+offset バイト目
+			return l.byte(lv, n+cv.Offset)
 		}
-		return "#0" // 符号拡張は、:sign_extension オペレータで行うので、存在しないbyteは0扱い
+		return fmt.Sprintf("%d+%s", n, l.toAsm(cv))
 	}
 	if ir.ValKind(v) == ir.KindLiteral {
 		lv := ir.ValLiteral(v)
