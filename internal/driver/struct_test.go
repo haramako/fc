@@ -284,3 +284,28 @@ function main():void
 		}
 	}
 }
+
+// 関数でない値の呼び出しはエラー (名前が同じ変数に取られて関数の宣言がエラーになったとき、以前は sema が panic した)。
+func TestCallNonFunction(t *testing.T) {
+	t.Parallel()
+	es := buildErrors(t, map[string]string{"t.fc": `#fc 2
+struct T { x:int; }
+var t0:T;
+function t0(p:int):int
+{
+	return p;
+}
+function main():void
+{
+	t0(1);
+}
+`}, "t.fc")
+	var msgs []string
+	for _, e := range es {
+		msgs = append(msgs, e.Msg)
+	}
+	all := strings.Join(msgs, "\n")
+	if !strings.Contains(all, "already defined") || !strings.Contains(all, "is not a function") {
+		t.Errorf("want both errors, got %q", all)
+	}
+}

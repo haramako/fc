@@ -1810,6 +1810,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			} else {
 				// 普通の関数コール
 				lmdType := ir.ValType(lmdV)
+				if lmdType.Kind != types.Func {
+					// 関数でない値の呼び出し (名前が同じ変数に取られて関数の宣言がエラーになったときなど)。以前は
+					// lmdType.Base (nil) を見てコンパイラが panic していた (fuzz の生成器の名前の衝突で発覚)
+					panic(&diag.Error{Msg: fmt.Sprintf("cannot call %s: type %s is not a function", describe(lmdV), lmdType)})
+				}
 				args = h.fillDefaultArgs(lmdV, args)
 				if lmdType.IsFarFunc() {
 					if !h.prog.FarCallEnabled() {
