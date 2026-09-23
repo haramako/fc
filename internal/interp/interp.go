@@ -52,8 +52,9 @@ const (
 
 type machine struct {
 	mem      [0x10000]byte
-	syms     map[string]int
-	lambdas  map[int]*ir.Lambda // 関数の偽の番地 → 関数
+	syms     map[string]int         // 全体のシンボル (モジュール名つきの大域変数・関数など)
+	local    map[any]map[string]int // 関数 / モジュールの中だけのシンボル (`_2` のような定数データ。.proc の中の名前で、別の関数やモジュールにも同じ名前がある)
+	lambdas  map[int]*ir.Lambda     // 関数の偽の番地 → 関数
 	codeAddr map[*ir.Lambda]int
 	labels   map[*ir.Lambda]map[string]int
 	sp       int
@@ -78,7 +79,7 @@ type call struct {
 
 // Run は modules の _main を実行する。maxSteps は実行する IR 命令数の上限 (0 なら無制限)。
 func Run(modules []*ir.Module, maxSteps int64) (res Result, err error) {
-	m := &machine{syms: map[string]int{}, lambdas: map[int]*ir.Lambda{}, codeAddr: map[*ir.Lambda]int{},
+	m := &machine{syms: map[string]int{}, local: map[any]map[string]int{}, lambdas: map[int]*ir.Lambda{}, codeAddr: map[*ir.Lambda]int{},
 		labels: map[*ir.Lambda]map[string]int{}, sp: stackBase, maxSteps: maxSteps}
 	m.mem[portPrint], m.mem[portExit] = 255, 255
 	defer func() {
@@ -120,13 +121,21 @@ func unsupported(format string, args ...any) {
 
 // layout はシンボルに番地を割り当て、定数表の中身を書く。_main を返す。
 func (m *machine) layout(modules []*ir.Module) *ir.Lambda {
-	var defs []*ir.Def
+	type scoped struct {
+		def   *ir.Def
+		scope any // *ir.Lambda か *ir.Module
+	}
+	var defs []scoped
 	var main *ir.Lambda
 	next := codeBase
 	for _, mod := range modules {
-		defs = append(defs, mod.Defs...)
+		for _, d := range mod.Defs {
+			defs = append(defs, scoped{d, mod})
+		}
 		for _, l := range mod.Lambdas {
-			defs = append(defs, l.Defs...)
+			for _, d := range l.Defs {
+				defs = append(defs, scoped{d, l})
+			}
 			m.codeAddr[l] = next
 			m.lambdas[next] = l
 			m.syms[l.Id] = next
@@ -136,11 +145,21 @@ func (m *machine) layout(modules []*ir.Module) *ir.Lambda {
 			}
 		}
 	}
+	define := func(sd scoped, a int) {
+		if m.local[sd.scope] == nil {
+			m.local[sd.scope] = map[string]int{}
+		}
+		m.local[sd.scope][sd.def.Sym] = a
+		if _, dup := m.syms[sd.def.Sym]; !dup {
+			m.syms[sd.def.Sym] = a
+		}
+	}
 	data := dataBase
-	for _, d := range defs {
+	for _, sd := range defs {
+		d := sd.def
 		switch d.Kind {
 		case ir.DefBss, ir.DefBlock:
-			m.syms[d.Sym] = data
+			define(sd, data)
 			size := d.Type.Size
 			if size < 0 {
 				size = 0
@@ -152,7 +171,7 @@ func (m *machine) layout(modules []*ir.Module) *ir.Lambda {
 		case ir.DefCode:
 			if d.Lambda != nil {
 				if a, ok := m.codeAddr[d.Lambda]; ok {
-					m.syms[d.Sym] = a
+					define(sd, a)
 				}
 			}
 		}
@@ -160,44 +179,99 @@ func (m *machine) layout(modules []*ir.Module) *ir.Lambda {
 	// equ は別のシンボルを指すことがあるので、引けるものから順に
 	for changed := true; changed; {
 		changed = false
-		for _, d := range defs {
+		for _, sd := range defs {
+			d := sd.def
 			if d.Kind != ir.DefEqu || d.Equ == nil {
 				continue
 			}
-			if _, done := m.syms[d.Sym]; done {
+			if _, done := m.local[sd.scope][d.Sym]; done {
 				continue
 			}
 			if d.Equ.IsInt {
-				m.syms[d.Sym] = d.Equ.Int & 0xffff
+				define(sd, d.Equ.Int&0xffff)
 				changed = true
-			} else if a, ok := m.syms[d.Equ.Symbol]; ok {
-				m.syms[d.Sym] = a
+			} else if a, ok := m.lookup(sd.scope, d.Equ.Symbol); ok {
+				define(sd, a)
 				changed = true
 			}
 		}
 	}
-	for _, d := range defs {
-		if d.Kind == ir.DefBlock {
-			m.writeBlock(m.syms[d.Sym], d.Type, d.Elems)
+	for _, sd := range defs {
+		if sd.def.Kind == ir.DefBlock {
+			m.writeBlock(sd.scope, m.local[sd.scope][sd.def.Sym], sd.def.Type, sd.def.Elems)
 		}
 	}
 	return main
 }
 
-// writeBlock は定数表 (配列) の要素を書く。
-func (m *machine) writeBlock(addr int, t *types.Type, elems []ir.Operand) {
-	es := 1
-	if t.Kind == types.Array && t.Base != nil {
-		es = t.Base.Size
+// lookup はシンボルの番地 (関数の中 → そのモジュールの中 → 全体の順)。scope は *ir.Lambda か *ir.Module (nil 可)。
+func (m *machine) lookup(scope any, sym string) (int, bool) {
+	if l, ok := scope.(*ir.Lambda); ok {
+		if a, ok := m.local[l][sym]; ok {
+			return a, true
+		}
+		scope = l.Module
 	}
-	for i, e := range elems {
-		if av, ok := e.(*ir.Value); ok && av.Kind == ir.KindArrayLiteral {
-			m.writeBlock(addr+i*es, t.Base, av.Elems)
-			continue
+	if mod, ok := scope.(*ir.Module); ok && mod != nil {
+		if a, ok := m.local[mod][sym]; ok {
+			return a, true
 		}
-		for k := 0; k < es; k++ {
-			m.mem[(addr+i*es+k)&0xffff] = m.byteOf(nil, e, k)
+	}
+	a, ok := m.syms[sym]
+	return a, ok
+}
+
+// scopeOf は f の関数 (f が nil なら全体)。
+func scopeOf(f *frame) any {
+	if f == nil {
+		return nil
+	}
+	return f.lmd
+}
+
+// writeBlock は定数データ (配列・struct) を書く。codegen の emitData と同じく、struct はフィールドごと、配列は要素ごとに
+// 型をたどって平らに並べる (以前は要素を全部 1 バイトとして書いていて、struct のリテラル `var ls:S = {…}` の値が
+// ずれていた)。
+func (m *machine) writeBlock(scope any, addr int, t *types.Type, elems []ir.Operand) {
+	f := &frame{lmd: &ir.Lambda{}}
+	switch x := scope.(type) {
+	case *ir.Lambda:
+		f.lmd = x
+	case *ir.Module:
+		f.lmd = &ir.Lambda{Module: x}
+	}
+	var put func(t *types.Type, v ir.Operand)
+	put = func(t *types.Type, v ir.Operand) {
+		switch t.Kind {
+		case types.Struct, types.Array:
+			lv := ir.ValLiteral(v)
+			if lv == nil || lv.Kind != ir.KindArrayLiteral {
+				unsupported("constant %s for %s", ir.OperandString(v), t)
+			}
+			for i, e := range lv.Elems {
+				if t.Kind == types.Struct {
+					put(t.Fields[i].Type, e)
+				} else {
+					put(t.Base, e)
+				}
+			}
+		default:
+			n := t.Size
+			if t.IsFarFunc() {
+				n = 3
+			}
+			for k := 0; k < n; k++ {
+				m.mem[addr&0xffff] = m.byteOf(f, v, k)
+				addr++
+			}
 		}
+	}
+	if t.Kind == types.Struct {
+		put(t, ir.NewArrayLiteral("", t, elems))
+		return
+	}
+	for _, e := range elems {
+		put(t.Base, e)
 	}
 }
 
@@ -218,7 +292,7 @@ func (m *machine) addrOf(f *frame, o ir.Operand) int {
 			}
 			unsupported("local %s not in frame of %s", x.Name, f.lmd.Id)
 		case ir.KindGlobal:
-			if a, ok := m.syms[x.Symbol]; ok {
+			if a, ok := m.lookup(scopeOf(f), x.Symbol); ok {
 				return a
 			}
 			unsupported("unknown symbol %q", x.Symbol)
@@ -232,8 +306,8 @@ func (m *machine) addrOf(f *frame, o ir.Operand) int {
 }
 
 // symAddr はリテラルのシンボル (関数・データ) の番地。
-func (m *machine) symAddr(sym string) int {
-	if a, ok := m.syms[sym]; ok {
+func (m *machine) symAddr(f *frame, sym string) int {
+	if a, ok := m.lookup(scopeOf(f), sym); ok {
 		return a
 	}
 	unsupported("unknown symbol %q", sym)
@@ -249,7 +323,7 @@ func (m *machine) byteOf(f *frame, o ir.Operand, k int) byte {
 			if x.IsInt {
 				return byte(x.Int >> (8 * k))
 			}
-			a := m.symAddr(x.Symbol)
+			a := m.symAddr(f, x.Symbol)
 			switch k {
 			case 0:
 				return byte(a)
@@ -288,7 +362,38 @@ func (m *machine) byteOf(f *frame, o ir.Operand, k int) byte {
 	return 0
 }
 
-// read は o の下位 n バイト (n ≤ 8)。
+// bytesOf は o の下位 n バイト (struct のコピーのように 8 バイトを超えることがある)。
+func (m *machine) bytesOf(f *frame, o ir.Operand, n int) []byte {
+	b := make([]byte, n)
+	for k := range b {
+		b[k] = m.byteOf(f, o, k)
+	}
+	return b
+}
+
+// writeBytes は o (変数・cast したその一部) に b を書く。
+func (m *machine) writeBytes(f *frame, o ir.Operand, b []byte) {
+	a := m.addrOf(f, o)
+	for k, x := range b {
+		m.store((a+k)&0xffff, x)
+	}
+}
+
+func (m *machine) loadBytes(p, n int) []byte {
+	b := make([]byte, n)
+	for k := range b {
+		b[k] = m.mem[(p+k)&0xffff]
+	}
+	return b
+}
+
+func (m *machine) storeBytes(p int, b []byte) {
+	for k, x := range b {
+		m.store((p+k)&0xffff, x)
+	}
+}
+
+// read は o の下位 n バイト (n ≤ 8。演算の入力)。
 func (m *machine) read(f *frame, o ir.Operand, n int) uint64 {
 	var v uint64
 	for k := 0; k < n; k++ {
@@ -464,7 +569,7 @@ func (m *machine) run(f *frame) {
 			}
 		case ir.OpReturn:
 			if op.In(0) != nil && f.lmd.Result != nil {
-				m.write(f, f.lmd.Result, m.read(f, op.Src[0], f.lmd.Result.Type.Size), f.lmd.Result.Type.Size)
+				m.writeBytes(f, f.lmd.Result, m.bytesOf(f, op.Src[0], f.lmd.Result.Type.Size))
 			}
 			return
 		case ir.OpPushResult, ir.OpPushFastcallResult:
@@ -473,11 +578,7 @@ func (m *machine) run(f *frame) {
 			if len(calls) == 0 {
 				unsupported("push_arg without push_result")
 			}
-			n := op.Type.Size
-			b := make([]byte, n)
-			for k := range b {
-				b[k] = m.byteOf(f, op.Src[0], k)
-			}
+			b := m.bytesOf(f, op.Src[0], op.Type.Size)
 			c := calls[len(calls)-1]
 			c.args = append(c.args, b)
 		case ir.OpCall, ir.OpFastcall:
@@ -492,16 +593,12 @@ func (m *machine) run(f *frame) {
 				return
 			}
 			if op.Dst != nil {
-				n := size(op.Dst)
-				var v uint64
-				for k := 0; k < n && k < len(r); k++ {
-					v |= uint64(r[k]) << (8 * k)
-				}
-				m.write(f, op.Dst, v, n)
+				b := make([]byte, size(op.Dst))
+				copy(b, r)
+				m.writeBytes(f, op.Dst, b)
 			}
 		case ir.OpLoad:
-			n := size(op.Dst)
-			m.write(f, op.Dst, m.read(f, op.Src[0], n), n)
+			m.writeBytes(f, op.Dst, m.bytesOf(f, op.Src[0], size(op.Dst)))
 		case ir.OpSignExtension:
 			n := size(op.Dst)
 			if n > 2 {
@@ -560,30 +657,24 @@ func (m *machine) run(f *frame) {
 			m.write(f, op.Dst, uint64(m.addrOf(f, op.Src[0])), 2)
 		case ir.OpPget:
 			p := int(m.read(f, op.Src[0], 2))
-			n := size(op.Dst)
-			m.write(f, op.Dst, m.load(p, n), n)
+			m.writeBytes(f, op.Dst, m.loadBytes(p, size(op.Dst)))
 		case ir.OpPset:
 			p := int(m.read(f, op.Src[0], 2))
-			n := ir.ValType(op.Src[0]).Base.Size
-			m.storeN(p, m.read(f, op.Src[1], n), n)
+			m.storeBytes(p, m.bytesOf(f, op.Src[1], ir.ValType(op.Src[0]).Base.Size))
 		case ir.OpIndexPget:
 			p := m.elemAddr(f, op.Src[0], op.Src[1], op.Scaled)
-			n := size(op.Dst)
-			m.write(f, op.Dst, m.load(p, n), n)
+			m.writeBytes(f, op.Dst, m.loadBytes(p, size(op.Dst)))
 		case ir.OpIndexPset:
 			p := m.elemAddr(f, op.Src[0], op.Src[1], op.Scaled)
-			n := ir.ValType(op.Src[0]).Base.Size
-			m.storeN(p, m.read(f, op.Src[2], n), n)
+			m.storeBytes(p, m.bytesOf(f, op.Src[2], ir.ValType(op.Src[0]).Base.Size))
 		case ir.OpFieldPget:
 			off, _ := ir.ValIntLiteral(op.Src[1])
 			p := int(m.read(f, op.Src[0], 2)) + off
-			n := size(op.Dst)
-			m.write(f, op.Dst, m.load(p, n), n)
+			m.writeBytes(f, op.Dst, m.loadBytes(p, size(op.Dst)))
 		case ir.OpFieldPset:
 			off, _ := ir.ValIntLiteral(op.Src[1])
 			p := int(m.read(f, op.Src[0], 2)) + off
-			n := op.Type.Size
-			m.storeN(p, m.read(f, op.Src[2], n), n)
+			m.storeBytes(p, m.bytesOf(f, op.Src[2], op.Type.Size))
 		default:
 			unsupported("op %s", op.Code)
 		}
@@ -597,20 +688,6 @@ func (m *machine) writeBool(f *frame, dst ir.Operand, t bool) {
 		b = 1
 	}
 	m.write(f, dst, b, 1)
-}
-
-func (m *machine) load(p, n int) uint64 {
-	var v uint64
-	for k := 0; k < n; k++ {
-		v |= uint64(m.mem[(p+k)&0xffff]) << (8 * k)
-	}
-	return v
-}
-
-func (m *machine) storeN(p int, v uint64, n int) {
-	for k := 0; k < n; k++ {
-		m.store((p+k)&0xffff, byte(v>>(8*k)))
-	}
 }
 
 // elemAddr は arr[idx] の番地 (arr は配列かポインタ)。scaled なら idx はバイト単位。
@@ -636,7 +713,7 @@ func (m *machine) elemAddr(f *frame, arr, idx ir.Operand, scaled bool) int {
 func (m *machine) callee(f *frame, o ir.Operand) *ir.Lambda {
 	var a int
 	if lv, ok := o.(*ir.Value); ok && lv.Kind == ir.KindLiteral && !lv.IsInt {
-		a = m.symAddr(lv.Symbol)
+		a = m.symAddr(f, lv.Symbol)
 	} else {
 		a = int(m.read(f, o, 2))
 	}
