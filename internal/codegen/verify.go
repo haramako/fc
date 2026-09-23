@@ -1,12 +1,12 @@
 package codegen
 
-// レジスタの検査 (FC_VERIFY_REGS=1。テストと fuzz で有効): 命令ごとに実際に出した asm を見て、
-//   - 常駐: regalloc.Classify が「この命令はレジスタに触らない」(ResFree) とした常駐レジスタを、命令の本体が書いていないか
-//   - 引数の保持: 呼び出しの引数を A / Y に置いてから call まで、stack 系の push_result (ldx FC_SP) から call まで、
-//     間の命令が (退避・復帰も含めて) そのレジスタを書いていないか
-// を確かめる。regalloc の「どの命令が A / X / Y を壊すか」(freeA / needsY / needsX …) と codegen の実際の命令列は
-// 別々に書かれていて、食い違いが fuzz で何度も出た (2 バイトの dec が A を壊す、push_result の後の ldx など)。
-// 食い違いを値の違いになる前に、コンパイルエラーとして見つける。
+// レジスタの書き込みを実際に出した asm から数える。
+//   - 常駐 (常に): regalloc.Classify が「この命令はレジスタに触らない」(ResFree) とした常駐レジスタを、命令の本体が
+//     書いていたら、その命令を退避 / 復帰にしてコンパイルし直す (CompileLambda。regalloc の見積もり (freeA / needsY /
+//     needsX …) と codegen の実際の命令列は別々に書かれていて、食い違いが fuzz で何度も出た)
+//   - 引数の保持 (FC_VERIFY_REGS=1。テストと fuzz で有効): 呼び出しの引数を A / Y に置いてから call まで、stack 系の
+//     push_result (ldx FC_SP) から call まで、間の命令が (退避・復帰も含めて) そのレジスタを書いていないか。codegen の
+//     中の約束事なので、破っていればコンパイルエラー
 
 import (
 	"fmt"
@@ -20,6 +20,30 @@ import (
 type regsKept struct{ a, x, y bool }
 
 func (k regsKept) any() bool { return k.a || k.x || k.y }
+
+func (k regsKept) and(o regsKept) regsKept { return regsKept{k.a && o.a, k.x && o.x, k.y && o.y} }
+
+// regsWritten は lines が書くレジスタ。`pha … pla` の間の A の書き込みは pla で元に戻るので数えない。
+func regsWritten(lines []any) regsKept {
+	var w regsKept
+	depth := 0
+	for _, line := range (&asmLines{lines: lines}).flatten() {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(t, "pha"):
+			depth++
+			continue
+		case strings.HasPrefix(t, "pla") && depth > 0:
+			depth--
+			continue
+		}
+		a, x, y := regWrites(t)
+		w.a = w.a || a && depth == 0
+		w.x = w.x || x
+		w.y = w.y || y
+	}
+	return w
+}
 
 // regWrites は 1 行の命令が書くレジスタ。ラベル・コメント・ディレクティブは何も書かない。
 // jsr や知らない命令 (マクロ) は全部を書くと見る。

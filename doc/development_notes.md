@@ -137,6 +137,15 @@ go test ./...                                    # 全部 (golden + examples + N
   （`opt.Passes`。全関数に 1 段ずつ）を当てては実行し直し、最初に出力が変わった段をログに出す（最後まで変わらなければ
   レジスタ割付か codegen）。`FC_DISABLE` での手の切り分けが要らなくなる。わざと commute を壊すと影響した 96 本すべてで
   「opt の commute」と出ることを確認済み
+- **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
+  （`freeA` / `needsX` / `needsY`）は codegen の出力を手で写した見積もりで、食い違いが fuzz で何度も出ていた
+  （2 バイトの dec、cast を挟んだ if、Y 代用と融合、push_result の後の ldx …）。`CompileLambda` は命令の本体を出した後で
+  実際に書いたレジスタを数え（`regsWritten`）、常駐を「触らない」（ResFree）とした命令が書いていたら、その命令だけ
+  退避 / 復帰（ResClobber）にして関数ごとコンパイルし直す（ラベルの番号などは `saveState` で戻す）。見積もりは常駐の
+  損得の計算にだけ使う（外れても遅くなるだけ）。直した数は `Llc.ResidentFixes`、中身は `FC_TRACE_RESIDENT=1`。
+  castle / miku / golden では 0 回（出力は同じ）。`TestResidentDec16` の修正を戻しても 5 命令が退避に直って通る。
+  呼び出しの引数の保持（A の最後の引数、Y の引数、stack 系の X = FC_SP）の検査は codegen の中の約束事なので、
+  `FC_VERIFY_REGS` のコンパイルエラーのまま
 - **生成器をさらに広げた**（2026-09-23）: soa（`soa E:[8]S`。フィールドの読み書き、要素ハンドル `h:*E`、要素の
   gather / scatter）、struct の値のコピー（`s0 = sa[i]`、重なりうる `sa[i] = sa[j]`、`*ps = …`）、`ps:*S` の引数、
   far1 の関数の farfn 表（`const fq0:[2]farfn(…)` をトランポリン経由で呼ぶ）、main の関数ポインタのローカル変数
