@@ -1062,8 +1062,12 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			before[pos] = append(before[pos], mk...)
 			return
 		}
-		backOver := func(pos int) int { // pos の手前にある写しの前へ
-			for pos > 0 && isResCopy(ops[pos-1]) {
+		// pos の手前にある (内側の領域の入口の) 読み込みの写しの前へ。退避 (レジスタ → Home) は越えない: 内側の出口の辺を
+		// 分割した写しだけのブロック (`内側の退避; この領域の復帰; jmp`) がこの領域の外への出口でもあるとき、書き戻しを
+		// 内側の退避より前に置くと、X がまだ内側の変数を持っているのにそれをこの領域の変数の Home に書いていた
+		// (`l1.lo = X (= l4)`。広げた生成器の fuzz で発覚。TestResidentExitThroughCopyBlock)
+		backOver := func(pos int) int {
+			for pos > 0 && isResCopy(ops[pos-1]) && !isResSpill(ops[pos-1]) {
 				pos--
 			}
 			return pos

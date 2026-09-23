@@ -782,6 +782,45 @@ function main():void
 	}
 }
 
+// 常駐の出口の辺の順序: 内側のループ (X = l4) の出口の辺を分割した写しだけのブロック (`l4 の退避; 関数全体の l1.lo の
+// 復帰; jmp`) が、関数全体の領域 (X = l1.lo) の外 (展開した 2 つ目のループ) への出口でもあった。関数全体の書き戻し
+// `l1.lo = X` が内側の退避より前に置かれ、X がまだ l4 (= 3) なのに l1.lo に書いて、7 のはずが 3 を返した
+// (広げた生成器の fuzz、種 3101767。onEdge の backOver が退避の写しも飛び越えていた)。
+func TestResidentExitThroughCopyBlock(t *testing.T) {
+	t.Parallel()
+	src := `function ff0():sint16 options(fastcall: true)
+{
+	var l1:sint16 = (-32599);
+	var la0:[16]int16;
+	var q0:*int16 = &la0[1];
+	var l4:int = 0;
+	la0[1] = 4;
+	la0[6] = 7;
+	l1 = ((*q0) as sint16);
+	for (var l2:sint = 0; l2 < 3; l2++) {
+		q0[((l1 as int) & 7)] = max((l1 as int16), 3);
+	}
+	for (var l3:int = 0; l3 < 2; l3++) {
+		while (((((~((*q0) as sint)) || (l1 as int16)) as int) >= ((!l1) as int)) && l4 < 3) {
+			l4++;
+			l1 = (la0[6] as sint16);
+		}
+	}
+	return l1;
+}
+function main():void
+{
+	printf(ff0(), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "7\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 狭めてから広げ直す cast: 定数の `as` は型の幅に切り詰める (`(300 as int) as int16` が 300 のままだった。sema の
 // constEval が値を切り詰めずに型だけ貼り替えていた)。変数の `((g as int) as int16)` を同じ変数への `+ 1` / `<< 1` に
 // 使う形 (常駐の isStep / isMemShift が「x のその場の inc / シフト」と見ないこと。上位は 0 になる)。
