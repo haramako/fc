@@ -110,9 +110,19 @@ type rpGen struct {
 	fqSig   rpFunc    // fq0 の要素の型
 	fnVar   bool      // main の関数ポインタのローカル変数 fv (fp0 の要素の型。今の関数が main のときだけ使う)
 	soa     bool      // soa E:[8]S がある (struct のフィールドがあるとき)
-	hptr    string    // 今の関数の soa の要素ハンドル (`h`。"" なら無し)
-	hasFar  bool      // far1 モジュール (options(bank: 1)) がある
-	sptr    string    // 今の関数の struct へのポインタ (`ps`。"" なら無し)
+	tArr    rpType    // struct T { s:S; arr:[4]tArr; x:tX; } の配列フィールドの要素型 (hasT のとき)
+	tX      rpType    // T の x の型
+	hasT    bool      // struct T (S の入れ子と配列フィールド) と u0 / ua:[2]T がある
+	ptr     string    // 今の関数の T へのポインタ (`pt`。"" なら無し)
+	alias   bool      // `var ab:[8]int; alias w:S = ab;` (同じ場所を配列と struct で読み書きする)
+	lsv     string    // 今の関数のローカルの struct 変数 (`ls`。"" なら無し)
+	sv      *rpFunc   // struct を値で受けて値で返す関数 sv(v:S, k:int):S (nil なら無し)
+	lambda  bool      // main のラムダ lf:fn(int):int (今の関数が main のときだけ使う)
+	labels  []string  // 囲んでいるラベル付きのループ (内側が末尾)
+	nLabel  int
+	hptr    string // 今の関数の soa の要素ハンドル (`h`。"" なら無し)
+	hasFar  bool   // far1 モジュール (options(bank: 1)) がある
+	sptr    string // 今の関数の struct へのポインタ (`ps`。"" なら無し)
 	funcs   []*rpFunc
 	scope   []rpVar // 今の関数で見えるローカル (引数含む。ポインタも)
 	loops   int     // ループの入れ子の深さ (break / continue を出せるか)
@@ -161,6 +171,12 @@ func (g *rpGen) arrayRef(a rpVar) string { return fmt.Sprintf("&%s[%s]", a.name,
 func (g *rpGen) fieldRef() (string, rpType) {
 	f := g.fields[g.pick(len(g.fields))]
 	switch {
+	case g.lsv != "" && g.chance(0.2):
+		return fmt.Sprintf("%s.%s", g.lsv, f.name), f.typ
+	case g.alias && g.chance(0.15):
+		return "w." + f.name, f.typ // ab と同じ場所
+	case g.hasT && g.chance(0.25):
+		return fmt.Sprintf("%s.s.%s", g.tBase(), f.name), f.typ
 	case g.hptr != "" && g.chance(0.25):
 		return fmt.Sprintf("%s.%s", g.hptr, f.name), f.typ
 	case g.soa && g.chance(0.3):
@@ -171,6 +187,30 @@ func (g *rpGen) fieldRef() (string, rpType) {
 		return fmt.Sprintf("sa[(%s & 3)].%s", g.expr(rpTypes[0], 1), f.name), f.typ
 	}
 	return "s0." + f.name, f.typ
+}
+
+// tBase は struct T の値 (u0、ua の要素、ポインタ pt 経由。t0 は関数ポインタ表の関数の名前)。
+func (g *rpGen) tBase() string {
+	switch {
+	case g.ptr != "" && g.chance(0.35):
+		return g.ptr
+	case g.chance(0.5):
+		return fmt.Sprintf("ua[(%s & 1)]", g.expr(rpTypes[0], 1))
+	}
+	return "u0"
+}
+
+// tRef は struct T の x か配列フィールド arr の要素 (入れ子の struct s のフィールドは fieldRef)。
+func (g *rpGen) tRef() (string, rpType) {
+	b := g.tBase()
+	if g.chance(0.3) {
+		return b + ".x", g.tX
+	}
+	j := fmt.Sprintf("%d", g.pick(4))
+	if g.chance(0.6) {
+		j = fmt.Sprintf("(%s & 3)", g.expr(rpTypes[0], 1))
+	}
+	return fmt.Sprintf("%s.arr[%s]", b, j), g.tArr
 }
 
 func (g *rpGen) pick(n int) int        { return g.r.Intn(n) }
@@ -349,6 +389,8 @@ func (g *rpGen) fpCall(depth int, t rpType) (string, bool) {
 		return strings.Join(args, ", ")
 	}
 	switch {
+	case g.lambda && g.cur != nil && g.cur.name == "main" && g.chance(0.3):
+		return cast(fmt.Sprintf("lf(%s)", g.expr(rpTypes[0], depth)), rpTypes[0], t), true
 	case g.fqTable != nil && g.chance(0.35):
 		return cast(fmt.Sprintf("fq0[(%s & %d)](%s)", g.expr(rpTypes[0], 1), len(g.fqTable)-1, callArgs(g.fqSig)), g.fqSig.ret, t), true
 	case g.fpTable == nil:
@@ -381,6 +423,10 @@ func (g *rpGen) leaf(t rpType) string {
 		}
 		fallthrough
 	case 3:
+		if g.hasT && g.chance(0.4) {
+			e, ft := g.tRef()
+			return cast(e, ft, t)
+		}
 		if len(g.fields) > 0 {
 			e, ft := g.fieldRef()
 			return cast(e, ft, t)
@@ -433,6 +479,9 @@ func (g *rpGen) lvalue() (string, rpType) {
 			return "(*" + p.name + ")", p.typ
 		}
 	case 5:
+		if g.hasT && g.chance(0.4) {
+			return g.tRef()
+		}
 		if len(g.fields) > 0 {
 			return g.fieldRef()
 		}
@@ -473,6 +522,9 @@ func (g *rpGen) ptrLoop(depth int) *rpStmt {
 	}
 	j0 := g.pick(4)
 	g.setPtr(p.name, true, false)
+	// 本体から外側のラベルへ抜けると、ループの後のポインタの戻し (`p = &a[0]`) を飛ばして fresh でなくなる: 越えさせない
+	g.labels = append(g.labels, "")
+	defer func() { g.labels = g.labels[:len(g.labels)-1] }()
 	g.loops++
 	var head, tail string
 	if g.chance(0.5) {
@@ -538,7 +590,29 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 			srcs = append(srcs, "*"+g.hptr)
 			dsts = append(dsts, "*"+g.hptr)
 		}
-		return rpSimple(fmt.Sprintf("%s = %s;", dsts[g.pick(len(dsts))], srcs[g.pick(len(srcs))]))
+		if g.hasT && g.chance(0.3) {
+			// T 全体 (入れ子の S と配列フィールドごと)
+			ts := []string{"u0", fmt.Sprintf("ua[(%s & 1)]", g.expr(rpTypes[0], 1))}
+			if g.ptr != "" {
+				ts = append(ts, "*"+g.ptr)
+			}
+			return rpSimple(fmt.Sprintf("%s = %s;", ts[g.pick(len(ts))], ts[g.pick(len(ts))]))
+		}
+		for _, x := range []string{g.lsv, map[bool]string{true: "w"}[g.alias]} {
+			if x != "" {
+				srcs = append(srcs, x)
+				dsts = append(dsts, x)
+			}
+		}
+		if g.hasT {
+			srcs = append(srcs, g.tBase()+".s")
+			dsts = append(dsts, g.tBase()+".s")
+		}
+		src := srcs[g.pick(len(srcs))]
+		if g.sv != nil && (g.cur == nil || !g.cur.inline) && g.chance(0.3) {
+			src = fmt.Sprintf("sv(%s, %s)", src, g.expr(rpTypes[0], 1)) // 値で渡して値で返す
+		}
+		return rpSimple(fmt.Sprintf("%s = %s;", dsts[g.pick(len(dsts))], src))
 	case 14:
 		// ポインタを配列の要素に向け直す (添字 0〜7 → fresh)、または struct のポインタを向け直す
 		if ps := g.ptrs(); len(ps) > 0 && g.chance(0.7) {
@@ -559,6 +633,12 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		if g.hptr != "" && g.chance(0.4) {
 			return rpSimple(fmt.Sprintf("%s = &E[%s];", g.hptr, g.index()))
 		}
+		if g.ptr != "" && g.chance(0.4) {
+			if g.chance(0.3) {
+				return rpSimple(fmt.Sprintf("%s = &u0;", g.ptr))
+			}
+			return rpSimple(fmt.Sprintf("%s = &ua[(%s & 1)];", g.ptr, g.expr(rpTypes[0], 1)))
+		}
 		if g.fnVar && g.cur != nil && g.cur.name == "main" && g.chance(0.4) {
 			return rpSimple(fmt.Sprintf("fv = %s;", g.fpTable[g.pick(len(g.fpTable))].name))
 		}
@@ -574,11 +654,13 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		i := g.newLocal(rpTypes[0])
 		g.scope[len(g.scope)-1].readOnly = true
 		n := g.pick(8) + 1
+		label := g.pushLabel()
 		g.loops++
 		body := g.block(depth - 1)
 		g.loops--
+		g.popLabel(label)
 		g.scope = g.scope[:len(g.scope)-1]
-		return &rpStmt{parts: []string{fmt.Sprintf("for (var %s:int = %d; %s; %s--) {\n", i.name, n, i.name, i.name), "}"}, kids: [][]*rpStmt{body}}
+		return &rpStmt{parts: []string{fmt.Sprintf("%sfor (var %s:int = %d; %s; %s--) {\n", label, i.name, n, i.name, i.name), "}"}, kids: [][]*rpStmt{body}}
 	case 0, 1, 2:
 		lv, t := g.lvalue()
 		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
@@ -618,20 +700,24 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		i := g.newLocal(g.typ())
 		g.scope[len(g.scope)-1].readOnly = true
 		n := g.pick(7) + 1
+		label := g.pushLabel()
 		g.loops++
 		body := g.block(depth - 1)
 		g.loops--
+		g.popLabel(label)
 		g.scope = g.scope[:len(g.scope)-1]
-		return &rpStmt{parts: []string{fmt.Sprintf("for (var %s:%s = 0; %s < %d; %s++) {\n", i.name, i.typ.name, i.name, n, i.name), "}"}, kids: [][]*rpStmt{body}}
+		return &rpStmt{parts: []string{fmt.Sprintf("%sfor (var %s:%s = 0; %s < %d; %s++) {\n", label, i.name, i.typ.name, i.name, n, i.name), "}"}, kids: [][]*rpStmt{body}}
 	case 11:
 		// 条件つきの while (回数の上限を別の変数で)
 		c := g.newLocal(rpTypes[0])
 		g.scope = g.scope[:len(g.scope)-1]
 		g.cur.locals = append(g.cur.locals, fmt.Sprintf("var %s:int = 0;", c.name))
+		label := g.pushLabel()
 		g.loops++
 		body := g.block(depth - 1)
 		g.loops--
-		return &rpStmt{parts: []string{fmt.Sprintf("while ((%s) && %s < %d) {\n%s++;\n", g.cond(), c.name, g.pick(6)+1, c.name), "}"}, kids: [][]*rpStmt{body}}
+		g.popLabel(label)
+		return &rpStmt{parts: []string{fmt.Sprintf("%swhile ((%s) && %s < %d) {\n%s++;\n", label, g.cond(), c.name, g.pick(6)+1, c.name), "}"}, kids: [][]*rpStmt{body}}
 	case 12:
 		// switch (タグは 1 バイト)
 		// parts: "switch (tag) {\ncase 1:\n", (case 本体), "case 2:\n", (本体), …, "}"
@@ -678,6 +764,10 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		s.parts[len(s.parts)-1] += "}"
 		return s
 	default:
+		if ls := g.reachableLabels(); len(ls) > 0 && g.chance(0.7) {
+			// 外側のループを抜ける / 次の繰り返しへ (switch の中からも)
+			return rpSimple(fmt.Sprintf("if (%s) { %s %s; }", g.cond(), []string{"break", "continue"}[g.pick(2)], ls[g.pick(len(ls))]))
+		}
 		if g.loops > 0 {
 			return rpSimple(fmt.Sprintf("if (%s) { %s; }", g.cond(), []string{"break", "continue"}[g.pick(2)]))
 		}
@@ -722,6 +812,36 @@ func (g *rpGen) block(depth int) []*rpStmt {
 	return out
 }
 
+// pushLabel はループに付けるラベル (`L3: `。付けないなら "")。popLabel で外す。
+func (g *rpGen) pushLabel() string {
+	if !g.chance(0.6) {
+		return ""
+	}
+	name := fmt.Sprintf("L%d", g.nLabel)
+	g.nLabel++
+	g.labels = append(g.labels, name)
+	return name + ": "
+}
+
+func (g *rpGen) popLabel(label string) {
+	if label != "" {
+		g.labels = g.labels[:len(g.labels)-1]
+	}
+}
+
+// reachableLabels は break / continue で指せるラベル (ポインタをずらすループの本体の外のもの (空の印の手前) は除く)。
+func (g *rpGen) reachableLabels() []string {
+	var r []string
+	for _, l := range g.labels {
+		if l == "" {
+			r = nil
+			continue
+		}
+		r = append(r, l)
+	}
+	return r
+}
+
 func (g *rpGen) newLocal(t rpType) rpVar {
 	v := rpVar{name: fmt.Sprintf("l%d", g.nLocal), typ: t}
 	g.nLocal++
@@ -744,11 +864,14 @@ func (g *rpGen) genFunc(name string, far bool, sig *rpFunc) *rpFunc {
 	g.larrays = nil
 	g.sptr = ""
 	g.hptr = ""
+	g.ptr, g.lsv, g.labels = "", "", nil
 	if far {
 		// main のものは見えない (中身は退避して、関数の後で戻す)
-		globals, arrays, fields, consts, fp := g.globals, g.arrays, g.fields, g.consts, g.fpTable
-		g.globals, g.arrays, g.fields, g.consts, g.fpTable = nil, nil, nil, nil, nil
-		defer func() { g.globals, g.arrays, g.fields, g.consts, g.fpTable = globals, arrays, fields, consts, fp }()
+		globals, arrays, fields, consts, fp, hasT := g.globals, g.arrays, g.fields, g.consts, g.fpTable, g.hasT
+		g.globals, g.arrays, g.fields, g.consts, g.fpTable, g.hasT = nil, nil, nil, nil, nil, false
+		defer func() {
+			g.globals, g.arrays, g.fields, g.consts, g.fpTable, g.hasT = globals, arrays, fields, consts, fp, hasT
+		}()
 	}
 	np := g.pick(3)
 	if sig != nil {
@@ -803,6 +926,7 @@ func (g *rpGen) genRec(name string) {
 	g.larrays = nil
 	g.sptr = ""
 	g.hptr = ""
+	g.ptr, g.lsv, g.labels = "", "", nil
 	n := rpVar{name: "n", typ: rpTypes[0], readOnly: true, small: true}
 	a := rpVar{name: "a", typ: g.typ()}
 	f.params = []rpVar{n, a}
@@ -821,6 +945,22 @@ func (g *rpGen) genRec(name string) {
 	g.cur = nil
 }
 
+// genSv は struct を値で受けて値で返す関数 `sv(v:S, k:int):S` を作る (本体は v のフィールドの書き換え)。
+func (g *rpGen) genSv() {
+	f := &rpFunc{name: "sv"}
+	g.cur = f
+	k := rpVar{name: "k", typ: rpTypes[0]}
+	g.scope = []rpVar{k}
+	g.nLocal, g.larrays, g.sptr, g.hptr, g.ptr, g.lsv, g.labels = 0, nil, "", "", "", "", nil
+	for i := 0; i < g.pick(2)+1; i++ {
+		a, b := g.fields[g.pick(len(g.fields))], g.fields[g.pick(len(g.fields))]
+		op := []string{"+", "-", "^", "&", "|"}[g.pick(5)]
+		f.stmts = append(f.stmts, rpSimple(fmt.Sprintf("v.%s = (%s %s %s);", a.name, cast("v."+b.name, b.typ, a.typ), op, g.expr(a.typ, 1))))
+	}
+	g.sv = f
+	g.cur = nil
+}
+
 // genProgram はプログラム全体を作る (main の文は最後に「全部を出力して exit」)。
 func (g *rpGen) genProgram() {
 	for i := 0; i < g.pick(4)+3; i++ {
@@ -836,6 +976,17 @@ func (g *rpGen) genProgram() {
 	}
 	if len(g.fields) > 0 && g.chance(0.4) {
 		g.soa = true // soa E:[8]S
+	}
+	if len(g.fields) > 0 && g.chance(0.4) {
+		g.hasT, g.tArr, g.tX = true, g.typ(), g.typ() // struct T { s:S; arr:[4]tArr; x:tX; } と u0 / ua:[2]T
+	}
+	if len(g.fields) > 0 && g.chance(0.3) {
+		// 同じ場所を配列 ab と struct w で読み書きする (ab は普通のグローバル配列としても使う)
+		g.alias = true
+		g.arrays = append(g.arrays, rpVar{name: "ab", typ: rpTypes[0]})
+	}
+	if len(g.fields) > 0 && g.chance(0.3) {
+		g.genSv()
 	}
 	for i := 0; i < g.pick(3); i++ {
 		g.consts = append(g.consts, rpVar{name: fmt.Sprintf("ct%d", i), typ: g.typ(), readOnly: true})
@@ -893,6 +1044,27 @@ func (g *rpGen) genProgram() {
 			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("E[%d].%s = %s;", i, f.name, g.lit(f.typ))))
 		}
 	}
+	if g.hasT {
+		for _, b := range []string{"u0", "ua[0]", "ua[1]"} {
+			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s.x = %s;", b, g.lit(g.tX))))
+			for _, f := range g.fields {
+				m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s.s.%s = %s;", b, f.name, g.lit(f.typ))))
+			}
+			for j := 0; j < 4; j++ {
+				m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s.arr[%d] = %s;", b, j, g.lit(g.tArr))))
+			}
+		}
+	}
+	if g.chance(0.3) {
+		// ラムダ (引数と大域変数だけを見る)
+		scope, cur, sptr, hptr, ptr, lsv, larrays := g.scope, g.cur, g.sptr, g.hptr, g.ptr, g.lsv, g.larrays
+		a := rpVar{name: "a", typ: rpTypes[0]}
+		g.scope, g.cur, g.sptr, g.hptr, g.ptr, g.lsv, g.larrays = []rpVar{a}, &rpFunc{name: "lambda", inline: true}, "", "", "", "", nil
+		body := g.expr(rpTypes[0], 2)
+		g.scope, g.cur, g.sptr, g.hptr, g.ptr, g.lsv, g.larrays = scope, cur, sptr, hptr, ptr, lsv, larrays
+		m.locals = append(m.locals, fmt.Sprintf("var lf:fn(int):int = ->fn(a:int):int { return %s; };", body))
+		g.lambda = true
+	}
 	if g.fpTable != nil && g.chance(0.5) {
 		// 関数ポインタのローカル変数 (付け替えながら呼ぶ)
 		ps := make([]string, len(g.fpSig.params))
@@ -909,6 +1081,7 @@ func (g *rpGen) genProgram() {
 	g.larrays = nil
 	g.sptr = ""
 	g.hptr = ""
+	g.ptr, g.lsv, g.labels = "", "", nil
 	g.declareArraysAndPtrs(m)
 	for i := 0; i < g.pick(8)+4; i++ {
 		m.stmts = append(m.stmts, g.stmt(2))
@@ -947,6 +1120,19 @@ func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
 		g.hptr = "h" // soa の要素ハンドル (1 バイトの添字)
 		f.locals = append(f.locals, fmt.Sprintf("var h:*E = &E[%d];", g.pick(8)))
 	}
+	if g.hasT && g.chance(0.35) {
+		g.ptr = "pt" // struct T へのポインタ
+		f.locals = append(f.locals, fmt.Sprintf("var pt:*T = &ua[%d];", g.pick(2)))
+	}
+	if len(g.fields) > 0 && !f.rec && g.chance(0.3) {
+		// ローカルの struct 変数 (フレームに置かれる。全フィールドを初期化)
+		vals := make([]string, len(g.fields))
+		for i, fl := range g.fields {
+			vals[i] = g.lit(fl.typ)
+		}
+		g.lsv = "ls"
+		f.locals = append(f.locals, fmt.Sprintf("var ls:S = {%s};", strings.Join(vals, ", ")))
+	}
 }
 
 // source はプログラムのソース (runEmu が `#fc 2` と stdio を頭に足す)。
@@ -981,6 +1167,20 @@ func (g *rpGen) source() string {
 		b.WriteString("}\nvar s0:S;\nvar sa:[4]S;\n")
 		if g.soa {
 			b.WriteString("soa E:[8]S;\n")
+		}
+		if g.hasT {
+			fmt.Fprintf(&b, "struct T {\n\ts:S;\n\tarr:[4]%s;\n\tx:%s;\n}\nvar u0:T;\nvar ua:[2]T;\n", g.tArr.name, g.tX.name)
+		}
+		if g.alias {
+			b.WriteString("alias w:S = ab;\n")
+		}
+		if g.sv != nil {
+			b.WriteString("function sv(v:S, k:int):S\n{\n")
+			for _, st := range g.sv.stmts {
+				st.render(&b)
+				b.WriteString("\n")
+			}
+			b.WriteString("return v;\n}\n")
 		}
 	}
 	if g.fqTable != nil {
@@ -1039,6 +1239,18 @@ func (g *rpGen) source() string {
 				}
 				for i := 0; g.soa && i < 8; i++ {
 					out = append(out, fmt.Sprintf("E[%d].%s", i, f.name), `" "`)
+				}
+			}
+			for _, bs := range []string{"u0", "ua[0]", "ua[1]"} {
+				if !g.hasT {
+					break
+				}
+				out = append(out, bs+".x", `" "`)
+				for _, f := range g.fields {
+					out = append(out, bs+".s."+f.name, `" "`)
+				}
+				for j := 0; j < 4; j++ {
+					out = append(out, fmt.Sprintf("%s.arr[%d]", bs, j), `" "`)
 				}
 			}
 			fmt.Fprintf(&b, "printf(%s, \"\\n\");\nexit(0);\n", strings.Join(out, ", "))
@@ -1148,6 +1360,11 @@ const rpInterpSteps = 20_000_000
 // (asm など) や上限は ok = false (判定しない)。
 func rpInterp(t *testing.T, files map[string]string) (out string, ok bool, err error) {
 	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			out, ok, err = "", true, fmt.Errorf("panic: %v", r) // sema / インタプリタの panic も失敗として報告する
+		}
+	}()
 	dir := t.TempDir()
 	for name, src := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
@@ -1174,8 +1391,13 @@ func rpInterp(t *testing.T, files map[string]string) (out string, ok bool, err e
 // rpLocate は失敗したプログラムで、どの段が IR の意味を変えたかを切り分ける: sema の IR をインタプリタで実行した
 // 出力を基準に、インライン展開 → opt の各段 (全関数に 1 段ずつ当てる) の後で実行し直し、最初に出力が変わった段を返す。
 // 最後まで変わらなければ、壊したのはレジスタ割付か codegen (最適化の後の IR の意味は正しい)。
-func rpLocate(t *testing.T, files map[string]string) string {
+func rpLocate(t *testing.T, files map[string]string) (res string) {
 	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			res = fmt.Sprintf("切り分けの途中で panic: %v", r)
+		}
+	}()
 	dir := t.TempDir()
 	for name, src := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
