@@ -128,6 +128,15 @@ go test ./...                                    # 全部 (golden + examples + N
   `g2++` は `inc lo; bne @s; inc hi` なので、下位が 0 に折り返すと Z は上位を映すのに、直後の `if ((g2 as sint))`
   （下位バイトの検査）が `flagsFromIncDec` でその Z を使っていた（2 バイトの inc の後は使わない。2 バイトの dec は最後が
   `dec lo` なので下位を映す。`TestIfLowByteAfterInc16`）
+- **IR インタプリタを 3 つ目の判定に**（2026-09-23、`internal/interp`）: -O 0 と -O 2 の差分だけでは、両方のレベルで同じように
+  間違える codegen のバグ（符号付きの変数シフトなど）が見えない。sema の直後の IR を 6502 を介さずに実行し、emu の出力と
+  比べる（`rpCheck` の失敗の種類 `interp`。`-randinterp=false` で切る）。各命令の意味は codegen の出すコードに合わせる
+  （オペランドの k バイト目は codegen の byte と同じ規則、加減算は Dst の幅、比較は入力の大きい方の幅、乗除算は Dst の
+  幅と符号の床除算）。stdio は FC のまま実行し、emu と同じ $FFFE / $FFFF への書き込みで出力・終了する。遅くならない
+  （1000 本で 20 秒のまま）。**失敗の切り分け**（`rpLocate`）: 最小化した後、sema の IR にインライン展開 → opt の各段
+  （`opt.Passes`。全関数に 1 段ずつ）を当てては実行し直し、最初に出力が変わった段をログに出す（最後まで変わらなければ
+  レジスタ割付か codegen）。`FC_DISABLE` での手の切り分けが要らなくなる。わざと commute を壊すと影響した 96 本すべてで
+  「opt の commute」と出ることを確認済み
 - **cast の正規形**（2026-09-23、Linux に移ってから）: `ir.CastedValue` は常に 1 段で `{From, Type, Offset, Width}`
   （From の Offset バイト目から Width バイトを読み、上位はゼロ拡張）。入れ子の cast は `ir.NewCastedValue` が畳む。
   それまでは入れ子のまま持っていて、内側の切り詰めを各パスが読み落とすバグが fuzz で 8 件以上出ていた（`castBits` /

@@ -7,10 +7,13 @@ package driver
 //	go test ./internal/driver -run TestRandomPrograms -randn 500 -randseed 12345
 //
 // 食い違ったら文を 1 つずつ消して最小化し、そのプログラムと両方の出力をログに出す (ops_test.go に足す材料)。
+// -O 0 と -O 2 が同じでも、最適化前の IR をインタプリタ (internal/interp) で実行した出力と違えば失敗にする (両方の
+// レベルで同じように間違える codegen のバグを拾う。`-randinterp=false` で切る)。
 // 未定義動作は生成しない: 0 除算 (除数は `| 1` か 0 でないリテラル)、範囲外の添字 (`& 7`)、2 バイト値の変数シフト
 // (シフト量はリテラル)、無限ループ (回数は上限つき)。
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -19,11 +22,17 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/haramako/fc/internal/interp"
+	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/opt"
+	"github.com/haramako/fc/internal/sema"
 )
 
 var (
-	randN    = flag.Int("randn", 30, "TestRandomPrograms のプログラム数")
-	randSeed = flag.Int64("randseed", 0, "TestRandomPrograms の種 (0 なら 1 から順)")
+	randN      = flag.Int("randn", 30, "TestRandomPrograms のプログラム数")
+	randSeed   = flag.Int64("randseed", 0, "TestRandomPrograms の種 (0 なら 1 から順)")
+	randInterp = flag.Bool("randinterp", true, "TestRandomPrograms で最適化前の IR のインタプリタの出力とも比べる")
 )
 
 // rpType は生成に使う整数型。
@@ -976,9 +985,96 @@ func rpRun(t *testing.T, files map[string]string, level int, maxCycles int64) (o
 	return o.String(), nil
 }
 
+// rpInterpSteps はインタプリタで実行する IR 命令数の上限 (emu の 20M サイクルより十分多い。止まらない種は判定を飛ばす)。
+const rpInterpSteps = 20_000_000
+
+// rpInterp はソースを sema だけ通して、最適化前の IR をインタプリタで実行した出力を返す。インタプリタが扱わない命令
+// (asm など) や上限は ok = false (判定しない)。
+func rpInterp(t *testing.T, files map[string]string) (out string, ok bool, err error) {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			return "", false, err
+		}
+	}
+	prog, cerr := sema.Compile(dir, NewCompiler(absRepoRoot).libPath("emu"), "t.fc")
+	if cerr != nil {
+		return "", false, cerr
+	}
+	res, err := interp.Run(prog.Modules.List(), rpInterpSteps)
+	if errors.Is(err, interp.ErrUnsupported) || errors.Is(err, interp.ErrStepLimit) {
+		return "", false, nil
+	}
+	if err != nil {
+		return res.Out, true, err
+	}
+	if res.Exit != 0 {
+		return res.Out, true, fmt.Errorf("exit code %d", res.Exit)
+	}
+	return res.Out, true, nil
+}
+
+// rpLocate は失敗したプログラムで、どの段が IR の意味を変えたかを切り分ける: sema の IR をインタプリタで実行した
+// 出力を基準に、インライン展開 → opt の各段 (全関数に 1 段ずつ当てる) の後で実行し直し、最初に出力が変わった段を返す。
+// 最後まで変わらなければ、壊したのはレジスタ割付か codegen (最適化の後の IR の意味は正しい)。
+func rpLocate(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			return err.Error()
+		}
+	}
+	prog, cerr := sema.Compile(dir, NewCompiler(absRepoRoot).libPath("emu"), "t.fc")
+	if cerr != nil {
+		return cerr.Error()
+	}
+	mods := prog.Modules.List()
+	run := func() (string, bool) {
+		res, err := interp.Run(mods, rpInterpSteps)
+		if errors.Is(err, interp.ErrUnsupported) || errors.Is(err, interp.ErrStepLimit) {
+			return "", false
+		}
+		return fmt.Sprintf("%q exit=%d %v", res.Out, res.Exit, err), true
+	}
+	ref, ok := run()
+	if !ok {
+		return "切り分けられない (最適化前の IR をインタプリタが扱えない)"
+	}
+	if err := opt.InlineProgram(mods); err != nil {
+		return "インライン展開がエラー: " + err.Error()
+	}
+	opt.DevirtualizeProgram(mods, prog.FarCallEnabled())
+	if out, ok := run(); !ok || out != ref {
+		return fmt.Sprintf("インライン展開 / devirtualize で出力が変わった (前 %s、後 %s)", ref, out)
+	}
+	var lmds []*ir.Lambda
+	for _, m := range mods {
+		for _, l := range m.Lambdas {
+			if !l.Extern && len(l.Ops) > 0 {
+				lmds = append(lmds, l)
+			}
+		}
+	}
+	for _, p := range opt.Passes(prog.Types) {
+		for _, l := range lmds {
+			p.Run(l)
+		}
+		out, ok := run()
+		if !ok {
+			return fmt.Sprintf("切り分けられない (opt の %s の後の IR をインタプリタが扱えない)", p.Name)
+		}
+		if out != ref {
+			return fmt.Sprintf("opt の %s で出力が変わった (前 %s、後 %s。FC_DISABLE=%s で確かめる)", p.Name, ref, out, p.Name)
+		}
+	}
+	return "最適化の後の IR はインタプリタで同じ出力: レジスタ割付か codegen (-O 0 だけなら codegen)"
+}
+
 // rpResult は 1 つのプログラムの判定。
 type rpResult struct {
-	kind   string // "ok" / "differs" / "panic" / "error" (error は生成器の問題: 型エラーなど)
+	kind   string // "ok" / "differs" / "interp" / "panic" / "error" (error は生成器の問題: 型エラーなど)
 	detail string
 }
 
@@ -1010,6 +1106,12 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	}
 	if o0 != o2 {
 		return rpResult{"differs", fmt.Sprintf("-O 0: %s-O 2: %s", o0, o2)}
+	}
+	if *randInterp {
+		oi, ok, err := rpInterp(t, files)
+		if ok && (err != nil || oi != o2) {
+			return rpResult{"interp", fmt.Sprintf("-O 0 / -O 2: %sinterp: %s %v", o2, oi, err)}
+		}
 	}
 	return rpResult{"ok", ""}
 }
@@ -1088,7 +1190,8 @@ func TestRandomPrograms(t *testing.T) {
 			default:
 				rpMinimize(t, g, res.kind)
 				res = rpCheck(t, g.sources())
-				t.Errorf("%s (seed %d):\n%s\n%s", map[string]string{"differs": "-O 0 と -O 2 の出力が違う", "panic": "コンパイラが panic", "hang": "両方のレベルで止まらない"}[res.kind], seed, g.allSource(), res.detail)
+				res.detail += "\n切り分け: " + rpLocate(t, g.sources())
+				t.Errorf("%s (seed %d):\n%s\n%s", map[string]string{"differs": "-O 0 と -O 2 の出力が違う", "interp": "-O 0 / -O 2 とインタプリタ (最適化前の IR) の出力が違う", "panic": "コンパイラが panic", "hang": "両方のレベルで止まらない"}[res.kind], seed, g.allSource(), res.detail)
 			}
 		})
 	}
