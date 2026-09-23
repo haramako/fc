@@ -222,3 +222,24 @@ func compileAsm(t *testing.T, body string) string {
 	}
 	return string(asm)
 }
+
+// stack 系 (再帰) の関数のフレームは `<S+k,x` で触るので、FC_STACK (128 バイト) を超えたら ld65 / ca65 の範囲エラーでなく
+// frame size over にする (-O 2 のインライン展開で再帰関数のフレームが 223 / 260 バイトになり、fuzz で発覚)。
+func TestStackFrameTooLarge(t *testing.T) {
+	t.Parallel()
+	msg := compileErr(t, `function r(n:int):int
+{
+	var big:[140]int;
+	big[n & 7] = n;
+	if (n == 0) { return big[0]; }
+	return r(n - 1) + big[n & 7];
+}
+function main():void
+{
+	r(3);
+}
+`)
+	if !strings.Contains(msg, "frame size over") || !strings.Contains(msg, "FC_STACK") {
+		t.Errorf("want frame size over, got %q", msg)
+	}
+}

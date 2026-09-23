@@ -137,6 +137,10 @@ go test ./...                                    # 全部 (golden + examples + N
   （`opt.Passes`。全関数に 1 段ずつ）を当てては実行し直し、最初に出力が変わった段をログに出す（最後まで変わらなければ
   レジスタ割付か codegen）。`FC_DISABLE` での手の切り分けが要らなくなる。わざと commute を壊すと影響した 96 本すべてで
   「opt の commute」と出ることを確認済み
+- 広げた生成器の 10 万本（種 1000000〜1099999）で 2 件（どちらも同じ原因）: 再帰関数（stack 系）に -O 2 の
+  インライン展開が入ってフレームが 223 / 260 バイトになり、`<S+127,x` のようなゼロページの外の番地を出して ld65 / ca65 が
+  範囲エラーになった。stack 系のフレームは FC_STACK（128 バイト、`regalloc.StackSize`）を超えたら `frame size over`
+  に（`TestStackFrameTooLarge`。fuzz はプログラムが大きすぎるとして飛ばす）。実行結果の食い違いは 0 件
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
   （`freeA` / `needsX` / `needsY`）は codegen の出力を手で写した見積もりで、食い違いが fuzz で何度も出ていた
   （2 バイトの dec、cast を挟んだ if、Y 代用と融合、push_result の後の ldx …）。`CompileLambda` は命令の本体を出した後で

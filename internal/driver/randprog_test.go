@@ -1327,8 +1327,9 @@ func TestRandomPrograms(t *testing.T) {
 			case "ok":
 			case "error":
 				if strings.Contains(res.detail, "frame size over") {
-					// -O 2 だけフレームが 256 バイトを超える (展開や自動インラインで一時変数が増える)。プログラムが大きすぎる (roadmap: 最適化がフレームの大きさで引く)
-					t.Skipf("フレームが 256 バイトを超えた (seed %d)", seed)
+					// -O 2 だけフレームが上限 (静的フレーム 256 バイト、stack 系は FC_STACK の 128 バイト) を超える (展開や自動インラインで
+					// 一時変数が増える)。プログラムが大きすぎる (roadmap: 最適化がフレームの大きさで引く)
+					t.Skipf("フレームが大きすぎる (seed %d)", seed)
 				}
 				if strings.Contains(res.detail, "memory area overflow") {
 					t.Skipf("プログラムが大きすぎて ROM に入らない (seed %d)", seed)
