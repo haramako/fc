@@ -141,6 +141,8 @@ go test ./...                                    # 全部 (golden + examples + N
   インライン展開が入ってフレームが 223 / 260 バイトになり、`<S+127,x` のようなゼロページの外の番地を出して ld65 / ca65 が
   範囲エラーになった。stack 系のフレームは FC_STACK（128 バイト、`regalloc.StackSize`）を超えたら `frame size over`
   に（`TestStackFrameTooLarge`。fuzz はプログラムが大きすぎるとして飛ばす）。実行結果の食い違いは 0 件
+- 続けて種 1100000〜1249999 の 15 万本（e544757、インタプリタとバンク切替込み）は失敗なし。広げた生成器で累計 25 万本、
+  見つかったのはフレームの上限の 1 件だけ。これ以上は生成する形を広げる（struct の入れ子・配列フィールド、alias、ラムダ…）
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
   （`freeA` / `needsX` / `needsY`）は codegen の出力を手で写した見積もりで、食い違いが fuzz で何度も出ていた
   （2 バイトの dec、cast を挟んだ if、Y 代用と融合、push_result の後の ldx …）。`CompileLambda` は命令の本体を出した後で
