@@ -821,6 +821,71 @@ function main():void
 	}
 }
 
+// splitWords の後の定数 / コピーの伝播 (propagateBytes) は、置き換える一時変数の型を保つ: sint8 の一時変数 (l0 * 0) を
+// uint8 のリテラル 0 に置き換えて、`(7 << l4) >= (l0 * 0)` (1 バイトの符号付きの比較。224 は -32) が符号なしの比較に
+// なり、l4 = 5 で a1[3] に書いていた (-O 2 だけ。広げた生成器の fuzz、種 3253765)。
+func TestPropagateBytesKeepsType(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int16;
+var g1:sint16;
+var g2:int16;
+var g3:sint16;
+const ct0:[16]int = [3, 174, 3, 99, 14, 5, 6, 3, 4, 7, 182, 43, 88, 0, 6, 63];
+const ct1:[16]int = [31, 5, 2, 3, 63, 4, 136, 108, 119, 70, 43, 84, 1, 129, 59, 26];
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+var a3:[16]sint16;
+function f0(p0:*sint16):int
+{
+var la0:[16]sint16;
+var l0:int = 0;
+la0[0] = (-2217);
+la0[1] = 3;
+la0[2] = (-12946);
+la0[3] = 0;
+la0[4] = 4154;
+la0[5] = 2;
+la0[6] = 706;
+la0[7] = 23643;
+la0[8] = (-16981);
+la0[9] = 0;
+la0[10] = 3;
+la0[11] = 0;
+la0[12] = 1;
+la0[13] = 13624;
+la0[14] = 3;
+la0[15] = 6;
+return ((((*p0) as int) + ct0[(ct0[((-ct0[(254 & 7)]) & 7)] & 7)]) ^ (-(g3 as int)));
+}
+function main():void
+{
+a0[3] = 5;
+var l0:sint = 48;
+var l2:int = 0;
+L0: for (var l4:int = 0; l4 < 6; l4++) {
+var l5:int = ct0[3];
+if ((g3 < (ct1[((l5 * ct1[7]) & 7)] as sint16)) || ((ct1[0] as sint))) {
+} elsif ((f0(&a3[((((ct1[(((!(-62)) as int) & 7)] as sint) < (ct1[(f0(&a3[(((!1) as int) & 7)]) & 7)] as sint)) as int) & 7)]) - f0(&a3[0])) > 182) {
+} else {
+l0 = ((!ct1[4]) as sint);
+}
+if ((7 << ((l4 & 7) as int)) >= (l0 * (125 % (0 | 1)))) {
+a1[((-l4) & 7)] = ((ct0[7] as sint) ^ (a0[3] as sint));
+}
+}
+printf(a1[0] as int, " ", a1[3] as int, " ", a1[4] as int, "
+");
+exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "6 0 6\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // 狭めてから広げ直す cast: 定数の `as` は型の幅に切り詰める (`(300 as int) as int16` が 300 のままだった。sema の
 // constEval が値を切り詰めずに型だけ貼り替えていた)。変数の `((g as int) as int16)` を同じ変数への `+ 1` / `<< 1` に
 // 使う形 (常駐の isStep / isMemShift が「x のその場の inc / シフト」と見ないこと。上位は 0 になる)。

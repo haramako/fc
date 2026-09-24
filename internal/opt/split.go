@@ -334,11 +334,17 @@ func propagateBytes(lmd *ir.Lambda) {
 		if v.LocalType != ir.LTTemp || nDefs[v] != 1 || op.Code != ir.OpLoad || v.Type.Size != 1 || op.Dst != ir.Operand(v) {
 			continue
 		}
+		// 置き換えは v の型のまま (比較の符号やシフトの符号は入力の型で決まる: sint8 の一時変数を uint8 のリテラル 0 に
+		// 置き換えると `(7 << i) >= (l0 * 0)` が符号なしの比較になって 224 >= 0 が真になった。広げた生成器の fuzz で発覚)
 		src := op.Src[0]
-		if _, lit := ir.ValIntLiteral(src); lit {
-			subst[v] = src
+		if n, lit := ir.ValIntLiteral(src); lit {
+			subst[v] = ir.NewIntLiteral("", v.Type, normInt(n&0xff, v.Type))
 		} else if sv, ok := src.(*ir.Value); ok && sv.LocalType == ir.LTTemp && nDefs[sv] == 1 && sv.Type.Size == 1 {
-			subst[v] = sv
+			if sv.Type == v.Type {
+				subst[v] = sv
+			} else {
+				subst[v] = ir.NewCastedValue(sv, v.Type, 0)
+			}
 		}
 	}
 	resolve := func(o ir.Operand) ir.Operand {
