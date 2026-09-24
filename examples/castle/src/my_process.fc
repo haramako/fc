@@ -1,7 +1,11 @@
 #fc 2
-use bg;
+options(bank: 16);
 
+use * from common;
 use * from my;
+use en;
+use bg;
+use sound;
 
 public function process():void
 {
@@ -142,7 +146,7 @@ public function process():void
 		}
 
 		// タッチイベントの処理
-		if (bitcast<uint16>(touch_event_func) != 0) {
+		if (touch_event_func != null) {
 			if (anim % 2 == 0) {
 				ppu.sprite(touch_event_x - 4, touch_event_y - (4 + 16), SPR_B_BUTTON, 0);
 			}
@@ -151,7 +155,7 @@ public function process():void
 				touch_event_func_activated = touch_event_func;
 				touch_event_stat = 0;
 			} else {
-				touch_event_func = bitcast<fn():int>(0);
+				touch_event_func = null;
 			}
 		} elsif (has_anchor) {
 			if (pad.pushed & pad.B) {
@@ -317,6 +321,8 @@ public function process():void
 			swim_keep_velocity = 0;
 		}
 
+		touch_event_func = null;
+
 	case STATE_LADDER: // はしご
 		vy = 0;
 		x = (x / 16) * 16 + 8;
@@ -422,7 +428,7 @@ public function process():void
 		var finished = touch_event_func_activated();
 		if (finished) {
 			state = STATE_STAND;
-			touch_event_func = bitcast<fn():int>(0);
+			touch_event_func = null;
 		}
 	case STATE_DYING:
 		if (state_free_move) {
@@ -495,7 +501,7 @@ public function process():void
 	}
 }
 
-function get_cell(x:int, y:int):int options(fastcall: true)
+function get_cell(x:int, y:int):int
 {
 	if (y >= 240) {
 		return 0;
@@ -512,12 +518,12 @@ function get_cell(x:int, y:int):int options(fastcall: true)
 	}
 }
 
-function get_cell_type(x:int, y:int):int options(fastcall: true)
+function get_cell_type(x:int, y:int):int
 {
 	return bg.tile_type[bg.data[(y / 16) * 16 + x / 16]];
 }
 
-function get_cell_type_with_blank_cell(x:int, y:int):int options(fastcall: true)
+function get_cell_type_with_blank_cell(x:int, y:int):int
 {
 	var cell = bg.data[(y / 16) * 16 + x / 16];
 	if (cell < 32 && bg.BLANK_CELL[cell]) {
@@ -526,7 +532,7 @@ function get_cell_type_with_blank_cell(x:int, y:int):int options(fastcall: true)
 	return bg.tile_type[cell];
 }
 
-function get_cell_kind(x:int, y:int):int options(fastcall: true)
+function get_cell_kind(x:int, y:int):int
 {
 	return bg.data[(y / 16) * 16 + x / 16];
 }

@@ -12,3 +12,6 @@ testdata/golden/** text eol=lf
 *.lib binary
 *.chr binary
 *.png binary
+*.nespal binary
+*.tilepal binary
+*.bg binary

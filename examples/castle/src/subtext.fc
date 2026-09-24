@@ -1,9 +1,12 @@
 #fc 2
+options(bank: 18);
 use * from common;
 use my;
 use bg;
 use mem;
 use game;
+use irqcmd;
+use mmc3;
 
 public var subtext_stat:int;
 var subtext_id:int;
@@ -82,29 +85,40 @@ public function process_subtext():void
 			ppu.put(pos, buf, size, 0);
 		}
 		if (subtext_count > 8) {
-			subtext_height = 28;
-			asm("sei");
-			ppu.irq_setup = game.irq_setup;
-			asm("cli");
+			subtext_height = 8;
+			setup_irqcmd();
+			ppu.irq_setup = irqcmd.irq_setup;
 			subtext_stat = 2;
 		}
 	case 2:
 		subtext_height += subtext_count % 2;
-		if (subtext_height >= 40) {
+		setup_irqcmd();
+		if (subtext_height >= 24) {
 			subtext_stat = 3;
 			subtext_count = 0;
 		}
 	case 3:
-		if (subtext_count >= 210) {
+		setup_irqcmd();
+		if (subtext_count >= 110) {
 			subtext_stat = 4;
 		}
 	case 4:
 		subtext_height -= subtext_count % 2;
-		if (subtext_height <= 28) {
+		setup_irqcmd();
+		if (subtext_height <= 8) {
 			subtext_stat = 0;
-			asm("sei");
 			ppu.irq_setup = ppu.null_func;
-			asm("cli");
 		}
 	}
+}
+
+function setup_irqcmd():void
+{
+	mmc3.MIRROR = 1; // horizontal
+	irqcmd.begin();
+	var ppu_ctrl = (ppu.ctrl1_bak & 0b1111_1100) | 2;
+	irqcmd.add_wait_line(40 - 1);
+	irqcmd.add_screen(subtext_height - 1, 0, 16, 2, ppu_ctrl, 0b00001110, CBANK_TEXT, CBANK_TEXT + 2);
+	irqcmd.add_screen(0, 0, 40 + subtext_height + 1, 0, ppu.ctrl1_bak, ppu.ctrl2_bak, mmc3.cbank_bak[0], mmc3.cbank_bak[1]);
+	irqcmd.commit();
 }

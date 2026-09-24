@@ -51,12 +51,10 @@ public const SPR_MARCHANT = 4 * 4;
 public const SPR_BOUNDER = 12 * 4;
 
 public const SPR_COOKIEBAR = 8 * 4;
-public const SPR_ZIGZAG = 10 * 4;
 public const SPR_LIVIATHAN_EYE = 0 * 4;
 public const SPR_LIVIATHAN_ARM = 4 * 4;
 public const SPR_WATERGATE = 12 * 4;
 public const SPR_KNIGHT = 8 * 4;
-public const SPR_STEAM = 0 * 4;
 public const SPR_SONIC = 8 * 4;
 public const SPR_SONIC_BULLET = SPR_SONIC + 3 * 4;
 public const SPR_GHOST2 = 0 * 4;
@@ -65,10 +63,6 @@ public const SPR_ROLLING_STONE = 8 * 4;
 
 // slot 12
 public const SPR_WATERFALL_SPLASH = 12 * 4;
-public const SPR_SNAKE = 0 * 4;
-public const SPR_WATER_JET = 0 * 4;
-
-public const SPR_BIRD_NEST = 8 * 4;
 
 // slot 13
 const SPR_SOUL_GATE = 0 * 4;

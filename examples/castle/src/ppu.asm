@@ -5,6 +5,8 @@
 	
 ;; function interrupt():void
 _interrupt:
+	lda _mmc3_select_shadow		; $8000 のシャドウを退避 (main の $8000 / $8001 の書き込みの間に入ったとき、出口で戻す)
+	pha
 
 	lda _ppu_vsync_flag				; if( vsync_flag ){
 	beq @else
@@ -12,7 +14,7 @@ _interrupt:
 	cmp #1						;   if( vsync_flag == 1 ){
 	bne @else2
 	lda #0						;     PPU_SPR_ADDR = 0;
-	lda _nes_PPU_SPR_ADDR
+	sta _nes_PPU_SPR_ADDR
 	lda #7						;     SPRITE_DMA = 7;
 	sta _nes_SPRITE_DMA
 @else2:							;   }
@@ -44,6 +46,12 @@ _interrupt:
 	lda _ppu_ctrl2_bak			; PPU_CTRL2 = ppu_ctrl2_bak;
 	sta _nes_PPU_CTRL2
 
+	;; CBANK0の変更
+	lda #0
+	sta _mmc3_BANK_SELECT
+	lda _mmc3_cbank_bak+0
+	sta _mmc3_BANK_DATA
+
 	;; setup irq
 	jsr @jsr_irq_setup
 
@@ -56,7 +64,11 @@ _interrupt:
 	sta _mmc3_BANK_SELECT
 	lda _ppu_cbank2
 	sta _mmc3_BANK_DATA
-	
+
+	pla							; $8000 をシャドウごと割り込む前の値に戻す (macro.asm の規則)
+	sta _mmc3_select_shadow
+	sta _mmc3_BANK_SELECT
+
 	rts
 
 @jsr_irq_setup:
@@ -216,130 +228,3 @@ _ppu_fill_in_lock:
 	ldx reg+0					; restore x
 	
 	rts
-	
-	
-		
-;;; function gr_pos( x:int, y:int ):int16
-_ppu_pos:
-	lda FC_FASTCALL_REG+3					; if( y < 0 ) y += 30;
-	bpl @end2
-	clc
-	adc #30
-	sta FC_FASTCALL_REG+3
-@end2:	
-	lda FC_FASTCALL_REG+3					; if( y > 30 ) y -= 30;
-	cmp #30
-	bmi @end
-	sec
-	sbc #30
-	sta FC_FASTCALL_REG+3
-@end:	
-	lda FC_FASTCALL_REG+3		; result[0] = x + y * 32
-	asl a
-	asl a
-	asl a
-	asl a
-	asl a
-	clc
-	adc FC_FASTCALL_REG+2
-	sta FC_FASTCALL_REG+0
-	lda FC_FASTCALL_REG+3       ; result[1] = 0x20 + y / 8
-	lsr a
-	lsr a
-	lsr a
-	clc
-	adc #$20
-	sta FC_FASTCALL_REG+1
-	rts
-		
-		
-
-;; function ppu_sprite( x:int, y:int, pat:int, mode:int ):void options (extern:true) {}
-;; {
-;;   if( !gr_sprite_dir ){
-;;     if( gr_sprite_idx >= 252 ){ return; }
-;;   }else{
-;;     if( gr_sprite_idx == 0 ){ return; }
-;;   }
-;;   var p:int = gr_sprite_idx;
-;;   gr_sprite_buf[p] = y-1;
-;;   gr_sprite_buf[p+1] = pat+1;
-;;   gr_sprite_buf[p+2] = mode;
-;;   gr_sprite_buf[p+3] = x;
-;;   if( !gr_sprite_idx ){
-;;  	 gr_sprite_idx += 4;
-;;   }else{
-;;  	 gr_sprite_idx -= 4;
-;;   }
-;; }
-;; USING: X,Y
-_ppu_sprite:
-	lda _ppu_gr_sprite_dir      ; if( !gr_sprite_dir){}
-	bne @dir_invert
-    ldy _ppu_gr_sprite_idx      ; if( gr_sprite_idx >= ppu.SPRITE_IDX_MAX ){ return; }
-    cpy #240
-	bcc @end
-	rts
-@dir_invert:
-    ldy _ppu_gr_sprite_idx      ; if( gr_sprite_idx < ppu.SPRITE_IDX_MIN ){ return; }
-	cpy #16
-	bne @end
-	rts
-@end:
-
-    lda FC_FASTCALL_REG+1      ; gr_sprite_buf[p] = y;
-	sec
-	sbc #1
-    sta _ppu_gr_sprite_buf,y   
-    iny                     ; gr_sprite_buf[p+1] = pat;
-    lda FC_FASTCALL_REG+2
-	ora #1
-    sta _ppu_gr_sprite_buf,y
-    iny                     ; gr_sprite_buf[p+2] = mode;
-    lda FC_FASTCALL_REG+3
-    sta _ppu_gr_sprite_buf,y
-    iny                     ; gr_sprite_buf[p+3] = x;
-    lda FC_FASTCALL_REG+0
-    sta _ppu_gr_sprite_buf,y
-
-	lda _ppu_gr_sprite_dir  ; if(!gr_sprite_idx){}
-	bne @dir_invert2
-    lda _ppu_gr_sprite_idx  ; gr_sprite_idx += 4;
-	clc
-	adc #4
-    sta _ppu_gr_sprite_idx
-	rts
-@dir_invert2:
-    lda _ppu_gr_sprite_idx  ; gr_sprite_idx -= 4;
-	sec
-	sbc #4
-    sta _ppu_gr_sprite_idx
-    rts
-        
-;; function ppu_sprite_idx( x:int, y:int, pat:int, mode:int, idx:int ):void options (extern:true) {}
-;; {
-;;   gr_sprite_buf[idx] = y-1;
-;;   gr_sprite_buf[idx+1] = pat+1;
-;;   gr_sprite_buf[idx+2] = mode;
-;;   gr_sprite_buf[idx+3] = x;
-;; }
-;; USING: Y
-_ppu_sprite_idx:
-	ldy FC_FASTCALL_REG+4
-
-    lda FC_FASTCALL_REG+1      ; gr_sprite_buf[p] = y;
-	sec
-	sbc #1
-    sta _ppu_gr_sprite_buf,y   
-    iny                     ; gr_sprite_buf[p+1] = pat;
-    lda FC_FASTCALL_REG+2
-	ora #1
-    sta _ppu_gr_sprite_buf,y
-    iny                     ; gr_sprite_buf[p+2] = mode;
-    lda FC_FASTCALL_REG+3
-    sta _ppu_gr_sprite_buf,y
-    iny                     ; gr_sprite_buf[p+3] = x;
-    lda FC_FASTCALL_REG+0
-    sta _ppu_gr_sprite_buf,y
-
-    rts

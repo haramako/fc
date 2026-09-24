@@ -1,8 +1,9 @@
 #fc 2
-options(bank: -1);
+options(bank: 10, bss: "BSS_EX");
 
 use * from common;
 use * from graphics;
+use event2;
 use sound;
 use mem;
 use menu;
@@ -10,18 +11,17 @@ use my;
 use en_vtbl;
 use en;
 use ending;
-use event2;
+use text;
+use game;
 
 include("event.asm");
 
-public const ID_GET_ITEM = 1;
 public const ID_MOVE_AREA = 2;
 public const ID_MOVE_CHECKPOINT = 3;
 public const ID_OPEN_MAGMAGATE = 4;
 public const ID_CLOSE_MAGMAGATE = 5;
 public const ID_SUNGATE = 6;
 public const ID_ANCHOR_SWITCH = 7;
-public const ID_MARCHANT = 8;
 public const ID_MEMORY = 9;
 public const ID_BIRD_NEST = 10;
 public const ID_SOUL_GATE = 11;
@@ -29,61 +29,21 @@ public const ID_GAME_CLEAR = 12;
 public const ID_OPEN_WATERGATE = 13;
 public const ID_TRIAL_ENDING = 14;
 
-use game;
-use * from resource;
-
 function irq_setup():void;
 
-function ppu_clear():void
+public var event_func:farfn():void;
+public var shared_work:[16]uint8; // 共有work領域
+
+public function init():void
 {
-	mem.set(bg.data_buf, 0, 64);
-	var i:int;
-	for (i = 0; i < 4; i++) {
-		var addr = ppu.pos(0, i * 2) + 0x400;
-		ppu.put(addr, bg.data_buf, 64, 0);
-		ppu.wait_vsync_with_flag(2);
-	}
-	ppu.put(0x27c0, bg.data_buf, 64, 0);
-	ppu.wait_vsync_with_flag(2);
-}
-
-function run_get_item():void
-{
-	mmc3.MIRROR = 0; // vertical
-	ppu_clear();
-	var str = ppu.alloc(32), tail = str;
-	tail += mem.strcpy(tail, _T("「"));
-	tail += fs.copy(tail, fs.ITEM_NAME_BASE + game_event_p1);
-	tail += mem.strcpy(tail, _T("」を手に入れた"));
-	var buf = ppu.alloc(64);
-	mem.zero(buf, 64);
-	menu.text_print(buf, str);
-	var addr = ppu.pos(6, 2) + 0x400;
-	ppu.put(addr, buf, 64, 0);
-	ppu.wait_vsync_with_flag(2);
-
-	ppu.irq_setup = irq_setup;
-
-	if (game_event_p1 >= 12 && game_event_p1 <= 17) {
-		sound.crossfade_jingle(sound.BGM_OPEN_GREAT_CHEST, 60);
-	} else {
-		sound.crossfade_jingle(sound.BGM_OPEN_CHEST, 60);
-	}
-
-	while (!sound.jingle_finished) {
-		ppu.wait_vsync_with_flag(2);
-	}
-
-	ppu.irq_setup = ppu.null_func;
-	ppu.wait_vsync_with_flag(2);
+	event_func = null;
 }
 
 public function run_event():void
 {
-	var old_pbank:int;
-	switch (game_event) {
-	case ID_GET_ITEM:
-		run_get_item();
+	var ev = game_event;
+	game_event = 0;
+	switch (ev) {
 	case ID_MOVE_AREA:
 		game.move_area(game_event_p1);
 	case ID_MOVE_CHECKPOINT:
@@ -96,8 +56,6 @@ public function run_event():void
 		run_sungate();
 	case ID_ANCHOR_SWITCH:
 		run_anchor_switch();
-	case ID_MARCHANT:
-		run_marchant();
 	case ID_MEMORY:
 		run_memory(game_event_p1);
 	case ID_BIRD_NEST:
@@ -107,13 +65,16 @@ public function run_event():void
 	case ID_GAME_CLEAR:
 		run_game_clear(0);
 	case ID_OPEN_WATERGATE:
-		old_pbank = mmc3.set_pbank(0, PBANK_EVENT2);
 		event2.run_open_watergate();
-		mmc3.set_pbank(0, old_pbank);
 	case ID_TRIAL_ENDING:
 		run_game_clear(1);
+	default:
+		if (event_func != null) {
+			var f = event_func;
+			event_func = null;
+			f();
+		}
 	}
-	game_event = 0;
 }
 
 //=================================================
@@ -253,6 +214,11 @@ function sungate_open_gate():void
 //=================================================
 // 錨生成器
 //=================================================
+public function register_anchor_switch():void
+{
+	event_func = run_anchor_switch;
+}
+
 function run_anchor_switch():void
 {
 	var i:int;
@@ -332,154 +298,6 @@ function draw_anchor_generater(x:int, y:sint):void
 }
 
 //=================================================
-// 商人
-//=================================================
-function run_marchant():void
-{
-	ppu.lock();
-	var old_ppu_ctrl1 = ppu.ctrl1_bak;
-	var old_cbank0 = mmc3.set_cbank(0, CBANK_TEXT + 0);
-	var old_cbank1 = mmc3.set_cbank(1, CBANK_TEXT + 2);
-	var old_cbank2 = ppu.cbank2;
-	ppu.cbank2 = CBANK_SYS_SPRITE;
-	mmc3.MIRROR = 0; // vertical
-	ppu.ctrl1_bak = 0b10100001;
-	ppu.irq_setup = ppu.null_func;
-
-	run_marchant_main();
-
-	ppu.irq_setup = ppu.null_func;
-	ppu.wait_vsync();
-	ppu.lock();
-	mmc3.set_cbank(0, old_cbank0);
-	mmc3.set_cbank(1, old_cbank1);
-	ppu.cbank2 = old_cbank2;
-	ppu.ctrl1_bak = old_ppu_ctrl1;
-	ppu.put_in_lock(0x3f00, bg.pallet, 16);
-	ppu.unlock();
-	ppu.wait_vsync();
-}
-
-function put_text(x:int, y:int, buf:*int, text:*uint8):void
-{
-	mem.zero(buf, 64);
-	game.text_print(buf, text);
-	var addr = ppu.pos(x, y) + 0x400;
-	ppu.put_in_lock(addr, buf, 64);
-}
-
-const ITEM_IDS = [
-	ITEM_ID_GAS_MASK, ITEM_ID_COMPASS, ITEM_ID_WATCH,
-	ITEM_ID_SECURITY_CARD, ITEM_ID_LAMP, ITEM_ID_OMAMORI,
-	ITEM_ID_WING, -1, -1
-];
-const ITEM_PRICES = [
-	4, 3, 6,
-	3, 5, 5,
-	14, 0, 0
-];
-
-var marchant_message:*int;
-
-function run_marchant_main():void
-{
-	ppu.put_in_lock(0x3f00, ITEM_PAL, 16);
-
-	marchant_message = bg.buf;
-	mem.copy(marchant_message, _T("なにか買ってくかい？"), 16);
-
-	marchant_draw_items();
-
-	ppu.unlock();
-
-	var idx_base = game_event_p1 * 3;
-	var idx = 0;
-	loop {
-		pad.update();
-		if (pad.pushed & pad.B) {
-			break;
-		}
-
-		if (pad.pushed & pad.A) {
-			var item_id = ITEM_IDS[idx_base + idx];
-			var price = ITEM_PRICES[idx_base + idx];
-			var wait = 0;
-			ppu.lock();
-			if (my.items[item_id] != 0) {
-				mem.copy(marchant_message, _T("うりきれだよ"), 16);
-				marchant_draw_items();
-			} elsif (my.coin_num < price) {
-				mem.copy(marchant_message, _T("おかねがたりないよ"), 16);
-				marchant_draw_items();
-			} else {
-				my.items[item_id] = 1;
-				my.coin_num -= price;
-				mem.copy(marchant_message, _T("ありがとよ"), 16);
-				marchant_draw_items();
-
-				sound.play_se(sound.SE_COIN, 20);
-			}
-			ppu.unlock();
-			if (wait) {
-				var i:int;
-				for (i = 0; i < 20; i++) {
-					ppu.wait_vsync();
-				}
-			}
-		}
-
-		if (pad.pushed & pad.B) {
-			break;
-		}
-
-		if (pad.pushed & pad.DOWN)
-			idx = (idx + 1) % 3;
-		if (pad.pushed & pad.UP)
-			idx = (idx + 2) % 3;
-
-		ppu.sprite(7 * 8, 7 * 8 + idx * 16, SPR_ARROW, 0);
-
-		ppu.wait_vsync();
-	}
-}
-
-function marchant_draw_items():void
-{
-	ppu.fill_in_lock(0x2400, 0x400, 0);
-
-	ppu.clear_out_sprite();
-
-	var buf = ppu.alloc(64);
-	var line = ppu.alloc(64);
-
-	put_text(4, 4, buf, marchant_message);
-
-	put_text(16, 14, buf, _T("しょじきん"));
-	game.text_print_num(line, my.coin_num);
-	line[3] = _T("G")[0];
-	line[4] = 0;
-	ppu.put_in_lock(ppu.pos(22, 15) + 0x400, line, 4);
-
-	var idx_base = game_event_p1 * 3;
-	var i:int;
-	for (i = 0; i < 3; i++) {
-		var item_id = ITEM_IDS[idx_base + i];
-		if (item_id < 0 || my.items[item_id]) {
-			put_text(8, 6 + i * 2, buf, _T("ーーうりきれーー"));
-		} else {
-			var size = fs.copy(line, fs.ITEM_NAME_BASE + item_id);
-			line[size] = 0;
-			put_text(8, 6 + i * 2, buf, line);
-
-			game.text_print_num(line, ITEM_PRICES[idx_base + i]);
-			line[3] = _T("G")[0];
-			line[4] = 0;
-			ppu.put_in_lock(ppu.pos(18, 7 + i * 2) + 0x400, line, 4);
-		}
-	}
-}
-
-//=================================================
 // 記憶のかけら
 //=================================================
 function run_memory(memory_id:int):void
@@ -538,7 +356,7 @@ function memory_draw(id:int):void
 	var buf = data_buf;
 	data_buf += 256;
 	mem.zero(buf, 255);
-	menu.text_print_width(buf, data, 32);
+	text.print(buf, data, 32);
 	var addr = ppu.pos(4, 8) + 0x400;
 	ppu.put_in_lock(addr, buf, 255);
 }
@@ -584,6 +402,8 @@ function run_bird_nest(nest_id:int):void
 	for (j = 0; j < 255; j++) {
 		ppu.wait_vsync_with_flag(2);
 	}
+
+	sound.jingle_force_finished = 1;
 
 	light_undown();
 }
@@ -687,7 +507,6 @@ function run_game_clear(is_trial:int):void
 		ppu.wait_vsync_with_flag(2);
 	}
 
-	mmc3.set_pbank(0, PBANK_ENDING);
 	ending.start(is_trial);
 }
 

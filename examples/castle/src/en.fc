@@ -1,5 +1,5 @@
 #fc 2
-options(bank: 1);
+options(bank: 1, near: true);
 
 public use * from common;
 use my;
@@ -52,7 +52,7 @@ public function process():void
 	mmc3.set_pbank(0, old_pbank);
 }
 
-public function new():int options(segment: "common", fastcall: true)
+public function new():int options(segment: "common")
 {
 	var i:int;
 	for (i = 0; i < MAX; i++) {
@@ -114,7 +114,7 @@ public function check_block(px:*int, py:*int):int
 	return r;
 }
 
-public function check_outside(x:int, y:int):int options(fastcall: true)
+public function check_outside(x:int, y:int):int
 {
 	return (x < 16 || x >= 240 || y < 16 || y >= 240);
 }

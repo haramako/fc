@@ -83,6 +83,9 @@ func castleMachine(t *testing.T, rom string, syms map[string]int, profile []Prof
 	return m
 }
 
+// castleBenchArea は敵の多い局面を測るエリア (チェックポイント 13 の行き先)。
+const castleBenchArea = 0x8b
+
 func TestCastleFrameCycles(t *testing.T) {
 	rom, _, dbgPath := buildCastle(t)
 	syms := parseLd65MapAll(t, dbgPath)
@@ -138,24 +141,25 @@ func TestCastleFrameCycles(t *testing.T) {
 	}
 	logProfile(t, m, "field", got["field"])
 
-	// 2. 敵 (スライム) が複数いるエリア $33 (チェックポイント 13) に強制移動: タイトルで A を押した後、game.start が
-	//    my.last_checkpoint を読むまで毎フレーム 13 を書き込む (セーブデータの読み込みが 0 に戻すので)
+	// 2. 敵が 8 体いるエリア $8b (チェックポイント 13。14 個のチェックポイントで一番重い) に強制移動: タイトルで A を
+	//    押した後、game.start が my.last_checkpoint を読むまで毎フレーム 13 を書き込む (セーブデータの読み込みが 0 に
+	//    戻すので)。2026-09-25 に examples/castle を取り込み直したとき、以前のエリア $33 はチェックポイントから外れた
 	m = castleMachine(t, rom, syms, profile)
 	run(180)
 	m.SetButtons(ButtonA)
 	run(10)
 	m.SetButtons(0)
-	for i := 0; i < 300 && m.Get(syms["_bg_cur_area"]) != 0x33; i++ {
+	for i := 0; i < 300 && m.Get(syms["_bg_cur_area"]) != castleBenchArea; i++ {
 		m.Set(syms["_my_last_checkpoint"], 13)
 		run(1)
 	}
-	if area := m.Get(syms["_bg_cur_area"]); area != 0x33 {
-		t.Fatalf("エリア $33 に移動できなかった (cur_area = $%02x)", area)
+	if area := m.Get(syms["_bg_cur_area"]); area != castleBenchArea {
+		t.Fatalf("エリア $%02x に移動できなかった (cur_area = $%02x)", castleBenchArea, area)
 	}
 	run(60)                                     // 出現の演出を待つ
-	measure("area33_idle", func() { run(300) }) // 立ち止まって敵だけが動く
-	logProfile(t, m, "area33_idle", got["area33_idle"])
-	measure("area33_jump", func() { // その場でジャンプ (歩くと敵に当たって死に、チェックポイントに戻ってしまう)
+	measure("area8b_idle", func() { run(300) }) // 立ち止まって敵だけが動く
+	logProfile(t, m, "area8b_idle", got["area8b_idle"])
+	measure("area8b_jump", func() { // その場でジャンプ (歩くと敵に当たって死に、チェックポイントに戻ってしまう)
 		for cycle := 0; cycle < 9; cycle++ {
 			m.SetButtons(ButtonA)
 			run(15)
@@ -163,10 +167,10 @@ func TestCastleFrameCycles(t *testing.T) {
 			run(45)
 		}
 	})
-	if area := m.Get(syms["_bg_cur_area"]); area != 0x33 {
-		t.Errorf("area33_jump の途中でエリアを出た (cur_area = $%02x)", area)
+	if area := m.Get(syms["_bg_cur_area"]); area != castleBenchArea {
+		t.Errorf("area8b_jump の途中でエリアを出た (cur_area = $%02x)", area)
 	}
-	logProfile(t, m, "area33_jump", got["area33_jump"])
+	logProfile(t, m, "area8b_jump", got["area8b_jump"])
 
 	path := filepath.Join("..", "..", "bench", "castle_frames.json")
 	want := map[string]FrameStat{}

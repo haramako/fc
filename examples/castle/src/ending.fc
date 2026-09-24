@@ -1,4 +1,5 @@
 #fc 2
+options(bank: 17);
 use * from common;
 use mem;
 use sound;

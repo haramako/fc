@@ -1,10 +1,12 @@
 #fc 2
+options(bank: 11);
 use my;
 use * from en;
 use boxelev;
 use sound;
 use game;
 use event;
+use * from graphics;
 
 /*********************************************
  * クッキーバー
@@ -66,6 +68,7 @@ function cookiebar_checkhit(x:int, y:int):void
  * p2: speed(1/16ピクセル/Frame)
  * p5: wait
  * p6: count(0~16でループ、0: 上下方向の判定, 8: 左右方向の判定)
+ * p7: 次のしっぽがでるまでのフレーム
  *********************************************/
 
 public function zigzag_new(i:int):void
@@ -74,6 +77,7 @@ public function zigzag_new(i:int):void
 	if (p2[i] == 0)
 		p2[i] = 16;
 	p6[i] = 0;
+	p7[i] = 4;
 }
 
 const ZIGZAG_VX = [1, 1, -1, -1];
@@ -90,6 +94,7 @@ public function zigzag_process(i:int):void
 	var speed = p2[i];
 	var wait = p5[i];
 	var count = p6[i];
+	var tail_wait = p7[i];
 
 	wait += speed;
 	while (wait >= 16) {
@@ -114,6 +119,20 @@ public function zigzag_process(i:int):void
 		y += ZIGZAG_VY[dir];
 	}
 
+	tail_wait -= 1;
+	if (tail_wait == 0) {
+		var ei = new();
+		if (ei != -1) {
+			type[ei] = TYPE_ZIGZAG_TAIL;
+			pslot[ei] = pslot[i];
+			px[ei] = px[i] + math.rand() % 8 - 4;
+			py[ei] = py[i] + math.rand() % 8 - 4;
+			p1[ei] = i;
+			p2[ei] = 0;
+		}
+		tail_wait = 8 + math.rand() % 4;
+	}
+
 	gr_sprite2(x + math.rand() % 4 - 2, y + math.rand() % 4 - 2, SPR_SLOT[slot] + SPR_ZIGZAG + (anim / 4) % 2 * 4, PAL_SLOT[slot]);
 
 	px[i] = x;
@@ -121,8 +140,36 @@ public function zigzag_process(i:int):void
 	p1[i] = dir;
 	p5[i] = wait;
 	p6[i] = count;
+	p7[i] = tail_wait;
 
 	check_hit(i, 8);
+}
+
+/*********************************************
+ * ジグザグ（しっぽ）
+ * p1: オーナーのenemy idx
+ *********************************************/
+public function zigzag_tail_new(i:int):void {}
+
+public function zigzag_tail_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var owner = p1[i];
+	var count = p2[i];
+
+	ppu.sprite(x - 4, y - 4, SPR_SLOT[slot] + SPR_ZIGZAG + 4 * 4 + count / 4 * 2, PAL_SLOT[slot]);
+
+	count += 1;
+	if (count >= 16) {
+		type[i] = 0;
+		return;
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p2[i] = count;
 }
 
 /*********************************************
@@ -481,109 +528,6 @@ function knight_check(cx:int, cy:int):int
 	var to = bg.cell_type_by_cell(cx, cy) & bg.TYPE_WALL;
 	var ground = bg.cell_type_by_cell(cx, cy + 1) & bg.TYPE_WALL;
 	return !to && ground;
-}
-
-/*********************************************
- * スチーム
- * p1: 方向
- * p2: 初期周期
- * p4: 状態
- * p5: ウェイト
- *********************************************/
-
-const STEAM_DIR_SPR = [8, 0, 8, 0];
-const STEAM_DIR_FLIP = [128, 64, 128, 64];
-
-public function steam_new(i:int):void
-{
-	p4[i] = 0;
-	p5[i] = p2[i];
-}
-
-public function steam_process(i:int):void
-{
-	var slot = pslot[i];
-	var x = px[i];
-	var y = py[i];
-	var dir = p1[i];
-	var stat = p4[i];
-	var wait = p5[i];
-
-	var spr = SPR_SLOT[slot] + SPR_STEAM;
-	var pal = PAL_SLOT[slot];
-
-	switch (stat) {
-	case 0:
-		if (wait <= 0) {
-			stat = 1;
-			wait = 0;
-		}
-		wait -= 1;
-	case 1:
-		wait += 1;
-		if (wait % 2 == 0) {
-			var a = (wait / 8) % 2 * 4;
-			var v = (wait / 2) % 8 - 6;
-			gr_sprite2(x + DIR_VX[dir] * v, y + DIR_VY[dir] * v, spr + STEAM_DIR_SPR[dir] + a, pal | ppu.SPRITE_FLAG_HIDE | DIR_FLIP_XY[dir]);
-		}
-		if (wait >= 40) {
-			stat = 2;
-			wait = 0;
-		}
-	case 2:
-		wait += 1;
-		if (wait % 2 == 0) {
-			var dx = DIR_VX[dir];
-			var dy = DIR_VY[dir];
-			var flag = pal | DIR_FLIP_XY[dir];
-			var flag_flip:int = STEAM_DIR_FLIP[(dir + 1) % 4];
-
-			if (wait > 0 && wait < 52) {
-				var z = (wait + 0) / 8 % 2;
-				gr_sprite2(x, y, spr + 4 + STEAM_DIR_SPR[dir], flag | flag_flip * z);
-			}
-			if (wait > 8 && wait < 56) {
-				var z = (wait + 3) / 8 % 2;
-				gr_sprite2(x + dx * 16, y + dy * 16, spr + 16 + STEAM_DIR_SPR[dir], flag | flag_flip * z);
-			}
-			if (wait > 16) {
-				var z = (wait + 6) / 8 % 2;
-				gr_sprite2(x + dx * 32, y + dy * 32, spr + 16 + STEAM_DIR_SPR[dir] + 4, flag | flag_flip * z);
-			}
-
-			var hit:int;
-			if (wait > 8 && dir % 2 == 0) {
-				// 上下
-				hit = check_over_rect(x - 6, y - dy * 4, x + 6, y + dy * 40);
-			} else {
-				// 左右
-				hit = check_over_rect(x - dx * 4, y - 6, x + dx * 40, y + 6);
-			}
-
-			if (hit) {
-				if (my.items[ITEM_ID_HELMET]) {
-					my.state = my.STATE_DAMAGE;
-					my.vy = -16;
-					my.vx = (my.dir * 2 - 1) * 16;
-					my.jump_pow = 0;
-				} else {
-					my.state = my.STATE_DYING;
-					my.wait = 0;
-				}
-			}
-		}
-
-		if (wait >= 60) {
-			stat = 0;
-			wait = 60;
-		}
-	}
-
-	px[i] = x;
-	py[i] = y;
-	p1[i] = dir;
-	p4[i] = stat;
-	p5[i] = wait;
 }
 
 /*********************************************

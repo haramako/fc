@@ -1,4 +1,5 @@
 #fc 2
+options(bank: 15);
 use my;
 use * from en;
 use boxelev;
@@ -6,6 +7,7 @@ use sound;
 use game;
 use event;
 use bg;
+use * from graphics;
 
 /*********************************************
  * プロミネンス
@@ -13,7 +15,7 @@ use bg;
  * p2: 速度
  * p3: 方向
  * p4: 移動ウェイト
- * p5: 方向
+ * p5: 以前の方向
  * p6: 状態
  * p8: １歩ごとのウェイト
  *********************************************/
@@ -25,8 +27,13 @@ public function snake_new(i:int):void
 	if (p2[i] == 0)
 		p1[i] = 16;
 	p4[i] = p1[i];
+	p5[i] = p3[i];
 	p6[i] = 0;
 	p8[i] = 0;
+
+	if (my.items[ITEM_ID_FLUTE]) {
+		sound.crossfade_jingle(sound.BGM_RIDDLE_SOLVED, 60);
+	}
 }
 
 public function snake_process(i:int):void
@@ -37,8 +44,8 @@ public function snake_process(i:int):void
 	var speed = p2[i];
 	var dir = p3[i];
 	var wait = p4[i];
+	var old_dir = p5[i];
 	var stat = p6[i];
-	var next_dir = p7[i];
 	var frame_wait = p8[i];
 
 	switch (stat) {
@@ -61,14 +68,19 @@ public function snake_process(i:int):void
 			y += DIR_VY[dir];
 			wait += 1;
 
+			if (wait == 7) {
+				snake_draw_cell(x / 16, y / 16, 1, old_dir, dir);
+			}
+
 			if (wait >= 16) {
 				var cell = bg.cell(x, y);
+				old_dir = dir;
 				if ((cell >= bg.TILE_UP_ARROW) && (cell <= bg.TILE_LEFT_ARROW)) {
 					dir = cell - bg.TILE_UP_ARROW;
 				}
 
 				wait = 0;
-				snake_draw_cell(x / 16, y / 16);
+				snake_draw_cell(x / 16, y / 16, 0, old_dir, dir);
 
 				if (x < 8 || x >= 248 || y < 8 || y >= 232) {
 					type[i] = 0;
@@ -89,85 +101,76 @@ public function snake_process(i:int):void
 	py[i] = y;
 	p3[i] = dir;
 	p4[i] = wait;
+	p5[i] = old_dir;
 	p6[i] = stat;
 	p8[i] = frame_wait;
 }
 
-function snake_draw_cell(cx:int, cy:int):void
+const SNAKE_BASE = 244;
+// ヘビのブロックの各方向のならび
+//
+// ブロックの並び順は
+// 01
+// 23
+// 
+// index: old_dir * 4 + dir
+const SNAKE_BLOCK_PAT:[]int = [
+	1, 2, 1, 2, // up/up
+	4, 0, 1, 11, // up/right
+	0, 0, 0, 0, // up/down
+	0, 6, 9, 2, // up/left
+	8, 2, 3, 7, // right/up
+	0, 0, 3, 3, // right/right
+	0, 6, 9, 2, // right/down
+	0, 0, 0, 0, // right/left
+	0, 0, 0, 0, // down/up
+	1, 10, 5, 3, // down/right
+	1, 2, 1, 2, // down/down
+	8, 2, 3, 7, // down/left
+	1, 10, 5, 3, // left/up
+	0, 0, 0, 0, // left/right
+	4, 0, 1, 10, // left/down
+	0, 0, 3, 3 // left/left
+];
+
+function snake_draw_cell(x:int, y:int, full:int, old_dir:int, dir:int):void
 {
-	bg.put2(cx, cy, 9, /*ブロック*/ 0 /*パレット*/ );
-}
-
-/*********************************************
- * 記憶のかけら
- * p1: 記憶のかけらID
- * p4: 表示X
- * p5: 表示Y
- * p6: タイマー
- *********************************************/
-
-public function memory_new(i:int):void
-{
-	p2[i] = 0;
-	p3[i] = 0;
-}
-
-public function memory_process(i:int):void
-{
-	var x = px[i];
-	var y = py[i];
-	var stat = p2[i];
-	var wait = p3[i];
-	var px = p4[i];
-	var py = p5[i];
-
-	if (!my.items[ITEM_ID_SPECTACLES]) {
+	if (y > 14)
 		return;
+
+	if (!full) {
+		bg.data[y * 16 + x] = SNAKE_BASE / 4;
 	}
 
-	var is_new = my.has_memory(p1[i]) > 0;
+	var pat_idx = (old_dir * 4 + dir) * 4;
 
-	switch (stat) {
-	case 0:
-		// タッチ判定
-		if (math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12) {
-			my.touch_event_func = memory_event;
-			my.touch_event_p1 = i;
-			my.touch_event_x = x;
-			my.touch_event_y = y + 8;
-		}
-	case 1:
-		// セーブ演出
-		game.game_event = event.ID_MEMORY;
-		game.game_event_p1 = p1[i];
-		stat = 0;
-	}
-
-	if (wait == 0) {
-		wait = math.rand() % 8 + 1;
-		px = math.rand() % 16 - 8;
-		py = math.rand() % 8 - 8;
+	var y16:int16 = y;
+	var addr:int16 = 0x2000 + y16 * 64 + x * 2;
+	var buf = ppu.alloc(4);
+	buf[0] = SNAKE_BASE + SNAKE_BLOCK_PAT[pat_idx + 0];
+	buf[1] = SNAKE_BASE + SNAKE_BLOCK_PAT[pat_idx + 1];
+	buf[2] = SNAKE_BASE + SNAKE_BLOCK_PAT[pat_idx + 2];
+	buf[3] = SNAKE_BASE + SNAKE_BLOCK_PAT[pat_idx + 3];
+	if (full) {
+		ppu.put(addr, &buf[0], 2, 0);
+		ppu.put(addr + 32, &buf[2], 2, 0);
 	} else {
-		if (anim % 4 == 0) {
-			wait -= 1;
-			if (wait > 1) {
-				py -= 2;
-				ppu.null_func();
-				ppu.sprite(x + px, y + py, SPR_MEMORY_FLASH, 1 - is_new);
-			}
+		switch (dir) {
+		case DIR_UP:
+			ppu.put(addr + 32, &buf[2], 2, 0);
+		case DIR_RIGHT:
+			ppu.put(addr, &buf[0], 1, 0);
+			ppu.put(addr + 32, &buf[2], 1, 0);
+		case DIR_DOWN:
+			ppu.put(addr, &buf[0], 2, 0);
+		case DIR_LEFT:
+			ppu.put(addr + 1, &buf[1], 1, 0);
+			ppu.put(addr + 33, &buf[3], 1, 0);
 		}
 	}
 
-	p2[i] = stat;
-	p3[i] = wait;
-	p4[i] = px;
-	p5[i] = py;
-}
-
-function memory_event():int options(segment: my)
-{
-	p2[my.touch_event_p1] = 1;
-	return 1;
+	var pal_addr = bg.set_pal(x, y, 0);
+	ppu.put(0x23c0 + pal_addr, &bg.pal[pal_addr], 1, 0);
 }
 
 /*********************************************
@@ -352,11 +355,8 @@ public function boxelev_switch_process(i:int):void
 	switch (stat) {
 	case 0:
 		// タッチ判定
-		if (my.items[ITEM_ID_SECURITY_CARD] && !on && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12) {
-			my.touch_event_func = boxelev_switch_event;
-			my.touch_event_p1 = i;
-			my.touch_event_x = x;
-			my.touch_event_y = y;
+		if (my.items[ITEM_ID_SECURITY_CARD] && !on && check_over(i, 12)) {
+			my.register_touch_event(boxelev_switch_event, x, y, i);
 		}
 	case 1:
 		// セーブ演出
@@ -382,57 +382,7 @@ public function boxelev_switch_process(i:int):void
 	p6[i] = on;
 }
 
-function boxelev_switch_event():int options(segment: my)
-{
-	p4[my.touch_event_p1] = 1;
-	p6[my.touch_event_p1] = 1 - p6[my.touch_event_p1];
-	return 1;
-}
-
-/*********************************************
- * 鳥の巣
- * p1: ID(0:入口、1:塔のふもと)
- *********************************************/
-
-public function bird_nest_new(i:int):void
-{
-	p4[i] = 0;
-	p6[i] = 0;
-}
-
-public function bird_nest_process(i:int):void
-{
-	var slot = pslot[i];
-	var x = px[i];
-	var y = py[i];
-	var nest_id = p1[i];
-	var stat = p4[i];
-
-	switch (stat) {
-	case 0:
-		// タッチ判定
-		if (my.items[ITEM_ID_EGG] && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12) {
-			my.touch_event_func = boxelev_switch_event;
-			my.touch_event_p1 = i;
-			my.touch_event_x = x;
-			my.touch_event_y = y;
-		}
-	case 1:
-		// 演出
-		stat = 0;
-		game_event = event.ID_BIRD_NEST;
-		game_event_p1 = nest_id;
-	}
-
-	var spr = SPR_SLOT[slot] + SPR_SNAKE;
-	var pal = PAL_SLOT[slot];
-	gr_sprite2(x - 8, y, spr + SPR_BIRD_NEST, pal);
-	gr_sprite2(x + 8, y, spr + SPR_BIRD_NEST + 4, pal);
-
-	p4[i] = stat;
-}
-
-function bird_nest_event():int options(segment: my)
+function boxelev_switch_event():int
 {
 	p4[my.touch_event_p1] = 1;
 	p6[my.touch_event_p1] = 1 - p6[my.touch_event_p1];
@@ -504,15 +454,12 @@ public function soul_gate_process(i:int):void
 
 	if (stat == 0) {
 		if (check_over(i, 16)) {
-			my.touch_event_func = soul_gate_event;
-			my.touch_event_p1 = i;
-			my.touch_event_x = x;
-			my.touch_event_y = y;
+			my.register_touch_event(soul_gate_event, x, y, i);
 		}
 	}
 }
 
-function soul_gate_event():int options(segment: my)
+function soul_gate_event():int
 {
 	game.game_event = event.ID_SOUL_GATE;
 	p4[my.touch_event_p1] = 1;
@@ -548,15 +495,15 @@ public function soul_gate_portal_process(i:int):void
 	}
 
 	if (anim % 16 == 0) {
-		var ei = en.new();
+		var ei = new();
 		if (ei != -1) {
-			en.type[ei] = en.TYPE_SOUL_GATE_FLASH;
-			en.pslot[ei] = pslot[i];
-			en.px[ei] = x;
-			en.py[ei] = y;
-			en.p4[ei] = 100 + math.rand() % 16;
-			en.p5[ei] = math.rand();
-			en.p6[ei] = 0;
+			type[ei] = TYPE_SOUL_GATE_FLASH;
+			pslot[ei] = pslot[i];
+			px[ei] = x;
+			py[ei] = y;
+			p4[ei] = 100 + math.rand() % 16;
+			p5[ei] = math.rand();
+			p6[ei] = 0;
 		}
 	}
 
@@ -638,10 +585,7 @@ public function soul_gate_symbol_process(i:int):void
 	}
 
 	if (check_over(i, 16)) {
-		my.touch_event_func = soul_gate_symbol_event;
-		my.touch_event_p1 = id;
-		my.touch_event_x = x;
-		my.touch_event_y = y;
+		my.register_touch_event(soul_gate_symbol_event, x, y, id);
 	}
 
 	mmc3.set_cbank(4 + 1, CBANK_ENEMY + 13);
@@ -655,7 +599,7 @@ public function soul_gate_symbol_process(i:int):void
 	p5[i] = wait;
 }
 
-function soul_gate_symbol_event():int options(segment: my)
+function soul_gate_symbol_event():int
 {
 	game.game_event = event.ID_MEMORY;
 	game.game_event_p1 = 100 + my.touch_event_p1;
@@ -704,14 +648,14 @@ public function magma_waterfall_process(i:int):void
 	if (!my.flags[my.FLAG_WATERGATE] && !(my.flags[my.FLAG_COLORSWITCH] & 1) /*赤*/ ) {
 		wait += 1;
 		if (anim % 8 == 0) {
-			var ei = en.new();
+			var ei = new();
 			if (ei != -1) {
-				en.type[ei] = en.TYPE_MAGMA_WATERSPLASH;
-				en.pslot[ei] = pslot[i];
-				en.px[ei] = x - math.rand() % 8;
-				en.py[ei] = y - 8 + math.rand() % 16;
-				en.p4[ei] = -12 - math.rand() % 8;
-				en.p5[ei] = 16 + math.rand() % 16;
+				type[ei] = TYPE_MAGMA_WATERSPLASH;
+				pslot[ei] = pslot[i];
+				px[ei] = x - math.rand() % 8;
+				py[ei] = y - 8 + math.rand() % 16;
+				p4[ei] = -12 - math.rand() % 8;
+				p5[ei] = 16 + math.rand() % 16;
 			}
 		}
 	}
@@ -833,7 +777,7 @@ public function timegate_process(i:int):void
 		if (check_over(i, 8)) {
 			my.x -= DIR_VX[dir] * 2;
 			my.y -= DIR_VY[dir] * 2;
-			if (bg.cell_type(my.x, my.y) && bg.TYPE_WALL) {
+			if (bg.cell_type(my.x - DIR_VX[dir] * 4, my.y) && bg.TYPE_WALL) {
 				my.state = my.STATE_DYING;
 				my.wait = 0;
 			}

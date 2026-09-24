@@ -181,7 +181,7 @@ type SwitchStmt struct {
 	Rbrace  Pos
 }
 
-// CaseClause は `case v1, v2: stmts` (stmts は 1 つ以上)。
+// CaseClause は `case v1, v2: stmts` (stmts は 0 個以上。空なら次の case へ落ちる)。
 type CaseClause struct {
 	Case   Pos
 	Values []Expr
@@ -189,7 +189,7 @@ type CaseClause struct {
 	Body   []Stmt
 }
 
-// DefaultClause は `default: stmts` (stmts は 1 つ以上)。
+// DefaultClause は `default: stmts` (stmts は 0 個以上)。
 type DefaultClause struct {
 	Default Pos
 	Colon   Pos
@@ -608,10 +608,20 @@ func (s *SwitchStmt) Pos() Pos { return s.Switch }
 func (s *SwitchStmt) End() Pos { return after(s.Rbrace, 1) }
 
 func (c *CaseClause) Pos() Pos { return c.Case }
-func (c *CaseClause) End() Pos { return c.Body[len(c.Body)-1].End() }
+func (c *CaseClause) End() Pos {
+	if len(c.Body) == 0 {
+		return after(c.Colon, 1) // `case 0:` だけ (本体はコメントのみ)。次の case へ落ちる
+	}
+	return c.Body[len(c.Body)-1].End()
+}
 
 func (c *DefaultClause) Pos() Pos { return c.Default }
-func (c *DefaultClause) End() Pos { return c.Body[len(c.Body)-1].End() }
+func (c *DefaultClause) End() Pos {
+	if len(c.Body) == 0 {
+		return after(c.Colon, 1)
+	}
+	return c.Body[len(c.Body)-1].End()
+}
 
 func (s *ExprStmt) Pos() Pos { return s.X.Pos() }
 func (s *ExprStmt) End() Pos {

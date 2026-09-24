@@ -1,6 +1,10 @@
 #fc 2
+options(bank: 8);
+use * from common;
+use lzw;
 use my;
 use sound;
+use mem;
 
 // 水門によるエリア変更テーブル
 const WG_AREA_NUM = 15;
@@ -44,6 +48,7 @@ public function _fetch_area(area:int, dir:int):void
 {
 	var old_area_flags = area_flags;
 	cur_area = area;
+	tele(TELE_AREA, area); // エリア移動をテレメトリに記録
 
 	// 水門によるエリア切り替え
 	if (my.flags[my.FLAG_WATERGATE]) {

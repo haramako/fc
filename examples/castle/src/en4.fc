@@ -1,12 +1,15 @@
 #fc 2
-use my;
+options(bank: 9);
 use * from en;
+use * from resource;
+use * from graphics;
+use my;
 use boxelev;
 use sound;
-public use game;
+use game;
 use event;
-
-use * from resource;
+use event2;
+use marchant;
 
 /*********************************************
  * バウンドするボール
@@ -377,22 +380,13 @@ public function sungate_process(i:int):void
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var stat = p4[i];
 	var flag = my.flags[my.FLAG_SUNGATE];
-	var item_flag = sungate_flag_from_item();
 
-	if (stat == 0 && flag != item_flag) {
-		if (check_over(i, 16)) {
-			my.touch_event_func = sungate_event;
-			my.touch_event_p1 = i;
-			my.touch_event_x = x + 8;
-			my.touch_event_y = y;
-		}
+	if (check_over(i, 16)) {
+		my.register_touch_event(sungate_event, x + 8, y, i);
 	}
 
 	draw_sungate(slot, flag);
-
-	p4[i] = stat;
 }
 
 function draw_sungate(slot:int, flag:int):void
@@ -409,11 +403,27 @@ function draw_sungate(slot:int, flag:int):void
 	}
 }
 
-function sungate_event():int options(segment: my)
+function sungate_event():int
 {
-	game.game_event = event.ID_SUNGATE;
-	p4[my.touch_event_p1] = 1;
+	var item_flag = sungate_flag_from_item();
+	var cur_flag = my.flags[my.FLAG_SUNGATE];
+	if (item_flag == 0) {
+		event2.register_message_dialog(_T("太陽をかたどった　だいざがある。\nくぼみが３つあいている。"));
+	} elsif (item_flag ^ cur_flag) {
+		event2.register_confirm_dialog(_T("太陽をかたどった　だいざがある。\nあいているくぼみに、石をはめますか？"), sungate_confirm_callback);
+	} elsif (cur_flag == 7) {
+		event2.register_message_dialog(_T("だいざは　やくわりをおえたようだ"));
+	} else {
+		event2.register_message_dialog(_T("太陽をかたどった　だいざがある。\nおくべき石はもっていない。"));
+	}
 	return 1;
+}
+
+function sungate_confirm_callback(i:int):void options(segment: "common")
+{
+	if (i == 0) {
+		game_event = event.ID_SUNGATE;
+	}
 }
 
 function sungate_flag_from_item():int
@@ -436,40 +446,38 @@ function sungate_flag_from_item():int
  * 錨生成器スイッチ
  *********************************************/
 
-public function anchor_switch_new(i:int):void
-{
-	p4[i] = 0;
-}
+public function anchor_switch_new(i:int):void {}
 
 public function anchor_switch_process(i:int):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var stat = p4[i];
-	var flag = my.flags[my.FLAG_ANCHOR_GENERATOR];
 	var spr = SPR_SLOT[slot] + SPR_ANCHOR_SWITCH;
 	var pal = PAL_SLOT[slot];
 
-	if (!flag && stat == 0) {
-		if (check_over(i, 16)) {
-			my.touch_event_func = anchro_switch_event;
-			my.touch_event_p1 = i;
-			my.touch_event_x = x;
-			my.touch_event_y = y;
-		}
+	if (check_over(i, 16)) {
+		my.register_touch_event(anchro_switch_event, x, y, i);
 	}
 
 	gr_sprite2(x, y, spr, pal);
-
-	p4[i] = stat;
 }
 
-function anchro_switch_event():int options(segment: my)
+function anchro_switch_event():int
 {
-	game.game_event = event.ID_ANCHOR_SWITCH;
-	p4[my.touch_event_p1] = 1;
+	if (my.flags[my.FLAG_ANCHOR_GENERATOR]) {
+		event2.register_message_dialog(_T("ランプがてんめつしている。\nかどうしているようだ。"));
+	} else {
+		event2.register_confirm_dialog(_T("ランプとボタンでいっぱいのきかいがある。ボタンをおしますか？"), anchor_confirm_callback);
+	}
 	return 1;
+}
+
+function anchor_confirm_callback(r:uint8):void
+{
+	if (r == 0) {
+		event.register_anchor_switch();
+	}
 }
 
 /*********************************************
@@ -804,24 +812,15 @@ public function mummy_process(i:int):void
  * p2: 商人の種類
  *********************************************/
 
-// event.fc空のコピーなので同期するのを忘れずに
-const MARCHANT_ITEM_IDS = [
-	ITEM_ID_GAS_MASK, ITEM_ID_COMPASS, ITEM_ID_WATCH,
-	ITEM_ID_SECURITY_CARD, ITEM_ID_LAMP, ITEM_ID_OMAMORI,
-	ITEM_ID_WING, -1, -1
-];
-
-const MARCHANT_MEMORY_ID = [50, 51, 52];
-
 public function marchant_new(i:int):void
 {
 	p4[i] = 0;
 
 	var kind = p2[i];
-	if (marchant_sold_out(kind)) {
+	if (marchant.is_sold_out(kind)) {
 		// 売り切れた場合、記憶のかけらに変わる
-		type[i] = en.TYPE_MEMORY;
-		p1[i] = MARCHANT_MEMORY_ID[kind];
+		type[i] = TYPE_MEMORY;
+		p1[i] = marchant.get_memory_id(kind);
 		p2[i] = 0;
 		p3[i] = 0;
 		return;
@@ -837,38 +836,19 @@ public function marchant_process(i:int):void
 
 	// そろばんがないと隠れる商人
 	if (kind == 2 && !my.items[ITEM_ID_ABACUS]) {
-		en.type[i] = 0;
+		type[i] = 0;
 		return;
 	}
 
 	if (check_over(i, 12)) {
-		my.touch_event_func = marchant_event;
-		my.touch_event_p1 = p2[i];
-		my.touch_event_x = x;
-		my.touch_event_y = y;
+		my.register_touch_event(marchant_event, x, y, kind);
 	}
 
 	gr_sprite2(x, y, SPR_SLOT[slot] + SPR_MARCHANT, PAL_SLOT[slot]);
 }
 
-function marchant_sold_out(kind:int):int
+function marchant_event():int
 {
-	var idx_base = kind * 3;
-	var i:int;
-	for (i = 0; i < 3; i++) {
-		var item_id = MARCHANT_ITEM_IDS[idx_base + i];
-		if (item_id != -1) {
-			if (!my.items[item_id]) {
-				return 0;
-			}
-		}
-	}
-	return 1;
-}
-
-function marchant_event():int options(segment: my)
-{
-	game_event = event.ID_MARCHANT;
-	game_event_p1 = my.touch_event_p1;
+	marchant.event_marchant(my.touch_event_p1);
 	return 1;
 }

@@ -1,11 +1,11 @@
 #fc 2
 options(bank: -2);
 
-public use * from common;
-public use lzw;
+use * from common;
+use lzw;
 use game;
 use my;
-public use mem;
+use mem;
 use en;
 use en_vtbl;
 
@@ -70,10 +70,10 @@ public const TILE_TYPE:[]int = [
 	1, 1, 1, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 1,
 	0, 0, 0, 0, 0, 0, 0, 0,
-	// 3: 溶鉱炉
-	1, 1, 1, 3, 1, 0, 1, 0,
+	// 3: 動力炉
+	1, 1, 1, 3, 1, 1, 1, 0,
 	1, 1, 1, 3, 4, 4, 4, 0,
-	3, 0, 3, 0, 1, 1, 1, 0,
+	3, 0, 3, 1, 1, 1, 1, 1,
 	0, 0, 0, 0, 0, 0, 0, 0,
 	// 4: 下層
 	1, 1, 1, 3, 0, 0, 1, 0,
@@ -109,7 +109,7 @@ public const TILE_TYPE:[]int = [
 	1, 1, 1, 3, 0, 1, 1, 0,
 	1, 1, 1, 0, 0, 0, 0, 0,
 	1, 1, 0, 0, 0, 0, 0, 0,
-	4, 0, 0, 0, 0, 0, 0, 0,
+	4, 0, 0, 0, 0, 1, 1, 1,
 	// 11: ゴミ捨て場
 	1, 1, 1, 3, 0, 0, 1, 0,
 	1, 1, 1, 0, 0, 0, 0, 0,
@@ -145,17 +145,17 @@ public function init():void
 	mem.copy(tile_type, TILE_TYPE, 64);
 }
 
-public function cell(x:int, y:int):int options(fastcall: true)
+public function cell(x:int, y:int):int
 {
 	return data[(y / 16) * 16 + x / 16];
 }
 
-public function cell_type(x:int, y:int):int options(fastcall: true)
+public function cell_type(x:int, y:int):int
 {
 	return tile_type[data[(y / 16) * 16 + x / 16]];
 }
 
-public function cell_type_by_cell(x:int, y:int):int options(fastcall: true)
+public function cell_type_by_cell(x:int, y:int):int
 {
 	return tile_type[data[y * 16 + x]];
 }
@@ -173,7 +173,7 @@ function get_cell_dir(x:int, y:int):int
 	return -1;
 }
 
-public function set_pal(x:int, y:int, _pal:int):int options(fastcall: true)
+public function set_pal(x:int, y:int, _pal:int):int
 {
 	var pal_addr:int8 = (y / 2) * 8 + x / 2;
 	var pos = (((y % 2) * 2) | (x % 2)) * 2;
@@ -221,9 +221,7 @@ public function draw_screen():void
 
 public function fetch_area(area:int, dir:int):void
 {
-	var old_pbank = mmc3.set_pbank(1, PBANK_BG_MMC);
 	_fetch_area(area, dir);
-	mmc3.set_pbank(1, old_pbank);
 }
 
 public function redraw_colorswitch(area:int):void
@@ -244,9 +242,7 @@ public function redraw_colorswitch(area:int):void
 public function scroll(dir:int):void
 {
 	ppu.wait_vsync_with_flag(2);
-	var old_pbank = mmc3.set_pbank(1, PBANK_BG_MMC);
 	_scroll(dir);
-	mmc3.set_pbank(1, old_pbank);
 }
 
 public function update_palette(in_ppu_lock:int):void
@@ -262,7 +258,7 @@ public function update_palette(in_ppu_lock:int):void
 	mmc3.set_pbank(1, old_pbank);
 }
 
-public function pal_down(pal:*int, size:int, pow:int):void options(fastcall: true)
+public function pal_down(pal:*int, size:int, pow:int):void
 {
 	var i:int;
 	var n = pow * 16;
@@ -278,7 +274,7 @@ public function pal_down(pal:*int, size:int, pow:int):void options(fastcall: tru
 	}
 }
 
-public function pal_up(pal:*int, size:int, pow:int):void options(fastcall: true)
+public function pal_up(pal:*int, size:int, pow:int):void
 {
 	var i:int;
 	var n = pow * 16;
@@ -317,7 +313,5 @@ function put_in_lock(x:int, y:int, n:int):void
 // 橋の切り替えの画面の更新
 public function colorswitch_redraw_area():void
 {
-	var old_pbank = mmc3.set_pbank(1, PBANK_BG_MMC);
 	_colorswitch_redraw_area();
-	mmc3.set_pbank(1, old_pbank);
 }

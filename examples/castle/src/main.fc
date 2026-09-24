@@ -1,5 +1,5 @@
 #fc 2
-// ビルド: fcc build -t nes -o ../castle.nes main.fc (自前の base / ld65.cfg / NSD のライブラリを options で指定)
+// ビルド: fcc build -t nes -g -o ../hiraeth.nes main.fc (自前の base / ld65.cfg / NSD のライブラリを options で指定。Rakefile 参照)
 options(base: "data.asm");
 options(linker_config: "../ld65.cfg");
 options(link: "../res/sound/bgm.o ../res/sound/castle.o ../nsd/lib/NSD.lib");
@@ -13,11 +13,14 @@ use sound;
 use title;
 use savedata;
 use ending;
+use heap;
+use irqcmd;
+use event;
 
 include('../res/images/bg_common.chr');
 include('../res/images/bg.chr');
 include('../res/images/sprite.chr');
-include('../tmp/font/text.chr');
+include('../tmp/font/text_merged.chr');
 include('../res/images/item.chr');
 include('../tmp/font/misc_text.chr');
 include('../res/images/title.chr');
@@ -27,7 +30,8 @@ include('../res/images/my.chr');
 include('../res/images/minimap.chr');
 include('../tmp/font/ending_text.chr');
 include('../tmp/font/memory_text.chr');
-include('../tmp/font/item_text.chr');
+include('../tmp/font/item_text_merged.chr');
+include('../res/images/marchant.chr');
 
 function main():void
 {
@@ -45,6 +49,10 @@ function main():void
 	bg.init();
 	en.init();
 	my.init();
+	heap.init();
+	irqcmd.init();
+	event.init();
+	ppu.clear_out_sprite();
 
 	// play music
 	sound.init();
@@ -58,16 +66,13 @@ function main():void
 
 	// エンディングテスト
 	if (0) {
-		mmc3.set_pbank(0, PBANK_ENDING);
-		mmc3.set_pbank(1, PBANK_ENDING);
 		ending.start(1);
 	}
 
 	if (!debug_on(DEBUG_FLAG_TITLE_SKIP)) {
-		var old_pbank = mmc3.set_pbank(1, PBANK_TITLE);
 		title.start();
-		mmc3.set_pbank(1, old_pbank);
 	}
 
+	tele(TELE_GAME_START, 0);
 	game.start();
 }

@@ -1,5 +1,5 @@
 #fc 2
-options(bank: -1);
+options(bank: 2);
 
 use * from common;
 use mem;
@@ -11,6 +11,7 @@ use menu;
 use boxelev;
 use ending;
 use sound;
+use text;
 
 var last_checkpoint:int;
 
@@ -99,14 +100,14 @@ function select_draw():void
 	var buf = ppu.alloc(64);
 
 	mem.zero(buf, 64);
-	menu.text_print(buf, title);
+	text.print(buf, title, 32);
 	ppu.put_in_lock(0x400 + ppu.pos(2, 2), buf, 64);
 
 	var sel_base = page * SEL_NUM_MAX;
 	var i:int;
 	for (i = 0; i < sel_num; i++) {
 		mem.zero(buf, 64);
-		menu.text_print(buf, items[sel_base + i]);
+		text.print(buf, items[sel_base + i], 32);
 		ppu.put_in_lock(0x400 + ppu.pos(4, i * 2 + 5), buf, 64);
 	}
 	ppu.unlock();
@@ -147,7 +148,6 @@ public function start():void
 		case 5:
 			do_coin();
 		case 6:
-			mmc3.set_pbank(0, PBANK_ENDING);
 			ending.start(0);
 		case -1:
 			break loop_1;

@@ -1,5 +1,5 @@
 #fc 2
-options(bank: 0);
+options(bank: 0, near: true);
 
 public use * from common;
 use menu;
@@ -52,6 +52,8 @@ public function start():void
 {
 	ppu.lock();
 
+	tele(TELE_GAME_START, debug_mode);
+
 	mmc3.set_cbank(0, CBANK_BG_COMMON);
 	mmc3.set_cbank(1, CBANK_BG);
 	mmc3.set_cbank(2, CBANK_SPRITE + 0);
@@ -88,17 +90,20 @@ public function start():void
 		pad.update();
 		boxelev.process();
 		en.process();
-		var old_pbank = mmc3.set_pbank(1, PBANK_MY);
 		my.process();
 		my.draw();
-		mmc3.set_pbank(1, old_pbank);
 
-		mmc3.set_cbank(0, CBANK_BG_COMMON + (anim / 8) % 4 * 2);
+		mmc3.cbank_bak[0] = CBANK_BG_COMMON + (anim / 8) % 4 * 2; // TODO: アニメーションがうごくようにする
+		//mmc3.set_cbank(0, CBANK_BG_COMMON + (anim / 8) % 4 * 2);
 		// nes.PPU_CTRL2 = 0b00011111; // コメントアウトで処理時間をビジュアライズする
 		ppu.wait_vsync();
 
 		// 死亡
 		if (my.state == my.STATE_DIE) {
+			if ((savedata.data[my.STATISTICS_DEAD_COUNT] as uint8) < 255) {
+				savedata.data[my.STATISTICS_DEAD_COUNT]++;
+			}
+			tele(TELE_DEAD, 0);
 			if (!bg.in_dark) {
 				var i:int;
 				for (i = 0; i < 4; i++) {
@@ -178,26 +183,16 @@ public function start():void
 			}
 		}
 
-		old_pbank = mmc3.set_pbank(1, PBANK_SUBTEXT);
 		subtext.process_subtext();
-		mmc3.set_pbank(1, old_pbank);
 
 		// イベント
-		if (game_event) {
-			old_pbank = mmc3.set_pbank(1, PBANK_EVENT);
-			event.run_event();
-			mmc3.set_pbank(1, old_pbank);
-		}
+		event.run_event();
 
 		// メニュー
 		if ((pad.pushed & pad.START) && debug_mode) {
-			var old_bank = mmc3.set_pbank(1, PBANK_DEBUG_MENU);
 			debug_menu.start();
-			mmc3.set_pbank(1, old_bank);
 		} elsif ((pad.pushed & pad.SELECT) && (my.state != my.STATE_DYING)) {
-			var old_bank = mmc3.set_pbank(1, PBANK_MENU);
 			menu.start();
-			mmc3.set_pbank(1, old_bank);
 		}
 	}
 }

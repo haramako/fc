@@ -1,8 +1,10 @@
 #fc 2
+options(bank: 7);
 use my;
 use * from en;
 use boxelev;
 use sound;
+use * from graphics;
 
 /*********************************************
  * 水滴ポイント
@@ -354,10 +356,7 @@ public function anchor_generator_process(i:int):void
 	case 0:
 		if (!my.has_anchor) {
 			if (check_over(i, 16)) {
-				my.touch_event_func = anchro_generator_event;
-				my.touch_event_p1 = i;
-				my.touch_event_x = x;
-				my.touch_event_y = y;
+				my.register_touch_event(anchro_generator_event, x, y, i);
 			}
 		}
 	case 1:
@@ -375,7 +374,7 @@ public function anchor_generator_process(i:int):void
 	p4[i] = stat;
 }
 
-function anchro_generator_event():int options(segment: my)
+function anchro_generator_event():int
 {
 	p4[my.touch_event_p1] = 1;
 	return 1;

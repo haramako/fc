@@ -8,13 +8,16 @@ const IDX_DEBUG_MODE = 1;
 const IDX_DEBUG_FLAG = 2;
 const IDX_LAST_CHECKPOINT = 3;
 const IDX_COIN_NUM = 4;
+
 public var exists:int;
-var data:[512]int options(segment: "BSS_SAVEDATA");
+public var data:[512]int options(segment: "BSS_SAVEDATA");
 
 public function init():void
 {
-	if (data[0] != data[IDX_VERSION])
+	// セーブデータのバージョンが変わったら消す
+	if (data[0] != SAVE_DATA_VERSION) {
 		clear();
+	}
 }
 
 public function clear():void
@@ -35,6 +38,8 @@ public function save():void
 	mem.copy(&data[186], my.memory_flags, my.MEMORY_FLAG_MAX / 8);
 	mem.copy(&data[202], my.memory_read_flags, my.MEMORY_FLAG_MAX / 8);
 	mem.copy(&data[218], my.checkpoint_flags, my.CHECKPOINT_FLAG_MAX);
+	// 
+
 	save_coins();
 }
 

@@ -1,6 +1,6 @@
 #fc 2
-options(mapper: "MMC3", fastcall_reg: 16); // fastcall_reg: ZP に空きが無いので 16 のまま (data.asm の FC_FASTCALL_REG_SIZE と一致)
-options(static_zp: 64, static_ram: 256);   // 静的フレームの領域 (data.asm の FC_SZP_SIZE / FC_SRAM_SIZE と一致)
+options(mapper: "MMC3", farcall: true);
+options(static_zp: 64, static_ram: 256); // 静的フレームの領域 (data.asm の FC_SZP_SIZE / FC_SRAM_SIZE と一致)
 options(bank: -1);
 
 //
@@ -15,8 +15,11 @@ var IRQ_LATCH:int options(address: 0xC000);
 var IRQ_RELOAD:int options(address: 0xC001);
 var IRQ_DISABLE:int options(address: 0xE000);
 var IRQ_ENABLE:int options(address: 0xE001);
+public var select_shadow:int;
 public var cbank_bak:[6]int;
 public var pbank_bak:[2]int;
+
+include("mmc3.asm");
 
 /**
  * 初期化する.
@@ -47,11 +50,12 @@ public function init():void
  *   5: 0x1C00-0x1FFF ( 1KB )
  * bank: 1KB bank
  */
-public function set_cbank(pos:int, bank:int):int options(fastcall: true)
+public function set_cbank(pos:int, bank:int):int
 {
 	var old = cbank_bak[pos];
-	if (1 || old != bank) {
+	if (cbank_bak[pos] != bank) {
 		asm("sei");
+		select_shadow = pos; // NMI割り込み中の変更にBANK_SELECTの値が変更されるときの対策
 		BANK_SELECT = pos;
 		BANK_DATA = bank;
 		cbank_bak[pos] = bank;
@@ -68,11 +72,12 @@ public function set_cbank(pos:int, bank:int):int options(fastcall: true)
  *   1: 0xA000-0xBFFF ( 8KB )
  * bank: 8KB bank
  */
-public function set_pbank(pos:int, bank:int):int options(fastcall: true)
+public function set_pbank(pos:int, bank:int):int
 {
 	var old = pbank_bak[pos];
-	if (1 || old != bank) {
+	if (pbank_bak[pos] != bank) {
 		asm("sei");
+		select_shadow = pos; // NMI割り込み中の変更にBANK_SELECTの値が変更されるときの対策
 		pbank_bak[pos] = bank;
 		BANK_SELECT = pos + 6;
 		BANK_DATA = bank;

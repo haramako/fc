@@ -1,5 +1,5 @@
 #fc 2
-options(bank: 0);
+options(bank: 14);
 
 use * from common;
 use bg;
@@ -21,14 +21,7 @@ public var box_running:int; // 一つ以上の箱エレベーターがアクテ�
 public var box_idx:int; // 現在スクリーン内にある箱エレベーター
 public var box_scrollable:int; // スクリーン内の箱エレベーターがいまスクロール可能な状態かどうか
 
-public function init():void options(segment: 'game')
-{
-	var old_pbank = mmc3.set_pbank(1, PBANK_BOXELEV);
-	_init();
-	mmc3.set_pbank(1, old_pbank);
-}
-
-function _init():void
+public function init():void
 {
 	var i:int;
 	for (i = 0; i < MAX; i++) {
@@ -66,14 +59,7 @@ public function on_fetch_area():void options(segment: 'common') // endingから�
 	}
 }
 
-public function process():void options(segment: 'game')
-{
-	var old_pbank = mmc3.set_pbank(1, PBANK_BOXELEV);
-	_process();
-	mmc3.set_pbank(1, old_pbank);
-}
-
-function _process():void
+public function process():void
 {
 	if (!box_running) {
 		return;

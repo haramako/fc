@@ -1,5 +1,5 @@
 #fc 2
-options(bank: 2, org: 0xa000);
+options(bank: 13, org: 0xa000, bss: "BSS_EX");
 
 use * from common;
 use mem;
@@ -7,10 +7,9 @@ use my;
 use game;
 use event;
 use ppu;
-
-include("menu.asm");
-
+use irqcmd;
 use bg;
+use text;
 
 const SCENE_ITEM = 0;
 const SCENE_MEMORY = 1;
@@ -22,6 +21,13 @@ const MEMORY_LIST = incbin('../tmp/memory_list.bin');
 
 var scene:int;
 
+const SCENE_DRAW_FUNC = [item_draw, memory_draw, map_draw];
+const SCENE_INIT_FUNC = [item_init, memory_init, map_init];
+const SCENE_PROCESS_FUNC = [item_process, memory_process, map_process];
+
+/*********************************************
+ * メニュー共通
+ *********************************************/
 public function start():void
 {
 	ppu.clear_out_sprite(); // 主人公のスプライトが一瞬表示されてしまう問題対策で、事前にクリアする
@@ -81,16 +87,14 @@ public function start():void
 		// 暗闇時のパレット作成
 		var buf = ppu.alloc(16);
 		mem.copy(buf, bg.pallet, 16);
-		bg.pal_down(buf + 4, 12, 3);
-		ppu.put_in_lock(0x3f00, buf, 16);
+		bg.pal_down(buf + 4, 12, 4);
+		ppu.put_palette_in_lock(VRAM_PALETTE, buf, 16);
 	} else {
-		ppu.put_in_lock(0x3f00, bg.pallet, 16);
+		ppu.put_palette_in_lock(VRAM_PALETTE, bg.pallet, 16);
 	}
 	ppu.unlock();
 	ppu.wait_vsync();
 }
-
-function irq_setup():void;
 
 /*********************************************
  * アイテム画面
@@ -105,10 +109,15 @@ const ITEM_MAX = 48; // my.ITEM_MAXと違い、表示上のアイテムの上限
 
 function item_init():void
 {
-	ppu.irq_setup = irq_setup;
+	irqcmd.begin();
+	irqcmd.add_cbank_bg(32 - 1, CBANK_TEXT, CBANK_TEXT + 2);
+	irqcmd.add_cbank_bg(96 - 1, CBANK_ITEM, CBANK_ITEM + 2);
+	irqcmd.add_cbank_bg(0, CBANK_ITEM_TEXT, CBANK_ITEM_TEXT + 2);
+	irqcmd.commit();
+	ppu.irq_setup = irqcmd.irq_setup;
 
-	mmc3.set_cbank(0, CBANK_ITEM);
-	mmc3.set_cbank(1, CBANK_ITEM + 2);
+	mmc3.set_cbank(0, CBANK_TEXT);
+	mmc3.set_cbank(1, CBANK_TEXT + 2);
 
 	mem.zero(bg.buf, 32);
 
@@ -116,7 +125,8 @@ function item_init():void
 	item_y = 0;
 	item_prev = -1;
 
-	ppu.put_in_lock(0x3f00, ITEM_PAL, 16);
+	ppu.put_palette_in_lock(VRAM_PALETTE, ITEM_PAL, 16);
+
 	ppu.fill_in_lock(0x2400 + 4 * 32, 0x400 - 4 * 32, 0);
 
 	var i:int;
@@ -166,45 +176,22 @@ function item_process():int
 				if (item_id != -1 && my.items[item_id]) {
 					// アイテム説明の描画
 					ppu.wait_vsync_with_flag(2);
-					var buf = ppu.alloc(64);
-					var buf2 = ppu.alloc(64);
-					mem.zero(buf2, 64);
-					var size = fs.copy(buf, fs.ITEM_DESC_NAME_BASE + item_id);
-					buf[size] = 0;
-					text_print(buf2, buf);
-					var addr = ppu.pos(4, 16) + 0x400;
-					ppu.put(addr, buf2, 64, 0);
+					var buf = ppu.alloc(20);
+					fs.copy(buf, fs.ITEM_DESC_NAME_BASE + item_id);
+					text.screen_print_str(ppu.pos(4, 18) + 0x400, buf, 10, 1);
 					ppu.wait_vsync_with_flag(2);
 
-					buf = ppu.alloc(64);
-					buf2 = ppu.alloc(128);
-					mem.zero(buf2, 128);
-					size = fs.copy(buf, fs.ITEM_DESC_BASE + item_id);
-					buf[size] = 0;
-					text_print_width(buf2, buf, 32);
-					addr = ppu.pos(8, 18) + 0x400;
-					ppu.put(addr, buf2, 64, 0);
-					ppu.wait_vsync_with_flag(2);
-					ppu.put(addr + 64, buf2 + 64, 64, 0);
+					buf = ppu.alloc(60);
+					fs.copy(buf, fs.ITEM_DESC_BASE + item_id);
+					text.screen_print_str(ppu.pos(8, 20) + 0x400, buf, 20, 2);
 					ppu.wait_vsync_with_flag(2);
 				} else {
 					// 空のアイテム説明の描画
 					ppu.wait_vsync_with_flag(2);
-					var buf = ppu.alloc(64);
-					mem.zero(buf, 64);
-					var addr = ppu.pos(4, 16) + 0x400;
-					ppu.put(addr, buf, 64, 0);
-					ppu.wait_vsync_with_flag(2);
+					text.screen_print_str(ppu.pos(4, 18) + 0x400, "", 10, 1);
 
-					buf = ppu.alloc(64);
-					mem.zero(buf, 64);
-					ppu.put(addr + 64, buf, 64, 0);
 					ppu.wait_vsync_with_flag(2);
-
-					buf = ppu.alloc(64);
-					mem.zero(buf, 64);
-					ppu.put(addr + 128, buf, 64, 0);
-					ppu.wait_vsync_with_flag(2);
+					text.screen_print_str(ppu.pos(8, 20) + 0x400, "", 20, 2);
 				}
 			}
 			item_prev = item_idx;
@@ -229,7 +216,7 @@ function item_process():int
 			}
 		}
 
-		gr_sprite2(item_x * 16 + 40, item_y * 16 + 40, SPR_CURSOR, 0);
+		gr_sprite2(item_x * 16 + 40, item_y * 16 + 56, SPR_CURSOR, 0);
 		draw_coin();
 
 		ppu.wait_vsync();
@@ -248,7 +235,7 @@ function put_item(i:int):void
 
 function put_item_inner(x:int, y:int16, item_id:int):void
 {
-	var addr:int16 = 0x2400 + 32 * 4 + 4 + (y << 6) + x * 2;
+	var addr:int16 = 0x2400 + 32 * 6 + 4 + (y << 6) + x * 2;
 	var buf = ppu.alloc(4);
 	var item_id_x = (item_id + 2) % 8;
 	var item_id_y = (item_id + 2) / 8;
@@ -266,8 +253,8 @@ function put_item_inner(x:int, y:int16, item_id:int):void
 	buf[2] = c + 16;
 	buf[3] = c + 17;
 
-	var item_addr = (y / 2) * 8 + x / 2;
-	var item_shift = (x % 2) | (y % 2 * 2);
+	var item_addr = ((y + 1) / 2) * 8 + x / 2;
+	var item_shift = (x % 2) | ((y + 1) % 2 * 2);
 	var pal_mask:uint;
 	switch (item_shift) {
 	case 0:
@@ -286,7 +273,7 @@ function put_item_inner(x:int, y:int16, item_id:int):void
 
 	ppu.put_in_lock(addr, buf, 2);
 	ppu.put_in_lock(addr + 32, buf + 2, 2);
-	ppu.put_in_lock(0x27c0 + 9 + item_addr, &bg.buf[item_addr], 1);
+	ppu.put_in_lock(0x27c0 + 8 + 1 + item_addr, &bg.buf[item_addr], 1);
 }
 
 function draw_coin():void
@@ -296,73 +283,15 @@ function draw_coin():void
 	var buf = ppu.alloc(64);
 	mem.zero(buf, 64);
 	var cur = buf;
-	text_print_num(cur, my.coin_num);
+	text.print_num(cur, my.coin_num);
 	cur[0] = 10; // "x"
 	var i:int;
 	var x = 8 * 6;
-	var y = 8 * 12 + 4;
+	var y = 8 * 14 + 4;
 	for (i = 0; i < 3; i++) {
 		ppu.sprite(x, y, SPR_SYS_NUM + cur[i] * 2, 0);
 		x += 8;
 	}
-}
-
-function text_print_num(p:*int, n:int):int
-{
-	var i:int;
-	for (i = 0; i < 3; i++) {
-		var c = 0 /* "0" */ + n % 10;
-		n = n / 10;
-		p[2 - i] = c;
-	}
-	return i;
-}
-
-public function text_print(p:*int, str:*int):int options(segment: "game")
-{
-	var i = 0;
-	var pi = 0;
-	while (1) {
-		var c = str[i];
-		if (c == 0) {
-			break;
-		}
-		if (c == 3 || c == 4) {
-			p[pi] = c;
-		} else {
-			p[pi + 32] = c;
-			pi += 1;
-		}
-		i += 1;
-	}
-	return 0;
-}
-
-public function text_print_width(p:*int, str:*int, width:int):int options(segment: "game")
-{
-	var i:uint8 = 0;
-	var pi:uint8 = 0;
-	while (1) {
-		var c = str[i];
-		if (c == 0) {
-			break;
-		}
-		if (c == 3 || c == 4) {
-			p[pi] = c;
-		} elsif (c == 2) {
-			p += width * 2;
-			pi = 0;
-		} else {
-			p[pi + 32] = c;
-			pi += 1;
-			if (pi >= width) {
-				p += width * 2;
-				pi = 0;
-			}
-		}
-		i += 1;
-	}
-	return 0;
 }
 
 /*********************************************
@@ -377,11 +306,17 @@ const MEMORY_MAX = 48;
 
 function memory_init():void
 {
-	ppu.irq_setup = irq_setup;
-	mmc3.set_cbank(0, CBANK_MENU);
-	mmc3.set_cbank(1, CBANK_TEXT);
+	irqcmd.begin();
+	irqcmd.add_cbank_bg(32 - 1, CBANK_TEXT, CBANK_TEXT + 2);
+	irqcmd.add_cbank_bg(64 - 1, CBANK_MENU, CBANK_TEXT + 2);
+	irqcmd.add_cbank_bg(0, CBANK_MEMORY_TEXT, CBANK_MEMORY_TEXT + 2);
+	irqcmd.commit();
+	ppu.irq_setup = irqcmd.irq_setup;
 
-	ppu.put_in_lock(0x3f00, ITEM_PAL, 16);
+	mmc3.set_cbank(0, CBANK_TEXT);
+	mmc3.set_cbank(1, CBANK_TEXT + 2);
+
+	ppu.put_palette_in_lock(VRAM_PALETTE, ITEM_PAL, 16);
 	ppu.fill_in_lock(0x2400 + 4 * 32, 0x400 - 4 * 32, 0);
 
 	var data_buf = &bg.data_buf[0];
@@ -494,7 +429,7 @@ function memory_put(id:int):void
 	var size = fs.copy(data, fs.MEMORIES_BASE + id);
 	data[size] = 0;
 	mem.zero(buf, 256);
-	text_print_width(buf, data, 32);
+	text.print(buf, data, 32);
 
 	var addr = ppu.pos(4, 12) + 0x400;
 	ppu.put(addr, buf, 64, 0);
@@ -524,7 +459,7 @@ function memory_show(id:int):void
 	var buf = data_buf;
 	data_buf += 256;
 	mem.zero(buf, 128);
-	text_print_width(buf, data, 32);
+	text.print(buf, data, 32);
 	var addr = ppu.pos(4, 12) + 0x400;
 	ppu.put_in_lock(addr, buf, 128);
 }
@@ -537,12 +472,16 @@ var map_y:int;
 
 function map_init():void
 {
-	ppu.irq_setup = irq_setup;
+	irqcmd.begin();
+	irqcmd.add_cbank_bg(32 - 1, CBANK_TEXT, CBANK_TEXT + 2);
+	irqcmd.add_cbank_bg(0, CBANK_MINIMAP, CBANK_MINIMAP + 2);
+	irqcmd.commit();
+	ppu.irq_setup = irqcmd.irq_setup;
 
-	mmc3.set_cbank(0, CBANK_MINIMAP);
-	mmc3.set_cbank(1, CBANK_MINIMAP + 2);
+	mmc3.set_cbank(0, CBANK_TEXT);
+	mmc3.set_cbank(1, CBANK_TEXT + 2);
 
-	ppu.put_in_lock(0x3f00, bg.pallet, 16);
+	ppu.put_palette_in_lock(VRAM_PALETTE, bg.pallet, 16);
 	ppu.fill_in_lock(0x2400 + 4 * 32, 0x400 - 4 * 32, 0);
 
 	if (!my.items[ITEM_ID_MAP]) {
@@ -583,7 +522,7 @@ function map_init():void
 
 	// パレットのコピー
 	fs.copy(buf, fs.MINIMAP_PALSET);
-	ppu.put_in_lock(VRAM_PALETTE, buf, 16);
+	ppu.put_palette_in_lock(VRAM_PALETTE, buf, 16);
 }
 
 function map_process():int
@@ -683,7 +622,7 @@ function map_draw():void
 		ax = area % 16;
 		ay = area / 16;
 		if (!checked && my.get_map(ax, ay)) {
-			if (item_id >= 12 && item_id <= 17) {
+			if ((item_id >= 12 && item_id <= 17) || item_id == ITEM_ID_STAFF) {
 				if (has_ouija_board) {
 					ppu.sprite(ax * 8 + 64, ay * 8 + 72, SPR_MAP_FLAG + 6, 1);
 				}
@@ -695,7 +634,3 @@ function map_draw():void
 		}
 	}
 }
-
-const SCENE_DRAW_FUNC = [item_draw, memory_draw, map_draw];
-const SCENE_INIT_FUNC = [item_init, memory_init, map_init];
-const SCENE_PROCESS_FUNC = [item_process, memory_process, map_process];

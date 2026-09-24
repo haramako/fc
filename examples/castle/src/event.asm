@@ -33,9 +33,9 @@ event_irq_1:
 	jsr scroll
 	
 	ldx #(_common_CBANK_TEXT+0)
-	mmc3_cbank 0
+	mmc3_cbank_irq 0
 	ldx #(_common_CBANK_TEXT+2)
-	mmc3_cbank 1
+	mmc3_cbank_irq 1
 
 	lda #%10100001
 	sta _nes_PPU_CTRL1
@@ -48,6 +48,7 @@ event_irq_1:
 	sta _nes_PPU_CTRL2
 	
 	loadw _ppu_irq_next, event_irq_2
+	mmc3_irq_end				; $8000 を割り込む前の値に戻す (8c)
 	rts
 
 ;;; IRQ割り込み(下辺)
@@ -64,9 +65,9 @@ event_irq_2:
 	;; 68c
 
 	ldx _mmc3_cbank_bak+0		; 4c
-	mmc3_cbank 0				; 11c
+	mmc3_cbank_irq 0				; 11c
 	ldx _mmc3_cbank_bak+1		; 4c
-	mmc3_cbank 1				; 11c
+	mmc3_cbank_irq 1				; 11c
 	;; 30c
 
 	lda _ppu_ctrl1_bak			; 4c
@@ -81,4 +82,5 @@ event_irq_2:
 	;; 86c
 	;; total 202c (89c+113c = 202c)
 	
+	mmc3_irq_end				; $8000 を割り込む前の値に戻す (8c)
 	rts

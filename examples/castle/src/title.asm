@@ -21,8 +21,9 @@ title_irq_1:
 	xwait #10
 	
 	ldx #(_common_CBANK_MISC_TEXT+0)
-	mmc3_cbank 0
+	mmc3_cbank_irq 0
 	ldx #(_common_CBANK_MISC_TEXT+2)
-	mmc3_cbank 1
+	mmc3_cbank_irq 1
 	
+	mmc3_irq_end				; $8000 を割り込む前の値に戻す (8c)
 	rts

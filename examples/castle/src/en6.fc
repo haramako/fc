@@ -1,10 +1,11 @@
 #fc 2
+options(bank: 12);
 use my;
 use * from en;
 use sound;
 use game;
 use event;
-public use en;
+use * from graphics;
 
 /*********************************************
  * ゴースト2
@@ -593,10 +594,10 @@ public function waterfall_process(i:int):void
 		create_bubble(x + dx, y + dy);
 	}
 
-	var mx:sint = (my.x / 2) - (x / 2 - 4) as sint as sint;
+	var mx:sint = (my.x / 2) - (x / 2 - 4) as sint;
 	var mmy:sint = my.y / 2 - (y / 2 - 4);
 
-	if ((mx > 0 as sint) && (mx < ((width * 8) as sint)) && (mmy > 0 as sint) && (mmy < (height * 8) as sint)) {
+	if ((mx > 0) && (mx < ((width * 8) as sint)) && (mmy > 0) && ((mmy as int) < height * 8)) {
 		if (anim % 16 == 0 && !has_bubble) {
 			create_splash(my.x, my.y);
 		}
@@ -623,24 +624,24 @@ public function waterfall_process(i:int):void
 
 function create_bubble(x:int, y:int):void
 {
-	var bi = en.new();
+	var bi = new();
 	if (bi != -1) {
-		en.type[bi] = en.TYPE_WATERFALL_BUBBLE;
-		en.px[bi] = x;
-		en.py[bi] = y;
-		en.p1[bi] = math.rand() % 8 - 4;
-		en.p2[bi] = 8;
+		type[bi] = TYPE_WATERFALL_BUBBLE;
+		px[bi] = x;
+		py[bi] = y;
+		p1[bi] = math.rand() % 8 - 4;
+		p2[bi] = 8;
 	}
 }
 
 function create_splash(x:int, y:int):void
 {
-	var bi = en.new();
+	var bi = new();
 	if (bi != -1) {
-		en.type[bi] = en.TYPE_SPLASH;
-		en.px[bi] = x;
-		en.py[bi] = y;
-		en.p1[bi] = 8;
+		type[bi] = TYPE_SPLASH;
+		px[bi] = x;
+		py[bi] = y;
+		p1[bi] = 8;
 	}
 }
 
@@ -683,15 +684,15 @@ public function waterfall_splash_process(i:int):void
 	var y = py[i];
 
 	if (anim % 4 == 0) {
-		var ei = en.new();
+		var ei = new();
 		if (ei != -1) {
-			en.type[ei] = en.TYPE_WATERFALL_SPLASH2;
-			en.pslot[ei] = pslot[i];
-			en.px[ei] = x - 8 + math.rand() % 32;
-			en.py[ei] = y + 4 + math.rand() % 8;
-			en.p1[ei] = math.rand() % 16 - 8;
-			en.p2[ei] = -16 - math.rand() % 8;
-			en.p3[ei] = 16 + math.rand() % 8;
+			type[ei] = TYPE_WATERFALL_SPLASH2;
+			pslot[ei] = pslot[i];
+			px[ei] = x - 8 + math.rand() % 32;
+			py[ei] = y + 4 + math.rand() % 8;
+			p1[ei] = math.rand() % 16 - 8;
+			p2[ei] = -16 - math.rand() % 8;
+			p3[ei] = 16 + math.rand() % 8;
 		}
 	}
 }

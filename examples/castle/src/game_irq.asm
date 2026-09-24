@@ -49,9 +49,9 @@ game_irq_2:
 	;; 68c
 
 	ldx _mmc3_cbank_bak+0		; 4c
-	mmc3_cbank 0				; 11c
+	mmc3_cbank_irq 0				; 11c
 	ldx _mmc3_cbank_bak+1		; 4c
-	mmc3_cbank 1				; 11c
+	mmc3_cbank_irq 1				; 11c
 	;; 30c
 
 	lda _ppu_ctrl1_bak			; 4c
@@ -66,4 +66,5 @@ game_irq_2:
 	;; 86c
 	;; total 202c (89c+113c = 202c)
 	
+	mmc3_irq_end				; $8000 を割り込む前の値に戻す (8c)
 	rts

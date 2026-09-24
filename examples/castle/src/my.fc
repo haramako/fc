@@ -1,10 +1,10 @@
 #fc 2
-options(bank: 0);
+options(bank: 5, bss: "BSS_EX");
 
-public use * from common;
-public use en;
-public use math;
-public use sound;
+use * from common;
+use en;
+use math;
+use sound;
 use mem;
 
 public const STATE_STAND = 0;
@@ -70,8 +70,8 @@ public var anchor_wait:int;
 
 public var grobe_progress:int; // グローブの押している時間
 
-public var touch_event_func:fn():int; // 予約されているタッチイベント
-public var touch_event_func_activated:fn():int; // 現在実行中のタッチイベント
+public var touch_event_func:farfn():int; // 予約されているタッチイベント
+public var touch_event_func_activated:farfn():int; // 現在実行中のタッチイベント
 public var touch_event_x:int; // タッチイベントのマーカーの表示場所
 public var touch_event_y:int;
 public var touch_event_stat:int; // タッチイベントの状態
@@ -105,6 +105,9 @@ public var memory_read_flags:[MEMORY_FLAG_MAX / 8]int options(segment: "BSS_EX")
 public const CHECKPOINT_FLAG_MAX = 16;
 public var checkpoint_flags:[CHECKPOINT_FLAG_MAX]int options(segment: "BSS_EX");
 
+public const STATISTICS_BASE = 234; // savedata.data[]のSTATISTICSの始まるインデックス
+public const STATISTICS_DEAD_COUNT = STATISTICS_BASE + 0; // 死んだ数（最大255)
+
 const ANIM_STAT_NONE = 0;
 public const ANIM_STAT_PUSH = 1;
 
@@ -132,9 +135,7 @@ public function clear_sprites():void options(segment: "game")
 
 public function process():void
 {
-	var old_pbank = mmc3.set_pbank(0, PBANK_MY_PROCESS);
 	my_process.process();
-	mmc3.set_pbank(0, old_pbank);
 }
 
 public function draw():void options(segment: "game")
@@ -273,28 +274,36 @@ public function anchor_event():int
 	return 1;
 }
 
-public function has_memory(i:int):int options(fastcall: true, segment: "common")
+public function has_memory(i:int):int options(segment: "common")
 {
 	return memory_flags[i / 8] & BIT_MASK[i % 8];
 }
 
-public function set_memory(i:int):void options(fastcall: true, segment: "game")
+public function set_memory(i:int):void options(segment: "game")
 {
 	memory_flags[i / 8] = memory_flags[i / 8] | BIT_MASK[i % 8];
 }
 
-public function clear_memory(i:int):void options(fastcall: true, segment: "game")
+public function clear_memory(i:int):void options(segment: "game")
 {
 	memory_flags[i / 8] = memory_flags[i / 8] & (BIT_MASK[i % 8] ^ 0xff);
 	memory_read_flags[i / 8] = memory_read_flags[i / 8] & (BIT_MASK[i % 8] ^ 0xff);
 }
 
-public function is_memory_read(i:int):int options(fastcall: true, segment: "game")
+public function is_memory_read(i:int):int options(segment: "game")
 {
 	return memory_read_flags[i / 8] & BIT_MASK[i % 8];
 }
 
-public function set_memory_read(i:int):void options(fastcall: true, segment: "game")
+public function set_memory_read(i:int):void options(segment: "game")
 {
 	memory_read_flags[i / 8] = memory_read_flags[i / 8] | BIT_MASK[i % 8];
+}
+
+public function register_touch_event(f:farfn():int, x:uint8, y:uint8, p1:uint8 = 0):void options(inline: true)
+{
+	touch_event_func = f;
+	touch_event_x = x;
+	touch_event_y = y;
+	touch_event_p1 = p1;
 }

@@ -1,8 +1,13 @@
 #fc 2
+options(bank: 4);
+use * from graphics;
 use my;
 use * from en;
 use boxelev;
-public use sound;
+use * from common;
+use sound;
+use game;
+use event2;
 
 /*********************************************
  * 鳥
@@ -356,11 +361,8 @@ public function watergate_process(i:int):void
 	var pal = PAL_SLOT[slot];
 
 	// タッチ判定
-	if (my.items[ITEM_ID_KEY] && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12) {
-		my.touch_event_func = watergate_event;
-		my.touch_event_p1 = i;
-		my.touch_event_x = x;
-		my.touch_event_y = y;
+	if (check_over(i, 12)) {
+		my.register_touch_event(watergate_event, x, y, i);
 	}
 
 	ppu.null_func();
@@ -370,11 +372,22 @@ public function watergate_process(i:int):void
 	p5[i] = wait;
 }
 
-function watergate_event():int options(segment: my)
+function watergate_event():int
 {
-	game_event = event.ID_OPEN_WATERGATE;
-	game_event_p1 = my.touch_event_p1;
+	if (my.items[ITEM_ID_KEY]) {
+		event2.register_confirm_dialog(_T("水門のかぎをつかって↓水門をうごかしますか？"), watergate_event_callback);
+	} else {
+		event2.register_message_dialog(_T("かぎあながある↓しかし、てもちのかぎはあわないようだ。"));
+	}
 	return 1;
+}
+
+function watergate_event_callback(result:int):void options(segment: common)
+{
+	if (result == 0) {
+		game_event = event.ID_OPEN_WATERGATE;
+		game_event_p1 = my.touch_event_p1;
+	}
 }
 
 /*********************************************
@@ -667,38 +680,32 @@ function jumpman_check(cx:int, cy:int):int
  * トライアルのエンディングポイント
  *********************************************/
 
-public function trial_ending_new(i:int):void
-{
-	p4[i] = 0;
-}
+public function trial_ending_new(i:int):void {}
 
 public function trial_ending_process(i:int):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var noslot = p2[i];
-	var nosave = p3[i];
-	var stat = p4[i];
-	var wait = p5[i];
 
 	// タッチ判定
-	if (!nosave && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12) {
-		my.touch_event_func = trial_ending_event;
-		my.touch_event_p1 = i;
-		my.touch_event_x = x;
-		my.touch_event_y = y - 16;
+	if (check_over(i, 12)) {
+		my.register_touch_event(trial_ending_event, x, y - 16, i);
 	}
 
 	gr_sprite2(x, y - 12 + math.sin(anim) / 32, SPR_SLOT[slot] + SPR_TRIAL_ENDING, PAL_SLOT[slot]);
 	gr_sprite2(x, y, SPR_SLOT[slot] + SPR_TRIAL_ENDING + 4, PAL_SLOT[slot]);
-
-	p4[i] = stat;
-	p5[i] = wait;
 }
 
-function trial_ending_event():int options(segment: my)
+function trial_ending_event():int
 {
-	game.game_event = event.ID_TRIAL_ENDING;
+	event2.register_confirm_dialog(_T("ためしは終わった……↓クリアしますか？"), trial_ending_callback, 1);
 	return 1;
+}
+
+function trial_ending_callback(result:int):void options(segment: "common")
+{
+	if (result == 0) {
+		game.game_event = event.ID_TRIAL_ENDING;
+	}
 }

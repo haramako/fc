@@ -13,16 +13,17 @@
 | ディレクトリ | 由来 | ビルド方法 |
 |---|---|---|
 | `miku/` | `C:\Work\fc-miku` | `fcc build -t nes miku.fc`（fc標準ドライバのみでROM生成） |
-| `castle/` | `C:\Work\castle` | `cd src && fcc build -t nes -o ../castle.nes main.fc`（main.fc の `options(base / linker_config / link)` で自前の data.asm・ld65.cfg・NSD を指定。実プロジェクトの Rakefile はまだ `fcc compile` → `ca65` → `ld65` の手順） |
+| `castle/` | `C:\Work\castle` | `cd src && fcc build -t nes -o ../castle.nes main.fc`（main.fc の `options(base / linker_config / link)` で自前の data.asm・ld65.cfg・NSD を指定。実プロジェクトの Rakefile も同じ `fcc build`） |
 
-castle は `textmap` によるテキスト変換（`_T`/`_M`、表は `tmp/font/*.chr.txt`）、独自リンカ設定、
+castle は `textmap` によるテキスト変換（ソースの `textmap("../tmp/font/*.chr.txt")` で表を指定）、独自リンカ設定、
 NSD サウンドドライバを含む、コンパイラ機能をほぼ全部通るサンプルになっている。
 
-**examples/ の .fc は 2026-09-14 に `fcc migrate` で文法 v2 に移行した**（ROM はバイト一致）。
-実プロジェクト側はまだ v1 のことがあるので、`sync_examples.ps1 -Update` で取り込む前に実プロジェクトを
-v2 に移行するか、取り込んだ後に `fcc migrate` を掛け直すこと（castle は
-`cd src && fcc migrate -t nes --textmap _T=../tmp/font/text.chr.txt --textmap _M=../tmp/font/misc_text.chr.txt -w main.fc`。
-`src/macro.rb` は不要になったので削除済み。`title.fc` の `VERSION_STR()` は固定文字列 `_M("VERSION 0.5.0")` に変更済み）。
+**castle は 2026-09-25 に `C:\Work\castle`（コミット 29b1fbb）から取り込み直した。** 実プロジェクト側も
+文法 v2・`textmap` はソース内指定・Rakefile も `fcc build` になったので、変換も migrate も要らず、ファイルを
+そのままコピーしている。取り込んだのは `src/main.fc` のビルドが参照するファイルだけで（`src/*.fc` / `*.asm`、
+`include` / `incbin` / `textmap` / `options(base / linker_config / link)` / asm の `.include` / `.incbin` の参照先）、
+1 つずつ抜いてビルドし、どれを抜いてもビルドが通らないか ROM が変わることを確かめてある（87 ファイル）。
+miku は 2026-09-14 に `fcc migrate` で文法 v2 に移行したもの（ROM はバイト一致）。
 
 ## テスト
 
@@ -84,10 +85,16 @@ internal/nes のスモークの既知の制限: タイミングは概算のた�
 
 ## 生成物リソースの方針（fs_data.bin 等）
 
-`castle/res/fs_data.bin`・`castle/tmp/*.bin`・`castle/tmp/font/*`（フォント表）は
-実プロジェクトのツールチェーン（map.json / xlsx / テキスト → castle 側の変換ツール）が
-生成するもの。再生成には castle 側のツール一式が必要なため、
-**examples では出来合いの生成物をスナップショットとして許容する**。
+castle の次のファイルは実プロジェクトのツールチェーン（map.json / xlsx / テキスト / png / mml → castle 側の
+`tools/converter.rb`・`make_table.rb`・nestools・NSD の nsc）が生成するもの:
+
+- `src/fs_config.fc`・`resource.fc`・`en_vtbl.fc`・`bg_data.fc`・`graphics_tbl.fc`
+- `res/fs_data.bin`、`res/images/*.{chr,nespal,tilepal,bg}`、`res/sound/*.o`
+- `tmp/*.bin`、`tmp/font/*`（フォントの chr と textmap の表 `*.chr.txt`）
+
+再生成には castle 側のツール一式（Ruby・nestools・nsc）が必要なため、
+**examples では出来合いの生成物をスナップショットとして持ち、fcc だけでビルドできるようにしている**。
+取り込み直す前に実プロジェクトで `rake` を通して、生成物を最新にしておくこと。
 
 - ソース内文字列（`_T(...)` 等）の変更には追従しない。文字列とフォント表・
   fs_data.bin の整合性は実プロジェクト側の責務

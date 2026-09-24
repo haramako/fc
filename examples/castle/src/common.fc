@@ -3,6 +3,7 @@ options(bank: -1);
 
 public const _M = textmap("../tmp/font/misc_text.chr.txt");
 public const _T = textmap("../tmp/font/text.chr.txt");
+public const _I = textmap("../tmp/font/item_text.chr.txt");
 
 const DEBUG = 0;
 public var debug_mode:int;
@@ -14,9 +15,35 @@ public const DEBUG_FLAG_UP_JUMP = 1 << 3;
 public const DEBUG_FLAG_AUTO_ANCHOR = 1 << 4;
 public const DEBUG_FLAG_NO_BGM = 1 << 5;
 
-public function debug_on(mask:int):int options(fastcall: true)
+public function debug_on(mask:int):int
 {
 	return debug_mode && debug_flag & mask;
+}
+
+// ---- テレメトリ・メールボックス ----
+// ホスト側（Web体験版のJS / FCEUXのLua）が tele_seq を毎フレーム監視し、
+// 前回からの増分ぶんだけ tele_buf のリングから読み出す。エミュレータの
+// 書き込みフックに依存せず、ゲーム側が出したいイベントだけを明示的に出す。
+// 実機やフックの無い環境ではただのRAM書き込みなので無害。
+// アドレスは hiraeth.map から castle/website/tools/gen-symbols.mjs が抽出する。
+public const TELE_AREA = 1; // arg: エリアID
+public const TELE_GAME_START = 2; // arg: デバッグモード(0:OFF, 1:ON)
+public const TELE_GET_ITEM = 3; // arg: アイテムID
+public const TELE_DEAD = 4; // arg: なし
+public const TELE_SAVE = 5; // arg: なし
+public const TELE_READ_MEMORY = 6; // arg: memory ID
+public const TELE_START_GAME = 7; // arg: なし
+public const TELE_CLEAR_SAVEDATA = 8; // arg: なし
+
+var tele_seq:int;
+var tele_buf:[32]int; // [type, arg] x 16 エントリのリング
+
+public function tele(type:int, arg:int):void
+{
+	var i = (tele_seq & 15) * 2;
+	tele_buf[i] = type;
+	tele_buf[i + 1] = arg;
+	tele_seq += 1;
 }
 
 public const ITEM_PAL = incbin("../res/images/item.nespal");
@@ -40,19 +67,20 @@ public const PAL_SLOT = [2, 3];
 public const CBANK_BG_COMMON = 0;
 public const CBANK_BG = 8;
 public const CBANK_SPRITE = 38;
-const CBANK_COMMON_SPRITE = 38;
+public const CBANK_COMMON_SPRITE = 38;
 public const CBANK_ENEMY = CBANK_SPRITE + 1;
 public const CBANK_TEXT = CBANK_SPRITE + 16;
 public const CBANK_ITEM = CBANK_SPRITE + 20;
 public const CBANK_MISC_TEXT = CBANK_SPRITE + 24;
 public const CBANK_TITLE = CBANK_SPRITE + 28;
-public const CBANK_SYS_SPRITE = CBANK_SPRITE + 30;
-public const CBANK_MENU = CBANK_SPRITE + 32;
-public const CBANK_MY = 74;
-public const CBANK_MINIMAP = 82;
-public const CBANK_ENDING_TEXT = 84;
-public const CBANK_MEMORY_TEXT = 88;
-const CBANK_ITEM_TEXT = 92;
+public const CBANK_SYS_SPRITE = CBANK_SPRITE + 32;
+public const CBANK_MENU = CBANK_SPRITE + 34;
+public const CBANK_MY = 76;
+public const CBANK_MINIMAP = 84;
+public const CBANK_ENDING_TEXT = 86;
+public const CBANK_MEMORY_TEXT = 90;
+public const CBANK_ITEM_TEXT = 94;
+public const CBANK_MARCHANT = 98;
 
 public const PBANK_MENU = 13;
 public const PBANK_EN = 1;
@@ -73,9 +101,11 @@ public const PBANK_MY_PROCESS = 16;
 public const PBANK_ENDING = 17;
 public const PBANK_SUBTEXT = 18;
 public const PBANK_EVENT2 = 19;
-const PBANK_SOUND_DATA = 20;
+public const PBANK_SOUND_DATA = 20; // NSD 本体と BGM/SE データ (ROM20 = 16KB、20 と 21 の両スロット)
 public const PBANK_EN8 = 22;
-public const PBANK_FS = 23;
+public const PBANK_TEXT = 23;
+const PBANK_HEAP = 23;
+public const PBANK_FS = 24;
 
 public const VRAM_PALETTE = 0x3f00;
 
@@ -85,8 +115,11 @@ public const GIFF_TABLE = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15]
 public var anim:int;
 public var giff:int;
 
-public var game_event:int;
-public var game_event_p1:int;
+public var game_event:int options(segment: "BSS_EX");
+public var game_event_p1:int options(segment: "BSS_EX");
+public var game_event_p2:int options(segment: "BSS_EX");
+public var game_event_ptr1:*int options(segment: "BSS_EX");
+public var game_event_callback:farfn(int):void options(segment: "BSS_EX");
 
 var scroll_x:int options(address: 0x68);
 
@@ -110,6 +143,14 @@ public function gr_sprite2_idx(x:int, y:int, pat:int, flag:int, idx:int):void
 		ppu.sprite_idx(x, y - 8, pat + 2, flag, idx);
 		ppu.sprite_idx(x - 8, y - 8, pat, flag, idx + 4);
 	}
+}
+
+public function heap_strcpy(str:*int):*int
+{
+	var len = mem.strlen(str);
+	var buf = heap.alloc(len + 1);
+	mem.strcpy(buf, str);
+	return buf;
 }
 
 public const DIR_VX:[]sint = [0, 1, 0, -1];
@@ -136,4 +177,6 @@ public use bg;
 public use pad;
 public use mmc3;
 public use math;
+use mem;
+use heap;
 public use * from resource;

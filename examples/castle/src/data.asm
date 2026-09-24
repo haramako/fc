@@ -2,10 +2,10 @@
 	.exportzp FC_REG
 	.exportzp FC_STACK
 	.exportzp FC_FASTCALL_REG
-	.export FC_FARCALL
 	.exportzp L 					; TODO: そのうち消すこと
 	.exportzp reg
 	.exportzp S
+	.export FC_FARCALL
 	.import interrupt
 	.import start
 	.import interrupt_irq
@@ -45,14 +45,14 @@
 	;; MMC3(4), battery backuped RAM
     .byte   %01000011 ; ines mir  - Specifies VRAM mirroring of the banks.
     .byte   0   	; ines map  - Specifies the NES mapper used.
-    .byte   0,0,0,0,0,0,0,0 ; 8 zeroes
+    .byte   1   	; ines prg ram - PRG RAM size in 8KB units ($6000-$7FFF)
+    .byte   0,0,0,0,0,0,0 ; 7 zeroes
 
-;; fc の fastcall 関数が使う領域の大きさ。fc は各モジュールで .assert して不足をリンク時に検出する。
-;; ZP に空きが無いので 16 のまま (main.fc の options(fastcall_reg: 16) と一致させる)
+;; fc の cc65 規約 (options(abi: "cc65")) の extern 関数が引数を A/X に置く前に使う領域と、sound.asm の NSD グルーの退避 (+0〜1、+14〜15)。fc は各モジュールで .assert する
 FC_FASTCALL_REG_SIZE = $10
 	.export FC_FASTCALL_REG_SIZE : absolute
 
-;; fc の静的フレーム (doc/v2_frame_alloc.md §6)。mmc3.fc の options(static_zp: 64, static_ram: 512) と一致させる。
+;; fc の静的フレーム (fc の doc/v2_frame_alloc.md §6)。mmc3.fc の options(static_zp: 64, static_ram: 256) と一致させる。
 ;; スタックは再帰関数と asm 定義の関数だけが使うので半分 ($40) にして、残りを静的フレームに充てる
 FC_SZP_SIZE = $40
 FC_SRAM_SIZE = $100						; RAM 側は WRAM (BSS_EX) に置く。実際の必要量は数十バイト
@@ -63,19 +63,17 @@ FC_SRAM_SIZE = $100						; RAM 側は WRAM (BSS_EX) に置く。実際の必要�
 	.export FC_SRAM
 
 .segment "FC_ZEROPAGE": zeropage
-	
+
 FC_LOCAL: .res $10
 FC_REG: .res $10
 FC_FASTCALL_REG: .res FC_FASTCALL_REG_SIZE
 
-.segment "BSS"
-FC_FARCALL: .res 3						; far call の呼び先アドレスとバンク (fc が使う。ZP でなくてよい)
-
 .segment "BSS_EX"
+FC_FARCALL: .res 3						; far call の呼び先アドレスとバンク (fc が使う。ZP でなくてよい)
 FC_SRAM: .res FC_SRAM_SIZE				; 静的フレーム (RAM 側。ZP に入りきらない関数のフレーム)
 
 .segment "FC_STACK": zeropage
-
+	
 FC_STACK: .res $3F
 FC_SP: .res 1							; スタックの空き先頭 (S からのオフセット。X の代わり)
 FC_SZP: .res FC_SZP_SIZE				; 静的フレーム (ゼロページ側)

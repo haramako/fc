@@ -1,9 +1,13 @@
 #fc 2
+options(bank: 3);
 use * from en;
 public use * from graphics;
 use ppu;
 use my;
 use savedata;
+use sound;
+use heap;
+use event2;
 
 /*********************************************
  * ダミー
@@ -394,14 +398,12 @@ public function chest_process(i:int):void
 	var x = px[i];
 	var y = py[i];
 
-	if (math.abs(my.x - x) < 16 && math.abs(my.y - y) < 16) {
-		my.touch_event_func = chest_event;
-		my.touch_event_p1 = i;
-		my.touch_event_x = x;
-		my.touch_event_y = y;
+	if (math.abs(my.x - x) < 16 && math.abs(my.y - y) < 16 && my.state == my.STATE_STAND) // MEMO: まきものバグにならないように、立ってるとき以外は反応しない
+	{
+		my.register_touch_event(chest_event, x, y, i);
 	}
 
-	var is_great = (item_id >= 12 && item_id <= 17);
+	var is_great = (item_id >= 12 && item_id <= 17) || item_id == ITEM_ID_STAFF;
 	if (item_id == ITEM_ID_COIN) {
 		ppu.sprite(x - 4, y - 8, SPR_CHEST_COIN, 0);
 	} else {
@@ -409,21 +411,13 @@ public function chest_process(i:int):void
 	}
 }
 
-function chest_event():int options(segment: my)
-{
-	var old_pbank = mmc3.set_pbank(0, PBANK_EN1);
-	var result = _chest_event();
-	mmc3.set_pbank(0, old_pbank);
-	return result;
-}
-
-function _chest_event():int
+function chest_event():int
 {
 	var i = my.touch_event_p1;
 	switch (my.touch_event_stat) {
 	case 0:
 		// 初期化
-		ppu.cbank2 = my.CBANK_MY + 2;
+		ppu.cbank2 = CBANK_MY + 2;
 		ppu.clear_sprite2_idx(my.SPRIDX_MY);
 		my.touch_event_stat = 1;
 		my.touch_event_wait = 0;
@@ -432,11 +426,11 @@ function _chest_event():int
 		my.touch_event_p1 = p1[i];
 		my.touch_event_p2 = p2[i];
 		type[i] = 0;
-		return _chest_event();
+		return chest_event();
 	case 1:
 		// 宝箱を開く
 		my.touch_event_wait += 1;
-		var is_great = (i >= 12 && i <= 17);
+		var is_great = (i >= 12 && i <= 17) || i == ITEM_ID_STAFF;
 
 		var a = 0;
 		;
@@ -474,6 +468,8 @@ function chest_get_item():void
 	var coin_id = my.touch_event_p2;
 	var has_event = 0;
 
+	tele(TELE_GET_ITEM, item_id);
+
 	if (item_id == ITEM_ID_COIN) {
 		if (my.items[item_id] == 0) {
 			has_event = 1;
@@ -489,8 +485,11 @@ function chest_get_item():void
 	}
 
 	if (has_event) {
-		game_event = event.ID_GET_ITEM;
-		game_event_p1 = item_id;
+		var str = ppu.alloc(32), tail = str;
+		tail += mem.strcpy(tail, _T("\n「"));
+		tail += fs.copy(tail, fs.ITEM_NAME_BASE + item_id);
+		tail += mem.strcpy(tail, _T("」を手に入れた"));
+		event2.register_message_dialog(str, null, event2.MESSAGE_DIALOG_ITEM, (game_event_p1 >= 12 && game_event_p1 <= 17));
 	}
 }
 
@@ -562,7 +561,14 @@ public function gas_process(i:int):void
 	py[i] = y;
 	p1[i] = dir;
 
-	if (!my.items[ITEM_ID_GAS_MASK]) {
+	if (my.items[ITEM_ID_GAS_MASK]) {
+		if (check_over(i, 8) && my.state != my.STATE_DAMAGE) {
+			my.state = my.STATE_DAMAGE;
+			my.vy = -16;
+			my.vx = (my.dir * 2 - 1) * 16;
+			my.jump_pow = 0;
+		}
+	} else {
 		check_hit(i, 8);
 	}
 }
@@ -780,11 +786,8 @@ public function checkpoint_process(i:int):void
 	switch (stat) {
 	case 0:
 		// タッチ判定
-		if (!nosave && math.abs(x - my.x) < 12 && math.abs(y - my.y) < 12) {
-			my.touch_event_func = checkpoint_event;
-			my.touch_event_p1 = i;
-			my.touch_event_x = x;
-			my.touch_event_y = y - 16;
+		if (!nosave && check_over(i, 12)) {
+			my.register_touch_event(checkpoint_event, x, y - 16, i);
 		}
 	case 1:
 		// セーブ演出
@@ -807,15 +810,7 @@ public function checkpoint_process(i:int):void
 	p5[i] = wait;
 }
 
-function checkpoint_event():int options(segment: my)
-{
-	var old_pbank = mmc3.set_pbank(0, PBANK_EN1);
-	var result = _checkpoint_event();
-	mmc3.set_pbank(0, old_pbank);
-	return result;
-}
-
-function _checkpoint_event():int
+function checkpoint_event():int
 {
 	var i = my.touch_event_p1;
 	var x = px[i];
@@ -823,14 +818,14 @@ function _checkpoint_event():int
 
 	switch (my.touch_event_stat) {
 	case 0:
-		ppu.cbank2 = my.CBANK_MY + 1;
+		ppu.cbank2 = CBANK_MY + 1;
 		ppu.clear_sprite2_idx(my.SPRIDX_MY);
 		my.touch_event_stat = 1;
 		my.touch_event_wait = 0;
 		p4[i] = 1;
 		p5[i] = 0;
 		sound.play_se(sound.SE_SAVEPOINT, 20);
-		return _checkpoint_event();
+		return checkpoint_event();
 	case 1:
 		my.touch_event_wait += 1;
 		var a = 0;
@@ -845,6 +840,7 @@ function _checkpoint_event():int
 		my.last_checkpoint = p1[i];
 		my.checkpoint_flags[p1[i]] = 1;
 		my.watch_used = 0;
+		tele(TELE_SAVE, 0);
 		savedata.save();
 		return 1;
 	}
