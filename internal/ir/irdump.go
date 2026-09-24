@@ -66,6 +66,9 @@ func dumpOperand(v Operand, ctx *irCtx) string {
 	case nil:
 		return "nil"
 	case *CastedValue:
+		if x.Truncated() {
+			return fmt.Sprintf("{cast %s %d/%d %s}", typeS(x.Type), x.Offset, x.Width, dumpOperand(x.From, ctx))
+		}
 		return fmt.Sprintf("{cast %s %d %s}", typeS(x.Type), x.Offset, dumpOperand(x.From, ctx))
 	case *PointeredArray:
 		return fmt.Sprintf("{pa %s}", dumpOperand(x.From, ctx))

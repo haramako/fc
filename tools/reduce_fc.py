@@ -1,5 +1,5 @@
 # 差分テストの失敗プログラムを小さくする (雑な delta debugging)。
-#   python reduce.py prog.fc fcc.exe [O0|panic]
+#   python3 tools/reduce_fc.py prog.fc ./fcc [O0|panic]   (Windows: python tools\reduce_fc.py prog.fc fcc.exe)
 # 1) 行を 1 つずつ消す (ブロックの { } は対で消す)、2) 括弧の部分式を定数に置き換える。症状が残る変更だけ採用。
 # 症状: 既定は「-O 0 と -O 2 の出力が違う」。第 3 引数 panic なら「どちらかのレベルで panic する」。
 import subprocess, sys, io, re

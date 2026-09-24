@@ -89,7 +89,7 @@ doc/              ドキュメント
 | [doc/roadmap.md](doc/roadmap.md) | 残っている仕事（最適化・言語機能・ツール） |
 | [bench/README.md](bench/README.md) | 生成コードのベンチマークと他コンパイラとの比較 |
 | [doc/golden_dump_format.md](doc/golden_dump_format.md) | golden ダンプ正規形の仕様 |
-| [doc/optimization.md](doc/optimization.md) / [doc/register_allocation.md](doc/register_allocation.md) | 最適化・レジスタ割付の解説 |
+| [doc/v2_regalloc.md](doc/v2_regalloc.md) | レジスタ割付（ループ内の常駐）の設計 |
 | [examples/README.md](examples/README.md) | サンプルの構成・同期方法・エミュレータテスト |
 
 ## License

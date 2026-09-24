@@ -201,33 +201,8 @@ func pow2(n int) int {
 //	2 バイト +1: inc x; bne @s; inc x+1; @s:  (7〜13 サイクル。18 から)
 //	2 バイト -1: lda x; bne @s; dec x+1; @s: dec x
 //
-// 結果を A に置く割付 (LocA) のときは A に値が要るので使わない。
-// flagsFromIncDec は直前の命令が `inc x` / `dec x` (1 バイト、メモリ上) で、いま x を検査するなら Z フラグが
-// その値を反映しているか (`dec x; lda x; bne` の lda を省く)。
-func (l *Llc) flagsFromIncDec(prev *ir.Op, v ir.Operand) bool {
-	if prev == nil || (prev.Code != ir.OpAdd && prev.Code != ir.OpSub) || ir.ValType(v).Size != 1 {
-		return false
-	}
-	if _, ok := l.incDec(prev); !ok {
-		return false
-	}
-	if prev.Code == ir.OpAdd && ir.ValType(prev.Dst).Size == 2 && !l.inY(prev.Dst) && !l.inX(prev.Dst) {
-		// 2 バイトの inc は `inc lo; bne @s; inc hi` で、下位が 0 に折り返すと Z は上位を映す。下位バイトの検査
-		// (`if (g as sint)`) には使えない (fuzz の種 758109)。2 バイトの dec は最後が `dec lo` なので下位を映す
-		return false
-	}
-	if l.inA(v) || l.inA(prev.Dst) {
-		return false // A にある値は下の byte では比べられない (toAsm が panic)。if の codegen が cmp #0 で検査する (fuzz で発覚)
-	}
-	if l.inY(v) {
-		return l.inY(prev.Dst) // iny / dey の直後の cpy #0 は要らない
-	}
-	if l.inX(v) {
-		return l.inX(prev.Dst)
-	}
-	return isValueOrCasted(v) && ir.ValKind(v) != ir.KindLiteral && !l.inY(prev.Dst) && !l.inX(prev.Dst) && l.byte(v, 0) == l.byte(prev.Dst, 0)
-}
-
+// 結果を A に置く割付 (LocA) のときは A に値が要るので使わない。直後の検査 (`dec x; lda x; bne`) の lda はピープホールが
+// 実際の命令列を見て消す (testMark。IR の命令の単位で判断していた flagsFromIncDec はバグが続いたので廃止)。
 func (l *Llc) incDec(op *ir.Op) ([]any, bool) {
 	k, lit := ir.ValIntLiteral(op.In(1))
 	size := ir.ValType(op.Dst).Size

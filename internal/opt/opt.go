@@ -18,62 +18,108 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 	if level <= 0 || len(lmd.Ops) == 0 {
 		return
 	}
-	// 各パスは FC_DISABLE=名前 で切れる (ir.Disabled。調査用)
-	if !ir.Disabled("ssa") {
-		propagateSSA(lmd)
+	for _, p := range Passes(u) {
+		p.Run(lmd)
 	}
-	if !ir.Disabled("mul") {
-		expandMul(lmd)
+}
+
+// Pass は Optimize の 1 段。Name は FC_DISABLE で切るときの名前 (ir.Disabled。調査用)。
+// fuzz の失敗の切り分け (internal/driver の rpLocate) は、全関数に 1 段ずつ当てて IR をインタプリタで実行し、
+// 出力が変わった段を探す。
+type Pass struct {
+	Name string
+	Run  func(lmd *ir.Lambda)
+}
+
+// Passes は Optimize が順に当てる段。
+func Passes(u *types.Universe) []Pass {
+	return []Pass{
+		{"ssa", func(lmd *ir.Lambda) {
+			if !ir.Disabled("ssa") {
+				propagateSSA(lmd)
+			}
+		}},
+		{"mul", func(lmd *ir.Lambda) {
+			if !ir.Disabled("mul") {
+				expandMul(lmd)
+			}
+		}},
+		{"sink", func(lmd *ir.Lambda) {
+			if !ir.Disabled("sink") {
+				sinkAddress(lmd)
+			}
+		}},
+		{"fuse", func(lmd *ir.Lambda) {
+			if !ir.Disabled("fuse") {
+				fusePointer(lmd)
+			}
+			compact(lmd)
+		}},
+		{"indexoff", func(lmd *ir.Lambda) {
+			if !ir.Disabled("indexoff") && foldIndexOffset(lmd) {
+				compact(lmd) // fuse が index + pget / pset を index_pget / index_pset にした後
+			}
+		}},
+		{"coalesce", func(lmd *ir.Lambda) {
+			if !ir.Disabled("coalesce") {
+				coalesceCopies(lmd)
+			}
+			compact(lmd)
+		}},
+		{"chain", func(lmd *ir.Lambda) {
+			if !ir.Disabled("chain") {
+				chainInPlace(lmd)
+			}
+		}},
+		{"induction", func(lmd *ir.Lambda) {
+			if !ir.Disabled("ssa") && !ir.Disabled("induction") && eliminateInduction(lmd) {
+				// coalesce の後 (`i += s` が `add i = i, s` になってから)。消したカウンタの加算と初期化、lim の計算の定数を畳む
+				propagateSSA(lmd)
+				compact(lmd)
+			}
+		}},
+		{"unroll", func(lmd *ir.Lambda) {
+			if !ir.Disabled("ssa") && !ir.Disabled("unroll") && unrollLoops(lmd) {
+				propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
+				compact(lmd)
+			}
+		}},
+		{"narrow", func(lmd *ir.Lambda) {
+			if !ir.Disabled("narrow") {
+				narrowBitTest(lmd, u)
+			}
+		}},
+		{"scale", func(lmd *ir.Lambda) {
+			if !ir.Disabled("scale") {
+				scaleIndex(lmd, u)
+			}
+		}},
+		{"commute", func(lmd *ir.Lambda) {
+			if !ir.Disabled("commute") {
+				commuteTemp(lmd)
+			}
+		}},
+		{"carry", func(lmd *ir.Lambda) {
+			for n := 0; n < 20 && !ir.Disabled("carry"); n++ {
+				before := len(lmd.Ops)
+				carryBranch(lmd)
+				compact(lmd)
+				if len(lmd.Ops) == before {
+					break
+				}
+			}
+		}},
+		{"split", func(lmd *ir.Lambda) {
+			if !ir.Disabled("split") {
+				splitWords(lmd, u)
+			}
+			compact(lmd)
+		}},
+		{"jumps", func(lmd *ir.Lambda) {
+			simplifyJumps(lmd)
+			compact(lmd)
+		}},
 	}
-	if !ir.Disabled("sink") {
-		sinkAddress(lmd)
-	}
-	if !ir.Disabled("fuse") {
-		fusePointer(lmd)
-	}
-	compact(lmd)
-	if !ir.Disabled("indexoff") && foldIndexOffset(lmd) {
-		compact(lmd) // fuse が index + pget / pset を index_pget / index_pset にした後
-	}
-	if !ir.Disabled("coalesce") {
-		coalesceCopies(lmd)
-	}
-	compact(lmd)
-	if !ir.Disabled("chain") {
-		chainInPlace(lmd)
-	}
-	if !ir.Disabled("ssa") && !ir.Disabled("induction") && eliminateInduction(lmd) {
-		// coalesce の後 (`i += s` が `add i = i, s` になってから)。消したカウンタの加算と初期化、lim の計算の定数を畳む
-		propagateSSA(lmd)
-		compact(lmd)
-	}
-	if !ir.Disabled("ssa") && !ir.Disabled("unroll") && unrollLoops(lmd) {
-		propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
-		compact(lmd)
-	}
-	if !ir.Disabled("narrow") {
-		narrowBitTest(lmd, u)
-	}
-	if !ir.Disabled("scale") {
-		scaleIndex(lmd, u)
-	}
-	if !ir.Disabled("commute") {
-		commuteTemp(lmd)
-	}
-	for n := 0; n < 20 && !ir.Disabled("carry"); n++ {
-		before := len(lmd.Ops)
-		carryBranch(lmd)
-		compact(lmd)
-		if len(lmd.Ops) == before {
-			break
-		}
-	}
-	if !ir.Disabled("split") {
-		splitWords(lmd, u)
-	}
-	compact(lmd)
-	simplifyJumps(lmd)
-	compact(lmd)
 }
 
 // newLabel は関数内で使われていないラベル名 (@name_N。N は既存のラベル番号の最大 + 1)。

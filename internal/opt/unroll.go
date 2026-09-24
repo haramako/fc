@@ -310,7 +310,7 @@ func renameOperand(o ir.Operand, rename map[*ir.Value]*ir.Value) ir.Operand {
 			return nv
 		}
 	case *ir.CastedValue:
-		return ir.NewCastedValue(renameOperand(x.From, rename), x.Type, x.Offset)
+		return ir.RebaseCast(x, renameOperand(x.From, rename))
 	case *ir.PointeredArray:
 		return ir.NewPointeredArray(renameOperand(x.From, rename), x.Type)
 	}

@@ -115,6 +115,11 @@ type Limits struct {
 	FastcallReg int // FC_FASTCALL_REG: fastcall 関数の引数・戻り値・ローカル・一時変数の全部。あふれたらエラー
 }
 
+// StackSize は stack 系の関数のフレームを積む FC_STACK (ゼロページ) の大きさ。フレームは `<S+k,x` で触るので、
+// 1 つのフレームがこれを超えると番地がゼロページの外に出る (ld65 の Range error。-O 2 のインライン展開で再帰関数の
+// フレームが膨らんで、fuzz で発覚)。
+const StackSize = 0x80
+
 // DefaultLimits は既定の大きさ (options(fastcall_reg: N) で FastcallReg を変えられる)。
 // FC_FASTCALL_REG は extern の fastcall 関数だけが使う (本体を持つ関数は静的フレーム) ので 16 で足りる。
 var DefaultLimits = Limits{Reg: 16, FastcallReg: 16}
@@ -238,6 +243,9 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 			toFrame(v)
 		}
 		lmd.ZpUsed = regUsed
+		if frameSize > StackSize {
+			panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s: stack frame needs %d bytes but FC_STACK has %d (split the function or reduce locals)", lmd, frameSize, StackSize)})
+		}
 	}
 
 	lmd.FrameSize = frameSize

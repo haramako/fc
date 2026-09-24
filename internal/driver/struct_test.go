@@ -222,3 +222,90 @@ func compileAsm(t *testing.T, body string) string {
 	}
 	return string(asm)
 }
+
+// stack 系 (再帰) の関数のフレームは `<S+k,x` で触るので、FC_STACK (128 バイト) を超えたら ld65 / ca65 の範囲エラーでなく
+// frame size over にする (-O 2 のインライン展開で再帰関数のフレームが 223 / 260 バイトになり、fuzz で発覚)。
+func TestStackFrameTooLarge(t *testing.T) {
+	t.Parallel()
+	msg := compileErr(t, `function r(n:int):int
+{
+	var big:[140]int;
+	big[n & 7] = n;
+	if (n == 0) { return big[0]; }
+	return r(n - 1) + big[n & 7];
+}
+function main():void
+{
+	r(3);
+}
+`)
+	if !strings.Contains(msg, "frame size over") || !strings.Contains(msg, "FC_STACK") {
+		t.Errorf("want frame size over, got %q", msg)
+	}
+}
+
+// ポインタ経由の配列フィールド (`ta[i].arr[j]`、`p.arr[j]`) は、配列の中身でなく番地を添字の基にする。以前は rval が
+// 配列フィールドを pget して、その中身を番地として添字を足し、別の場所に書いていた (-O 0 / -O 2 とも同じ値なので
+// 差分の fuzz では見えず、生成器を広げるときの手計算で発覚)。
+func TestArrayFieldViaPointer(t *testing.T) {
+	t.Parallel()
+	src := `struct T {
+	x:int;
+	arr:[4]int16;
+}
+var ta:[2]T;
+var g0:int;
+function setp(p:*T, i:int, v:int16):void
+{
+	p.arr[i & 3] = v;
+}
+function sum(q:*int16, n:int):int16
+{
+	var s:int16 = 0;
+	for (var i:int = 0; i < n; i++) {
+		s += q[i];
+	}
+	return s;
+}
+function main():void
+{
+	ta[1].arr[(g0 & 3)] = 300;
+	ta[1].arr[2] = 500;
+	setp(&ta[0], 1, 1000);
+	var pp:*int16 = &ta[0].arr[3];
+	*pp = 7;
+	printf(ta[1].arr[0], " ", ta[1].arr[2], " ", ta[0].arr[1], " ", ta[0].arr[3], " ", sum(ta[1].arr, 4), " ", ta[0].x, " ", ta[1].x, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "300 500 1000 7 800 0 0\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// 関数でない値の呼び出しはエラー (名前が同じ変数に取られて関数の宣言がエラーになったとき、以前は sema が panic した)。
+func TestCallNonFunction(t *testing.T) {
+	t.Parallel()
+	es := buildErrors(t, map[string]string{"t.fc": `#fc 2
+struct T { x:int; }
+var t0:T;
+function t0(p:int):int
+{
+	return p;
+}
+function main():void
+{
+	t0(1);
+}
+`}, "t.fc")
+	var msgs []string
+	for _, e := range es {
+		msgs = append(msgs, e.Msg)
+	}
+	all := strings.Join(msgs, "\n")
+	if !strings.Contains(all, "already defined") || !strings.Contains(all, "is not a function") {
+		t.Errorf("want both errors, got %q", all)
+	}
+}

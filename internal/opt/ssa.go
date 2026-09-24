@@ -407,17 +407,15 @@ func (s *ssaForm) operandBits(i, k int) (int, bool) {
 	return castBits(o, val.bits), true
 }
 
-// castBits は値のビット列 base (変数ならそのサイズに切り詰めたもの、リテラルならその整数値) を、o の cast の連鎖で
-// 内側から順に読み替えたビット列。各段は Offset バイト目からその型の幅を取る (狭める cast は切り詰め、そこから広げる cast は
-// ゼロ拡張: `((l0 as int) as sint16)` は l0 の下位バイト。外側の型と合計のオフセットだけで読むと内側の切り詰めが
-// 消えてしまう。fuzz で発覚)。
+// castBits は値のビット列 base (変数ならそのサイズに切り詰めたもの、リテラルならその整数値) を o の cast で読み替えた
+// ビット列: Offset バイト目から Width バイトを取ってゼロ拡張する (`((l0 as int) as sint16)` は l0 の下位バイト。
+// 入れ子の cast の切り詰めは ir.NewCastedValue が Width に畳んでいる)。
 func castBits(o ir.Operand, base int) int {
 	cv, ok := o.(*ir.CastedValue)
 	if !ok {
 		return base
 	}
-	inner := castBits(cv.From, base)
-	return bitsOf(inner>>(8*uint(cv.Offset)), cv.Type.Size)
+	return bitsOf(base>>(8*uint(cv.Offset)), cv.Width)
 }
 
 // operandInt は入力 k の値をその型で読んだもの。
@@ -589,7 +587,7 @@ func (s *ssaForm) rewrite() bool {
 		switch op.Code {
 		case ir.OpLoad:
 			if s.defAt[i] != nil && sameStorage(op.Dst, op.Src[0]) && ir.ValType(op.Dst) == ir.ValType(op.Src[0]) &&
-				castFits(op.Src[0]) && castFits(op.Dst) {
+				ir.PlainOperand(op.Src[0]) && ir.PlainOperand(op.Dst) {
 				dels = append(dels, i) // load x = x
 			}
 		case ir.OpIf, ir.OpIfTrue:
@@ -649,26 +647,10 @@ func (s *ssaForm) copySource(val *ssaVal, i int) *ir.Value {
 	return y
 }
 
-// castFits は o の cast の連鎖が、外側の各段が内側の幅に収まっている (= 元の変数の一部をそのまま読むのと同じ) か。
-// `((l1 as int) as int16)` は内側で 1 バイトに狭めてからゼロ拡張するので、型と場所が同じでも `load l1 = l1` ではない
-// (fuzz で発覚: 切り詰めが消えて 0x554 が 0x54 にならなかった)。
-func castFits(o ir.Operand) bool {
-	for {
-		cv, ok := o.(*ir.CastedValue)
-		if !ok {
-			return true
-		}
-		if cv.Offset+cv.Type.Size > ir.ValType(cv.From).Size {
-			return false
-		}
-		o = cv.From
-	}
-}
-
-// rebase は o (CastedValue の連鎖かもしれない) の元の変数を y に差し替えたものを返す。
+// rebase は o (CastedValue かもしれない) の元の変数を y に差し替えたものを返す。
 func rebase(o ir.Operand, y *ir.Value) ir.Operand {
 	if cv, ok := o.(*ir.CastedValue); ok {
-		return ir.NewCastedValue(rebase(cv.From, y), cv.Type, cv.Offset)
+		return ir.RebaseCast(cv, y)
 	}
 	return y
 }

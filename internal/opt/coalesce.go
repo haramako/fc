@@ -148,5 +148,6 @@ func sameStorage(a, b ir.Operand) bool {
 	if ua == nil || ub == nil || ua != ub {
 		return false
 	}
-	return ir.ValOffset(a) == ir.ValOffset(b)
+	// ゼロ拡張したバイトを含む cast (`((x as uint8) as int16)`) は x と同じ場所でも同じ値ではない
+	return ir.ValOffset(a) == ir.ValOffset(b) && ir.PlainOperand(a) && ir.PlainOperand(b)
 }

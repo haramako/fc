@@ -51,7 +51,9 @@ func isStep(op *ir.Op, maxK int) bool {
 		return false
 	}
 	d, s := ir.UnderlyingValue(op.Dst), ir.UnderlyingValue(op.Src[0])
-	return d != nil && d == s && ir.ValOffset(op.Dst) == ir.ValOffset(op.Src[0]) && ir.ValType(op.Dst).Size == ir.ValType(op.Src[0]).Size
+	// ゼロ拡張したバイトを含む cast (`x = ((x as uint8) as int16) + 1`) は x のその場の inc ではない (上位を 0 にする)
+	return d != nil && d == s && ir.ValOffset(op.Dst) == ir.ValOffset(op.Src[0]) && ir.ValType(op.Dst).Size == ir.ValType(op.Src[0]).Size &&
+		ir.PlainOperand(op.Dst) && ir.PlainOperand(op.Src[0])
 }
 
 // stepGain は isStep な命令を iny × k にしたときの得: k = 1 は inc x (5) → iny (2) で 3、k ≥ 2 は lda; clc; adc #k; sta (10) → 2k。
@@ -83,7 +85,7 @@ func isMemShift(op *ir.Op) bool {
 		return false
 	}
 	d, s := ir.UnderlyingValue(op.Dst), ir.UnderlyingValue(op.Src[0])
-	if d == nil || d != s || ir.ValOffset(op.Dst) != ir.ValOffset(op.Src[0]) {
+	if d == nil || d != s || ir.ValOffset(op.Dst) != ir.ValOffset(op.Src[0]) || !ir.PlainOperand(op.Dst) || !ir.PlainOperand(op.Src[0]) {
 		return false
 	}
 	if op.Code == ir.OpShiftRight && ir.ValType(op.Src[0]).Signed {
@@ -923,10 +925,9 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 	}
 	// 常駐変数に差し替える。cast (`(x as int)` の符号の読み替え) は残す: 落とすと `lt` の符号が変わる
 	// (`(f() as int) >= 0` が符号付きの比較になって偽になった。fuzz で発覚)
-	var rebase func(o ir.Operand, nv *ir.Value) ir.Operand
-	rebase = func(o ir.Operand, nv *ir.Value) ir.Operand {
+	rebase := func(o ir.Operand, nv *ir.Value) ir.Operand {
 		if cv, ok := o.(*ir.CastedValue); ok {
-			return ir.NewCastedValue(rebase(cv.From, nv), cv.Type, cv.Offset)
+			return ir.RebaseCast(cv, nv)
 		}
 		return nv
 	}
@@ -1061,8 +1062,12 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			before[pos] = append(before[pos], mk...)
 			return
 		}
-		backOver := func(pos int) int { // pos の手前にある写しの前へ
-			for pos > 0 && isResCopy(ops[pos-1]) {
+		// pos の手前にある (内側の領域の入口の) 読み込みの写しの前へ。退避 (レジスタ → Home) は越えない: 内側の出口の辺を
+		// 分割した写しだけのブロック (`内側の退避; この領域の復帰; jmp`) がこの領域の外への出口でもあるとき、書き戻しを
+		// 内側の退避より前に置くと、X がまだ内側の変数を持っているのにそれをこの領域の変数の Home に書いていた
+		// (`l1.lo = X (= l4)`。広げた生成器の fuzz で発覚。TestResidentExitThroughCopyBlock)
+		backOver := func(pos int) int {
+			for pos > 0 && isResCopy(ops[pos-1]) && !isResSpill(ops[pos-1]) {
 				pos--
 			}
 			return pos

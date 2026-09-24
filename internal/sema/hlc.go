@@ -1202,7 +1202,17 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			if c.ck == syntax.CastAs {
 				h.checkCast(c.ck, x.val.Type, ty)
 			}
-			return cv(ir.NewIntLiteral("", ty, x.val.Int))
+			n := x.val.Int
+			if c.ck == syntax.CastAs && ty.Kind == types.Int && ty.Size > 0 && ty.Size < 8 {
+				// 数値変換: 型の幅に切り詰めて、その符号で読む (`(300 as int) as int16` は 44。畳まない変数の cast と同じ。
+				// 以前は値をそのまま型だけ貼り替えていて、広げ直すと 300 のままだった)
+				bits := 8 * ty.Size
+				n = ir.FloorMod(n, 1<<bits)
+				if ty.Signed && n >= 1<<(bits-1) {
+					n -= 1 << bits
+				}
+			}
+			return cv(ir.NewIntLiteral("", ty, n))
 		}
 		return &cexpr{kind: cCast, args: []*cexpr{x}, typ: c.typ, ty: ty, ck: c.ck, pos: c.pos}
 
@@ -1527,6 +1537,12 @@ func (h *Hlc) rval(c *cexpr) ir.Operand {
 		if ir.ValType(v).Kind == types.SoaRef {
 			return h.soaGather(v)
 		}
+		if b := ir.ValType(v).Base; b.Kind == types.Array {
+			// 配列の値はその番地 (ポインタ経由の配列フィールド `ta[i].arr` / `p.arr`): 要素へのポインタとして読み替える。
+			// 中身を pget すると、それを番地として添字を足して別の場所を壊していた (-O 0 / -O 2 とも同じ値なので差分の
+			// fuzz では見えず、生成器を広げるときの手計算で発覚)
+			return ir.NewCastedValue(v, h.prog.Types.PointerTo(b.Base), 0)
+		}
 		r := h.newTmp(ir.ValType(v).Base)
 		h.emit(&ir.Op{Code: ir.OpPget, Dst: r, Src: []ir.Operand{v}})
 		return r
@@ -1794,6 +1810,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			} else {
 				// 普通の関数コール
 				lmdType := ir.ValType(lmdV)
+				if lmdType.Kind != types.Func {
+					// 関数でない値の呼び出し (名前が同じ変数に取られて関数の宣言がエラーになったときなど)。以前は
+					// lmdType.Base (nil) を見てコンパイラが panic していた (fuzz の生成器の名前の衝突で発覚)
+					panic(&diag.Error{Msg: fmt.Sprintf("cannot call %s: type %s is not a function", describe(lmdV), lmdType)})
+				}
 				args = h.fillDefaultArgs(lmdV, args)
 				if lmdType.IsFarFunc() {
 					if !h.prog.FarCallEnabled() {

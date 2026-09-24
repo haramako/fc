@@ -782,6 +782,145 @@ function main():void
 	}
 }
 
+// 常駐の出口の辺の順序: 内側のループ (X = l4) の出口の辺を分割した写しだけのブロック (`l4 の退避; 関数全体の l1.lo の
+// 復帰; jmp`) が、関数全体の領域 (X = l1.lo) の外 (展開した 2 つ目のループ) への出口でもあった。関数全体の書き戻し
+// `l1.lo = X` が内側の退避より前に置かれ、X がまだ l4 (= 3) なのに l1.lo に書いて、7 のはずが 3 を返した
+// (広げた生成器の fuzz、種 3101767。onEdge の backOver が退避の写しも飛び越えていた)。
+func TestResidentExitThroughCopyBlock(t *testing.T) {
+	t.Parallel()
+	src := `function ff0():sint16 options(fastcall: true)
+{
+	var l1:sint16 = (-32599);
+	var la0:[16]int16;
+	var q0:*int16 = &la0[1];
+	var l4:int = 0;
+	la0[1] = 4;
+	la0[6] = 7;
+	l1 = ((*q0) as sint16);
+	for (var l2:sint = 0; l2 < 3; l2++) {
+		q0[((l1 as int) & 7)] = max((l1 as int16), 3);
+	}
+	for (var l3:int = 0; l3 < 2; l3++) {
+		while (((((~((*q0) as sint)) || (l1 as int16)) as int) >= ((!l1) as int)) && l4 < 3) {
+			l4++;
+			l1 = (la0[6] as sint16);
+		}
+	}
+	return l1;
+}
+function main():void
+{
+	printf(ff0(), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "7\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// splitWords の後の定数 / コピーの伝播 (propagateBytes) は、置き換える一時変数の型を保つ: sint8 の一時変数 (l0 * 0) を
+// uint8 のリテラル 0 に置き換えて、`(7 << l4) >= (l0 * 0)` (1 バイトの符号付きの比較。224 は -32) が符号なしの比較に
+// なり、l4 = 5 で a1[3] に書いていた (-O 2 だけ。広げた生成器の fuzz、種 3253765)。
+func TestPropagateBytesKeepsType(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int16;
+var g1:sint16;
+var g2:int16;
+var g3:sint16;
+const ct0:[16]int = [3, 174, 3, 99, 14, 5, 6, 3, 4, 7, 182, 43, 88, 0, 6, 63];
+const ct1:[16]int = [31, 5, 2, 3, 63, 4, 136, 108, 119, 70, 43, 84, 1, 129, 59, 26];
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+var a3:[16]sint16;
+function f0(p0:*sint16):int
+{
+var la0:[16]sint16;
+var l0:int = 0;
+la0[0] = (-2217);
+la0[1] = 3;
+la0[2] = (-12946);
+la0[3] = 0;
+la0[4] = 4154;
+la0[5] = 2;
+la0[6] = 706;
+la0[7] = 23643;
+la0[8] = (-16981);
+la0[9] = 0;
+la0[10] = 3;
+la0[11] = 0;
+la0[12] = 1;
+la0[13] = 13624;
+la0[14] = 3;
+la0[15] = 6;
+return ((((*p0) as int) + ct0[(ct0[((-ct0[(254 & 7)]) & 7)] & 7)]) ^ (-(g3 as int)));
+}
+function main():void
+{
+a0[3] = 5;
+var l0:sint = 48;
+var l2:int = 0;
+L0: for (var l4:int = 0; l4 < 6; l4++) {
+var l5:int = ct0[3];
+if ((g3 < (ct1[((l5 * ct1[7]) & 7)] as sint16)) || ((ct1[0] as sint))) {
+} elsif ((f0(&a3[((((ct1[(((!(-62)) as int) & 7)] as sint) < (ct1[(f0(&a3[(((!1) as int) & 7)]) & 7)] as sint)) as int) & 7)]) - f0(&a3[0])) > 182) {
+} else {
+l0 = ((!ct1[4]) as sint);
+}
+if ((7 << ((l4 & 7) as int)) >= (l0 * (125 % (0 | 1)))) {
+a1[((-l4) & 7)] = ((ct0[7] as sint) ^ (a0[3] as sint));
+}
+}
+printf(a1[0] as int, " ", a1[3] as int, " ", a1[4] as int, "
+");
+exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "6 0 6\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
+// 狭めてから広げ直す cast: 定数の `as` は型の幅に切り詰める (`(300 as int) as int16` が 300 のままだった。sema の
+// constEval が値を切り詰めずに型だけ貼り替えていた)。変数の `((g as int) as int16)` を同じ変数への `+ 1` / `<< 1` に
+// 使う形 (常駐の isStep / isMemShift が「x のその場の inc / シフト」と見ないこと。上位は 0 になる)。
+func TestCastNarrowThenWiden(t *testing.T) {
+	t.Parallel()
+	src := `var g0:int16;
+var g1:int16;
+function main():void
+{
+	var m:int16 = ((300 as int) as int16);
+	var n:sint16 = ((255 as sint8) as sint16);
+	var k:int16 = 300;
+	var q:int16 = ((k as int) as int16);
+	printf(m, " ", n, " ", q, "\n");
+	g0 = 4660;
+	g0 = ((g0 as int) as int16) + 1;
+	g1 = 4660;
+	for (var i:int = 0; i < 3; i += 1) {
+		g1 = ((g1 as int) as int16) + 1;
+	}
+	var l:int16 = 4660;
+	for (var j:int = 0; j < 3; j += 1) {
+		l = ((l as int) as int16) << 1;
+	}
+	printf(g0, " ", g1, " ", l, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "44 65535 44\n53 55 416\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // sign_extension の入力が A にある (呼び出しの戻り値) とき、N フラグが A を反映していない (常駐 Y の復帰の ldy の後)
 // のに bpl していた (fuzz で発覚)
 func TestSignExtendCallResult(t *testing.T) {

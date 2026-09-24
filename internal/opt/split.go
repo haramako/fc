@@ -122,24 +122,14 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 			}
 			return ir.NewIntLiteral("", u8, 0)
 		}
-		if cv, ok := o.(*ir.CastedValue); ok && cv.Offset == 0 && cv.Type.Size == 2 && ir.ValType(cv.From).Size == 1 {
-			// 1 バイトの値 (変数、struct のフィールド `<u8+1>s0`、狭めた cast) を 2 バイトに広げた cast (`x as int16`):
-			// 下位はその値、上位は 0 (符号付きは wordOperand が弾く。cast の 1 バイト目を読むと隣のバイトを拾ってしまう。
-			// fuzz で発覚。フィールドの場合は元の変数でなく From の cast を包む: オフセットを保つ)
-			if k == 0 {
-				return ir.NewCastedValue(cv.From, u8, 0)
-			}
+		// o (2 バイトの cast。struct のフィールド `<int16+1>s0`、1 バイトの値を広げた `x as int16` も) の k バイト目。
+		// cast の上から畳むので、オフセット (二重に足すと隣のフィールド) と、1 バイトを広げた cast の上位
+		// (Width の外 = 0。読むと隣のバイトを拾う) は NewCastedValue が扱う (どちらも fuzz で発覚)
+		if cv := ir.NewCastedValue(o, u8, k); cv.Width == 0 {
 			return ir.NewIntLiteral("", u8, 0)
+		} else {
+			return cv
 		}
-		if v := ir.UnderlyingValue(o); v != nil && v.Type.Size == 1 {
-			if k == 0 {
-				return ir.NewCastedValue(v, u8, 0)
-			}
-			return ir.NewIntLiteral("", u8, 0)
-		}
-		// o (2 バイト。struct のフィールド `<int16+1>s0` のような cast の連鎖も) の k バイト目。オフセットは o の cast が
-		// 持っているので足さない (足すと二重に数える。fuzz で発覚)
-		return ir.NewCastedValue(o, u8, k)
 	}
 	var out []*ir.Op
 	for _, op := range lmd.Ops {
@@ -229,21 +219,15 @@ func isWord(o ir.Operand, cands map[*ir.Value]bool) bool {
 }
 
 // plainWord は o が 2 バイトの変数そのもの、またはそれを 2 バイトのまま読み替えた cast か (`((p0 as int) as int16)` のように
-// 途中で 1 バイトに狭めた連鎖は下位バイトのゼロ拡張なので違う: 分けた変数の上位を読んでいた。fuzz で発覚)。
+// 途中で 1 バイトに狭めた cast は下位バイトのゼロ拡張なので違う (Width が 1): 分けた変数の上位を読んでいた。fuzz で発覚)。
 func plainWord(o ir.Operand) bool {
-	for {
-		switch x := o.(type) {
-		case *ir.Value:
-			return x.Type.Size == 2
-		case *ir.CastedValue:
-			if x.Offset != 0 || x.Type.Size != 2 {
-				return false
-			}
-			o = x.From
-		default:
-			return false
-		}
+	switch x := o.(type) {
+	case *ir.Value:
+		return x.Type.Size == 2
+	case *ir.CastedValue:
+		return x.Offset == 0 && x.Type.Size == 2 && x.Plain() && ir.ValType(x.From).Size == 2
 	}
+	return false
 }
 
 // wordOperand は o が分解に使える 2 バイト (または 1 バイト) の値か: 候補の変数、2 バイトのメモリ上の変数、定数、1 バイトの値。
@@ -267,10 +251,10 @@ func wordOperand(o ir.Operand, cands map[*ir.Value]bool) bool {
 	if ir.ValType(o).Kind != types.Int {
 		return false
 	}
-	if cv, ok := o.(*ir.CastedValue); ok && cv.Offset == 0 && cv.Type.Size == 2 && ir.ValType(cv.From).Size == 1 {
-		// 1 バイトの値を 2 バイトに広げた cast: 符号なしのゼロ拡張だけ (byteOf と同じ判定)
-		ft := ir.ValType(cv.From)
-		return (ft.Kind == types.Int || ft.Kind == types.Bool) && !ft.Signed
+	if cv, ok := o.(*ir.CastedValue); ok && cv.Type.Size == 2 && cv.Width <= 1 && v.Type.Size > 1 {
+		// 大きい値の 1 バイト (struct のフィールド `<u8+1>s0`、狭めた cast) を 2 バイトに広げた cast: 上位は 0
+		// (cast は常にゼロ拡張。byteOf と同じ扱い)
+		return true
 	}
 	if v.Type.Size == 1 {
 		// 1 バイトの変数 (2 バイトに広げた cast も): 符号なしのゼロ拡張だけ (符号拡張はバイトに分けられない)
@@ -350,11 +334,17 @@ func propagateBytes(lmd *ir.Lambda) {
 		if v.LocalType != ir.LTTemp || nDefs[v] != 1 || op.Code != ir.OpLoad || v.Type.Size != 1 || op.Dst != ir.Operand(v) {
 			continue
 		}
+		// 置き換えは v の型のまま (比較の符号やシフトの符号は入力の型で決まる: sint8 の一時変数を uint8 のリテラル 0 に
+		// 置き換えると `(7 << i) >= (l0 * 0)` が符号なしの比較になって 224 >= 0 が真になった。広げた生成器の fuzz で発覚)
 		src := op.Src[0]
-		if _, lit := ir.ValIntLiteral(src); lit {
-			subst[v] = src
+		if n, lit := ir.ValIntLiteral(src); lit {
+			subst[v] = ir.NewIntLiteral("", v.Type, normInt(n&0xff, v.Type))
 		} else if sv, ok := src.(*ir.Value); ok && sv.LocalType == ir.LTTemp && nDefs[sv] == 1 && sv.Type.Size == 1 {
-			subst[v] = sv
+			if sv.Type == v.Type {
+				subst[v] = sv
+			} else {
+				subst[v] = ir.NewCastedValue(sv, v.Type, 0)
+			}
 		}
 	}
 	resolve := func(o ir.Operand) ir.Operand {

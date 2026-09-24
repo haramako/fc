@@ -5,6 +5,7 @@ package codegen
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 	"sort"
@@ -26,6 +27,7 @@ type Llc struct {
 	Limits        regalloc.Limits // レジスタ領域の大きさ (base.asm と一致させる)
 	FarCall       bool            // far call が有効 (各モジュールに farcall / FC_FARCALL の import を出す)
 	labelCount    int
+	ResidentFixes int // 常駐を触らないはずの命令が書いていて、退避 / 復帰に直した数 (regalloc の見積もりの外れ。CompileLambda)
 	codeSegment   string
 	curLambda     *ir.Lambda // 処理中の関数 (エラー位置の補完用)
 	curOp         *ir.Op     // 処理中の命令 (エラー位置の補完用)
@@ -316,11 +318,35 @@ func anyList(ss []string) []any {
 // testA は値の i バイト目を A に読んで N / Z を立てる。値がすでに A にある (loadA が何も出さない) ときは `cmp #0`
 // (直前が A を書いた命令ならピープホールが消す)。呼び出しの戻り値 (A) を if で見るとき、call の後の常駐の復帰 (`ldy home`)
 // がフラグを壊していた (`if ((f(x)) as sint16)`。fuzz で発覚)。
+//
+// 検査のためだけの lda には testMark を付ける。直前の命令がフラグをその場所の値で立てていれば (`dec x` の直後など)
+// ピープホールが消す。IR の命令の単位ではなく実際に出た命令列で判断するので、間に挟まる常駐の復帰や、2 バイトの inc の
+// 中の分岐 (`inc lo; bne @s; inc hi; @s:`) を見落とさない (codegen の flagsFromIncDec でこの形のバグが続いた)。
 func (l *Llc) testA(v ir.Operand, i int) any {
 	if code := l.loadA(v, i); code != nil {
-		return code
+		return markTest(code)
 	}
 	return "cmp #0"
+}
+
+// testMark は「フラグを立てるためだけのロード」の印 (行末のコメント)。ピープホールが消すか、最後に印だけ外す。
+const testMark = " ; tst"
+
+// markTest は code がメモリからの 1 命令の lda / ldy なら testMark を付ける。
+func markTest(code any) any {
+	s, ok := code.(string)
+	if !ok || !(strings.HasPrefix(s, "lda ") || strings.HasPrefix(s, "ldy ")) || strings.HasPrefix(s[4:], "#") {
+		return code
+	}
+	return s + testMark
+}
+
+// stripTestMarks は残った testMark を外す。
+func stripTestMarks(lines []string) []string {
+	for i, line := range lines {
+		lines[i] = strings.TrimSuffix(line, testMark)
+	}
+	return lines
 }
 
 // nextOp は i の次の (nil でない) 命令。
@@ -465,7 +491,61 @@ func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {
 }
 
 // CompileLambda は関数1つ分のアセンブリを生成する (Prepare 済みであること)。
+//
+// 常駐レジスタを「触らない」(regalloc.Classify の ResFree) とした命令の本体が実際にはそのレジスタを書いていたら、
+// その命令だけ退避 / 復帰 (ResClobber) にして関数ごとコンパイルし直す。regalloc の「どの命令が A / X / Y を
+// 使うか」(freeA / needsX / needsY) は codegen の出力を手で写した見積もりで、食い違いが fuzz で何度も出た
+// (2 バイトの dec が A を壊す、cast を挟んだ if、Y 代用と融合 …)。正しさは実際に出した命令列から決め、見積もりは
+// 常駐の損得の計算にだけ使う (外れても遅くなるだけ)。FC_TRACE_RESIDENT で直した命令を stderr に出す。
 func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
+	saved := l.saveState()
+	forced := map[int]regsKept{}
+	for try := 0; ; try++ {
+		lines, writes := l.compileLambda(sym, lmd, forced)
+		if len(writes) == 0 {
+			return lines
+		}
+		if try >= 8 {
+			panic(&diag.Error{Msg: fmt.Sprintf("internal: resident registers did not converge in %s", lmd.Id)})
+		}
+		for opNo, w := range writes {
+			f := forced[opNo]
+			f.a, f.x, f.y = f.a || w.a, f.x || w.x, f.y || w.y
+			forced[opNo] = f
+			if os.Getenv("FC_TRACE_RESIDENT") != "" {
+				fmt.Fprintf(os.Stderr, "resident: %s op %d writes %+v; spill instead: %s\n", lmd.Id, opNo, w, ir.DumpOp(lmd.Ops[opNo], nil))
+			}
+		}
+		l.ResidentFixes += len(writes)
+		l.restoreState(saved)
+	}
+}
+
+// llcState はコンパイルし直すときに戻す状態 (ラベルの番号、.dbg、呼び出しの引数の保持、融合)。
+type llcState struct {
+	labelCount int
+	dbgFiles   map[string]bool
+	dbgLast    string
+	holdA      bool
+	holdX      int
+	fused      map[*ir.Value]string
+	fusedAt    int
+}
+
+func (l *Llc) saveState() llcState {
+	return llcState{labelCount: l.labelCount, dbgFiles: maps.Clone(l.dbgFiles), dbgLast: l.dbgLast,
+		holdA: l.holdA, holdX: l.holdX, fused: l.fused, fusedAt: l.fusedAt}
+}
+
+func (l *Llc) restoreState(s llcState) {
+	l.labelCount, l.dbgFiles, l.dbgLast, l.holdA, l.holdX, l.fused, l.fusedAt =
+		s.labelCount, maps.Clone(s.dbgFiles), s.dbgLast, s.holdA, s.holdX, s.fused, s.fusedAt
+}
+
+// compileLambda は CompileLambda の 1 回分。forced の命令は常駐レジスタを退避 / 復帰する。戻り値の writes は、
+// 常駐を触らないとした命令の本体が書いていたレジスタ (空ならこのコンパイルで正しい)。
+func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept) ([]string, map[int]regsKept) {
+	writes := map[int]regsKept{}
 	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
 	l.curOp = nil
 	ops := lmd.Ops
@@ -535,16 +615,13 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	pushArgSize := 0
 	pushFastcallArgSize := 0
 	var calls []*pendingCall // 積んでいる途中の呼び出し (内側が末尾)
-	var prevOp *ir.Op        // 直前に生成した命令 (フラグの再利用の判定用)
+	verify := os.Getenv("FC_VERIFY_REGS") != "" // テストと fuzz で有効 (verifyRegs)
 
 	for opNo, op := range ops {
 		if op == nil {
 			continue
 		}
 		l.curOp = op
-		if opNo > 0 {
-			prevOp = ops[opNo-1]
-		}
 		// IRコメント (golden比較では除去されるため、Go版独自の形式でよい)
 		cm := ir.DumpOp(op, nil)
 		if len(cm) > 120 {
@@ -561,8 +638,22 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = op.Resident, false, op.ResidentY, false, op.ResidentX, false, false
 		restoreA, restoreY, restoreX := false, false, false
+		opStart, holdAIn, holdXIn := len(r.lines), l.holdA, l.holdX
+		var d regalloc.Decision
 		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
-			d, _ := regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+			d, _ = regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+			// 前のコンパイルで、触らないはずの本体が書いていた常駐レジスタは退避 / 復帰する (CompileLambda)
+			if f := forced[opNo]; f.any() {
+				if f.a && d.A == regalloc.ResFree {
+					d.A, d.UseY = regalloc.ResClobber, false
+				}
+				if f.y && d.Y == regalloc.ResFree {
+					d.Y = regalloc.ResClobber
+				}
+				if f.x && d.X == regalloc.ResFree {
+					d.X = regalloc.ResClobber
+				}
+			}
 			// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
 			// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
 			// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
@@ -596,6 +687,12 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			}
 			l.aHeld = d.UseY
 		}
+		bodyStart := len(r.lines)
+		keep := regsKept{
+			a: op.Resident != nil && !l.resMem && d.A == regalloc.ResFree,
+			y: op.ResidentY != nil && !l.resYMem && d.Y == regalloc.ResFree,
+			x: op.ResidentX != nil && !l.resXMem && d.X == regalloc.ResFree,
+		}
 
 		switch op.Code {
 
@@ -610,9 +707,6 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				// コンディションレジスタの場合。CondPositive のとき「真 ⇔ フラグがセット」、ただし C だけは
 				// 「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)
 				r.push(fmt.Sprintf("%s %s", condJump(ir.UnderlyingValue(op.In(0)), onTrue), op.Label))
-			} else if l.flagsFromIncDec(prevOp, op.In(0)) {
-				// 直前の inc / dec が Z を残している (`dec x; bne L`)
-				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if l.inA(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
 				// A に常駐している値: フラグが A を反映しているとは限らない (直前が A の演算ならピープホールが cmp を消す)
 				r.push("cmp #0")
@@ -625,7 +719,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if l.aHeld && ir.ValType(op.In(0)).Size == 1 {
 				// A は常駐変数で塞がっている: Y で検査する
-				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
+				r.push(markTest(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0))))
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
 			} else if restoreA {
 				// A に常駐している変数を壊して検査し、飛び先でも A が要る: 飛ぶ側の経路でも復帰する
@@ -1468,6 +1562,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
+		bodyEnd := len(r.lines)
 		if restoreA || restoreY || restoreX {
 			// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
 			// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
@@ -1488,6 +1583,19 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			if cond {
 				r.push("plp")
 			}
+		}
+		if w := keep.and(regsWritten(r.lines[bodyStart:bodyEnd])); w.any() {
+			writes[opNo] = w // 常駐を触らないはずの本体が書いた: この命令は退避 / 復帰にしてコンパイルし直す
+		}
+		if verify {
+			// 呼び出しの引数の保持中 (A の最後の引数、Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない
+			// (codegen の中の約束事なので、破っていたらコンパイルエラー)
+			hold := regsKept{
+				a: holdAIn && !isCallOp(op),
+				y: op.HoldY && !isCallOp(op),
+				x: holdXIn > 0 && !isCallOp(op) && op.Code != ir.OpPushResult,
+			}
+			l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
 		}
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
 	}
@@ -1516,10 +1624,11 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	if l.OptimizeLevel > 0 && !ir.Disabled("peephole") {
 		lines = peepholeA(lines)
 	}
+	lines = stripTestMarks(lines)
 	lines = l.extendJump(lines)
 
 	lmd.Asm = lines
-	return lines
+	return lines, writes
 }
 
 var reIndentExempt = regexp.MustCompile(`^([.@_a-zA-Z0-9][_a-zA-Z0-9]+:|\.segment|\.proc)`)

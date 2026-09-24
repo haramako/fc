@@ -25,7 +25,8 @@ golden は Go 自身の出力をスナップショットとして保持し、`go
 - global → `{g <id> <type> <val>[ <base_string>]}` (val: `:symbol` / 文字列 / `mod:<id>` / `macro` / nil)
 - module → `{mod <id>}`
 - 表にない local → `{l? <id> <type>}`
-- CastedValue → `{cast <type> <offset> <内側>}`
+- CastedValue → `{cast <type> <offset> <内側>}`。入れ子の cast を 1 段に畳んで内側で切り詰めたとき（`((x as uint8) as int16)`）は
+  読む幅を付けて `{cast <type> <offset>/<width> <内側>}`（内側は cast ではない。`ir.NewCastedValue` が畳む）
 - PointeredArray → `{pa <内側>}`
 - Lambda参照 → `{lambda <id>}`
 

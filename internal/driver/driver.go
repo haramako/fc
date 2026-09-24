@@ -566,7 +566,7 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\n" +
 		".segment \"FC_STACK\": zeropage\n" +
 		"\t\n" +
-		"FC_STACK: .res $80\n" +
+		fmt.Sprintf("FC_STACK: .res $%02X\n", regalloc.StackSize) +
 		"\n" +
 		"\tL = FC_LOCAL\n" +
 		"\treg = FC_REG\n" +
