@@ -16,6 +16,7 @@ import (
 
 	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/regalloc"
@@ -175,37 +176,31 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 	result = &Result{BuildDir: c.buildDir}
 
-	// compile (ソースコード -> 中間コード)
-	prog, cerr := sema.Compile(opt.Dir, c.libPath(opt.Target), filename)
-	if cerr != nil {
-		return nil, cerr
-	}
-	c.prog = prog
-	result.Warnings = collectWarnings(prog)
-
-	// compile2 (中間コード -> アセンブラファイル)
-	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
-	if opt.Debug {
-		outDir := filepath.Dir(opt.Out)
-		llc.DebugFile = func(ref string) string {
-			abs := ref
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(c.dir, ref)
-			}
-			if rel, err := filepath.Rel(outDir, abs); err == nil {
-				return filepath.ToSlash(rel)
-			}
-			return filepath.ToSlash(abs)
+	// compile (ソースコード -> 中間コード) と compile2 (中間コード -> アセンブラファイル) の準備
+	var prog *sema.Program
+	var llc *codegen.Llc
+	var plan *frames.Plan
+	var perr error
+	for noGrow := map[string]bool{}; ; {
+		var cerr error
+		prog, cerr = sema.Compile(opt.Dir, c.libPath(opt.Target), filename)
+		if cerr != nil {
+			return nil, cerr
+		}
+		c.prog = prog
+		llc = c.newLlc(opt, prog)
+		llc.NoGrow = noGrow
+		// フレームの静的割付 (doc/v2_frame_alloc.md §6-4): 呼び出し規約の決定 → 全関数の最適化と割付 → 配置 → _frames.inc
+		plan, perr = llc.PrepareProgram(prog.Modules.List(), c.staticZpSize(), c.staticRamSize())
+		if !retryFrameOver(llc, perr, noGrow) {
+			break
 		}
 	}
-	llc.Limits.FastcallReg = c.fastcallRegSize()
-	llc.FarCall = prog.FarCallEnabled()
-	result.FarCalls = prog.FarCalls
-	// フレームの静的割付 (doc/v2_frame_alloc.md §6-4): 呼び出し規約の決定 → 全関数の最適化と割付 → 配置 → _frames.inc
-	plan, perr := llc.PrepareProgram(prog.Modules.List(), c.staticZpSize(), c.staticRamSize())
 	if perr != nil {
 		return nil, perr
 	}
+	result.Warnings = collectWarnings(prog)
+	result.FarCalls = prog.FarCalls
 	if err := os.WriteFile(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n")), 0o666); err != nil {
 		return nil, err
 	}
@@ -483,6 +478,39 @@ func (c *Compiler) farcallAsm() string {
 		return ""
 	}
 	return p
+}
+
+// newLlc は prog のコード生成器を作る (PrepareProgram の前の設定まで)。
+func (c *Compiler) newLlc(opt *BuildOptions, prog *sema.Program) *codegen.Llc {
+	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
+	if opt.Debug {
+		outDir := filepath.Dir(opt.Out)
+		llc.DebugFile = func(ref string) string {
+			abs := ref
+			if !filepath.IsAbs(abs) {
+				abs = filepath.Join(c.dir, ref)
+			}
+			if rel, err := filepath.Rel(outDir, abs); err == nil {
+				return filepath.ToSlash(rel)
+			}
+			return filepath.ToSlash(abs)
+		}
+	}
+	llc.Limits.FastcallReg = c.fastcallRegSize()
+	llc.FarCall = prog.FarCallEnabled()
+	return llc
+}
+
+// retryFrameOver は PrepareProgram の結果を見て、-O 2 のフレームが上限を超えた関数 (llc.FrameOver) をまだ noGrow に
+// 入れていなければ入れて true (展開を止めて sema からやり直す)。最適化は IR をその場で書き換えるので、やり直しは
+// 意味解析から。失敗したときだけ走るので、通るプログラムのコンパイル時間は変わらない。止めても超えるなら false
+// (エラーをそのまま返す。-O 0 でも超える大きすぎる関数)。
+func retryFrameOver(llc *codegen.Llc, err error, noGrow map[string]bool) bool {
+	if err == nil || llc.FrameOver == "" || noGrow[llc.FrameOver] {
+		return false
+	}
+	noGrow[llc.FrameOver] = true
+	return true
 }
 
 // staticZpSize / staticRamSize は静的フレームの領域の大きさ (options(static_zp: N) / options(static_ram: N)。

@@ -295,7 +295,7 @@ func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda, owners map[string
 	for k := 0; k < len(caller.Ops); k++ {
 		op := caller.Ops[k]
 		callee := inl[calleeSym(op)]
-		if callee == nil || callee == caller {
+		if callee == nil || callee == caller || caller.NoGrow {
 			continue
 		}
 		if callee.Module != caller.Module && (hasCallsOrOpaqueAsm(callee) || !dataReachable(callee, caller, owners)) {

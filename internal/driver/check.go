@@ -55,13 +55,23 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 
 // compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。
 func (c *Compiler) compileNoWrite(dir, target, main string) (*sema.Program, error) {
-	prog := sema.NewProgram()
-	if err := sema.CompileProgram(prog, dir, c.libPath(target), main); err != nil {
-		return nil, err
-	}
-	llc := codegen.NewLlc(2, prog.Types)
-	if _, err := llc.PrepareProgram(prog.Modules.List(), DefaultStaticZp, DefaultStaticRam); err != nil {
-		return nil, err
+	var prog *sema.Program
+	var llc *codegen.Llc
+	for noGrow := map[string]bool{}; ; {
+		prog = sema.NewProgram()
+		if err := sema.CompileProgram(prog, dir, c.libPath(target), main); err != nil {
+			return nil, err
+		}
+		llc = codegen.NewLlc(2, prog.Types)
+		llc.NoGrow = noGrow
+		_, err := llc.PrepareProgram(prog.Modules.List(), DefaultStaticZp, DefaultStaticRam)
+		if retryFrameOver(llc, err, noGrow) {
+			continue // fcc build と同じく、フレームが上限を超えた関数の展開を止めてやり直す
+		}
+		if err != nil {
+			return nil, err
+		}
+		break
 	}
 	for _, mod := range prog.Modules.List() {
 		if mod.FromFcm {

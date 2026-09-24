@@ -34,6 +34,10 @@ type Llc struct {
 	zero          *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
 	types         *types.Universe
 	Lambdas       map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
+	// NoGrow は展開をしない関数の Id (PrepareProgram が ir.Lambda.NoGrow にする)。FrameOver は PrepareProgram が
+	// frame size over で止まったときのその関数の Id (-O 2 のときだけ。driver が NoGrow に足してやり直す)
+	NoGrow    map[string]bool
+	FrameOver string
 
 	// DebugFile が nil でなければ、命令ごとに fc のソース位置を `.dbg line, "file", N` で .s に埋める (fcc build -g)。
 	// ld65 の --dbgfile に載り、Mesen が fc のソースをステップ実行できる。DebugFile は sema のファイル参照
@@ -392,6 +396,13 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 // 戻り値の Plan.Inc を `_frames.inc` として書き、各モジュールの asm が include する。
 func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frames.Plan, error) {
 	if l.OptimizeLevel > 0 {
+		for _, m := range mods {
+			for _, d := range m.Defs {
+				if d.Kind == ir.DefCode && l.NoGrow[d.Lambda.Id] {
+					d.Lambda.NoGrow = true
+				}
+			}
+		}
 		if err := opt.InlineProgram(mods); err != nil {
 			return nil, err
 		}
@@ -474,6 +485,9 @@ func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {
 			if ce, ok := r.(*diag.Error); ok {
 				if !ce.Pos.IsValid() && l.curLambda != nil {
 					ce.Pos = l.curLambda.Pos
+				}
+				if l.OptimizeLevel > 0 && l.curLambda != nil && strings.HasPrefix(ce.Msg, "frame size over") {
+					l.FrameOver = l.curLambda.Id
 				}
 				err = ce
 				return

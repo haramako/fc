@@ -89,10 +89,17 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       ピープホールが先頭の `ldy` / `lda` を消す。calls −2.4%、castle −0.5%。v2_frame_alloc.md §7.1） ✅ 2026-09-20
 - [x] `a[i + k]` の添字の加算を配列側に畳む（`opt.foldIndexOffset` → `sta a+k,y`。bgdecode −11.7%、castle の
       `ppu.sprite_idx` が手書き asm より速く。添字の式は折り返さない規則を §6 に。v2_ssa.md §9） ✅ 2026-09-20
-- [ ] 展開・自動インラインでフレームが 256 バイトを超えるときは引く（fuzz の種 618862: -O 0 は通るのに -O 2 だけ
-      `frame size over`。runner は今は skip）
+- [x] 展開・自動インラインでフレームが 256 バイトを超えるときは引く（-O 2 で frame size over になった関数に
+      `Lambda.NoGrow` を付け、インライン展開とループ展開をせずに sema からやり直す。`driver.retryFrameOver`。
+      fuzz で 5000 本中 -O 2 だけ落ちていた 3 本が通るように。`TestFrameOverNoGrow`） ✅ 2026-09-24
 - [ ] far call にもレジスタで渡す（トランポリンの速い経路を X だけで書き、切替の経路で A / Y をスタックに退避。
       FC_FARCALL の設定を引数の読み出しの前に。castle の `farcall` も書き換え。v2_frame_alloc.md §7.1）
+- [ ] （検討メモ・やる見込みは薄い）far call のバンク復帰を関数の出口まで遅らせる: 関数 F の入口で呼び先のスロットの
+      バンクを覚え、F の中の far call は「違えば切り替えて飛ぶだけ」の戻さない版のトランポリンで呼び、F の出口で
+      1 回だけ戻す（castle の `en.process` の手動 `set_pbank` と同じ形。farfn の表でも同じバンクが続けば切り替えない）。
+      自動で判定できる条件: F がそのスロットに無い、far call の後でそのスロットの const を読まない。判定しにくいのは
+      上から受け取ったポインタがそのスロットを指す場合と割り込みの前提なので、`options(farcall_restore: "exit")` の
+      ような明示の属性か、「far call の後でポインタを読まない・渡さない」関数に限る自動化になる（2026-09-24 検討）
 - [x] 小さな static 関数の自動インライン（12 命令以下でループ・呼び出し無し。6 命令以下は無条件、それより大きいものは
       呼び出し 2 か所まで。calls −22%、entities −16%、castle は ROM +1.6 KB で −0.2%。`options(noinline: true)` /
       `FC_DISABLE=autoinline`。v2_ssa.md §8） ✅ 2026-09-20
@@ -101,6 +108,10 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       効果が薄い（v2_ssa.md §7）
 - [ ] 書き換えルールの DSL（Go コンパイラの rulegen の縮小版）— パスが 10 個を超えて手書きの照合が辛くなってから
 - [ ] デッドストア除去、live range の精度（穴あき区間の共有）
+- [ ] ポインタを 1 ずつ進めるループ（`*p = …; p += 1`）を、ポインタを動かさず Y を進める `sta (p),y; iny` に
+      （回数が 256 以下なら Y だけで回してループの後で `p += Y`、超えるなら Y の一周で上位を `inc`）。今は 1 回 約 26 →
+      14 サイクルになる見込み。1 バイトの添字の `p[i]` はすでに Y 常駐で最適。sieve は時間の半分が素数ずつ進む内側の
+      ループで対象外なので 1〜2 割。castle には今この形のループがほとんど無い（2026-09-24 検討。将来の項目）
 - [x] マクロベンチ: `examples/castle` を `internal/nes` で自動プレイし、局面ごとの 1 フレームの busy サイクル
       （フレーム長 − vsync 待ち）を `bench/castle_frames.json` と比べる（`TestCastleFrameCycles`） ✅ 2026-09-19
 
