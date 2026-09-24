@@ -15,7 +15,9 @@ package opt
 //     `lt t = k, LIM` (t は分岐だけが使う) だけで、ループの外では使われない
 //   - q はポインタ、ループ内の定義は毎周 1 回の `add q = q, s` だけ (歩幅 s は同じリテラル、または同じ版のループ不変の
 //     ローカル変数)。ヘッダの比較の時点で k も q も加算前の版 (φ)
-//   - LIM はリテラル。k が折り返さないこと: LIM + (s の上限) が k の型に収まる。s の上限はリテラルの値、型の最大値、
+//   - LIM はリテラルか、ループの中で定義されない符号なしの変数 (crc8 の `i < length`)。変数なら歩幅はリテラルの 1 だけ
+//     (k < LIM ≤ 型の最大値 なので k + 1 は折り返さない。k0 が 0 でなければ入口で 1 度だけ元の検査をする)。
+//     リテラルなら k が折り返さないこと: LIM + (s の上限) が k の型に収まる。s の上限はリテラルの値、型の最大値、
 //     加算なら入力の上限の和、ループの変数なら支配する比較 `v < LIM'` から (maxValue。sieve の prime = i + i + 3 は
 //     外側の `i < 8191` から 16383 以下)
 //   - q + (LIM - k0) がポインタとして折り返さないことは「ポインタ演算が配列の末尾 + 1 を超えるのは未定義」
@@ -97,13 +99,14 @@ func (s *ssaForm) eliminateOneInduction() bool {
 			ivTrace(4)
 			continue
 		}
-		// 比較の向き: `k < LIM` または `LIM < k`
+		// 比較の向き: `k < LIM` または `LIM < k` (k は誘導変数の側)
+		ivs := s.inductionVars(lp, dominates)
 		kIdx := 0
-		if _, lit := ir.ValIntLiteral(cmp.Src[1]); !lit {
+		if v, ok := cmp.Src[0].(*ir.Value); !ok || ivs[v] == nil {
 			kIdx = 1
 		}
 		lim, lit := ir.ValIntLiteral(cmp.Src[1-kIdx])
-		if !lit {
+		if !lit && !s.loopInvariantVar(cmp.Src[1-kIdx], lp) {
 			ivTrace(5)
 			continue
 		}
@@ -112,7 +115,6 @@ func (s *ssaForm) eliminateOneInduction() bool {
 			ivTrace(6)
 			continue
 		}
-		ivs := s.inductionVars(lp, dominates)
 		kiv := ivs[k]
 		if kiv == nil || len(s.useAt[hops[1]]) == 0 || resolve(s.useAt[hops[1]][kIdx]) != kiv.phi {
 			ivTrace(7)
@@ -126,9 +128,15 @@ func (s *ssaForm) eliminateOneInduction() bool {
 			continue
 		}
 		// 折り返さないこと: LIM + (歩幅の最大値) が k の型に収まる (歩幅の上限は maxValue: リテラル、型、支配する比較から)
+		// LIM が変数 (ループ不変) なら歩幅はリテラルの 1 だけ: k < LIM ≤ 型の最大値 なので k + 1 は折り返さない
 		kmax := 1<<(8*uint(k.Type.Size)) - 1
 		stepMax, ok := s.maxValue(kiv.def, kiv.stepIdx, idom)
-		if !ok || stepMax <= 0 || lim+stepMax > kmax {
+		if !lit {
+			if n, one := ir.ValIntLiteral(kiv.step); !one || n != 1 || ir.ValType(cmp.Src[1-kIdx]).Size > k.Type.Size || ir.ValType(cmp.Src[1-kIdx]).Signed {
+				ivTrace(12)
+				continue
+			}
+		} else if !ok || stepMax <= 0 || lim+stepMax > kmax {
 			ivTrace(11)
 			continue
 		}
@@ -159,15 +167,22 @@ func (s *ssaForm) eliminateOneInduction() bool {
 		diff := ir.NewLocal("$diff", k.Type, ir.LTTemp)
 		s.lmd.Vars = append(s.lmd.Vars, limV, diff)
 		var pro []*ir.Op
-		if _, k0lit := ir.ValIntLiteral(s.initialOperand(k, pre)); !k0lit {
+		// 入口で 1 度だけ元の検査をする (k0 > LIM のとき LIM - k0 が負になって lim が q の下に回り込むので)。k0 が 0、
+		// または k0 も LIM もリテラル (ヘッダの検査のままで足りる) なら要らない
+		k0, k0lit := ir.ValIntLiteral(s.initialOperand(k, pre))
+		if !k0lit || (!lit && k0 != 0) {
 			g := ir.NewLocal("$guard", t.Type, ir.LTTemp)
 			s.lmd.Vars = append(s.lmd.Vars, g)
 			pro = append(pro, &ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{cmp.Src[0], cmp.Src[1]}, Pos: cmp.Pos},
 				&ir.Op{Code: ir.OpIf, Src: []ir.Operand{g}, Label: br.Label, Pos: br.Pos})
 		}
-		pro = append(pro,
-			&ir.Op{Code: ir.OpSub, Dst: diff, Src: []ir.Operand{ir.NewIntLiteral("", k.Type, lim), k}, Pos: cmp.Pos},
-			&ir.Op{Code: ir.OpAdd, Dst: limV, Src: []ir.Operand{q.v, diff}, Pos: cmp.Pos})
+		if !lit && k0lit && k0 == 0 {
+			pro = append(pro, &ir.Op{Code: ir.OpAdd, Dst: limV, Src: []ir.Operand{q.v, cmp.Src[1-kIdx]}, Pos: cmp.Pos}) // LIM - 0
+		} else {
+			pro = append(pro,
+				&ir.Op{Code: ir.OpSub, Dst: diff, Src: []ir.Operand{limOperand(cmp.Src[1-kIdx], lit, lim, k.Type), k}, Pos: cmp.Pos},
+				&ir.Op{Code: ir.OpAdd, Dst: limV, Src: []ir.Operand{q.v, diff}, Pos: cmp.Pos})
+		}
 		newCmp := &ir.Op{Code: ir.OpLt, Dst: t, Src: []ir.Operand{q.v, limV}, Pos: cmp.Pos}
 		if kIdx == 1 {
 			newCmp.Src = []ir.Operand{limV, q.v}
@@ -186,6 +201,30 @@ func (s *ssaForm) eliminateOneInduction() bool {
 		return true
 	}
 	return false
+}
+
+// limOperand は lim の計算に使う LIM (リテラルなら k の型のリテラル、変数ならそのまま)。
+func limOperand(o ir.Operand, lit bool, n int, t *types.Type) ir.Operand {
+	if lit {
+		return ir.NewIntLiteral("", t, n)
+	}
+	return o
+}
+
+// loopInvariantVar は o がループ lp の中で定義されないローカル変数か (volatile でない)。
+func (s *ssaForm) loopInvariantVar(o ir.Operand, lp *ir.Loop) bool {
+	v, ok := o.(*ir.Value)
+	if !ok || !s.vars[v] || v.Type.Kind != types.Int || v.Volatile {
+		return false
+	}
+	for b := range lp.Blocks {
+		for _, i := range s.cfg.Ops(b) {
+			if d := s.defAt[i]; d != nil && d.v == v {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // inductionVars はループ内で「毎周 1 回だけ `add v = v, s` (s はループ不変) で更新される」ローカル変数。

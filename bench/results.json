@@ -10,13 +10,13 @@
     "out": "sum=663"
   },
   "crc16": {
-    "cycles": 1672514,
-    "size": 432,
+    "cycles": 1606867,
+    "size": 437,
     "out": "crc16=16501"
   },
   "crc8": {
-    "cycles": 819583,
-    "size": 306,
+    "cycles": 753936,
+    "size": 311,
     "out": "crc8=149"
   },
   "entities": {
