@@ -181,7 +181,7 @@ type SwitchStmt struct {
 	Rbrace  Pos
 }
 
-// CaseClause は `case v1, v2: stmts` (stmts は 0 個以上。空なら次の case へ落ちる)。
+// CaseClause は `case v1, v2: stmts` (stmts は 0 個以上。空の case は何もしない。fall through はしない)。
 type CaseClause struct {
 	Case   Pos
 	Values []Expr
@@ -610,7 +610,7 @@ func (s *SwitchStmt) End() Pos { return after(s.Rbrace, 1) }
 func (c *CaseClause) Pos() Pos { return c.Case }
 func (c *CaseClause) End() Pos {
 	if len(c.Body) == 0 {
-		return after(c.Colon, 1) // `case 0:` だけ (本体はコメントのみ)。次の case へ落ちる
+		return after(c.Colon, 1) // `case 0:` だけ (本体はコメントのみ。何もしない case)
 	}
 	return c.Body[len(c.Body)-1].End()
 }
