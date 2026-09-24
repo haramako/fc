@@ -34,6 +34,10 @@ type Llc struct {
 	zero          *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
 	types         *types.Universe
 	Lambdas       map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
+	// NoGrow は展開をしない関数の Id (PrepareProgram が ir.Lambda.NoGrow にする)。FrameOver は PrepareProgram が
+	// frame size over で止まったときのその関数の Id (-O 2 のときだけ。driver が NoGrow に足してやり直す)
+	NoGrow    map[string]bool
+	FrameOver string
 
 	// DebugFile が nil でなければ、命令ごとに fc のソース位置を `.dbg line, "file", N` で .s に埋める (fcc build -g)。
 	// ld65 の --dbgfile に載り、Mesen が fc のソースをステップ実行できる。DebugFile は sema のファイル参照
@@ -392,6 +396,13 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 // 戻り値の Plan.Inc を `_frames.inc` として書き、各モジュールの asm が include する。
 func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frames.Plan, error) {
 	if l.OptimizeLevel > 0 {
+		for _, m := range mods {
+			for _, d := range m.Defs {
+				if d.Kind == ir.DefCode && l.NoGrow[d.Lambda.Id] {
+					d.Lambda.NoGrow = true
+				}
+			}
+		}
 		if err := opt.InlineProgram(mods); err != nil {
 			return nil, err
 		}
@@ -474,6 +485,9 @@ func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {
 			if ce, ok := r.(*diag.Error); ok {
 				if !ce.Pos.IsValid() && l.curLambda != nil {
 					ce.Pos = l.curLambda.Pos
+				}
+				if l.OptimizeLevel > 0 && l.curLambda != nil && strings.HasPrefix(ce.Msg, "frame size over") {
+					l.FrameOver = l.curLambda.Id
 				}
 				err = ce
 				return
@@ -943,11 +957,13 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 				} else if sym != "" {
 					r.push(l.callStackish(lmd, sym))
 				} else {
-					// 関数ポインタから呼ぶ
-					r.push(l.loadA(op.In(0), 0))
-					r.push("sta <reg+0")
-					r.push(l.loadA(op.In(0), 1))
-					r.push("sta <reg+1")
+					// 関数ポインタから呼ぶ (表から読んだ index_pget が reg に直接書いたなら写さない)
+					if !fnPtrInReg(lmd, ops, opNo) {
+						r.push(l.loadA(op.In(0), 0))
+						r.push("sta <reg+0")
+						r.push(l.loadA(op.In(0), 1))
+						r.push("sta <reg+1")
+					}
 					r.push(l.callStackish(lmd, "jsr_reg"))
 				}
 				if op.Dst != nil {
@@ -988,10 +1004,12 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 				} else if sym != "" {
 					r.push(fmt.Sprintf("jsr %s", sym))
 				} else {
-					r.push(l.loadA(op.In(0), 0))
-					r.push("sta <reg+0")
-					r.push(l.loadA(op.In(0), 1))
-					r.push("sta <reg+1")
+					if !fnPtrInReg(lmd, ops, opNo) {
+						r.push(l.loadA(op.In(0), 0))
+						r.push("sta <reg+0")
+						r.push(l.loadA(op.In(0), 1))
+						r.push("sta <reg+1")
+					}
 					r.push("jsr jsr_reg")
 				}
 				if op.Dst != nil {
@@ -1495,18 +1513,22 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 				l.fusedAt = opNo
 				break
 			}
+			store := func(i int) any { return l.storeA(op.Dst, i) }
+			if fnPtrToReg(lmd, ops, opNo) >= 0 {
+				store = func(i int) any { return fmt.Sprintf("sta <reg+%d", i) } // 呼び出しが reg から飛ぶ (写しを省く)
+			}
 			if l.inX(op.In(1)) {
 				// 添字が X に常駐 (グローバル配列、要素 1 バイトかバイト単位の添字)
 				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 					r.push(fmt.Sprintf("lda %s+%d,x", l.toAsm(op.In(0)), i))
-					r.push(l.storeA(op.Dst, i))
+					r.push(store(i))
 				}
 				break
 			}
 			r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
 			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 				r.push(fmt.Sprintf("lda %s+%d,y", l.toAsm(op.In(0)), i))
-				r.push(l.storeA(op.Dst, i))
+				r.push(store(i))
 			}
 
 		case ir.OpIndexPset:
@@ -1675,3 +1697,95 @@ func (l *Llc) allocRegister(lmd *ir.Lambda) {
 // ---------------------------------------------------------------
 // extend_jump
 // ---------------------------------------------------------------
+
+// fnPtrToReg は ops[i] (グローバルの表の index_pget) が読む関数ポインタを、一時変数でなく reg に直接書いてよいとき、
+// それを使う呼び出しの命令番号を返す (だめなら -1)。条件: 結果が near の関数ポインタの一時変数で、関数の中でその
+// 呼び出しにしか使われず、間にあるのが reg を使わない引数の積み込み (1〜2 バイトの値の push_result / push_arg) と
+// 引数の式の単純な演算 (load / add / sub / and / or / xor) だけ。
+// 呼び出しの側 (fnPtrInReg) も同じ判定で reg への写しを省く (castle の en.process の `PROCESS[t](i)`: 表 → 一時変数 →
+// reg の写し 4 命令、12 サイクルが消える)。
+func fnPtrToReg(lmd *ir.Lambda, ops []*ir.Op, i int) int {
+	op := ops[i]
+	if op == nil || op.Code != ir.OpIndexPget || ir.Disabled("fnptr-reg") {
+		return -1
+	}
+	t, ok := op.Dst.(*ir.Value)
+	if !ok || t.LocalType != ir.LTTemp || t.Type.Kind != types.Func || t.Type.IsFarFunc() || t.Type.Size != 2 {
+		return -1
+	}
+	if ir.ValType(op.In(0)).Kind == types.Pointer {
+		return -1 // ポインタ経由の表は (reg),y で読むことがある
+	}
+	call := -1
+	for j := i + 1; j < len(ops) && call < 0; j++ {
+		b := ops[j]
+		if b == nil {
+			continue
+		}
+		switch b.Code {
+		case ir.OpPushResult, ir.OpPushFastcallResult:
+		case ir.OpPushArg, ir.OpPushFastcallArg, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor:
+			// 引数の積み込みと、引数の式の単純な演算 (lda / adc / sta … だけで reg を使わない)
+			for _, s := range append([]ir.Operand{b.Dst}, b.Src...) {
+				if s == ir.Operand(t) || !simpleArg(s) {
+					return -1
+				}
+			}
+		case ir.OpCall, ir.OpFastcall:
+			if b.Src[0] != ir.Operand(t) {
+				return -1 // 引数の中の呼び出し (reg を壊す)
+			}
+			call = j
+		default:
+			return -1
+		}
+	}
+	if call < 0 {
+		return -1
+	}
+	uses := 0
+	for _, o := range lmd.Ops {
+		if o == nil {
+			continue
+		}
+		defs, us := ir.DefUse(o)
+		for _, u := range us {
+			if ir.UnderlyingValue(u) == t {
+				uses++
+			}
+		}
+		for _, d := range defs {
+			if ir.UnderlyingValue(d) == t && o != op {
+				return -1
+			}
+		}
+	}
+	if uses != 1 {
+		return -1
+	}
+	return call
+}
+
+// fnPtrInReg は ops[i] (関数ポインタの一時変数からの呼び出し) の呼び先を、それを定義した index_pget が reg に直接
+// 書いたか (fnPtrToReg)。
+func fnPtrInReg(lmd *ir.Lambda, ops []*ir.Op, i int) bool {
+	for j := i - 1; j >= 0; j-- {
+		if b := ops[j]; b != nil && b.Code == ir.OpIndexPget && b.Dst == ops[i].Src[0] {
+			return fnPtrToReg(lmd, ops, j) == i
+		}
+	}
+	return false
+}
+
+// simpleArg は積み込みの codegen が lda / sta だけで reg を使わない引数 (リテラルか、2 バイト以下の値)。
+func simpleArg(s ir.Operand) bool {
+	if s == nil || ir.ValKind(s) == ir.KindLiteral {
+		return true
+	}
+	switch s.(type) {
+	case *ir.Value, *ir.CastedValue:
+		tp := ir.ValType(s)
+		return tp.Size <= 2 && tp.Kind != types.Struct && tp.Kind != types.Array
+	}
+	return false
+}

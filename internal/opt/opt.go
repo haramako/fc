@@ -79,7 +79,7 @@ func Passes(u *types.Universe) []Pass {
 			}
 		}},
 		{"unroll", func(lmd *ir.Lambda) {
-			if !ir.Disabled("ssa") && !ir.Disabled("unroll") && unrollLoops(lmd) {
+			if !ir.Disabled("ssa") && !ir.Disabled("unroll") && !lmd.NoGrow && unrollLoops(lmd) {
 				propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
 				compact(lmd)
 			}

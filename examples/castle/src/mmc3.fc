@@ -72,7 +72,7 @@ public function set_cbank(pos:int, bank:int):int
  *   1: 0xA000-0xBFFF ( 8KB )
  * bank: 8KB bank
  */
-public function set_pbank(pos:int, bank:int):int
+public function set_pbank(pos:int, bank:int):int options(inline: true)
 {
 	var old = pbank_bak[pos];
 	if (pbank_bak[pos] != bank) {

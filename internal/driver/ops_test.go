@@ -2480,3 +2480,49 @@ function main():void
 		}
 	}
 }
+
+// TestFnPtrTableToReg: 関数ポインタの表の呼び出し `PROC[t](i)` は、表から一時変数を経ずに reg へ直接読む
+// (castle の en.process)。引数の中に呼び出しがある (reg を壊す) ときと、読んだ関数ポインタを 2 回使うときは今までどおり。
+// 表は 16 要素を超えるので呼び出しの直接化 (devirt) はされない。
+func TestFnPtrTableToReg(t *testing.T) {
+	t.Parallel()
+	src := `var acc:int16;
+function a0(i:int):void { acc += i; }
+function a1(i:int):void { acc ^= i as int16; }
+function a2(i:int):void { acc -= i; }
+function b0(i:int, w:int16):void { acc += w + i; }
+function b1(i:int, w:int16):void { acc -= w - i; }
+function dbl(i:int):int { return i + i; }
+const PROC:[20]fn(int):void = [a0, a1, a2, a0, a1, a2, a0, a1, a2, a0, a1, a2, a0, a1, a2, a0, a1, a2, a0, a1];
+const PROC2:[18]fn(int, int16):void = [b0, b1, b0, b1, b0, b1, b0, b1, b0, b1, b0, b1, b0, b1, b0, b1, b0, b1];
+var type:[16]int;
+function main():void
+{
+	var i:int;
+	for (i = 0; i < 16; i++) { type[i] = (i * 7) & 15; }
+	for (i = 0; i < 16; i++) {
+		var t = type[i];
+		PROC[t](i);
+		PROC2[t](i, 300 + i);
+		PROC[t](dbl(i));
+		var f = PROC[t];
+		f(i);
+		f(1);
+	}
+	printf(acc, "\n");
+	exit(0);
+}
+`
+	want := "146\n" // Python で同じ計算をして確認
+	for _, level := range []int{-1, 0} {
+		if out := runEmuLevel(t, src, level); out != want {
+			t.Errorf("-O %d: got %q want %q", level, out, want)
+		}
+	}
+	asm := compileAsm(t, src)
+	for _, tab := range []string{"_t_PROC", "_t_PROC2"} {
+		if !strings.Contains(asm, "lda "+tab+"+0,y\n\tsta <reg+0\n\tlda "+tab+"+1,y\n\tsta <reg+1") {
+			t.Errorf("%s を reg に直接読んでいない:\n%s", tab, asm)
+		}
+	}
+}

@@ -244,6 +244,41 @@ function main():void
 	}
 }
 
+// TestFrameOverNoGrow: -O 2 の展開でフレームが上限を超えた関数は、その関数だけ展開を止めてコンパイルし直す
+// (100 バイトのローカル配列を持つ inline 関数を 3 回展開すると main の静的フレームが 256 バイトを超える。-O 0 は通るのに
+// -O 2 だけ frame size over だった。fuzz では種の 0.1〜0.2% がこれで飛ばされていた)。fcc check も同じくやり直す。
+func TestFrameOverNoGrow(t *testing.T) {
+	t.Parallel()
+	src := `function f(n:int):int options(inline: true)
+{
+	var a:[100]int;
+	a[n & 7] = n;
+	return a[n & 7] + 1;
+}
+function main():void
+{
+	printf(f(1), " ", f(2), " ", f(3), "\n");
+	exit(0);
+}
+`
+	want := "2 3 4\n"
+	for _, level := range []int{-1, 0} {
+		if out := runEmuLevel(t, src, level); out != want {
+			t.Errorf("-O %d: got %q want %q", level, out, want)
+		}
+	}
+	if asm := compileAsm(t, src); !strings.Contains(asm, "jsr _t_f") {
+		t.Errorf("main に f を展開したまま (呼び出しが無い):\n%s", asm)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte("#fc 2\nuse * from stdio;\n"+src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewCompiler(absRepoRoot).Check("t.fc", &CheckOptions{Dir: dir}); err != nil {
+		t.Errorf("fcc check: %v", err)
+	}
+}
+
 // ポインタ経由の配列フィールド (`ta[i].arr[j]`、`p.arr[j]`) は、配列の中身でなく番地を添字の基にする。以前は rval が
 // 配列フィールドを pget して、その中身を番地として添字を足し、別の場所に書いていた (-O 0 / -O 2 とも同じ値なので
 // 差分の fuzz では見えず、生成器を広げるときの手計算で発覚)。

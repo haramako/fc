@@ -92,6 +92,7 @@ func runNes(t *testing.T, files map[string]string, level int, n int) (out []int,
 
 // TestInlineAcrossBanks: 別バンクの const 表を読む小関数 (明示 inline / 自動 inline の両方) は呼び出し側に写さず far call の
 // まま (写すとコードだけ移って表は元のバンクに残り、別の表を読む)。private な BSS を読み書きするだけの小関数は写す。
+// asm は sei / cli のようなフラグだけの命令なら写し (castle の mmc3.set_pbank)、それ以外 (pha など) なら far call のまま。
 func TestInlineAcrossBanks(t *testing.T) {
 	t.Parallel()
 	files := map[string]string{
@@ -106,6 +107,8 @@ function main():void
 	out[3] = bank4.getauto(1);
 	out[4] = bank0.text(1);
 	bank0.bump();
+	bank0.crit();
+	bank0.opaque();
 	bank4.bump();
 	bank4.bump();
 	out[5] = bank0.cnt;
@@ -125,6 +128,8 @@ public function get(i:int):int options(inline: true) { return T[i]; }
 public function getauto(i:int):int { return T[i] ^ 1; }
 public function text(i:int):int options(inline: true) { var s:*int = "ab"; return s[i]; }
 public function bump():void options(inline: true) { cnt += 1; }
+public function crit():void options(inline: true) { asm("sei"); cnt += 2; asm("cli"); }
+public function opaque():void options(inline: true) { asm("nop"); asm("pha"); asm("pla"); cnt += 4; }
 `,
 		"bank4.fc": `#fc 2
 options(bank: 4);
@@ -135,7 +140,7 @@ public function getauto(i:int):int { return T[i] ^ 1; }
 public function bump():void options(inline: true) { cnt += 1; }
 `,
 	}
-	want := []int{30, 70, 21, 61, 'b', 1, 2, 0, 1}
+	want := []int{30, 70, 21, 61, 'b', 7, 2, 0, 1}
 	for _, level := range []int{-1, 0} {
 		out, done, asm := runNes(t, files, level, len(want))
 		if done != 1 {
@@ -146,13 +151,16 @@ public function bump():void options(inline: true) { cnt += 1; }
 		}
 		if level == 0 {
 			// 表を読む関数は far call のまま、BSS だけの bump は写されて呼び出しが無い
-			for _, sym := range []string{"_bank0_get", "_bank4_get", "_bank0_getauto", "_bank0_text"} {
+			for _, sym := range []string{"_bank0_get", "_bank4_get", "_bank0_getauto", "_bank0_text", "_bank0_opaque"} {
 				if !strings.Contains(asm, ".bank("+sym) {
 					t.Errorf("%s が far call になっていない", sym)
 				}
 			}
 			if strings.Contains(asm, "_bank0_bump") || strings.Contains(asm, "_bank4_bump") {
 				t.Errorf("bump (BSS だけ) が写されていない:\n%s", asm)
+			}
+			if strings.Contains(asm, "_bank0_crit") || !strings.Contains(asm, "sei") {
+				t.Errorf("crit (sei / cli だけの asm) が写されていない:\n%s", asm)
 			}
 		}
 	}
