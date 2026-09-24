@@ -177,6 +177,38 @@ func hasCalls(lmd *ir.Lambda) bool {
 	return false
 }
 
+// hasCallsOrOpaqueAsm は本体に呼び出しか、flagOnlyAsm でない asm があるか。別モジュールへの展開の判定に使う
+// (asm の中身は解析しないので、中で jsr したり元のモジュールだけに見えるシンボルを参照したりしうる。自動インラインは
+// asm を含む関数を最初から対象にしない (autoInlinable) ので、これが効くのは options(inline: true) の関数だけ)。
+func hasCallsOrOpaqueAsm(lmd *ir.Lambda) bool {
+	for _, op := range lmd.Ops {
+		if isCall(op) || (op != nil && op.Code == ir.OpAsm && !flagOnlyAsm(op.Text)) {
+			return true
+		}
+	}
+	return false
+}
+
+// flagOnlyAsm は asm の本文が、フラグだけを変えてレジスタ・スタック・メモリを触らない命令 (オペランド無し) だけか
+// (castle の mmc3.set_pbank の sei / cli)。rts / pha / tax などは写した先の意味が変わるので含めない。
+func flagOnlyAsm(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		if i := strings.IndexByte(line, ';'); i >= 0 {
+			line = line[:i]
+		}
+		f := strings.Fields(line)
+		if len(f) == 0 {
+			continue
+		}
+		if len(f) > 1 || !flagOnlyMnemonics[strings.ToLower(f[0])] {
+			return false
+		}
+	}
+	return true
+}
+
+var flagOnlyMnemonics = map[string]bool{"sei": true, "cli": true, "clc": true, "sec": true, "cld": true, "sed": true, "clv": true, "nop": true}
+
 // defOwner はモジュールレベルの定義 (シンボル) の置き場所: どのモジュールの、どの種類の定義か。
 type defOwner struct {
 	mod *ir.Module
@@ -266,8 +298,8 @@ func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda, owners map[string
 		if callee == nil || callee == caller {
 			continue
 		}
-		if callee.Module != caller.Module && (hasCalls(callee) || !dataReachable(callee, caller, owners)) {
-			// far call の判定が呼び先のモジュール基準なので、呼び出しを含む本体は別モジュールに写せない。
+		if callee.Module != caller.Module && (hasCallsOrOpaqueAsm(callee) || !dataReachable(callee, caller, owners)) {
+			// far call の判定が呼び先のモジュール基準なので、呼び出し (と sei / cli 以外の asm) を含む本体は別モジュールに写せない。
 			// 本体が読む ROM のデータ (const の表、文字列) が写した先から見えない (別の切替バンク) ときも写せない
 			// (コードだけ移って表は元のバンクに残り、farcall のバンク切替が消えて別の表を読んでいた)
 			continue

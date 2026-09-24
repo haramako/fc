@@ -150,6 +150,13 @@ ROM（const の表 = DefBlock、関数内の文字列などの `Lambda.Defs`）�
 バンクが無いので見えず、`internal/driver/bank_test.go` に MMC3 の内蔵 NES ランナーで走らせる `TestInlineAcrossBanks` と
 小さな fuzz `TestRandomBankPrograms` を足した）。
 
+**asm を含む本体の別モジュールへの展開**（2026-09-24）: 別モジュールへは呼び出しと同じく asm を含む本体も写さない
+（中身を解析しないので、中で `jsr` したり元のモジュールだけに見えるシンボルを参照したりしうる）。ただしフラグだけを
+変える命令（`sei` / `cli` / `clc` / `sec` / `cld` / `sed` / `clv` / `nop`）だけの asm は写す（`opt.flagOnlyAsm`）。
+自動インラインは asm を含む関数を最初から対象にしないので、効くのは `options(inline: true)` の関数だけ。
+castle の `mmc3.set_pbank`（`sei` / `cli` を含む）を inline にして、`en.process` の敵ごとのバンク切替の呼び出しが
+消えた（area8b −2.7%、ROM −417 バイト）。
+
 ## 9. 添字の定数オフセットの畳み込み（`internal/opt/indexoff.go`、2026-09-20）
 
 `a[i + k]`（k は定数、a はグローバルの要素 1 バイトの配列）の `add t = i, #k; index_pget / index_pset a, t` を
