@@ -1211,6 +1211,13 @@ func (g *rpGen) source() string {
 			for i, tf := range g.fpTable {
 				names[i] = tf.name
 			}
+			if len(names) == 4 {
+				// 4 要素の表は同じ関数を繰り返して 20 要素にする (添字は `& 3` のまま)。16 要素までは呼び出しが直接化 (devirt)
+				// されるので、2 要素の表は直接化、4 要素の表は間接呼び出し (表から reg に直接読む形) を試す
+				for len(names) < 20 {
+					names = append(names, names[len(names)%4])
+				}
+			}
 			fmt.Fprintf(&b, "const fp0:[%d]fn(%s):%s = [%s];\n", len(names), strings.Join(ps, ", "), g.fpSig.ret.name, strings.Join(names, ", "))
 		}
 		if f.name != "main" {

@@ -83,6 +83,9 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       plasma −3.2%、entities −2.6%、castle −1%） ✅ 2026-09-20
 - [x] 関数ポインタ表の呼び出しの直接化（`opt.DevirtualizeProgram`。const の表 16 要素まで。calls −5.6%。v2_ssa.md §7。
       castle の `en_vtbl.PROCESS` は 83 要素で対象外: 上限を上げれば 1.6 KB の ROM で −4%） ✅ 2026-09-20
+- [x] 直接化しない関数ポインタ表の呼び出し `PROC[t](i)` は、表から一時変数を経ずに reg へ直接読む（codegen
+      `fnPtrToReg`。間が引数の積み込みと単純な演算だけのとき。1 回 12 サイクル。castle area8b −0.6%。fuzz の 4 要素の表は
+      20 要素に水増しして間接呼び出しのまま試す） ✅ 2026-09-24
 - [x] fuzz に far call・密な switch・const 表・関数ポインタ表（switch 命令の飛び先が live range の流れに無いバグ、
       stack 関数の switch が X (フレームポインタ) を壊すバグ） ✅ 2026-09-20
 - [x] 最後から 2 つ目の引数を Y で渡す（`Lambda.RegArgY`、`codegen.markArgY`。本体の先頭で A / Y に引数がある形にして
