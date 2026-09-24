@@ -19,7 +19,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -81,9 +80,13 @@ type rpFunc struct {
 type rpStmt struct {
 	parts []string
 	kids  [][]*rpStmt
+	keep  bool // 初期化文: 最小化で消さない (消すと未初期化の読み出し = 値がレベルやインタプリタで違うのが当たり前になる)
 }
 
 func rpSimple(text string) *rpStmt { return &rpStmt{parts: []string{text}} }
+
+// rpInit は初期化文 (大域変数・配列・struct・soa の main の先頭での代入、ローカル配列の要素の代入)。
+func rpInit(text string) *rpStmt { return &rpStmt{parts: []string{text}, keep: true} }
 
 func (s *rpStmt) render(b *strings.Builder) {
 	for i, p := range s.parts {
@@ -1028,30 +1031,30 @@ func (g *rpGen) genProgram() {
 	g.scope = nil
 	g.nLocal = 0
 	for _, v := range g.globals {
-		m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s = %s;", v.name, g.lit(v.typ))))
+		m.stmts = append(m.stmts, rpInit(fmt.Sprintf("%s = %s;", v.name, g.lit(v.typ))))
 	}
 	for _, a := range g.arrays {
 		for i := 0; i < 16; i++ {
-			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s[%d] = %s;", a.name, i, g.lit(a.typ))))
+			m.stmts = append(m.stmts, rpInit(fmt.Sprintf("%s[%d] = %s;", a.name, i, g.lit(a.typ))))
 		}
 	}
 	for _, f := range g.fields {
-		m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("s0.%s = %s;", f.name, g.lit(f.typ))))
+		m.stmts = append(m.stmts, rpInit(fmt.Sprintf("s0.%s = %s;", f.name, g.lit(f.typ))))
 		for i := 0; i < 4; i++ {
-			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("sa[%d].%s = %s;", i, f.name, g.lit(f.typ))))
+			m.stmts = append(m.stmts, rpInit(fmt.Sprintf("sa[%d].%s = %s;", i, f.name, g.lit(f.typ))))
 		}
 		for i := 0; g.soa && i < 8; i++ {
-			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("E[%d].%s = %s;", i, f.name, g.lit(f.typ))))
+			m.stmts = append(m.stmts, rpInit(fmt.Sprintf("E[%d].%s = %s;", i, f.name, g.lit(f.typ))))
 		}
 	}
 	if g.hasT {
 		for _, b := range []string{"u0", "ua[0]", "ua[1]"} {
-			m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s.x = %s;", b, g.lit(g.tX))))
+			m.stmts = append(m.stmts, rpInit(fmt.Sprintf("%s.x = %s;", b, g.lit(g.tX))))
 			for _, f := range g.fields {
-				m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s.s.%s = %s;", b, f.name, g.lit(f.typ))))
+				m.stmts = append(m.stmts, rpInit(fmt.Sprintf("%s.s.%s = %s;", b, f.name, g.lit(f.typ))))
 			}
 			for j := 0; j < 4; j++ {
-				m.stmts = append(m.stmts, rpSimple(fmt.Sprintf("%s.arr[%d] = %s;", b, j, g.lit(g.tArr))))
+				m.stmts = append(m.stmts, rpInit(fmt.Sprintf("%s.arr[%d] = %s;", b, j, g.lit(g.tArr))))
 			}
 		}
 	}
@@ -1102,7 +1105,7 @@ func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
 		g.larrays = append(g.larrays, a)
 		f.locals = append(f.locals, fmt.Sprintf("var %s:[16]%s;", a.name, a.typ.name))
 		for i := 0; i < 16; i++ {
-			f.stmts = append(f.stmts, rpSimple(fmt.Sprintf("%s[%d] = %s;", a.name, i, g.lit(a.typ))))
+			f.stmts = append(f.stmts, rpInit(fmt.Sprintf("%s[%d] = %s;", a.name, i, g.lit(a.typ))))
 		}
 	}
 	as := g.arraysAll()
@@ -1494,8 +1497,6 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	return rpResult{"ok", ""}
 }
 
-// rpInitStmt はローカル配列の初期化文 (`la0[3] = 5;`)。最小化で消さない。
-var rpInitStmt = regexp.MustCompile(`^la[0-9]+\[[0-9]+\] = `)
 
 // rpMinimize は同じ種類の失敗が残る範囲で文を消す (どの深さの文も。消せなかった文はその中身を試す)。
 func rpMinimize(t *testing.T, g *rpGen, kind string) {
@@ -1504,8 +1505,8 @@ func rpMinimize(t *testing.T, g *rpGen, kind string) {
 		changed := false
 		for i := 0; i < len(*list); i++ {
 			saved := (*list)[i]
-			if len(saved.parts) == 1 && rpInitStmt.MatchString(saved.parts[0]) {
-				continue // ローカル配列の初期化は消さない (消すと未初期化の読み出し = 未定義動作になって、レベルで値が違うのが当たり前になる)
+			if saved.keep {
+				continue // 初期化文は消さない (rpStmt.keep)
 			}
 			*list = append((*list)[:i:i], (*list)[i+1:]...)
 			if rpCheck(t, g.sources()).kind == kind {
