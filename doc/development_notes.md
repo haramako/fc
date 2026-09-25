@@ -186,6 +186,14 @@ go test ./...                                    # 全部 (golden + examples + N
   現在の関数（`h.lmd`）無しで `emit` に届く（emit でモジュールレベルならエラーに）。
   速度の目安: N100（4 コア）で FuzzParse 約 2 万実行/秒、TestRandomPrograms 約 5 本/秒（200 本 41 秒。
   16 コア機の記録 6 万本 ≈ 2 時間 ≈ 8 本/秒の 6 割ほど）
+  続けて FuzzCheck 3 ワーカー + FuzzFormat 1 ワーカーで回して 5 件（どれも数分以内）: トップレベルのブロックの中の
+  `return`（emit より前に `h.lmd` を読む。`requireFunction` を切り出して return でも呼ぶ）、呼び出しの結果への代入
+  （`f() = 0` / `f()++` が void なら nil 参照、値を返す関数なら一時変数への代入として**黙って通っていた**。代入の左辺が
+  呼び出しならエラーに）、宣言がエラーの soa の添字（`soaIndex` が `soa.Base` を直に読んで nil。`soaElement` を通す）、
+  void の呼び出しの `f().x` / `*f()` / `&f()`（値が要る lval は `lvalValue` で nil を弾く）、`//\r` の整形が冪等でない
+  （行コメント末尾の単独の CR が出力の改行と CRLF になる。行コメントの末尾の CR を落とす）。
+  注意: `go test -fuzz` を kill してもテストバイナリ（コーディネータとワーカー）が残って回り続ける。止めるときは
+  `setsid` で起動してプロセスグループごと kill する
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
   （`freeA` / `needsX` / `needsY`）は codegen の出力を手で写した見積もりで、食い違いが fuzz で何度も出ていた
   （2 バイトの dec、cast を挟んだ if、Y 代用と融合、push_result の後の ldx …）。`CompileLambda` は命令の本体を出した後で

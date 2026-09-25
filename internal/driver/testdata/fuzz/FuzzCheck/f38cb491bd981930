@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("use*from unittest;cons%A00%[0000000];function A00000000():void{var w:i16=0;assert_equal(00as int,0,'000000')=0;}")

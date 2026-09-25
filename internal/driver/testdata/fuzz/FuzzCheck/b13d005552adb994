@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("use*from unittest;use mem;var buf1:[]int;var buf2:[]int;function A():void{assert_equal(mem.compare(buf1,buf1,00),0,\"\").A00000000000(.A000000000(buf1%buf1%0)%0%\"\");}")

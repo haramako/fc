@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("soa const TABLE:A=[];function A():void{va%A000;for(var i=0;;){TABLE[0].A;}}")

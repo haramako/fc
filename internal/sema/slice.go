@@ -43,7 +43,7 @@ type sliceParts struct {
 
 // sliceParts は c (配列・slice の式) を評価して、先頭と長さを取り出す。what はエラーの表示用。
 func (h *Hlc) sliceParts(c *cexpr, what string) sliceParts {
-	v, lv := h.lval(c)
+	v, lv := h.lvalValue(c)
 	p, rv, ok := h.partsOf(v, lv, h.isStringLit(c), what)
 	if !ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s: %s is not an array or a slice (type %s)", what, describe(rv), ir.ValType(rv))})
@@ -127,7 +127,7 @@ func (h *Hlc) toSlice(c *cexpr, st *types.Type) ir.Operand {
 		panic(&diag.Error{Msg: fmt.Sprintf("null cannot be used as %s (use an empty slice: a[0..0])", st)})
 	}
 	c = h.withExpected(c, h.prog.Types.ArrayOf(st.SliceOf, -1))
-	v, lv := h.lval(c)
+	v, lv := h.lvalValue(c)
 	p, rv, ok := h.partsOf(v, lv, h.isStringLit(c), "slice")
 	if !ok {
 		return rv // 型の検査は代入側がする

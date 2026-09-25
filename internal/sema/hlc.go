@@ -828,6 +828,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.emit(&ir.Op{Code: ir.OpJump, Label: b.continueLabel})
 
 	case *syntax.ReturnStmt:
+		h.requireFunction()
 		if h.lmd.Type.Base.Kind != types.Void {
 			// 非void関数
 			if s.Value == nil {
@@ -1657,11 +1658,25 @@ func (h *Hlc) rval(c *cexpr) ir.Operand {
 	return h.rvalOf(v, left)
 }
 
+// lvalValue は値が要る場所の lval。void 関数の呼び出しなど値を持たない式はエラーにする
+// (lval は値の無い式に nil を返す。そのまま ValType などに渡すと落ちる: `f().x` `*f()` `&f()` が fuzz で発覚)。
+func (h *Hlc) lvalValue(c *cexpr) (ir.Operand, bool) {
+	v, left := h.lval(c)
+	if v == nil {
+		panic(noValueError())
+	}
+	return v, left
+}
+
+func noValueError() *diag.Error {
+	return &diag.Error{Msg: "expression has no value (void function call used as a value)"}
+}
+
 // rvalOf は lval の結果 (v, left) を右辺値にする。
 func (h *Hlc) rvalOf(v ir.Operand, left bool) ir.Operand {
 	if v == nil {
 		// void 関数の呼び出しなど値を持たない式を、値が要る場所 (条件・代入・引数) に書いた
-		panic(&diag.Error{Msg: "expression has no value (void function call used as a value)"})
+		panic(noValueError())
 	}
 	if left {
 		if ir.ValType(v).Kind == types.SoaRef {
@@ -1812,6 +1827,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		switch e.op {
 
 		case opLoad:
+			if lhs := e.args[0]; lhs.kind == cOp && lhs.op == opCall {
+				// 呼び出しの結果は一時変数なので、そのまま進むと `g() = 0` が黙って通り、void なら nil 参照で落ちる (fuzz で発覚)
+				panic(&diag.Error{Msg: "cannot assign to the result of a function call"})
+			}
 			if rhs := e.args[1]; rhs.kind == cOp && len(rhs.args) == 2 && rhs.args[0] == e.args[0] && containsCall(e.args[0]) {
 				// 複合代入 `X op= v` は (load X (op X v)) に脱糖されていて X を 2 回評価する。X に関数呼び出しが
 				// あるとき (`a[f()] += 1`) は呼び出しを先に 1 回だけ評価して値に置き換えてから続ける
@@ -1834,7 +1853,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				leftValue = fr.lv
 				break
 			}
-			left, lv := h.lval(e.args[0])
+			left, lv := h.lvalValue(e.args[0])
 			r = h.assign(left, lv, e.args[1])
 			leftValue = lv
 
@@ -2030,7 +2049,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 				left, lv = fr.v, fr.lv
 			} else {
-				left, lv = h.lval(a)
+				left, lv = h.lvalValue(a)
 			}
 			if lv {
 				r = left
@@ -2045,7 +2064,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 
 		case opDeref: // *演算子
-			if v, lv := h.lval(e.args[0]); lv && ir.ValType(v).Kind == types.SoaRef {
+			if v, lv := h.lvalValue(e.args[0]); lv && ir.ValType(v).Kind == types.SoaRef {
 				// `*Points[i]`: 要素 (左辺値) の参照はがしは要素そのもの
 				r = v
 				leftValue = true
@@ -2213,11 +2232,16 @@ func (h *Hlc) warn(format string, args ...any) {
 	h.prog.Warnings = append(h.prog.Warnings, diag.Warning{Msg: fmt.Sprintf(format, args...), Pos: h.curPos})
 }
 
-func (h *Hlc) emit(op *ir.Op) {
+// requireFunction は関数の外 (トップレベルの裸のブロックの中など) の実行文をエラーにする
+// (fuzz で発覚。h.lmd (現在の関数) が無いまま進むと nil 参照で落ちる)。
+func (h *Hlc) requireFunction() {
 	if h.lmd == nil {
-		// トップレベルの実行文 (fuzz で発覚。h.lmd (現在の関数) が無いまま emit すると nil 参照で落ちる)
 		panic(&diag.Error{Msg: "executable statement is not allowed at module level; put it in a function"})
 	}
+}
+
+func (h *Hlc) emit(op *ir.Op) {
+	h.requireFunction()
 	op.Pos = h.curPos
 	if len(h.pendingLogs) > 0 {
 		op.Logs = append(op.Logs, h.pendingLogs...)

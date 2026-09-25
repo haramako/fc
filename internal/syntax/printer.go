@@ -143,6 +143,10 @@ func (p *printer) flushComments(before Pos) {
 	for p.ci < len(p.comments) && p.comments[p.ci].Pos.Offset < before.Offset {
 		c := p.comments[p.ci]
 		p.ci++
+		if c.IsLine() {
+			// 行コメント末尾の単独の CR は、直後に出す改行と合わせて CRLF になり次の整形で消える (冪等でなくなる。fuzz で発覚)
+			c.Text = strings.TrimRight(c.Text, "\r")
+		}
 		if p.lastLine > 0 && c.Pos.Line == p.lastLine && p.buf.Len() > 0 {
 			// 直前のトークンと同じ行 → 行末コメント。保留中の改行より前に出す
 			saved := p.pending

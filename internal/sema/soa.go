@@ -255,7 +255,8 @@ func (h *Hlc) soaIndex(soa *types.Type, idx ir.Operand) ir.Operand {
 	if _, isLit := ir.ValIntLiteral(idx); !isLit && ir.ValType(idx).Size != 1 {
 		panic(&diag.Error{Msg: fmt.Sprintf("soa %s: index must be 1 byte", shortName(soa.Name))})
 	}
-	return soaRetype(idx, h.prog.Types.SoaRef(soa, soa.Base, ""))
+	// 宣言がエラーだと soa.Base は nil のまま (fuzz で発覚)。soaElement ならエラーにできる
+	return soaRetype(idx, h.prog.Types.SoaRef(soa, h.soaElement(soa), ""))
 }
 
 // soaLeafPtr はハンドル ref のリーフ lf へのポインタ (index)。

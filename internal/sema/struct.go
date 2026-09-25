@@ -244,7 +244,7 @@ type fieldRef struct {
 
 // fieldRef は `x.name` (x は struct、struct へのポインタ、または SoA のハンドル)。
 func (h *Hlc) fieldRef(arg *cexpr, name string) fieldRef {
-	left, lv := h.lval(arg)
+	left, lv := h.lvalValue(arg)
 	t := ir.ValType(left)
 	if lv && t.Kind != types.SoaRef {
 		t = t.Base
