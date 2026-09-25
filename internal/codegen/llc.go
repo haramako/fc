@@ -385,6 +385,7 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 		regalloc.AllocateResident(lmd)
 	}
 	l.allocRegister(lmd)
+	l.checkStackPush(lmd)
 	if os.Getenv("FC_DUMP_IR") != "" {
 		// 調査用: 最適化と割付の後の IR を stderr に出す (golden の allocir と同じ形式)
 		fmt.Fprint(os.Stderr, ir.DumpAllocLambda(lmd.Module.Id, lmd.Id, lmd))

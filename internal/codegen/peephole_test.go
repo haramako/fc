@@ -59,6 +59,16 @@ func TestPeepholeFlagTests(t *testing.T) {
 			want: []string{"dex", "bne L", "ldx <L+2", "beq M"},
 		},
 		{
+			name: "iny / ldy の直後の cpy #0 は消す (以前は最初の switch で flagsFromY を落としていて効かなかった)",
+			in:   []string{"iny", "cpy #0", "bne L", "ldy <L+2", "cpy #0", "beq M"},
+			want: []string{"iny", "bne L", "ldy <L+2", "beq M"},
+		},
+		{
+			name: "Y 以外でフラグが変わった後、C を見る分岐の前の cpy #0 は残す",
+			in:   []string{"iny", "inx", "cpy #0", "bne L", "iny", "cpy #0", "bcs M"},
+			want: []string{"iny", "inx", "cpy #0", "bne L", "iny", "cpy #0", "bcs M"},
+		},
+		{
 			name: "X 以外でフラグが変わった後の cpx #0 は残す",
 			in:   []string{"dex", "iny", "cpx #0", "bne L"},
 			want: []string{"dex", "iny", "cpx #0", "bne L"},

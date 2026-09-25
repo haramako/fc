@@ -5,6 +5,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/regalloc"
 )
 
 // 関数呼び出し (call マクロ / fastcall / far call)。
@@ -225,6 +226,44 @@ func staticAddr(lmd *ir.Lambda, off int) string {
 		return fmt.Sprintf("<%s+%d", lmd.FrameSym(), off)
 	}
 	return fmt.Sprintf("%s+%d", lmd.FrameSym(), off)
+}
+
+// checkStackPush は、スタックに積む引数 (S+k,x の k = 基点 + 積んでいる途中の引数と戻り値) が FC_STACK に収まるか
+// (k は ゼロページの番地の定数なので、超えると ca65 / ld65 の範囲エラーになる)。フレームだけの検査
+// (regalloc の FC_STACK) では、stack 系の関数が大きいフレームの後ろに引数を積むときに漏れていた (inline 関数を
+// 展開した再帰関数で `<S+128,x`。fuzz で発覚)。frame size over なので、-O 2 なら driver が展開を止めてやり直す。
+func (l *Llc) checkStackPush(lmd *ir.Lambda) {
+	ops := lmd.Ops
+	var pending []*pendingCall
+	var marks []int
+	cur, peak := 0, 0
+	for i, op := range ops {
+		if op == nil {
+			continue
+		}
+		switch op.Code {
+		case ir.OpPushResult, ir.OpPushFastcallResult:
+			pc := l.resolveCall(ops, i)
+			pending = append(pending, pc)
+			marks = append(marks, cur)
+			if pc.kind == ckStack {
+				cur += op.Type.Size
+			}
+		case ir.OpPushArg, ir.OpPushFastcallArg:
+			if len(pending) > 0 && pending[len(pending)-1].kind == ckStack {
+				cur += op.Type.Size
+			}
+		case ir.OpCall, ir.OpFastcall:
+			if len(pending) > 0 {
+				cur = marks[len(marks)-1]
+				pending, marks = pending[:len(pending)-1], marks[:len(marks)-1]
+			}
+		}
+		peak = max(peak, cur)
+	}
+	if need := l.stackBase(lmd) + peak; peak > 0 && need > regalloc.StackSize {
+		panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s: stack frame and call arguments need %d bytes but FC_STACK has %d (split the function or reduce locals)", lmd, need, regalloc.StackSize)})
+	}
 }
 
 // stackBase は現在の関数がスタックに引数を積むときの基点 (stack 関数は自分のフレームの後ろ、static / entry は X の指す位置)。

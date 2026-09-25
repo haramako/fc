@@ -210,6 +210,11 @@ func peepholeA(lines []string) []string {
 		case "ldy", "iny", "dey", "tay", "sta", "sty", "stx", "clc", "sec", "cli", "sei", "cld", "nop", "txs",
 			"bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
 			// Y のフラグを保つ (ldy / iny / dey / tay は下で立てる)
+		case "cpy":
+			if arg == "#0" && s.flagsFromY && branchOnNZ(next(i)) {
+				continue // N/Z は Y そのもの (`iny; cpy #0; bne` の cpy。以前は下の case に届く前にここで flagsFromY を落としていた)
+			}
+			s.flagsFromY = false
 		default:
 			s.flagsFromY = false // フラグを別の値で立てる命令
 		}
@@ -258,14 +263,6 @@ func peepholeA(lines []string) []string {
 			s.flagsFromA = false
 			s.flagsFromY = true
 		case "cpy":
-			if arg == "#0" && s.flagsFromY {
-				if f := strings.Fields(next(i)); len(f) > 0 {
-					switch f[0] {
-					case "beq", "bne", "bmi", "bpl":
-						continue // N/Z は Y そのもの
-					}
-				}
-			}
 			s.flagsFromA = false
 		case "cmp":
 			if arg == "#0" && s.flagsFromA {

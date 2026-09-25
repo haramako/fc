@@ -77,6 +77,67 @@ func TestInductionGuard(t *testing.T) {
 	)
 }
 
+// 上限がループ不変の変数 (crc8 の `i < length`) でも、歩幅が 1 なら置き換える (k < LIM なので k + 1 は折り返さない)。
+// 初期値が 0 なら入口の検査は要らない。0 でないリテラルなら入口で 1 度検査する。歩幅が 1 でなければ対象外
+func TestInductionVariableLimit(t *testing.T) {
+	build := func(k0, step int) (*ir.Lambda, bool) {
+		i, n, p, tv := local("i", u16()), local("n", u16()), local("p", tu.PointerTo(u8())), tmp("t", u8())
+		lmd := lambda(
+			op(ir.OpLoad, i, lit(k0, u16())),
+			label("@begin"),
+			op(ir.OpLt, tv, i, n),
+			ifz(tv, "@end"),
+			op(ir.OpPset, nil, p, lit(1, u8())),
+			op(ir.OpAdd, p, p, lit(step, u8())),
+			op(ir.OpAdd, i, i, lit(step, u8())),
+			jump("@begin"),
+			label("@end"),
+			ret(p),
+		)
+		lmd.Args = []*ir.Value{n, p}
+		propagateSSA(lmd)
+		ok := eliminateInduction(lmd)
+		propagateSSA(lmd)
+		return lmd, ok
+	}
+	lmd, ok := build(0, 1)
+	if !ok {
+		t.Fatal("k0 = 0: not transformed")
+	}
+	check(t, lmd,
+		"add $lim = p, n",
+		"label @begin",
+		"lt t = p, $lim",
+		"if t @end",
+		"pset p, #1",
+		"add p = p, #1",
+		"jump @begin",
+		"label @end",
+		"return p",
+	)
+	lmd, ok = build(3, 1)
+	if !ok {
+		t.Fatal("k0 = 3: not transformed")
+	}
+	check(t, lmd,
+		"lt $guard = #3, n",
+		"if $guard @end",
+		"sub $diff = n, #3",
+		"add $lim = p, $diff",
+		"label @begin",
+		"lt t = p, $lim",
+		"if t @end",
+		"pset p, #1",
+		"add p = p, #1",
+		"jump @begin",
+		"label @end",
+		"return p",
+	)
+	if _, ok := build(0, 2); ok {
+		t.Error("歩幅 2 (変数の上限で折り返しうる) を置き換えた")
+	}
+}
+
 // 対象外: カウンタが本体でも使われる、歩幅の型がカウンタと同じ幅 (折り返しうる)、上限 + 歩幅が型に収まらない
 func TestInductionNotApplicable(t *testing.T) {
 	mk := func(step ir.Operand, lim int, useI bool) *ir.Lambda {

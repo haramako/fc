@@ -279,6 +279,41 @@ function main():void
 	}
 }
 
+// TestStackPushOverNoGrow: stack 系 (再帰) の関数が大きいフレームの後ろに引数を積むとき、積む位置 (`<S+k,x`) が
+// FC_STACK を超えたら frame size over にし、-O 2 なら展開を止めてやり直す。以前はフレームだけを検査していて、inline 関数を
+// 展開した再帰関数で `<S+128,x` になり ld65 の範囲エラーだった (fuzz の種 3572709)。
+func TestStackPushOverNoGrow(t *testing.T) {
+	t.Parallel()
+	src := `function f(n:int):int options(inline: true)
+{
+	var a:[62]int;
+	a[n & 7] = n;
+	return a[n & 7] + 1;
+}
+function h(a:int16, b:int16, c:int16, d:int16, e:int16, g:int16, i:int16, j:int16):int16
+{
+	return a + b + c + d + e + g + i + j;
+}
+function r(n:int):int16
+{
+	if (n == 0) { return 0; }
+	var x = f(n) + f(n + 1);
+	return r(n - 1) + h(x, 1, 2, 3, 4, 5, 6, n);
+}
+function main():void
+{
+	printf(r(2), "\n");
+	exit(0);
+}
+`
+	want := "57\n" // r(1) = (2 + 3) + 21 + 1 = 27、r(2) = 27 + (3 + 4) + 21 + 2
+	for _, level := range []int{-1, 0} {
+		if out := runEmuLevel(t, src, level); out != want {
+			t.Errorf("-O %d: got %q want %q", level, out, want)
+		}
+	}
+}
+
 // ポインタ経由の配列フィールド (`ta[i].arr[j]`、`p.arr[j]`) は、配列の中身でなく番地を添字の基にする。以前は rval が
 // 配列フィールドを pget して、その中身を番地として添字を足し、別の場所に書いていた (-O 0 / -O 2 とも同じ値なので
 // 差分の fuzz では見えず、生成器を広げるときの手計算で発覚)。
