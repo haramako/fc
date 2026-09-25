@@ -11,6 +11,7 @@
 - [ライブラリ API 利用例](v3_slices_api_examples.md)：文字列、ゲーム処理、数値 ID の readonly FS。
 - [長さ・ABI・sentinel・移行](v3_slice_tradeoffs.md)：8 / 16 ビット長の比較、終端 0、現行 migrate の削除と将来の v2 → v3 移行。
 - [言語機能の追加候補](language_feature_candidates.md)：当初の候補一覧。全候補の V3 採用を決めたものではない。
+  §1 の基底型つき enum は 2026-09-25 に FC3 での採用と仕様を決定（未実装）。
 
 ## 1. ifdef 相当の static if
 
