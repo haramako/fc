@@ -119,6 +119,11 @@ func Passes(u *types.Universe) []Pass {
 			simplifyJumps(lmd)
 			compact(lmd)
 		}},
+		{"ywalk", func(lmd *ir.Lambda) {
+			if walkPointerY(lmd, u) {
+				compact(lmd)
+			}
+		}},
 	}
 }
 

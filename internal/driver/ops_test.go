@@ -3,6 +3,7 @@ package driver
 // v2 で足した演算子 (複合代入、~) と switch の case の規則。
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -2525,4 +2526,118 @@ function main():void
 			t.Errorf("%s を reg に直接読んでいない:\n%s", tab, asm)
 		}
 	}
+}
+
+// TestPointerWalkY: 1 ずつ進むポインタのループは下位バイトを Y で回す (opt.walkPointerY)。ページをまたぐ長さ、
+// 1 回も回らない入口 (p >= lim)、ループの後の p の値、上限がリテラルの形、continue がある (対象外) 形で値を確かめる。
+func TestPointerWalkY(t *testing.T) {
+	t.Parallel()
+	src := `var buf:[700]int options(segment: "BSS_EX");
+var outp:*int;
+function fill(p:*int, n:int16, v:int):void
+{
+	var i:int16;
+	for (i = 0; i < n; i++) {
+		*p = v;
+		v += 3;
+		p += 1;
+	}
+	outp = p;
+}
+function sum(p:*int, n:int16):int16
+{
+	var s:int16 = 0;
+	var i:int16;
+	for (i = 0; i < n; i++) {
+		s += *p;
+		p += 1;
+	}
+	return s;
+}
+function skip(p:*int, n:int16):int16
+{
+	var s:int16 = 0;
+	var i:int16;
+	for (i = 0; i < n; i++) {
+		var x = *p;
+		p += 1;
+		if (x & 1) { continue; }
+		s += x;
+	}
+	return s;
+}
+function main():void
+{
+	var b = buf as *int;
+	fill(b, 700, 1);
+	printf(sum(b, 700), " ", sum(b + 3, 520), " ", outp == b + 700, "\n");
+	fill(b + 10, 0, 9);
+	printf(sum(b, 12), " ", outp == b + 10, " ", skip(b, 700), "\n");
+	var q = b;
+	while (q < b + 256) {
+		*q = 2;
+		q += 1;
+	}
+	printf(sum(b, 300), " ", q == b + 256, "\n");
+	exit(0);
+}
+`
+	want := goPointerWalkY()
+	for _, level := range []int{-1, 0} {
+		if out := runEmuLevel(t, src, level); out != want {
+			t.Errorf("-O %d: got %q want %q", level, out, want)
+		}
+	}
+	asm := compileAsm(t, src)
+	for _, fn := range []string{"_t_fill", "_t_sum"} {
+		i := strings.Index(asm, ".proc "+fn+"\n")
+		body := asm[i:]
+		body = body[:strings.Index(body, ".endproc")]
+		if !strings.Contains(body, "\tiny\n") || !strings.Contains(body, "ywalk_skip") {
+			t.Errorf("%s: ポインタの下位を Y で回していない:\n%s", fn, body)
+		}
+	}
+}
+
+// goPointerWalkY は TestPointerWalkY の期待値を Go で計算する。
+func goPointerWalkY() string {
+	buf := make([]int, 700)
+	fill := func(off, n, v int) int {
+		for i := 0; i < n; i++ {
+			buf[off+i] = v & 0xff
+			v += 3
+		}
+		return off + n
+	}
+	sum := func(off, n int) int {
+		s := 0
+		for i := 0; i < n; i++ {
+			s += buf[off+i]
+		}
+		return s & 0xffff
+	}
+	skip := func(off, n int) int {
+		s := 0
+		for i := 0; i < n; i++ {
+			if x := buf[off+i]; x&1 == 0 {
+				s += x
+			}
+		}
+		return s & 0xffff
+	}
+	b2i := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	o := fill(0, 700, 1)
+	l1 := fmt.Sprintf("%d %d %d\n", sum(0, 700), sum(3, 520), b2i(o == 700))
+	o = fill(10, 0, 9)
+	l2 := fmt.Sprintf("%d %d %d\n", sum(0, 12), b2i(o == 10), skip(0, 700))
+	for i := 0; i < 256; i++ {
+		buf[i] = 2
+	}
+	l3 := fmt.Sprintf("%d %d\n", sum(0, 300), 1)
+	return l1 + l2 + l3
 }

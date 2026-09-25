@@ -10,13 +10,13 @@
     "out": "sum=663"
   },
   "crc16": {
-    "cycles": 1606867,
-    "size": 437,
+    "cycles": 1517052,
+    "size": 481,
     "out": "crc16=16501"
   },
   "crc8": {
-    "cycles": 753936,
-    "size": 311,
+    "cycles": 664093,
+    "size": 351,
     "out": "crc8=149"
   },
   "entities": {
@@ -40,8 +40,8 @@
     "out": "sum=8921"
   },
   "oam": {
-    "cycles": 2132076,
-    "size": 1090,
+    "cycles": 2080876,
+    "size": 1088,
     "out": "sum=25008"
   },
   "plasma": {
@@ -50,8 +50,8 @@
     "out": "sum=15293"
   },
   "sieve": {
-    "cycles": 15066104,
-    "size": 355,
+    "cycles": 13922084,
+    "size": 373,
     "out": "count=1900"
   },
   "textprint": {

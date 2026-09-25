@@ -102,6 +102,7 @@ func (s *rpStmt) render(b *strings.Builder) {
 
 type rpGen struct {
 	r       *rand.Rand
+	wb      bool // 300 バイトのバッファ wb (walkLoop) を使う
 	globals []rpVar
 	arrays  []rpVar // グローバル配列 (16 要素。要素型)
 	larrays []rpVar // 今の関数のローカル配列 (16 要素)
@@ -503,6 +504,9 @@ func (g *rpGen) lvalue() (string, rpType) {
 // 添字 j0 (0〜3) から始めて、本体の前で進める (最大の添字は 14) ので範囲を出ない。本体の間はそのポインタを `*p` でしか
 // 触らず、終わったら先頭に戻す (fresh に)。
 func (g *rpGen) ptrLoop(depth int) *rpStmt {
+	if len(g.arrays) > 0 && g.chance(0.25) {
+		return g.walkLoop()
+	}
 	var ps []rpVar
 	for _, p := range g.ptrs() {
 		if !p.readOnly {
@@ -564,6 +568,41 @@ func (g *rpGen) ptrLoop(depth int) *rpStmt {
 	head += fmt.Sprintf("%s = %d;\n%s = &%s[%d];\nwhile (%s < %d) {\n%s += %s;\n%s += %s;\n", k.name, j0, p.name, arr.name, j0, k.name, n, p.name, step, k.name, step)
 	tail = fmt.Sprintf("}\n%s = &%s[0];", p.name, arr.name)
 	return &rpStmt{parts: []string{head, tail}, kids: [][]*rpStmt{body}}
+}
+
+// walkLoop は 300 バイトのバッファ wb をポインタで 1 ずつなめる 16 ビットのループ (opt.walkPointerY の対象: 下位を Y で
+// 回す)。回数は 17〜290 (展開されず、ページをまたぐ)、上限はリテラルか変数、`wp += 1` は本体の先頭か末尾。本体は
+// `*wp` に書いてから読む (未初期化を読まない)。ループの後は `wp -= 1` で最後に書いた要素を読む (出口で戻した p の値)。
+func (g *rpGen) walkLoop() *rpStmt {
+	g.wb = true
+	wp := fmt.Sprintf("wp%d", g.nLocal)
+	wi := fmt.Sprintf("wi%d", g.nLocal)
+	wn := fmt.Sprintf("wn%d", g.nLocal)
+	g.nLocal++
+	j0 := g.pick(8)
+	n := 17 + g.pick(274)
+	g.cur.locals = append(g.cur.locals, fmt.Sprintf("var %s:*int = &wb[0];", wp))
+	lim := fmt.Sprintf("%d", n)
+	if g.chance(0.5) {
+		g.cur.locals = append(g.cur.locals, fmt.Sprintf("var %s:int16 = 0;", wn))
+		lim = wn
+	}
+	lv, t := g.lvalue()
+	lv2, t2 := g.lvalue()
+	body := fmt.Sprintf("*%s = (%s) as int;\n%s ^= ((*%s) as %s);\n", wp, g.expr(rpTypes[0], 1), lv, wp, t.name)
+	inc := fmt.Sprintf("%s += 1;\n", wp)
+	if g.chance(0.5) {
+		body = inc + body
+	} else {
+		body += inc
+	}
+	var head string
+	if lim == wn {
+		head = fmt.Sprintf("%s = %d;\n", wn, n)
+	}
+	head += fmt.Sprintf("%s = &wb[%d];\nfor (var %s:int16 = 0; %s < %s; %s++) {\n%s}\n%s -= 1;\n%s ^= ((*%s) as %s);",
+		wp, j0, wi, wi, lim, wi, body, wp, lv2, wp, t2.name)
+	return rpSimple(head)
 }
 
 // stmt は文 1 つ (複数行のこともある)。depth はブロックの入れ子の残り。
@@ -1158,6 +1197,9 @@ func (g *rpGen) source() string {
 			vals[i] = g.lit(c.typ)
 		}
 		fmt.Fprintf(&b, "const %s:[16]%s = [%s];\n", c.name, c.typ.name, strings.Join(vals, ", "))
+	}
+	if g.wb {
+		b.WriteString("var wb:[300]int options(segment: \"BSS_EX\");\n")
 	}
 	for _, a := range g.arrays {
 		fmt.Fprintf(&b, "var %s:[16]%s;\n", a.name, a.typ.name)
