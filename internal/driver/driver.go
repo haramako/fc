@@ -91,6 +91,7 @@ type Compiler struct {
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
 	prog     *sema.Program
+	layout   *bankLayout  // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
 	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 }
 
@@ -195,6 +196,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	for noGrow := map[string]bool{}; ; {
 		prog = sema.NewProgram()
 		prog.Defines = copyDefines(defs)
+		prog.Banks = c.banks()
 		if cerr := sema.CompileProgram(prog, opt.Dir, c.libPath(opt.Target), filename); cerr != nil {
 			return nil, cerr
 		}
@@ -309,6 +311,16 @@ func (c *Compiler) makeBase() string {
 		c.ca65(path)
 		return filepath.Join(c.buildDir, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".o")
 	}
+	if c.layout != nil && c.target == "nes" {
+		// fc.toml の [target] から (layout.go)
+		l := c.layout
+		str := c.baseAsmTemplate(l.PRGSize/0x4000, max(1, l.CHRSize/0x2000), 1, l.Profile.INES)
+		if err := writeIfChanged(filepath.Join(c.buildDir, "base.s"), []byte(str)); err != nil {
+			panic(err)
+		}
+		c.ca65(filepath.Join(c.buildDir, "base.s"))
+		return filepath.Join(c.buildDir, "base.o")
+	}
 	inesmap := 0
 	if m, ok := opts.Get("mapper"); ok {
 		switch m.Kind {
@@ -353,6 +365,8 @@ func (c *Compiler) link(baseObj string, objs []string, opt *BuildOptions) (mapFi
 	if custom, ok := opts.Get("linker_config"); ok && custom.Kind == ir.OptStr {
 		// options(linker_config: "../ld65.cfg"): 自前のリンカ設定 (Dir 相対)。bank / org は配置に使われない (far call の判定だけ)
 		cfgPath = filepath.Join(c.dir, custom.Str)
+	} else if c.layout != nil && c.target == "nes" {
+		c.writeLayoutConfig() // fc.toml のバンクの表から (layout.go)
 	} else {
 		c.writeLinkerConfig(opts, opt)
 	}
@@ -484,7 +498,10 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 // 「そのまま飛ぶ」だけの fclib/<target>/farcall.asm を使う。バンク切替のあるマッパーはプロジェクトが farcall を用意する。
 func (c *Compiler) farcallAsm() string {
 	if c.target == "nes" {
-		if m, ok := c.prog.Options.Get("mapper"); ok && !(m.Kind == ir.OptStr && m.Str == "MMC0" || m.Kind == ir.OptInt && m.Int == 0) {
+		if c.layout != nil && len(c.layout.Profile.Slots) > 0 {
+			return "" // fc.toml のバンクの表でバンク切替のあるマッパー: トランポリンはプロジェクトが用意する
+		}
+		if m, ok := c.prog.Options.Get("mapper"); ok && c.layout == nil && !(m.Kind == ir.OptStr && m.Str == "MMC0" || m.Kind == ir.OptInt && m.Int == 0) {
 			return ""
 		}
 	}
@@ -496,12 +513,27 @@ func (c *Compiler) farcallAsm() string {
 }
 
 // projectDefines は fc.toml (ソースの基準ディレクトリから親へ探す) と CLI の -D から @(build) の const の上書きを作る。
+// fc.toml のバンクの表も読んで c.layout に入れる。
 func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, error) {
 	cfg, err := findConfig(c.dir)
 	if err != nil {
 		return nil, err
 	}
+	if c.layout, err = cfg.layout(); err != nil {
+		return nil, err
+	}
+	if c.layout != nil && c.layout.Fragment != "" && !filepath.IsAbs(c.layout.Fragment) {
+		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
+	}
 	return cfg.defines(cli)
+}
+
+// banks は意味解析に渡すバンクの表 (fc.toml に無ければ nil)。
+func (c *Compiler) banks() map[string]sema.BankRef {
+	if c.layout == nil {
+		return nil
+	}
+	return c.layout.semaBanks()
 }
 
 // checkDefines は上書きが宣言された @(build) の const に当たったかを検査する (ビルドに含まれないモジュールは警告)。

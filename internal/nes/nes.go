@@ -88,6 +88,12 @@ type Machine struct {
 	irqEnabled     bool
 	irqPending     bool
 
+	// UxROM (2) / MMC1 (1)
+	prgBank16 int  // $8000 に入れた 16KB のバンク (UxROM、MMC1 の PRG バンク)
+	mmc1Shift byte // MMC1 のシリアルの受け口 (5 回で 1 つのレジスタ)
+	mmc1Count int
+	mmc1Regs  [4]byte // control / CHR 0 / CHR 1 / PRG
+
 	// PPU
 	ctrl        byte
 	mask        byte
@@ -114,7 +120,7 @@ func New(rom []byte) (*Machine, error) {
 	prgSize := int(rom[4]) * 0x4000
 	chrSize := int(rom[5]) * 0x2000
 	mapper := int(rom[6]>>4) | int(rom[7]&0xf0)
-	if mapper != 0 && mapper != 4 {
+	if mapper != 0 && mapper != 1 && mapper != 2 && mapper != 4 {
 		return nil, fmt.Errorf("unsupported mapper %d", mapper)
 	}
 	if len(rom) < 16+prgSize+chrSize {
@@ -126,10 +132,16 @@ func New(rom []byte) (*Machine, error) {
 		mapper:         mapper,
 		mirrorVertical: rom[6]&1 != 0,
 	}
-	if mapper == 4 {
+	switch mapper {
+	case 4:
 		// 起動時のバンクは電源投入時不定だが、リセットベクタが最終バンクに
 		// 固定でいるよう初期化しておく
 		m.updateMmc3Banks()
+	case 1:
+		m.mmc1Regs[0] = 0x0c // 電源投入時: PRG は $8000 の 16KB を切り替え、$C000 は最後に固定
+		m.updateMmc1Banks()
+	case 2:
+		m.updateUxromBanks()
 	}
 	m.Cpu = r6502.NewCpu(m)
 	return m, nil
@@ -205,7 +217,7 @@ func (m *Machine) Set(addr, val int) {
 }
 
 func (m *Machine) readPrg(addr int) byte {
-	if m.mapper == 4 {
+	if m.mapper != 0 {
 		bank := (addr - 0x8000) / 0x2000
 		return m.prg[m.prgOffsets[bank]+(addr-0x8000)&0x1fff]
 	}
@@ -344,7 +356,7 @@ func (m *Machine) chrAt(addr int) byte {
 	if len(m.chr) == 0 {
 		return 0
 	}
-	if m.mapper == 4 {
+	if m.mapper == 4 || m.mapper == 1 {
 		bank := addr / 0x400
 		return m.chr[(m.chrOffsets[bank]+(addr&0x3ff))%len(m.chr)]
 	}
@@ -356,7 +368,16 @@ func (m *Machine) chrAt(addr int) byte {
 // ---------------------------------------------------------------
 
 func (m *Machine) writeMapper(addr int, v byte) {
-	if m.mapper != 4 {
+	switch m.mapper {
+	case 2:
+		m.prgBank16 = int(v) // UxROM: $8000〜$FFFF への書き込みで $8000 の 16KB を選ぶ (バスの衝突は再現しない)
+		m.updateUxromBanks()
+		return
+	case 1:
+		m.writeMmc1(addr, v)
+		return
+	case 4:
+	default:
 		return
 	}
 	even := addr&1 == 0
@@ -386,6 +407,69 @@ func (m *Machine) writeMapper(addr int, v byte) {
 		} else {
 			m.irqEnabled = true
 		}
+	}
+}
+
+// updateUxromBanks は UxROM の窓: $8000 に選んだ 16KB、$C000 に最後の 16KB。
+func (m *Machine) updateUxromBanks() {
+	n := len(m.prg) / 0x4000
+	b := (m.prgBank16 % n) * 0x4000
+	last := (n - 1) * 0x4000
+	m.prgOffsets = [4]int{b, b + 0x2000, last, last + 0x2000}
+}
+
+// writeMmc1 は MMC1 のシリアルの書き込み: bit 7 が立っていれば受け口を空にして PRG をモード 3 に、そうでなければ bit 0 を
+// 下から 5 回ためて、5 回目の番地 ($8000 / $A000 / $C000 / $E000) のレジスタに入れる。
+func (m *Machine) writeMmc1(addr int, v byte) {
+	if v&0x80 != 0 {
+		m.mmc1Shift, m.mmc1Count = 0, 0
+		m.mmc1Regs[0] |= 0x0c
+		m.updateMmc1Banks()
+		return
+	}
+	m.mmc1Shift |= (v & 1) << m.mmc1Count
+	m.mmc1Count++
+	if m.mmc1Count < 5 {
+		return
+	}
+	m.mmc1Regs[(addr-0x8000)/0x2000] = m.mmc1Shift
+	m.mmc1Shift, m.mmc1Count = 0, 0
+	m.updateMmc1Banks()
+}
+
+// updateMmc1Banks は MMC1 の窓 (control の bit 2-3 が PRG のモード、bit 4 が CHR の 4KB / 8KB、bit 0-1 がミラー)。
+func (m *Machine) updateMmc1Banks() {
+	ctrl := m.mmc1Regs[0]
+	switch ctrl & 3 {
+	case 2:
+		m.mirrorVertical = true
+	case 3:
+		m.mirrorVertical = false
+	}
+	n := len(m.prg) / 0x4000
+	b := int(m.mmc1Regs[3]&0x0f) % n
+	m.prgBank16 = b
+	last := (n - 1) * 0x4000
+	switch (ctrl >> 2) & 3 {
+	case 0, 1: // 32KB を切り替え (bit 0 は無視)
+		base := (b &^ 1) * 0x4000
+		m.prgOffsets = [4]int{base, base + 0x2000, base + 0x4000, base + 0x6000}
+	case 2: // $8000 は最初に固定、$C000 を切り替え
+		m.prgOffsets = [4]int{0, 0x2000, b * 0x4000, b*0x4000 + 0x2000}
+	default: // 3: $8000 を切り替え、$C000 は最後に固定
+		m.prgOffsets = [4]int{b * 0x4000, b*0x4000 + 0x2000, last, last + 0x2000}
+	}
+	var c0, c1 int
+	if ctrl&0x10 == 0 { // 8KB (CHR 0 の bit 0 は無視)
+		c0 = int(m.mmc1Regs[1]&^1) * 0x1000
+		c1 = c0 + 0x1000
+	} else {
+		c0 = int(m.mmc1Regs[1]) * 0x1000
+		c1 = int(m.mmc1Regs[2]) * 0x1000
+	}
+	for i := 0; i < 4; i++ {
+		m.chrOffsets[i] = c0 + i*0x400
+		m.chrOffsets[4+i] = c1 + i*0x400
 	}
 }
 
@@ -495,7 +579,7 @@ func (m *Machine) RomOffset(pc int) int {
 	if pc < 0x8000 {
 		return -1
 	}
-	if m.mapper == 4 {
+	if m.mapper != 0 {
 		bank := (pc - 0x8000) / 0x2000
 		return 16 + m.prgOffsets[bank] + (pc-0x8000)&0x1fff
 	}

@@ -145,6 +145,10 @@ far call の判定に「N ≥ 0 なら切替バンク、無しか負なら固定
 | `bool` | 1 | | `true` / `false`、比較演算（`==` `!=` `<` …）と論理演算（`&&` `\|\|` `!`）の結果の型。値は 0 / 1。整数（`uint8`）と互換で、`if` の条件や `&`、整数の引数・戻り値・代入にそのまま使える（`var f = a < b;` の `f` は `bool`。`int` にしたいなら `var f:int = a < b;`）。整数との相互変換はビット列そのままで、整数を bool に入れても 0/1 に正規化しない（非ゼロ = 真。`b == true` ではなく `if (b)` で判定する） |
 | `void` | 0 | | 戻り値なし |
 
+fc.toml の `[target]`（mapper / prg / chr）と `[bank.<名前>]`（slot / index / segments）、`[ram.<名前>]`（start / size）、
+`[linker] extra`（ld65.cfg の断片）を書くと、fc が ld65.cfg と iNES のヘッダを作る。モジュールは `@(bank: "名前")`（"fixed" は
+常に見えている領域）、手動の切り替えの番号は `@bank("名前")`。マッパーは NROM / MMC3 / UxROM / MMC1（[v3_plan.md](v3_plan.md) §3）。
+
 fc 3 の `@if (条件) { … } else @if (…) { … } else { … }` はコンパイル時に片方を選ぶ（条件はリテラルと `@(build)` の const だけ。
 選ばれなかった側は名前解決しない。トップレベルでも関数の中でも書け、新しいスコープは作らない）。`const DEBUG = false @(build);` は
 fc.toml の `[define.<モジュール名>]` と `fcc build -D モジュール名.DEBUG=true` で値を上書きできる（[v3_plan.md](v3_plan.md) §1）。

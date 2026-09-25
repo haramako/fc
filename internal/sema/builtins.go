@@ -106,6 +106,19 @@ func registerBuiltins(p *Program) {
 		return macroResult{expr: ccall(cv(m.Interface().LookupInternal("sin")), cop2(opAdd, args[0], cint(64)))}
 	})
 
+	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。doc/v3_plan.md §3)
+	h.defconstmacro("@bank", func(h *Hlc, args []*cexpr) *cexpr {
+		if len(args) != 1 || args[0].kind != cValue || !args[0].val.IsString {
+			panic(&diag.Error{Msg: "@bank takes 1 string argument (a bank name of fc.toml [bank.<name>])"})
+		}
+		name := args[0].val.Str
+		v := h.bankByName(name)
+		if v.Int < 0 {
+			panic(&diag.Error{Msg: fmt.Sprintf("@bank(%q): the fixed area has no bank number", name)})
+		}
+		return cv(h.IntValue(v.Int))
+	})
+
 	// textmap(path) は定数式。文字表を持つ新しいマクロ値を返し、それを呼ぶと文字列が int[] 定数になる
 	h.defconstmacro("textmap", func(h *Hlc, args []*cexpr) *cexpr {
 		if len(args) != 1 {

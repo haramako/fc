@@ -54,6 +54,9 @@ type Program struct {
 	curModule   string                     // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
 	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
 	Defines map[string]*DefineUse
+	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
+	// (driver/layout.go。doc/v3_plan.md §3)
+	Banks map[string]BankRef
 	// unconst は @bitcast で作った値 (読み取り専用の元を包んでいても読み取り専用にしない。constptr.go)
 	unconst map[*ir.CastedValue]bool
 }

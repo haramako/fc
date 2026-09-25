@@ -69,6 +69,7 @@ func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (*sema
 	for noGrow := map[string]bool{}; ; {
 		prog = sema.NewProgram()
 		prog.Defines = copyDefines(defs)
+		prog.Banks = c.banks()
 		if err := sema.CompileProgram(prog, dir, c.libPath(target), main); err != nil {
 			return nil, err
 		}

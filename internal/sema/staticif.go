@@ -19,6 +19,28 @@ import (
 	"github.com/haramako/fc/internal/syntax"
 )
 
+// BankRef は fc.toml の [bank.<name>] 1 つ (Fixed なら常に見えている領域 "fixed")。
+type BankRef struct {
+	Index int
+	Slot  int
+	Fixed bool
+}
+
+// bankByName は fc.toml のバンクの名前を options の bank の値 (番号。"fixed" は -1) にする。
+func (h *Hlc) bankByName(name string) ir.OptionValue {
+	if h.prog.Banks == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("bank %q: bank names need a bank table in fc.toml ([target] and [bank.%s])", name, name)})
+	}
+	b, ok := h.prog.Banks[name]
+	if !ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("unknown bank %q (add [bank.%s] to fc.toml)", name, name)})
+	}
+	if b.Fixed {
+		return ir.OptionValue{Kind: ir.OptInt, Int: -1}
+	}
+	return ir.OptionValue{Kind: ir.OptInt, Int: b.Index}
+}
+
 // DefineUse は上書きの値 1 つの使われ方 (fcc build -d の表示と検査)。
 type DefineUse struct {
 	Key    string // module.NAME

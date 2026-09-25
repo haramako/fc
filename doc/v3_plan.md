@@ -170,7 +170,15 @@ castle の `ld65.cfg`（125 行、切替バンク 23 個）を分類した結果
 渡し、fc が作った cfg に足す（fc は自分の領域と重ならないかを検査する）。(3) それでも足りなければ今の
 `options(linker_config:)` で丸ごと手で書く。castle は `fs_data` と `ROM20` を断片で渡せば残りは fc だけで書ける見込み。
 
-**2026-09-25 決定（未実装）: 配置は `fc.toml` にバンクの表を書き、モジュール・関数は名前で指定する。**
+**2026-09-25 決定・実装済み（feature/v3）: 配置は `fc.toml` にバンクの表を書き、モジュールは名前で指定する。**
+実装: `driver/layout.go`（`[target]` / `[bank.*]` / `[ram.*]` / `[linker] extra` を読み、番号を決め、ld65.cfg と iNES のヘッダを
+作る。固定の領域は 1 つのメモリ領域にまとめて最後の 6 バイトをベクタに）、モジュールの `@(bank: "名前")` は意味解析で番号に
+（"fixed" は -1。以降の far call の判定などは今の番号のまま）、`@bank("名前")`（コンパイル時の u8）、マッパーのプロファイル
+NROM / MMC3 / UxROM / MMC1（16KB モード）、トランポリン `fclib/nes/farcall_uxrom.asm` / `farcall_mmc1.asm`、内蔵 NES
+エミュレータに UxROM と MMC1、`TestLayoutMMC3` / `TestLayoutNROM` / `TestLayout16K` / `TestLayoutErrors`。
+最初の版で入れなかったもの: 16KB のバンク（MMC3 の 2 スロット続き。トランポリンが 1 スロットしか切り替えないので、cfg の
+断片に回す）、関数ごとの `@(bank:)`、容量の超過の使用量の一覧（今は ld65 のエラーのまま）、同じバンクのモジュール同士を
+near にすること、castle の番号のバンクを名前に移すこと（castle は ld65.cfg を丸ごと書く道のまま）。
 
 ```toml
 # fc.toml

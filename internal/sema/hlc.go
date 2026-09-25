@@ -561,6 +561,10 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		}
 		for _, r := range raws {
 			val := optionValueOf(mustValue(h.constEval(toC(r.val))))
+			if r.key == "bank" && val.Kind == ir.OptStr {
+				h.updatePos(r.val)
+				val = h.bankByName(val.Str) // @(bank: "en"): fc.toml のバンクの表で番号に (fixed は -1)
+			}
 			if r.key == "bss" {
 				h.updatePos(r.val)
 				validateBss(val)
