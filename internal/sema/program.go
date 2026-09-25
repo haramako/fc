@@ -194,18 +194,26 @@ const MaxErrors = 30
 
 // report はエラーを記録する (同じ位置・同じ文言は 1 回だけ)。件数が上限に達したら Fatal なエラーを投げて打ち切る。
 func (p *Program) report(e *diag.Error) {
+	if fatal := p.record(e); fatal != nil {
+		panic(fatal)
+	}
+}
+
+// record は report の本体。件数が上限に達したら投げるべき Fatal なエラーを返す (投げるのは呼び出し側)。
+func (p *Program) record(e *diag.Error) *diag.Error {
 	if e.Suppressed {
-		return
+		return nil
 	}
 	for _, prev := range p.Errors {
 		if prev.Pos == e.Pos && prev.Msg == e.Msg {
-			return
+			return nil
 		}
 	}
 	p.Errors = append(p.Errors, e)
 	if len(p.Errors) >= MaxErrors {
-		panic(&diag.Error{Msg: fmt.Sprintf("too many errors (%d); stopping", len(p.Errors)), Pos: e.Pos, Fatal: true})
+		return &diag.Error{Msg: fmt.Sprintf("too many errors (%d); stopping", len(p.Errors)), Pos: e.Pos, Fatal: true}
 	}
+	return nil
 }
 
 // ErrorList は集めたエラーをファイル・位置順に並べて error として返す (無ければ nil)。
@@ -257,7 +265,10 @@ func (h *Hlc) recoverTo(err *error) {
 			h.prog.Errors = append(h.prog.Errors, ce)
 			return
 		}
-		h.prog.report(ce)
+		// ここは最外の回復点なので上限到達でも投げない (report だと defer の中から panic が抜けて落ちた。fuzz で発覚)
+		if fatal := h.prog.record(ce); fatal != nil {
+			h.prog.Errors = append(h.prog.Errors, fatal)
+		}
 	}
 }
 

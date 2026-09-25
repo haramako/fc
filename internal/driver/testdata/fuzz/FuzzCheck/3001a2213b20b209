@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("#fc 2\nA0;A;A;A;A;[];A;A;A;A;A;A;A;A;A;A;A;A;A;A;{A;A;}function d():A{}function B():d{A;A;0.0;A0;0.0;A0;}")
