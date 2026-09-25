@@ -57,6 +57,13 @@ type Program struct {
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
 	// (driver/layout.go。doc/v3_plan.md §3)
 	Banks map[string]BankRef
+	// LogEnabled なら @log を注釈として命令に付ける (fcc build -g。無ければ @log は検査だけで何も残さない)
+	LogEnabled bool
+	nextLogID  int
+	// LogEveryStatement はテスト用: 関数の中の文ごとに、その関数の変数を全部出す @log を置く (@log があっても生成コードが
+	// 変わらないことを fuzz のプログラムで確かめる。driver の TestLogZeroCost)
+	LogEveryStatement bool
+
 	// unconst は @bitcast で作った値 (読み取り専用の元を包んでいても読み取り専用にしない。constptr.go)
 	unconst map[*ir.CastedValue]bool
 }

@@ -81,7 +81,7 @@ func foldIndexOffset(lmd *ir.Lambda) bool {
 			}
 		}
 		if nuse[t] == 0 {
-			ops[j] = nil
+			ir.DropOp(ops, j)
 		}
 	}
 	return changed

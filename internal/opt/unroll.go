@@ -271,6 +271,9 @@ func (s *ssaForm) unrollOne() bool {
 				if op.Dst != nil {
 					no.Dst = mapOperand(op.Dst)
 				}
+				if n > 0 {
+					no.Logs = ir.CloneLogs(op.Logs, mapOperand) // 最初の写しは元の注釈のまま (ir.KeepLogs が付け替えない)
+				}
 				// 最後の写し (検査だけ) の飛び先は元のブロック (出口の経路はどの写しでも同じ)
 				target := func(l string) string {
 					if l == h.Label {

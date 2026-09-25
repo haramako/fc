@@ -553,10 +553,17 @@ func b2i(b bool) int {
 func (s *ssaForm) rewrite() bool {
 	changed := false
 	ops := s.lmd.Ops
-	var dels []int // ループの後で消す (ループ中は他の版の定義として参照されうる)
+	var dels []int           // ループの後で消す (ループ中は他の版の定義として参照されうる)
+	var logLive *ir.Liveness // @log の引数の書き換えに使う生存 (注釈がある関数だけ)
+	if ir.HasLogs(ops) {
+		logLive = ir.BuildLiveness(s.lmd)
+	}
 	for i, op := range ops {
 		if op == nil || s.blockOf[i] == nil {
 			continue
+		}
+		if logLive != nil {
+			s.rewriteLogs(i, op, logLive)
 		}
 		for k, val := range s.useAt[i] {
 			if val == nil {
@@ -579,7 +586,7 @@ func (s *ssaForm) rewrite() bool {
 		// 定数になった定義はリテラルの load に (使用が全部リテラルに置き換わっていれば次の DCE で消える)
 		if d := s.defAt[i]; d != nil && s.konst(d) && isIntLike(ir.ValType(op.Dst)) {
 			if _, lit := ir.ValIntLiteral(op.In(0)); op.Code != ir.OpLoad || !lit {
-				ops[i] = &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{ir.NewIntLiteral("", ir.ValType(op.Dst), normInt(d.bits, ir.ValType(op.Dst)))}, Pos: op.Pos}
+				ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{ir.NewIntLiteral("", ir.ValType(op.Dst), normInt(d.bits, ir.ValType(op.Dst)))}, Pos: op.Pos})
 				changed = true
 			}
 		}
@@ -593,9 +600,9 @@ func (s *ssaForm) rewrite() bool {
 		case ir.OpIf, ir.OpIfTrue:
 			if n, ok := ir.ValIntLiteral(op.Src[0]); ok {
 				if (n != 0) == (op.Code == ir.OpIfTrue) {
-					ops[i] = &ir.Op{Code: ir.OpJump, Label: op.Label, Pos: op.Pos}
+					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpJump, Label: op.Label, Pos: op.Pos})
 				} else {
-					ops[i] = nil
+					ir.DropOp(ops, i)
 				}
 				changed = true
 			}
@@ -603,19 +610,56 @@ func (s *ssaForm) rewrite() bool {
 			if n, ok := ir.ValIntLiteral(op.Src[0]); ok {
 				minV, _ := ir.ValIntLiteral(op.Src[1])
 				if k := n - minV; k >= 0 && k < len(op.Labels) {
-					ops[i] = &ir.Op{Code: ir.OpJump, Label: op.Labels[k], Pos: op.Pos}
+					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpJump, Label: op.Labels[k], Pos: op.Pos})
 				} else {
-					ops[i] = nil
+					ir.DropOp(ops, i)
 				}
 				changed = true
 			}
 		}
 	}
 	for _, i := range dels {
-		ops[i] = nil
+		ir.DropOp(ops, i)
 		changed = true
 	}
 	return changed
+}
+
+// rewriteLogs は命令 i の @log の引数を、その地点での版の定数・コピー元に置き換える (注釈は使用に数えないので、
+// 変数が消えても地点で値が分かるように。ir/log.go)。変数がその地点で生きているか、同じブロックの中に定義があるときだけ:
+// 死んでいる地点には合流の φ が無く、valueAt が合流の前の片方の版を返す。
+func (s *ssaForm) rewriteLogs(i int, op *ir.Op, live *ir.Liveness) {
+	for _, p := range op.Logs {
+		for _, a := range p.Args {
+			u, ok := a.Val.(*ir.Value)
+			if !ok || !s.vars[u] || u.LogStale || u.LogNoValue {
+				continue // 死んだ代入を消した変数は、版の並びが元の値の並びと違う
+			}
+			if !live.LiveIn(i, u) && !s.definedInBlock(u, i) {
+				continue
+			}
+			val := s.valueAt(u, i)
+			if val.undef {
+				continue
+			}
+			if isIntLike(u.Type) && s.konst(val) {
+				a.Val = ir.NewIntLiteral("", u.Type, normInt(resolve(val).bits, u.Type))
+			} else if y := s.copySource(val, i); y != nil {
+				a.Val = y
+			}
+		}
+	}
+}
+
+// definedInBlock は命令 i の前に、同じブロックの中で v の定義があるか。
+func (s *ssaForm) definedInBlock(v *ir.Value, i int) bool {
+	b := s.blockOf[i]
+	for j := i - 1; j >= b.Start; j-- {
+		if d := s.defAt[j]; d != nil && d.v == v {
+			return true
+		}
+	}
+	return false
 }
 
 // copySource は版 val が `load x = y` のコピーで、命令 i の位置でも y がその版のままなら y を返す。
@@ -721,7 +765,7 @@ func (s *ssaForm) simplify() bool {
 		default:
 			continue
 		}
-		s.lmd.Ops[i] = &ir.Op{Code: code, Dst: op.Dst, Src: []ir.Operand{y, ir.NewIntLiteral("", ir.ValType(op.Src[1]), k)}, Pos: op.Pos}
+		ir.ReplaceOp(s.lmd.Ops, i, &ir.Op{Code: code, Dst: op.Dst, Src: []ir.Operand{y, ir.NewIntLiteral("", ir.ValType(op.Src[1]), k)}, Pos: op.Pos})
 		changed = true
 	}
 	return changed
@@ -791,7 +835,8 @@ func (s *ssaForm) eliminateDead() bool {
 			continue
 		}
 		if d := s.defAt[i]; d != nil && isPure(op.Code) && !live[d] {
-			s.lmd.Ops[i] = nil
+			d.v.LogStale = true // 死んだ代入: この後の @log は、生きている地点でしか値を読まない (ir/log.go)
+			ir.DropOp(s.lmd.Ops, i)
 			changed = true
 		}
 	}

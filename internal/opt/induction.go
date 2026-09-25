@@ -193,7 +193,7 @@ func (s *ssaForm) eliminateOneInduction() bool {
 			for at = pre.End - 1; ops[at] != last; at-- {
 			}
 		}
-		ops[hops[1]] = newCmp
+		ir.ReplaceOp(ops, hops[1], newCmp)
 		out := append([]*ir.Op{}, ops[:at]...)
 		out = append(out, pro...)
 		out = append(out, ops[at:]...)

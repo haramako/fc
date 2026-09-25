@@ -456,6 +456,7 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) (argLoads, body 
 			no.Src[s] = mapOperand(o)
 		}
 		no.Dst = mapOperand(op.Dst)
+		no.Logs = ir.CloneLogs(op.Logs, mapOperand)
 		no.Label = label(op.Label)
 		if len(op.Labels) > 0 {
 			no.Labels = make([]string, len(op.Labels))

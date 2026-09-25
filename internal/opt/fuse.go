@@ -41,13 +41,13 @@ func fusePointer(lmd *ir.Lambda) {
 			switch next.Code {
 			case ir.OpPget:
 				if isSameOperand(op.Dst, next.Src[0]) && k+ir.ValType(next.Dst).Size <= 256 {
-					ops[i] = &ir.Op{Code: ir.OpFieldPget, Dst: next.Dst, Src: []ir.Operand{ptr, off}, Pos: next.Pos}
-					ops[i+1] = nil
+					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpFieldPget, Dst: next.Dst, Src: []ir.Operand{ptr, off}, Pos: next.Pos})
+					ir.MergeDrop(ops, i, i+1)
 				}
 			case ir.OpPset:
 				if isSameOperand(op.Dst, next.Src[0]) && k+ir.ValType(op.Dst).Base.Size <= 256 {
-					ops[i] = &ir.Op{Code: ir.OpFieldPset, Src: []ir.Operand{ptr, off, next.Src[1]}, Type: ir.ValType(op.Dst).Base, Pos: next.Pos}
-					ops[i+1] = nil
+					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpFieldPset, Src: []ir.Operand{ptr, off, next.Src[1]}, Type: ir.ValType(op.Dst).Base, Pos: next.Pos})
+					ir.MergeDrop(ops, i, i+1)
 				}
 			}
 		case ir.OpIndex:
@@ -65,15 +65,15 @@ func fusePointer(lmd *ir.Lambda) {
 			switch next.Code {
 			case ir.OpPget:
 				if isSameOperand(op.Dst, next.Src[0]) {
-					ops[i] = &ir.Op{Code: ir.OpIndexPget, Dst: next.Dst, Src: []ir.Operand{arr, idx}, Pos: next.Pos}
-					ops[i+1] = nil
+					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpIndexPget, Dst: next.Dst, Src: []ir.Operand{arr, idx}, Pos: next.Pos})
+					ir.MergeDrop(ops, i, i+1)
 				}
 			case ir.OpPset:
 				// 書く幅は要素の大きさになるので、ポインタが要素の型 (struct の先頭フィールドへの cast ではない) のときだけ
 				// (`sa[i].f0 = 4` (S は 2 バイト) が隣のフィールドまで書いていた。fuzz で発覚)
 				if isSameOperand(op.Dst, next.Src[0]) && ir.ValType(next.Src[0]).Base.Size == ir.ValType(arr).Base.Size {
-					ops[i] = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, next.Src[1]}, Pos: next.Pos}
-					ops[i+1] = nil
+					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, next.Src[1]}, Pos: next.Pos})
+					ir.MergeDrop(ops, i, i+1)
 				}
 			}
 		}

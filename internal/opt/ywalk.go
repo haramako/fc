@@ -204,6 +204,7 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	t1 := ir.NewLocal("$ylo", t.Type, ir.LTTemp)
 	t2 := ir.NewLocal("$yhi", t.Type, ir.LTTemp)
 	lmd.Vars = append(lmd.Vars, k, g, t1, t2)
+	p.LogNoValue = true // ループの中の p の値は p と k の組 (@log では読めない)
 	lo := ir.NewCastedValue(p, u8, 0)
 	hi := ir.NewCastedValue(p, u8, 1)
 	limByte := func(n int) ir.Operand {
@@ -217,11 +218,18 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	if sLabel == xLabel {
 		sLabel = xLabel + "_s"
 	}
+	// @log の注釈: 入口の jump B のものは入口の検査へ、ループの条件 (B の後ろ) のものは新しい比較へ (ir/log.go)
+	var condLogs []*ir.LogPoint
+	for i := b + 1; i <= c; i++ {
+		if ops[i] != nil {
+			condLogs = append(condLogs, ops[i].Logs...)
+		}
+	}
 	var out []*ir.Op
 	out = append(out, ops[:a-1]...)
 	// 入口 (jump B の代わり): 元の検査、下位を k へ
 	out = append(out,
-		&ir.Op{Code: ir.OpLoad, Dst: k, Src: []ir.Operand{lo}, Pos: pos},
+		&ir.Op{Code: ir.OpLoad, Dst: k, Src: []ir.Operand{lo}, Pos: pos, Logs: ops[a-1].Logs},
 		&ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{p, lim}, Pos: pos},
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{g}, Label: xLabel, Pos: pos},
 		&ir.Op{Code: ir.OpLoad, Dst: lo, Src: []ir.Operand{ir.NewIntLiteral("", u8, 0)}, Pos: pos},
@@ -233,12 +241,12 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 		}
 		switch {
 		case op.Code == ir.OpPget && op.Src[0] == ir.Operand(p):
-			out = append(out, &ir.Op{Code: ir.OpIndexPget, Dst: op.Dst, Src: []ir.Operand{p, k}, Pos: op.Pos})
+			out = append(out, &ir.Op{Code: ir.OpIndexPget, Dst: op.Dst, Src: []ir.Operand{p, k}, Pos: op.Pos, Logs: op.Logs})
 		case op.Code == ir.OpPset && op.Src[0] == ir.Operand(p):
-			out = append(out, &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{p, k, op.Src[1]}, Pos: op.Pos})
+			out = append(out, &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{p, k, op.Src[1]}, Pos: op.Pos, Logs: op.Logs})
 		case op.Code == ir.OpAdd && op.Dst == ir.Operand(p):
 			out = append(out,
-				&ir.Op{Code: ir.OpAdd, Dst: k, Src: []ir.Operand{k, ir.NewIntLiteral("", u8, 1)}, Pos: op.Pos},
+				&ir.Op{Code: ir.OpAdd, Dst: k, Src: []ir.Operand{k, ir.NewIntLiteral("", u8, 1)}, Pos: op.Pos, Logs: op.Logs},
 				&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{k}, Label: sLabel, Pos: op.Pos},
 				&ir.Op{Code: ir.OpAdd, Dst: hi, Src: []ir.Operand{hi, ir.NewIntLiteral("", u8, 1)}, Pos: op.Pos},
 				&ir.Op{Code: ir.OpLabel, Label: sLabel, Pos: op.Pos},
@@ -250,7 +258,7 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	L := ops[a].Label
 	out = append(out,
 		ops[b], // B
-		&ir.Op{Code: ir.OpEq, Dst: t1, Src: []ir.Operand{k, limByte(0)}, Pos: pos},
+		&ir.Op{Code: ir.OpEq, Dst: t1, Src: []ir.Operand{k, limByte(0)}, Pos: pos, Logs: condLogs},
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t1}, Label: L, Pos: pos},
 		&ir.Op{Code: ir.OpEq, Dst: t2, Src: []ir.Operand{hi, limByte(1)}, Pos: pos},
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t2}, Label: L, Pos: pos},

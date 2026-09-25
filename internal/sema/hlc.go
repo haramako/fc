@@ -40,6 +40,8 @@ type Hlc struct {
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
 	cmemo map[*cexpr]*cexpr
+
+	pendingLogs []*ir.LogPoint // 次に出す命令に付ける @log (log.go)
 }
 
 // breakable は break / continue の飛び先になる文 (ループ、v2 では switch も)。
@@ -393,8 +395,8 @@ func (h *Hlc) readFile(name string) []byte {
 const switchTableMin = 10
 
 func (h *Hlc) compileLambda(lmd *ir.Lambda) {
-	oldLmd := h.lmd
-	h.lmd = lmd
+	oldLmd, oldLogs := h.lmd, h.pendingLogs
+	h.lmd, h.pendingLogs = lmd, nil
 	if len(h.loops) != 0 {
 		panic("loops not empty")
 	}
@@ -434,8 +436,11 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 				h.emit(&ir.Op{Code: ir.OpReturn})
 			}
 		}
+		for _, p := range h.pendingLogs {
+			h.prog.Warnings = append(h.prog.Warnings, diag.Warning{Msg: "@log after the last statement is never reached", Pos: p.Pos})
+		}
 	})
-	h.lmd = oldLmd
+	h.lmd, h.pendingLogs = oldLmd, oldLogs
 }
 
 // ---------------------------------------------------------------
@@ -527,6 +532,9 @@ func (h *Hlc) scopeIsPublic(publicPos syntax.Pos) bool {
 func (h *Hlc) compileStatement(s syntax.Stmt) {
 	h.updatePos(s)
 	h.cmemo = nil
+	if h.prog.LogEveryStatement && h.prog.LogEnabled && h.lmd != nil {
+		h.logEveryStatement()
+	}
 
 	switch s := s.(type) {
 
@@ -703,10 +711,14 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileCond(toC(s.Cond), elseLabel, false)
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
 		h.inScope(func() { h.compileStatement(s.Then) })
+		if s.Else == nil {
+			h.warnBranchEndLog()
+		}
 		h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
 		if s.Else != nil {
 			h.inScope(func() { h.compileStatement(s.Else) })
+			h.warnBranchEndLog()
 		}
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 
@@ -2168,6 +2180,10 @@ func (h *Hlc) warn(format string, args ...any) {
 
 func (h *Hlc) emit(op *ir.Op) {
 	op.Pos = h.curPos
+	if len(h.pendingLogs) > 0 {
+		op.Logs = append(op.Logs, h.pendingLogs...)
+		h.pendingLogs = nil
+	}
 	h.lmd.Ops = append(h.lmd.Ops, op)
 }
 

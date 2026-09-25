@@ -725,7 +725,7 @@ func DeleteUnuse(lmd *ir.Lambda) {
 			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot,
 			ir.OpIndex, ir.OpRef, ir.OpSignExtension, ir.OpIndexPget, ir.OpFieldPget, ir.OpRolC, ir.OpRorC:
 			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
-				lmd.Ops[i] = nil
+				ir.DropOp(lmd.Ops, i)
 			}
 		case ir.OpCall, ir.OpFastcall:
 			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {

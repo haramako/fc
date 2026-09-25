@@ -106,6 +106,8 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 		if v.LocalType == ir.LTTemp {
 			lo.LocalType, hi.LocalType = ir.LTTemp, ir.LTTemp
 		}
+		lo.LogStale, hi.LogStale = v.LogStale, v.LogStale // @log の値の信頼度 (ir/value.go)
+		lo.LogNoValue, hi.LogNoValue = v.LogNoValue, v.LogNoValue
 		parts[v] = [2]*ir.Value{lo, hi}
 		lmd.Vars = append(lmd.Vars, lo, hi)
 	}
@@ -132,9 +134,17 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 		}
 	}
 	var out []*ir.Op
+	type logMove struct {
+		op    *ir.Op
+		start int
+	}
+	var logMoves []logMove // @log の注釈のある命令と、その代わりに出した最初の命令の位置 (ir/log.go)
 	for _, op := range lmd.Ops {
 		if op == nil {
 			continue
+		}
+		if len(op.Logs) > 0 {
+			logMoves = append(logMoves, logMove{op, len(out)})
 		}
 		vs := wordVars(op, cands)
 		if len(vs) == 0 {
@@ -194,6 +204,29 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 			out = append(out, mk(ir.OpOr, t, byteOf(op.Src[0], 0), byteOf(op.Src[0], 1)), &ir.Op{Code: op.Code, Src: []ir.Operand{t}, Label: op.Label, Pos: pos})
 		default:
 			panic("splitWords: decomposable op not handled")
+		}
+	}
+	for _, m := range logMoves {
+		if m.start < len(out) && out[m.start] != m.op {
+			ir.PrependLogs(out[m.start], m.op.Logs)
+			m.op.Logs = nil
+		}
+	}
+	// @log の引数の、分けた変数はバイトごとの変数で読む
+	for _, op := range out {
+		for _, p := range op.Logs {
+			for _, a := range p.Args {
+				u := ir.UnderlyingValue(a.Val)
+				if u == nil || parts[u] == [2]*ir.Value{} {
+					continue
+				}
+				switch {
+				case a.Val == ir.Operand(u):
+					a.Bytes = []ir.Operand{parts[u][0], parts[u][1]}
+				case ir.ValType(a.Val).Size == 1 && ir.PlainOperand(a.Val) && ir.ValOffset(a.Val) < 2:
+					a.Val = parts[u][ir.ValOffset(a.Val)]
+				}
+			}
 		}
 	}
 	lmd.Ops = out
@@ -379,9 +412,9 @@ func propagateBytes(lmd *ir.Lambda) {
 				if n, ok := ir.ValIntLiteral(op.Src[k]); ok && n == 0 {
 					other := op.Src[1-k]
 					if other == op.Dst {
-						lmd.Ops[i] = nil
+						ir.DropOp(lmd.Ops, i)
 					} else {
-						lmd.Ops[i] = &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{other}, Pos: op.Pos}
+						ir.ReplaceOp(lmd.Ops, i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{other}, Pos: op.Pos})
 					}
 					break
 				}
@@ -392,19 +425,19 @@ func propagateBytes(lmd *ir.Lambda) {
 					other := op.Src[1-k]
 					if n&255 == 255 {
 						if other == op.Dst {
-							lmd.Ops[i] = nil
+							ir.DropOp(lmd.Ops, i)
 						} else {
-							lmd.Ops[i] = &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{other}, Pos: op.Pos}
+							ir.ReplaceOp(lmd.Ops, i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{other}, Pos: op.Pos})
 						}
 					} else if n == 0 {
-						lmd.Ops[i] = &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{op.Src[k]}, Pos: op.Pos}
+						ir.ReplaceOp(lmd.Ops, i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{op.Src[k]}, Pos: op.Pos})
 					}
 					break
 				}
 			}
 		case ir.OpLoad:
 			if op.Src[0] == op.Dst {
-				lmd.Ops[i] = nil
+				ir.DropOp(lmd.Ops, i)
 			}
 		}
 	}
@@ -426,7 +459,7 @@ func propagateBytes(lmd *ir.Lambda) {
 			continue
 		}
 		if v, ok := op.Dst.(*ir.Value); ok && v.LocalType == ir.LTTemp && uses[v] == 0 {
-			lmd.Ops[i] = nil
+			ir.DropOp(lmd.Ops, i)
 		}
 	}
 }

@@ -47,6 +47,11 @@ func sinkAddress(lmd *ir.Lambda) {
 				continue
 			}
 			// op を j の直前へ
+			if len(op.Logs) > 0 && i+1 < j {
+				// @log の注釈は元の位置に残す (次の命令へ。ir/log.go)
+				ir.PrependLogs(ops[i+1], op.Logs)
+				op.Logs = nil
+			}
 			moved := append([]*ir.Op{}, ops[:i]...)
 			moved = append(moved, ops[i+1:j]...)
 			moved = append(moved, op)

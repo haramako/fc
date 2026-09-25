@@ -43,6 +43,8 @@ type Llc struct {
 	// ld65 の --dbgfile に載り、Mesen が fc のソースをステップ実行できる。DebugFile は sema のファイル参照
 	// (Dir 相対) を .dbg に書く名前 (ROM の隣から辿れる相対パス) にする
 	DebugFile func(ref string) string
+	// LogSites は -g のときの @log の地点 (log.go。Compile の順に増える)
+	LogSites []*LogSite
 	dbgFiles  map[string]bool // このモジュールで宣言済みの .dbg file
 	dbgLast   string          // 直前に出した .dbg line (同じ行の命令の間では出さない)
 
@@ -380,15 +382,40 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 	l.curLambda = lmd
 	l.curOp = nil
 	opt.Optimize(lmd, l.OptimizeLevel, l.types)
+	prev := ir.SnapshotLogs(lmd)
 	markArgY(lmd, l.Lambdas) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
 	if l.OptimizeLevel > 0 {
 		regalloc.AllocateResident(lmd)
 	}
 	l.allocRegister(lmd)
+	ir.KeepLogs(lmd, prev)
 	l.checkStackPush(lmd)
 	if os.Getenv("FC_DUMP_IR") != "" {
 		// 調査用: 最適化と割付の後の IR を stderr に出す (golden の allocir と同じ形式)
 		fmt.Fprint(os.Stderr, ir.DumpAllocLambda(lmd.Module.Id, lmd.Id, lmd))
+	}
+}
+
+// snapshotProgramLogs は全関数の命令の並びを覚え、返す関数で @log の注釈を付け替える (ir.KeepLogs)。
+func snapshotProgramLogs(mods []*ir.Module) func() {
+	type snap struct {
+		lmd  *ir.Lambda
+		prev []*ir.Op
+	}
+	var snaps []snap
+	for _, m := range mods {
+		for _, d := range m.Defs {
+			if d.Kind == ir.DefCode {
+				if prev := ir.SnapshotLogs(d.Lambda); prev != nil {
+					snaps = append(snaps, snap{d.Lambda, prev})
+				}
+			}
+		}
+	}
+	return func() {
+		for _, s := range snaps {
+			ir.KeepLogs(s.lmd, s.prev)
+		}
 	}
 }
 
@@ -404,10 +431,12 @@ func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frame
 				}
 			}
 		}
+		keep := snapshotProgramLogs(mods) // @log の注釈を、置き換わった呼び出しから付け替える
 		if err := opt.InlineProgram(mods); err != nil {
 			return nil, err
 		}
 		opt.DevirtualizeProgram(mods, l.FarCall) // 表経由の呼び出しを直接に (frames.Analyze が直接の辺として見る)
+		keep()
 	}
 	markVolatile(mods)
 	graph, err := frames.Analyze(mods)
@@ -545,16 +574,18 @@ type llcState struct {
 	holdX      int
 	fused      map[*ir.Value]string
 	fusedAt    int
+	logSites   int
 }
 
 func (l *Llc) saveState() llcState {
 	return llcState{labelCount: l.labelCount, dbgFiles: maps.Clone(l.dbgFiles), dbgLast: l.dbgLast,
-		holdA: l.holdA, holdX: l.holdX, fused: l.fused, fusedAt: l.fusedAt}
+		holdA: l.holdA, holdX: l.holdX, fused: l.fused, fusedAt: l.fusedAt, logSites: len(l.LogSites)}
 }
 
 func (l *Llc) restoreState(s llcState) {
 	l.labelCount, l.dbgFiles, l.dbgLast, l.holdA, l.holdX, l.fused, l.fusedAt =
 		s.labelCount, maps.Clone(s.dbgFiles), s.dbgLast, s.holdA, s.holdX, s.fused, s.fusedAt
+	l.LogSites = l.LogSites[:s.logSites]
 }
 
 // compileLambda は CompileLambda の 1 回分。forced の命令は常駐レジスタを退避 / 復帰する。戻り値の writes は、
@@ -564,6 +595,14 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
 	l.curOp = nil
 	ops := lmd.Ops
+	siteStart := len(l.LogSites)
+	var lv *ir.Liveness
+	liveness := func() *ir.Liveness { // @log の値の生存 (地点がある関数だけ作る)
+		if lv == nil {
+			lv = ir.BuildLiveness(lmd)
+		}
+		return lv
+	}
 
 	r := &asmLines{}
 
@@ -642,7 +681,11 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 		if len(cm) > 120 {
 			cm = cm[:120]
 		}
-		r.push(fmt.Sprintf("; %04d: %s", opNo, cm))
+		comment := fmt.Sprintf("; %04d: %s", opNo, cm)
+		if l.DebugFile != nil && len(op.Logs) > 0 {
+			comment += l.logMarkers(lmd, opNo, op, liveness) // @log の地点 (log.go)
+		}
+		r.push(comment)
 		if l.DebugFile != nil && op.Pos.IsValid() && op.Code != ir.OpLabel {
 			r.push(l.dbgLine(op.Pos.Filename, op.Pos.Line))
 		}
@@ -1666,6 +1709,9 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 	}
 	lines = stripTestMarks(lines)
 	lines = l.extendJump(lines)
+	if len(l.LogSites) > siteStart {
+		lines = l.placeLogLabels(lines, l.LogSites[siteStart:])
+	}
 
 	lmd.Asm = lines
 	return lines, writes

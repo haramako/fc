@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -50,6 +51,10 @@ type BuildOptions struct {
 	CompileOnly   bool
 	Stdout        io.Writer
 	Debug         bool // -g: fc のソース位置を .dbg line で埋め、ROM の隣に Mesen 用の .dbg / .mlb を書く
+	// LogOut は emu の実行での @log の出力先 (nil なら Stdout。printf と同じ順に混ざる)
+	LogOut io.Writer
+	// LogEveryStatement はテスト用: 文ごとに変数を全部出す @log を置く (sema.Program.LogEveryStatement)
+	LogEveryStatement bool
 	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
@@ -197,6 +202,8 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		prog = sema.NewProgram()
 		prog.Defines = copyDefines(defs)
 		prog.Banks = c.banks()
+		prog.LogEnabled = opt.Debug // @log の注釈は -g のときだけ (doc/v3_plan.md §9)
+		prog.LogEveryStatement = opt.LogEveryStatement
 		if cerr := sema.CompileProgram(prog, opt.Dir, c.libPath(opt.Target), filename); cerr != nil {
 			return nil, cerr
 		}
@@ -265,10 +272,21 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 
 	result.Out = opt.Out
 	result.MapFile, result.DbgFile = c.link(baseObj, objs, opt)
+	var logFile *LogFile
 	if opt.Debug || opt.SizeReport {
 		dbg, err := ParseDbgFile(result.DbgFile)
 		if err != nil {
 			return nil, err
+		}
+		if opt.Debug && len(llc.LogSites) > 0 {
+			// @log の地点 (<rom>.fclog.json / .fclog.lua)
+			if logFile, err = buildLogFile(llc.LogSites, dbg, opt.Target, llc.DebugFile); err != nil {
+				return nil, err
+			}
+			if err := writeLogFiles(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)), logFile); err != nil {
+				return nil, err
+			}
+			result.Warnings = append(result.Warnings, logWarnings(llc.LogSites)...)
 		}
 		if opt.Debug && opt.Target == "nes" {
 			battery := false
@@ -285,7 +303,11 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 
 	if opt.Run {
-		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles)
+		logOut := opt.LogOut
+		if logOut == nil {
+			logOut = opt.Stdout
+		}
+		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles, logHooks(logFile), logOut)
 		if err != nil {
 			return nil, err
 		}
@@ -795,7 +817,8 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // ホスト呼び出し規約 ($fff0〜$ffff): 1=print / 2=print_int / 3=print_int_sp、
 // $ffff が 255 以外になったら終了 (その値が終了コード)。
 // 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
-func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int, int64, error) {
+// logs は @log の地点 (PC → 表示。-g のとき)。命令の実行前に PC が地点なら 1 行出す。
+func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]logHook, logOut io.Writer) (int, int64, error) {
 	if c.target != "emu" {
 		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
 	}
@@ -814,6 +837,7 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int
 	mem.Set(0xffff, 255)
 	mem.Set(0xfffe, 255)
 	var benchStart, benchCycles int64
+	prevPC := -1 // 直前に実行した命令 (@log の合流点の地点: LogFileSite.Prevs)
 	benchUsed := false
 	var trace []int // FC_TRACE_PC=1: 直近の PC (invalid opcode の panic で表示する。調査用)
 	if os.Getenv("FC_TRACE_PC") != "" {
@@ -835,6 +859,15 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int
 				trace = trace[1:]
 			}
 		}
+		if hs := logs[cpu.Pc]; logs != nil && hs != nil {
+			r := logReader{mem: mem.Get, a: cpu.A, x: cpu.X, y: cpu.Y}
+			for _, h := range hs {
+				if h.site.Prevs == nil || slices.Contains(h.site.Prevs, prevPC) {
+					fmt.Fprintln(logOut, formatLog(h.point, h.site, r))
+				}
+			}
+		}
+		prevPC = cpu.Pc
 		cpu.StepSilent()
 		if maxCycles > 0 && cpu.Cycles > maxCycles {
 			return 0, 0, fmt.Errorf("cycle limit exceeded (%d cycles, pc=$%04x)", maxCycles, cpu.Pc)

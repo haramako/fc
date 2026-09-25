@@ -67,8 +67,12 @@ type Value struct {
 	ReadOnly bool // 書き換えられないデータ (const の配列・文字列リテラル)。そこから作るポインタは *const になる
 
 	// 以下はレジスタ割付で設定される
-	Home         *Value // Location == LocA / LocY / LocX でループ内に常駐する一時変数のメモリ側 (退避先。regalloc.AllocateResident)
-	Clean        bool   // Home と常に一致する (領域内で書き換えられない。引数など) ので、レジスタを壊す命令の前の退避 (書き戻し) が要らない
+	Home *Value // Location == LocA / LocY / LocX でループ内に常駐する一時変数のメモリ側 (退避先。regalloc.AllocateResident)
+	// @log の値の信頼度 (ir/log.go。コード生成には使わない): LogStale は死んだ代入を消した変数 (生きている地点の値だけ
+	// 正しい)、LogNoValue は更新を別の変数に置き換えた変数 (opt.ywalk のポインタなど。常に「?」)
+	LogStale     bool
+	LogNoValue   bool
+	Clean        bool // Home と常に一致する (領域内で書き換えられない。引数など) ので、レジスタを壊す命令の前の退避 (書き戻し) が要らない
 	Location     Location
 	Address      int // Location が LocFrame / LocReg / LocFastcallReg のとき有効
 	Unuse        bool
