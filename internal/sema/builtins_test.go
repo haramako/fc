@@ -63,11 +63,11 @@ func TestBuiltins(t *testing.T) {
 	})
 }
 
-// codes は IR ダンプ上の配列定数の要素列 ({lit nil N #"uint8"} ...) を作る。
+// codes は IR ダンプ上の配列定数の要素列 ({lit nil N #"u8"} ...) を作る。
 func codes(ns ...int) string {
 	var parts []string
 	for _, n := range ns {
-		parts = append(parts, fmt.Sprintf("{lit nil %d #\"uint8\"}", n))
+		parts = append(parts, fmt.Sprintf("{lit nil %d #\"u8\"}", n))
 	}
 	return strings.Join(parts, " ")
 }

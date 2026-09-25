@@ -209,7 +209,7 @@ func (h *Hlc) zeroValue(t *types.Type) ir.Operand {
 func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
 	var ty *types.Type
 	if nt, ok := t.(*syntax.NamedType); ok && nt.Module == nil {
-		if _, isBasic := h.prog.Types.Named(nt.Name.Name); !isBasic {
+		if _, isBasic := h.prog.Types.NamedIn(nt.Name.Name, h.version()); !isBasic {
 			if v := h.scope.Find(nt.Name.Name, true); v != nil && v.TypeRef == nil {
 				ty = v.Type
 			}

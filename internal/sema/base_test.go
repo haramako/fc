@@ -16,8 +16,8 @@ func TestIntValue(t *testing.T) {
 		n    int
 		want string
 	}{
-		{0, "uint8"}, {255, "uint8"}, {256, "uint16"}, {70000, "uint16"},
-		{-1, "sint8"}, {-127, "sint8"}, {-128, "sint8"}, {-129, "sint16"}, {-255, "sint16"},
+		{0, "u8"}, {255, "u8"}, {256, "u16"}, {70000, "u16"},
+		{-1, "i8"}, {-127, "i8"}, {-128, "i8"}, {-129, "i16"}, {-255, "i16"},
 	}
 	for _, c := range cases {
 		v := h.IntValue(c.n)

@@ -8,11 +8,11 @@ import (
 func TestStorageAliasSyntax(t *testing.T) {
 	src := []byte(`// typed view
 public alias /* binding */ work:Work=shared.data;
-var alias:uint8;
-function f(alias:uint8):void {
+var alias:u8;
+function f(alias:u8):void {
  alias = 1;
  alias /* local */ local:Work=work;
- if(alias) alias other:uint8=shared.data;
+ if(alias) alias other:u8=shared.data;
 }
 `)
 	f, err := Parse(src, "alias.fc")
@@ -35,7 +35,7 @@ function f(alias:uint8):void {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"public alias", "/* binding */", "/* local */", "var alias:uint8", "alias = 1;"} {
+	for _, want := range []string{"public alias", "/* binding */", "/* local */", "var alias:u8", "alias = 1;"} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("missing %q:\n%s", want, out)
 		}

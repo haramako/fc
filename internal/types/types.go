@@ -186,23 +186,37 @@ func (u *Universe) SoaRef(soa, base *Type, path string) *Type {
 func (u *Universe) IntType(size int, signed bool) *Type {
 	s := "u"
 	if signed {
-		s = "s"
+		s = "i"
 	}
-	return u.intern(&Type{Kind: Int, Size: size, Signed: signed, Length: -1, str: fmt.Sprintf("%sint%d", s, size*8)})
+	return u.intern(&Type{Kind: Int, Size: size, Signed: signed, Length: -1, str: fmt.Sprintf("%s%d", s, size*8)})
 }
 
-// 基本型の名前 → (サイズ, 符号)。
-var basicTypes = map[string]struct {
+type intSpec struct {
 	size   int
 	signed bool
-}{
-	"int": {1, false}, "uint": {1, false}, "sint": {1, true},
-	"int8": {1, false}, "sint8": {1, true}, "uint8": {1, false},
-	"int16": {2, false}, "sint16": {2, true}, "uint16": {2, false},
 }
 
-// Named は型名から型を返す。未知の名前なら ok=false。
+// IntTypeNames は整数型の名前 (fc 3 の正式名。fc 2 でも使える) → (サイズ, 符号)。doc/v3_plan.md §7。
+var IntTypeNames = map[string]intSpec{
+	"u8": {1, false}, "i8": {1, true}, "u16": {2, false}, "i16": {2, true},
+}
+
+// V2IntTypeNames は fc 2 だけの整数型の名前 → fc 3 の名前 (`fcc migrate` の書き換えと fc 3 での案内に使う)。
+// `int` / `uint` / `int8` / `uint8` は u8、`sint` / `sint8` は i8、`int16` / `uint16` は u16、`sint16` は i16。
+var V2IntTypeNames = map[string]string{
+	"int": "u8", "uint": "u8", "int8": "u8", "uint8": "u8",
+	"sint": "i8", "sint8": "i8",
+	"int16": "u16", "uint16": "u16",
+	"sint16": "i16",
+}
+
+// Named は型名から型を返す (fc 2 の規則: 古い名前も fc 3 の名前も引ける)。未知の名前なら ok=false。
 func (u *Universe) Named(name string) (t *Type, ok bool) {
+	return u.NamedIn(name, 2)
+}
+
+// NamedIn は文法バージョン version のモジュールでの型名の解決。fc 3 では fc 2 だけの整数型の名前 (int など) を引かない。
+func (u *Universe) NamedIn(name string, version int) (t *Type, ok bool) {
 	switch name {
 	case "void":
 		return u.Void(), true
@@ -213,7 +227,11 @@ func (u *Universe) Named(name string) (t *Type, ok bool) {
 	case "macro":
 		return u.Macro(), true
 	}
-	if bt, ok := basicTypes[name]; ok {
+	if bt, ok := IntTypeNames[name]; ok {
+		return u.IntType(bt.size, bt.signed), true
+	}
+	if n, ok := V2IntTypeNames[name]; ok && version < 3 {
+		bt := IntTypeNames[n]
 		return u.IntType(bt.size, bt.signed), true
 	}
 	return nil, false

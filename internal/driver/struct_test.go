@@ -171,7 +171,7 @@ func TestStructErrors(t *testing.T) {
 		{"struct P { x:int; }\nfunction main():void { var q = P{1, 2}; }\n", "has 1 fields but 2 values"},
 		{"struct P { x:int; y:int; }\nfunction main():void { var q = P{x: 1, 2}; }\n", "mixes named and positional"},
 		{"struct P { x:int; y:int; }\nfunction main():void { var q = P{x: 1, x: 2}; }\n", "given twice"},
-		{"struct P { x:int; y:int; }\nfunction main():void { var n:int; n = {1, 2}; }\n", "struct literal cannot be used as uint8"},
+		{"struct P { x:int; y:int; }\nfunction main():void { var n:int; n = {1, 2}; }\n", "struct literal cannot be used as u8"},
 		{"struct P { x:int; y:int; }\nfunction main():void { var q = [{1, 2}]; }\n", "needs a declared type"},
 		{"struct P { x:int; p:P; }\n", "not complete yet"},
 		{"struct P { x:int; }\nstruct P { y:int; }\n", "already defined"},

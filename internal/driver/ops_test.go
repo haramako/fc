@@ -101,8 +101,8 @@ function main():void
 func TestDivMod16(t *testing.T) {
 	t.Parallel()
 	out := runEmu(t, `var u:int16;
-var s:sint16;
-var a:sint8;
+var s:i16;
+var a:i8;
 function main():void
 {
 	u = 65236;
@@ -240,7 +240,7 @@ func TestChainSelfOperand(t *testing.T) {
 func TestScaledIndex(t *testing.T) {
 	t.Parallel()
 	out := runEmu(t, `var a:[8]int16;
-var b:[8]sint16;
+var b:[8]i16;
 function fill(p:*int16, n:int):void
 {
 	for (var i = 0; i < n; i++) {
@@ -251,7 +251,7 @@ function main():void
 {
 	fill(a, 8);
 	for (var i = 0; i < 8; i++) {
-		b[i] = (a[i] as sint16) - 1000;
+		b[i] = (a[i] as i16) - 1000;
 	}
 	var s:int16 = 0;
 	for (var i = 0; i < 8; i++) {
@@ -261,7 +261,7 @@ function main():void
 		s += b[i] as int16;
 		a[i] = s;
 	}
-	var p = b as *sint16;
+	var p = b as *i16;
 	var j = 3;
 	p[j] = p[j] + p[j + 1];
 	printf(s, " ", a[7], " ", b[3], " ", a[6], " ", b[7], "\n");
@@ -284,7 +284,7 @@ function main():void
 func TestResidentSignedCompare(t *testing.T) {
 	t.Parallel()
 	out := runEmu(t, `var tab:[4]int;
-function f(x:sint8):int
+function f(x:i8):int
 {
 	if (x < 0) {
 		if (x < -2) {
@@ -636,7 +636,7 @@ func TestStructFieldWidths(t *testing.T) {
 struct T { f0:int; f1:int; f2:int16; }
 var sa:[4]S;
 var s0:T;
-var g3:sint16;
+var g3:i16;
 var g4:int;
 function main():void
 {
@@ -647,10 +647,10 @@ function main():void
 	}
 	s0.f1 = 202;
 	for (var j:int = 5; j; j--) {
-		g3 = (s0.f1 as int16) as sint16;
+		g3 = (s0.f1 as int16) as i16;
 	}
-	var w:sint16 = 0;
-	if (((s0.f1 as sint16) & (sa[0].f1 as sint16))) { w = 1; } else { w = 2; }
+	var w:i16 = 0;
+	if (((s0.f1 as i16) & (sa[0].f1 as i16))) { w = 1; } else { w = 2; }
 	printf(sa[0].f0 as int, " ", sa[0].f1 as int, " ", sa[3].f0 as int, " ", sa[3].f1 as int, " ", g3, " ", w, "\n");
 	exit(0);
 }
@@ -698,7 +698,7 @@ var a3:[16]int16;
 function main():void
 {
 	var l3:int = 0;
-	while ((((!((g4 as sint16) + a3[((g4) & 7)])) as sint16)) && l3 < 4) {
+	while ((((!((g4 as i16) + a3[((g4) & 7)])) as i16)) && l3 < 4) {
 		l3++;
 		for (var l4:sint = 0; l4 < 5; l4++) {
 			g3 <<= 3; g3 ^= 66;
@@ -726,10 +726,10 @@ var a0:[16]int;
 var a2:[16]int16;
 function f0():int
 {
-	var l1:sint16 = 5;
+	var l1:i16 = 5;
 	var q0:*int16 = &a2[2];
 	var l5:int = 0;
-	if ((((g1) as int) < (g2 / 2)) || (((l1 || (~((*q0) as sint16))) as int))) {
+	if ((((g1) as int) < (g2 / 2)) || (((l1 || (~((*q0) as i16))) as int))) {
 		while ((((((q0[1] as sint) << 2) && (-l1)) as int16)) && l5 < 5) {
 			l5++;
 			a0[2] = 2;
@@ -755,14 +755,14 @@ function main():void
 // 読んでいた (inline 関数の引数で発覚)
 func TestSplitNarrowWiden(t *testing.T) {
 	t.Parallel()
-	src := `var g0:sint16;
+	src := `var g0:i16;
 var g1:int16;
 var g2:int;
 var a3:[16]int16;
 var la0:[16]sint;
 function f0(p0:*sint):int
 {
-	return ((((-11304) as int) <= ((g2 as sint16) as int)) as int);
+	return ((((-11304) as int) <= ((g2 as i16) as int)) as int);
 }
 function f1(p0:int16):int16 options(inline: true)
 {
@@ -771,7 +771,7 @@ function f1(p0:int16):int16 options(inline: true)
 function main():void
 {
 	g1 = 39181;
-	g0 = (f1(((f0(&la0[((f1((a3[((g2 + 54) & 7)] as int16)) as int) & 7)]) as int16) | g1)) as sint16);
+	g0 = (f1(((f0(&la0[((f1((a3[((g2 + 54) & 7)] as int16)) as int) & 7)]) as int16) | g1)) as i16);
 	printf(g0, "\n");
 	exit(0);
 }
@@ -789,22 +789,22 @@ function main():void
 // (広げた生成器の fuzz、種 3101767。onEdge の backOver が退避の写しも飛び越えていた)。
 func TestResidentExitThroughCopyBlock(t *testing.T) {
 	t.Parallel()
-	src := `function ff0():sint16 options(fastcall: true)
+	src := `function ff0():i16 options(fastcall: true)
 {
-	var l1:sint16 = (-32599);
+	var l1:i16 = (-32599);
 	var la0:[16]int16;
 	var q0:*int16 = &la0[1];
 	var l4:int = 0;
 	la0[1] = 4;
 	la0[6] = 7;
-	l1 = ((*q0) as sint16);
+	l1 = ((*q0) as i16);
 	for (var l2:sint = 0; l2 < 3; l2++) {
 		q0[((l1 as int) & 7)] = max((l1 as int16), 3);
 	}
 	for (var l3:int = 0; l3 < 2; l3++) {
 		while (((((~((*q0) as sint)) || (l1 as int16)) as int) >= ((!l1) as int)) && l4 < 3) {
 			l4++;
-			l1 = (la0[6] as sint16);
+			l1 = (la0[6] as i16);
 		}
 	}
 	return l1;
@@ -828,18 +828,18 @@ function main():void
 func TestPropagateBytesKeepsType(t *testing.T) {
 	t.Parallel()
 	src := `var g0:int16;
-var g1:sint16;
+var g1:i16;
 var g2:int16;
-var g3:sint16;
+var g3:i16;
 const ct0:[16]int = [3, 174, 3, 99, 14, 5, 6, 3, 4, 7, 182, 43, 88, 0, 6, 63];
 const ct1:[16]int = [31, 5, 2, 3, 63, 4, 136, 108, 119, 70, 43, 84, 1, 129, 59, 26];
 var a0:[16]int;
 var a1:[16]sint;
 var a2:[16]int16;
-var a3:[16]sint16;
-function f0(p0:*sint16):int
+var a3:[16]i16;
+function f0(p0:*i16):int
 {
-var la0:[16]sint16;
+var la0:[16]i16;
 var l0:int = 0;
 la0[0] = (-2217);
 la0[1] = 3;
@@ -866,7 +866,7 @@ var l0:sint = 48;
 var l2:int = 0;
 L0: for (var l4:int = 0; l4 < 6; l4++) {
 var l5:int = ct0[3];
-if ((g3 < (ct1[((l5 * ct1[7]) & 7)] as sint16)) || ((ct1[0] as sint))) {
+if ((g3 < (ct1[((l5 * ct1[7]) & 7)] as i16)) || ((ct1[0] as sint))) {
 } elsif ((f0(&a3[((((ct1[(((!(-62)) as int) & 7)] as sint) < (ct1[(f0(&a3[(((!1) as int) & 7)]) & 7)] as sint)) as int) & 7)]) - f0(&a3[0])) > 182) {
 } else {
 l0 = ((!ct1[4]) as sint);
@@ -897,7 +897,7 @@ var g1:int16;
 function main():void
 {
 	var m:int16 = ((300 as int) as int16);
-	var n:sint16 = ((255 as sint8) as sint16);
+	var n:i16 = ((255 as i8) as i16);
 	var k:int16 = 300;
 	var q:int16 = ((k as int) as int16);
 	printf(m, " ", n, " ", q, "\n");
@@ -926,10 +926,10 @@ function main():void
 // のに bpl していた (fuzz で発覚)
 func TestSignExtendCallResult(t *testing.T) {
 	t.Parallel()
-	src := `var g2:sint16;
-struct S { f0:int16; f1:int; f2:sint16; }
+	src := `var g2:i16;
+struct S { f0:int16; f1:int; f2:i16; }
 var s0:S;
-function f0(p0:int16):sint16 options(fastcall: true)
+function f0(p0:int16):i16 options(fastcall: true)
 {
 	return (g2 + 0);
 }
@@ -947,7 +947,7 @@ function main():void
 		switch ((l6 & 7)) {
 		case 0:
 			l1 = 3;
-			s0.f2 = (f2() as sint16);
+			s0.f2 = (f2() as i16);
 		default:
 			l1 = 0;
 		}
@@ -1050,7 +1050,7 @@ function main():void
 	default:
 		l0 = 2;
 	}
-	if (5 > (l0 as sint16)) {
+	if (5 > (l0 as i16)) {
 		g2 = g0;
 	}
 	printf(l0, " ", g2, " ", la0[15], "\n");
@@ -1079,9 +1079,9 @@ function main():void
 {
 	var i:int;
 	for (i = 0; i < 4; i++) {
-		acc += fp0[i](5) as sint16;
+		acc += fp0[i](5) as i16;
 	}
-	acc += fp0[(g & 3)](9) as sint16;
+	acc += fp0[(g & 3)](9) as i16;
 	printf(acc, " ", g, "\n");
 	exit(0);
 }
@@ -1099,14 +1099,14 @@ func TestExpandMulRun(t *testing.T) {
 	src := `var a:int;
 var b:sint;
 var c:int16;
-var d:sint16;
+var d:i16;
 function main():void
 {
 	a = 13; b = (-7); c = 1234; d = (-300);
 	var x:int = a * 10;
 	var y:sint = b * 7;
 	var z:int16 = c * 11;
-	var w:sint16 = d * 3;
+	var w:i16 = d * 3;
 	a *= 3;
 	c *= 100;
 	printf(x, " ", y as int, " ", z, " ", w as int16, " ", a, " ", c, "\n");
@@ -1316,11 +1316,11 @@ func TestNot16(t *testing.T) {
 
 func TestFuzzFound1(t *testing.T) {
 	t.Parallel()
-	src := `var g0:sint16;
+	src := `var g0:i16;
 var g1:int16;
 var g2:sint;
 var g5:int;
-var a0:[8]sint16;
+var a0:[8]i16;
 var a1:[8]int;
 var b0:[8]sint;
 var b:sint;
@@ -1332,7 +1332,7 @@ function f0(p0:sint):int16 options(fastcall: true, inline: true)
 {
 	return (a1[((g1 as int) & 7)] as int16);
 }
-function f2(p0:sint16):int16 options(inline: true)
+function f2(p0:i16):int16 options(inline: true)
 {
 	return (((p0 as int) << 7) as int16);
 }
@@ -1398,7 +1398,7 @@ function main():void
 // TestFuzzFound2: 差分テストで見つかった 2 巡目の 3 件 (2026-09-19)。
 //
 //	part1 (-O 0): `l ^ l` の l を A に置く (allocateA) と 2 つ目の入力がメモリから読めず panic
-//	part2 (-O 0): `cast<sint16>(cast<uint16>(b8))` の 1 バイト目が b8 の隣の番地を読む (codegen の byte)
+//	part2 (-O 0): `cast<i16>(cast<u16>(b8))` の 1 バイト目が b8 の隣の番地を読む (codegen の byte)
 //	part3: 関数全体の常駐 (l1@X) の退避が、内側のループの入口の写し (l0@X の tax) の後に出て l1 が壊れる
 //	part4: cast を挟んだ使用 `~(l1 as int16)` は常駐 (l1@Y) に置き換わらずメモリを読むのに、退避が出ていなかった
 func TestFuzzFound2(t *testing.T) {
@@ -1407,9 +1407,9 @@ func TestFuzzFound2(t *testing.T) {
 var g1:sint;
 var g3:int;
 var g4:int16;
-var a0:[8]sint16;
+var a0:[8]i16;
 var b1:[8]int16;
-var c1:[8]sint16;
+var c1:[8]i16;
 function f1(p0:sint, p1:int16):int options(inline: true)
 {
 	var l0:int = 241;
@@ -1426,10 +1426,10 @@ function part1():int
 	var l7:int = g3;
 	return (l7 & l7) + (l6 - l6);
 }
-function part2():sint16
+function part2():i16
 {
 	c1[5] = 4; // 下位 4 は >> 4 で 0 になり、!0 = 1。壊れると隣の番地 (この 4) が上位バイトに入って 1025 になる
-	a0[2] = (((!((c1[5] as int) >> 4)) as int16) as sint16);
+	a0[2] = (((!((c1[5] as int) >> 4)) as int16) as i16);
 	return a0[2];
 }
 function part3():int16
@@ -1440,7 +1440,7 @@ function part3():int16
 	b1[1] = 1891;
 	for (var l2:sint = 0; l2 < 1; l2++) {
 	}
-	b1[((((b1[1] as int) || l0) as int) & 7)] = (((((a0[0] / (l1 | 1)) > ((b1[(((a0[(f1(0, g0) & 7)] as int) | 3) & 7)] as sint16) as int16)) as sint16) != ((f1(g1, 4) as sint16) ^ 0)) as int16);
+	b1[((((b1[1] as int) || l0) as int) & 7)] = (((((a0[0] / (l1 | 1)) > ((b1[(((a0[(f1(0, g0) & 7)] as int) | 3) & 7)] as i16) as int16)) as i16) != ((f1(g1, 4) as i16) ^ 0)) as int16);
 	l4++;
 	return b1[0] + l4;
 }
@@ -1630,7 +1630,7 @@ function main():void
 func TestShiftByte(t *testing.T) {
 	t.Parallel()
 	out := runEmu(t, `var u:int16;
-var s:sint16;
+var s:i16;
 function main():void
 {
 	u = 0xa5c3;
@@ -1641,7 +1641,7 @@ function main():void
 	var d = u >> 10;
 	var e = u << 9;
 	var f = u >> 16;
-	var g = (s >> 8) as sint8;
+	var g = (s >> 8) as i8;
 	var h = (u >> 8) as int + 1;
 	s = s >> 8;          // その場
 	u = u << 8;
@@ -1706,7 +1706,7 @@ function main():void
 func TestFuseIndexedOperand(t *testing.T) {
 	t.Parallel()
 	out := runEmu(t, `var tab:[8]int;
-var stab:[8]sint8;
+var stab:[8]i8;
 function f(x:int, i:int):int
 {
 	var d = x - tab[i];
@@ -1716,14 +1716,14 @@ function f(x:int, i:int):int
 	var e = x - t + t;   // t は 2 回使う: 融合しない
 	return d + lt * 10 + e;
 }
-function g(x:sint8, i:int):int
+function g(x:i8, i:int):int
 {
 	if (x < stab[i]) { return 1; }   // 符号付き
 	return 0;
 }
 function main():void
 {
-	for (var i = 0; i < 8; i++) { tab[i] = i * 3; stab[i] = (i as sint8) - 4; }
+	for (var i = 0; i < 8; i++) { tab[i] = i * 3; stab[i] = (i as i8) - 4; }
 	printf(f(10, 2), " ", f(5, 3), " ", g(-2, 1), " ", g(-2, 6), " ", g(3, 7), "\n");
 	exit(0);
 }
@@ -1736,15 +1736,15 @@ function main():void
 }
 
 // TestArrayLiteralFitsDeclaredType: 整数の配列リテラルの要素の型は値から推定して統合する (`[11902, -3]` は uint16 と sint8 で
-// uint16) が、宣言の型があればそちらに合わせる (fuzz の const 表 `[16]sint16` で `cannot assign [16]uint16` になっていた)。
+// uint16) が、宣言の型があればそちらに合わせる (fuzz の const 表 `[16]i16` で `cannot assign [16]u16` になっていた)。
 // 収まらない値は今まで通りエラー。
 func TestArrayLiteralFitsDeclaredType(t *testing.T) {
 	t.Parallel()
-	out := runEmu(t, `const ct:[4]sint16 = [11902, 0, (-3), 3];
+	out := runEmu(t, `const ct:[4]i16 = [11902, 0, (-3), 3];
 const cs:[3]sint = [1, (-3), 3];
 function main():void
 {
-	var l:[4]sint16 = [300, (-2), 1, 0];
+	var l:[4]i16 = [300, (-2), 1, 0];
 	printf(ct[2] as int16, " ", cs[1] as sint, " ", l[1] as int16, " ", (ct[0] + ct[2]) as int16, "\n");
 	exit(0);
 }
@@ -1753,7 +1753,7 @@ function main():void
 	if want := "65533 65533 65534 11899\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
 	}
-	if got := compileErr(t, "const bad:[2]sint = [200, 1];\nfunction main():void { exit(0); }\n"); !strings.Contains(got, "cannot assign [2]uint8 to [2]sint8") {
+	if got := compileErr(t, "const bad:[2]sint = [200, 1];\nfunction main():void { exit(0); }\n"); !strings.Contains(got, "cannot assign [2]u8 to [2]i8") {
 		t.Errorf("収まらない値がエラーにならない: %q", got)
 	}
 }
@@ -1937,7 +1937,7 @@ function main():void
 }
 
 // TestResidentIf16: A に常駐する変数 (関数全体の常駐のグローバル) があるとき、2 バイトの一時変数を条件にした if
-// (`while ((g4 as sint16) << 5)`) は `lda lo; ora hi` で A を壊すのに freeA が「コンディションの一時変数」と見ていて、
+// (`while ((g4 as i16) << 5)`) は `lda lo; ora hi` で A を壊すのに freeA が「コンディションの一時変数」と見ていて、
 // 常駐の値が消えていた (fuzz で発覚。-O 2 だけ 32 / 0 になった)。
 func TestResidentIf16(t *testing.T) {
 	t.Parallel()
@@ -1946,7 +1946,7 @@ var g4:int16;
 function t0():void
 {
 	var l3:int = 0;
-	while ((((g4 as sint16) << 5)) && l3 < 5) {
+	while ((((g4 as i16) << 5)) && l3 < 5) {
 		l3++;
 		for (var l4:int = 0; l4 < 6; l4++) {
 			g1 <<= 0; g1 ^= 131;
@@ -1980,11 +1980,11 @@ func TestResidentExitEdgeOrder(t *testing.T) {
 	src := `var g1:int;
 var g2:int;
 var g3:int;
-var a3:[16]sint16;
+var a3:[16]i16;
 const ct0:[8]int = [3, 1, 4, 1, 5, 9, 2, 6];
 function f2(p0:*int):int
 {
-	var q0:*sint16 = &a3[1];
+	var q0:*i16 = &a3[1];
 	return (ct0[((((*q0) as int) * 2) & 7)] as int);
 }
 function main():void
@@ -2021,7 +2021,7 @@ function main():void
 	}
 }
 
-// TestIfCallResultFlags: 呼び出しの 1 バイトの戻り値 (A) を cast を挟んだ if (`if ((f(x)) as sint16)`) で見るとき、
+// TestIfCallResultFlags: 呼び出しの 1 バイトの戻り値 (A) を cast を挟んだ if (`if ((f(x)) as i16)`) で見るとき、
 // call の後に出る常駐レジスタの復帰 (`ldy home`) が N / Z を壊していて、値でなく Y のフラグで飛んでいた
 // (fuzz で発覚。A にある値の検査は `cmp #0` を出し、直前が A を書く命令ならピープホールが消す)。
 func TestIfCallResultFlags(t *testing.T) {
@@ -2030,14 +2030,14 @@ func TestIfCallResultFlags(t *testing.T) {
 {
 	return (-((!(p0 as sint)) as int));
 }
-function ff1(p0:int16, p1:sint16):int
+function ff1(p0:int16, p1:i16):int
 {
 	var l0:int16 = 29033;
-	if ((p0 < p0) || ((ff0((p0 + p0)) as sint16))) {
+	if ((p0 < p0) || ((ff0((p0 + p0)) as i16))) {
 		for (var l1:int = 4; l1; l1--) {
 			l0 <<= 1; l0 ^= 18036;
 		}
-	} elsif ((l0 != 61514) && ((7 ^ ((!(l0 as sint16)) as int16)))) {
+	} elsif ((l0 != 61514) && ((7 ^ ((!(l0 as i16)) as int16)))) {
 	} else {
 	}
 	return (l0 as int);
@@ -2062,14 +2062,14 @@ func TestPeepholeAddressSpelling(t *testing.T) {
 	t.Parallel()
 	src := `function ff0():int
 {
-	var l0:sint16 = 15109;
-	var l1:sint16 = 3;
+	var l0:i16 = 15109;
+	var l1:i16 = 3;
 	for (var l2:int = 0; l2 < 9; l2++) {
 		l1 = l0;
 		if (((l1 as int16) ^ (~(l2 as int16))) <= ((!(51717 << 4)) as int16)) {
 			l0 |= l0;
 		} else {
-			l0 = (((l0 + (l2 as sint16)) >> 2) / 1);
+			l0 = (((l0 + (l2 as i16)) >> 2) / 1);
 		}
 	}
 	return (l1 as int);
@@ -2094,21 +2094,21 @@ function main():void
 func TestResidentEntryAfterRestore(t *testing.T) {
 	t.Parallel()
 	src := `var g0:int;
-var g1:sint16;
-var g2:sint16;
-var g3:sint16;
+var g1:i16;
+var g2:i16;
+var g3:i16;
 const ct0:[16]int = [98, 4, 156, 5, 3, 1, 3, 246, 157, 0, 81, 4, 160, 4, 1, 129];
 var a0:[16]int;
 var a1:[16]sint;
 var a2:[16]int16;
-var a3:[16]sint16;
+var a3:[16]i16;
 struct S {
 	f0:int16;
 	f1:sint;
 }
 var s0:S;
 var sa:[4]S;
-function f0(p0:sint, p1:sint):sint16 options(fastcall: true)
+function f0(p0:sint, p1:sint):i16 options(fastcall: true)
 {
 var l0:int = 0;
 var q0:*int = &a0[6];
@@ -2118,10 +2118,10 @@ var l3:int = 0;
 for (var l1:int = 0; l1 < 4; l1++) {
 while ((((!(((*q0) as sint) / 5)) as int)) && l2 < 3) {
 l2++;
-g2 = ((g1 & g1) | (q0[(g0 & 7)] as sint16));
+g2 = ((g1 & g1) | (q0[(g0 & 7)] as i16));
 }
 (*q0) = a0[((sa[(l0 & 3)].f1 as int) & 7)];
-a3[1] = (ct0[(l1 & 7)] as sint16);
+a3[1] = (ct0[(l1 & 7)] as i16);
 }
 while ((q0[2]) && l3 < 1) {
 l3++;
@@ -2133,7 +2133,7 @@ for (var l4:int = 8; l4; l4--) {
 q0[(ct0[(((p1 || l0) as int) & 7)] & 7)] = 149;
 }
 }
-return (((q0[7] as sint16) << 0) ^ (a1[(ct0[2] & 7)] as sint16));
+return (((q0[7] as i16) << 0) ^ (a1[(ct0[2] & 7)] as i16));
 }
 function f1():int16
 {
@@ -2184,16 +2184,16 @@ func TestIfAfterIncResident(t *testing.T) {
 	t.Parallel()
 	src := `var g0:sint;
 var g1:int;
-var g2:sint16;
-var g3:sint16;
-var g4:sint16;
+var g2:i16;
+var g3:i16;
+var g4:i16;
 var a0:[16]int;
 var a1:[16]sint;
 var a2:[16]int16;
-var a3:[16]sint16;
+var a3:[16]i16;
 function f0():sint options(fastcall: true)
 {
-var la0:[16]sint16;
+var la0:[16]i16;
 la0[0] = 2;
 la0[1] = (-30304);
 la0[2] = 4;
@@ -2220,23 +2220,23 @@ return p0;
 }
 function f2(p0:int, p1:sint):sint options(fastcall: true)
 {
-var q0:*sint16 = &a3[6];
-var q1:*sint16 = &a3[4];
+var q0:*i16 = &a3[6];
+var q1:*i16 = &a3[4];
 return (((!((*q1) as sint)) as sint) & ((*q1) as sint));
 }
-function t0():sint16
+function t0():i16
 {
 var l0:int = 1;
 return 3;
 }
-function t1():sint16
+function t1():i16
 {
 var l0:sint = 4;
-var q0:*sint16 = &a3[5];
+var q0:*i16 = &a3[5];
 var l5:int = 0;
 return (-13171);
 }
-const fp0:[2]fn():sint16 = [t0, t1];
+const fp0:[2]fn():i16 = [t0, t1];
 function main():void
 {
 var la0:[16]sint;
@@ -2294,7 +2294,7 @@ function main():void
 	var ps:*S = &sa[2];
 	var l1:int = 0;
 	g1 = 147;
-	while ((((!(2 % 70)) as sint) > ((((a2[(g3 & 7)] as sint16) && ps.f0) as sint) / 47)) && l1 < 5) {
+	while ((((!(2 % 70)) as sint) > ((((a2[(g3 & 7)] as i16) && ps.f0) as sint) / 47)) && l1 < 5) {
 		l1++;
 		for (var l3:int = 6; l3; l3--) {
 			g1++;
@@ -2316,13 +2316,13 @@ function main():void
 // (fuzz の種 576349)。2 バイトの inc は inc lo; bne; inc hi で壊さない。
 func TestResidentDec16(t *testing.T) {
 	t.Parallel()
-	src := `var g0:sint16;
+	src := `var g0:i16;
 var g1:int;
 var a0:[16]int;
 var a2:[16]int16;
 function t0(p0:sint, p1:int16):int options(noinline: true)
 {
-	var l1:sint16 = 1;
+	var l1:i16 = 1;
 	var q1:*int16 = &a2[7];
 	for (var l2:sint = 0; l2 < 3; l2++) {
 		q1 = &a2[1];
@@ -2354,18 +2354,18 @@ function main():void
 // t1 が p0 = 0 で呼ばれて a3[1] の積が狂う)。push_result から call まで X の常駐はメモリ側 (holdX)。
 func TestStackCallHoldsX(t *testing.T) {
 	t.Parallel()
-	src := `function ff0(p0:sint16, p1:sint16):int16 options(noinline: true) { var l0:sint = 6; return (l0 as int16); }
-var g0:sint16;
+	src := `function ff0(p0:i16, p1:i16):int16 options(noinline: true) { var l0:sint = 6; return (l0 as int16); }
+var g0:i16;
 var g1:sint;
-var g2:sint16;
+var g2:i16;
 var a0:[16]int;
 var a1:[16]sint;
 var a2:[16]int16;
-var a3:[16]sint16;
+var a3:[16]i16;
 struct S {
 	f0:sint;
-	f1:sint16;
-	f2:sint16;
+	f1:i16;
+	f2:i16;
 }
 var s0:S;
 var sa:[4]S;
@@ -2378,8 +2378,8 @@ function t0(p0:int16):sint
 {
 var l0:sint = 66;
 var l1:int = 103;
-var q0:*sint16 = &a3[4];
-var q1:*sint16 = &a3[7];
+var q0:*i16 = &a3[4];
+var q1:*i16 = &a3[7];
 return l0;
 }
 function t1(p0:int16):sint
@@ -2391,7 +2391,7 @@ case 7:
 case 0:
 case 5:
 case 1, 6:
-a3[1] *= (((*q0) as sint16) - ((!p0) as sint16));
+a3[1] *= (((*q0) as i16) - ((!p0) as i16));
 default:
 }
 }
@@ -2400,7 +2400,7 @@ return ((((*q0) as sint) << 1) - (sa[((ff0(g2, g2) as int) & 3)].f2 as sint));
 const fp0:[2]fn(int16):sint = [t0, t1];
 function main():void
 {
-var l0:sint16 = 1;
+var l0:i16 = 1;
 var q0:*int16 = &a2[2];
 g1 = 3;
 a2[1] = 3;
@@ -2408,9 +2408,9 @@ a2[2] = 7;
 a2[6] = 12861;
 a3[1] = (-29164);
 for (var l1:int = 0; l1 < 3; l1++) {
-if ((q0[((-(a2[((-l1) & 7)] as int)) & 7)] as sint16) == ((!fp0[((q0[(60 & 7)] as int) & 1)]((*q0))) as sint16)) { continue; }
+if ((q0[((-(a2[((-l1) & 7)] as int)) & 7)] as i16) == ((!fp0[((q0[(60 & 7)] as int) & 1)]((*q0))) as i16)) { continue; }
 for (var l2:int = 0; l2 < 7; l2++) {
-var l3:sint16 = (((f0() as int16) == ((l2 && (q0[((a1[(((1 != g0) as int) & 7)] as int) & 7)] as sint16)) as int16)) as sint16);
+var l3:i16 = (((f0() as int16) == ((l2 && (q0[((a1[(((1 != g0) as int) & 7)] as int) & 7)] as i16)) as int16)) as i16);
 }
 }
 printf(a3[1] as int16, "
@@ -2430,7 +2430,7 @@ exit(0);
 // 2 回目のシフトで 5 になるはずが 0x55 = 85 が返った)。
 func TestSSACastTruncateReload(t *testing.T) {
 	t.Parallel()
-	src := `function ff0(p0:sint16):int options(noinline: true)
+	src := `function ff0(p0:i16):int options(noinline: true)
 {
 	var l1:int16 = 21826;
 	for (var l3:sint = 0; l3 < 2; l3++) {

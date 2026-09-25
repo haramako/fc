@@ -6,7 +6,7 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// 入れ子の cast は 1 段に畳まれ、内側の切り詰めは Width に残る (`((x as uint8) as int16)` の上位は 0)。
+// 入れ子の cast は 1 段に畳まれ、内側の切り詰めは Width に残る (`((x as u8) as int16)` の上位は 0)。
 func TestCastedValueCanonical(t *testing.T) {
 	u := types.NewUniverse()
 	u8, u16, u32 := u.IntType(1, false), u.IntType(2, false), u.IntType(4, false)

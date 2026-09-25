@@ -9,8 +9,11 @@ import (
 )
 
 type Scope struct {
-	Parent   *Scope
-	Owner    string // モジュールスコープならモジュール id (ローカル/グローバルは "")
+	Parent *Scope
+	Owner  string // モジュールスコープならモジュール id (ローカル/グローバルは "")
+	// Reserved は宣言できない名前 → 理由 (fc 3 のモジュールの型名 u8 など。型名は型の位置でスコープより先に引くので、
+	// 同名の宣言は黙って隠れてしまう)。子のスコープに引き継ぐ
+	Reserved map[string]string
 	trace    func(TraceEvent)
 	declares map[string]*Value
 	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
@@ -37,7 +40,18 @@ type scopeUse struct {
 }
 
 func NewScope(parent *Scope) *Scope {
-	return &Scope{Parent: parent, declares: map[string]*Value{}}
+	s := &Scope{Parent: parent, declares: map[string]*Value{}}
+	if parent != nil {
+		s.Reserved = parent.Reserved
+	}
+	return s
+}
+
+// checkReserved は name が宣言できない名前ならエラー。
+func (s *Scope) checkReserved(name string) {
+	if why, ok := s.Reserved[name]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s cannot be declared (%s)", name, why)})
+	}
 }
 
 // TraceEvent は名前解決の観測 (fcc migrate の参照解析用。通常のコンパイルでは発生しない)。
@@ -197,6 +211,7 @@ func (s *Scope) DeclaredHere(id string) bool {
 
 // Declare は値を宣言する。同名が既にあれば CompileError (選択的インポートとの衝突も含む: 規則 S2)。
 func (s *Scope) Declare(val *Value) {
+	s.checkReserved(val.Name)
 	if _, ok := s.declares[val.Name]; ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", val.Name)})
 	}
@@ -212,6 +227,7 @@ func (s *Scope) Declare(val *Value) {
 // Alias は他モジュールの宣言 val を name でこのスコープに束縛する (`use a, b from mod;`)。
 // 自宣言・既存の束縛と同名なら CompileError (規則 S2)。
 func (s *Scope) Alias(name string, val *Value, reexport bool) {
+	s.checkReserved(name)
 	if _, ok := s.declares[name]; ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", name)})
 	}

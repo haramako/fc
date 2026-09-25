@@ -109,6 +109,9 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	}
 	mod = ir.NewModule(id, file.Filename, p.global)
 	mod.Version = file.Version
+	if file.Version >= syntax.Version3 {
+		mod.Scope.Reserved = v3Reserved
+	}
 	p.Modules.Add(mod)
 
 	// use で別モジュールの相 1 にネストして入るので、参照元モジュールを保存・復帰する
@@ -311,6 +314,15 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 	}
 	return l.prog.CompileModule(file, l)
 }
+
+// v3Reserved は fc 3 のモジュールで宣言できない名前 (doc/v3_plan.md §7)。
+var v3Reserved = func() map[string]string {
+	m := map[string]string{}
+	for n := range types.IntTypeNames {
+		m[n] = "it is a type name in fc 3"
+	}
+	return m
+}()
 
 // Compile は libPath 上の mainFile から始めてプログラム全体を解析する (相 1 → 相 2)。
 // baseDir は libPath の相対エントリの基準 ("" なら作業ディレクトリ)。

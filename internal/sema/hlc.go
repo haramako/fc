@@ -1436,12 +1436,23 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	panic(fmt.Sprintf("typeOf: unknown type expression %T", t))
 }
 
+// version はコンパイル中のモジュールの文法バージョン (モジュールの外 (組み込みの登録など) では fc 2)。
+func (h *Hlc) version() int {
+	if h.module == nil || h.module.Version == 0 {
+		return syntax.Version2
+	}
+	return h.module.Version
+}
+
 // namedType は型名 (基本型、または struct / soa 宣言の名前。`mod.Name` は他モジュールの公開型) を型にする。
 func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 	name := t.Name.Name
 	if t.Module == nil {
-		if ty, ok := h.prog.Types.Named(name); ok {
+		if ty, ok := h.prog.Types.NamedIn(name, h.version()); ok {
 			return ty
+		}
+		if n, old := types.V2IntTypeNames[name]; old && h.version() >= syntax.Version3 {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s is not a type in fc 3 (write %s; `fcc migrate` rewrites fc 2 sources)", name, n)})
 		}
 		if v := h.scope.Find(name, true); v != nil {
 			if v.TypeRef != nil {

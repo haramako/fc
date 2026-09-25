@@ -62,7 +62,7 @@ func TestBoolNullVoidPtrErrors(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ src, want string }{
 		{"function main():void { var p = null; }\n", "null needs a context"},
-		{"function main():void { var n:int = null; }\n", "null cannot be used as uint8"},
+		{"function main():void { var n:int = null; }\n", "null cannot be used as u8"},
 		{"struct P { x:int; }\nsoa Ps:[4]P;\nfunction main():void { var p:*Ps = null; }\n", "has no null"},
 		{"function main():void { var p:*void; var q = *p; }\n", "cannot dereference *void"},
 		{"function main():void { var p:*void; p[1] = 0; }\n", "cannot index *void"},

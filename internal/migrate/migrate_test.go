@@ -11,9 +11,9 @@ import (
 // コメントと書式は残る。
 func TestMigratePragma(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"#fc 2\n// c\nvar a:int;  // x\n", "#fc 3\n// c\nvar a:int;  // x\n"},
-		{"var a:int;\n", "#fc 3\nvar a:int;\n"},
-		{"#fc 3\nvar a:int;\n", "#fc 3\nvar a:int;\n"},
+		{"#fc 2\n// c\nvar a:bool;  // x\n", "#fc 3\n// c\nvar a:bool;  // x\n"},
+		{"var a:bool;\n", "#fc 3\nvar a:bool;\n"},
+		{"#fc 3\nvar a:u8;\n", "#fc 3\nvar a:u8;\n"},
 		{"", "#fc 3\n"},
 	}
 	for _, c := range cases {
@@ -42,12 +42,43 @@ func TestMigrateRule(t *testing.T) {
 			}
 		}
 	}}}
-	got, err := Migrate([]byte("var a:int;\nfunction f():void { a = 1; }\n"), "t.fc")
-	if err != nil || string(got) != "#fc 3\nvar b:int;\nfunction f():void { b = 1; }\n" {
+	got, err := Migrate([]byte("var a:bool;\nfunction f():void { a = true; }\n"), "t.fc")
+	if err != nil || string(got) != "#fc 3\nvar b:bool;\nfunction f():void { b = true; }\n" {
 		t.Errorf("got %q, %v", got, err)
 	}
 	Rules = append(Rules, Rule{Name: "overlap", Apply: func(c *Ctx) { c.Replace(4, 6, "x") }})
-	if _, err := Migrate([]byte("var a:int;\n"), "t.fc"); err == nil || !strings.Contains(err.Error(), "overlapping") {
+	if _, err := Migrate([]byte("var a:bool;\n"), "t.fc"); err == nil || !strings.Contains(err.Error(), "overlapping") {
 		t.Errorf("重なる Edit: %v", err)
+	}
+}
+
+// TestMigrateIntTypes: 型の位置の整数型名だけを書き換える (変数名・コメント・文字列・モジュール名つきの型はそのまま)。
+func TestMigrateIntTypes(t *testing.T) {
+	in := `#fc 2
+// int のコメント
+var a:int;
+var b:[4]sint16 = [1, 2, 3, 4];
+struct P { x:uint8; y:int16; }
+function f(p:*sint, q:fn(int8):uint):int16 { var s = "int"; return (p[0] as int16) + (p[1] as uint16); }
+const N = sizeof(sint8) + sizeof(P);
+var c = bitcast<*int>(0x2000);
+var d:mod.int;
+`
+	want := `#fc 3
+// int のコメント
+var a:u8;
+var b:[4]i16 = [1, 2, 3, 4];
+struct P { x:u8; y:u16; }
+function f(p:*i8, q:fn(u8):u8):u16 { var s = "int"; return (p[0] as u16) + (p[1] as u16); }
+const N = sizeof(i8) + sizeof(P);
+var c = bitcast<*u8>(0x2000);
+var d:mod.int;
+`
+	got, err := Migrate([]byte(in), "t.fc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }

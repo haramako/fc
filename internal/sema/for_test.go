@@ -39,7 +39,7 @@ func TestForV2(t *testing.T) {
 		}
 	})
 	t.Run("var in init is scoped to the for", func(t *testing.T) {
-		if err := compileFiles(t, v2("for (var i:uint8 = 0; i < 3; i++) { y = i; }\nfor (var i = 5; i > 0; i--) { y = i; }"), "t.fc"); err != nil {
+		if err := compileFiles(t, v2("for (var i:u8 = 0; i < 3; i++) { y = i; }\nfor (var i = 5; i > 0; i--) { y = i; }"), "t.fc"); err != nil {
 			t.Fatal(err)
 		}
 		err := compileFiles(t, v2("for (var i = 0; i < 3; i++) { }\ny = i;"), "t.fc")

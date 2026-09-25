@@ -29,7 +29,7 @@ function later():void { earlier(); }
 function earlier():void {}
 function accept(p:*[COUNT]Item):void {}
 struct Item { value:Word; }
-struct Word { lo:uint8; hi:uint8; }
+struct Word { lo:u8; hi:u8; }
 const EXTRA=3, COUNT=BASE+1, ROWS=2, BASE=3;
 `})
 	if err != nil {
@@ -59,7 +59,7 @@ func TestDeclarationOrderRecursiveTypes(t *testing.T) {
 	p, err := compileModules(t, map[string]string{"t.fc": `
 var a:A;
 struct A { next:*B; }
-struct B { owner:A; count:uint8; }
+struct B { owner:A; count:u8; }
 const SIZE=sizeof(B);
 function main():void {}
 `})
@@ -109,7 +109,7 @@ func TestDeclarationOrderImports(t *testing.T) {
 func TestDeclarationOrderCrossModuleTypes(t *testing.T) {
 	p, err := compileModules(t, map[string]string{
 		"t.fc":   `public struct A { b:*dep.B; } var a:A; use dep; const SIZE=sizeof(dep.B); function main():void {}`,
-		"dep.fc": `public struct B { a:t.A; n:uint8; } use t;`,
+		"dep.fc": `public struct B { a:t.A; n:u8; } use t;`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func TestDeclarationOrderPlacement(t *testing.T) {
 const SIZE=sizeof(items);
 block { var items:[COUNT]Item; soa Points:[COUNT]Item; } options(bss:"GROUP");
 var handle:*Points;
-struct Item { x:uint8; }
+struct Item { x:u8; }
 const COUNT=4;
 options(bss:"DEFAULT");
 function main():void { handle=&Points[0]; handle.x=1; }
@@ -148,12 +148,12 @@ function main():void { handle=&Points[0]; handle.x=1; }
 func TestDeclarationOrderErrors(t *testing.T) {
 	for _, tc := range []struct{ src, want string }{
 		{`const A=B+1; const B=A+1;`, "cyclic declaration dependency: t.A -> t.B -> t.A"},
-		{`const N=sizeof(Item); struct Item { data:[N]uint8; }`, "cyclic declaration dependency"},
+		{`const N=sizeof(Item); struct Item { data:[N]u8; }`, "cyclic declaration dependency"},
 		{`struct A { b:B; } struct B { a:A; }`, "cyclic declaration dependency"},
 		{`const A=1; const A=2;`, "A already defined"},
-		{`struct A {} struct A {x:uint8;}`, "A already defined"},
+		{`struct A {} struct A {x:u8;}`, "A already defined"},
 		{`const N=missing+1;`, "missing not found"},
-		{`function main():void { x=1; var x:uint8; }`, "x not found"},
+		{`function main():void { x=1; var x:u8; }`, "x not found"},
 	} {
 		t.Run(tc.src, func(t *testing.T) {
 			_, err := compileSrc(t, tc.src)
@@ -173,9 +173,9 @@ func TestDeclarationOrderErrors(t *testing.T) {
 
 func TestDeclarationOrderRecursiveArraysAndSoa(t *testing.T) {
 	for _, src := range []string{
-		`struct Node { next:*[2]Node; n:uint8; } const SIZE=sizeof([2]Node);`,
-		`const SIZE=sizeof([2]Node); struct Node { next:*[2]Node; n:uint8; }`,
-		`struct Node { callback:fn([2]Node):void; n:uint8; } const SIZE=sizeof([2]Node);`,
+		`struct Node { next:*[2]Node; n:u8; } const SIZE=sizeof([2]Node);`,
+		`const SIZE=sizeof([2]Node); struct Node { next:*[2]Node; n:u8; }`,
+		`struct Node { callback:fn([2]Node):void; n:u8; } const SIZE=sizeof([2]Node);`,
 	} {
 		p, err := compileModules(t, map[string]string{"t.fc": src})
 		if err != nil {
@@ -187,8 +187,8 @@ func TestDeclarationOrderRecursiveArraysAndSoa(t *testing.T) {
 		}
 	}
 	for _, src := range []string{
-		`struct Node {next:*Nodes; n:uint8;} soa Nodes:[COUNT]Node; const COUNT=4;`,
-		`soa Nodes:[COUNT]Node; struct Node {next:*Nodes; n:uint8;} const COUNT=4;`,
+		`struct Node {next:*Nodes; n:u8;} soa Nodes:[COUNT]Node; const COUNT=4;`,
+		`soa Nodes:[COUNT]Node; struct Node {next:*Nodes; n:u8;} const COUNT=4;`,
 	} {
 		p, err := compileModules(t, map[string]string{"t.fc": src + ` const SIZE=sizeof(Node); function main():void { var n:*Nodes=&Nodes[0]; n.next=&Nodes[1]; n.next.n=7; }`})
 		if err != nil {
@@ -205,7 +205,7 @@ func TestDeclarationOrderKeepsEnumerationOrder(t *testing.T) {
 	p, err := compileModules(t, map[string]string{"t.fc": `
 public const TABLE=[last,first];
 public function first():void {}
-public struct Item {x:uint8;}
+public struct Item {x:u8;}
 public function last():void {}
 `})
 	if err != nil {
@@ -217,7 +217,7 @@ public function last():void {}
 	}
 }
 func TestDeclarationOrderInvalidSoaDoesNotPanic(t *testing.T) {
-	_, err := compileSrc(t, `soa Nodes:[0]Node; struct Node {next:*Nodes; n:uint8;} function main():void {var n:*Nodes=&Nodes[0]; n.next.n=7;}`)
+	_, err := compileSrc(t, `soa Nodes:[0]Node; struct Node {next:*Nodes; n:u8;} function main():void {var n:*Nodes=&Nodes[0]; n.next.n=7;}`)
 	if err == nil || !strings.Contains(err.Error(), "length must be 1..256") {
 		t.Fatalf("error: %v", err)
 	}

@@ -55,7 +55,7 @@ function hoge():void {
 	var a = 1 +
 } //! col=1
 
-//@cannot dereference `a` \(type uint8 is not a pointer\)
+//@cannot dereference `a` \(type u8 is not a pointer\)
 function hoge():void {
 	var a:int;
 	*a = 1; //! col=2

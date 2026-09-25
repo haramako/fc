@@ -624,7 +624,9 @@ V3 で省略形を true として正規化する際、false の意味・可否�
 
 ## 7. `int` の廃止と整数型名の整理
 
-**2026-09-25 決定（未実装）**:
+**2026-09-25 決定・実装済み（feature/v3）**: `types.IntTypeNames` / `V2IntTypeNames`、`Universe.NamedIn`（fc 3 は短い名前だけ）、
+`ir.Scope.Reserved`（fc 3 のモジュールで u8 などの宣言を禁止）、migrate の規則 `int-types`、`TestV3IntTypes`。fc 2 でも短い
+名前を使える（fc 2 のソースに同名の識別子は無かった）。
 
 - 正式名は短い `u8` / `i8` / `u16` / `i16`。エラーメッセージや IR のダンプの表示もこれにそろえる
 - FC3 では古い名前（`int` / `uint` / `sint` / `int8` / `int16` / `uint8` / `sint8` / `uint16` / `sint16`）を全て受け付けず、
