@@ -42,6 +42,20 @@ func isCond(op *ir.Op) bool {
 	return false
 }
 
+// takeOnTaken は op の注釈のうち分岐が成立したときの分を外して返す (分岐の向きを変えるとき)。
+func takeOnTaken(op *ir.Op) []*ir.LogPoint {
+	var taken, rest []*ir.LogPoint
+	for _, p := range op.Logs {
+		if p.OnTaken {
+			taken = append(taken, p)
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	op.Logs = rest
+	return taken
+}
+
 // invertCond は条件分岐の向きを反転する。
 func invertCond(op *ir.Op) {
 	switch op.Code {
@@ -61,15 +75,34 @@ func threadJumps(lmd *ir.Lambda) bool {
 	cfg := ir.BuildCFG(lmd)
 	ops := lmd.Ops
 	changed := false
-	// ブロックの「実質の飛び先」: ラベルだけなら次のブロック、ラベル + jump ならその先
-	resolve := func(label string) string {
+	// ブロックの「実質の飛び先」: ラベルだけなら次のブロック、ラベル + jump ならその先。logs は素通りしたブロックの
+	// @log の注釈 (飛び先を付け替えた分岐が引き取る。ir/log.go)。ラベルへ飛んで入ったブロックでは、そのラベルとその前の
+	// ラベルの注釈は通らない (ラベルの注釈はラベルの前の地点。上から落ちてきたときだけ出る)。空のループを回っても
+	// 同じ注釈を 2 度拾わない
+	resolve := func(label string) (string, []*ir.LogPoint) {
+		var logs []*ir.LogPoint
+		seen := map[*ir.LogPoint]bool{}
+		jumped := true // label へ飛んで入った (false: 前のブロックから落ちてきた)
 		for n := 0; n < 20; n++ {
 			b := cfg.BlockOf(label)
 			if b == nil {
-				return label
+				return label, logs
 			}
 			var body []*ir.Op
+			var blogs []*ir.LogPoint
+			skip := jumped
 			for _, i := range cfg.Ops(b) {
+				if !skip {
+					for _, p := range ops[i].Logs {
+						if !seen[p] {
+							seen[p] = true
+							blogs = append(blogs, p)
+						}
+					}
+				}
+				if ops[i].Code == ir.OpLabel && ops[i].Label == label {
+					skip = false
+				}
 				if ops[i].Code != ir.OpLabel {
 					body = append(body, ops[i])
 				}
@@ -77,20 +110,44 @@ func threadJumps(lmd *ir.Lambda) bool {
 			switch {
 			case len(body) == 0 && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label != "":
 				label = cfg.Blocks[b.Index+1].Label
+				jumped = false
 			case len(body) == 1 && body[0].Code == ir.OpJump && body[0].Label != label:
 				label = body[0].Label
+				jumped = true
 			default:
-				return label
+				return label, logs
 			}
+			logs = append(logs, blogs...)
 		}
-		return label
+		return label, logs
+	}
+	// passLogs は分岐 op が素通りするようになったブロックの注釈を引き継ぐ: 無条件のジャンプならその命令 (素通りした
+	// ブロックは何もしないので、ジャンプの直前と同じ)、条件分岐なら成立したときだけの注釈 (LogPoint.OnTaken)
+	passLogs := func(op *ir.Op, target string, logs []*ir.LogPoint) {
+		if len(logs) == 0 {
+			return
+		}
+		logs = ir.CloneLogs(logs, nil)
+		if op.Code == ir.OpJump {
+			ir.AppendLogs(op, logs)
+			return
+		}
+		if op.Code == ir.OpSwitch {
+			return // ジャンプ表の辺は表せない
+		}
+		// 条件分岐: 成立したときだけの地点 (codegen が飛び先に置き、直前がこの分岐のときだけ出す)
+		for _, p := range logs {
+			p.OnTaken = true
+		}
+		ir.AppendLogs(op, logs)
 	}
 	for _, b := range cfg.Blocks {
 		for _, i := range cfg.Ops(b) {
 			op := ops[i]
 			if op != nil && op.Code == ir.OpSwitch {
 				for k, l := range op.Labels {
-					if nl := resolve(l); nl != l {
+					if nl, logs := resolve(l); nl != l {
+						passLogs(op, nl, logs)
 						op.Labels[k] = nl
 						changed = true
 					}
@@ -100,14 +157,18 @@ func threadJumps(lmd *ir.Lambda) bool {
 			if !isBranch(op) {
 				continue
 			}
-			if l := resolve(op.Label); l != op.Label {
+			if l, logs := resolve(op.Label); l != op.Label {
+				passLogs(op, l, logs)
 				op.Label = l
 				changed = true
 			}
 			// 直後のブロックへの jump / 条件分岐は不要 (`||` の片側が定数に畳まれると `if_true c goto next` が残る。
 			// 残すと飛ぶ辺と落ちる辺が同じブロックに入り、常駐の入口の写しが片方の辺にしか付かなかった。fuzz で発覚)
 			if (op.Code == ir.OpJump || isCond(op)) && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label == op.Label {
-				ops[i] = nil
+				for _, p := range op.Logs {
+					p.OnTaken = false // 成立しても落ちても次のブロック
+				}
+				ir.DropOp(ops, i)
 				changed = true
 			}
 		}
@@ -125,7 +186,7 @@ func removeUnreachable(lmd *ir.Lambda) bool {
 	for _, b := range cfg.Blocks {
 		if !reach[b] {
 			for _, i := range cfg.Ops(b) {
-				ops[i] = nil
+				ir.DiscardOp(ops, i) // 到達しないコードの @log は出さない
 				changed = true
 			}
 			continue
@@ -142,7 +203,7 @@ func removeUnreachable(lmd *ir.Lambda) bool {
 	}
 	for i, op := range ops {
 		if op != nil && op.Code == ir.OpLabel && refs[op.Label] == 0 && !usedByAsm(lmd, op.Label) {
-			ops[i] = nil
+			ir.DropOp(ops, i)
 			changed = true
 		}
 	}
@@ -183,9 +244,26 @@ func invertBranches(lmd *ir.Lambda) bool {
 		if len(jops) != 1 || ops[jops[0]].Code != ir.OpJump || jb.Label != "" || lb.Label != last.Label {
 			continue
 		}
+		// @log の注釈: 分岐が成立したとき (L1 へ) の注釈は、反転の後は落ちる辺なので L1 の先頭へ。消す jump の注釈は
+		// 反転の後は成立したとき (L2 へ) の注釈
+		taken := takeOnTaken(last)
+		for _, p := range taken {
+			p.OnTaken = false
+		}
+		if lops := cfg.Ops(lb); len(taken) > 0 && len(lops) > 0 {
+			ir.PrependLogs(ops[lops[0]], taken)
+		}
+		if j := ops[jops[0]]; len(j.Logs) > 0 {
+			moved := ir.CloneLogs(j.Logs, nil)
+			for _, p := range moved {
+				p.OnTaken = true
+			}
+			ir.AppendLogs(last, moved)
+			j.Logs = nil
+		}
 		invertCond(last)
 		last.Label = ops[jops[0]].Label
-		ops[jops[0]] = nil
+		ir.DropOp(ops, jops[0])
 		changed = true
 	}
 	return changed
@@ -263,11 +341,23 @@ func rotateLoops(lmd *ir.Lambda) bool {
 				}
 			}
 			last := dup[len(dup)-1]
+			takeOnTaken(last) // 向きが変わるので、成立したときの @log の注釈は落とす (稀な形)
 			invertCond(last)
 			last.Label = bodyLabel
 			out = append(out, dup...)
 		} else {
-			out = append(out, &ir.Op{Code: ir.OpJump, Label: b0.Label, Pos: cond.Pos})
+			// 先頭のラベルの @log の注釈 (ループに入る前の地点) は入口の jump へ (ラベルは末尾に移って毎周通るので)
+			var entryLogs []*ir.LogPoint
+			for i := b0.Start; i < b0.End; i++ {
+				if ops[i] != nil && ops[i].Code == ir.OpLabel {
+					entryLogs = append(entryLogs, ops[i].Logs...)
+					ops[i].Logs = nil
+				}
+			}
+			for _, p := range entryLogs {
+				p.Moved = true
+			}
+			out = append(out, &ir.Op{Code: ir.OpJump, Label: b0.Label, Pos: cond.Pos, Logs: entryLogs})
 			out = append(out, &ir.Op{Code: ir.OpLabel, Label: bodyLabel, Pos: cond.Pos})
 			for i := b0.End; i < back.End; i++ {
 				if ops[i] != bj {
@@ -275,6 +365,7 @@ func rotateLoops(lmd *ir.Lambda) bool {
 				}
 			}
 			out = append(out, ops[b0.Start:b0.End]...)
+			takeOnTaken(cond)
 			invertCond(cond)
 			cond.Label = bodyLabel
 		}
@@ -328,6 +419,7 @@ func cloneCond(lmd *ir.Lambda, cfg *ir.CFG, b0 *ir.Block) []*ir.Op {
 	var out []*ir.Op
 	for _, op := range body {
 		no := *op
+		no.Logs = ir.CloneLogs(op.Logs, nil) // 写しごとに別の注釈 (SSA が地点ごとに引数を書き換える)
 		no.Src = make([]ir.Operand, len(op.Src))
 		for k, o := range op.Src {
 			if v, ok := o.(*ir.Value); ok && rename[v] != nil {

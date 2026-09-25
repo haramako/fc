@@ -36,8 +36,8 @@ func TestBugSignedCompare(t *testing.T) {
 		"}\n"+
 		"function s16():void\n"+
 		"{\n"+
-		"\tvar s16:sint16 = -300;\n"+
-		"\tvar t16:sint16 = 300;\n"+
+		"\tvar s16:i16 = -300;\n"+
+		"\tvar t16:i16 = 300;\n"+
 		"\tvar r8 = s16 < t16;\n"+
 		"\tvar r9 = t16 < s16;\n"+
 		"\tvar r10 = s16 < 0;\n"+

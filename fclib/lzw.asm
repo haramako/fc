@@ -145,21 +145,21 @@ cur = _lzw_cur				; 現在読んでいるbyteの内容
 	sta len
 
 	lda dest_addr+0				;     mem.copy(dest_addr, dest_addr-idx, len);
-	sta S+6,x
+	sta FC_FASTCALL_REG+0		;     (mem.copy は fastcall: 引数は +0〜+5。ここで生きている作業領域は +8 以降)
 	lda dest_addr+1
-	sta S+7,x
+	sta FC_FASTCALL_REG+1
 	sec
 	lda dest_addr+0
 	sbc idx
-	sta S+8,x
+	sta FC_FASTCALL_REG+2
 	lda dest_addr+1
 	sbc #0
-	sta S+9,x
+	sta FC_FASTCALL_REG+3
 	lda len
-	sta S+10,x
+	sta FC_FASTCALL_REG+4
 	lda #0
-	sta S+11,x
-	call _mem_copy, #6
+	sta FC_FASTCALL_REG+5
+	jsr _mem_copy
 
 	sec							;     total_len -= len;
 	lda total_len+0

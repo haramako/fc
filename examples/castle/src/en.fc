@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 1, near: true);
+#fc 3
+@(bank: 1, near);
 
 public use * from common;
 use my;
@@ -9,20 +9,20 @@ public use mem;
 public use * from en_vtbl;
 
 const MAX = 16;
-public var type:[MAX]int options(segment: "BSS_EX");
-public var px:[MAX]int options(segment: "BSS_EX");
-public var py:[MAX]int options(segment: "BSS_EX");
-public var pslot:[MAX]int options(segment: "BSS_EX");
-public var p1:[MAX]int options(segment: "BSS_EX");
-public var p2:[MAX]int options(segment: "BSS_EX");
-public var p3:[MAX]int options(segment: "BSS_EX");
-public var p4:[MAX]int options(segment: "BSS_EX");
-public var p5:[MAX]int options(segment: "BSS_EX");
-public var p6:[MAX]int options(segment: "BSS_EX");
-public var p7:[MAX]int options(segment: "BSS_EX");
-public var p8:[MAX]int options(segment: "BSS_EX");
-public var cur_max:int;
-public var temp:[16]int options(segment: "BSS_EX"); // en.process_*()内部などで使えるテンポラリ
+public var type:[MAX]u8 @(segment: "BSS_EX");
+public var px:[MAX]u8 @(segment: "BSS_EX");
+public var py:[MAX]u8 @(segment: "BSS_EX");
+public var pslot:[MAX]u8 @(segment: "BSS_EX");
+public var p1:[MAX]u8 @(segment: "BSS_EX");
+public var p2:[MAX]u8 @(segment: "BSS_EX");
+public var p3:[MAX]u8 @(segment: "BSS_EX");
+public var p4:[MAX]u8 @(segment: "BSS_EX");
+public var p5:[MAX]u8 @(segment: "BSS_EX");
+public var p6:[MAX]u8 @(segment: "BSS_EX");
+public var p7:[MAX]u8 @(segment: "BSS_EX");
+public var p8:[MAX]u8 @(segment: "BSS_EX");
+public var cur_max:u8;
+public var temp:[16]u8 @(segment: "BSS_EX"); // en.process_*()内部などで使えるテンポラリ
 
 /*********************************************
  * 敵関係のルーチン
@@ -31,9 +31,9 @@ public var temp:[16]int options(segment: "BSS_EX"); // en.process_*()内部な�
 /** 初期化する */
 public function init():void {}
 
-public function clear():void options(segment: "common")
+public function clear():void @(segment: "common")
 {
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MAX; i++) {
 		type[i] = 0;
 	}
@@ -43,7 +43,7 @@ public function clear():void options(segment: "common")
 public function process():void
 {
 	var old_pbank = mmc3.pbank_bak[0];
-	var i:int;
+	var i:u8;
 	for (i = 0; i < cur_max; i++) {
 		var t = type[i];
 		mmc3.set_pbank(0, EN_BANKS[t]);
@@ -52,9 +52,9 @@ public function process():void
 	mmc3.set_pbank(0, old_pbank);
 }
 
-public function new():int options(segment: "common")
+public function new():u8 @(segment: "common")
 {
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MAX; i++) {
 		if (!type[i]) {
 			if (i >= cur_max) {
@@ -66,7 +66,7 @@ public function new():int options(segment: "common")
 	return 255;
 }
 
-public function setup(i:int):void
+public function setup(i:u8):void
 {
 	var t = type[i];
 	var old_pbank = mmc3.set_pbank(0, EN_BANKS[t]);
@@ -74,7 +74,7 @@ public function setup(i:int):void
 	mmc3.set_pbank(0, old_pbank);
 }
 
-public function check_block(px:*int, py:*int):int
+public function check_block(px:*u8, py:*u8):u8
 {
 	const size = 8;
 	var x = *px;
@@ -114,12 +114,12 @@ public function check_block(px:*int, py:*int):int
 	return r;
 }
 
-public function check_outside(x:int, y:int):int
+public function check_outside(x:u8, y:u8):u8
 {
 	return (x < 16 || x >= 240 || y < 16 || y >= 240);
 }
 
-public function check_over(i:int, size:int):int
+public function check_over(i:u8, size:u8):u8
 {
 	if (math.abs(px[i] - my.x) < size && math.abs(py[i] - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE) {
 		return 1;
@@ -128,7 +128,7 @@ public function check_over(i:int, size:int):int
 	}
 }
 
-public function check_over2(i:int, size:int):int
+public function check_over2(i:u8, size:u8):u8
 {
 	if (math.abs(px[i] / 2 - my.x / 2) < size / 2 && math.abs(py[i] / 2 - my.y / 2) < size / 2 && my.state != my.STATE_DYING && my.state != my.STATE_DIE) {
 		return 1;
@@ -137,7 +137,7 @@ public function check_over2(i:int, size:int):int
 	}
 }
 
-public function check_hit(i:int, size:int):void
+public function check_hit(i:u8, size:u8):void
 {
 	if (math.abs(px[i] - my.x) < size && math.abs(py[i] - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE) {
 		my.state = my.STATE_DYING;
@@ -145,7 +145,7 @@ public function check_hit(i:int, size:int):void
 	}
 }
 
-public function check_hit2(i:int, size:int, dx:sint, dy:sint):void
+public function check_hit2(i:u8, size:u8, dx:i8, dy:i8):void
 {
 	if (math.abs(px[i] + dx - my.x) < size && math.abs(py[i] + dy - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE) {
 		my.state = my.STATE_DYING;
@@ -153,7 +153,7 @@ public function check_hit2(i:int, size:int, dx:sint, dy:sint):void
 	}
 }
 
-public function check_hit_rect(x1:int, y1:int, x2:int, y2:int):void
+public function check_hit_rect(x1:u8, y1:u8, x2:u8, y2:u8):void
 {
 	if (x1 > x2) {
 		var tmp = x1;
@@ -171,7 +171,7 @@ public function check_hit_rect(x1:int, y1:int, x2:int, y2:int):void
 	}
 }
 
-public function check_over_rect(x1:int, y1:int, x2:int, y2:int):int
+public function check_over_rect(x1:u8, y1:u8, x2:u8, y2:u8):u8
 {
 	if (x1 > x2) {
 		var tmp = x1;

@@ -1,18 +1,18 @@
-#fc 2
+#fc 3
 /** PPUレジスタ */
 
-public var PPU_CTRL1:int options(address: 0x2000);
-public var PPU_CTRL2:int options(address: 0x2001);
-public var PPU_STAT:int options(address: 0x2002);
-public var PPU_SPR_ADDR:int options(address: 0x2003);
-public var PPU_SPR_DATA:int options(address: 0x2004);
-public var PPU_SCROLL:int options(address: 0x2005);
-public var PPU_ADDR:int options(address: 0x2006);
-public var PPU_DATA:int options(address: 0x2007);
-public var SPRITE_DMA:int options(address: 0x4014);
+public var PPU_CTRL1:u8 @(address: 0x2000);
+public var PPU_CTRL2:u8 @(address: 0x2001);
+public var PPU_STAT:u8 @(address: 0x2002);
+public var PPU_SPR_ADDR:u8 @(address: 0x2003);
+public var PPU_SPR_DATA:u8 @(address: 0x2004);
+public var PPU_SCROLL:u8 @(address: 0x2005);
+public var PPU_ADDR:u8 @(address: 0x2006);
+public var PPU_DATA:u8 @(address: 0x2007);
+public var SPRITE_DMA:u8 @(address: 0x4014);
 
-public var PAD_CTRL:int options(address: 0x4016);
-public var PAD_DATA:int options(address: 0x4017);
+public var PAD_CTRL:u8 @(address: 0x4016);
+public var PAD_DATA:u8 @(address: 0x4017);
 
-public var APU_DMC:int options(address: 0x4010);
-public var APU_INTERRUPT:int options(address: 0x4017);
+public var APU_DMC:u8 @(address: 0x4010);
+public var APU_INTERRUPT:u8 @(address: 0x4017);

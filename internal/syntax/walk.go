@@ -55,6 +55,10 @@ func Children(node Node) []Node {
 		add(n.Cond)
 		add(n.Then)
 		add(n.Else)
+	case *StaticIfStmt:
+		add(n.Cond)
+		add(n.Then)
+		add(n.Else)
 	case *LabeledStmt:
 		add(n.Label)
 		add(n.Stmt)
@@ -100,6 +104,19 @@ func Children(node Node) []Node {
 		for _, f := range n.Fields {
 			add(f)
 		}
+	case *EnumDecl:
+		add(n.Name)
+		add(n.Base)
+		for _, m := range n.Members {
+			add(m.Name)
+			add(m.Value)
+		}
+	case *EnumShortExpr:
+		add(n.Name)
+	case *SliceExpr:
+		add(n.X)
+		add(n.Lo)
+		add(n.Hi)
 	case *FieldDecl:
 		add(n.Name)
 		add(n.Type)
@@ -173,6 +190,7 @@ func Children(node Node) []Node {
 	case *ArrayType:
 		if n.IsPrefix() { // [N]T
 			add(n.Len)
+			add(n.LenType)
 			add(n.Elem)
 		} else {
 			add(n.Elem)
@@ -201,7 +219,9 @@ func Children(node Node) []Node {
 		}
 	case *OptionEntry:
 		add(n.Key)
-		add(n.Value)
+		if !n.Bare {
+			add(n.Value) // `@(inline)` の値は補ったもの (ソースに無い)
+		}
 	}
 	return r
 }
@@ -220,6 +240,8 @@ func isNilNode(n Node) bool {
 	case *DefaultClause:
 		return v == nil
 	case *IfStmt:
+		return v == nil
+	case *StaticIfStmt:
 		return v == nil
 	case *NamedType:
 		return v == nil

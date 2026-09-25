@@ -5,19 +5,19 @@ import "testing"
 func TestUniverse(t *testing.T) {
 	u := NewUniverse()
 	i8 := u.IntType(1, false)
-	if i8.String() != "uint8" || i8.Kind != Int || i8.Size != 1 || i8.Signed {
-		t.Errorf("uint8: %+v", i8)
+	if i8.String() != "u8" || i8.Kind != Int || i8.Size != 1 || i8.Signed {
+		t.Errorf("u8: %+v", i8)
 	}
 	if n, ok := u.Named("int"); !ok || n != i8 {
-		t.Error("int は uint8 と同一の型であるべき")
+		t.Error("int は u8 と同一の型であるべき")
 	}
-	for _, name := range []string{"uint", "int8", "uint8"} {
+	for _, name := range []string{"uint", "int8", "u8"} {
 		if n, _ := u.Named(name); n != i8 {
-			t.Errorf("%s は uint8 と同一であるべき", name)
+			t.Errorf("%s は u8 と同一であるべき", name)
 		}
 	}
-	if s16, _ := u.Named("sint16"); s16.String() != "sint16" || !s16.Signed || s16.Size != 2 {
-		t.Errorf("sint16: %+v", s16)
+	if s16, _ := u.Named("i16"); s16.String() != "i16" || !s16.Signed || s16.Size != 2 {
+		t.Errorf("i16: %+v", s16)
 	}
 	if _, ok := u.Named("hoge"); ok {
 		t.Error("未知の型名は ok=false")
@@ -30,19 +30,19 @@ func TestUniverse(t *testing.T) {
 	}
 
 	p := u.PointerTo(i8)
-	if p.String() != "*uint8" || p.Size != 2 || p.Base != i8 || p != u.PointerTo(i8) {
+	if p.String() != "*u8" || p.Size != 2 || p.Base != i8 || p != u.PointerTo(i8) {
 		t.Errorf("pointer: %+v", p)
 	}
 	a := u.ArrayOf(u.IntType(2, false), 10)
-	if a.String() != "[10]uint16" || a.Size != 20 || a.Length != 10 {
+	if a.String() != "[10]u16" || a.Size != 20 || a.Length != 10 {
 		t.Errorf("array: %+v", a)
 	}
 	au := u.ArrayOf(i8, -1)
-	if au.String() != "[]uint8" || au.Size != -1 || au.Length != -1 {
+	if au.String() != "[]u8" || au.Size != -1 || au.Length != -1 {
 		t.Errorf("unsized array: %+v", au)
 	}
 	f := u.Func([]*Type{i8, i8}, p, false)
-	if f.String() != "fn(uint8,uint8):*uint8" || f.Size != 2 || f.Base != p || f.Fastcall() {
+	if f.String() != "fn(u8,u8):*u8" || f.Size != 2 || f.Base != p || f.Fastcall() {
 		t.Errorf("func: %+v", f)
 	}
 	ff := u.Func(nil, u.Void(), true)
@@ -76,7 +76,7 @@ func TestFarFunc(t *testing.T) {
 	args := []*Type{u.IntType(1, false)}
 	near := u.Func(args, u.Void(), false)
 	far := u.FarFunc(args, u.Void())
-	if far.Size != 3 || far.String() != "farfn(uint8):void" || !far.IsFarFunc() || near.IsFarFunc() || far != u.FarFunc(args, u.Void()) {
+	if far.Size != 3 || far.String() != "farfn(u8):void" || !far.IsFarFunc() || near.IsFarFunc() || far != u.FarFunc(args, u.Void()) {
 		t.Fatalf("far=%+v near=%+v", far, near)
 	}
 	if !SameFuncSignature(near, far) || SameFuncSignature(far, u.FarFunc(nil, u.Void())) {

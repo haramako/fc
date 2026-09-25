@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 18);
+#fc 3
+@(bank: 18);
 use * from common;
 use my;
 use bg;
@@ -8,25 +8,25 @@ use game;
 use irqcmd;
 use mmc3;
 
-public var subtext_stat:int;
-var subtext_id:int;
-var subtext_count:int;
-var subtext_height:int;
-var subtext_irq_temp:int;
-var subtext_irq_scroll:int;
-public var subtext_shown:int;
+public var subtext_stat:u8;
+var subtext_id:u8;
+var subtext_count:u8;
+var subtext_height:u8;
+var subtext_irq_temp:u8;
+var subtext_irq_scroll:u8;
+public var subtext_shown:u8;
 
-function get_subtext_flag(i:int):int
+function get_subtext_flag(i:u8):u8
 {
 	return my.subtext_flags[i / 8] & (1 << (i % 8));
 }
 
-function set_subtext_flag(i:int):void
+function set_subtext_flag(i:u8):void
 {
 	my.subtext_flags[i / 8] = my.subtext_flags[i / 8] | (1 << (i % 8));
 }
 
-function show_subtext(id:int):void
+function show_subtext(id:u8):void
 {
 	subtext_stat = 1;
 	subtext_count = 0;
@@ -56,8 +56,8 @@ public function process_subtext():void
 
 	subtext_count += 1;
 
-	var buf:*int;
-	var pos:int16;
+	var buf:*u8;
+	var pos:u16;
 
 	switch (subtext_stat) {
 	case 1:
@@ -107,7 +107,7 @@ public function process_subtext():void
 		setup_irqcmd();
 		if (subtext_height <= 8) {
 			subtext_stat = 0;
-			ppu.irq_setup = ppu.null_func;
+			ppu.irq_setup = @null_fn;
 		}
 	}
 }

@@ -414,21 +414,18 @@ _test_lzw_buf: .res 256
 	lda #.HIBYTE(_58)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldx FC_SP
 	lda #.LOBYTE(_test_lzw_buf)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_test_lzw_buf)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(UNPACKED)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(UNPACKED)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda 0+<F_test_lzw_test_unpack+0
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_lzw_test_unpack+0
 	sta <F_unittest_assert_equal+0
 	lda #0

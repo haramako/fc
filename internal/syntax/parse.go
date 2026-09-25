@@ -28,6 +28,7 @@ func Parse(src []byte, filename string) (*File, error) {
 	f := &File{
 		Filename: filename,
 		Pragma:   lx.lex.Pragma(),
+		Version:  lx.lex.Version(),
 		Stmts:    lx.result,
 		Comments: lx.lex.Comments(),
 		EOFPos:   lx.last.Pos,
@@ -52,6 +53,25 @@ func checkVersion(f *File) error {
 			fail(pos, "postfix types (int*, int[4], void(int)) are written prefix in fc 2 (*int, [4]int, fn(int):void)")
 		}
 	}
+	if f.Version >= Version3 {
+		// fc 3 で書き方が変わった構文 (fcc migrate が書き換える)
+		Inspect(f, func(n Node) bool {
+			if err != nil {
+				return false
+			}
+			switch n := n.(type) {
+			case *PlacementBlock:
+				if n.Keyword != nil {
+					fail(n.Keyword.Pos(), "`block { ... } options(...)` is written `@(...) { ... }` in fc 3 (`fcc migrate` rewrites fc 2 sources)")
+				}
+			case *Options:
+				if !n.At {
+					fail(n.Keyword, "`options(...)` is written `@(...)` in fc 3 (`fcc migrate` rewrites fc 2 sources)")
+				}
+			}
+			return true
+		})
+	}
 	Inspect(f, func(n Node) bool {
 		if err != nil {
 			return false
@@ -69,8 +89,18 @@ func checkVersion(f *File) error {
 			}
 		case *ArrayType:
 			checkTypeForm(n.IsPrefix(), n.Lbrack)
+			if (n.Infer.IsValid() || n.Const.IsValid() || n.LenType != nil) && f.Version < Version3 {
+				fail(n.Lbrack, "`[?]T` / `[]const T` / `[:u16]T` are fc 3 syntax (write `#fc 3`)")
+			}
 		case *PointerType:
 			checkTypeForm(n.IsPrefix(), n.Star)
+			if n.Const.IsValid() && f.Version < Version3 {
+				fail(n.Const, "`*const T` is fc 3 syntax (write `#fc 3`)")
+			}
+		case *SliceExpr:
+			if f.Version < Version3 {
+				fail(n.DotDot, "slices `a[i..j]` are fc 3 syntax (write `#fc 3`)")
+			}
 		case *FuncType:
 			checkTypeForm(n.IsPrefix(), n.Lparen)
 		case *CastExpr:
@@ -118,14 +148,15 @@ var kindToYacc = map[Kind]int{
 	KwLoop: kLOOP, KwWhile: kWHILE, KwFor: kFOR, KwReturn: kRETURN,
 	KwBreak: kBREAK, KwContinue: kCONTINUE, KwIncbin: kINCBIN,
 	KwSwitch: kSWITCH, KwCase: kCASE, KwDefault: kDEFAULT,
-	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwFarFn: kFARFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA, KwTrue: kTRUE, KwFalse: kFALSE, KwNull: kNULL,
+	AtSizeof: kAT_SIZEOF, AtBitcast: kAT_BITCAST, AtIncbin: kAT_INCBIN, AtInclude: kAT_INCLUDE, AtIdent: kATIDENT, AtIf: kAT_IF, AtSign: '@',
+	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwFarFn: kFARFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA, KwTrue: kTRUE, KwFalse: kFALSE, KwNull: kNULL, KwEnum: kENUM, KwFallthrough: kFALLTHROUGH,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
 	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
 	MulEq: MULEQ, DivEq: DIVEQ, ModEq: MODEQ, AndEq: ANDEQ, OrEq: OREQ, XorEq: XOREQ, ShlEq: SHLEQ, ShrEq: SHREQ,
 	LParen: '(', RParen: ')', LBrace: '{', RBrace: '}', Semicolon: ';', Colon: ':',
 	Lt: '<', Gt: '>', LBrack: '[', RBrack: ']', Plus: '+', Minus: '-', Star: '*',
 	Slash: '/', Percent: '%', Amp: '&', Pipe: '|', Caret: '^', Assign: '=',
-	Comma: ',', Dot: '.', Not: '!', Tilde: '~',
+	Comma: ',', Dot: '.', Not: '!', Tilde: '~', Question: '?', DotDot: DOTDOT,
 }
 
 func (a *yyLexAdapter) Lex(lval *yySymType) int {
@@ -287,4 +318,13 @@ func funcDecl(scope *Token, kw, name Token, params []*VarSpec, result TypeExpr, 
 		Body:      body.Block,
 		Semi:      body.Semi,
 	}
+}
+
+// staticIf は `@if (cond) { ... } [else ...]` の構文木を作る。
+func staticIf(at, lp Token, cond Expr, rp Token, then *Block, el *staticElse) *StaticIfStmt {
+	s := &StaticIfStmt{At: at.Pos, Lparen: lp.Pos, Cond: cond, Rparen: rp.Pos, Then: then}
+	if el != nil {
+		s.ElsePos, s.Else = el.pos, el.body
+	}
+	return s
 }

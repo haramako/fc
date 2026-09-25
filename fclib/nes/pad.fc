@@ -1,19 +1,19 @@
-#fc 2
-options(bank: -1);
+#fc 3
+@(bank: -1);
 
 use nes;
 
-public var a:int;
-public var b:int;
-public var select:int;
-public var start:int;
-public var up:int;
-public var down:int;
-public var left:int;
-public var right:int;
-public var cur:int;
-public var prev:int;
-public var pushed:int;
+public var a:u8;
+public var b:u8;
+public var select:u8;
+public var start:u8;
+public var up:u8;
+public var down:u8;
+public var left:u8;
+public var right:u8;
+public var cur:u8;
+public var prev:u8;
+public var pushed:u8;
 
 public const A = 1 << 7;
 public const B = 1 << 6;

@@ -48,15 +48,45 @@ type Type struct {
 	Base     *Type // Pointer / Array の要素型、Func の戻り値型
 	Length   int   // Array の要素数。省略時 -1
 	Params   []*Type
-	Fields   []Field // Struct のフィールド (宣言順)
-	Name     string  // Struct / SoaRef のモジュール修飾名 (mod.Name)
-	Soa      *Type   // SoaRef のコンテナ (`soa` 配列型)、Kind == Array で IsSoa
-	IsSoa    bool    // Array が SoA コンテナ (soa 宣言) か
-	IsConst  bool    // SoA コンテナが `soa const` (読み出しのみ) か
-	Path     string  // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
+	Fields   []Field   // Struct のフィールド (宣言順)
+	Name     string    // Struct / SoaRef のモジュール修飾名 (mod.Name)
+	Soa      *Type     // SoaRef のコンテナ (`soa` 配列型)、Kind == Array で IsSoa
+	IsSoa    bool      // Array が SoA コンテナ (soa 宣言) か
+	IsConst  bool      // SoA コンテナが `soa const` (読み出しのみ) か
+	Path     string    // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
+	Enum     *EnumInfo // fc 3 の enum (Kind は Int のまま。基底型の幅と符号。別の enum・整数とは互換でない)
+	ReadOnly bool      // fc 3 の `*const T` / `[]const T` (参照先を書き換えられない。表現は普通のポインタ / slice と同じ)
+	SliceOf  *Type     // fc 3 の slice `[]T` なら要素の型 (Kind は Struct: ptr:*T, len:u8 の 3 バイト。IsSlice)
 	far      bool
 	fastcall bool
 	str      string
+}
+
+// EnumInfo は enum 型のメンバー (宣言順)。doc/language_feature_candidates.md §1。
+type EnumInfo struct {
+	Name    string // モジュール修飾名 (mod.Name)
+	Members []EnumMember
+}
+
+// EnumMember は enum のメンバー 1 つ。
+type EnumMember struct {
+	Name  string
+	Value int
+}
+
+// Member は名前でメンバーを引く。
+func (e *EnumInfo) Member(name string) (EnumMember, bool) {
+	for _, m := range e.Members {
+		if m.Name == name {
+			return m, true
+		}
+	}
+	return EnumMember{}, false
+}
+
+// NewEnum は基底型 base (整数型) の enum 型 name (モジュール修飾名) を作る。メンバーは後から EnumInfo に入れる。
+func (u *Universe) NewEnum(name string, base *Type) *Type {
+	return u.intern(&Type{Kind: Int, Size: base.Size, Signed: base.Signed, Length: -1, Enum: &EnumInfo{Name: name}, str: name})
 }
 
 // Field は struct のフィールド。
@@ -186,23 +216,37 @@ func (u *Universe) SoaRef(soa, base *Type, path string) *Type {
 func (u *Universe) IntType(size int, signed bool) *Type {
 	s := "u"
 	if signed {
-		s = "s"
+		s = "i"
 	}
-	return u.intern(&Type{Kind: Int, Size: size, Signed: signed, Length: -1, str: fmt.Sprintf("%sint%d", s, size*8)})
+	return u.intern(&Type{Kind: Int, Size: size, Signed: signed, Length: -1, str: fmt.Sprintf("%s%d", s, size*8)})
 }
 
-// 基本型の名前 → (サイズ, 符号)。
-var basicTypes = map[string]struct {
+type intSpec struct {
 	size   int
 	signed bool
-}{
-	"int": {1, false}, "uint": {1, false}, "sint": {1, true},
-	"int8": {1, false}, "sint8": {1, true}, "uint8": {1, false},
-	"int16": {2, false}, "sint16": {2, true}, "uint16": {2, false},
 }
 
-// Named は型名から型を返す。未知の名前なら ok=false。
+// IntTypeNames は整数型の名前 (fc 3 の正式名。fc 2 でも使える) → (サイズ, 符号)。doc/v3_plan.md §7。
+var IntTypeNames = map[string]intSpec{
+	"u8": {1, false}, "i8": {1, true}, "u16": {2, false}, "i16": {2, true},
+}
+
+// V2IntTypeNames は fc 2 だけの整数型の名前 → fc 3 の名前 (`fcc migrate` の書き換えと fc 3 での案内に使う)。
+// `int` / `uint` / `int8` / `uint8` は u8、`sint` / `sint8` は i8、`int16` / `uint16` は u16、`sint16` は i16。
+var V2IntTypeNames = map[string]string{
+	"int": "u8", "uint": "u8", "int8": "u8", "uint8": "u8",
+	"sint": "i8", "sint8": "i8",
+	"int16": "u16", "uint16": "u16",
+	"sint16": "i16",
+}
+
+// Named は型名から型を返す (fc 2 の規則: 古い名前も fc 3 の名前も引ける)。未知の名前なら ok=false。
 func (u *Universe) Named(name string) (t *Type, ok bool) {
+	return u.NamedIn(name, 2)
+}
+
+// NamedIn は文法バージョン version のモジュールでの型名の解決。fc 3 では fc 2 だけの整数型の名前 (int など) を引かない。
+func (u *Universe) NamedIn(name string, version int) (t *Type, ok bool) {
 	switch name {
 	case "void":
 		return u.Void(), true
@@ -213,7 +257,11 @@ func (u *Universe) Named(name string) (t *Type, ok bool) {
 	case "macro":
 		return u.Macro(), true
 	}
-	if bt, ok := basicTypes[name]; ok {
+	if bt, ok := IntTypeNames[name]; ok {
+		return u.IntType(bt.size, bt.signed), true
+	}
+	if n, ok := V2IntTypeNames[name]; ok && version < 3 {
+		bt := IntTypeNames[n]
 		return u.IntType(bt.size, bt.signed), true
 	}
 	return nil, false
@@ -222,6 +270,54 @@ func (u *Universe) Named(name string) (t *Type, ok bool) {
 // PointerTo は base へのポインタ型。
 func (u *Universe) PointerTo(base *Type) *Type {
 	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, str: "*" + base.str})
+}
+
+// Slice は要素 elem の slice の型 `[]elem` / `[]const elem` (wide なら長さ u16 の `[:u16]elem`。doc/v3_slices_vector.md)。
+// 表現は struct { ptr:*elem; len:u8 } の 3 バイト (wide は len:u16 の 4 バイト)。普通の slice の要素は 255 個まで: 添字・ループが
+// 8 ビットで済むように。値のコピー・引数・戻り値・フィールドの参照は struct の仕組みで扱い、添字・範囲・長さは意味解析が書き換える。
+func (u *Universe) Slice(elem *Type, ro, wide bool) *Type {
+	head := "[]"
+	if wide {
+		head = "[:u16]"
+	}
+	if ro {
+		head += "const "
+	}
+	name := head + elem.str
+	key := "slice " + name // 表示名は長さを省いた配列 (fc 2 の `[]T`) と同じ綴りなので、表のキーは分ける
+	if t, ok := u.cache[key]; ok {
+		return t
+	}
+	t := &Type{Kind: Struct, Name: name, Size: -1, Length: -1, SliceOf: elem, ReadOnly: ro, str: name}
+	u.cache[key] = t
+	lenSize := 1
+	if wide {
+		lenSize = 2
+	}
+	u.SetFields(t, []Field{{Name: "ptr", Type: u.PointerTo(elem)}, {Name: "len", Type: u.IntType(lenSize, false)}})
+	return t
+}
+
+// IsSlice は slice の型か。
+func (t *Type) IsSlice() bool { return t != nil && t.SliceOf != nil }
+
+// SliceLen は slice の長さの型 (u8、広い slice は u16)。
+func (t *Type) SliceLen() *Type { return t.Fields[1].Type }
+
+// IsWideSlice は長さ u16 の slice (`[:u16]T`) か。
+func (t *Type) IsWideSlice() bool { return t.IsSlice() && t.SliceLen().Size == 2 }
+
+// ConstPointerTo は base への読み取り専用のポインタ型 `*const base` (doc/language_feature_candidates.md §3)。
+func (u *Universe) ConstPointerTo(base *Type) *Type {
+	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, ReadOnly: true, str: "*const " + base.str})
+}
+
+// PointerToRO は ro なら ConstPointerTo、そうでなければ PointerTo。
+func (u *Universe) PointerToRO(base *Type, ro bool) *Type {
+	if ro {
+		return u.ConstPointerTo(base)
+	}
+	return u.PointerTo(base)
 }
 
 // ArrayOf は base の配列型。length < 0 なら長さ省略 (Size も -1)。
@@ -275,6 +371,18 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 		return b
 	}
 	if b.Kind == Bad {
+		return a
+	}
+	// enum は同じ enum とだけ互換 (整数・bool・別の enum とは `as` で変換する)
+	if a.Enum != nil || b.Enum != nil {
+		return nil
+	}
+	// 同じ要素のポインタは const の有無によらず互換 (*T → *const T は暗黙。const を捨てる向きは sema が警告する)
+	if a.Kind == Pointer && b.Kind == Pointer && a.Base == b.Base {
+		return a
+	}
+	// slice も同じ ([]T → []const T は暗黙)。長さの幅が違うものは互換でない (普通 → 広いは sema が作り直す)
+	if a.IsSlice() && b.IsSlice() && a.SliceOf == b.SliceOf && a.IsWideSlice() == b.IsWideSlice() {
 		return a
 	}
 	// bool は uint8 と互換 (比較・論理演算の結果と true / false は bool。整数と混ぜれば uint8)

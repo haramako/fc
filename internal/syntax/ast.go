@@ -38,7 +38,8 @@ type TypeExpr interface {
 // File は 1 ソースファイル。
 type File struct {
 	Filename string
-	Pragma   string // 先頭行の `#fc 2` の原文 (無ければ "")
+	Pragma   string // 先頭行の `#fc 2` / `#fc 3` の原文 (無ければ "")
+	Version  int    // 文法バージョン (syntax.Version2 / Version3。プラグマが無ければ DefaultVersion)
 	Stmts    []Stmt
 	Comments []Comment // 出現順
 	EOFPos   Pos
@@ -98,6 +99,33 @@ type IfStmt struct {
 	Else    Stmt
 }
 
+// StaticIfStmt は fc 3 の `@if (cond) { ... } else { ... }` / `else @if (...)` (doc/v3_plan.md §1)。条件はリテラルと
+// `@(build)` の定数だけで、選ばれなかった側は名前解決・型検査をしない。新しいスコープは作らない。
+type StaticIfStmt struct {
+	At      Pos // `@if`
+	Lparen  Pos
+	Cond    Expr
+	Rparen  Pos
+	Then    *Block
+	ElsePos Pos  // `else` (無ければ無効)
+	Else    Stmt // nil / *Block / *StaticIfStmt
+}
+
+func (s *StaticIfStmt) Pos() Pos { return s.At }
+func (s *StaticIfStmt) End() Pos {
+	if s.Else != nil {
+		return s.Else.End()
+	}
+	return s.Then.End()
+}
+func (*StaticIfStmt) stmtNode() {}
+
+// staticElse は文法の途中で `else` の位置を運ぶためのもの。
+type staticElse struct {
+	pos  Pos
+	body Stmt
+}
+
 // LoopStmt は `loop() stmt` (v1) / `loop { ... }` (v2。Rparen は無効)。
 type LoopStmt struct {
 	Loop   Pos
@@ -154,6 +182,12 @@ type IncDecStmt struct {
 type BreakStmt struct {
 	Keyword Pos
 	Label   *Ident // nil ならラベルなし
+	Semi    Pos
+}
+
+// FallthroughStmt は fc 3 の `fallthrough;` (switch の case の最後の文。次の case の本体へ、値の検査をせずに進む)。
+type FallthroughStmt struct {
+	Keyword Pos
 	Semi    Pos
 }
 
@@ -231,6 +265,51 @@ type StructDecl struct {
 	Rbrace    Pos
 }
 
+// EnumDecl は fc 3 の `enum Name:u8 { A = 0, B, ... }` (基底型を省けば u8。値を省けば前の値 + 1、最初は 0)。
+type EnumDecl struct {
+	PublicPos Pos
+	Keyword   Pos
+	Name      *Ident
+	Base      TypeExpr // nil なら省略 (u8)
+	Lbrace    Pos
+	Members   []*EnumMember
+	Rbrace    Pos
+}
+
+// EnumMember は enum のメンバー `Name` / `Name = value`。
+type EnumMember struct {
+	Name  *Ident
+	Value Expr // nil なら前の値 + 1
+}
+
+func (s *EnumDecl) Pos() Pos { return firstValid(s.PublicPos, s.Keyword) }
+func (s *EnumDecl) End() Pos { return after(s.Rbrace, 1) }
+func (*EnumDecl) stmtNode()  {}
+
+// SliceExpr は fc 3 の範囲 `x[lo..hi]` (lo / hi は省略できる: 省けば 0 / 長さ)。配列・slice の一部を指す slice になる。
+type SliceExpr struct {
+	X      Expr
+	Lbrack Pos
+	Lo     Expr // nil なら 0
+	DotDot Pos
+	Hi     Expr // nil なら長さ
+	Rbrack Pos
+}
+
+func (e *SliceExpr) Pos() Pos { return e.X.Pos() }
+func (e *SliceExpr) End() Pos { return after(e.Rbrack, 1) }
+func (*SliceExpr) exprNode()  {}
+
+// EnumShortExpr は fc 3 の `.Name` (型が文脈から分かるときの enum のメンバー)。
+type EnumShortExpr struct {
+	Dot  Pos
+	Name *Ident
+}
+
+func (e *EnumShortExpr) Pos() Pos { return e.Dot }
+func (e *EnumShortExpr) End() Pos { return e.Name.End() }
+func (*EnumShortExpr) exprNode()  {}
+
 // FieldDecl は struct のフィールド `name:type;`。
 type FieldDecl struct {
 	Name *Ident
@@ -259,6 +338,8 @@ type IncludeDecl struct {
 	Rparen  Pos
 	Options *Options // nil なら省略
 	Semi    Pos
+	// At は fc 3 の `@include("path", key: value, ...)` (属性は名前つきの引数。Options.Keyword は無効)
+	At bool
 }
 
 // ScopeLabel は `public:` / `private:` ラベル。
@@ -278,15 +359,25 @@ type Block struct {
 // PlacementBlock groups global storage declarations without introducing a scope.
 // Keyword remains an identifier so existing variables/types named block still work.
 type PlacementBlock struct {
-	Keyword *Ident
+	Keyword *Ident // `block` (fc 3 の `@(...) { ... }` は nil で、Options が前)
 	Body    *Block
 	Options *Options
 	Semi    Pos
 }
 
-func (s *PlacementBlock) Pos() Pos { return s.Keyword.Pos() }
-func (s *PlacementBlock) End() Pos { return after(s.Semi, 1) }
-func (*PlacementBlock) stmtNode()  {}
+func (s *PlacementBlock) Pos() Pos {
+	if s.Keyword == nil {
+		return s.Options.Keyword
+	}
+	return s.Keyword.Pos()
+}
+func (s *PlacementBlock) End() Pos {
+	if s.Keyword == nil {
+		return s.Body.End()
+	}
+	return after(s.Semi, 1)
+}
+func (*PlacementBlock) stmtNode() {}
 
 // EmptyStmt は単独の `;`。
 type EmptyStmt struct {
@@ -383,6 +474,7 @@ type CastExpr struct {
 	X       Expr
 	Rparen  Pos
 	As      Pos // `as`
+	Comma   Pos // fc 3 の `@bitcast(T, x)` の `,` (有効なら @ の形。Lt / Gt は無い)
 }
 
 // CallExpr は `fun(args) [{ block }]`。Block はマクロ呼び出し用の後置ブロック (nil なら省略)。
@@ -461,16 +553,26 @@ type NamedType struct {
 
 // ArrayType は `elem[len]` / `elem[]`。
 type ArrayType struct {
-	Elem   TypeExpr
-	Lbrack Pos
-	Len    Expr // nil なら長さ省略
-	Rbrack Pos
+	Elem    TypeExpr
+	Lbrack  Pos
+	Len     Expr // nil なら長さ省略 (fc 2 は長さを推論する配列、fc 3 は slice)
+	Rbrack  Pos
+	Infer   Pos      // fc 3 の `[?]T` の `?` (長さを推論する配列。fc 2 の `[]T` と同じ)
+	Const   Pos      // fc 3 の `[]const T` の `const` (読み取り専用の slice)
+	Colon   Pos      // fc 3 の `[:u16]T` の `:` (長さの型を指定した slice)
+	LenType TypeExpr // `[:u16]T` の長さの型 (u8 / u16。無ければ nil = u8)
+}
+
+// IsSlice は fc 3 のソースで slice の型 (`[]T` / `[]const T` / `[:u16]T`) か (version は文法バージョン)。
+func (t *ArrayType) IsSlice(version int) bool {
+	return t.Len == nil && !t.Infer.IsValid() && version >= Version3
 }
 
 // PointerType は `elem*`。
 type PointerType struct {
-	Elem TypeExpr
-	Star Pos
+	Elem  TypeExpr
+	Star  Pos
+	Const Pos // fc 3 の `*const T` の `const` (有効なら読み取り専用)
 }
 
 // FuncType は関数型。v1 `result(params)` / v2 `fn(params):result` (Fn が有効)。
@@ -500,15 +602,17 @@ type Param struct {
 
 // Options は `options(k1: v1, k2: v2)`。順序を保持する。
 type Options struct {
-	Keyword Pos
+	Keyword Pos // `options` (fc 3 は `@`)
 	Entries []*OptionEntry
 	Rparen  Pos
+	At      bool // fc 3 の `@(...)`
 }
 
 // OptionEntry は `key: value`。
 type OptionEntry struct {
 	Key   *Ident
 	Value Expr
+	Bare  bool // fc 3 の値の省略 `@(inline)` (Value は true)
 }
 
 // Get は key に一致する最後のエントリの値を返す (重複時は後勝ち)。
@@ -595,8 +699,10 @@ func (s *IncDecStmt) End() Pos {
 	return after(s.OpPos, 2)
 }
 
-func (s *BreakStmt) Pos() Pos { return s.Keyword }
-func (s *BreakStmt) End() Pos { return after(s.Semi, 1) }
+func (s *BreakStmt) Pos() Pos       { return s.Keyword }
+func (s *BreakStmt) End() Pos       { return after(s.Semi, 1) }
+func (s *FallthroughStmt) Pos() Pos { return s.Keyword }
+func (s *FallthroughStmt) End() Pos { return after(s.Semi, 1) }
 
 func (s *ContinueStmt) Pos() Pos { return s.Keyword }
 func (s *ContinueStmt) End() Pos { return after(s.Semi, 1) }
@@ -811,7 +917,12 @@ func (o *Options) Pos() Pos { return o.Keyword }
 func (o *Options) End() Pos { return after(o.Rparen, 1) }
 
 func (e *OptionEntry) Pos() Pos { return e.Key.Pos() }
-func (e *OptionEntry) End() Pos { return e.Value.End() }
+func (e *OptionEntry) End() Pos {
+	if e.Bare {
+		return e.Key.End() // fc 3 の `@(inline)` (Value は位置を借りた true)
+	}
+	return e.Value.End()
+}
 
 func (s *VarSpec) Pos() Pos { return s.Name.Pos() }
 func (s *VarSpec) End() Pos {
@@ -826,27 +937,28 @@ func (s *VarSpec) End() Pos {
 }
 
 // マーカーメソッド
-func (*VarDecl) stmtNode()      {}
-func (*FuncDecl) stmtNode()     {}
-func (*IfStmt) stmtNode()       {}
-func (*LoopStmt) stmtNode()     {}
-func (*LabeledStmt) stmtNode()  {}
-func (*WhileStmt) stmtNode()    {}
-func (*ForStmt) stmtNode()      {}
-func (*IncDecStmt) stmtNode()   {}
-func (*BreakStmt) stmtNode()    {}
-func (*ContinueStmt) stmtNode() {}
-func (*ReturnStmt) stmtNode()   {}
-func (*SwitchStmt) stmtNode()   {}
-func (*ExprStmt) stmtNode()     {}
-func (*OptionsStmt) stmtNode()  {}
-func (*UseDecl) stmtNode()      {}
-func (*IncludeDecl) stmtNode()  {}
-func (*StructDecl) stmtNode()   {}
-func (*SoaDecl) stmtNode()      {}
-func (*ScopeLabel) stmtNode()   {}
-func (*Block) stmtNode()        {}
-func (*EmptyStmt) stmtNode()    {}
+func (*VarDecl) stmtNode()         {}
+func (*FuncDecl) stmtNode()        {}
+func (*IfStmt) stmtNode()          {}
+func (*LoopStmt) stmtNode()        {}
+func (*LabeledStmt) stmtNode()     {}
+func (*WhileStmt) stmtNode()       {}
+func (*ForStmt) stmtNode()         {}
+func (*IncDecStmt) stmtNode()      {}
+func (*BreakStmt) stmtNode()       {}
+func (*FallthroughStmt) stmtNode() {}
+func (*ContinueStmt) stmtNode()    {}
+func (*ReturnStmt) stmtNode()      {}
+func (*SwitchStmt) stmtNode()      {}
+func (*ExprStmt) stmtNode()        {}
+func (*OptionsStmt) stmtNode()     {}
+func (*UseDecl) stmtNode()         {}
+func (*IncludeDecl) stmtNode()     {}
+func (*StructDecl) stmtNode()      {}
+func (*SoaDecl) stmtNode()         {}
+func (*ScopeLabel) stmtNode()      {}
+func (*Block) stmtNode()           {}
+func (*EmptyStmt) stmtNode()       {}
 
 func (*Ident) exprNode()      {}
 func (*IntLit) exprNode()     {}

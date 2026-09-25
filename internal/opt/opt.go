@@ -6,6 +6,7 @@ package opt
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -19,7 +20,39 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 		return
 	}
 	for _, p := range Passes(u) {
+		prev := ir.SnapshotLogs(lmd) // @log の注釈を、消えた・動いた命令から付け替える (ir.KeepLogs)
 		p.Run(lmd)
+		ir.KeepLogs(lmd, prev)
+		if os.Getenv("FC_TRACE_LOGS") != "" {
+			var at []string
+			for i, op := range lmd.Ops {
+				if op != nil {
+					for _, lp := range op.Logs {
+						at = append(at, fmt.Sprintf("%d@%d(%s)", lp.ID, i, op.Code))
+					}
+				}
+			}
+			fmt.Fprintf(os.Stderr, "logs %s after %s: %v\n", lmd.Id, p.Name, at)
+			if os.Getenv("FC_TRACE_LOGS") == lmd.Id {
+				for i, op := range lmd.Ops {
+					if op != nil {
+						var ids []int
+						for _, lp := range op.Logs {
+							ids = append(ids, lp.ID)
+						}
+						var args []string
+						for _, lp := range op.Logs {
+							if want := os.Getenv("FC_TRACE_LOG_ID"); want != "" && fmt.Sprint(lp.ID) == want {
+								for _, a := range lp.Args {
+									args = append(args, a.Expr+"="+ir.OperandString(a.Val))
+								}
+							}
+						}
+						fmt.Fprintf(os.Stderr, "  %3d %v %s %v\n", i, ids, ir.DumpOp(op, nil), args)
+					}
+				}
+			}
+		}
 	}
 }
 

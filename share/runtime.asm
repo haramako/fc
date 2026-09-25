@@ -17,6 +17,7 @@
 	.export __mul_8s
 	.export __mul_8t16
 	.export __mul_16
+	.export __fc_null_fn
 	.export __div_8
 	.export __div_8s
 	.export __div_16
@@ -208,10 +209,12 @@
         sec                     ; reg4 = a - reg6
         sbc reg+6
         sta reg+4
+null_rts:                       ; fc 3 の @null_fn (rts だけの関数。この rts を借りる: ランタイムのバイト列を変えない)
         rts
 .endproc
 
 __mul_8s = __mul_8
+__fc_null_fn = __mul_8::null_rts
 
 
 ;;; uint8xuint8=>uint16の掛け算

@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 4);
+#fc 3
+@(bank: 4);
 use * from graphics;
 use my;
 use * from en;
@@ -13,7 +13,7 @@ use event2;
  * 鳥
  *********************************************/
 
-public function bird_new(i:int):void
+public function bird_new(i:u8):void
 {
 	if (p2[i] == 0) {
 		p2[i] = 16;
@@ -23,10 +23,10 @@ public function bird_new(i:int):void
 	p6[i] = 0;
 }
 
-public function bird_process(i:int):void
+public function bird_process(i:u8):void
 {
 	var slot = pslot[i];
-	var x:int, y:int, dx:int, dy:int;
+	var x:u8, y:u8, dx:u8, dy:u8;
 	var orig_x = p4[i];
 	var orig_y = p5[i];
 	var dir = p1[i];
@@ -97,14 +97,14 @@ public function bird_process(i:int):void
  * 石像
  *********************************************/
 
-public function statue_new(i:int):void
+public function statue_new(i:u8):void
 {
 	if (p2[i] == 0) {
 		p2[i] = 120;
 	}
 }
 
-public function statue_process(i:int):void
+public function statue_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -139,9 +139,9 @@ public function statue_process(i:int):void
  * 石像の弾
  *********************************************/
 
-public function statue_fire_new(i:int):void {}
+public function statue_fire_new(i:u8):void {}
 
-public function statue_fire_process(i:int):void
+public function statue_fire_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -169,7 +169,7 @@ public function statue_fire_process(i:int):void
  * 魚
  *********************************************/
 
-public function fish_new(i:int):void
+public function fish_new(i:u8):void
 {
 	if (p2[i] == 0)
 		p2[i] = 8;
@@ -179,7 +179,7 @@ public function fish_new(i:int):void
 	p7[i] = 60;
 }
 
-public function fish_process(i:int):void
+public function fish_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -187,11 +187,11 @@ public function fish_process(i:int):void
 	var dir = p1[i];
 	var speed = p2[i];
 	var stat = p3[i];
-	var count:sint8 = p5[i];
+	var count:i8 = p5[i];
 	var wait = p7[i];
 	var disp = 0;
-	var pat:int;
-	var vx:int;
+	var pat:u8;
+	var vx:u8;
 
 	const ANIM_SWIM = [2, 3, 4, 4, 3, 2, 1, 0, 0, 1];
 
@@ -202,9 +202,9 @@ public function fish_process(i:int):void
 			dir = DIR_RIGHT;
 		}
 	if (dir == DIR_LEFT) {
-		x -= (giff + speed as sint8) / 16;
+		x -= (giff + speed as i8) / 16;
 	} else {
-		x += (giff + speed as sint8) / 16;
+		x += (giff + speed as i8) / 16;
 	}
 
 	switch (stat) {
@@ -219,7 +219,7 @@ public function fish_process(i:int):void
 	case 1: // 気付いた！
 		count += 1;
 		vx = math.sin(count * 8) / 32;
-		vx = (vx as uint8) * (DIR_VX[dir] as uint8);
+		vx = (vx as u8) * (DIR_VX[dir] as u8);
 		x = px[i];
 		y -= (giff + 4) / 16;
 		if (count > 32) {
@@ -264,7 +264,7 @@ public function fish_process(i:int):void
 	case 2:
 		gr_sprite2(x, y, spr + 8 * 4, flag);
 	case 3:
-		var pa:int;
+		var pa:u8;
 		if (count < -8) {
 			pa = 0;
 		} else
@@ -288,7 +288,7 @@ public function fish_process(i:int):void
 	p7[i] = wait;
 }
 
-function splash(x:int, y:int):void
+function splash(x:u8, y:u8):void
 {
 	var i = new();
 	type[i] = TYPE_SPLASH;
@@ -301,12 +301,12 @@ function splash(x:int, y:int):void
  * 死んだ魚
  *********************************************/
 
-public function dead_fish_new(i:int):void
+public function dead_fish_new(i:u8):void
 {
 	p4[i] = 0;
 }
 
-public function dead_fish_process(i:int):void
+public function dead_fish_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -340,7 +340,7 @@ public function dead_fish_process(i:int):void
  * p4: stat
  *********************************************/
 
-public function watergate_new(i:int):void
+public function watergate_new(i:u8):void
 {
 	p2[i] = py[i];
 	p3[i] = 0;
@@ -348,7 +348,7 @@ public function watergate_new(i:int):void
 	p6[i] = 0;
 }
 
-public function watergate_process(i:int):void
+public function watergate_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -365,14 +365,13 @@ public function watergate_process(i:int):void
 		my.register_touch_event(watergate_event, x, y, i);
 	}
 
-	ppu.null_func();
 	gr_sprite2(x, y, spr, pal);
 
 	p4[i] = stat;
 	p5[i] = wait;
 }
 
-function watergate_event():int
+function watergate_event():u8
 {
 	if (my.items[ITEM_ID_KEY]) {
 		event2.register_confirm_dialog(_T("水門のかぎをつかって↓水門をうごかしますか？"), watergate_event_callback);
@@ -382,7 +381,7 @@ function watergate_event():int
 	return 1;
 }
 
-function watergate_event_callback(result:int):void options(segment: common)
+function watergate_event_callback(result:u8):void @(segment: common)
 {
 	if (result == 0) {
 		game_event = event.ID_OPEN_WATERGATE;
@@ -394,7 +393,7 @@ function watergate_event_callback(result:int):void options(segment: common)
  * 色スイッチ
  *********************************************/
 
-public function colorswitch_new(i:int):void
+public function colorswitch_new(i:u8):void
 {
 	p2[i] = py[i];
 	if (my.flags[my.FLAG_COLORSWITCH] == p1[i] + 1) {
@@ -402,7 +401,7 @@ public function colorswitch_new(i:int):void
 	}
 }
 
-public function colorswitch_process(i:int):void
+public function colorswitch_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -445,12 +444,12 @@ public function colorswitch_process(i:int):void
 	py[i] = y;
 }
 
-function colorswitch_check_enemy_on(me:int):int
+function colorswitch_check_enemy_on(me:u8):u8
 {
 	var x = px[me];
 	var y = py[me];
 
-	var i:int;
+	var i:u8;
 	for (i = 0; i < cur_max; i++) {
 		var et = type[i];
 		if ((et == TYPE_SLIME || et == TYPE_FROG || et == TYPE_BOUNDER) && i != me) {
@@ -471,24 +470,24 @@ function colorswitch_check_enemy_on(me:int):int
  * p7: vx
  *********************************************/
 
-public function jumpman_new(i:int):void
+public function jumpman_new(i:u8):void
 {
 	p5[i] = 0;
 	p6[i] = 0;
 }
 
-public function jumpman_process(i:int):void
+public function jumpman_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var dir:sint = p1[i];
-	var vy:sint = p4[i];
+	var dir:i8 = p1[i];
+	var vy:i8 = p4[i];
 	var stat = p5[i];
 	var jump_wait = p6[i];
 	var vx = p7[i];
 	var back_flag = 0;
-	var dx:sint = (giff + 8) / 16;
+	var dx:i8 = (giff + 8) / 16;
 	if (dir < 0) {
 		dx = -dx;
 	}
@@ -496,7 +495,7 @@ public function jumpman_process(i:int):void
 	var cell = 0; //bg.cell(x-dir*4,y-7);
 	switch (stat) {
 	case 0:
-		var jump_to:sint = -1;
+		var jump_to:i8 = -1;
 		// 歩き
 		if (jump_wait > 0) {
 			jump_wait -= 1;
@@ -529,7 +528,7 @@ public function jumpman_process(i:int):void
 			vy = JUMPMAN_JUMP_VY[jump_to];
 			vx = JUMPMAN_JUMP_VX[jump_to];
 		} elsif (bg.cell_type(x - 5, y + 8) & bg.TYPE_WALL || bg.cell_type(x + 5, y + 8) & bg.TYPE_WALL) {
-			var nx:uint = x + dir * 8;
+			var nx:u8 = x + dir * 8;
 			if (nx < 16 || nx > 240 || bg.cell_type(nx, y - 8) & bg.TYPE_STOP) {
 				dir = -dir;
 			} else {
@@ -571,11 +570,11 @@ public function jumpman_process(i:int):void
 		}
 	}
 
-	var flip:uint = (1 - dir) / 2;
+	var flip:u8 = (1 - dir) / 2;
 	var spr = SPR_SLOT[slot] + SPR_JUMPMAN;
 	var pal = PAL_SLOT[slot];
 	gr_sprite2(x, y, spr + (anim / 16) % 2 * 4, 64 * flip | back_flag | pal);
-	var pdx:sint = dir * 8;
+	var pdx:i8 = dir * 8;
 	if (dir < 0) {
 		pdx -= 8;
 	}
@@ -598,14 +597,14 @@ public function jumpman_process(i:int):void
 	}
 }
 
-function jumpman_search(x:int, y:int, dir:sint, no_horizontal:int):int
+function jumpman_search(x:u8, y:u8, dir:i8, no_horizontal:u8):u8
 {
-	var horizontal_type:int;
+	var horizontal_type:u8;
 	//return 4;
 	var i = 0;
 	var cx = x / 16;
 	var cy = y / 16;
-	var dir2:sint = dir * 2;
+	var dir2:i8 = dir * 2;
 	if (cx + dir2 <= 0)
 		return -1;
 	if (cx + dir2 >= 15)
@@ -653,7 +652,7 @@ function jumpman_search(x:int, y:int, dir:sint, no_horizontal:int):int
 	if (total <= 0)
 		return -1;
 
-	var n:sint = math.rand() % total;
+	var n:i8 = math.rand() % total;
 	for (i = 0; i < 7; i++) {
 		n -= temp[i];
 		if (n < 0)
@@ -667,7 +666,7 @@ function jumpman_search(x:int, y:int, dir:sint, no_horizontal:int):int
 const JUMPMAN_JUMP_VY = [-25, -19, -16, -10, -8, -12, -16];
 const JUMPMAN_JUMP_VX = [12, 12, 12, 12, 12, 10, 16];
 
-function jumpman_check(cx:int, cy:int):int
+function jumpman_check(cx:u8, cy:u8):u8
 {
 	if (cy <= 0 || cy >= 15)
 		return 0;
@@ -680,9 +679,9 @@ function jumpman_check(cx:int, cy:int):int
  * トライアルのエンディングポイント
  *********************************************/
 
-public function trial_ending_new(i:int):void {}
+public function trial_ending_new(i:u8):void {}
 
-public function trial_ending_process(i:int):void
+public function trial_ending_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -697,13 +696,13 @@ public function trial_ending_process(i:int):void
 	gr_sprite2(x, y, SPR_SLOT[slot] + SPR_TRIAL_ENDING + 4, PAL_SLOT[slot]);
 }
 
-function trial_ending_event():int
+function trial_ending_event():u8
 {
 	event2.register_confirm_dialog(_T("ためしは終わった……↓クリアしますか？"), trial_ending_callback, 1);
 	return 1;
 }
 
-function trial_ending_callback(result:int):void options(segment: "common")
+function trial_ending_callback(result:u8):void @(segment: "common")
 {
 	if (result == 0) {
 		game.game_event = event.ID_TRIAL_ENDING;

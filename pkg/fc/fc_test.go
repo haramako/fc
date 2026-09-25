@@ -39,7 +39,7 @@ func TestBuildMiku(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := os.ReadFile(filepath.Join(root, "testdata", "golden", "examples", "miku.nes"))
+	want, err := os.ReadFile(filepath.Join(root, "testdata", "golden", "examples", "v3", "miku.nes")) // examples/ は fc 3 の版
 	if err != nil {
 		t.Fatal(err)
 	}

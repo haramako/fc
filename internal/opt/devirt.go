@@ -67,7 +67,7 @@ func DevirtualizeProgram(mods []*ir.Module, farEnabled bool) {
 		return lmd.Module
 	}
 	isFar := func(caller, callee *ir.Lambda) bool {
-		if !farEnabled || callee.Options.Has("near") {
+		if !farEnabled || callee.Options.Flag("near") {
 			return false
 		}
 		at, from := placement(callee), placement(caller)

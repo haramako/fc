@@ -32,6 +32,32 @@ NES 向けの特色を伸ばす候補として、バンク情報を持つ関数�
 
 ## 1. 基底型を指定できる enum
 
+**2026-09-25 決定・実装済み（feature/v3）**: 型は `types.EnumInfo` を付けた整数型（コード生成は基底型の整数のまま）、
+`sema/enum.go`、`.Name` は `withExpected` の文脈の型で決める（代入・比較の相手・case・引数・戻り値・初期値）、`TestV3Enum`。
+残り: `@len(E)`（§2 の len と一緒に入れる）、メンバーの値の式で同じ enum の他のメンバーを使うこと（今は整数の定数とリテラルだけ）。
+
+```fc
+enum PlayerState:u8 {   // 基底型は u8 / i8 / u16 / i16。省略したら u8
+    Stand = 0,
+    Jump = 2,           // 値を明示できる (ROM のデータやセーブ形式の数値を保つ)
+    Ladder,             // 省略したら前の値 + 1 (= 3)
+}
+var state:PlayerState = .Stand;
+```
+
+- 値は定数式（他のメンバー・`const` を使える）。全ての値が基底型に収まらなければエラー
+- 参照は型名つき（`PlayerState.Jump`、他モジュールからは `my.PlayerState.Jump`）。型が文脈から分かるとき
+  （代入・比較の相手・`switch` の `case`・引数・戻り値・フィールド）は `.Jump` と省略できる（struct リテラルの型名の省略と同じ規則）
+- 整数との変換は両方向とも `as` で明示する。範囲外の値の変換は検査しない（基底型の値は何でも入る）。汎用の `u8` 配列に
+  しまう使い方は `p4[i] as EnState` で使える
+- 同じ enum 同士の `==` `!=` と大小比較（値の順序）はできる。算術（`+`、`++` など）は `as` で整数にしてから
+- 配列の添字には変換なしで使える（`PROCESS[t]`）。メンバーの数は `@len(EnType)` のように取れるようにする（§2 の len と合わせる）
+- `default` の無い `switch` がメンバーを全て書いていなければ警告
+- `public enum` はメンバーも公開する（メンバーごとの可視性は無し）。struct / soa のフィールドの型にも使える
+- ビットフラグ（`1 << n` を組み合わせるもの）は含めない（別に検討）。`@if` の条件には使えない（`@(build)` の定数だけ）
+- migrate は無し（新しい機能。今の `const STATE_*` はそのまま動く）。`enum` は FC3 の予約語（2026-09-25 時点で既存
+  ソースに `enum` という識別子は無い）
+
 ### 動機
 
 [my.fc](../examples/castle/src/my.fc) の `STATE_*` と `state:int`、
@@ -85,6 +111,26 @@ static_assert(offsetof(Sprite, x) == 3, "field offset mismatch");
 
 ## 3. 読み取り専用ポインタ
 
+**2026-09-25 決定・実装済み（feature/v3）**: `types.ConstPointerTo`（関数の型・struct のフィールドに残す）、`sema/constptr.go`。
+読み取り専用は意味解析だけの情報にした: 変数（引数・ローカル・グローバル・戻り値）の IR の型は `*T` にして `ir.Value.ReadOnly`
+で持ち、添字・アドレス・フィールドで作る一時変数も印で持つ（IR の型が変わると写しの統合などが変わり、*const を書いただけで
+生成コードが変わったため）。`@bitcast` の結果は読み取り専用にしない。*const T を通した書き込みはエラー（新しい書き方なので
+既存のソースには当たらない）、ポインタ同士の `as` はもともと不可。fclib は fc 3 に migrate し、読むだけの引数（mem.copy の
+コピー元、compare、strlen、strcpy のコピー元、各 unpack の元、stdio の print / puts / ppu_put、unittest のメッセージ）を
+`*const u8` にした。`TestV3ConstPointer`。soa の `const` の入れ物（IsConst）とはまだまとめていない。決定の内容:
+
+- 表記は `*const T`（slice の `[]const T` とそろえる）。`const` はその 1 段の参照先にだけ掛かる（`*const *u8` は書き換えられる
+  ポインタを読み取り専用で指す）。ポインタ変数そのものの書き換えは今の `var` / `const` のまま
+- 読み取り専用のポインタになるもの: `const` の配列・変数のアドレス、`const` の配列からポインタへの変換、文字列リテラル
+  （型は `*const u8`）。soa の `const` の入れ物（今の `IsConst`）も同じ仕組みにまとめる。読み取り専用と ROM 配置は別の概念
+  （RAM のバッファを `*const` で渡してよい）
+- `*T` → `*const T` は暗黙に変換できる。`*const T` → `*T` はできず、外すのは `@bitcast(*T, p)` だけ（`as` では外せない）
+- 書き込みの禁止: `*p = …` / `p[i] = …` / `p.x = …`（中の配列の要素・フィールドも）と、`*const` を `*T` の引数・変数に渡すこと
+- **移行: FC3 の最初の版では、読み取り専用の違反（ROM の配列や文字列を `*u8` に渡すなど）はエラーでなく警告にする**。
+  migrate は `*const` を付けない（書き込まれないことの推論には意味解析と呼び出しグラフの反復が要るため）。fclib の API
+  （`mem.copy` のコピー元、`strlen`、`print` の文字列など）と利用側は手で `*const` に直し、警告が無くなってからエラーにする
+- 読み取り専用の参照を根拠に「他の参照からも変更されない」と仮定する最適化はしない
+
 ### 動機
 
 現状の [types.go](../internal/types/types.go) のポインタ型には参照先の読み取り専用属性がなく、
@@ -103,6 +149,14 @@ static_assert(offsetof(Sprite, x) == 3, "field offset mismatch");
 `len` などより影響範囲は大きいが、ROM と RAM を日常的に扱う言語として優先度は高い。
 
 ## 4. バンク情報を持つ関数ポインタ
+
+**2026-09-25 時点: `farfn(T):R` として実装済み**（f60f29e、[v2_far_function_pointers.md](v2_far_function_pointers.md)。3 バイト、
+`.bank(symbol)`、`fn` と分けて必要な表だけ使う、ABI・呼び出しグラフ・定数表・near / far の変換）。残りは:
+
+- バンク番号の取り出し `@bank(関数)` / `@bank(farfn の値)`: リンク時の値（`.bank(symbol)`、farfn の 3 バイト目）として先に入れる。
+  手書きの ld65.cfg の経路とも両立する。`PROCESS` を farfn の表にすれば `EN_BANKS` の二重管理が無くなる。コンパイル時に
+  バンクを知る機能は v3_plan.md §3（配置の情報源）で扱う
+- 密なループで毎回バンクを戻さない呼び方: roadmap に「far call の復帰を関数の出口まで遅らせる」として記録（見込みは薄い）
 
 ### 動機
 

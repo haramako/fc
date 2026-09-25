@@ -33,11 +33,14 @@ type declaration struct {
 	use      *syntax.UseDecl
 	imported *ir.Module
 	action   func(*Hlc)
+	inStatic bool // トップレベルの @if の選ばれた側で集めた宣言 (@(build) は置けない)
 }
 type moduleDecls struct {
-	h       *Hlc
-	entries []*declaration
-	state   resolutionState
+	h           *Hlc
+	entries     []*declaration
+	state       resolutionState
+	pending     []pendingIf // 評価を待つトップレベルの @if
+	staticDepth int         // @if の選ばれた側を集めている深さ
 }
 
 func (d *declaration) resolve() {
@@ -70,7 +73,7 @@ func (d *declaration) resolve() {
 		panic(&diag.Error{Msg: msg})
 	}
 	d.state = resolutionActive
-	h := &Hlc{prog: p, deps: d.owner.h.deps, module: d.owner.h.module, scope: d.owner.h.scope}
+	h := &Hlc{prog: p, deps: d.owner.h.deps, module: d.owner.h.module, scope: d.owner.h.scope, inStaticIf: d.inStatic}
 	h.updatePos(d.stmt)
 	outer := p.curModule
 	p.curModule = h.module.Id
@@ -136,10 +139,14 @@ func (md *moduleDecls) collect(stmts []syntax.Stmt, group *declaration) {
 	}
 }
 func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
-	d := &declaration{owner: md, stmt: s, group: group}
+	d := &declaration{owner: md, stmt: s, group: group, inStatic: md.staticDepth > 0}
 	switch s := s.(type) {
 	case *syntax.Block:
 		md.collect(s.Stmts, group)
+		return
+	case *syntax.StaticIfStmt:
+		// 条件は use を読み込んでから評価する (expandStaticIfs)
+		md.pending = append(md.pending, pendingIf{stmt: s, group: group})
 		return
 	case *syntax.PlacementBlock:
 		// Validate allowed children before registering any of their names.
@@ -161,6 +168,8 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 	case *syntax.FuncDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.StructDecl:
+		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
+	case *syntax.EnumDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.SoaDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
@@ -210,8 +219,8 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 
 func (md *moduleDecls) loadImports() {
 	for _, d := range md.entries {
-		if d.use == nil {
-			continue
+		if d.use == nil || d.imported != nil || d.state == resolutionFailed {
+			continue // 読み込み済み (@if を展開した後にもう一度呼ぶ)
 		}
 		md.run(d.stmt, func() {
 			m, err := md.h.deps.Module(d.use.Module.Name)
@@ -228,6 +237,24 @@ func (md *moduleDecls) loadImports() {
 				d.action = func(*Hlc) {}
 			}
 		})
+	}
+}
+
+// expandStaticIfs はトップレベルの @if を評価し、選ばれた側の文を集めて、その中の use を読み込む (入れ子の @if が
+// 無くなるまで繰り返す)。選ばれなかった側は名前解決も use の読み込みもしない。
+func (md *moduleDecls) expandStaticIfs() {
+	for len(md.pending) > 0 {
+		ps := md.pending
+		md.pending = nil
+		for _, p := range ps {
+			md.run(p.stmt, func() {
+				stmts := md.h.staticBranch(p.stmt)
+				md.staticDepth++
+				defer func() { md.staticDepth-- }()
+				md.collect(stmts, p.group)
+			})
+		}
+		md.loadImports()
 	}
 }
 

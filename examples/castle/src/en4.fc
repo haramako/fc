@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 9);
+#fc 3
+@(bank: 9);
 use * from en;
 use * from resource;
 use * from graphics;
@@ -14,7 +14,7 @@ use marchant;
 /*********************************************
  * バウンドするボール
  *********************************************/
-public function bounder_new(i:int):void
+public function bounder_new(i:u8):void
 {
 	if (p2[i] == 0) {
 		p2[i] = 32;
@@ -26,7 +26,7 @@ public function bounder_new(i:int):void
 	p5[i] = 1;
 }
 
-public function bounder_process(i:int):void
+public function bounder_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -35,7 +35,7 @@ public function bounder_process(i:int):void
 	var speed = p2[i];
 	var pow = p3[i];
 	var state = p4[i];
-	var t:sint = p5[i];
+	var t:i8 = p5[i];
 	var anim = 0;
 
 	switch (state) {
@@ -98,7 +98,7 @@ public function bounder_process(i:int):void
  * p7: 次に進む方向
  *********************************************/
 
-public function prominence_new(i:int):void
+public function prominence_new(i:u8):void
 {
 	if (p1[i] == 0)
 		p1[i] = 60;
@@ -110,7 +110,7 @@ public function prominence_new(i:int):void
 	p8[i] = 0;
 }
 
-public function prominence_process(i:int):void
+public function prominence_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -135,8 +135,8 @@ public function prominence_process(i:int):void
 
 	case 1: // 移動中
 		if (next_dir == -1) {
-			var dx:sint = x / 2 - my.x / 2;
-			var dy:sint = y / 2 - my.y / 2;
+			var dx:i8 = x / 2 - my.x / 2;
+			var dy:i8 = y / 2 - my.y / 2;
 			switch (dir) {
 			case DIR_UP, DIR_DOWN:
 				if (math.abs(dy) < 4 || y <= 16 || y >= 224) {
@@ -217,7 +217,7 @@ public function prominence_process(i:int):void
 	p8[i] = frame_wait;
 }
 
-function prominence_draw_cell(cx:int, cy:int):void
+function prominence_draw_cell(cx:u8, cy:u8):void
 {
 	bg.put2(cx, cy, 2, 1 /*パレット*/ );
 }
@@ -229,13 +229,13 @@ function prominence_draw_cell(cx:int, cy:int):void
  * p6: カウンター
  *********************************************/
 
-public function skelton_new(i:int):void
+public function skelton_new(i:u8):void
 {
 	p5[i] = 0;
 	p6[i] = 0;
 }
 
-public function skelton_process(i:int):void
+public function skelton_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -243,9 +243,9 @@ public function skelton_process(i:int):void
 	var dir = p1[i];
 	var stat = p5[i];
 	var wait = p6[i];
-	var dx:sint;
+	var dx:i8;
 
-	var nx:uint = x + DIR_VX[dir] * 8;
+	var nx:u8 = x + DIR_VX[dir] * 8;
 	var is_hole = (bg.cell_type(nx, y + 16) & bg.TYPE_WALL) == 0;
 	var is_wall = nx < 16 || nx > 240 || (bg.cell_type(nx, y - 8) & (bg.TYPE_STOP | bg.TYPE_WALL));
 
@@ -260,7 +260,7 @@ public function skelton_process(i:int):void
 		if (is_hole || is_wall) {
 			dir = 4 - dir;
 		} else {
-			var dx:sint = (giff + 16) / 16;
+			var dx:i8 = (giff + 16) / 16;
 			if (dir == DIR_LEFT) {
 				dx = -dx;
 			}
@@ -284,7 +284,7 @@ public function skelton_process(i:int):void
 			if (is_hole || is_wall) {
 				dir = 4 - dir;
 			} else {
-				var dx:sint = (giff + 8) / 16;
+				var dx:i8 = (giff + 8) / 16;
 				if (dir == DIR_LEFT) {
 					dx = -dx;
 				}
@@ -332,15 +332,15 @@ public function skelton_process(i:int):void
 const skelton_bone_anims = [0, 4, 4];
 const skelton_bone_flags = [0, 0, 64];
 
-public function skelton_bone_new(i:int):void {}
+public function skelton_bone_new(i:u8):void {}
 
-public function skelton_bone_process(i:int):void
+public function skelton_bone_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var vx:sint = p1[i];
-	var vy:sint = p2[i];
+	var vx:i8 = p1[i];
+	var vy:i8 = p2[i];
 	var local_anim = p3[i];
 
 	vy += anim % 2;
@@ -370,12 +370,12 @@ public function skelton_bone_process(i:int):void
  * 太陽神殿のゲート
  *********************************************/
 
-public function sungate_new(i:int):void
+public function sungate_new(i:u8):void
 {
 	p4[i] = 0;
 }
 
-public function sungate_process(i:int):void
+public function sungate_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -389,7 +389,7 @@ public function sungate_process(i:int):void
 	draw_sungate(slot, flag);
 }
 
-function draw_sungate(slot:int, flag:int):void
+function draw_sungate(slot:u8, flag:u8):void
 {
 	if (anim % 2 == 0) {
 		var spr = SPR_SLOT[slot] + SPR_SUNGATE;
@@ -403,7 +403,7 @@ function draw_sungate(slot:int, flag:int):void
 	}
 }
 
-function sungate_event():int
+function sungate_event():u8
 {
 	var item_flag = sungate_flag_from_item();
 	var cur_flag = my.flags[my.FLAG_SUNGATE];
@@ -419,14 +419,14 @@ function sungate_event():int
 	return 1;
 }
 
-function sungate_confirm_callback(i:int):void options(segment: "common")
+function sungate_confirm_callback(i:u8):void @(segment: "common")
 {
 	if (i == 0) {
 		game_event = event.ID_SUNGATE;
 	}
 }
 
-function sungate_flag_from_item():int
+function sungate_flag_from_item():u8
 {
 	var flag = 0;
 
@@ -446,9 +446,9 @@ function sungate_flag_from_item():int
  * 錨生成器スイッチ
  *********************************************/
 
-public function anchor_switch_new(i:int):void {}
+public function anchor_switch_new(i:u8):void {}
 
-public function anchor_switch_process(i:int):void
+public function anchor_switch_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -463,7 +463,7 @@ public function anchor_switch_process(i:int):void
 	gr_sprite2(x, y, spr, pal);
 }
 
-function anchro_switch_event():int
+function anchro_switch_event():u8
 {
 	if (my.flags[my.FLAG_ANCHOR_GENERATOR]) {
 		event2.register_message_dialog(_T("ランプがてんめつしている。\nかどうしているようだ。"));
@@ -473,7 +473,7 @@ function anchro_switch_event():int
 	return 1;
 }
 
-function anchor_confirm_callback(r:uint8):void
+function anchor_confirm_callback(r:u8):void
 {
 	if (r == 0) {
 		event.register_anchor_switch();
@@ -484,15 +484,15 @@ function anchor_confirm_callback(r:uint8):void
  * 錨生成器の鎖
  *********************************************/
 
-public function anchor_chain_new(i:int):void {}
+public function anchor_chain_new(i:u8):void {}
 
-public function anchor_chain_process(i:int):void
+public function anchor_chain_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
 
-	var n:int;
+	var n:u8;
 	for (n = 0; n < 6; n++) {
 		gr_sprite2(x, y + 16 * n, SPR_SLOT[slot] + SPR_ANCHOR_CHAIN, PAL_SLOT[slot] | ppu.SPRITE_FLAG_HIDE);
 	}
@@ -505,13 +505,13 @@ public function anchor_chain_process(i:int):void
  * p6: 時計回り方向なら0, 反時計回り方向なら1
  *********************************************/
 
-public function spider_new(i:int):void
+public function spider_new(i:u8):void
 {
 	p4[i] = 0;
 	p5[i] = 0;
 }
 
-public function spider_process(i:int):void
+public function spider_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -569,7 +569,7 @@ public function spider_process(i:int):void
 		}
 		gr_sprite2(x, y, spr + 2 * 4, pal | DIR_FLIP[dir]);
 	case 4: // 歩く
-		spider_walk(&foot_cell_idx, &dir, bitcast<*sint>(&wait), reverse);
+		spider_walk(&foot_cell_idx, &dir, @bitcast(*i8, &wait), reverse);
 
 		if (dir == -1) {
 			//落ちる
@@ -626,7 +626,7 @@ const DIR_CELL_OFFSET = [-16, 1, 16, -1];
  *
  * □: foot, 1: next_upper, 2: next_foot
  */
-function spider_walk(p_foot_cell_idx:*int, p_dir:*int, p_wait:*sint, reverse:int):void
+function spider_walk(p_foot_cell_idx:*u8, p_dir:*u8, p_wait:*i8, reverse:u8):void
 {
 	var dir = *p_dir;
 	var foot_cell_idx = *p_foot_cell_idx;
@@ -686,7 +686,7 @@ function spider_walk(p_foot_cell_idx:*int, p_dir:*int, p_wait:*sint, reverse:int
  * p5: ウェイト
  *********************************************/
 
-public function mummy_new(i:int):void
+public function mummy_new(i:u8):void
 {
 	if (p2[i] == 0)
 		p2[i] = 8;
@@ -694,7 +694,7 @@ public function mummy_new(i:int):void
 	p5[i] = 0;
 }
 
-public function mummy_process(i:int):void
+public function mummy_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -704,8 +704,8 @@ public function mummy_process(i:int):void
 	var stat = p4[i];
 	var wait = p5[i];
 
-	var ground_cell:int;
-	var vy:int;
+	var ground_cell:u8;
+	var vy:u8;
 
 	var spr = SPR_SLOT[slot] + SPR_MUMMY;
 	var pal = PAL_SLOT[slot];
@@ -812,7 +812,7 @@ public function mummy_process(i:int):void
  * p2: 商人の種類
  *********************************************/
 
-public function marchant_new(i:int):void
+public function marchant_new(i:u8):void
 {
 	p4[i] = 0;
 
@@ -827,7 +827,7 @@ public function marchant_new(i:int):void
 	}
 }
 
-public function marchant_process(i:int):void
+public function marchant_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -847,7 +847,7 @@ public function marchant_process(i:int):void
 	gr_sprite2(x, y, SPR_SLOT[slot] + SPR_MARCHANT, PAL_SLOT[slot]);
 }
 
-function marchant_event():int
+function marchant_event():u8
 {
 	marchant.event_marchant(my.touch_event_p1);
 	return 1;

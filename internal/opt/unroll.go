@@ -258,10 +258,14 @@ func (s *ssaForm) unrollOne() bool {
 			if n == trips {
 				end = h.End
 			}
+			head := true // ヘッダの先頭のラベルの並び
 			for i := h.Start; i < end; i++ {
 				op := ops[i]
 				if op == nil {
 					continue
+				}
+				if op.Code != ir.OpLabel {
+					head = false
 				}
 				no := *op
 				no.Src = make([]ir.Operand, len(op.Src))
@@ -270,6 +274,15 @@ func (s *ssaForm) unrollOne() bool {
 				}
 				if op.Dst != nil {
 					no.Dst = mapOperand(op.Dst)
+				}
+				if n > 0 {
+					// 最初の写しは元の注釈のまま (ir.KeepLogs が付け替えない)。ヘッダの先頭のラベルの注釈はループに入る前の
+					// 地点 (`@log(...); while (...)`) なので最初の写しだけ (2 つめからは前の周から来る)
+					if head {
+						no.Logs = nil
+					} else {
+						no.Logs = ir.CloneLogs(op.Logs, mapOperand)
+					}
 				}
 				// 最後の写し (検査だけ) の飛び先は元のブロック (出口の経路はどの写しでも同じ)
 				target := func(l string) string {

@@ -53,21 +53,18 @@ _test_rle_dest: .res 128
 	lda #.HIBYTE(_5)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldx FC_SP
 	lda #.LOBYTE(_test_rle_dest)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_test_rle_dest)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(_10)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(_10)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda 0+<F_test_rle_test_rle+0
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	bne @1
 	lda #1
 	sta 0+<F_test_rle_test_rle+2
@@ -112,21 +109,18 @@ _test_rle_dest: .res 128
 	lda #.HIBYTE(_17)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldx FC_SP
 	lda #.LOBYTE(_test_rle_dest)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_test_rle_dest)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(_22)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(_22)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda 0+<F_test_rle_test_rle+0
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	bne @3
 	lda #1
 	sta 0+<F_test_rle_test_rle+0

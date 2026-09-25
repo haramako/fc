@@ -1,13 +1,13 @@
-#fc 2
-options(bank: -1);
+#fc 3
+@(bank: -1);
 
-public const _M = textmap("../tmp/font/misc_text.chr.txt");
-public const _T = textmap("../tmp/font/text.chr.txt");
-public const _I = textmap("../tmp/font/item_text.chr.txt");
+public const _M = @textmap("../tmp/font/misc_text.chr.txt");
+public const _T = @textmap("../tmp/font/text.chr.txt");
+public const _I = @textmap("../tmp/font/item_text.chr.txt");
 
 const DEBUG = 0;
-public var debug_mode:int;
-public var debug_flag:int;
+public var debug_mode:u8;
+public var debug_flag:u8;
 public const DEBUG_FLAG_TITLE_SKIP = 1 << 0;
 public const DEBUG_FLAG_AUTO_SAVE = 1 << 1;
 public const DEBUG_FLAG_FREEJUMP = 1 << 2;
@@ -15,7 +15,7 @@ public const DEBUG_FLAG_UP_JUMP = 1 << 3;
 public const DEBUG_FLAG_AUTO_ANCHOR = 1 << 4;
 public const DEBUG_FLAG_NO_BGM = 1 << 5;
 
-public function debug_on(mask:int):int
+public function debug_on(mask:u8):u8
 {
 	return debug_mode && debug_flag & mask;
 }
@@ -35,10 +35,10 @@ public const TELE_READ_MEMORY = 6; // arg: memory ID
 public const TELE_START_GAME = 7; // arg: なし
 public const TELE_CLEAR_SAVEDATA = 8; // arg: なし
 
-var tele_seq:int;
-var tele_buf:[32]int; // [type, arg] x 16 エントリのリング
+var tele_seq:u8;
+var tele_buf:[32]u8; // [type, arg] x 16 エントリのリング
 
-public function tele(type:int, arg:int):void
+public function tele(type:u8, arg:u8):void
 {
 	var i = (tele_seq & 15) * 2;
 	tele_buf[i] = type;
@@ -46,8 +46,8 @@ public function tele(type:int, arg:int):void
 	tele_seq += 1;
 }
 
-public const ITEM_PAL = incbin("../res/images/item.nespal");
-public const ITEM_TILEPAL = incbin("../res/images/item.tilepal");
+public const ITEM_PAL = @incbin("../res/images/item.nespal");
+public const ITEM_TILEPAL = @incbin("../res/images/item.tilepal");
 
 public const SAVE_DATA_VERSION = 11;
 
@@ -109,21 +109,21 @@ public const PBANK_FS = 24;
 
 public const VRAM_PALETTE = 0x3f00;
 
-public const BIT_MASK:[]int = [1, 2, 4, 8, 16, 32, 64, 128];
+public const BIT_MASK:[?]u8 = [1, 2, 4, 8, 16, 32, 64, 128];
 
 public const GIFF_TABLE = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
-public var anim:int;
-public var giff:int;
+public var anim:u8;
+public var giff:u8;
 
-public var game_event:int options(segment: "BSS_EX");
-public var game_event_p1:int options(segment: "BSS_EX");
-public var game_event_p2:int options(segment: "BSS_EX");
-public var game_event_ptr1:*int options(segment: "BSS_EX");
-public var game_event_callback:farfn(int):void options(segment: "BSS_EX");
+public var game_event:u8 @(segment: "BSS_EX");
+public var game_event_p1:u8 @(segment: "BSS_EX");
+public var game_event_p2:u8 @(segment: "BSS_EX");
+public var game_event_ptr1:*u8 @(segment: "BSS_EX");
+public var game_event_callback:farfn(u8):void @(segment: "BSS_EX");
 
-var scroll_x:int options(address: 0x68);
+var scroll_x:u8 @(address: 0x68);
 
-public function gr_sprite2(x:int, y:int, pat:int, flag:int):void
+public function gr_sprite2(x:u8, y:u8, pat:u8, flag:u8):void
 {
 	if (flag & (1 << 6)) {
 		ppu.sprite(x, y - 8, pat, flag);
@@ -134,7 +134,7 @@ public function gr_sprite2(x:int, y:int, pat:int, flag:int):void
 	}
 }
 
-public function gr_sprite2_idx(x:int, y:int, pat:int, flag:int, idx:int):void
+public function gr_sprite2_idx(x:u8, y:u8, pat:u8, flag:u8, idx:u8):void
 {
 	if (flag & (1 << 6)) {
 		ppu.sprite_idx(x, y - 8, pat, flag, idx);
@@ -145,7 +145,7 @@ public function gr_sprite2_idx(x:int, y:int, pat:int, flag:int, idx:int):void
 	}
 }
 
-public function heap_strcpy(str:*int):*int
+public function heap_strcpy(str:*u8):*u8
 {
 	var len = mem.strlen(str);
 	var buf = heap.alloc(len + 1);
@@ -153,8 +153,8 @@ public function heap_strcpy(str:*int):*int
 	return buf;
 }
 
-public const DIR_VX:[]sint = [0, 1, 0, -1];
-public const DIR_VY:[]sint = [-1, 0, 1, 0];
+public const DIR_VX:[?]i8 = [0, 1, 0, -1];
+public const DIR_VY:[?]i8 = [-1, 0, 1, 0];
 public const DIR_FLIP = [0, 0, 0, 1];
 public const DIR_FLIP_XY = [0, 0, 128, 64];
 public const DIR_NONE = -1;

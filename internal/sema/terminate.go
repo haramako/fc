@@ -15,7 +15,7 @@ import (
 //   - ブロック: 最後の文が終端文
 //   - if: else があり、then / else とも終端文
 //   - loop / while (1) / 条件なし for: 中にそのループを抜ける break が無い
-//   - switch: default があり、全 case と default の最後の文が終端文
+//   - switch: default があり、全 case と default の最後の文が終端文 (fc 3 の fallthrough で終わる case は次の case が終端文なら)
 //   - ラベル付き文: 中の文
 func terminates(s syntax.Stmt) bool {
 	switch s := s.(type) {
@@ -39,12 +39,23 @@ func terminates(s syntax.Stmt) bool {
 		if s.Default == nil {
 			return false
 		}
-		for _, c := range s.Cases {
-			if len(c.Body) == 0 || !terminates(c.Body[len(c.Body)-1]) {
+		// 後ろから: fallthrough で終わる case は、次の case (最後なら default) が終端するなら終端する
+		next := len(s.Default.Body) > 0 && terminates(s.Default.Body[len(s.Default.Body)-1])
+		if !next {
+			return false
+		}
+		for i := len(s.Cases) - 1; i >= 0; i-- {
+			body := s.Cases[i].Body
+			switch {
+			case len(body) == 0:
+				return false
+			case endsWithFallthrough(body):
+				// next (次の case が終端するか) のまま
+			case !terminates(body[len(body)-1]):
 				return false
 			}
 		}
-		return len(s.Default.Body) > 0 && terminates(s.Default.Body[len(s.Default.Body)-1])
+		return true
 	case *syntax.LabeledStmt:
 		switch inner := s.Stmt.(type) {
 		case *syntax.LoopStmt:

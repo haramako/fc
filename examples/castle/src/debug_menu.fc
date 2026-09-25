@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 2);
+#fc 3
+@(bank: 2);
 
 use * from common;
 use mem;
@@ -13,36 +13,36 @@ use ending;
 use sound;
 use text;
 
-var last_checkpoint:int;
+var last_checkpoint:u8;
 
-var num:int;
-var items:[16]*int;
-var cur:int;
-var title:*int;
+var num:u8;
+var items:[16]*u8;
+var cur:u8;
+var title:*u8;
 
 function init():void {}
 
-function begin(name:*int):void
+function begin(name:*u8):void
 {
 	title = name;
 	num = 0;
 	cur = 0;
 }
 
-function add(item:*int):void
+function add(item:*u8):void
 {
 	items[num] = item;
 	num += 1;
 }
 
-const VRAM:int16 = 0x2400;
+const VRAM:u16 = 0x2400;
 const SEL_NUM_MAX = 10;
 
-var page:int;
-var page_num:int;
-var sel_num:int;
+var page:u8;
+var page_num:u8;
+var sel_num:u8;
 
-function select():int
+function select():u8
 {
 	ppu.clear_out_sprite();
 
@@ -75,7 +75,7 @@ function select():int
 	}
 }
 
-function select_change_page(new_page:int):void
+function select_change_page(new_page:u8):void
 {
 	page = new_page;
 	page_num = 1 + (num - 1) / SEL_NUM_MAX;
@@ -104,7 +104,7 @@ function select_draw():void
 	ppu.put_in_lock(0x400 + ppu.pos(2, 2), buf, 64);
 
 	var sel_base = page * SEL_NUM_MAX;
-	var i:int;
+	var i:u8;
 	for (i = 0; i < sel_num; i++) {
 		mem.zero(buf, 64);
 		text.print(buf, items[sel_base + i], 32);
@@ -166,10 +166,10 @@ public function start():void
 	ppu.wait_vsync();
 }
 
-function do_flag():int
+function do_flag():u8
 {
 	begin(_T("ちぇっくぽいんとをせんたく"));
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MAP_CHECKPOINT_NUM; i++) {
 		add(&MAP_CHECKPOINT_DATA[MAP_CHECKPOINT[i] + 3]);
 	}
@@ -186,7 +186,7 @@ function do_flag():int
 	return 1;
 }
 
-function do_debug_flag_change(mask:int, title:*int):void
+function do_debug_flag_change(mask:u8, title:*u8):void
 {
 	var flag = debug_flag & mask;
 	flag = do_select(flag, title);
@@ -198,7 +198,7 @@ function do_debug_flag_change(mask:int, title:*int):void
 	savedata.save();
 }
 
-function do_select(init:int, title:*int):int
+function do_select(init:u8, title:*u8):u8
 {
 	begin(title);
 	add(_T("OFF"));
@@ -214,7 +214,7 @@ function do_select(init:int, title:*int):int
 	}
 }
 
-function do_select2(init:int, title:*int):int
+function do_select2(init:u8, title:*u8):u8
 {
 	begin(title);
 	add(_T("OFF"));
@@ -269,7 +269,7 @@ function do_flag_select():void
 	}
 }
 
-function do_flag_change(flag_id:int, title:*int):void
+function do_flag_change(flag_id:u8, title:*u8):void
 {
 	var n = do_select2(my.flags[flag_id], title);
 	if (n != -1) {

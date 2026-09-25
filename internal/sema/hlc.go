@@ -31,6 +31,7 @@ type Hlc struct {
 	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
 	fastCalling  bool
 	groupBss     string // innermost placement block; module default is applied after declarations
+	inStaticIf   bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
 
 	module *ir.Module
 	lmd    *ir.Lambda
@@ -39,6 +40,9 @@ type Hlc struct {
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
 	cmemo map[*cexpr]*cexpr
+
+	pendingLogs []*ir.LogPoint  // 次に出す命令に付ける @log (log.go)
+	caseDecls   map[string]bool // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
 }
 
 // breakable は break / continue の飛び先になる文 (ループ、v2 では switch も)。
@@ -392,22 +396,26 @@ func (h *Hlc) readFile(name string) []byte {
 const switchTableMin = 10
 
 func (h *Hlc) compileLambda(lmd *ir.Lambda) {
-	oldLmd := h.lmd
-	h.lmd = lmd
+	oldLmd, oldLogs := h.lmd, h.pendingLogs
+	h.lmd, h.pendingLogs = lmd, nil
 	if len(h.loops) != 0 {
 		panic("loops not empty")
 	}
 	h.inScope(func() {
 		// 帰り値の追加
 		if lmd.Type.Base.Kind != types.Void {
-			lmd.Result = ir.NewLocal("$result", lmd.Type.Base, ir.LTResult)
+			rt, ro := h.storageType(lmd.Type.Base)
+			lmd.Result = ir.NewLocal("$result", rt, ir.LTResult)
+			lmd.Result.ReadOnly = ro
 			lmd.Vars = append([]*ir.Value{lmd.Result}, lmd.Vars...)
 		}
 
 		// 引数の追加
 		lmd.Args = make([]*ir.Value, len(lmd.Params))
 		for i, p := range lmd.Params {
-			lmd.Args[i] = h.addVar(ir.NewLocal(p.Name, p.Type, ir.LTArg))
+			pt, ro := h.storageType(p.Type)
+			lmd.Args[i] = h.addVar(ir.NewLocal(p.Name, pt, ir.LTArg))
+			lmd.Args[i].ReadOnly = ro
 		}
 
 		if lmd.Body != nil {
@@ -429,8 +437,11 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 				h.emit(&ir.Op{Code: ir.OpReturn})
 			}
 		}
+		for _, p := range h.pendingLogs {
+			h.prog.Warnings = append(h.prog.Warnings, diag.Warning{Msg: "@log after the last statement is never reached", Pos: p.Pos})
+		}
 	})
-	h.lmd = oldLmd
+	h.lmd, h.pendingLogs = oldLmd, oldLogs
 }
 
 // ---------------------------------------------------------------
@@ -522,6 +533,9 @@ func (h *Hlc) scopeIsPublic(publicPos syntax.Pos) bool {
 func (h *Hlc) compileStatement(s syntax.Stmt) {
 	h.updatePos(s)
 	h.cmemo = nil
+	if h.prog.LogEveryStatement && h.prog.LogEnabled && h.lmd != nil {
+		h.logEveryStatement()
+	}
 
 	switch s := s.(type) {
 
@@ -542,6 +556,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		}
 		var raws []rawOpt
 		for _, e := range s.Options.Entries {
+			checkBareOption(e)
 			found := false
 			for i := range raws {
 				if raws[i].key == e.Key.Name {
@@ -555,6 +570,10 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		}
 		for _, r := range raws {
 			val := optionValueOf(mustValue(h.constEval(toC(r.val))))
+			if r.key == "bank" && val.Kind == ir.OptStr {
+				h.updatePos(r.val)
+				val = h.bankByName(val.Str) // @(bank: "en"): fc.toml のバンクの表で番号に (fixed は -1)
+			}
 			if r.key == "bss" {
 				h.updatePos(r.val)
 				validateBss(val)
@@ -657,16 +676,34 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.compileStorageAlias(s)
 		} else if s.Const {
 			for _, sp := range s.Specs {
+				opts := parseOptions(sp.Options)
+				build := opts.Flag("build")
 				var init *cexpr
-				if sp.Init != nil {
+				if build {
+					init = toC(h.buildConstInit(sp.Name.Name, sp))
+				} else if sp.Init != nil {
 					init = toC(sp.Init)
 				}
-				h.compileConstSpec(sp.Name.Name, sp.Type, init, parseOptions(sp.Options), s.PublicPos)
+				h.compileConstSpec(sp.Name.Name, sp.Type, init, opts, s.PublicPos)
+				if build {
+					if v := h.scope.Local(sp.Name.Name); v != nil {
+						v.Build = true
+					}
+				}
 			}
 		} else {
 			for _, sp := range s.Specs {
 				h.compileVarSpec(sp, s.PublicPos)
 			}
+		}
+
+	case *syntax.EnumDecl:
+		h.compileEnumDecl(s)
+
+	case *syntax.StaticIfStmt:
+		// fc 3 の @if (関数の中): 選ばれた側だけを同じスコープでコンパイルする
+		for _, st := range h.staticBranch(s) {
+			h.compileStatement(st)
 		}
 
 	case *syntax.IfStmt:
@@ -675,10 +712,14 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileCond(toC(s.Cond), elseLabel, false)
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
 		h.inScope(func() { h.compileStatement(s.Then) })
+		if s.Else == nil {
+			h.warnBranchEndLog()
+		}
 		h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
 		if s.Else != nil {
 			h.inScope(func() { h.compileStatement(s.Else) })
+			h.warnBranchEndLog()
 		}
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 
@@ -773,6 +814,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileStatement(&syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.X, OpPos: s.OpPos, Op: syntax.Assign,
 			Rhs: &syntax.BinaryExpr{X: s.X, OpPos: s.OpPos, Op: op, Y: &syntax.IntLit{ValuePos: s.OpPos, Value: 1, Text: "1"}}}})
 
+	case *syntax.FallthroughStmt:
+		panic(&diag.Error{Msg: "fallthrough must be the last statement of a switch case"})
+
 	case *syntax.BreakStmt:
 		h.emit(&ir.Op{Code: ir.OpJump, Label: h.findBreakable("break", s.Label).breakLabel})
 
@@ -792,6 +836,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			rt := h.lmd.Type.Base
 			v := h.rval(h.withExpected(toC(s.Value), rt))
 			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
+			h.warnDropConst("return from "+h.lmd.Name, rt, v)
 			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.cast(v, rt)}})
 		} else {
 			// void関数
@@ -815,7 +860,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		allInt, n, minV, maxV := true, 0, 0, 0
 		for ci, c := range s.Cases {
 			for _, v := range c.Values {
-				cv := h.constEvalOperand(toC(v))
+				cv := h.constEvalOperand(h.withExpected(toC(v), ir.ValType(cond))) // enum なら `case .A:`
 				if k, ok := ir.ValIntLiteral(cv); ok {
 					if seen[k] {
 						panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d", k), Pos: syntax.At(h.module.Path, v.Pos())})
@@ -834,6 +879,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				vals[ci] = append(vals[ci], cv)
 			}
 		}
+		h.warnEnumSwitch(ir.ValType(cond), seen, s.Default != nil)
 		// ジャンプテーブル (switchTableMin 個以上の整数の case が密に並ぶとき。language_reference.md §5):
 		//   switch tag, min, [label...]; jump default; case...: ...; jump end; default: ...; end:
 		// 1 バイトのタグだけ (飛び先 - 1 を pha; pha; rts で飛ぶ。比較の連鎖は平均 3 + 5N/2 サイクル、表は約 33 で一定)
@@ -855,14 +901,28 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.emit(&ir.Op{Code: ir.OpJump, Label: defaultLabel})
 			for ci, c := range s.Cases {
 				h.emit(&ir.Op{Code: ir.OpLabel, Label: caseLabels[ci]})
-				h.compileStmts(c.Body)
-				h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
+				next := defaultLabel // fallthrough の行き先 (次の case の本体。最後の case なら default)
+				if ci+1 < len(caseLabels) {
+					next = caseLabels[ci+1]
+				}
+				h.compileCaseBody(s, ci, c.Body, next, endLabel)
 			}
 			h.emit(&ir.Op{Code: ir.OpLabel, Label: defaultLabel})
 		} else {
+			// fallthrough の行き先の本体の先頭のラベル (fallthrough される case だけ置く。ラベルはブロックの切れ目に
+			// なって最適化の結果を変えうるので、使わないときは今までどおり出さない)
+			bodyLabels := make([]string, len(s.Cases)+1) // 最後は default の本体
+			for ci, c := range s.Cases {
+				if endsWithFallthrough(c.Body) {
+					bodyLabels[ci+1] = h.newLabel("case")
+				}
+			}
 			for ci, c := range s.Cases {
 				labels := h.newLabels("then", "else")
 				thenLabel, elseLabel := labels[0], labels[1]
+				if bodyLabels[ci] != "" {
+					thenLabel = bodyLabels[ci]
+				}
 				// 値ごとに `eq t; if_true t goto then`、最後の値だけ `eq t; if t goto else` (一致しなければ次の case へ)。
 				// t は値ごとに新しい一時変数にする (定義 1 つ + 直後で使用、でコンディションフラグに割り付く: cmp; bne)
 				for k, cv := range vals[ci] {
@@ -874,16 +934,18 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 						h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: elseLabel})
 					}
 				}
-				if len(vals[ci]) > 1 {
+				if len(vals[ci]) > 1 || bodyLabels[ci] != "" {
 					h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
 				}
-				h.compileStmts(c.Body)
-				h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
+				h.compileCaseBody(s, ci, c.Body, bodyLabels[ci+1], endLabel)
 				h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
+			}
+			if l := bodyLabels[len(s.Cases)]; l != "" {
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: l})
 			}
 		}
 		if s.Default != nil {
-			h.compileStmts(s.Default.Body)
+			h.compileCaseBody(s, -1, s.Default.Body, "", endLabel)
 		}
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 		h.popBreakable()
@@ -932,6 +994,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	}
 	if typ != nil && init != nil {
 		h.compatibleAssign("`"+name+"`", typ, ir.ValType(init))
+		h.warnDropConst("`"+name+"`", typ, init)
 	}
 	var vv *ir.Value
 	if h.lmd == nil {
@@ -960,11 +1023,15 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				symbol = h.addDef(name, d)
 			}
 		}
-		vv = h.addVar(ir.NewGlobal(name, typ, symbol))
+		st, ro := h.storageType(typ)
+		vv = h.addVar(ir.NewGlobal(name, st, symbol))
+		vv.ReadOnly = ro
 		h.prog.storageGlobals[vv] = true
-		vv.Volatile = opt.Has("address") || opt.Has("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
+		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
 	} else {
-		vv = h.addVar(ir.NewLocal(name, typ, ir.LTNone))
+		st, ro := h.storageType(typ)
+		vv = h.addVar(ir.NewLocal(name, st, ir.LTNone))
+		vv.ReadOnly = ro
 	}
 	if h.scopeIsPublic(publicPos) {
 		vv.Public = true
@@ -978,6 +1045,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 // typ / val / opt はそれぞれ省略可 (nil)。
 func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
 	var newVal *ir.Value
+	if at, ok := typ.(*syntax.ArrayType); ok && at.IsSlice(h.version()) {
+		panic(&diag.Error{Msg: fmt.Sprintf("const %s: a slice is a run-time value (use [?]T for a constant array)", name)})
+	}
 	if val != nil {
 		declType := h.typeEval(typ)
 		cv := h.constEval(h.withExpected(val, declType))
@@ -1014,6 +1084,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 				symbol = h.addDef(name, d)
 			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
+			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)
 		} else {
 			if opt.Has("symbol") {
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(symbol:) needs an array constant (or no value to refer to an assembler symbol)", name)})
@@ -1096,7 +1167,13 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	case cNull:
 		return &cexpr{kind: cNull} // 型が決まるまで保留 (withExpected)
 
+	case cNullFn:
+		return c // @null_fn (型が決まるまで保留)
+
 	case cIdent:
+		if h.caseDecls[c.name] && h.scope.Find(c.name, true) == nil {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s not found (in fc 3 a variable declared in a switch case is visible only in that case; declare it before the switch)", c.name)})
+		}
 		return cv(h.scope.FindMust(c.name, true))
 
 	case cStr:
@@ -1164,10 +1241,16 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		h.registerDefaults(lmd, lam.params)
 		return cv(ir.NewSymbolLiteral("", lmd.Type, id))
 
+	case cEnumShort:
+		return c // 型は文脈から (withExpected)。決まらないまま値として使ったら rval がエラーにする
+
 	case cDot:
 		left := h.constEval(c.args[0])
 		if left.kind == cValue && left.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true})
+		}
+		if left.kind == cValue && left.val.TypeRef != nil && left.val.TypeRef.Enum != nil {
+			return cv(h.enumMember(left.val.TypeRef, c.name)) // enum のメンバー (Type.Name)
 		}
 		if left.kind == cValue && left.val.Module != nil {
 			return cv(left.val.Module.LookupMust(c.name))
@@ -1223,9 +1306,21 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			opAnd, opOr, opXor, opLand, opLor, opNot, opUminus, opBitNot,
 			opShiftLeft, opShiftRight:
 			args := make([]*cexpr, len(c.args))
-			args[0] = h.constEval(c.args[0])
+			src := c.args
+			if len(src) == 2 {
+				a, b := h.resolveEnumShortPair(src[0], src[1]) // `x == .A`
+				src = []*cexpr{a, b}
+			}
+			args[0] = h.constEval(src[0])
 			if len(c.args) > 1 {
-				args[1] = h.constEval(c.args[1])
+				args[1] = h.constEval(src[1])
+			}
+			if args[0].kind == cValue && (len(args) == 1 || args[1].kind == cValue) {
+				var bt *types.Type
+				if len(args) > 1 {
+					bt = args[1].val.Type
+				}
+				checkEnumOp(c.op, args[0].val.Type, bt)
 			}
 			for _, arg := range args {
 				if arg.kind != cValue || !arg.val.Type.IsFarFunc() {
@@ -1295,12 +1390,14 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			}
 			return &cexpr{kind: cOp, op: c.op, args: args}
 
-		case opLoad, opIndex, opRef, opDeref:
+		case opLoad, opIndex, opRef, opDeref, opSlice, opToSlice, opLen:
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
-				args[i] = h.constEval(a)
+				if a != nil { // opSlice の省いた lo / hi
+					args[i] = h.constEval(a)
+				}
 			}
-			return &cexpr{kind: cOp, op: c.op, args: args}
+			return &cexpr{kind: cOp, op: c.op, args: args, ty: c.ty}
 		}
 	}
 	panic(fmt.Sprintf("invalid op %v", c.op))
@@ -1328,7 +1425,7 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 	for i, p := range params {
 		argTypes[i] = p.Type
 	}
-	typ := h.prog.Types.Func(argTypes, baseType, opts.Has("fastcall"))
+	typ := h.prog.Types.Func(argTypes, baseType, opts.Flag("fastcall"))
 	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil, Body: body}
 }
 
@@ -1406,8 +1503,22 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 		if elem.IsSoa {
 			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
 		}
-		return h.prog.Types.PointerTo(elem)
+		return h.prog.Types.PointerToRO(elem, t.Const.IsValid())
 	case *syntax.ArrayType:
+		if t.IsSlice(h.version()) {
+			wide := false
+			if t.LenType != nil {
+				lt := h.typeOf(t.LenType)
+				if lt.Kind != types.Int || lt.Enum != nil || lt.Signed {
+					panic(&diag.Error{Msg: fmt.Sprintf("the length type of a slice must be u8 or u16 (got %s)", lt)})
+				}
+				wide = lt.Size == 2
+			}
+			return h.prog.Types.Slice(h.typeOf(t.Elem), t.Const.IsValid(), wide)
+		}
+		if t.Const.IsValid() {
+			panic(&diag.Error{Msg: "const is only for slices ([]const T); an array's elements are read-only when the array is const"})
+		}
 		n := -1
 		if t.Len != nil {
 			sv := h.constEval(toC(t.Len))
@@ -1436,12 +1547,23 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 	panic(fmt.Sprintf("typeOf: unknown type expression %T", t))
 }
 
+// version はコンパイル中のモジュールの文法バージョン (モジュールの外 (組み込みの登録など) では fc 2)。
+func (h *Hlc) version() int {
+	if h.module == nil || h.module.Version == 0 {
+		return syntax.Version2
+	}
+	return h.module.Version
+}
+
 // namedType は型名 (基本型、または struct / soa 宣言の名前。`mod.Name` は他モジュールの公開型) を型にする。
 func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 	name := t.Name.Name
 	if t.Module == nil {
-		if ty, ok := h.prog.Types.Named(name); ok {
+		if ty, ok := h.prog.Types.NamedIn(name, h.version()); ok {
 			return ty
+		}
+		if n, old := types.V2IntTypeNames[name]; old && h.version() >= syntax.Version3 {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s is not a type in fc 3 (write %s; `fcc migrate` rewrites fc 2 sources)", name, n)})
 		}
 		if v := h.scope.Find(name, true); v != nil {
 			if v.TypeRef != nil {
@@ -1529,6 +1651,11 @@ func (h *Hlc) typeEval(t syntax.TypeExpr) *types.Type {
 // rval は右辺値として評価し、値を返す。
 func (h *Hlc) rval(c *cexpr) ir.Operand {
 	v, left := h.lval(c)
+	return h.rvalOf(v, left)
+}
+
+// rvalOf は lval の結果 (v, left) を右辺値にする。
+func (h *Hlc) rvalOf(v ir.Operand, left bool) ir.Operand {
 	if v == nil {
 		// void 関数の呼び出しなど値を持たない式を、値が要る場所 (条件・代入・引数) に書いた
 		panic(&diag.Error{Msg: "expression has no value (void function call used as a value)"})
@@ -1620,6 +1747,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 	switch e.kind {
 
+	case cEnumShort:
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot tell the enum type of .%s here (write Type.%s)", e.name, e.name)})
+
 	case cValue:
 		if e.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true}) // エラーになった宣言の参照: 報告済みなので黙って打ち切る
@@ -1634,7 +1764,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = ir.NewCastedValue(root, e.val.Type, 0)
 		} else if e.val.Kind == ir.KindArrayLiteral {
 			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
-			r = ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
+			g := ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
+			g.ReadOnly = true // 文字列・配列リテラルは ROM (fc 3 の *const)
+			r = g
 		} else {
 			r = e.val
 		}
@@ -1670,6 +1802,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	case cNull:
 		panic(&diag.Error{Msg: "null needs a context that gives the pointer type (assignment, comparison, argument, or `null as *T`)"})
 
+	case cNullFn:
+		r = h.nullFn(h.prog.Types.Func(nil, h.prog.Types.Void(), false))
+
 	case cOp:
 		switch e.op {
 
@@ -1703,6 +1838,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		case opNot, opUminus, opBitNot:
 			left := h.rval(e.args[0])
 			typ := ir.ValType(left)
+			checkEnumOp(e.op, typ, nil)
 			if typ.IsFarFunc() && e.op != opNot {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
@@ -1720,6 +1856,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc() {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
+			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
@@ -1746,13 +1883,20 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if a0.kind == cNull && a1.kind != cNull {
 				a0, a1 = a1, a0 // `null == p` も `p == null` と同じ
 			}
-			left := h.rval(a0)
-			var right ir.Operand
-			if a1.kind == cNull {
-				right = h.nullOf(ir.ValType(left))
+			var left, right ir.Operand
+			if a0.kind == cEnumShort && a1.kind != cEnumShort {
+				// `.A == x` / `.A < x`: 相手の型で .A を決める (.A は定数なので評価の順は変わらない)
+				right = h.rval(a1)
+				left = h.rval(h.withExpected(a0, ir.ValType(right)))
 			} else {
-				right = h.rval(h.withExpected(a1, ir.ValType(left)))
+				left = h.rval(a0)
+				if a1.kind == cNull {
+					right = h.nullOf(ir.ValType(left))
+				} else {
+					right = h.rval(h.withExpected(a1, ir.ValType(left)))
+				}
 			}
+			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			if v, ok := left.(*ir.Value); ok && ir.ValType(right).IsFarFunc() {
 				left = h.rval(h.withExpected(cv(v), ir.ValType(right)))
 			}
@@ -1794,6 +1938,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = rr
 
 		case opCall:
+			if e.args[0].kind == cNullFn {
+				panic(&diag.Error{Msg: "@null_fn does nothing; remove the call (it is a value for function pointers)"})
+			}
 			lmdV := h.rval(e.args[0])
 			args := e.args[1:]
 			if ir.ValType(lmdV).Kind == types.Macro {
@@ -1837,6 +1984,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				evalArg := func(i int) ir.Operand {
 					v := h.rval(h.withExpected(args[i], lmdType.Params[i]))
 					h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
+					h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], v)
 					return h.cast(v, lmdType.Params[i])
 				}
 				argVals := make([]ir.Operand, len(args))
@@ -1888,6 +2036,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					panic(&diag.Error{Msg: fmt.Sprintf("cannot take the address of %s (not a variable)", describe(left))})
 				}
 				tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left)))
+				h.markReadOnly(tmp, h.readOnly(left))
 				h.emit(&ir.Op{Code: ir.OpRef, Dst: tmp, Src: []ir.Operand{left}})
 				r = tmp
 			}
@@ -1968,6 +2117,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
+			if st := ir.ValType(left); st.IsSlice() {
+				// s[i] は s.ptr[i] (範囲の検査はしない)
+				left = ir.NewCastedValue(left, h.prog.Types.PointerTo(st.SliceOf), 0)
+			}
 			if ir.ValType(left).Kind != types.Pointer && ir.ValType(left).Kind != types.Array {
 				panic(&diag.Error{Msg: fmt.Sprintf("cannot index %s (type %s is not a pointer or array)", describe(left), ir.ValType(left))})
 			}
@@ -1978,9 +2131,23 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(right))})
 			}
 			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))
+			h.markReadOnly(tmp, h.readOnly(left))
 			h.emit(&ir.Op{Code: ir.OpIndex, Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 			leftValue = true
+
+		case opSlice:
+			r = h.sliceRange(e.args[0], e.args[1], e.args[2])
+
+		case opToSlice:
+			r = h.toSlice(e.args[0], e.ty)
+
+		case opLen:
+			if p := h.sliceParts(e.args[0], "@len"); p.n >= 0 {
+				r = h.IntValue(p.n)
+			} else {
+				r = p.len
+			}
 
 		default:
 			panic(fmt.Sprintf("unknown op %s", e.op))
@@ -1993,7 +2160,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 // assign は代入 `left = rhs` (left は評価済みの左辺、lv は左辺値 (ポインタ) かどうか)。代入した値 (左辺) を返す。
 func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
-	if h.needsExpected(rhs) || ir.ValType(left).IsFarFunc() || (lv && ir.ValType(left).Base.IsFarFunc()) {
+	if h.needsExpected(rhs) || ir.ValType(left).IsFarFunc() || (lv && ir.ValType(left).Base.IsFarFunc()) || ir.ValType(left).IsSlice() || (lv && ir.ValType(left).Base.IsSlice()) {
 		// `p = {1, 2}`: 左辺の型で struct リテラルの型を決める
 		lt := ir.ValType(left)
 		if lv {
@@ -2007,12 +2174,19 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 			h.soaScatter(left, right)
 			return left
 		}
+		if h.readOnly(left) {
+			panic(&diag.Error{Msg: "cannot assign through a read-only pointer (*const) or to const data"})
+		}
 		h.compatibleAssign("assignment", ir.ValType(left).Base, ir.ValType(right))
+		h.warnDropConst("assignment", ir.ValType(left).Base, right)
 		right = h.cast(right, ir.ValType(left).Base)
 		h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{left, right}})
 		return left
 	}
 	h.compatibleAssign("assignment to "+describe(left), ir.ValType(left), ir.ValType(right))
+	if !h.readOnly(left) { // 代入先が *const の変数 (IR の型は *T) なら読み取り専用のデータを入れてよい
+		h.warnDropConst("assignment to "+describe(left), ir.ValType(left), right)
+	}
 	if !ir.ValAssignable(left) {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
@@ -2038,6 +2212,10 @@ func (h *Hlc) warn(format string, args ...any) {
 
 func (h *Hlc) emit(op *ir.Op) {
 	op.Pos = h.curPos
+	if len(h.pendingLogs) > 0 {
+		op.Logs = append(op.Logs, h.pendingLogs...)
+		h.pendingLogs = nil
+	}
 	h.lmd.Ops = append(h.lmd.Ops, op)
 }
 
@@ -2077,7 +2255,7 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 		return false
 	}
 	callee, ok := h.prog.lambdas[lit.Symbol]
-	if !ok || callee.Options.Has("near") {
+	if !ok || callee.Options.Flag("near") {
 		return false
 	}
 	if v, ok := callee.Options.Get("abi"); ok && v.Text() == "cc65" {
@@ -2284,6 +2462,12 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) ir.Operand {
 	from := ir.ValType(v)
 	h.checkCast(kind, from, to)
+	if kind == syntax.CastAs && from.Kind == types.Pointer && from.ReadOnly && to.Kind == types.Pointer && !to.ReadOnly {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot drop const with `as` (%s to %s); use @bitcast(%s, x)", from, to, to)})
+	}
+	if kind == syntax.CastAs && to.Kind == types.Pointer && !to.ReadOnly {
+		h.warnDropConst("`as`", to, v)
+	}
 	if kind == syntax.CastAs {
 		if from.Kind == types.Array {
 			return ir.NewPointeredArray(v, to)
@@ -2294,7 +2478,11 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 			return newV
 		}
 	}
-	return ir.NewCastedValue(v, to, 0)
+	c := ir.NewCastedValue(v, to, 0)
+	if kind == syntax.CastBit && h.prog.unconst != nil {
+		h.prog.unconst[c] = true // @bitcast は const を外す (読み取り専用にしない)
+	}
+	return c
 }
 
 // makeCompatible は互換型に変換する (キャストコード生成込み)。
@@ -2327,4 +2515,51 @@ func ReadSource(path string) ([]byte, error) {
 		return nil, err
 	}
 	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")), nil
+}
+
+// endsWithFallthrough は case の本体の最後の文が `fallthrough;` か (fc 3)。
+func endsWithFallthrough(body []syntax.Stmt) bool {
+	if len(body) == 0 {
+		return false
+	}
+	_, ok := body[len(body)-1].(*syntax.FallthroughStmt)
+	return ok
+}
+
+// compileCaseBody は switch の case (ci。default は -1) の本体と、その後ろのジャンプ (switch の出口 end、fallthrough
+// なら次の case の本体 next) を出す。fc 3 では case ごとにスコープを作る (case の中の宣言は、ほかの case と switch の
+// 後ろからは見えない)。fc 2 は今までどおり (囲むスコープに宣言する)。
+func (h *Hlc) compileCaseBody(s *syntax.SwitchStmt, ci int, body []syntax.Stmt, next, end string) {
+	target := end
+	if endsWithFallthrough(body) {
+		ft := body[len(body)-1]
+		body = body[:len(body)-1]
+		switch {
+		case ci < 0:
+			h.updatePos(ft)
+			panic(&diag.Error{Msg: "cannot fallthrough from default (it is the last clause)"})
+		case ci == len(s.Cases)-1 && s.Default == nil:
+			h.updatePos(ft)
+			panic(&diag.Error{Msg: "cannot fallthrough from the last case (no default follows)"})
+		}
+		target = next
+	}
+	if h.version() >= syntax.Version3 {
+		for _, st := range body {
+			if d, ok := st.(*syntax.VarDecl); ok {
+				if h.caseDecls == nil {
+					h.caseDecls = map[string]bool{}
+				}
+				for _, sp := range d.Specs {
+					h.caseDecls[sp.Name.Name] = true
+				}
+			}
+		}
+		h.inScope(func() { h.compileStmts(body) })
+	} else {
+		h.compileStmts(body)
+	}
+	if ci >= 0 || target != end {
+		h.emit(&ir.Op{Code: ir.OpJump, Label: target})
+	}
 }

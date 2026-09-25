@@ -1,7 +1,7 @@
-#fc 2
-options(bank_count: 4);
-options(char_banks: 1);
-options(bank: -1);
+#fc 3
+@(bank_count: 4);
+@(char_banks: 1);
+@(bank: -1);
 
 use pad;
 use ppu;
@@ -11,7 +11,7 @@ use * from math;
 use * from common;
 use en;
 
-include('miku.chr');
+@include('miku.chr');
 
 const SPR_MIKU = 0x80;
 const SPR_MIKU_BANG = 0x88;
@@ -20,7 +20,7 @@ const SPR_EN_BUL = 0xe0;
 
 function my_process():void
 {
-	var i:int;
+	var i:u8;
 	// 自機の移動
 	if (my_stat == 0) {
 		pad.update();
@@ -69,7 +69,7 @@ function my_process():void
 		// 弾を打つ
 		if (my_wait == 0) {
 			if (pad.cur & pad.A) {
-				var n:int;
+				var n:u8;
 				for (n = 0; n < MY_BUL_MAX; n++) {
 					if (my_bul_type[n] == 0) {
 						my_bul_type[n] = 1;
@@ -163,7 +163,7 @@ function main():void
 
 	ppu.unlock();
 
-	asm("cli");
+	@asm("cli");
 
 	while (1) {
 		var scroll = giff16 / 8;
@@ -173,7 +173,7 @@ function main():void
 				ppu.scroll2 -= 16;
 			}
 			if ((ppu.scroll2 % 8) == 0) {
-				var cy:int = ppu.scroll2 / 8;
+				var cy:u8 = ppu.scroll2 / 8;
 				ppu.put(ppu.pos(0, cy), "                                    ", 32, 0);
 				ppu.put(ppu.pos(rand() / 8, cy), "w", 1, 0);
 			}

@@ -15,6 +15,9 @@ package syntax
 
 %union {
 	tok     Token
+	emem    *EnumMember
+	emems   []*EnumMember
+	selse   *staticElse
 	stmt    Stmt
 	stmts   []Stmt
 	expr    Expr
@@ -44,10 +47,16 @@ package syntax
 }
 
 %token <tok> NUMBER IDENT STRING kPLACEMENT kALIAS
+%token <tok> kAT_SIZEOF kAT_BITCAST kAT_INCBIN kAT_INCLUDE kATIDENT kAT_IF kENUM kFALLTHROUGH
+%type <emem> enum_member
+%type <emems> enum_members enum_member_list
+%type <typ> opt_enum_base
+%type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
+%token <tok> DOTDOT
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
-%token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~'
+%token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~' '@' '?'
 
 %type <stmts>   program opt_statement_list statement_list
 %type <stmt>    statement_i statement else_block opt_for_init opt_for_step simple_stmt incdec
@@ -70,8 +79,8 @@ package syntax
 %type <expr>    opt_exp exp
 %type <exprs>   exp_list
 %type <alist>   arg_list
-%type <opts>    opt_options options
-%type <optents> option_list option_list_sub option
+%type <opts>    opt_options options attrs
+%type <optents> option_list option_list_sub option attr_list attr
 %type <specs>   opt_var_decl_list var_decl_list
 %type <spec>    var_decl
 %type <expr>    opt_var_init
@@ -117,6 +126,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | opt_scope kALIAS IDENT ':' type_decl '=' exp ';' { $$ = &VarDecl{PublicPos: optPos($1), Keyword: $2.Pos, Alias: true, Specs: []*VarSpec{{Name: ident($3), Type: $5, Init: $7}}, Semi: $8.Pos} }
          | opt_scope kCONST var_decl_list ';'   { $$ = &VarDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Specs: $3, Semi: $4.Pos} }
          | kIF '(' exp ')' statement else_block { $$ = &IfStmt{If: $1.Pos, Lparen: $2.Pos, Cond: $3, Rparen: $4.Pos, Then: $5, Else: $6} }
+         | kAT_IF '(' exp ')' block static_else { $$ = staticIf($1, $2, $3, $4, $5, $6) } /* v3 */
          | kLOOP '(' ')' statement              { $$ = &LoopStmt{Loop: $1.Pos, Rparen: $3.Pos, Body: $4} }
          | kLOOP block                          { $$ = &LoopStmt{Loop: $1.Pos, Body: $2} } /* v2: 括弧なし */
          | IDENT ':' statement                  { $$ = &LabeledStmt{Label: ident($1), Colon: $2.Pos, Stmt: $3} } /* v2: 文ラベル */
@@ -126,6 +136,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
                                                 { $$ = &ForStmt{For: $1.Pos, Init: $3, Cond: $5, Step: $7, Rparen: $8.Pos, Body: $9} } /* v2: C 型 */
          | incdec ';'                           { s := $1.(*IncDecStmt); s.Semi = $2.Pos; $$ = s } /* v2 */
          | kBREAK opt_ident ';'                 { $$ = &BreakStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
+         | kFALLTHROUGH ';'                     { $$ = &FallthroughStmt{Keyword: $1.Pos, Semi: $2.Pos} } /* v3 */
          | kCONTINUE opt_ident ';'              { $$ = &ContinueStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
          | kRETURN opt_exp ';'                  { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} }
          | kRETURN anon_struct_lit ';'          { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} } /* v2: 戻り値の型で決まる */
@@ -134,11 +145,16 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | opt_scope kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
                                                 { $$ = funcDecl($1, $2, $3, $5, $8, $9, $10) }
          | options ';'                          { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} }
+         | attrs ';'                            { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} } /* v3: モジュールへの指定 */
+         | attrs block                          { $$ = &PlacementBlock{Options: $1, Body: $2} } /* v3: 中の宣言の既定値 */
          | opt_scope kUSE use_target ';'        { u := $3; u.PublicPos = optPos($1); u.Use = $2.Pos; u.Semi = $4.Pos; $$ = u }
+         | opt_scope kENUM IDENT opt_enum_base '{' enum_members '}' { $$ = &EnumDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Base: $4, Lbrace: $5.Pos, Members: $6, Rbrace: $7.Pos} } /* v3 */
          | opt_scope kSTRUCT IDENT '{' field_decl_list '}' { $$ = &StructDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Lbrace: $4.Pos, Fields: $5, Rbrace: $6.Pos} } /* v2 */
          | opt_scope kSOA IDENT ':' type_decl opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Type: $5, Options: $6, Semi: $7.Pos} } /* v2 */
          | opt_scope kSOA kCONST IDENT ':' type_decl '=' exp opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Name: ident($4), Type: $6, Init: $8, Options: $9, Semi: $10.Pos} } /* v2 */
          | kINCLUDE opt_ident '(' STRING ')' opt_options ';' { $$ = &IncludeDecl{Include: $1.Pos, Kind: $2, Path: strLit($4), Rparen: $5.Pos, Options: $6, Semi: $7.Pos} }
+         | kAT_INCLUDE '(' STRING ')' ';' { $$ = &IncludeDecl{Include: $1.Pos, Path: strLit($3), Rparen: $4.Pos, Semi: $5.Pos, At: true} } /* v3 */
+         | kAT_INCLUDE '(' STRING ',' attr_list ')' ';' { $$ = &IncludeDecl{Include: $1.Pos, Path: strLit($3), Options: &Options{Entries: $5, Rparen: $6.Pos, At: true}, Rparen: $6.Pos, Semi: $7.Pos, At: true} } /* v3: 属性は名前つきの引数 */
          | kPUBLIC ':'                          { $$ = &ScopeLabel{Keyword: $1.Pos, Public: true, Colon: $2.Pos} }
          | kPRIVATE ':'                         { $$ = &ScopeLabel{Keyword: $1.Pos, Public: false, Colon: $2.Pos} }
          | kPLACEMENT block options ';'         { $$ = &PlacementBlock{Keyword: ident($1), Body: $2, Options: $3, Semi: $4.Pos} }
@@ -216,6 +232,22 @@ block: '{' opt_statement_list '}' { $$ = &Block{Lbrace: $1.Pos, Stmts: $2, Rbrac
 opt_block: /* empty */ { $$ = nil }
          | block
 
+/* fc 3 の enum */
+opt_enum_base: /* empty */ { $$ = nil }
+             | ':' type_decl { $$ = $2 }
+enum_members: /* empty */ { $$ = []*EnumMember{} }
+            | enum_member_list
+            | enum_member_list ','
+enum_member_list: enum_member_list ',' enum_member { $$ = append($1, $3) }
+                | enum_member { $$ = []*EnumMember{$1} }
+enum_member: IDENT { $$ = &EnumMember{Name: ident($1)} }
+           | IDENT '=' exp { $$ = &EnumMember{Name: ident($1), Value: $3} }
+
+/* fc 3 の @if の else: `else { ... }` / `else @if (...) { ... } ...` */
+static_else: /* empty */ %prec NO_ELSE { $$ = nil }
+           | kELSE block { $$ = &staticElse{pos: $1.Pos, body: $2} }
+           | kELSE kAT_IF '(' exp ')' block static_else { $$ = &staticElse{pos: $1.Pos, body: staticIf($2, $3, $4, $5, $6, $7)} }
+
 else_block: /* empty */ %prec NO_ELSE { $$ = nil }
           | kELSE statement { $$ = $2 }
           | kELSIF '(' exp ')' statement else_block { $$ = &IfStmt{If: $1.Pos, IsElsif: true, Lparen: $2.Pos, Cond: $3, Rparen: $4.Pos, Then: $5, Else: $6} }
@@ -260,6 +292,7 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | '<' type_decl '>' exp  { $$ = &CastExpr{Lt: $1.Pos, Type: $2, Gt: $3.Pos, X: $4} } /* v1 */
    | exp kAS type_v2         { $$ = &CastExpr{Kind: CastAs, X: $1, As: $2.Pos, Type: $3} } /* v2: 数値変換 */
    | kBITCAST '<' type_decl '>' '(' exp ')' { $$ = &CastExpr{Kind: CastBit, Bitcast: $1.Pos, Lt: $2.Pos, Type: $3, Gt: $4.Pos, Lparen: $5.Pos, X: $6, Rparen: $7.Pos} } /* v2: ビット読み替え */
+   | kAT_BITCAST '(' type_decl ',' exp ')' { $$ = &CastExpr{Kind: CastBit, Bitcast: $1.Pos, Type: $3, Lparen: $2.Pos, Comma: $4.Pos, X: $5, Rparen: $6.Pos} } /* v3 */
    | '!' exp %prec UMINUS   { $$ = unary($1, $2) }
    | '~' exp %prec UMINUS   { $$ = unary($1, $2) } /* v2 */
    | '-' exp %prec UMINUS   { $$ = unary($1, $2) }
@@ -268,12 +301,17 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | '&' exp %prec UMINUS   { $$ = unary($1, $2) }
    | exp '(' arg_list ')' opt_block { $$ = &CallExpr{Fun: $1, Lparen: $2.Pos, Args: $3.exprs, Comma: $3.comma, Rparen: $4.Pos, Block: $5} }
    | exp '[' exp ']'        { $$ = &IndexExpr{X: $1, Lbrack: $2.Pos, Index: $3, Rbrack: $4.Pos} }
+   | exp '[' opt_exp DOTDOT opt_exp ']' { $$ = &SliceExpr{X: $1, Lbrack: $2.Pos, Lo: $3, DotDot: $4.Pos, Hi: $5, Rbrack: $6.Pos} } /* v3 */
    | '[' ']'                { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: []Expr{}, Rbrack: $2.Pos} }
    | '[' lit_elem_list ']'  { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Rbrack: $3.Pos} }
    | '[' lit_elem_list ',' ']' { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Comma: $3.Pos, Rbrack: $4.Pos} }
    | struct_lit             { $$ = $1 }
    | kSIZEOF '(' type_decl ')' { $$ = &SizeofExpr{Sizeof: $1.Pos, Lparen: $2.Pos, Type: $3, Rparen: $4.Pos} } /* v2 */
    | kINCBIN '(' STRING ')' { $$ = &IncbinExpr{Incbin: $1.Pos, Path: strLit($3), Rparen: $4.Pos} }
+   | kAT_SIZEOF '(' type_decl ')' { $$ = &SizeofExpr{Sizeof: $1.Pos, Lparen: $2.Pos, Type: $3, Rparen: $4.Pos} } /* v3 */
+   | kAT_INCBIN '(' STRING ')' { $$ = &IncbinExpr{Incbin: $1.Pos, Path: strLit($3), Rparen: $4.Pos} } /* v3 */
+   | kATIDENT               { $$ = ident($1) } /* v3: @min などの組み込み (名前は `@min`) */
+   | '.' IDENT              { $$ = &EnumShortExpr{Dot: $1.Pos, Name: ident($2)} } /* v3: 型が文脈から分かる enum のメンバー */
    | ARROW type_decl function_block { $$ = &LambdaExpr{Arrow: $1.Pos, Type: $2, Body: $3.Block, Semi: $3.Semi} }
    | NUMBER                 { $$ = &IntLit{ValuePos: $1.Pos, Value: $1.Int, Text: $1.Text} }
    | kTRUE                  { $$ = &BoolLit{ValuePos: $1.Pos, Value: true} }  /* v2 */
@@ -294,7 +332,15 @@ arg_list: /* empty */ { $$ = argList{exprs: []Expr{}} }
 /* option */
 opt_options: /* empty */ { $$ = nil }
            | options
+           | attrs
 options: kOPTIONS '(' option_list ')' { $$ = &Options{Keyword: $1.Pos, Entries: $3, Rparen: $4.Pos} }
+
+/* fc 3 の属性 `@(key: value, flag, ...)`。値を省いたキーは true */
+attrs: '@' '(' attr_list ')' { $$ = &Options{Keyword: $1.Pos, Entries: $3, Rparen: $4.Pos, At: true} }
+attr_list: attr_list ',' attr { $$ = append($1, $3...) }
+         | attr
+attr: IDENT ':' exp { $$ = []*OptionEntry{{Key: ident($1), Value: $3}} }
+    | IDENT         { $$ = []*OptionEntry{{Key: ident($1), Value: &BoolLit{ValuePos: $1.Pos, Value: true}, Bare: true}} }
 
 option_list: option_list_sub
 option_list_sub: option_list_sub ',' option { $$ = append($1, $3...) }
@@ -322,16 +368,26 @@ type_decl: type_v2_prefix
          | type_post
 
 type_v2_prefix: '*' type_decl                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
+              | '*' kCONST type_decl                 { $$ = &PointerType{Star: $1.Pos, Const: $2.Pos, Elem: $3} } /* v3 */
               | '[' exp ']' type_decl                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
               | '[' ']' type_decl                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
+              | '[' '?' ']' type_decl                { $$ = &ArrayType{Lbrack: $1.Pos, Infer: $2.Pos, Rbrack: $3.Pos, Elem: $4} } /* v3 */
+              | '[' ']' kCONST type_decl             { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Const: $3.Pos, Elem: $4} } /* v3 */
+              | '[' ':' type_v2 ']' type_decl        { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Elem: $5} } /* v3 */
+              | '[' ':' type_v2 ']' kCONST type_decl { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Const: $5.Pos, Elem: $6} } /* v3 */
               | kFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
               | kFARFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Far: true, Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
 
 /* v2 の前置形だけ (後置なし)。`x as T` の T に使う: 後ろに二項演算子が続いても曖昧にならない */
 type_v2: '*' type_v2                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
+       | '*' kCONST type_v2                 { $$ = &PointerType{Star: $1.Pos, Const: $2.Pos, Elem: $3} } /* v3 */
        | IDENT '.' IDENT                    { $$ = &NamedType{Module: ident($1), Name: ident($3)} }
        | '[' exp ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
        | '[' ']' type_v2                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
+       | '[' '?' ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Infer: $2.Pos, Rbrack: $3.Pos, Elem: $4} } /* v3 */
+       | '[' ']' kCONST type_v2             { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Const: $3.Pos, Elem: $4} } /* v3 */
+       | '[' ':' type_v2 ']' type_v2        { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Elem: $5} } /* v3 */
+       | '[' ':' type_v2 ']' kCONST type_v2 { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Const: $5.Pos, Elem: $6} } /* v3 */
        | kFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
        | kFARFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Far: true, Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
        | IDENT %prec kAS                    { $$ = &NamedType{Name: ident($1)} } /* `x as m.T` の '.' は型の修飾として読む (shift) */

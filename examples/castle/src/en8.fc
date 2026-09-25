@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 22);
+#fc 3
+@(bank: 22);
 use * from en;
 use * from graphics;
 use ppu;
@@ -13,18 +13,18 @@ use event2;
  * p5: アニメーションカウンター
  *********************************************/
 
-public function slime_new(i:int):void
+public function slime_new(i:u8):void
 {
 	p4[i] = 0;
 	p5[i] = 0;
 }
 
-public function slime_process(i:int):void
+public function slime_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var dir:sint = p1[i];
+	var dir:i8 = p1[i];
 	var vy = p3[i];
 	var anim_wait = p4[i];
 	var anim_counter = p5[i];
@@ -46,7 +46,7 @@ public function slime_process(i:int):void
 		gr_sprite2(x, y, spr + 3 * 4 + anim / 8 % 2 * 4, pal | ppu.SPRITE_FLAG_HIDE | DIR_FLIP_XY[dir2]);
 	} elsif (bg.cell_type(x - 5, y + 8) & bg.TYPE_WALL || bg.cell_type(x + 5, y + 8) & bg.TYPE_WALL) {
 		// 地面の上
-		var nx:uint = x + dir * 8;
+		var nx:u8 = x + dir * 8;
 		if (nx < 16 || nx > 240 || bg.cell_type(nx, y - 8) & bg.TYPE_STOP) {
 			dir = -dir;
 		} else {
@@ -114,13 +114,13 @@ const SLIME_ANIM = [0, 1, 2, 2, 2, 3, 3, 0];
 const STEAM_DIR_SPR = [8, 0, 8, 0];
 const STEAM_DIR_FLIP = [128, 64, 128, 64];
 
-public function steam_new(i:int):void
+public function steam_new(i:u8):void
 {
 	p4[i] = 0;
 	p5[i] = p2[i];
 }
 
-public function steam_process(i:int):void
+public function steam_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -156,7 +156,7 @@ public function steam_process(i:int):void
 			var dx = DIR_VX[dir];
 			var dy = DIR_VY[dir];
 			var flag = pal | DIR_FLIP_XY[dir];
-			var flag_flip:int = STEAM_DIR_FLIP[(dir + 1) % 4];
+			var flag_flip:u8 = STEAM_DIR_FLIP[(dir + 1) % 4];
 
 			if (wait > 0 && wait < 52) {
 				var z = (wait + 0) / 8 % 2;
@@ -171,7 +171,7 @@ public function steam_process(i:int):void
 				gr_sprite2(x + dx * 32, y + dy * 32, spr + 16 + STEAM_DIR_SPR[dir] + 4, flag | flag_flip * z);
 			}
 
-			var hit:int;
+			var hit:u8;
 			if (wait > 8 && dir % 2 == 0) {
 				// 上下
 				hit = check_over_rect(x - 6, y - dy * 4, x + 6, y + dy * 40);
@@ -214,13 +214,13 @@ public function steam_process(i:int):void
  * p6: タイマー
  *********************************************/
 
-public function memory_new(i:int):void
+public function memory_new(i:u8):void
 {
 	p2[i] = 0;
 	p3[i] = 0;
 }
 
-public function memory_process(i:int):void
+public function memory_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -258,7 +258,6 @@ public function memory_process(i:int):void
 			wait -= 1;
 			if (wait > 1) {
 				py -= 2;
-				ppu.null_func();
 				ppu.sprite(x + px, y + py, SPR_MEMORY_FLASH, 1 - is_new);
 			}
 		}
@@ -270,7 +269,7 @@ public function memory_process(i:int):void
 	p5[i] = py;
 }
 
-function memory_event():int
+function memory_event():u8
 {
 	p2[my.touch_event_p1] = 1;
 	return 1;
@@ -281,13 +280,13 @@ function memory_event():int
  * p1: ID(0:入口、1:塔のふもと)
  *********************************************/
 
-public function bird_nest_new(i:int):void
+public function bird_nest_new(i:u8):void
 {
 	p4[i] = 0;
 	p6[i] = 0;
 }
 
-public function bird_nest_process(i:int):void
+public function bird_nest_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -316,7 +315,7 @@ public function bird_nest_process(i:int):void
 	p4[i] = stat;
 }
 
-function bird_nest_event():int
+function bird_nest_event():u8
 {
 	if (my.items[ITEM_ID_EGG]) {
 		event2.register_confirm_dialog(_T("おおきなとりの巣だ。\nたまごといっしょに　まるまりますか？"), bird_nest_event_callback);
@@ -326,7 +325,7 @@ function bird_nest_event():int
 	return 1;
 }
 
-function bird_nest_event_callback(r:int):void
+function bird_nest_event_callback(r:u8):void
 {
 	if (r == 0) {
 		p4[my.touch_event_p1] = 1;

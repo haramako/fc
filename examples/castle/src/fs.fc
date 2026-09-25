@@ -1,5 +1,5 @@
-#fc 2
-options(bank: -1);
+#fc 3
+@(bank: -1);
 
 public use * from common;
 use mem;
@@ -8,12 +8,12 @@ public use * from fs_config;
 const BASE = 0xa000;
 const BANK_SIZE = 0x2000;
 
-public function copy(to:*int, idx:int16):int
+public function copy(to:*u8, idx:u16):u8
 {
 	var old_bank = mmc3.set_pbank(1, PBANK_FS);
 	var offset = FILE_ADDR[idx];
-	var bank:int = offset / BANK_SIZE;
-	var addr = bitcast<*int>(BASE + (offset & (BANK_SIZE - 1)));
+	var bank:u8 = offset / BANK_SIZE;
+	var addr = @bitcast(*u8, BASE + (offset & (BANK_SIZE - 1)));
 	var size = FILE_SIZE[idx];
 
 	mmc3.set_pbank(1, (PBANK_FS + 1) + bank);

@@ -45,6 +45,9 @@ type Options struct {
 
 	// Stdout は Run 時のプログラム出力先 (既定 os.Stdout)。
 	Stdout io.Writer
+
+	// Defines は @(build) の const の上書き (`module.NAME=value`。fc.toml の [define.<module>] の後に当てる)。
+	Defines []string
 }
 
 // Result はビルドの結果 (生成物のパスと、Run 時の終了コード)。
@@ -68,13 +71,14 @@ type Position = syntax.Position
 
 // CheckOptions は Check の設定。
 type CheckOptions struct {
-	Target string // TargetEmu (既定) / TargetNES
-	Dir    string // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
+	Target  string   // TargetEmu (既定) / TargetNES
+	Dir     string   // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
+	Defines []string // @(build) の const の上書き (Options.Defines と同じ)
 }
 
 // Check は src から始まるプログラムを検査する (ファイルは書かない)。警告を返し、エラーは *Error。
 func (c *Compiler) Check(src string, opt CheckOptions) ([]Warning, error) {
-	return c.c.Check(src, &driver.CheckOptions{Target: opt.Target, Dir: opt.Dir})
+	return c.c.Check(src, &driver.CheckOptions{Target: opt.Target, Dir: opt.Dir, Defines: opt.Defines})
 }
 
 // CommandError は外部コマンドの失敗。
@@ -125,6 +129,7 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		BuildDir:      opt.BuildDir,
 		Jobs:          opt.Jobs,
 		Stdout:        opt.Stdout,
+		Defines:       opt.Defines,
 	})
 }
 

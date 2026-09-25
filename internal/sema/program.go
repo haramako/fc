@@ -52,6 +52,20 @@ type Program struct {
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
 	curModule   string                     // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
+	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
+	Defines map[string]*DefineUse
+	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
+	// (driver/layout.go。doc/v3_plan.md §3)
+	Banks map[string]BankRef
+	// LogEnabled なら @log を注釈として命令に付ける (fcc build -g。無ければ @log は検査だけで何も残さない)
+	LogEnabled bool
+	nextLogID  int
+	// LogEveryStatement はテスト用: 関数の中の文ごとに、その関数の変数を全部出す @log を置く (@log があっても生成コードが
+	// 変わらないことを fuzz のプログラムで確かめる。driver の TestLogZeroCost)
+	LogEveryStatement bool
+
+	// unconst は @bitcast で作った値 (読み取り専用の元を包んでいても読み取り専用にしない。constptr.go)
+	unconst map[*ir.CastedValue]bool
 }
 
 // Source は読み込んだソースファイル。
@@ -71,6 +85,7 @@ func (p *Program) SetTrace(fn func(origin string, ev ir.TraceEvent)) {
 func NewProgram() *Program {
 	p := &Program{
 		declarations:   map[*ir.Module]*moduleDecls{},
+		unconst:        map[*ir.CastedValue]bool{},
 		typeDecls:      map[*types.Type]*declaration{},
 		Types:          types.NewUniverse(),
 		Modules:        ir.NewModuleList(),
@@ -86,6 +101,10 @@ func NewProgram() *Program {
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)
+	for old, at := range V3Builtins {
+		// fc 3 の綴り (@asm など) でも同じ組み込みを引けるように (値は同じ。マクロの表は値で引く)
+		p.global.Alias(at, p.global.FindMust(old, true), false)
+	}
 	return p
 }
 
@@ -108,6 +127,11 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 		return m, nil
 	}
 	mod = ir.NewModule(id, file.Filename, p.global)
+	mod.Version = file.Version
+	if file.Version >= syntax.Version3 {
+		mod.Scope.Reserved = v3Reserved
+		mod.Scope.Hidden = v3Hidden
+	}
 	p.Modules.Add(mod)
 
 	// use で別モジュールの相 1 にネストして入るので、参照元モジュールを保存・復帰する
@@ -123,6 +147,7 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	p.declarations[mod] = md
 	md.collect(file.Stmts, nil)
 	md.loadImports()
+	md.expandStaticIfs()
 	if p.collectDepth == 1 {
 		md.resolve()
 		for _, m := range p.Modules.List() {
@@ -310,6 +335,33 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 	}
 	return l.prog.CompileModule(file, l)
 }
+
+// V3Builtins は fc 3 で `@` を付けて呼ぶ組み込みの名前 → fc 3 の綴り (doc/v3_plan.md §5 A)。fc 3 のモジュールからは
+// `@` の無い名前では見えない (利用者が同じ名前を宣言できる)。@sizeof / @bitcast / @incbin / @include は構文 (syntax)。
+// fcc migrate の書き換えにも使う。
+var V3Builtins = map[string]string{
+	"asm": "@asm", "textmap": "@textmap", "min": "@min", "max": "@max", "clamp": "@clamp",
+	"unittest_run_tests": "@run_tests",
+}
+
+// v3Hidden は fc 3 のモジュールで `@` の無い名前では見えない組み込み (V3Builtins) と、fc 3 で `@` の構文になった名前
+// (見つからないときの案内だけに使う)。
+var v3Hidden = func() map[string]string {
+	m := map[string]string{"sizeof": "@sizeof", "bitcast": "@bitcast(T, x)", "incbin": "@incbin", "include": "@include"}
+	for k, v := range V3Builtins {
+		m[k] = v
+	}
+	return m
+}()
+
+// v3Reserved は fc 3 のモジュールで宣言できない名前 (doc/v3_plan.md §7)。
+var v3Reserved = func() map[string]string {
+	m := map[string]string{}
+	for n := range types.IntTypeNames {
+		m[n] = "it is a type name in fc 3"
+	}
+	return m
+}()
 
 // Compile は libPath 上の mainFile から始めてプログラム全体を解析する (相 1 → 相 2)。
 // baseDir は libPath の相対エントリの基準 ("" なら作業ディレクトリ)。

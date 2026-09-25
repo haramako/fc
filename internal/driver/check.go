@@ -35,8 +35,9 @@ func collectWarnings(prog *sema.Program) []diag.Warning {
 
 // CheckOptions は fcc check の設定。
 type CheckOptions struct {
-	Target string // emu (既定) / nes
-	Dir    string // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
+	Target  string   // emu (既定) / nes
+	Dir     string   // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
+	Defines []string // CLI の -D (fcc build と同じく fc.toml の後に当てる)
 }
 
 // Check は filename から始まるプログラムを意味解析・コード生成まで通し (ファイルは書かない)、
@@ -46,7 +47,7 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 	if target == "" {
 		target = "emu"
 	}
-	prog, err := c.compileNoWrite(opt.Dir, target, filename)
+	prog, err := c.compileNoWrite(opt.Dir, target, filename, opt.Defines)
 	if err != nil {
 		return nil, err
 	}
@@ -54,12 +55,25 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 }
 
 // compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。
-func (c *Compiler) compileNoWrite(dir, target, main string) (*sema.Program, error) {
+func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (*sema.Program, error) {
 	var prog *sema.Program
 	var llc *codegen.Llc
+	c.dir = dir
+	if c.dir == "" {
+		c.dir = "."
+	}
+	defs, err := c.projectDefines(cli)
+	if err != nil {
+		return nil, err
+	}
 	for noGrow := map[string]bool{}; ; {
 		prog = sema.NewProgram()
+		prog.Defines = copyDefines(defs)
+		prog.Banks = c.banks()
 		if err := sema.CompileProgram(prog, dir, c.libPath(target), main); err != nil {
+			return nil, err
+		}
+		if err := c.checkDefines(prog, target); err != nil {
 			return nil, err
 		}
 		llc = codegen.NewLlc(2, prog.Types)

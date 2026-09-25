@@ -10,42 +10,32 @@
 ;; }
 ;;; USING Y
 _mem_copy:
-	lda S+0,x
-	sta reg+0
-	lda S+1,x
-	sta reg+1
-	lda S+2,x
-	sta reg+2
-	lda S+3,x
-	sta reg+3
-	lda S+4,x
-	sta reg+4
-	lda S+5,x
-	sta reg+5
+	;; fastcall: _to = FC_FASTCALL_REG+0,1、_from = +2,3、size = +4,5 (ポインタと size はその場で進める)
+	lda FC_FASTCALL_REG+5
 
 ;;; 256byteごとのコピー
 	beq @end
 @loop:
 	ldy #0
-:	lda (reg+2),y
-	sta (reg),y
+:	lda (FC_FASTCALL_REG+2),y
+	sta (FC_FASTCALL_REG+0),y
 	iny
 	bne :-
-	inc reg+3
-	inc reg+1
-	dec reg+5
+	inc FC_FASTCALL_REG+3
+	inc FC_FASTCALL_REG+1
+	dec FC_FASTCALL_REG+5
 	bne @loop
 @end:	
 	
 
 ;;; 残りのコピー
-	lda reg+4
+	lda FC_FASTCALL_REG+4
 	beq @end2
     ldy #0
-:	lda (reg+2),y
-    sta (reg),y
+:	lda (FC_FASTCALL_REG+2),y
+    sta (FC_FASTCALL_REG+0),y
     iny
-    cpy reg+4
+    cpy FC_FASTCALL_REG+4
     bne :-
 @end2:
 
@@ -71,46 +61,31 @@ _mem_set:
 
 ;;; USING Y
 _mem_zero:
-	lda S+0,x
-	sta reg+0
-	lda S+1,x
-	sta reg+1
-	lda S+2,x
-	sta reg+2
+	;; fastcall: p = FC_FASTCALL_REG+0,1、size = +2
 	ldy #0
 	lda #0
-:	sta (reg+0),y
+:	sta (FC_FASTCALL_REG+0),y
 	iny
-	cpy reg+2
+	cpy FC_FASTCALL_REG+2
     bne :-
 	rts
 
 ;;; USING Y
 _mem_compare:
-	lda S+1,x
-	sta reg+0
-	lda S+2,x
-	sta reg+1
-	lda S+3,x
-	sta reg+2
-	lda S+4,x
-	sta reg+3
-	lda S+5,x
-	sta reg+4
-	
+	;; fastcall: 戻り値 = FC_FASTCALL_REG+0、p1 = +1,2、p2 = +3,4、size = +5
 	ldy #0
-:	lda (reg+0),y
-	cmp (reg+2),y
+:	lda (FC_FASTCALL_REG+1),y
+	cmp (FC_FASTCALL_REG+3),y
 	bne @fail
 	iny
-	cpy reg+4
+	cpy FC_FASTCALL_REG+5
 	bne :-
 	
 	lda #0
-	sta S+0,x
+	sta FC_FASTCALL_REG+0
 	rts
 
 @fail:
 	lda #1
-	sta S+0,x
+	sta FC_FASTCALL_REG+0
 	rts

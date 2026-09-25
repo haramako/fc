@@ -52,9 +52,9 @@ function main():void
 	want := []string{
 		"3:1 unknown type Nope",
 		"7:6 hoge not found",
-		"8:2 assignment to `a`: cannot assign [4]uint8 to uint8 (not compatible types)",
+		"8:2 assignment to `a`: cannot assign [4]u8 to u8 (not compatible types)",
 		"11:2 `f` expects 0 argument(s) but 2 given",
-		"12:2 `p`: cannot assign uint8 to *uint8 (not compatible types)",
+		"12:2 `p`: cannot assign u8 to *u8 (not compatible types)",
 		"13:2 undefined_fn not found",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {

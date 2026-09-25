@@ -1,30 +1,30 @@
-#fc 2
-options(bank: 1);
+#fc 3
+@(bank: 1);
 use * from math;
 use * from common;
 use ppu;
 
-include("en.asm");
+@include("en.asm");
 
 const MAX = 16;
-var type:[MAX]int;
-var x_:[MAX]int;
-var y_:[MAX]int;
-var p1_:[MAX]int;
-var p2_:[MAX]int;
-var p3_:[MAX]int;
-var p4_:[MAX]int;
-var wait:int;
-var now:int;
+var type:[MAX]u8;
+var x_:[MAX]u8;
+var y_:[MAX]u8;
+var p1_:[MAX]u8;
+var p2_:[MAX]u8;
+var p3_:[MAX]u8;
+var p4_:[MAX]u8;
+var wait:u8;
+var now:u8;
 
 const BUL_MAX = 32;
-var bul_type:[BUL_MAX]int;
-var bul_x:[BUL_MAX]int; // フリーリストのnextとしても使用
-var bul_y:[BUL_MAX]int;
-var bul_vx:[BUL_MAX]sint8;
-var bul_vy:[BUL_MAX]sint8;
-var bul_idx:int;
-var bul_free:int; // フリーリストの先頭
+var bul_type:[BUL_MAX]u8;
+var bul_x:[BUL_MAX]u8; // フリーリストのnextとしても使用
+var bul_y:[BUL_MAX]u8;
+var bul_vx:[BUL_MAX]i8;
+var bul_vy:[BUL_MAX]i8;
+var bul_idx:u8;
+var bul_free:u8; // フリーリストの先頭
 
 /*********************************************
  * 敵関係のルーチン
@@ -33,7 +33,7 @@ var bul_free:int; // フリーリストの先頭
 /** 初期化する */
 public function init():void
 {
-	var i:int;
+	var i:u8;
 	bul_free = 0;
 	for (i = 0; i < BUL_MAX; i++) {
 		bul_x[i] = i + 1;
@@ -42,7 +42,7 @@ public function init():void
 
 public function process():void
 {
-	var i:int;
+	var i:u8;
 	// 敵の出現
 	if (wait == 0) {
 		if (rand() % 8 == 0) {
@@ -61,9 +61,9 @@ public function process():void
 	}
 }
 
-function new():int
+function new():u8
 {
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MAX; i++) {
 		if (!type[i]) {
 			return i;
@@ -79,7 +79,7 @@ function new():int
  * 新しい敵の弾を生成して、そのインデックスを返す.
  * 取得できなかった場合は、255を返す
  */
-function bul_new():int
+function bul_new():u8
 {
 	if (bul_free >= BUL_MAX) {
 		return 255;
@@ -92,7 +92,7 @@ function bul_new():int
 /**
  * 角度を指定して玉を打つ
  */
-function bul_new_angle(x:int, y:int, angle:int, speed:int):void
+function bul_new_angle(x:u8, y:u8, angle:u8, speed:u8):void
 {
 	var n = bul_new();
 	if (n == 255) {
@@ -108,9 +108,9 @@ function bul_new_angle(x:int, y:int, angle:int, speed:int):void
 /**
  * 角度を指定して玉を打つ
  */
-function bul_nway(x:int, y:int, angle:int, speed:int, way:int, spread:int):void
+function bul_nway(x:u8, y:u8, angle:u8, speed:u8, way:u8, spread:u8):void
 {
-	var i:int;
+	var i:u8;
 	angle = angle - (way * spread) / 2;
 	for (i = 0; i < way; i++) {
 		var n = bul_new();
@@ -127,9 +127,9 @@ function bul_nway(x:int, y:int, angle:int, speed:int, way:int, spread:int):void
 }
 
 /** 敵と自機の弾の当たり判定を行う */
-function check_hit(i:int):int
+function check_hit(i:u8):u8
 {
-	var j:int;
+	var j:u8;
 	for (j = 0; j < MY_BUL_MAX; j++) {
 		if (my_bul_type[j] == 1 && x_[i] + 12 - my_bul_x[j] < 24 && y_[i] + 12 - my_bul_y[j] < 24) {
 			my_bul_type[j] = 2;
@@ -145,14 +145,14 @@ public function bul_process():void;
 /*********************************************
  * ダミー
  *********************************************/
-function none_process(i:int):void {}
+function none_process(i:u8):void {}
 
 /*********************************************
  * 敵１
  *********************************************/
 const SPR_ENEMY = 0xc0;
 
-function en_1_new():int
+function en_1_new():u8
 {
 	var i = new();
 	if (i != 255) {
@@ -166,9 +166,9 @@ function en_1_new():int
 	return i;
 }
 
-function en_1_process(i:int):void
+function en_1_process(i:u8):void
 {
-	var pal:int = 1;
+	var pal:u8 = 1;
 
 	// 自機の弾との当たり判定
 	if (check_hit(i)) {
@@ -220,23 +220,23 @@ function en_1_process(i:int):void
 
 const SPR_BILLY = 0;
 
-const BILLY_NORMAL:[]int = [0x80, 0x81, 0x82, 0x83,
+const BILLY_NORMAL:[?]u8 = [0x80, 0x81, 0x82, 0x83,
 	0x90, 0x91, 0x92, 0x93,
 	0xA0, 0xA1, 0xa2, 0xa3,
 	0xb0, 0xb1, 0xb2, 0xb3];
 
-const BILLY_SMOKE:[]int = [0x84, 0x85, 0x86, 0x87,
+const BILLY_SMOKE:[?]u8 = [0x84, 0x85, 0x86, 0x87,
 	0x94, 0x95, 0x96, 0x97,
 	0xa4, 0xa5, 0xa6, 0xa7,
 	0xb4, 0xb5, 0xb6, 0xb7];
 
-const BANG:[]int = [0x88, 0x89, 0x98, 0x99,
+const BANG:[?]u8 = [0x88, 0x89, 0x98, 0x99,
 	0x8a, 0x8b, 0x9a, 0x9b,
 	0x8c, 0x8d, 0x9c, 0x9d,
 	0x8e, 0x8f, 0x9e, 0x9f,
 	0x00, 0x00, 0x00, 0x00];
 
-function billy_new():int
+function billy_new():u8
 {
 	var i = new();
 	if (i != 255) {
@@ -252,7 +252,7 @@ function billy_new():int
 	return i;
 }
 
-function billy_process(i:int):void
+function billy_process(i:u8):void
 {
 	// 画面上の位置を計算
 	var y = p2_[i] * 8;
@@ -315,16 +315,16 @@ function billy_process(i:int):void
 	}
 }
 
-function bang(cx:int, cy:int, n:int):void
+function bang(cx:u8, cy:u8, n:u8):void
 {
 	if (n < 5) {
 		gr_print(cx, cy, &BANG[n * 4], 2, 2);
 	}
 }
 
-function gr_print(cx:int, cy:int, data:*int8, width:int, height:int):void
+function gr_print(cx:u8, cy:u8, data:*u8, width:u8, height:u8):void
 {
-	var y:int;
+	var y:u8;
 	var i = 0;
 	for (y = 0; y < height; y++) {
 		ppu.put(ppu.pos(cx, cy + y), &data[i], width, 0);
@@ -332,4 +332,4 @@ function gr_print(cx:int, cy:int, data:*int8, width:int, height:int):void
 	}
 }
 
-const PROCESS:[]fn(int):void = [none_process, en_1_process, billy_process];
+const PROCESS:[?]fn(u8):void = [none_process, en_1_process, billy_process];

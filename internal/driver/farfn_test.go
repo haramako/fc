@@ -14,13 +14,13 @@ func TestFarFunctionPointers(t *testing.T) {
 	for _, level := range []int{-1, 2} {
 		t.Run(fmtLevel(level), func(t *testing.T) {
 			got := runEmuLevel(t, `options(farcall: true);
-var callback:farfn(uint8):uint8;
-function add(x:uint8):uint8 { return x+7; }
-function sub(x:uint8):uint8 options(near: true) { return x-1; }
-function change():uint8 { callback = sub; return 3; }
-function pass(f:farfn(uint8):uint8):farfn(uint8):uint8 { return f; }
-const TABLE:[]farfn(uint8):uint8 = [add,sub,null];
-struct Box { f:farfn(uint8):uint8; tag:uint8; }
+var callback:farfn(u8):u8;
+function add(x:u8):u8 { return x+7; }
+function sub(x:u8):u8 options(near: true) { return x-1; }
+function change():u8 { callback = sub; return 3; }
+function pass(f:farfn(u8):u8):farfn(u8):u8 { return f; }
+const TABLE:[]farfn(u8):u8 = [add,sub,null];
+struct Box { f:farfn(u8):u8; tag:u8; }
 const BOXES:[]Box = [{add,1},{sub,2}];
 function main():void {
  callback = add;
@@ -28,7 +28,7 @@ function main():void {
  var f = pass(add);
  printf(f(5), ",", TABLE[0](6), ",", BOXES[1].f(7), ",");
  f = null;
- printf(f == null, ",", TABLE[2] == null, ",", sizeof(farfn(uint8):uint8), "\n");
+ printf(f == null, ",", TABLE[2] == null, ",", sizeof(farfn(u8):u8), "\n");
  exit(0);
 }`, level)
 			if strings.TrimSpace(got) != "10,2,12,13,6,1,1,3" {
@@ -48,18 +48,18 @@ func TestFarFunctionPointerStorage(t *testing.T) {
 	for _, level := range []int{-1, 2} {
 		t.Run(fmtLevel(level), func(t *testing.T) {
 			source := `options(farcall: true);
-function f(x:uint8):uint8 { return x+2; }
-const FS:[]farfn(uint8):uint8 = [%s];
-var idx:uint8;
-var mutable:[90]farfn(uint8):uint8;
-struct Box { fnptr:farfn(uint8):uint8; }
+function f(x:u8):u8 { return x+2; }
+const FS:[]farfn(u8):u8 = [%s];
+var idx:u8;
+var mutable:[90]farfn(u8):u8;
+struct Box { fnptr:farfn(u8):u8; }
 soa const CS:[2]Box = [{f},{null}];
 soa VS:[2]Box;
 var box:Box;
-function invoke(p:*farfn(uint8):uint8, x:uint8):uint8 { return (*p)(x); }
-function factorial(n:uint8):uint16 {
+function invoke(p:*farfn(u8):u8, x:u8):u8 { return (*p)(x); }
+function factorial(n:u8):u16 {
  if (n == 0) { return 1; }
- var fnptr:farfn(uint8):uint16 = factorial;
+ var fnptr:farfn(u8):u16 = factorial;
  return n * fnptr(n-1);
 }
 function main():void {
@@ -67,7 +67,7 @@ function main():void {
  mutable[idx] = FS[idx];
  mutable[89] = f;
  printf(mutable[idx](6), ",", invoke(&mutable[89],7), ",");
- var p:*farfn(uint8):uint8 = FS;
+ var p:*farfn(u8):u8 = FS;
  idx = 89;
  printf(p[idx](8), ",");
  VS[1].fnptr = CS[0].fnptr;
@@ -95,10 +95,10 @@ func TestFarFunctionPointerErrors(t *testing.T) {
 		{"far to near", `function main():void { var p:farfn():void; var n:fn():void=p; }`, "not compatible types"},
 		{"void pointer", `function main():void { var p:farfn():void; var n:*void=p; }`, "not compatible types"},
 		{"integer", `function main():void { var p=bitcast<farfn():void>(123); }`, "cannot construct farfn from an integer"},
-		{"typed null cast", `function main():void { var n=bitcast<uint16>(null as farfn():void); }`, "sizes differ"},
+		{"typed null cast", `function main():void { var n=bitcast<u16>(null as farfn():void); }`, "sizes differ"},
 		{"constant arithmetic", `const Z:farfn():void=null; const N=Z+Z;`, "arithmetic is not supported on farfn"},
 		{"constant order", `const Z:farfn():void=null; const N=Z<Z;`, "ordered comparison is not supported on farfn"},
-		{"signature", `function f(x:uint8):void{} function main():void { var p:farfn():void=f; }`, "not compatible types"},
+		{"signature", `function f(x:u8):void{} function main():void { var p:farfn():void=f; }`, "not compatible types"},
 		{"fastcall", `function f():void options(fastcall:true){} function main():void { var p:farfn():void=f; }`, "not compatible types"},
 		{"cc65", `function f():void options(abi:"cc65"); function main():void { var p:farfn():void=f; }`, "cannot take the address of a cc65 abi function"},
 		{"arithmetic", `function main():void { var p:farfn():void; var q=p+p; }`, "arithmetic is not supported on farfn"},
@@ -129,17 +129,17 @@ use mmc3;
 use a;
 use b;
 use slot1;
-var result:[16]uint8 options(address:0x700);
-var callback:farfn(uint8):uint8;
-const TABLE:[]farfn(uint8):uint8 = [a.add,b.add,slot1.add,fixed];
+var result:[16]u8 options(address:0x700);
+var callback:farfn(u8):u8;
+const TABLE:[]farfn(u8):u8 = [a.add,b.add,slot1.add,fixed];
 function irq():void options(symbol:"_interrupt_irq") {}
 function nmi():void options(symbol:"_interrupt") {}
-function fixed(x:uint8):uint8 { return x+20; }
-function same(x:farfn(uint8):uint8,y:farfn(uint8):uint8):uint8 options(noinline:true) { return x==y; }
+function fixed(x:u8):u8 { return x+20; }
+function same(x:farfn(u8):u8,y:farfn(u8):u8):u8 options(noinline:true) { return x==y; }
 function main():void {
  mmc3.set(0,2);
  mmc3.set(1,0);
- for (var i:uint8=0; i<4; i++) { result[i]=TABLE[i](1); }
+ for (var i:u8=0; i<4; i++) { result[i]=TABLE[i](1); }
  callback=a.add;
  result[4]=callback(TABLE[1](2));
  result[5]=a.nested(3);
@@ -154,9 +154,9 @@ function main():void {
 options(bank:0, org:0x8000);
 use b;
 use mmc3;
-public function add(x:uint8):uint8 options(near:true, noinline:true) { return x+5; }
-public function nested(x:uint8):uint8 {
- var f:farfn(uint8):uint8=add;
+public function add(x:u8):u8 options(near:true, noinline:true) { return x+5; }
+public function nested(x:u8):u8 {
+ var f:farfn(u8):u8=add;
  var same_bank=f(x);
  f=b.add;
  var other_bank=f(x);
@@ -165,18 +165,18 @@ public function nested(x:uint8):uint8 {
 `,
 				"b.fc": `#fc 2
 options(bank:1,org:0x8000);
-public function add(x:uint8):uint8 options(near:true,noinline:true) { return x+9; }
+public function add(x:u8):u8 options(near:true,noinline:true) { return x+9; }
 `,
 				"slot1.fc": `#fc 2
 options(bank:2,org:0xa000);
-public function add(x:uint8):uint8 { return x+13; }
+public function add(x:u8):u8 { return x+13; }
 `,
 				"mmc3.fc": `#fc 2
 options(bank:3);
-public var pbank_bak:[2]uint8;
-var select:uint8 options(address:0x8000);
-var data:uint8 options(address:0x8001);
-public function set(slot:uint8,bank:uint8):void { pbank_bak[slot]=bank; select=6+slot; data=bank; }
+public var pbank_bak:[2]u8;
+var select:u8 options(address:0x8000);
+var data:u8 options(address:0x8001);
+public function set(slot:u8,bank:u8):void { pbank_bak[slot]=bank; select=6+slot; data=bank; }
 include("trampoline.asm");
 `,
 				"trampoline.asm": string(trampoline) + "\n.global _a_add, _b_add\n.assert _a_add = _b_add, lderror, \"test requires identical CPU addresses\"\n",

@@ -14,6 +14,7 @@ import (
 const checkUsage = `Usage: fcc check [-t target] [--json] <src.fc> ...
     -t, --target     target platform ( nes, emu )
     --json           print diagnostics as JSON lines ({"file","line","col","severity","message"}) for editors
+    -D MOD.NAME=VAL  override a @(build) const (same as fcc build)
 `
 
 func runCheck(args []string) int {
@@ -22,6 +23,8 @@ func runCheck(args []string) int {
 	target := fs.String("t", "", "target platform")
 	fs.StringVar(target, "target", "", "target platform")
 	jsonFlag := fs.Bool("json", false, "JSON lines output")
+	var defines stringList
+	fs.Var(&defines, "D", "override a @(build) const: module.NAME=value (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -38,7 +41,7 @@ func runCheck(args []string) int {
 
 	rc := 0
 	for _, src := range fs.Args() {
-		ws, err := compiler.Check(src, fc.CheckOptions{Target: *target})
+		ws, err := compiler.Check(src, fc.CheckOptions{Target: *target, Defines: defines})
 		if *jsonFlag {
 			if err != nil {
 				rc = 1

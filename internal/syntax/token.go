@@ -79,15 +79,27 @@ const (
 	KwFrom
 	KwPublic
 	KwPrivate
-	KwFarFn   // farfn (bank-aware function pointer)
-	KwFn      // fn (v2: 関数型)
-	KwBitcast // bitcast (v2)
-	KwStruct  // struct (v2)
-	KwSizeof  // sizeof (v2)
-	KwSoa     // soa (v2)
-	KwTrue    // true (v2)
-	KwFalse   // false (v2)
-	KwNull    // null (v2)
+	KwFarFn       // farfn (bank-aware function pointer)
+	KwFn          // fn (v2: 関数型)
+	KwBitcast     // bitcast (v2)
+	KwStruct      // struct (v2)
+	KwSizeof      // sizeof (v2)
+	KwSoa         // soa (v2)
+	KwTrue        // true (v2)
+	KwFalse       // false (v2)
+	KwNull        // null (v2)
+	KwEnum        // enum (fc 3)
+	KwFallthrough // fallthrough (fc 3。switch の case の最後で次の case の本体へ)
+
+	// fc 3 の `@` の組み込み (doc/v3_plan.md §5 A)。型を取るもの・宣言になるものは専用のトークン、それ以外の
+	// `@名前` は AtIdent (Text は `@名前`。名前つきの組み込みの呼び出し)。`@` の直後が `(` なら AtSign (属性)
+	AtSizeof  // @sizeof
+	AtBitcast // @bitcast
+	AtIncbin  // @incbin
+	AtInclude // @include
+	AtIf      // @if
+	AtIdent   // @名前
+	AtSign    // @ (属性 `@(...)`)
 
 	// 記号 (2 文字)
 	Leq    // <=
@@ -136,6 +148,8 @@ const (
 	Dot       // .
 	Not       // !
 	Tilde     // ~ (v2)
+	Question  // ? (fc 3 の `[?]T`)
+	DotDot    // .. (fc 3 の範囲 `a[i..j]`)
 )
 
 var kindNames = [...]string{
@@ -146,7 +160,7 @@ var kindNames = [...]string{
 	KwBreak: "break", KwContinue: "continue", KwIncbin: "incbin",
 	KwSwitch: "switch", KwCase: "case", KwDefault: "default",
 	KwUse: "use", KwAs: "as", KwFrom: "from", KwPublic: "public", KwPrivate: "private",
-	KwFn: "fn", KwFarFn: "farfn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null",
+	KwFn: "fn", KwFarFn: "farfn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null", KwEnum: "enum", KwFallthrough: "fallthrough",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
 	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
 	MulEq: "*=", DivEq: "/=", ModEq: "%=", AndEq: "&=", OrEq: "|=", XorEq: "^=", ShlEq: "<<=", ShrEq: ">>=",

@@ -68,36 +68,31 @@ _test_memory_buf2: .res 512
 	sta 1+<F_test_memory_test_copy+0
 	lda #6
 	sta (F_test_memory_test_copy+0),y
-	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf2)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_test_memory_buf2)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.LOBYTE(_test_memory_buf1)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.HIBYTE(_test_memory_buf1)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #2
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda #0
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_copy
-	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf1)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_test_memory_buf1)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(_test_memory_buf2)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(_test_memory_buf2)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda #2
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_memory_test_copy+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -109,20 +104,18 @@ _test_memory_buf2: .res 512
 	lda #.HIBYTE(_9)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf2)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_test_memory_buf2)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.LOBYTE(_test_memory_buf1)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.HIBYTE(_test_memory_buf1)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #0
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda #2
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_copy
 	ldy #255
 	lda _test_memory_buf2+0,y
@@ -211,21 +204,18 @@ _test_memory_buf2: .res 512
 	lda #.HIBYTE(_29)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf1)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_test_memory_buf1)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(_test_memory_buf2)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(_test_memory_buf2)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda #0
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_memory_test_copy+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -240,21 +230,18 @@ _test_memory_buf2: .res 512
 	ldy #255
 	lda #0
 	sta _test_memory_buf2+0,y
-	ldx FC_SP
 	lda #.LOBYTE(_test_memory_buf1)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_test_memory_buf1)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(_test_memory_buf2)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(_test_memory_buf2)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda #0
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_memory_test_copy+0
 	sta <F_unittest_assert_equal+0
 	lda #0

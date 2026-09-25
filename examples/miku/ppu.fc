@@ -1,53 +1,52 @@
-#fc 2
+#fc 3
 use * from nes;
 
-options(bank: -1);
+@(bank: -1);
 
-include("ppu.asm");
+@include("ppu.asm");
 
-var vsync_flag:int;
-public var ctrl1_bak:int; // = 0b10000000;
-public var ctrl2_bak:int; // = 0b00011110;
-public var scroll1:int;
-public var scroll2:int;
+var vsync_flag:u8;
+public var ctrl1_bak:u8; // = 0b10000000;
+public var ctrl2_bak:u8; // = 0b00011110;
+public var scroll1:u8;
+public var scroll2:u8;
 
 const HORIZONTAL = 0b00000000;
 const VERTICAL = 0b01000000;
 const ATTRIBUTE = 0b10000000;
 
 const GR_MAX = 8;
-var gr_idx:int;
-var gr_to_buf:[GR_MAX]int16;
-var gr_from_buf:[GR_MAX]*int;
-var gr_size_buf:[GR_MAX]int;
-var gr_flag_buf:[GR_MAX]int;
-var gr_sprite_idx:int;
-var gr_sprite_buf:[256]int options(address: 0x0700);
-var gr_buf:[256]int;
-var gr_buf_idx:int;
+var gr_idx:u8;
+var gr_to_buf:[GR_MAX]u16;
+var gr_from_buf:[GR_MAX]*u8;
+var gr_size_buf:[GR_MAX]u8;
+var gr_flag_buf:[GR_MAX]u8;
+var gr_sprite_idx:u8;
+var gr_sprite_buf:[256]u8 @(address: 0x0700);
+var gr_buf:[256]u8;
+var gr_buf_idx:u8;
 
-var put_to:int16;
-var put_from:*int options(address: 0x60);
-var put_size:int;
-var interrupt_i:int;
+var put_to:u16;
+var put_from:*u8 @(address: 0x60);
+var put_size:u8;
+var interrupt_i:u8;
 
 // IRQ関連
-var irq_counter:int;
+var irq_counter:u8;
 var irq_setup:fn():void;   // 以前は ZP の固定番地 ($62) だったが、$00-$7F は fc の領域なので BSS に
-var irq_next:uint16;
+var irq_next:u16;
 
 var on_vsync:fn():void;
-var locked:int;
+var locked:u8;
 
 var on_wait_vsync:fn():void;
 
-function null_func():void {}
 
 public function init():void
 {
-	irq_setup = null_func;
-	on_vsync = null_func;
-	on_wait_vsync = null_func;
+	irq_setup = @null_fn;
+	on_vsync = @null_fn;
+	on_wait_vsync = @null_fn;
 	locked = 1;
 }
 
@@ -56,7 +55,7 @@ public function wait_vsync():void
 	wait_vsync_with_flag(1);
 }
 
-function wait_vsync_with_flag(flag:int):void
+function wait_vsync_with_flag(flag:u8):void
 {
 	// PPU_CTRL2 = 0b00010110; // for debug (profiling)
 	if (flag != 2) {
@@ -85,11 +84,11 @@ public function unlock():void
 	wait_vsync();
 }
 
-public function put_in_lock(addr:int16, _from:*int, size:int):void;
+public function put_in_lock(addr:u16, _from:*u8, size:u8):void;
 
-public function fill_in_lock(addr:int16, size:int16, n:int):void;
+public function fill_in_lock(addr:u16, size:u16, n:u8):void;
 
-public function put(addr:int16, _from:*int, size:int, flag:int):void
+public function put(addr:u16, _from:*u8, size:u8, flag:u8):void
 {
 	while (gr_idx >= GR_MAX) {
 		vsync_flag = 2;
@@ -102,23 +101,23 @@ public function put(addr:int16, _from:*int, size:int, flag:int):void
 	gr_idx += 1;
 }
 
-function alloc(size:int):*int
+function alloc(size:u8):*u8
 {
 	var old = gr_buf_idx;
 	gr_buf_idx += size;
 	return &gr_buf[old];
 }
 
-public function pos(x:int, y:int):int16;
+public function pos(x:u8, y:u8):u16;
 
-public function sprite(x:int, y:int, pat:int, mode:int):void;
+public function sprite(x:u8, y:u8, pat:u8, mode:u8):void;
 
-function wait(n:int):void
+function wait(n:u8):void
 {
 	while (n) {
-		var i:int = 55;
+		var i:u8 = 55;
 		while (i) {
-			var j:int = 255;
+			var j:u8 = 255;
 			while (j) {
 				j -= 1;
 			}

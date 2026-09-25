@@ -95,7 +95,7 @@ func carryBranch(lmd *ir.Lambda) {
 		}
 		// 書き換え: and → シフト (x 自身に)、if → C の分岐、両方の枝の先頭のシフトを消す。
 		// 枝のシフトが一時変数 t に入れる形 (`shl t = x; xor x = t, k`) なら、t の使用を x に置き換える
-		ops[i] = &ir.Op{Code: shiftCode, Dst: x, Src: []ir.Operand{x, si.Src[1]}, Pos: si.Pos}
+		ir.ReplaceOp(ops, i, &ir.Op{Code: shiftCode, Dst: x, Src: []ir.Operand{x, si.Src[1]}, Pos: si.Pos})
 		if cond.Code == ir.OpIf {
 			cond.Code = ir.OpIfNotCarry // ビットが 0 (C クリア) なら L へ
 		} else {
@@ -113,8 +113,8 @@ func carryBranch(lmd *ir.Lambda) {
 				}
 			}
 		}
-		ops[ki] = nil
-		ops[kf] = nil
+		ir.DropOp(ops, ki)
+		ir.DropOp(ops, kf)
 		return // CFG と use/def が変わったので 1 回 1 箇所 (呼び出し側が繰り返す)
 	}
 }

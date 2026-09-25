@@ -52,7 +52,7 @@ func TestSSAConstWrap(t *testing.T) {
 	check(t, lmd, "push_arg nil = #4", "push_arg nil = #-3")
 }
 
-// cast の連鎖: `((x as int) as sint16)` は下位バイトのゼロ拡張 (外側の型だけで読むと符号拡張してしまう)
+// cast の連鎖: `((x as int) as i16)` は下位バイトのゼロ拡張 (外側の型だけで読むと符号拡張してしまう)
 func TestSSAConstCastChain(t *testing.T) {
 	s16 := tu.IntType(2, true)
 	x, tv := local("x", u16()), tmp("t", s16)

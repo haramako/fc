@@ -1,5 +1,5 @@
-#fc 2
-options(bank: -1);
-include("inflate.asm");
+#fc 3
+@(bank: -1);
+@include("inflate.asm");
 
-function unpack(dest:*int, src:*int):int16;
+function unpack(dest:*u8, src:*const u8):u16;

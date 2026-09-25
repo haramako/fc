@@ -378,6 +378,30 @@ go test ./...                                    # 全部 (golden + examples + N
   共有すると片方の RemoveAll でもう片方のビルドが壊れ、単独実行では再現しない
   フレーク不良になる）
 
+## @log の注釈とパス（最適化を書くときの規則、2026-09-25）
+
+fc 3 の `@log` は命令を出さず、次の命令への注釈 `ir.Op.Logs` になる（`internal/ir/log.go`、[v3_plan.md](v3_plan.md) §9）。
+最適化の判断には注釈を使わないので、生成コードは `@log` の有無で変わらない。そのかわり、命令を消す・作り直すパスは
+注釈を正しい地点へ運ぶ責任がある。IR のパス（`internal/opt`、regalloc）を書く・直すときは次の 3 つを守る。
+
+1. **命令の削除・差し替えはヘルパーを通す。** `ops[i] = nil` / `ops[i] = &ir.Op{…}` を直接書かない。
+   - 消す: `ir.DropOp`（注釈は次に実行される命令へ）。到達しないコード: `ir.DiscardOp`（注釈も捨てる）
+   - 置き換える: `ir.ReplaceOp`。2 つを 1 つにまとめる（融合）: `ir.MergeDrop`
+   - `TestNoDirectOpWrites`（`internal/opt/logrules_test.go`）が `internal/opt` / `regalloc` / `codegen` の直書きを落とす。
+2. **命令列を作り直すパス**（`out` を組み立てて `lmd.Ops = out`。ywalk、split、ループの回転・展開、インライン展開）は、
+   消える命令の `Logs` を代わりに出す最初の命令へ引き継ぐ（新しい `ir.Op` に `Logs: op.Logs`）。命令を写すときは
+   `ir.CloneLogs`（値を付け替えるなら mapOperand も）。命令を別の場所へ移すなら注釈は元の場所に残す（sink）。
+   取りこぼしはパスごとの `ir.KeepLogs` が「元の位置の前で残った命令の直後」へ付け替えるが、地点はずれる。
+3. **変数の値の意味を変える変換は印を立てる。** ループの中で変数の更新を別の変数に置き換える（ywalk のポインタ `p` を
+   `p` と `k` の組にする）なら `Value.LogNoValue`、死んだ代入を消すなら `Value.LogStale`（SSA の eliminateDead）。
+   立てないと `@log` が古い値を「正しい値」として出す。いちばん気づきにくい。
+
+検査: `TestLogZeroCost`（`internal/driver/log_test.go`）は fuzz のプログラムの全部の文の前に変数を全部出す `@log` を置き、
+ROM とプログラムの出力が変わらないこと（-O 0 / -O 2）を確かめ、`@log` の値を -O 0 と -O 2 で比べる。値の食い違った種が
+比べた種の 1% を超えたら失敗（2026-09-25 の時点で 464 個中 1 個）。パスを変えたら `-randn 5000` などで広く回す。
+注釈の動きの調査には `FC_TRACE_LOGS=1`（パスごとの注釈の位置）、`FC_TRACE_LOGS=<関数のシンボル>`（命令列ごと）、
+`FC_TRACE_LOG_ID=<@log の ID>`（その注釈の引数の値）。
+
 ## MesenCE の導入とハマりどころ
 
 導入: [MesenCE releases](https://github.com/nesdev-org/MesenCE/releases) の
@@ -394,12 +418,15 @@ go test ./...                                    # 全部 (golden + examples + N
    テストは settings.json が無ければ最小構成を自動生成する
 3. **testrunner の Lua では `io`/`os` が使えない**（設定でも解除不可）。
    テスト結果は `emu.stop(exitCode)` の終了コードで返す設計にする。
-   `emu.log` の出力は stdout には出ない（`print()` は stdout に出るので、途中経過はこちらで出す）
+   `emu.log` の出力は stdout には出ないが、**`print()` は stdout に出る**（途中経過はこちらで出す。
+   `emu.log = function(s) print(s) end` と差し替えれば、生成した `.fclog.lua` の表示をそのまま取れる。`TestMesenLog`）
 4. **セーブデータ（`.sav`）が残る**: バッテリーバックアップの SRAM は ROM のファイル名で `Saves/<名前>.sav` に
    書かれ、次に同じ名前の ROM を開くと読み込まれる。castle はセーブがあると「つづける」で最後のチェックポイントから
    始まるので、自動プレイの行き先が変わる（2026-09-26、エリア 66 で止まって TestMesenPlayCastle が落ちた）。テストは
    ROM を `fc_test_<名前>` に写し、その `.sav` を前後で消す（`mesenFreshRom`。手でプレイした `castle.sav` には触らない）
-5. Lua API 覚え書き: `emu.setInput(inputTable, port)`（inputPolled イベント内で呼ぶ。
+5. **`emu.getState()` は重い**（1 回 100 マイクロ秒ほど。PPU まで含む全状態の表を作る）。exec コールバックの中で
+   毎回呼ぶと数倍〜10 倍遅くなるので、レジスタ・サイクル数が要るときだけ呼ぶ
+6. Lua API 覚え書き: `emu.setInput(inputTable, port)`（inputPolled イベント内で呼ぶ。
    キーは a/b/select/start/up/down/left/right の bool）、
    `emu.read(addr, emu.memType.nesDebug, false)`（副作用なし読み取り）
 

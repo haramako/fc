@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 19);
+#fc 3
+@(bank: 19);
 use * from common;
 use my;
 use bg;
@@ -27,8 +27,8 @@ public function run_open_watergate():void
 
 function watergate_open():void
 {
-	var i:int;
-	var j:int;
+	var i:u8;
+	var j:u8;
 	for (i = 0; i < 180; i++) {
 		ppu.scroll2 = math.rand() % [2, 4, 8, 8, 4, 2][i / 30];
 		ppu.wait_vsync_with_flag(2);
@@ -57,8 +57,8 @@ function watergate_open():void
 
 function watergate_close():void
 {
-	var i:int;
-	var j:int;
+	var i:u8;
+	var j:u8;
 	for (i = 0; i < 180; i++) {
 		ppu.scroll2 = math.rand() % [2, 4, 8, 8, 4, 2][i / 30];
 		ppu.wait_vsync_with_flag(2);
@@ -90,20 +90,20 @@ function watergate_close():void
 //=================================================
 
 struct ConfirmDialog {
-	scroll:uint8; // MessageDialog/ConfirmDialogと共用
-	text:*uint8;
-	default_cur:uint8;
-	callback:farfn(int):void;
-	cur:uint8;
-	old_cur:uint8;
-	cur_anim:uint8;
+	scroll:u8; // MessageDialog/ConfirmDialogと共用
+	text:*u8;
+	default_cur:u8;
+	callback:farfn(u8):void;
+	cur:u8;
+	old_cur:u8;
+	cur_anim:u8;
 }
 
 alias cdlg:ConfirmDialog = event.shared_work;
 
 // 確認ダイアログを開く
 // strはheapにコピーされる。bankを切り替えないために common セグメントに常駐する
-public function register_confirm_dialog(str:*uint8, callback:farfn(int):void, default_cur:int = 0):void options(segment: "common")
+public function register_confirm_dialog(str:*u8, callback:farfn(u8):void, default_cur:u8 = 0):void @(segment: "common")
 {
 	event.event_func = run_confirm_dialog;
 	cdlg.text = heap_strcpy(str);
@@ -118,7 +118,7 @@ function ppu_clear():void
 {
 	var buf = ppu.alloc(64);
 	mem.set(buf, 0, 64);
-	var i:int;
+	var i:u8;
 	for (i = 0; i < 5; i++) {
 		var addr = ppu.pos(0, i * 2) + 0x800;
 		ppu.put(addr, buf, 64, 0);
@@ -199,14 +199,14 @@ function run_confirm_dialog():void
 	}
 
 	heap.release(cdlg.text);
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 	if (cdlg.callback != null) {
 		cdlg.callback(cdlg.cur);
 	}
 }
 
-function confirm_setup_irqcmd(h:int):void
+function confirm_setup_irqcmd(h:u8):void
 {
 	irqcmd.begin();
 	irqcmd.add_wait_line(80 - 1 + h);
@@ -237,7 +237,7 @@ function confirm_redraw_cursor():void
 	cdlg.cur_anim += 1;
 }
 
-function confirm_draw_cursor(idx:int, chr:int):void
+function confirm_draw_cursor(idx:u8, chr:u8):void
 {
 	var addr = ppu.pos(CONFIRM_CURSOR_X[idx], CONFIRM_CURSOR_Y[idx]) + 0x800;
 	var buf = ppu.alloc(1);
@@ -253,10 +253,10 @@ public const MESSAGE_DIALOG_NONE = 0;
 public const MESSAGE_DIALOG_ITEM = 1;
 
 struct MessageDialog {
-	scroll:uint8; // MessageDialog/ConfirmDialogと共用
-	text:*uint8;
-	kind:uint8;
-	param:uint8;
+	scroll:u8; // MessageDialog/ConfirmDialogと共用
+	text:*u8;
+	kind:u8;
+	param:u8;
 	callback:farfn():void;
 }
 
@@ -264,7 +264,7 @@ alias msgdlg:MessageDialog = event.shared_work;
 
 // メッセージダイアログを開く
 // strはheapにコピーされる。bankを切り替えないために common セグメントに常駐する
-public function register_message_dialog(str:*uint8, callback:farfn():void = null, kind:int = 0, p2:int = 0):void options(segment: "common")
+public function register_message_dialog(str:*u8, callback:farfn():void = null, kind:u8 = 0, p2:u8 = 0):void @(segment: "common")
 {
 	event.event_func = run_message_dialog;
 	msgdlg.text = heap_strcpy(str);
@@ -356,7 +356,7 @@ function run_message_dialog():void
 	}
 
 	heap.release(msgdlg.text);
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 	if (msgdlg.callback != null) {
 		msgdlg.callback();

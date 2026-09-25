@@ -1,28 +1,28 @@
-#fc 2
+#fc 3
 /*
  * NES用の定義ファイル
  */
 
-options(bank: -1);
+@(bank: -1);
 
 public use * from nes;
-include("stdio.asm");
+@include("stdio.asm");
 
-public var vsync_flag:int;
-public var ppu_addr:int16;
-public var print_addr:int16;
+public var vsync_flag:u8;
+public var ppu_addr:u16;
+public var print_addr:u16;
 
-public function print_int16(n:int16):void;
+public function print_int16(n:u16):void;
 public function wait_vsync():void;
-public function print(str:*int):void;
-public function ppu_put(addr:int16, data:*int, size:int):void;
+public function print(str:*const u8):void @(fastcall);
+public function ppu_put(addr:u16, data:*const u8, size:u8):void @(fastcall);
 
-public function puts(str:*int):void
+public function puts(str:*const u8):void
 {
 	printf(str, "\n");
 }
 
-public function exit(code:int):void
+public function exit(code:u8):void
 {
 	printf('exit(', code, ")\n");
 	PPU_CTRL1 = 0b11001000;
@@ -43,5 +43,5 @@ public function init():void
 	print_addr = 0x2000;
 }
 
-public function interrupt():void options(symbol: '_interrupt');
-public function interrupt_irq():void options(symbol: '_interrupt_irq');
+public function interrupt():void @(symbol: '_interrupt');
+public function interrupt_irq():void @(symbol: '_interrupt_irq');

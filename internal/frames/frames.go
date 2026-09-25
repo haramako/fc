@@ -146,7 +146,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 	}
 	for i, lmd := range g.Lambdas {
-		if lmd.Options.Has("interrupt") {
+		if lmd.Options.Flag("interrupt") {
 			lmd.Interrupt = true
 			entry[i] = true
 		}

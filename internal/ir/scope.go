@@ -9,8 +9,14 @@ import (
 )
 
 type Scope struct {
-	Parent   *Scope
-	Owner    string // モジュールスコープならモジュール id (ローカル/グローバルは "")
+	Parent *Scope
+	Owner  string // モジュールスコープならモジュール id (ローカル/グローバルは "")
+	// Reserved は宣言できない名前 → 理由 (fc 3 のモジュールの型名 u8 など。型名は型の位置でスコープより先に引くので、
+	// 同名の宣言は黙って隠れてしまう)。子のスコープに引き継ぐ
+	Reserved map[string]string
+	// Hidden はモジュールスコープから親 (グローバル) へ辿らない名前 → 代わりの名前 (fc 3 のモジュールで、`@` の付かない
+	// 組み込みの名前 asm / min など。fc 3 では @asm と書く)。モジュール自身の宣言・取り込みは見える
+	Hidden   map[string]string
 	trace    func(TraceEvent)
 	declares map[string]*Value
 	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
@@ -37,7 +43,18 @@ type scopeUse struct {
 }
 
 func NewScope(parent *Scope) *Scope {
-	return &Scope{Parent: parent, declares: map[string]*Value{}}
+	s := &Scope{Parent: parent, declares: map[string]*Value{}}
+	if parent != nil {
+		s.Reserved = parent.Reserved
+	}
+	return s
+}
+
+// checkReserved は name が宣言できない名前ならエラー。
+func (s *Scope) checkReserved(name string) {
+	if why, ok := s.Reserved[name]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s cannot be declared (%s)", name, why)})
+	}
 }
 
 // TraceEvent は名前解決の観測 (fcc migrate の参照解析用。通常のコンパイルでは発生しない)。
@@ -124,10 +141,23 @@ func (s *Scope) Find(id string, withPrivate bool) *Value {
 			return v
 		}
 	}
+	if _, hidden := s.Hidden[id]; hidden {
+		return nil
+	}
 	if s.Parent != nil {
 		return s.Parent.Find(id, withPrivate)
 	}
 	return nil
+}
+
+// hiddenHint は id が fc 3 で隠した組み込みの名前なら、その代わりの名前 (スコープを親へ辿って探す)。
+func (s *Scope) hiddenHint(id string) string {
+	for x := s; x != nil; x = x.Parent {
+		if h, ok := x.Hidden[id]; ok {
+			return h
+		}
+	}
+	return ""
 }
 
 // FindMust は Find と同じだが、見つからなければ CompileError。
@@ -136,7 +166,9 @@ func (s *Scope) FindMust(id string, withPrivate bool) *Value {
 		return v
 	}
 	msg := fmt.Sprintf("%s not found", id)
-	if hint := s.Suggest(id); hint != "" {
+	if h := s.hiddenHint(id); h != "" {
+		msg += fmt.Sprintf(" (write %s in fc 3; `fcc migrate` rewrites fc 2 sources)", h)
+	} else if hint := s.Suggest(id); hint != "" {
 		msg += fmt.Sprintf(" (did you mean %s?)", hint)
 	}
 	panic(&diag.Error{Msg: msg})
@@ -183,6 +215,9 @@ func editDistance(a, b string) int {
 	return prev[len(rb)]
 }
 
+// Local はこのスコープ自身で宣言した id の値 (遅延の解決を起こさない。無ければ nil)。
+func (s *Scope) Local(id string) *Value { return s.declares[id] }
+
 // DeclaredHere はこのスコープ自身に id の宣言 (または束縛) があるか。
 func (s *Scope) DeclaredHere(id string) bool {
 	if _, ok := s.deferred[id]; ok {
@@ -197,6 +232,7 @@ func (s *Scope) DeclaredHere(id string) bool {
 
 // Declare は値を宣言する。同名が既にあれば CompileError (選択的インポートとの衝突も含む: 規則 S2)。
 func (s *Scope) Declare(val *Value) {
+	s.checkReserved(val.Name)
 	if _, ok := s.declares[val.Name]; ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", val.Name)})
 	}
@@ -212,6 +248,7 @@ func (s *Scope) Declare(val *Value) {
 // Alias は他モジュールの宣言 val を name でこのスコープに束縛する (`use a, b from mod;`)。
 // 自宣言・既存の束縛と同名なら CompileError (規則 S2)。
 func (s *Scope) Alias(name string, val *Value, reexport bool) {
+	s.checkReserved(name)
 	if _, ok := s.declares[name]; ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", name)})
 	}

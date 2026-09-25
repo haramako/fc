@@ -20,7 +20,7 @@ import (
 // needsExpected は、型名を省いた struct リテラル (`{1, 2}`) を含み、文脈の型がないと評価できない式か。
 func (h *Hlc) needsExpected(c *cexpr) bool {
 	switch c.kind {
-	case cNull:
+	case cNull, cEnumShort, cNullFn:
 		return true
 	case cStructLit:
 		return c.typ == nil && c.ty == nil
@@ -44,12 +44,20 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 			return cv(ir.NewSymbolLiteral("", t, x.val.Symbol))
 		}
 	}
+	if t.IsSlice() && !(c.kind == cOp && c.op == opToSlice) {
+		// 配列 (と slice) の値を slice にする (長さは配列の長さ。文字列リテラルは終端の 0 を含めない)
+		return &cexpr{kind: cOp, op: opToSlice, args: []*cexpr{c}, ty: t, pos: c.pos}
+	}
 	if t == nil || (!h.needsExpected(c) && c.kind != cArray) {
 		return c
 	}
 	switch c.kind {
 	case cNull:
 		return cv(h.nullOf(t).(*ir.Value))
+	case cEnumShort:
+		return h.enumShort(c, t)
+	case cNullFn:
+		return cv(h.nullFn(t))
 	case cStructLit:
 		if t.Kind != types.Struct {
 			panic(&diag.Error{Msg: fmt.Sprintf("struct literal cannot be used as %s", t)})
@@ -209,7 +217,7 @@ func (h *Hlc) zeroValue(t *types.Type) ir.Operand {
 func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
 	var ty *types.Type
 	if nt, ok := t.(*syntax.NamedType); ok && nt.Module == nil {
-		if _, isBasic := h.prog.Types.Named(nt.Name.Name); !isBasic {
+		if _, isBasic := h.prog.Types.NamedIn(nt.Name.Name, h.version()); !isBasic {
 			if v := h.scope.Find(nt.Name.Name, true); v != nil && v.TypeRef == nil {
 				ty = v.Type
 			}
@@ -277,9 +285,11 @@ func (h *Hlc) fieldViaPointer(ptr ir.Operand, st *types.Type, name string) ir.Op
 	f := h.fieldOf(st, name)
 	pt := h.prog.Types.PointerTo(f.Type)
 	if f.Offset == 0 {
-		return ir.NewCastedValue(ptr, pt, 0)
+		c := ir.NewCastedValue(ptr, pt, 0)
+		return c // readOnly は CastedValue の元 (ptr) を見る
 	}
 	tmp := h.newTmp(pt)
+	h.markReadOnly(tmp, h.readOnly(ptr))
 	h.emit(&ir.Op{Code: ir.OpAdd, Dst: tmp, Src: []ir.Operand{ptr, h.IntValue(f.Offset)}})
 	return tmp
 }

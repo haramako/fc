@@ -37,6 +37,8 @@ const (
 	cStructLit              // struct リテラル (typ = 型名 (省略なら nil)、ty = 確定した型、fields)
 	cSizeof                 // sizeof(typ)
 	cNull                   // null (型は文脈から。ty が決まれば 0 のリテラルになる)
+	cEnumShort              // fc 3 の `.Name` (enum のメンバー。型は文脈から (withExpected)。name)
+	cNullFn                 // fc 3 の @null_fn (何もしない関数。型は文脈の fn(...):void。無ければ fn():void)
 )
 
 // cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
@@ -68,11 +70,14 @@ const (
 	opIndex      cop = "index"
 	opRef        cop = "ref"
 	opDeref      cop = "deref"
-	opField      cop = "field"  // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
-	opMin        cop = "min"    // min(a, b) (組み込み。型は両辺の互換型、符号もそれに従う)
-	opMax        cop = "max"    // max(a, b)
-	opClamp      cop = "clamp"  // clamp(x, lo, hi)
-	opBitNot     cop = "bitnot" // ~x
+	opField      cop = "field"    // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
+	opMin        cop = "min"      // min(a, b) (組み込み。型は両辺の互換型、符号もそれに従う)
+	opMax        cop = "max"      // max(a, b)
+	opClamp      cop = "clamp"    // clamp(x, lo, hi)
+	opBitNot     cop = "bitnot"   // ~x
+	opSlice      cop = "slice"    // fc 3 の範囲 args[0][args[1]..args[2]] (lo / hi は省けば nil)
+	opToSlice    cop = "to_slice" // 配列 / slice args[0] を slice の型 ty にする (withExpected が挟む)
+	opLen        cop = "len"      // @len(args[0]) の実行時の値 (slice の長さ)
 )
 
 // compoundOps は複合代入 `x op= y` の op。
@@ -178,6 +183,9 @@ func toC(e syntax.Expr) *cexpr {
 func toC0(e syntax.Expr) *cexpr {
 	switch e := e.(type) {
 	case *syntax.Ident:
+		if e.Name == "@null_fn" {
+			return &cexpr{kind: cNullFn} // 型は文脈から (withExpected)
+		}
 		return cident(e.Name)
 	case *syntax.IntLit:
 		return cint(e.Value)
@@ -192,6 +200,8 @@ func toC0(e syntax.Expr) *cexpr {
 		return cstr(e.Value)
 	case *syntax.ParenExpr:
 		return toC(e.X)
+	case *syntax.EnumShortExpr:
+		return &cexpr{kind: cEnumShort, name: e.Name.Name}
 	case *syntax.BinaryExpr:
 		if e.Op == syntax.Dot {
 			id, ok := e.Y.(*syntax.Ident)
@@ -225,6 +235,15 @@ func toC0(e syntax.Expr) *cexpr {
 		return &cexpr{kind: cOp, op: opCall, args: args, block: e.Block}
 	case *syntax.IndexExpr:
 		return cop2(opIndex, toC(e.X), toC(e.Index))
+	case *syntax.SliceExpr:
+		c := &cexpr{kind: cOp, op: opSlice, args: []*cexpr{toC(e.X), nil, nil}}
+		if e.Lo != nil {
+			c.args[1] = toC(e.Lo)
+		}
+		if e.Hi != nil {
+			c.args[2] = toC(e.Hi)
+		}
+		return c
 	case *syntax.ArrayLit:
 		elems := make([]*cexpr, len(e.Elems))
 		for i, el := range e.Elems {
@@ -267,12 +286,20 @@ func toC0(e syntax.Expr) *cexpr {
 
 // parseOptions は options(...) を生の値のまま ir.Options にする (重複キーは後勝ち・位置維持)。
 // 値は整数 / 文字列 / 識別子のいずれか。nil なら nil。
+// checkBareOption は値を省いた属性 (`@(inline)`) が真偽値の属性か検査する (bank / address などは値が要る)。
+func checkBareOption(e *syntax.OptionEntry) {
+	if e.Bare && !ir.FlagOptions[e.Key.Name] {
+		panic(&diag.Error{Msg: "@(" + e.Key.Name + ") needs a value (`" + e.Key.Name + ": ...`; only flag attributes such as inline can omit it)"})
+	}
+}
+
 func parseOptions(o *syntax.Options) ir.Options {
 	if o == nil {
 		return nil
 	}
 	var r ir.Options
 	for _, e := range o.Entries {
+		checkBareOption(e)
 		if e.Key.Name == "bss" {
 			panic(&diag.Error{Msg: "bss is only allowed on modules and placement blocks; use segment on individual declarations"})
 		}

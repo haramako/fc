@@ -63,7 +63,7 @@ func coalesceCopies(lmd *ir.Lambda) {
 		if next.Code == ir.OpReturn {
 			next.Src[0] = x
 		} else {
-			ops[i+1] = nil
+			ir.DropOp(ops, i+1)
 		}
 	}
 }

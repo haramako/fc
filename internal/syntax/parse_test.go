@@ -219,7 +219,7 @@ func TestVersionPragma(t *testing.T) {
 
 	bad := []struct{ src, msg string }{
 		{"#fc 1\nvar a:int;\n", "fc 1 sources are no longer supported"},
-		{"#fc 3\n", "invalid version pragma"},
+		{"#fc 4\n", "invalid version pragma"},
 		{"#fc\n", "invalid version pragma"},
 		{"#fc 2 extra\n", "invalid version pragma"},
 		{"var a:int;\n#fc 2\n", "invalid token"},
@@ -241,6 +241,13 @@ func TestVersionPragma(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), b.msg) {
 			t.Errorf("%q: got %v, want /%s/", b.src, err, b.msg)
 		}
+	}
+	// `#fc 3` は fc 3、プラグマが無ければ fc 2 (DefaultVersion)
+	if f, err := Parse([]byte("#fc 3\nvar a:int;\n"), "t.fc"); err != nil || f.Version != Version3 {
+		t.Errorf("#fc 3: err=%v version=%v", err, f)
+	}
+	if f, err := Parse([]byte("var a:int;\n"), "t.fc"); err != nil || f.Version != Version2 {
+		t.Errorf("no pragma: err=%v version=%v", err, f)
 	}
 	// プラグマが無くても fc 2 として受理する
 	for _, ok := range []string{"var a:*int;\n", "const a = [1, 2,];\n", "var x = y as int;\n", "struct P { x:int; }\n"} {

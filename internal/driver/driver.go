@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,6 +51,10 @@ type BuildOptions struct {
 	CompileOnly   bool
 	Stdout        io.Writer
 	Debug         bool // -g: fc のソース位置を .dbg line で埋め、ROM の隣に Mesen 用の .dbg / .mlb を書く
+	// LogOut は emu の実行での @log の出力先 (nil なら Stdout。printf と同じ順に混ざる)
+	LogOut io.Writer
+	// LogEveryStatement はテスト用: 文ごとに変数を全部出す @log を置く (sema.Program.LogEveryStatement)
+	LogEveryStatement bool
 	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
@@ -59,6 +65,9 @@ type BuildOptions struct {
 
 	// Jobs は ca65 を同時に走らせる数。0 なら CPU 数。1 で逐次。
 	Jobs int
+
+	// Defines は CLI の -D (`module.NAME=value`)。fc.toml の [define.<module>] の後に当てる (doc/v3_plan.md §1)
+	Defines []string
 }
 
 // Result はビルドの結果。
@@ -74,8 +83,9 @@ type Result struct {
 	Cycles     int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
 	StaticZp   int            // 静的フレームの使用量 (ゼロページ側 FC_SZP / RAM 側 FC_SRAM)
 	StaticRam  int
-	Frames     []string // 静的フレームの配置の要約 (fcc build -d で表示)
-	SizeReport []string // 関数ごとのコードサイズ (fcc build --size-report で表示)
+	Frames     []string         // 静的フレームの配置の要約 (fcc build -d で表示)
+	Defines    []sema.DefineUse // @(build) の const の上書き (fc.toml / -D。fcc build -d で表示)
+	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
 }
 
 type Compiler struct {
@@ -86,6 +96,7 @@ type Compiler struct {
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
 	prog     *sema.Program
+	layout   *bankLayout  // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
 	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 }
 
@@ -183,10 +194,20 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	var llc *codegen.Llc
 	var plan *frames.Plan
 	var perr error
+	defs, derr := c.projectDefines(opt.Defines)
+	if derr != nil {
+		return nil, derr
+	}
 	for noGrow := map[string]bool{}; ; {
-		var cerr error
-		prog, cerr = sema.Compile(opt.Dir, c.libPath(opt.Target), filename)
-		if cerr != nil {
+		prog = sema.NewProgram()
+		prog.Defines = copyDefines(defs)
+		prog.Banks = c.banks()
+		prog.LogEnabled = opt.Debug // @log の注釈は -g のときだけ (doc/v3_plan.md §9)
+		prog.LogEveryStatement = opt.LogEveryStatement
+		if cerr := sema.CompileProgram(prog, opt.Dir, c.libPath(opt.Target), filename); cerr != nil {
+			return nil, cerr
+		}
+		if cerr := c.checkDefines(prog, opt.Target); cerr != nil {
 			return nil, cerr
 		}
 		c.prog = prog
@@ -203,6 +224,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
+	result.Defines = sortedDefines(prog.Defines)
 	if err := writeIfChanged(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n"))); err != nil {
 		return nil, err
 	}
@@ -250,10 +272,21 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 
 	result.Out = opt.Out
 	result.MapFile, result.DbgFile = c.link(baseObj, objs, opt)
+	var logFile *LogFile
 	if opt.Debug || opt.SizeReport {
 		dbg, err := ParseDbgFile(result.DbgFile)
 		if err != nil {
 			return nil, err
+		}
+		if opt.Debug && len(llc.LogSites) > 0 {
+			// @log の地点 (<rom>.fclog.json / .fclog.lua)
+			if logFile, err = buildLogFile(llc.LogSites, dbg, opt.Target, llc.DebugFile); err != nil {
+				return nil, err
+			}
+			if err := writeLogFiles(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)), logFile); err != nil {
+				return nil, err
+			}
+			result.Warnings = append(result.Warnings, logWarnings(llc.LogSites)...)
 		}
 		if opt.Debug && opt.Target == "nes" {
 			battery := false
@@ -270,7 +303,11 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 
 	if opt.Run {
-		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles)
+		logOut := opt.LogOut
+		if logOut == nil {
+			logOut = opt.Stdout
+		}
+		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles, logHooks(logFile), logOut)
 		if err != nil {
 			return nil, err
 		}
@@ -295,6 +332,16 @@ func (c *Compiler) makeBase() string {
 		path := filepath.Join(c.dir, base.Str)
 		c.ca65(path)
 		return filepath.Join(c.buildDir, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".o")
+	}
+	if c.layout != nil && c.target == "nes" {
+		// fc.toml の [target] から (layout.go)
+		l := c.layout
+		str := c.baseAsmTemplate(l.PRGSize/0x4000, max(1, l.CHRSize/0x2000), 1, l.Profile.INES)
+		if err := writeIfChanged(filepath.Join(c.buildDir, "base.s"), []byte(str)); err != nil {
+			panic(err)
+		}
+		c.ca65(filepath.Join(c.buildDir, "base.s"))
+		return filepath.Join(c.buildDir, "base.o")
 	}
 	inesmap := 0
 	if m, ok := opts.Get("mapper"); ok {
@@ -340,6 +387,8 @@ func (c *Compiler) link(baseObj string, objs []string, opt *BuildOptions) (mapFi
 	if custom, ok := opts.Get("linker_config"); ok && custom.Kind == ir.OptStr {
 		// options(linker_config: "../ld65.cfg"): 自前のリンカ設定 (Dir 相対)。bank / org は配置に使われない (far call の判定だけ)
 		cfgPath = filepath.Join(c.dir, custom.Str)
+	} else if c.layout != nil && c.target == "nes" {
+		c.writeLayoutConfig() // fc.toml のバンクの表から (layout.go)
 	} else {
 		c.writeLinkerConfig(opts, opt)
 	}
@@ -471,7 +520,10 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 // 「そのまま飛ぶ」だけの fclib/<target>/farcall.asm を使う。バンク切替のあるマッパーはプロジェクトが farcall を用意する。
 func (c *Compiler) farcallAsm() string {
 	if c.target == "nes" {
-		if m, ok := c.prog.Options.Get("mapper"); ok && !(m.Kind == ir.OptStr && m.Str == "MMC0" || m.Kind == ir.OptInt && m.Int == 0) {
+		if c.layout != nil && len(c.layout.Profile.Slots) > 0 {
+			return "" // fc.toml のバンクの表でバンク切替のあるマッパー: トランポリンはプロジェクトが用意する
+		}
+		if m, ok := c.prog.Options.Get("mapper"); ok && c.layout == nil && !(m.Kind == ir.OptStr && m.Str == "MMC0" || m.Kind == ir.OptInt && m.Int == 0) {
 			return ""
 		}
 	}
@@ -480,6 +532,45 @@ func (c *Compiler) farcallAsm() string {
 		return ""
 	}
 	return p
+}
+
+// projectDefines は fc.toml (ソースの基準ディレクトリから親へ探す) と CLI の -D から @(build) の const の上書きを作る。
+// fc.toml のバンクの表も読んで c.layout に入れる。
+func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, error) {
+	cfg, err := findConfig(c.dir)
+	if err != nil {
+		return nil, err
+	}
+	if c.layout, err = cfg.layout(); err != nil {
+		return nil, err
+	}
+	if c.layout != nil && c.layout.Fragment != "" && !filepath.IsAbs(c.layout.Fragment) {
+		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
+	}
+	return cfg.defines(cli)
+}
+
+// banks は意味解析に渡すバンクの表 (fc.toml に無ければ nil)。
+func (c *Compiler) banks() map[string]sema.BankRef {
+	if c.layout == nil {
+		return nil
+	}
+	return c.layout.semaBanks()
+}
+
+// checkDefines は上書きが宣言された @(build) の const に当たったかを検査する (ビルドに含まれないモジュールは警告)。
+func (c *Compiler) checkDefines(prog *sema.Program, target string) error {
+	return prog.CheckDefines(func(m string) bool { return moduleExists(c.dir, c.libPath(target), m) })
+}
+
+// sortedDefines は上書きの一覧 (キー順)。
+func sortedDefines(m map[string]*sema.DefineUse) []sema.DefineUse {
+	var r []sema.DefineUse
+	for _, d := range m {
+		r = append(r, *d)
+	}
+	sort.Slice(r, func(i, j int) bool { return r[i].Key < r[j].Key })
+	return r
 }
 
 // newLlc は prog のコード生成器を作る (PrepareProgram の前の設定まで)。
@@ -726,7 +817,8 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // ホスト呼び出し規約 ($fff0〜$ffff): 1=print / 2=print_int / 3=print_int_sp、
 // $ffff が 255 以外になったら終了 (その値が終了コード)。
 // 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
-func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int, int64, error) {
+// logs は @log の地点 (PC → 表示。-g のとき)。命令の実行前に PC が地点なら 1 行出す。
+func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]logHook, logOut io.Writer) (int, int64, error) {
 	if c.target != "emu" {
 		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
 	}
@@ -745,6 +837,7 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int
 	mem.Set(0xffff, 255)
 	mem.Set(0xfffe, 255)
 	var benchStart, benchCycles int64
+	prevPC := -1 // 直前に実行した命令 (@log の合流点の地点: LogFileSite.Prevs)
 	benchUsed := false
 	var trace []int // FC_TRACE_PC=1: 直近の PC (invalid opcode の panic で表示する。調査用)
 	if os.Getenv("FC_TRACE_PC") != "" {
@@ -765,6 +858,20 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64) (int
 			if len(trace) > 48 {
 				trace = trace[1:]
 			}
+		}
+		if hs := logs[cpu.Pc]; logs != nil && hs != nil {
+			r := logReader{mem: mem.Get, a: cpu.A, x: cpu.X, y: cpu.Y}
+			for _, h := range hs {
+				if h.site.Prevs == nil || slices.Contains(h.site.Prevs, prevPC) {
+					fmt.Fprintln(logOut, formatLog(h.point, h.site, r))
+				}
+			}
+		}
+		prevPC = cpu.Pc
+		if logs != nil && mem.Get(cpu.Pc) == 0x60 {
+			// rts の後は、戻り先の直前の jsr を直前の命令とみなす (呼び出しの直後の合流点の地点。Prevs は jsr を指す)
+			ret := mem.Get(0x100+(cpu.S+1)&0xff) | mem.Get(0x100+(cpu.S+2)&0xff)<<8
+			prevPC = (ret - 2) & 0xffff
 		}
 		cpu.StepSilent()
 		if maxCycles > 0 && cpu.Cycles > maxCycles {

@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 15);
+#fc 3
+@(bank: 15);
 use my;
 use * from en;
 use boxelev;
@@ -20,7 +20,7 @@ use * from graphics;
  * p8: １歩ごとのウェイト
  *********************************************/
 
-public function snake_new(i:int):void
+public function snake_new(i:u8):void
 {
 	if (p1[i] == 0)
 		p1[i] = 60;
@@ -36,7 +36,7 @@ public function snake_new(i:int):void
 	}
 }
 
-public function snake_process(i:int):void
+public function snake_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -114,7 +114,7 @@ const SNAKE_BASE = 244;
 // 23
 // 
 // index: old_dir * 4 + dir
-const SNAKE_BLOCK_PAT:[]int = [
+const SNAKE_BLOCK_PAT:[?]u8 = [
 	1, 2, 1, 2, // up/up
 	4, 0, 1, 11, // up/right
 	0, 0, 0, 0, // up/down
@@ -133,7 +133,7 @@ const SNAKE_BLOCK_PAT:[]int = [
 	0, 0, 3, 3 // left/left
 ];
 
-function snake_draw_cell(x:int, y:int, full:int, old_dir:int, dir:int):void
+function snake_draw_cell(x:u8, y:u8, full:u8, old_dir:u8, dir:u8):void
 {
 	if (y > 14)
 		return;
@@ -144,8 +144,8 @@ function snake_draw_cell(x:int, y:int, full:int, old_dir:int, dir:int):void
 
 	var pat_idx = (old_dir * 4 + dir) * 4;
 
-	var y16:int16 = y;
-	var addr:int16 = 0x2000 + y16 * 64 + x * 2;
+	var y16:u16 = y;
+	var addr:u16 = 0x2000 + y16 * 64 + x * 2;
 	var buf = ppu.alloc(4);
 	buf[0] = SNAKE_BASE + SNAKE_BLOCK_PAT[pat_idx + 0];
 	buf[1] = SNAKE_BASE + SNAKE_BLOCK_PAT[pat_idx + 1];
@@ -185,13 +185,13 @@ function snake_draw_cell(x:int, y:int, full:int, old_dir:int, dir:int):void
 const STEAM_DIR_SPR = [8, 0, 8, 0];
 const STEAM_DIR_FLIP = [128, 64, 128, 64];
 
-public function water_jet_new(i:int):void
+public function water_jet_new(i:u8):void
 {
 	p4[i] = 0;
 	p5[i] = p2[i];
 }
 
-public function water_jet_process(i:int):void
+public function water_jet_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -233,13 +233,13 @@ public function water_jet_process(i:int):void
 		var dx = DIR_VX[dir];
 		var dy = DIR_VY[dir];
 		var flag = pal | DIR_FLIP_XY[dir];
-		var flag_flip:int = STEAM_DIR_FLIP[(dir + 1) % 4];
+		var flag_flip:u8 = STEAM_DIR_FLIP[(dir + 1) % 4];
 
 		var a = (wait / 4) % 2 * 4;
 		var v = wait % 8 * 6;
 		gr_sprite2(x + dx * v, y + dy * v, spr + STEAM_DIR_SPR[dir] + a, pal | DIR_FLIP_XY[dir]);
 
-		var len:sint = wait * 2;
+		var len:i8 = wait * 2;
 		if (wait > 24)
 			len = 48;
 		if (dir % 2 == 0) {
@@ -301,24 +301,24 @@ public function water_jet_process(i:int):void
 	p5[i] = wait;
 }
 
-function water_jet_process_bubble(x:int, y:int, i:int, dir:int, idx:int):int
+function water_jet_process_bubble(x:u8, y:u8, i:u8, dir:u8, idx:u8):u8
 {
 	if (i <= 32) {
 		return i + 1;
 	} elsif (i <= 48) {
-		var d:sint;
+		var d:i8;
 		if (i <= 40) {
 			d = (i - 32) * 4;
 		} else {
 			d = 32 + (i - 40) * 2;
 		}
 		var n = anim + i * 4 + idx * 64;
-		var dy:sint = math.sin(n) / 16;
-		var dx:sint = math.cos(n) / 16;
+		var dy:i8 = math.sin(n) / 16;
+		var dx:i8 = math.cos(n) / 16;
 		ppu.sprite(x - 4 + DIR_VX[dir] * d + dx, y - 8 + DIR_VY[dir] * d + dy, SPR_BUBBLE, 1);
 		return i + 1;
 	} else {
-		return 24 + math.rand() / 32 as int;
+		return 24 + math.rand() / 32 as u8;
 	}
 }
 
@@ -329,13 +329,13 @@ function water_jet_process_bubble(x:int, y:int, i:int, dir:int, idx:int):int
  * p4: stat
  *********************************************/
 
-public function boxelev_switch_new(i:int):void
+public function boxelev_switch_new(i:u8):void
 {
 	p4[i] = 0;
 	p6[i] = 0;
 }
 
-public function boxelev_switch_process(i:int):void
+public function boxelev_switch_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -345,7 +345,7 @@ public function boxelev_switch_process(i:int):void
 	var wait = p5[i];
 	//var on = p6[i];
 
-	var on:int;
+	var on:u8;
 	if (box_pos == 0) {
 		on = (boxelev.box_stat[box_id] != 0);
 	} else {
@@ -374,7 +374,6 @@ public function boxelev_switch_process(i:int):void
 		boxelev.box_running = 1;
 	}
 
-	ppu.null_func();
 	ppu.sprite(x - 4, y - 8, SPR_BOXELEV_SWITCH + on * 2, 1);
 
 	p4[i] = stat;
@@ -382,7 +381,7 @@ public function boxelev_switch_process(i:int):void
 	p6[i] = on;
 }
 
-function boxelev_switch_event():int
+function boxelev_switch_event():u8
 {
 	p4[my.touch_event_p1] = 1;
 	p6[my.touch_event_p1] = 1 - p6[my.touch_event_p1];
@@ -393,13 +392,13 @@ function boxelev_switch_event():int
  * 錫杖で開くゲート
  *********************************************/
 
-public function staff_gate_new(i:int):void
+public function staff_gate_new(i:u8):void
 {
 	p2[i] = my.items[ITEM_ID_STAFF];
 	p3[i] = 1;
 }
 
-public function staff_gate_process(i:int):void
+public function staff_gate_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -419,7 +418,7 @@ public function staff_gate_process(i:int):void
 	}
 }
 
-function staff_gate_redraw(x:int, y:int, flag:int):void
+function staff_gate_redraw(x:u8, y:u8, flag:u8):void
 {
 	if (flag) {
 		bg.put2(x / 16, y / 16, bg.blank_cell_by_door, bg.tile_pal[bg.blank_cell_by_door]);
@@ -435,17 +434,17 @@ function staff_gate_redraw(x:int, y:int, flag:int):void
  * p4: 状態
  *********************************************/
 
-var soul_gate_flag:int;
-var soul_gate_idx:[6]int; // ソウルゲートのインデックス
-var soul_gate_portal_idx:int;
+var soul_gate_flag:u8;
+var soul_gate_idx:[6]u8; // ソウルゲートのインデックス
+var soul_gate_portal_idx:u8;
 
-public function soul_gate_new(i:int):void
+public function soul_gate_new(i:u8):void
 {
 	p4[i] = 0;
 	soul_gate_flag = 0;
 }
 
-public function soul_gate_process(i:int):void
+public function soul_gate_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -459,7 +458,7 @@ public function soul_gate_process(i:int):void
 	}
 }
 
-function soul_gate_event():int
+function soul_gate_event():u8
 {
 	game.game_event = event.ID_SOUL_GATE;
 	p4[my.touch_event_p1] = 1;
@@ -471,12 +470,12 @@ function soul_gate_event():int
  * p4: 状態
  *********************************************/
 
-public function soul_gate_portal_new(i:int):void
+public function soul_gate_portal_new(i:u8):void
 {
 	mmc3.set_cbank(4 + 1, CBANK_ENEMY + 13);
 }
 
-public function soul_gate_portal_process(i:int):void
+public function soul_gate_portal_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -520,12 +519,12 @@ public function soul_gate_portal_process(i:int):void
  * p4: ウェイト
  *********************************************/
 
-public function soul_gate_flash_new(i:int):void
+public function soul_gate_flash_new(i:u8):void
 {
 	soul_gate_flag = 0;
 }
 
-public function soul_gate_flash_process(i:int):void
+public function soul_gate_flash_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -546,7 +545,6 @@ public function soul_gate_flash_process(i:int):void
 	if ((anim + i) % 2 == 0) {
 		var dx = math.cos(angle) / 16 * (stat / 16);
 		var dy = math.sin(angle) / 16 * (stat / 16);
-		ppu.null_func();
 		ppu.sprite(x + dx - 4, y + dy - 8, spr + wait / 8 % 4 * 2, pal);
 	}
 
@@ -561,14 +559,14 @@ public function soul_gate_flash_process(i:int):void
  * p4: 状態
  * p5: ウェイト
  *********************************************/
-public function soul_gate_symbol_new(i:int):void
+public function soul_gate_symbol_new(i:u8):void
 {
 	p4[i] = 0;
 	p5[i] = 0;
 	soul_gate_portal_idx = i;
 }
 
-public function soul_gate_symbol_process(i:int):void
+public function soul_gate_symbol_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -599,7 +597,7 @@ public function soul_gate_symbol_process(i:int):void
 	p5[i] = wait;
 }
 
-function soul_gate_symbol_event():int
+function soul_gate_symbol_event():u8
 {
 	game.game_event = event.ID_MEMORY;
 	game.game_event_p1 = 100 + my.touch_event_p1;
@@ -610,13 +608,13 @@ function soul_gate_symbol_event():int
  * 懐中時計の監視オブジェクト
  * p4: 状態(0:未使用, 1:使用済み)
  *********************************************/
-public function watch_keeper_new(i:int):void
+public function watch_keeper_new(i:u8):void
 {
 	p4[i] = 0;
 	my.watch_in_area = 1;
 }
 
-public function watch_keeper_process(i:int):void
+public function watch_keeper_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -634,12 +632,12 @@ public function watch_keeper_process(i:int):void
  * マグマを消す滝
  * p4: ウェイト
  *********************************************/
-public function magma_waterfall_new(i:int):void
+public function magma_waterfall_new(i:u8):void
 {
 	p4[i] = 0;
 }
 
-public function magma_waterfall_process(i:int):void
+public function magma_waterfall_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -669,15 +667,15 @@ public function magma_waterfall_process(i:int):void
  * p5: vy
  * p6: カウンター
  *********************************************/
-public function magma_watersplash_new(i:int):void {}
+public function magma_watersplash_new(i:u8):void {}
 
-public function magma_watersplash_process(i:int):void
+public function magma_watersplash_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var vx:sint = p4[i];
-	var vy:sint = p5[i];
+	var vx:i8 = p4[i];
+	var vy:i8 = p5[i];
 	var wait = p6[i];
 	var spr = SPR_SLOT[slot] + SPR_WATERFALL_SPLASH;
 	var pal = PAL_SLOT[slot];
@@ -716,7 +714,7 @@ public function magma_watersplash_process(i:int):void
  * p6: 種類(0:下層,1:金剛宮,2:廃棄場)
  *********************************************/
 
-public function timegate_new(i:int):void
+public function timegate_new(i:u8):void
 {
 	p4[i] = 0;
 	p5[i] = 0;
@@ -724,7 +722,7 @@ public function timegate_new(i:int):void
 	p7[i] = SPR_TIMEGATE;
 }
 
-public function timegate_process(i:int):void
+public function timegate_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -738,8 +736,8 @@ public function timegate_process(i:int):void
 	var spr_base = p7[i];
 	var dx = 0;
 	var dy = 0;
-	var a:int;
-	var flag:int;
+	var a:u8;
+	var flag:u8;
 
 	switch (stat) {
 	case 0:
@@ -763,8 +761,8 @@ public function timegate_process(i:int):void
 		flag = 0;
 		count += 1;
 		if (count % 8 == 0) {
-			var ddx:int8 = x + DIR_VX[dir] * 8;
-			var ddy:int8 = y + DIR_VY[dir] * 8;
+			var ddx:u8 = x + DIR_VX[dir] * 8;
+			var ddy:u8 = y + DIR_VY[dir] * 8;
 			timegate_draw(kind, ddx / 8, ddy / 8, dir);
 		}
 
@@ -806,15 +804,15 @@ const TIMEGATE_PAL = [1, 1, 2];
 const TIMEGATE_PAT_HORIZONTAL = [196, 197, 198, 199];
 const TIMEGATE_PAT_VERTICAL = [192, 194, 193, 195];
 
-function timegate_draw(kind:int, x:int, y:int, dir:int):void
+function timegate_draw(kind:u8, x:u8, y:u8, dir:u8):void
 {
-	var y16:int16;
-	var odd:int;
-	var addr:int16;
+	var y16:u16;
+	var odd:u8;
+	var addr:u16;
 	var buf = ppu.alloc(2);
-	var y2:int;
-	var x2:int;
-	var pal_addr:uint16;
+	var y2:u8;
+	var x2:u8;
+	var pal_addr:u16;
 	if (dir % 2) {
 		// 水平
 		odd = x % 2;
@@ -851,14 +849,14 @@ function timegate_draw(kind:int, x:int, y:int, dir:int):void
  * 時間で閉じるゲート（金剛宮）
  *********************************************/
 
-public function timegate_diamond_new(i:int):void
+public function timegate_diamond_new(i:u8):void
 {
 	timegate_new(i);
 	p6[i] = 1;
 	p7[i] = SPR_TIMEGATE_DIAMOND;
 }
 
-public function timegate_diamond_process(i:int):void
+public function timegate_diamond_process(i:u8):void
 {
 	timegate_process(i);
 }
@@ -867,14 +865,14 @@ public function timegate_diamond_process(i:int):void
  * 時間で閉じるゲート（廃棄場）
  *********************************************/
 
-public function timegate_waste_new(i:int):void
+public function timegate_waste_new(i:u8):void
 {
 	timegate_new(i);
 	p6[i] = 2;
 	p7[i] = SPR_TIMEGATE_WASTE;
 }
 
-public function timegate_waste_process(i:int):void
+public function timegate_waste_process(i:u8):void
 {
 	timegate_process(i);
 }

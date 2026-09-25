@@ -17,7 +17,7 @@ function main():void {
 function draw():void { printf(items[0].x,",",items[0].y,"\n"); }
 function update():void { items[0].y+=COUNT; }
 const COUNT=BASE+1;
-struct Item {x:uint8; y:uint16;}
+struct Item {x:u8; y:u16;}
 const BASE=3;
 `)
 	if want := "7,300\n7,304\nsize=12,12\n"; out != want {
@@ -28,7 +28,7 @@ func TestRecursiveSoaDeclarationsExecution(t *testing.T) {
 	out := runEmu(t, `
 soa Nodes:[COUNT]Node;
 var head:*Nodes;
-struct Node {next:*Nodes; value:uint8;}
+struct Node {next:*Nodes; value:u8;}
 const COUNT=4;
 function main():void {
  head=&Nodes[0]; head.value=7;

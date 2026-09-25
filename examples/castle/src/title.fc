@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 6);
+#fc 3
+@(bank: 6);
 
 use * from common;
 use sound;
@@ -8,7 +8,7 @@ use my;
 use savedata;
 use ppu;
 
-include("title.asm");
+@include("title.asm");
 
 const SCENE_FINISH = 0;
 const SCENE_TITLE = 1;
@@ -18,7 +18,7 @@ const SCENE_CLEAR_SAVEDATA = 4;
 const SCENE_TEXT_VIWER = 5;
 const SCENE_OPTION = 6;
 
-var text_viwer_id:int16;
+var text_viwer_id:u16;
 
 public function start():void
 {
@@ -50,15 +50,15 @@ public function start():void
 		}
 	}
 
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync();
 }
 
-const TITLE_PALETTE:[]int = incbin("../res/images/title.nespal");
-const TITLE_BG:[]int = incbin("../res/images/title.bg");
-const TITLE_TILEPAL:[]int = incbin("../res/images/title.tilepal");
+const TITLE_PALETTE:[?]u8 = @incbin("../res/images/title.nespal");
+const TITLE_BG:[?]u8 = @incbin("../res/images/title.bg");
+const TITLE_TILEPAL:[?]u8 = @incbin("../res/images/title.tilepal");
 
-function do_title():int
+function do_title():u8
 {
 	ppu.lock();
 	ppu.irq_setup = irq_setup;
@@ -133,7 +133,7 @@ function do_title():int
 			switch (cursor) {
 			case 0:
 				sound.play_bgm(sound.BGM_GAME_START);
-				var i:int;
+				var i:u8;
 				for (i = 0; i < 30; i++) {
 					ppu.wait_vsync_with_flag(2);
 				}
@@ -158,20 +158,20 @@ function do_title():int
 function light_down():void
 {
 	var buf = ppu.alloc(32);
-	var i:int;
+	var i:u8;
 	for (i = 0; i < 4; i++) {
 		mem.copy(buf, TITLE_PALETTE, 16);
 		mem.copy(buf + 16, TITLE_PALETTE, 16);
 		bg.pal_down(buf, 32, i + 1);
 		ppu.put(VRAM_PALETTE, buf, 32, 0);
-		var j:int;
+		var j:u8;
 		for (j = 0; j < 10; j++) {
 			ppu.wait_vsync_with_flag(2);
 		}
 	}
 }
 
-function put_text_in_lock(addr:int16, s:*int):void
+function put_text_in_lock(addr:u16, s:*u8):void
 {
 	mem.set(ppu.gr_buf, 0, 64);
 	var len = text_print(ppu.gr_buf, s);
@@ -179,7 +179,7 @@ function put_text_in_lock(addr:int16, s:*int):void
 	ppu.put_in_lock(addr + 32, &ppu.gr_buf[32], len);
 }
 
-function put_text_in_lock2(addr:int16, s:*int, col:int, row:int):*int
+function put_text_in_lock2(addr:u16, s:*u8, col:u8, row:u8):*u8
 {
 	while (row > 0 && *s != 0) {
 		s += text_print2(ppu.gr_buf, s, col);
@@ -191,7 +191,7 @@ function put_text_in_lock2(addr:int16, s:*int, col:int, row:int):*int
 	return s;
 }
 
-function text_print(p:*int, str:*int):int
+function text_print(p:*u8, str:*u8):u8
 {
 	var i = 0;
 	var pi = 0;
@@ -211,7 +211,7 @@ function text_print(p:*int, str:*int):int
 	return i;
 }
 
-function text_print2(p:*int, str:*int, size:int):int
+function text_print2(p:*u8, str:*u8, size:u8):u8
 {
 	mem.zero(p, size * 2);
 	var i = 0;
@@ -238,9 +238,9 @@ function text_print2(p:*int, str:*int, size:int):int
  * オプション画面
  *********************************************/
 
-function do_option():int
+function do_option():u8
 {
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 
 	ppu.lock();
@@ -292,7 +292,7 @@ function do_option():int
 /*********************************************
  * テキストビューワ
  *********************************************/
-function do_text_viewer():int
+function do_text_viewer():u8
 {
 	ppu.lock();
 	mmc3.set_cbank(0, CBANK_MISC_TEXT);
@@ -325,7 +325,7 @@ function do_text_viewer():int
 	return SCENE_CREDIT;
 }
 
-function feed_page(s:*int):*int
+function feed_page(s:*u8):*u8
 {
 	ppu.fill_in_lock(0x2000, 256 * 4, 0);
 	return put_text_in_lock2(ppu.pos(3, 4), s, 26, 10);
@@ -338,11 +338,11 @@ function feed_page(s:*int):*int
 const CREDIT_CUR_MAX = [3, 2];
 const CREDIT_CUR_Y_BASE = [0, 3];
 const CREDIT_CUR_Y = [4, 7, 10, 2, 3];
-var credit_page:int;
+var credit_page:u8;
 
-function do_credit():int
+function do_credit():u8
 {
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 
 	ppu.lock();
@@ -408,7 +408,7 @@ function do_credit():int
 	return SCENE_TITLE;
 }
 
-function create_draw_page(page:int):void
+function create_draw_page(page:u8):void
 {
 	ppu.fill_in_lock(0x2000, 256 * 4, 0);
 
@@ -416,7 +416,7 @@ function create_draw_page(page:int):void
 	put_text_in_lock2(ppu.pos(4, 2), bg.data_buf, 26, 13);
 }
 
-function do_secret_command():int
+function do_secret_command():u8
 {
 	debug_mode = 1;
 	savedata.save();
@@ -426,11 +426,11 @@ function do_secret_command():int
 /*********************************************
  * セーブデータの削除画面
  *********************************************/
-function do_clear_savedata():int
+function do_clear_savedata():u8
 {
 	ppu.lock();
 
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	mmc3.set_cbank(0, CBANK_MISC_TEXT);
 	mmc3.set_cbank(1, CBANK_MISC_TEXT + 2);
 

@@ -1,9 +1,9 @@
-#fc 2
+#fc 3
 // ビルド: fcc build -t nes -g -o ../hiraeth.nes main.fc (自前の base / ld65.cfg / NSD のライブラリを options で指定。Rakefile 参照)
-options(base: "data.asm");
-options(linker_config: "../ld65.cfg");
-options(link: "../res/sound/bgm.o ../res/sound/castle.o ../nsd/lib/NSD.lib");
-include("main.asm");
+@(base: "data.asm");
+@(linker_config: "../ld65.cfg");
+@(link: "../res/sound/bgm.o ../res/sound/castle.o ../nsd/lib/NSD.lib");
+@include("main.asm");
 
 use * from common;
 use game;
@@ -17,21 +17,21 @@ use heap;
 use irqcmd;
 use event;
 
-include('../res/images/bg_common.chr');
-include('../res/images/bg.chr');
-include('../res/images/sprite.chr');
-include('../tmp/font/text_merged.chr');
-include('../res/images/item.chr');
-include('../tmp/font/misc_text.chr');
-include('../res/images/title.chr');
-include('../res/images/sys_sprite.chr');
-include('../res/images/menu.chr');
-include('../res/images/my.chr');
-include('../res/images/minimap.chr');
-include('../tmp/font/ending_text.chr');
-include('../tmp/font/memory_text.chr');
-include('../tmp/font/item_text_merged.chr');
-include('../res/images/marchant.chr');
+@include('../res/images/bg_common.chr');
+@include('../res/images/bg.chr');
+@include('../res/images/sprite.chr');
+@include('../tmp/font/text_merged.chr');
+@include('../res/images/item.chr');
+@include('../tmp/font/misc_text.chr');
+@include('../res/images/title.chr');
+@include('../res/images/sys_sprite.chr');
+@include('../res/images/menu.chr');
+@include('../res/images/my.chr');
+@include('../res/images/minimap.chr');
+@include('../tmp/font/ending_text.chr');
+@include('../tmp/font/memory_text.chr');
+@include('../tmp/font/item_text_merged.chr');
+@include('../res/images/marchant.chr');
 
 function main():void
 {
@@ -62,7 +62,7 @@ function main():void
 		sound.process_frame();
 	};
 
-	asm("cli");
+	@asm("cli");
 
 	// エンディングテスト
 	if (0) {

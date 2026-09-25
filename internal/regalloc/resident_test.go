@@ -54,20 +54,20 @@ func TestAllocateResident(t *testing.T) {
 		got = append(got, ir.DumpOp(op, nil)+res)
 	}
 	want := []string{
-		`(:load {l? i #"uint8"} {lit nil 8 #"uint8"})`,
-		`(:load {l? crc@A #"uint8"} {l? crc #"uint8"} "a=crc@A") [a in=false out=true]`,
-		`(:load {l? i@Y #"uint8"} {l? i #"uint8"} "y=i@Y") [y in=false out=true]`,
+		`(:load {l? i #"u8"} {lit nil 8 #"u8"})`,
+		`(:load {l? crc@A #"u8"} {l? crc #"u8"} "a=crc@A") [a in=false out=true]`,
+		`(:load {l? i@Y #"u8"} {l? i #"u8"} "y=i@Y") [y in=false out=true]`,
 		`(:jump "@begin")`,
 		`(:label "@body" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
-		`(:shift_left {l? crc@A #"uint8"} {l? crc@A #"uint8"} {lit nil 1 #"uint8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:shift_left {l? crc@A #"u8"} {l? crc@A #"u8"} {lit nil 1 #"u8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
 		`(:if_not_carry "@end" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
-		`(:xor {l? crc@A #"uint8"} {l? crc@A #"uint8"} {lit nil 29 #"uint8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:xor {l? crc@A #"u8"} {l? crc@A #"u8"} {lit nil 29 #"u8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
 		`(:label "@end" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
-		`(:sub {l? i@Y #"uint8"} {l? i@Y #"uint8"} {lit nil 1 #"uint8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:sub {l? i@Y #"u8"} {l? i@Y #"u8"} {lit nil 1 #"u8"} "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
 		`(:label "@begin" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
-		`(:if_true {l? i@Y #"uint8"} "@body" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
-		`(:load {l? crc #"uint8"} {l? crc@A #"uint8"} "a=crc@A") [a in=true out=false]`,
-		`(:return {l? crc #"uint8"})`,
+		`(:if_true {l? i@Y #"u8"} "@body" "a=crc@A" "y=i@Y") [a in=true out=true] [y in=true out=true]`,
+		`(:load {l? crc #"u8"} {l? crc@A #"u8"} "a=crc@A") [a in=true out=false]`,
+		`(:return {l? crc #"u8"})`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
