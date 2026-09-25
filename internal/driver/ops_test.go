@@ -2641,3 +2641,43 @@ func goPointerWalkY() string {
 	l3 := fmt.Sprintf("%d %d\n", sum(0, 300), 1)
 	return l1 + l2 + l3
 }
+
+// TestFuseIndexResidentY: 添字付きオペランドの融合 (`sub d = x, a0[2]` を `sbc a0+0,y`) を、Y にループの常駐変数
+// (ywalk の $k@Y) があるところでしない。融合すると Y が命令の最後で常駐に戻されて、a0[$k] を読んでいた (fuzz で発覚)。
+func TestFuseIndexResidentY(t *testing.T) {
+	t.Parallel()
+	src := `var g4:int16;
+const ct0:[16]sint16 = [934, 2, (-12141), 6, (-14858), 27725, (-22908), 1, 31404, (-28027), 6, (-16564), (-25974), 12927, 5, 5];
+const ct1:[16]sint16 = [12025, (-16447), 4, 633, 23353, 9350, (-14550), 4, 8380, 4703, (-2413), (-30451), 20204, 28072, 16399, 7];
+var wb:[300]int options(segment: "BSS_EX");
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+function f0(p0:*int):sint16 options(inline: true)
+{
+	return ct0[2];
+}
+function main():void
+{
+	var l0:int = 6;
+	var q0:*int16 = &a2[5];
+	var wp10:*int = &wb[0];
+	a0[15] = 2;
+	if (((ct1[((2 % 3) & 7)] as int) > l0) && ((min((l0 as sint16), (a2[(((a1[((f0(&a0[((a1[6] as int) & 7)]) as int) & 7)] as int) & (q0[(l0 & 7)] as int)) & 7)] as sint16)) << 3))) {
+	} else {
+		for (var wi10:int16 = 0; wi10 < 76; wi10++) {
+			wp10 += 1;
+			*wp10 = ((l0 - a0[2])) as int;
+			g4 ^= ((*wp10) as int16);
+		}
+	}
+	printf(g4, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if out, want := runEmuLevel(t, src, level), "0\n"; out != want {
+			t.Errorf("level %d: got %q, want %q", level, out, want)
+		}
+	}
+}

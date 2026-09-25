@@ -53,6 +53,7 @@ type rpVar struct {
 	fresh    bool
 	sptr     bool // struct へのポインタの引数 `ps:*S` (呼ぶ側は &sa[e & 3] か &s0)
 	small    bool // 再帰の深さの引数 (呼ぶ側は `(e & 3)`)
+	vals     []string // const の表の値 (最初の source で決めて持つ。呼ぶたびに乱数で作り直すと最小化で別のプログラムになる)
 }
 
 // rpField は struct のフィールド。
@@ -1206,12 +1207,15 @@ func (g *rpGen) source() string {
 	for _, v := range g.globals {
 		fmt.Fprintf(&b, "var %s:%s;\n", v.name, v.typ.name)
 	}
-	for _, c := range g.consts {
-		vals := make([]string, 16)
-		for i := range vals {
-			vals[i] = g.lit(c.typ)
+	for k := range g.consts {
+		c := &g.consts[k]
+		if c.vals == nil {
+			c.vals = make([]string, 16)
+			for i := range c.vals {
+				c.vals[i] = g.lit(c.typ)
+			}
 		}
-		fmt.Fprintf(&b, "const %s:[16]%s = [%s];\n", c.name, c.typ.name, strings.Join(vals, ", "))
+		fmt.Fprintf(&b, "const %s:[16]%s = [%s];\n", c.name, c.typ.name, strings.Join(c.vals, ", "))
 	}
 	if g.wb {
 		b.WriteString("var wb:[300]int options(segment: \"BSS_EX\");\n")

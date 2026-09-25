@@ -237,8 +237,32 @@ func TestRandomV3Programs(t *testing.T) {
 			case "hang":
 				t.Skipf("両方のレベルでサイクルの上限を超えた (seed %d)", seed)
 			default:
+				rpMinimize(t, g, res.kind)
+				res = rpCheck(t, g.sources())
+				res.detail += "\n切り分け: " + rpLocate(t, g.sources())
 				t.Errorf("%s (seed %d):\n%s\n%s", res.kind, seed, g.allSource(), res.detail)
 			}
 		})
+	}
+}
+
+// TestRandomSourceStable: 生成したプログラムの sources() が何度呼んでも同じ (最小化は文を消して呼び直すので、呼ぶたびに
+// 乱数で作り直す部分があると別のプログラムを比べてしまう。const の表の値でそうなっていた)。
+func TestRandomSourceStable(t *testing.T) {
+	t.Parallel()
+	for seed := int64(1); seed <= 200; seed++ {
+		for _, v3 := range []bool{false, true} {
+			g := &rpGen{r: rand.New(rand.NewSource(seed))}
+			if v3 {
+				g.v3 = &rpV3{}
+			}
+			g.genProgram()
+			a, b := g.sources(), g.sources()
+			for name := range a {
+				if a[name] != b[name] {
+					t.Fatalf("seed %d (v3 %v): %s が呼ぶたびに変わる", seed, v3, name)
+				}
+			}
+		}
 	}
 }

@@ -1565,7 +1565,9 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 				r.push(l.restoreY(op.In(1), ir.ValType(op.Dst).Size))
 				break
 			}
-			if reg, ok := l.fusableIndex(ops, opNo); ok && !ir.Disabled("fuse-index") {
+			// Y の常駐変数をこの命令の最後で復帰するなら融合しない (添字を入れた Y が直後の命令の前に常駐の値に戻って、
+			// `tab+0,y` が常駐の値で読んでいた: `sty k; ldy #2; ldy k; sbc tab+0,y`。fuzz で発覚)
+			if reg, ok := l.fusableIndex(ops, opNo); ok && !(reg == "y" && restoreY) && !ir.Disabled("fuse-index") {
 				// 直後の sub / lt の第 2 入力に融合: 添字をレジスタに用意して、結果の一時変数を `tab+0,y` として読ませる
 				if reg == "y" {
 					r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
