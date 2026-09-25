@@ -401,14 +401,18 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 	h.inScope(func() {
 		// 帰り値の追加
 		if lmd.Type.Base.Kind != types.Void {
-			lmd.Result = ir.NewLocal("$result", lmd.Type.Base, ir.LTResult)
+			rt, ro := h.storageType(lmd.Type.Base)
+			lmd.Result = ir.NewLocal("$result", rt, ir.LTResult)
+			lmd.Result.ReadOnly = ro
 			lmd.Vars = append([]*ir.Value{lmd.Result}, lmd.Vars...)
 		}
 
 		// 引数の追加
 		lmd.Args = make([]*ir.Value, len(lmd.Params))
 		for i, p := range lmd.Params {
-			lmd.Args[i] = h.addVar(ir.NewLocal(p.Name, p.Type, ir.LTArg))
+			pt, ro := h.storageType(p.Type)
+			lmd.Args[i] = h.addVar(ir.NewLocal(p.Name, pt, ir.LTArg))
+			lmd.Args[i].ReadOnly = ro
 		}
 
 		if lmd.Body != nil {
@@ -812,6 +816,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			rt := h.lmd.Type.Base
 			v := h.rval(h.withExpected(toC(s.Value), rt))
 			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
+			h.warnDropConst("return from "+h.lmd.Name, rt, v)
 			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.cast(v, rt)}})
 		} else {
 			// void関数
@@ -953,6 +958,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	}
 	if typ != nil && init != nil {
 		h.compatibleAssign("`"+name+"`", typ, ir.ValType(init))
+		h.warnDropConst("`"+name+"`", typ, init)
 	}
 	var vv *ir.Value
 	if h.lmd == nil {
@@ -981,11 +987,15 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				symbol = h.addDef(name, d)
 			}
 		}
-		vv = h.addVar(ir.NewGlobal(name, typ, symbol))
+		st, ro := h.storageType(typ)
+		vv = h.addVar(ir.NewGlobal(name, st, symbol))
+		vv.ReadOnly = ro
 		h.prog.storageGlobals[vv] = true
 		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
 	} else {
-		vv = h.addVar(ir.NewLocal(name, typ, ir.LTNone))
+		st, ro := h.storageType(typ)
+		vv = h.addVar(ir.NewLocal(name, st, ir.LTNone))
+		vv.ReadOnly = ro
 	}
 	if h.scopeIsPublic(publicPos) {
 		vv.Public = true
@@ -1035,6 +1045,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 				symbol = h.addDef(name, d)
 			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
+			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)
 		} else {
 			if opt.Has("symbol") {
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(symbol:) needs an array constant (or no value to refer to an assembler symbol)", name)})
@@ -1445,7 +1456,7 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 		if elem.IsSoa {
 			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
 		}
-		return h.prog.Types.PointerTo(elem)
+		return h.prog.Types.PointerToRO(elem, t.Const.IsValid())
 	case *syntax.ArrayType:
 		n := -1
 		if t.Len != nil {
@@ -1687,7 +1698,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = ir.NewCastedValue(root, e.val.Type, 0)
 		} else if e.val.Kind == ir.KindArrayLiteral {
 			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
-			r = ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
+			g := ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
+			g.ReadOnly = true // 文字列・配列リテラルは ROM (fc 3 の *const)
+			r = g
 		} else {
 			r = e.val
 		}
@@ -1899,6 +1912,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				evalArg := func(i int) ir.Operand {
 					v := h.rval(h.withExpected(args[i], lmdType.Params[i]))
 					h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
+					h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], v)
 					return h.cast(v, lmdType.Params[i])
 				}
 				argVals := make([]ir.Operand, len(args))
@@ -1950,6 +1964,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					panic(&diag.Error{Msg: fmt.Sprintf("cannot take the address of %s (not a variable)", describe(left))})
 				}
 				tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left)))
+				h.markReadOnly(tmp, h.readOnly(left))
 				h.emit(&ir.Op{Code: ir.OpRef, Dst: tmp, Src: []ir.Operand{left}})
 				r = tmp
 			}
@@ -2040,6 +2055,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(right))})
 			}
 			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))
+			h.markReadOnly(tmp, h.readOnly(left))
 			h.emit(&ir.Op{Code: ir.OpIndex, Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 			leftValue = true
@@ -2069,12 +2085,19 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 			h.soaScatter(left, right)
 			return left
 		}
+		if h.readOnly(left) {
+			panic(&diag.Error{Msg: "cannot assign through a read-only pointer (*const) or to const data"})
+		}
 		h.compatibleAssign("assignment", ir.ValType(left).Base, ir.ValType(right))
+		h.warnDropConst("assignment", ir.ValType(left).Base, right)
 		right = h.cast(right, ir.ValType(left).Base)
 		h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{left, right}})
 		return left
 	}
 	h.compatibleAssign("assignment to "+describe(left), ir.ValType(left), ir.ValType(right))
+	if !h.readOnly(left) { // 代入先が *const の変数 (IR の型は *T) なら読み取り専用のデータを入れてよい
+		h.warnDropConst("assignment to "+describe(left), ir.ValType(left), right)
+	}
 	if !ir.ValAssignable(left) {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
@@ -2346,6 +2369,12 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) ir.Operand {
 	from := ir.ValType(v)
 	h.checkCast(kind, from, to)
+	if kind == syntax.CastAs && from.Kind == types.Pointer && from.ReadOnly && to.Kind == types.Pointer && !to.ReadOnly {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot drop const with `as` (%s to %s); use @bitcast(%s, x)", from, to, to)})
+	}
+	if kind == syntax.CastAs && to.Kind == types.Pointer && !to.ReadOnly {
+		h.warnDropConst("`as`", to, v)
+	}
 	if kind == syntax.CastAs {
 		if from.Kind == types.Array {
 			return ir.NewPointeredArray(v, to)
@@ -2356,7 +2385,11 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 			return newV
 		}
 	}
-	return ir.NewCastedValue(v, to, 0)
+	c := ir.NewCastedValue(v, to, 0)
+	if kind == syntax.CastBit && h.prog.unconst != nil {
+		h.prog.unconst[c] = true // @bitcast は const を外す (読み取り専用にしない)
+	}
+	return c
 }
 
 // makeCompatible は互換型に変換する (キャストコード生成込み)。

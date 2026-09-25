@@ -1,5 +1,5 @@
-#fc 2
-options(bank: -1);
+#fc 3
+@(bank: -1);
 
 public const atan_table = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 32, 18, 13, 9, 8, 6, 5, 5, 4, 4, 3, 3, 3, 2, 2, 63, 45, 32, 23, 18, 15, 13, 11, 9, 8, 8, 7, 6, 6, 5, 5, 63, 50, 40, 32, 26, 22, 18, 16, 14, 13, 11, 10, 9, 9, 8, 8, 63, 54, 45, 37, 32, 27, 23, 21, 18, 17, 15, 14, 13, 12, 11, 10, 63, 55, 48, 41, 36, 32, 28, 25, 22, 20, 18, 17, 16, 14, 13, 13, 63, 57, 50, 45, 40, 35, 32, 28, 26, 23, 22, 20, 18, 17, 16, 15, 63, 58, 52, 47, 42, 38, 35, 32, 29, 26, 24, 23, 21, 20, 18, 17, 63, 58, 54, 49, 45, 41, 37, 34, 32, 29, 27, 25, 23, 22, 21, 19, 63, 59, 55, 50, 46, 43, 40, 37, 34, 32, 29, 27, 26, 24, 23, 22, 63, 59, 55, 52, 48, 45, 41, 39, 36, 34, 32, 30, 28, 26, 25, 23, 63, 60, 56, 53, 49, 46, 43, 40, 38, 36, 33, 32, 30, 28, 27, 25, 63, 60, 57, 54, 50, 47, 45, 42, 40, 37, 35, 33, 32, 30, 28, 27, 63, 60, 57, 54, 51, 49, 46, 43, 41, 39, 37, 35, 33, 32, 30, 29, 63, 61, 58, 55, 52, 50, 47, 45, 42, 40, 38, 36, 35, 33, 32, 30, 63, 61, 58, 55, 53, 50, 48, 46, 44, 41, 40, 38, 36, 34, 33, 32];
 public const sin_table = [0, 3, 6, 9, 12, 15, 18, 21, 24, 28, 31, 34, 37, 40, 43, 46, 48, 51, 54, 57, 60, 63, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88, 90, 92, 94, 96, 98, 100, 102, 104, 106, 108, 109, 111, 112, 114, 115, 117, 118, 119, 120, 121, 122, 123, 124, 124, 125, 126, 126, 127, 127, 127, 127, 127];
@@ -7,7 +7,7 @@ public const rand_table = [192, 92, 101, 225, 200, 225, 219, 159, 217, 179, 16, 
 
 // 比較は符号付き (x は sint8)。v1 のコンパイラは符号付き比較が壊れていて `x < 128` が
 // 「符号なしで 128 未満」として動いていたので、その意図 (`x >= 0`) に書き直した (2026-09-14)
-public function sin(x:sint8):sint8 options(fastcall: true)
+public function sin(x:i8):i8 @(fastcall)
 {
 	if (x >= 0) {
 		if (x < 64) {
@@ -32,7 +32,7 @@ function cos(x:sint8):sint8
 }
 */
 
-public function atan(y:sint8, x:sint8):int8 options(fastcall: true)
+public function atan(y:i8, x:i8):u8 @(fastcall)
 {
 	if (y >= 0) {
 		if (x >= 0) {
@@ -54,14 +54,14 @@ public function atan(y:sint8, x:sint8):int8 options(fastcall: true)
 	return 0;
 }
 
-public var rand_idx:int;
-public function rand():int options(fastcall: true, inline: true)
+public var rand_idx:u8;
+public function rand():u8 @(fastcall, inline)
 {
 	rand_idx += 1;
 	return rand_table[rand_idx];
 }
 
-public function sign(i:sint):int options(fastcall: true, inline: true)
+public function sign(i:i8):u8 @(fastcall, inline)
 {
 	if (i < 0) {
 		return -1;
@@ -72,7 +72,7 @@ public function sign(i:sint):int options(fastcall: true, inline: true)
 	}
 }
 
-public function abs(i:sint):int options(fastcall: true, inline: true)
+public function abs(i:i8):u8 @(fastcall, inline)
 {
 	if (i < 0) {
 		return -i;

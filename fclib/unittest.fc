@@ -1,7 +1,7 @@
-#fc 2
+#fc 3
 public use stdio;
 
-public function assert_true(a:int, message:*int):void
+public function assert_true(a:u8, message:*const u8):void
 {
 	if (!a) {
 		stdio.printf("\nERROR: ", message, "  expects true but false\n");
@@ -11,7 +11,7 @@ public function assert_true(a:int, message:*int):void
 	}
 }
 
-public function assert_equal(a:int16, b:int16, message:*int):void
+public function assert_equal(a:u16, b:u16, message:*const u8):void
 {
 	if (a != b) {
 		stdio.printf("\nERROR: ", message, "  expects ", b, "  but ", a, "\n");

@@ -91,6 +91,9 @@ func checkVersion(f *File) error {
 			checkTypeForm(n.IsPrefix(), n.Lbrack)
 		case *PointerType:
 			checkTypeForm(n.IsPrefix(), n.Star)
+			if n.Const.IsValid() && f.Version < Version3 {
+				fail(n.Const, "`*const T` is fc 3 syntax (write `#fc 3`)")
+			}
 		case *FuncType:
 			checkTypeForm(n.IsPrefix(), n.Lparen)
 		case *CastExpr:

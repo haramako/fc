@@ -1,13 +1,13 @@
-#fc 2
+#fc 3
 use mem;
 
-public var addr:*int options(address: 0x7e);
-public var bpos:int options(address: 0x7d);
-public var cur:int options(address: 0x7c);
+public var addr:*u8 @(address: 0x7e);
+public var bpos:u8 @(address: 0x7d);
+public var cur:u8 @(address: 0x7c);
 
-public function read_bit(n:int):int16 options(fastcall: true);
-public function read_vln():int8 options(fastcall: true);
-public function read_vln16():int16 options(fastcall: true);
-public function unpack(dest:*int, src:*int):int16;
+public function read_bit(n:u8):u16 @(fastcall);
+public function read_vln():u8 @(fastcall);
+public function read_vln16():u16 @(fastcall);
+public function unpack(dest:*u8, src:*const u8):u16;
 
-include("lzw.asm");
+@include("lzw.asm");

@@ -214,7 +214,9 @@ func Children(node Node) []Node {
 		}
 	case *OptionEntry:
 		add(n.Key)
-		add(n.Value)
+		if !n.Bare {
+			add(n.Value) // `@(inline)` の値は補ったもの (ソースに無い)
+		}
 	}
 	return r
 }

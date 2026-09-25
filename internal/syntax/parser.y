@@ -365,6 +365,7 @@ type_decl: type_v2_prefix
          | type_post
 
 type_v2_prefix: '*' type_decl                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
+              | '*' kCONST type_decl                 { $$ = &PointerType{Star: $1.Pos, Const: $2.Pos, Elem: $3} } /* v3 */
               | '[' exp ']' type_decl                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
               | '[' ']' type_decl                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
               | kFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
@@ -372,6 +373,7 @@ type_v2_prefix: '*' type_decl                        { $$ = &PointerType{Star: $
 
 /* v2 の前置形だけ (後置なし)。`x as T` の T に使う: 後ろに二項演算子が続いても曖昧にならない */
 type_v2: '*' type_v2                        { $$ = &PointerType{Star: $1.Pos, Elem: $2} }
+       | '*' kCONST type_v2                 { $$ = &PointerType{Star: $1.Pos, Const: $2.Pos, Elem: $3} } /* v3 */
        | IDENT '.' IDENT                    { $$ = &NamedType{Module: ident($1), Name: ident($3)} }
        | '[' exp ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
        | '[' ']' type_v2                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }

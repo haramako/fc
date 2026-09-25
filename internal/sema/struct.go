@@ -279,9 +279,11 @@ func (h *Hlc) fieldViaPointer(ptr ir.Operand, st *types.Type, name string) ir.Op
 	f := h.fieldOf(st, name)
 	pt := h.prog.Types.PointerTo(f.Type)
 	if f.Offset == 0 {
-		return ir.NewCastedValue(ptr, pt, 0)
+		c := ir.NewCastedValue(ptr, pt, 0)
+		return c // readOnly は CastedValue の元 (ptr) を見る
 	}
 	tmp := h.newTmp(pt)
+	h.markReadOnly(tmp, h.readOnly(ptr))
 	h.emit(&ir.Op{Code: ir.OpAdd, Dst: tmp, Src: []ir.Operand{ptr, h.IntValue(f.Offset)}})
 	return tmp
 }

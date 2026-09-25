@@ -54,6 +54,8 @@ type Program struct {
 	curModule   string                     // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
 	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
 	Defines map[string]*DefineUse
+	// unconst は @bitcast で作った値 (読み取り専用の元を包んでいても読み取り専用にしない。constptr.go)
+	unconst map[*ir.CastedValue]bool
 }
 
 // Source は読み込んだソースファイル。
@@ -73,6 +75,7 @@ func (p *Program) SetTrace(fn func(origin string, ev ir.TraceEvent)) {
 func NewProgram() *Program {
 	p := &Program{
 		declarations:   map[*ir.Module]*moduleDecls{},
+		unconst:        map[*ir.CastedValue]bool{},
 		typeDecls:      map[*types.Type]*declaration{},
 		Types:          types.NewUniverse(),
 		Modules:        ir.NewModuleList(),

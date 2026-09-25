@@ -973,6 +973,10 @@ func (p *printer) typeExprV2(t TypeExpr) {
 		p.typeExprV2(t.Elem)
 	case *PointerType:
 		p.tokAt(t.Star, "*")
+		if t.Const.IsValid() {
+			p.tokAt(t.Const, "const")
+			p.space()
+		}
 		p.typeExprV2(t.Elem)
 	case *FuncType:
 		if t.Far {

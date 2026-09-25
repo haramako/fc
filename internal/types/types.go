@@ -55,6 +55,7 @@ type Type struct {
 	IsConst  bool      // SoA コンテナが `soa const` (読み出しのみ) か
 	Path     string    // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
 	Enum     *EnumInfo // fc 3 の enum (Kind は Int のまま。基底型の幅と符号。別の enum・整数とは互換でない)
+	ReadOnly bool      // fc 3 の `*const T` (Pointer のみ。参照先を書き換えられない。表現は普通のポインタと同じ)
 	far      bool
 	fastcall bool
 	str      string
@@ -270,6 +271,19 @@ func (u *Universe) PointerTo(base *Type) *Type {
 	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, str: "*" + base.str})
 }
 
+// ConstPointerTo は base への読み取り専用のポインタ型 `*const base` (doc/language_feature_candidates.md §3)。
+func (u *Universe) ConstPointerTo(base *Type) *Type {
+	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, ReadOnly: true, str: "*const " + base.str})
+}
+
+// PointerToRO は ro なら ConstPointerTo、そうでなければ PointerTo。
+func (u *Universe) PointerToRO(base *Type, ro bool) *Type {
+	if ro {
+		return u.ConstPointerTo(base)
+	}
+	return u.PointerTo(base)
+}
+
 // ArrayOf は base の配列型。length < 0 なら長さ省略 (Size も -1)。
 func (u *Universe) ArrayOf(base *Type, length int) *Type {
 	t := &Type{Kind: Array, Base: base, Length: -1, Size: -1}
@@ -326,6 +340,10 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 	// enum は同じ enum とだけ互換 (整数・bool・別の enum とは `as` で変換する)
 	if a.Enum != nil || b.Enum != nil {
 		return nil
+	}
+	// 同じ要素のポインタは const の有無によらず互換 (*T → *const T は暗黙。const を捨てる向きは sema が警告する)
+	if a.Kind == Pointer && b.Kind == Pointer && a.Base == b.Base {
+		return a
 	}
 	// bool は uint8 と互換 (比較・論理演算の結果と true / false は bool。整数と混ぜれば uint8)
 	if a.Kind == Bool {

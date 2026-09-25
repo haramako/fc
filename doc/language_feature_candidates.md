@@ -111,7 +111,13 @@ static_assert(offsetof(Sprite, x) == 3, "field offset mismatch");
 
 ## 3. 読み取り専用ポインタ
 
-**2026-09-25 決定（FC3 で実装。未実装）**:
+**2026-09-25 決定・実装済み（feature/v3）**: `types.ConstPointerTo`（関数の型・struct のフィールドに残す）、`sema/constptr.go`。
+読み取り専用は意味解析だけの情報にした: 変数（引数・ローカル・グローバル・戻り値）の IR の型は `*T` にして `ir.Value.ReadOnly`
+で持ち、添字・アドレス・フィールドで作る一時変数も印で持つ（IR の型が変わると写しの統合などが変わり、*const を書いただけで
+生成コードが変わったため）。`@bitcast` の結果は読み取り専用にしない。*const T を通した書き込みはエラー（新しい書き方なので
+既存のソースには当たらない）、ポインタ同士の `as` はもともと不可。fclib は fc 3 に migrate し、読むだけの引数（mem.copy の
+コピー元、compare、strlen、strcpy のコピー元、各 unpack の元、stdio の print / puts / ppu_put、unittest のメッセージ）を
+`*const u8` にした。`TestV3ConstPointer`。soa の `const` の入れ物（IsConst）とはまだまとめていない。決定の内容:
 
 - 表記は `*const T`（slice の `[]const T` とそろえる）。`const` はその 1 段の参照先にだけ掛かる（`*const *u8` は書き換えられる
   ポインタを読み取り専用で指す）。ポインタ変数そのものの書き換えは今の `var` / `const` のまま

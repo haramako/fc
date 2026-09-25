@@ -83,7 +83,7 @@ function main():void
 	exit(0);
 }
 `,
-		"k.asm": "\t.byte 1 ; @include したファイルもアセンブルされる\n",
+		"k.asm":   "\t.byte 1 ; @include したファイルもアセンブルされる\n",
 		"tab.bin": "\x05\x02",
 	})
 	if err != nil || out != "2 2 9 3 10 7 5\n" {
@@ -336,5 +336,55 @@ public enum State { Stand, Jump, Die = 2 }
 	// fc 2 では enum は予約語でない
 	if _, err := buildFiles(t, map[string]string{"t.fc": "#fc 2\nuse * from stdio;\nvar enum:int;\nfunction main():void { enum = 1; exit(0); }\n"}); err != nil {
 		t.Errorf("fc 2 の enum という名前: %v", err)
+	}
+}
+
+// TestV3ConstPointer: `*const T`。const の配列・文字列リテラル (とそこから作ったポインタ) は読み取り専用。書き込みと
+// `as` で const を外すことはエラー、*T として渡すのは警告 (fc 3 の最初の版)。@bitcast で外せる。生成コードは *T と同じ。
+func TestV3ConstPointer(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+const TABLE:[4]u8 = [1, 2, 3, 4];
+struct P { x:u8; }
+const PS:[1]P = [{5}];
+function sum(p:*const u8, n:u8):u8 { var s:u8 = 0; for (var i:u8 = 0; i < n; i++) { s += p[i]; } return s; }
+function first(p:*u8):u8 { return *p; }
+function main():void
+{
+	var p:*const u8 = TABLE;
+	var q:*const P = &PS[0];
+	var w = @bitcast(*u8, p);
+	printf(sum(TABLE, 4), " ", sum(&TABLE[1], 2), " ", *p, " ", q.x, " ", first(w), " ", first(TABLE), "\n");
+	exit(0);
+}
+`
+	out, res, err := buildFilesDefs(t, map[string]string{"t.fc": src}, nil)
+	if err != nil || out != "10 5 1 5 1 1\n" {
+		t.Fatalf("got %q, %v", out, err)
+	}
+	var drops []string
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Msg, "passes read-only data") {
+			drops = append(drops, w.Msg)
+		}
+	}
+	if len(drops) != 1 || !strings.Contains(drops[0], "argument 1 of `first`") {
+		t.Errorf("警告は first(TABLE) の 1 つだけのはず: %v", drops)
+	}
+	for _, c := range []struct{ body, msg string }{
+		{"var p:*const u8 = TABLE; *p = 1;", "cannot assign through a read-only pointer"},
+		{"var p:*const u8 = TABLE; p[1] = 1;", "cannot assign through a read-only pointer"},
+		{"TABLE[0] = 1;", "cannot assign through a read-only pointer"},
+		{"var q:*const P = &PS[0]; q.x = 1;", "cannot assign through a read-only pointer"},
+		{"var p:*const u8 = TABLE; var r = p as *u8;", "with `as` (use bitcast"}, // ポインタ同士の as はもともと不可
+	} {
+		prog := "#fc 3\nconst TABLE:[4]u8 = [1, 2, 3, 4];\nstruct P { x:u8; }\nconst PS:[1]P = [{5}];\nfunction main():void { " + c.body + " }\n"
+		if _, err := buildFiles(t, map[string]string{"t.fc": prog}); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("%q: got %v, want /%s/", c.body, err, c.msg)
+		}
+	}
+	if _, err := buildFiles(t, map[string]string{"t.fc": "#fc 2\nvar p:*const int;\nfunction main():void { }\n"}); err == nil || !strings.Contains(err.Error(), "`*const T` is fc 3 syntax") {
+		t.Errorf("fc 2 の *const: %v", err)
 	}
 }

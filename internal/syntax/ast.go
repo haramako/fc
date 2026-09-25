@@ -541,8 +541,9 @@ type ArrayType struct {
 
 // PointerType は `elem*`。
 type PointerType struct {
-	Elem TypeExpr
-	Star Pos
+	Elem  TypeExpr
+	Star  Pos
+	Const Pos // fc 3 の `*const T` の `const` (有効なら読み取り専用)
 }
 
 // FuncType は関数型。v1 `result(params)` / v2 `fn(params):result` (Fn が有効)。
@@ -885,7 +886,12 @@ func (o *Options) Pos() Pos { return o.Keyword }
 func (o *Options) End() Pos { return after(o.Rparen, 1) }
 
 func (e *OptionEntry) Pos() Pos { return e.Key.Pos() }
-func (e *OptionEntry) End() Pos { return e.Value.End() }
+func (e *OptionEntry) End() Pos {
+	if e.Bare {
+		return e.Key.End() // fc 3 の `@(inline)` (Value は位置を借りた true)
+	}
+	return e.Value.End()
+}
 
 func (s *VarSpec) Pos() Pos { return s.Name.Pos() }
 func (s *VarSpec) End() Pos {
