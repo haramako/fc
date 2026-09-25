@@ -28,6 +28,7 @@ func Parse(src []byte, filename string) (*File, error) {
 	f := &File{
 		Filename: filename,
 		Pragma:   lx.lex.Pragma(),
+		Version:  lx.lex.Version(),
 		Stmts:    lx.result,
 		Comments: lx.lex.Comments(),
 		EOFPos:   lx.last.Pos,

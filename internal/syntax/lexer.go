@@ -18,17 +18,25 @@ type Lexer struct {
 	line     int // 現在行 (1 始まり)
 	lineOff  int // 現在行の先頭オフセット
 	comments []Comment
-	pragma   string // 先頭行の `#fc 2` プラグマの原文 (行末の改行を含まない。無ければ "")
+	pragma   string // 先頭行の `#fc 2` / `#fc 3` プラグマの原文 (行末の改行を含まない。無ければ "")
+	version  int    // 文法バージョン (プラグマが無ければ DefaultVersion)
 	verErr   *Error // プラグマの構文エラー (最初の Next で返す)
 }
 
-// Version は文法バージョン。fc 1 (2026-09 まで) は削除した。`#fc 2` の宣言は任意 (無くても fc 2)。
-const Version = 2
+// 文法バージョン。fc 1 (2026-09 まで) は削除した。fc 3 は開発中 (doc/v3_plan.md)。ソースごとに先頭行の `#fc 2` /
+// `#fc 3` で選び、無ければ DefaultVersion (移行期間は fc 2)。fc 2 と fc 3 のソースは 1 つのプログラムに混ぜられる
+// (モジュールごとに Module.Version)。fc 2 → fc 3 の書き換えは `fcc migrate` (internal/migrate)。
+const (
+	Version2       = 2
+	Version3       = 3
+	LatestVersion  = Version3
+	DefaultVersion = Version2
+)
 
 // NewLexer はレキサを作る。src の CRLF は呼び出し側で正規化済みであることを想定するが、
 // '\r' は空白として扱うので残っていても動作する。
 func NewLexer(src []byte, filename string) *Lexer {
-	l := &Lexer{src: src, filename: filename, line: 1}
+	l := &Lexer{src: src, filename: filename, line: 1, version: DefaultVersion}
 	l.scanPragma()
 	return l
 }
@@ -36,7 +44,10 @@ func NewLexer(src []byte, filename string) *Lexer {
 // Pragma は先頭行のプラグマの原文 (無ければ "")。
 func (l *Lexer) Pragma() string { return l.pragma }
 
-// scanPragma は先頭行の `#fc 2` を読む。`#fc` で始まらなければ何もしない
+// Version はソースの文法バージョン (プラグマが無ければ DefaultVersion)。
+func (l *Lexer) Version() int { return l.version }
+
+// scanPragma は先頭行の `#fc 2` / `#fc 3` を読む。`#fc` で始まらなければ何もしない
 // (それ以外の `#` は通常の字句解析でエラーになる)。`#fc 1` は fc 1 のソース (もう扱えない) なのでエラー。
 func (l *Lexer) scanPragma() {
 	if !bytes.HasPrefix(l.src, []byte("#fc")) {
@@ -54,11 +65,12 @@ func (l *Lexer) scanPragma() {
 		ver, _ = strconv.Atoi(fields[1])
 	}
 	switch ver {
-	case Version:
+	case Version2, Version3:
+		l.version = ver
 	case 1:
 		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: "fc 1 sources are no longer supported (migrate with `fcc migrate` of fc 0.1 and write `#fc 2`)"}
 	default:
-		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: fmt.Sprintf("invalid version pragma %q (expected \"#fc 2\")", line)}
+		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: fmt.Sprintf("invalid version pragma %q (expected \"#fc 2\" or \"#fc 3\")", line)}
 	}
 	l.advance(n)
 }

@@ -35,8 +35,8 @@ func Format(src []byte, filename string) ([]byte, error) {
 func Print(f *File) []byte {
 	p := &printer{comments: f.Comments}
 	if f.Pragma != "" {
-		// `#fc 2` は正規化して 1 行目に (直後の空行を保つ)。無いソースには足さない
-		p.write(fmt.Sprintf("#fc %d", Version))
+		// `#fc N` は正規化して 1 行目に (直後の空行を保つ)。無いソースには足さない
+		p.write(fmt.Sprintf("#fc %d", f.Version))
 		p.lastLine = 1
 		p.blankOK = true
 		p.newline()

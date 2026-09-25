@@ -38,7 +38,8 @@ type TypeExpr interface {
 // File は 1 ソースファイル。
 type File struct {
 	Filename string
-	Pragma   string // 先頭行の `#fc 2` の原文 (無ければ "")
+	Pragma   string // 先頭行の `#fc 2` / `#fc 3` の原文 (無ければ "")
+	Version  int    // 文法バージョン (syntax.Version2 / Version3。プラグマが無ければ DefaultVersion)
 	Stmts    []Stmt
 	Comments []Comment // 出現順
 	EOFPos   Pos

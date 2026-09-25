@@ -1,7 +1,7 @@
 // fcc は FC コンパイラの CLI。
 //
 //	Usage: fcc <command> [options] <src.fc> ...
-//	  command: build(b) / compile(c) / run / fmt / check
+//	  command: build(b) / compile(c) / run / fmt / migrate / check
 package main
 
 import (
@@ -20,6 +20,7 @@ Commands:
     compile, c       compile to object files only
     run              build and run by emulator
     fmt              format source files (see fcc fmt -h)
+    migrate          rewrite fc 2 sources as fc 3 (see fcc migrate -h)
     check            compile without producing files and report errors / warnings
     size             show code size per function from an ld65 --dbgfile (see fcc size -h)
     watch            rebuild whenever a source file changes (see fcc watch -h)
@@ -50,6 +51,8 @@ func run() int {
 	switch com {
 	case "fmt":
 		return runFmt(args[1:])
+	case "migrate":
+		return runMigrate(args[1:])
 	case "version", "--version", "-v":
 		return runVersion()
 	case "check":

@@ -97,6 +97,7 @@ func (o Options) Has(key string) bool {
 type Module struct {
 	Id             string
 	Path           string
+	Version        int // ソースの文法バージョン (syntax.Version2 / Version3)。版で意味が変わる規則の分岐に使う
 	Vars           []*Value
 	Lambdas        []*Lambda
 	Options        Options // options(...) 文で設定されたモジュール属性 (bank, org, ...)。値は定数評価済み

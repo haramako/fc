@@ -417,6 +417,21 @@ V3 で省略形を true として正規化する際、false の意味・可否�
 
 ### V2 からの移行
 
+**仕組み（2026-09-25、ブランチ `feature/v3`）**:
+
+- 文法バージョンはソースごとに先頭行の `#fc 2` / `#fc 3` で選ぶ（無ければ移行期間は fc 2 = `syntax.DefaultVersion`）。
+  コンパイラは両方を受け付け、1 つのプログラムに混ぜられる（`syntax.File.Version` → `ir.Module.Version`。版で意味が
+  変わる規則はモジュールの版で分岐する）
+- `fcc migrate [-l|-w|-d] <file.fc> ...` が fc 2 のソースを fc 3 に書き換える（`internal/migrate`）。fc 2 として解析し、
+  規則（`migrate.Rules`）がトークンの位置に対する置き換え（`Edit`）を足す。構文木を印字し直さないので、コメント・空行・
+  書式は残る。最後にプラグマを `#fc 3` にし、fc 3 として解析し直せなければエラー（規則の不具合）。fc 3 のソースは
+  そのまま（何度かけても同じ）
+- **文法を変えるときは、migrate の規則とテストを一緒に足す**。`internal/driver/migrate_test.go` が castle / miku /
+  bench / golden のテストプログラムと fclib を migrate して fc 3 としてビルドし、fc 2 のままのビルドと ROM・バイナリが
+  バイト単位で一致することを確かめる（`TestMigrateExamples` / `TestMigrateGoldenPrograms` / `TestMigrateBench`）。
+  意味を変える変更（`int` の幅など）でも、migrate した結果が同じコードになることを要求する
+- 起点は main の 3625001（fc 2 の最後）。この時点の fc 2 のソースは全部 migrate で fc 3 にできることを保つ
+
 将来の migrate では、予約語の構文と組み込みへの参照を特定して書き換える。
 利用者の同名関数・ローカル変数を、単なる文字列置換で `@` 付きにしない。
 `textmap` が返す `_T` のような値、型 / 式を受ける構文、モジュールの別名も区別する。
