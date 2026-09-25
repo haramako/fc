@@ -89,6 +89,15 @@ const (
 	KwFalse   // false (v2)
 	KwNull    // null (v2)
 
+	// fc 3 の `@` の組み込み (doc/v3_plan.md §5 A)。型を取るもの・宣言になるものは専用のトークン、それ以外の
+	// `@名前` は AtIdent (Text は `@名前`。名前つきの組み込みの呼び出し)。`@` の直後が `(` なら AtSign (属性)
+	AtSizeof  // @sizeof
+	AtBitcast // @bitcast
+	AtIncbin  // @incbin
+	AtInclude // @include
+	AtIdent   // @名前
+	AtSign    // @ (属性 `@(...)`)
+
 	// 記号 (2 文字)
 	Leq    // <=
 	Geq    // >=

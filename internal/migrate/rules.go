@@ -1,6 +1,9 @@
 package migrate
 
 import (
+	"strings"
+
+	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
@@ -8,6 +11,7 @@ import (
 func init() {
 	Rules = append(Rules,
 		Rule{Name: "int-types", Doc: "整数型名を fc 3 の名前にする (int / uint8 → u8、sint → i8、int16 → u16、sint16 → i16)", Apply: renameIntTypes},
+		Rule{Name: "at-builtins", Doc: "組み込みを @ の形にする (sizeof / incbin / bitcast<T>(x) → @bitcast(T, x) / include(...) options(...) → @include(..., k: v) / asm / textmap / min / max / clamp / unittest_run_tests → @run_tests)", Apply: atBuiltins},
 	)
 }
 
@@ -22,6 +26,54 @@ func renameIntTypes(c *Ctx) {
 		if v3, old := types.V2IntTypeNames[nt.Name.Name]; old {
 			off := nt.Name.NamePos.Offset
 			c.Replace(off, off+len(nt.Name.Name), v3)
+		}
+		return true
+	})
+}
+
+// atBuiltins は fc 2 の組み込みの書き方を fc 3 の `@` の形にする (doc/v3_plan.md §5 A)。名前で引く組み込み (asm / min など) の
+// 呼び出しは、同じファイルのトップレベルで同じ名前を宣言していなければ書き換える (use で取り込んだ同名の関数は見分けられない)。
+func atBuiltins(c *Ctx) {
+	declared := map[string]bool{}
+	for _, st := range c.File.Stmts {
+		switch d := st.(type) {
+		case *syntax.FuncDecl:
+			declared[d.Name.Name] = true
+		case *syntax.VarDecl:
+			for _, sp := range d.Specs {
+				declared[sp.Name.Name] = true
+			}
+		}
+	}
+	syntax.Inspect(c.File, func(n syntax.Node) bool {
+		switch e := n.(type) {
+		case *syntax.SizeofExpr:
+			c.Replace(e.Sizeof.Offset, e.Sizeof.Offset+len("sizeof"), "@sizeof")
+		case *syntax.IncbinExpr:
+			c.Replace(e.Incbin.Offset, e.Incbin.Offset+len("incbin"), "@incbin")
+		case *syntax.CastExpr:
+			if e.Kind == syntax.CastBit && e.Lt.IsValid() {
+				// bitcast<T>(x) → @bitcast(T, x)。T の中は触らない (型名の書き換え int-types が当たる)
+				c.Replace(e.Bitcast.Offset, e.Lt.Offset+1, "@bitcast(")
+				c.Replace(e.Gt.Offset, e.Lparen.Offset+1, ", ")
+			}
+		case *syntax.IncludeDecl:
+			if e.At {
+				return true
+			}
+			c.Replace(e.Include.Offset, e.Include.Offset+len("include"), "@include")
+			if o := e.Options; o != nil {
+				// include("p") options(k: v) → @include("p", k: v)
+				lp := strings.IndexByte(string(c.Src[o.Keyword.Offset:o.Rparen.Offset]), '(') + o.Keyword.Offset
+				inner := strings.TrimSpace(string(c.Src[lp+1 : o.Rparen.Offset]))
+				c.Replace(e.Rparen.Offset, o.Rparen.Offset+1, ", "+inner+")")
+			}
+		case *syntax.CallExpr:
+			if id, ok := e.Fun.(*syntax.Ident); ok && !declared[id.Name] {
+				if at, ok := sema.V3Builtins[id.Name]; ok {
+					c.Replace(id.NamePos.Offset, id.NamePos.Offset+len(id.Name), at)
+				}
+			}
 		}
 		return true
 	})

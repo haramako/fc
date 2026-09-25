@@ -17,6 +17,9 @@ func TestFormatStyle(t *testing.T) {
 		want string
 	}{
 		{"default arguments", "#fc 2\nfunction f(x:u8,y:u8=COUNT+1,p:*u8=null):void{}\n", "#fc 2\nfunction f(x:u8, y:u8 = COUNT + 1, p:*u8 = null):void {}\n"},
+		{"fc 3 @ builtins",
+			"#fc 3\n@include( \"f.chr\" ,size:4096,fill:0 );\n@include(\"a.asm\");\nconst T:[]u8=@incbin(\"t.bin\");\nfunction f():void{ @asm(\"sei\"); var n=@sizeof(*u8)+@min(a,b); var p=@bitcast(*u8,0x2000); }\n",
+			"#fc 3\n@include(\"f.chr\", size: 4096, fill: 0);\n@include(\"a.asm\");\nconst T:[]u8 = @incbin(\"t.bin\");\nfunction f():void\n{\n\t@asm(\"sei\");\n\tvar n = @sizeof(*u8) + @min(a, b);\n\tvar p = @bitcast(*u8, 0x2000);\n}\n"},
 		{"farfn types", "#fc 2\nvar p:farfn(u8):void;\nvar t:[2]farfn(farfn():u16):farfn():void;\n", "#fc 2\nvar p:farfn(u8):void;\nvar t:[2]farfn(farfn():u16):farfn():void;\n"},
 		{"decls",
 			"public   var a:int=1,b:int ;\nconst   c = 2;\n",

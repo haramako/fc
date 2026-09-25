@@ -123,6 +123,12 @@ var keywords = map[string]Kind{
 	"true": KwTrue, "false": KwFalse, "null": KwNull,
 }
 
+// v3Unreserved は fc 3 で予約語でなくなった語 (`@sizeof` などの組み込みになった。普通の名前として使える)。
+var v3Unreserved = map[Kind]bool{KwSizeof: true, KwBitcast: true, KwIncbin: true, KwInclude: true, KwPrivate: true}
+
+// atKeywords は専用のトークンになる fc 3 の `@` の組み込み (型を取る・宣言になるもの)。
+var atKeywords = map[string]Kind{"sizeof": AtSizeof, "bitcast": AtBitcast, "incbin": AtIncbin, "include": AtInclude}
+
 // v2Keywords は v2 で足した予約語のうち、v1 では識別子として使えていたもの (v1 のソースを壊さない)。
 var v2Keywords = map[Kind]bool{KwTrue: true, KwFalse: true, KwNull: true}
 
@@ -236,6 +242,24 @@ func (l *Lexer) Next() (Token, error) {
 		return t, nil
 	}
 
+	// fc 3 の `@名前` (組み込み) と `@` (属性)
+	if rest[0] == '@' && l.version >= Version3 {
+		n := 1
+		for n < len(rest) && isWord(rest[n]) {
+			n++
+		}
+		if n == 1 {
+			return tok(AtSign, 1), nil
+		}
+		if isDigit(rest[1]) {
+			return Token{}, &Error{Filename: l.filename, Pos: start, Msg: fmt.Sprintf("invalid token at %d", start.Line)}
+		}
+		if kind, ok := atKeywords[string(rest[1:n])]; ok {
+			return tok(kind, n), nil
+		}
+		return tok(AtIdent, n), nil
+	}
+
 	// 識別子 / キーワード
 	if isWord(rest[0]) {
 		n := 0
@@ -243,6 +267,9 @@ func (l *Lexer) Next() (Token, error) {
 			n++
 		}
 		if kind, ok := keywords[string(rest[:n])]; ok {
+			if l.version >= Version3 && v3Unreserved[kind] {
+				return tok(Identifier, n), nil // fc 3 では `@` の組み込み (@sizeof など) になった名前
+			}
 			if kind == KwPrivate {
 				// `private` は予約語ではない (宣言はデフォルトで private。fc 1 の `private:` ラベルの名残)
 				return tok(Identifier, n), nil

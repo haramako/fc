@@ -33,7 +33,7 @@ func Format(src []byte, filename string) ([]byte, error) {
 
 // Print は構文木を整形して出力する。f.Comments の位置を使ってコメントを差し込む。
 func Print(f *File) []byte {
-	p := &printer{comments: f.Comments}
+	p := &printer{comments: f.Comments, version: f.Version}
 	if f.Pragma != "" {
 		// `#fc N` は正規化して 1 行目に (直後の空行を保つ)。無いソースには足さない
 		p.write(fmt.Sprintf("#fc %d", f.Version))
@@ -50,6 +50,7 @@ func Print(f *File) []byte {
 }
 
 type printer struct {
+	version  int // ソースの文法バージョン (fc 3 は @sizeof / @incbin で出す)
 	buf      bytes.Buffer
 	comments []Comment
 	ci       int // 次に出力するコメント
@@ -513,6 +514,18 @@ func (p *printer) stmt(s Stmt) {
 		p.tokAt(s.Semi, ";")
 
 	case *IncludeDecl:
+		if s.At {
+			// fc 3: @include("path", key: value, ...)
+			p.tokAt(s.Include, "@include")
+			p.tok("(")
+			p.tokAt(s.Path.ValuePos, s.Path.Text)
+			if s.Options != nil {
+				p.optionEntries(s.Options, true)
+			}
+			p.tokAt(s.Rparen, ")")
+			p.tokAt(s.Semi, ";")
+			break
+		}
 		p.tokAt(s.Include, "include")
 		if s.Kind != nil {
 			p.space()
@@ -638,8 +651,14 @@ func (p *printer) varSpec(sp *VarSpec) {
 func (p *printer) options(o *Options) {
 	p.tokAt(o.Keyword, "options")
 	p.tok("(")
+	p.optionEntries(o, false)
+	p.tokAt(o.Rparen, ")")
+}
+
+// optionEntries は `key: value, ...` を出す (lead なら最初の要素の前にも `, `)。
+func (p *printer) optionEntries(o *Options, lead bool) {
 	for i, e := range o.Entries {
-		if i > 0 {
+		if i > 0 || lead {
 			p.tok(",")
 			p.space()
 		}
@@ -648,12 +667,19 @@ func (p *printer) options(o *Options) {
 		p.space()
 		p.expr(e.Value)
 	}
-	p.tokAt(o.Rparen, ")")
 }
 
 // ---------------------------------------------------------------
 // 式
 // ---------------------------------------------------------------
+
+// at は組み込みの綴り (fc 3 は `@` を付ける)。
+func (p *printer) at(name string) string {
+	if p.version >= Version3 {
+		return "@" + name
+	}
+	return name
+}
 
 func (p *printer) ident(id *Ident) {
 	p.tokAt(id.NamePos, id.Name)
@@ -707,6 +733,17 @@ func (p *printer) expr(e Expr) {
 			p.space()
 			p.typeExpr(e.Type)
 		case CastBit:
+			if e.Comma.IsValid() {
+				// fc 3: @bitcast(T, x)
+				p.tokAt(e.Bitcast, "@bitcast")
+				p.tokAt(e.Lparen, "(")
+				p.typeExpr(e.Type)
+				p.tokAt(e.Comma, ",")
+				p.space()
+				p.expr(e.X)
+				p.tokAt(e.Rparen, ")")
+				break
+			}
 			p.tokAt(e.Bitcast, "bitcast")
 			p.tokAt(e.Lt, "<")
 			p.typeExpr(e.Type)
@@ -746,12 +783,12 @@ func (p *printer) expr(e Expr) {
 		p.fieldInits(e.Fields, e.Rbrace)
 		p.tokAt(e.Rbrace, "}")
 	case *SizeofExpr:
-		p.tokAt(e.Sizeof, "sizeof")
+		p.tokAt(e.Sizeof, p.at("sizeof"))
 		p.tokAt(e.Lparen, "(")
 		p.typeExpr(e.Type)
 		p.tokAt(e.Rparen, ")")
 	case *IncbinExpr:
-		p.tokAt(e.Incbin, "incbin")
+		p.tokAt(e.Incbin, p.at("incbin"))
 		p.tok("(")
 		p.tokAt(e.Path.ValuePos, e.Path.Text)
 		p.tokAt(e.Rparen, ")")

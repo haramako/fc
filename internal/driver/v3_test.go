@@ -52,10 +52,49 @@ public function add(x:int, y:u8):int16 { return (x as int16) + y; }
 	for _, c := range []struct{ src, msg string }{
 		{"#fc 3\nvar a:int;\nfunction main():void { }\n", "int is not a type in fc 3 (write u8; `fcc migrate` rewrites fc 2 sources)"},
 		{"#fc 3\nvar a:sint16;\nfunction main():void { }\n", "sint16 is not a type in fc 3 (write i16"},
-		{"#fc 3\nfunction main():void { var n = sizeof(uint8); }\n", "uint8 is not a type in fc 3 (write u8"},
+		{"#fc 3\nfunction main():void { var n = @sizeof(uint8); }\n", "uint8 is not a type in fc 3 (write u8"},
 		{"#fc 3\nvar u8:u8;\nfunction main():void { }\n", "u8 cannot be declared (it is a type name in fc 3)"},
 		{"#fc 3\nfunction main():void { var i16 = 1; }\n", "i16 cannot be declared"},
 		{"#fc 3\nfunction u16():void { }\nfunction main():void { }\n", "u16 cannot be declared"},
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": c.src}); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("%q: got %v, want /%s/", c.src, err, c.msg)
+		}
+	}
+}
+
+// TestV3AtBuiltins: fc 3 の `@` の組み込み。`@` の無い古い書き方は案内つきのエラー、`min` などは利用者が宣言できる、
+// fc 2 のソースでは `@` は使えない。
+func TestV3AtBuiltins(t *testing.T) {
+	t.Parallel()
+	out, err := buildFiles(t, map[string]string{
+		"t.fc": `#fc 3
+use * from stdio;
+@include("k.asm");
+const TAB:[]u8 = @incbin("tab.bin");
+var g:u16;
+function sizeof(x:u8):u8 { return x + 1; }   // fc 3 では普通の名前
+function max(a:u8, b:u8):u8 { return a; }    // 組み込みの @max とは別
+function main():void
+{
+	@asm("lda #7", "sta _t_g");
+	var p = @bitcast(*u8, &g);
+	printf(@sizeof(i16), " ", @min(TAB[0], TAB[1]), " ", @max(3, 9), " ", max(3, 9), " ", @clamp(20, 0, 10), " ", *p, " ", sizeof(4), "\n");
+	exit(0);
+}
+`,
+		"k.asm": "\t.byte 1 ; @include したファイルもアセンブルされる\n",
+		"tab.bin": "\x05\x02",
+	})
+	if err != nil || out != "2 2 9 3 10 7 5\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	for _, c := range []struct{ src, msg string }{
+		{"#fc 3\nfunction main():void { asm(\"sei\"); }\n", "asm not found (write @asm in fc 3"},
+		{"#fc 3\nfunction main():void { var n = sizeof(u8); }\n", "sizeof not found (write @sizeof in fc 3"},
+		{"#fc 3\ninclude(\"k.asm\");\nfunction main():void { }\n", "include not found (write @include in fc 3"},
+		{"#fc 3\nfunction main():void { var n = min(1, 2); }\n", "min not found (write @min in fc 3"},
+		{"#fc 2\nfunction main():void { var n = @min(1, 2); }\n", "invalid token"},
 	} {
 		if _, err := buildFiles(t, map[string]string{"t.fc": c.src}); err == nil || !strings.Contains(err.Error(), c.msg) {
 			t.Errorf("%q: got %v, want /%s/", c.src, err, c.msg)

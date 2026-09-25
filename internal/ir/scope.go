@@ -14,6 +14,9 @@ type Scope struct {
 	// Reserved は宣言できない名前 → 理由 (fc 3 のモジュールの型名 u8 など。型名は型の位置でスコープより先に引くので、
 	// 同名の宣言は黙って隠れてしまう)。子のスコープに引き継ぐ
 	Reserved map[string]string
+	// Hidden はモジュールスコープから親 (グローバル) へ辿らない名前 → 代わりの名前 (fc 3 のモジュールで、`@` の付かない
+	// 組み込みの名前 asm / min など。fc 3 では @asm と書く)。モジュール自身の宣言・取り込みは見える
+	Hidden map[string]string
 	trace    func(TraceEvent)
 	declares map[string]*Value
 	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
@@ -138,10 +141,23 @@ func (s *Scope) Find(id string, withPrivate bool) *Value {
 			return v
 		}
 	}
+	if _, hidden := s.Hidden[id]; hidden {
+		return nil
+	}
 	if s.Parent != nil {
 		return s.Parent.Find(id, withPrivate)
 	}
 	return nil
+}
+
+// hiddenHint は id が fc 3 で隠した組み込みの名前なら、その代わりの名前 (スコープを親へ辿って探す)。
+func (s *Scope) hiddenHint(id string) string {
+	for x := s; x != nil; x = x.Parent {
+		if h, ok := x.Hidden[id]; ok {
+			return h
+		}
+	}
+	return ""
 }
 
 // FindMust は Find と同じだが、見つからなければ CompileError。
@@ -150,7 +166,9 @@ func (s *Scope) FindMust(id string, withPrivate bool) *Value {
 		return v
 	}
 	msg := fmt.Sprintf("%s not found", id)
-	if hint := s.Suggest(id); hint != "" {
+	if h := s.hiddenHint(id); h != "" {
+		msg += fmt.Sprintf(" (write %s in fc 3; `fcc migrate` rewrites fc 2 sources)", h)
+	} else if hint := s.Suggest(id); hint != "" {
 		msg += fmt.Sprintf(" (did you mean %s?)", hint)
 	}
 	panic(&diag.Error{Msg: msg})

@@ -260,6 +260,8 @@ type IncludeDecl struct {
 	Rparen  Pos
 	Options *Options // nil なら省略
 	Semi    Pos
+	// At は fc 3 の `@include("path", key: value, ...)` (属性は名前つきの引数。Options.Keyword は無効)
+	At bool
 }
 
 // ScopeLabel は `public:` / `private:` ラベル。
@@ -384,6 +386,7 @@ type CastExpr struct {
 	X       Expr
 	Rparen  Pos
 	As      Pos // `as`
+	Comma   Pos // fc 3 の `@bitcast(T, x)` の `,` (有効なら @ の形。Lt / Gt は無い)
 }
 
 // CallExpr は `fun(args) [{ block }]`。Block はマクロ呼び出し用の後置ブロック (nil なら省略)。

@@ -70,8 +70,8 @@ var a:u8;
 var b:[4]i16 = [1, 2, 3, 4];
 struct P { x:u8; y:u16; }
 function f(p:*i8, q:fn(u8):u8):u16 { var s = "int"; return (p[0] as u16) + (p[1] as u16); }
-const N = sizeof(i8) + sizeof(P);
-var c = bitcast<*u8>(0x2000);
+const N = @sizeof(i8) + @sizeof(P);
+var c = @bitcast(*u8, 0x2000);
 var d:mod.int;
 `
 	got, err := Migrate([]byte(in), "t.fc")
@@ -80,5 +80,45 @@ var d:mod.int;
 	}
 	if string(got) != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestMigrateAtBuiltins: 組み込みを @ の形にする。同じファイルで宣言した同名の関数の呼び出しはそのまま。
+func TestMigrateAtBuiltins(t *testing.T) {
+	in := `#fc 2
+include("x.asm");
+include("font.chr") options(size: 4096, fill: 0);
+const T:[]int = incbin("t.bin");
+const _T = textmap("font.txt");
+function f():void {
+	asm("sei", "cli");
+	var n = sizeof(int) + min(1, 2) + clamp(3, 0, 1);
+	var p = bitcast<*fn():void>(0x2000);
+	unittest_run_tests();
+}
+`
+	want := `#fc 3
+@include("x.asm");
+@include("font.chr", size: 4096, fill: 0);
+const T:[]u8 = @incbin("t.bin");
+const _T = @textmap("font.txt");
+function f():void {
+	@asm("sei", "cli");
+	var n = @sizeof(u8) + @min(1, 2) + @clamp(3, 0, 1);
+	var p = @bitcast(*fn():void, 0x2000);
+	@run_tests();
+}
+`
+	got, err := Migrate([]byte(in), "t.fc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	// 同じファイルで宣言した max はそのまま
+	got, err = Migrate([]byte("function max(a:int, b:int):int { return a; }\nfunction g():void { max(1, 2); min(1, 2); }\n"), "t.fc")
+	if err != nil || !strings.Contains(string(got), "{ max(1, 2); @min(1, 2); }") {
+		t.Errorf("同名の宣言: %q, %v", got, err)
 	}
 }
