@@ -73,7 +73,11 @@ func Migrate(src []byte, filename string) ([]byte, error) {
 	if f.Pragma != "" {
 		c.Replace(0, len(f.Pragma), fmt.Sprintf("#fc %d", syntax.Version3))
 	} else {
-		c.Replace(0, 0, fmt.Sprintf("#fc %d\n", syntax.Version3))
+		nl := "\n"
+		if i := bytes.IndexByte(src, '\n'); i > 0 && src[i-1] == '\r' {
+			nl = "\r\n" // 改行が CRLF のソース (Windows の作業ツリー) は揃える
+		}
+		c.Replace(0, 0, fmt.Sprintf("#fc %d%s", syntax.Version3, nl))
 	}
 	out, err := apply(src, c.Edits)
 	if err != nil {
@@ -89,10 +93,16 @@ func Migrate(src []byte, filename string) ([]byte, error) {
 	return out, nil
 }
 
-// apply は edits を src に当てる (位置の順に並べ、重なりはエラー。同じ位置への挿入は足した順)。
+// apply は edits を src に当てる (位置の順に並べ、重なりはエラー。同じ位置への挿入は足した順で、その位置からの
+// 置き換えより前: 先頭のトークンを書き換えるソースに `#fc 3` を足すとき)。
 func apply(src []byte, edits []Edit) ([]byte, error) {
 	es := append([]Edit{}, edits...)
-	sort.SliceStable(es, func(i, j int) bool { return es[i].Start < es[j].Start })
+	sort.SliceStable(es, func(i, j int) bool {
+		if es[i].Start != es[j].Start {
+			return es[i].Start < es[j].Start
+		}
+		return es[i].End == es[i].Start && es[j].End > es[j].Start
+	})
 	var b bytes.Buffer
 	at := 0
 	for _, e := range es {

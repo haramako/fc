@@ -46,6 +46,11 @@ func TestMigrateRule(t *testing.T) {
 	if err != nil || string(got) != "#fc 3\nvar b:bool;\nfunction f():void { b = true; }\n" {
 		t.Errorf("got %q, %v", got, err)
 	}
+	// 先頭のトークンの書き換えと、先頭に足す `#fc 3` (同じ位置) は重ならない。CRLF のソースには CRLF で足す
+	got, err = Migrate([]byte("var a:bool;\r\n"), "t.fc")
+	if err != nil || string(got) != "#fc 3\r\nvar b:bool;\r\n" {
+		t.Errorf("CRLF: got %q, %v", got, err)
+	}
 	Rules = append(Rules, Rule{Name: "overlap", Apply: func(c *Ctx) { c.Replace(4, 6, "x") }})
 	if _, err := Migrate([]byte("var a:bool;\n"), "t.fc"); err == nil || !strings.Contains(err.Error(), "overlapping") {
 		t.Errorf("重なる Edit: %v", err)
@@ -162,5 +167,14 @@ func TestMigrateInferArrays(t *testing.T) {
 	}
 	if string(got) != want {
 		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+// TestMigrateFirstToken: 先頭のトークンを書き換えるソース (`options(...)` で始まる) にも `#fc 3` を足せる
+// (同じ位置の挿入と置き換えが重ならない)。
+func TestMigrateFirstToken(t *testing.T) {
+	got, err := Migrate([]byte("options(bank: 1);\r\nvar a:int;\r\n"), "t.fc")
+	if err != nil || string(got) != "#fc 3\r\n@(bank: 1);\r\nvar a:u8;\r\n" {
+		t.Errorf("got %q, %v", got, err)
 	}
 }
