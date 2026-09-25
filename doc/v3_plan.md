@@ -15,7 +15,11 @@
 
 ## 1. ifdef 相当の static if
 
-**2026-09-25 決定（未実装）**:
+**2026-09-25 決定・実装済み（feature/v3）**: 構文 `StaticIfStmt`（`@if`）、`sema/staticif.go`（条件の検査と評価、
+`@(build)` の const の上書き、`Program.CheckDefines`）、トップレベルは `moduleDecls.expandStaticIfs`（use を読み込んでから
+評価して選ばれた側を集める。入れ子も繰り返す）、`driver/config.go`（fc.toml を基準ディレクトリから親へ探す。`[section]` と
+`key = value` だけを読む）、`BuildOptions.Defines` / CLI の `-D` / `fcc check -D`、`fcc build -d` の `defines:` の表示、
+`TestV3StaticIf`。決定の内容:
 
 - 構文は `@if (条件) { … } else { … }`（`else @if (…)` も続けられる）。`static` という予約語は増やさない
 - 書ける場所はトップレベル（宣言・`use`・`@include`）と関数の中の文。struct のフィールドの並びなどは最初の版では対象外

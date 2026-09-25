@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -59,6 +60,9 @@ type BuildOptions struct {
 
 	// Jobs は ca65 を同時に走らせる数。0 なら CPU 数。1 で逐次。
 	Jobs int
+
+	// Defines は CLI の -D (`module.NAME=value`)。fc.toml の [define.<module>] の後に当てる (doc/v3_plan.md §1)
+	Defines []string
 }
 
 // Result はビルドの結果。
@@ -74,8 +78,9 @@ type Result struct {
 	Cycles     int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
 	StaticZp   int            // 静的フレームの使用量 (ゼロページ側 FC_SZP / RAM 側 FC_SRAM)
 	StaticRam  int
-	Frames     []string // 静的フレームの配置の要約 (fcc build -d で表示)
-	SizeReport []string // 関数ごとのコードサイズ (fcc build --size-report で表示)
+	Frames     []string         // 静的フレームの配置の要約 (fcc build -d で表示)
+	Defines    []sema.DefineUse // @(build) の const の上書き (fc.toml / -D。fcc build -d で表示)
+	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
 }
 
 type Compiler struct {
@@ -183,10 +188,17 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	var llc *codegen.Llc
 	var plan *frames.Plan
 	var perr error
+	defs, derr := c.projectDefines(opt.Defines)
+	if derr != nil {
+		return nil, derr
+	}
 	for noGrow := map[string]bool{}; ; {
-		var cerr error
-		prog, cerr = sema.Compile(opt.Dir, c.libPath(opt.Target), filename)
-		if cerr != nil {
+		prog = sema.NewProgram()
+		prog.Defines = copyDefines(defs)
+		if cerr := sema.CompileProgram(prog, opt.Dir, c.libPath(opt.Target), filename); cerr != nil {
+			return nil, cerr
+		}
+		if cerr := c.checkDefines(prog, opt.Target); cerr != nil {
 			return nil, cerr
 		}
 		c.prog = prog
@@ -203,6 +215,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
+	result.Defines = sortedDefines(prog.Defines)
 	if err := writeIfChanged(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n"))); err != nil {
 		return nil, err
 	}
@@ -480,6 +493,30 @@ func (c *Compiler) farcallAsm() string {
 		return ""
 	}
 	return p
+}
+
+// projectDefines は fc.toml (ソースの基準ディレクトリから親へ探す) と CLI の -D から @(build) の const の上書きを作る。
+func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, error) {
+	cfg, err := findConfig(c.dir)
+	if err != nil {
+		return nil, err
+	}
+	return cfg.defines(cli)
+}
+
+// checkDefines は上書きが宣言された @(build) の const に当たったかを検査する (ビルドに含まれないモジュールは警告)。
+func (c *Compiler) checkDefines(prog *sema.Program, target string) error {
+	return prog.CheckDefines(func(m string) bool { return moduleExists(c.dir, c.libPath(target), m) })
+}
+
+// sortedDefines は上書きの一覧 (キー順)。
+func sortedDefines(m map[string]*sema.DefineUse) []sema.DefineUse {
+	var r []sema.DefineUse
+	for _, d := range m {
+		r = append(r, *d)
+	}
+	sort.Slice(r, func(i, j int) bool { return r[i].Key < r[j].Key })
+	return r
 }
 
 // newLlc は prog のコード生成器を作る (PrepareProgram の前の設定まで)。

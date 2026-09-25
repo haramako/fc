@@ -31,6 +31,7 @@ type Hlc struct {
 	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
 	fastCalling  bool
 	groupBss     string // innermost placement block; module default is applied after declarations
+	inStaticIf   bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
 
 	module *ir.Module
 	lmd    *ir.Lambda
@@ -658,16 +659,31 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.compileStorageAlias(s)
 		} else if s.Const {
 			for _, sp := range s.Specs {
+				opts := parseOptions(sp.Options)
+				build := opts.Flag("build")
 				var init *cexpr
-				if sp.Init != nil {
+				if build {
+					init = toC(h.buildConstInit(sp.Name.Name, sp))
+				} else if sp.Init != nil {
 					init = toC(sp.Init)
 				}
-				h.compileConstSpec(sp.Name.Name, sp.Type, init, parseOptions(sp.Options), s.PublicPos)
+				h.compileConstSpec(sp.Name.Name, sp.Type, init, opts, s.PublicPos)
+				if build {
+					if v := h.scope.Local(sp.Name.Name); v != nil {
+						v.Build = true
+					}
+				}
 			}
 		} else {
 			for _, sp := range s.Specs {
 				h.compileVarSpec(sp, s.PublicPos)
 			}
+		}
+
+	case *syntax.StaticIfStmt:
+		// fc 3 の @if (関数の中): 選ばれた側だけを同じスコープでコンパイルする
+		for _, st := range h.staticBranch(s) {
+			h.compileStatement(st)
 		}
 
 	case *syntax.IfStmt:

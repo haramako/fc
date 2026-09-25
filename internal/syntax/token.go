@@ -95,6 +95,7 @@ const (
 	AtBitcast // @bitcast
 	AtIncbin  // @incbin
 	AtInclude // @include
+	AtIf      // @if
 	AtIdent   // @名前
 	AtSign    // @ (属性 `@(...)`)
 

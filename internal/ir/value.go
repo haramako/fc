@@ -63,6 +63,7 @@ type Value struct {
 	// Volatile はグローバル変数で、読むたび / 書くたびに意味がある (レジスタに置いたままにできない):
 	// options(address:) の I/O レジスタ、asm から参照される変数、options(volatile: true) (doc/language_reference.md §2)
 	Volatile bool
+	Build    bool // fc 3 の @(build) の const (@if の条件に使える。値はビルドの設定で上書きできる)
 
 	// 以下はレジスタ割付で設定される
 	Home         *Value // Location == LocA / LocY / LocX でループ内に常駐する一時変数のメモリ側 (退避先。regalloc.AllocateResident)

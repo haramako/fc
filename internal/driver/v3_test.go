@@ -158,3 +158,115 @@ func compileAsmFiles(t *testing.T, files map[string]string) string {
 	}
 	return string(asm)
 }
+
+// buildFilesDefs は buildFiles に CLI の -D を渡す版。
+func buildFilesDefs(t *testing.T, files map[string]string, defines []string) (string, *Result, error) {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out strings.Builder
+	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, MaxCycles: 10_000_000, Defines: defines})
+	return out.String(), res, err
+}
+
+// TestV3StaticIf: @if と @(build) の const。トップレベルの @if は use ごと選び、選ばれなかった側は名前解決しない
+// (存在しないモジュール・関数でもよい)。関数の中の @if は同じスコープ。値は fc.toml の [define.<module>] と -D で上書きできる。
+func TestV3StaticIf(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{
+		"t.fc": `#fc 3
+use * from stdio;
+use common;
+@if (common.DEBUG) {
+	use dbg;
+	function f():u8 { return 1; }
+} else @if (common.LEVEL > 2) {
+	use nosuchmodule;   // 選ばれないので読み込まない
+	function f():u8 { return undefined_name; }
+} else {
+	function f():u8 { return 7; }
+}
+function main():void
+{
+	@if (common.DEBUG && LOCAL) {
+		var x = dbg.value();
+	} else {
+		var x = f();
+	}
+	printf(x, " ", common.LEVEL, "\n");
+	exit(0);
+}
+const LOCAL = true @(build);
+`,
+		"common.fc": `#fc 3
+public const DEBUG = false @(build);
+public const LEVEL:u8 = 1 @(build);
+`,
+		"dbg.fc": `#fc 3
+public function value():u8 { return 42; }
+`,
+	}
+	out, res, err := buildFilesDefs(t, files, nil)
+	if err != nil || out != "7 1\n" {
+		t.Fatalf("既定値: got %q, %v", out, err)
+	}
+	if len(res.Defines) != 0 {
+		t.Errorf("上書きが無いのに Defines: %v", res.Defines)
+	}
+	if out, res, err = buildFilesDefs(t, files, []string{"common.DEBUG=true"}); err != nil || out != "42 1\n" {
+		t.Errorf("-D common.DEBUG=true: got %q, %v", out, err)
+	} else if len(res.Defines) != 1 || !res.Defines[0].Used || res.Defines[0].Source != "-D" {
+		t.Errorf("Defines: %+v", res.Defines)
+	}
+	// fc.toml の上書き (CLI の -D が後勝ち)
+	files["fc.toml"] = "# project\n[define.common]\nDEBUG = true   # comment\nLEVEL = 3\n[define.t]\nLOCAL = false\n"
+	if out, _, err = buildFilesDefs(t, files, []string{"common.DEBUG=false"}); err == nil {
+		t.Errorf("LEVEL = 3 なら f は undefined_name を読む (選ばれた側は名前解決する): got %q", out)
+	} else if !strings.Contains(err.Error(), "nosuchmodule") && !strings.Contains(err.Error(), "undefined_name") {
+		t.Errorf("LEVEL = 3: got %v", err)
+	}
+	files["fc.toml"] = "[define.common]\nDEBUG = true\n[define.t]\nLOCAL = false\n"
+	if out, _, err = buildFilesDefs(t, files, nil); err != nil || out != "1 1\n" {
+		t.Errorf("fc.toml DEBUG = true, LOCAL = false: got %q, %v (dbg の側の f、main は else 側)", out, err)
+	}
+	delete(files, "fc.toml")
+
+	for _, c := range []struct {
+		defs []string
+		msg  string
+	}{
+		{[]string{"common.NOPE=1"}, "common has no @(build) const NOPE"},
+		{[]string{"nosuch.X=1"}, "module nosuch not found"},
+		{[]string{"common.DEBUG=3"}, "DEBUG is a bool @(build) const"},
+		{[]string{"common.LEVEL=true"}, "LEVEL is an integer @(build) const"},
+		{[]string{"common.LEVEL"}, "expected module.NAME=value"},
+	} {
+		if _, _, err := buildFilesDefs(t, files, c.defs); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("-D %v: got %v, want /%s/", c.defs, err, c.msg)
+		}
+	}
+	// ビルドに含まれないモジュールへの上書きは警告
+	if _, res, err := buildFilesDefs(t, files, []string{"dbg.X=1"}); err != nil {
+		t.Errorf("dbg.X=1: %v", err)
+	} else if len(res.Warnings) == 0 || !strings.Contains(res.Warnings[len(res.Warnings)-1].Msg, "module dbg is not part of this build") {
+		t.Errorf("dbg.X=1 の警告: %v", res.Warnings)
+	}
+
+	for _, c := range []struct{ src, msg string }{
+		{"#fc 3\nconst N = 1;\n@if (N) { }\nfunction main():void { }\n", "@if condition can use only literals and @(build) constants (N is not @(build))"},
+		{"#fc 3\nconst N = 1 + 1 @(build);\nfunction main():void { }\n", "@(build) const N must be initialized with a literal"},
+		{"#fc 3\n@if (true) { const N = 1 @(build); }\nfunction main():void { }\n", "@(build) const N cannot be declared inside @if"},
+		{"#fc 3\nfunction main():void { var a:u8 = 1; @if (a) { } }\n", "a is not @(build)"},
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": c.src}); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("%q: got %v, want /%s/", c.src, err, c.msg)
+		}
+	}
+}

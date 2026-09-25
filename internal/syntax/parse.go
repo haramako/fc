@@ -138,7 +138,7 @@ var kindToYacc = map[Kind]int{
 	KwLoop: kLOOP, KwWhile: kWHILE, KwFor: kFOR, KwReturn: kRETURN,
 	KwBreak: kBREAK, KwContinue: kCONTINUE, KwIncbin: kINCBIN,
 	KwSwitch: kSWITCH, KwCase: kCASE, KwDefault: kDEFAULT,
-	AtSizeof: kAT_SIZEOF, AtBitcast: kAT_BITCAST, AtIncbin: kAT_INCBIN, AtInclude: kAT_INCLUDE, AtIdent: kATIDENT, AtSign: '@',
+	AtSizeof: kAT_SIZEOF, AtBitcast: kAT_BITCAST, AtIncbin: kAT_INCBIN, AtInclude: kAT_INCLUDE, AtIdent: kATIDENT, AtIf: kAT_IF, AtSign: '@',
 	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwFarFn: kFARFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA, KwTrue: kTRUE, KwFalse: kFALSE, KwNull: kNULL,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
 	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
@@ -308,4 +308,13 @@ func funcDecl(scope *Token, kw, name Token, params []*VarSpec, result TypeExpr, 
 		Body:      body.Block,
 		Semi:      body.Semi,
 	}
+}
+
+// staticIf は `@if (cond) { ... } [else ...]` の構文木を作る。
+func staticIf(at, lp Token, cond Expr, rp Token, then *Block, el *staticElse) *StaticIfStmt {
+	s := &StaticIfStmt{At: at.Pos, Lparen: lp.Pos, Cond: cond, Rparen: rp.Pos, Then: then}
+	if el != nil {
+		s.ElsePos, s.Else = el.pos, el.body
+	}
+	return s
 }

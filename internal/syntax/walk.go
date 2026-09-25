@@ -55,6 +55,10 @@ func Children(node Node) []Node {
 		add(n.Cond)
 		add(n.Then)
 		add(n.Else)
+	case *StaticIfStmt:
+		add(n.Cond)
+		add(n.Then)
+		add(n.Else)
 	case *LabeledStmt:
 		add(n.Label)
 		add(n.Stmt)
@@ -220,6 +224,8 @@ func isNilNode(n Node) bool {
 	case *DefaultClause:
 		return v == nil
 	case *IfStmt:
+		return v == nil
+	case *StaticIfStmt:
 		return v == nil
 	case *NamedType:
 		return v == nil

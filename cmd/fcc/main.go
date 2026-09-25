@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/haramako/fc/pkg/fc"
 )
@@ -34,6 +35,7 @@ Options:
     --size-report    show code size per segment / function (needs linking)
     -t, --target     target platform ( nes, emu )
     -O LEVEL         optimize level (0-2)
+    -D MOD.NAME=VAL  override a @(build) const (repeatable; applied after fc.toml [define.MOD])
 `
 
 func main() {
@@ -73,6 +75,8 @@ func run() int {
 	target := fs.String("t", "", "target platform ( nes, emu )")
 	fs.StringVar(target, "target", "", "target platform ( nes, emu )")
 	optLevel := fs.Int("O", 2, "optimize level (0-2)")
+	var defines stringList
+	fs.Var(&defines, "D", "override a @(build) const: module.NAME=value (repeatable)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 1
 	}
@@ -85,6 +89,7 @@ func run() int {
 		OptimizeLevel: optimizeLevel(*optLevel),
 		Debug:         *gFlag,
 		SizeReport:    *sizeFlag,
+		Defines:       defines,
 	}
 	switch com {
 	case "run":
@@ -118,6 +123,17 @@ func run() int {
 		for _, line := range res.Frames {
 			fmt.Fprintln(os.Stderr, line)
 		}
+		if len(res.Defines) > 0 {
+			// @(build) の const の上書き (値と出所)
+			fmt.Fprintf(os.Stderr, "defines: %d\n", len(res.Defines))
+			for _, d := range res.Defines {
+				used := ""
+				if !d.Used {
+					used = " (not used)"
+				}
+				fmt.Fprintf(os.Stderr, "  %s = %s (%s)%s\n", d.Key, d.Value, d.Source, used)
+			}
+		}
 	}
 	for _, line := range res.SizeReport {
 		fmt.Println(line)
@@ -131,6 +147,12 @@ func run() int {
 	}
 	return res.ExitCode
 }
+
+// stringList は繰り返せる文字列のフラグ (-D)。
+type stringList []string
+
+func (s *stringList) String() string     { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
 
 // optimizeLevel は -O の値を driver の表現に (0 は「未指定」の意味なので、-O 0 は -1 で渡す)。
 func optimizeLevel(o int) int {

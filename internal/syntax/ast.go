@@ -99,6 +99,33 @@ type IfStmt struct {
 	Else    Stmt
 }
 
+// StaticIfStmt は fc 3 の `@if (cond) { ... } else { ... }` / `else @if (...)` (doc/v3_plan.md §1)。条件はリテラルと
+// `@(build)` の定数だけで、選ばれなかった側は名前解決・型検査をしない。新しいスコープは作らない。
+type StaticIfStmt struct {
+	At      Pos // `@if`
+	Lparen  Pos
+	Cond    Expr
+	Rparen  Pos
+	Then    *Block
+	ElsePos Pos  // `else` (無ければ無効)
+	Else    Stmt // nil / *Block / *StaticIfStmt
+}
+
+func (s *StaticIfStmt) Pos() Pos { return s.At }
+func (s *StaticIfStmt) End() Pos {
+	if s.Else != nil {
+		return s.Else.End()
+	}
+	return s.Then.End()
+}
+func (*StaticIfStmt) stmtNode() {}
+
+// staticElse は文法の途中で `else` の位置を運ぶためのもの。
+type staticElse struct {
+	pos  Pos
+	body Stmt
+}
+
 // LoopStmt は `loop() stmt` (v1) / `loop { ... }` (v2。Rparen は無効)。
 type LoopStmt struct {
 	Loop   Pos
@@ -299,7 +326,7 @@ func (s *PlacementBlock) End() Pos {
 	}
 	return after(s.Semi, 1)
 }
-func (*PlacementBlock) stmtNode()  {}
+func (*PlacementBlock) stmtNode() {}
 
 // EmptyStmt は単独の `;`。
 type EmptyStmt struct {

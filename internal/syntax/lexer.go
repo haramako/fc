@@ -127,7 +127,7 @@ var keywords = map[string]Kind{
 var v3Unreserved = map[Kind]bool{KwSizeof: true, KwBitcast: true, KwIncbin: true, KwInclude: true, KwPrivate: true}
 
 // atKeywords は専用のトークンになる fc 3 の `@` の組み込み (型を取る・宣言になるもの)。
-var atKeywords = map[string]Kind{"sizeof": AtSizeof, "bitcast": AtBitcast, "incbin": AtIncbin, "include": AtInclude}
+var atKeywords = map[string]Kind{"sizeof": AtSizeof, "bitcast": AtBitcast, "incbin": AtIncbin, "include": AtInclude, "if": AtIf}
 
 // v2Keywords は v2 で足した予約語のうち、v1 では識別子として使えていたもの (v1 のソースを壊さない)。
 var v2Keywords = map[Kind]bool{KwTrue: true, KwFalse: true, KwNull: true}

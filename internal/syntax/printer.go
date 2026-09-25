@@ -296,6 +296,9 @@ func (p *printer) stmt(s Stmt) {
 	case *IfStmt:
 		p.ifStmt(s)
 
+	case *StaticIfStmt:
+		p.staticIf(s)
+
 	case *LoopStmt:
 		p.tokAt(s.Loop, "loop")
 		if s.Rparen.IsValid() {
@@ -603,6 +606,28 @@ func (p *printer) ifStmt(s *IfStmt) {
 	}
 	p.tok("else")
 	p.body(s.Else)
+}
+
+// staticIf は fc 3 の `@if (...) { ... } else @if (...) { ... } else { ... }` (`} else` は同じ行)。
+func (p *printer) staticIf(s *StaticIfStmt) {
+	p.tokAt(s.At, "@if")
+	p.space()
+	p.tokAt(s.Lparen, "(")
+	p.expr(s.Cond)
+	p.tokAt(s.Rparen, ")")
+	p.space()
+	p.block(s.Then)
+	if s.Else == nil {
+		return
+	}
+	p.space()
+	p.tokAt(s.ElsePos, "else")
+	p.space()
+	if e, ok := s.Else.(*StaticIfStmt); ok {
+		p.staticIf(e)
+		return
+	}
+	p.block(s.Else.(*Block))
 }
 
 // simpleStmt は for の init / step (`;` を持たない文)。

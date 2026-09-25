@@ -52,6 +52,8 @@ type Program struct {
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
 	curModule   string                     // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
+	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
+	Defines map[string]*DefineUse
 }
 
 // Source は読み込んだソースファイル。
@@ -132,6 +134,7 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	p.declarations[mod] = md
 	md.collect(file.Stmts, nil)
 	md.loadImports()
+	md.expandStaticIfs()
 	if p.collectDepth == 1 {
 		md.resolve()
 		for _, m := range p.Modules.List() {

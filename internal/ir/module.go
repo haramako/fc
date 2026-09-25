@@ -112,7 +112,7 @@ func (o Options) Flag(key string) bool {
 // FlagOptions は真偽値の属性のキー (fc 3 で値を省いて `@(inline)` と書ける)。
 var FlagOptions = map[string]bool{
 	"inline": true, "noinline": true, "fastcall": true, "interrupt": true, "volatile": true,
-	"near": true, "farcall": true, "zeropage": true,
+	"near": true, "farcall": true, "zeropage": true, "build": true,
 }
 
 // Module は 1 ソースファイルに対応するコンパイル単位。

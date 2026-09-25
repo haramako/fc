@@ -15,6 +15,7 @@ package syntax
 
 %union {
 	tok     Token
+	selse   *staticElse
 	stmt    Stmt
 	stmts   []Stmt
 	expr    Expr
@@ -44,7 +45,8 @@ package syntax
 }
 
 %token <tok> NUMBER IDENT STRING kPLACEMENT kALIAS
-%token <tok> kAT_SIZEOF kAT_BITCAST kAT_INCBIN kAT_INCLUDE kATIDENT
+%token <tok> kAT_SIZEOF kAT_BITCAST kAT_INCBIN kAT_INCLUDE kATIDENT kAT_IF
+%type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
@@ -118,6 +120,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | opt_scope kALIAS IDENT ':' type_decl '=' exp ';' { $$ = &VarDecl{PublicPos: optPos($1), Keyword: $2.Pos, Alias: true, Specs: []*VarSpec{{Name: ident($3), Type: $5, Init: $7}}, Semi: $8.Pos} }
          | opt_scope kCONST var_decl_list ';'   { $$ = &VarDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Specs: $3, Semi: $4.Pos} }
          | kIF '(' exp ')' statement else_block { $$ = &IfStmt{If: $1.Pos, Lparen: $2.Pos, Cond: $3, Rparen: $4.Pos, Then: $5, Else: $6} }
+         | kAT_IF '(' exp ')' block static_else { $$ = staticIf($1, $2, $3, $4, $5, $6) } /* v3 */
          | kLOOP '(' ')' statement              { $$ = &LoopStmt{Loop: $1.Pos, Rparen: $3.Pos, Body: $4} }
          | kLOOP block                          { $$ = &LoopStmt{Loop: $1.Pos, Body: $2} } /* v2: 括弧なし */
          | IDENT ':' statement                  { $$ = &LabeledStmt{Label: ident($1), Colon: $2.Pos, Stmt: $3} } /* v2: 文ラベル */
@@ -220,6 +223,11 @@ block: '{' opt_statement_list '}' { $$ = &Block{Lbrace: $1.Pos, Stmts: $2, Rbrac
 
 opt_block: /* empty */ { $$ = nil }
          | block
+
+/* fc 3 の @if の else: `else { ... }` / `else @if (...) { ... } ...` */
+static_else: /* empty */ %prec NO_ELSE { $$ = nil }
+           | kELSE block { $$ = &staticElse{pos: $1.Pos, body: $2} }
+           | kELSE kAT_IF '(' exp ')' block static_else { $$ = &staticElse{pos: $1.Pos, body: staticIf($2, $3, $4, $5, $6, $7)} }
 
 else_block: /* empty */ %prec NO_ELSE { $$ = nil }
           | kELSE statement { $$ = $2 }

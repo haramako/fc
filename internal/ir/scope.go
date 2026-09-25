@@ -16,7 +16,7 @@ type Scope struct {
 	Reserved map[string]string
 	// Hidden はモジュールスコープから親 (グローバル) へ辿らない名前 → 代わりの名前 (fc 3 のモジュールで、`@` の付かない
 	// 組み込みの名前 asm / min など。fc 3 では @asm と書く)。モジュール自身の宣言・取り込みは見える
-	Hidden map[string]string
+	Hidden   map[string]string
 	trace    func(TraceEvent)
 	declares map[string]*Value
 	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
@@ -214,6 +214,9 @@ func editDistance(a, b string) int {
 	}
 	return prev[len(rb)]
 }
+
+// Local はこのスコープ自身で宣言した id の値 (遅延の解決を起こさない。無ければ nil)。
+func (s *Scope) Local(id string) *Value { return s.declares[id] }
 
 // DeclaredHere はこのスコープ自身に id の宣言 (または束縛) があるか。
 func (s *Scope) DeclaredHere(id string) bool {
