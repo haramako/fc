@@ -1448,9 +1448,14 @@ func foldIntOp(op cop, v1, v2 int) int {
 		return v1 - v2
 	case opMul:
 		return v1 * v2
-	case opDiv:
-		return ir.FloorDiv(v1, v2)
-	case opMod:
+	case opDiv, opMod:
+		if v2 == 0 {
+			// 定数同士の 0 除算 (`1/0`) は畳み込みで Go の panic になっていた (fuzz で発覚)
+			panic(&diag.Error{Msg: "div by 0"})
+		}
+		if op == opDiv {
+			return ir.FloorDiv(v1, v2)
+		}
 		return ir.FloorMod(v1, v2)
 	case opEq:
 		return b2i(v1 == v2)
