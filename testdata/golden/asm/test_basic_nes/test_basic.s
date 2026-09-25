@@ -209,21 +209,18 @@ _32:
 	lda #.HIBYTE(_47)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldx FC_SP
 	lda #.LOBYTE(_53)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_53)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(_55)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(_55)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda #6
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	bne @4
 	lda #1
 	sta 0+<F_test_basic_test_misc+0
@@ -283,64 +280,48 @@ _63:
 .segment "test_basic"
 .proc _main
 	jsr _stdio_init
-	ldx FC_SP
 	lda #.LOBYTE(_66)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_66)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	ldx FC_SP
 	lda #.LOBYTE(_69)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_69)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	ldx FC_SP
 	lda #.LOBYTE(_72)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_72)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_basic_test_function
-	ldx FC_SP
 	lda #.LOBYTE(_75)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_75)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	ldx FC_SP
 	lda #.LOBYTE(_78)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_78)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_basic_test_misc
-	ldx FC_SP
 	lda #.LOBYTE(_81)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_81)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
-	ldx FC_SP
 	lda #.LOBYTE(_84)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_84)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	jsr _test_basic_test_fastcall
-	ldx FC_SP
 	lda #.LOBYTE(_87)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_87)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #0
 	jsr _stdio_exit

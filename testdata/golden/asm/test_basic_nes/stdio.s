@@ -30,12 +30,10 @@ _stdio_print_addr: .res 2
 	.endproc
 .proc _stdio_exit
 	sta <F_stdio_exit+0
-	ldx FC_SP
 	lda #.LOBYTE(_6)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_6)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	ldx FC_SP
 	lda 0+<F_stdio_exit+0
@@ -44,12 +42,10 @@ _stdio_print_addr: .res 2
 	sta <S+1,x
 	ldx FC_SP
 	jsr _stdio_print_int16
-	ldx FC_SP
 	lda #.LOBYTE(_8)
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #.HIBYTE(_8)
-	sta <S+1,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #200
 	sta 0+_nes_PPU_CTRL1
@@ -78,18 +74,16 @@ _8:
 .proc _stdio_init
 	lda #253
 	sta 0+_stdio_vsync_flag
-	ldx FC_SP
 	lda #0
-	sta <S+0,x
+	sta <FC_FASTCALL_REG+0
 	lda #63
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.LOBYTE(pallet)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.HIBYTE(pallet)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #16
-	sta <S+4,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+4
 	jsr _stdio_ppu_put
 	lda #0
 	sta 0+_stdio_print_addr

@@ -209,21 +209,18 @@ _32:
 	lda #.HIBYTE(_47)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldx FC_SP
 	lda #.LOBYTE(_53)
-	sta <S+1,x
+	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_53)
-	sta <S+2,x
+	sta <FC_FASTCALL_REG+2
 	lda #.LOBYTE(_55)
-	sta <S+3,x
+	sta <FC_FASTCALL_REG+3
 	lda #.HIBYTE(_55)
-	sta <S+4,x
+	sta <FC_FASTCALL_REG+4
 	lda #6
-	sta <S+5,x
-	ldx FC_SP
+	sta <FC_FASTCALL_REG+5
 	jsr _mem_compare
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <0+FC_FASTCALL_REG
 	bne @4
 	lda #1
 	sta 0+<F_test_basic_test_misc+0

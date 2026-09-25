@@ -206,11 +206,11 @@
    0011 (:push_arg #"u16" {l5 $57})
    0012 (:push_arg #"*const u8" {pa {g $59 #"[4]u8" :_58}})
    0013 (:call nil {lit assert_equal :_unittest_assert_equal #"fn(u16,u16,*const u8):void"})
-   0014 (:push_result #"u8")
-   0015 (:push_arg #"*const u8" {pa {g buf #"[256]u8" :_test_lzw_buf}})
-   0016 (:push_arg #"*const u8" {pa {l1 UNPACKED}})
-   0017 (:push_arg #"u8" {l3 len})
-   0018 (:call {l6 $61} {lit compare :_mem_compare #"fn(*const u8,*const u8,u8):u8"})
+   0014 (:push_fastcall_result #"u8")
+   0015 (:push_fastcall_arg #"*const u8" {pa {g buf #"[256]u8" :_test_lzw_buf}})
+   0016 (:push_fastcall_arg #"*const u8" {pa {l1 UNPACKED}})
+   0017 (:push_fastcall_arg #"u8" {l3 len})
+   0018 (:fastcall {l6 $61} {lit compare :_mem_compare #"fastcall fn(*const u8,*const u8,u8):u8"})
    0019 (:push_result #"void")
    0020 (:push_arg #"u16" {l6 $61})
    0021 (:push_arg #"u16" {lit nil 0 #"u8"})
@@ -365,17 +365,17 @@
  (modules ())
  (defs
   (def _mem_set code #"fastcall fn(*u8,u8,u8):void" {lambda _mem_set})
-  (def _mem_zero code #"fn(*u8,u8):void" {lambda _mem_zero})
-  (def _mem_copy code #"fn(*u8,*const u8,u16):void" {lambda _mem_copy})
-  (def _mem_compare code #"fn(*const u8,*const u8,u8):u8" {lambda _mem_compare})
+  (def _mem_zero code #"fastcall fn(*u8,u8):void" {lambda _mem_zero})
+  (def _mem_copy code #"fastcall fn(*u8,*const u8,u16):void" {lambda _mem_copy})
+  (def _mem_compare code #"fastcall fn(*const u8,*const u8,u8):u8" {lambda _mem_compare})
   (def _mem_strlen code #"fastcall fn(*const u8):u8" {lambda _mem_strlen})
   (def _mem_strcpy code #"fastcall fn(*u8,*const u8):u8" {lambda _mem_strcpy})
  )
  (vars
   (var 0 set literal #"fastcall fn(*u8,u8,u8):void" val=:_mem_set pub)
-  (var 1 zero literal #"fn(*u8,u8):void" val=:_mem_zero pub)
-  (var 2 copy literal #"fn(*u8,*const u8,u16):void" val=:_mem_copy pub)
-  (var 3 compare literal #"fn(*const u8,*const u8,u8):u8" val=:_mem_compare pub)
+  (var 1 zero literal #"fastcall fn(*u8,u8):void" val=:_mem_zero pub)
+  (var 2 copy literal #"fastcall fn(*u8,*const u8,u16):void" val=:_mem_copy pub)
+  (var 3 compare literal #"fastcall fn(*const u8,*const u8,u8):u8" val=:_mem_compare pub)
   (var 4 strlen literal #"fastcall fn(*const u8):u8" val=:_mem_strlen pub)
   (var 5 strcpy literal #"fastcall fn(*u8,*const u8):u8" val=:_mem_strcpy pub)
  )
@@ -393,7 +393,7 @@
    0000 (:return)
   )
  )
- (lambda _mem_zero #"fn(*u8,u8):void" opt={id :zero extern true}
+ (lambda _mem_zero #"fastcall fn(*u8,u8):void" opt={id :zero fastcall :true extern true}
   (args ({l0 p} {l1 size}))
   (result nil)
   (vars
@@ -406,7 +406,7 @@
    0000 (:return)
   )
  )
- (lambda _mem_copy #"fn(*u8,*const u8,u16):void" opt={id :copy extern true}
+ (lambda _mem_copy #"fastcall fn(*u8,*const u8,u16):void" opt={id :copy fastcall :true extern true}
   (args ({l0 _to} {l1 _from} {l2 size}))
   (result nil)
   (vars
@@ -420,7 +420,7 @@
    0000 (:return)
   )
  )
- (lambda _mem_compare #"fn(*const u8,*const u8,u8):u8" opt={id :compare extern true}
+ (lambda _mem_compare #"fastcall fn(*const u8,*const u8,u8):u8" opt={id :compare fastcall :true extern true}
   (args ({l1 p1} {l2 p2} {l3 size}))
   (result {l0 $result})
   (vars

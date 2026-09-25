@@ -14,8 +14,8 @@ public var print_addr:u16;
 
 public function print_int16(n:u16):void;
 public function wait_vsync():void;
-public function print(str:*const u8):void;
-public function ppu_put(addr:u16, data:*const u8, size:u8):void;
+public function print(str:*const u8):void @(fastcall);
+public function ppu_put(addr:u16, data:*const u8, size:u8):void @(fastcall);
 
 public function puts(str:*const u8):void
 {

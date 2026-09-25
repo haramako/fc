@@ -2,23 +2,17 @@
 .segment "CODE"
 	
 _stdio_ppu_put:
-		lda S+1,x
+		;; fastcall: addr = FC_FASTCALL_REG+0,1、data = +2,3、size = +4
+		lda FC_FASTCALL_REG+1
 		sta _nes_PPU_ADDR
-		lda S+0,x
+		lda FC_FASTCALL_REG+0
 		sta _nes_PPU_ADDR
-		
-		lda S+2,x		; reg[2,3] = addr
-		sta reg+0
-		lda S+3,x
-		sta reg+1
-		lda S+4,x
-		sta reg+2
 		ldy #0
 @loop:
-		lda (reg),y
+		lda (FC_FASTCALL_REG+2),y
 		sta _nes_PPU_DATA
 		iny
-		cpy reg+2
+		cpy FC_FASTCALL_REG+4
 		bne @loop
 @end:
 		rts
@@ -29,14 +23,10 @@ _stdio_print:
 		lda _stdio_print_addr+0
 		sta _nes_PPU_ADDR
 		
-		lda S+0,x
-		sta reg+0
-		lda S+1,x
-		sta reg+1
-
+		;; fastcall: str = FC_FASTCALL_REG+0,1
 		ldy #0
 @loop:	
-		lda (reg),y
+		lda (FC_FASTCALL_REG+0),y
 		beq @end
 		iny
 		cmp #10
