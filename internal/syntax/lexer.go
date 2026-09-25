@@ -120,8 +120,11 @@ var keywords = map[string]Kind{
 	"switch": KwSwitch, "case": KwCase, "default": KwDefault,
 	"use": KwUse, "as": KwAs, "from": KwFrom, "public": KwPublic, "private": KwPrivate,
 	"fn": KwFn, "farfn": KwFarFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
-	"true": KwTrue, "false": KwFalse, "null": KwNull,
+	"true": KwTrue, "false": KwFalse, "null": KwNull, "enum": KwEnum,
 }
+
+// v3Keywords は fc 3 で足した予約語 (fc 2 のソースでは識別子のまま)。
+var v3Keywords = map[Kind]bool{KwEnum: true}
 
 // v3Unreserved は fc 3 で予約語でなくなった語 (`@sizeof` などの組み込みになった。普通の名前として使える)。
 var v3Unreserved = map[Kind]bool{KwSizeof: true, KwBitcast: true, KwIncbin: true, KwInclude: true, KwPrivate: true}
@@ -267,6 +270,9 @@ func (l *Lexer) Next() (Token, error) {
 			n++
 		}
 		if kind, ok := keywords[string(rest[:n])]; ok {
+			if l.version < Version3 && v3Keywords[kind] {
+				return tok(Identifier, n), nil
+			}
 			if l.version >= Version3 && v3Unreserved[kind] {
 				return tok(Identifier, n), nil // fc 3 では `@` の組み込み (@sizeof など) になった名前
 			}

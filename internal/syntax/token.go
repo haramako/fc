@@ -88,6 +88,7 @@ const (
 	KwTrue    // true (v2)
 	KwFalse   // false (v2)
 	KwNull    // null (v2)
+	KwEnum    // enum (fc 3)
 
 	// fc 3 の `@` の組み込み (doc/v3_plan.md §5 A)。型を取るもの・宣言になるものは専用のトークン、それ以外の
 	// `@名前` は AtIdent (Text は `@名前`。名前つきの組み込みの呼び出し)。`@` の直後が `(` なら AtSign (属性)

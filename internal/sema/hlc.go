@@ -680,6 +680,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			}
 		}
 
+	case *syntax.EnumDecl:
+		h.compileEnumDecl(s)
+
 	case *syntax.StaticIfStmt:
 		// fc 3 の @if (関数の中): 選ばれた側だけを同じスコープでコンパイルする
 		for _, st := range h.staticBranch(s) {
@@ -832,7 +835,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		allInt, n, minV, maxV := true, 0, 0, 0
 		for ci, c := range s.Cases {
 			for _, v := range c.Values {
-				cv := h.constEvalOperand(toC(v))
+				cv := h.constEvalOperand(h.withExpected(toC(v), ir.ValType(cond))) // enum なら `case .A:`
 				if k, ok := ir.ValIntLiteral(cv); ok {
 					if seen[k] {
 						panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d", k), Pos: syntax.At(h.module.Path, v.Pos())})
@@ -851,6 +854,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				vals[ci] = append(vals[ci], cv)
 			}
 		}
+		h.warnEnumSwitch(ir.ValType(cond), seen, s.Default != nil)
 		// ジャンプテーブル (switchTableMin 個以上の整数の case が密に並ぶとき。language_reference.md §5):
 		//   switch tag, min, [label...]; jump default; case...: ...; jump end; default: ...; end:
 		// 1 バイトのタグだけ (飛び先 - 1 を pha; pha; rts で飛ぶ。比較の連鎖は平均 3 + 5N/2 サイクル、表は約 33 で一定)
@@ -1181,10 +1185,16 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		h.registerDefaults(lmd, lam.params)
 		return cv(ir.NewSymbolLiteral("", lmd.Type, id))
 
+	case cEnumShort:
+		return c // 型は文脈から (withExpected)。決まらないまま値として使ったら rval がエラーにする
+
 	case cDot:
 		left := h.constEval(c.args[0])
 		if left.kind == cValue && left.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true})
+		}
+		if left.kind == cValue && left.val.TypeRef != nil && left.val.TypeRef.Enum != nil {
+			return cv(h.enumMember(left.val.TypeRef, c.name)) // enum のメンバー (Type.Name)
 		}
 		if left.kind == cValue && left.val.Module != nil {
 			return cv(left.val.Module.LookupMust(c.name))
@@ -1240,9 +1250,21 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			opAnd, opOr, opXor, opLand, opLor, opNot, opUminus, opBitNot,
 			opShiftLeft, opShiftRight:
 			args := make([]*cexpr, len(c.args))
-			args[0] = h.constEval(c.args[0])
+			src := c.args
+			if len(src) == 2 {
+				a, b := h.resolveEnumShortPair(src[0], src[1]) // `x == .A`
+				src = []*cexpr{a, b}
+			}
+			args[0] = h.constEval(src[0])
 			if len(c.args) > 1 {
-				args[1] = h.constEval(c.args[1])
+				args[1] = h.constEval(src[1])
+			}
+			if args[0].kind == cValue && (len(args) == 1 || args[1].kind == cValue) {
+				var bt *types.Type
+				if len(args) > 1 {
+					bt = args[1].val.Type
+				}
+				checkEnumOp(c.op, args[0].val.Type, bt)
 			}
 			for _, arg := range args {
 				if arg.kind != cValue || !arg.val.Type.IsFarFunc() {
@@ -1648,6 +1670,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 	switch e.kind {
 
+	case cEnumShort:
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot tell the enum type of .%s here (write Type.%s)", e.name, e.name)})
+
 	case cValue:
 		if e.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true}) // エラーになった宣言の参照: 報告済みなので黙って打ち切る
@@ -1731,6 +1756,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		case opNot, opUminus, opBitNot:
 			left := h.rval(e.args[0])
 			typ := ir.ValType(left)
+			checkEnumOp(e.op, typ, nil)
 			if typ.IsFarFunc() && e.op != opNot {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
@@ -1748,6 +1774,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc() {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
+			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
@@ -1774,13 +1801,20 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if a0.kind == cNull && a1.kind != cNull {
 				a0, a1 = a1, a0 // `null == p` も `p == null` と同じ
 			}
-			left := h.rval(a0)
-			var right ir.Operand
-			if a1.kind == cNull {
-				right = h.nullOf(ir.ValType(left))
+			var left, right ir.Operand
+			if a0.kind == cEnumShort && a1.kind != cEnumShort {
+				// `.A == x` / `.A < x`: 相手の型で .A を決める (.A は定数なので評価の順は変わらない)
+				right = h.rval(a1)
+				left = h.rval(h.withExpected(a0, ir.ValType(right)))
 			} else {
-				right = h.rval(h.withExpected(a1, ir.ValType(left)))
+				left = h.rval(a0)
+				if a1.kind == cNull {
+					right = h.nullOf(ir.ValType(left))
+				} else {
+					right = h.rval(h.withExpected(a1, ir.ValType(left)))
+				}
 			}
+			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			if v, ok := left.(*ir.Value); ok && ir.ValType(right).IsFarFunc() {
 				left = h.rval(h.withExpected(cv(v), ir.ValType(right)))
 			}

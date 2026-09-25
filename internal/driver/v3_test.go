@@ -270,3 +270,71 @@ public function value():u8 { return 42; }
 		}
 	}
 }
+
+// TestV3Enum: enum の宣言 (基底型は省けば u8、値は省けば前の値 + 1)、Type.Name / 文脈からの .Name、同じ enum 同士の比較、
+// `as` の変換、配列の添字、switch (default が無くメンバーが足りなければ警告)。整数・別の enum とは混ぜられない。
+func TestV3Enum(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{
+		"t.fc": `#fc 3
+use * from stdio;
+use my;
+enum Dir:i8 { Left = -1, None, Right, }
+const NAMES:[3]u8 = [10, 20, 30];
+var state:my.State;
+function next(s:my.State):my.State
+{
+	switch (s) {
+	case .Stand: return .Jump;
+	case .Jump: return my.State.Die;
+	}
+	return s;
+}
+function main():void
+{
+	var d:Dir = .Right;
+	state = .Stand;
+	state = next(state);
+	var a = state == .Jump;
+	var b = .Die > state;
+	var c = state < my.State.Stand;
+	printf(state as u8, " ", a, " ", b, " ", c, " ", (d as i8) + 1, " ", NAMES[my.State.Die], " ", Dir.Left as u8, "\n");
+	exit(0);
+}
+`,
+		"my.fc": `#fc 3
+public enum State { Stand, Jump, Die = 2 }
+`,
+	}
+	out, res, err := buildFilesDefs(t, files, nil)
+	if err != nil || out != "1 1 1 0 2 30 255\n" {
+		t.Fatalf("got %q, %v", out, err)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Msg, "switch on my.State does not handle .Die") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("switch の網羅の警告が無い: %v", res.Warnings)
+	}
+	for _, c := range []struct{ src, msg string }{
+		{"enum E { A, B }\nfunction main():void { var e:E = 0; }\n", "cannot assign u8 to t.E"},
+		{"enum E { A, B }\nfunction main():void { var e:E = .A; var n = e + 1; }\n", "cannot apply + to enum t.E"},
+		{"enum E { A, B }\nenum F { A }\nfunction main():void { var e:E = .A; var f:F = .A; var x = e == f; }\n", "cannot compare t.E and t.F"},
+		{"enum E { A, B }\nfunction main():void { var e:E = .C; }\n", "t.E has no member C (members: A, B)"},
+		{"enum E { A, B }\nfunction main():void { var n:u8 = .A; }\n", ".A needs an enum type from context"},
+		{"enum E { A = 300 }\nfunction main():void { }\n", "enum E: A = 300 does not fit in u8"},
+		{"enum E { A, A }\nfunction main():void { }\n", "member A already defined"},
+		{"enum E:bool { A }\nfunction main():void { }\n", "the base type must be an integer type"},
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\n" + c.src}); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("%q: got %v, want /%s/", c.src, err, c.msg)
+		}
+	}
+	// fc 2 では enum は予約語でない
+	if _, err := buildFiles(t, map[string]string{"t.fc": "#fc 2\nuse * from stdio;\nvar enum:int;\nfunction main():void { enum = 1; exit(0); }\n"}); err != nil {
+		t.Errorf("fc 2 の enum という名前: %v", err)
+	}
+}

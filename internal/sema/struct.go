@@ -20,7 +20,7 @@ import (
 // needsExpected は、型名を省いた struct リテラル (`{1, 2}`) を含み、文脈の型がないと評価できない式か。
 func (h *Hlc) needsExpected(c *cexpr) bool {
 	switch c.kind {
-	case cNull:
+	case cNull, cEnumShort:
 		return true
 	case cStructLit:
 		return c.typ == nil && c.ty == nil
@@ -50,6 +50,8 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 	switch c.kind {
 	case cNull:
 		return cv(h.nullOf(t).(*ir.Value))
+	case cEnumShort:
+		return h.enumShort(c, t)
 	case cStructLit:
 		if t.Kind != types.Struct {
 			panic(&diag.Error{Msg: fmt.Sprintf("struct literal cannot be used as %s", t)})

@@ -15,6 +15,8 @@ package syntax
 
 %union {
 	tok     Token
+	emem    *EnumMember
+	emems   []*EnumMember
 	selse   *staticElse
 	stmt    Stmt
 	stmts   []Stmt
@@ -45,7 +47,10 @@ package syntax
 }
 
 %token <tok> NUMBER IDENT STRING kPLACEMENT kALIAS
-%token <tok> kAT_SIZEOF kAT_BITCAST kAT_INCBIN kAT_INCLUDE kATIDENT kAT_IF
+%token <tok> kAT_SIZEOF kAT_BITCAST kAT_INCBIN kAT_INCLUDE kATIDENT kAT_IF kENUM
+%type <emem> enum_member
+%type <emems> enum_members enum_member_list
+%type <typ> opt_enum_base
 %type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
@@ -141,6 +146,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | attrs ';'                            { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} } /* v3: モジュールへの指定 */
          | attrs block                          { $$ = &PlacementBlock{Options: $1, Body: $2} } /* v3: 中の宣言の既定値 */
          | opt_scope kUSE use_target ';'        { u := $3; u.PublicPos = optPos($1); u.Use = $2.Pos; u.Semi = $4.Pos; $$ = u }
+         | opt_scope kENUM IDENT opt_enum_base '{' enum_members '}' { $$ = &EnumDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Base: $4, Lbrace: $5.Pos, Members: $6, Rbrace: $7.Pos} } /* v3 */
          | opt_scope kSTRUCT IDENT '{' field_decl_list '}' { $$ = &StructDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Lbrace: $4.Pos, Fields: $5, Rbrace: $6.Pos} } /* v2 */
          | opt_scope kSOA IDENT ':' type_decl opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Type: $5, Options: $6, Semi: $7.Pos} } /* v2 */
          | opt_scope kSOA kCONST IDENT ':' type_decl '=' exp opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Name: ident($4), Type: $6, Init: $8, Options: $9, Semi: $10.Pos} } /* v2 */
@@ -224,6 +230,17 @@ block: '{' opt_statement_list '}' { $$ = &Block{Lbrace: $1.Pos, Stmts: $2, Rbrac
 opt_block: /* empty */ { $$ = nil }
          | block
 
+/* fc 3 の enum */
+opt_enum_base: /* empty */ { $$ = nil }
+             | ':' type_decl { $$ = $2 }
+enum_members: /* empty */ { $$ = []*EnumMember{} }
+            | enum_member_list
+            | enum_member_list ','
+enum_member_list: enum_member_list ',' enum_member { $$ = append($1, $3) }
+                | enum_member { $$ = []*EnumMember{$1} }
+enum_member: IDENT { $$ = &EnumMember{Name: ident($1)} }
+           | IDENT '=' exp { $$ = &EnumMember{Name: ident($1), Value: $3} }
+
 /* fc 3 の @if の else: `else { ... }` / `else @if (...) { ... } ...` */
 static_else: /* empty */ %prec NO_ELSE { $$ = nil }
            | kELSE block { $$ = &staticElse{pos: $1.Pos, body: $2} }
@@ -291,6 +308,7 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | kAT_SIZEOF '(' type_decl ')' { $$ = &SizeofExpr{Sizeof: $1.Pos, Lparen: $2.Pos, Type: $3, Rparen: $4.Pos} } /* v3 */
    | kAT_INCBIN '(' STRING ')' { $$ = &IncbinExpr{Incbin: $1.Pos, Path: strLit($3), Rparen: $4.Pos} } /* v3 */
    | kATIDENT               { $$ = ident($1) } /* v3: @min などの組み込み (名前は `@min`) */
+   | '.' IDENT              { $$ = &EnumShortExpr{Dot: $1.Pos, Name: ident($2)} } /* v3: 型が文脈から分かる enum のメンバー */
    | ARROW type_decl function_block { $$ = &LambdaExpr{Arrow: $1.Pos, Type: $2, Body: $3.Block, Semi: $3.Semi} }
    | NUMBER                 { $$ = &IntLit{ValuePos: $1.Pos, Value: $1.Int, Text: $1.Text} }
    | kTRUE                  { $$ = &BoolLit{ValuePos: $1.Pos, Value: true} }  /* v2 */

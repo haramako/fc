@@ -169,6 +169,8 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.StructDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
+	case *syntax.EnumDecl:
+		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.SoaDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.UseDecl:

@@ -490,6 +490,40 @@ func (p *printer) stmt(s Stmt) {
 		p.blankOK = false
 		p.tokAt(s.Rbrace, "}")
 
+	case *EnumDecl:
+		// enum Name:u8 {  (メンバーは 1 行に 1 つ、末尾のカンマ付き)
+		if s.PublicPos.IsValid() {
+			p.tokAt(s.PublicPos, "public")
+			p.space()
+		}
+		p.tokAt(s.Keyword, "enum")
+		p.space()
+		p.ident(s.Name)
+		if s.Base != nil {
+			p.tok(":")
+			p.typeExpr(s.Base)
+		}
+		p.space()
+		p.tokAt(s.Lbrace, "{")
+		p.indent++
+		for _, m := range s.Members {
+			p.newline()
+			p.blankOK = true
+			p.ident(m.Name)
+			if m.Value != nil {
+				p.space()
+				p.tok("=")
+				p.space()
+				p.expr(m.Value)
+			}
+			p.tok(",")
+		}
+		p.flushComments(s.Rbrace)
+		p.indent--
+		p.newline()
+		p.blankOK = false
+		p.tokAt(s.Rbrace, "}")
+
 	case *SoaDecl:
 		if s.PublicPos.IsValid() {
 			p.tokAt(s.PublicPos, "public")
@@ -821,6 +855,9 @@ func (p *printer) expr(e Expr) {
 		p.tokAt(e.Lbrace, "{")
 		p.fieldInits(e.Fields, e.Rbrace)
 		p.tokAt(e.Rbrace, "}")
+	case *EnumShortExpr:
+		p.tokAt(e.Dot, ".")
+		p.ident(e.Name)
 	case *SizeofExpr:
 		p.tokAt(e.Sizeof, p.at("sizeof"))
 		p.tokAt(e.Lparen, "(")

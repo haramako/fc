@@ -37,6 +37,7 @@ const (
 	cStructLit              // struct リテラル (typ = 型名 (省略なら nil)、ty = 確定した型、fields)
 	cSizeof                 // sizeof(typ)
 	cNull                   // null (型は文脈から。ty が決まれば 0 のリテラルになる)
+	cEnumShort              // fc 3 の `.Name` (enum のメンバー。型は文脈から (withExpected)。name)
 )
 
 // cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
@@ -192,6 +193,8 @@ func toC0(e syntax.Expr) *cexpr {
 		return cstr(e.Value)
 	case *syntax.ParenExpr:
 		return toC(e.X)
+	case *syntax.EnumShortExpr:
+		return &cexpr{kind: cEnumShort, name: e.Name.Name}
 	case *syntax.BinaryExpr:
 		if e.Op == syntax.Dot {
 			id, ok := e.Y.(*syntax.Ident)

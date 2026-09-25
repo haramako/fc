@@ -259,6 +259,37 @@ type StructDecl struct {
 	Rbrace    Pos
 }
 
+// EnumDecl は fc 3 の `enum Name:u8 { A = 0, B, ... }` (基底型を省けば u8。値を省けば前の値 + 1、最初は 0)。
+type EnumDecl struct {
+	PublicPos Pos
+	Keyword   Pos
+	Name      *Ident
+	Base      TypeExpr // nil なら省略 (u8)
+	Lbrace    Pos
+	Members   []*EnumMember
+	Rbrace    Pos
+}
+
+// EnumMember は enum のメンバー `Name` / `Name = value`。
+type EnumMember struct {
+	Name  *Ident
+	Value Expr // nil なら前の値 + 1
+}
+
+func (s *EnumDecl) Pos() Pos { return firstValid(s.PublicPos, s.Keyword) }
+func (s *EnumDecl) End() Pos { return after(s.Rbrace, 1) }
+func (*EnumDecl) stmtNode()  {}
+
+// EnumShortExpr は fc 3 の `.Name` (型が文脈から分かるときの enum のメンバー)。
+type EnumShortExpr struct {
+	Dot  Pos
+	Name *Ident
+}
+
+func (e *EnumShortExpr) Pos() Pos { return e.Dot }
+func (e *EnumShortExpr) End() Pos { return e.Name.End() }
+func (*EnumShortExpr) exprNode()  {}
+
 // FieldDecl は struct のフィールド `name:type;`。
 type FieldDecl struct {
 	Name *Ident

@@ -104,6 +104,15 @@ func Children(node Node) []Node {
 		for _, f := range n.Fields {
 			add(f)
 		}
+	case *EnumDecl:
+		add(n.Name)
+		add(n.Base)
+		for _, m := range n.Members {
+			add(m.Name)
+			add(m.Value)
+		}
+	case *EnumShortExpr:
+		add(n.Name)
 	case *FieldDecl:
 		add(n.Name)
 		add(n.Type)

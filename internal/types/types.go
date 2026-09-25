@@ -48,15 +48,43 @@ type Type struct {
 	Base     *Type // Pointer / Array の要素型、Func の戻り値型
 	Length   int   // Array の要素数。省略時 -1
 	Params   []*Type
-	Fields   []Field // Struct のフィールド (宣言順)
-	Name     string  // Struct / SoaRef のモジュール修飾名 (mod.Name)
-	Soa      *Type   // SoaRef のコンテナ (`soa` 配列型)、Kind == Array で IsSoa
-	IsSoa    bool    // Array が SoA コンテナ (soa 宣言) か
-	IsConst  bool    // SoA コンテナが `soa const` (読み出しのみ) か
-	Path     string  // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
+	Fields   []Field   // Struct のフィールド (宣言順)
+	Name     string    // Struct / SoaRef のモジュール修飾名 (mod.Name)
+	Soa      *Type     // SoaRef のコンテナ (`soa` 配列型)、Kind == Array で IsSoa
+	IsSoa    bool      // Array が SoA コンテナ (soa 宣言) か
+	IsConst  bool      // SoA コンテナが `soa const` (読み出しのみ) か
+	Path     string    // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
+	Enum     *EnumInfo // fc 3 の enum (Kind は Int のまま。基底型の幅と符号。別の enum・整数とは互換でない)
 	far      bool
 	fastcall bool
 	str      string
+}
+
+// EnumInfo は enum 型のメンバー (宣言順)。doc/language_feature_candidates.md §1。
+type EnumInfo struct {
+	Name    string // モジュール修飾名 (mod.Name)
+	Members []EnumMember
+}
+
+// EnumMember は enum のメンバー 1 つ。
+type EnumMember struct {
+	Name  string
+	Value int
+}
+
+// Member は名前でメンバーを引く。
+func (e *EnumInfo) Member(name string) (EnumMember, bool) {
+	for _, m := range e.Members {
+		if m.Name == name {
+			return m, true
+		}
+	}
+	return EnumMember{}, false
+}
+
+// NewEnum は基底型 base (整数型) の enum 型 name (モジュール修飾名) を作る。メンバーは後から EnumInfo に入れる。
+func (u *Universe) NewEnum(name string, base *Type) *Type {
+	return u.intern(&Type{Kind: Int, Size: base.Size, Signed: base.Signed, Length: -1, Enum: &EnumInfo{Name: name}, str: name})
 }
 
 // Field は struct のフィールド。
@@ -294,6 +322,10 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 	}
 	if b.Kind == Bad {
 		return a
+	}
+	// enum は同じ enum とだけ互換 (整数・bool・別の enum とは `as` で変換する)
+	if a.Enum != nil || b.Enum != nil {
+		return nil
 	}
 	// bool は uint8 と互換 (比較・論理演算の結果と true / false は bool。整数と混ぜれば uint8)
 	if a.Kind == Bool {
