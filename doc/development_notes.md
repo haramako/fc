@@ -195,6 +195,8 @@ go test ./...                                    # 全部 (golden + examples + N
   続けて定数同士の 0 除算（`1/0`、`[0%0]`）が畳み込み（`foldIntOp`）で Go の panic に（"div by 0" のエラーに）。
   エラーの上限（30 件）ちょうどが関数本体の外側の回復点（`recoverTo`）で記録されると、`report` の投げる
   "too many errors" が defer の中から抜けて落ちた（`record` を分けて、最外の回復点では投げずに記録だけ）。
+  FuzzFormat が 1 時間 20 分でハング: 後置の型（v1 の `A****`、`int[1][1]`）の入れ子で `PointerType.Pos` /
+  `ArrayType.Pos` が `IsPrefix` と自分とで `Elem.Pos()` を 2 回ずつ呼び、段数の指数時間（`*` 25 個で 2.5 秒）。
   注意: `go test -fuzz` を kill してもテストバイナリ（コーディネータとワーカー）が残って回り続ける。止めるときは
   `setsid` で起動してプロセスグループごと kill する
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」

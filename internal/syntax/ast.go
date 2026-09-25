@@ -867,10 +867,11 @@ func (t *NamedType) Pos() Pos {
 func (t *NamedType) End() Pos { return t.Name.End() }
 
 func (t *ArrayType) Pos() Pos {
-	if t.IsPrefix() {
-		return t.Lbrack
+	// IsPrefix を使うと後置 (v1 の `int**`) の入れ子で Elem.Pos() を 2 回ずつ呼び、段数の指数時間になる (fuzz で発覚)
+	if ep := t.Elem.Pos(); t.Lbrack.Offset >= ep.Offset {
+		return ep
 	}
-	return t.Elem.Pos()
+	return t.Lbrack
 }
 func (t *ArrayType) End() Pos {
 	if t.IsPrefix() {
@@ -880,10 +881,11 @@ func (t *ArrayType) End() Pos {
 }
 
 func (t *PointerType) Pos() Pos {
-	if t.IsPrefix() {
-		return t.Star
+	// IsPrefix を使うと後置 (v1 の `int**`) の入れ子で Elem.Pos() を 2 回ずつ呼び、段数の指数時間になる (fuzz で発覚)
+	if ep := t.Elem.Pos(); t.Star.Offset >= ep.Offset {
+		return ep
 	}
-	return t.Elem.Pos()
+	return t.Star
 }
 func (t *PointerType) End() Pos {
 	if t.IsPrefix() {
