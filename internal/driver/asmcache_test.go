@@ -63,6 +63,7 @@ func TestReadDepFile(t *testing.T) {
 	}{
 		{".fc-build/_t.o:\t.fc-build/_t.s inc\\ a.inc bin.dat\n\n.fc-build/_t.s inc\\ a.inc bin.dat:\n", []string{".fc-build/_t.s", "inc a.inc", "bin.dat"}},
 		{"C:\\w\\b\\_t.o:\tC:\\w\\b\\_t.s C:\\fc\\share\\macro.inc\n", []string{"C:\\w\\b\\_t.s", "C:\\fc\\share\\macro.inc"}},
+		{"C:\\w\\b\\_t.o:\tC:\\w\\b\\_t.s b.inc\r\n\r\n", []string{"C:\\w\\b\\_t.s", "b.inc"}}, // Windows の ca65 は CRLF で書く
 	}
 	for _, c := range cases {
 		p := filepath.Join(t.TempDir(), "t.d")

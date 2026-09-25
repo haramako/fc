@@ -164,6 +164,7 @@ func readDepFile(path string) ([]string, error) {
 	if i := strings.IndexByte(line, '\n'); i >= 0 {
 		line = line[:i]
 	}
+	line = strings.TrimSuffix(line, "\r") // Windows の ca65 は CRLF で書く
 	i := strings.Index(line, ":")
 	for i >= 0 && i+1 < len(line) && line[i+1] != ' ' && line[i+1] != '\t' {
 		// Windows のドライブ名 (C:\...) の ':' は飛ばす

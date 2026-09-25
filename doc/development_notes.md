@@ -394,8 +394,12 @@ go test ./...                                    # 全部 (golden + examples + N
    テストは settings.json が無ければ最小構成を自動生成する
 3. **testrunner の Lua では `io`/`os` が使えない**（設定でも解除不可）。
    テスト結果は `emu.stop(exitCode)` の終了コードで返す設計にする。
-   `emu.log` の出力は stdout には出ない
-4. Lua API 覚え書き: `emu.setInput(inputTable, port)`（inputPolled イベント内で呼ぶ。
+   `emu.log` の出力は stdout には出ない（`print()` は stdout に出るので、途中経過はこちらで出す）
+4. **セーブデータ（`.sav`）が残る**: バッテリーバックアップの SRAM は ROM のファイル名で `Saves/<名前>.sav` に
+   書かれ、次に同じ名前の ROM を開くと読み込まれる。castle はセーブがあると「つづける」で最後のチェックポイントから
+   始まるので、自動プレイの行き先が変わる（2026-09-26、エリア 66 で止まって TestMesenPlayCastle が落ちた）。テストは
+   ROM を `fc_test_<名前>` に写し、その `.sav` を前後で消す（`mesenFreshRom`。手でプレイした `castle.sav` には触らない）
+5. Lua API 覚え書き: `emu.setInput(inputTable, port)`（inputPolled イベント内で呼ぶ。
    キーは a/b/select/start/up/down/left/right の bool）、
    `emu.read(addr, emu.memType.nesDebug, false)`（副作用なし読み取り）
 

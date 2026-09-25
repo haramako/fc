@@ -69,6 +69,31 @@ func ensureMesenSettings(t *testing.T, mesenPath string) {
 	t.Logf("Mesen settings.json を作成した: %s", p)
 }
 
+// mesenFreshRom は rom をテスト専用の名前 (fc_test_<名前>) に写し、Mesen に残っているその名前のセーブデータを消す。
+// Mesen はバッテリーバックアップの SRAM を ROM のファイル名で Saves/<名前>.sav に書き、次に同じ名前の ROM を開くと
+// 読み込む。castle は SRAM にセーブデータがあるとタイトルが「つづける」になって最後のチェックポイントから始まるので、
+// 手でプレイした castle.nes のセーブや前回のテストの結果で自動プレイの行き先が変わる (エリア 66 から右に歩いて止まり、
+// TestMesenPlayCastle が落ちていた)。利用者の castle.sav には触らない。Saves は settings.json と同じく Mesen.exe の隣
+// (ポータブル構成。ensureMesenSettings を参照)。
+func mesenFreshRom(t *testing.T, mesenPath, rom string) string {
+	t.Helper()
+	name := "fc_test_" + filepath.Base(rom)
+	fresh := filepath.Join(filepath.Dir(rom), name)
+	b, err := os.ReadFile(rom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fresh, b, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	sav := filepath.Join(filepath.Dir(mesenPath), "Saves", strings.TrimSuffix(name, filepath.Ext(name))+".sav")
+	if err := os.Remove(sav); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("Mesen のセーブデータを消せない: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(sav) })
+	return fresh
+}
+
 // copyTree は src ディレクトリを dst へ再帰コピーする (.fc-build は除く)。
 func copyTree(t *testing.T, src, dst string) {
 	t.Helper()
@@ -225,22 +250,22 @@ emu.addEventCallback(function()
   if frame == 480 then
     startX = emu.read(ADDR_MY_X, emu.memType.nesDebug, false)
     lastArea = emu.read(ADDR_CUR_AREA, emu.memType.nesDebug, false)
-    emu.log("field start: my_x=" .. startX .. " area=" .. lastArea)
+    print("field start: my_x=" .. startX .. " area=" .. lastArea)
   end
   if frame > 490 and frame %% 10 == 0 then
     local area = emu.read(ADDR_CUR_AREA, emu.memType.nesDebug, false)
     if area ~= lastArea then
       areaChanges = areaChanges + 1
-      emu.log("area change #" .. areaChanges .. ": " .. lastArea .. " -> " .. area .. " (frame " .. frame .. ")")
+      print("area change #" .. areaChanges .. ": " .. lastArea .. " -> " .. area .. " (frame " .. frame .. ")")
       lastArea = area
       if areaChanges >= 2 then
-        emu.log("PASS: my_x=" .. emu.read(ADDR_MY_X, emu.memType.nesDebug, false))
+        print("PASS: my_x=" .. emu.read(ADDR_MY_X, emu.memType.nesDebug, false))
         emu.stop(0)
       end
     end
   end
   if frame > 6000 then
-    emu.log("FAIL: area changes=" .. areaChanges)
+    print("FAIL: area changes=" .. areaChanges)
     emu.stop(1)
   end
 end, emu.eventType.startFrame)
@@ -255,6 +280,7 @@ func TestMesenPlayCastle(t *testing.T) {
 	ensureMesenSettings(t, mesen)
 
 	rom, dbgPath := buildCastleWithDbg(t)
+	rom = mesenFreshRom(t, mesen, rom)
 	addrs := parseLd65Map(t, dbgPath, "_my_x", "_bg_cur_area")
 	t.Logf("シンボル: _my_x=$%04x _bg_cur_area=$%04x", addrs["_my_x"], addrs["_bg_cur_area"])
 
