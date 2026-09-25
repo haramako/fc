@@ -199,7 +199,7 @@ function run_confirm_dialog():void
 	}
 
 	heap.release(cdlg.text);
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 	if (cdlg.callback != null) {
 		cdlg.callback(cdlg.cur);
@@ -356,7 +356,7 @@ function run_message_dialog():void
 	}
 
 	heap.release(msgdlg.text);
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 	if (msgdlg.callback != null) {
 		msgdlg.callback();

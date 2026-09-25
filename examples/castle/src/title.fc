@@ -50,7 +50,7 @@ public function start():void
 		}
 	}
 
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync();
 }
 
@@ -240,7 +240,7 @@ function text_print2(p:*u8, str:*u8, size:u8):u8
 
 function do_option():u8
 {
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 
 	ppu.lock();
@@ -342,7 +342,7 @@ var credit_page:u8;
 
 function do_credit():u8
 {
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync_with_flag(2);
 
 	ppu.lock();
@@ -430,7 +430,7 @@ function do_clear_savedata():u8
 {
 	ppu.lock();
 
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	mmc3.set_cbank(0, CBANK_MISC_TEXT);
 	mmc3.set_cbank(1, CBANK_MISC_TEXT + 2);
 

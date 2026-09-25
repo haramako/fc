@@ -5,6 +5,7 @@
 	.importzp FC_FASTCALL_REG
 
 	.import jsr_reg
+	.import __fc_null_fn
 	.import __mul_8
 	.import __mul_8s
 	.import __mul_8t16

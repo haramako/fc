@@ -441,7 +441,7 @@ function light_down(i:u8):void
 
 function draw_endcall():void
 {
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync();
 
 	ppu.lock();

@@ -38,6 +38,7 @@ const (
 	cSizeof                 // sizeof(typ)
 	cNull                   // null (型は文脈から。ty が決まれば 0 のリテラルになる)
 	cEnumShort              // fc 3 の `.Name` (enum のメンバー。型は文脈から (withExpected)。name)
+	cNullFn                 // fc 3 の @null_fn (何もしない関数。型は文脈の fn(...):void。無ければ fn():void)
 )
 
 // cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
@@ -182,6 +183,9 @@ func toC(e syntax.Expr) *cexpr {
 func toC0(e syntax.Expr) *cexpr {
 	switch e := e.(type) {
 	case *syntax.Ident:
+		if e.Name == "@null_fn" {
+			return &cexpr{kind: cNullFn} // 型は文脈から (withExpected)
+		}
 		return cident(e.Name)
 	case *syntax.IntLit:
 		return cint(e.Value)

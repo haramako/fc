@@ -52,14 +52,13 @@ public var cbank2:u8; // CBANK2の値(interrupt時に書き込まれる)
 
 public var on_wait_vsync:fn():void;
 
-public function null_func():void {}
 
 public function init():void
 {
-	irq_setup = null_func;
-	irq_next = null_func;
-	on_vsync = null_func;
-	on_wait_vsync = null_func;
+	irq_setup = @null_fn;
+	irq_next = @null_fn;
+	on_vsync = @null_fn;
+	on_wait_vsync = @null_fn;
 	gr_sprite_dir = 0;
 	locked = 1;
 }

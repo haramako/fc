@@ -365,7 +365,6 @@ public function watergate_process(i:u8):void
 		my.register_touch_event(watergate_event, x, y, i);
 	}
 
-	ppu.null_func();
 	gr_sprite2(x, y, spr, pal);
 
 	p4[i] = stat;

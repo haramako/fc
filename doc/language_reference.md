@@ -173,6 +173,11 @@ fc 3 の `[]T` / `[]const T` は slice（先頭のポインタと長さ `u8` の
 以上に使う。`[:u8]T` は `[]T` と同じ）。`[]T` → `[:u16]T` は暗黙、逆は `@slice(@ptr(s), n)`。256 要素以上の配列の範囲と、長さが
 `u16` の `@slice(p, n)` は広い slice（[v3_slices_vector.md](v3_slices_vector.md)）。
 
+fc 3 の `@null_fn` は何もしない関数（`rts` だけ。share/runtime.asm）。戻り値の無い関数の型なら、引数・fastcall・farfn に
+よらずどれにでも入る（`ppu.irq_setup = @null_fn;`。型は `null` と同じく文脈から、無ければ `fn():void`）。呼ぶ側が引数を積み、
+呼び出しの後でレジスタを戻すので、`rts` だけでどの型としても呼べる。戻り値のある型はエラー、直接の呼び出し
+`@null_fn();` もエラー（何もしないので消す）。
+
 fc 3 の `switch` は case / default ごとにスコープを作る（case の中で宣言した変数は、ほかの case と switch の後ろからは
 見えない。fc 2 は囲むスコープに宣言していた。`fcc migrate` は書き換えないので、そう使っていたソースは fc 3 でエラーに
 なる。宣言を switch の前に移す）。`fallthrough;` を case の最後の文に書くと、次の case（最後の case なら default）の本体へ

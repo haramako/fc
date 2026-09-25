@@ -161,3 +161,18 @@ func (h *Hlc) stdioModule(builtin string) *ir.ModuleInterface {
 	}
 	return m.Interface()
 }
+
+// nullFnSymbol は @null_fn のシンボル (share/runtime.asm の rts だけの関数)。
+const nullFnSymbol = "__fc_null_fn"
+
+// nullFn は型 t (戻り値の無い関数の型。引数・fastcall・farfn は問わない) の @null_fn。呼ぶ側が引数を積み、呼び出しの後に
+// レジスタを戻すので (呼び先は引数を片付けない)、rts だけでどの型としても呼べる。戻り値のある型は値が不定になるのでエラー。
+func (h *Hlc) nullFn(t *types.Type) *ir.Value {
+	if t.Kind != types.Func {
+		panic(&diag.Error{Msg: fmt.Sprintf("@null_fn cannot be used as %s (it is a function that does nothing)", t)})
+	}
+	if t.Base.Kind != types.Void {
+		panic(&diag.Error{Msg: fmt.Sprintf("@null_fn cannot be used as %s: it returns nothing (only fn(...):void)", t)})
+	}
+	return ir.NewSymbolLiteral("", t, nullFnSymbol)
+}

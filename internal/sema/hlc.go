@@ -1167,6 +1167,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	case cNull:
 		return &cexpr{kind: cNull} // 型が決まるまで保留 (withExpected)
 
+	case cNullFn:
+		return c // @null_fn (型が決まるまで保留)
+
 	case cIdent:
 		if h.caseDecls[c.name] && h.scope.Find(c.name, true) == nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s not found (in fc 3 a variable declared in a switch case is visible only in that case; declare it before the switch)", c.name)})
@@ -1799,6 +1802,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	case cNull:
 		panic(&diag.Error{Msg: "null needs a context that gives the pointer type (assignment, comparison, argument, or `null as *T`)"})
 
+	case cNullFn:
+		r = h.nullFn(h.prog.Types.Func(nil, h.prog.Types.Void(), false))
+
 	case cOp:
 		switch e.op {
 
@@ -1932,6 +1938,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = rr
 
 		case opCall:
+			if e.args[0].kind == cNullFn {
+				panic(&diag.Error{Msg: "@null_fn does nothing; remove the call (it is a value for function pointers)"})
+			}
 			lmdV := h.rval(e.args[0])
 			args := e.args[1:]
 			if ir.ValType(lmdV).Kind == types.Macro {

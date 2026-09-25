@@ -41,13 +41,12 @@ var locked:u8;
 
 var on_wait_vsync:fn():void;
 
-function null_func():void {}
 
 public function init():void
 {
-	irq_setup = null_func;
-	on_vsync = null_func;
-	on_wait_vsync = null_func;
+	irq_setup = @null_fn;
+	on_vsync = @null_fn;
+	on_wait_vsync = @null_fn;
 	locked = 1;
 }
 

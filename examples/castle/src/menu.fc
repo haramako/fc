@@ -76,7 +76,7 @@ public function start():void
 		ppu.wait_vsync();
 	}
 
-	ppu.irq_setup = ppu.null_func;
+	ppu.irq_setup = @null_fn;
 	ppu.wait_vsync();
 	ppu.lock();
 	mmc3.set_cbank(0, old_cbank0);

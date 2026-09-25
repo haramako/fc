@@ -152,7 +152,7 @@ public function start():void
 		}
 		if (scroll_dir != -1) {
 			@asm("sei");
-			ppu.irq_setup = ppu.null_func;
+			ppu.irq_setup = @null_fn;
 			subtext.subtext_stat = 0;
 			@asm("cli");
 

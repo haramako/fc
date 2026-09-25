@@ -36,7 +36,7 @@ public function begin():void
 
 public function commit():void
 {
-	*@bitcast(*fn():void, &buf[buf_head]) = ppu.null_func;
+	*@bitcast(*fn():void, &buf[buf_head]) = @null_fn;
 	buf_head += 2;
 	var old_buf_start = buf_start;
 	buf_start = 64 - buf_start;
