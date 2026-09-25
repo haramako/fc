@@ -1,41 +1,41 @@
-#fc 2
+#fc 3
 use ppu;
 
-public var anim:int;
-public var anim_count:int;
-public var giff:int8;
-public var giff16:int8;
+public var anim:u8;
+public var anim_count:u8;
+public var giff:u8;
+public var giff16:u8;
 
-public var my_stat:int;
-public var my_muteki:int;
-public var my_muteki_count:int;
-public var my_bang:int;
-public var my_x:int;
-public var my_y:int;
-var my_bang_count:int;
-public var my_wait:int;
+public var my_stat:u8;
+public var my_muteki:u8;
+public var my_muteki_count:u8;
+public var my_bang:u8;
+public var my_x:u8;
+public var my_y:u8;
+var my_bang_count:u8;
+public var my_wait:u8;
 
 public const MY_BUL_MAX = 8;
-public var my_bul_type:[MY_BUL_MAX]int;
-public var my_bul_x:[MY_BUL_MAX]int;
-public var my_bul_y:[MY_BUL_MAX]int;
-public var my_bul_vx:[MY_BUL_MAX]sint8;
-public var my_bul_vy:[MY_BUL_MAX]sint8;
-public var my_bul_idx:int;
+public var my_bul_type:[MY_BUL_MAX]u8;
+public var my_bul_x:[MY_BUL_MAX]u8;
+public var my_bul_y:[MY_BUL_MAX]u8;
+public var my_bul_vx:[MY_BUL_MAX]i8;
+public var my_bul_vy:[MY_BUL_MAX]i8;
+public var my_bul_idx:u8;
 
-var dout:int; // 未使用 (以前は ZP $20 の固定番地だったが fc の領域と重なる)
+var dout:u8; // 未使用 (以前は ZP $20 の固定番地だったが fc の領域と重なる)
 
-public const PALLET:[32]int = [0x0f, 0x27, 0x38, 0x30, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13,
+public const PALLET:[32]u8 = [0x0f, 0x27, 0x38, 0x30, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13,
 	0x19, 0x0b, 0x2b, 0x30, 0x0f, 0x04, 0x26, 0x36, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13];
 
 public const GIFF_TABLE = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
 
-public function outside(x:int, y:int):int
+public function outside(x:u8, y:u8):u8
 {
 	return (x < 8 || x > 240 || y < 8 || y > 240);
 }
 
-public function put_sprite2x2(x:int, y:int, pat:int, mode:int):void
+public function put_sprite2x2(x:u8, y:u8, pat:u8, mode:u8):void
 {
 	ppu.sprite(x, y, pat, mode);
 	ppu.sprite(x + 8, y, pat + 1, mode);

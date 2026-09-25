@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 3);
+#fc 3
+@(bank: 3);
 use * from en;
 public use * from graphics;
 use ppu;
@@ -12,16 +12,16 @@ use event2;
 /*********************************************
  * ダミー
  *********************************************/
-public function none_new(i:int):void {}
-public function none_process(i:int):void {}
+public function none_new(i:u8):void {}
+public function none_process(i:u8):void {}
 
 /*********************************************
  * ウィルオーウィスプ
  *********************************************/
 
-public function wow_new(i:int):void {}
+public function wow_new(i:u8):void {}
 
-public function wow_process(i:int):void
+public function wow_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -75,7 +75,7 @@ public function wow_process(i:int):void
 /*********************************************
  * エレベーター
  *********************************************/
-public function elevator_new(i:int):void
+public function elevator_new(i:u8):void
 {
 	if (p2[i] == 0) {
 		p2[i] = 8;
@@ -85,7 +85,7 @@ public function elevator_new(i:int):void
 	}
 }
 
-public function elevator_process(i:int):void
+public function elevator_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -96,7 +96,7 @@ public function elevator_process(i:int):void
 	while (n) {
 		var vx = DIR_VX[dir];
 		var vy = DIR_VY[dir];
-		var size:int;
+		var size:u8;
 		if (p3[i] == 1) {
 			size = vx * 8;
 		} else {
@@ -127,9 +127,9 @@ public function elevator_process(i:int):void
 /*********************************************
  * 水の中の泡
  *********************************************/
-public function bubble_new(i:int):void {}
+public function bubble_new(i:u8):void {}
 
-public function bubble_process(i:int):void
+public function bubble_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -150,9 +150,9 @@ public function bubble_process(i:int):void
 /*********************************************
  * 水に入った時の飛沫
  *********************************************/
-public function splash_new(i:int):void {}
+public function splash_new(i:u8):void {}
 
-public function splash_process(i:int):void
+public function splash_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -184,7 +184,7 @@ public function splash_process(i:int):void
  * p4: 状態
  * p5: vy;
  *********************************************/
-public function block_new(i:int):void
+public function block_new(i:u8):void
 {
 	/*
 	MEMO: バンクの関係で使えないので、my.do_grobe()にベタ書きしてる
@@ -194,7 +194,7 @@ public function block_new(i:int):void
 	*/
 }
 
-public function block_process(i:int):void
+public function block_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -261,7 +261,7 @@ public function block_process(i:int):void
 /*********************************************
  * カエル
  *********************************************/
-public function frog_new(i:int):void
+public function frog_new(i:u8):void
 {
 	if (p3[i] == 0) {
 		p3[i] = 32;
@@ -270,7 +270,7 @@ public function frog_new(i:int):void
 	p5[i] = 30;
 }
 
-public function frog_process(i:int):void
+public function frog_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -279,7 +279,7 @@ public function frog_process(i:int):void
 	var speed = p2[i];
 	var pow = p3[i];
 	var state = p4[i];
-	var t:sint = p5[i];
+	var t:i8 = p5[i];
 	var anim = 0;
 
 	switch (state) {
@@ -333,7 +333,7 @@ public function frog_process(i:int):void
 /*********************************************
  * クッキー
  *********************************************/
-public function cookie_new(i:int):void
+public function cookie_new(i:u8):void
 {
 	if (p3[i] == 0) {
 		p3[i] = 2;
@@ -342,7 +342,7 @@ public function cookie_new(i:int):void
 	p5[i] = py[i];
 }
 
-public function cookie_process(i:int):void
+public function cookie_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -366,18 +366,18 @@ public function cookie_process(i:int):void
 /*********************************************
  * 宝箱
  *********************************************/
-function has_coin(i:int):int
+function has_coin(i:u8):u8
 {
 	return my.map_coin[i / 8] & BIT_MASK[i % 8];
 }
 
-function set_coin(i:int):void
+function set_coin(i:u8):void
 {
 	my.map_coin[i / 8] = my.map_coin[i / 8] | BIT_MASK[i % 8];
 	my.coin_num += 1;
 }
 
-public function chest_new(i:int):void
+public function chest_new(i:u8):void
 {
 	var item_id = p1[i];
 	var coin_id = p2[i];
@@ -392,7 +392,7 @@ public function chest_new(i:int):void
 	}
 }
 
-public function chest_process(i:int):void
+public function chest_process(i:u8):void
 {
 	var item_id = p1[i];
 	var x = px[i];
@@ -411,7 +411,7 @@ public function chest_process(i:int):void
 	}
 }
 
-function chest_event():int
+function chest_event():u8
 {
 	var i = my.touch_event_p1;
 	switch (my.touch_event_stat) {
@@ -496,9 +496,9 @@ function chest_get_item():void
 /*********************************************
  * ランプの灯火
  *********************************************/
-public function lamp_new(i:int):void {}
+public function lamp_new(i:u8):void {}
 
-public function lamp_process(i:int):void
+public function lamp_process(i:u8):void
 {
 	var slot = pslot[i];
 	if (my.items[ITEM_ID_LAMP]) {
@@ -511,9 +511,9 @@ public function lamp_process(i:int):void
 /*********************************************
  * ガスさん
  *********************************************/
-public function gas_new(i:int):void {}
+public function gas_new(i:u8):void {}
 
-public function gas_process(i:int):void
+public function gas_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -577,7 +577,7 @@ public function gas_process(i:int):void
  * ゴースト
  *********************************************/
 
-public function ghost_new(i:int):void
+public function ghost_new(i:u8):void
 {
 	if (p1[i] == 0) {
 		p1[i] = 30;
@@ -586,7 +586,7 @@ public function ghost_new(i:int):void
 	p4[i] = math.rand() / 2;
 }
 
-public function ghost_process(i:int):void
+public function ghost_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -594,7 +594,7 @@ public function ghost_process(i:int):void
 	var wait = p4[i];
 	var angle = p5[i];
 
-	var dy:int;
+	var dy:u8;
 	var dir = 0;
 	if ((angle - 64) < 128) {
 		dir = 64;
@@ -648,12 +648,12 @@ public function ghost_process(i:int):void
  * スイッチ
  *********************************************/
 
-public function switch_new(i:int):void
+public function switch_new(i:u8):void
 {
 	p2[i] = py[i];
 }
 
-public function switch_process(i:int):void
+public function switch_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -681,13 +681,13 @@ public function switch_process(i:int):void
  * 開閉扉スイッチ
  *********************************************/
 
-public function flaged_door_new(i:int):void
+public function flaged_door_new(i:u8):void
 {
 	p2[i] = my.flags[p1[i]];
 	p3[i] = 1;
 }
 
-public function flaged_door_process(i:int):void
+public function flaged_door_process(i:u8):void
 {
 	var x = px[i];
 	var y = py[i];
@@ -707,7 +707,7 @@ public function flaged_door_process(i:int):void
 	}
 }
 
-function flaged_door_redraw(x:int, y:int, flag:int):void
+function flaged_door_redraw(x:u8, y:u8, flag:u8):void
 {
 	if (flag) {
 		bg.put2(x / 16, y / 16, bg.blank_cell_by_door, bg.tile_pal[bg.blank_cell_by_door]);
@@ -722,12 +722,12 @@ function flaged_door_redraw(x:int, y:int, flag:int):void
  * 無限湧きポイント
  *********************************************/
 
-public function portal_new(i:int):void
+public function portal_new(i:u8):void
 {
 	p5[i] = 0;
 }
 
-public function portal_process(i:int):void
+public function portal_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -768,12 +768,12 @@ public function portal_process(i:int):void
  * チェックポイント
  *********************************************/
 
-public function checkpoint_new(i:int):void
+public function checkpoint_new(i:u8):void
 {
 	p4[i] = 0;
 }
 
-public function checkpoint_process(i:int):void
+public function checkpoint_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -810,7 +810,7 @@ public function checkpoint_process(i:int):void
 	p5[i] = wait;
 }
 
-function checkpoint_event():int
+function checkpoint_event():u8
 {
 	var i = my.touch_event_p1;
 	var x = px[i];
@@ -850,12 +850,12 @@ function checkpoint_event():int
 /*********************************************
  * チェックポイントのスロット未使用版
  *********************************************/
-public function checkpoint_noslot_new(i:int):void
+public function checkpoint_noslot_new(i:u8):void
 {
 	checkpoint_new(i);
 }
 
-public function checkpoint_noslot_process(i:int):void
+public function checkpoint_noslot_process(i:u8):void
 {
 	checkpoint_process(i);
 }

@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 16);
+#fc 3
+@(bank: 16);
 
 use * from common;
 use * from my;
@@ -10,7 +10,7 @@ use sound;
 public function process():void
 {
 	// 水の中の処理
-	var bi:int;
+	var bi:u8;
 	var in_water = get_cell_type_with_blank_cell(x, y) & bg.TYPE_WATER;
 	if (prev_in_water ^ in_water) {
 		// 水に飛び込んだ飛沫を表示
@@ -23,7 +23,7 @@ public function process():void
 	}
 	prev_in_water = in_water;
 
-	var hit:int;
+	var hit:u8;
 	switch (state) {
 	case STATE_STAND, STATE_ON_ENEMY, STATE_ON_ELEVATOR:
 		// 地上
@@ -501,7 +501,7 @@ public function process():void
 	}
 }
 
-function get_cell(x:int, y:int):int
+function get_cell(x:u8, y:u8):u8
 {
 	if (y >= 240) {
 		return 0;
@@ -518,12 +518,12 @@ function get_cell(x:int, y:int):int
 	}
 }
 
-function get_cell_type(x:int, y:int):int
+function get_cell_type(x:u8, y:u8):u8
 {
 	return bg.tile_type[bg.data[(y / 16) * 16 + x / 16]];
 }
 
-function get_cell_type_with_blank_cell(x:int, y:int):int
+function get_cell_type_with_blank_cell(x:u8, y:u8):u8
 {
 	var cell = bg.data[(y / 16) * 16 + x / 16];
 	if (cell < 32 && bg.BLANK_CELL[cell]) {
@@ -532,14 +532,14 @@ function get_cell_type_with_blank_cell(x:int, y:int):int
 	return bg.tile_type[cell];
 }
 
-function get_cell_kind(x:int, y:int):int
+function get_cell_kind(x:u8, y:u8):u8
 {
 	return bg.data[(y / 16) * 16 + x / 16];
 }
 
-function check_on_enemy():int
+function check_on_enemy():u8
 {
-	var i:int;
+	var i:u8;
 	for (i = 0; i < en.cur_max; i++) {
 		var et = en.type[i];
 		if (et) {
@@ -574,9 +574,9 @@ function check_on_enemy():int
 	return -1;
 }
 
-function check_on_elevator(i:int):int
+function check_on_elevator(i:u8):u8
 {
-	var size:int;
+	var size:u8;
 	if (en.p3[i] == 1) {
 		size = 14;
 	} else {
@@ -590,7 +590,7 @@ function check_on_elevator(i:int):int
 	}
 }
 
-function check_on_box_elevator():int
+function check_on_box_elevator():u8
 {
 	var i = boxelev.box_idx;
 	if (i == -1 || boxelev.box_area[i] != bg.cur_area) {
@@ -612,7 +612,7 @@ function do_grobe():void
 {
 	var anim_pushing = 0;
 	var pushing = 0;
-	var dir:int;
+	var dir:u8;
 	if (vx > 0) {
 		dir = DIR_RIGHT;
 	} else {
@@ -626,7 +626,7 @@ function do_grobe():void
 		if (items[ITEM_ID_GROBE]) {
 			var upper_cell = bg.cell(bx, y - 16);
 			var next_cell_type = bg.cell_type(bx + DIR_VX[dir] * 16, y);
-			var cx:int = (bx as int) / 16;
+			var cx:u8 = (bx as u8) / 16;
 			var outside = (cx <= 0) || (cx >= 15);
 			if (!outside && (upper_cell != bg.TILE_MOVABLE_BLOCK) && ((next_cell_type & bg.TYPE_WALL) == 0)) {
 				pushing = 1;
@@ -666,7 +666,7 @@ function do_grobe():void
 	}
 }
 
-function check_block_box_elevator(r:int):int
+function check_block_box_elevator(r:u8):u8
 {
 	if (vy > 0) {
 		return r;
@@ -681,7 +681,7 @@ function check_block_box_elevator(r:int):int
 	return r;
 }
 
-function check_block():int
+function check_block():u8
 {
 	var r = 0;
 
@@ -692,7 +692,7 @@ function check_block():int
 	}
 
 	// 上方向
-	var i:int;
+	var i:u8;
 	var head_y = y - 5;
 	var mod16 = head_y % 16;
 	for (i = 0; i < 2; i++) {
@@ -721,7 +721,7 @@ function check_block():int
 	return r;
 }
 
-function create_splash(x:int, y:int):void
+function create_splash(x:u8, y:u8):void
 {
 	var bi = en.new();
 	en.type[bi] = en.TYPE_SPLASH;
@@ -730,7 +730,7 @@ function create_splash(x:int, y:int):void
 	en.p1[bi] = 8;
 }
 
-function create_bubble(x:int, y:int):void
+function create_bubble(x:u8, y:u8):void
 {
 	var bi = en.new();
 	en.type[bi] = en.TYPE_BUBBLE;
@@ -800,7 +800,7 @@ function process_anchor():void
 	}
 }
 
-function check_over(_x:int, _y:int, size:int):int
+function check_over(_x:u8, _y:u8, size:u8):u8
 {
 	if (math.abs(_x - x) < size && math.abs(_y - y) < size && state != STATE_DYING && state != STATE_DIE) {
 		return 1;

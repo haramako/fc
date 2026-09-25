@@ -1,4 +1,4 @@
-#fc 2
+#fc 3
 use * from common;
 use mem;
 use my;
@@ -9,8 +9,8 @@ const IDX_DEBUG_FLAG = 2;
 const IDX_LAST_CHECKPOINT = 3;
 const IDX_COIN_NUM = 4;
 
-public var exists:int;
-public var data:[512]int options(segment: "BSS_SAVEDATA");
+public var exists:u8;
+public var data:[512]u8 @(segment: "BSS_SAVEDATA");
 
 public function init():void
 {

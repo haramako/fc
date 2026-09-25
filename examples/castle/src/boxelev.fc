@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 14);
+#fc 3
+@(bank: 14);
 
 use * from common;
 use bg;
@@ -7,23 +7,23 @@ use en;
 use my;
 use * from boxelev_data;
 
-public var box_area:[MAX]int;
-public var box_active:[MAX]int;
-public var box_stat:[MAX]int;
-public var box_x:[MAX]int;
-public var box_y:[MAX]int;
-public var box_px:[MAX]int;
-public var box_py:[MAX]int;
-var box_counter:[MAX]int;
-var box_over:[MAX]int;
+public var box_area:[MAX]u8;
+public var box_active:[MAX]u8;
+public var box_stat:[MAX]u8;
+public var box_x:[MAX]u8;
+public var box_y:[MAX]u8;
+public var box_px:[MAX]u8;
+public var box_py:[MAX]u8;
+var box_counter:[MAX]u8;
+var box_over:[MAX]u8;
 
-public var box_running:int; // 一つ以上の箱エレベーターがアクティブかどうか
-public var box_idx:int; // 現在スクリーン内にある箱エレベーター
-public var box_scrollable:int; // スクリーン内の箱エレベーターがいまスクロール可能な状態かどうか
+public var box_running:u8; // 一つ以上の箱エレベーターがアクティブかどうか
+public var box_idx:u8; // 現在スクリーン内にある箱エレベーター
+public var box_scrollable:u8; // スクリーン内の箱エレベーターがいまスクロール可能な状態かどうか
 
 public function init():void
 {
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MAX; i++) {
 		box_x[i] = BOX_INIT_X[i];
 		if (BOX_INIT_POS[i] == 0) {
@@ -42,11 +42,11 @@ public function init():void
  * fetch_area時の処理.
  * 画面内に箱エレベーターがあるか、アクティブな箱エレベーターがあるかを確認する
  */
-public function on_fetch_area():void options(segment: 'common') // endingからも呼ばれるため、commonセグメントにする
+public function on_fetch_area():void @(segment: 'common') // endingからも呼ばれるため、commonセグメントにする
 {
 	box_running = 0;
 	box_idx = -1;
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MAX; i++) {
 		if (box_area[i] == bg.cur_area) {
 			// 画面内にある
@@ -65,7 +65,7 @@ public function process():void
 		return;
 	}
 
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MAX; i++) {
 		var idx = box_idx == i;
 		if (idx || box_active[i]) {
@@ -77,7 +77,7 @@ public function process():void
 /**
  * 箱エレベーターの1フレーム分の処理
  */
-function process_one(i:int):void
+function process_one(i:u8):void
 {
 	var stat = box_stat[i];
 	var counter = box_counter[i];
@@ -153,7 +153,7 @@ function process_one(i:int):void
 	process_inscreen(i);
 }
 
-function process_inscreen(i:int):void
+function process_inscreen(i:u8):void
 {
 	var stat = box_stat[i];
 	var x = box_x[i];
@@ -204,7 +204,7 @@ function process_inscreen(i:int):void
 	box_y[i] = y;
 }
 
-function check_over(x:int, y:int, size:int):int
+function check_over(x:u8, y:u8, size:u8):u8
 {
 	if (math.abs(x - my.x) < size && math.abs(y - my.y) < size && my.state != my.STATE_DYING && my.state != my.STATE_DIE) {
 		return 1;
@@ -213,7 +213,7 @@ function check_over(x:int, y:int, size:int):int
 	}
 }
 
-function draw_box_elevator(x:int, y:int):void
+function draw_box_elevator(x:u8, y:u8):void
 {
 	gr_sprite2(x - 8, y - 8, 68, 0);
 	gr_sprite2(x + 8, y - 8, 68, 64);

@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 10, bss: "BSS_EX");
+#fc 3
+@(bank: 10, bss: "BSS_EX");
 
 use * from common;
 use event;
@@ -16,17 +16,17 @@ use irqcmd;
 //=================================================
 
 struct MarchantEvent {
-	kind:uint8;
+	kind:u8;
 
-	text:*uint8;
-	idx_base:uint8;
+	text:*u8;
+	idx_base:u8;
 }
 
 alias m:MarchantEvent = event.shared_work;
 
-const MARCHANT_PALETTE:[]int = incbin("../res/images/marchant.nespal");
-const MARCHANT_BG:[]int = incbin("../res/images/marchant.bg");
-const MARCHANT_TILEPAL:[]int = incbin("../res/images/marchant.tilepal");
+const MARCHANT_PALETTE:[]u8 = @incbin("../res/images/marchant.nespal");
+const MARCHANT_BG:[]u8 = @incbin("../res/images/marchant.bg");
+const MARCHANT_TILEPAL:[]u8 = @incbin("../res/images/marchant.tilepal");
 
 const ITEM_IDS = [
 	ITEM_ID_GAS_MASK, ITEM_ID_COMPASS, ITEM_ID_WATCH,
@@ -46,13 +46,13 @@ const MARCHANT_MEMORY_ID = [50, 51, 52];
 // 外部インターフェース
 //=================================================
 
-public function event_marchant(kind:uint8):void
+public function event_marchant(kind:u8):void
 {
 	event.event_func = run_marchant;
 	m.kind = kind;
 }
 
-public function is_sold_out(kind:int):bool
+public function is_sold_out(kind:u8):bool
 {
 	var idx_base = kind * 3;
 	for (var i = 0; i < 3; i++) {
@@ -66,7 +66,7 @@ public function is_sold_out(kind:int):bool
 	return true;
 }
 
-public function get_memory_id(kind:uint8):uint8
+public function get_memory_id(kind:u8):u8
 {
 	return MARCHANT_MEMORY_ID[kind];
 }
@@ -196,10 +196,10 @@ function setup_irqcmd():void
 // 商人のバストアップを描画する
 function draw_marchant_in_lock():void
 {
-	for (var i:uint16 = 0; i < 8; i++) {
+	for (var i:u16 = 0; i < 8; i++) {
 		ppu.put_in_lock(ppu.pos(8, 4 + i) + 0x400, &MARCHANT_BG[i * 16], 16);
 	}
-	for (var i:int16 = 0; i < 2; i++) {
+	for (var i:u16 = 0; i < 2; i++) {
 		ppu.put_in_lock(0x27C0 + (1 + i) * 8 + 2, &MARCHANT_TILEPAL[i * 4], 4);
 	}
 }
@@ -229,7 +229,7 @@ function draw_all():void
 	}
 }
 
-function draw_message(str:*uint8):void
+function draw_message(str:*u8):void
 {
 	mem.strcpy(m.text, str);
 	text.talk_set(0, ppu.pos(4, 14) + 0x400, m.text, 24, 2);
@@ -245,10 +245,10 @@ function draw_money():void
 	ppu.wait_vsync_with_flag(2);
 }
 
-function draw_item(i:int):void
+function draw_item(i:u8):void
 {
 	var item_id = ITEM_IDS[m.idx_base + i];
-	var line:*uint8, tail:*uint8;
+	var line:*u8, tail:*u8;
 
 	line = ppu.alloc(32);
 	fs.copy(line, fs.ITEM_DESC_NAME_BASE + item_id);
@@ -267,7 +267,7 @@ function draw_item(i:int):void
 	}
 }
 
-function draw_item_desc(item_id:int):void
+function draw_item_desc(item_id:u8):void
 {
 	var line = ppu.alloc(64);
 	fs.copy(line, fs.ITEM_DESC_BASE + item_id);

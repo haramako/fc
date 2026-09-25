@@ -1,23 +1,23 @@
-#fc 2
+#fc 3
 use * from common;
 
-var buf_start:int options(segment: "BSS_EX", volatile: true); // bufの使用領域。 0: top(buf[0..63]), 64: bottom(buf[64..127])
-var buf_head:int options(segment: "BSS_EX");
-var buf:[128]int options(segment: "irqcmd_bss");
-var tmp0:int options(segment: "BSS_EX");
-var tmp1:int options(segment: "BSS_EX");
-var tmp2:int options(segment: "BSS_EX");
-var tmp3:int options(segment: "BSS_EX");
+var buf_start:u8 @(segment: "BSS_EX", volatile); // bufの使用領域。 0: top(buf[0..63]), 64: bottom(buf[64..127])
+var buf_head:u8 @(segment: "BSS_EX");
+var buf:[128]u8 @(segment: "irqcmd_bss");
+var tmp0:u8 @(segment: "BSS_EX");
+var tmp1:u8 @(segment: "BSS_EX");
+var tmp2:u8 @(segment: "BSS_EX");
+var tmp3:u8 @(segment: "BSS_EX");
 
-include("irqcmd_irq.asm");
+@include("irqcmd_irq.asm");
 
 public function irq_setup():void;
 
-function irq_command_wait_line():void options(symbol: "irq_command_wait_line");
+function irq_command_wait_line():void @(symbol: "irq_command_wait_line");
 function cmd_begin_screen():void;
-function irq_command_cbank_bg():void options(symbol: "irq_command_cbank_bg");
-function irq_command_scroll():void options(symbol: "irq_command_scroll");
-function irq_command_screen():void options(symbol: "irq_command_screen");
+function irq_command_cbank_bg():void @(symbol: "irq_command_cbank_bg");
+function irq_command_scroll():void @(symbol: "irq_command_scroll");
+function irq_command_screen():void @(symbol: "irq_command_screen");
 
 // buf は 2 面のダブルバッファ: buf_start の面を IRQ が読み、もう一方の面 (buf_head) に次のフレームのコマンドを書く。
 // commit で入れ替える。両方とも WRAM (BSS_EX) なので電源投入時の値は不定 (QuickNES は 0xFF、実機は前回の残り)。
@@ -36,23 +36,23 @@ public function begin():void
 
 public function commit():void
 {
-	*bitcast<*fn():void>(&buf[buf_head]) = ppu.null_func;
+	*@bitcast(*fn():void, &buf[buf_head]) = ppu.null_func;
 	buf_head += 2;
 	var old_buf_start = buf_start;
 	buf_start = 64 - buf_start;
 	buf_head = old_buf_start;
 }
 
-public function add_wait_line(irq:int):void
+public function add_wait_line(irq:u8):void
 {
-	*bitcast<*fn():void>(&buf[buf_head]) = irq_command_wait_line;
+	*@bitcast(*fn():void, &buf[buf_head]) = irq_command_wait_line;
 	buf[buf_head + 2] = irq;
 	buf_head += 3;
 }
 
-public function add_begin_screen(irq:uint, x:int, y:int, ppu_ctrl:int, cbank0:int, cbank1:int):void
+public function add_begin_screen(irq:u8, x:u8, y:u8, ppu_ctrl:u8, cbank0:u8, cbank1:u8):void
 {
-	*bitcast<*fn():void>(&buf[buf_head]) = cmd_begin_screen;
+	*@bitcast(*fn():void, &buf[buf_head]) = cmd_begin_screen;
 	buf[buf_head + 2] = irq;
 	buf[buf_head + 3] = x;
 	buf[buf_head + 4] = y;
@@ -62,18 +62,18 @@ public function add_begin_screen(irq:uint, x:int, y:int, ppu_ctrl:int, cbank0:in
 	buf_head += 8;
 }
 
-public function add_cbank_bg(irq:uint, cbank0:int, cbank1:int):void
+public function add_cbank_bg(irq:u8, cbank0:u8, cbank1:u8):void
 {
-	*bitcast<*fn():void>(&buf[buf_head]) = irq_command_cbank_bg;
+	*@bitcast(*fn():void, &buf[buf_head]) = irq_command_cbank_bg;
 	buf[buf_head + 2] = irq;
 	buf[buf_head + 3] = cbank0;
 	buf[buf_head + 4] = cbank1;
 	buf_head += 5;
 }
 
-public function add_scroll(irq:uint, x:int, y:int, nametable:int, ppu_ctrl:int):void
+public function add_scroll(irq:u8, x:u8, y:u8, nametable:u8, ppu_ctrl:u8):void
 {
-	*bitcast<*fn():void>(&buf[buf_head]) = irq_command_scroll;
+	*@bitcast(*fn():void, &buf[buf_head]) = irq_command_scroll;
 	buf[buf_head + 2] = irq;
 	make_scroll_reg(x, y - 1, nametable);
 	buf[buf_head + 3] = tmp0;
@@ -84,9 +84,9 @@ public function add_scroll(irq:uint, x:int, y:int, nametable:int, ppu_ctrl:int):
 	buf_head += 8;
 }
 
-public function add_screen(irq:uint, x:int, y:int, nametable:int, ppu_ctrl:int, ppu_mask:int, cbank0:int, cbank1:int):void
+public function add_screen(irq:u8, x:u8, y:u8, nametable:u8, ppu_ctrl:u8, ppu_mask:u8, cbank0:u8, cbank1:u8):void
 {
-	*bitcast<*fn():void>(&buf[buf_head]) = irq_command_screen;
+	*@bitcast(*fn():void, &buf[buf_head]) = irq_command_screen;
 	buf[buf_head + 2] = irq;
 	make_scroll_reg(x, y - 1, nametable);
 	buf[buf_head + 3] = tmp0;
@@ -102,7 +102,7 @@ public function add_screen(irq:uint, x:int, y:int, nametable:int, ppu_ctrl:int, 
 
 // scroll registers for a scanline split (see irqcmd_irq.asm for the bit layout): tmp0 = PPU_ADDR (nametable),
 // tmp1 = PPU_SCROLL (y), tmp2 = x, tmp3 = PPU_ADDR (coarse y / x)
-function make_scroll_reg(x:int, y:int, nametable:int):void
+function make_scroll_reg(x:u8, y:u8, nametable:u8):void
 {
 	tmp0 = nametable << 2;
 	tmp1 = y;

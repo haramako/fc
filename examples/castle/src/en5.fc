@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 11);
+#fc 3
+@(bank: 11);
 use my;
 use * from en;
 use boxelev;
@@ -15,7 +15,7 @@ use * from graphics;
  * p3: 回転の大きさ(3=標準で小さい値ほど大きな円を描く)
  *********************************************/
 
-public function cookiebar_new(i:int):void
+public function cookiebar_new(i:u8):void
 {
 	if (p3[i] == 0) {
 		p3[i] = 6;
@@ -24,7 +24,7 @@ public function cookiebar_new(i:int):void
 	p5[i] = py[i];
 }
 
-public function cookiebar_process(i:int):void
+public function cookiebar_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -39,9 +39,9 @@ public function cookiebar_process(i:int):void
 
 	var rx = math.cos(angle) / 8;
 	var ry = math.sin(angle) / 8;
-	var sx:int;
-	var sy:int;
-	var n:int;
+	var sx:u8;
+	var sy:u8;
+	var n:u8;
 	var spr = SPR_SLOT[slot] + SPR_COOKIEBAR;
 	var pal = PAL_SLOT[slot];
 	for (n = 1; n < size; n++) {
@@ -54,7 +54,7 @@ public function cookiebar_process(i:int):void
 	p1[i] = angle;
 }
 
-function cookiebar_checkhit(x:int, y:int):void
+function cookiebar_checkhit(x:u8, y:u8):void
 {
 	if (math.abs(x - my.x) < 4 && math.abs(y - my.y) < 4 && my.state != my.STATE_DYING && my.state != my.STATE_DIE) {
 		my.state = my.STATE_DYING;
@@ -71,7 +71,7 @@ function cookiebar_checkhit(x:int, y:int):void
  * p7: 次のしっぽがでるまでのフレーム
  *********************************************/
 
-public function zigzag_new(i:int):void
+public function zigzag_new(i:u8):void
 {
 	py[i] = py[i] - 8;
 	if (p2[i] == 0)
@@ -85,7 +85,7 @@ const ZIGZAG_VY = [-1, 1, 1, -1];
 const ZIGZAG_BOUND_Y = [1, 0, 3, 2];
 const ZIGZAG_BOUND_X = [3, 2, 1, 0];
 
-public function zigzag_process(i:int):void
+public function zigzag_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -149,9 +149,9 @@ public function zigzag_process(i:int):void
  * ジグザグ（しっぽ）
  * p1: オーナーのenemy idx
  *********************************************/
-public function zigzag_tail_new(i:int):void {}
+public function zigzag_tail_new(i:u8):void {}
 
-public function zigzag_tail_process(i:int):void
+public function zigzag_tail_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -176,12 +176,12 @@ public function zigzag_tail_process(i:int):void
  * リヴァイアサンの目
  *********************************************/
 
-public function leviathan_eye_new(i:int):void
+public function leviathan_eye_new(i:u8):void
 {
 	p4[i] = math.rand();
 }
 
-public function leviathan_eye_process(i:int):void
+public function leviathan_eye_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -207,13 +207,13 @@ public function leviathan_eye_process(i:int):void
  * リヴァイアサンの腕
  *********************************************/
 
-public function leviathan_arm_new(i:int):void
+public function leviathan_arm_new(i:u8):void
 {
 	p4[i] = 0;
 	p6[i] = math.rand();
 }
 
-public function leviathan_arm_process(i:int):void
+public function leviathan_arm_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -234,7 +234,7 @@ public function leviathan_arm_process(i:int):void
 	p6[i] = count;
 }
 
-function leviathan_arm_draw(slot:int, x:int, y:int, arm_expand:int, count:int):void
+function leviathan_arm_draw(slot:u8, x:u8, y:u8, arm_expand:u8, count:u8):void
 {
 	var spr = SPR_SLOT[slot] + SPR_LIVIATHAN_ARM;
 	var dx1 = math.sin(count * 2) / 64;
@@ -270,7 +270,7 @@ function leviathan_arm_draw(slot:int, x:int, y:int, arm_expand:int, count:int):v
 const KNIGHT_JUMP_VY = [-25, -19, -16, -10, -8, -12, -16];
 const KNIGHT_JUMP_VX = [12, 12, 12, 12, 12, 10, 16];
 
-public function knight_new(i:int):void
+public function knight_new(i:u8):void
 {
 	if (p1[i] == 0)
 		p1[i] = DIR_RIGHT;
@@ -283,19 +283,19 @@ public function knight_new(i:int):void
 	p7[i] = 0;
 }
 
-public function knight_process(i:int):void
+public function knight_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
 	var dir = p1[i];
 	var speed = p2[i];
-	var vy:sint = p4[i];
+	var vy:i8 = p4[i];
 	var stat = p5[i];
 	var wait = p6[i];
 	var vx = p7[i];
-	var dx:sint = (giff + speed) / 16 * DIR_VX[dir];
-	var ground_cell:int;
+	var dx:i8 = (giff + speed) / 16 * DIR_VX[dir];
+	var ground_cell:u8;
 	var spr_anim = (anim / 16) % 2 * 4;
 
 	var spr = SPR_SLOT[slot] + SPR_KNIGHT;
@@ -303,7 +303,7 @@ public function knight_process(i:int):void
 
 	switch (stat) {
 	case 0:
-		var jump_to:sint = -1;
+		var jump_to:i8 = -1;
 		// 歩き
 		if (wait > 0) {
 			wait -= 1;
@@ -356,7 +356,7 @@ public function knight_process(i:int):void
 			vy = KNIGHT_JUMP_VY[jump_to];
 			vx = KNIGHT_JUMP_VX[jump_to];
 		} elsif (bg.cell_type(x - 5, y + 8) & bg.TYPE_WALL || bg.cell_type(x + 5, y + 8) & bg.TYPE_WALL) {
-			var nx:uint = x + DIR_VX[dir] * 8;
+			var nx:u8 = x + DIR_VX[dir] * 8;
 			if (nx < 16 || nx > 240 || bg.cell_type(nx, y - 8) & bg.TYPE_STOP) {
 				dir = 4 - dir;
 			} else {
@@ -456,14 +456,14 @@ public function knight_process(i:int):void
 	//if( check_outside(x,y) ){ type[i] = 0; }
 }
 
-function knight_search(x:int, y:int, dir:sint, no_horizontal:int):int
+function knight_search(x:u8, y:u8, dir:i8, no_horizontal:u8):u8
 {
-	var horizontal_type:int;
+	var horizontal_type:u8;
 	//return 4;
 	var i = 0;
 	var cx = x / 16;
 	var cy = y / 16;
-	var dir2:sint = dir * 2;
+	var dir2:i8 = dir * 2;
 	if (cx + dir2 <= 0)
 		return -1;
 	if (cx + dir2 >= 15)
@@ -511,7 +511,7 @@ function knight_search(x:int, y:int, dir:sint, no_horizontal:int):int
 	if (total <= 0)
 		return -1;
 
-	var n:sint = math.rand() % total;
+	var n:i8 = math.rand() % total;
 	for (i = 0; i < 7; i++) {
 		n -= temp[i];
 		if (n < 0)
@@ -521,7 +521,7 @@ function knight_search(x:int, y:int, dir:sint, no_horizontal:int):int
 	return -1;
 }
 
-function knight_check(cx:int, cy:int):int
+function knight_check(cx:u8, cy:u8):u8
 {
 	if (cy <= 0 || cy >= 15)
 		return 0;
@@ -536,13 +536,13 @@ function knight_check(cx:int, cy:int):int
  * p2: 速度
  *********************************************/
 
-public function sonic_new(i:int):void
+public function sonic_new(i:u8):void
 {
 	p5[i] = 0;
 	p6[i] = 0;
 }
 
-public function sonic_process(i:int):void
+public function sonic_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
@@ -550,9 +550,9 @@ public function sonic_process(i:int):void
 	var dir = p1[i];
 	var stat = p5[i];
 	var wait = p6[i];
-	var dx:sint;
+	var dx:i8;
 
-	var nx:uint = x + DIR_VX[dir] * 8;
+	var nx:u8 = x + DIR_VX[dir] * 8;
 	var is_hole = (bg.cell_type(nx, y + 16) & bg.TYPE_WALL) == 0;
 	var is_wall = nx < 16 || nx > 240 || (bg.cell_type(nx, y - 8) & (bg.TYPE_STOP | bg.TYPE_WALL));
 
@@ -567,7 +567,7 @@ public function sonic_process(i:int):void
 		if (is_hole || is_wall) {
 			dir = 4 - dir;
 		} else {
-			var dx:sint = (giff + 16) / 16;
+			var dx:i8 = (giff + 16) / 16;
 			if (dir == DIR_LEFT) {
 				dx = -dx;
 			}
@@ -638,18 +638,18 @@ public function sonic_process(i:int):void
 const sonic_bullet_anims = [4, 6, 6];
 const sonic_bullet_flags = [0, 0, 64];
 
-public function sonic_bullet_new(i:int):void {}
+public function sonic_bullet_new(i:u8):void {}
 
 // ローカルレジスタの使用を削減するためのダミー関数
 function reduce_local_register():void {}
 
-public function sonic_bullet_process(i:int):void
+public function sonic_bullet_process(i:u8):void
 {
 	var slot = pslot[i];
 	var x = px[i];
 	var y = py[i];
-	var vx:sint = p1[i];
-	var vy:sint = p2[i];
+	var vx:i8 = p1[i];
+	var vy:i8 = p2[i];
 	var stat = p4[i];
 
 	var dir = 1;
@@ -658,7 +658,7 @@ public function sonic_bullet_process(i:int):void
 
 	x += (vx + giff) / 16;
 	var a = (anim / 4) % 3;
-	var flag:int;
+	var flag:u8;
 
 	var spr = SPR_SLOT[slot] + SPR_SONIC_BULLET;
 	var pal = PAL_SLOT[slot];

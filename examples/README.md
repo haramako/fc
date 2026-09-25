@@ -120,3 +120,12 @@ castle の次のファイルは実プロジェクトのツールチェーン（m
 
 **現時点でどちらのプロジェクトも無修正**（実プロジェクトのファイルをそのままコピー）。
 変更が発生したら、この節に「どのファイルを・なぜ・どう変えたか」を記録すること。
+
+## fc 3 への移行（2026-09-25、ブランチ feature/v3）
+
+`miku` と `castle` の `.fc` は `fcc migrate -w` で fc 3 にした（ROM は fc 2 の golden とバイト単位で同じ）。fc 2 の版の `.fc` は
+`testdata/migrate/v2/` に残してあり、`TestMigrateExamples` がそれを migrate して ROM の一致を確かめる（migrate の規則を
+足したときに実際のプロジェクトで確かめるため）。実プロジェクトの castle（`C:\Work\castle`）はしばらく fc 2 のままなので、
+取り込み直すとき（tools/sync_examples.ps1）は取り込んだ後に `fcc migrate -w` をかけ、fc 2 の版を `testdata/migrate/v2/castle/`
+に写す。fc 3 の読み取り専用ポインタの警告（ROM の表や文字列を `*u8` の引数に渡す）が castle で 103 件、miku で 7 件出る
+（fc 3 の最初の版は警告）。

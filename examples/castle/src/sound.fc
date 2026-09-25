@@ -1,9 +1,9 @@
-#fc 2
+#fc 3
 use mmc3;
 use * from common;
 
-include("../nsd/include/nsd.inc");
-include("sound.asm");
+@include("../nsd/include/nsd.inc");
+@include("sound.asm");
 
 // 0x00d0..0x00ff, 0x6500..0x67ff までは、NSDが使用する
 
@@ -34,65 +34,65 @@ const SE_LAVA_FIXED = 11;
 public const SE_PUSH_BUTTON = 12;
 
 // BGM / SE データ (res/sound/*.mml → .o のシンボル。fc が .global を出すので asm 側の宣言は不要)
-const BGM0:[]int options(symbol: "_nsd_bgm_BGM0");
-const BGM1:[]int options(symbol: "_nsd_bgm_BGM1");
-const BGM2:[]int options(symbol: "_nsd_bgm_BGM2");
-const BGM3:[]int options(symbol: "_nsd_bgm_BGM3");
-const BGM4:[]int options(symbol: "_nsd_bgm_BGM4");
-const BGM5:[]int options(symbol: "_nsd_bgm_BGM5");
-const BGM6:[]int options(symbol: "_nsd_bgm_BGM6");
-const BGM7:[]int options(symbol: "_nsd_bgm_BGM7");
-const BGM8:[]int options(symbol: "_nsd_bgm_BGM8");
-const BGM9:[]int options(symbol: "_nsd_bgm_BGM9");
-const BGM10:[]int options(symbol: "_nsd_bgm_BGM10");
-const bgm_table:[]*int = [BGM0, BGM1, BGM2, BGM3, BGM4, BGM5, BGM6, BGM7, BGM8, BGM9, BGM10];
+const BGM0:[]u8 @(symbol: "_nsd_bgm_BGM0");
+const BGM1:[]u8 @(symbol: "_nsd_bgm_BGM1");
+const BGM2:[]u8 @(symbol: "_nsd_bgm_BGM2");
+const BGM3:[]u8 @(symbol: "_nsd_bgm_BGM3");
+const BGM4:[]u8 @(symbol: "_nsd_bgm_BGM4");
+const BGM5:[]u8 @(symbol: "_nsd_bgm_BGM5");
+const BGM6:[]u8 @(symbol: "_nsd_bgm_BGM6");
+const BGM7:[]u8 @(symbol: "_nsd_bgm_BGM7");
+const BGM8:[]u8 @(symbol: "_nsd_bgm_BGM8");
+const BGM9:[]u8 @(symbol: "_nsd_bgm_BGM9");
+const BGM10:[]u8 @(symbol: "_nsd_bgm_BGM10");
+const bgm_table:[]*u8 = [BGM0, BGM1, BGM2, BGM3, BGM4, BGM5, BGM6, BGM7, BGM8, BGM9, BGM10];
 
-const SE0:[]int options(symbol: "_nsd_se_SE0");
-const SE1:[]int options(symbol: "_nsd_se_SE1");
-const SE2:[]int options(symbol: "_nsd_se_SE2");
-const SE3:[]int options(symbol: "_nsd_se_SE3");
-const SE4:[]int options(symbol: "_nsd_se_SE4");
-const SE5:[]int options(symbol: "_nsd_se_SE5");
-const SE6:[]int options(symbol: "_nsd_se_SE6");
-const SE7:[]int options(symbol: "_nsd_se_SE7");
-const SE8:[]int options(symbol: "_nsd_se_SE8");
-const SE9:[]int options(symbol: "_nsd_se_SE9");
-const SE10:[]int options(symbol: "_nsd_se_SE10");
-const SE11:[]int options(symbol: "_nsd_se_SE11");
-const SE12:[]int options(symbol: "_nsd_se_SE12");
-const se_table:[]*int = [SE0, SE1, SE2, SE3, SE4, SE5, SE6, SE7, SE8, SE9, SE10, SE11, SE12];
+const SE0:[]u8 @(symbol: "_nsd_se_SE0");
+const SE1:[]u8 @(symbol: "_nsd_se_SE1");
+const SE2:[]u8 @(symbol: "_nsd_se_SE2");
+const SE3:[]u8 @(symbol: "_nsd_se_SE3");
+const SE4:[]u8 @(symbol: "_nsd_se_SE4");
+const SE5:[]u8 @(symbol: "_nsd_se_SE5");
+const SE6:[]u8 @(symbol: "_nsd_se_SE6");
+const SE7:[]u8 @(symbol: "_nsd_se_SE7");
+const SE8:[]u8 @(symbol: "_nsd_se_SE8");
+const SE9:[]u8 @(symbol: "_nsd_se_SE9");
+const SE10:[]u8 @(symbol: "_nsd_se_SE10");
+const SE11:[]u8 @(symbol: "_nsd_se_SE11");
+const SE12:[]u8 @(symbol: "_nsd_se_SE12");
+const se_table:[]*u8 = [SE0, SE1, SE2, SE3, SE4, SE5, SE6, SE7, SE8, SE9, SE10, SE11, SE12];
 
 // NSD の関数 (NSD.lib、cc65 の __fastcall__ 規約)。
 // NSD 本体と BGM/SE データは ROM20 (バンク 20/21) にあるので、呼ぶときは nsd_begin / nsd_end で両スロットを切り替える
-function nsd_init():void options(abi: "cc65", symbol: "_nsd_init");
-function nsd_play_bgm(bgm:*int):void options(abi: "cc65", symbol: "_nsd_play_bgm");
-function nsd_stop_bgm():void options(abi: "cc65", symbol: "_nsd_stop_bgm");
-function nsd_play_se(se:*int):void options(abi: "cc65", symbol: "_nsd_play_se");
-function nsd_set_master_volume(volume:int):void options(abi: "cc65", symbol: "_nsd_set_master_volume");
-function nsd_load(buf:*int):void options(abi: "cc65", symbol: "_nsd_load");
-function nsd_save(buf:*int):void options(abi: "cc65", symbol: "_nsd_save");
-function nsd_resume_bgm():void options(abi: "cc65", symbol: "_nsd_resume_bgm");
-function bgm_finished():int options(abi: "cc65"); // sound.asm
+function nsd_init():void @(abi: "cc65", symbol: "_nsd_init");
+function nsd_play_bgm(bgm:*u8):void @(abi: "cc65", symbol: "_nsd_play_bgm");
+function nsd_stop_bgm():void @(abi: "cc65", symbol: "_nsd_stop_bgm");
+function nsd_play_se(se:*u8):void @(abi: "cc65", symbol: "_nsd_play_se");
+function nsd_set_master_volume(volume:u8):void @(abi: "cc65", symbol: "_nsd_set_master_volume");
+function nsd_load(buf:*u8):void @(abi: "cc65", symbol: "_nsd_load");
+function nsd_save(buf:*u8):void @(abi: "cc65", symbol: "_nsd_save");
+function nsd_resume_bgm():void @(abi: "cc65", symbol: "_nsd_resume_bgm");
+function bgm_finished():u8 @(abi: "cc65"); // sound.asm
 public function main_nsd():void; // sound.asm (NMI から呼ばれる。ppu.on_vsync に設定する)
 
-var nsd_flag:int; // NSD の __flag のコピー (main_nsd が書く)
-var jingle_wait:int;
-public var jingle_finished:int;
-public var jingle_force_finished:int; // 強制的に、無限ループのjingleを終了するフラグ
+var nsd_flag:u8; // NSD の __flag のコピー (main_nsd が書く)
+var jingle_wait:u8;
+public var jingle_finished:u8;
+public var jingle_force_finished:u8; // 強制的に、無限ループのjingleを終了するフラグ
 
-var next_bgm_idx:int;
-public var cur_bgm_idx:int;
-var bgm_stat:int; // 0:待機中, 1:再生中, 2: フェードアウト中, 3..6: ジングル (process_frame 参照)
-var bgm_fade_wait:int; // フェードのウェイトカウンタ
-var bgm_fade_speed:int; // フェードの速さ
-var bgm_fade_count:int; // 現在のフェードカウント
+var next_bgm_idx:u8;
+public var cur_bgm_idx:u8;
+var bgm_stat:u8; // 0:待機中, 1:再生中, 2: フェードアウト中, 3..6: ジングル (process_frame 参照)
+var bgm_fade_wait:u8; // フェードのウェイトカウンタ
+var bgm_fade_speed:u8; // フェードの速さ
+var bgm_fade_count:u8; // 現在のフェードカウント
 
-var cur_se_priority:int;
+var cur_se_priority:u8;
 
 const NSD_BUF_SIZE = 343;
-var nsd_buf:[NSD_BUF_SIZE]int;
+var nsd_buf:[NSD_BUF_SIZE]u8;
 
-var pbank_bak0:int, pbank_bak1:int; // nsd_begin 前のバンク
+var pbank_bak0:u8, pbank_bak1:u8; // nsd_begin 前のバンク
 
 // NSD 呼び出しの前後: pbank 0/1 を ROM20 (SOUND_DATA) に切り替え、戻す
 function nsd_begin():void
@@ -118,7 +118,7 @@ public function init():void
 	cur_se_priority = 0;
 }
 
-public function play_bgm(idx:int):void
+public function play_bgm(idx:u8):void
 {
 	nsd_begin();
 	nsd_play_bgm(bgm_table[idx]);
@@ -132,7 +132,7 @@ public function stop_bgm():void
 	nsd_end();
 }
 
-function set_master_volume(volume:int):void
+function set_master_volume(volume:u8):void
 {
 	nsd_begin();
 	nsd_set_master_volume(volume);
@@ -145,7 +145,7 @@ function set_master_volume(volume:int):void
 //  1: ジャンプ
 // 10: 優先度が高い音（ドアが開く音, ...)
 // 20: 絶対に優先したい音(死亡音, コイン, ...)
-public function play_se(idx:int, priority:int):void
+public function play_se(idx:u8, priority:u8):void
 {
 	if (cur_se_priority > priority)
 		return;
@@ -225,7 +225,7 @@ public function process_frame():void
 	}
 }
 
-public function crossfade_bgm(idx:int, wait:int):void
+public function crossfade_bgm(idx:u8, wait:u8):void
 {
 	next_bgm_idx = idx;
 	bgm_stat = 2;
@@ -234,7 +234,7 @@ public function crossfade_bgm(idx:int, wait:int):void
 	bgm_fade_count = 15;
 }
 
-public function crossfade_jingle(idx:int, wait:int16):void
+public function crossfade_jingle(idx:u8, wait:u16):void
 {
 	next_bgm_idx = idx;
 	bgm_stat = 3;

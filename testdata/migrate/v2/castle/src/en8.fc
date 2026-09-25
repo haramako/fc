@@ -1,0 +1,335 @@
+#fc 2
+options(bank: 22);
+use * from en;
+use * from graphics;
+use ppu;
+use my;
+use savedata;
+use event2;
+
+/*********************************************
+ * スライム
+ * p4: アニメーションウェイト
+ * p5: アニメーションカウンター
+ *********************************************/
+
+public function slime_new(i:int):void
+{
+	p4[i] = 0;
+	p5[i] = 0;
+}
+
+public function slime_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir:sint = p1[i];
+	var vy = p3[i];
+	var anim_wait = p4[i];
+	var anim_counter = p5[i];
+	var spr = SPR_SLOT[slot] + SPR_SLIME;
+	var pal = PAL_SLOT[slot];
+	var dir2 = 2 - dir;
+
+	if (bg.cell(x, y - 7) == 6 /*下矢印*/ ) {
+		// 下矢印に吸い込まれる
+		if (giff < 4) {
+			if (y % 16 == 6) {
+				type[i] = 0;
+				return;
+			} else {
+				y += 1;
+			}
+		}
+
+		gr_sprite2(x, y, spr + 3 * 4 + anim / 8 % 2 * 4, pal | ppu.SPRITE_FLAG_HIDE | DIR_FLIP_XY[dir2]);
+	} elsif (bg.cell_type(x - 5, y + 8) & bg.TYPE_WALL || bg.cell_type(x + 5, y + 8) & bg.TYPE_WALL) {
+		// 地面の上
+		var nx:uint = x + dir * 8;
+		if (nx < 16 || nx > 240 || bg.cell_type(nx, y - 8) & bg.TYPE_STOP) {
+			dir = -dir;
+		} else {
+			if ((anim % 32) < 16) {
+				if (giff < 10) {
+					x += dir;
+				}
+			} else {
+				if (giff < 6) {
+					x += dir;
+				}
+			}
+		}
+		vy = 0;
+
+		anim_wait += 1;
+		if (anim_wait >= 6) {
+			anim_wait = 0;
+			anim_counter += 1;
+		}
+
+		var dir2 = 2 - dir;
+
+		var a = SLIME_ANIM[anim_counter % 8];
+		gr_sprite2(x + SLIME_DX[a] * DIR_VX[dir2], y, spr + SPR_SLIME + a * 4, pal | DIR_FLIP_XY[dir2]);
+	} else {
+		// 落ちる
+		vy += anim % 2;
+		if (vy > 12) {
+			vy = 12;
+		}
+		y = y + (vy + giff) / 16;
+
+		gr_sprite2(x, y, spr + 3 * 4 + anim / 8 % 2 * 4, pal | DIR_FLIP_XY[dir2]);
+
+		anim_counter = 0;
+		anim_wait = 0;
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = dir;
+	p3[i] = vy;
+	p4[i] = anim_wait;
+	p5[i] = anim_counter;
+
+	check_hit(i, 10);
+
+	if (check_outside(x, y)) {
+		type[i] = 0;
+	}
+}
+
+const SLIME_DX = [-2, 2, 4, 2, 1, 0, -2, -4];
+const SLIME_ANIM = [0, 1, 2, 2, 2, 3, 3, 0];
+
+/*********************************************
+ * スチーム
+ * p1: 方向
+ * p2: 初期周期
+ * p4: 状態
+ * p5: ウェイト
+ *********************************************/
+
+const STEAM_DIR_SPR = [8, 0, 8, 0];
+const STEAM_DIR_FLIP = [128, 64, 128, 64];
+
+public function steam_new(i:int):void
+{
+	p4[i] = 0;
+	p5[i] = p2[i];
+}
+
+public function steam_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var dir = p1[i];
+	var stat = p4[i];
+	var wait = p5[i];
+
+	var spr = SPR_SLOT[slot] + SPR_STEAM;
+	var pal = PAL_SLOT[slot];
+
+	switch (stat) {
+	case 0:
+		if (wait <= 0) {
+			stat = 1;
+			wait = 0;
+		}
+		wait -= 1;
+	case 1:
+		wait += 1;
+		if (wait % 2 == 0) {
+			var a = (wait / 8) % 2 * 4;
+			var v = (wait / 2) % 8 - 6;
+			gr_sprite2(x + DIR_VX[dir] * v, y + DIR_VY[dir] * v, spr + STEAM_DIR_SPR[dir] + a, pal | ppu.SPRITE_FLAG_HIDE | DIR_FLIP_XY[dir]);
+		}
+		if (wait >= 40) {
+			stat = 2;
+			wait = 0;
+		}
+	case 2:
+		wait += 1;
+		if (wait % 2 == 0) {
+			var dx = DIR_VX[dir];
+			var dy = DIR_VY[dir];
+			var flag = pal | DIR_FLIP_XY[dir];
+			var flag_flip:int = STEAM_DIR_FLIP[(dir + 1) % 4];
+
+			if (wait > 0 && wait < 52) {
+				var z = (wait + 0) / 8 % 2;
+				gr_sprite2(x, y, spr + 4 + STEAM_DIR_SPR[dir], flag | flag_flip * z);
+			}
+			if (wait > 8 && wait < 56) {
+				var z = (wait + 3) / 8 % 2;
+				gr_sprite2(x + dx * 16, y + dy * 16, spr + 16 + STEAM_DIR_SPR[dir], flag | flag_flip * z);
+			}
+			if (wait > 16) {
+				var z = (wait + 6) / 8 % 2;
+				gr_sprite2(x + dx * 32, y + dy * 32, spr + 16 + STEAM_DIR_SPR[dir] + 4, flag | flag_flip * z);
+			}
+
+			var hit:int;
+			if (wait > 8 && dir % 2 == 0) {
+				// 上下
+				hit = check_over_rect(x - 6, y - dy * 4, x + 6, y + dy * 40);
+			} else {
+				// 左右
+				hit = check_over_rect(x - dx * 4, y - 6, x + dx * 40, y + 6);
+			}
+
+			if (hit) {
+				if (my.items[ITEM_ID_HELMET]) {
+					my.state = my.STATE_DAMAGE;
+					my.vy = -16;
+					my.vx = (my.dir * 2 - 1) * 16;
+					my.jump_pow = 0;
+				} else {
+					my.state = my.STATE_DYING;
+					my.wait = 0;
+				}
+			}
+		}
+
+		if (wait >= 60) {
+			stat = 0;
+			wait = 60;
+		}
+	}
+
+	px[i] = x;
+	py[i] = y;
+	p1[i] = dir;
+	p4[i] = stat;
+	p5[i] = wait;
+}
+
+/*********************************************
+ * 記憶のかけら
+ * p1: 記憶のかけらID
+ * p4: 表示X
+ * p5: 表示Y
+ * p6: タイマー
+ *********************************************/
+
+public function memory_new(i:int):void
+{
+	p2[i] = 0;
+	p3[i] = 0;
+}
+
+public function memory_process(i:int):void
+{
+	var x = px[i];
+	var y = py[i];
+	var stat = p2[i];
+	var wait = p3[i];
+	var px = p4[i];
+	var py = p5[i];
+
+	if (!my.items[ITEM_ID_SPECTACLES]) {
+		return;
+	}
+
+	var is_new = my.has_memory(p1[i]) > 0;
+
+	switch (stat) {
+	case 0:
+		// タッチ判定
+		if (check_over(i, 12)) {
+			my.register_touch_event(memory_event, x, y + 8, i);
+		}
+	case 1:
+		// セーブ演出
+		tele(TELE_READ_MEMORY, p1[i]);
+		game_event = event.ID_MEMORY;
+		game_event_p1 = p1[i];
+		stat = 0;
+	}
+
+	if (wait == 0) {
+		wait = math.rand() % 8 + 1;
+		px = math.rand() % 16 - 8;
+		py = math.rand() % 8 - 8;
+	} else {
+		if (anim % 4 == 0) {
+			wait -= 1;
+			if (wait > 1) {
+				py -= 2;
+				ppu.null_func();
+				ppu.sprite(x + px, y + py, SPR_MEMORY_FLASH, 1 - is_new);
+			}
+		}
+	}
+
+	p2[i] = stat;
+	p3[i] = wait;
+	p4[i] = px;
+	p5[i] = py;
+}
+
+function memory_event():int
+{
+	p2[my.touch_event_p1] = 1;
+	return 1;
+}
+
+/*********************************************
+ * 鳥の巣
+ * p1: ID(0:入口、1:塔のふもと)
+ *********************************************/
+
+public function bird_nest_new(i:int):void
+{
+	p4[i] = 0;
+	p6[i] = 0;
+}
+
+public function bird_nest_process(i:int):void
+{
+	var slot = pslot[i];
+	var x = px[i];
+	var y = py[i];
+	var nest_id = p1[i];
+	var stat = p4[i];
+
+	switch (stat) {
+	case 0:
+		// タッチ判定
+		if (check_over(i, 12)) {
+			my.register_touch_event(bird_nest_event, x, y, i);
+		}
+	case 1:
+		// 演出
+		stat = 0;
+		game_event = event.ID_BIRD_NEST;
+		game_event_p1 = nest_id;
+	}
+
+	var spr = SPR_SLOT[slot] + SPR_SNAKE;
+	var pal = PAL_SLOT[slot];
+	gr_sprite2(x - 8, y + 4, spr + SPR_BIRD_NEST, pal);
+	gr_sprite2(x + 8, y + 4, spr + SPR_BIRD_NEST + 4, pal);
+
+	p4[i] = stat;
+}
+
+function bird_nest_event():int
+{
+	if (my.items[ITEM_ID_EGG]) {
+		event2.register_confirm_dialog(_T("おおきなとりの巣だ。\nたまごといっしょに　まるまりますか？"), bird_nest_event_callback);
+	} else {
+		event2.register_message_dialog(_T("おおきなとりの巣だ。\nかえってこないうちに　たちさろう。"));
+	}
+	return 1;
+}
+
+function bird_nest_event_callback(r:int):void
+{
+	if (r == 0) {
+		p4[my.touch_event_p1] = 1;
+		p6[my.touch_event_p1] = 1 - p6[my.touch_event_p1];
+	}
+}

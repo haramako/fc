@@ -83,7 +83,8 @@ func sameBytes(t *testing.T, gotPath, wantPath string) {
 	}
 }
 
-// TestMigrateExamples: castle / miku を migrate してビルドした ROM が、fc 2 の ROM の golden と一致する。
+// TestMigrateExamples: castle / miku の fc 2 のソース (testdata/migrate/v2/。examples/ は fc 3 に migrate 済み) を migrate して
+// ビルドした ROM が、fc 2 の ROM の golden と一致する。資源 (画像・音) は examples/ の木を使い、.fc だけ fc 2 の版で上書きする。
 func TestMigrateExamples(t *testing.T) {
 	t.Parallel()
 	home := migratedHome(t)
@@ -95,6 +96,7 @@ func TestMigrateExamples(t *testing.T) {
 			t.Parallel()
 			root := filepath.Join(t.TempDir(), ex.name)
 			copyDir(t, filepath.Join(absRepoRoot, "examples", ex.name), root)
+			copyDir(t, filepath.Join(absRepoRoot, "testdata", "migrate", "v2", ex.name), root) // .fc を fc 2 の版に
 			if migrateTree(t, root) == 0 {
 				t.Fatal(".fc が無い")
 			}

@@ -1,25 +1,25 @@
-#fc 2
-options(mapper: "MMC3", farcall: true);
-options(static_zp: 64, static_ram: 256); // 静的フレームの領域 (data.asm の FC_SZP_SIZE / FC_SRAM_SIZE と一致)
-options(bank: -1);
+#fc 3
+@(mapper: "MMC3", farcall);
+@(static_zp: 64, static_ram: 256); // 静的フレームの領域 (data.asm の FC_SZP_SIZE / FC_SRAM_SIZE と一致)
+@(bank: -1);
 
 //
 //
 // See: http://wiki.nesdev.com/w/index.php/Nintendo_MMC3
 
-var BANK_SELECT:int options(address: 0x8000);
-var BANK_DATA:int options(address: 0x8001);
-public var MIRROR:int options(address: 0xA000);
-public var RAM_PROTECT:int options(address: 0xA001);
-var IRQ_LATCH:int options(address: 0xC000);
-var IRQ_RELOAD:int options(address: 0xC001);
-var IRQ_DISABLE:int options(address: 0xE000);
-var IRQ_ENABLE:int options(address: 0xE001);
-public var select_shadow:int;
-public var cbank_bak:[6]int;
-public var pbank_bak:[2]int;
+var BANK_SELECT:u8 @(address: 0x8000);
+var BANK_DATA:u8 @(address: 0x8001);
+public var MIRROR:u8 @(address: 0xA000);
+public var RAM_PROTECT:u8 @(address: 0xA001);
+var IRQ_LATCH:u8 @(address: 0xC000);
+var IRQ_RELOAD:u8 @(address: 0xC001);
+var IRQ_DISABLE:u8 @(address: 0xE000);
+var IRQ_ENABLE:u8 @(address: 0xE001);
+public var select_shadow:u8;
+public var cbank_bak:[6]u8;
+public var pbank_bak:[2]u8;
 
-include("mmc3.asm");
+@include("mmc3.asm");
 
 /**
  * 初期化する.
@@ -50,16 +50,16 @@ public function init():void
  *   5: 0x1C00-0x1FFF ( 1KB )
  * bank: 1KB bank
  */
-public function set_cbank(pos:int, bank:int):int
+public function set_cbank(pos:u8, bank:u8):u8
 {
 	var old = cbank_bak[pos];
 	if (cbank_bak[pos] != bank) {
-		asm("sei");
+		@asm("sei");
 		select_shadow = pos; // NMI割り込み中の変更にBANK_SELECTの値が変更されるときの対策
 		BANK_SELECT = pos;
 		BANK_DATA = bank;
 		cbank_bak[pos] = bank;
-		asm("cli");
+		@asm("cli");
 	}
 	return old;
 }
@@ -72,16 +72,16 @@ public function set_cbank(pos:int, bank:int):int
  *   1: 0xA000-0xBFFF ( 8KB )
  * bank: 8KB bank
  */
-public function set_pbank(pos:int, bank:int):int options(inline: true)
+public function set_pbank(pos:u8, bank:u8):u8 @(inline)
 {
 	var old = pbank_bak[pos];
 	if (pbank_bak[pos] != bank) {
-		asm("sei");
+		@asm("sei");
 		select_shadow = pos; // NMI割り込み中の変更にBANK_SELECTの値が変更されるときの対策
 		pbank_bak[pos] = bank;
 		BANK_SELECT = pos + 6;
 		BANK_DATA = bank;
-		asm("cli");
+		@asm("cli");
 	}
 	return old;
 }

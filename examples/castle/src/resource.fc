@@ -1,4 +1,4 @@
-#fc 2
+#fc 3
 public const MAP_WIDTH = 16;
 public const MAP_HEIGHT = 16;
 

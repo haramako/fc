@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 23);
+#fc 3
+@(bank: 23);
 //use stdio;
 
 // 
@@ -9,7 +9,7 @@ options(bank: 23);
 // flag = 0=フリー, 1:確保済み
 // size = メモリサイズ/4 (tagの1byteを含む)
 //
-var buf:[256]int options(segment: "BSS_EX");
+var buf:[256]u8 @(segment: "BSS_EX");
 
 const MASK_FLAG = 0x80;
 const MASK_SIZE = 0x7f;
@@ -21,7 +21,7 @@ public function init():void
 	buf[0] = 0 | 63;
 }
 
-public function alloc(size:int):*int
+public function alloc(size:u8):*u8
 {
 	var cur = &buf[0];
 	var tail = cur + 252;
@@ -42,22 +42,22 @@ public function alloc(size:int):*int
 		} else {
 			cur = cur + tag_size * 4;
 			if (cur >= tail) {
-				asm(".byte 2"); // 不正命令で止める
-				return bitcast<*int>(0);
+				@asm(".byte 2"); // 不正命令で止める
+				return @bitcast(*u8, 0);
 			}
 		}
 	}
 }
 
-public function release(addr:*int):int
+public function release(addr:*u8):u8
 {
 	var cur = &buf[0];
-	var prev = bitcast<*int>(0);
+	var prev = @bitcast(*u8, 0);
 	var tail = cur + 252;
 	while (1) {
 		var tag = *cur;
 		var tag_flag = tag & MASK_FLAG;
-		var tag_size:uint8 = tag & MASK_SIZE;
+		var tag_size:u8 = tag & MASK_SIZE;
 		if (cur + 1 == addr) {
 			var next = cur + (tag_size * 4);
 			var next_tag = *next;

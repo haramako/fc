@@ -1,0 +1,237 @@
+#fc 2
+use * from nes;
+use mmc3;
+use mem;
+
+options(bank: -1);
+
+include("ppu.asm");
+
+var vsync_flag:int;
+public var ctrl1_bak:int; // = 0b10000000;
+public var ctrl2_bak:int; // = 0b00011110;
+public var scroll1:int;
+public var scroll2:int;
+
+public const HORIZONTAL = 0b00000000;
+public const VERTICAL = 0b01000000;
+public const ATTRIBUTE = 0b10000000;
+
+public const SPRITE_FLAG_HIDE = 32;
+public const SPRITE_FLAG_FLIP_X = 64;
+public const SPRITE_FLAG_FLIP_Y = 128;
+
+const SPRITE_IDX_MIN = 16;
+const SPRITE_IDX_MAX = 240;
+
+const GR_MAX = 8;
+var gr_idx:int;
+var gr_to_buf:[GR_MAX]int16;
+var gr_from_buf:[GR_MAX]*int;
+var gr_size_buf:[GR_MAX]int;
+var gr_flag_buf:[GR_MAX]int;
+var gr_sprite_idx:int;
+var gr_sprite_dir:int; // spriteの増分 0:順方向, 1:逆方向
+var gr_sprite_buf:[256]int options(address: 0x0700);
+public var gr_buf:[512]int options(segment: "BSS_EX");
+var gr_buf_idx:uint16;
+
+var put_to:int16;
+var put_from:*int options(address: 0x60);
+var put_size:int;
+var interrupt_i:int;
+
+// IRQ関連
+var irq_counter:int;
+public var irq_setup:fn():void options(address: 0x62);
+var irq_next:fn():void options(address: 0x64);
+
+public var on_vsync:fn():void options(address: 0x78);
+var locked:int;
+public var cbank2:int; // CBANK2の値(interrupt時に書き込まれる)
+
+public var on_wait_vsync:fn():void;
+
+public function null_func():void {}
+
+public function init():void
+{
+	irq_setup = null_func;
+	irq_next = null_func;
+	on_vsync = null_func;
+	on_wait_vsync = null_func;
+	gr_sprite_dir = 0;
+	locked = 1;
+}
+
+public function wait_vsync():void
+{
+	wait_vsync_with_flag(1);
+}
+
+public function wait_vsync_with_flag(flag:int):void
+{
+	//PPU_CTRL2 = 0b00011111; // for debug (profiling)
+	if (flag != 2) {
+		// 未使用のスロットを隠す。消すのは Y 座標 (先頭の 1 バイト) だけでよい (255 で非表示)。
+		// 以前は mem.set で 4 バイト全部を埋めていて、1 フレームの 24% (約 2,400 サイクル) を使っていた
+		if (!gr_sprite_dir) {
+			for (var i = gr_sprite_idx; i < SPRITE_IDX_MAX; i += 4) {
+				gr_sprite_buf[i] = 255;
+			}
+		} else {
+			for (var i = SPRITE_IDX_MIN; i <= gr_sprite_idx; i += 4) {
+				gr_sprite_buf[i] = 255;
+			}
+		}
+	}
+	vsync_flag = flag;
+	while (vsync_flag) {}
+	gr_sprite_dir = 1 - gr_sprite_dir;
+	if (!gr_sprite_dir) {
+		gr_sprite_idx = SPRITE_IDX_MIN;
+	} else {
+		gr_sprite_idx = SPRITE_IDX_MAX - 4;
+	}
+	on_wait_vsync();
+}
+
+public function lock():void
+{
+	PPU_CTRL1 = 0b10000000;
+	PPU_CTRL2 = 0b00000000;
+	locked = 1;
+}
+
+public function unlock():void
+{
+	PPU_CTRL1 = 0b10000000;
+	locked = 0;
+	wait_vsync();
+}
+
+public function put_in_lock(addr:int16, _from:*int, size:int):void;
+
+public function fill_in_lock(addr:int16, size:int16, n:int):void;
+
+public function put(addr:int16, _from:*int, size:int, flag:int):void
+{
+	while (gr_idx >= GR_MAX) {
+		vsync_flag = 2;
+		while (vsync_flag) {}
+	}
+	gr_from_buf[gr_idx] = _from;
+	gr_to_buf[gr_idx] = addr;
+	gr_size_buf[gr_idx] = size;
+	gr_flag_buf[gr_idx] = flag;
+	gr_idx += 1;
+}
+
+public function alloc(size:int):*int
+{
+	var start = gr_buf_idx;
+	var p:*int = &gr_buf[0];
+	gr_buf_idx += size;
+	if (gr_buf_idx >= 512) {
+		start = 0;
+		gr_buf_idx = size;
+	}
+	return p + start;
+}
+
+// PPU address of tile (x, y): 0x2000 + y * 32 + x. y wraps into 0..29 (signed).
+// Low byte is 8-bit (no carry from x into the high byte), same as the old asm.
+public function pos(x:int, y:int):int16
+{
+	var yy = y as sint;
+	if (yy < 0) {
+		yy += 30;
+	}
+	if (yy >= 30) {
+		yy -= 30;
+	}
+	var yu = yy as int;
+	return (((0x20 + (yu >> 3)) as int16) << 8) | (((yu << 5) + x) as int16);
+}
+
+public function sprite(x:int, y:int, pat:int, mode:int):void
+{
+	var idx = gr_sprite_idx;
+	if (!gr_sprite_dir) {
+		if (idx >= SPRITE_IDX_MAX) {
+			return;
+		}
+		gr_sprite_idx = idx + 4;
+	} else {
+		if (idx == SPRITE_IDX_MIN) {
+			return;
+		}
+		gr_sprite_idx = idx - 4;
+	}
+	gr_sprite_buf[idx] = y - 1;
+	gr_sprite_buf[idx + 1] = pat | 1;
+	gr_sprite_buf[idx + 2] = mode;
+	gr_sprite_buf[idx + 3] = x;
+}
+
+public function sprite_idx(x:int, y:int, pat:int, mode:int, idx:int):void
+{
+	gr_sprite_buf[idx] = y - 1;
+	gr_sprite_buf[idx + 1] = pat | 1;
+	gr_sprite_buf[idx + 2] = mode;
+	gr_sprite_buf[idx + 3] = x;
+}
+
+function clear_sprite_idx(idx:int):void
+{
+	gr_sprite_buf[idx] = 255;
+}
+
+public function clear_sprite2_idx(idx:int):void
+{
+	gr_sprite_buf[idx] = 255;
+	gr_sprite_buf[idx + 4] = 255;
+}
+
+public function clear_out_sprite():void
+{
+	gr_sprite_buf[0] = 255;
+	gr_sprite_buf[4] = 255;
+	gr_sprite_buf[8] = 255;
+	gr_sprite_buf[12] = 255;
+	gr_sprite_buf[240] = 255;
+	gr_sprite_buf[244] = 255;
+	gr_sprite_buf[248] = 255;
+	gr_sprite_buf[252] = 255;
+}
+
+function wait(n:int):void
+{
+	while (n) {
+		var i:int = 55;
+		while (i) {
+			var j:int = 255;
+			while (j) {
+				j -= 1;
+			}
+			i -= i;
+		}
+		n -= 1;
+	}
+}
+
+/**
+ * パレット領域への書き込み。
+ *
+ * パレットだけは、ppu.lock()中でも書き込むと画面にゴミがでてしまう。
+ * そのため、一時的に画面描画を無効化して、ppu.unlock()し、ppu.put()で書き込む。
+ */
+public function put_palette_in_lock(addr:uint16, p:*uint8, size:int):void
+{
+	var ctrl2_tmp = ctrl2_bak;
+	ctrl2_bak = 0b00000000;
+	unlock();
+	put(addr, p, size, HORIZONTAL);
+	lock();
+	ctrl2_bak = ctrl2_tmp;
+}

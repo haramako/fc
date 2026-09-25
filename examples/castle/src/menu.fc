@@ -1,5 +1,5 @@
-#fc 2
-options(bank: 13, org: 0xa000, bss: "BSS_EX");
+#fc 3
+@(bank: 13, org: 0xa000, bss: "BSS_EX");
 
 use * from common;
 use mem;
@@ -16,10 +16,10 @@ const SCENE_MEMORY = 1;
 const SCENE_MAP = 2;
 const SCENE_MAX = 3;
 
-const ITEM_LIST = incbin('../tmp/item_list.bin');
-const MEMORY_LIST = incbin('../tmp/memory_list.bin');
+const ITEM_LIST = @incbin('../tmp/item_list.bin');
+const MEMORY_LIST = @incbin('../tmp/memory_list.bin');
 
-var scene:int;
+var scene:u8;
 
 const SCENE_DRAW_FUNC = [item_draw, memory_draw, map_draw];
 const SCENE_INIT_FUNC = [item_init, memory_init, map_init];
@@ -100,10 +100,10 @@ public function start():void
  * アイテム画面
  *********************************************/
 
-var item_idx:int;
-var item_x:int;
-var item_y:int;
-var item_prev:int;
+var item_idx:u8;
+var item_x:u8;
+var item_y:u8;
+var item_prev:u8;
 
 const ITEM_MAX = 48; // my.ITEM_MAXと違い、表示上のアイテムの上限
 
@@ -129,7 +129,7 @@ function item_init():void
 
 	ppu.fill_in_lock(0x2400 + 4 * 32, 0x400 - 4 * 32, 0);
 
-	var i:int;
+	var i:u8;
 	for (i = 0; i < ITEM_MAX; i++) {
 		put_item(i);
 	}
@@ -144,7 +144,7 @@ function item_draw():void
 	draw_coin();
 }
 
-function item_process():int
+function item_process():u8
 {
 	loop {
 		pad.update();
@@ -223,9 +223,9 @@ function item_process():int
 	}
 }
 
-function put_item(i:int):void
+function put_item(i:u8):void
 {
-	var y:int16 = i / 12;
+	var y:u16 = i / 12;
 	var x = i % 12;
 	var item_id = ITEM_LIST[i];
 	if (item_id == ITEM_ID_WATCH && my.watch_used)
@@ -233,9 +233,9 @@ function put_item(i:int):void
 	put_item_inner(x, y, item_id);
 }
 
-function put_item_inner(x:int, y:int16, item_id:int):void
+function put_item_inner(x:u8, y:u16, item_id:u8):void
 {
-	var addr:int16 = 0x2400 + 32 * 6 + 4 + (y << 6) + x * 2;
+	var addr:u16 = 0x2400 + 32 * 6 + 4 + (y << 6) + x * 2;
 	var buf = ppu.alloc(4);
 	var item_id_x = (item_id + 2) % 8;
 	var item_id_y = (item_id + 2) / 8;
@@ -255,7 +255,7 @@ function put_item_inner(x:int, y:int16, item_id:int):void
 
 	var item_addr = ((y + 1) / 2) * 8 + x / 2;
 	var item_shift = (x % 2) | ((y + 1) % 2 * 2);
-	var pal_mask:uint;
+	var pal_mask:u8;
 	switch (item_shift) {
 	case 0:
 		pal_mask = 255 - (3 << 0);
@@ -285,7 +285,7 @@ function draw_coin():void
 	var cur = buf;
 	text.print_num(cur, my.coin_num);
 	cur[0] = 10; // "x"
-	var i:int;
+	var i:u8;
 	var x = 8 * 6;
 	var y = 8 * 14 + 4;
 	for (i = 0; i < 3; i++) {
@@ -297,10 +297,10 @@ function draw_coin():void
 /*********************************************
  * 記憶画面
  *********************************************/
-var memory_x:int;
-var memory_y:int;
-var memory_idx:int;
-var memory_prev:int;
+var memory_x:u8;
+var memory_y:u8;
+var memory_idx:u8;
+var memory_prev:u8;
 
 const MEMORY_MAX = 48;
 
@@ -324,7 +324,7 @@ function memory_init():void
 	data_buf += 256;
 	mem.zero(buf, 255);
 
-	var i:int;
+	var i:u8;
 	for (i = 0; i < MEMORY_MAX; i++) {
 		var x = i % 12;
 		var y = i / 12;
@@ -345,7 +345,7 @@ function memory_init():void
 	ppu.put_in_lock(addr, buf, 128);
 }
 
-function memory_process():int
+function memory_process():u8
 {
 	memory_prev = -1;
 	if (!my.items[ITEM_ID_SPECTACLES]) {
@@ -418,7 +418,7 @@ function memory_process():int
 
 function memory_draw():void {}
 
-function memory_put(id:int):void
+function memory_put(id:u8):void
 {
 	// 記憶のかけらの描画
 	if (id == -1) {
@@ -450,7 +450,7 @@ function memory_put(id:int):void
 	ppu.put(addr, buf, 64, 0);
 }
 
-function memory_show(id:int):void
+function memory_show(id:u8):void
 {
 	var data_buf = &bg.data_buf[0];
 	var data = data_buf;
@@ -467,8 +467,8 @@ function memory_show(id:int):void
 /*********************************************
  * ミニマップ画面
  *********************************************/
-var map_x:int;
-var map_y:int;
+var map_x:u8;
+var map_y:u8;
 
 function map_init():void
 {
@@ -489,14 +489,14 @@ function map_init():void
 	}
 
 	// タイルのコピー
-	var buf:*int = bg.data_buf;
+	var buf:*u8 = bg.data_buf;
 	buf += 2048 - 16 * 18; // bgが使ってる領域と被らないようにずらす
 	fs.copy(buf, fs.MINIMAP_BG);
 
-	var x:int;
-	var y:int;
+	var x:u8;
+	var y:u8;
 	var cur_buf = buf;
-	var addr:int16 = 0x2400 + 8 * 32 + 8;
+	var addr:u16 = 0x2400 + 8 * 32 + 8;
 	for (y = 0; y < 18; y++) {
 		if (y >= 1 && y < 17) {
 			for (x = 0; x < 16; x++) {
@@ -525,7 +525,7 @@ function map_init():void
 	ppu.put_palette_in_lock(VRAM_PALETTE, buf, 16);
 }
 
-function map_process():int
+function map_process():u8
 {
 	if (!my.items[ITEM_ID_MAP]) {
 		return 0;
@@ -558,7 +558,7 @@ function map_process():int
 
 		if (my.items[ITEM_ID_WING] && (pad.pushed & pad.A) && my.get_map(ax, ay)) {
 			// 羽で飛ぶ
-			var i:int;
+			var i:u8;
 			for (i = 0; i < MAP_CHECKPOINT_NUM; i++) {
 				var cp = MAP_CHECKPOINT[i];
 				var area = ay * 16 + ax;
@@ -590,8 +590,8 @@ function map_draw():void
 		return;
 	}
 
-	var ax:int;
-	var ay:int;
+	var ax:u8;
+	var ay:u8;
 
 	if (anim / 16 % 2 == 0) {
 		ax = bg.cur_area % 16;
@@ -599,7 +599,7 @@ function map_draw():void
 		ppu.sprite(ax * 8 + 64, ay * 8 + 72, SPR_MAP_FLAG + 4, 0);
 	}
 
-	var i:int;
+	var i:u8;
 	if (my.items[ITEM_ID_PEN]) {
 		for (i = 1; i < MAP_CHECKPOINT_NUM; i++) {
 			var cp = MAP_CHECKPOINT[i];
