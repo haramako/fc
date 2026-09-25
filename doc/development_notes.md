@@ -331,6 +331,9 @@ go test ./...                                    # 全部 (golden + examples + N
   **テストで「この関数が出力される」ことを見るときは `options(noinline: true)` を付ける**（`TestUnusedFunctions` /
   `TestDebugInfoAndSizeReport` / `TestFarCall` は小さな関数が消えて落ちた）。const の別名（`const D2 = f`）で参照される
   関数は呼び出しが全部展開されても出力が要る（`frames.Analyze` が DefEqu を根に足す）
+- **ca65 のオブジェクトの再利用**（2026-09-25、`internal/driver/asmcache.go`）: ビルドディレクトリの `<obj>.stamp` に
+  ca65 が読んだ全ファイルの内容のハッシュを記録し、同じなら ca65 を起動しない。アセンブルの結果が怪しいときは
+  `FC_NO_ASM_CACHE=1` で切るか、ビルドディレクトリ（`.fc-build`）を消す
 - **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
   （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa mul indexoff induction unroll devirt autoinline sink fuse coalesce chain narrow scale commute carry split rotate dup
   inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が

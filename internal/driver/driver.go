@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
@@ -85,6 +86,7 @@ type Compiler struct {
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
 	prog     *sema.Program
+	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -201,7 +203,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
-	if err := os.WriteFile(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n")), 0o666); err != nil {
+	if err := writeIfChanged(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n"))); err != nil {
 		return nil, err
 	}
 	result.StaticZp, result.StaticRam = plan.ZpUsed, plan.RamUsed
@@ -214,10 +216,10 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		if lerr != nil {
 			return nil, lerr
 		}
-		if err := os.WriteFile(filepath.Join(c.buildDir, fmt.Sprintf("_%s.inc", mod.Id)), []byte(strings.Join(inc, "\n")), 0o666); err != nil {
+		if err := writeIfChanged(filepath.Join(c.buildDir, fmt.Sprintf("_%s.inc", mod.Id)), []byte(strings.Join(inc, "\n"))); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)), []byte(strings.Join(asm, "\n")), 0o666); err != nil {
+		if err := writeIfChanged(filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)), []byte(strings.Join(asm, "\n"))); err != nil {
 			return nil, err
 		}
 	}
@@ -320,7 +322,7 @@ func (c *Compiler) makeBase() string {
 	}
 
 	str := c.baseAsmTemplate(inesprg, ineschr, 1, inesmap)
-	if err := os.WriteFile(filepath.Join(c.buildDir, "base.s"), []byte(str), 0o666); err != nil {
+	if err := writeIfChanged(filepath.Join(c.buildDir, "base.s"), []byte(str)); err != nil {
 		panic(err)
 	}
 	c.ca65(filepath.Join(c.buildDir, "base.s"))
@@ -460,7 +462,7 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 		cfg = b.String()
 	}
 
-	if err := os.WriteFile(filepath.Join(c.buildDir, "ld65.cfg"), []byte(cfg), 0o666); err != nil {
+	if err := writeIfChanged(filepath.Join(c.buildDir, "ld65.cfg"), []byte(cfg)); err != nil {
 		panic(err)
 	}
 }
@@ -638,7 +640,7 @@ func (c *Compiler) assembleAll(sources []string) error {
 			if ctx.Err() != nil {
 				return
 			}
-			if err := c.run(ctx, "ca65", c.ca65Args(src)...); err != nil {
+			if err := c.assembleCached(ctx, src); err != nil {
 				errs[i] = err
 				cancel()
 			}
@@ -661,9 +663,11 @@ func (c *Compiler) assembleAll(sources []string) error {
 	return first
 }
 
-// ca65 はアセンブルを実行する (逐次。失敗は CommandError を panic)。
+// ca65 はアセンブルを実行する (逐次。入力が前回と同じなら再利用する。失敗は CommandError を panic)。
 func (c *Compiler) ca65(path string) {
-	c.sh("ca65", c.ca65Args(path)...)
+	if err := c.assembleCached(c.ctxOrBackground(), path); err != nil {
+		panic(err)
+	}
 }
 
 // ca65Args はアセンブルのコマンド引数を作る。
