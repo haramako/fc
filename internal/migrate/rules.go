@@ -3,6 +3,7 @@ package migrate
 import (
 	"strings"
 
+	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
@@ -11,6 +12,7 @@ import (
 func init() {
 	Rules = append(Rules,
 		Rule{Name: "int-types", Doc: "整数型名を fc 3 の名前にする (int / uint8 → u8、sint → i8、int16 → u16、sint16 → i16)", Apply: renameIntTypes},
+		Rule{Name: "attributes", Doc: "options(...) を @(...) にする (真偽値の属性の `: true` は省く。block { ... } options(k: v); は @(k: v) { ... })", Apply: attributes},
 		Rule{Name: "at-builtins", Doc: "組み込みを @ の形にする (sizeof / incbin / bitcast<T>(x) → @bitcast(T, x) / include(...) options(...) → @include(..., k: v) / asm / textmap / min / max / clamp / unittest_run_tests → @run_tests)", Apply: atBuiltins},
 	)
 }
@@ -77,4 +79,55 @@ func atBuiltins(c *Ctx) {
 		}
 		return true
 	})
+}
+
+// attributes は fc 2 の `options(...)` を fc 3 の `@(...)` にする (doc/v3_plan.md §5 C)。真偽値の属性 (ir.FlagOptions) の
+// `: true` は省いて `@(inline)` にする。`block { ... } options(k: v);` は `@(k: v) { ... }`。include の options は at-builtins が
+// 名前つきの引数にまとめるので触らない。
+func attributes(c *Ctx) {
+	skip := map[*syntax.Options]bool{}
+	syntax.Inspect(c.File, func(n syntax.Node) bool {
+		if d, ok := n.(*syntax.IncludeDecl); ok && d.Options != nil {
+			skip[d.Options] = true
+		}
+		return true
+	})
+	syntax.Inspect(c.File, func(n syntax.Node) bool {
+		switch x := n.(type) {
+		case *syntax.PlacementBlock:
+			if x.Keyword == nil || x.Options == nil {
+				return true
+			}
+			o := x.Options
+			skip[o] = true
+			kw := x.Keyword.NamePos.Offset
+			c.Replace(kw, kw+len(x.Keyword.Name), "@("+c.optionEntriesText(o)+")")
+			c.Replace(x.Body.End().Offset, x.Semi.Offset+1, "")
+		case *syntax.Options:
+			if x.At || skip[x] {
+				return true
+			}
+			c.Replace(x.Keyword.Offset, x.Keyword.Offset+len("options"), "@")
+			for _, e := range x.Entries {
+				if b, ok := e.Value.(*syntax.BoolLit); ok && b.Value && ir.FlagOptions[e.Key.Name] {
+					end := e.Key.NamePos.Offset + len(e.Key.Name)
+					c.Replace(end, b.ValuePos.Offset+len("true"), "")
+				}
+			}
+		}
+		return true
+	})
+}
+
+// optionEntriesText は options の `key: value, ...` の部分のソースの綴り (真偽値の属性の `: true` は省く)。
+func (c *Ctx) optionEntriesText(o *syntax.Options) string {
+	var parts []string
+	for _, e := range o.Entries {
+		if b, ok := e.Value.(*syntax.BoolLit); ok && b.Value && ir.FlagOptions[e.Key.Name] {
+			parts = append(parts, e.Key.Name)
+			continue
+		}
+		parts = append(parts, e.Key.Name+": "+strings.TrimSpace(string(c.Src[e.Value.Pos().Offset:e.Value.End().Offset])))
+	}
+	return strings.Join(parts, ", ")
 }

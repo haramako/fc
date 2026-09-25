@@ -122,3 +122,32 @@ function f():void {
 		t.Errorf("同名の宣言: %q, %v", got, err)
 	}
 }
+
+// TestMigrateAttributes: options(...) → @(...)。真偽値の属性の `: true` は省く。block { } options(); は @(...) { }。
+func TestMigrateAttributes(t *testing.T) {
+	in := `#fc 2
+options(bank: 3, farcall: true);
+var v:int options(address: 0x2000);
+function f():int options(fastcall: true, inline: true, segment: "game") { return 1; }
+function g():void options(inline: false) { }
+block {
+	var b:int;
+} options(bss: "BSS_EX");
+`
+	want := `#fc 3
+@(bank: 3, farcall);
+var v:u8 @(address: 0x2000);
+function f():u8 @(fastcall, inline, segment: "game") { return 1; }
+function g():void @(inline: false) { }
+@(bss: "BSS_EX") {
+	var b:u8;
+}
+`
+	got, err := Migrate([]byte(in), "t.fc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

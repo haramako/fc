@@ -267,12 +267,20 @@ func toC0(e syntax.Expr) *cexpr {
 
 // parseOptions は options(...) を生の値のまま ir.Options にする (重複キーは後勝ち・位置維持)。
 // 値は整数 / 文字列 / 識別子のいずれか。nil なら nil。
+// checkBareOption は値を省いた属性 (`@(inline)`) が真偽値の属性か検査する (bank / address などは値が要る)。
+func checkBareOption(e *syntax.OptionEntry) {
+	if e.Bare && !ir.FlagOptions[e.Key.Name] {
+		panic(&diag.Error{Msg: "@(" + e.Key.Name + ") needs a value (`" + e.Key.Name + ": ...`; only flag attributes such as inline can omit it)"})
+	}
+}
+
 func parseOptions(o *syntax.Options) ir.Options {
 	if o == nil {
 		return nil
 	}
 	var r ir.Options
 	for _, e := range o.Entries {
+		checkBareOption(e)
 		if e.Key.Name == "bss" {
 			panic(&diag.Error{Msg: "bss is only allowed on modules and placement blocks; use segment on individual declarations"})
 		}

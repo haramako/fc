@@ -53,6 +53,25 @@ func checkVersion(f *File) error {
 			fail(pos, "postfix types (int*, int[4], void(int)) are written prefix in fc 2 (*int, [4]int, fn(int):void)")
 		}
 	}
+	if f.Version >= Version3 {
+		// fc 3 で書き方が変わった構文 (fcc migrate が書き換える)
+		Inspect(f, func(n Node) bool {
+			if err != nil {
+				return false
+			}
+			switch n := n.(type) {
+			case *PlacementBlock:
+				if n.Keyword != nil {
+					fail(n.Keyword.Pos(), "`block { ... } options(...)` is written `@(...) { ... }` in fc 3 (`fcc migrate` rewrites fc 2 sources)")
+				}
+			case *Options:
+				if !n.At {
+					fail(n.Keyword, "`options(...)` is written `@(...)` in fc 3 (`fcc migrate` rewrites fc 2 sources)")
+				}
+			}
+			return true
+		})
+	}
 	Inspect(f, func(n Node) bool {
 		if err != nil {
 			return false

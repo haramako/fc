@@ -26,14 +26,14 @@ func InlineProgram(mods []*ir.Module) error {
 	inl := map[string]*ir.Lambda{} // シンボル → inline 関数
 	for _, m := range mods {
 		for _, d := range m.Defs {
-			if d.Kind != ir.DefCode || !d.Lambda.Options.Has("inline") {
+			if d.Kind != ir.DefCode || !d.Lambda.Options.Flag("inline") {
 				continue
 			}
 			lmd := d.Lambda
 			switch {
 			case lmd.Extern:
 				return &diag.Error{Msg: fmt.Sprintf("inline function %s has no body", lmd.Name), Pos: lmd.Pos}
-			case lmd.Options.Has("interrupt"):
+			case lmd.Options.Flag("interrupt"):
 				return &diag.Error{Msg: fmt.Sprintf("inline function %s cannot be an interrupt handler", lmd.Name), Pos: lmd.Pos}
 			case callsTo(lmd, lmd.Id):
 				return &diag.Error{Msg: fmt.Sprintf("inline function %s is recursive", lmd.Name), Pos: lmd.Pos}
@@ -96,7 +96,7 @@ const (
 // autoInlinable は印の無い関数を自動で展開してよいか (本体の命令数も返す): 本体が小さく、ループ・呼び出し・asm・
 // アドレス取得・配列 / struct のローカルが無く、interrupt / 再帰 / extern でないもの。
 func autoInlinable(lmd *ir.Lambda) (int, bool) {
-	if lmd.Extern || lmd.Options.Has("interrupt") || lmd.Options.Has("inline") || lmd.Options.Has("noinline") || len(lmd.Ops) == 0 {
+	if lmd.Extern || lmd.Options.Flag("interrupt") || lmd.Options.Flag("inline") || lmd.Options.Flag("noinline") || len(lmd.Ops) == 0 {
 		return 0, false
 	}
 	if lmd.Options.Has("segment") || lmd.Options.Has("symbol") || lmd.Options.Has("abi") {

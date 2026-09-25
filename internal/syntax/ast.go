@@ -281,14 +281,24 @@ type Block struct {
 // PlacementBlock groups global storage declarations without introducing a scope.
 // Keyword remains an identifier so existing variables/types named block still work.
 type PlacementBlock struct {
-	Keyword *Ident
+	Keyword *Ident // `block` (fc 3 の `@(...) { ... }` は nil で、Options が前)
 	Body    *Block
 	Options *Options
 	Semi    Pos
 }
 
-func (s *PlacementBlock) Pos() Pos { return s.Keyword.Pos() }
-func (s *PlacementBlock) End() Pos { return after(s.Semi, 1) }
+func (s *PlacementBlock) Pos() Pos {
+	if s.Keyword == nil {
+		return s.Options.Keyword
+	}
+	return s.Keyword.Pos()
+}
+func (s *PlacementBlock) End() Pos {
+	if s.Keyword == nil {
+		return s.Body.End()
+	}
+	return after(s.Semi, 1)
+}
 func (*PlacementBlock) stmtNode()  {}
 
 // EmptyStmt は単独の `;`。
@@ -504,15 +514,17 @@ type Param struct {
 
 // Options は `options(k1: v1, k2: v2)`。順序を保持する。
 type Options struct {
-	Keyword Pos
+	Keyword Pos // `options` (fc 3 は `@`)
 	Entries []*OptionEntry
 	Rparen  Pos
+	At      bool // fc 3 の `@(...)`
 }
 
 // OptionEntry は `key: value`。
 type OptionEntry struct {
 	Key   *Ident
 	Value Expr
+	Bare  bool // fc 3 の値の省略 `@(inline)` (Value は true)
 }
 
 // Get は key に一致する最後のエントリの値を返す (重複時は後勝ち)。

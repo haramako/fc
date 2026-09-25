@@ -553,6 +553,13 @@ func (p *printer) stmt(s Stmt) {
 		p.indent = saved
 
 	case *PlacementBlock:
+		if s.Keyword == nil {
+			// fc 3: @(...) { ... }
+			p.options(s.Options)
+			p.space()
+			p.block(s.Body)
+			break
+		}
 		p.ident(s.Keyword)
 		p.space()
 		p.block(s.Body)
@@ -649,7 +656,11 @@ func (p *printer) varSpec(sp *VarSpec) {
 }
 
 func (p *printer) options(o *Options) {
-	p.tokAt(o.Keyword, "options")
+	if o.At {
+		p.tokAt(o.Keyword, "@")
+	} else {
+		p.tokAt(o.Keyword, "options")
+	}
 	p.tok("(")
 	p.optionEntries(o, false)
 	p.tokAt(o.Rparen, ")")
@@ -663,6 +674,9 @@ func (p *printer) optionEntries(o *Options, lead bool) {
 			p.space()
 		}
 		p.ident(e.Key)
+		if e.Bare {
+			continue // fc 3 の `@(inline)`
+		}
 		p.tok(":")
 		p.space()
 		p.expr(e.Value)

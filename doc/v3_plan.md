@@ -444,7 +444,11 @@ V3 への移行時に共通の文法を改めることは対象に含む。下�
 
 ### C. `options(...)` → `@(...)`（決定済み・未実装）
 
-**2026-09-25 の追加決定（未実装）**:
+**2026-09-25 の追加決定（実装済み・feature/v3）**: 文法の `attrs`（`@(...)`、値を省いたキーは true）、`OptionEntry.Bare`、
+`PlacementBlock` の前置の形、fc 3 で `options(...)` / `block { } options(...)` を書いたら案内つきのエラー（`syntax.checkVersion`）、
+`ir.Options.Flag` / `ir.FlagOptions`（inline / noinline / fastcall / interrupt / volatile / near / farcall / zeropage。値を省けるのは
+これだけ）、migrate の規則 `attributes`（`: true` は省く）、`TestV3Attributes`。`options(inline: false)` がキーがあるだけで
+inline になっていたのも直った（fc 2 のソースに `false` の指定は無かった）。
 
 - 宣言のまとまりへの既定値は、`block { ... } options(bss: ...)` をやめて前置の `@(...) { ... }` にする（`block` という
   文脈依存の名前も無くす。D の「属性 `{` 宣言 `}`」と同じ考え方）。`@(...)` の後ろが `;` ならモジュールへの指定、`{` なら

@@ -71,8 +71,8 @@ package syntax
 %type <expr>    opt_exp exp
 %type <exprs>   exp_list
 %type <alist>   arg_list
-%type <opts>    opt_options options
-%type <optents> option_list option_list_sub option
+%type <opts>    opt_options options attrs
+%type <optents> option_list option_list_sub option attr_list attr
 %type <specs>   opt_var_decl_list var_decl_list
 %type <spec>    var_decl
 %type <expr>    opt_var_init
@@ -135,13 +135,15 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | opt_scope kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
                                                 { $$ = funcDecl($1, $2, $3, $5, $8, $9, $10) }
          | options ';'                          { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} }
+         | attrs ';'                            { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} } /* v3: モジュールへの指定 */
+         | attrs block                          { $$ = &PlacementBlock{Options: $1, Body: $2} } /* v3: 中の宣言の既定値 */
          | opt_scope kUSE use_target ';'        { u := $3; u.PublicPos = optPos($1); u.Use = $2.Pos; u.Semi = $4.Pos; $$ = u }
          | opt_scope kSTRUCT IDENT '{' field_decl_list '}' { $$ = &StructDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Lbrace: $4.Pos, Fields: $5, Rbrace: $6.Pos} } /* v2 */
          | opt_scope kSOA IDENT ':' type_decl opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Type: $5, Options: $6, Semi: $7.Pos} } /* v2 */
          | opt_scope kSOA kCONST IDENT ':' type_decl '=' exp opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Name: ident($4), Type: $6, Init: $8, Options: $9, Semi: $10.Pos} } /* v2 */
          | kINCLUDE opt_ident '(' STRING ')' opt_options ';' { $$ = &IncludeDecl{Include: $1.Pos, Kind: $2, Path: strLit($4), Rparen: $5.Pos, Options: $6, Semi: $7.Pos} }
          | kAT_INCLUDE '(' STRING ')' ';' { $$ = &IncludeDecl{Include: $1.Pos, Path: strLit($3), Rparen: $4.Pos, Semi: $5.Pos, At: true} } /* v3 */
-         | kAT_INCLUDE '(' STRING ',' option_list ')' ';' { $$ = &IncludeDecl{Include: $1.Pos, Path: strLit($3), Options: &Options{Entries: $5, Rparen: $6.Pos}, Rparen: $6.Pos, Semi: $7.Pos, At: true} } /* v3: 属性は名前つきの引数 */
+         | kAT_INCLUDE '(' STRING ',' attr_list ')' ';' { $$ = &IncludeDecl{Include: $1.Pos, Path: strLit($3), Options: &Options{Entries: $5, Rparen: $6.Pos, At: true}, Rparen: $6.Pos, Semi: $7.Pos, At: true} } /* v3: 属性は名前つきの引数 */
          | kPUBLIC ':'                          { $$ = &ScopeLabel{Keyword: $1.Pos, Public: true, Colon: $2.Pos} }
          | kPRIVATE ':'                         { $$ = &ScopeLabel{Keyword: $1.Pos, Public: false, Colon: $2.Pos} }
          | kPLACEMENT block options ';'         { $$ = &PlacementBlock{Keyword: ident($1), Body: $2, Options: $3, Semi: $4.Pos} }
@@ -301,7 +303,15 @@ arg_list: /* empty */ { $$ = argList{exprs: []Expr{}} }
 /* option */
 opt_options: /* empty */ { $$ = nil }
            | options
+           | attrs
 options: kOPTIONS '(' option_list ')' { $$ = &Options{Keyword: $1.Pos, Entries: $3, Rparen: $4.Pos} }
+
+/* fc 3 の属性 `@(key: value, flag, ...)`。値を省いたキーは true */
+attrs: '@' '(' attr_list ')' { $$ = &Options{Keyword: $1.Pos, Entries: $3, Rparen: $4.Pos, At: true} }
+attr_list: attr_list ',' attr { $$ = append($1, $3...) }
+         | attr
+attr: IDENT ':' exp { $$ = []*OptionEntry{{Key: ident($1), Value: $3}} }
+    | IDENT         { $$ = []*OptionEntry{{Key: ident($1), Value: &BoolLit{ValuePos: $1.Pos, Value: true}, Bare: true}} }
 
 option_list: option_list_sub
 option_list_sub: option_list_sub ',' option { $$ = append($1, $3...) }

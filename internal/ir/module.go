@@ -93,6 +93,28 @@ func (o Options) Has(key string) bool {
 	return ok
 }
 
+// Flag は真偽値の属性 (inline / fastcall / volatile など) が真か: キーがあり、値が true か 0 以外の整数
+// (`inline: false` / `inline: 0` は偽。fc 3 の `@(inline)` は true)。doc/v3_plan.md §5 C。
+func (o Options) Flag(key string) bool {
+	v, ok := o.Get(key)
+	if !ok {
+		return false
+	}
+	switch v.Kind {
+	case OptInt:
+		return v.Int != 0
+	case OptIdent:
+		return v.Str != "false"
+	}
+	return true
+}
+
+// FlagOptions は真偽値の属性のキー (fc 3 で値を省いて `@(inline)` と書ける)。
+var FlagOptions = map[string]bool{
+	"inline": true, "noinline": true, "fastcall": true, "interrupt": true, "volatile": true,
+	"near": true, "farcall": true, "zeropage": true,
+}
+
 // Module は 1 ソースファイルに対応するコンパイル単位。
 type Module struct {
 	Id             string
@@ -294,7 +316,7 @@ func Mangle(str string) string { return strings.ReplaceAll(str, "$", "_D") }
 // Switchable はこのモジュールが切替バンクに載っているか (`options(bank: N)` で N >= 0。`options(near: true)` なら固定扱い)。
 // doc/v2_farcall.md §3.2
 func (m *Module) Switchable() bool {
-	if m.Options.Has("near") {
+	if m.Options.Flag("near") {
 		return false
 	}
 	b, ok := m.Options.Int("bank")

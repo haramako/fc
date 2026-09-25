@@ -101,3 +101,60 @@ function main():void
 		}
 	}
 }
+
+// TestV3Attributes: fc 3 の属性 `@(...)`。`@(inline)` は `inline: true`、`@(inline: false)` は偽 (以前はキーがあるだけで
+// inline になった)。値の要る属性の省略・古い options(...) / block はエラー。`@(bss: ...) { }` は中の変数の既定の置き場所。
+func TestV3Attributes(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+@(bss: "BSS") {
+	var b:u8;
+}
+// ループ入りの関数は自動インラインの対象外なので、展開されるのは明示の inline だけ
+function one():u8 @(inline) { var s:u8 = 0; for (var i:u8 = 0; i < 3; i++) { s += i; } return s; }
+function two():u8 @(inline: false) { var s:u8 = 0; for (var i:u8 = 0; i < 3; i++) { s += i + 1; } return s; }
+function main():void
+{
+	b = one() + two();
+	printf(b, "\n");
+	exit(0);
+}
+`
+	out, err := buildFiles(t, map[string]string{"t.fc": src})
+	if err != nil || out != "9\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	if asm := compileAsmFiles(t, map[string]string{"t.fc": src}); strings.Contains(asm, "jsr _t_one") || !strings.Contains(asm, "jsr _t_two") {
+		t.Errorf("@(inline) は展開、@(inline: false) は呼び出しのはず:\n%s", asm)
+	}
+	for _, c := range []struct{ src, msg string }{
+		{"#fc 3\n@(bank);\nfunction main():void { }\n", "@(bank) needs a value"},
+		{"#fc 3\nvar v:u8 @(address);\nfunction main():void { }\n", "@(address) needs a value"},
+		{"#fc 3\noptions(bank: 1);\nfunction main():void { }\n", "`options(...)` is written `@(...)` in fc 3"},
+		{"#fc 3\nblock { var b:u8; } options(bss: \"BSS\");\nfunction main():void { }\n", "is written `@(...) { ... }` in fc 3"},
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": c.src}); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("%q: got %v, want /%s/", c.src, err, c.msg)
+		}
+	}
+}
+
+// compileAsmFiles は files を t.fc からコンパイルして _t.s を返す。
+func compileAsmFiles(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}); err != nil {
+		t.Fatalf("コンパイル失敗: %v", err)
+	}
+	asm, err := os.ReadFile(filepath.Join(dir, "b", "_t.s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(asm)
+}

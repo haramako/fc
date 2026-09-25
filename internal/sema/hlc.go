@@ -542,6 +542,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		}
 		var raws []rawOpt
 		for _, e := range s.Options.Entries {
+			checkBareOption(e)
 			found := false
 			for i := range raws {
 				if raws[i].key == e.Key.Name {
@@ -962,7 +963,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		}
 		vv = h.addVar(ir.NewGlobal(name, typ, symbol))
 		h.prog.storageGlobals[vv] = true
-		vv.Volatile = opt.Has("address") || opt.Has("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
+		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
 	} else {
 		vv = h.addVar(ir.NewLocal(name, typ, ir.LTNone))
 	}
@@ -1328,7 +1329,7 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 	for i, p := range params {
 		argTypes[i] = p.Type
 	}
-	typ := h.prog.Types.Func(argTypes, baseType, opts.Has("fastcall"))
+	typ := h.prog.Types.Func(argTypes, baseType, opts.Flag("fastcall"))
 	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil, Body: body}
 }
 
@@ -2088,7 +2089,7 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 		return false
 	}
 	callee, ok := h.prog.lambdas[lit.Symbol]
-	if !ok || callee.Options.Has("near") {
+	if !ok || callee.Options.Flag("near") {
 		return false
 	}
 	if v, ok := callee.Options.Get("abi"); ok && v.Text() == "cc65" {
