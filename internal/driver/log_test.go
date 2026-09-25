@@ -104,6 +104,44 @@ function main():void
 	}
 }
 
+// TestLogLoopEntry: ループの前の @log (ループの先頭のラベルの注釈) は入るときだけ出る。呼び出しの直後 (直前の命令が jsr の
+// 合流点: emu は rts の後を jsr の後とみなす)、ループ展開 (写しの先頭のラベルに注釈を写さない)、空の無限ループを
+// 回るジャンプの連鎖 (飛び先のラベルの注釈を拾わない)。Mesen での同じ確認は internal/nes の TestMesenLog。
+func TestLogLoopEntry(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+var g:u8;
+function f():void @(noinline) { g += 1; }
+function main():void
+{
+	var i:u8 = 0;
+	f();
+	@log("before g={}", g);
+	while (i < 3) { i += 1; g += i; }
+	@log("after g={}", g);
+	f();
+	@log("before2 g={}", g);
+	while (true) {
+		g += 1;
+		if (g > 10) { break; }
+	}
+	@log("end g={}", g);
+	exit(0);
+}
+`
+	want := "before g=1\nafter g=7\nbefore2 g=8\nend g=11\n"
+	for _, level := range []int{-1, 1, 2} {
+		_, _, logs, _, err := logBuild(t, map[string]string{"t.fc": src}, level, true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if logs != want {
+			t.Errorf("-O %d: logs %q\nwant %q", level, logs, want)
+		}
+	}
+}
+
 // TestLogErrors: 書式と引数の検査 (-g でなくても)。
 func TestLogErrors(t *testing.T) {
 	t.Parallel()

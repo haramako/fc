@@ -418,7 +418,10 @@ ROM とプログラムの出力が変わらないこと（-O 0 / -O 2）を確�
    テストは settings.json が無ければ最小構成を自動生成する
 3. **testrunner の Lua では `io`/`os` が使えない**（設定でも解除不可）。
    テスト結果は `emu.stop(exitCode)` の終了コードで返す設計にする。
-   `emu.log` の出力は stdout には出ない
+   `emu.log` の出力は stdout には出ないが、**`print` は stdout に出る**（`emu.log = function(s) print(s) end` と
+   差し替えれば、生成した `.fclog.lua` の表示をそのまま取れる。`TestMesenLog`）
+5. **`emu.getState()` は重い**（1 回 100 マイクロ秒ほど。PPU まで含む全状態の表を作る）。exec コールバックの中で
+   毎回呼ぶと数倍〜10 倍遅くなるので、レジスタ・サイクル数が要るときだけ呼ぶ
 4. Lua API 覚え書き: `emu.setInput(inputTable, port)`（inputPolled イベント内で呼ぶ。
    キーは a/b/select/start/up/down/left/right の bool）、
    `emu.read(addr, emu.memType.nesDebug, false)`（副作用なし読み取り）

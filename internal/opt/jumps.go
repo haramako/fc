@@ -76,9 +76,13 @@ func threadJumps(lmd *ir.Lambda) bool {
 	ops := lmd.Ops
 	changed := false
 	// ブロックの「実質の飛び先」: ラベルだけなら次のブロック、ラベル + jump ならその先。logs は素通りしたブロックの
-	// @log の注釈 (飛び先を付け替えた分岐が引き取る。ir/log.go)
+	// @log の注釈 (飛び先を付け替えた分岐が引き取る。ir/log.go)。ラベルへ飛んで入ったブロックでは、そのラベルとその前の
+	// ラベルの注釈は通らない (ラベルの注釈はラベルの前の地点。上から落ちてきたときだけ出る)。空のループを回っても
+	// 同じ注釈を 2 度拾わない
 	resolve := func(label string) (string, []*ir.LogPoint) {
 		var logs []*ir.LogPoint
+		seen := map[*ir.LogPoint]bool{}
+		jumped := true // label へ飛んで入った (false: 前のブロックから落ちてきた)
 		for n := 0; n < 20; n++ {
 			b := cfg.BlockOf(label)
 			if b == nil {
@@ -86,8 +90,19 @@ func threadJumps(lmd *ir.Lambda) bool {
 			}
 			var body []*ir.Op
 			var blogs []*ir.LogPoint
+			skip := jumped
 			for _, i := range cfg.Ops(b) {
-				blogs = append(blogs, ops[i].Logs...)
+				if !skip {
+					for _, p := range ops[i].Logs {
+						if !seen[p] {
+							seen[p] = true
+							blogs = append(blogs, p)
+						}
+					}
+				}
+				if ops[i].Code == ir.OpLabel && ops[i].Label == label {
+					skip = false
+				}
 				if ops[i].Code != ir.OpLabel {
 					body = append(body, ops[i])
 				}
@@ -95,8 +110,10 @@ func threadJumps(lmd *ir.Lambda) bool {
 			switch {
 			case len(body) == 0 && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label != "":
 				label = cfg.Blocks[b.Index+1].Label
+				jumped = false
 			case len(body) == 1 && body[0].Code == ir.OpJump && body[0].Label != label:
 				label = body[0].Label
+				jumped = true
 			default:
 				return label, logs
 			}

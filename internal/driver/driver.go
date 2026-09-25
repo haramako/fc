@@ -868,6 +868,11 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 			}
 		}
 		prevPC = cpu.Pc
+		if logs != nil && mem.Get(cpu.Pc) == 0x60 {
+			// rts の後は、戻り先の直前の jsr を直前の命令とみなす (呼び出しの直後の合流点の地点。Prevs は jsr を指す)
+			ret := mem.Get(0x100+(cpu.S+1)&0xff) | mem.Get(0x100+(cpu.S+2)&0xff)<<8
+			prevPC = (ret - 2) & 0xffff
+		}
 		cpu.StepSilent()
 		if maxCycles > 0 && cpu.Cycles > maxCycles {
 			return 0, 0, fmt.Errorf("cycle limit exceeded (%d cycles, pc=$%04x)", maxCycles, cpu.Pc)

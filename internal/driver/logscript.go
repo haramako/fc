@@ -97,6 +97,7 @@ local cpuMem = emu.memType.nesDebug or emu.memType.nesMemory
 local prgRom = emu.memType.nesPrgRom
 
 local function readValue(v, size, state)
+  -- state(key) は CPU の状態 (emu.getState は重いので、レジスタ・スタックを読むときだけ取る)
   if v.loc == "const" then return v.value end
   if v.loc == "bytes" then
     local n = 0
@@ -107,10 +108,10 @@ local function readValue(v, size, state)
     end
     return n
   end
-  if v.loc == "reg" then return state["cpu." .. v.reg] end
+  if v.loc == "reg" then return state("cpu." .. v.reg) end
   if v.loc == "mem" or v.loc == "stack" then
     local addr = v.addr
-    if v.loc == "stack" then addr = (addr + state["cpu.x"]) & 0xff end
+    if v.loc == "stack" then addr = (addr + state("cpu.x")) & 0xff end
     local n = 0
     for i = 0, size - 1 do
       n = n | (emu.read((addr + i) & 0xffff, cpuMem, false) << (8 * i))
@@ -158,7 +159,11 @@ local function formatValue(a, part, v)
 end
 
 local function show(p, site)
-  local state = emu.getState()
+  local st = nil
+  local function state(key)
+    st = st or emu.getState()
+    return st[key]
+  end
   local out = {}
   for _, part in ipairs(p.parts) do
     if part.text then
@@ -184,9 +189,14 @@ for _, list in pairs(byPc) do
 end
 -- 合流点の地点 (prevs がある) は、この地点の経路の直前の命令 (prevs) を実行したときに準備し、地点に来たら出して準備を
 -- 解く (ループの先頭に付いた @log を後ろからの辺で来た周では出さない、何も出さない else の地点を then の後で出さない)。
--- 準備はその命令を実行したときのサイクル数で持ち、地点に来たときに 1 命令分 (8 サイクル以内) の差のときだけ有効
--- (直前の命令が分岐で、成立してほかへ行った後に別の経路で来たときに出さないように)
+-- 直前の命令が条件分岐なら、準備はその命令を実行したときのサイクル数で持ち、地点に来たときに 1 命令分 (8 サイクル以内)
+-- の差のときだけ有効 (成立してほかへ行った後に別の経路で来たときに出さないように)。jsr (呼び出しの直後の地点) なら、
+-- 呼び先の長さが分からないので、かわりに jsr のときのスタックポインタで持ち、戻って同じ値のときに有効 (再帰で同じ jsr を
+-- 入れ子に通っても、戻るたびに合う)。ほかの命令 (jmp と、上から落ちてくる命令) の次は必ず地点なので印だけ。
+-- emu.getState は 1 回 100 マイクロ秒ほどかかるので、要るとき (条件分岐・jsr、レジスタ・スタックの値) だけ呼ぶ
+local condBranch = { [0x10] = true, [0x30] = true, [0x50] = true, [0x70] = true, [0x90] = true, [0xb0] = true, [0xd0] = true, [0xf0] = true }
 local armed = {}
+local armedCall = {}
 local function cycles()
   local st = emu.getState()
   return st["cpu.cycleCount"]
@@ -204,7 +214,17 @@ for _, p in ipairs(points) do
 end
 for pc, sites in pairs(prevs) do
   emu.addMemoryCallback(function(address)
-    local c = cycles() or true
+    local op = emu.read(address, cpuMem, false)
+    if op == 0x20 then
+      local sp = emu.getState()["cpu.sp"]
+      for _, site in ipairs(sites) do
+        armedCall[site] = armedCall[site] or {}
+        armedCall[site][sp] = true
+      end
+      return
+    end
+    local c = true
+    if condBranch[op] then c = cycles() or true end
     for _, site in ipairs(sites) do armed[site] = c end
   end, emu.callbackType.exec, pc, pc)
 end
@@ -217,6 +237,14 @@ for pc, list in pairs(byPc) do
         local a = armed[e.site]
         ok = a == true or (type(a) == "number" and (cycles() or a) - a <= 8)
         armed[e.site] = nil
+        local calls = armedCall[e.site]
+        if calls and next(calls) ~= nil then
+          local sp = emu.getState()["cpu.sp"]
+          if calls[sp] then
+            ok = true
+            calls[sp] = nil
+          end
+        end
       end
       if ok and e.site.prg >= 0 then
         abs = abs or emu.convertAddress(address, emu.memType.nesMemory)
