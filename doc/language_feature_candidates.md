@@ -142,6 +142,14 @@ static_assert(offsetof(Sprite, x) == 3, "field offset mismatch");
 
 ## 4. バンク情報を持つ関数ポインタ
 
+**2026-09-25 時点: `farfn(T):R` として実装済み**（f60f29e、[v2_far_function_pointers.md](v2_far_function_pointers.md)。3 バイト、
+`.bank(symbol)`、`fn` と分けて必要な表だけ使う、ABI・呼び出しグラフ・定数表・near / far の変換）。残りは:
+
+- バンク番号の取り出し `@bank(関数)` / `@bank(farfn の値)`: リンク時の値（`.bank(symbol)`、farfn の 3 バイト目）として先に入れる。
+  手書きの ld65.cfg の経路とも両立する。`PROCESS` を farfn の表にすれば `EN_BANKS` の二重管理が無くなる。コンパイル時に
+  バンクを知る機能は v3_plan.md §3（配置の情報源）で扱う
+- 密なループで毎回バンクを戻さない呼び方: roadmap に「far call の復帰を関数の出口まで遅らせる」として記録（見込みは薄い）
+
 ### 動機
 
 直接呼び出しの far call は実装済みだが、関数ポインタ経由は対象外。
