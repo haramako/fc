@@ -71,6 +71,8 @@ type rpFunc struct {
 	far      bool      // 別バンクのモジュール far1 にある (main からは far call)
 	inTable  bool      // 関数ポインタ表 fp0 / fq0 の要素 (アドレスを取られる: Entry 関数になる)
 	rec      bool      // 自分を呼ぶ関数 (stack ABI になる。深さは引数 n で 4 まで)
+	mod      string    // 別のモジュールの関数 (fc 3 のモジュール v3m。本体は randv3_test.go が生成して text に持つ)
+	text     string
 	locals   []string  // 宣言
 	stmts    []*rpStmt // 本体
 	retExpr  string
@@ -132,6 +134,7 @@ type rpGen struct {
 	loops   int     // ループの入れ子の深さ (break / continue を出せるか)
 	nLocal  int
 	cur     *rpFunc
+	v3      *rpV3 // fc 3 のモジュール v3m (TestRandomV3Programs のときだけ。randv3_test.go)
 }
 
 // arraysAll は見えている配列 (グローバル + 今の関数のローカル)。
@@ -366,6 +369,9 @@ func (g *rpGen) callables() []*rpFunc {
 		if g.cur != nil && g.cur.far && !f.far {
 			continue
 		}
+		if f.mod != "" && g.cur != nil && (g.cur.far || g.cur.inline) {
+			continue // far1 と inline 関数からは v3m を呼ばない
+		}
 		r = append(r, f)
 	}
 	return r
@@ -375,6 +381,9 @@ func (g *rpGen) callables() []*rpFunc {
 func (g *rpGen) callName(f *rpFunc) string {
 	if f.far && (g.cur == nil || !g.cur.far) {
 		return "far1." + f.name
+	}
+	if f.mod != "" {
+		return f.mod + "." + f.name
 	}
 	return f.name
 }
@@ -1005,6 +1014,9 @@ func (g *rpGen) genSv() {
 
 // genProgram はプログラム全体を作る (main の文は最後に「全部を出力して exit」)。
 func (g *rpGen) genProgram() {
+	if g.v3 != nil {
+		g.genV3() // 先に作る (後の関数と main から呼べるように)
+	}
 	for i := 0; i < g.pick(4)+3; i++ {
 		g.globals = append(g.globals, rpVar{name: fmt.Sprintf("g%d", i), typ: g.typ()})
 	}
@@ -1188,6 +1200,9 @@ func (g *rpGen) source() string {
 	if g.hasFar {
 		b.WriteString("use far1;\n")
 	}
+	if g.v3 != nil {
+		b.WriteString("use v3m;\n")
+	}
 	for _, v := range g.globals {
 		fmt.Fprintf(&b, "var %s:%s;\n", v.name, v.typ.name)
 	}
@@ -1240,8 +1255,8 @@ func (g *rpGen) source() string {
 		fmt.Fprintf(&b, "const fq0:[%d]farfn(%s):%s = [%s];\n", len(names), strings.Join(ps, ", "), g.fqSig.ret.name, strings.Join(names, ", "))
 	}
 	for _, f := range g.funcs {
-		if f.far {
-			continue // far1.fc に出す
+		if f.far || f.mod != "" {
+			continue // far1.fc / v3m.fc に出す
 		}
 		if f.name == "main" && g.fpTable != nil {
 			// 関数ポインタ表 (要素の関数の後に置く)
@@ -1364,12 +1379,18 @@ func (g *rpGen) sources() map[string]string {
 	if g.hasFar {
 		m["far1.fc"] = g.farSource()
 	}
+	if g.v3 != nil {
+		m["v3m.fc"] = g.v3Source()
+	}
 	return m
 }
 
 // allSource は表示用 (far1.fc も繋げる)。
 func (g *rpGen) allSource() string {
 	s := g.source()
+	if g.v3 != nil {
+		s += "// ---- v3m.fc ----\n" + g.v3Source()
+	}
 	if g.hasFar {
 		s += "// ---- far1.fc ----\n" + g.farSource()
 	}
