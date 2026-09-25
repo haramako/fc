@@ -250,22 +250,22 @@ emu.addEventCallback(function()
   if frame == 480 then
     startX = emu.read(ADDR_MY_X, emu.memType.nesDebug, false)
     lastArea = emu.read(ADDR_CUR_AREA, emu.memType.nesDebug, false)
-    emu.log("field start: my_x=" .. startX .. " area=" .. lastArea)
+    print("field start: my_x=" .. startX .. " area=" .. lastArea)
   end
   if frame > 490 and frame %% 10 == 0 then
     local area = emu.read(ADDR_CUR_AREA, emu.memType.nesDebug, false)
     if area ~= lastArea then
       areaChanges = areaChanges + 1
-      emu.log("area change #" .. areaChanges .. ": " .. lastArea .. " -> " .. area .. " (frame " .. frame .. ")")
+      print("area change #" .. areaChanges .. ": " .. lastArea .. " -> " .. area .. " (frame " .. frame .. ")")
       lastArea = area
       if areaChanges >= 2 then
-        emu.log("PASS: my_x=" .. emu.read(ADDR_MY_X, emu.memType.nesDebug, false))
+        print("PASS: my_x=" .. emu.read(ADDR_MY_X, emu.memType.nesDebug, false))
         emu.stop(0)
       end
     end
   end
   if frame > 6000 then
-    emu.log("FAIL: area changes=" .. areaChanges)
+    print("FAIL: area changes=" .. areaChanges)
     emu.stop(1)
   end
 end, emu.eventType.startFrame)
