@@ -173,6 +173,11 @@ fc 3 の `[]T` / `[]const T` は slice（先頭のポインタと長さ `u8` の
 以上に使う。`[:u8]T` は `[]T` と同じ）。`[]T` → `[:u16]T` は暗黙、逆は `@slice(@ptr(s), n)`。256 要素以上の配列の範囲と、長さが
 `u16` の `@slice(p, n)` は広い slice（[v3_slices_vector.md](v3_slices_vector.md)）。
 
+fc 3 の `switch` は case / default ごとにスコープを作る（case の中で宣言した変数は、ほかの case と switch の後ろからは
+見えない。fc 2 は囲むスコープに宣言していた。`fcc migrate` は書き換えないので、そう使っていたソースは fc 3 でエラーに
+なる。宣言を switch の前に移す）。`fallthrough;` を case の最後の文に書くと、次の case（最後の case なら default）の本体へ
+値の検査をせずに進む（default と、default の無い最後の case からはできない）。
+
 fc 3 の `@log("HP: {} / {}", hp, max_hp);` は、エミュレータ側で表示するログ（NES 側の命令・サイクル・ROM は変わらない）。
 書式は `{}`（順番）/ `{0}`（位置）と `{:x}` / `{:04X}` / `{:b}` / `{:c}` / `{:d}`、`{{` / `}}`。引数は変数（グローバル・
 ローカル・引数）・定数・struct のフィールド・定数添字の要素で、enum はメンバー名、bool は true / false、ポインタは `$1234`

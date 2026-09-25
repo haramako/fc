@@ -41,7 +41,8 @@ type Hlc struct {
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
 	cmemo map[*cexpr]*cexpr
 
-	pendingLogs []*ir.LogPoint // 次に出す命令に付ける @log (log.go)
+	pendingLogs []*ir.LogPoint  // 次に出す命令に付ける @log (log.go)
+	caseDecls   map[string]bool // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
 }
 
 // breakable は break / continue の飛び先になる文 (ループ、v2 では switch も)。
@@ -813,6 +814,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileStatement(&syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.X, OpPos: s.OpPos, Op: syntax.Assign,
 			Rhs: &syntax.BinaryExpr{X: s.X, OpPos: s.OpPos, Op: op, Y: &syntax.IntLit{ValuePos: s.OpPos, Value: 1, Text: "1"}}}})
 
+	case *syntax.FallthroughStmt:
+		panic(&diag.Error{Msg: "fallthrough must be the last statement of a switch case"})
+
 	case *syntax.BreakStmt:
 		h.emit(&ir.Op{Code: ir.OpJump, Label: h.findBreakable("break", s.Label).breakLabel})
 
@@ -897,14 +901,28 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.emit(&ir.Op{Code: ir.OpJump, Label: defaultLabel})
 			for ci, c := range s.Cases {
 				h.emit(&ir.Op{Code: ir.OpLabel, Label: caseLabels[ci]})
-				h.compileStmts(c.Body)
-				h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
+				next := defaultLabel // fallthrough の行き先 (次の case の本体。最後の case なら default)
+				if ci+1 < len(caseLabels) {
+					next = caseLabels[ci+1]
+				}
+				h.compileCaseBody(s, ci, c.Body, next, endLabel)
 			}
 			h.emit(&ir.Op{Code: ir.OpLabel, Label: defaultLabel})
 		} else {
+			// fallthrough の行き先の本体の先頭のラベル (fallthrough される case だけ置く。ラベルはブロックの切れ目に
+			// なって最適化の結果を変えうるので、使わないときは今までどおり出さない)
+			bodyLabels := make([]string, len(s.Cases)+1) // 最後は default の本体
+			for ci, c := range s.Cases {
+				if endsWithFallthrough(c.Body) {
+					bodyLabels[ci+1] = h.newLabel("case")
+				}
+			}
 			for ci, c := range s.Cases {
 				labels := h.newLabels("then", "else")
 				thenLabel, elseLabel := labels[0], labels[1]
+				if bodyLabels[ci] != "" {
+					thenLabel = bodyLabels[ci]
+				}
 				// 値ごとに `eq t; if_true t goto then`、最後の値だけ `eq t; if t goto else` (一致しなければ次の case へ)。
 				// t は値ごとに新しい一時変数にする (定義 1 つ + 直後で使用、でコンディションフラグに割り付く: cmp; bne)
 				for k, cv := range vals[ci] {
@@ -916,16 +934,18 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 						h.emit(&ir.Op{Code: ir.OpIf, Src: []ir.Operand{tmp}, Label: elseLabel})
 					}
 				}
-				if len(vals[ci]) > 1 {
+				if len(vals[ci]) > 1 || bodyLabels[ci] != "" {
 					h.emit(&ir.Op{Code: ir.OpLabel, Label: thenLabel})
 				}
-				h.compileStmts(c.Body)
-				h.emit(&ir.Op{Code: ir.OpJump, Label: endLabel})
+				h.compileCaseBody(s, ci, c.Body, bodyLabels[ci+1], endLabel)
 				h.emit(&ir.Op{Code: ir.OpLabel, Label: elseLabel})
+			}
+			if l := bodyLabels[len(s.Cases)]; l != "" {
+				h.emit(&ir.Op{Code: ir.OpLabel, Label: l})
 			}
 		}
 		if s.Default != nil {
-			h.compileStmts(s.Default.Body)
+			h.compileCaseBody(s, -1, s.Default.Body, "", endLabel)
 		}
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: endLabel})
 		h.popBreakable()
@@ -1148,6 +1168,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		return &cexpr{kind: cNull} // 型が決まるまで保留 (withExpected)
 
 	case cIdent:
+		if h.caseDecls[c.name] && h.scope.Find(c.name, true) == nil {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s not found (in fc 3 a variable declared in a switch case is visible only in that case; declare it before the switch)", c.name)})
+		}
 		return cv(h.scope.FindMust(c.name, true))
 
 	case cStr:
@@ -2483,4 +2506,51 @@ func ReadSource(path string) ([]byte, error) {
 		return nil, err
 	}
 	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")), nil
+}
+
+// endsWithFallthrough は case の本体の最後の文が `fallthrough;` か (fc 3)。
+func endsWithFallthrough(body []syntax.Stmt) bool {
+	if len(body) == 0 {
+		return false
+	}
+	_, ok := body[len(body)-1].(*syntax.FallthroughStmt)
+	return ok
+}
+
+// compileCaseBody は switch の case (ci。default は -1) の本体と、その後ろのジャンプ (switch の出口 end、fallthrough
+// なら次の case の本体 next) を出す。fc 3 では case ごとにスコープを作る (case の中の宣言は、ほかの case と switch の
+// 後ろからは見えない)。fc 2 は今までどおり (囲むスコープに宣言する)。
+func (h *Hlc) compileCaseBody(s *syntax.SwitchStmt, ci int, body []syntax.Stmt, next, end string) {
+	target := end
+	if endsWithFallthrough(body) {
+		ft := body[len(body)-1]
+		body = body[:len(body)-1]
+		switch {
+		case ci < 0:
+			h.updatePos(ft)
+			panic(&diag.Error{Msg: "cannot fallthrough from default (it is the last clause)"})
+		case ci == len(s.Cases)-1 && s.Default == nil:
+			h.updatePos(ft)
+			panic(&diag.Error{Msg: "cannot fallthrough from the last case (no default follows)"})
+		}
+		target = next
+	}
+	if h.version() >= syntax.Version3 {
+		for _, st := range body {
+			if d, ok := st.(*syntax.VarDecl); ok {
+				if h.caseDecls == nil {
+					h.caseDecls = map[string]bool{}
+				}
+				for _, sp := range d.Specs {
+					h.caseDecls[sp.Name.Name] = true
+				}
+			}
+		}
+		h.inScope(func() { h.compileStmts(body) })
+	} else {
+		h.compileStmts(body)
+	}
+	if ci >= 0 || target != end {
+		h.emit(&ir.Op{Code: ir.OpJump, Label: target})
+	}
 }

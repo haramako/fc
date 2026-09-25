@@ -366,6 +366,10 @@ func (p *printer) stmt(s Stmt) {
 		}
 		p.tokAt(s.Semi, ";")
 
+	case *FallthroughStmt:
+		p.tokAt(s.Keyword, "fallthrough")
+		p.tokAt(s.Semi, ";")
+
 	case *ContinueStmt:
 		p.tokAt(s.Keyword, "continue")
 		if s.Label != nil {

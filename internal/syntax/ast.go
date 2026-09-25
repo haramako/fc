@@ -185,6 +185,12 @@ type BreakStmt struct {
 	Semi    Pos
 }
 
+// FallthroughStmt は fc 3 の `fallthrough;` (switch の case の最後の文。次の case の本体へ、値の検査をせずに進む)。
+type FallthroughStmt struct {
+	Keyword Pos
+	Semi    Pos
+}
+
 // ContinueStmt は `continue;` / `continue L;` (v2)。
 type ContinueStmt struct {
 	Keyword Pos
@@ -693,8 +699,10 @@ func (s *IncDecStmt) End() Pos {
 	return after(s.OpPos, 2)
 }
 
-func (s *BreakStmt) Pos() Pos { return s.Keyword }
-func (s *BreakStmt) End() Pos { return after(s.Semi, 1) }
+func (s *BreakStmt) Pos() Pos       { return s.Keyword }
+func (s *BreakStmt) End() Pos       { return after(s.Semi, 1) }
+func (s *FallthroughStmt) Pos() Pos { return s.Keyword }
+func (s *FallthroughStmt) End() Pos { return after(s.Semi, 1) }
 
 func (s *ContinueStmt) Pos() Pos { return s.Keyword }
 func (s *ContinueStmt) End() Pos { return after(s.Semi, 1) }
@@ -929,27 +937,28 @@ func (s *VarSpec) End() Pos {
 }
 
 // マーカーメソッド
-func (*VarDecl) stmtNode()      {}
-func (*FuncDecl) stmtNode()     {}
-func (*IfStmt) stmtNode()       {}
-func (*LoopStmt) stmtNode()     {}
-func (*LabeledStmt) stmtNode()  {}
-func (*WhileStmt) stmtNode()    {}
-func (*ForStmt) stmtNode()      {}
-func (*IncDecStmt) stmtNode()   {}
-func (*BreakStmt) stmtNode()    {}
-func (*ContinueStmt) stmtNode() {}
-func (*ReturnStmt) stmtNode()   {}
-func (*SwitchStmt) stmtNode()   {}
-func (*ExprStmt) stmtNode()     {}
-func (*OptionsStmt) stmtNode()  {}
-func (*UseDecl) stmtNode()      {}
-func (*IncludeDecl) stmtNode()  {}
-func (*StructDecl) stmtNode()   {}
-func (*SoaDecl) stmtNode()      {}
-func (*ScopeLabel) stmtNode()   {}
-func (*Block) stmtNode()        {}
-func (*EmptyStmt) stmtNode()    {}
+func (*VarDecl) stmtNode()         {}
+func (*FuncDecl) stmtNode()        {}
+func (*IfStmt) stmtNode()          {}
+func (*LoopStmt) stmtNode()        {}
+func (*LabeledStmt) stmtNode()     {}
+func (*WhileStmt) stmtNode()       {}
+func (*ForStmt) stmtNode()         {}
+func (*IncDecStmt) stmtNode()      {}
+func (*BreakStmt) stmtNode()       {}
+func (*FallthroughStmt) stmtNode() {}
+func (*ContinueStmt) stmtNode()    {}
+func (*ReturnStmt) stmtNode()      {}
+func (*SwitchStmt) stmtNode()      {}
+func (*ExprStmt) stmtNode()        {}
+func (*OptionsStmt) stmtNode()     {}
+func (*UseDecl) stmtNode()         {}
+func (*IncludeDecl) stmtNode()     {}
+func (*StructDecl) stmtNode()      {}
+func (*SoaDecl) stmtNode()         {}
+func (*ScopeLabel) stmtNode()      {}
+func (*Block) stmtNode()           {}
+func (*EmptyStmt) stmtNode()       {}
 
 func (*Ident) exprNode()      {}
 func (*IntLit) exprNode()     {}

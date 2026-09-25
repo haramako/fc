@@ -47,7 +47,7 @@ package syntax
 }
 
 %token <tok> NUMBER IDENT STRING kPLACEMENT kALIAS
-%token <tok> kAT_SIZEOF kAT_BITCAST kAT_INCBIN kAT_INCLUDE kATIDENT kAT_IF kENUM
+%token <tok> kAT_SIZEOF kAT_BITCAST kAT_INCBIN kAT_INCLUDE kATIDENT kAT_IF kENUM kFALLTHROUGH
 %type <emem> enum_member
 %type <emems> enum_members enum_member_list
 %type <typ> opt_enum_base
@@ -136,6 +136,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
                                                 { $$ = &ForStmt{For: $1.Pos, Init: $3, Cond: $5, Step: $7, Rparen: $8.Pos, Body: $9} } /* v2: C 型 */
          | incdec ';'                           { s := $1.(*IncDecStmt); s.Semi = $2.Pos; $$ = s } /* v2 */
          | kBREAK opt_ident ';'                 { $$ = &BreakStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
+         | kFALLTHROUGH ';'                     { $$ = &FallthroughStmt{Keyword: $1.Pos, Semi: $2.Pos} } /* v3 */
          | kCONTINUE opt_ident ';'              { $$ = &ContinueStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
          | kRETURN opt_exp ';'                  { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} }
          | kRETURN anon_struct_lit ';'          { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} } /* v2: 戻り値の型で決まる */
