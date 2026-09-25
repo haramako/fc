@@ -1204,6 +1204,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				typ = h.compatible(typ, ir.ValType(v))
 			}
 		}
+		if typ == nil {
+			panic(&diag.Error{Msg: "cannot infer the element type of an empty array literal"})
+		}
 		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(typ, len(vals)), vals))
 
 	case cIncbin:
@@ -2211,6 +2214,10 @@ func (h *Hlc) warn(format string, args ...any) {
 }
 
 func (h *Hlc) emit(op *ir.Op) {
+	if h.lmd == nil {
+		// トップレベルの実行文 (fuzz で発覚。h.lmd (現在の関数) が無いまま emit すると nil 参照で落ちる)
+		panic(&diag.Error{Msg: "executable statement is not allowed at module level; put it in a function"})
+	}
 	op.Pos = h.curPos
 	if len(h.pendingLogs) > 0 {
 		op.Logs = append(op.Logs, h.pendingLogs...)

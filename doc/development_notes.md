@@ -177,6 +177,15 @@ go test ./...                                    # 全部 (golden + examples + N
   frame size over にして展開を止めてやり直す）。修正後、種 3600000〜3619999 の 2 万本とバンク切替 1000 本は失敗なし
 - 続けて main（4402194）で種 3620000〜3679999 の 6 万本とバンク切替 2000 本は失敗なし（飛ばした種 7.3%: ROM に
   入らない 6.4%、両方でサイクル上限 0.7%、フレームが大きすぎる 0.2%、ソフトウェアスタックのあふれ 8 本）
+- **Go native fuzz（コンパイラが落ちないこと）の導入**（2026-09-25）: 差分 fuzz（上）は正しいプログラムの実行結果を
+  比べるもので、壊れた入力での panic は見ない。`internal/syntax/fuzz_test.go`（FuzzParse / FuzzFormat: 整形結果が
+  再パースできて冪等）と `internal/driver/fuzz_test.go`（FuzzCheck: 構文〜コード生成、ファイルは書かない）を追加。
+  `go test ./internal/driver -fuzz FuzzCheck -fuzztime 60s` のように回す。見つけた入力は `testdata/fuzz/` に保存され、
+  以後は通常の `go test` で回帰テストになる。最初の数分で sema の nil 参照 2 件: 空の配列リテラル（`const A=[];`）で
+  要素型が nil のまま `ArrayOf` に渡る（cArray で要素が無ければエラーに）、トップレベルの裸のブロックの中の実行文が
+  現在の関数（`h.lmd`）無しで `emit` に届く（emit でモジュールレベルならエラーに）。
+  速度の目安: N100（4 コア）で FuzzParse 約 2 万実行/秒、TestRandomPrograms 約 5 本/秒（200 本 41 秒。
+  16 コア機の記録 6 万本 ≈ 2 時間 ≈ 8 本/秒の 6 割ほど）
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
   （`freeA` / `needsX` / `needsY`）は codegen の出力を手で写した見積もりで、食い違いが fuzz で何度も出ていた
   （2 バイトの dec、cast を挟んだ if、Y 代用と融合、push_result の後の ldx …）。`CompileLambda` は命令の本体を出した後で

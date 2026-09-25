@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("use*from unittest;const A00000000:A;{assert_equal([0],0,'');}")
