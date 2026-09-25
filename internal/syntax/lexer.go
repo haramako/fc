@@ -105,11 +105,11 @@ var symbolTokens = []struct {
 	{"<<=", ShlEq}, {">>=", ShrEq}, {"*=", MulEq}, {"/=", DivEq}, {"%=", ModEq}, {"&=", AndEq}, {"|=", OrEq}, {"^=", XorEq}, // v2 (長いものを先に)
 	{"<=", Leq}, {">=", Geq}, {"==", EqEq}, {"+=", AddEq}, {"-=", SubEq},
 	{"!=", Neq}, {"->", Arrow}, {"<<", Shl}, {">>", Shr},
-	{"&&", AndAnd}, {"||", OrOr}, {"++", Inc}, {"--", Dec},
+	{"&&", AndAnd}, {"||", OrOr}, {"++", Inc}, {"--", Dec}, {"..", DotDot},
 	{"(", LParen}, {")", RParen}, {"{", LBrace}, {"}", RBrace}, {";", Semicolon}, {":", Colon},
 	{"<", Lt}, {">", Gt}, {"[", LBrack}, {"]", RBrack}, {"+", Plus}, {"-", Minus},
 	{"*", Star}, {"/", Slash}, {"%", Percent}, {"&", Amp}, {"|", Pipe}, {"^", Caret},
-	{"=", Assign}, {",", Comma}, {".", Dot}, {"!", Not}, {"~", Tilde},
+	{"=", Assign}, {",", Comma}, {".", Dot}, {"!", Not}, {"~", Tilde}, {"?", Question},
 }
 
 var keywords = map[string]Kind{

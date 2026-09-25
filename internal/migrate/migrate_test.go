@@ -100,7 +100,7 @@ function f():void {
 	want := `#fc 3
 @include("x.asm");
 @include("font.chr", size: 4096, fill: 0);
-const T:[]u8 = @incbin("t.bin");
+const T:[?]u8 = @incbin("t.bin");
 const _T = @textmap("font.txt");
 function f():void {
 	@asm("sei", "cli");
@@ -149,5 +149,18 @@ function g():void @(inline: false) { }
 	}
 	if string(got) != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestMigrateInferArrays: 長さを省いた配列型 []T は [?]T (fc 3 の []T は slice)。長さのある配列はそのまま。
+func TestMigrateInferArrays(t *testing.T) {
+	in := "const A:[]int = [1, 2];\nvar B:[4][]int;\nfunction f(p:*[]int, q:[3]int):void {}\n"
+	want := "#fc 3\nconst A:[?]u8 = [1, 2];\nvar B:[4][?]u8;\nfunction f(p:*[?]u8, q:[3]u8):void {}\n"
+	got, err := Migrate([]byte(in), "t.fc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Errorf("got %q want %q", got, want)
 	}
 }

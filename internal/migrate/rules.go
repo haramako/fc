@@ -13,6 +13,7 @@ func init() {
 	Rules = append(Rules,
 		Rule{Name: "int-types", Doc: "整数型名を fc 3 の名前にする (int / uint8 → u8、sint → i8、int16 → u16、sint16 → i16)", Apply: renameIntTypes},
 		Rule{Name: "attributes", Doc: "options(...) を @(...) にする (真偽値の属性の `: true` は省く。block { ... } options(k: v); は @(k: v) { ... })", Apply: attributes},
+		Rule{Name: "infer-arrays", Doc: "長さを省いた配列型 []T を [?]T にする (fc 3 の []T は slice)", Apply: inferArrays},
 		Rule{Name: "at-builtins", Doc: "組み込みを @ の形にする (sizeof / incbin / bitcast<T>(x) → @bitcast(T, x) / include(...) options(...) → @include(..., k: v) / asm / textmap / min / max / clamp / unittest_run_tests → @run_tests)", Apply: atBuiltins},
 	)
 }
@@ -28,6 +29,16 @@ func renameIntTypes(c *Ctx) {
 		if v3, old := types.V2IntTypeNames[nt.Name.Name]; old {
 			off := nt.Name.NamePos.Offset
 			c.Replace(off, off+len(nt.Name.Name), v3)
+		}
+		return true
+	})
+}
+
+// inferArrays は長さを省いた配列型 `[]T` (長さは初期値などから決まる) を fc 3 の `[?]T` にする。fc 3 の `[]T` は slice。
+func inferArrays(c *Ctx) {
+	syntax.Inspect(c.File, func(n syntax.Node) bool {
+		if at, ok := n.(*syntax.ArrayType); ok && at.Len == nil && !at.Infer.IsValid() {
+			c.Replace(at.Rbrack.Offset, at.Rbrack.Offset, "?")
 		}
 		return true
 	})

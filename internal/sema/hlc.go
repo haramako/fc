@@ -1013,6 +1013,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 // typ / val / opt はそれぞれ省略可 (nil)。
 func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
 	var newVal *ir.Value
+	if at, ok := typ.(*syntax.ArrayType); ok && at.IsSlice(h.version()) {
+		panic(&diag.Error{Msg: fmt.Sprintf("const %s: a slice is a run-time value (use [?]T for a constant array)", name)})
+	}
 	if val != nil {
 		declType := h.typeEval(typ)
 		cv := h.constEval(h.withExpected(val, declType))
@@ -1349,12 +1352,14 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			}
 			return &cexpr{kind: cOp, op: c.op, args: args}
 
-		case opLoad, opIndex, opRef, opDeref:
+		case opLoad, opIndex, opRef, opDeref, opSlice, opToSlice, opLen:
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
-				args[i] = h.constEval(a)
+				if a != nil { // opSlice の省いた lo / hi
+					args[i] = h.constEval(a)
+				}
 			}
-			return &cexpr{kind: cOp, op: c.op, args: args}
+			return &cexpr{kind: cOp, op: c.op, args: args, ty: c.ty}
 		}
 	}
 	panic(fmt.Sprintf("invalid op %v", c.op))
@@ -1462,6 +1467,20 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 		}
 		return h.prog.Types.PointerToRO(elem, t.Const.IsValid())
 	case *syntax.ArrayType:
+		if t.IsSlice(h.version()) {
+			wide := false
+			if t.LenType != nil {
+				lt := h.typeOf(t.LenType)
+				if lt.Kind != types.Int || lt.Enum != nil || lt.Signed {
+					panic(&diag.Error{Msg: fmt.Sprintf("the length type of a slice must be u8 or u16 (got %s)", lt)})
+				}
+				wide = lt.Size == 2
+			}
+			return h.prog.Types.Slice(h.typeOf(t.Elem), t.Const.IsValid(), wide)
+		}
+		if t.Const.IsValid() {
+			panic(&diag.Error{Msg: "const is only for slices ([]const T); an array's elements are read-only when the array is const"})
+		}
 		n := -1
 		if t.Len != nil {
 			sv := h.constEval(toC(t.Len))
@@ -1594,6 +1613,11 @@ func (h *Hlc) typeEval(t syntax.TypeExpr) *types.Type {
 // rval は右辺値として評価し、値を返す。
 func (h *Hlc) rval(c *cexpr) ir.Operand {
 	v, left := h.lval(c)
+	return h.rvalOf(v, left)
+}
+
+// rvalOf は lval の結果 (v, left) を右辺値にする。
+func (h *Hlc) rvalOf(v ir.Operand, left bool) ir.Operand {
 	if v == nil {
 		// void 関数の呼び出しなど値を持たない式を、値が要る場所 (条件・代入・引数) に書いた
 		panic(&diag.Error{Msg: "expression has no value (void function call used as a value)"})
@@ -2049,6 +2073,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
+			if st := ir.ValType(left); st.IsSlice() {
+				// s[i] は s.ptr[i] (範囲の検査はしない)
+				left = ir.NewCastedValue(left, h.prog.Types.PointerTo(st.SliceOf), 0)
+			}
 			if ir.ValType(left).Kind != types.Pointer && ir.ValType(left).Kind != types.Array {
 				panic(&diag.Error{Msg: fmt.Sprintf("cannot index %s (type %s is not a pointer or array)", describe(left), ir.ValType(left))})
 			}
@@ -2064,6 +2092,19 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = tmp
 			leftValue = true
 
+		case opSlice:
+			r = h.sliceRange(e.args[0], e.args[1], e.args[2])
+
+		case opToSlice:
+			r = h.toSlice(e.args[0], e.ty)
+
+		case opLen:
+			if p := h.sliceParts(e.args[0], "@len"); p.n >= 0 {
+				r = h.IntValue(p.n)
+			} else {
+				r = p.len
+			}
+
 		default:
 			panic(fmt.Sprintf("unknown op %s", e.op))
 		}
@@ -2075,7 +2116,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 // assign は代入 `left = rhs` (left は評価済みの左辺、lv は左辺値 (ポインタ) かどうか)。代入した値 (左辺) を返す。
 func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
-	if h.needsExpected(rhs) || ir.ValType(left).IsFarFunc() || (lv && ir.ValType(left).Base.IsFarFunc()) {
+	if h.needsExpected(rhs) || ir.ValType(left).IsFarFunc() || (lv && ir.ValType(left).Base.IsFarFunc()) || ir.ValType(left).IsSlice() || (lv && ir.ValType(left).Base.IsSlice()) {
 		// `p = {1, 2}`: 左辺の型で struct リテラルの型を決める
 		lt := ir.ValType(left)
 		if lv {

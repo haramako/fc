@@ -364,17 +364,17 @@ function memory_draw(id:u8):void
 //=================================================
 // 鳥の巣ワープ
 //=================================================
-const BIRD_NEST_MOVE_TO_AREA:[]u8 = [
+const BIRD_NEST_MOVE_TO_AREA:[?]u8 = [
 	7 * 16 + 12,
 	3 * 16 + 2
 ];
 
-const BIRD_NEST_X:[]u8 = [
+const BIRD_NEST_X:[?]u8 = [
 	4 * 16 + 8,
 	9 * 16 + 8
 ];
 
-const BIRD_NEST_Y:[]u8 = [
+const BIRD_NEST_Y:[?]u8 = [
 	7 * 16 + 8,
 	8 * 16 + 8
 ];

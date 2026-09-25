@@ -1,7 +1,7 @@
 #fc 3
 @(bank:-2);
-public var FILE_ADDR:[]u16 @( address:0xa000 );
-public var FILE_SIZE:[]u16 @( address:0xa676 );
+public var FILE_ADDR:[?]u16 @( address:0xa000 );
+public var FILE_SIZE:[?]u16 @( address:0xa676 );
 public const ITEM_NAME_BASE:u16 = 0;
 public const ITEM_DESC_NAME_BASE:u16 = 48;
 public const ITEM_DESC_BASE:u16 = 96;

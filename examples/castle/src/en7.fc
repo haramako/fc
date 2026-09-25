@@ -114,7 +114,7 @@ const SNAKE_BASE = 244;
 // 23
 // 
 // index: old_dir * 4 + dir
-const SNAKE_BLOCK_PAT:[]u8 = [
+const SNAKE_BLOCK_PAT:[?]u8 = [
 	1, 2, 1, 2, // up/up
 	4, 0, 1, 11, // up/right
 	0, 0, 0, 0, // up/down

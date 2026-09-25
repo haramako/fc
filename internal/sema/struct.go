@@ -44,6 +44,10 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 			return cv(ir.NewSymbolLiteral("", t, x.val.Symbol))
 		}
 	}
+	if t.IsSlice() && !(c.kind == cOp && c.op == opToSlice) {
+		// 配列 (と slice) の値を slice にする (長さは配列の長さ。文字列リテラルは終端の 0 を含めない)
+		return &cexpr{kind: cOp, op: opToSlice, args: []*cexpr{c}, ty: t, pos: c.pos}
+	}
 	if t == nil || (!h.needsExpected(c) && c.kind != cArray) {
 		return c
 	}

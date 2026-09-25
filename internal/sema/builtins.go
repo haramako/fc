@@ -106,6 +106,8 @@ func registerBuiltins(p *Program) {
 		return macroResult{expr: ccall(cv(m.Interface().LookupInternal("sin")), cop2(opAdd, args[0], cint(64)))}
 	})
 
+	registerSliceBuiltins(h)
+
 	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。doc/v3_plan.md §3)
 	h.defconstmacro("@bank", func(h *Hlc, args []*cexpr) *cexpr {
 		if len(args) != 1 || args[0].kind != cValue || !args[0].val.IsString {

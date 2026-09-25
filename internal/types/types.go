@@ -55,7 +55,8 @@ type Type struct {
 	IsConst  bool      // SoA コンテナが `soa const` (読み出しのみ) か
 	Path     string    // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
 	Enum     *EnumInfo // fc 3 の enum (Kind は Int のまま。基底型の幅と符号。別の enum・整数とは互換でない)
-	ReadOnly bool      // fc 3 の `*const T` (Pointer のみ。参照先を書き換えられない。表現は普通のポインタと同じ)
+	ReadOnly bool      // fc 3 の `*const T` / `[]const T` (参照先を書き換えられない。表現は普通のポインタ / slice と同じ)
+	SliceOf  *Type     // fc 3 の slice `[]T` なら要素の型 (Kind は Struct: ptr:*T, len:u8 の 3 バイト。IsSlice)
 	far      bool
 	fastcall bool
 	str      string
@@ -271,6 +272,41 @@ func (u *Universe) PointerTo(base *Type) *Type {
 	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, str: "*" + base.str})
 }
 
+// Slice は要素 elem の slice の型 `[]elem` / `[]const elem` (wide なら長さ u16 の `[:u16]elem`。doc/v3_slices_vector.md)。
+// 表現は struct { ptr:*elem; len:u8 } の 3 バイト (wide は len:u16 の 4 バイト)。普通の slice の要素は 255 個まで: 添字・ループが
+// 8 ビットで済むように。値のコピー・引数・戻り値・フィールドの参照は struct の仕組みで扱い、添字・範囲・長さは意味解析が書き換える。
+func (u *Universe) Slice(elem *Type, ro, wide bool) *Type {
+	head := "[]"
+	if wide {
+		head = "[:u16]"
+	}
+	if ro {
+		head += "const "
+	}
+	name := head + elem.str
+	key := "slice " + name // 表示名は長さを省いた配列 (fc 2 の `[]T`) と同じ綴りなので、表のキーは分ける
+	if t, ok := u.cache[key]; ok {
+		return t
+	}
+	t := &Type{Kind: Struct, Name: name, Size: -1, Length: -1, SliceOf: elem, ReadOnly: ro, str: name}
+	u.cache[key] = t
+	lenSize := 1
+	if wide {
+		lenSize = 2
+	}
+	u.SetFields(t, []Field{{Name: "ptr", Type: u.PointerTo(elem)}, {Name: "len", Type: u.IntType(lenSize, false)}})
+	return t
+}
+
+// IsSlice は slice の型か。
+func (t *Type) IsSlice() bool { return t != nil && t.SliceOf != nil }
+
+// SliceLen は slice の長さの型 (u8、広い slice は u16)。
+func (t *Type) SliceLen() *Type { return t.Fields[1].Type }
+
+// IsWideSlice は長さ u16 の slice (`[:u16]T`) か。
+func (t *Type) IsWideSlice() bool { return t.IsSlice() && t.SliceLen().Size == 2 }
+
 // ConstPointerTo は base への読み取り専用のポインタ型 `*const base` (doc/language_feature_candidates.md §3)。
 func (u *Universe) ConstPointerTo(base *Type) *Type {
 	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, ReadOnly: true, str: "*const " + base.str})
@@ -343,6 +379,10 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 	}
 	// 同じ要素のポインタは const の有無によらず互換 (*T → *const T は暗黙。const を捨てる向きは sema が警告する)
 	if a.Kind == Pointer && b.Kind == Pointer && a.Base == b.Base {
+		return a
+	}
+	// slice も同じ ([]T → []const T は暗黙)。長さの幅が違うものは互換でない (普通 → 広いは sema が作り直す)
+	if a.IsSlice() && b.IsSlice() && a.SliceOf == b.SliceOf && a.IsWideSlice() == b.IsWideSlice() {
 		return a
 	}
 	// bool は uint8 と互換 (比較・論理演算の結果と true / false は bool。整数と混ぜれば uint8)

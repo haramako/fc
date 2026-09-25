@@ -34,33 +34,33 @@ const SE_LAVA_FIXED = 11;
 public const SE_PUSH_BUTTON = 12;
 
 // BGM / SE データ (res/sound/*.mml → .o のシンボル。fc が .global を出すので asm 側の宣言は不要)
-const BGM0:[]u8 @(symbol: "_nsd_bgm_BGM0");
-const BGM1:[]u8 @(symbol: "_nsd_bgm_BGM1");
-const BGM2:[]u8 @(symbol: "_nsd_bgm_BGM2");
-const BGM3:[]u8 @(symbol: "_nsd_bgm_BGM3");
-const BGM4:[]u8 @(symbol: "_nsd_bgm_BGM4");
-const BGM5:[]u8 @(symbol: "_nsd_bgm_BGM5");
-const BGM6:[]u8 @(symbol: "_nsd_bgm_BGM6");
-const BGM7:[]u8 @(symbol: "_nsd_bgm_BGM7");
-const BGM8:[]u8 @(symbol: "_nsd_bgm_BGM8");
-const BGM9:[]u8 @(symbol: "_nsd_bgm_BGM9");
-const BGM10:[]u8 @(symbol: "_nsd_bgm_BGM10");
-const bgm_table:[]*u8 = [BGM0, BGM1, BGM2, BGM3, BGM4, BGM5, BGM6, BGM7, BGM8, BGM9, BGM10];
+const BGM0:[?]u8 @(symbol: "_nsd_bgm_BGM0");
+const BGM1:[?]u8 @(symbol: "_nsd_bgm_BGM1");
+const BGM2:[?]u8 @(symbol: "_nsd_bgm_BGM2");
+const BGM3:[?]u8 @(symbol: "_nsd_bgm_BGM3");
+const BGM4:[?]u8 @(symbol: "_nsd_bgm_BGM4");
+const BGM5:[?]u8 @(symbol: "_nsd_bgm_BGM5");
+const BGM6:[?]u8 @(symbol: "_nsd_bgm_BGM6");
+const BGM7:[?]u8 @(symbol: "_nsd_bgm_BGM7");
+const BGM8:[?]u8 @(symbol: "_nsd_bgm_BGM8");
+const BGM9:[?]u8 @(symbol: "_nsd_bgm_BGM9");
+const BGM10:[?]u8 @(symbol: "_nsd_bgm_BGM10");
+const bgm_table:[?]*u8 = [BGM0, BGM1, BGM2, BGM3, BGM4, BGM5, BGM6, BGM7, BGM8, BGM9, BGM10];
 
-const SE0:[]u8 @(symbol: "_nsd_se_SE0");
-const SE1:[]u8 @(symbol: "_nsd_se_SE1");
-const SE2:[]u8 @(symbol: "_nsd_se_SE2");
-const SE3:[]u8 @(symbol: "_nsd_se_SE3");
-const SE4:[]u8 @(symbol: "_nsd_se_SE4");
-const SE5:[]u8 @(symbol: "_nsd_se_SE5");
-const SE6:[]u8 @(symbol: "_nsd_se_SE6");
-const SE7:[]u8 @(symbol: "_nsd_se_SE7");
-const SE8:[]u8 @(symbol: "_nsd_se_SE8");
-const SE9:[]u8 @(symbol: "_nsd_se_SE9");
-const SE10:[]u8 @(symbol: "_nsd_se_SE10");
-const SE11:[]u8 @(symbol: "_nsd_se_SE11");
-const SE12:[]u8 @(symbol: "_nsd_se_SE12");
-const se_table:[]*u8 = [SE0, SE1, SE2, SE3, SE4, SE5, SE6, SE7, SE8, SE9, SE10, SE11, SE12];
+const SE0:[?]u8 @(symbol: "_nsd_se_SE0");
+const SE1:[?]u8 @(symbol: "_nsd_se_SE1");
+const SE2:[?]u8 @(symbol: "_nsd_se_SE2");
+const SE3:[?]u8 @(symbol: "_nsd_se_SE3");
+const SE4:[?]u8 @(symbol: "_nsd_se_SE4");
+const SE5:[?]u8 @(symbol: "_nsd_se_SE5");
+const SE6:[?]u8 @(symbol: "_nsd_se_SE6");
+const SE7:[?]u8 @(symbol: "_nsd_se_SE7");
+const SE8:[?]u8 @(symbol: "_nsd_se_SE8");
+const SE9:[?]u8 @(symbol: "_nsd_se_SE9");
+const SE10:[?]u8 @(symbol: "_nsd_se_SE10");
+const SE11:[?]u8 @(symbol: "_nsd_se_SE11");
+const SE12:[?]u8 @(symbol: "_nsd_se_SE12");
+const se_table:[?]*u8 = [SE0, SE1, SE2, SE3, SE4, SE5, SE6, SE7, SE8, SE9, SE10, SE11, SE12];
 
 // NSD の関数 (NSD.lib、cc65 の __fastcall__ 規約)。
 // NSD 本体と BGM/SE データは ROM20 (バンク 20/21) にあるので、呼ぶときは nsd_begin / nsd_end で両スロットを切り替える

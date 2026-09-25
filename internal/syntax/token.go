@@ -147,6 +147,8 @@ const (
 	Dot       // .
 	Not       // !
 	Tilde     // ~ (v2)
+	Question  // ? (fc 3 の `[?]T`)
+	DotDot    // .. (fc 3 の範囲 `a[i..j]`)
 )
 
 var kindNames = [...]string{

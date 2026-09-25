@@ -53,9 +53,10 @@ package syntax
 %type <typ> opt_enum_base
 %type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
+%token <tok> DOTDOT
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
-%token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~' '@'
+%token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~' '@' '?'
 
 %type <stmts>   program opt_statement_list statement_list
 %type <stmt>    statement_i statement else_block opt_for_init opt_for_step simple_stmt incdec
@@ -299,6 +300,7 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | '&' exp %prec UMINUS   { $$ = unary($1, $2) }
    | exp '(' arg_list ')' opt_block { $$ = &CallExpr{Fun: $1, Lparen: $2.Pos, Args: $3.exprs, Comma: $3.comma, Rparen: $4.Pos, Block: $5} }
    | exp '[' exp ']'        { $$ = &IndexExpr{X: $1, Lbrack: $2.Pos, Index: $3, Rbrack: $4.Pos} }
+   | exp '[' opt_exp DOTDOT opt_exp ']' { $$ = &SliceExpr{X: $1, Lbrack: $2.Pos, Lo: $3, DotDot: $4.Pos, Hi: $5, Rbrack: $6.Pos} } /* v3 */
    | '[' ']'                { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: []Expr{}, Rbrack: $2.Pos} }
    | '[' lit_elem_list ']'  { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Rbrack: $3.Pos} }
    | '[' lit_elem_list ',' ']' { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Comma: $3.Pos, Rbrack: $4.Pos} }
@@ -368,6 +370,10 @@ type_v2_prefix: '*' type_decl                        { $$ = &PointerType{Star: $
               | '*' kCONST type_decl                 { $$ = &PointerType{Star: $1.Pos, Const: $2.Pos, Elem: $3} } /* v3 */
               | '[' exp ']' type_decl                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
               | '[' ']' type_decl                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
+              | '[' '?' ']' type_decl                { $$ = &ArrayType{Lbrack: $1.Pos, Infer: $2.Pos, Rbrack: $3.Pos, Elem: $4} } /* v3 */
+              | '[' ']' kCONST type_decl             { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Const: $3.Pos, Elem: $4} } /* v3 */
+              | '[' ':' type_v2 ']' type_decl        { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Elem: $5} } /* v3 */
+              | '[' ':' type_v2 ']' kCONST type_decl { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Const: $5.Pos, Elem: $6} } /* v3 */
               | kFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
               | kFARFN '(' arg_decl_list ')' ':' type_decl { $$ = &FuncType{Far: true, Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
 
@@ -377,6 +383,10 @@ type_v2: '*' type_v2                        { $$ = &PointerType{Star: $1.Pos, El
        | IDENT '.' IDENT                    { $$ = &NamedType{Module: ident($1), Name: ident($3)} }
        | '[' exp ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Len: $2, Rbrack: $3.Pos, Elem: $4} }
        | '[' ']' type_v2                    { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Elem: $3} }
+       | '[' '?' ']' type_v2                { $$ = &ArrayType{Lbrack: $1.Pos, Infer: $2.Pos, Rbrack: $3.Pos, Elem: $4} } /* v3 */
+       | '[' ']' kCONST type_v2             { $$ = &ArrayType{Lbrack: $1.Pos, Rbrack: $2.Pos, Const: $3.Pos, Elem: $4} } /* v3 */
+       | '[' ':' type_v2 ']' type_v2        { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Elem: $5} } /* v3 */
+       | '[' ':' type_v2 ']' kCONST type_v2 { $$ = &ArrayType{Lbrack: $1.Pos, Colon: $2.Pos, LenType: $3, Rbrack: $4.Pos, Const: $5.Pos, Elem: $6} } /* v3 */
        | kFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
        | kFARFN '(' arg_decl_list ')' ':' type_v2 { $$ = &FuncType{Far: true, Fn: $1.Pos, Lparen: $2.Pos, Params: $3, Rparen: $4.Pos, Result: $6} }
        | IDENT %prec kAS                    { $$ = &NamedType{Name: ident($1)} } /* `x as m.T` の '.' は型の修飾として読む (shift) */

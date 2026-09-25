@@ -8,6 +8,7 @@
 ## 既存の検討資料
 
 - [slice・固定容量 vector](v3_slices_vector.md)：`[]T` / `[?]T`、値コピー、容量、停止と回復版、`try!` の短いアイデア。
+  slice の初版（長さ u8、`a[lo..hi]`、`@len` / `@slice` / `@ptr` / `@copy`）は実装済み。vector は未実装。
 - [ライブラリ API 利用例](v3_slices_api_examples.md)：文字列、ゲーム処理、数値 ID の readonly FS。
 - [長さ・ABI・sentinel・移行](v3_slice_tradeoffs.md)：8 / 16 ビット長の比較、終端 0、現行 migrate の削除と将来の v2 → v3 移行。
 - [言語機能の追加候補](language_feature_candidates.md)：当初の候補一覧。全候補の V3 採用を決めたものではない。

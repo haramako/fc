@@ -54,9 +54,9 @@ public function start():void
 	ppu.wait_vsync();
 }
 
-const TITLE_PALETTE:[]u8 = @incbin("../res/images/title.nespal");
-const TITLE_BG:[]u8 = @incbin("../res/images/title.bg");
-const TITLE_TILEPAL:[]u8 = @incbin("../res/images/title.tilepal");
+const TITLE_PALETTE:[?]u8 = @incbin("../res/images/title.nespal");
+const TITLE_BG:[?]u8 = @incbin("../res/images/title.bg");
+const TITLE_TILEPAL:[?]u8 = @incbin("../res/images/title.tilepal");
 
 function do_title():u8
 {

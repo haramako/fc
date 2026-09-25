@@ -227,7 +227,7 @@ function light_undown():void
 	}
 }
 
-const BGM_BY_AREA:[]u8 = [
+const BGM_BY_AREA:[?]u8 = [
 	0,
 	sound.BGM_GROUND,
 	sound.BGM_GROUND,

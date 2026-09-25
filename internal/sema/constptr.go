@@ -18,6 +18,9 @@ func (h *Hlc) storageType(t *types.Type) (*types.Type, bool) {
 	if t != nil && t.Kind == types.Pointer && t.ReadOnly {
 		return h.prog.Types.PointerTo(t.Base), true
 	}
+	if t.IsSlice() && t.ReadOnly {
+		return h.prog.Types.Slice(t.SliceOf, false, t.IsWideSlice()), true
+	}
 	return t, false
 }
 
@@ -32,7 +35,7 @@ func (h *Hlc) markReadOnly(tmp *ir.Value, ro bool) {
 // readOnly は op が書き換えられないデータか: 読み取り専用のポインタ (*const) か、const の配列・文字列リテラルの値、
 // またはそこから作ったポインタの一時変数。
 func (h *Hlc) readOnly(op ir.Operand) bool {
-	if t := ir.ValType(op); t != nil && t.Kind == types.Pointer && t.ReadOnly {
+	if t := ir.ValType(op); t != nil && (t.Kind == types.Pointer || t.IsSlice()) && t.ReadOnly {
 		return true
 	}
 	switch v := op.(type) {
@@ -49,7 +52,11 @@ func (h *Hlc) readOnly(op ir.Operand) bool {
 // warnDropConst は読み取り専用のデータを書き換えられるポインタ (*T) として渡すときに警告する (fc 3 の最初の版は警告。
 // doc/language_feature_candidates.md §3)。
 func (h *Hlc) warnDropConst(what string, to *types.Type, from ir.Operand) {
-	if to == nil || to.Kind != types.Pointer || to.ReadOnly || !h.readOnly(from) || h.version() < syntax.Version3 {
+	if to == nil || (to.Kind != types.Pointer && !to.IsSlice()) || to.ReadOnly || !h.readOnly(from) || h.version() < syntax.Version3 {
+		return
+	}
+	if to.IsSlice() {
+		h.warn("%s: passes read-only data as %s (use []const %s)", what, to, to.SliceOf)
 		return
 	}
 	h.warn("%s: passes read-only data as %s (use *const %s, or @bitcast(%s, x) to drop const)", what, to, to.Base, to)

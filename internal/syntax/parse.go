@@ -89,10 +89,17 @@ func checkVersion(f *File) error {
 			}
 		case *ArrayType:
 			checkTypeForm(n.IsPrefix(), n.Lbrack)
+			if (n.Infer.IsValid() || n.Const.IsValid() || n.LenType != nil) && f.Version < Version3 {
+				fail(n.Lbrack, "`[?]T` / `[]const T` / `[:u16]T` are fc 3 syntax (write `#fc 3`)")
+			}
 		case *PointerType:
 			checkTypeForm(n.IsPrefix(), n.Star)
 			if n.Const.IsValid() && f.Version < Version3 {
 				fail(n.Const, "`*const T` is fc 3 syntax (write `#fc 3`)")
+			}
+		case *SliceExpr:
+			if f.Version < Version3 {
+				fail(n.DotDot, "slices `a[i..j]` are fc 3 syntax (write `#fc 3`)")
 			}
 		case *FuncType:
 			checkTypeForm(n.IsPrefix(), n.Lparen)
@@ -149,7 +156,7 @@ var kindToYacc = map[Kind]int{
 	LParen: '(', RParen: ')', LBrace: '{', RBrace: '}', Semicolon: ';', Colon: ':',
 	Lt: '<', Gt: '>', LBrack: '[', RBrack: ']', Plus: '+', Minus: '-', Star: '*',
 	Slash: '/', Percent: '%', Amp: '&', Pipe: '|', Caret: '^', Assign: '=',
-	Comma: ',', Dot: '.', Not: '!', Tilde: '~',
+	Comma: ',', Dot: '.', Not: '!', Tilde: '~', Question: '?', DotDot: DOTDOT,
 }
 
 func (a *yyLexAdapter) Lex(lval *yySymType) int {

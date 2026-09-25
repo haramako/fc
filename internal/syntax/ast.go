@@ -280,6 +280,20 @@ func (s *EnumDecl) Pos() Pos { return firstValid(s.PublicPos, s.Keyword) }
 func (s *EnumDecl) End() Pos { return after(s.Rbrace, 1) }
 func (*EnumDecl) stmtNode()  {}
 
+// SliceExpr は fc 3 の範囲 `x[lo..hi]` (lo / hi は省略できる: 省けば 0 / 長さ)。配列・slice の一部を指す slice になる。
+type SliceExpr struct {
+	X      Expr
+	Lbrack Pos
+	Lo     Expr // nil なら 0
+	DotDot Pos
+	Hi     Expr // nil なら長さ
+	Rbrack Pos
+}
+
+func (e *SliceExpr) Pos() Pos { return e.X.Pos() }
+func (e *SliceExpr) End() Pos { return after(e.Rbrack, 1) }
+func (*SliceExpr) exprNode()  {}
+
 // EnumShortExpr は fc 3 の `.Name` (型が文脈から分かるときの enum のメンバー)。
 type EnumShortExpr struct {
 	Dot  Pos
@@ -533,10 +547,19 @@ type NamedType struct {
 
 // ArrayType は `elem[len]` / `elem[]`。
 type ArrayType struct {
-	Elem   TypeExpr
-	Lbrack Pos
-	Len    Expr // nil なら長さ省略
-	Rbrack Pos
+	Elem    TypeExpr
+	Lbrack  Pos
+	Len     Expr // nil なら長さ省略 (fc 2 は長さを推論する配列、fc 3 は slice)
+	Rbrack  Pos
+	Infer   Pos      // fc 3 の `[?]T` の `?` (長さを推論する配列。fc 2 の `[]T` と同じ)
+	Const   Pos      // fc 3 の `[]const T` の `const` (読み取り専用の slice)
+	Colon   Pos      // fc 3 の `[:u16]T` の `:` (長さの型を指定した slice)
+	LenType TypeExpr // `[:u16]T` の長さの型 (u8 / u16。無ければ nil = u8)
+}
+
+// IsSlice は fc 3 のソースで slice の型 (`[]T` / `[]const T` / `[:u16]T`) か (version は文法バージョン)。
+func (t *ArrayType) IsSlice(version int) bool {
+	return t.Len == nil && !t.Infer.IsValid() && version >= Version3
 }
 
 // PointerType は `elem*`。

@@ -858,6 +858,17 @@ func (p *printer) expr(e Expr) {
 	case *EnumShortExpr:
 		p.tokAt(e.Dot, ".")
 		p.ident(e.Name)
+	case *SliceExpr:
+		p.expr(e.X)
+		p.tokAt(e.Lbrack, "[")
+		if e.Lo != nil {
+			p.expr(e.Lo)
+		}
+		p.tokAt(e.DotDot, "..")
+		if e.Hi != nil {
+			p.expr(e.Hi)
+		}
+		p.tokAt(e.Rbrack, "]")
 	case *SizeofExpr:
 		p.tokAt(e.Sizeof, p.at("sizeof"))
 		p.tokAt(e.Lparen, "(")
@@ -969,7 +980,18 @@ func (p *printer) typeExprV2(t TypeExpr) {
 		if t.Len != nil {
 			p.expr(t.Len)
 		}
+		if t.Infer.IsValid() {
+			p.tokAt(t.Infer, "?")
+		}
+		if t.LenType != nil {
+			p.tokAt(t.Colon, ":")
+			p.typeExprV2(t.LenType)
+		}
 		p.tokAt(t.Rbrack, "]")
+		if t.Const.IsValid() {
+			p.tokAt(t.Const, "const")
+			p.space()
+		}
 		p.typeExprV2(t.Elem)
 	case *PointerType:
 		p.tokAt(t.Star, "*")

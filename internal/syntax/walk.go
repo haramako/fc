@@ -113,6 +113,10 @@ func Children(node Node) []Node {
 		}
 	case *EnumShortExpr:
 		add(n.Name)
+	case *SliceExpr:
+		add(n.X)
+		add(n.Lo)
+		add(n.Hi)
 	case *FieldDecl:
 		add(n.Name)
 		add(n.Type)
@@ -186,6 +190,7 @@ func Children(node Node) []Node {
 	case *ArrayType:
 		if n.IsPrefix() { // [N]T
 			add(n.Len)
+			add(n.LenType)
 			add(n.Elem)
 		} else {
 			add(n.Elem)

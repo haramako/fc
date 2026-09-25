@@ -24,9 +24,9 @@ struct MarchantEvent {
 
 alias m:MarchantEvent = event.shared_work;
 
-const MARCHANT_PALETTE:[]u8 = @incbin("../res/images/marchant.nespal");
-const MARCHANT_BG:[]u8 = @incbin("../res/images/marchant.bg");
-const MARCHANT_TILEPAL:[]u8 = @incbin("../res/images/marchant.tilepal");
+const MARCHANT_PALETTE:[?]u8 = @incbin("../res/images/marchant.nespal");
+const MARCHANT_BG:[?]u8 = @incbin("../res/images/marchant.bg");
+const MARCHANT_TILEPAL:[?]u8 = @incbin("../res/images/marchant.tilepal");
 
 const ITEM_IDS = [
 	ITEM_ID_GAS_MASK, ITEM_ID_COMPASS, ITEM_ID_WATCH,

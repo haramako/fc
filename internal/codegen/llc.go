@@ -1455,6 +1455,23 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 						r.push(fmt.Sprintf("adc #.HIBYTE(%s)", l.addrExpr(op.In(0))))
 						r.push(l.storeA(op.Dst, 1))
 					}
+				} else if ir.ValType(op.In(0)).Kind == types.Pointer {
+					// ポインタ + 16 ビットの添字 (fc 3 の広い slice の範囲・添字)
+					r.push(l.loadA(op.In(1), 0))
+					r.push("sta <reg+0")
+					r.push(l.loadA(op.In(1), 1))
+					r.push("sta <reg+1")
+					if ir.ValType(op.In(0)).Base.Size == 2 {
+						r.push("asl <reg+0")
+						r.push("rol <reg+1")
+					}
+					r.push("clc")
+					r.push(l.loadA(op.In(0), 0))
+					r.push("adc <reg+0")
+					r.push(l.storeA(op.Dst, 0))
+					r.push(l.loadA(op.In(0), 1))
+					r.push("adc <reg+1")
+					r.push(l.storeA(op.Dst, 1))
 				} else {
 					panic("invalid index")
 				}

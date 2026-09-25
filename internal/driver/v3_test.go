@@ -71,7 +71,7 @@ func TestV3AtBuiltins(t *testing.T) {
 		"t.fc": `#fc 3
 use * from stdio;
 @include("k.asm");
-const TAB:[]u8 = @incbin("tab.bin");
+const TAB:[?]u8 = @incbin("tab.bin");
 var g:u16;
 function sizeof(x:u8):u8 { return x + 1; }   // fc 3 では普通の名前
 function max(a:u8, b:u8):u8 { return a; }    // 組み込みの @max とは別

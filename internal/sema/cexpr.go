@@ -69,11 +69,14 @@ const (
 	opIndex      cop = "index"
 	opRef        cop = "ref"
 	opDeref      cop = "deref"
-	opField      cop = "field"  // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
-	opMin        cop = "min"    // min(a, b) (組み込み。型は両辺の互換型、符号もそれに従う)
-	opMax        cop = "max"    // max(a, b)
-	opClamp      cop = "clamp"  // clamp(x, lo, hi)
-	opBitNot     cop = "bitnot" // ~x
+	opField      cop = "field"    // args[0] . name (struct のフィールド参照。cDot の評価で module でないと分かったもの)
+	opMin        cop = "min"      // min(a, b) (組み込み。型は両辺の互換型、符号もそれに従う)
+	opMax        cop = "max"      // max(a, b)
+	opClamp      cop = "clamp"    // clamp(x, lo, hi)
+	opBitNot     cop = "bitnot"   // ~x
+	opSlice      cop = "slice"    // fc 3 の範囲 args[0][args[1]..args[2]] (lo / hi は省けば nil)
+	opToSlice    cop = "to_slice" // 配列 / slice args[0] を slice の型 ty にする (withExpected が挟む)
+	opLen        cop = "len"      // @len(args[0]) の実行時の値 (slice の長さ)
 )
 
 // compoundOps は複合代入 `x op= y` の op。
@@ -228,6 +231,15 @@ func toC0(e syntax.Expr) *cexpr {
 		return &cexpr{kind: cOp, op: opCall, args: args, block: e.Block}
 	case *syntax.IndexExpr:
 		return cop2(opIndex, toC(e.X), toC(e.Index))
+	case *syntax.SliceExpr:
+		c := &cexpr{kind: cOp, op: opSlice, args: []*cexpr{toC(e.X), nil, nil}}
+		if e.Lo != nil {
+			c.args[1] = toC(e.Lo)
+		}
+		if e.Hi != nil {
+			c.args[2] = toC(e.Hi)
+		}
+		return c
 	case *syntax.ArrayLit:
 		elems := make([]*cexpr, len(e.Elems))
 		for i, el := range e.Elems {
