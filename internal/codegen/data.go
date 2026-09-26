@@ -117,3 +117,59 @@ func (l *Llc) emitData(typ *types.Type, val []ir.Operand) []any {
 	}
 	return r
 }
+
+// referencedDefs は関数の中の定義 (defs、出力する行は blocks) のうち、コード (code) か、残したほかの定義から参照されるものの
+// 添字を元の順で返す。参照はコメント (`;` から後) を除いた行の中の名前で見る。
+func referencedDefs(defs []*ir.Def, blocks [][]any, code []string) []int {
+	strip := func(lines []string) string {
+		var b strings.Builder
+		for _, s := range lines {
+			if i := strings.IndexByte(s, ';'); i >= 0 {
+				s = s[:i]
+			}
+			b.WriteString(s)
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+	refers := func(text, sym string) bool {
+		isID := func(c byte) bool {
+			return c == '_' || c == '$' || c == '@' || c == '.' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+		}
+		for i := 0; ; {
+			k := strings.Index(text[i:], sym)
+			if k < 0 {
+				return false
+			}
+			s, e := i+k, i+k+len(sym)
+			if (s == 0 || !isID(text[s-1])) && (e == len(text) || !isID(text[e])) {
+				return true
+			}
+			i = s + 1
+		}
+	}
+	keep := make([]bool, len(defs))
+	pending := []string{strip(code)}
+	for len(pending) > 0 {
+		text := pending[0]
+		pending = pending[1:]
+		for i, d := range defs {
+			if !keep[i] && refers(text, d.Sym) {
+				keep[i] = true
+				// 自分のラベル行 (`sym:`) を除いた本体から、ほかの定義への参照を探す
+				body := (&asmLines{lines: blocks[i]}).flatten()
+				if len(body) > 0 {
+					body = body[1:]
+				}
+				pending = append(pending, strip(body))
+			}
+		}
+	}
+	var r []int
+	for i := range defs {
+		if keep[i] {
+			r = append(r, i)
+		}
+	}
+	return r
+}

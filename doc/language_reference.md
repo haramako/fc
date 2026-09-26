@@ -706,7 +706,7 @@ ASCII の英数字・記号は全角に、濁点・半濁点付きのかなは�
 | モジュール | 主な内容 |
 |---|---|
 | `stdio`（ターゲット別） | `print(str)`, `print_int16(n)`, `puts(str)`, `exit(code)`, NES では `wait_vsync()`, `ppu_put(...)` |
-| `mem` | `set(dst, value, size)`, `copy(dst, src, size)`, `strcpy(dst, src)` など |
+| `mem` | `set(dst, value, size)`, `zero(dst, size)`, `copy(dst, src, size)`, `compare(a, b, size)`（size は u16。0 なら何もしない / 等しい）, `strcpy(dst, src)` など |
 | `math` | `sin(x)`, `atan(y, x)`, `rand()`, `sign(i)`, 乗算テーブル |
 | `nes`（NES） | PPU / APU / コントローラのレジスタ定義 |
 | `pad`（NES） | コントローラ入力 |

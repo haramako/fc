@@ -219,6 +219,8 @@ _32:
 	sta <FC_FASTCALL_REG+4
 	lda #6
 	sta <FC_FASTCALL_REG+5
+	lda #0
+	sta <FC_FASTCALL_REG+6
 	jsr _mem_compare
 	lda <0+FC_FASTCALL_REG
 	bne @4
@@ -237,8 +239,6 @@ _32:
 	sta <F_unittest_assert_true+2
 	jsr _unittest_assert_true__frame
 	rts
-_40:
-		.byte 108,111,111,112,32,98,114,101,97,107,0
 _43:
 		.byte 108,111,111,112,0
 _47:

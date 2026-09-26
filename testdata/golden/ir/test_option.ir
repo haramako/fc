@@ -340,28 +340,28 @@
  (include_chrs ())
  (modules ())
  (defs
-  (def _mem_set code #"fastcall fn(*u8,u8,u8):void" {lambda _mem_set})
-  (def _mem_zero code #"fastcall fn(*u8,u8):void" {lambda _mem_zero})
+  (def _mem_set code #"fastcall fn(*u8,u8,u16):void" {lambda _mem_set})
+  (def _mem_zero code #"fastcall fn(*u8,u16):void" {lambda _mem_zero})
   (def _mem_copy code #"fastcall fn(*u8,*const u8,u16):void" {lambda _mem_copy})
-  (def _mem_compare code #"fastcall fn(*const u8,*const u8,u8):u8" {lambda _mem_compare})
+  (def _mem_compare code #"fastcall fn(*const u8,*const u8,u16):u8" {lambda _mem_compare})
   (def _mem_strlen code #"fastcall fn(*const u8):u8" {lambda _mem_strlen})
   (def _mem_strcpy code #"fastcall fn(*u8,*const u8):u8" {lambda _mem_strcpy})
  )
  (vars
-  (var 0 set literal #"fastcall fn(*u8,u8,u8):void" val=:_mem_set pub)
-  (var 1 zero literal #"fastcall fn(*u8,u8):void" val=:_mem_zero pub)
+  (var 0 set literal #"fastcall fn(*u8,u8,u16):void" val=:_mem_set pub)
+  (var 1 zero literal #"fastcall fn(*u8,u16):void" val=:_mem_zero pub)
   (var 2 copy literal #"fastcall fn(*u8,*const u8,u16):void" val=:_mem_copy pub)
-  (var 3 compare literal #"fastcall fn(*const u8,*const u8,u8):u8" val=:_mem_compare pub)
+  (var 3 compare literal #"fastcall fn(*const u8,*const u8,u16):u8" val=:_mem_compare pub)
   (var 4 strlen literal #"fastcall fn(*const u8):u8" val=:_mem_strlen pub)
   (var 5 strcpy literal #"fastcall fn(*u8,*const u8):u8" val=:_mem_strcpy pub)
  )
- (lambda _mem_set #"fastcall fn(*u8,u8,u8):void" opt={id :set fastcall :true extern true}
+ (lambda _mem_set #"fastcall fn(*u8,u8,u16):void" opt={id :set fastcall :true extern true}
   (args ({l0 p} {l1 c} {l2 size}))
   (result nil)
   (vars
    (var 0 p local #"*u8" lt=arg)
    (var 1 c local #"u8" lt=arg)
-   (var 2 size local #"u8" lt=arg)
+   (var 2 size local #"u16" lt=arg)
   )
   (defs
   )
@@ -369,12 +369,12 @@
    0000 (:return)
   )
  )
- (lambda _mem_zero #"fastcall fn(*u8,u8):void" opt={id :zero fastcall :true extern true}
+ (lambda _mem_zero #"fastcall fn(*u8,u16):void" opt={id :zero fastcall :true extern true}
   (args ({l0 p} {l1 size}))
   (result nil)
   (vars
    (var 0 p local #"*u8" lt=arg)
-   (var 1 size local #"u8" lt=arg)
+   (var 1 size local #"u16" lt=arg)
   )
   (defs
   )
@@ -396,14 +396,14 @@
    0000 (:return)
   )
  )
- (lambda _mem_compare #"fastcall fn(*const u8,*const u8,u8):u8" opt={id :compare fastcall :true extern true}
+ (lambda _mem_compare #"fastcall fn(*const u8,*const u8,u16):u8" opt={id :compare fastcall :true extern true}
   (args ({l1 p1} {l2 p2} {l3 size}))
   (result {l0 $result})
   (vars
    (var 0 $result local #"u8" lt=result)
    (var 1 p1 local #"*u8" lt=arg)
    (var 2 p2 local #"*u8" lt=arg)
-   (var 3 size local #"u8" lt=arg)
+   (var 3 size local #"u16" lt=arg)
   )
   (defs
   )

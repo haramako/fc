@@ -3,10 +3,10 @@
 
 @include("mem.asm");
 
-public function set(p:*u8, c:u8, size:u8):void @(fastcall);
-public function zero(p:*u8, size:u8):void @(fastcall);
+public function set(p:*u8, c:u8, size:u16):void @(fastcall);
+public function zero(p:*u8, size:u16):void @(fastcall);
 public function copy(_to:*u8, _from:*const u8, size:u16):void @(fastcall);
-public function compare(p1:*const u8, p2:*const u8, size:u8):u8 @(fastcall);
+public function compare(p1:*const u8, p2:*const u8, size:u16):u8 @(fastcall);
 
 public function strlen(str:*const u8):u8 @(fastcall)
 {

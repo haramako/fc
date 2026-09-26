@@ -31,7 +31,8 @@ function main():void
 	}
 }
 
-// TestMemZeroLength: mem.zero / mem.compare の長さ 0 は何もしない・等しい (`iny; cpy; bne` のループで 256 バイトになっていた)。
+// TestMemZeroLength: mem.set / zero / compare の長さは u16 で、0 は何もしない・等しい (長さ u8 の `iny; cpy; bne` のループで
+// 0 が 256 バイトになっていた。256 を渡すと 0 に切り詰められ、それに頼っていた)。256 バイトを超える長さも。
 func TestMemZeroLength(t *testing.T) {
 	t.Parallel()
 	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
@@ -39,6 +40,8 @@ use * from stdio;
 use mem;
 var buf:[8]u8;
 var n:u8;
+var big:[301]u8;
+var big2:[301]u8;
 function main():void
 {
 	for (var i:u8 = 0; i < 8; i += 1) { buf[i] = i + 1; }
@@ -49,11 +52,19 @@ function main():void
 	mem.zero(&buf[2], n);
 	printf(buf[1], buf[2], buf[4], buf[5], " ");
 	n = 0;
-	printf(mem.compare("abc", "xyz", n), mem.compare("abc", "abd", 2), mem.compare("abc", "abd", 3), "\n");
+	printf(mem.compare("abc", "xyz", n), mem.compare("abc", "abd", 2), mem.compare("abc", "abd", 3), " ");
+	mem.set(&big[0], 7, 300);
+	printf(big[0], big[255], big[299], big[300], " ");
+	mem.copy(&big2[0], &big[0], 300);
+	printf(mem.compare(&big[0], &big2[0], 300), " ");
+	big2[299] = 1;
+	printf(mem.compare(&big[0], &big2[0], 300), mem.compare(&big[0], &big2[0], 299), " ");
+	mem.zero(&big[1], 298);
+	printf(big[0], big[1], big[298], big[299], "\n");
 	exit(0);
 }
 `})
-	if err != nil || out != "238 2006 001\n" {
+	if err != nil || out != "238 2006 001 7770 0 10 7007\n" {
 		t.Errorf("got %q, %v", out, err)
 	}
 }

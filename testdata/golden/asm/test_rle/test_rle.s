@@ -63,6 +63,8 @@ _test_rle_dest: .res 128
 	sta <FC_FASTCALL_REG+4
 	lda 0+<F_test_rle_test_rle+0
 	sta <FC_FASTCALL_REG+5
+	lda 1+<F_test_rle_test_rle+0
+	sta <FC_FASTCALL_REG+6
 	jsr _mem_compare
 	lda <0+FC_FASTCALL_REG
 	bne @1
@@ -119,6 +121,8 @@ _test_rle_dest: .res 128
 	sta <FC_FASTCALL_REG+4
 	lda 0+<F_test_rle_test_rle+0
 	sta <FC_FASTCALL_REG+5
+	lda 1+<F_test_rle_test_rle+0
+	sta <FC_FASTCALL_REG+6
 	jsr _mem_compare
 	lda <0+FC_FASTCALL_REG
 	bne @3

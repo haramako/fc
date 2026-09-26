@@ -106,7 +106,18 @@ func TestMigrateExamples(t *testing.T) {
 			if err != nil || code != 0 {
 				t.Fatalf("ビルド失敗: %v (code %d)", err, code)
 			}
-			sameBytes(t, rom, filepath.Join(absGoldenRoot, "examples", ex.name+".nes"))
+			golden := filepath.Join(absGoldenRoot, "examples", ex.name+".nes")
+			if *update { // fclib を変えたとき (fc 2 のソースを migrate したビルドの ROM を golden にする)
+				b, err := os.ReadFile(rom)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(golden, b, 0o666); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			sameBytes(t, rom, golden)
 		})
 	}
 }

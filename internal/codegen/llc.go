@@ -1704,13 +1704,17 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
 	}
 
-	for _, d := range lmd.Defs {
-		switch d.Kind {
-		case ir.DefBlock:
-			r.push(l.emitBlock(d.Sym, d.Type, d.Elems))
-		default:
+	// 関数の中の const の表・文字列 (.proc の中のラベルなので、この関数の中からしか参照されない)。コード (インラインアセンブラを
+	// 含む) とほかの表から参照されているものだけ出す (インライン展開で写した表が、最適化で使われなくなることがある)
+	blocks := make([][]any, len(lmd.Defs))
+	for i, d := range lmd.Defs {
+		if d.Kind != ir.DefBlock {
 			panic(fmt.Sprintf("invalid lambda def kind %s", d.Kind))
 		}
+		blocks[i] = l.emitBlock(d.Sym, d.Type, d.Elems)
+	}
+	for _, i := range referencedDefs(lmd.Defs, blocks, r.flatten()) {
+		r.push(blocks[i])
 	}
 
 	lines := r.flatten() // まとめた行を展開 + 空の行を削除
