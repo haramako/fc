@@ -447,14 +447,14 @@
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static
+(alloc-lambda stdio _interrupt _interrupt frame_size=0 abi=static entry
  (vars
  )
  (ops
   0000 (:return)
  )
 )
-(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static
+(alloc-lambda stdio _interrupt_irq _interrupt_irq frame_size=0 abi=static entry
  (vars
  )
  (ops

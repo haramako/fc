@@ -146,7 +146,9 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 	}
 	for i, lmd := range g.Lambdas {
-		if lmd.Options.Flag("interrupt") {
+		if lmd.Options.Flag("interrupt") || lmd.Id == "_interrupt" || lmd.Id == "_interrupt_irq" {
+			// NMI / IRQ の入口の名前 (share/runtime.asm が呼ぶ) の関数は @(interrupt) が無くても割り込み (付け忘れると
+			// フレームが main の呼び出しと重なっていた)
 			lmd.Interrupt = true
 			entry[i] = true
 		}
@@ -528,6 +530,7 @@ type Plan struct {
 	ZpUsed, RamUsed int
 	Inc             []string // _frames.inc の行
 	Report          []string // 配置の要約 (fcc build -d で表示)
+	Warnings        []diag.Warning
 }
 
 type placed struct {
@@ -562,6 +565,32 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 	}
 	conflict := func(a, b int) bool {
 		return a == b || reach[a][b] || reach[b][a] || irqTree[a] || irqTree[b]
+	}
+	// 割り込みと通常の処理の両方から呼ばれる関数: 静的フレームは 1 つなので、通常の処理がその関数の中にいるときに
+	// 割り込みが来て同じ関数を呼ぶと、フレームが壊れる
+	var warnings []diag.Warning
+	for j, lmd := range g.Lambdas {
+		if !irqTree[j] || lmd.Interrupt || lmd.Unused || lmd.Extern {
+			continue
+		}
+		from := ""
+		for i, caller := range g.Lambdas {
+			if !irqTree[i] && reach[i][j] && !caller.Unused {
+				from = caller.Id
+				break
+			}
+		}
+		if from == "" {
+			continue
+		}
+		var irqs []string
+		for i, root := range g.Lambdas {
+			if root.Interrupt && reach[i][j] {
+				irqs = append(irqs, root.Id)
+			}
+		}
+		warnings = append(warnings, diag.Warning{Pos: lmd.Pos, Msg: fmt.Sprintf("%s is called both from the interrupt handler %s and from %s; its static frame is shared, so an interrupt while %s runs corrupts it",
+			lmd.Id, strings.Join(irqs, ", "), from, lmd.Id)})
 	}
 
 	var order []int
@@ -606,7 +635,7 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 		}
 		return at, true
 	}
-	plan := &Plan{}
+	plan := &Plan{Warnings: warnings}
 	for _, i := range order {
 		lmd := g.Lambdas[i]
 		if lmd.FrameSize == 0 {

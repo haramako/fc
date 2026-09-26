@@ -222,6 +222,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if perr != nil {
 		return nil, perr
 	}
+	prog.Warnings = append(prog.Warnings, plan.Warnings...) // 割り込みと共有するフレームなど (frames.Place)
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
 	result.Defines = sortedDefines(prog.Defines)

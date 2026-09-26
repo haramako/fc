@@ -3,6 +3,8 @@ package driver
 // doc/v3_plan.md §10（一般的な用途で不便な仕様の調査、2026-09-26）で「修正する」にした項目のテスト。
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -281,5 +283,44 @@ func TestAddressVarOverlap(t *testing.T) {
 	out, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\nuse * from stdio;\nvar sram:u8 @(address: 0x6000);\nfunction main():void { sram = 1; printf(sram, \"\n\"); exit(0); }\n"})
 	if err != nil || out != "1\n" {
 		t.Errorf("$6000: %q, %v", out, err)
+	}
+}
+
+// TestInterruptSymbolFrames: @(symbol: "_interrupt") の関数は @(interrupt) が無くても割り込み (フレームを main の呼び出しと
+// 重ねない)。割り込みと main の両方から呼ぶ関数は、静的フレームを共有するので警告。
+func TestInterruptSymbolFrames(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := `#fc 3
+use nes;
+var frame:u8;
+var work:[4]u8;
+function helper(a:u8, b:u8):u8 @(noinline) { var t = a + b; return t * 2; }
+function sub(x:u8):u8 @(noinline) { var y = x + 1; var z = y * 3; return z; }
+function nmi():void @(symbol: "_interrupt") { var k = sub(frame); frame = k; }
+function irq():void @(symbol: "_interrupt_irq") { }
+function main():void { while (true) { work[0] = helper(work[1], work[2]); work[3] = sub(work[0]); } }
+`
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "t.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "t.nes")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		found = found || strings.Contains(w.Msg, "_t_sub is called both from the interrupt handler _interrupt and from _main")
+	}
+	if !found {
+		t.Errorf("共有するフレームの警告が無い: %v", res.Warnings)
+	}
+	inc, err := os.ReadFile(filepath.Join(dir, "b", "_frames.inc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 割り込みから届く sub と main から呼ぶ helper のフレームが重ならない (前は両方 FC_SZP+0)
+	if strings.Contains(string(inc), "F_t_sub = FC_SZP+0") && strings.Contains(string(inc), "F_t_helper = FC_SZP+0") {
+		t.Errorf("フレームが重なっている:\n%s", inc)
 	}
 }
