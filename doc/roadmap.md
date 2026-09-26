@@ -114,6 +114,11 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] ポインタを 1 ずつ進めるループ（`*p = …; p += 1`）の下位バイトを Y で回す（`opt.walkPointerY`。`lda (p),y; iny;
       bne; inc p+1`、帰りは `cpy lim; bne`。誘導変数の統合を変数の上限にも広げ、ピープホールの `iny; cpy #0` の不具合も
       直した。crc8 −19%、crc16 −9%、sieve −7.6%、oam −2.4%。v2_ssa.md §10） ✅ 2026-09-24
+- [x] struct の配列（グローバル、全体が 256 バイト以内）のフィールドの読み書きを `lda a+ofs,y` / `sta a+ofs,y` に
+      （`opt.foldFieldIndex`。`index t = &a[i]` + フィールドの pget / pset を、`i * 要素の大きさ` の scaled な index_pget / pset に。
+      同じブロックの同じ添字の積は使い回す。今までは先頭のフィールドの読み出し以外、`&a[i]` を 16 ビットで組み立てて `(p),y` で、
+      `es[i].hp -= 1` が 1 要素約 20 命令 → 5 命令（SoA と同じ）。定数の添字の `lda #k; asl; tay` も `ldy #2k` に。oam のサイズ −11%、
+      entities −1.4%。castle は en が soa なので 1 フレームは変わらない） ✅ 2026-09-27
 - [ ] crc8 のように A に常駐する変数とポインタの読み出しを `eor (p),y` に融合する（今は k が X に乗って `stx; ldy; …; ldx`）
 - [x] マクロベンチ: `examples/castle` を `internal/nes` で自動プレイし、局面ごとの 1 フレームの busy サイクル
       （フレーム長 − vsync 待ち）を `bench/castle_frames.json` と比べる（`TestCastleFrameCycles`） ✅ 2026-09-19

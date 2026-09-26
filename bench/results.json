@@ -20,8 +20,8 @@
     "out": "crc8=149"
   },
   "entities": {
-    "cycles": 736589,
-    "size": 1112,
+    "cycles": 736490,
+    "size": 1096,
     "out": "sum=20554"
   },
   "fib": {
@@ -41,7 +41,7 @@
   },
   "oam": {
     "cycles": 2080876,
-    "size": 1088,
+    "size": 968,
     "out": "sum=25008"
   },
   "plasma": {

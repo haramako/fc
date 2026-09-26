@@ -285,6 +285,8 @@ function update():void {
 ### 2.2 soa — SoA コンテナ
 
 6502 では「フィールドごとに配列を分けて添字で触る」（structure of arrays）方が `ldy i; lda Field,y` で速い。
+普通の struct の配列（`var es:[N]E`）も、全体が 256 バイト以内のグローバル配列なら `es[i].f` は `ldy i*size; lda es+ofs,y` に
+なる（2026-09-27 から。`i*size` の計算の分だけ SoA より遅く、256 バイトを超える配列・ポインタの先の配列はポインタを組み立てる）。
 `soa` は struct の定義を共有したまま、そのレイアウトで置いたコンテナを宣言する:
 
 ```
