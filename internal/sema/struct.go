@@ -456,3 +456,56 @@ func checkOperandKinds(op cop, lt, rt *types.Type) {
 	}
 	panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to a pointer (pointers have p + n, p - n, p - q, comparisons and null checks)", opSymbol(op))})
 }
+
+// isTrueLit は評価済みの式が bool の true (0 以外の bool の定数) か。
+func isTrueLit(c *cexpr) bool {
+	return c.kind == cValue && c.val.Kind == ir.KindLiteral && c.val.IsInt && c.val.Int != 0 && c.val.Type.Kind == types.Bool
+}
+
+// isNormalBool は式の値が必ず 0 / 1 の bool か (比較・論理演算の結果、bool の定数)。bool の変数は `5 as bool` のことがある。
+func isNormalBool(c *cexpr) bool {
+	switch c.kind {
+	case cOp:
+		switch c.op {
+		case opEq, opNe, opLt, opGt, opLe, opGe, opNot, opLand, opLor:
+			return true
+		}
+	case cValue:
+		return c.val.Kind == ir.KindLiteral && c.val.IsInt && c.val.Type.Kind == types.Bool
+	}
+	return false
+}
+
+// boolEq は bool 同士の `==` を真理値で比べる (bool は正規化しないので、バイトの比較では 5 と 1 が違っていた)。
+// `x == true` は x != 0、0 / 1 と分からない値同士は (x == 0) == (y == 0)。false との比較と、0 / 1 同士は今のまま (ok = false)。
+func (h *Hlc) boolEq(e *cexpr, left, right ir.Operand) (ir.Operand, bool) {
+	if ir.ValType(left).Kind != types.Bool || ir.ValType(right).Kind != types.Bool {
+		return nil, false
+	}
+	b := h.prog.Types.Bool()
+	zero := ir.NewIntLiteral("", b, 0)
+	isZero := func(v ir.Operand) *ir.Value {
+		t := h.newTmp(b)
+		h.emit(&ir.Op{Code: ir.OpEq, Dst: t, Src: []ir.Operand{v, zero}})
+		return t
+	}
+	lk, lok := ir.ValIntLiteral(left)
+	rk, rok := ir.ValIntLiteral(right)
+	switch {
+	case lok && rok, lok && lk == 0, rok && rk == 0:
+		return nil, false
+	case lok || rok: // x == true
+		x := left
+		if lok {
+			x = right
+		}
+		t := h.newTmp(b)
+		h.emit(&ir.Op{Code: ir.OpNot, Dst: t, Src: []ir.Operand{isZero(x)}})
+		return t, true
+	case isNormalBool(h.constEval(e.args[0])) && isNormalBool(h.constEval(e.args[1])):
+		return nil, false
+	}
+	t := h.newTmp(b)
+	h.emit(&ir.Op{Code: ir.OpEq, Dst: t, Src: []ir.Operand{isZero(left), isZero(right)}})
+	return t, true
+}

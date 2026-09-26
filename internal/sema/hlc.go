@@ -1782,6 +1782,24 @@ func (h *Hlc) compileCond(c *cexpr, label string, jumpIfTrue bool) {
 			return
 		}
 	}
+	if e.kind == cOp && e.op == opEq {
+		// `f == true` (f は bool): 0 かどうかだけを見る (`lda f / bne`。bool は正規化しないので 5 も真)
+		for k := 0; k < 2; k++ {
+			if isTrueLit(e.args[1-k]) {
+				v := h.rval(e.args[k])
+				if ir.ValType(v).Kind == types.Bool {
+					code := ir.OpIf
+					if jumpIfTrue {
+						code = ir.OpIfTrue
+					}
+					h.emit(&ir.Op{Code: code, Src: []ir.Operand{v}, Label: label})
+					return
+				}
+				e = cop2(opEq, cv(h.operandValue(v)), e.args[1-k])
+				break
+			}
+		}
+	}
 	v := h.rval(e)
 	if isAggregate(ir.ValType(v)) {
 		panic(&diag.Error{Msg: fmt.Sprintf("a value of type %s cannot be used as a condition (struct / array values have only == and !=)", ir.ValType(v))})
@@ -1989,6 +2007,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
 			}
 			_, left, right = h.makeCompatible(left, right)
+			if e.op == opEq {
+				if bv, ok := h.boolEq(e, left, right); ok {
+					r = bv
+					break
+				}
+			}
 			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。language_reference.md §2)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp

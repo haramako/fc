@@ -50,3 +50,33 @@ function main():void
 		t.Errorf("使える演算: got %q, %v", out, err)
 	}
 }
+
+// TestBoolEqualityTruth: bool 同士の == / != は真理値で比べる (バイトの比較で、5 as bool と 3 as bool や true が違っていた)。
+// f == true / true == f / f != true / f == false、比較の結果同士。
+func TestBoolEqualityTruth(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+var a:u8; var b:u8;
+function t(x:u8, y:u8):void @(noinline)
+{
+	var f = x as bool;
+	var g = y as bool;
+	var r1 = 0; var r2 = 0; var r3 = 0; var r4 = 0; var r5 = 0; var r6 = 0;
+	if (f == g) { r1 = 1; }
+	if (f == true) { r2 = 1; }
+	if (f != g) { r3 = 1; }
+	if (true == f) { r4 = 1; }
+	var v = f == g;
+	var w = f == true;
+	var z = (x < 3) == (y < 3);
+	if (f == false) { r5 = 1; }
+	if (f != true) { r6 = 1; }
+	printf(r1, r2, r3, r4, r5, r6, " ", v, w, z, "\n");
+}
+function main():void { a = 5; b = 3; t(a, b); t(0, 7); t(0, 0); exit(0); }
+`})
+	if err != nil || out != "110100 111\n001011 000\n100011 101\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}
