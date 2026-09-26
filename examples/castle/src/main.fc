@@ -16,6 +16,7 @@ use ending;
 use heap;
 use irqcmd;
 use event;
+use text;
 
 @include('../res/images/bg_common.chr');
 @include('../res/images/bg.chr');
@@ -53,6 +54,7 @@ function main():void
 	irqcmd.init();
 	event.init();
 	ppu.clear_out_sprite();
+	text.talk_init();
 
 	// play music
 	sound.init();

@@ -310,7 +310,7 @@ function run_memory(memory_id:u8):void
 	ppu.cbank2 = CBANK_SYS_SPRITE;
 	mmc3.MIRROR = 0; // vertical
 	ppu.ctrl1_bak = 0b10100001;
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 
 	my.clear_sprites();
 
@@ -324,7 +324,7 @@ function run_memory(memory_id:u8):void
 
 	run_memory_main();
 
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync();
 	ppu.lock();
 	mmc3.set_cbank(0, old_cbank0);

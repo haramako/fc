@@ -75,7 +75,7 @@ public function process():void
 			on_y = boxelev.box_py[ei];
 		} else {
 			var idx = check_on_box_elevator();
-			if (idx != -1) {
+			if (idx != NONE) {
 				// エレベーターに乗った!
 				state = STATE_ON_ELEVATOR;
 				on_idx = idx;
@@ -277,7 +277,7 @@ public function process():void
 				anim_stat = 0;
 			} else {
 				var idx = check_on_enemy();
-				if (idx != -1) {
+				if (idx != NONE) {
 					// 敵に乗った!
 					jump_autokeep = 0;
 					state = STATE_ON_ENEMY;
@@ -287,7 +287,7 @@ public function process():void
 					on_y = en.py[idx];
 				}
 				idx = check_on_box_elevator();
-				if (idx != -1) {
+				if (idx != NONE) {
 					// エレベーターに乗った!
 					jump_autokeep = 0;
 					state = STATE_ON_ELEVATOR;
@@ -593,7 +593,7 @@ function check_on_elevator(i:u8):u8
 function check_on_box_elevator():u8
 {
 	var i = boxelev.box_idx;
-	if (i == -1 || boxelev.box_area[i] != bg.cur_area) {
+	if (i == NONE || boxelev.box_area[i] != bg.cur_area) {
 		return -1;
 	}
 
@@ -641,7 +641,7 @@ function do_grobe():void
 			push_wait = 10;
 		if (grobe_progress >= push_wait) {
 			var i = en.new();
-			if (i != -1) {
+			if (i != NONE) {
 				en.type[i] = en.TYPE_BLOCK;
 				en.px[i] = bx / 16 * 16 + 8;
 				en.py[i] = y / 16 * 16 + 8;
@@ -671,7 +671,7 @@ function check_block_box_elevator(r:u8):u8
 	if (vy > 0) {
 		return r;
 	}
-	if (boxelev.box_idx == -1) {
+	if (boxelev.box_idx == NONE) {
 		return r;
 	}
 	var i = boxelev.box_idx;

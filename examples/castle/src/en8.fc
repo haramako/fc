@@ -258,6 +258,7 @@ public function memory_process(i:u8):void
 			wait -= 1;
 			if (wait > 1) {
 				py -= 2;
+				ppu.null_func();
 				ppu.sprite(x + px, y + py, SPR_MEMORY_FLASH, 1 - is_new);
 			}
 		}

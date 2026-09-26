@@ -123,9 +123,8 @@ castle の次のファイルは実プロジェクトのツールチェーン（m
 
 ## fc 3 への移行（2026-09-25、ブランチ feature/v3）
 
-`miku` と `castle` の `.fc` は `fcc migrate -w` で fc 3 にした（ROM は fc 2 の golden とバイト単位で同じ）。fc 2 の版の `.fc` は
-`testdata/migrate/v2/` に残してあり、`TestMigrateExamples` がそれを migrate して ROM の一致を確かめる（migrate の規則を
-足したときに実際のプロジェクトで確かめるため）。実プロジェクトの castle（`C:\Work\castle`）はしばらく fc 2 のままなので、
-取り込み直すとき（tools/sync_examples.ps1）は取り込んだ後に `fcc migrate -w` をかけ、fc 2 の版を `testdata/migrate/v2/castle/`
-に写す。fc 3 の読み取り専用ポインタの警告（ROM の表や文字列を `*u8` の引数に渡す）が castle で 103 件、miku で 7 件出る
-（fc 3 の最初の版は警告）。
+`miku` と `castle` の `.fc` は `fcc migrate -w` で fc 3 にした（ROM は fc 2 の golden とバイト単位で同じだった）。
+実プロジェクト（`C:\Work\fc-miku`、`C:\Work\castle`）も fc 3 になったので、fc 2 の版のソース（`testdata/migrate/v2/`）と
+その ROM の golden、`TestMigrateExamples` は 2026-09-27 に削除した。ROM の golden は `testdata/golden/examples/<name>.nes`（fc 3 の版）。
+castle は 2026-09-27 に実プロジェクトから取り込み直した（`tools/sync_examples.ps1 -Update`。読み取り専用ポインタの警告・`x == -1`
+の書き換えなどが入り、警告は 0 件。1 フレームのサイクル数は場面により +0.1〜2.6%）。

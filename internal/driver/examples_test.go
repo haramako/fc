@@ -56,7 +56,7 @@ func TestExampleMiku(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("ビルド結果コード: %d", code)
 	}
-	compareROM(t, rom, filepath.Join("examples", "v3", "miku.nes")) // fc 3 の版 (fc 2 の版の ROM は examples/miku.nes。TestMigrateExamples)
+	compareROM(t, rom, filepath.Join("examples", "miku.nes"))
 }
 
 // TestExampleCastle は examples/castle (castle 由来) のビルド。main.fc の options(base:) / options(linker_config:) /
@@ -84,5 +84,5 @@ func TestExampleCastle(t *testing.T) {
 	if res.DbgFile == "" {
 		t.Errorf("dbgfile が無い")
 	}
-	compareROM(t, rom, filepath.Join("examples", "v3", "castle.nes")) // fc 3 の版 (@null_fn など fc 3 で書き換えた後)
+	compareROM(t, rom, filepath.Join("examples", "castle.nes"))
 }

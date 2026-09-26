@@ -594,7 +594,7 @@ public function ghost_process(i:u8):void
 	var wait = p4[i];
 	var angle = p5[i];
 
-	var dy:u8;
+	var dy:u8 = 0;
 	var dir = 0;
 	if ((angle - 64) < 128) {
 		dir = 64;
@@ -742,7 +742,7 @@ public function portal_process(i:u8):void
 			rest -= 1;
 		} else {
 			var n = new();
-			if (n != -1) {
+			if (n != NONE) {
 				type[n] = p4[i];
 				pslot[n] = slot;
 				px[n] = x;

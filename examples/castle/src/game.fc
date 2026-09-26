@@ -136,7 +136,7 @@ public function start():void
 		}
 
 		// スクロール
-		var scroll_dir = -1;
+		var scroll_dir = NONE;
 		if (my.x < 8) {
 			scroll_dir = DIR_LEFT;
 		} elsif (my.x >= 248) {
@@ -150,9 +150,9 @@ public function start():void
 				my.y = 8;
 			}
 		}
-		if (scroll_dir != -1) {
+		if (scroll_dir != NONE) {
 			@asm("sei");
-			ppu.irq_setup = @null_fn;
+			ppu.irq_setup = ppu.null_func;
 			subtext.subtext_stat = 0;
 			@asm("cli");
 
@@ -336,7 +336,7 @@ public function move_checkpoint(i:u8):void
 
 function move_checkpoint_with_flag(i:u8, in_lock:u8):void
 {
-	var cp = &MAP_CHECKPOINT_DATA[MAP_CHECKPOINT[i]];
+	var cp:*const u8 = &MAP_CHECKPOINT_DATA[MAP_CHECKPOINT[i]];
 	my.state = my.STATE_STAND;
 	my.x = cp[1] + 8;
 	my.y = cp[2] + 8;

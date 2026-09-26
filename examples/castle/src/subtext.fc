@@ -107,7 +107,7 @@ public function process_subtext():void
 		setup_irqcmd();
 		if (subtext_height <= 8) {
 			subtext_stat = 0;
-			ppu.irq_setup = @null_fn;
+			ppu.irq_setup = ppu.null_func;
 		}
 	}
 }

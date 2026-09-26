@@ -26,7 +26,7 @@ public function bird_new(i:u8):void
 public function bird_process(i:u8):void
 {
 	var slot = pslot[i];
-	var x:u8, y:u8, dx:u8, dy:u8;
+	var x:u8 = 0, y:u8 = 0, dx:u8, dy:u8;
 	var orig_x = p4[i];
 	var orig_y = p5[i];
 	var dir = p1[i];
@@ -191,7 +191,7 @@ public function fish_process(i:u8):void
 	var wait = p7[i];
 	var disp = 0;
 	var pat:u8;
-	var vx:u8;
+	var vx:u8 = 0;
 
 	const ANIM_SWIM = [2, 3, 4, 4, 3, 2, 1, 0, 0, 1];
 
@@ -365,6 +365,7 @@ public function watergate_process(i:u8):void
 		my.register_touch_event(watergate_event, x, y, i);
 	}
 
+	ppu.null_func();
 	gr_sprite2(x, y, spr, pal);
 
 	p4[i] = stat;

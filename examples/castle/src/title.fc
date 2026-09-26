@@ -50,7 +50,7 @@ public function start():void
 		}
 	}
 
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync();
 }
 
@@ -171,7 +171,7 @@ function light_down():void
 	}
 }
 
-function put_text_in_lock(addr:u16, s:*u8):void
+function put_text_in_lock(addr:u16, s:*const u8):void
 {
 	mem.set(ppu.gr_buf, 0, 64);
 	var len = text_print(ppu.gr_buf, s);
@@ -191,7 +191,7 @@ function put_text_in_lock2(addr:u16, s:*u8, col:u8, row:u8):*u8
 	return s;
 }
 
-function text_print(p:*u8, str:*u8):u8
+function text_print(p:*u8, str:*const u8):u8
 {
 	var i = 0;
 	var pi = 0;
@@ -211,7 +211,7 @@ function text_print(p:*u8, str:*u8):u8
 	return i;
 }
 
-function text_print2(p:*u8, str:*u8, size:u8):u8
+function text_print2(p:*u8, str:*const u8, size:u8):u8
 {
 	mem.zero(p, size * 2);
 	var i = 0;
@@ -240,7 +240,7 @@ function text_print2(p:*u8, str:*u8, size:u8):u8
 
 function do_option():u8
 {
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync_with_flag(2);
 
 	ppu.lock();
@@ -258,7 +258,7 @@ function do_option():u8
 	ppu.unlock();
 
 	var cur = 0;
-	var cur_prev = -1;
+	var cur_prev = NONE;
 	var cur_max = 2;
 	loop {
 		pad.update();
@@ -342,7 +342,7 @@ var credit_page:u8;
 
 function do_credit():u8
 {
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync_with_flag(2);
 
 	ppu.lock();
@@ -353,13 +353,13 @@ function do_credit():u8
 	ppu.unlock();
 
 	var cur = 0;
-	var cur_prev = -1;
+	var cur_prev = NONE;
 	loop {
 		pad.update();
 		if (pad.pushed & pad.LEFT || pad.pushed & pad.RIGHT) {
 			credit_page = (credit_page + 1) % 2;
 			cur = 0;
-			cur_prev = -1;
+			cur_prev = NONE;
 			ppu.lock();
 			create_draw_page(credit_page);
 			ppu.unlock();
@@ -430,7 +430,7 @@ function do_clear_savedata():u8
 {
 	ppu.lock();
 
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	mmc3.set_cbank(0, CBANK_MISC_TEXT);
 	mmc3.set_cbank(1, CBANK_MISC_TEXT + 2);
 
