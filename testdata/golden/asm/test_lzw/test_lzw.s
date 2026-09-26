@@ -424,6 +424,8 @@ _test_lzw_buf: .res 256
 	sta <FC_FASTCALL_REG+4
 	lda 0+<F_test_lzw_test_unpack+0
 	sta <FC_FASTCALL_REG+5
+	lda 1+<F_test_lzw_test_unpack+0
+	sta <FC_FASTCALL_REG+6
 	jsr _mem_compare
 	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_lzw_test_unpack+0

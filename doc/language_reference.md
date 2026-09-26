@@ -463,7 +463,9 @@ fc で本体を持つ関数のうち**再帰しないもの**は、引数・戻�
 fc が生成する base.asm のゼロページ配置は `$00-$0F` L（stack 関数のレジスタ領域）、`$10-$1F` reg、`$20-$2F` FC_FASTCALL_REG、
 `$30-$6F` FC_SZP、`$70-$7F` は `options(segment: "ZEROPAGE")` の変数用、`$80-$FF` スタック S。**`$00-$7F` に
 `options(address:)` で固定番地の変数を置いてはいけない**（fc の領域と重なる。固定番地の ZP 変数が要るプロジェクトは
-castle のように base.asm を自前で持つ）。
+castle のように base.asm を自前で持つ）。リンクの後に、`@(address:)` の変数が RAM のセグメント（fc の ZP・BSS・スタック、
+fc.toml の `[ram.*]`、ほかの変数）と重なっていないかを確かめ、重なればエラー。fc.toml の `[ram.*]` も fc の領域（`$00-$01FF`、
+`$0200-$06FF`）と重なればエラー（OAM は `$0700` かカートリッジの RAM に置く）。重なりを意図するなら storage alias を使う。
 base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .res M` と `FC_SZP_SIZE` / `FC_SRAM_SIZE` の
 `.export … : absolute`、それにスタックの空き先頭 `FC_SP: .res 1`（`.exportzp`）を合わせる（不足はリンク時の `.assert` で
 検出される。配置は `.fc-build/_frames.inc`）。
@@ -647,7 +649,9 @@ outer: loop {
   定数）は 8 ビットで折り返さないものとみなす（`i + k > 255` は範囲外と同じ扱い。最適化が `a[i + k]` を「`a` の k 先を
   添字 `i` で」に畳むため。折り返しを当てにする `[256]` のリングバッファは、添字の式でなく変数で進める:
   `j = i + k; a[j]`。変数の加算は普通に折り返す）
-- `*p` / `&x`: ポインタ演算。ポインタの加減算は同じ配列（または変数）の中と末尾の 1 つ先までで意味を持つ。
+- `*p` / `&x`: ポインタ演算。`p + n` / `p - n` / `p++` は要素 n 個分進める（`*T` なら n × `@sizeof(T)` バイト。`p[n]` と
+  `*(p + n)` は同じ）。同じ型のポインタの差 `p - q` は要素数（u16）。`*void` の算術はできない（2026-09-26 まではバイト単位だった）。
+  ポインタの加減算は同じ配列（または変数）の中と末尾の 1 つ先までで意味を持つ。
   それを超えて進めた値は未定義（C と同じ。最適化はこれを前提にする: 例えばループのカウンタとポインタを 1 つにまとめる
   ときに「ポインタ + 残りの要素数」が折り返さないとみなす）
 - `mod.name`: モジュールの public 宣言。`x.name`: struct のフィールド（§2.1）
@@ -681,7 +685,7 @@ var v:int16 = s as int16;                // s:sint8 = -1 なら -1 (符号拡張
 | `min(a, b)` / `max(a, b)` | 小さい方 / 大きい方。型は引数の互換型（片方が符号付きなら符号付き比較、`int16` と `int` なら `int16`）。定数なら畳み込み。関数呼び出しではなく、その場に比較と代入のコードを出す（fastcall 関数の中でも使える） |
 | `clamp(x, lo, hi)` | `lo` 以上 `hi` 以下に収める（`x < lo` なら `lo`、`hi < x` なら `hi`）。型・コードは `min` / `max` と同じ |
 | `asm("lda #1", "sta $2000")` | インラインアセンブラ（各引数が 1 行） |
-| `printf(a, b, ...)` | 引数の型で `stdio.print`（`*uint8`）/ `stdio.print_int16`（整数）を呼び分ける。`stdio` モジュールが必要 |
+| `printf(a, b, ...)` | 引数の型で `stdio.print`（`*u8`）/ `print_slice`（`[]u8`。長さの分だけ）/ `print_int16`（符号なしの整数・bool・enum）/ `print_sint16`（符号付き。負なら `-`）を呼び分ける。それ以外の型（struct など）はエラー。`stdio` モジュールが必要 |
 | `unittest_run_tests()` | `stdio.init()` の後、スコープ内の `test_*` 関数を宣言順に呼び、`stdio.exit(0)` する（`stdio` が必要） |
 | `cos(x)` | `math.sin(x + 64)` に展開（`math` モジュールが必要）。`math.cos(x)` とも書ける |
 | `incbin("file")` | ファイルを配列定数として埋め込む |
@@ -706,7 +710,7 @@ ASCII の英数字・記号は全角に、濁点・半濁点付きのかなは�
 | モジュール | 主な内容 |
 |---|---|
 | `stdio`（ターゲット別） | `print(str)`, `print_int16(n)`, `puts(str)`, `exit(code)`, NES では `wait_vsync()`, `ppu_put(...)` |
-| `mem` | `set(dst, value, size)`, `copy(dst, src, size)`, `strcpy(dst, src)` など |
+| `mem` | `set(dst, value, size)`, `zero(dst, size)`, `copy(dst, src, size)`, `compare(a, b, size)`（size は u16。0 なら何もしない / 等しい）, `strcpy(dst, src)` など |
 | `math` | `sin(x)`, `atan(y, x)`, `rand()`, `sign(i)`, 乗算テーブル |
 | `nes`（NES） | PPU / APU / コントローラのレジスタ定義 |
 | `pad`（NES） | コントローラ入力 |

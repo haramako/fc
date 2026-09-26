@@ -91,6 +91,8 @@ _test_memory_buf2: .res 512
 	sta <FC_FASTCALL_REG+4
 	lda #2
 	sta <FC_FASTCALL_REG+5
+	lda #0
+	sta <FC_FASTCALL_REG+6
 	jsr _mem_compare
 	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_memory_test_copy+0
@@ -214,6 +216,8 @@ _test_memory_buf2: .res 512
 	sta <FC_FASTCALL_REG+4
 	lda #0
 	sta <FC_FASTCALL_REG+5
+	lda #1
+	sta <FC_FASTCALL_REG+6
 	jsr _mem_compare
 	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_memory_test_copy+0
@@ -240,6 +244,8 @@ _test_memory_buf2: .res 512
 	sta <FC_FASTCALL_REG+4
 	lda #0
 	sta <FC_FASTCALL_REG+5
+	lda #1
+	sta <FC_FASTCALL_REG+6
 	jsr _mem_compare
 	lda <0+FC_FASTCALL_REG
 	sta 0+<F_test_memory_test_copy+0
@@ -320,6 +326,8 @@ _45:
 	sta <FC_FASTCALL_REG+2
 	lda #8
 	sta <FC_FASTCALL_REG+3
+	lda #0
+	sta <FC_FASTCALL_REG+4
 	jsr _mem_set
 	ldy #0
 	lda _test_memory_buf1+0,y
@@ -353,6 +361,8 @@ _45:
 	sta <FC_FASTCALL_REG+2
 	lda #7
 	sta <FC_FASTCALL_REG+3
+	lda #0
+	sta <FC_FASTCALL_REG+4
 	jsr _mem_set
 	ldy #0
 	lda _test_memory_buf1+0,y

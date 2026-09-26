@@ -46,7 +46,7 @@ public const SIZE:int16 = 24;
 public function add(x:int, y:u8):int16 { return (x as int16) + y; }
 `,
 	})
-	if err != nil || out != "255 64533 1024\n" {
+	if err != nil || out != "255 -1003 1024\n" {
 		t.Errorf("got %q, %v", out, err)
 	}
 	for _, c := range []struct{ src, msg string }{

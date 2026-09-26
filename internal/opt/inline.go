@@ -401,6 +401,13 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) (argLoads, body 
 		vmap[v] = nv
 		caller.Vars = append(caller.Vars, nv)
 	}
+	// 関数の中の const の表・文字列 (callee.Defs。callee の .proc の中のラベルとして出る) は、展開先から見えない
+	// (callee が使われなくなって出力されないこともある) ので、展開ごとに呼び出し側の Defs へ別の名前で写す
+	symMap := map[string]string{}
+	for _, d := range callee.Defs {
+		symMap[d.Sym] = fmt.Sprintf("_i%d_%s", n, strings.TrimLeft(d.Sym, "_"))
+	}
+	symVals := map[*ir.Value]*ir.Value{}
 	var mapOperand func(o ir.Operand) ir.Operand
 	mapOperand = func(o ir.Operand) ir.Operand {
 		switch x := o.(type) {
@@ -409,6 +416,15 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) (argLoads, body 
 		case *ir.Value:
 			if nv, ok := vmap[x]; ok {
 				return nv
+			}
+			if ns, ok := symMap[x.Symbol]; ok && x.Symbol != "" && (x.Kind == ir.KindGlobal || x.Kind == ir.KindLiteral) {
+				if nv := symVals[x]; nv != nil {
+					return nv
+				}
+				nv := *x
+				nv.Symbol = ns
+				symVals[x] = &nv
+				return &nv
 			}
 			return x
 		case *ir.CastedValue:
@@ -425,6 +441,15 @@ func expand(caller, callee *ir.Lambda, callIdx int, args []int) (argLoads, body 
 		return tag + l[1:]
 	}
 	end := tag + "end"
+	for _, d := range callee.Defs {
+		nd := *d
+		nd.Sym = symMap[d.Sym]
+		nd.Elems = make([]ir.Operand, len(d.Elems))
+		for k, e := range d.Elems {
+			nd.Elems[k] = mapOperand(e) // 表の要素が関数の中の別の表・文字列を指すとき
+		}
+		caller.Defs = append(caller.Defs, &nd)
+	}
 
 	for i, j := range args {
 		a := caller.Ops[j]

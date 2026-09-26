@@ -56,9 +56,11 @@ func runWatch(args []string) int {
 		dirs = append(dirs, filepath.Join(home, "fclib"))
 	}
 	opt := fc.Options{Target: *target, Out: *out, OptimizeLevel: optimizeLevel(*optLevel), Debug: *gFlag, CompileOnly: *cFlag}
+	dir, file := splitSrc(src)
+	opt.Dir, posDir = dir, dir
 	build := func() {
 		start := time.Now()
-		res, err := compiler.Build(context.Background(), src, opt)
+		res, err := compiler.Build(context.Background(), file, opt)
 		stamp := time.Now().Format("15:04:05")
 		if err != nil {
 			printErrors(err)

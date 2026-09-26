@@ -78,13 +78,14 @@ func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (*sema
 		}
 		llc = codegen.NewLlc(2, prog.Types)
 		llc.NoGrow = noGrow
-		_, err := llc.PrepareProgram(prog.Modules.List(), DefaultStaticZp, DefaultStaticRam)
+		plan, err := llc.PrepareProgram(prog.Modules.List(), DefaultStaticZp, DefaultStaticRam)
 		if retryFrameOver(llc, err, noGrow) {
 			continue // fcc build と同じく、フレームが上限を超えた関数の展開を止めてやり直す
 		}
 		if err != nil {
 			return nil, err
 		}
+		prog.Warnings = append(prog.Warnings, plan.Warnings...)
 		break
 	}
 	for _, mod := range prog.Modules.List() {

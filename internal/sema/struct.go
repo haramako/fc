@@ -75,6 +75,7 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 			return c
 		}
 		r := *c
+		r.ty = t // 実行時に組み立てるときの型 (runtimeArray)
 		r.args = make([]*cexpr, len(c.args))
 		for i, e := range c.args {
 			r.args[i] = h.withExpected(e, t.Base)
@@ -302,4 +303,122 @@ func (h *Hlc) fieldViaPointer(ptr ir.Operand, st *types.Type, name string) ir.Op
 	h.markReadOnly(tmp, h.readOnly(ptr))
 	h.emit(&ir.Op{Code: ir.OpAdd, Dst: tmp, Src: []ir.Operand{ptr, h.IntValue(f.Offset)}})
 	return tmp
+}
+
+// padArrayLiteral は `const X:[4]u8 = [1, 2];` の配列リテラルを宣言の長さまで 0 で埋める (ローカルの var と C と同じ。
+// 宣言の長さが無視されて 2 要素の表になり、X[2] が隣のデータを読んでいた)。要素が多すぎればエラー。
+func (h *Hlc) padArrayLiteral(name string, v *ir.Value, typ *types.Type) *ir.Value {
+	if typ == nil || typ.Kind != types.Array || typ.Length < 0 || v.Kind != ir.KindArrayLiteral || ir.ValType(v).Kind != types.Array {
+		return v
+	}
+	n := len(v.Elems)
+	if n > typ.Length {
+		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: %d elements given for %s", name, n, typ)})
+	}
+	if n == typ.Length {
+		return v
+	}
+	base := ir.ValType(v).Base
+	if n == 0 || base.Kind == types.Macro {
+		base = typ.Base
+	}
+	zero := h.zeroLiteral(base)
+	if typ.Base.Kind == types.Pointer {
+		zero = ir.NewIntLiteral("", typ.Base, 0) // ポインタの表は null で埋める (pointerElems が 0 のまま置く)
+	}
+	elems := append([]ir.Operand{}, v.Elems...)
+	for len(elems) < typ.Length {
+		elems = append(elems, zero)
+	}
+	r := ir.NewArrayLiteral(v.Name, h.prog.Types.ArrayOf(base, len(elems)), elems)
+	r.IsString, r.Str = v.IsString, v.Str
+	return r
+}
+
+// isConstElem は評価済みの配列リテラルの要素が、データとして置ける定数か: 整数・シンボル (関数など)・配列/struct リテラル、
+// 配列の名前 (const のポインタの表 `[S, T]` のアドレス。pointerElems が変換する)。変数の値・式は実行時。
+func isConstElem(c *cexpr) bool {
+	if c.kind != cValue {
+		return false
+	}
+	switch c.val.Kind {
+	case ir.KindLiteral, ir.KindArrayLiteral:
+		return true
+	case ir.KindGlobal:
+		return c.val.Symbol != "" && c.val.Type.Kind == types.Array
+	}
+	return false
+}
+
+// runtimeArray は実行時の値を要素に持つ配列リテラル (`[n, m]`) を一時変数に組み立てる (struct リテラルと同じ)。要素の型は
+// 文脈の配列型 (宣言・代入先・引数)、無ければ要素の型をまとめたもの。文脈の長さに足りなければ 0 で埋める。
+func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
+	vals := make([]ir.Operand, len(e.args))
+	var base *types.Type
+	n := len(e.args)
+	if e.ty != nil && e.ty.Kind == types.Array {
+		base = e.ty.Base
+		if e.ty.Length > n {
+			n = e.ty.Length
+		} else if e.ty.Length >= 0 && e.ty.Length < n {
+			panic(&diag.Error{Msg: fmt.Sprintf("%d elements given for %s", len(e.args), e.ty)})
+		}
+	}
+	for i, a := range e.args {
+		v := h.rval(a)
+		vals[i] = v
+		if e.ty == nil {
+			if i == 0 {
+				base = ir.ValType(v)
+			} else {
+				base = h.compatible(base, ir.ValType(v))
+			}
+		}
+	}
+	tmp := h.newTmp(h.prog.Types.ArrayOf(base, n))
+	for i := 0; i < n; i++ {
+		var v ir.Operand
+		if i < len(vals) {
+			h.compatible(base, ir.ValType(vals[i]))
+			v = h.cast(vals[i], base)
+		} else {
+			v = h.zeroValue(base)
+		}
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: ir.NewCastedValue(tmp, base, i*base.Size), Src: []ir.Operand{v}})
+	}
+	return tmp
+}
+
+// scaleOffset はポインタに足す要素数 n を、要素の大きさ size を掛けたバイト数 (16 ビット) にする (定数ならその場で)。
+// 符号付きの n は符号を広げてから掛ける (p - 1 と p + (-1) が同じになるように)。
+func (h *Hlc) scaleOffset(n ir.Operand, size int) ir.Operand {
+	nt := ir.ValType(n)
+	wt := h.prog.Types.IntType(2, nt.Signed)
+	if k, ok := ir.ValIntLiteral(n); ok {
+		return ir.NewIntLiteral("", wt, k*size)
+	}
+	tmp := h.newTmp(wt)
+	h.emit(&ir.Op{Code: ir.OpMul, Dst: tmp, Src: []ir.Operand{h.cast(n, wt), ir.NewIntLiteral("", wt, size)}})
+	return tmp
+}
+
+// pointerDiff は同じ型のポインタの差 p - q を要素数 (u16) にする (C と同じ)。
+func (h *Hlc) pointerDiff(p, q ir.Operand, elem *types.Type) ir.Operand {
+	u16 := h.prog.Types.IntType(2, false)
+	d := h.newTmp(u16)
+	h.emit(&ir.Op{Code: ir.OpSub, Dst: d, Src: []ir.Operand{ir.NewCastedValue(p, u16, 0), ir.NewCastedValue(q, u16, 0)}})
+	if elem.Size <= 1 {
+		return d
+	}
+	r := h.newTmp(u16)
+	if elem.Size&(elem.Size-1) == 0 {
+		shift := 0
+		for 1<<shift < elem.Size {
+			shift++
+		}
+		h.emit(&ir.Op{Code: ir.OpShiftRight, Dst: r, Src: []ir.Operand{d, ir.NewIntLiteral("", h.prog.Types.IntType(1, false), shift)}})
+	} else {
+		h.emit(&ir.Op{Code: ir.OpDiv, Dst: r, Src: []ir.Operand{d, ir.NewIntLiteral("", u16, elem.Size)}})
+	}
+	return r
 }

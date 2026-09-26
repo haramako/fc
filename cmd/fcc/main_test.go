@@ -221,3 +221,35 @@ func TestCLIHomeTempFailure(t *testing.T) {
 		}
 	}
 }
+
+// TestCLIUseFromSourceDir: `fcc build m1/main.fc` の use / include はソースのディレクトリから探す (作業ディレクトリでなく)。
+// 出力 (-o) は作業ディレクトリ基準、診断の位置は作業ディレクトリ基準で表示する。
+func TestCLIUseFromSourceDir(t *testing.T) {
+	dir := setup(t)
+	if err := os.Mkdir("m1", 0o777); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join("m1", "a.fc"), "#fc 3\npublic function two():u8 { return 2; }\n")
+	write(t, filepath.Join("m1", "main.fc"), "#fc 3\nuse * from stdio;\nuse a;\nfunction main():void { printf(a.two(), \"\n\"); exit(0); }\n")
+	if code, out, _ := runCLI(t, "run", "m1/main.fc"); code != 0 || out != "2\n" {
+		t.Errorf("run m1/main.fc: code=%d out=%q", code, out)
+	}
+	if code, out, _ := runCLI(t, "build", "-o", "out.bin", "m1/main.fc"); code != 0 {
+		t.Errorf("build: code=%d out=%q", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "out.bin")); err != nil {
+		t.Errorf("out.bin が作業ディレクトリに無い: %v", err)
+	}
+	write(t, filepath.Join("m1", "bad.fc"), "#fc 3\nuse a;\nfunction main():void { x = 1; }\n")
+	want := filepath.Join("m1", "bad.fc") + ":3:"
+	if code, out, _ := runCLI(t, "check", "m1/bad.fc"); code != 1 || !strings.Contains(out, want) {
+		t.Errorf("check m1/bad.fc: code=%d out=%q (want %q)", code, out, want)
+	}
+	if code, out, _ := runCLI(t, "build", "m1/bad.fc"); code != 1 || !strings.Contains(out, want) {
+		t.Errorf("build m1/bad.fc: code=%d out=%q (want %q)", code, out, want)
+	}
+	t.Chdir("m1")
+	if code, out, _ := runCLI(t, "run", "bad.fc"); code != 1 || !strings.Contains(out, "bad.fc:3:") || strings.Contains(out, "m1") {
+		t.Errorf("run bad.fc: code=%d out=%q", code, out)
+	}
+}

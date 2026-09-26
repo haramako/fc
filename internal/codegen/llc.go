@@ -1237,8 +1237,44 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			} else {
 				// 定数でない場合
 				// TODO: もうちょっと整理して効率よくできるはず
-				if ir.ValType(op.Dst).Size != 1 {
-					panic(&diag.Error{Msg: "shift of 2-byte value by non-constant count is not supported"})
+				if size := ir.ValType(op.Dst).Size; size != 1 {
+					// 2 バイト以上: 回数を Y に置き、値を Dst に写してから 1 ビットずつ回す (定数の回数の形と同じ)。
+					// 回数を先に読む (Dst と同じ変数のことがある: `x = w << x`)
+					labels := l.newLabels(2)
+					loopLabel, endLabel := labels[0], labels[1]
+					r.push(l.loadA(op.In(1), 0))
+					r.push("tay")
+					r.push(anyIfy(l.load(op.Dst, op.In(0))))
+					r.push(loopLabel + ":")
+					r.push("cpy #0")
+					r.push(fmt.Sprintf("beq %s", endLabel))
+					if op.Code == ir.OpShiftLeft {
+						for i := 0; i < size; i++ {
+							r.push(l.loadA(op.Dst, i))
+							if i == 0 {
+								r.push("clc")
+							}
+							r.push("rol a")
+							r.push(l.storeA(op.Dst, i))
+						}
+					} else {
+						for i := size - 1; i >= 0; i-- {
+							r.push(l.loadA(op.Dst, i))
+							if i == size-1 {
+								if signed {
+									r.push("cmp #128") // 算術右シフト
+								} else {
+									r.push("clc")
+								}
+							}
+							r.push("ror a")
+							r.push(l.storeA(op.Dst, i))
+						}
+					}
+					r.push("dey")
+					r.push(fmt.Sprintf("jmp %s", loopLabel))
+					r.push(endLabel + ":")
+					break
 				}
 				labels := l.newLabels(2)
 				loopLabel, endLabel := labels[0], labels[1]
@@ -1704,13 +1740,17 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
 	}
 
-	for _, d := range lmd.Defs {
-		switch d.Kind {
-		case ir.DefBlock:
-			r.push(l.emitBlock(d.Sym, d.Type, d.Elems))
-		default:
+	// 関数の中の const の表・文字列 (.proc の中のラベルなので、この関数の中からしか参照されない)。コード (インラインアセンブラを
+	// 含む) とほかの表から参照されているものだけ出す (インライン展開で写した表が、最適化で使われなくなることがある)
+	blocks := make([][]any, len(lmd.Defs))
+	for i, d := range lmd.Defs {
+		if d.Kind != ir.DefBlock {
 			panic(fmt.Sprintf("invalid lambda def kind %s", d.Kind))
 		}
+		blocks[i] = l.emitBlock(d.Sym, d.Type, d.Elems)
+	}
+	for _, i := range referencedDefs(lmd.Defs, blocks, r.flatten()) {
+		r.push(blocks[i])
 	}
 
 	lines := r.flatten() // まとめた行を展開 + 空の行を削除
