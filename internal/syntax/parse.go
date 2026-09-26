@@ -101,6 +101,10 @@ func checkVersion(f *File) error {
 			if f.Version < Version3 {
 				fail(n.DotDot, "slices `a[i..j]` are fc 3 syntax (write `#fc 3`)")
 			}
+		case *RangeExpr:
+			if f.Version < Version3 {
+				fail(n.Op, "ranges `a..b` are fc 3 syntax (write `#fc 3`)")
+			}
 		case *FuncType:
 			checkTypeForm(n.IsPrefix(), n.Lparen)
 		case *CastExpr:
@@ -114,7 +118,7 @@ func checkVersion(f *File) error {
 			}
 		case *LabeledStmt:
 			switch n.Stmt.(type) {
-			case *LoopStmt, *WhileStmt, *ForStmt, *SwitchStmt:
+			case *LoopStmt, *WhileStmt, *ForStmt, *ForInStmt, *SwitchStmt:
 			default:
 				fail(n.Label.NamePos, "a label must be placed on loop / while / for / switch")
 			}
@@ -149,14 +153,14 @@ var kindToYacc = map[Kind]int{
 	KwBreak: kBREAK, KwContinue: kCONTINUE, KwIncbin: kINCBIN,
 	KwSwitch: kSWITCH, KwCase: kCASE, KwDefault: kDEFAULT,
 	AtSizeof: kAT_SIZEOF, AtBitcast: kAT_BITCAST, AtIncbin: kAT_INCBIN, AtInclude: kAT_INCLUDE, AtIdent: kATIDENT, AtIf: kAT_IF, AtSign: '@',
-	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwFarFn: kFARFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA, KwTrue: kTRUE, KwFalse: kFALSE, KwNull: kNULL, KwEnum: kENUM, KwFallthrough: kFALLTHROUGH,
+	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwFarFn: kFARFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA, KwTrue: kTRUE, KwFalse: kFALSE, KwNull: kNULL, KwEnum: kENUM, KwFallthrough: kFALLTHROUGH, KwIn: kIN,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
 	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
 	MulEq: MULEQ, DivEq: DIVEQ, ModEq: MODEQ, AndEq: ANDEQ, OrEq: OREQ, XorEq: XOREQ, ShlEq: SHLEQ, ShrEq: SHREQ,
 	LParen: '(', RParen: ')', LBrace: '{', RBrace: '}', Semicolon: ';', Colon: ':',
 	Lt: '<', Gt: '>', LBrack: '[', RBrack: ']', Plus: '+', Minus: '-', Star: '*',
 	Slash: '/', Percent: '%', Amp: '&', Pipe: '|', Caret: '^', Assign: '=',
-	Comma: ',', Dot: '.', Not: '!', Tilde: '~', Question: '?', DotDot: DOTDOT,
+	Comma: ',', Dot: '.', Not: '!', Tilde: '~', Question: '?', DotDot: DOTDOT, DotDotEq: DOTDOTEQ,
 }
 
 func (a *yyLexAdapter) Lex(lval *yySymType) int {

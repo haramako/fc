@@ -14,8 +14,19 @@ func init() {
 		Rule{Name: "int-types", Doc: "整数型名を fc 3 の名前にする (int / uint8 → u8、sint → i8、int16 → u16、sint16 → i16)", Apply: renameIntTypes},
 		Rule{Name: "attributes", Doc: "options(...) を @(...) にする (真偽値の属性の `: true` は省く。block { ... } options(k: v); は @(k: v) { ... })", Apply: attributes},
 		Rule{Name: "infer-arrays", Doc: "長さを省いた配列型 []T を [?]T にする (fc 3 の []T は slice)", Apply: inferArrays},
+		Rule{Name: "reserved-names", Doc: "fc 3 の予約語 (enum / fallthrough / in) と同じ綴りの名前の後ろに _ を付ける (in → in_。asm から `_mod_in` で参照していれば asm も直す)", Apply: renameV3Keywords},
 		Rule{Name: "at-builtins", Doc: "組み込みを @ の形にする (sizeof / incbin / bitcast<T>(x) → @bitcast(T, x) / include(...) options(...) → @include(..., k: v) / asm / textmap / min / max / clamp / unittest_run_tests → @run_tests)", Apply: atBuiltins},
 	)
+}
+
+// renameV3Keywords は fc 3 の予約語と同じ綴りの名前 (fc 2 では識別子) を `名前_` にする。ファイルごとに同じ規則で
+// 書き換えるので、ほかのモジュールからの参照 (`mod.in`) も揃う。
+func renameV3Keywords(c *Ctx) {
+	for _, t := range c.Tokens {
+		if t.Kind == syntax.Identifier && syntax.IsV3Keyword(t.Text) {
+			c.ReplaceToken(t, t.Text+"_")
+		}
+	}
 }
 
 // renameIntTypes は型の位置の fc 2 だけの整数型名 (モジュール名の付かない NamedType) を fc 3 の名前にする。

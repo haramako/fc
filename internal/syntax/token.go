@@ -90,6 +90,7 @@ const (
 	KwNull        // null (v2)
 	KwEnum        // enum (fc 3)
 	KwFallthrough // fallthrough (fc 3。switch の case の最後で次の case の本体へ)
+	KwIn          // in (fc 3 の for-each `for (var x in A)`)
 
 	// fc 3 の `@` の組み込み (doc/v3_plan.md §5 A)。型を取るもの・宣言になるものは専用のトークン、それ以外の
 	// `@名前` は AtIdent (Text は `@名前`。名前つきの組み込みの呼び出し)。`@` の直後が `(` なら AtSign (属性)
@@ -149,7 +150,8 @@ const (
 	Not       // !
 	Tilde     // ~ (v2)
 	Question  // ? (fc 3 の `[?]T`)
-	DotDot    // .. (fc 3 の範囲 `a[i..j]`)
+	DotDot    // .. (fc 3 の範囲 `a[i..j]`。終わりを含まない)
+	DotDotEq  // ..= (fc 3 の範囲。終わりを含む `a[i..=j]`)
 )
 
 var kindNames = [...]string{
@@ -160,14 +162,14 @@ var kindNames = [...]string{
 	KwBreak: "break", KwContinue: "continue", KwIncbin: "incbin",
 	KwSwitch: "switch", KwCase: "case", KwDefault: "default",
 	KwUse: "use", KwAs: "as", KwFrom: "from", KwPublic: "public", KwPrivate: "private",
-	KwFn: "fn", KwFarFn: "farfn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null", KwEnum: "enum", KwFallthrough: "fallthrough",
+	KwFn: "fn", KwFarFn: "farfn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null", KwEnum: "enum", KwFallthrough: "fallthrough", KwIn: "in",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
 	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
 	MulEq: "*=", DivEq: "/=", ModEq: "%=", AndEq: "&=", OrEq: "|=", XorEq: "^=", ShlEq: "<<=", ShrEq: ">>=",
 	LParen: "(", RParen: ")", LBrace: "{", RBrace: "}", Semicolon: ";", Colon: ":",
 	Lt: "<", Gt: ">", LBrack: "[", RBrack: "]", Plus: "+", Minus: "-", Star: "*",
 	Slash: "/", Percent: "%", Amp: "&", Pipe: "|", Caret: "^", Assign: "=",
-	Comma: ",", Dot: ".", Not: "!", Tilde: "~",
+	Comma: ",", Dot: ".", Not: "!", Tilde: "~", Question: "?", DotDot: "..", DotDotEq: "..=",
 }
 
 // IsCompoundAssign は `op=` 形の代入演算子か (+= と -= は v1 から、他は v2)。

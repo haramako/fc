@@ -53,7 +53,7 @@ package syntax
 %type <typ> opt_enum_base
 %type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
-%token <tok> DOTDOT
+%token <tok> DOTDOT DOTDOTEQ kIN
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~' '@' '?'
@@ -76,8 +76,8 @@ package syntax
 %type <kase>    case_block
 %type <block>   block opt_block
 %type <fbody>   function_block
-%type <expr>    opt_exp exp
-%type <exprs>   exp_list
+%type <expr>    opt_exp exp for_in_value range_exp
+%type <exprs>   exp_list case_value_list
 %type <alist>   arg_list
 %type <opts>    opt_options options attrs
 %type <optents> option_list option_list_sub option attr_list attr
@@ -134,6 +134,9 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | kFOR '(' IDENT ',' exp ',' exp ')' block { $$ = &ForStmt{For: $1.Pos, Var: ident($3), From: $5, To: $7, Rparen: $8.Pos, Body: $9} } /* v1 */
          | kFOR '(' opt_for_init ';' opt_exp ';' opt_for_step ')' block
                                                 { $$ = &ForStmt{For: $1.Pos, Init: $3, Cond: $5, Step: $7, Rparen: $8.Pos, Body: $9} } /* v2: C 型 */
+         | kFOR '(' kVAR IDENT kIN for_in_value ')' block { $$ = &ForInStmt{For: $1.Pos, Var: $3.Pos, Elem: ident($4), In: $5.Pos, X: $6, Rparen: $7.Pos, Body: $8} } /* v3: for-each */
+         | kFOR '(' kVAR IDENT ':' type_decl kIN for_in_value ')' block { $$ = &ForInStmt{For: $1.Pos, Var: $3.Pos, Elem: ident($4), Type: $6, In: $7.Pos, X: $8, Rparen: $9.Pos, Body: $10} } /* v3 */
+         | kFOR '(' kVAR IDENT ',' IDENT kIN for_in_value ')' block { $$ = &ForInStmt{For: $1.Pos, Var: $3.Pos, Index: ident($4), Elem: ident($6), In: $7.Pos, X: $8, Rparen: $9.Pos, Body: $10} } /* v3 */
          | incdec ';'                           { s := $1.(*IncDecStmt); s.Semi = $2.Pos; $$ = s } /* v2 */
          | kBREAK opt_ident ';'                 { $$ = &BreakStmt{Keyword: $1.Pos, Label: $2, Semi: $3.Pos} }
          | kFALLTHROUGH ';'                     { $$ = &FallthroughStmt{Keyword: $1.Pos, Semi: $2.Pos} } /* v3 */
@@ -182,6 +185,14 @@ lit_elem: exp
 lit_elem_list: lit_elem { $$ = []Expr{$1} }
              | lit_elem_list ',' lit_elem { $$ = append($1, $3) }
 
+/* for-each の回す値と case の値 (v3): 式か範囲 `a..b` / `a..=b` */
+for_in_value: exp
+            | range_exp
+range_exp: exp DOTDOT exp { $$ = &RangeExpr{Lo: $1, Op: $2.Pos, Hi: $3} }
+         | exp DOTDOTEQ exp { $$ = &RangeExpr{Lo: $1, Op: $2.Pos, Inclusive: true, Hi: $3} }
+case_value_list: case_value_list ',' for_in_value { $$ = append($1, $3) }
+               | for_in_value { $$ = []Expr{$1} }
+
 /* C 型 for の各部 (v2) */
 opt_for_init: /* empty */ { $$ = nil }
             | kVAR var_decl_list { $$ = &VarDecl{Keyword: $1.Pos, Specs: $2} }
@@ -222,7 +233,7 @@ switch_block: switch_block case_block { $$ = append($1, $2) }
             | case_block { $$ = []*CaseClause{$1} }
 
 /* 本体は空でもよい (`case 0:` の直後に `case 1:`)。fall through はしない: 空の case は「何もしない」 */
-case_block: kCASE exp_list ':' opt_statement_list { $$ = &CaseClause{Case: $1.Pos, Values: $2, Colon: $3.Pos, Body: $4} }
+case_block: kCASE case_value_list ':' opt_statement_list { $$ = &CaseClause{Case: $1.Pos, Values: $2, Colon: $3.Pos, Body: $4} }
 
 function_block: block { $$ = funcBody{Block: $1} }
               | ';' { $$ = funcBody{Semi: $1.Pos} }
@@ -302,6 +313,7 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | exp '(' arg_list ')' opt_block { $$ = &CallExpr{Fun: $1, Lparen: $2.Pos, Args: $3.exprs, Comma: $3.comma, Rparen: $4.Pos, Block: $5} }
    | exp '[' exp ']'        { $$ = &IndexExpr{X: $1, Lbrack: $2.Pos, Index: $3, Rbrack: $4.Pos} }
    | exp '[' opt_exp DOTDOT opt_exp ']' { $$ = &SliceExpr{X: $1, Lbrack: $2.Pos, Lo: $3, DotDot: $4.Pos, Hi: $5, Rbrack: $6.Pos} } /* v3 */
+   | exp '[' opt_exp DOTDOTEQ exp ']' { $$ = &SliceExpr{X: $1, Lbrack: $2.Pos, Lo: $3, DotDot: $4.Pos, Inclusive: true, Hi: $5, Rbrack: $6.Pos} } /* v3 */
    | '[' ']'                { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: []Expr{}, Rbrack: $2.Pos} }
    | '[' lit_elem_list ']'  { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Rbrack: $3.Pos} }
    | '[' lit_elem_list ',' ']' { $$ = &ArrayLit{Lbrack: $1.Pos, Elems: $2, Comma: $3.Pos, Rbrack: $4.Pos} }

@@ -168,6 +168,24 @@ type ForStmt struct {
 // IsV1 は v1 の `for (var, from, to)` 形か。
 func (s *ForStmt) IsV1() bool { return s.Var != nil }
 
+// ForInStmt は fc 3 の for-each `for (var x in X) { … }` / `for (var i, x in X)` / `for (var i in lo..hi)`。
+// X が配列・slice なら要素の値 (コピー)、配列・slice へのポインタなら要素のポインタ、RangeExpr なら範囲の整数を回す。
+type ForInStmt struct {
+	For    Pos
+	Var    Pos      // `var`
+	Index  *Ident   // `for (var i, x in X)` の i (無ければ nil)
+	Elem   *Ident   // x
+	Type   TypeExpr // `for (var i:u16 in 0..300)` (範囲だけ。無ければ nil)
+	In     Pos
+	X      Expr // *RangeExpr または回す値
+	Rparen Pos
+	Body   *Block
+}
+
+func (s *ForInStmt) Pos() Pos { return s.For }
+func (s *ForInStmt) End() Pos { return s.Body.End() }
+func (*ForInStmt) stmtNode()  {}
+
 // IncDecStmt は `x++;` / `x--;` / `++x;` / `--x;` (v2)。文としてだけ使え、式の値は持たない。
 // for の step に置いたときは Semi が無効。
 type IncDecStmt struct {
@@ -287,17 +305,32 @@ func (s *EnumDecl) End() Pos { return after(s.Rbrace, 1) }
 func (*EnumDecl) stmtNode()  {}
 
 // SliceExpr は fc 3 の範囲 `x[lo..hi]` (lo / hi は省略できる: 省けば 0 / 長さ)。配列・slice の一部を指す slice になる。
+// `x[lo..=hi]` (Inclusive) は hi を含む (hi は省けない)。
 type SliceExpr struct {
-	X      Expr
-	Lbrack Pos
-	Lo     Expr // nil なら 0
-	DotDot Pos
-	Hi     Expr // nil なら長さ
-	Rbrack Pos
+	X         Expr
+	Lbrack    Pos
+	Lo        Expr // nil なら 0
+	DotDot    Pos
+	Inclusive bool // `..=`
+	Hi        Expr // nil なら長さ
+	Rbrack    Pos
 }
 
 func (e *SliceExpr) Pos() Pos { return e.X.Pos() }
 func (e *SliceExpr) End() Pos { return after(e.Rbrack, 1) }
+
+// RangeExpr は fc 3 の範囲 `lo..hi` (hi を含まない) / `lo..=hi` (含む)。for-each の回す値と case の値にだけ書ける
+// (式ではない。slice の `x[lo..hi]` は SliceExpr)。
+type RangeExpr struct {
+	Lo        Expr
+	Op        Pos // `..` / `..=`
+	Inclusive bool
+	Hi        Expr
+}
+
+func (e *RangeExpr) Pos() Pos { return e.Lo.Pos() }
+func (e *RangeExpr) End() Pos { return e.Hi.End() }
+func (*RangeExpr) exprNode()  {}
 func (*SliceExpr) exprNode()  {}
 
 // EnumShortExpr は fc 3 の `.Name` (型が文脈から分かるときの enum のメンバー)。

@@ -178,3 +178,13 @@ func TestMigrateFirstToken(t *testing.T) {
 		t.Errorf("got %q, %v", got, err)
 	}
 }
+
+// TestMigrateReservedNames: fc 3 の予約語 (enum / fallthrough / in) と同じ綴りの名前は後ろに _ を付ける (文字列・コメントはそのまま)。
+func TestMigrateReservedNames(t *testing.T) {
+	in := "var in:int; // in\nfunction f(enum:int):int { return enum + in + m.fallthrough; }\nvar s = \"in\";\n"
+	want := "#fc 3\nvar in_:u8; // in\nfunction f(enum_:u8):u8 { return enum_ + in_ + m.fallthrough_; }\nvar s = \"in\";\n"
+	got, err := Migrate([]byte(in), "t.fc")
+	if err != nil || string(got) != want {
+		t.Errorf("got %q, %v\nwant %q", got, err, want)
+	}
+}
