@@ -115,8 +115,8 @@ func run() int {
 	defer compiler.Close()
 
 	src := rest[0]
-	opt.Dir, posDir = splitSrc(src)
-	_, file := splitSrc(src)
+	dir, file := splitSrc(src)
+	opt.Dir, posDir = dir, dir
 	res, err := compiler.Build(context.Background(), file, opt)
 	if err != nil {
 		printErrors(err)
