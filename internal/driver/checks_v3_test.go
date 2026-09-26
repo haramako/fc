@@ -80,3 +80,43 @@ function main():void { a = 5; b = 3; t(a, b); t(0, 7); t(0, 0); exit(0); }
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestUninitializedLocal: 代入する前に読みうるローカル変数を警告する (静的フレームが重なるので前の関数の値が見え、-O で結果も
+// 変わっていた)。両方の枝で代入・アドレスを渡した変数・必ず通る loop の中の代入・配列は警告しない。
+func TestUninitializedLocal(t *testing.T) {
+	t.Parallel()
+	_, res, err := buildFilesDefs(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+function set(p:*u8):void { *p = 3; }
+function f(c:bool):u8
+{
+	var y:u8;
+	y += 1;
+	var a:u8;
+	if (c) { a = 1; }
+	var b:u8;
+	if (c) { b = 1; } else { b = 2; }
+	var d:u8;
+	set(&d);
+	var g:u8;
+	loop { g = 5; break; }
+	var k:[4]u8;
+	k[0] = 1;
+	var m:u8 = 4;
+	return y + a + b + d + g + k[1] + m;
+}
+function main():void { printf(f(true), "\n"); exit(0); }
+`}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Msg, "may be read before it is assigned") {
+			got = append(got, w.Msg[1:strings.Index(w.Msg[1:], "`")+1])
+		}
+	}
+	if strings.Join(got, ",") != "y,a" {
+		t.Errorf("警告した変数: %v (want y,a)", got)
+	}
+}

@@ -400,6 +400,7 @@ const switchTableMin = 10
 func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 	oldLmd, oldLogs := h.lmd, h.pendingLogs
 	h.lmd, h.pendingLogs = lmd, nil
+	errs := len(h.prog.Errors)
 	if len(h.loops) != 0 {
 		panic("loops not empty")
 	}
@@ -441,6 +442,9 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 		}
 		for _, p := range h.pendingLogs {
 			h.prog.Warnings = append(h.prog.Warnings, diag.Warning{Msg: "@log after the last statement is never reached", Pos: p.Pos})
+		}
+		if lmd.Body != nil && len(h.prog.Errors) == errs {
+			h.warnUninitialized(lmd) // エラーのあった関数は命令列が途中なので見ない
 		}
 	})
 	h.lmd, h.pendingLogs = oldLmd, oldLogs
