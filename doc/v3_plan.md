@@ -1099,6 +1099,17 @@ fclib と NES の開発の流れ）で、小さなプログラムを `fcc run`�
   `0...3` と `0..<3` が書き分け）。終わりを含む `a..=b` を全部の文脈に足す（Rust と同じ）。`for (var i in 0..=255)` は終わりが
   型に収まるので u8 のまま 256 回回せる。switch は表引きなので範囲は表を埋めるだけ（広い範囲は比較の分岐に）。重なりと
   空の範囲はエラー
+  **実装（2026-09-27、feat/v3-syntax）:** 構文は `syntax.ForInStmt` と `syntax.RangeExpr`（for-each の回す値と case の値にだけ
+  書ける。式ではないので `var r = 1..3` は構文エラー）、slice は `SliceExpr.Inclusive`。字句は `in`（fc 3 の予約語。fc 2 では名前）と
+  `..=`。sema は forin.go: 範囲・配列は数え上げのループにし、終わりが型に収まれば C 型 for と同じ IR（`begin: if (i < end)
+  { body; step } else break`。最適化の帰納変数・展開に乗る）、収まらなければ（u8 の `0..256` / `0..=255`、長さ 256 の配列）
+  後ろで判定する形（`body; i++; if (i != end) goto begin`。end は 1 周多い値 0）。要素のポインタは `Hlc.exprAliases` で名前を
+  `&base[i]` の cexpr の別名にし、変数を作らない（`(&A[i]).hp` は `A[i].hp` と同じ IR になる。生成コードで確認）。ループの変数の
+  代入は `Hlc.loopVars` で assign がエラーにする（ループ自身の step と要素のコピーだけ writeLoopVar で通す）。実行時の終わり・
+  slice・ポインタの値は 1 回だけ評価する（読み取り専用の印は freezeRO で引き継ぐ。落ちていて const の表に書けた）。
+  case の範囲は比較の連鎖では符号なしの `(x - lo) < 個数`（1 回の比較）、ジャンプテーブルでは範囲の値を全部埋める。
+  migrate は reserved-names 規則で fc 2 の名前 `in` / `enum` / `fallthrough` を `in_` などにする（enum / fallthrough は今まで
+  書き換えていなかった）
 - **構文エラーに内部のトークン名**（低、安い）: `Kind(89)`（`?`）、`Kind(90)`（`..`）。`syntax/token.go` の `kindNames` に
   `Question` / `DotDot` / `At*` を足す。`var z = y++;` には「++ は文としてだけ」と案内
 - **`@asm` から変数を扱いにくい**（低〜中）: ローカル変数・引数を参照する書き方が無く、asm の誤りは ca65 のエラーが

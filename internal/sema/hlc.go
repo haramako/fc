@@ -43,8 +43,10 @@ type Hlc struct {
 	// constSlice のメモ (同じ配列リテラルから無名の配列定数を 2 度作らない)。cmemo と一緒にリセットする
 	sliceMemo map[sliceKey]*cexpr
 
-	pendingLogs []*ir.LogPoint  // 次に出す命令に付ける @log (log.go)
-	caseDecls   map[string]bool // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
+	pendingLogs []*ir.LogPoint       // 次に出す命令に付ける @log (log.go)
+	caseDecls   map[string]bool      // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
+	loopVars    map[*ir.Value]bool   // fc 3: for-each の変数 (読み取り専用。forin.go)
+	exprAliases map[*ir.Value]*cexpr // fc 3: 式の別名になった名前 (for-each の要素のポインタ `&A[i]`。forin.go)
 }
 
 // breakable は break / continue の飛び先になる文 (ループ、v2 では switch も)。
@@ -88,7 +90,7 @@ func forHasContinue(body *syntax.Block, label *syntax.Ident) bool {
 				found = true
 			}
 			return
-		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt:
+		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
 			nested = true
 		case *syntax.LambdaExpr:
 			return
@@ -423,9 +425,13 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 
 		if lmd.Body != nil {
 			h.compileStmts(lmd.Body.Stmts)
-			if lmd.Type.Base.Kind != types.Void && !terminates(lmd.Body) {
+			if lmd.Type.Base.Kind != types.Void && !h.terminates(lmd.Body) {
 				// 終端に落ちると rts が無く次の関数へ流れて暴走する (fc 1 は黙って通していた)
-				panic(&diag.Error{Msg: fmt.Sprintf("missing return at end of function %s (returns %s)", lmd.Name, lmd.Type.Base),
+				hint := ""
+				if n := len(lmd.Body.Stmts); n > 0 && h.switchWithoutDefault(lmd.Body.Stmts[n-1]) {
+					hint = "; the switch has no default, so a value matching no case (even for an enum: `5 as E`) falls through: add `default:`"
+				}
+				panic(&diag.Error{Msg: fmt.Sprintf("missing return at end of function %s (returns %s)%s", lmd.Name, lmd.Type.Base, hint),
 					Pos: syntax.Position{Filename: lmd.Pos.Filename, Line: lmd.Body.Rbrace.Line, Col: lmd.Body.Rbrace.Col}})
 			}
 		}
@@ -812,6 +818,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.popBreakable()
 		})
 
+	case *syntax.ForInStmt:
+		h.compileForIn(s)
+
 	case *syntax.IncDecStmt:
 		// x++ → x = x + 1 (v1 の for のインクリメントと同じ形。左辺値は 2 回評価される)
 		op := syntax.Plus
@@ -845,6 +854,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			v := h.rval(h.withExpected(toC(s.Value), rt))
 			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
 			h.warnDropConst("return from "+h.lmd.Name, rt, v)
+			h.warnReturnLocalAddr(s.Value, rt)
 			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.cast(v, rt)}})
 		} else {
 			// void関数
@@ -864,10 +874,29 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.pushBreakable(breakable{isSwitch: true, breakLabel: endLabel})
 		// case の値を先に評価する (重複の検出と、ジャンプテーブルにするかの判断)
 		seen := map[int]bool{} // case の値の重複検出 (先勝ちで黙って通っていた)
-		vals := make([][]ir.Operand, len(s.Cases))
+		vals := make([][]caseItem, len(s.Cases))
 		allInt, n, minV, maxV := true, 0, 0, 0
 		for ci, c := range s.Cases {
 			for _, v := range c.Values {
+				if r, ok := v.(*syntax.RangeExpr); ok {
+					// fc 3 の `case lo..hi:` / `case lo..=hi:` (2026-09-27)
+					it := h.caseRange(r, ir.ValType(cond))
+					for k := it.lo; k <= it.last; k++ {
+						if seen[k] {
+							panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d (in the range %d..=%d)", k, it.lo, it.last), Pos: syntax.At(h.module.Path, v.Pos())})
+						}
+						seen[k] = true
+					}
+					if n == 0 || it.lo < minV {
+						minV = it.lo
+					}
+					if n == 0 || it.last > maxV {
+						maxV = it.last
+					}
+					n += it.last - it.lo + 1
+					vals[ci] = append(vals[ci], it)
+					continue
+				}
 				cv := h.constEvalOperand(h.withExpected(toC(v), ir.ValType(cond))) // enum なら `case .A:`
 				if t := ir.ValType(cv); t.Kind == types.Array || t.Kind == types.Struct {
 					// `case "A":` (C の文字のつもり。fc の "A" / 'A' は 2 バイトの文字列) が codegen で panic していた
@@ -892,7 +921,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				} else {
 					allInt = false
 				}
-				vals[ci] = append(vals[ci], cv)
+				vals[ci] = append(vals[ci], caseItem{v: cv})
 			}
 		}
 		h.warnEnumSwitch(ir.ValType(cond), seen, s.Default != nil)
@@ -908,8 +937,14 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			}
 			for ci := range s.Cases {
 				caseLabels[ci] = h.newLabel("case")
-				for _, cv := range vals[ci] {
-					k, _ := ir.ValIntLiteral(cv)
+				for _, it := range vals[ci] {
+					if it.isRange {
+						for k := it.lo; k <= it.last; k++ {
+							table[k-minV] = caseLabels[ci]
+						}
+						continue
+					}
+					k, _ := ir.ValIntLiteral(it.v)
 					table[k-minV] = caseLabels[ci]
 				}
 			}
@@ -941,9 +976,13 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				}
 				// 値ごとに `eq t; if_true t goto then`、最後の値だけ `eq t; if t goto else` (一致しなければ次の case へ)。
 				// t は値ごとに新しい一時変数にする (定義 1 つ + 直後で使用、でコンディションフラグに割り付く: cmp; bne)
-				for k, cv := range vals[ci] {
+				for k, it := range vals[ci] {
 					tmp := h.newTmp(h.prog.Types.IntType(1, false))
-					h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, cv}})
+					if it.isRange {
+						h.caseRangeTest(tmp, cond, it)
+					} else {
+						h.emit(&ir.Op{Code: ir.OpEq, Dst: tmp, Src: []ir.Operand{cond, it.v}})
+					}
 					if k < len(vals[ci])-1 {
 						h.emit(&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{tmp}, Label: thenLabel})
 					} else {
@@ -1209,7 +1248,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if h.caseDecls[c.name] && h.scope.Find(c.name, true) == nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s not found (in fc 3 a variable declared in a switch case is visible only in that case; declare it before the switch)", c.name)})
 		}
-		return cv(h.scope.FindMust(c.name, true))
+		v := h.scope.FindMust(c.name, true)
+		if a := h.exprAliases[v]; a != nil {
+			return h.constEval(a)
+		}
+		return cv(v)
 
 	case cStr:
 		// String#unpack('c*') は符号付きバイト
@@ -1441,7 +1484,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 					args[i] = h.constEval(a)
 				}
 			}
-			return &cexpr{kind: cOp, op: c.op, args: args, ty: c.ty}
+			return &cexpr{kind: cOp, op: c.op, args: args, ty: c.ty, incl: c.incl}
 		}
 	}
 	panic(fmt.Sprintf("invalid op %v", c.op))
@@ -2253,7 +2296,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			leftValue = true
 
 		case opSlice:
-			r = h.sliceRange(e.args[0], e.args[1], e.args[2])
+			r = h.sliceRange(e.args[0], e.args[1], e.args[2], e.incl)
 
 		case opToSlice:
 			r = h.toSlice(e.args[0], e.ty)
@@ -2284,6 +2327,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		}
 		rhs = h.withExpected(rhs, lt)
 	}
+	h.checkLoopVarAssign(left)
 	right := h.rval(rhs)
 	if lv {
 		if ir.ValType(left).Kind == types.SoaRef {

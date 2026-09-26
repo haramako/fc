@@ -388,6 +388,30 @@ func (p *printer) stmt(s Stmt) {
 		p.space()
 		p.block(s.Body)
 
+	case *ForInStmt:
+		p.tokAt(s.For, "for")
+		p.space()
+		p.tok("(")
+		p.tokAt(s.Var, "var")
+		p.space()
+		if s.Index != nil {
+			p.ident(s.Index)
+			p.tok(",")
+			p.space()
+		}
+		p.ident(s.Elem)
+		if s.Type != nil {
+			p.tok(":")
+			p.typeExpr(s.Type)
+		}
+		p.space()
+		p.tokAt(s.In, "in")
+		p.space()
+		p.expr(s.X)
+		p.tokAt(s.Rparen, ")")
+		p.space()
+		p.block(s.Body)
+
 	case *IncDecStmt:
 		p.incDec(s)
 		p.tokAt(s.Semi, ";")
@@ -902,11 +926,15 @@ func (p *printer) expr(e Expr) {
 		if e.Lo != nil {
 			p.expr(e.Lo)
 		}
-		p.tokAt(e.DotDot, "..")
+		p.tokAt(e.DotDot, rangeOp(e.Inclusive))
 		if e.Hi != nil {
 			p.expr(e.Hi)
 		}
 		p.tokAt(e.Rbrack, "]")
+	case *RangeExpr:
+		p.expr(e.Lo)
+		p.tokAt(e.Op, rangeOp(e.Inclusive))
+		p.expr(e.Hi)
 	case *SizeofExpr:
 		p.tokAt(e.Sizeof, p.at("sizeof"))
 		p.tokAt(e.Lparen, "(")
@@ -1066,4 +1094,12 @@ func (p *printer) params(params []*Param) {
 		}
 		p.typeExpr(prm.Type)
 	}
+}
+
+// rangeOp は範囲の記号 (`..` / `..=`)。
+func rangeOp(inclusive bool) string {
+	if inclusive {
+		return "..="
+	}
+	return ".."
 }

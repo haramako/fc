@@ -102,7 +102,7 @@ var symbolTokens = []struct {
 	text string
 	kind Kind
 }{
-	{"<<=", ShlEq}, {">>=", ShrEq}, {"*=", MulEq}, {"/=", DivEq}, {"%=", ModEq}, {"&=", AndEq}, {"|=", OrEq}, {"^=", XorEq}, // v2 (長いものを先に)
+	{"<<=", ShlEq}, {">>=", ShrEq}, {"..=", DotDotEq}, {"*=", MulEq}, {"/=", DivEq}, {"%=", ModEq}, {"&=", AndEq}, {"|=", OrEq}, {"^=", XorEq}, // v2 (長いものを先に)
 	{"<=", Leq}, {">=", Geq}, {"==", EqEq}, {"+=", AddEq}, {"-=", SubEq},
 	{"!=", Neq}, {"->", Arrow}, {"<<", Shl}, {">>", Shr},
 	{"&&", AndAnd}, {"||", OrOr}, {"++", Inc}, {"--", Dec}, {"..", DotDot},
@@ -120,11 +120,17 @@ var keywords = map[string]Kind{
 	"switch": KwSwitch, "case": KwCase, "default": KwDefault,
 	"use": KwUse, "as": KwAs, "from": KwFrom, "public": KwPublic, "private": KwPrivate,
 	"fn": KwFn, "farfn": KwFarFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
-	"true": KwTrue, "false": KwFalse, "null": KwNull, "enum": KwEnum, "fallthrough": KwFallthrough,
+	"true": KwTrue, "false": KwFalse, "null": KwNull, "enum": KwEnum, "fallthrough": KwFallthrough, "in": KwIn,
 }
 
 // v3Keywords は fc 3 で足した予約語 (fc 2 のソースでは識別子のまま)。
-var v3Keywords = map[Kind]bool{KwEnum: true, KwFallthrough: true}
+var v3Keywords = map[Kind]bool{KwEnum: true, KwFallthrough: true, KwIn: true}
+
+// IsV3Keyword は name が fc 3 で足した予約語 (fc 2 では名前に使える: enum / fallthrough / in) か (fcc migrate が名前を書き換える)。
+func IsV3Keyword(name string) bool {
+	k, ok := keywords[name]
+	return ok && v3Keywords[k]
+}
 
 // v3Unreserved は fc 3 で予約語でなくなった語 (`@sizeof` などの組み込みになった。普通の名前として使える)。
 var v3Unreserved = map[Kind]bool{KwSizeof: true, KwBitcast: true, KwIncbin: true, KwInclude: true, KwPrivate: true}

@@ -155,7 +155,7 @@ func (h *Hlc) toSlice(c *cexpr, st *types.Type) ir.Operand {
 }
 
 // sliceRange は a[lo..hi] (lo / hi は省けば nil)。
-func (h *Hlc) sliceRange(a, lo, hi *cexpr) ir.Operand {
+func (h *Hlc) sliceRange(a, lo, hi *cexpr, incl bool) ir.Operand {
 	p := h.sliceParts(a, "a[lo..hi]")
 	u8 := h.prog.Types.IntType(1, false)
 	intOf := func(c *cexpr, what string) ir.Operand {
@@ -171,6 +171,19 @@ func (h *Hlc) sliceRange(a, lo, hi *cexpr) ir.Operand {
 	}
 	if hi != nil {
 		hiV = intOf(hi, "hi")
+		if incl { // `a[lo..=hi]` は `a[lo..hi + 1]` (広い slice なら u16 で足す)
+			if k, ok := ir.ValIntLiteral(hiV); ok {
+				hiV = h.IntValue(k + 1)
+			} else {
+				t := h.prog.Types.IntType(1, false)
+				if p.wide || ir.ValType(hiV).Size > 1 {
+					t = h.prog.Types.IntType(2, false)
+				}
+				tmp := h.newTmp(t)
+				h.emit(&ir.Op{Code: ir.OpAdd, Dst: tmp, Src: []ir.Operand{h.cast(hiV, t), ir.NewIntLiteral("", t, 1)}})
+				hiV = tmp
+			}
+		}
 	}
 	// 定数の範囲だけ検査する
 	loN, loLit := ir.ValIntLiteral(loV)

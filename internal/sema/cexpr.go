@@ -141,6 +141,7 @@ type cexpr struct {
 	lam   *lambdaLit      // cLambda
 	flds  []cfield        // cStructLit の項目
 	rt    bool            // cArray: 実行時の値を要素に持つ (lval が一時変数に組み立てる。ty は文脈の配列型、無ければ nil)
+	incl  bool            // opSlice: `a[lo..=hi]` (hi を含む)
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
 }
 
@@ -245,7 +246,7 @@ func toC0(e syntax.Expr) *cexpr {
 	case *syntax.IndexExpr:
 		return cop2(opIndex, toC(e.X), toC(e.Index))
 	case *syntax.SliceExpr:
-		c := &cexpr{kind: cOp, op: opSlice, args: []*cexpr{toC(e.X), nil, nil}}
+		c := &cexpr{kind: cOp, op: opSlice, args: []*cexpr{toC(e.X), nil, nil}, incl: e.Inclusive}
 		if e.Lo != nil {
 			c.args[1] = toC(e.Lo)
 		}
@@ -253,6 +254,8 @@ func toC0(e syntax.Expr) *cexpr {
 			c.args[2] = toC(e.Hi)
 		}
 		return c
+	case *syntax.RangeExpr:
+		panic(&diag.Error{Msg: "a range `a..b` can be used only in a for-each (`for (var i in a..b)`) or a case (`case a..b:`); for a part of an array write `x[a..b]`"})
 	case *syntax.ArrayLit:
 		elems := make([]*cexpr, len(e.Elems))
 		for i, el := range e.Elems {

@@ -17,7 +17,10 @@ import (
 //   - loop / while (1) / 条件なし for: 中にそのループを抜ける break が無い
 //   - switch: default があり、全 case と default の最後の文が終端文 (fc 3 の fallthrough で終わる case は次の case が終端文なら)
 //   - ラベル付き文: 中の文
-func terminates(s syntax.Stmt) bool {
+//   - fc 3 の @if: 選ばれた側 (else が無く条件が偽なら終端文でない)。選ばれなかった側は見ない
+//
+// while / for の無限ループは条件が 0 以外の整数か true (`while (true)`)。
+func (h *Hlc) terminates(s syntax.Stmt) bool {
 	switch s := s.(type) {
 	case *syntax.ReturnStmt:
 		return true
@@ -25,9 +28,12 @@ func terminates(s syntax.Stmt) bool {
 		if len(s.Stmts) == 0 {
 			return false
 		}
-		return terminates(s.Stmts[len(s.Stmts)-1])
+		return h.terminates(s.Stmts[len(s.Stmts)-1])
 	case *syntax.IfStmt:
-		return s.Else != nil && terminates(s.Then) && terminates(s.Else)
+		return s.Else != nil && h.terminates(s.Then) && h.terminates(s.Else)
+	case *syntax.StaticIfStmt:
+		body := h.staticBranch(s)
+		return len(body) > 0 && h.terminates(body[len(body)-1])
 	case *syntax.LoopStmt:
 		return !hasBreakFor(s.Body, nil)
 	case *syntax.WhileStmt:
@@ -40,7 +46,7 @@ func terminates(s syntax.Stmt) bool {
 			return false
 		}
 		// 後ろから: fallthrough で終わる case は、次の case (最後なら default) が終端するなら終端する
-		next := len(s.Default.Body) > 0 && terminates(s.Default.Body[len(s.Default.Body)-1])
+		next := len(s.Default.Body) > 0 && h.terminates(s.Default.Body[len(s.Default.Body)-1])
 		if !next {
 			return false
 		}
@@ -51,7 +57,7 @@ func terminates(s syntax.Stmt) bool {
 				return false
 			case endsWithFallthrough(body):
 				// next (次の case が終端するか) のまま
-			case !terminates(body[len(body)-1]):
+			case !h.terminates(body[len(body)-1]):
 				return false
 			}
 		}
@@ -65,12 +71,27 @@ func terminates(s syntax.Stmt) bool {
 		case *syntax.ForStmt:
 			return !inner.IsV1() && (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
 		}
-		return terminates(s.Stmt)
+		return h.terminates(s.Stmt)
 	}
 	return false
 }
 
-// isTrueLiteral は 0 以外の整数リテラル (括弧付きも可) か。
+// switchWithoutDefault は、s が default の無い switch で、全 case が終端文か (`missing return` で default を案内する。
+// enum の全メンバーを並べても、範囲外の値 (`5 as Dir`、初期化していない値) で落ちうるので終端文にしない: 2026-09-27 決定)。
+func (h *Hlc) switchWithoutDefault(s syntax.Stmt) bool {
+	sw, ok := s.(*syntax.SwitchStmt)
+	if !ok || sw.Default != nil || len(sw.Cases) == 0 {
+		return false
+	}
+	for _, c := range sw.Cases {
+		if len(c.Body) == 0 || !endsWithFallthrough(c.Body) && !h.terminates(c.Body[len(c.Body)-1]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isTrueLiteral は 0 以外の整数リテラルか true (括弧付きも可) か。
 func isTrueLiteral(e syntax.Expr) bool {
 	for {
 		switch x := e.(type) {
@@ -78,6 +99,8 @@ func isTrueLiteral(e syntax.Expr) bool {
 			e = x.X
 		case *syntax.IntLit:
 			return x.Value != 0
+		case *syntax.BoolLit:
+			return x.Value
 		default:
 			return false
 		}
@@ -99,7 +122,7 @@ func hasBreakFor(body syntax.Stmt, label *syntax.Ident) bool {
 				found = true
 			}
 			return
-		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt:
+		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
 			nested = true
 		case *syntax.SwitchStmt:
 			nested = true
