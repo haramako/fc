@@ -400,6 +400,7 @@ const switchTableMin = 10
 func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 	oldLmd, oldLogs := h.lmd, h.pendingLogs
 	h.lmd, h.pendingLogs = lmd, nil
+	errs := len(h.prog.Errors)
 	if len(h.loops) != 0 {
 		panic("loops not empty")
 	}
@@ -441,6 +442,9 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 		}
 		for _, p := range h.pendingLogs {
 			h.prog.Warnings = append(h.prog.Warnings, diag.Warning{Msg: "@log after the last statement is never reached", Pos: p.Pos})
+		}
+		if lmd.Body != nil && len(h.prog.Errors) == errs {
+			h.warnUninitialized(lmd) // エラーのあった関数は命令列が途中なので見ない
 		}
 	})
 	h.lmd, h.pendingLogs = oldLmd, oldLogs
@@ -1782,7 +1786,28 @@ func (h *Hlc) compileCond(c *cexpr, label string, jumpIfTrue bool) {
 			return
 		}
 	}
+	if e.kind == cOp && e.op == opEq {
+		// `f == true` (f は bool): 0 かどうかだけを見る (`lda f / bne`。bool は正規化しないので 5 も真)
+		for k := 0; k < 2; k++ {
+			if isTrueLit(e.args[1-k]) {
+				v := h.rval(e.args[k])
+				if ir.ValType(v).Kind == types.Bool {
+					code := ir.OpIf
+					if jumpIfTrue {
+						code = ir.OpIfTrue
+					}
+					h.emit(&ir.Op{Code: code, Src: []ir.Operand{v}, Label: label})
+					return
+				}
+				e = cop2(opEq, cv(h.operandValue(v)), e.args[1-k])
+				break
+			}
+		}
+	}
 	v := h.rval(e)
+	if isAggregate(ir.ValType(v)) {
+		panic(&diag.Error{Msg: fmt.Sprintf("a value of type %s cannot be used as a condition (struct / array values have only == and !=)", ir.ValType(v))})
+	}
 	if n, ok := ir.ValIntLiteral(v); ok {
 		if (n != 0) == jumpIfTrue {
 			h.emit(&ir.Op{Code: ir.OpJump, Label: label})
@@ -1904,6 +1929,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			left := h.rval(e.args[0])
 			typ := ir.ValType(left)
 			checkEnumOp(e.op, typ, nil)
+			checkOperandKinds(e.op, typ, nil)
 			if typ.IsFarFunc() && e.op != opNot {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
@@ -1922,6 +1948,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right))
 			if lt, rt := ir.ValType(left), ir.ValType(right); e.op == opSub && lt.Kind == types.Pointer && rt.Kind == types.Pointer && lt.Base == rt.Base {
 				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
 				break
@@ -1971,6 +1998,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			h.warnConstCompare(e.op, left, right)
+			if e.op == opLt {
+				checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right)) // == / != は struct・配列でもよい (バイトの比較)
+			}
 			if v, ok := left.(*ir.Value); ok && ir.ValType(right).IsFarFunc() {
 				left = h.rval(h.withExpected(cv(v), ir.ValType(right)))
 			}
@@ -1981,6 +2012,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
 			}
 			_, left, right = h.makeCompatible(left, right)
+			if e.op == opEq {
+				if bv, ok := h.boolEq(e, left, right); ok {
+					r = bv
+					break
+				}
+			}
 			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。language_reference.md §2)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp

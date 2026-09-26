@@ -422,3 +422,144 @@ func (h *Hlc) pointerDiff(p, q ir.Operand, elem *types.Type) ir.Operand {
 	}
 	return r
 }
+
+// isAggregate は struct (slice を含む) / 配列の型か。
+func isAggregate(t *types.Type) bool {
+	return t != nil && (t.Kind == types.Struct || t.Kind == types.Array)
+}
+
+// checkOperandKinds は演算 op に使えない型の値をエラーにする (rt は単項演算なら nil)。struct・配列 (slice を含む) は == / != だけ
+// (算術・順序比較・`!` が多バイトの整数として通っていた)。ポインタは ± 整数、ポインタ - ポインタ、順序比較、`!` (null の確認) だけ。
+func checkOperandKinds(op cop, lt, rt *types.Type) {
+	if isAggregate(lt) || isAggregate(rt) {
+		t := lt
+		if !isAggregate(t) {
+			t = rt
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to %s (struct / array values have only == and !=)", opSymbol(op), t)})
+	}
+	isPtr := func(t *types.Type) bool { return t != nil && t.Kind == types.Pointer }
+	if !isPtr(lt) && !isPtr(rt) {
+		return
+	}
+	switch op {
+	case opLt, opNot:
+		return // 順序比較 (`p < end`)、null の確認 (`!p`)
+	case opAdd:
+		if isPtr(lt) && !isPtr(rt) {
+			return
+		}
+	case opSub:
+		if isPtr(lt) {
+			return // p - n、p - q
+		}
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to a pointer (pointers have p + n, p - n, p - q, comparisons and null checks)", opSymbol(op))})
+}
+
+// isTrueLit は評価済みの式が bool の true (0 以外の bool の定数) か。
+func isTrueLit(c *cexpr) bool {
+	return c.kind == cValue && c.val.Kind == ir.KindLiteral && c.val.IsInt && c.val.Int != 0 && c.val.Type.Kind == types.Bool
+}
+
+// isNormalBool は式の値が必ず 0 / 1 の bool か (比較・論理演算の結果、bool の定数)。bool の変数は `5 as bool` のことがある。
+func isNormalBool(c *cexpr) bool {
+	switch c.kind {
+	case cOp:
+		switch c.op {
+		case opEq, opNe, opLt, opGt, opLe, opGe, opNot, opLand, opLor:
+			return true
+		}
+	case cValue:
+		return c.val.Kind == ir.KindLiteral && c.val.IsInt && c.val.Type.Kind == types.Bool
+	}
+	return false
+}
+
+// boolEq は bool 同士の `==` を真理値で比べる (bool は正規化しないので、バイトの比較では 5 と 1 が違っていた)。
+// `x == true` は x != 0、0 / 1 と分からない値同士は (x == 0) == (y == 0)。false との比較と、0 / 1 同士は今のまま (ok = false)。
+func (h *Hlc) boolEq(e *cexpr, left, right ir.Operand) (ir.Operand, bool) {
+	if ir.ValType(left).Kind != types.Bool || ir.ValType(right).Kind != types.Bool {
+		return nil, false
+	}
+	b := h.prog.Types.Bool()
+	zero := ir.NewIntLiteral("", b, 0)
+	isZero := func(v ir.Operand) *ir.Value {
+		t := h.newTmp(b)
+		h.emit(&ir.Op{Code: ir.OpEq, Dst: t, Src: []ir.Operand{v, zero}})
+		return t
+	}
+	lk, lok := ir.ValIntLiteral(left)
+	rk, rok := ir.ValIntLiteral(right)
+	switch {
+	case lok && rok, lok && lk == 0, rok && rk == 0:
+		return nil, false
+	case lok || rok: // x == true
+		x := left
+		if lok {
+			x = right
+		}
+		t := h.newTmp(b)
+		h.emit(&ir.Op{Code: ir.OpNot, Dst: t, Src: []ir.Operand{isZero(x)}})
+		return t, true
+	case isNormalBool(h.constEval(e.args[0])) && isNormalBool(h.constEval(e.args[1])):
+		return nil, false
+	}
+	t := h.newTmp(b)
+	h.emit(&ir.Op{Code: ir.OpEq, Dst: t, Src: []ir.Operand{isZero(left), isZero(right)}})
+	return t, true
+}
+
+// warnConstCompare は、符号なしの値と範囲外の定数の比較のように、型の範囲だけで結果が決まる比較を警告する
+// (`for (var i = 0; i < 256; i++)` の i は u8 で無限ループ、`hp - dmg < 0` は常に偽)。`<=` / `>=` / `!=` / `>` は `<` / `==` と
+// `!` に書き換えた後なので、文言は「いつも同じ結果」にする。符号付きの値はリテラルの型の方針 (保留) と一緒に決める。
+func (h *Hlc) warnConstCompare(op cop, left, right ir.Operand) {
+	lt, rt := ir.ValType(left), ir.ValType(right)
+	lk, lok := ir.ValIntLiteral(left)
+	rk, rok := ir.ValIntLiteral(right)
+	if lok == rok {
+		return // 定数同士・変数同士
+	}
+	vt, k := rt, lk
+	if rok {
+		vt, k = lt, rk
+	}
+	if vt.Kind != types.Int || vt.Signed || vt.Enum != nil || vt.Size < 1 || vt.Size > 2 || k < 0 {
+		return // 負の定数との比較 (`x == -1` は今の規則では x == 255 として働く) は符号の混在の方針 (保留) と一緒に
+	}
+	max := 1<<(8*vt.Size) - 1
+	var why, hint string
+	outOfRange := func(msg string) {
+		why = msg
+		if vt.Size == 1 {
+			hint = " (use a wider type, e.g. `var i:u16`)"
+		}
+	}
+	negative := func() {
+		why = fmt.Sprintf("%s values are never negative", vt)
+		hint = " (for `a - b < 0` compare `a < b`)"
+	}
+	switch op {
+	case opEq:
+		if k > max {
+			outOfRange(fmt.Sprintf("%s values are 0..%d, so they never equal %d", vt, max, k))
+		}
+	case opLt:
+		if rok { // v < k
+			switch {
+			case k > max:
+				outOfRange(fmt.Sprintf("%s values are 0..%d, so they are always less than %d", vt, max, k))
+			case k == 0:
+				negative()
+			}
+		} else { // k < v
+			switch {
+			case k >= max:
+				outOfRange(fmt.Sprintf("%s values are 0..%d, so they are never greater than %d", vt, max, k))
+			}
+		}
+	}
+	if why != "" {
+		h.warn("this comparison always has the same result: %s%s", why, hint)
+	}
+}
