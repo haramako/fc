@@ -1237,8 +1237,44 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			} else {
 				// 定数でない場合
 				// TODO: もうちょっと整理して効率よくできるはず
-				if ir.ValType(op.Dst).Size != 1 {
-					panic(&diag.Error{Msg: "shift of 2-byte value by non-constant count is not supported"})
+				if size := ir.ValType(op.Dst).Size; size != 1 {
+					// 2 バイト以上: 回数を Y に置き、値を Dst に写してから 1 ビットずつ回す (定数の回数の形と同じ)。
+					// 回数を先に読む (Dst と同じ変数のことがある: `x = w << x`)
+					labels := l.newLabels(2)
+					loopLabel, endLabel := labels[0], labels[1]
+					r.push(l.loadA(op.In(1), 0))
+					r.push("tay")
+					r.push(anyIfy(l.load(op.Dst, op.In(0))))
+					r.push(loopLabel + ":")
+					r.push("cpy #0")
+					r.push(fmt.Sprintf("beq %s", endLabel))
+					if op.Code == ir.OpShiftLeft {
+						for i := 0; i < size; i++ {
+							r.push(l.loadA(op.Dst, i))
+							if i == 0 {
+								r.push("clc")
+							}
+							r.push("rol a")
+							r.push(l.storeA(op.Dst, i))
+						}
+					} else {
+						for i := size - 1; i >= 0; i-- {
+							r.push(l.loadA(op.Dst, i))
+							if i == size-1 {
+								if signed {
+									r.push("cmp #128") // 算術右シフト
+								} else {
+									r.push("clc")
+								}
+							}
+							r.push("ror a")
+							r.push(l.storeA(op.Dst, i))
+						}
+					}
+					r.push("dey")
+					r.push(fmt.Sprintf("jmp %s", loopLabel))
+					r.push(endLabel + ":")
+					break
 				}
 				labels := l.newLabels(2)
 				loopLabel, endLabel := labels[0], labels[1]

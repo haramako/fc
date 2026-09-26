@@ -213,3 +213,29 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestShift16Variable: 2 バイトの値を変数の回数でシフトする (-O 0 では「not supported」、-O 2 では回数が定数伝播されたときだけ
+// 通っていた)。左・右・算術右、回数 0 / 15、回数が代入先と同じ変数 (`x = 0x0100 >> x`)。
+func TestShift16Variable(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+function shl(w:u16, n:u8):u16 @(noinline) { return w << n; }
+function shr(w:u16, n:u8):u16 @(noinline) { return w >> n; }
+function sar(w:i16, n:u8):i16 @(noinline) { return w >> n; }
+function mask(n:u8):u16 @(noinline) { return (1 as u16) << n; }
+function main():void
+{
+	var w:u16 = 0x1234;
+	var n:u8 = 4;
+	w <<= n;
+	var x:u16 = 3;
+	x = 0x0100 >> x;
+	printf(shl(0x1234, 4), " ", shl(1, 15), " ", shl(0x1234, 0), " ", shr(0x8000, 15), " ", shr(0x1234, 8), " ", sar(-256, 4), " ", mask(10), " ", w, " ", x, "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "9024 32768 4660 1 18 65520 1024 9024 32\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}
