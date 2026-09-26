@@ -83,15 +83,16 @@ _stdio_print_int8:
 		lda #0
 		sta reg+7
 
+		;; print は fastcall (str = FC_FASTCALL_REG+0,1)
 		lda #.LOBYTE(reg+5)
-		sta S+0,x
+		sta FC_FASTCALL_REG+0
 		lda #.HIBYTE(reg+5)
-		sta S+1,x
+		sta FC_FASTCALL_REG+1
 		jsr _stdio_print
 		
 		rts
 @char:
-		.byte 48,49,50,51,52,53,54,55,56,57,65,66,67,67,69,70
+		.byte 48,49,50,51,52,53,54,55,56,57,65,66,67,68,69,70
 		
 _interrupt:
 		lda #1
