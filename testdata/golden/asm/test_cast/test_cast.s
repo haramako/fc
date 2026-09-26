@@ -37,9 +37,7 @@ _test_cast_a1:
 	sta 0+<F_test_cast_test_cast+2
 	lda 1+<F_test_cast_test_cast+0
 	sta 1+<F_test_cast_test_cast+2
-	lda #0
-	asl a
-	tay
+	ldy #0
 	lda (F_test_cast_test_cast+2),y
 	sta 0+<F_test_cast_test_cast+0
 	iny
@@ -62,9 +60,7 @@ _test_cast_a1:
 	sta 0+<F_test_cast_test_cast+0
 	lda 1+_test_cast_a1
 	sta 1+<F_test_cast_test_cast+0
-	lda #0
-	asl a
-	tay
+	ldy #0
 	lda (F_test_cast_test_cast+0),y
 	sta 0+<F_test_cast_test_cast+2
 	iny

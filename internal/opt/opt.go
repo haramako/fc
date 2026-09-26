@@ -88,6 +88,11 @@ func Passes(u *types.Universe) []Pass {
 			}
 			compact(lmd)
 		}},
+		{"fieldindex", func(lmd *ir.Lambda) {
+			if !ir.Disabled("fieldindex") && foldFieldIndex(lmd, u) {
+				compact(lmd)
+			}
+		}},
 		{"indexoff", func(lmd *ir.Lambda) {
 			if !ir.Disabled("indexoff") && foldIndexOffset(lmd) {
 				compact(lmd) // fuse が index + pget / pset を index_pget / index_pset にした後

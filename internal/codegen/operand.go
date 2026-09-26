@@ -36,6 +36,8 @@ func (l *Llc) loadYIdx(idx, ptr ir.Operand, scaled bool) []any {
 		} else {
 			r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
 		}
+	} else if k, ok := ir.ValIntLiteral(idx); ok && k >= 0 && k*ir.ValType(ptr).Base.Size < 256 {
+		r = append(r, fmt.Sprintf("ldy #%d", k*ir.ValType(ptr).Base.Size)) // 定数の添字 (展開したループの `a16[3]`)
 	} else {
 		r = append(r, l.loadA(idx, 0))
 		for i := 0; i < ir.ValType(ptr).Base.Size-1; i++ {
