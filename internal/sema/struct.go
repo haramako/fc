@@ -422,3 +422,37 @@ func (h *Hlc) pointerDiff(p, q ir.Operand, elem *types.Type) ir.Operand {
 	}
 	return r
 }
+
+// isAggregate は struct (slice を含む) / 配列の型か。
+func isAggregate(t *types.Type) bool {
+	return t != nil && (t.Kind == types.Struct || t.Kind == types.Array)
+}
+
+// checkOperandKinds は演算 op に使えない型の値をエラーにする (rt は単項演算なら nil)。struct・配列 (slice を含む) は == / != だけ
+// (算術・順序比較・`!` が多バイトの整数として通っていた)。ポインタは ± 整数、ポインタ - ポインタ、順序比較、`!` (null の確認) だけ。
+func checkOperandKinds(op cop, lt, rt *types.Type) {
+	if isAggregate(lt) || isAggregate(rt) {
+		t := lt
+		if !isAggregate(t) {
+			t = rt
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to %s (struct / array values have only == and !=)", opSymbol(op), t)})
+	}
+	isPtr := func(t *types.Type) bool { return t != nil && t.Kind == types.Pointer }
+	if !isPtr(lt) && !isPtr(rt) {
+		return
+	}
+	switch op {
+	case opLt, opNot:
+		return // 順序比較 (`p < end`)、null の確認 (`!p`)
+	case opAdd:
+		if isPtr(lt) && !isPtr(rt) {
+			return
+		}
+	case opSub:
+		if isPtr(lt) {
+			return // p - n、p - q
+		}
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to a pointer (pointers have p + n, p - n, p - q, comparisons and null checks)", opSymbol(op))})
+}

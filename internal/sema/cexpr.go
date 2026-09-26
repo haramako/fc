@@ -88,6 +88,14 @@ var compoundOps = map[syntax.Kind]cop{
 
 // opSymbol は演算のソース上の綴り (エラーメッセージ用)。
 func opSymbol(op cop) string {
+	switch op { // 単項演算
+	case opNot:
+		return "!"
+	case opBitNot:
+		return "~"
+	case opUminus:
+		return "-"
+	}
 	for k, v := range binaryOps {
 		if v == op {
 			return k.String()

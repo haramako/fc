@@ -1783,6 +1783,9 @@ func (h *Hlc) compileCond(c *cexpr, label string, jumpIfTrue bool) {
 		}
 	}
 	v := h.rval(e)
+	if isAggregate(ir.ValType(v)) {
+		panic(&diag.Error{Msg: fmt.Sprintf("a value of type %s cannot be used as a condition (struct / array values have only == and !=)", ir.ValType(v))})
+	}
 	if n, ok := ir.ValIntLiteral(v); ok {
 		if (n != 0) == jumpIfTrue {
 			h.emit(&ir.Op{Code: ir.OpJump, Label: label})
@@ -1904,6 +1907,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			left := h.rval(e.args[0])
 			typ := ir.ValType(left)
 			checkEnumOp(e.op, typ, nil)
+			checkOperandKinds(e.op, typ, nil)
 			if typ.IsFarFunc() && e.op != opNot {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
@@ -1922,6 +1926,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right))
 			if lt, rt := ir.ValType(left), ir.ValType(right); e.op == opSub && lt.Kind == types.Pointer && rt.Kind == types.Pointer && lt.Base == rt.Base {
 				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
 				break
@@ -1971,6 +1976,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			if e.op == opLt {
+				checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right)) // == / != は struct・配列でもよい (バイトの比較)
+			}
 			if v, ok := left.(*ir.Value); ok && ir.ValType(right).IsFarFunc() {
 				left = h.rval(h.withExpected(cv(v), ir.ValType(right)))
 			}
