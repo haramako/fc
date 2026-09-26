@@ -45,7 +45,7 @@ public function init():void
 public function on_fetch_area():void @(segment: 'common') // endingからも呼ばれるため、commonセグメントにする
 {
 	box_running = 0;
-	box_idx = -1;
+	box_idx = NONE;
 	var i:u8;
 	for (i = 0; i < MAX; i++) {
 		if (box_area[i] == bg.cur_area) {

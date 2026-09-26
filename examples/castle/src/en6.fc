@@ -443,7 +443,7 @@ public function rolling_stone_process(i:u8):void
 	if (wait == 0) {
 		wait = p2[i];
 		var n = new();
-		if (n != -1) {
+		if (n != NONE) {
 			type[n] = TYPE_ROLLING_STONE_ROCK;
 			pslot[n] = slot;
 			px[n] = x;
@@ -625,7 +625,7 @@ public function waterfall_process(i:u8):void
 function create_bubble(x:u8, y:u8):void
 {
 	var bi = new();
-	if (bi != -1) {
+	if (bi != NONE) {
 		type[bi] = TYPE_WATERFALL_BUBBLE;
 		px[bi] = x;
 		py[bi] = y;
@@ -637,7 +637,7 @@ function create_bubble(x:u8, y:u8):void
 function create_splash(x:u8, y:u8):void
 {
 	var bi = new();
-	if (bi != -1) {
+	if (bi != NONE) {
 		type[bi] = TYPE_SPLASH;
 		px[bi] = x;
 		py[bi] = y;
@@ -685,7 +685,7 @@ public function waterfall_splash_process(i:u8):void
 
 	if (anim % 4 == 0) {
 		var ei = new();
-		if (ei != -1) {
+		if (ei != NONE) {
 			type[ei] = TYPE_WATERFALL_SPLASH2;
 			pslot[ei] = pslot[i];
 			px[ei] = x - 8 + math.rand() % 32;

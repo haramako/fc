@@ -129,12 +129,12 @@ public function prominence_process(i:u8):void
 		if (!wait) {
 			stat = 1;
 			wait = 0;
-			next_dir = -1;
+			next_dir = NONE;
 			sound.play_se(sound.SE_OPEN_DOOR, 10);
 		}
 
 	case 1: // 移動中
-		if (next_dir == -1) {
+		if (next_dir == NONE) {
 			var dx:i8 = x / 2 - my.x / 2;
 			var dy:i8 = y / 2 - my.y / 2;
 			switch (dir) {
@@ -168,9 +168,9 @@ public function prominence_process(i:u8):void
 			if (wait >= 16) {
 				wait = 0;
 				prominence_draw_cell(x / 16, y / 16);
-				if (next_dir != -1) {
+				if (next_dir != NONE) {
 					dir = next_dir;
-					next_dir = -1;
+					next_dir = NONE;
 				}
 				if (life != 0) {
 					life -= 1;
@@ -295,7 +295,7 @@ public function skelton_process(i:u8):void
 		// 投げる
 		if (wait > 10 && wait % 16 == 0) {
 			var ni = new();
-			if (ni != -1) {
+			if (ni != NONE) {
 				type[ni] = TYPE_SKELTON_BONE;
 				pslot[ni] = slot;
 				px[ni] = x;
@@ -571,7 +571,7 @@ public function spider_process(i:u8):void
 	case 4: // 歩く
 		spider_walk(&foot_cell_idx, &dir, @bitcast(*i8, &wait), reverse);
 
-		if (dir == -1) {
+		if (dir == NONE) {
 			//落ちる
 			stat = 2;
 			vy = 0;
@@ -670,7 +670,7 @@ function spider_walk(p_foot_cell_idx:*u8, p_dir:*u8, p_wait:*i8, reverse:u8):voi
 
 		if ((foot_cell & bg.TYPE_WALL) == 0) {
 			// 地面を失って落ちる
-			*p_dir = -1;
+			*p_dir = NONE;
 		} elsif ((cur_cell & bg.TYPE_WALL) != 0) {
 			// 壁に埋まって止まる
 			*p_wait -= 1;

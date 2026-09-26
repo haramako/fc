@@ -316,7 +316,7 @@ function scroll_up():void
 {
 	var bi = boxelev.box_idx; // fetch_areaで変更されるのでそれより前に取得
 	if (!boxelev.box_scrollable) {
-		bi = -1;
+		bi = NONE;
 	}
 
 	var y = 14;
@@ -329,7 +329,7 @@ function scroll_up():void
 	mmc3.MIRROR = 0; // vertical
 
 	var speed = 116; // スクロール速度、箱エレベータがあるときは少し大きくなる
-	if (bi != -1) {
+	if (bi != NONE) {
 		speed = 108;
 	}
 
@@ -341,7 +341,7 @@ function scroll_up():void
 			var scroll_y = (speed + GIFF_TABLE[y]) / 16;
 			my.y += scroll_y;
 			my.draw();
-			if (bi != -1) {
+			if (bi != NONE) {
 				// エレベーターに乗っていたら、エレベーターを描画
 				boxelev.box_y[bi] += scroll_y;
 				draw_box_elevator(boxelev.box_x[bi], boxelev.box_y[bi]);
@@ -360,7 +360,7 @@ function scroll_up():void
 	}
 
 	// エレベーターのエリア移動
-	if (bi != -1) {
+	if (bi != NONE) {
 		var y = boxelev.box_y[bi];
 		boxelev.box_y[bi] = boxelev.box_py[bi] = my.on_y = y;
 		boxelev.box_area[bi] -= 16;
@@ -371,7 +371,7 @@ function scroll_down():void
 {
 	var bi = boxelev.box_idx; // fetch_areaで変更されるのでそれより前に取得
 	if (!boxelev.box_scrollable) {
-		bi = -1;
+		bi = NONE;
 	}
 
 	var y = 0;
@@ -384,7 +384,7 @@ function scroll_down():void
 	mmc3.MIRROR = 0; // vertical
 
 	var speed = 116; // スクロール速度、箱エレベータがあるときは少し大きくなる
-	if (bi != -1) {
+	if (bi != NONE) {
 		speed = 108;
 	}
 
@@ -396,7 +396,7 @@ function scroll_down():void
 			var scroll_y = (speed + GIFF_TABLE[y]) / 16;
 			my.y -= scroll_y;
 			my.draw();
-			if (bi != -1) {
+			if (bi != NONE) {
 				// エレベーターに乗っていたら、エレベーターを描画
 				boxelev.box_y[bi] -= scroll_y;
 				draw_box_elevator(boxelev.box_x[bi], boxelev.box_y[bi]);
@@ -415,7 +415,7 @@ function scroll_down():void
 	}
 
 	// エレベーターのエリア移動
-	if (bi != -1) {
+	if (bi != NONE) {
 		var y = boxelev.box_y[bi];
 		boxelev.box_y[bi] = boxelev.box_py[bi] = my.on_y = y;
 		boxelev.box_area[bi] += 16;

@@ -103,7 +103,7 @@ alias cdlg:ConfirmDialog = event.shared_work;
 
 // 確認ダイアログを開く
 // strはheapにコピーされる。bankを切り替えないために common セグメントに常駐する
-public function register_confirm_dialog(str:*u8, callback:farfn(u8):void, default_cur:u8 = 0):void @(segment: "common")
+public function register_confirm_dialog(str:*const u8, callback:farfn(u8):void, default_cur:u8 = 0):void @(segment: "common")
 {
 	event.event_func = run_confirm_dialog;
 	cdlg.text = heap_strcpy(str);
@@ -199,7 +199,7 @@ function run_confirm_dialog():void
 	}
 
 	heap.release(cdlg.text);
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync_with_flag(2);
 	if (cdlg.callback != null) {
 		cdlg.callback(cdlg.cur);
@@ -264,7 +264,7 @@ alias msgdlg:MessageDialog = event.shared_work;
 
 // メッセージダイアログを開く
 // strはheapにコピーされる。bankを切り替えないために common セグメントに常駐する
-public function register_message_dialog(str:*u8, callback:farfn():void = null, kind:u8 = 0, p2:u8 = 0):void @(segment: "common")
+public function register_message_dialog(str:*const u8, callback:farfn():void = null, kind:u8 = 0, p2:u8 = 0):void @(segment: "common")
 {
 	event.event_func = run_message_dialog;
 	msgdlg.text = heap_strcpy(str);
@@ -356,7 +356,7 @@ function run_message_dialog():void
 	}
 
 	heap.release(msgdlg.text);
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync_with_flag(2);
 	if (msgdlg.callback != null) {
 		msgdlg.callback();

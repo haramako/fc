@@ -18,8 +18,10 @@ use irqcmd;
 struct MarchantEvent {
 	kind:u8;
 
+	cur:u8;
 	text:*u8;
-	idx_base:u8;
+	buy_something:bool;
+	buy_all:bool;
 }
 
 alias m:MarchantEvent = event.shared_work;
@@ -28,19 +30,39 @@ const MARCHANT_PALETTE:[?]u8 = @incbin("../res/images/marchant.nespal");
 const MARCHANT_BG:[?]u8 = @incbin("../res/images/marchant.bg");
 const MARCHANT_TILEPAL:[?]u8 = @incbin("../res/images/marchant.tilepal");
 
-const ITEM_IDS = [
-	ITEM_ID_GAS_MASK, ITEM_ID_COMPASS, ITEM_ID_WATCH,
-	ITEM_ID_SECURITY_CARD, ITEM_ID_LAMP, ITEM_ID_OMAMORI,
-	ITEM_ID_WING, -1, -1
-];
+struct MarchantItem {
+	item_id:u8;
+	price:u8;
+}
 
-const ITEM_PRICES = [
-	4, 3, 6,
-	3, 5, 5,
-	14, 0, 0
-];
+struct MarchantData {
+	items:[3]MarchantItem;
+	memory_id:u8;
+}
 
-const MARCHANT_MEMORY_ID = [50, 51, 52];
+const marchants:[?]MarchantData = [
+	{
+		items: [
+			{ITEM_ID_GAS_MASK, 4},
+			{ITEM_ID_COMPASS, 3},
+			{ITEM_ID_WATCH, 6}],
+		memory_id: 50,
+	},
+	{
+		items: [
+			{ITEM_ID_SECURITY_CARD, 3},
+			{ITEM_ID_LAMP, 5},
+			{ITEM_ID_OMAMORI, 5}],
+		memory_id: 51,
+	},
+	{
+		items: [
+			{ITEM_ID_GAS_MASK, 4},
+			{-1, 0},
+			{-1, 0}],
+		memory_id: 52,
+	},
+];
 
 //=================================================
 // 外部インターフェース
@@ -49,15 +71,15 @@ const MARCHANT_MEMORY_ID = [50, 51, 52];
 public function event_marchant(kind:u8):void
 {
 	event.event_func = run_marchant;
-	m.kind = kind;
+	m = {kind: kind, text: bg.buf};
 }
 
 public function is_sold_out(kind:u8):bool
 {
 	var idx_base = kind * 3;
 	for (var i = 0; i < 3; i++) {
-		var item_id = ITEM_IDS[idx_base + i];
-		if (item_id != -1) {
+		var item_id = marchants[kind].items[i].item_id;
+		if (item_id != NONE) {
 			if (!my.items[item_id]) {
 				return false;
 			}
@@ -68,7 +90,7 @@ public function is_sold_out(kind:u8):bool
 
 public function get_memory_id(kind:u8):u8
 {
-	return MARCHANT_MEMORY_ID[kind];
+	return marchants[kind].memory_id;
 }
 
 //=================================================
@@ -94,7 +116,7 @@ function run_marchant():void
 
 	run_marchant_main();
 
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync();
 	ppu.lock();
 	mmc3.set_cbank(0, old_cbank0);
@@ -111,9 +133,6 @@ function run_marchant_main():void
 	ppu.fill_in_lock(0x2400, 0x400, 0);
 	ppu.put_palette_in_lock(VRAM_PALETTE, MARCHANT_PALETTE, 16);
 
-	m.idx_base = m.kind * 3;
-
-	m.text = bg.buf;
 	draw_message(_I("なにか買ってくかい？\nどれもおかいどくだよ"));
 
 	draw_marchant_in_lock();
@@ -124,8 +143,8 @@ function run_marchant_main():void
 	draw_all();
 	ppu.wait_vsync();
 
-	var idx = 0;
-	var old_idx = -1;
+	var marchant = &marchants[m.kind];
+	var old_cur = NONE;
 	loop {
 		pad.update();
 		if (pad.pushed & pad.B) {
@@ -134,19 +153,20 @@ function run_marchant_main():void
 
 		text.talk_process(0);
 
-		var item_id = ITEM_IDS[m.idx_base + idx];
-		var price = ITEM_PRICES[m.idx_base + idx];
+		var item = &marchant.items[m.cur];
 		if (pad.pushed & pad.A) {
 			var wait = 0;
 			//ppu.lock();
-			if (my.items[item_id] != 0) {
+			if (my.items[item.item_id] != 0) {
 				draw_message(_I("うりきれだよ"));
-			} elsif (my.coin_num < price) {
+			} elsif (my.coin_num < item.price) {
 				draw_message(_I("おかねがたりないよ"));
 			} else {
-				my.items[item_id] = 1;
-				my.coin_num -= price;
-				draw_item(idx);
+				my.items[item.item_id] = 1;
+				my.coin_num -= item.price;
+				m.buy_something = true;
+				draw_item(m.cur);
+				draw_money();
 				draw_message(_I("ありがとよ"));
 
 				sound.play_se(sound.SE_COIN, 20);
@@ -164,18 +184,36 @@ function run_marchant_main():void
 		}
 
 		if (pad.pushed & pad.DOWN) {
-			idx = (idx + 1) % 3;
+			m.cur = (m.cur + 1) % 3;
 		}
 		if (pad.pushed & pad.UP) {
-			idx = (idx + 2) % 3;
+			m.cur = (m.cur + 2) % 3;
 		}
 
-		if (idx != old_idx) {
-			draw_item_desc(item_id);
+		if (m.cur != old_cur) {
+			draw_item_desc(marchant.items[m.cur].item_id);
+			old_cur = m.cur;
 		}
 
-		ppu.sprite(11 * 8, 19 * 8 + 2 + idx * 16, SPR_ARROW, 0);
+		ppu.sprite(11 * 8, 19 * 8 + 2 + m.cur * 16, SPR_ARROW, 0);
 
+		ppu.wait_vsync();
+	}
+
+	if (m.buy_something) {
+		draw_message(_I("まいど　ありがとうございます"));
+	} else {
+		draw_message(_I("なんだい、ひやかしですか"));
+	}
+
+	loop {
+		pad.update();
+		var running = text.talk_process_all();
+		if (!running) {
+			if (pad.pushed & pad.B || pad.pushed & pad.A) {
+				break;
+			}
+		}
 		ppu.wait_vsync();
 	}
 }
@@ -220,8 +258,6 @@ function draw_frame_in_lock():void
 // 全要素を描画する
 function draw_all():void
 {
-	//draw_message();
-
 	draw_money();
 
 	for (var i = 0; i < 3; i++) {
@@ -229,7 +265,7 @@ function draw_all():void
 	}
 }
 
-function draw_message(str:*u8):void
+function draw_message(str:*const u8):void
 {
 	mem.strcpy(m.text, str);
 	text.talk_set(0, ppu.pos(4, 14) + 0x400, m.text, 24, 2);
@@ -247,7 +283,8 @@ function draw_money():void
 
 function draw_item(i:u8):void
 {
-	var item_id = ITEM_IDS[m.idx_base + i];
+	var item:*const MarchantItem = &marchants[m.kind].items[i];
+	var item_id = item.item_id;
 	var line:*u8, tail:*u8;
 
 	line = ppu.alloc(32);
@@ -255,12 +292,12 @@ function draw_item(i:u8):void
 	text.screen_print_str(ppu.pos(12, 20 + i * 2) + 0x400, line, 12, 1);
 	ppu.wait_vsync_with_flag(2);
 
-	if (item_id < 0 || my.items[item_id]) {
+	if (item_id == NONE || my.items[item_id]) {
 		text.screen_print_str(ppu.pos(24, 20 + i * 2) + 0x400, _I("ーうりきれー"), 6, 1);
 		ppu.wait_vsync_with_flag(2);
 	} else {
 		line = tail = ppu.alloc(32);
-		tail += text.print_num(tail, ITEM_PRICES[m.idx_base + i]);
+		tail += text.print_num(tail, item.price);
 		tail += mem.strcpy(tail, _I("G"));
 		text.screen_print_str(ppu.pos(24, 20 + i * 2) + 0x400, line, 6, 1);
 		ppu.wait_vsync_with_flag(2);

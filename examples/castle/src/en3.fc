@@ -27,7 +27,7 @@ public function drop_portal_process(i:u8):void
 			rest -= 1;
 		} else {
 			var n = new();
-			if (n != -1) {
+			if (n != NONE) {
 				if (p1[i] == 0) {
 					type[n] = TYPE_WATER_DROP;
 				} else {
@@ -165,7 +165,7 @@ public function bamboo_process(i:u8):void
 		count += 1;
 		if (count % 8 == 0) {
 			var n = new();
-			if (n != -1) {
+			if (n != NONE) {
 				type[n] = TYPE_BAMBOO_EFFECT;
 				pslot[n] = slot;
 				px[n] = x;
@@ -179,7 +179,7 @@ public function bamboo_process(i:u8):void
 
 		if (count > 48) {
 			var n = new();
-			if (n != -1) {
+			if (n != NONE) {
 				type[n] = TYPE_BAMBOO_SPIRE;
 				pslot[n] = slot;
 				px[n] = x;
@@ -408,7 +408,7 @@ public function fish_w_process(i:u8):void
 	var angle = p8[i];
 	var disp = 0;
 	var pat:u8;
-	var vx:i8;
+	var vx:i8 = 0;
 	var hit:u8;
 
 	const ANIM_SWIM = [2, 3, 4, 4, 3, 2, 1, 0, 0, 1];
@@ -784,7 +784,7 @@ function jellyfish_process_b(i:u8):void
             if (x % 16 == 8 && y % 16 == 8)
             {
                 var cell_dir = bg.get_cell_dir(x, y);
-                if( cell_dir != -1){
+                if( cell_dir != NONE){
                     dir = cell_dir;
                 }
             }

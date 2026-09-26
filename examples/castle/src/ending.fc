@@ -207,10 +207,10 @@ function init_my():void
 	my_stat = 0;
 	my_x = 32;
 	my_y = 200;
-	my_anim = -1;
+	my_anim = NONE;
 	my_x2 = 255;
 	my_y2 = 200;
-	my_anim2 = -1;
+	my_anim2 = NONE;
 	my_flip2 = 0;
 	my_wait = 0;
 }
@@ -251,7 +251,7 @@ function process_my():void
 		my_anim = 0;
 	case 4:
 		// 指パッチン、明転
-		my_anim = -1;
+		my_anim = NONE;
 		my_wait += 1;
 		var light = 4 - my_wait / 4;
 		light_unup(light);
@@ -274,15 +274,15 @@ function process_my():void
 		}
 	case 11:
 		// マーリン消える、待ち状態
-		my_anim = -1;
-		my_anim2 = -1;
+		my_anim = NONE;
+		my_anim2 = NONE;
 	}
 
-	if (my_anim != -1) {
+	if (my_anim != NONE) {
 		gr_sprite2(my_x, my_y, my_anim * 4, 0);
 	}
 
-	if (my_anim2 != -1) {
+	if (my_anim2 != NONE) {
 		gr_sprite2(my_x2, my_y2, my_anim2 * 4, my_flip2 * ppu.SPRITE_FLAG_FLIP_X);
 	}
 }
@@ -441,7 +441,7 @@ function light_down(i:u8):void
 
 function draw_endcall():void
 {
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync();
 
 	ppu.lock();

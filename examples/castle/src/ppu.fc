@@ -27,7 +27,7 @@ const SPRITE_IDX_MAX = 240;
 const GR_MAX = 8;
 var gr_idx:u8;
 var gr_to_buf:[GR_MAX]u16;
-var gr_from_buf:[GR_MAX]*u8;
+var gr_from_buf:[GR_MAX]*const u8;
 var gr_size_buf:[GR_MAX]u8;
 var gr_flag_buf:[GR_MAX]u8;
 var gr_sprite_idx:u8;
@@ -52,13 +52,14 @@ public var cbank2:u8; // CBANK2の値(interrupt時に書き込まれる)
 
 public var on_wait_vsync:fn():void;
 
+public function null_func():void {}
 
 public function init():void
 {
-	irq_setup = @null_fn;
-	irq_next = @null_fn;
-	on_vsync = @null_fn;
-	on_wait_vsync = @null_fn;
+	irq_setup = null_func;
+	irq_next = null_func;
+	on_vsync = null_func;
+	on_wait_vsync = null_func;
 	gr_sprite_dir = 0;
 	locked = 1;
 }
@@ -109,11 +110,11 @@ public function unlock():void
 	wait_vsync();
 }
 
-public function put_in_lock(addr:u16, _from:*u8, size:u8):void;
+public function put_in_lock(addr:u16, _from:*const u8, size:u8):void;
 
 public function fill_in_lock(addr:u16, size:u16, n:u8):void;
 
-public function put(addr:u16, _from:*u8, size:u8, flag:u8):void
+public function put(addr:u16, _from:*const u8, size:u8, flag:u8):void
 {
 	while (gr_idx >= GR_MAX) {
 		vsync_flag = 2;
@@ -225,7 +226,7 @@ function wait(n:u8):void
  * パレットだけは、ppu.lock()中でも書き込むと画面にゴミがでてしまう。
  * そのため、一時的に画面描画を無効化して、ppu.unlock()し、ppu.put()で書き込む。
  */
-public function put_palette_in_lock(addr:u16, p:*u8, size:u8):void
+public function put_palette_in_lock(addr:u16, p:*const u8, size:u8):void
 {
 	var ctrl2_tmp = ctrl2_bak;
 	ctrl2_bak = 0b00000000;

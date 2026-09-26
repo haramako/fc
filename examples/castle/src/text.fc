@@ -7,7 +7,7 @@ use mmc3;
 use heap;
 
 // strはbank awareである必要は「ない」
-public function screen_print_str(addr:u16, str:*u8, width:u8, height:u8):u8 @(segment: "common")
+public function screen_print_str(addr:u16, str:*const u8, width:u8, height:u8):u8 @(segment: "common")
 {
 	var len = mem.strlen(str) + 1;
 	var str_buf = ppu.alloc(len);
@@ -17,7 +17,7 @@ public function screen_print_str(addr:u16, str:*u8, width:u8, height:u8):u8 @(se
 }
 
 // strはbank awareである必要は「ない」
-function screen_print_str_in_lock(addr:u16, str:*u8, width:u8, height:u8):u8 @(segment: "common")
+function screen_print_str_in_lock(addr:u16, str:*const u8, width:u8, height:u8):u8 @(segment: "common")
 {
 	var len = mem.strlen(str) + 1;
 	var str_buf = ppu.alloc(len);
@@ -39,7 +39,7 @@ public function print_num(p:*u8, n:u8, base_chr:u8 = 5):u8
 }
 
 // MEMO: strはbank aware である必要があるので注意
-public function print(p:*u8, str:*u8, width:u8):u8
+public function print(p:*u8, str:*const u8, width:u8):u8
 {
 	var i = 0;
 	var pi = 0;
@@ -112,6 +112,8 @@ function screen_print_in_lock(addr:u16, buf:*u8, str:*u8, width:u8, height:u8):u
 // 文字送り
 //=================================================
 
+const MAX_TASK = 4;
+
 struct TalkTask {
 	stat:u8; /* 0: 非アクティブ、 1:クリーン, 2: 文字送り */
 	addr:u16;
@@ -124,11 +126,11 @@ struct TalkTask {
 	cur_y:u8; // 現在の相対Y位置
 }
 
-soa talk_tasks:[4]TalkTask;
+soa talk_tasks:[MAX_TASK]TalkTask;
 
 public function talk_init():void
 {
-	for (var i = 0; i < 4; i++) {
+	for (var i = 0; i < MAX_TASK; i++) {
 		talk_tasks[i].stat = 0;
 		talk_tasks[i].str = null;
 	}
@@ -136,16 +138,18 @@ public function talk_init():void
 
 public function talk_release_all():void
 {
-	for (var i = 0; i < 4; i++) {
+	for (var i = 0; i < MAX_TASK; i++) {
 		talk_release(i);
 	}
 }
 
-public function talk_process_all():void
+public function talk_process_all():bool
 {
-	for (var i = 0; i < 4; i++) {
-		talk_process(i);
+	var running = false;
+	for (var i = 0; i < MAX_TASK; i++) {
+		running |= talk_process(i);
 	}
+	return running;
 }
 
 public function talk_release(id:u8):void
@@ -226,5 +230,5 @@ public function talk_process(id:u8):bool
 		}
 	}
 
-	return t.stat == 0;
+	return t.stat != 0;
 }

@@ -374,6 +374,7 @@ public function boxelev_switch_process(i:u8):void
 		boxelev.box_running = 1;
 	}
 
+	ppu.null_func();
 	ppu.sprite(x - 4, y - 8, SPR_BOXELEV_SWITCH + on * 2, 1);
 
 	p4[i] = stat;
@@ -495,7 +496,7 @@ public function soul_gate_portal_process(i:u8):void
 
 	if (anim % 16 == 0) {
 		var ei = new();
-		if (ei != -1) {
+		if (ei != NONE) {
 			type[ei] = TYPE_SOUL_GATE_FLASH;
 			pslot[ei] = pslot[i];
 			px[ei] = x;
@@ -545,6 +546,7 @@ public function soul_gate_flash_process(i:u8):void
 	if ((anim + i) % 2 == 0) {
 		var dx = math.cos(angle) / 16 * (stat / 16);
 		var dy = math.sin(angle) / 16 * (stat / 16);
+		ppu.null_func();
 		ppu.sprite(x + dx - 4, y + dy - 8, spr + wait / 8 % 4 * 2, pal);
 	}
 
@@ -647,7 +649,7 @@ public function magma_waterfall_process(i:u8):void
 		wait += 1;
 		if (anim % 8 == 0) {
 			var ei = new();
-			if (ei != -1) {
+			if (ei != NONE) {
 				type[ei] = TYPE_MAGMA_WATERSPLASH;
 				pslot[ei] = pslot[i];
 				px[ei] = x - math.rand() % 8;
@@ -736,8 +738,8 @@ public function timegate_process(i:u8):void
 	var spr_base = p7[i];
 	var dx = 0;
 	var dy = 0;
-	var a:u8;
-	var flag:u8;
+	var a:u8 = 0;
+	var flag:u8 = 0;
 
 	switch (stat) {
 	case 0:

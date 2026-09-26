@@ -76,7 +76,7 @@ public function start():void
 		ppu.wait_vsync();
 	}
 
-	ppu.irq_setup = @null_fn;
+	ppu.irq_setup = ppu.null_func;
 	ppu.wait_vsync();
 	ppu.lock();
 	mmc3.set_cbank(0, old_cbank0);
@@ -123,7 +123,7 @@ function item_init():void
 
 	item_x = 0;
 	item_y = 0;
-	item_prev = -1;
+	item_prev = NONE;
 
 	ppu.put_palette_in_lock(VRAM_PALETTE, ITEM_PAL, 16);
 
@@ -173,7 +173,7 @@ function item_process():u8
 				var item_id = ITEM_LIST[item_idx];
 				if (item_id == ITEM_ID_WATCH && my.watch_used)
 					item_id = ITEM_ID_BROKEN_WATCH;
-				if (item_id != -1 && my.items[item_id]) {
+				if (item_id != NONE && my.items[item_id]) {
 					// アイテム説明の描画
 					ppu.wait_vsync_with_flag(2);
 					var buf = ppu.alloc(20);
@@ -201,7 +201,7 @@ function item_process():u8
 			var item_id = ITEM_LIST[item_idx];
 			if (item_id == ITEM_ID_WATCH && my.watch_used)
 				item_id = ITEM_ID_BROKEN_WATCH;
-			if (item_id != -1) {
+			if (item_id != NONE) {
 				my.items[item_id] = !my.items[item_id];
 				ppu.lock();
 				put_item(item_idx);
@@ -241,7 +241,7 @@ function put_item_inner(x:u8, y:u16, item_id:u8):void
 	var item_id_y = (item_id + 2) / 8;
 	var c = item_id_y * 32 + item_id_x * 2;
 	var pal = ITEM_TILEPAL[2 + item_id];
-	if (item_id == -1) {
+	if (item_id == NONE) {
 		c = 0;
 		pal = 0;
 	} elsif (!my.items[item_id]) {
@@ -255,7 +255,7 @@ function put_item_inner(x:u8, y:u16, item_id:u8):void
 
 	var item_addr = ((y + 1) / 2) * 8 + x / 2;
 	var item_shift = (x % 2) | ((y + 1) % 2 * 2);
-	var pal_mask:u8;
+	var pal_mask:u8 = 0;
 	switch (item_shift) {
 	case 0:
 		pal_mask = 255 - (3 << 0);
@@ -347,7 +347,7 @@ function memory_init():void
 
 function memory_process():u8
 {
-	memory_prev = -1;
+	memory_prev = NONE;
 	if (!my.items[ITEM_ID_SPECTACLES]) {
 		return 0;
 	}
@@ -377,7 +377,7 @@ function memory_process():u8
 		if (memory_prev != memory_idx) {
 			if (memory_idx < MEMORY_MAX) {
 				var id = MEMORY_LIST[memory_idx];
-				if (id != -1) {
+				if (id != NONE) {
 					if (my.has_memory(id)) {
 						my.set_memory_read(id);
 					}
@@ -396,7 +396,7 @@ function memory_process():u8
 
 		if (debug_mode && (pad.pushed & pad.A)) {
 			var id = MEMORY_LIST[memory_idx];
-			if (id != -1) {
+			if (id != NONE) {
 				if (my.has_memory(id)) {
 					my.clear_memory(id);
 				} else {
@@ -421,7 +421,7 @@ function memory_draw():void {}
 function memory_put(id:u8):void
 {
 	// 記憶のかけらの描画
-	if (id == -1) {
+	if (id == NONE) {
 		id = 0;
 	}
 	var data = &bg.data_buf[0];
