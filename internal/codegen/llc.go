@@ -377,11 +377,30 @@ func (l *Llc) restoreY(idx ir.Operand, size int) []any {
 	return r
 }
 
+// zeroEmptyCasts は元の値のどのバイトも読まない cast (Width 0: `cast<u8, 1>(t)` で t が 1 バイト。上位のゼロ拡張だけ) の
+// 入力を 0 のリテラルにする。byte はそのバイトを #0 と読むが、値がレジスタにあるときの経路 (loadA の A そのまま、tay、
+// cmp #0 など) はオフセットを見ずに値そのものを使っていた (`(f() as u16) & 0x3c00` が f() の下位で判定。fuzz で発覚)。
+func zeroEmptyCasts(lmd *ir.Lambda) {
+	for _, op := range lmd.Ops {
+		if op == nil {
+			continue
+		}
+		for i, src := range op.Src {
+			if cv, ok := src.(*ir.CastedValue); ok && cv.Width == 0 {
+				if _, isVal := cv.From.(*ir.Value); isVal {
+					op.Src[i] = ir.NewIntLiteral("", cv.Type, 0)
+				}
+			}
+		}
+	}
+}
+
 // Prepare は関数 1 つの最適化とレジスタ割付 (frames.Analyze の後、frames.Place の前に全関数について呼ぶ)。
 func (l *Llc) Prepare(lmd *ir.Lambda) {
 	l.curLambda = lmd
 	l.curOp = nil
 	opt.Optimize(lmd, l.OptimizeLevel, l.types)
+	zeroEmptyCasts(lmd)
 	prev := ir.SnapshotLogs(lmd)
 	markArgY(lmd, l.Lambdas) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
 	if l.OptimizeLevel > 0 {

@@ -2681,3 +2681,27 @@ function main():void
 		}
 	}
 }
+
+// TestEmptyCastInRegister: `(f() as i16) & 0x3c00` は下位が 0 の定数との and で上位だけになり、`cast<u8, 1>($r)` ($r は
+// 1 バイトの戻り値) を読む。$r が A にあると A をそのまま使って、f() の下位 (30 & 60) で判定していた (fuzz で発覚)。
+func TestEmptyCastInRegister(t *testing.T) {
+	t.Parallel()
+	src := `var g2:int;
+var g3:int;
+function main():void
+{
+	var lf:fn(int):int = ->fn(a:int):int { return 30; };
+	var l0:sint16 = (-6536);
+	if ((lf(g3) as sint16) & (l0 << 7)) {
+		g2 = 1;
+	}
+	printf(g2, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if out, want := runEmuLevel(t, src, level), "0\n"; out != want {
+			t.Errorf("level %d: got %q, want %q", level, out, want)
+		}
+	}
+}
