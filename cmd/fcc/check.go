@@ -41,13 +41,15 @@ func runCheck(args []string) int {
 
 	rc := 0
 	for _, src := range fs.Args() {
-		ws, err := compiler.Check(src, fc.CheckOptions{Target: *target, Defines: defines})
+		dir, file := splitSrc(src)
+		posDir = dir
+		ws, err := compiler.Check(file, fc.CheckOptions{Target: *target, Dir: dir, Defines: defines})
 		if *jsonFlag {
 			if err != nil {
 				rc = 1
 				es := fc.Errors(err)
 				if len(es) == 0 {
-					printJSONDiag(fc.Position{Filename: src}, "error", err.Error())
+					printJSONDiag(fc.Position{Filename: file}, "error", err.Error())
 				}
 				for _, e := range es {
 					printJSONDiag(e.Pos, "error", e.Msg)
@@ -70,6 +72,7 @@ func runCheck(args []string) int {
 
 // printJSONDiag は診断 1 件を JSON 1 行で出す (エディタ連携。tools/vscode-fc)。
 func printJSONDiag(pos fc.Position, severity, msg string) {
+	pos = displayPos(pos)
 	b, _ := json.Marshal(map[string]any{"file": pos.Filename, "line": pos.Line, "col": pos.Col, "severity": severity, "message": msg})
 	fmt.Println(string(b))
 }
@@ -82,7 +85,7 @@ func printErrors(err error) {
 		return
 	}
 	for _, e := range es {
-		fmt.Printf("%s: error: %s\n", e.Pos, e.Msg)
+		fmt.Printf("%s: error: %s\n", displayPos(e.Pos), e.Msg)
 	}
 	if len(es) > 1 {
 		fmt.Printf("%d errors\n", len(es))
@@ -92,6 +95,6 @@ func printErrors(err error) {
 // printWarnings は警告を `file:line:col: warning: msg` で標準エラーに出す。
 func printWarnings(ws []fc.Warning) {
 	for _, w := range ws {
-		fmt.Fprintf(os.Stderr, "%s: warning: %s\n", w.Pos, w.Msg)
+		fmt.Fprintf(os.Stderr, "%s: warning: %s\n", displayPos(w.Pos), w.Msg)
 	}
 }

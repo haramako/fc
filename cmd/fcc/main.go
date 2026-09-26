@@ -43,6 +43,7 @@ func main() {
 }
 
 func run() int {
+	posDir = ""
 	// <command> が先頭に来る
 	args := os.Args[1:]
 	if len(args) == 0 {
@@ -113,7 +114,10 @@ func run() int {
 	}
 	defer compiler.Close()
 
-	res, err := compiler.Build(context.Background(), rest[0], opt)
+	src := rest[0]
+	opt.Dir, posDir = splitSrc(src)
+	_, file := splitSrc(src)
+	res, err := compiler.Build(context.Background(), file, opt)
 	if err != nil {
 		printErrors(err)
 		return 1
