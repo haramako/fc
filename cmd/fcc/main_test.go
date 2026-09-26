@@ -245,4 +245,11 @@ func TestCLIUseFromSourceDir(t *testing.T) {
 	if code, out, _ := runCLI(t, "check", "m1/bad.fc"); code != 1 || !strings.Contains(out, want) {
 		t.Errorf("check m1/bad.fc: code=%d out=%q (want %q)", code, out, want)
 	}
+	if code, out, _ := runCLI(t, "build", "m1/bad.fc"); code != 1 || !strings.Contains(out, want) {
+		t.Errorf("build m1/bad.fc: code=%d out=%q (want %q)", code, out, want)
+	}
+	t.Chdir("m1")
+	if code, out, _ := runCLI(t, "run", "bad.fc"); code != 1 || !strings.Contains(out, "bad.fc:3:") || strings.Contains(out, "m1") {
+		t.Errorf("run bad.fc: code=%d out=%q", code, out)
+	}
 }
