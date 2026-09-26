@@ -61,19 +61,21 @@ _mem_set:
 
 ;;; USING Y
 _mem_zero:
-	;; fastcall: p = FC_FASTCALL_REG+0,1、size = +2
-	ldy #0
+	;; fastcall: p = FC_FASTCALL_REG+0,1、size = +2 (0 なら何もしない。後ろから書く: mem.set と同じ)
+	ldy FC_FASTCALL_REG+2
+	beq :++
 	lda #0
-:	sta (FC_FASTCALL_REG+0),y
-	iny
-	cpy FC_FASTCALL_REG+2
-    bne :-
-	rts
+:	dey
+	sta (FC_FASTCALL_REG+0),y
+	bne :-
+:	rts
 
 ;;; USING Y
 _mem_compare:
-	;; fastcall: 戻り値 = FC_FASTCALL_REG+0、p1 = +1,2、p2 = +3,4、size = +5
+	;; fastcall: 戻り値 = FC_FASTCALL_REG+0、p1 = +1,2、p2 = +3,4、size = +5 (0 なら等しい)
 	ldy #0
+	lda FC_FASTCALL_REG+5
+	beq @equal
 :	lda (FC_FASTCALL_REG+1),y
 	cmp (FC_FASTCALL_REG+3),y
 	bne @fail
@@ -81,6 +83,7 @@ _mem_compare:
 	cpy FC_FASTCALL_REG+5
 	bne :-
 	
+@equal:
 	lda #0
 	sta FC_FASTCALL_REG+0
 	rts

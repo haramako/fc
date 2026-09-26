@@ -8,6 +8,8 @@ _stdio_ppu_put:
 		lda FC_FASTCALL_REG+0
 		sta _nes_PPU_ADDR
 		ldy #0
+		lda FC_FASTCALL_REG+4		; size 0 なら何も書かない (256 バイトになっていた)
+		beq @end
 @loop:
 		lda (FC_FASTCALL_REG+2),y
 		sta _nes_PPU_DATA

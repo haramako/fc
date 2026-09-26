@@ -14,6 +14,7 @@ import (
 
 // TestNesStdioPrint: print と print_int16 (16 進 4 桁) がネームテーブルに並ぶ。print_int16 が文字列を古い渡し方
 // (S+0,x) で fastcall の print に渡していて、数値でなく前の文字列が出ていた。16 進の表の D も C になっていた。
+// ppu_put の長さ 0 は何も書かない。
 func TestNesStdioPrint(t *testing.T) {
 	t.Parallel()
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
@@ -32,6 +33,7 @@ function main():void
 	print_int16(n);
 	print(" ");
 	print_int16(0x0F09);
+	ppu_put(0x2100, "XYZ", 0);
 	while (true) { }
 }
 `
@@ -57,5 +59,9 @@ function main():void
 	}
 	if want := []byte("HI ABCD 0F09"); !bytes.Contains(nt, want) {
 		t.Errorf("ネームテーブルに %q が無い: %q", want, bytes.Trim(nt, "\x00"))
+	}
+	// ppu_put の長さ 0 は何も書かない (256 バイト書いていた)
+	if nt[0x100] != 0 || nt[0x1ff] != 0 {
+		t.Errorf("ppu_put(…, 0) が書いた: %q", nt[0x100:0x104])
 	}
 }
