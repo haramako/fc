@@ -150,7 +150,17 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 		} else {
 			fd = ty.Fields[i]
 		}
-		flds = append(flds, cfield{key: fd.Name, val: h.constEval(h.withExpected(f.val, fd.Type))})
+		// slice のフィールドは定数の配列から定数の slice に、ポインタのフィールドは配列の定数・リテラルのアドレスに
+		// (const の表: `{items: [{1, 4}, {2, 3}], id: 50}`)
+		et := fd.Type
+		if et.Kind == types.Pointer && f.val.kind == cArray {
+			et = h.prog.Types.ArrayOf(et.Base, -1) // `{p: [{1, 2}]}`: 型名を省いた要素はポインタの先の型
+		}
+		fv := h.constEval(h.constSlice(h.withExpected(f.val, et)))
+		if fd.Type.Kind == types.Pointer {
+			fv = h.constAddress(fv, fd.Type)
+		}
+		flds = append(flds, cfield{key: fd.Name, val: fv})
 	}
 	r := &cexpr{kind: cStructLit, ty: ty, flds: flds}
 	// 全部定数なら定数の struct にする

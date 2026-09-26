@@ -40,6 +40,8 @@ type Hlc struct {
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
 	cmemo map[*cexpr]*cexpr
+	// constSlice のメモ (同じ配列リテラルから無名の配列定数を 2 度作らない)。cmemo と一緒にリセットする
+	sliceMemo map[sliceKey]*cexpr
 
 	pendingLogs []*ir.LogPoint  // 次に出す命令に付ける @log (log.go)
 	caseDecls   map[string]bool // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
@@ -473,7 +475,7 @@ func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 		}
 		h.scope, h.pendingLabel, h.fastCalling = scope, pending, fast
 		h.loops = h.loops[:loops]
-		h.cmemo = nil
+		h.cmemo, h.sliceMemo = nil, nil
 		h.prog.report(ce) // 上限なら Fatal を投げる
 		h.declareBad(s)
 	}()
@@ -532,7 +534,7 @@ func (h *Hlc) scopeIsPublic(publicPos syntax.Pos) bool {
 
 func (h *Hlc) compileStatement(s syntax.Stmt) {
 	h.updatePos(s)
-	h.cmemo = nil
+	h.cmemo, h.sliceMemo = nil, nil
 	if h.prog.LogEveryStatement && h.prog.LogEnabled && h.lmd != nil {
 		h.logEveryStatement()
 	}
@@ -1046,13 +1048,16 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 // typ / val / opt はそれぞれ省略可 (nil)。
 func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
 	var newVal *ir.Value
-	if at, ok := typ.(*syntax.ArrayType); ok && at.IsSlice(h.version()) {
+	if at, ok := typ.(*syntax.ArrayType); ok && at.IsSlice(h.version()) && val == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("const %s: a slice is a run-time value (use [?]T for a constant array)", name)})
 	}
 	if val != nil {
 		declType := h.typeEval(typ)
-		cv := h.constEval(h.withExpected(val, declType))
+		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
 		if cv.kind != cValue {
+			if declType.IsSlice() {
+				panic(&diag.Error{Msg: fmt.Sprintf("const %s: a constant slice needs an array constant, an array literal or a string (use [?]T for a constant array)", name)})
+			}
 			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
 		}
 		if h.prog.storageAliases[cv.val] != nil {
@@ -1197,7 +1202,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				// 型名を省いた struct リテラルを含む配列: 宣言の型が与えられるまで評価を保留する
 				return &cexpr{kind: cArray, args: c.args}
 			}
-			v := h.constEvalOperand(e)
+			v := h.constEvalOperand(h.constSlice(e)) // slice の要素 (`[?][]const u8 = ["ab", "cde"]`) は定数の slice に
 			vals[i] = v
 			if i == 0 {
 				typ = ir.ValType(v)

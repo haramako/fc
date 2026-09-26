@@ -142,7 +142,7 @@ func TestSliceErrors(t *testing.T) {
 		{`function main():void { var p:*u8; var s:[]u8 = p; }`, "not compatible"},
 		{`function main():void { var p:*u8; var s = p[0..2]; }`, "not an array or a slice"},
 		{`const A = [1, 2]; function f(s:[]u8):void {} function main():void { var s:[]const u8 = A; s[0] = 1; }`, "read-only"},
-		{`const S:[]u8 = [1, 2];`, "a slice is a run-time value"},
+		{`function f():void { var a:[2]u8; const S:[]u8 = a; }`, "a constant slice needs an array constant"},
 		{`const S:[]u8 @(symbol: "_s");`, "a slice is a run-time value"},
 		{`use mem; const A = [1, 2]; function main():void { var s:[]const u8 = A; @copy(s, A); }`, "destination is read-only"},
 		{`function main():void { var a:[2]u8; var s:[]u8 = a; @copy(s, a); }`, "requires the mem module"},
@@ -263,5 +263,54 @@ function main():void
 		if err == nil || !strings.Contains(err.Error(), c.msg) {
 			t.Errorf("%s: got %v, want %q", c.src, err, c.msg)
 		}
+	}
+}
+
+// TestSliceConst: const の表の中の slice とポインタ。struct の slice のフィールドに配列リテラル (型名を省いた struct の
+// 要素) と配列の定数、ポインタのフィールドに配列の定数とリテラル、slice の配列 (文字列のジャグ配列)、const の slice の
+// 宣言、広い slice、RAM の配列を指す slice。-O 0 / 2 で同じ。
+func TestSliceConst(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+struct Item { item_id:u8; price:u8; }
+struct Data { items:[]Item; memory_id:u8; }
+struct PData { items:*const Item; n:u8; }
+const I1:[?]Item = [{7, 70}, {8, 80}];
+const ms:[?]Data = [
+	{items: [{1, 4}, {2, 3}, {3, 6}], memory_id: 50},
+	{items: [{4, 3}, {5, 5}], memory_id: 51},
+	{items: I1, memory_id: 52},
+];
+const one:Data = {items: [{9, 90}], memory_id: 53};
+const ps:[?]PData = [{items: I1, n: 2}, {items: [{6, 60}], n: 1}];
+const names:[?][]const u8 = ["ab", "cde", ""];
+const NAME:[]const u8 = "hello";
+const WIDE:[:u16]const u8 = [1, 2, 3, 250];
+var buf:[4]u8;
+const bufs:[?][]u8 = [buf];
+function main():void
+{
+	for (var i:u8 = 0; i < @len(ms); i += 1) {
+		var s = ms[i].items;
+		printf(ms[i].memory_id, ":", @len(s));
+		for (var k:u8 = 0; k < @len(s); k += 1) {
+			printf(" ", s[k].item_id, "/", s[k].price);
+		}
+		printf("\n");
+	}
+	printf(one.memory_id, " ", @len(one.items), " ", one.items[0].price, "\n");
+	printf(ps[0].items[1].price, " ", ps[1].items[0].price, " ", ps[1].n, "\n");
+	printf(@len(names[0]), " ", @len(names[1]), " ", @len(names[2]), " ", names[1][2], "\n");
+	printf(@len(NAME), " ", NAME[4], " ", @len(WIDE), " ", WIDE[3], "\n");
+	bufs[0][2] = 42;
+	printf(buf[2], " ", @len(bufs[0]), "\n");
+	exit(0);
+}
+`
+	want := "50:3 1/4 2/3 3/6\n51:2 4/3 5/5\n52:2 7/70 8/80\n53 1 90\n80 60 1\n2 3 0 101\n5 111 4 250\n42 4\n"
+	out, err := buildBothLevels(t, map[string]string{"t.fc": src})
+	if err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
 	}
 }

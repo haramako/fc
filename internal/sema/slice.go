@@ -323,3 +323,83 @@ func registerSliceBuiltins(h *Hlc) {
 		return macroResult{expr: cv(h.operandValue(n))}
 	})
 }
+
+// sliceKey は constSlice のメモの鍵 (元の配列の式と slice の型)。
+type sliceKey struct {
+	c *cexpr
+	t *types.Type
+}
+
+// constSlice は、配列を slice にする式 (withExpected が挟んだ opToSlice) を、配列が定数のアドレスを持つとき
+// (配列・文字列のリテラル、配列の定数・グローバル変数の名前) に、{ 先頭, 長さ } の定数 (ir.KindArrayLiteral、型は
+// slice) にする。const の表の中の slice (struct のフィールド・配列の要素・const の宣言) に使う。リテラルは無名の
+// 配列定数に切り出す。定数にできなければ c をそのまま返す (実行時に toSlice が作る)。
+func (h *Hlc) constSlice(c *cexpr) *cexpr {
+	if c.kind != cOp || c.op != opToSlice || c.args[0].kind == cNull {
+		return c
+	}
+	st := c.ty
+	key := sliceKey{c.args[0], st}
+	if r, ok := h.sliceMemo[key]; ok {
+		return r
+	}
+	x := h.constEval(h.withExpected(c.args[0], h.prog.Types.ArrayOf(st.SliceOf, -1)))
+	if x.kind != cValue {
+		return c
+	}
+	v := x.val
+	var sym string
+	var n int
+	switch {
+	case v.Kind == ir.KindArrayLiteral && v.Type.Kind == types.Array:
+		v = h.fitArrayLiteral(v, h.prog.Types.ArrayOf(st.SliceOf, -1))
+		n = len(v.Elems)
+		if v.IsString && n > 0 {
+			n-- // 文字列リテラルは終端の 0 を含めない (データには残す)
+		}
+	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && !v.Type.IsSoa && v.Symbol != "" && v.Type.Length >= 0:
+		n, sym = v.Type.Length, v.Symbol
+	default:
+		return c
+	}
+	if v.Type.Base != st.SliceOf && !(v.IsString && st.SliceOf.Kind == types.Int && st.SliceOf.Size == 1) {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s (element types differ)", v.Type, st)})
+	}
+	if max := maxSliceLen(st.IsWideSlice()); n > max {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s: the slice has at most %d elements", v.Type, st, max)})
+	}
+	if sym == "" {
+		sym = h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: v.Type, Elems: v.Elems})
+	}
+	r := cv(ir.NewArrayLiteral("", st, []ir.Operand{
+		ir.NewSymbolLiteral("", st.Fields[0].Type, sym),
+		ir.NewIntLiteral("", st.SliceLen(), n),
+	}))
+	if h.sliceMemo == nil {
+		h.sliceMemo = map[sliceKey]*cexpr{}
+	}
+	h.sliceMemo[key] = r
+	return r
+}
+
+// constAddress は、ポインタ pt のフィールドに入る定数 c が配列 (配列の定数・グローバル変数の名前、配列・文字列の
+// リテラル) なら、そのアドレスの定数にする (リテラルは無名の配列定数に切り出す。const PS:[N]*T の要素と同じ)。
+// それ以外はそのまま。
+func (h *Hlc) constAddress(c *cexpr, pt *types.Type) *cexpr {
+	if c.kind != cValue {
+		return c
+	}
+	v := c.val
+	switch {
+	case v.Kind == ir.KindArrayLiteral && v.Type.Kind == types.Array:
+		if !v.IsString {
+			h.compatibleAssign("field", pt, v.Type)
+		}
+		sym := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: v.Type, Elems: v.Elems})
+		return cv(ir.NewSymbolLiteral("", pt, sym))
+	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && !v.Type.IsSoa && v.Symbol != "":
+		h.compatibleAssign("field", pt, v.Type)
+		return cv(ir.NewSymbolLiteral("", pt, v.Symbol))
+	}
+	return c
+}
