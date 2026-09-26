@@ -1025,7 +1025,8 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			if addr.Kind != ir.OptInt {
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address:) takes a number; to refer to an assembler symbol, declare a const with options(symbol: \"%s\")", name, addr.Str)})
 			}
-			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: ir.NewIntLiteral("", typ, addr.Int)})
+			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: ir.NewIntLiteral("", typ, addr.Int),
+				AddressVar: h.module.Id + "." + name, Pos: h.curPos})
 		} else {
 			seg := h.groupBss
 			if sv, ok := opt.Get("segment"); ok {

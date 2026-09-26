@@ -27,7 +27,7 @@ var gr_buf:[256]int;
 var gr_buf_idx:int;
 
 var put_to:int16;
-var put_from:*int options(address: 0x60);
+var put_from:*int options(address: 0x71); // asm が (sym),y で使うので ZP。$00-$70 は fc の領域 (FC_ZEROPAGE) なので $71-$7F に置く
 var put_size:int;
 var interrupt_i:int;
 

@@ -272,6 +272,9 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 
 	result.Out = opt.Out
 	result.MapFile, result.DbgFile = c.link(baseObj, objs, opt)
+	if err := c.checkAddressVars(result.DbgFile); err != nil {
+		return nil, err
+	}
 	var logFile *LogFile
 	if opt.Debug || opt.SizeReport {
 		dbg, err := ParseDbgFile(result.DbgFile)
@@ -906,4 +909,52 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 		benchCycles = cpu.Cycles
 	}
 	return mem.Get(0xffff), benchCycles, nil
+}
+
+// checkAddressVars は @(address: N) の変数が、リンクした RAM のセグメント (fc の ZP・BSS・静的フレーム・スタック、[ram.*]、
+// ほかの変数) と重ならないかを確かめる (fc の ZP の中に置くと、reg などと黙って重なっていた)。ROM・I/O の番地は RAM の
+// セグメントでないので対象外。重なりを意図するなら storage alias を使う。
+func (c *Compiler) checkAddressVars(dbgPath string) error {
+	var vars []*ir.Def
+	for _, m := range c.prog.Modules.List() {
+		for _, d := range m.Defs {
+			if d.AddressVar != "" && d.Equ != nil && d.Equ.IsInt {
+				vars = append(vars, d)
+			}
+		}
+	}
+	if len(vars) == 0 {
+		return nil
+	}
+	dbg, err := ParseDbgFile(dbgPath)
+	if err != nil {
+		return err
+	}
+	ids := make([]int, 0, len(dbg.Segments))
+	for id := range dbg.Segments {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	var errs diag.ErrorList
+	for _, d := range vars {
+		start, size := d.Equ.Int, d.Type.Size
+		if size <= 0 {
+			size = 1 // 長さ未定の配列 (`[]u8 @(address: …)`) は先頭だけ
+		}
+		for _, id := range ids {
+			s := dbg.Segments[id]
+			if s.RO || s.Ooffs >= 0 || s.Size <= 0 {
+				continue // ROM に置かれるセグメント
+			}
+			if start < s.Start+s.Size && s.Start < start+size {
+				errs = append(errs, &diag.Error{Pos: d.Pos, Msg: fmt.Sprintf("`%s` @(address: $%04X) overlaps segment %s ($%04X-$%04X; fc's registers, frames or other variables)",
+					d.AddressVar, start, s.Name, s.Start, s.Start+s.Size-1)})
+				break
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
 }

@@ -463,7 +463,9 @@ fc で本体を持つ関数のうち**再帰しないもの**は、引数・戻�
 fc が生成する base.asm のゼロページ配置は `$00-$0F` L（stack 関数のレジスタ領域）、`$10-$1F` reg、`$20-$2F` FC_FASTCALL_REG、
 `$30-$6F` FC_SZP、`$70-$7F` は `options(segment: "ZEROPAGE")` の変数用、`$80-$FF` スタック S。**`$00-$7F` に
 `options(address:)` で固定番地の変数を置いてはいけない**（fc の領域と重なる。固定番地の ZP 変数が要るプロジェクトは
-castle のように base.asm を自前で持つ）。
+castle のように base.asm を自前で持つ）。リンクの後に、`@(address:)` の変数が RAM のセグメント（fc の ZP・BSS・スタック、
+fc.toml の `[ram.*]`、ほかの変数）と重なっていないかを確かめ、重なればエラー。fc.toml の `[ram.*]` も fc の領域（`$00-$01FF`、
+`$0200-$06FF`）と重なればエラー（OAM は `$0700` かカートリッジの RAM に置く）。重なりを意図するなら storage alias を使う。
 base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .res M` と `FC_SZP_SIZE` / `FC_SRAM_SIZE` の
 `.export … : absolute`、それにスタックの空き先頭 `FC_SP: .res 1`（`.exportzp`）を合わせる（不足はリンク時の `.assert` で
 検出される。配置は `.fc-build/_frames.inc`）。

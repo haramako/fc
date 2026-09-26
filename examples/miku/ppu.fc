@@ -27,7 +27,7 @@ var gr_buf:[256]u8;
 var gr_buf_idx:u8;
 
 var put_to:u16;
-var put_from:*u8 @(address: 0x60);
+var put_from:*u8 @(address: 0x71); // asm が (sym),y で使うので ZP。$00-$70 は fc の領域 (FC_ZEROPAGE) なので $71-$7F に置く
 var put_size:u8;
 var interrupt_i:u8;
 

@@ -22,6 +22,11 @@ type Def struct {
 	Segment string    // DefBss: 配置セグメント ("" なら既定の BSS)
 	Elems   []Operand // DefBlock: 配列の要素
 	Lambda  *Lambda   // DefCode
+
+	// AddressVar は @(address: N) の変数の名前 (mod.name) と宣言の位置。リンクの後に RAM のセグメント (fc の ZP・BSS など) と
+	// 重なっていないかを確かめる (driver.checkAddressVars)
+	AddressVar string
+	Pos        syntax.Position
 }
 
 // OptionKind は OptionValue の種類。

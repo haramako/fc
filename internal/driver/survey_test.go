@@ -269,3 +269,17 @@ function main():void
 		t.Errorf("struct: %v", err)
 	}
 }
+
+// TestAddressVarOverlap: @(address:) の変数がリンクした RAM のセグメント (fc の ZP・BSS など) と重なればエラー (fc の ZP の
+// 中に置くと reg などと黙って重なっていた)。I/O・カートリッジの RAM の番地はよい。
+func TestAddressVarOverlap(t *testing.T) {
+	t.Parallel()
+	_, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\nuse * from stdio;\nvar zp:u8 @(address: 0x10);\nfunction main():void { zp = 1; exit(0); }\n"})
+	if err == nil || !strings.Contains(err.Error(), "`t.zp` @(address: $0010) overlaps segment") {
+		t.Errorf("ZP: %v", err)
+	}
+	out, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\nuse * from stdio;\nvar sram:u8 @(address: 0x6000);\nfunction main():void { sram = 1; printf(sram, \"\n\"); exit(0); }\n"})
+	if err != nil || out != "1\n" {
+		t.Errorf("$6000: %q, %v", out, err)
+	}
+}
