@@ -21,6 +21,28 @@ public function print(str:*const u8):void @(fastcall)
 	EMU_PRINT = 1;
 }
 
+// printf の符号付きの整数 (負なら '-' を付ける)
+public function print_sint16(n:i16):void
+{
+	if (n < 0) {
+		print("-");
+		print_int16(@bitcast(u16, 0 - n));
+	} else {
+		print_int16(@bitcast(u16, n));
+	}
+}
+
+// printf の slice (長さの分だけ。途中の 0 も終端にしない)
+public function print_slice(s:[]const u8):void
+{
+	var buf:[2]u8;
+	buf[1] = 0;
+	for (var i:u8 = 0; i < @len(s); i += 1) {
+		buf[0] = s[i];
+		print(&buf[0]);
+	}
+}
+
 public function puts(str:*const u8):void
 {
 	printf(str, "\n");

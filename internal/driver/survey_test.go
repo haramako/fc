@@ -235,7 +235,37 @@ function main():void
 	exit(0);
 }
 `})
-	if err != nil || out != "9024 32768 4660 1 18 65520 1024 9024 32\n" {
+	if err != nil || out != "9024 32768 4660 1 18 -16 1024 9024 32\n" {
 		t.Errorf("got %q, %v", out, err)
+	}
+}
+
+// TestPrintfTypes: printf は slice を長さの分だけ、符号付きの整数を符号付きで、enum を値で出す (slice と struct は黙って捨て、
+// 符号付きは符号なしで 65531 と出し、enum は print_int16 の引数のエラーだった)。struct はエラー。
+func TestPrintfTypes(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+enum Color { Red, Green, Blue }
+enum Delta:i8 { Back = -1, Stay = 0 }
+function main():void
+{
+	var s:[]const u8 = "bob";
+	var n8:i8 = -5;
+	var n16:i16 = -300;
+	var big:i16 = -32768;
+	var c = Color.Blue;
+	var d = Delta.Back;
+	var t:u16 = 65535;
+	printf("[", s, "] ", n8, " ", n16, " ", big, " ", c, " ", d, " ", t, " ", true, " ", s[1..], "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "[bob] -5 -300 -32768 2 -1 65535 1 ob\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	_, err = buildFiles(t, map[string]string{"t.fc": "#fc 3\nuse * from stdio;\nstruct P { x:u8; }\nfunction main():void { var p:P; printf(p); }\n"})
+	if err == nil || !strings.Contains(err.Error(), "printf cannot print a value of type") {
+		t.Errorf("struct: %v", err)
 	}
 }

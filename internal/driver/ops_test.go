@@ -118,8 +118,8 @@ function main():void
 	exit(0);
 }
 `)
-	// printf は 8 ビット値も 16 ビットに符号拡張して表示する (a / 7 = -15 → 65521)
-	want := "9319 3 16309 4\n65461 65436 0 0 65530 42\n75 42 6 65493 65535\n54613 1\n65521 5 65511 0\n"
+	// printf は符号付きの値を符号付きで表示する (a / 7 = -15)
+	want := "9319 3 16309 4\n-75 -100 0 0 -6 42\n75 42 6 -43 -1\n-10923 1\n-15 5 -25 0\n"
 	if out != want {
 		t.Errorf("got %q\nwant %q", out, want)
 	}
@@ -916,7 +916,7 @@ function main():void
 }
 `
 	for _, level := range []int{-1, 0} {
-		if got := runEmuLevel(t, src, level); got != "44 65535 44\n53 55 416\n" {
+		if got := runEmuLevel(t, src, level); got != "44 -1 44\n53 55 416\n" {
 			t.Errorf("level %d: got %q", level, got)
 		}
 	}
@@ -1389,7 +1389,7 @@ function main():void
 }
 `
 	for _, level := range []int{-1, 0} {
-		if out, want := runEmuLevel(t, src, level), "0 0 1 4 65533 200 28\n"; out != want {
+		if out, want := runEmuLevel(t, src, level), "0 0 1 4 -3 200 28\n"; out != want {
 			t.Errorf("level %d: got %q\nwant %q", level, out, want)
 		}
 	}
@@ -1651,7 +1651,7 @@ function main():void
 `)
 	// a = 0xa5 = 165, b = 0xc300 = 49920, c = 0xfffe = 65534, d = 0x29 = 41, e = 0x8600 = 34304, f = 0,
 	// g = -2 → 65534 (8 ビットも符号拡張して表示), h = 166, s = 65534, u = 49920
-	if want := "165 49920 65534 41 34304 0 65534 166 65534 49920\n"; out != want {
+	if want := "165 49920 -2 41 34304 0 -2 166 -2 49920\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 }
@@ -1750,7 +1750,7 @@ function main():void
 }
 `)
 	// printf は 8 ビットの値も 16 ビットに符号拡張して表示する (-3 → 65533)
-	if want := "65533 65533 65534 11899\n"; out != want {
+	if want := "65533 -3 65534 11899\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
 	}
 	if got := compileErr(t, "const bad:[2]sint = [200, 1];\nfunction main():void { exit(0); }\n"); !strings.Contains(got, "cannot assign [2]u8 to [2]i8") {
@@ -2343,7 +2343,7 @@ function main():void
 }
 `
 	for _, level := range []int{-1, 0} {
-		if got := runEmuLevel(t, src, level); got != "0 65521 5\n" {
+		if got := runEmuLevel(t, src, level); got != "0 -15 5\n" {
 			t.Errorf("level %d: got %q", level, got)
 		}
 	}

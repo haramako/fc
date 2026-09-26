@@ -49,10 +49,28 @@ func registerBuiltins(p *Program) {
 				arg = cv(h.operandValue(h.rval(arg)))
 			}
 			typ := arg.val.Type
-			if h.prog.Types.Compatible(uint8p, typ) != nil {
+			switch {
+			case h.prog.Types.Compatible(uint8p, typ) != nil:
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
-			} else if typ.Kind == types.Int || typ.Kind == types.Bool {
+			case typ.IsSlice() && typ.SliceOf.Kind == types.Int && typ.SliceOf.Size == 1 && !typ.IsWideSlice():
+				// slice は長さの分だけ (文字列の slice。黙って捨てていた)
+				r.stmts = append(r.stmts, ccall(cv(stdio.LookupInternal("print_slice")), arg))
+			case typ.Kind == types.Int && typ.Enum != nil:
+				// enum は値 (print_int16 の引数の型のエラーだった)
+				u16 := h.prog.Types.IntType(2, typ.Signed)
+				n := &cexpr{kind: cCast, args: []*cexpr{arg}, ty: u16, ck: syntax.CastAs}
+				if typ.Signed {
+					r.stmts = append(r.stmts, ccall(cv(stdio.LookupInternal("print_sint16")), n))
+				} else {
+					r.stmts = append(r.stmts, ccall(cv(printInt16), n))
+				}
+			case typ.Kind == types.Int && typ.Signed:
+				// 符号付きは符号付きで (符号なしで 65531 と出ていた)
+				r.stmts = append(r.stmts, ccall(cv(stdio.LookupInternal("print_sint16")), arg))
+			case typ.Kind == types.Int || typ.Kind == types.Bool:
 				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
+			default:
+				panic(&diag.Error{Msg: fmt.Sprintf("printf cannot print a value of type %s (strings (*u8 / []u8), integers, bool and enums)", typ)})
 			}
 		}
 		return r

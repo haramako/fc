@@ -30,9 +30,9 @@ _stdio_print_addr: .res 2
 	.endproc
 .proc _stdio_exit
 	sta <F_stdio_exit+0
-	lda #.LOBYTE(_6)
+	lda #.LOBYTE(_26)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_6)
+	lda #.HIBYTE(_26)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	ldx FC_SP
@@ -42,14 +42,14 @@ _stdio_print_addr: .res 2
 	sta <S+1,x
 	ldx FC_SP
 	jsr _stdio_print_int16
-	lda #.LOBYTE(_8)
+	lda #.LOBYTE(_28)
 	sta <FC_FASTCALL_REG+0
-	lda #.HIBYTE(_8)
+	lda #.HIBYTE(_28)
 	sta <FC_FASTCALL_REG+1
 	jsr _stdio_print
 	lda #200
 	sta 0+_nes_PPU_CTRL1
-@then_12:
+@then_32:
 	ldx FC_SP
 	ldx FC_SP
 	jsr _stdio_wait_vsync
@@ -60,10 +60,10 @@ _stdio_print_addr: .res 2
 	sta 0+_nes_PPU_CTRL1
 	lda #10
 	sta 0+_nes_PPU_CTRL2
-	jmp @then_12
-_6:
+	jmp @then_32
+_26:
 		.byte 101,120,105,116,40,0
-_8:
+_28:
 		.byte 41,10,0
 .endproc
 	.export _stdio_init
