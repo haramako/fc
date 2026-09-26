@@ -1921,6 +1921,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			if lt, rt := ir.ValType(left), ir.ValType(right); e.op == opSub && lt.Kind == types.Pointer && rt.Kind == types.Pointer && lt.Base == rt.Base {
+				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
+				break
+			}
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
@@ -1929,6 +1933,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 						panic(&diag.Error{Msg: "no arithmetic on *void"})
 					}
 					typ = ir.ValType(left)
+					if typ.Kind == types.Pointer && typ.Base.Size > 1 {
+						// p + n / p++ は要素 n 個分進める (C と同じ。language_reference §6)。バイト単位で進めていて、u16 の配列を
+						// p++ でたどると 1 バイトずれ、p[1] と *(p + 1) が違っていた
+						right = h.scaleOffset(right, typ.Base.Size)
+					}
 				} else {
 					panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to %s and %s (not compatible types)", opSymbol(e.op), ir.ValType(left), ir.ValType(right))})
 				}

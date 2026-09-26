@@ -388,3 +388,37 @@ func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
 	}
 	return tmp
 }
+
+// scaleOffset はポインタに足す要素数 n を、要素の大きさ size を掛けたバイト数 (16 ビット) にする (定数ならその場で)。
+// 符号付きの n は符号を広げてから掛ける (p - 1 と p + (-1) が同じになるように)。
+func (h *Hlc) scaleOffset(n ir.Operand, size int) ir.Operand {
+	nt := ir.ValType(n)
+	wt := h.prog.Types.IntType(2, nt.Signed)
+	if k, ok := ir.ValIntLiteral(n); ok {
+		return ir.NewIntLiteral("", wt, k*size)
+	}
+	tmp := h.newTmp(wt)
+	h.emit(&ir.Op{Code: ir.OpMul, Dst: tmp, Src: []ir.Operand{h.cast(n, wt), ir.NewIntLiteral("", wt, size)}})
+	return tmp
+}
+
+// pointerDiff は同じ型のポインタの差 p - q を要素数 (u16) にする (C と同じ)。
+func (h *Hlc) pointerDiff(p, q ir.Operand, elem *types.Type) ir.Operand {
+	u16 := h.prog.Types.IntType(2, false)
+	d := h.newTmp(u16)
+	h.emit(&ir.Op{Code: ir.OpSub, Dst: d, Src: []ir.Operand{ir.NewCastedValue(p, u16, 0), ir.NewCastedValue(q, u16, 0)}})
+	if elem.Size <= 1 {
+		return d
+	}
+	r := h.newTmp(u16)
+	if elem.Size&(elem.Size-1) == 0 {
+		shift := 0
+		for 1<<shift < elem.Size {
+			shift++
+		}
+		h.emit(&ir.Op{Code: ir.OpShiftRight, Dst: r, Src: []ir.Operand{d, ir.NewIntLiteral("", h.prog.Types.IntType(1, false), shift)}})
+	} else {
+		h.emit(&ir.Op{Code: ir.OpDiv, Dst: r, Src: []ir.Operand{d, ir.NewIntLiteral("", u16, elem.Size)}})
+	}
+	return r
+}

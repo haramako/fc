@@ -176,3 +176,40 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestPointerArithmeticScaled: ポインタの加減算は要素 n 個分 (C と同じ)。バイト単位で、u16 の配列を p++ でたどると 1 バイト
+// ずれ、p[1] と *(p + 1) が違っていた。変数・符号付きの n、struct の配列、ポインタの差 (要素数。要素 3 バイトは割り算)。
+func TestPointerArithmeticScaled(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+struct O { hp:u8; x:u16; }
+var w:[4]u16;
+var objs:[4]O;
+var b:[4]u8;
+function main():void
+{
+	w[0] = 1000; w[1] = 2000; w[2] = 3000; w[3] = 4000;
+	for (var i:u8 = 0; i < 4; i += 1) { objs[i].hp = i * 10; b[i] = i + 1; }
+	var p = &w[0];
+	p += 1;
+	var q = &w[0] + 2;
+	var r = &w[3];
+	r--;
+	var k:u8 = 3;
+	var s = &w[0] + k;
+	var m:i8 = -1;
+	var t = &w[3] + m;
+	var o = &objs[0];
+	o++;
+	o += 1;
+	var bp = &b[0];
+	bp += 2;
+	printf(*p, " ", *q, " ", *r, " ", *s, " ", *t, " ", o.hp, " ", *bp, " ", s - p, " ", &objs[3] - &objs[0], " ", (p + 1)[0] == p[1], "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "2000 3000 3000 4000 3000 20 3 2 3 1\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}
