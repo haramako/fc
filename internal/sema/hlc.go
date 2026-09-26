@@ -544,7 +544,8 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.PlacementBlock:
 		h.compilePlacementBlock(s)
 	case *syntax.Block:
-		h.compileStmts(s.Stmts)
+		// ブロックごとにスコープを作る (language_reference §1.3。素の `{ }` の宣言が外へ漏れ、同じ名前を宣言できなかった)
+		h.inScope(func() { h.compileStmts(s.Stmts) })
 
 	case *syntax.EmptyStmt:
 		// DO NOTHING
