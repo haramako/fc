@@ -57,3 +57,23 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestInlineLocalConst: インライン展開する関数の中の const の表・文字列 (その関数の .proc の中のラベル) を、展開先へ別の名前で
+// 写す (ca65 の `Symbol 'T' is undefined` だった)。表が別の表を指す形、呼び出し側の同じ名前の表とも衝突しない。
+func TestInlineLocalConst(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+function f(i:u8):u8 { const T = [5, 6, 7]; var p:*const u8 = "ab"; return T[i] + p[0]; }
+function g(i:u8):u8 { const T = [50, 60, 70]; const PS:[?]*const u8 = ["xy", "zw"]; return T[i] + PS[i][1]; }
+function main():void
+{
+	const T = [1, 2, 3];
+	printf(f(1), " ", f(2), " ", g(0), " ", g(1), " ", T[2], "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "103 104 171 179 3\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}
