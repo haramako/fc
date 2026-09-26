@@ -117,9 +117,9 @@ func (l *Llc) logLoc(lmd *ir.Lambda, opNo int, op *ir.Op, v ir.Operand, live fun
 	// 常駐のメモリ側 (Home) の変数: 常駐の値がレジスタで更新され、死んだ後は書き戻されないので、メモリ側が正しいのは
 	// 常駐の値が生きていてここでは常駐していないとき (メモリ側に退避している) か、メモリ側の変数そのものが生きているとき
 	if rs := residentsOf(lmd, u); len(rs) > 0 {
-		ok := live().LiveIn(opNo, u)
+		ok := liveHere(lmd, opNo, u, live)
 		for _, r := range rs {
-			ok = ok || live().LiveIn(opNo, r)
+			ok = ok || liveHere(lmd, opNo, r, live)
 		}
 		if !ok {
 			return LogLoc{Kind: "none", Why: "optimized out"}
@@ -135,7 +135,7 @@ func (l *Llc) logLoc(lmd *ir.Lambda, opNo int, op *ir.Op, v ir.Operand, live fun
 	if u.Kind != ir.KindLocal {
 		return LogLoc{Kind: "none", Why: "not a variable"}
 	}
-	isLive := live().LiveIn(opNo, u)
+	isLive := liveHere(lmd, opNo, u, live)
 	// 付け替えた注釈の地点は元の地点と違う: 間の代入が消えている (LogStale) と、生きていても元の地点の値ではない
 	if u.LogNoValue || (moved && u.LogStale) || (!isLive && (u.LogStale || moved || !recentlyTouched(lmd.Ops, opNo, u))) {
 		return LogLoc{Kind: "none", Why: "optimized out"}
@@ -160,6 +160,24 @@ func (l *Llc) logLoc(lmd *ir.Lambda, opNo int, op *ir.Op, v ir.Operand, live fun
 		return l.memLoc(v)
 	}
 	return LogLoc{Kind: "none", Why: "in a register"}
+}
+
+// liveHere は u が opNo の入口で生きていて、その値が場所にあるか。引数でない変数が関数の入口から生きているのは、書く前に
+// 読まれている形 (常駐の値の書き戻しは IR の定義に見えないので、メモリ側 (Home) は入口から最後の読みまで生きて見える。
+// 初期値の代入が消えた変数も同じ) で、その間の場所の値は元の地点の値ではない (fuzz の TestLogZeroCost で発覚)。
+func liveHere(lmd *ir.Lambda, opNo int, u *ir.Value, live func() *ir.Liveness) bool {
+	if !live().LiveIn(opNo, u) {
+		return false
+	}
+	if u.LocalType == ir.LTArg {
+		return true
+	}
+	for j, op := range lmd.Ops {
+		if op != nil {
+			return !live().LiveIn(j, u)
+		}
+	}
+	return true
 }
 
 // residentsOf は u をメモリ側 (Home) に持つ常駐の値 (regalloc.AllocateResident)。

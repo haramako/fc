@@ -206,14 +206,15 @@ function main():void
 // 変わらない (-O 0 / -O 2)。@log の値は、両方のレベルで取れた値を比べる。食い違いは種ごとにはログに出すだけ (丸ごと
 // 畳まれたループの写しが同じ命令に集まる形などで、-O 2 の地点が元の地点からずれることがある。doc/v3_plan.md §9) だが、
 // 食い違った種が比べた種の logValueDiffLimit を超えたら失敗 (最適化のパスの変更で注釈の扱いが崩れたことに気づくため。
-// 2026-09-25 の時点で 464 個中 1 個)。
+// 2026-09-26 の時点で 1816 個中 12 個 (0.7%)。fuzz の 1 周の 200 個前後では 1% だと 1 個しか許さず、偶然の 2〜4 個で
+// 落ちていたので、logValueDiffSlack 個の余裕を足す)。
 func TestLogZeroCost(t *testing.T) {
 	t.Parallel()
 	var compared, differed atomic.Int32
 	t.Cleanup(func() { // 並列の子のテストが全部終わった後
 		n, d := compared.Load(), differed.Load()
-		if float64(d) > float64(n)*logValueDiffLimit {
-			t.Errorf("@log の値が -O 0 と -O 2 で食い違った種が多すぎる: %d / %d (上限 %.0f%%)。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue) が崩れていないか (doc/development_notes.md)", d, n, logValueDiffLimit*100)
+		if float64(d) > float64(n)*logValueDiffLimit+logValueDiffSlack {
+			t.Errorf("@log の値が -O 0 と -O 2 で食い違った種が多すぎる: %d / %d (上限 %.0f%% + %d 個)。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue) が崩れていないか (doc/development_notes.md)", d, n, logValueDiffLimit*100, logValueDiffSlack)
 		}
 	})
 	n := 20
@@ -264,6 +265,9 @@ func TestLogZeroCost(t *testing.T) {
 
 // logValueDiffLimit は TestLogZeroCost の、@log の値が食い違ってよい種の割合の上限。
 const logValueDiffLimit = 0.01
+
+// logValueDiffSlack は logValueDiffLimit に足す、食い違ってよい種の個数 (少ない種数での偶然のばらつきの分)。
+const logValueDiffSlack = 3
 
 var reLogField = regexp.MustCompile(` (\S+)=(\S+)`)
 
@@ -321,4 +325,24 @@ func compareLogValues(o0, o2 string) (bad string, countDiffs int) {
 		}
 	}
 	return "", countDiffs
+}
+
+// TestLogResidentHomeAtEntry: 常駐 (l1@A) のメモリ側 (Home) は書き戻しが IR の定義に見えず、関数の入口から生きて見える。
+// その間 (丸ごと展開したループの初めの周) の @log が Home の古い値を出していた (fuzz の種 50042125。codegen の liveHere)。
+func TestLogResidentHomeAtEntry(t *testing.T) {
+	t.Parallel()
+	g := &rpGen{r: rand.New(rand.NewSource(50042125))}
+	g.genProgram()
+	files := g.sources()
+	var logs []string
+	for _, level := range []int{-1, 0} {
+		_, _, l, _, err := logBuild(t, files, level, true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		logs = append(logs, l)
+	}
+	if bad, _ := compareLogValues(logs[0], logs[1]); bad != "" {
+		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
+	}
 }
