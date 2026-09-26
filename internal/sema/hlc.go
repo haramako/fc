@@ -864,6 +864,14 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		for ci, c := range s.Cases {
 			for _, v := range c.Values {
 				cv := h.constEvalOperand(h.withExpected(toC(v), ir.ValType(cond))) // enum なら `case .A:`
+				if t := ir.ValType(cv); t.Kind == types.Array || t.Kind == types.Struct {
+					// `case "A":` (C の文字のつもり。fc の "A" / 'A' は 2 バイトの文字列) が codegen で panic していた
+					msg := fmt.Sprintf("case value must be an integer constant (got %s)", t)
+					if lv := ir.ValLiteral(cv); lv != nil && lv.IsString {
+						msg += "; a string literal is an array in fc (write the character code, e.g. 65 for \"A\")"
+					}
+					panic(&diag.Error{Msg: msg, Pos: syntax.At(h.module.Path, v.Pos())})
+				}
 				if k, ok := ir.ValIntLiteral(cv); ok {
 					if seen[k] {
 						panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d", k), Pos: syntax.At(h.module.Path, v.Pos())})

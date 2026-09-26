@@ -81,7 +81,7 @@ function main():void
 	}
 }
 
-// TestV3SwitchErrors: case の外で case の変数を使う (案内つき)、fallthrough の置き場所。
+// TestV3SwitchErrors: case の外で case の変数を使う (案内つき)、fallthrough の置き場所、case の値が文字列 (codegen の panic だった)。
 func TestV3SwitchErrors(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct{ src, msg string }{
@@ -93,6 +93,8 @@ func TestV3SwitchErrors(t *testing.T) {
 		{`function f(x:u8):void { switch (x) { case 1: if (x) { fallthrough; } case 2: } }`, "must be the last statement"},
 		{`function f(x:u8):void { fallthrough; }`, "must be the last statement"},
 		{`function f(x:u8):u8 { switch (x) { case 1: fallthrough; case 2: x = 1; default: return 1; } }`, "missing return"},
+		{`function f(x:u8):void { switch (x) { case "A": x = 1; } }`, "case value must be an integer constant (got [2]u8); a string literal"},
+		{`function f(x:u8):void { switch (x) { case "A": } }`, "case value must be an integer constant"},
 	} {
 		_, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\n" + c.src + "\nfunction main():void {}\n"})
 		if err == nil || !strings.Contains(err.Error(), c.msg) {
