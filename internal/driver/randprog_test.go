@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -295,7 +296,7 @@ func (g *rpGen) expr(t rpType, depth int) string {
 		// 比較 (bool) を整数として使う
 		u := g.typ()
 		op := []string{"<", "<=", "==", "!=", ">", ">="}[g.pick(6)]
-		return fmt.Sprintf("((%s %s %s) as %s)", g.expr(u, depth-1), op, g.expr(u, depth-1), t.name)
+		return fmt.Sprintf("((%s %s %s) as %s)", g.cmpSide(u, depth-1), op, g.cmpSide(u, depth-1), t.name)
 	case 6:
 		// 論理演算 (短絡)
 		op := []string{"&&", "||"}[g.pick(2)]
@@ -830,12 +831,25 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 	return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
 }
 
+// cmpSide は比較の片側の型 t の式。リテラル・変数などの葉以外は `as t` で包む: 定数だけの式 (`min(3416, -3)` も) は畳み込むと値から型が決まる
+// 型のない定数になり (`(3 - 5)` は -2)、相手の型に収まらないと比較がエラーになる (doc/v3_plan.md §10.2)。
+func (g *rpGen) cmpSide(t rpType, depth int) string {
+	e := g.expr(t, depth)
+	if strings.Contains(e, "(") && !(t.signed && rpNegLit.MatchString(e)) { // 符号なしの `(-5)` は `-` を付けた葉
+		return fmt.Sprintf("(%s as %s)", e, t.name)
+	}
+	return e
+}
+
+// rpNegLit は lit が出す負のリテラル `(-5)` (符号付きの型の範囲内)。
+var rpNegLit = regexp.MustCompile(`^\(-[0-9]+\)$`)
+
 // cond は条件式 (比較か整数)。
 func (g *rpGen) cond() string {
 	t := g.typ()
 	if g.chance(0.7) {
 		op := []string{"<", "<=", "==", "!=", ">", ">="}[g.pick(6)]
-		c := fmt.Sprintf("%s %s %s", g.expr(t, 2), op, g.expr(t, 2))
+		c := fmt.Sprintf("%s %s %s", g.cmpSide(t, 2), op, g.cmpSide(t, 2))
 		if g.chance(0.3) {
 			u := g.typ()
 			c = fmt.Sprintf("(%s) %s (%s)", c, []string{"&&", "||"}[g.pick(2)], g.expr(u, 2))

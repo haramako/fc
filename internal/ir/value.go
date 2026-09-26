@@ -49,6 +49,7 @@ type Value struct {
 
 	IsInt   bool
 	Int     int
+	Untyped bool // 型を書いていない整数定数 (リテラル・型を書かない const・sizeof)。演算・比較で相手の型に合わせる (sema.adaptLiteral)
 	Symbol  string
 	Elems   []Operand
 	Module  *ModuleInterface // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
