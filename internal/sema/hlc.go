@@ -1126,6 +1126,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			var lit *ir.Value
 			if v.IsInt {
 				lit = ir.NewIntLiteral(name, t, v.Int)
+				lit.Untyped = v.Untyped && declType == nil // `const N = 200` は型のない定数、`const N:u8 = 200` は型付き
 			} else {
 				lit = ir.NewSymbolLiteral(name, t, v.Symbol)
 			}
@@ -1459,7 +1460,9 @@ func (h *Hlc) IntValue(n int) *ir.Value {
 	default:
 		t = h.prog.Types.IntType(1, false)
 	}
-	return ir.NewIntLiteral("", t, n)
+	v := ir.NewIntLiteral("", t, n)
+	v.Untyped = true
+	return v
 }
 
 // newLambda は ir.Lambda を作る。型は params / baseType / options(fastcall) から決まる。
@@ -1953,6 +1956,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
 				break
 			}
+			left, right = h.adaptLiteral(left, right, false)
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
 				if (e.op == opAdd || e.op == opSub) &&
@@ -1998,6 +2002,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			left, right = h.adaptLiteral(left, right, true)
 			h.warnConstCompare(e.op, left, right)
 			if e.op == opLt {
 				checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right)) // == / != は struct・配列でもよい (バイトの比較)

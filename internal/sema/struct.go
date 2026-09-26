@@ -525,7 +525,7 @@ func (h *Hlc) warnConstCompare(op cop, left, right ir.Operand) {
 		vt, k = lt, rk
 	}
 	if vt.Kind != types.Int || vt.Signed || vt.Enum != nil || vt.Size < 1 || vt.Size > 2 || k < 0 {
-		return // 負の定数との比較 (`x == -1` は今の規則では x == 255 として働く) は符号の混在の方針 (保留) と一緒に
+		return // 負の定数: 同じ大きさ (`x == -1`) は adaptLiteral がエラーにする。広い定数 (`x == -200`) は符号の混在の方針 (保留) と一緒に
 	}
 	max := 1<<(8*vt.Size) - 1
 	var why, hint string

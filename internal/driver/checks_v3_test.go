@@ -123,7 +123,8 @@ function main():void { printf(f(true), "\n"); exit(0); }
 }
 
 // TestAlwaysSameComparison: 符号なしの値と範囲外の定数の比較は、型の範囲だけで結果が決まるので警告する (`i < 256` の u8 の
-// 無限ループ、`hp - dmg < 0` は常に偽)。範囲内の比較、符号付きの値、負の定数 (`x == -1` は今の規則では x == 255) は警告しない。
+// 無限ループ、`hp - dmg < 0` は常に偽)。範囲内の比較と符号付きの値は警告しない (`x == -1` は
+// 定数が相手の型に収まらないのでエラー。literal_type_test.go)。
 func TestAlwaysSameComparison(t *testing.T) {
 	t.Parallel()
 	_, res, err := buildFilesDefs(t, map[string]string{"t.fc": `#fc 3
@@ -142,7 +143,6 @@ function main():void
 	if (x >= 1) { }
 	if (s < 100) { }
 	if (w < 300) { }
-	if (x == -1) { }
 	exit(0);
 }
 `}, nil)
