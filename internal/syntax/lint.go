@@ -19,6 +19,7 @@ func Lint(f *File) []Warning {
 		}
 		return true
 	})
+	l.attributes(f)
 	// 位置順に
 	for i := 1; i < len(l.warnings); i++ {
 		for j := i; j > 0 && l.warnings[j].Pos.Offset < l.warnings[j-1].Pos.Offset; j-- {
