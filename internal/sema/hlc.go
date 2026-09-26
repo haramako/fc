@@ -992,12 +992,17 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if typ != nil {
 		h.checkComplete(typ, "variable "+name)
 	}
+	// 型を省いた変数は、読み取り専用のポインタ・slice で初期化すると読み取り専用 (`var p = &TAB[i]` は *const T)
+	inferRO := false
 	if typ == nil {
 		typ = h.guessType(name, nil, init)
+		inferRO = typ != nil && (typ.Kind == types.Pointer || typ.IsSlice()) && h.readOnly(init)
 	}
 	if typ != nil && init != nil {
 		h.compatibleAssign("`"+name+"`", typ, ir.ValType(init))
-		h.warnDropConst("`"+name+"`", typ, init)
+		if !inferRO {
+			h.warnDropConst("`"+name+"`", typ, init)
+		}
 	}
 	var vv *ir.Value
 	if h.lmd == nil {
@@ -1028,13 +1033,13 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		}
 		st, ro := h.storageType(typ)
 		vv = h.addVar(ir.NewGlobal(name, st, symbol))
-		vv.ReadOnly = ro
+		vv.ReadOnly = ro || inferRO
 		h.prog.storageGlobals[vv] = true
 		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
 	} else {
 		st, ro := h.storageType(typ)
 		vv = h.addVar(ir.NewLocal(name, st, ir.LTNone))
-		vv.ReadOnly = ro
+		vv.ReadOnly = ro || inferRO
 	}
 	if h.scopeIsPublic(publicPos) {
 		vv.Public = true

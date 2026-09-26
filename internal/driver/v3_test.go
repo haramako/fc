@@ -341,6 +341,7 @@ public enum State { Stand, Jump, Die = 2 }
 
 // TestV3ConstPointer: `*const T`。const の配列・文字列リテラル (とそこから作ったポインタ) は読み取り専用。書き込みと
 // `as` で const を外すことはエラー、*T として渡すのは警告 (fc 3 の最初の版)。@bitcast で外せる。生成コードは *T と同じ。
+// 型を省いた変数は、読み取り専用のポインタで初期化すると *const (警告しない。書き込みはエラー)。
 func TestV3ConstPointer(t *testing.T) {
 	t.Parallel()
 	src := `#fc 3
@@ -355,12 +356,13 @@ function main():void
 	var p:*const u8 = TABLE;
 	var q:*const P = &PS[0];
 	var w = @bitcast(*u8, p);
-	printf(sum(TABLE, 4), " ", sum(&TABLE[1], 2), " ", *p, " ", q.x, " ", first(w), " ", first(TABLE), "\n");
+	var r = &PS[0];
+	printf(sum(TABLE, 4), " ", sum(&TABLE[1], 2), " ", *p, " ", q.x, " ", first(w), " ", first(TABLE), " ", r.x, "\n");
 	exit(0);
 }
 `
 	out, res, err := buildFilesDefs(t, map[string]string{"t.fc": src}, nil)
-	if err != nil || out != "10 5 1 5 1 1\n" {
+	if err != nil || out != "10 5 1 5 1 1 5\n" {
 		t.Fatalf("got %q, %v", out, err)
 	}
 	var drops []string
@@ -377,6 +379,8 @@ function main():void
 		{"var p:*const u8 = TABLE; p[1] = 1;", "cannot assign through a read-only pointer"},
 		{"TABLE[0] = 1;", "cannot assign through a read-only pointer"},
 		{"var q:*const P = &PS[0]; q.x = 1;", "cannot assign through a read-only pointer"},
+		{"var q = &PS[0]; q.x = 1;", "cannot assign through a read-only pointer"},
+		{"var p = &TABLE[1]; *p = 1;", "cannot assign through a read-only pointer"},
 		{"var p:*const u8 = TABLE; var r = p as *u8;", "with `as` (use bitcast"}, // ポインタ同士の as はもともと不可
 	} {
 		prog := "#fc 3\nconst TABLE:[4]u8 = [1, 2, 3, 4];\nstruct P { x:u8; }\nconst PS:[1]P = [{5}];\nfunction main():void { " + c.body + " }\n"
