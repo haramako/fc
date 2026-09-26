@@ -21,6 +21,10 @@ func TestLint(t *testing.T) {
 		{"attribute without effect", "#fc 3\nvar z:u8 @(zeropage);\nconst T = [1] @(segment: \"R\");\nfunction f(a:u8 @(address: 1)):void @(address: 2) { var l:u8 @(address: 3); }\n",
 			[]string{"`zeropage` has no effect on a global variable; it is ignored (use @(segment: \"ZEROPAGE\"))", "`segment` has no effect on a const",
 				"`address` has no effect on a parameter", "`address` has no effect on a function", "`address` has no effect on a local variable"}},
+		// 文の無い case (fc 3): 後ろに case / default が続くと警告。コメント・文 (break;)・最後の case は警告しない
+		{"empty case", "#fc 3\nfunction f(x:u8):void { switch (x) { case 1: case 2: x = 7; case 3: // 何もしない\n case 4: x = 1; case 5: break; case 6: default: x = 9; } switch (x) { case 1: x = 2; case 9: } }\n",
+			[]string{"this case does nothing", "this case does nothing"}},
+		{"empty case in fc 2", "#fc 2\nfunction f(x:int):void { switch (x) { case 1: case 2: x = 7; } }\n", nil},
 		{"valid attributes", "#fc 3\n@(bank: -1, farcall);\nvar io:u8 @(address: 0x2000, volatile);\nconst T = [1] @(symbol: \"_t\");\nfunction f():void @(inline, segment: \"CODE\") { }\n", nil},
 	}
 	for _, c := range cases {
