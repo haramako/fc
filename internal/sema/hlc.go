@@ -994,6 +994,10 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			}
 		}
 		init = h.rval(c)
+		// `var a:[?]u8 = [1, 2, 3];`: 長さを初期値から決める (長さ未定のままフレームに領域が取られず、ほかのローカルを壊していた)
+		if it := ir.ValType(init); typ != nil && typ.Kind == types.Array && typ.Length < 0 && it.Kind == types.Array && it.Length >= 0 {
+			typ = h.prog.Types.ArrayOf(typ.Base, it.Length)
+		}
 	}
 	if init != nil && h.lmd == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("can't init global variable %s (globals start as 0; assign it in a function, or use const)", name)})

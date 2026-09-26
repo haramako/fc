@@ -88,3 +88,26 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestLocalInferredArray: ローカルの `var a:[?]T = [...]` は初期値から長さを決める (長さ未定のまま領域が取られず、ほかの
+// ローカルを壊していた。-O 0 では ca65 の Range error)。
+func TestLocalInferredArray(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+struct P { x:u8; y:u8; }
+function main():void
+{
+	var a:[?]u8 = [1, 2, 3];
+	var z:u8 = 50;
+	var ps:[?]P = [{1, 2}, {3, 4}];
+	a[0] = 9;
+	ps[1].y = 7;
+	printf(a[0], a[1], a[2], " ", z, " ", @len(a), " ", @sizeof(ps), " ", ps[0].x, ps[1].y, "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "923 50 3 4 17\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}
