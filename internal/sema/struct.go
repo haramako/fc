@@ -75,6 +75,7 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 			return c
 		}
 		r := *c
+		r.ty = t // 実行時に組み立てるときの型 (runtimeArray)
 		r.args = make([]*cexpr, len(c.args))
 		for i, e := range c.args {
 			r.args[i] = h.withExpected(e, t.Base)
@@ -332,4 +333,58 @@ func (h *Hlc) padArrayLiteral(name string, v *ir.Value, typ *types.Type) *ir.Val
 	r := ir.NewArrayLiteral(v.Name, h.prog.Types.ArrayOf(base, len(elems)), elems)
 	r.IsString, r.Str = v.IsString, v.Str
 	return r
+}
+
+// isConstElem は評価済みの配列リテラルの要素が、データとして置ける定数か: 整数・シンボル (関数など)・配列/struct リテラル、
+// 配列の名前 (const のポインタの表 `[S, T]` のアドレス。pointerElems が変換する)。変数の値・式は実行時。
+func isConstElem(c *cexpr) bool {
+	if c.kind != cValue {
+		return false
+	}
+	switch c.val.Kind {
+	case ir.KindLiteral, ir.KindArrayLiteral:
+		return true
+	case ir.KindGlobal:
+		return c.val.Symbol != "" && c.val.Type.Kind == types.Array
+	}
+	return false
+}
+
+// runtimeArray は実行時の値を要素に持つ配列リテラル (`[n, m]`) を一時変数に組み立てる (struct リテラルと同じ)。要素の型は
+// 文脈の配列型 (宣言・代入先・引数)、無ければ要素の型をまとめたもの。文脈の長さに足りなければ 0 で埋める。
+func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
+	vals := make([]ir.Operand, len(e.args))
+	var base *types.Type
+	n := len(e.args)
+	if e.ty != nil && e.ty.Kind == types.Array {
+		base = e.ty.Base
+		if e.ty.Length > n {
+			n = e.ty.Length
+		} else if e.ty.Length >= 0 && e.ty.Length < n {
+			panic(&diag.Error{Msg: fmt.Sprintf("%d elements given for %s", len(e.args), e.ty)})
+		}
+	}
+	for i, a := range e.args {
+		v := h.rval(a)
+		vals[i] = v
+		if e.ty == nil {
+			if i == 0 {
+				base = ir.ValType(v)
+			} else {
+				base = h.compatible(base, ir.ValType(v))
+			}
+		}
+	}
+	tmp := h.newTmp(h.prog.Types.ArrayOf(base, n))
+	for i := 0; i < n; i++ {
+		var v ir.Operand
+		if i < len(vals) {
+			h.compatible(base, ir.ValType(vals[i]))
+			v = h.cast(vals[i], base)
+		} else {
+			v = h.zeroValue(base)
+		}
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: ir.NewCastedValue(tmp, base, i*base.Size), Src: []ir.Operand{v}})
+	}
+	return tmp
 }

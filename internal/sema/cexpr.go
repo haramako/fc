@@ -132,6 +132,7 @@ type cexpr struct {
 	block *syntax.Block   // opCall の後置ブロック
 	lam   *lambdaLit      // cLambda
 	flds  []cfield        // cStructLit の項目
+	rt    bool            // cArray: 実行時の値を要素に持つ (lval が一時変数に組み立てる。ty は文脈の配列型、無ければ nil)
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
 }
 

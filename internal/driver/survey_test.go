@@ -139,3 +139,40 @@ function main():void
 		t.Errorf("多すぎる要素: %v", err)
 	}
 }
+
+// TestRuntimeArrayLiteral: 実行時の値 (変数・式) を要素に持つ配列リテラルは実行時に組み立てる。変数の名前がそのアドレスの
+// 定数になり (`var a:[2]u8 = [n, m]` が n と m のアドレスの表で 34 が 28)、式なら constant value required、代入・引数・
+// struct のフィールドの中では panic だった。関数の中・戻り値・グローバルへの代入・struct のフィールド・slice の引数・
+// 足りない要素の 0 埋め・要素の型の推論 (u16)・再帰関数の中。
+func TestRuntimeArrayLiteral(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+struct Inv { items:[2]u8; n:u8; }
+var gx:u8;
+var gw:u16;
+var g:Inv;
+var pts:[2]u8;
+function g2(n:u8, m:u8):u8 @(noinline) { var a:[2]u8 = [n, m]; return a[0] * 10 + a[1]; }
+function pair(n:u8, m:u8):[2]u8 @(noinline) { return [n, m]; }
+function sum(s:[]const u8):u8 { var t:u8 = 0; for (var i:u8 = 0; i < @len(s); i += 1) { t += s[i]; } return t; }
+function rec(d:u8):u8 { if (d == 0) { return 0; } var a:[2]u8 = [d, d + 1]; return a[1] + rec(d - 1); }
+function main():void
+{
+	gx = 7; gw = 1000;
+	var b:[3]u8 = [gx, gx + 1, gx * 2];
+	var w:[2]u16 = [gw, 5];
+	var p = pair(4, 9);
+	pts = [gx, 3];
+	g = {items: [gx, 2], n: 1};
+	var inv:Inv = {items: [gx, 6], n: gx};
+	var pad:[4]u8 = [gx];
+	var q = [gx, 300];
+	printf(g2(3, 4), " ", g2(5, 6), " ", b[0], b[1], b[2], " ", w[0], " ", p[0], p[1], " ", pts[0], pts[1], " ", g.items[0], g.items[1], " ", inv.items[1], inv.n, " ", sum([gx, 1, 2]), " ", pad[0], pad[3], " ", q[1], " ", rec(3), "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "34 56 7814 1000 49 73 72 67 10 70 300 9\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}

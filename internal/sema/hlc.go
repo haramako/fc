@@ -1072,6 +1072,11 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 	if val != nil {
 		declType := h.typeEval(typ)
 		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
+		if cv.kind == cArray && cv.rt {
+			for _, e := range cv.args {
+				h.constEvalOperand(h.constSlice(e)) // 定数でない要素の理由 (constant value required / storage alias) を出す
+			}
+		}
 		if cv.kind != cValue {
 			if declType.IsSlice() {
 				panic(&diag.Error{Msg: fmt.Sprintf("const %s: a constant slice needs an array constant, an array literal or a string (use [?]T for a constant array)", name)})
@@ -1218,9 +1223,15 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		for i, e := range c.args {
 			if h.needsExpected(e) {
 				// 型名を省いた struct リテラルを含む配列: 宣言の型が与えられるまで評価を保留する
-				return &cexpr{kind: cArray, args: c.args}
+				return &cexpr{kind: cArray, args: c.args, ty: c.ty}
 			}
-			v := h.constEvalOperand(h.constSlice(e)) // slice の要素 (`[?][]const u8 = ["ab", "cde"]`) は定数の slice に
+			x := h.constEval(h.constSlice(e)) // slice の要素 (`[?][]const u8 = ["ab", "cde"]`) は定数の slice に
+			if !isConstElem(x) || h.prog.storageAliases[x.val] != nil {
+				// 実行時の値 (変数・式) を要素に持つ: 実行時に一時変数へ組み立てる (lval)。変数の名前がそのアドレスの定数に
+				// なっていた (`var a:[2]u8 = [n, m]` が n と m のアドレスの表。const のポインタの表の規則が効いていた)
+				return &cexpr{kind: cArray, args: c.args, ty: c.ty, rt: true, pos: c.pos}
+			}
+			v := x.val
 			vals[i] = v
 			if i == 0 {
 				typ = ir.ValType(v)
@@ -1843,7 +1854,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		r = tmp
 
 	case cArray:
-		panic(&diag.Error{Msg: "array literal with untyped struct literals needs a declared type"})
+		if !e.rt {
+			panic(&diag.Error{Msg: "array literal with untyped struct literals needs a declared type"})
+		}
+		r = h.runtimeArray(e)
 
 	case cNull:
 		panic(&diag.Error{Msg: "null needs a context that gives the pointer type (assignment, comparison, argument, or `null as *T`)"})
