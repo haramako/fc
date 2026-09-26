@@ -868,3 +868,184 @@ CLI の emu 用 stdio は既にメモリマップ I/O を経由してホスト�
 既存の [Mesen 自動プレイ試験](../internal/nes/mesen_test.go) にも、Lua がゲームのメモリを読みログを組み立てる例がある。
 これは検討材料であり、上記の PC ログポイント生成が実装済みという意味ではない。
 今回の作業は V3 メモの更新のみ。処理系・ROM・エミュレータ・Lua スクリプトは変更しない。
+
+## 10. 一般的な用途で不便な仕様（2026-09-26 調査）
+
+const の表の slice（`{items: [{1, 4}, …]}`）が通らなかった件と、`var p = &TAB[i]` が const を引き継がなかった件の後に、
+仕様全般を「普通に書いたら困るもの」の観点で調べた。4 つの分野（型・式、宣言・データ、制御構文・関数・モジュール、
+fclib と NES の開発の流れ）で、小さなプログラムを `fcc run`（-O 2 と -O 0）・Mesen で実際に動かして確かめた。
+やることの一覧（優先度つき）は [roadmap.md](roadmap.md) の「v3: 一般的な用途で不便な仕様」。ここには再現と直す方向を書く。
+優先度は 高 / 中 / 低。
+
+### 10.1 コンパイラ・ライブラリのバグ（誤った結果・クラッシュ・壊れた asm）
+
+- **実行時の変数を要素に持つ配列リテラル**（高）: `var a:[2]u8 = [n, m];` が変数の**アドレス**の表になる
+  （`g(3, 4)` が 34 でなく 28。-O 0 も同じ。fc 2 の頃から）。要素が式（`[n, n + 1]`）なら「constant value required」、
+  代入・引数・struct のフィールドの中（`pts = [a, a]`、`sum([a, 1])`、`{items: [a, 2]}`）では
+  `panic: invalid location none of {a}`、グローバル変数・再帰関数の中では ca65 のエラー。const のポインタの表（`[S, T]`）の
+  規則で名前がアドレス定数として通っている。直す方向: 要素が整数型なら名前をアドレスにしない。struct リテラルと同じく
+  実行時に組み立てる（`[n, n + 1, n * 2]` も書けるようにする）
+- **switch の case に文字列**（高）: `case "A":` で `panic: invalid v {$2}`（`fcc check` でも）。C の `case 'A':` の
+  つもりで必ず踏む。case の値が整数の定数かを sema で検査する
+- **範囲外の整数リテラル**（高）: `var y:i8 = 200; var w:i16 = y;` が -O 2 で -56、-O 0 で 200。型に合わせるときに正規化
+  されず、最適化で結果が変わる。範囲外の定数はエラー（下の「暗黙の縮小」と一緒に）
+- **スカラーの const の型の注釈が無視される**（中）: `const B:u8 = 300;` が 2 バイト・300、`const F:u8 = -1;` が i8。
+  `guessType` の結果（大きいほう・符号付き）を使っている。宣言した型にして、範囲外はエラー
+- **struct・配列・ポインタに算術・順序比較**（中）: `a + c`（struct）、`a < c`、`x + x`（配列）、`pa * pc`、`!a`、`if (a)` が
+  多バイト整数として通る。算術・ビット演算・`<` は整数と bool だけ、ポインタは ± 整数だけにする
+- **インライン展開した関数の中のローカル const 表**（高）: `function f(i:u8):u8 { const T = [5, 6, 7]; return T[i]; }` が
+  -O 1 / 2 で ca65 の `Symbol 'T' is undefined`（`.proc` のローカルラベルを展開先から参照する）。モジュールで一意な名前で出す
+- **`var a:[?]u8 = [1, 2, 3];`（ローカル）の領域が確保されない**（高）: -O 2 でほかのローカルを壊し、-O 0 で ca65 の
+  Range error。`@sizeof(a)` は `size is not known`。型を省いた `var a = [1, 2, 3]` は動く。初期値から長さを決める
+- **`const X:[4]u8 = [1, 2];` の宣言の長さが無視される**（中）: `@len(X)` が 2 で、`X[2]` は隣のデータを読む。ローカルの
+  `var` は 0 で埋め、struct のフィールドはエラーで、3 つとも違う。0 で埋める（またはエラー）にそろえる
+- **素のブロック `{ … }` がスコープを作らない**（中）: `{ var x = 2; }` の x が外から見え、`{ var t = 1; } { var t = 2; }` が
+  `t already defined`。`if` / `for` の本体は正しい。`sema/hlc.go` の `*syntax.Block` でスコープを積む
+- **名前付きの文字列定数を slice にすると終端の 0 が入る**（高）: `const NM = "joe";` の `@len(NM)` と `f(NM)`（`[]const u8`）
+  が 4、`f("joe")` は 3。描画ルーチンが 0 まで描く。文字列から作った配列定数には印を持たせ、slice にするとき 0 を除く
+- **ポインタの加減算がバイト単位**（高）: `var p = &w[0]; p += 1;`（`w:[4]u16`）が 1 バイトずれて読み、`o++`（struct の配列）は
+  途中のバイトを指す。`p[1]` は要素の大きさを掛けるので `p[1]` と `*(p + 1)` が違う。仕様（language_reference §6「C と同じ」）
+  とも食い違う。C と同じく要素の大きさを掛ける（1 バイトの要素は今と同じ）。ポインタ − ポインタは要素数の整数
+- **u16 の可変量シフトが -O で通ったり通らなかったり**（中）: `w <<= n` が -O 2 では n の定数伝播で通り、-O 0 では
+  `shift of 2-byte value by non-constant count is not supported`。ランタイムのルーチンで対応するか、判定を -O から独立に
+- **`use` の検索がソースのディレクトリでなく作業ディレクトリ基準**（中）: `fcc run m1/main.fc` で `use a;` が
+  `file a.fc not found`（language_reference §1.4 はソースのディレクトリ）。CLI の `Dir` の既定をソースのディレクトリに
+- **NES の `stdio.print_int16` が壊れている**（高）: `_stdio_print_int8` が文字列を `S+0,x` に置いて `jsr _stdio_print` するが、
+  `print` は fastcall（`FC_FASTCALL_REG`）。数値でなく前の文字列が出る。16 進の表も `…,66,67,67,69,…`（D が C）。
+  NES の `printf` の整数・`exit()`・unittest の出力が全部壊れる。NES の stdio にテストを付ける
+- **`mem.zero` / `mem.compare` / `stdio.ppu_put` の長さ 0 が 256**（中）: `iny; cpy; bne` のループ。計算した長さが 0 のとき
+  RAM を 256 バイト消す（`mem.set` は正しい）。ループの前で 0 を検査する
+- **printf が slice・struct・関数ポインタを黙って捨てる、符号付きを符号なしで出す**（中）: `printf("[", s, "]")` が `[]`、
+  `printf(-5)` が 65531、enum は `argument 1 of print_int16` の分かりにくいエラー。扱えない型は printf の名前でエラー、
+  slice は長さ分、符号付きは符号付きで（`@log` は正しい）
+- **`@(address:)` / fc.toml の `[ram.*]` が fc 自身の領域と重なっても検出しない**（高）: `[ram.oam] start = 0x0200` と
+  `FC_FARCALL` が同じ $0200、`@(address: 0x10)` が `reg` と重なる、miku の `@(address: 0x60)` は FC_SZP の中。OAM を $0200 に
+  置くのは NES の定番。fc の ZP / SRAM と照合してエラー（§3 の「重ならないかを検査する」は未実装）
+- **`@(farcall)` を忘れると切替バンクの関数を普通の `jsr` で呼ぶ**（高）: fc.toml の MMC3 で `[bank.a]` / `[bank.b]`（どちらも
+  $8000）の関数を main から呼ぶと、両方 `jsr` で警告なしに通る。切替バンクがあれば farcall を既定にするか、別モジュールの
+  切替バンクへの直接の呼び出しをエラーに
+- **`@(symbol: "_interrupt")` の NMI のフレームが main の呼び出しと重なる**（中）: symbol だけでは interrupt 扱いにならず、
+  `F_interrupt` が `F_main_*` と同じ場所。`@(interrupt)` を付けても main と NMI の両方から呼ぶ関数は同じフレームを共有する
+  （§6 は演算ルーチンの `reg` だけを記録）。`_interrupt` / `_interrupt_irq` の symbol は interrupt を暗黙に、両方から届く関数を警告
+- **値が飛び飛びの enum の表**（中）: `enum E { A = 0, B = 5, C }` で `[@len(E)]` の表を `T[.C]` で引くと範囲外を読み、
+  -O で値が変わる。定数の添字の範囲を検査する（下の「定数添字の範囲外」と同じ）
+
+### 10.2 整数と式
+
+- **整数の拡張が無い**（高）: 結果の型はオペランドの型だけで決まり、代入先が広くても 8 ビットで折り返す。警告も無い。
+  `var d:u16 = a + b;`（200 + 100）が 44、`score += pts * 10;`（u16 += u8 × 10）、`(x + y) / 2`、`var diff:i16 = x - 5;`。
+  `x * 100` は折り返し、`x * 300` は折り返さない（リテラルの大きさで型が変わる）。直す方向: 代入先・相手の型を式の中へ
+  伝えて広げる（6502 のコストは 16 ビットが要る所だけ）。無理なら、8 ビットの + − * << の結果が 16 ビットの文脈に入るとき警告
+- **符号の混在**（高）: 同じ大きさなら符号付きが勝つので、`x + -1`（x:u8 = 200）が i8 の -57、`s < 200`（s:i8）が偽。
+  u8 の座標に i8 の速度を足すのは定番。混在は 1 段広い型（u8 + i8 → i16）にするか警告。規則をリファレンスに書く
+- **暗黙の縮小が黙って通る**（高）: `var c:u8 = 300;` が 44、引数・戻り値・struct リテラル・配列の要素でも同じ。
+  リファレンス §2 の「サイズが合わない代入はエラー」と食い違う（`const T:[3]u8 = [1, 2, 256]` だけはエラー）。
+  範囲外の定数はエラー、変数の縮小は警告（`hi = addr >> 8` のために暗黙のままでもよい。その場合は文書を直す）
+- **必ず真・偽になる比較**（高）: `for (var i = 0; i < 300; i++)`（i は u8）、`for (var i = 0; i < @len(buf); i++)`（256 要素。
+  OAM の消去の定番）、`i <= 255`、`i >= 0`（u8）が無限ループ、`hp - dmg < 0`（u8）が常に偽。型の範囲から警告する。
+  for の変数の型を上限から推論する案も
+- **文字リテラルが無い**（高）: `'A'` は `"A"`（`[2]u8`）。`var c:u8 = 'A'`、`s[i] == 'l'` が型エラー、`case 'A':` は panic
+  （10.1）。§8（char 型）で 1 文字のリテラルは未決。fc 3 では `'A'` を u8 の定数にして、migrate で fc 2 の `'…'` を `"…"` に
+- **条件式が無い**（中）: `x > 2 ? 10 : 20` が `parse error: unexpected 'Kind(89)'`。`var dir = right ? 1 : -1` が if / else の 4 行
+- **`as bool` と bool への代入が下位バイトだけ**（中）: `var b:bool = w;`（w:u16 = 0x100）が false、`5 as bool` が 5。
+  `as bool` は `!= 0`、2 バイト以上から bool への暗黙の変換はエラーか `!= 0`
+- **定数添字の範囲外を検出しない**（中）: `var a:[3]u8; a[3] = 1;`、`T[7]`（const）が通る（slice の範囲は定数なら検査している）
+- **`if (x = 0)` を警告しない**（低〜中）: `&` と `==` の優先順位の警告と同じ仕組みで、条件の直下の代入を警告
+- **enum を回しにくい**（低）: `d++` が `cannot apply + to enum`（`++` なのに `+` と出る）。`++` / `--` だけ許すか、for で回す手段
+- **const 表の定数添字が定数にならない**（低）: `const HP1 = MONS[1].hp;`、`const K2 = KINDS[2];` が `must be constant`
+
+### 10.3 宣言とデータ
+
+- **グローバル変数の初期値**（中、既知）: `var gx:u8 = 5;` が `can't init global variable`（roadmap の既存項目、
+  language_feature_candidates.md §6）
+- **未知・無効な属性を黙って無視する**（高）: `@(adress: 0x6000)`（綴りの誤り）が普通の RAM 変数になる。`@(volatil)`、
+  `@(inlin)`、var の `@(zeropage)`、const 表の `@(segment:)`、ローカルの `@(address:)` も無視。I/O レジスタの宣言の誤りに気づけない。
+  宣言の種類ごとに受け付けるキーを持ち、それ以外はエラー（fc.toml の未知のキー・セクションも同じ: 10.5）
+- **型名を省いた struct リテラルを引数に書けない**（中）: `add({1, 2}, p)` が `parse error: unexpected '{'`（配列リテラルの要素なら
+  書ける。enum の `.B` は引数で推論できる）。`var s = {1, 2};` も構文エラーで「型が要る」と言わない。モジュール修飾の
+  `geom.Point{x: 1, y: 1}` は `dot: right side must be identifier`。引数の型を文脈にする
+- **名前付きの const を別の const 表の要素にできない**（中）: `const PTS:[?]Point = [ORIGIN, {1, 2}];`（ORIGIN は const の struct）が
+  位置なしの `: error: invalid constant for struct t.Point`、`[ROW, [4, 5, 6]]` も同じ。`var arr:[2]Point = [ORIGIN, …]` はエラーの行が
+  ずれる。定数の名前を値として展開し、診断に位置を付ける
+- **グローバル変数のアドレスを const の表に入れられない**（中）: `const PP:*P = &gp;`、`[&g[0], &gp.y]`、`[h]`（スカラー）が
+  通らない（配列の名前 `[g]` だけ通る）。メニュー項目・セーブ対象の表に要る。リンク時に決まるアドレスとして定数にする
+- **2 次元配列の行が値の文脈でポインタになる**（中）: `var b = a[1];` が `*u8` で、`a` を書き換えると `b` も変わる。
+  `var row = M[1]; @len(row)` がエラー（`@len(M[1])` は 3）。`var f = ANIMS[0].frames;` もポインタ。添字の結果の配列も配列型のままに
+- **ZP の変数**（低〜中）: `@(segment: "ZEROPAGE")` はほかのモジュールから `.import`（`.importzp` でない）で絶対番地の
+  アクセスになり、ZP のポインタも毎回 `reg` に写して `(reg),y`。var の `@(zeropage)` と直接の `(ptr),y`
+- **`@(address:)` に定数式を書けない**（低）: `@(address: BASE + 0x10)` が `must be a literal or identifier`
+- **文字列のエスケープと連結**（低）: `\t` / `\0` は `\` が残り、`\"` は 2 バイト、`"abc" "def"` は構文エラー。`\\` が効くことは
+  リファレンスに無い
+- **soa に `@len` が使えない**（低）
+- **型の表示**（低）: `[?]T` が `[]T`（slice と同じ）と出る、`*const u8` が `*u8` と出る、配列のエラーでどの要素が悪いか出ない
+  （`const T:[3]u8 = [1, 200, -1]` が `cannot assign [3]i8 to [3]u8`）
+
+### 10.4 制御構文・関数・モジュール
+
+- **do-while が無い**（中〜高、既知）: `do` が識別子として読まれ、エラーが本体の中身で変わる（`unexpected ++`、`unexpected ;`、
+  `unexpected while`）。最低 1 回回るループ（256 回回す `i` など）は 6502 で最も自然。fc 3 で `do { } while (c);`、
+  少なくとも専用のエラー（loop + break を案内）
+- **C の書き方で空の case を並べると何もしない**（中〜高）: `case 2: case 3: r = 7;` で x == 2 のとき何もしない（v2 の仕様）。
+  fc 3 には `case 2, 3:` と `fallthrough;` があるので、後ろに case が続く空の case を警告（またはエラー）にして案内する
+- **return 忘れの検査が狭い**（中）: `while (true) { … return … }`（`isTrueLiteral` が `true` を認めない）、全メンバーの
+  enum の switch、`@if (…) { return 1; } else { return 2; }` が `missing return`。`terminates()` に足す
+- **初期化していないローカル変数**（中）: 静的フレームがほかの関数と重なるので、前の値が見えて -O で結果が変わる
+  （`var y:u8; y += 1;` を 3 回呼んで 111 / 123）。SSA で「書く前に読む」を警告する
+- **ローカル変数のアドレス・slice を返しても警告しない**（中）: `function f():[]u8 { var a:[4]u8; …; return a; }` が通り、
+  次の呼び出しで上書きされる。警告する
+- **C 風の前方宣言**（中）: `function helper(x:u8):u8;` の後に本体を書くと `helper already defined`、本体が無いと ld65 の
+  `Unresolved external`（fc のソースの位置が出ない）。「宣言の順は自由」と案内し、fc 3 では本体の無い関数に `@(symbol:)` などを必須に
+- **for-each と case の範囲が無い**（中）: `for (x in A)`、`case 0..3:`（`Kind(90)` のエラー）。for-each は上の「必ず真の比較」の
+  罠も避けられる。低: for の初期化・step のカンマ、空の switch、for だけ本体の `{}` が必須
+- **構文エラーに内部のトークン名**（低、安い）: `Kind(89)`（`?`）、`Kind(90)`（`..`）。`syntax/token.go` の `kindNames` に
+  `Question` / `DotDot` / `At*` を足す。`var z = y++;` には「++ は文としてだけ」と案内
+- **`@asm` から変数を扱いにくい**（低〜中）: ローカル変数・引数を参照する書き方が無く、asm の誤りは ca65 のエラーが
+  `.fc-build\_x.s` の行で出る。グローバルは `@(symbol:)` を案内する
+- **モジュール**（低）: サブディレクトリのモジュール（`use sub.util;`）と検索パスの設定が無い。glob で取り込んだ先の private な
+  名前が `priv not found (did you mean print?)`（選択的なら `a.priv is private`）
+- **エラーの文言**（低）: fc 3 で fc 2 の書き方を案内する（`options(farcall: true)`、`use bitcast` など sema に 12 か所ほど）、
+  `elseif` が `unexpected '}'`、デフォルト引数があっても `expects 3 argument(s)`、ラムダの外側のローカル変数が
+  `total not found`、`&f`（関数）が `not a variable`、`@(inline)` の再帰のエラーが -O 0 で出ない
+- **emu のソフトウェアスタックのあふれ**（低）: 再帰 25 段ほどで Go の panic とスタックトレースがそのまま出る
+
+### 10.5 fclib と NES の開発の流れ
+
+- **最小の NES プログラムに割り込みの定型文が要る**（高）: `use nes` と `main` だけで ld65 の `Unresolved external '_interrupt'` /
+  `'_interrupt_irq'`（share/runtime.asm が import）。`use stdio` して自分の NMI を書くと `Duplicate external identifier`
+  （stdio.asm が定義）で、stdio のデバッグ表示と自分の NMI を両立できない。名前の決まりは文書に無い。未定義なら空の
+  ハンドラを生成し、stdio の NMI は差し替えられる形に
+- **NES の stdio で hello world ができない**（中）: `init()` が NMI を有効にしないので `wait_vsync()` が戻らず、描画は `exit()` まで
+  OFF、フォントの CHR が無い。`exit()` が PPU_CTRL1 の bit 6 を立てる。init で NMI と描画を有効に、ASCII フォントを同梱
+- **PPU / OAM / vblank の部品が無い**（中）: castle と miku が ppu.fc / ppu.asm（230〜290 行: NMI、書き込みキュー、スプライトの
+  バッファ）を自前で持つ。RAM の配置（SRAM $0200-$06FF）で空いているのは $0700 だけで、OAM の置き場所が文書に無い。
+  `nes/ppu.fc`（OAM のバッファと DMA、vblank のキュー、パレット・ネームテーブルの転送）
+- **マッパー周りの定型文**（中）: fc.toml で mapper を指定しても、`@include("farcall_mmc3.asm")`、
+  `var pbank_bak:[2]u8 @(symbol: "_mmc3_pbank_bak")`、バンクの初期化を利用者が全部書く（欠けると ld65 の生のエラー）。
+  fclib に mmc3 / mmc1 / uxrom のモジュールが無い。MMC3 で start / runtime_init / interrupt が $C000 台に置かれる
+  （電源投入時の状態が不定なので $E000-$FFFF に置き、reset で $8000 を初期化するのが定石）。farcall_mmc1 / mmc3.asm が `cli` を
+  無条件に実行する。プロファイルごとにトランポリン・状態変数・reset の初期化を自動で入れる
+- **fc.toml の `[target]` のキーが足りない、書き間違いを検出しない**（中）: ミラーリングは iNES ヘッダで常に 1、バッテリーの
+  フラグが無い、`chr = "0"`（CHR-RAM）が `not a size`。`[taget]` や未知のキーは黙って無視（`[bank.*]` はエラー）。エラーの
+  先頭が `: error:` で位置が無い
+- **ターゲットを fc.toml から決めない**（中）: `[target] mapper = "NROM"` があっても既定は emu で、`fcc build main.fc` が
+  `file nes.fc not found`（`-t nes` の案内が無い）。`fcc run -t nes` は a.nes を作って黙って終わる。VS Code 拡張の既定の
+  ターゲットが 2 つで食い違う（tools/vscode-fc は nes、editors/vscode は emu）
+- **fclib の API が slice を受けない**（低〜中）: `print(s)`（`[]const u8`）がエラーで、文言は `cannot assign []u8 to *const u8`
+  （const が落ちる）。mem の slice 版が無く、set / zero の長さは u8、copy は u16
+- **math**（低）: `sign(i8):u8` が -1 を 255 で返す、`atan(y, x)` は |x|, |y| ≤ 15 だけ正しい（範囲が文書に無い）、i16 の abs が無い、
+  `rand` のシードを設定できない、10 進・BCD のスコア表示の部品が無い（castle が手書き）
+- **lzw / inflate と ZP の配置の文書**（低〜中）: lzw.fc が ZP の $7C-$7E を固定番地で使う（「$00-$7F 禁止」の規則に反し、
+  FC_ZEROPAGE が後ろにずれると衝突しうる）。language_reference §4.5 の ZP の配置（$70-$7F が ZEROPAGE）が実際と違う。
+  inflate の `unpack` が public でなく使えないのにリファレンス §8 に載っている
+- **nes.fc / pad.fc が最小限**（低）: APU のレジスタが無い、ビットの定数が無い、名前が PPU_CTRL1/2 の古い流儀、pad は
+  コントローラ 1 だけ
+- **castle / miku の「passes read-only data」の警告**（参考）: castle 102 件、miku 7 件は全部ゲーム側の関数（`add`、
+  `put_in_lock`、`put_text_in_lock` など）の引数。fclib の入力は `*const u8` になっている
+
+### 10.6 文書が実装より古い
+
+- language_reference §2.1「struct の比較 `==` はない」→ struct・配列の `==` は中身の比較として動く
+- §6「添字は 1 バイト（2 バイトは不可）」→ u16 の添字は動く
+- §2「サイズが合わない代入はエラー」→ 暗黙に縮小する（10.2）
+- §6 のポインタ演算「C と同じ」→ バイト単位（10.1）
+- §4.5 の ZP の配置（10.5）
