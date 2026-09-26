@@ -1081,7 +1081,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 		if h.prog.storageAliases[cv.val] != nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("const %s cannot read a storage alias at compile time", name)})
 		}
-		v := h.fitArrayLiteral(cv.val, declType)
+		v := h.fitArrayLiteral(h.padArrayLiteral(name, cv.val, declType), declType)
 		if v.Kind == ir.KindArrayLiteral && declType != nil && declType.Kind == types.Array && declType.Base.Kind == types.Pointer {
 			// const PS:[N]*T = ["...", other_const, ...]: ポインタの配列。要素の文字列 / 配列リテラルは無名の配列定数に
 			// 切り出してそのアドレス、配列定数の名前 (address: で asm のシンボルに束縛したものも) はそのアドレスにする

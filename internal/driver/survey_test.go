@@ -111,3 +111,31 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestConstArrayDeclaredLength: `const X:[4]u8 = [1, 2];` は宣言の長さまで 0 で埋める (ローカルの var・C と同じ。長さが
+// 無視されて X[2] が隣のデータを読んでいた)。struct・文字列・u16 は 0、ポインタは null。要素が多すぎればエラー。
+func TestConstArrayDeclaredLength(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+struct P { x:u8; y:u8; }
+const X:[4]u8 = [1, 2];
+const Y:[2]u8 = [7, 8];
+const PS:[3]P = [{1, 2}];
+const S:[6]u8 = "abc";
+const Q:[3]*const u8 = ["hi"];
+const W:[3]u16 = [1000];
+function main():void
+{
+	printf(@len(X), X[2], X[3], Y[0], " ", PS[0].y, PS[2].y, " ", S[4], @len(S), " ", Q[0][1], Q[1] == null, " ", W[0], " ", W[2], "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "4007 20 06 1051 1000 0\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	_, err = buildFiles(t, map[string]string{"t.fc": "#fc 3\nconst Z:[2]u8 = [1, 2, 3];\nfunction main():void { }\n"})
+	if err == nil || !strings.Contains(err.Error(), "3 elements given for [2]u8") {
+		t.Errorf("多すぎる要素: %v", err)
+	}
+}

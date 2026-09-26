@@ -303,3 +303,33 @@ func (h *Hlc) fieldViaPointer(ptr ir.Operand, st *types.Type, name string) ir.Op
 	h.emit(&ir.Op{Code: ir.OpAdd, Dst: tmp, Src: []ir.Operand{ptr, h.IntValue(f.Offset)}})
 	return tmp
 }
+
+// padArrayLiteral は `const X:[4]u8 = [1, 2];` の配列リテラルを宣言の長さまで 0 で埋める (ローカルの var と C と同じ。
+// 宣言の長さが無視されて 2 要素の表になり、X[2] が隣のデータを読んでいた)。要素が多すぎればエラー。
+func (h *Hlc) padArrayLiteral(name string, v *ir.Value, typ *types.Type) *ir.Value {
+	if typ == nil || typ.Kind != types.Array || typ.Length < 0 || v.Kind != ir.KindArrayLiteral || ir.ValType(v).Kind != types.Array {
+		return v
+	}
+	n := len(v.Elems)
+	if n > typ.Length {
+		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: %d elements given for %s", name, n, typ)})
+	}
+	if n == typ.Length {
+		return v
+	}
+	base := ir.ValType(v).Base
+	if n == 0 || base.Kind == types.Macro {
+		base = typ.Base
+	}
+	zero := h.zeroLiteral(base)
+	if typ.Base.Kind == types.Pointer {
+		zero = ir.NewIntLiteral("", typ.Base, 0) // ポインタの表は null で埋める (pointerElems が 0 のまま置く)
+	}
+	elems := append([]ir.Operand{}, v.Elems...)
+	for len(elems) < typ.Length {
+		elems = append(elems, zero)
+	}
+	r := ir.NewArrayLiteral(v.Name, h.prog.Types.ArrayOf(base, len(elems)), elems)
+	r.IsString, r.Str = v.IsString, v.Str
+	return r
+}
