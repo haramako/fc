@@ -83,45 +83,6 @@ func sameBytes(t *testing.T, gotPath, wantPath string) {
 	}
 }
 
-// TestMigrateExamples: castle / miku の fc 2 のソース (testdata/migrate/v2/。examples/ は fc 3 に migrate 済み) を migrate して
-// ビルドした ROM が、fc 2 の ROM の golden と一致する。資源 (画像・音) は examples/ の木を使い、.fc だけ fc 2 の版で上書きする。
-func TestMigrateExamples(t *testing.T) {
-	t.Parallel()
-	home := migratedHome(t)
-	for _, ex := range []struct{ name, dir, main string }{
-		{"miku", "", "miku.fc"},
-		{"castle", "src", "main.fc"},
-	} {
-		t.Run(ex.name, func(t *testing.T) {
-			t.Parallel()
-			root := filepath.Join(t.TempDir(), ex.name)
-			copyDir(t, filepath.Join(absRepoRoot, "examples", ex.name), root)
-			copyDir(t, filepath.Join(absRepoRoot, "testdata", "migrate", "v2", ex.name), root) // .fc を fc 2 の版に
-			if migrateTree(t, root) == 0 {
-				t.Fatal(".fc が無い")
-			}
-			src := filepath.Join(root, ex.dir)
-			rom := filepath.Join(root, ex.name+".nes")
-			code, err := NewCompiler(home).Build(ex.main, &BuildOptions{Target: "nes", Dir: src, Out: rom, BuildDir: filepath.Join(root, "build")})
-			if err != nil || code != 0 {
-				t.Fatalf("ビルド失敗: %v (code %d)", err, code)
-			}
-			golden := filepath.Join(absGoldenRoot, "examples", ex.name+".nes")
-			if *update { // fclib を変えたとき (fc 2 のソースを migrate したビルドの ROM を golden にする)
-				b, err := os.ReadFile(rom)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(golden, b, 0o666); err != nil {
-					t.Fatal(err)
-				}
-				return
-			}
-			sameBytes(t, rom, golden)
-		})
-	}
-}
-
 // TestMigrateGoldenPrograms: test/ の golden のプログラム (testdata/golden/bin) を migrate してビルドしたバイナリが、
 // fc 2 のバイナリの golden と一致する。
 func TestMigrateGoldenPrograms(t *testing.T) {

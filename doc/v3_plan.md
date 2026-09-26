@@ -597,9 +597,10 @@ V3 で省略形を true として正規化する際、false の意味・可否�
   規則（`migrate.Rules`）がトークンの位置に対する置き換え（`Edit`）を足す。構文木を印字し直さないので、コメント・空行・
   書式は残る。最後にプラグマを `#fc 3` にし、fc 3 として解析し直せなければエラー（規則の不具合）。fc 3 のソースは
   そのまま（何度かけても同じ）
-- **文法を変えるときは、migrate の規則とテストを一緒に足す**。`internal/driver/migrate_test.go` が castle / miku /
-  bench / golden のテストプログラムと fclib を migrate して fc 3 としてビルドし、fc 2 のままのビルドと ROM・バイナリが
-  バイト単位で一致することを確かめる（`TestMigrateExamples` / `TestMigrateGoldenPrograms` / `TestMigrateBench`）。
+- **文法を変えるときは、migrate の規則とテストを一緒に足す**。`internal/driver/migrate_test.go` が bench / golden のテスト
+  プログラムと fclib を migrate して fc 3 としてビルドし、fc 2 のままのビルドと ROM・バイナリがバイト単位で一致することを
+  確かめる（`TestMigrateGoldenPrograms` / `TestMigrateBench`）。castle / miku は実プロジェクトも fc 3 になったので、fc 2 の版の
+  ソースと `TestMigrateExamples` は 2026-09-27 に削除した。
   意味を変える変更（`int` の幅など）でも、migrate した結果が同じコードになることを要求する
 - 起点は main の 3625001（fc 2 の最後）。この時点の fc 2 のソースは全部 migrate で fc 3 にできることを保つ
 
