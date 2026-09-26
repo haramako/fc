@@ -23,12 +23,39 @@ import (
 
 // Format は fc ソースを正規形に整形する。構文エラーは *Error で返す。
 func Format(src []byte, filename string) ([]byte, error) {
-	src = bytes.ReplaceAll(src, []byte("\r\n"), []byte("\n"))
+	src = normalizeNewlines(src)
 	f, err := Parse(src, filename)
 	if err != nil {
 		return nil, err
 	}
 	return Print(f), nil
+}
+
+// normalizeNewlines は改行の直前の CR をすべて落とす (CRLF → LF)。`\r\n` を 1 回置き換えるだけだと
+// `\r\r\n` が `\r\n` として残り、整形が冪等でなくなる (fuzz で発覚)。
+func normalizeNewlines(src []byte) []byte {
+	if !bytes.Contains(src, []byte("\r\n")) {
+		return src
+	}
+	out := make([]byte, 0, len(src))
+	crs := 0 // 保留中の CR の数 (直後が LF なら捨てる)
+	for _, c := range src {
+		switch c {
+		case '\r':
+			crs++
+			continue
+		case '\n':
+			crs = 0
+		}
+		for ; crs > 0; crs-- {
+			out = append(out, '\r')
+		}
+		out = append(out, c)
+	}
+	for ; crs > 0; crs-- {
+		out = append(out, '\r')
+	}
+	return out
 }
 
 // Print は構文木を整形して出力する。f.Comments の位置を使ってコメントを差し込む。
