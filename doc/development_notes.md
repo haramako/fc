@@ -199,6 +199,9 @@ go test ./...                                    # 全部 (golden + examples + N
   `ArrayType.Pos` が `IsPrefix` と自分とで `Elem.Pos()` を 2 回ずつ呼び、段数の指数時間（`*` 25 個で 2.5 秒）。
   続けて FuzzFormat が 2 時間 34 分で文字列の中の `\r\r\n` の整形が冪等でないのを発見（Format の CRLF → LF が 1 回の
   置き換えで `\r\n` が残る。改行の直前の CR をまとめて落とす `normalizeNewlines` に）。
+  続けて 5 時間は失敗なし（FuzzCheck 6240 万回、FuzzFormat 1.6 億回）。その次に FuzzFormat が 3 時間 12 分で `a. .B`
+  （`.` の右辺が型名を省いた enum）が `a..B` に整形されて `..` になるのを発見（printer の `mergesWithPrev` に `..` が
+  抜けていた。字句解析の 2 文字の記号と揃える）。
   注意: `go test -fuzz` を kill してもテストバイナリ（コーディネータとワーカー）が残って回り続ける。止めるときは
   `setsid` で起動してプロセスグループごと kill する
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
