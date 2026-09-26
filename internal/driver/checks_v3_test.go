@@ -3,6 +3,7 @@ package driver
 // doc/roadmap.md の v3 で「する」にした演算の制限と警告 (2026-09-26〜27 決定) のテスト。
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -118,5 +119,43 @@ function main():void { printf(f(true), "\n"); exit(0); }
 	}
 	if strings.Join(got, ",") != "y,a" {
 		t.Errorf("警告した変数: %v (want y,a)", got)
+	}
+}
+
+// TestAlwaysSameComparison: 符号なしの値と範囲外の定数の比較は、型の範囲だけで結果が決まるので警告する (`i < 256` の u8 の
+// 無限ループ、`hp - dmg < 0` は常に偽)。範囲内の比較、符号付きの値、負の定数 (`x == -1` は今の規則では x == 255) は警告しない。
+func TestAlwaysSameComparison(t *testing.T) {
+	t.Parallel()
+	_, res, err := buildFilesDefs(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+var buf:[256]u8;
+var hp:u8; var dmg:u8; var w:u16; var s:i8; var x:u8;
+function main():void
+{
+	for (var i = 0; i < 300; i++) { break; }
+	for (var j = 0; j < @len(buf); j++) { break; }
+	for (var k:u8 = 0; k <= 255; k++) { break; }
+	if (hp - dmg < 0) { }
+	if (x == 300) { }
+	if (w < 65536) { }
+	if (x < 200) { }
+	if (x >= 1) { }
+	if (s < 100) { }
+	if (w < 300) { }
+	if (x == -1) { }
+	exit(0);
+}
+`}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []int
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Msg, "this comparison always has the same result") {
+			lines = append(lines, w.Pos.Line)
+		}
+	}
+	if fmt.Sprint(lines) != "[7 8 9 10 11 12]" {
+		t.Errorf("警告した行: %v", lines)
 	}
 }

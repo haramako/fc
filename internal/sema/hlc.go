@@ -1998,6 +1998,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			h.warnConstCompare(e.op, left, right)
 			if e.op == opLt {
 				checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right)) // == / != は struct・配列でもよい (バイトの比較)
 			}

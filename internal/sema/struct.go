@@ -509,3 +509,57 @@ func (h *Hlc) boolEq(e *cexpr, left, right ir.Operand) (ir.Operand, bool) {
 	h.emit(&ir.Op{Code: ir.OpEq, Dst: t, Src: []ir.Operand{isZero(left), isZero(right)}})
 	return t, true
 }
+
+// warnConstCompare は、符号なしの値と範囲外の定数の比較のように、型の範囲だけで結果が決まる比較を警告する
+// (`for (var i = 0; i < 256; i++)` の i は u8 で無限ループ、`hp - dmg < 0` は常に偽)。`<=` / `>=` / `!=` / `>` は `<` / `==` と
+// `!` に書き換えた後なので、文言は「いつも同じ結果」にする。符号付きの値はリテラルの型の方針 (保留) と一緒に決める。
+func (h *Hlc) warnConstCompare(op cop, left, right ir.Operand) {
+	lt, rt := ir.ValType(left), ir.ValType(right)
+	lk, lok := ir.ValIntLiteral(left)
+	rk, rok := ir.ValIntLiteral(right)
+	if lok == rok {
+		return // 定数同士・変数同士
+	}
+	vt, k := rt, lk
+	if rok {
+		vt, k = lt, rk
+	}
+	if vt.Kind != types.Int || vt.Signed || vt.Enum != nil || vt.Size < 1 || vt.Size > 2 || k < 0 {
+		return // 負の定数との比較 (`x == -1` は今の規則では x == 255 として働く) は符号の混在の方針 (保留) と一緒に
+	}
+	max := 1<<(8*vt.Size) - 1
+	var why, hint string
+	outOfRange := func(msg string) {
+		why = msg
+		if vt.Size == 1 {
+			hint = " (use a wider type, e.g. `var i:u16`)"
+		}
+	}
+	negative := func() {
+		why = fmt.Sprintf("%s values are never negative", vt)
+		hint = " (for `a - b < 0` compare `a < b`)"
+	}
+	switch op {
+	case opEq:
+		if k > max {
+			outOfRange(fmt.Sprintf("%s values are 0..%d, so they never equal %d", vt, max, k))
+		}
+	case opLt:
+		if rok { // v < k
+			switch {
+			case k > max:
+				outOfRange(fmt.Sprintf("%s values are 0..%d, so they are always less than %d", vt, max, k))
+			case k == 0:
+				negative()
+			}
+		} else { // k < v
+			switch {
+			case k >= max:
+				outOfRange(fmt.Sprintf("%s values are 0..%d, so they are never greater than %d", vt, max, k))
+			}
+		}
+	}
+	if why != "" {
+		h.warn("this comparison always has the same result: %s%s", why, hint)
+	}
+}
