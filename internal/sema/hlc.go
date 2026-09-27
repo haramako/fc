@@ -909,10 +909,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				}
 				if k, ok := ir.ValIntLiteral(cv); ok {
 					if ct := ir.ValType(cond); ct.Kind == types.Int && ct.Enum == nil && ct.Size <= 2 {
-						// タグの大きさのビットに収まらない値は決して一致しないのでエラー (u8 の `case 300:` が黙って一致しなかった。
-						// survey 2026-09-27)。符号だけ違う値 (u8 の `case -1:` は 255 と一致) は比較の規則に合わせるか未判断
-						// (castle に 4 か所。doc/v3_plan.md §10.7) なので今のまま
-						if k < -(1<<(8*ct.Size-1)) || k >= 1<<(8*ct.Size) {
+						// case の値も比較と同じく、タグの型に収まらなければエラー (u8 の `case 300:` が黙って一度も一致せず、
+						// `case -1:` が 255 に一致していた。survey 2026-09-27、`case -1:` のエラーは 2026-09-27 決定)
+						if lo, hi := intRange(ct); k < lo || k > hi {
 							panic(&diag.Error{Msg: fmt.Sprintf("case value %d does not fit in %s, the type of the switch value", k, ct), Pos: syntax.At(h.module.Path, v.Pos())})
 						}
 					}

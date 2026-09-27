@@ -149,7 +149,7 @@ public function start():void
 			do_coin();
 		case 6:
 			ending.start(0);
-		case -1:
+		case NONE:
 			break loop_1;
 		}
 	}
@@ -263,7 +263,7 @@ function do_flag_select():void
 		case 9:
 			savedata.clear_debug();
 			savedata.save();
-		case -1:
+		case NONE:
 			break loop_2;
 		}
 	}
@@ -327,7 +327,7 @@ function do_debug_setting():void
 			if (debug_on(DEBUG_FLAG_NO_BGM)) {
 				sound.stop_bgm();
 			}
-		case -1:
+		case NONE:
 			break loop_3;
 		}
 	}
@@ -361,7 +361,7 @@ function do_coin():void
 			if (my.coin_num == 0) {
 				my.items[ITEM_ID_COIN] = 0;
 			}
-		case -1:
+		case NONE:
 			break loop_4;
 		}
 	}
