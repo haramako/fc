@@ -289,7 +289,9 @@ PRG と CHR は空間・切替単位が異なるので、同一の番号表と�
 main 側の変更）。ca65 が読んだ全ファイル（`--create-dep`: `.s` 本体・`.include`・`.incbin`）の内容のハッシュと ca65・引数を
 `<obj>.stamp` に記録し、同じなら ca65 を起動しない。生成する `.s` / `.inc` / `_frames.inc` / `base.s` / `ld65.cfg` は中身が
 同じなら書き直さない（Windows の Defender の検査を減らす）。配布版の fcc は同梱の fclib / share を実行のたびに別の一時
-ディレクトリへ展開するので、記録では FC_HOME の場所を `$FCHOME` に置き換える。castle（Linux）: 変更なしの再ビルドで
+ディレクトリへ展開するので、記録では FC_HOME の場所を `$FCHOME` に置き換える（2026-09-28 からはユーザーのキャッシュの
+`home-<中身のハッシュ>` に展開して使い回す。-g の `.dbg file` のパスが毎回変わって再アセンブルしていたため。development_notes.md
+「castle のビルドの時間」）。castle（Linux）: 変更なしの再ビルドで
 ca65 の起動 48 → 0 回、0.55 → 0.46 秒。Windows ではプロセスの起動と Defender の分がもっと縮む見込み（未計測）。
 `FC_NO_ASM_CACHE=1` で使わない。既知の穴: `-I` の探索で、前回のファイルより前の探索先に同名のファイルを新しく置いても
 気づかない。fc の解析・コード生成の再利用（段階 3）は、モジュールをまたぐ最適化（インライン展開・直接化・静的フレームの
@@ -1220,7 +1222,7 @@ fclib と NES の開発の流れ）で、小さなプログラムを `fcc run`�
   - textmap の結果を const・表の要素に書けない、表に無い文字を黙って足す（.po を渡したときは警告する。2026-09-28）
   - 使わなくても乗算表などのランタイム 1.5KB が入る
   - fc.toml の `[target]` があると `@(mapper:)` を黙って無視
-  - `-D` の値を宣言の型で検査しない、fcc watch が fc.toml・incbin を見ない・`%TEMP%c-home-*` が残る
+  - `-D` の値を宣言の型で検査しない、fcc watch が fc.toml・incbin を見ない・`%TEMP%\fc-home-*` が残る（2026-09-28 から同梱の fclib はキャッシュに展開する）
   - emu の実行時の異常（null の関数ポインタの呼び出し）が Go の panic のまま
 - 文書: language_reference が fc 2 の書き方のまま（§2 の型の表が途中の段落で崩れている、節の順、§7 の組み込みの名前）。
   VS Code 拡張が fc 2 のまま。NES の最小のサンプルと fclib の API 一覧が無い。examples/README のテストのパス・コマンド表

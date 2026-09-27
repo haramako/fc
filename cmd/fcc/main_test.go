@@ -211,6 +211,7 @@ func TestCLIHomeTempFailure(t *testing.T) {
 	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
 		t.Setenv(name, blocked)
 	}
+	t.Setenv("FC_CACHE_DIR", blocked) // 同梱の fclib のキャッシュも作れないとき
 	code, out, stderr := runCLI(t, "build", "unused.fc")
 	if code != 1 || out != "" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, stderr)

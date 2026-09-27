@@ -413,6 +413,15 @@ go test ./...                                    # 全部 (golden + examples + N
 - **ca65 のオブジェクトの再利用**（2026-09-25、`internal/driver/asmcache.go`）: ビルドディレクトリの `<obj>.stamp` に
   ca65 が読んだ全ファイルの内容のハッシュを記録し、同じなら ca65 を起動しない。アセンブルの結果が怪しいときは
   `FC_NO_ASM_CACHE=1` で切るか、ビルドディレクトリ（`.fc-build`）を消す
+- **castle のビルドの時間**（2026-09-28、何も変えない再ビルド、Windows）: fcc が 4.1 → 2.2 秒。内訳は sema 0.15・最適化と
+  割付 0.6・コード生成 0.3・ld65 0.9（`--dbgfile` 無しなら 0.37）・残り 0.1 秒。直したのは 3 つ:
+  (1) ld65 の dbgfile（13MB、21 万行の大半は line / span）の全行を正規表現で読み、しかも `@(address:)` の検査と -g のラベルで
+  2 回読んでいた（1.4 → 0.05 秒。`ParseDbgFile` は seg / sym だけ読む、読むのは 1 回）、(2) ca65 の依存の出力は `.include` の
+  たびに同じファイルを並べ、変えていないビルドでも 6,716 回ハッシュしていた（記録は 1 回ずつ、ハッシュはビルドの中で使い回す）、
+  (3) 配布版の fcc が同梱の fclib を実行ごとに別の一時ディレクトリへ展開し、-g の `.dbg file` のパスが毎回変わって 45 個中 18 個の
+  モジュールを毎回アセンブルしていた（ユーザーのキャッシュ `FC_CACHE_DIR`、無ければ `os.UserCacheDir()/fc` の
+  `home-<中身のハッシュ>` に展開して使い回す。`internal/driver/home.go`）。(1)〜(3) で ROM は変わらない。
+  段ごとの時間を測るときは、`BuildContext` の段の間に時刻を出す一時的な変更を入れて測った（常設の仕組みは無い）
 - **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
   （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa mul indexoff induction unroll devirt autoinline sink fuse coalesce chain narrow scale commute carry split rotate dup
   inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が

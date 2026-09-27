@@ -12,6 +12,10 @@ package driver
 // 展開するので、そのままでは引数も依存ファイルのパスも毎回変わる)。既知の穴:
 // -I の探索で、前回見つかったファイルより前の探索先に同名のファイルを新しく置いても気づかない (前回のファイルが
 // 変わっていなければ再利用する)。FC_NO_ASM_CACHE=1 で使わない。
+//
+// ca65 の依存の出力は .include のたびに同じファイルを並べる (castle では 48 個の記録に合わせて 6,716 行、実際のファイルは
+// 124 個)。記録には 1 回ずつ書き、1 回のビルドの中ではファイルのハッシュを使い回す (Compiler.hashes)。以前は変わって
+// いないビルドでも毎回 6,716 回ハッシュしていて、castle の assemble の段に約 0.7 秒かかっていた (2026-09-28)。
 
 import (
 	"bytes"
@@ -23,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // assembleCached は src をアセンブルする。前回のアセンブルから入力が変わっていなければ ca65 を起動しない。
@@ -86,12 +91,17 @@ func (c *Compiler) makeStamp(args, deps []string) (string, error) {
 	}
 	fmt.Fprintf(&b, "tool %s\n", tool)
 	fmt.Fprintf(&b, "args %q\n", c.portable(strings.Join(args, "\x00")))
+	seen := map[string]bool{}
 	for _, d := range deps {
 		abs, err := filepath.Abs(d)
 		if err != nil {
 			return "", err
 		}
-		h, err := fileHash(abs)
+		if seen[abs] {
+			continue // .include のたびに同じファイルが並ぶ
+		}
+		seen[abs] = true
+		h, err := c.hashes.hash(abs)
 		if err != nil {
 			return "", err
 		}
@@ -122,7 +132,7 @@ func (c *Compiler) stampValid(stamp, obj string, args []string) bool {
 		if _, err := fmt.Sscanf(l, "file %s %q", &h, &q); err != nil {
 			return false
 		}
-		got, err := fileHash(c.restore(q))
+		got, err := c.hashes.hash(c.restore(q))
 		if err != nil || got != h {
 			return false
 		}
@@ -143,6 +153,35 @@ func toolID() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%q %d %d", p, st.Size(), st.ModTime().UnixNano()), nil
+}
+
+// hashMemo は 1 回のビルドの中のファイルのハッシュ (BuildContext が作り直す。ビルドの途中で .s / .inc / .incbin の
+// ファイルは書き換えない: .s / .inc は assemble の前に全部書き終えている)。nil なら使い回さない。
+type hashMemo struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+func newHashMemo() *hashMemo { return &hashMemo{m: map[string]string{}} }
+
+func (hm *hashMemo) hash(path string) (string, error) {
+	if hm == nil {
+		return fileHash(path)
+	}
+	hm.mu.Lock()
+	h, ok := hm.m[path]
+	hm.mu.Unlock()
+	if ok {
+		return h, nil
+	}
+	h, err := fileHash(path)
+	if err != nil {
+		return "", err
+	}
+	hm.mu.Lock()
+	hm.m[path] = h
+	hm.mu.Unlock()
+	return h, nil
 }
 
 func fileHash(path string) (string, error) {

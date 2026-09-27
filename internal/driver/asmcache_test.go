@@ -55,6 +55,30 @@ function main():void
 	}
 }
 
+// TestAsmStampDedup: ca65 の依存の出力は .include のたびに同じファイルを並べるが、記録には 1 回ずつ書く
+// (castle では 6,716 行が 1,516 行になり、変えていないビルドの assemble の段が約 0.7 秒短くなった)。
+func TestAsmStampDedup(t *testing.T) {
+	dir := t.TempDir()
+	a, b := filepath.Join(dir, "a.inc"), filepath.Join(dir, "b.inc")
+	for _, p := range []string{a, b} {
+		if err := os.WriteFile(p, []byte(p), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := NewCompiler(absRepoRoot)
+	c.hashes = newHashMemo()
+	s, err := c.makeStamp([]string{"-o", "x.o"}, []string{a, b, a, a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(s, "\nfile "); n != 2 {
+		t.Errorf("file の行が %d 個 (2 のはず):\n%s", n, s)
+	}
+	if len(c.hashes.m) != 2 {
+		t.Errorf("ハッシュを使い回していない: %v", c.hashes.m)
+	}
+}
+
 // TestReadDepFile: ca65 の --create-dep の出力の読み方 (空白は `\ `、Windows のドライブ名の ':' は区切りでない)。
 func TestReadDepFile(t *testing.T) {
 	cases := []struct {
