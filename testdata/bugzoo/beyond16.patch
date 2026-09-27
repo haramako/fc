@@ -1,0 +1,15 @@
+# 16 ビットを超える定数との比較を畳まない (cf63a3c。切り詰めて比べる)
+diff --git a/internal/sema/literal.go b/internal/sema/literal.go
+index 4c0b607..c0d4c41 100644
+--- a/internal/sema/literal.go
++++ b/internal/sema/literal.go
+@@ -83,6 +83,9 @@ func intRange(t *types.Type) (lo, hi int) {
+ // foldBeyond16 は、16 ビットに収まらない定数と整数の値の比較を畳む (結果は値によらず決まる)。広げる先の型が無く、
+ // 定数を 16 ビットに切り詰めて比べていた (`w == 65537` (w = 1) が真。警告は「決して等しくない」と出ていた)。
+ func (h *Hlc) foldBeyond16(op cop, left, right ir.Operand) (int, bool) {
++	if true {
++		return 0, false
++	}
+ 	beyond := func(v ir.Operand) (int, bool) {
+ 		k, ok := ir.ValIntLiteral(v)
+ 		return k, ok && (k < -32768 || k > 65535)

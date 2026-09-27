@@ -19,7 +19,7 @@ import (
 
 // castleCompileLimit はコンパイル時間の退行を捕まえる閾値 (手元で約 1.8 秒。常駐の候補探索が候補数の 3 乗になって
 // 55 秒になったのを見落としたことがある。doc/development_notes.md (11))。マシン差を見て目安の 5 倍。
-const castleCompileLimit = 10 * time.Second
+const castleCompileLimit = 25 * time.Second // 単独で約 4 秒、go test ./... の並列で約 11 秒 (2026-09-28。10 秒だと並列で落ちた)
 
 func runTool(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
@@ -63,7 +63,7 @@ func TestExampleMiku(t *testing.T) {
 // options(link:) で自前の data.asm・ld65.cfg・NSD のライブラリを指定しているので、`fcc build -t nes main.fc` だけで
 // ROM ができる (以前は fcc compile → ca65 data.asm → ld65 を Rakefile が並べていた)。
 func TestExampleCastle(t *testing.T) {
-	t.Parallel()
+	// t.Parallel() にしない: ビルド時間を測るので、同じパッケージの重いテスト (fuzz など) が並列に走る前に単独で回す
 	// castle は .fc-build/ を src の下に作る実プロジェクト手順なので、ツリーごと一時ディレクトリに複製する
 	dir := filepath.Join(t.TempDir(), "castle")
 	copyDir(t, filepath.Join(absRepoRoot, "examples", "castle"), dir)

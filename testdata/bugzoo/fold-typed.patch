@@ -1,0 +1,15 @@
+# 型付きの定数の畳み込みを型で扱わない (cf63a3c / 8ecfbad。`(200 as u8) + (100 as u8)` が 300)
+diff --git a/internal/sema/hlc.go b/internal/sema/hlc.go
+index d2ee7b8..56e1af6 100644
+--- a/internal/sema/hlc.go
++++ b/internal/sema/hlc.go
+@@ -2865,6 +2865,9 @@ func (h *Hlc) signedOffset(v ir.Operand) ir.Operand {
+ // 全部が型のない定数なら nil (値から型を決める IntValue)。`(200 as u8) + (100 as u8)` や `const A:u8 = 200; A + 100` は
+ // u8 で 44 (変数と同じ。畳み込みで 300 のまま広がっていた。survey 2026-09-27)。
+ func (h *Hlc) foldType(args []*cexpr, cmp bool) *types.Type {
++	if true {
++		return nil
++	}
+ 	var ops []ir.Operand
+ 	typed := false
+ 	for _, a := range args {

@@ -1,0 +1,14 @@
+# ポインタの算術で *const が外れる (cf63a3c)
+diff --git a/internal/sema/hlc.go b/internal/sema/hlc.go
+index d2ee7b8..82de0a8 100644
+--- a/internal/sema/hlc.go
++++ b/internal/sema/hlc.go
+@@ -2119,7 +2119,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
+ 			}
+ 			tmp := h.newTmp(typ)
+ 			if typ.Kind == types.Pointer {
+-				h.markReadOnly(tmp, h.readOnly(left)) // `p + 1` (p:*const T) も読み取り専用 (外れて書き込めていた。survey 2026-09-27)
++				h.markReadOnly(tmp, false && h.readOnly(left)) // `p + 1` (p:*const T) も読み取り専用 (外れて書き込めていた。survey 2026-09-27)
+ 			}
+ 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
+ 			r = tmp

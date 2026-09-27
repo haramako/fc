@@ -1,0 +1,283 @@
+# 型の規則の総当たり (TestTypeRuleMatrix。`go test ./internal/driver -run TestTypeRuleMatrix -update` で書き直す)
+
+## 大域変数: var v:%T;
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       E variable v cannot be void
+
+## ローカル変数: function f():void { var v:%T; }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       E variable v cannot be void
+
+## 引数: function f(p:%T):void { }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## 戻り値: function f(p:%T):%T { return p; }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       E can't return with value from void function f
+
+## struct のフィールド: struct Q { f:%T; }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       E field f cannot be void
+
+## 配列の要素: var v:[2]%T;
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## ポインタ: var v:*%T;
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         ok
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## u8 からの as: function f(x:u8):void { var v = x as %T; }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          E cannot convert u8 to t.S with `as` (use bitcast for bit reinterpretation)
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      E cannot convert u8 to [4]u8 with `as` (use bitcast for bit reinterpretation)
+[]u8       E cannot convert u8 to []u8 with `as` (use bitcast for bit reinterpretation)
+[:u16]u8   E cannot convert u8 to [:u16]u8 with `as` (use bitcast for bit reinterpretation)
+*u8        E cannot convert u8 to *u8 with `as` (use bitcast for bit reinterpretation)
+*const u8  E cannot convert u8 to *const u8 with `as` (use bitcast for bit reinterpretation)
+*S         E cannot convert u8 to *t.S with `as` (use bitcast for bit reinterpretation)
+*Es        ok
+fn(u8):u8  E cannot convert u8 to fn(u8):u8 with `as` (use bitcast for bit reinterpretation)
+void       E cannot convert u8 to void with `as` (use bitcast for bit reinterpretation)
+
+## u8 の代入: function f(x:u8, v:%T):void { v = x; }
+u8         ok
+i16        ok
+bool       ok
+E          E assignment to `v`: cannot assign u8 to t.E (not compatible types)
+S          E assignment to `v`: cannot assign u8 to t.S (not compatible types)
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      E assignment to `v`: cannot assign u8 to [4]u8 (not compatible types)
+[]u8       E assignment to `v`: cannot assign u8 to []u8 (not compatible types)
+[:u16]u8   E assignment to `v`: cannot assign u8 to [:u16]u8 (not compatible types)
+*u8        E assignment to `v`: cannot assign u8 to *u8 (not compatible types)
+*const u8  E assignment to `v`: cannot assign u8 to *u8 (not compatible types)
+*S         E assignment to `v`: cannot assign u8 to *t.S (not compatible types)
+*Es        E assignment to `v`: cannot assign u8 to *t.Es (not compatible types)
+fn(u8):u8  E assignment to `v`: cannot assign u8 to fn(u8):u8 (not compatible types)
+void       E assignment to `v`: cannot assign u8 to void (not compatible types)
+
+## 加算: function f(a:%T, b:%T):void { var c = a + b; }
+u8         ok
+i16        ok
+bool       ok
+E          E cannot apply + to enum t.E (convert with `as` first)
+S          E cannot apply + to t.S (struct / array values have only == and !=)
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      E cannot apply + to [4]u8 (struct / array values have only == and !=)
+[]u8       E cannot apply + to []u8 (struct / array values have only == and !=)
+[:u16]u8   E cannot apply + to [:u16]u8 (struct / array values have only == and !=)
+*u8        E cannot apply + to a pointer (pointers have p + n, p - n, p - q, comparisons and null checks)
+*const u8  E cannot apply + to a pointer (pointers have p + n, p - n, p - q, comparisons and null checks)
+*S         E cannot apply + to a pointer (pointers have p + n, p - n, p - q, comparisons and null checks)
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## ==: function f(a:%T, b:%T):bool { return a == b; }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## <: function f(a:%T, b:%T):bool { return a < b; }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          E cannot apply < to t.S (struct / array values have only == and !=)
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      E cannot apply < to [4]u8 (struct / array values have only == and !=)
+[]u8       E cannot apply < to []u8 (struct / array values have only == and !=)
+[:u16]u8   E cannot apply < to [:u16]u8 (struct / array values have only == and !=)
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## 条件: function f(a:%T):void { if (a) { } }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          E a value of type t.S cannot be used as a condition (struct / array values have only == and !=)
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      E a value of type [4]u8 cannot be used as a condition (struct / array values have only == and !=)
+[]u8       E a value of type []u8 cannot be used as a condition (struct / array values have only == and !=)
+[:u16]u8   E a value of type [:u16]u8 cannot be used as a condition (struct / array values have only == and !=)
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## for-each: function f(a:%T):void { for (var x in a) { } }
+u8         E cannot iterate over u8 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+i16        E cannot iterate over i16 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+bool       E cannot iterate over ubool8 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+E          E cannot iterate over t.E (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+S          E cannot iterate over t.S (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        E cannot iterate over *u8 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+*const u8  E cannot iterate over *u8 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+*S         E cannot iterate over *t.S (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+*Es        E cannot iterate over *t.Es (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+fn(u8):u8  E cannot iterate over fn(u8):u8 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`…
+void       E cannot iterate over void (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+
+## @sizeof: const N = @sizeof(%T);
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+Es         ok
+[4]u8      ok
+[]u8       ok
+[:u16]u8   ok
+*u8        ok
+*const u8  ok
+*S         ok
+*Es        ok
+fn(u8):u8  ok
+void       ok
+
+## printf: function f(a:%T):void { printf(a); }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          E printf cannot print a value of type t.S (strings (*u8 / []u8), integers, bool and enums)
+Es         E soa Es is not a value type; use *Es for an element handle, or Es[i]
+[4]u8      ok
+[]u8       ok
+[:u16]u8   E printf cannot print a value of type [:u16]u8 (strings (*u8 / []u8), integers, bool and enums)
+*u8        ok
+*const u8  ok
+*S         E printf cannot print a value of type *t.S (strings (*u8 / []u8), integers, bool and enums)
+*Es        E printf cannot print a value of type *t.Es (strings (*u8 / []u8), integers, bool and enums)
+fn(u8):u8  E printf cannot print a value of type fn(u8):u8 (strings (*u8 / []u8), integers, bool and enums)
+void       E printf cannot print a value of type void (strings (*u8 / []u8), integers, bool and enums)
+
+## 値の初期化: function f():void { var v:%T = %Z; }
+u8         ok
+i16        ok
+bool       ok
+E          ok
+S          ok
+*u8        ok
+*const u8  ok
+*S         ok

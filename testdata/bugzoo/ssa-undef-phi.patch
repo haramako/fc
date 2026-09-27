@@ -1,0 +1,14 @@
+# SSA の自明な φ の除去が未定義の入力を無視する (cf63a3c で修正。ループの後の値が -O 2 で壊れる)
+diff --git a/internal/opt/ssa.go b/internal/opt/ssa.go
+index b25cb25..0bc2053 100644
+--- a/internal/opt/ssa.go
++++ b/internal/opt/ssa.go
+@@ -308,7 +308,7 @@ func (s *ssaForm) tryRemoveTrivialPhi(phi *ssaVal) *ssaVal {
+ 	var same *ssaVal
+ 	for _, a := range phi.args {
+ 		a = resolve(a)
+-		if a == same || a == phi {
++		if a == same || a == phi || a.undef {
+ 			continue
+ 		}
+ 		if same != nil {

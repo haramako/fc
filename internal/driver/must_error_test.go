@@ -13,7 +13,7 @@ import (
 // TestMustError は、各プログラムがコンパイルエラーになり、文言に want を含むことを確かめる。
 func TestMustError(t *testing.T) {
 	t.Parallel()
-	pre := "#fc 3\nstruct S { a:u8; b:u8; }\nenum D { N, E, S }\nconst T:[3]u8 = [1, 2, 3];\nvar A:[4]u8;\nvar g:u8;\n"
+	pre := "#fc 3\nstruct S { a:u8; b:u8; }\nenum D { N, E, S }\nconst T:[3]u8 = [1, 2, 3];\nvar A:[4]u8;\nvar g:u8;\nsoa Es:[4]S;\n"
 	cases := []struct{ name, src, want string }{
 		// 型のない定数・比較
 		{"比較で収まらない定数", "function f(s:i8):bool { return s < 200; }", "200 does not fit in i8"},
@@ -53,6 +53,9 @@ func TestMustError(t *testing.T) {
 		{"struct の加算", "function f():void { var a:S; var b:S; var c = a + b; }", "cannot apply +"},
 		{"ポインタの乗算", "function f():void { var p:*u8; var q:*u8; var r = p * q; }", "cannot apply *"},
 		{"*void の算術", "function f():void { var p:*void; var q = p + 1; }", "no arithmetic on *void"},
+		// soa (42f5734)
+		{"soa の名前を変数の型に", "var v:Es;", "is not a value type"},
+		{"soa の名前を引数の型に", "function f(a:Es):void { }", "is not a value type"},
 	}
 	for i, c := range cases {
 		c := c

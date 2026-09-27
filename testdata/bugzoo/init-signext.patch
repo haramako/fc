@@ -1,0 +1,14 @@
+# 宣言の初期値を宣言の型に変換しない (cf63a3c。i8 で i16 を初期化すると符号拡張しない)
+diff --git a/internal/sema/hlc.go b/internal/sema/hlc.go
+index d2ee7b8..ba1470a 100644
+--- a/internal/sema/hlc.go
++++ b/internal/sema/hlc.go
+@@ -1113,7 +1113,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
+ 	if init != nil {
+ 		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
+ 		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
+-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.cast(init, vv.Type)}})
++		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{init}})
+ 	}
+ }
+ 

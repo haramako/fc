@@ -1,0 +1,14 @@
+# for-each の `&X` の中の変数を毎周読み直す (cf63a3c)
+diff --git a/internal/sema/forin.go b/internal/sema/forin.go
+index 6a78d0b..e999971 100644
+--- a/internal/sema/forin.go
++++ b/internal/sema/forin.go
+@@ -127,7 +127,7 @@ func (h *Hlc) forInElems(s *syntax.ForInStmt) (forInLoop, func()) {
+ 	switch {
+ 	case t.Kind == types.Pointer && (t.Base.Kind == types.Array || t.Base.IsSlice()):
+ 		ptrMode, bt = true, t.Base
+-		if ex := h.constEval(x); ex.kind == cOp && ex.op == opRef && bt.Kind == types.Array && staticPlace(ex.args[0]) {
++		if ex := h.constEval(x); ex.kind == cOp && ex.op == opRef && bt.Kind == types.Array && (staticPlace(ex.args[0]) || true) {
+ 			base = ex.args[0] // `&A`: 要素のポインタを `&A[i]` にする (A が静的な配列なら添字の読み書きのまま)
+ 		} else {
+ 			// ほかは回す値を最初に 1 回だけ評価する (`&M[k]`、`&sp.buf`、`&s` (slice) の中の変数を毎周読み直して、途中で

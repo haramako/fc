@@ -13,7 +13,24 @@ import (
 func (g *rpGen) v3SelfCheck(f *rpFunc) string {
 	b := func() string { return g.v3Byte(f) }
 	var src string
-	switch g.pick(4) {
+	switch g.pick(5) {
+	case 4:
+		// for-each の回す値の中の変数は最初に 1 回だけ評価する (`&vm[k]` の k を途中で変えても最初の行を回る。毎周読み直していた)
+		src = `{
+	for (var $k in 0..4) {
+		vm[0][$k] = $k;
+		vm[1][$k] = $k + 10;
+	}
+	var $u:u16 = 0;
+	var $w = 0;
+	for (var $x in &vm[$w]) {
+		$u += *$x;
+		$w = 1;
+	}
+	if ($u != 6) {
+		stdio.exit(77);
+	}
+}`
 	case 0:
 		// ポインタの負のずれ・i8 のずれで書いた値を、16 ビットの添字で読む (符号拡張していなかった)
 		src = fmt.Sprintf(`{

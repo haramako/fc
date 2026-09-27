@@ -1,0 +1,27 @@
+# regalloc: 値より大きい先に書く store は A の常駐を friendly にしない (3cba778 の逆)
+diff --git b/internal/regalloc/resident.go a/internal/regalloc/resident.go
+index fb42c94..482c723 100644
+--- b/internal/regalloc/resident.go
++++ a/internal/regalloc/resident.go
+@@ -246,18 +246,16 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
+ 		if isV(op.In(1), v) && !isV(op.Dst, v) && !liveOut {
+ 			return true, 1 // tay
+ 		}
+-	// 書く先が値より大きい (u8 の常駐を i16 の要素に書く) と、codegen は上位を lda #0 で書いて A を壊すので friendly にしない
+-	// (`a3[3] = l0` (a3:[16]i16) の後の l0@A の dec が 0 から始まってループが終わらなかった。fuzz で発覚)
+ 	case ir.OpIndexPset:
+-		if isV(op.In(2), v) && ir.ValType(op.In(1)).Size == 1 && !isV(op.In(1), v) && ir.ValType(op.In(0)).Base.Size <= ir.ValType(v).Size {
++		if isV(op.In(2), v) && ir.ValType(op.In(1)).Size == 1 && !isV(op.In(1), v) {
+ 			return true, 3
+ 		}
+ 	case ir.OpPset:
+-		if isV(op.In(1), v) && ir.ValType(op.In(0)).Base.Size <= ir.ValType(v).Size {
++		if isV(op.In(1), v) {
+ 			return true, 3
+ 		}
+ 	case ir.OpFieldPset:
+-		if isV(op.In(2), v) && op.Type.Size <= ir.ValType(v).Size {
++		if isV(op.In(2), v) {
+ 			return true, 3
+ 		}
+ 	case ir.OpPushArg, ir.OpPushFastcallArg:

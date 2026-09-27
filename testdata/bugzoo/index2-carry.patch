@@ -1,0 +1,27 @@
+# 2 バイトの要素の添字 i*2 の桁上がりを捨てる (cf63a3c。129 番目以降が別の要素)
+diff --git a/internal/codegen/llc.go b/internal/codegen/llc.go
+index e044d16..c760a37 100644
+--- a/internal/codegen/llc.go
++++ b/internal/codegen/llc.go
+@@ -1495,7 +1495,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
+ 					r.push(l.storeA(op.Dst, 0))
+ 					r.push("lda #0")
+ 					r.push(l.storeA(op.Dst, 1))
+-				} else if es == 2 && (ir.ValType(op.In(0)).Kind == types.Pointer || ir.ValType(op.In(0)).Size > 256) {
++				} else if false {
+ 					// 要素 2 バイトで i * 2 が 1 バイトに収まらないことがある (長さの分からないポインタ、128 要素を超える配列):
+ 					// 9 ビット目 (asl の C) を上位に足す (捨てていて `a[150]` (a:[200]u16) が a[22] だった。survey 2026-09-27)
+ 					r.push(l.loadA(op.In(1), 0), "asl a", "sta <reg+0", "lda #0", "rol a", "sta <reg+1", "clc")
+diff --git a/internal/opt/fuse.go b/internal/opt/fuse.go
+index 896e62f..44b2669 100644
+--- a/internal/opt/fuse.go
++++ b/internal/opt/fuse.go
+@@ -58,7 +58,7 @@ func fusePointer(lmd *ir.Lambda) {
+ 			}
+ 			// 要素が 2 バイトのときは Y = i * 2 が 1 バイトに収まる (配列全体が 256 バイト以内) ときだけ。ポインタは長さが
+ 			// 分からないので要素 1 バイトだけ (`a[150]` (a:[200]u16) が a[22] を読み書きしていた。survey 2026-09-27)
+-			isArray := ir.ValKind(arr) == ir.KindGlobal && ir.ValType(arr).Kind == types.Array && (es == 1 || ir.ValType(arr).Size <= 256) // sym+i,y
++			isArray := ir.ValKind(arr) == ir.KindGlobal && ir.ValType(arr).Kind == types.Array && true // sym+i,y
+ 			k, lit := ir.ValIntLiteral(idx)
+ 			isPtr := ir.ValType(arr).Kind == types.Pointer && (es == 1 || lit && k >= 0 && k*es+es <= 256) // ldy i; lda (p),y (定数の添字なら要素 2 バイトも)
+ 			if (!isArray && !isPtr) ||

@@ -7,6 +7,7 @@ name: Fuzz
 on:
   schedule:
     - cron: "0 18 * * *" # 毎日 03:00 JST
+    - cron: "0 20 * * 0" # 日曜 05:00 JST (bugzoo: 直したバグを戻して、テストが見つけるかを測る)
   workflow_dispatch:
     inputs:
       seed:
@@ -18,7 +19,32 @@ on:
         default: "1500"
 
 jobs:
+  bugzoo:
+    # 週 1 回 (と手動): testdata/bugzoo/*.patch を 1 つずつ戻して、各テストが何本で見つけるかの表 (tools/fuzzmeasure)
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 20 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install cc65
+        run: sudo apt-get update && sudo apt-get install -y cc65
+
+      - name: bugzoo
+        run: go run ./tools/fuzzmeasure zoo -randn 300 -foldn 150 | tee bugzoo.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bugzoo
+          path: bugzoo.md
+
   random:
+    if: github.event.schedule != '0 20 * * 0'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -38,9 +64,17 @@ jobs:
           N="${{ github.event.inputs.randn }}"
           if [ -z "$N" ]; then N=1500; fi
           echo "seed $SEED, n $N"
-          go test ./internal/driver -run 'TestRandom' -randn "$N" -foldn 500 -randseed "$SEED" -timeout 140m
+          FUZZ_STATS=$PWD/fuzz-stats.jsonl go test ./internal/driver -run 'TestRandom' -randn "$N" -foldn 500 -metan 200 -mutn 300 -randseed "$SEED" -timeout 140m
+
+      - name: Upload stats (使った機能と結果。効果の測定)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-stats
+          path: fuzz-stats.jsonl
 
   gofuzz:
+    if: github.event.schedule != '0 20 * * 0'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

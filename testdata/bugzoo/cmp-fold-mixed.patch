@@ -1,0 +1,42 @@
+# sema: 型付きの定数と型のない定数の比較の畳み込みを実行時に合わせる (21efb61 の逆)
+diff --git b/internal/sema/hlc.go a/internal/sema/hlc.go
+index 6799541..22afb30 100644
+--- b/internal/sema/hlc.go
++++ a/internal/sema/hlc.go
+@@ -1452,34 +1452,8 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
+ 				case c.op == opEq || c.op == opNe || c.op == opLt || c.op == opGt || c.op == opLe || c.op == opGe:
+ 					// 比較: 型付きの定数だけを互換型の値にする。型のない定数は実行時も相手に合わせる / 広げる / 16 ビットを
+ 					// 超えれば数学の値で比べる (foldBeyond16) ので、そのまま
+-					// 片方が型のない定数でも、16 ビットに収まるなら両方を互換型の値にする (実行時は型のない定数を相手に合わせるか
+-					// 広げた型で比べる: `65533 > ((-81 as i8) >> 9)` は i16 で -3 > -1。数学の値で比べて 1 になっていた。
+-					// TestRandomConstFold)。16 ビットを超える型のない定数は実行時も数学の値で比べる (foldBeyond16)
+-					if len(args) > 1 {
+-						u0, u1 := args[0].val.Untyped, args[1].val.Untyped
+-						switch {
+-						case !u0 && !u1:
+-							v1, v2 = wrapInt(v1, t), wrapInt(v2, t)
+-						case u0 != u1:
+-							// 型付きの側が符号付きなら、実行時はそれを符号拡張して、定数が i16 に収まれば符号付き (数学の値) で、
+-							// 収まらなければ u16 で比べる (`(-5 as i8) < 271` は真、`65533 > (-1 as i8)` は 65533 > 65535 で偽)。
+-							// 符号なしなら互換型 (広いほう) の値で比べる
+-							typed, uv := args[0], &v2
+-							tv := &v1
+-							if u0 {
+-								typed, uv, tv = args[1], &v1, &v2
+-							}
+-							if *uv >= -32768 && *uv <= 65535 { // 16 ビットを超える型のない定数は数学の値のまま (foldBeyond16)
+-								if tt := typed.val.Type; tt.Kind == types.Int && tt.Signed {
+-									*tv = wrapInt(*tv, tt)
+-									if *uv >= 32768 {
+-										*tv, *uv = wrapInt(*tv, t), wrapInt(*uv, t)
+-									}
+-								} else {
+-									*tv, *uv = wrapInt(*tv, t), wrapInt(*uv, t)
+-								}
+-							}
+-						}
++					if len(args) > 1 && !args[0].val.Untyped && !args[1].val.Untyped {
++						v1, v2 = wrapInt(v1, t), wrapInt(v2, t)
+ 					}
+ 				default:
+ 					v1 = wrapInt(v1, t)
