@@ -51,7 +51,10 @@ type Program struct {
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
-	curModule   string                     // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
+	// buildStrings は文字列の @(build) の const → 値 (データを作らず、使った場所で文字列リテラルにする。staticif.go)
+	buildStrings map[*ir.Value]string
+	poCatalogs   map[string]*poCatalog // 読んだ .po (実パス → 訳の表。textmap の翻訳。po.go)
+	curModule    string                // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
 	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
 	Defines map[string]*DefineUse
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
@@ -93,6 +96,8 @@ func NewProgram() *Program {
 		CastKinds:      map[syntax.Position]syntax.CastKind{},
 		macros:         map[*ir.Value]MacroFn{},
 		constMacros:    map[*ir.Value]ConstMacroFn{},
+		buildStrings:   map[*ir.Value]string{},
+		poCatalogs:     map[string]*poCatalog{},
 		soas:           map[*types.Type]*soaInfo{},
 		lambdas:        map[string]*ir.Lambda{},
 		defaults:       map[*ir.Lambda]*functionDefaults{},

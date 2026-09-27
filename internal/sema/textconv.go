@@ -69,11 +69,16 @@ func NewTextConverter(using string) *TextConverter {
 }
 
 func (tc *TextConverter) registerChar(c rune) *tcEntry {
+	e, _ := tc.register(c)
+	return e
+}
+
+// register は registerChar と同じ。isNew は表に無くて新しく登録したか。
+func (tc *TextConverter) register(c rune) (e *tcEntry, isNew bool) {
 	if e, ok := tc.using[c]; ok {
 		e.count++
-		return e
+		return e, false
 	}
-	var e *tcEntry
 	if len(tc.using) >= 256 {
 		// 表があふれた文字は 255 になる (エラーにしない)
 		e = &tcEntry{index: 255, count: 1}
@@ -81,14 +86,25 @@ func (tc *TextConverter) registerChar(c rune) *tcEntry {
 		e = &tcEntry{index: len(tc.using), count: 1}
 	}
 	tc.using[c] = e
-	return e
+	return e, true
 }
 
 // Conv は conv(str) 相当。文字コード列を返す。
 // 表にない文字は新規登録される (表の末尾に追加。フォントに無い文字はエラーにせず、表示が化けるだけ)。
 func (tc *TextConverter) Conv(str string) []int {
-	str = strings.ReplaceAll(str, "\r", "")
-	str = trFullwidth(str)
+	r, _ := tc.convReport(str)
+	return r
+}
+
+// textKey は Conv の前半 (\r を除いて全角にする。convertChar の前)。.po の msgid はこの形 (castle の
+// NesTools::TextConverter#conv の raw_str と同じ)。
+func textKey(str string) string {
+	return trFullwidth(strings.ReplaceAll(str, "\r", ""))
+}
+
+// convReport は Conv と同じ。added は表に無くて新しく登録した文字 (出てきた順)。
+func (tc *TextConverter) convReport(str string) (r []int, added []rune) {
+	str = textKey(str)
 	var expanded strings.Builder
 	for _, c := range str {
 		if rep, ok := convertChar[c]; ok {
@@ -97,9 +113,12 @@ func (tc *TextConverter) Conv(str string) []int {
 			expanded.WriteRune(c)
 		}
 	}
-	var r []int
 	for _, c := range expanded.String() {
-		r = append(r, tc.registerChar(c).index)
+		e, isNew := tc.register(c)
+		if isNew {
+			added = append(added, c)
+		}
+		r = append(r, e.index)
 	}
-	return r
+	return r, added
 }

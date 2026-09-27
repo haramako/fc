@@ -3,6 +3,7 @@ package driver
 // fc 3 (`#fc 3`) の言語の規則のテスト (doc/v3_plan.md)。fc 2 と fc 3 のモジュールは 1 つのプログラムに混ぜられる。
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -264,6 +265,94 @@ public function value():u8 { return 42; }
 		{"#fc 3\nconst N = 1 + 1 @(build);\nfunction main():void { }\n", "@(build) const N must be initialized with a literal"},
 		{"#fc 3\n@if (true) { const N = 1 @(build); }\nfunction main():void { }\n", "@(build) const N cannot be declared inside @if"},
 		{"#fc 3\nfunction main():void { var a:u8 = 1; @if (a) { } }\n", "a is not @(build)"},
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": c.src}); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("%q: got %v, want /%s/", c.src, err, c.msg)
+		}
+	}
+}
+
+// TestV3BuildString: 文字列の @(build) の const。データを作らず使った場所で文字列リテラルになる (使わなければ ROM が
+// 変わらない)。@textmap の引数に渡せ、-D / fc.toml で .po を切り替えられる (language_reference.md §7.1)。
+func TestV3BuildString(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{
+		"t.fc": `#fc 3
+use * from stdio;
+use common;
+function main():void
+{
+	print(common.MSG);
+	var s = common._T("あい");
+	printf(" ", s[0], " ", s[1], "\n");
+	exit(0);
+}
+`,
+		"common.fc": `#fc 3
+public const MSG = "hi" @(build);
+public const UNUSED = "zzzqqq" @(build);
+public const TEXT_PO = "" @(build);
+public const _T = @textmap("tbl.txt", TEXT_PO);
+`,
+		"tbl.txt":  "あいＨＩ",
+		"po/en.po": "msgid \"あい\"\nmsgstr \"IH\"\n",
+	}
+	out, res, err := buildFilesDefs(t, files, nil)
+	if err != nil || out != "hi 0 1\n" {
+		t.Fatalf("既定値: got %q, %v", out, err)
+	}
+	if len(res.Warnings) != 0 {
+		t.Errorf("警告: %v", res.Warnings)
+	}
+	if out, _, err = buildFilesDefs(t, files, []string{"common.MSG=yo", "common.TEXT_PO=po/en.po"}); err != nil || out != "yo 3 2\n" {
+		t.Errorf("-D: got %q, %v", out, err)
+	}
+	files["fc.toml"] = "[define.common]\nTEXT_PO = \"po/en.po\"\n"
+	if out, _, err = buildFilesDefs(t, files, nil); err != nil || out != "hi 3 2\n" {
+		t.Errorf("fc.toml: got %q, %v", out, err)
+	}
+	if out, _, err = buildFilesDefs(t, files, []string{"common.TEXT_PO="}); err != nil || out != "hi 0 1\n" {
+		t.Errorf("-D common.TEXT_PO= (空文字列で翻訳しない): got %q, %v", out, err)
+	}
+	delete(files, "fc.toml")
+
+	// 使わない文字列の @(build) の const は ROM に何も出さない
+	rom := func(common string) []byte {
+		fs := map[string]string{"t.fc": "#fc 3\nuse * from stdio;\nuse common;\nfunction main():void { exit(0); }\n", "common.fc": common}
+		dir := t.TempDir()
+		for name, src := range fs {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out := filepath.Join(dir, "a.nes")
+		if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: out}); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	if !bytes.Equal(rom("#fc 3\n"), rom("#fc 3\npublic const P = \"zzzqqq\" @(build);\n")) {
+		t.Errorf("使わない文字列の @(build) の const で ROM が変わった")
+	}
+
+	for _, c := range []struct {
+		defs []string
+		msg  string
+	}{
+		{[]string{"common.NOPE=x"}, "common has no @(build) const NOPE"},
+		{[]string{"common.TEXT_PO=nosuch.po"}, "nosuch.po"},
+	} {
+		if _, _, err := buildFilesDefs(t, files, c.defs); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("-D %v: got %v, want /%s/", c.defs, err, c.msg)
+		}
+	}
+	for _, c := range []struct{ src, msg string }{
+		{"#fc 3\nconst S:[]const u8 = \"a\" @(build);\nfunction main():void { }\n", "a string @(build) const cannot have a type"},
+		{"#fc 3\nconst S = \"a\" @(build);\n@if (S) { }\nfunction main():void { }\n", "@if"},
 	} {
 		if _, err := buildFiles(t, map[string]string{"t.fc": c.src}); err == nil || !strings.Contains(err.Error(), c.msg) {
 			t.Errorf("%q: got %v, want /%s/", c.src, err, c.msg)

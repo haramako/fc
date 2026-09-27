@@ -9,7 +9,7 @@ package sema
 //   - printf(args...)       : 引数の型で stdio.print / stdio.print_int16 を呼び分ける
 //   - unittest_run_tests()  : スコープ内の test_* 関数を順に呼ぶ
 //   - cos(x)                : sin(x + 64) への展開 (math モジュールの sin を使う)
-//   - textmap(path)         : 文字列→文字コード表 (const _T = textmap("..."); _T("…") で int[] 定数)
+//   - textmap(path [, po])  : 文字列→文字コード表 (const _T = textmap("..."); _T("…" [, "msgctxt"]) で int[] 定数。po で翻訳)
 //
 // printf / unittest_run_tests / cos は stdio / math モジュールの関数を参照する。可視性に関係なく届く
 // (LookupInternal) が、そのモジュールがプログラムに読み込まれていなければエラー。
@@ -17,6 +17,7 @@ package sema
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -140,19 +141,55 @@ func registerBuiltins(p *Program) {
 		return cv(h.IntValue(v.Int))
 	})
 
-	// textmap(path) は定数式。文字表を持つ新しいマクロ値を返し、それを呼ぶと文字列が int[] 定数になる
+	// textmap(table [, po]) は定数式。文字表を持つ新しいマクロ値を返し、それを呼ぶと文字列が int[] 定数になる。
+	// po (gettext の .po。"" なら無し) を渡すと、変換器の呼び出し `_T("原文" [, "msgctxt"])` を訳文に差し替える
+	// (`_T("原文", null)` は翻訳しない)
 	h.defconstmacro("textmap", func(h *Hlc, args []*cexpr) *cexpr {
-		if len(args) != 1 {
-			panic(&diag.Error{Msg: "textmap takes 1 argument (path of the character table)"})
+		if len(args) != 1 && len(args) != 2 {
+			panic(&diag.Error{Msg: "textmap takes 1 or 2 arguments (path of the character table, and optionally a .po file)"})
 		}
-		path := mustString(args[0])
-		conv := NewTextConverter(string(bytes.ReplaceAll(h.readFile(path), []byte("\r\n"), []byte("\n"))))
-		m := ir.NewGlobal("", h.prog.Types.Macro(), "")
-		h.prog.macros[m] = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-			if len(args) != 1 {
-				panic(&diag.Error{Msg: "text conversion takes 1 string argument"})
+		table := mustString(args[0])
+		conv := NewTextConverter(string(bytes.ReplaceAll(h.readFile(table), []byte("\r\n"), []byte("\n"))))
+		var cat *poCatalog
+		if len(args) == 2 {
+			if po := mustString(args[1]); po != "" {
+				cat = h.readPO(po)
 			}
-			codes := append(conv.Conv(mustString(args[0])), 0)
+		}
+		m := ir.NewGlobal("", h.prog.Types.Macro(), "")
+		warned := map[string]bool{}
+		h.prog.macros[m] = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+			if len(args) != 1 && len(args) != 2 {
+				panic(&diag.Error{Msg: "text conversion takes a string and an optional msgctxt string (or null not to translate)"})
+			}
+			src := mustString(args[0])
+			key := poKey{id: textKey(src)}
+			translate := true
+			if len(args) == 2 {
+				if args[1].kind == cNull {
+					translate = false // _T("…", null): 翻訳しない (デバッグ表示など。.pot にも入れない)
+				} else {
+					key.hasCtxt, key.ctxt = true, mustString(args[1])
+				}
+			}
+			text := src
+			if cat != nil && translate && src != "" { // "" はヘッダーの msgid と同じなので照合しない
+				if s, ok, reason := cat.lookup(key); ok {
+					text = s
+				} else {
+					h.textWarn(warned, "%s: no translation for %q%s in %s (%s); using the original text", textmapName(m), src, ctxtNote(key), cat.path, reason)
+				}
+			}
+			codes, added := conv.convReport(text)
+			if cat != nil && len(added) > 0 {
+				// 翻訳ありでは、文字表に無い文字を知らせる (表の後ろに足されて表示が化ける。同じ文字は最初の 1 回だけ)
+				var cs []string
+				for _, c := range added {
+					cs = append(cs, fmt.Sprintf("%q (U+%04X)", c, c))
+				}
+				h.textWarn(warned, "%s: %q has characters not in the character table %s: %s", textmapName(m), text, table, strings.Join(cs, ", "))
+			}
+			codes = append(codes, 0)
 			elems := make([]*cexpr, len(codes))
 			for i, c := range codes {
 				elems[i] = cint(c)
@@ -161,6 +198,47 @@ func registerBuiltins(p *Program) {
 		}
 		return cv(m)
 	})
+}
+
+// readPO は .po を読む (同じファイルは 1 回だけ読む。_T / _M / _I が同じ .po を渡すため)。
+func (h *Hlc) readPO(path string) *poCatalog {
+	_, abs := h.resolveFile(path)
+	if cat := h.prog.poCatalogs[abs]; cat != nil {
+		return cat
+	}
+	cat, err := parsePO(path, h.readFile(path))
+	if err != nil {
+		panic(err)
+	}
+	h.prog.poCatalogs[abs] = cat
+	return cat
+}
+
+// textWarn は textmap の警告を出す (同じ位置の同じ警告は 1 回だけ。定数式が評価し直されることがあるため)。
+func (h *Hlc) textWarn(warned map[string]bool, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	k := h.curPos.String() + "\x00" + msg
+	if warned[k] {
+		return
+	}
+	warned[k] = true
+	h.warn("%s", msg)
+}
+
+// textmapName は警告に出す変換器の名前 (`const _T = @textmap(...)` の _T)。
+func textmapName(m *ir.Value) string {
+	if m.Name == "" {
+		return "text conversion"
+	}
+	return m.Name
+}
+
+// ctxtNote は警告に添える msgctxt。
+func ctxtNote(k poKey) string {
+	if !k.hasCtxt {
+		return " (no msgctxt)"
+	}
+	return fmt.Sprintf(" (msgctxt %q)", k.ctxt)
 }
 
 // defconstmacro は定数式で評価される組み込みをグローバルに登録する。
