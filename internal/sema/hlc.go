@@ -1660,11 +1660,23 @@ func foldIntOp(op cop, v1, v2 int) int {
 // typeOf resolves type identities and array lengths at every nesting depth.
 // A named struct does not require its layout until it is used by value.
 func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
+	ty := h.typeOfRaw(t)
+	if ty.IsSoa {
+		// soa は型と実体が 1 対 1 で、値の型にはならない (`var v:E;` は E と同じ形の 2 つ目の実体ではなく、確保した領域を
+		// 使わずに E を読み書きしていた)。型として書けるのはハンドル `*E` だけ
+		n := shortName(ty.Name)
+		panic(&diag.Error{Msg: fmt.Sprintf("soa %s is not a value type; use *%s for an element handle, or %s[i]", n, n, n)})
+	}
+	return ty
+}
+
+// typeOfRaw は typeOf の本体。soa の型もそのまま返す (`*E` の要素のため)。
+func (h *Hlc) typeOfRaw(t syntax.TypeExpr) *types.Type {
 	switch t := t.(type) {
 	case *syntax.NamedType:
 		return h.namedType(t)
 	case *syntax.PointerType:
-		elem := h.typeOf(t.Elem)
+		elem := h.typeOfRaw(t.Elem)
 		if elem.IsSoa {
 			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
 		}

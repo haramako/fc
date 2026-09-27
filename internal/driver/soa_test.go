@@ -79,6 +79,11 @@ func TestSoaErrors(t *testing.T) {
 		{pre + "function main():void { var p:*Ps; var q:*P = bitcast<*P>(p); }\n", "sizes differ"},
 		{pre + "function main():void { var p:*Ps; p.z = 1; }\n", "has no field z"},
 		{pre + "function main():void { var p = &Ps[0].y; }\n", "cannot take the address of soa field y"},
+		// soa は値の型にならない (`*Ps` か `Ps[i]`)。`var v:Ps;` は領域を確保したうえで Ps を読み書きしていた
+		{pre + "var v:Ps;\nfunction main():void {}\n", "soa Ps is not a value type"},
+		{pre + "function f(a:Ps):void {}\nfunction main():void {}\n", "soa Ps is not a value type"},
+		{pre + "struct T { e:Ps; }\nfunction main():void {}\n", "soa Ps is not a value type"},
+		{pre + "var v:[2]Ps;\nfunction main():void {}\n", "soa Ps is not a value type"},
 	}
 	for _, c := range cases {
 		got := compileErr(t, c.src)

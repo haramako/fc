@@ -304,6 +304,8 @@ function move(e:*Enemies):void { ... }       // ハンドルは 1 バイトで�
 
 - `Enemies[i]` は要素（左辺値）、`&Enemies[i]` はハンドル、`*e` はハンドルの指す要素。入れ子の struct フィールド（`e.pos`）も要素として扱える
 - 配列フィールドを持つ struct は `soa` にできない。2 バイト以上のフィールドのアドレス（`&e.hp`）は取れない
+- soa の名前は値の型にならない（`var v:Enemies`、引数・戻り値・フィールド・配列の要素の型はエラー。型として書けるのは
+  ハンドルの `*Enemies` だけ）。`@sizeof(Enemies)` は全フィールドの配列の合計の大きさ
 - 他モジュールからは `mod.Enemies[i]`、`*mod.Enemies`、`use Enemies from mod;`（`public soa` のとき）
 
 ---

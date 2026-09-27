@@ -235,7 +235,7 @@ func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
 		}
 	}
 	if ty == nil {
-		ty = h.typeEval(t)
+		ty = h.typeOfRaw(t) // soa の名前 (`@sizeof(E)`) も通す (値の型にはならないが、大きさは従来どおり返す)
 	}
 	h.completeType(ty)
 	if ty.Size < 0 {
