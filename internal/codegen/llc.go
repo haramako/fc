@@ -1495,6 +1495,16 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 					r.push(l.storeA(op.Dst, 0))
 					r.push("lda #0")
 					r.push(l.storeA(op.Dst, 1))
+				} else if es == 2 && (ir.ValType(op.In(0)).Kind == types.Pointer || ir.ValType(op.In(0)).Size > 256) {
+					// 要素 2 バイトで i * 2 が 1 バイトに収まらないことがある (長さの分からないポインタ、128 要素を超える配列):
+					// 9 ビット目 (asl の C) を上位に足す (捨てていて `a[150]` (a:[200]u16) が a[22] だった。survey 2026-09-27)
+					r.push(l.loadA(op.In(1), 0), "asl a", "sta <reg+0", "lda #0", "rol a", "sta <reg+1", "clc")
+					if ir.ValType(op.In(0)).Kind == types.Array {
+						r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))), "adc <reg+0", l.storeA(op.Dst, 0),
+							fmt.Sprintf("lda #.HIBYTE(%s)", l.addrExpr(op.In(0))), "adc <reg+1", l.storeA(op.Dst, 1))
+					} else {
+						r.push(l.loadA(op.In(0), 0), "adc <reg+0", l.storeA(op.Dst, 0), l.loadA(op.In(0), 1), "adc <reg+1", l.storeA(op.Dst, 1))
+					}
 				} else if ir.ValType(op.In(0)).Kind == types.Array {
 					r.push(l.loadYIdx(op.In(1), op.In(0), false))
 					r.push("sty <reg+0")

@@ -299,12 +299,16 @@ func (s *ssaForm) addPhiOperands(v *ir.Value, phi *ssaVal) *ssaVal {
 	return s.tryRemoveTrivialPhi(phi)
 }
 
-// tryRemoveTrivialPhi は入力が (自分自身と未定義を除いて) 1 種類しかない φ をその入力で置き換える。
+// tryRemoveTrivialPhi は入力が (自分自身を除いて) 1 種類しかない φ をその入力で置き換える。
+// 未定義の入力は無視しない: φ(未定義, v) を v にすると、v が φ を支配しないとき (ループの先頭の φ で、v がループの中の
+// 代入) に、ループの後の読み出しが v の版 (`m = i` の i) の写しとして伝わって値が変わっていた (`var m; for (…) { m = i; }`
+// の後の m が -O 2 で最後の i ではなくループを抜けた i。survey 2026-09-27)。定数の評価 (evalConst) は未定義を
+// どの値でもよいとして無視してよい (値の同一性でなく定数だけを伝えるため)。
 func (s *ssaForm) tryRemoveTrivialPhi(phi *ssaVal) *ssaVal {
 	var same *ssaVal
 	for _, a := range phi.args {
 		a = resolve(a)
-		if a == same || a == phi || a.undef {
+		if a == same || a == phi {
 			continue
 		}
 		if same != nil {

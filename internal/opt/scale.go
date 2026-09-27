@@ -26,7 +26,7 @@ func scaleIndex(lmd *ir.Lambda, u *types.Universe) {
 				arr, idx := op.In(0), op.In(1)
 				iv, ok := idx.(*ir.Value)
 				if !op.Scaled && ok && iv.Kind == ir.KindLocal && iv.Type.Size == 1 && iv.Type.Kind == types.Int &&
-					ir.ValType(arr).Base.Size == 2 && (ir.ValKind(arr) == ir.KindGlobal || ir.ValType(arr).Kind == types.Pointer) {
+					ir.ValType(arr).Base.Size == 2 && (ir.ValKind(arr) == ir.KindGlobal && ir.ValType(arr).Size <= 256 || ir.ValType(arr).Kind == types.Pointer) {
 					i2 := scaled[iv]
 					if i2 == nil {
 						i2 = ir.NewLocal(iv.Name+"*2", u8, ir.LTNone)

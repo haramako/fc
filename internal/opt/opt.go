@@ -120,6 +120,10 @@ func Passes(u *types.Universe) []Pass {
 			if !ir.Disabled("ssa") && !ir.Disabled("unroll") && !lmd.NoGrow && unrollLoops(lmd) {
 				propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
 				compact(lmd)
+				if !ir.Disabled("fuse") {
+					fusePointer(lmd) // 添字が定数になった index + pget / pset (要素 2 バイトのポインタは定数の添字だけ融合できる)
+					compact(lmd)
+				}
 			}
 		}},
 		{"narrow", func(lmd *ir.Lambda) {

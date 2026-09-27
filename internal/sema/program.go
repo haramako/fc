@@ -126,6 +126,16 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	if m, ok := p.Modules.Get(id); ok {
 		return m, nil
 	}
+	if !isIdentifier(id) {
+		// モジュール名はファイル名から作り、アセンブラのシンボル・セグメント名になる (`a-b.fc` が ca65 の
+		// `Illegal segment name` になっていた。survey 2026-09-27)
+		return nil, &diag.Error{Msg: fmt.Sprintf("file name %s cannot be a module name: use letters, digits and _ (e.g. %s.fc)", filepath.Base(file.Filename), strings.Map(func(r rune) rune {
+			if r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+				return r
+			}
+			return '_'
+		}, id)), Pos: syntax.Position{Filename: file.Filename, Line: 1, Col: 1}}
+	}
 	mod = ir.NewModule(id, file.Filename, p.global)
 	mod.Version = file.Version
 	if file.Version >= syntax.Version3 {
@@ -394,4 +404,17 @@ func CompileProgram(prog *Program, baseDir string, libPath []string, mainFile st
 		return err
 	}
 	return prog.ErrorList()
+}
+
+// isIdentifier は s が fc の名前として使える綴りか (英字か _ で始まり、英数字と _)。
+func isIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
 }

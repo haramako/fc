@@ -42,26 +42,7 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
 	case *syntax.ForStmt:
 		return !s.IsV1() && (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
 	case *syntax.SwitchStmt:
-		if s.Default == nil {
-			return false
-		}
-		// 後ろから: fallthrough で終わる case は、次の case (最後なら default) が終端するなら終端する
-		next := len(s.Default.Body) > 0 && h.terminates(s.Default.Body[len(s.Default.Body)-1])
-		if !next {
-			return false
-		}
-		for i := len(s.Cases) - 1; i >= 0; i-- {
-			body := s.Cases[i].Body
-			switch {
-			case len(body) == 0:
-				return false
-			case endsWithFallthrough(body):
-				// next (次の case が終端するか) のまま
-			case !h.terminates(body[len(body)-1]):
-				return false
-			}
-		}
-		return true
+		return h.switchTerminates(s, nil)
 	case *syntax.LabeledStmt:
 		switch inner := s.Stmt.(type) {
 		case *syntax.LoopStmt:
@@ -70,10 +51,46 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
 			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label)
 		case *syntax.ForStmt:
 			return !inner.IsV1() && (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
+		case *syntax.SwitchStmt:
+			return h.switchTerminates(inner, s.Label)
 		}
 		return h.terminates(s.Stmt)
 	}
 	return false
+}
+
+// switchTerminates は switch が終端文か: default があり、全 case と default の最後の文が終端文 (fallthrough で終わる case は
+// 次の case が終端するなら)。case の中にこの switch を抜ける break (ラベル無しか label) や、外のループ・ラベルへの
+// break / continue があれば終端文でない (`case 1: if (c) { break; } return 1;` が落ちる)。
+func (h *Hlc) switchTerminates(sw *syntax.SwitchStmt, label *syntax.Ident) bool {
+	for _, c := range sw.Cases {
+		if hasBreakForSwitch(c.Body, label) {
+			return false
+		}
+	}
+	if sw.Default != nil && hasBreakForSwitch(sw.Default.Body, label) {
+		return false
+	}
+	if sw.Default == nil {
+		return false
+	}
+	// 後ろから: fallthrough で終わる case は、次の case (最後なら default) が終端するなら終端する
+	next := len(sw.Default.Body) > 0 && h.terminates(sw.Default.Body[len(sw.Default.Body)-1])
+	if !next {
+		return false
+	}
+	for i := len(sw.Cases) - 1; i >= 0; i-- {
+		body := sw.Cases[i].Body
+		switch {
+		case len(body) == 0:
+			return false
+		case endsWithFallthrough(body):
+			// next (次の case が終端するか) のまま
+		case !h.terminates(body[len(body)-1]):
+			return false
+		}
+	}
+	return true
 }
 
 // switchWithoutDefault は、s が default の無い switch で、全 case が終端文か (`missing return` で default を案内する。
@@ -107,32 +124,70 @@ func isTrueLiteral(e syntax.Expr) bool {
 	}
 }
 
-// hasBreakFor は body の中に「このループを抜ける break」があるか
-// (ラベルなしで間にループ/switch を挟まないもの、または label を指すもの)。
+// hasBreakFor は body (ループの本体) の中に「このループを抜ける」文があるか: このループを指す break (ラベル無しで間に
+// ループ / switch を挟まないもの、または label を指すもの) と、body の外のラベルへの break / continue
+// (`L: switch (x) { case 1: loop { break L; } … }` の loop は L へ抜ける。見ていなくて return 忘れを見逃した)。
 func hasBreakFor(body syntax.Stmt, label *syntax.Ident) bool {
+	return escapes(body, label, false)
+}
+
+// hasBreakForSwitch は switch の case の本体 stmts の中に、switch を抜ける文があるか (hasBreakFor と同じ。加えて、ループを
+// 挟まないラベル無しの continue は外のループへ抜ける)。
+func hasBreakForSwitch(stmts []syntax.Stmt, label *syntax.Ident) bool {
+	return escapes(&syntax.Block{Stmts: stmts}, label, true)
+}
+
+func escapes(body syntax.Stmt, label *syntax.Ident, isSwitch bool) bool {
+	inner := map[string]bool{} // body の中で付けたラベル (そこへの break / continue は body の中に留まる)
+	var collect func(n syntax.Node)
+	collect = func(n syntax.Node) {
+		switch n := n.(type) {
+		case *syntax.LabeledStmt:
+			inner[n.Label.Name] = true
+		case *syntax.LambdaExpr:
+			return
+		}
+		for _, c := range syntax.Children(n) {
+			collect(c)
+		}
+	}
+	collect(body)
+	outside := func(l *syntax.Ident) bool {
+		return (label != nil && l.Name == label.Name) || !inner[l.Name]
+	}
 	found := false
-	var walk func(n syntax.Node, nested bool)
-	walk = func(n syntax.Node, nested bool) {
+	var walk func(n syntax.Node, inLoop, inBreakable bool)
+	walk = func(n syntax.Node, inLoop, inBreakable bool) {
 		if found {
 			return
 		}
 		switch n := n.(type) {
 		case *syntax.BreakStmt:
-			if n.Label == nil && !nested || n.Label != nil && label != nil && n.Label.Name == label.Name {
+			if n.Label == nil && !inBreakable || n.Label != nil && outside(n.Label) {
+				found = true
+			}
+			return
+		case *syntax.ContinueStmt:
+			switch {
+			case n.Label == nil:
+				found = isSwitch && !inLoop // switch の中の continue は外のループへ
+			case label != nil && n.Label.Name == label.Name && !isSwitch:
+				// このループの次の繰り返し (抜けない)
+			case !inner[n.Label.Name]:
 				found = true
 			}
 			return
 		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
-			nested = true
+			inLoop, inBreakable = true, true
 		case *syntax.SwitchStmt:
-			nested = true
+			inBreakable = true
 		case *syntax.LambdaExpr:
 			return
 		}
 		for _, c := range syntax.Children(n) {
-			walk(c, nested)
+			walk(c, inLoop, inBreakable)
 		}
 	}
-	walk(body, false)
+	walk(body, false, false)
 	return found
 }

@@ -31,8 +31,21 @@ func (h *Hlc) adaptLiteral(a, b ir.Operand, cmp bool) (ir.Operand, ir.Operand) {
 			continue // 定数同士 (普通は畳み込まれている)
 		}
 		t := ir.ValType(other)
-		if t.Kind != types.Int || t.Enum != nil || t.Size < 1 || t.Size > 2 || v.Type.Size > t.Size || v.Int < -32768 || v.Int > 65535 {
-			continue // 定数のほうが大きい型 (16 ビットに収まらない 65536 なども): 今までどおり広げる (比較は warnConstCompare)
+		if t.Kind != types.Int || t.Enum != nil || t.Size < 1 || t.Size > 2 {
+			continue
+		}
+		if v.Type.Size > t.Size || v.Int < -32768 || v.Int > 65535 {
+			// 定数のほうが大きい型: 今までどおり広げる (16 ビットに収まらない定数の比較は foldBeyond16 が畳む)。
+			// 比較で相手が符号付きなら、符号付きの広い型にする (`s < 300` (s:i8) が u16 で比べて -10 < 300 が偽だった)
+			if cmp && t.Signed && !v.Type.Signed && v.Int <= 32767 {
+				r := ir.NewIntLiteral("", h.prog.Types.IntType(2, true), v.Int)
+				if k == 0 {
+					a = r
+				} else {
+					b = r
+				}
+			}
+			continue
 		}
 		lo, hi := intRange(t)
 		if v.Int >= lo && v.Int <= hi {
@@ -65,4 +78,37 @@ func intRange(t *types.Type) (lo, hi int) {
 		lo, hi = -(hi+1)/2, (hi+1)/2-1
 	}
 	return lo, hi
+}
+
+// foldBeyond16 は、16 ビットに収まらない定数と整数の値の比較を畳む (結果は値によらず決まる)。広げる先の型が無く、
+// 定数を 16 ビットに切り詰めて比べていた (`w == 65537` (w = 1) が真。警告は「決して等しくない」と出ていた)。
+func (h *Hlc) foldBeyond16(op cop, left, right ir.Operand) (int, bool) {
+	beyond := func(v ir.Operand) (int, bool) {
+		k, ok := ir.ValIntLiteral(v)
+		return k, ok && (k < -32768 || k > 65535)
+	}
+	isVar := func(v ir.Operand) bool {
+		t := ir.ValType(v)
+		_, lit := ir.ValIntLiteral(v)
+		return !lit && t.Kind == types.Int && t.Enum == nil
+	}
+	b2i := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	if k, ok := beyond(right); ok && isVar(left) {
+		if op == opEq {
+			return 0, true
+		}
+		return b2i(k > 0), true // v < k
+	}
+	if k, ok := beyond(left); ok && isVar(right) {
+		if op == opEq {
+			return 0, true
+		}
+		return b2i(k < 0), true // k < v
+	}
+	return 0, false
 }
