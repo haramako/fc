@@ -43,7 +43,7 @@
    0003 (:push_arg #"u16" {lit nil 255 #"u8"})
    0004 (:push_arg #"*const u8" {pa {g $4 #"[7]u8" :_3}})
    0005 (:call nil {lit assert_equal :_unittest_assert_equal #"fn(u16,u16,*const u8):void"})
-   0006 (:load {l1 a} {g a1 #"[4]u8" :_test_cast_a1})
+   0006 (:load {l1 a} {pa {g a1 #"[4]u8" :_test_cast_a1}})
    0007 (:load {l2 a2} {cast #"*u16" 0 {l1 a}})
    0008 (:push_result #"void")
    0009 (:index {l3 $6} {l2 a2} {lit nil 0 #"u8"})

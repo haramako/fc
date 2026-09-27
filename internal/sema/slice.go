@@ -332,7 +332,7 @@ func registerSliceBuiltins(h *Hlc) {
 		bp := h.prog.Types.PointerTo(u8)
 		dp := h.operandValue(retypePtr(d.ptr, bp))
 		sp := h.operandValue(retypePtr(s.ptr, bp))
-		h.lval(ccall(cv(mem.Interface().LookupInternal("copy")), cv(dp), cv(sp), cv(h.operandValue(bytes))))
+		h.lval(ccall(cv(h.moduleFunc(mem.Interface(), "mem", "copy")), cv(dp), cv(sp), cv(h.operandValue(bytes))))
 		return macroResult{expr: cv(h.operandValue(n))}
 	})
 }

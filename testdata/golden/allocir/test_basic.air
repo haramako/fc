@@ -8,7 +8,7 @@
   0000 (:load {l0 toooooooooooooooooooooooooooooooooooooooo_long_id} {lit nil 0 #"u8"})
   0001 (:add {l1 $4} {l0 toooooooooooooooooooooooooooooooooooooooo_long_id} {lit nil 1 #"u8"})
   0002 (:load {l0 toooooooooooooooooooooooooooooooooooooooo_long_id} {l1 $4})
-  0003 (:load {l2 i} {g $7 #"[64]u8" :_6})
+  0003 (:load {l2 i} {pa {g $7 #"[64]u8" :_6}})
   0004 (:return)
  )
 )

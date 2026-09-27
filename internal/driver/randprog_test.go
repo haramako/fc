@@ -266,7 +266,7 @@ func (g *rpGen) expr(t rpType, depth int) string {
 	switch g.pick(14) {
 	case 12:
 		// min / max (その場に比較と代入を出す組み込み)
-		return fmt.Sprintf("%s(%s, %s)", []string{"min", "max"}[g.pick(2)], g.expr(t, depth-1), g.expr(t, depth-1))
+		return fmt.Sprintf("%s(%s, %s)", []string{"min", "max"}[g.pick(2)], g.cmpSide(t, depth-1), g.cmpSide(t, depth-1)) // 比較なので定数の規則も同じ
 	case 0, 1, 2:
 		op := []string{"+", "-", "*", "&", "|", "^"}[g.pick(6)]
 		return fmt.Sprintf("(%s %s %s)", g.expr(t, depth-1), op, g.expr(t, depth-1))

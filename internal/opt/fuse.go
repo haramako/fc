@@ -52,11 +52,15 @@ func fusePointer(lmd *ir.Lambda) {
 			}
 		case ir.OpIndex:
 			arr, idx := op.Src[0], op.Src[1]
-			if es := ir.ValType(arr).Base.Size; es != 1 && es != 2 {
+			es := ir.ValType(arr).Base.Size
+			if es != 1 && es != 2 {
 				continue // struct の配列 (要素サイズが 1・2 以外) は sym+i,y の形にできない
 			}
-			isArray := ir.ValKind(arr) == ir.KindGlobal && ir.ValType(arr).Kind == types.Array // グローバル配列: sym+i,y
-			isPtr := ir.ValType(arr).Kind == types.Pointer                                     // ポインタ変数: ldy i; lda (p),y
+			// 要素が 2 バイトのときは Y = i * 2 が 1 バイトに収まる (配列全体が 256 バイト以内) ときだけ。ポインタは長さが
+			// 分からないので要素 1 バイトだけ (`a[150]` (a:[200]u16) が a[22] を読み書きしていた。survey 2026-09-27)
+			isArray := ir.ValKind(arr) == ir.KindGlobal && ir.ValType(arr).Kind == types.Array && (es == 1 || ir.ValType(arr).Size <= 256) // sym+i,y
+			k, lit := ir.ValIntLiteral(idx)
+			isPtr := ir.ValType(arr).Kind == types.Pointer && (es == 1 || lit && k >= 0 && k*es+es <= 256) // ldy i; lda (p),y (定数の添字なら要素 2 バイトも)
 			if (!isArray && !isPtr) ||
 				ir.ValLocalType(op.Dst) != ir.LTTemp || // その変数をそこでしか使っていない
 				ir.ValType(idx).Size != 1 { // インデックスのサイズが 1 バイト

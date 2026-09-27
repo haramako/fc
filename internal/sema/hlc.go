@@ -47,6 +47,7 @@ type Hlc struct {
 	caseDecls   map[string]bool      // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
 	loopVars    map[*ir.Value]bool   // fc 3: for-each の変数 (読み取り専用。forin.go)
 	exprAliases map[*ir.Value]*cexpr // fc 3: 式の別名になった名前 (for-each の要素のポインタ `&A[i]`。forin.go)
+	aliasNodes  map[*cexpr]string    // 別名の評価済みの式 → 名前 (代入の検査。forin.go)
 }
 
 // breakable は break / continue の飛び先になる文 (ループ、v2 では switch も)。
@@ -907,6 +908,14 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 					panic(&diag.Error{Msg: msg, Pos: syntax.At(h.module.Path, v.Pos())})
 				}
 				if k, ok := ir.ValIntLiteral(cv); ok {
+					if ct := ir.ValType(cond); ct.Kind == types.Int && ct.Enum == nil && ct.Size <= 2 {
+						// タグの大きさのビットに収まらない値は決して一致しないのでエラー (u8 の `case 300:` が黙って一致しなかった。
+						// survey 2026-09-27)。符号だけ違う値 (u8 の `case -1:` は 255 と一致) は比較の規則に合わせるか未判断
+						// (castle に 4 か所。doc/v3_plan.md §10.7) なので今のまま
+						if k < -(1<<(8*ct.Size-1)) || k >= 1<<(8*ct.Size) {
+							panic(&diag.Error{Msg: fmt.Sprintf("case value %d does not fit in %s, the type of the switch value", k, ct), Pos: syntax.At(h.module.Path, v.Pos())})
+						}
+					}
 					if seen[k] {
 						panic(&diag.Error{Msg: fmt.Sprintf("duplicate case value %d", k), Pos: syntax.At(h.module.Path, v.Pos())})
 					}
@@ -1102,7 +1111,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		vv.Public = true
 	}
 	if init != nil {
-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{init}})
+		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
+		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.cast(init, vv.Type)}})
 	}
 }
 
@@ -1137,6 +1148,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			// (.word で並ぶ)。型検査は変換した後の値で (要素が名前だけだと変換前は `[N][M]T` で `[N]*T` に合わない)
 			v = h.pointerElems(name, v, declType.Base)
 		}
+		checkRaggedLiteral(v)
 		t := h.guessType(name, declType, v)
 		if v.Type.Kind == types.Macro {
 			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
@@ -1250,7 +1262,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		}
 		v := h.scope.FindMust(c.name, true)
 		if a := h.exprAliases[v]; a != nil {
-			return h.constEval(a)
+			return a // 評価済みの式そのもの (代入の検査は同じ node かで見る)
 		}
 		return cv(v)
 
@@ -1373,8 +1385,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				h.checkCast(c.ck, x.val.Type, ty)
 			}
 			n := x.val.Int
-			if c.ck == syntax.CastAs && ty.Kind == types.Int && ty.Size > 0 && ty.Size < 8 {
-				// 数値変換: 型の幅に切り詰めて、その符号で読む (`(300 as int) as int16` は 44。畳まない変数の cast と同じ。
+			if (ty.Kind == types.Int || ty.Kind == types.Bool) && ty.Size > 0 && ty.Size < 8 {
+				// 数値変換・ビットの読み替え: 型の幅に切り詰めて、その符号で読む (`(300 as int) as int16` は 44、
+				// `@bitcast(i8, 254 as u8)` は -2。畳まない変数の cast と同じ。
 				// 以前は値をそのまま型だけ貼り替えていて、広げ直すと 300 のままだった)
 				bits := 8 * ty.Size
 				n = ir.FloorMod(n, 1<<bits)
@@ -1435,6 +1448,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				switch c.op {
 				case opEq, opNe, opLt, opGt, opLe, opGe, opLand, opLor, opNot:
 					return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), n)) // 比較・論理演算の定数畳み込みも bool
+				}
+				if t := h.foldType(args); t != nil {
+					return cv(ir.NewIntLiteral("", t, wrapInt(n, t))) // 型付きの定数は、変数と同じく型の幅で折り返す
 				}
 				return cv(h.IntValue(n))
 			}
@@ -1621,9 +1637,18 @@ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 			}
 			if sv.val.Kind == ir.KindLiteral && sv.val.IsInt {
 				n = sv.val.Int
+				if n < 0 {
+					// 負の長さは「長さ未定」(-1) と区別できず、ca65 の Range error や slice 扱いになっていた (survey 2026-09-27)
+					panic(&diag.Error{Msg: fmt.Sprintf("array length must not be negative (got %d)", n)})
+				}
+			} else {
+				panic(&diag.Error{Msg: fmt.Sprintf("array length must be an integer constant (got %s)", ir.ValType(sv.val))})
 			}
 		}
 		elem := h.typeOf(t.Elem)
+		if n >= 0 && elem.Size > 0 && n*elem.Size > 65535 {
+			panic(&diag.Error{Msg: fmt.Sprintf("array [%d]%s is too large (%d bytes; the 6502 address space is 64 KB)", n, elem, n*elem.Size)})
+		}
 		return h.prog.Types.ArrayOf(elem, n)
 	case *syntax.FuncType:
 		params := make([]*types.Type, len(t.Params))
@@ -1892,6 +1917,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		if root := h.prog.storageAliases[e.val]; root != nil {
 			r = ir.NewCastedValue(root, e.val.Type, 0)
 		} else if e.val.Kind == ir.KindArrayLiteral {
+			checkRaggedLiteral(e.val)
 			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
 			g := ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
 			g.ReadOnly = true // 文字列・配列リテラルは ROM (fc 3 の *const)
@@ -1941,6 +1967,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		switch e.op {
 
 		case opLoad:
+			h.checkAliasAssign(e.args[0])
 			if lhs := e.args[0]; lhs.kind == cOp && lhs.op == opCall {
 				// 呼び出しの結果は一時変数なので、そのまま進むと `g() = 0` が黙って通り、void なら nil 参照で落ちる (fuzz で発覚)
 				panic(&diag.Error{Msg: "cannot assign to the result of a function call"})
@@ -2008,6 +2035,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 						panic(&diag.Error{Msg: "no arithmetic on *void"})
 					}
 					typ = ir.ValType(left)
+					right = h.signedOffset(right) // p + i (i:i8 が負) は後ろへ
 					if typ.Kind == types.Pointer && typ.Base.Size > 1 {
 						// p + n / p++ は要素 n 個分進める (C と同じ。language_reference §6)。バイト単位で進めていて、u16 の配列を
 						// p++ でたどると 1 バイトずれ、p[1] と *(p + 1) が違っていた
@@ -2023,6 +2051,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				panic(&diag.Error{Msg: "div by 0"})
 			}
 			tmp := h.newTmp(typ)
+			if typ.Kind == types.Pointer {
+				h.markReadOnly(tmp, h.readOnly(left)) // `p + 1` (p:*const T) も読み取り専用 (外れて書き込めていた。survey 2026-09-27)
+			}
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 
@@ -2047,6 +2078,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			left, right = h.adaptLiteral(left, right, true)
 			h.warnConstCompare(e.op, left, right)
+			if k, ok := h.foldBeyond16(e.op, left, right); ok {
+				r = ir.NewIntLiteral("", h.prog.Types.Bool(), k)
+				break
+			}
 			if e.op == opLt {
 				checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right)) // == / != は struct・配列でもよい (バイトの比較)
 			}
@@ -2228,6 +2263,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			for i, a := range e.args {
 				vals[i] = h.rval(a)
 			}
+			for i := 1; i < len(vals); i++ {
+				// 比較なので、型のない定数は比較と同じ規則 (`@min(s, 200)` (s:i8) は 200 が収まらずエラー。-56 と比べていた)
+				vals[0], vals[i] = h.adaptLiteral(vals[0], vals[i], true)
+			}
 			typ := ir.ValType(vals[0])
 			for _, v := range vals[1:] {
 				typ = h.compatible(typ, ir.ValType(v))
@@ -2288,6 +2327,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 			if ir.ValType(right).Kind != types.Int && ir.ValType(right).Kind != types.Bool {
 				panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(right))})
+			}
+			if ir.ValType(left).Kind == types.Pointer {
+				right = h.signedOffset(right) // p[-1]、p[i] (i:i8) は負のずれ
 			}
 			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))
 			h.markReadOnly(tmp, h.readOnly(left))
@@ -2730,5 +2772,70 @@ func (h *Hlc) compileCaseBody(s *syntax.SwitchStmt, ci int, body []syntax.Stmt, 
 	}
 	if ci >= 0 || target != end {
 		h.emit(&ir.Op{Code: ir.OpJump, Label: target})
+	}
+}
+
+// signedOffset は、ポインタに足す符号付きの 1 バイトの値 (添字・ずれ) を 2 バイトに符号拡張する。1 バイトのまま
+// アドレスの下位に足すと上位の桁を借りず、`p[-1]` や `p[i]` (i:i8 = -2) が 255 / 254 先を読んでいた (survey 2026-09-27)。
+func (h *Hlc) signedOffset(v ir.Operand) ir.Operand {
+	t := ir.ValType(v)
+	if t.Kind != types.Int || !t.Signed || t.Size != 1 {
+		return v
+	}
+	i16 := h.prog.Types.IntType(2, true)
+	if k, ok := ir.ValIntLiteral(v); ok {
+		return ir.NewIntLiteral("", i16, k)
+	}
+	return h.cast(v, i16)
+}
+
+// foldType は定数の演算の結果の型 (オペランドに型付きの整数定数があるとき。型のない定数は相手に合わせる)。
+// 全部が型のない定数なら nil (値から型を決める IntValue)。`(200 as u8) + (100 as u8)` や `const A:u8 = 200; A + 100` は
+// u8 で 44 (変数と同じ。畳み込みで 300 のまま広がっていた。survey 2026-09-27)。
+func (h *Hlc) foldType(args []*cexpr) *types.Type {
+	var ops []ir.Operand
+	typed := false
+	for _, a := range args {
+		v := a.val
+		if v.Type.Kind != types.Int || v.Type.Enum != nil {
+			return nil // bool・enum・ポインタの定数は今までどおり
+		}
+		typed = typed || !v.Untyped
+		ops = append(ops, v)
+	}
+	if !typed {
+		return nil
+	}
+	if len(ops) == 1 {
+		return ir.ValType(ops[0])
+	}
+	a, b := h.adaptLiteral(ops[0], ops[1], false)
+	return h.prog.Types.Compatible(ir.ValType(a), ir.ValType(b))
+}
+
+// wrapInt は n を整数型 t の値に折り返す (幅で切り詰めて、その符号で読む)。
+func wrapInt(n int, t *types.Type) int {
+	if t.Size <= 0 || t.Size >= 8 {
+		return n
+	}
+	bits := 8 * t.Size
+	n = ir.FloorMod(n, 1<<bits)
+	if t.Signed && n >= 1<<(bits-1) {
+		n -= 1 << bits
+	}
+	return n
+}
+
+// checkRaggedLiteral は、長さの揃わない入れ子の配列リテラル (`[[1, 2, 3], [4, 5]]`) が、ポインタの配列への変換
+// (`const PS:[N]*T = [...]`) を通らずに残っていたらエラーにする (要素の互換型がポインタになり、要素が配列のまま残って
+// codegen が panic していた。survey 2026-09-27)。
+func checkRaggedLiteral(v *ir.Value) {
+	if v.Kind != ir.KindArrayLiteral || v.Type.Kind != types.Array || v.Type.Base.Kind != types.Pointer {
+		return
+	}
+	for _, e := range v.Elems {
+		if ev := ir.ValLiteral(e); ev != nil && ev.Kind == ir.KindArrayLiteral {
+			panic(&diag.Error{Msg: "elements of an array literal have different lengths; declare the type, e.g. `const M:[?][]const u8 = [...]` (rows as slices) or `const M:[?]*const u8 = [...]`"})
+		}
 	}
 }

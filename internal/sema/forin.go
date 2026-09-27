@@ -127,9 +127,11 @@ func (h *Hlc) forInElems(s *syntax.ForInStmt) (forInLoop, func()) {
 	switch {
 	case t.Kind == types.Pointer && (t.Base.Kind == types.Array || t.Base.IsSlice()):
 		ptrMode, bt = true, t.Base
-		if x.kind == cOp && x.op == opRef {
-			base = x.args[0] // `&A`: 要素のポインタを `&A[i]` にする (A が静的な配列なら添字の読み書きのまま)
+		if ex := h.constEval(x); ex.kind == cOp && ex.op == opRef && bt.Kind == types.Array && staticPlace(ex.args[0]) {
+			base = ex.args[0] // `&A`: 要素のポインタを `&A[i]` にする (A が静的な配列なら添字の読み書きのまま)
 		} else {
+			// ほかは回す値を最初に 1 回だけ評価する (`&M[k]`、`&sp.buf`、`&s` (slice) の中の変数を毎周読み直して、途中で
+			// 変えると別の行・範囲外を回っていた。survey 2026-09-27)
 			base = cop2(opDeref, cv(h.freezeRO(v)))
 		}
 	case t.Kind == types.Array:
@@ -148,6 +150,9 @@ func (h *Hlc) forInElems(s *syntax.ForInStmt) (forInLoop, func()) {
 	}
 	if bt.Kind == types.Array {
 		n := bt.Length
+		if ce := h.constEval(x); ce.kind == cValue && ce.val.IsString && !ptrMode && n > 0 {
+			n-- // 文字列リテラルは終端の 0 を回らない (`@len("abc")` や slice にしたときと同じ 3 文字。survey 2026-09-27)
+		}
 		it = h.prog.Types.IntType(1, false)
 		if n > 256 {
 			it = h.prog.Types.IntType(2, false)
@@ -226,8 +231,19 @@ func (h *Hlc) declareAlias(name string, t *types.Type, e *cexpr) {
 	h.scope.Declare(v)
 	if h.exprAliases == nil {
 		h.exprAliases = map[*ir.Value]*cexpr{}
+		h.aliasNodes = map[*cexpr]string{}
 	}
-	h.exprAliases[v] = e
+	ev := h.constEval(e) // 名前を読むたびに同じ評価済みの式になる (cmemo)。代入の左辺に来たら checkAliasAssign が見つける
+	h.exprAliases[v] = ev
+	h.aliasNodes[ev] = name
+}
+
+// checkAliasAssign は for-each の要素のポインタ (式の別名) への代入をエラーにする (`p++`、`p = &b` が置き場所の無い
+// 一時変数に入って黙って捨てられていた。survey 2026-09-27)。
+func (h *Hlc) checkAliasAssign(lhs *cexpr) {
+	if name, ok := h.aliasNodes[lhs]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to for-each variable `%s` (it is read-only; it points to the current element)", name)})
+	}
 }
 
 // checkLoopVarAssign は for-each の変数への代入をエラーにする。
@@ -350,4 +366,19 @@ func (h *Hlc) caseRangeTest(dst *ir.Value, cond ir.Operand, it caseItem) {
 		u = d
 	}
 	h.emit(&ir.Op{Code: ir.OpLt, Dst: dst, Src: []ir.Operand{u, ir.NewIntLiteral("", ut, count)}})
+}
+
+// staticPlace は評価済みの式 c が、変数を読まずに決まる置き場所 (変数そのもの・定数の添字・struct のフィールドをたどったもの)
+// か。for-each が `&A[i]` の別名で回してよい (周ごとに評価し直しても同じ場所) かの判定。
+func staticPlace(c *cexpr) bool {
+	switch {
+	case c.kind == cValue:
+		v := c.val
+		return (v.Kind == ir.KindGlobal || v.Kind == ir.KindLocal) && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct)
+	case c.kind == cOp && c.op == opField:
+		return staticPlace(c.args[0])
+	case c.kind == cOp && c.op == opIndex:
+		return c.args[1].isLiteralInt() && staticPlace(c.args[0])
+	}
+	return false
 }

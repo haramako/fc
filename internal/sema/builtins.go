@@ -40,8 +40,8 @@ func registerBuiltins(p *Program) {
 	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		stdio := h.stdioModule("printf")
 		uint8p := h.prog.Types.PointerTo(h.prog.Types.IntType(1, false))
-		print := stdio.LookupInternal("print")
-		printInt16 := stdio.LookupInternal("print_int16")
+		print := h.moduleFunc(stdio, "stdio", "print")
+		printInt16 := h.moduleFunc(stdio, "stdio", "print_int16")
 		r := macroResult{stmts: []*cexpr{}}
 		for _, arg := range args {
 			// 旧実装は引数が定数値 (変数・リテラル) しか受けなかった。式 (struct のフィールドなど) は先に評価して値にする
@@ -54,19 +54,19 @@ func registerBuiltins(p *Program) {
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
 			case typ.IsSlice() && typ.SliceOf.Kind == types.Int && typ.SliceOf.Size == 1 && !typ.IsWideSlice():
 				// slice は長さの分だけ (文字列の slice。黙って捨てていた)
-				r.stmts = append(r.stmts, ccall(cv(stdio.LookupInternal("print_slice")), arg))
+				r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "stdio", "print_slice")), arg))
 			case typ.Kind == types.Int && typ.Enum != nil:
 				// enum は値 (print_int16 の引数の型のエラーだった)
 				u16 := h.prog.Types.IntType(2, typ.Signed)
 				n := &cexpr{kind: cCast, args: []*cexpr{arg}, ty: u16, ck: syntax.CastAs}
 				if typ.Signed {
-					r.stmts = append(r.stmts, ccall(cv(stdio.LookupInternal("print_sint16")), n))
+					r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "stdio", "print_sint16")), n))
 				} else {
 					r.stmts = append(r.stmts, ccall(cv(printInt16), n))
 				}
 			case typ.Kind == types.Int && typ.Signed:
 				// 符号付きは符号付きで (符号なしで 65531 と出ていた)
-				r.stmts = append(r.stmts, ccall(cv(stdio.LookupInternal("print_sint16")), arg))
+				r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "stdio", "print_sint16")), arg))
 			case typ.Kind == types.Int || typ.Kind == types.Bool:
 				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
 			default:
@@ -78,9 +78,9 @@ func registerBuiltins(p *Program) {
 
 	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		stdio := h.stdioModule("unittest_run_tests")
-		print := stdio.LookupInternal("print")
-		exit := stdio.LookupInternal("exit")
-		init := stdio.LookupInternal("init")
+		print := h.moduleFunc(stdio, "stdio", "print")
+		exit := h.moduleFunc(stdio, "stdio", "exit")
+		init := h.moduleFunc(stdio, "stdio", "init")
 		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
 		for _, id := range h.scope.IdList() {
 			if len(id) >= 5 && id[:5] == "test_" {
@@ -121,7 +121,7 @@ func registerBuiltins(p *Program) {
 		if len(args) != 1 {
 			panic(&diag.Error{Msg: "cos takes 1 argument"})
 		}
-		return macroResult{expr: ccall(cv(m.Interface().LookupInternal("sin")), cop2(opAdd, args[0], cint(64)))}
+		return macroResult{expr: ccall(cv(h.moduleFunc(m.Interface(), "math", "sin")), cop2(opAdd, args[0], cint(64)))}
 	})
 
 	registerSliceBuiltins(h)
@@ -193,4 +193,14 @@ func (h *Hlc) nullFn(t *types.Type) *ir.Value {
 		panic(&diag.Error{Msg: fmt.Sprintf("@null_fn cannot be used as %s: it returns nothing (only fn(...):void)", t)})
 	}
 	return ir.NewSymbolLiteral("", t, nullFnSymbol)
+}
+
+// moduleFunc は組み込みが呼ぶモジュールの関数 name を引く。無ければエラー (ソースのディレクトリに同じ名前のモジュール
+// (stdio.fc など) があると fclib のものが隠れ、nil のまま呼んで panic していた。survey 2026-09-27)。
+func (h *Hlc) moduleFunc(m *ir.ModuleInterface, mod, name string) *ir.Value {
+	v := m.LookupInternal(name)
+	if v == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("module %s has no %s (needed by a builtin); is a %s.fc in your source directory hiding fclib's %s?", mod, name, mod, mod)})
+	}
+	return v
 }

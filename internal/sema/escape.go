@@ -41,6 +41,17 @@ func (h *Hlc) localAddr(e syntax.Expr, decay bool) (string, bool) {
 		return name, t != nil && t.Kind == types.Array
 	case *syntax.CastExpr:
 		return h.localAddr(x.X, true) // `a as *u8`、`(&x) as *u8`
+	case *syntax.BinaryExpr:
+		if x.Op == syntax.Plus || x.Op == syntax.Minus {
+			return h.localAddr(x.X, decay) // `&x + 1`、`a + 2`
+		} // `s.buf` (Dot) は下の配列の名前として見る
+	case *syntax.Ident:
+		// for-each の要素のポインタ (`&base[i]` の別名): ローカルの配列を回しているなら同じ
+		if v := h.scope.Find(x.Name, true); v != nil {
+			if ev := h.exprAliases[v]; ev != nil {
+				return aliasLocal(ev)
+			}
+		}
 	}
 	if decay {
 		name, t := h.localPath(e)
@@ -55,7 +66,7 @@ func (h *Hlc) localPath(e syntax.Expr) (string, *types.Type) {
 	switch x := unparenExpr(e).(type) {
 	case *syntax.Ident:
 		v := h.scope.Find(x.Name, true)
-		if v == nil || v.Kind != ir.KindLocal || v.LocalType != ir.LTNone {
+		if v == nil || !localStorage(v) {
 			return "", nil
 		}
 		return x.Name, v.Type
@@ -92,4 +103,37 @@ func unparenExpr(e syntax.Expr) syntax.Expr {
 		}
 		e = p.X
 	}
+}
+
+// localStorage は v が呼ばれた側の静的フレームにある値か: ユーザーのローカル変数と、値渡しの struct・配列の引数
+// (呼ぶ側の値の写し。`function g(s:S):*u8 { return &s.b; }` は次の呼び出しで上書きされる)。
+func localStorage(v *ir.Value) bool {
+	if v.Kind != ir.KindLocal {
+		return false
+	}
+	switch v.LocalType {
+	case ir.LTNone:
+		return true
+	case ir.LTArg:
+		return v.Type.Kind == types.Struct || v.Type.Kind == types.Array
+	}
+	return false
+}
+
+// aliasLocal は評価済みの式 (for-each の要素のポインタの別名 `&base[i]`) の元がローカル変数なら、その名前を返す。
+func aliasLocal(c *cexpr) (string, bool) {
+	for c != nil {
+		switch {
+		case c.kind == cValue:
+			if localStorage(c.val) {
+				return c.val.Name, true
+			}
+			return "", false
+		case c.kind == cOp && (c.op == opRef || c.op == opIndex || c.op == opField):
+			c = c.args[0]
+		default:
+			return "", false
+		}
+	}
+	return "", false
 }
