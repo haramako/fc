@@ -90,15 +90,13 @@ func TestSurvey2Errors(t *testing.T) {
 		{"var A:[4]u8;\nfunction f():void { for (var p in &A) { p++; } }", "cannot assign to for-each variable `p`"},
 		{"function f(s:i8):i8 { return @min(s, 200); }", "200 does not fit in i8"},
 		{"function f(u:u8):void { switch (u) { case 300: u = 1; } }", "case value 300 does not fit in u8"},
+		{"function f(u:u8):void { switch (u) { case -1: u = 1; } }", "case value -1 does not fit in u8"},
+		{"function f(s:i8):void { switch (s) { case 200: s = 1; } }", "case value 200 does not fit in i8"},
 	} {
 		_, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\n" + c.src + "\nfunction main():void { }\n"})
 		if err == nil || !strings.Contains(err.Error(), c.msg) {
 			t.Errorf("%s: got %v, want %q", c.src, err, c.msg)
 		}
-	}
-	// 符号だけ違う case の値 (u8 の `case -1:` は 255) は未判断なので今のまま通る (castle に 4 か所)
-	if _, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\nuse * from stdio;\nfunction main():void { var u:u8 = 255; switch (u) { case -1: exit(0); } exit(1); }\n"}); err != nil {
-		t.Errorf("u8 の case -1: %v", err)
 	}
 	if _, err := buildFiles(t, map[string]string{"a-b.fc": "#fc 3\nfunction main():void { }\n", "t.fc": "#fc 3\nuse a-b;\n"}); err == nil {
 		t.Errorf("a-b.fc: エラーにならない")
