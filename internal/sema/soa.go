@@ -202,8 +202,11 @@ func (h *Hlc) soaOf(t *types.Type) *soaInfo {
 	if t.Kind == types.SoaRef {
 		t = t.Soa
 	}
-	if d := h.prog.typeDecls[t]; d != nil && d.state == resolutionFailed {
-		panic(&diag.Error{Suppressed: true})
+	if d := h.prog.typeDecls[t]; d != nil {
+		// まだ解決していない宣言はここで解決する (失敗済みなら黙って打ち切る)。soaElement は要素の型だけを先に
+		// 決めるので、宣言より前に評価される式 (`function A():t {}` から引かれた `{ var t = Enemies[0]; }` など) が
+		// 登録前の soa に届く (fuzz で発覚)
+		d.resolve()
 	}
 	info, ok := h.prog.soas[t]
 	if !ok {

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("struct Enemy{}function A():t{}soa Enemies:[0]Enemy;{var t=Enemies[0];}")

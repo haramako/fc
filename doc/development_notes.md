@@ -252,6 +252,8 @@ go test ./...                                    # 全部 (golden + examples + N
   既定値つきの引数の型にすると落ちるのを発見（`fitArrayLiteral` が Kind == Array の soa の `Base`（nil）を読んだ。soa を除く）。
   続けて 4 時間 24 分で `options(symbol: "")` の外部 const を読むと codegen が落ちるのを発見（シンボル名を検査して
   いなかった。空白入り・数字始まりも壊れた asm になる。`symbolOption` で識別子か検査する）。
+  続けて 1 時間 38 分で、宣言より前に評価される式（`function A():t {}` から引かれた `{ var t = Es[0]; }`）が登録前の soa に
+  届いて落ちるのを発見（`soaElement` は要素の型だけ先に決める。`soaOf` で宣言をその場で解決する）。
   注意: `go test -fuzz` を kill してもテストバイナリ（コーディネータとワーカー）が残って回り続ける。止めるときは
   `setsid` で起動してプロセスグループごと kill する
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
