@@ -1088,9 +1088,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				} // explicit legacy default overrides inherited bss
 			}
 			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg}
-			if sym, ok := opt.Get("symbol"); ok {
+			if sym, ok := symbolOption(opt); ok {
 				// options(symbol: "name"): fc が確保する領域のシンボル名を固定する (asm から参照するとき)
-				d.Sym = sym.Text()
+				d.Sym = sym
 				h.addDefModule(d)
 				symbol = d.Sym
 			} else {
@@ -1161,8 +1161,8 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			}
 			d := &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems}
 			var symbol string
-			if sym, ok := opt.Get("symbol"); ok {
-				d.Sym = sym.Text() // シンボル名を固定 (asm から参照する表など)
+			if sym, ok := symbolOption(opt); ok {
+				d.Sym = sym // シンボル名を固定 (asm から参照する表など)
 				h.addDefModule(d)
 				symbol = d.Sym
 			} else {
@@ -1192,10 +1192,10 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 		if addr, ok := opt.Get("address"); ok && addr.Kind == ir.OptStr {
 			panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address: \"...\") is now options(symbol: \"%s\")", name, addr.Str)})
 		}
-		if sym, ok := opt.Get("symbol"); ok {
+		if sym, ok := symbolOption(opt); ok {
 			t := h.typeEval(typ)
-			h.addDefModule(&ir.Def{Sym: sym.Text(), Kind: ir.DefExtern, Type: t})
-			newVal = h.addVar(ir.NewGlobal(name, t, sym.Text()))
+			h.addDefModule(&ir.Def{Sym: sym, Kind: ir.DefExtern, Type: t})
+			newVal = h.addVar(ir.NewGlobal(name, t, sym))
 		} else {
 			panic(&diag.Error{Msg: fmt.Sprintf("cannot define const without value %s (a const defined in assembler needs options(symbol: \"...\"))", name)})
 		}
@@ -1322,8 +1322,8 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		}
 		baseType := h.typeOf(lam.result)
 		var id string
-		if sym, ok := lam.options.Get("symbol"); ok {
-			id = sym.Text()
+		if sym, ok := symbolOption(lam.options); ok {
+			id = sym
 		} else if lam.name == "main" {
 			id = "_main"
 		} else if lam.name != "" {
@@ -1731,6 +1731,23 @@ func (h *Hlc) typeOfRaw(t syntax.TypeExpr) *types.Type {
 		return h.prog.Types.Func(params, h.typeOf(t.Result), false)
 	}
 	panic(fmt.Sprintf("typeOf: unknown type expression %T", t))
+}
+
+// asmSymbolRe は options(symbol: "...") に書けるシンボル名 (ca65 の識別子。`@` で始まる局所シンボルは除く)。
+var asmSymbolRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// symbolOption は options(symbol: "name") の名前。識別子でなければエラー (空文字列だと codegen が
+// シンボル無しの大域変数として落ち、空白などを含むと壊れた asm を出していた。fuzz で発覚)。
+func symbolOption(opt ir.Options) (string, bool) {
+	v, ok := opt.Get("symbol")
+	if !ok {
+		return "", false
+	}
+	sym := v.Text()
+	if !asmSymbolRe.MatchString(sym) {
+		panic(&diag.Error{Msg: fmt.Sprintf("options(symbol: %q): not a valid assembler symbol name", sym)})
+	}
+	return sym, true
 }
 
 // version はコンパイル中のモジュールの文法バージョン (モジュールの外 (組み込みの登録など) では fc 2)。
