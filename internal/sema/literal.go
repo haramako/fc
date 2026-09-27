@@ -87,28 +87,56 @@ func (h *Hlc) foldBeyond16(op cop, left, right ir.Operand) (int, bool) {
 		k, ok := ir.ValIntLiteral(v)
 		return k, ok && (k < -32768 || k > 65535)
 	}
-	isVar := func(v ir.Operand) bool {
+	isInt := func(v ir.Operand) bool {
 		t := ir.ValType(v)
-		_, lit := ir.ValIntLiteral(v)
-		return !lit && t.Kind == types.Int && t.Enum == nil
+		return t.Kind == types.Int && t.Enum == nil
 	}
-	b2i := func(b bool) int {
-		if b {
+	// 相手の値: リテラルなら自分の型で読んだ値 (両方とも定数のときも数学の値で比べる)、変数なら型の範囲のどこか
+	cmp := func(a, b int) int {
+		switch {
+		case op == opEq && a == b, op == opLt && a < b:
 			return 1
 		}
 		return 0
 	}
-	if k, ok := beyond(right); ok && isVar(left) {
+	if k, ok := beyond(right); ok && isInt(left) {
+		if n, lit := ir.ValIntLiteral(left); lit {
+			return cmp(wrapInt(n, ir.ValType(left)), k), true
+		}
 		if op == opEq {
 			return 0, true
 		}
 		return b2i(k > 0), true // v < k
 	}
-	if k, ok := beyond(left); ok && isVar(right) {
+	if k, ok := beyond(left); ok && isInt(right) {
+		if n, lit := ir.ValIntLiteral(right); lit {
+			return cmp(k, wrapInt(n, ir.ValType(right))), true
+		}
 		if op == opEq {
 			return 0, true
 		}
 		return b2i(k < 0), true // k < v
 	}
 	return 0, false
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// adaptLiteralNoErr は adaptLiteral と同じだが、比較で収まらない定数のエラーを出さずにそのまま返す (定数の畳み込みの型を
+// 決めるため。エラーは実行時の式を作る側 (lval) が出す)。
+func (h *Hlc) adaptLiteralNoErr(a, b ir.Operand, cmp bool) (ra, rb ir.Operand) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*diag.Error); !ok {
+				panic(r)
+			}
+			ra, rb = a, b
+		}
+	}()
+	return h.adaptLiteral(a, b, cmp)
 }

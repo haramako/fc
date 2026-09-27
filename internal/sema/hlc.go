@@ -1443,12 +1443,30 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				if len(args) > 1 {
 					v2 = args[1].val.Int
 				}
+				// 型付きの定数は、実行時と同じく両方を演算の型 (互換型) の値にしてから計算し、結果も型の幅で折り返す
+				// (`(0 as u8) + 242` と `(-5 as i8)` の剰余は i8 の -14 % -5。畳み込みが 242 のまま計算して実行時と違っていた。
+				// TestRandomConstFold で発覚)。シフトの量はそのまま
+				t := h.foldType(args, false)
+				switch {
+				case t == nil || c.op == opLand || c.op == opLor || c.op == opNot:
+				case c.op == opEq || c.op == opNe || c.op == opLt || c.op == opGt || c.op == opLe || c.op == opGe:
+					// 比較: 型付きの定数だけを互換型の値にする。型のない定数は実行時も相手に合わせる / 広げる / 16 ビットを
+					// 超えれば数学の値で比べる (foldBeyond16) ので、そのまま
+					if len(args) > 1 && !args[0].val.Untyped && !args[1].val.Untyped {
+						v1, v2 = wrapInt(v1, t), wrapInt(v2, t)
+					}
+				default:
+					v1 = wrapInt(v1, t)
+					if len(args) > 1 && c.op != opShiftLeft && c.op != opShiftRight {
+						v2 = wrapInt(v2, t)
+					}
+				}
 				n := foldIntOp(c.op, v1, v2)
 				switch c.op {
 				case opEq, opNe, opLt, opGt, opLe, opGe, opLand, opLor, opNot:
 					return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), n)) // 比較・論理演算の定数畳み込みも bool
 				}
-				if t := h.foldType(args); t != nil {
+				if t != nil {
 					return cv(ir.NewIntLiteral("", t, wrapInt(n, t))) // 型付きの定数は、変数と同じく型の幅で折り返す
 				}
 				return cv(h.IntValue(n))
@@ -1479,14 +1497,25 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				allLit = allLit && args[i].isLiteralInt()
 			}
 			if allLit {
-				v := args[0].val.Int
+				// 型付きの定数があれば、実行時と同じく互換型の値にして比べる (数学の値で比べていた)。型は比較の規則
+				t := h.foldType(args, true)
+				val := func(i int) int {
+					if t != nil {
+						return wrapInt(args[i].val.Int, t)
+					}
+					return args[i].val.Int
+				}
+				v := val(0)
 				switch c.op {
 				case opMin:
-					v = min(v, args[1].val.Int)
+					v = min(v, val(1))
 				case opMax:
-					v = max(v, args[1].val.Int)
+					v = max(v, val(1))
 				case opClamp:
-					v = min(max(v, args[1].val.Int), args[2].val.Int)
+					v = min(max(v, val(1)), val(2))
+				}
+				if t != nil {
+					return cv(ir.NewIntLiteral("", t, v))
 				}
 				return cv(h.IntValue(v))
 			}
@@ -2589,6 +2618,11 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
 		if !ir.ValType(v).Signed {
 			return v
 		}
+		if k, ok := ir.ValIntLiteral(v); ok {
+			// 符号付きのリテラルを広げる: 目的の型の値のリテラルにする (i8 のまま残すと、SSA の定数の評価が「どちらかが
+			// 符号付きなら符号付き」で比べて、変数の符号拡張と結果が違った: `(-7 as i8) >= (0 as u16)`。TestRandomConstFold)
+			return ir.NewIntLiteral("", typ, wrapInt(wrapInt(k, ir.ValType(v)), typ)) // 読み替えた型 (@bitcast の cast) で読んでから
+		}
 		if ir.ValKind(v) == ir.KindLiteral {
 			return v
 		}
@@ -2791,7 +2825,7 @@ func (h *Hlc) signedOffset(v ir.Operand) ir.Operand {
 // foldType は定数の演算の結果の型 (オペランドに型付きの整数定数があるとき。型のない定数は相手に合わせる)。
 // 全部が型のない定数なら nil (値から型を決める IntValue)。`(200 as u8) + (100 as u8)` や `const A:u8 = 200; A + 100` は
 // u8 で 44 (変数と同じ。畳み込みで 300 のまま広がっていた。survey 2026-09-27)。
-func (h *Hlc) foldType(args []*cexpr) *types.Type {
+func (h *Hlc) foldType(args []*cexpr, cmp bool) *types.Type {
 	var ops []ir.Operand
 	typed := false
 	for _, a := range args {
@@ -2808,8 +2842,20 @@ func (h *Hlc) foldType(args []*cexpr) *types.Type {
 	if len(ops) == 1 {
 		return ir.ValType(ops[0])
 	}
-	a, b := h.adaptLiteral(ops[0], ops[1], false)
-	return h.prog.Types.Compatible(ir.ValType(a), ir.ValType(b))
+	var t *types.Type
+	for _, o := range ops[1:] {
+		a, b := h.adaptLiteralNoErr(ops[0], o, cmp)
+		ct := h.prog.Types.Compatible(ir.ValType(a), ir.ValType(b))
+		if ct == nil {
+			return nil
+		}
+		if t == nil {
+			t = ct
+		} else if t = h.prog.Types.Compatible(t, ct); t == nil {
+			return nil
+		}
+	}
+	return t
 }
 
 // wrapInt は n を整数型 t の値に折り返す (幅で切り詰めて、その符号で読む)。

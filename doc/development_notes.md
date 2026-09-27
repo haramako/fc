@@ -50,6 +50,25 @@ go test ./...                                    # 全部 (golden + examples + N
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
 | 差分テスト | TestRandomPrograms（internal/driver） | 〜20秒 | ランダムな小プログラムを -O 0 / -O 2 で走らせて出力が一致 |
+| 畳み込みの差分 | TestRandomConstFold（internal/driver） | 〜5秒 | 同じ式を型付きの定数と変数の 2 通りに書いて結果が一致（sema の誤りを見る） |
+| 通ってはいけない | TestMustError / TestMustWarn（internal/driver） | 〜1秒 | エラー・警告になるべきプログラムの表（検査が緩む退行） |
+
+- **差分テストの判定の弱点と、足した検査**（2026-09-27）: TestRandomPrograms / TestRandomV3Programs の判定は -O 0・-O 2・
+  最適化前の IR のインタプリタの 3 つで、どれも sema の作った同じ IR を実行するので **sema の誤りは 3 つとも同じように
+  間違えて見えない**（型付きの定数の畳み込み、i8 の初期値の符号拡張、ポインタの負のずれの符号拡張、for-each の回数など。
+  2 回目の調査で人手で見つかったもの）。そこで次を足した:
+  - `TestRandomConstFold`（randfold_test.go）: 同じ式を型付きの定数 `(200 as u8)` と noinline の関数 `id_u8(200)` で書いて
+    比べる（畳み込みと実行時の計算の食い違い。最初の実行で畳み込みの型の食い違いが 4 種類見つかった）。狭い型の値で広い型の
+    変数を暗黙に初期化する形（出どころは式・大域変数・配列の要素・struct のフィールド）も比べる。既定 10 本、`-foldn 500`
+  - v3m の自己検査（randv3check_test.go）: 同じことを 2 通りに計算して違えば `stdio.exit(77)`（rpCheck が `selfcheck` にする）
+  - 生成器: 初期値なしの変数とループ・if / else での代入、暗黙の拡張、200 要素の u16 の配列（k - 128 の重なりも読む）、
+    ポインタの負のずれ、fc 3 の for-each・範囲・case の範囲・`..=`、struct の配列のフィールド、const の表の無名関数
+  - インタプリタ: `@null_fn` と asm の `mem.copy` / `set` / `zero` を実行する（v3 のプログラムの約半分で判定を飛ばしていた）
+  足した形が実際にバグを捕まえるかは、直したバグを一時的に戻して確かめた（SSA の φ: 200 本中 2 本、i8 の初期値: 30 本で 39 か所、
+  2 バイトの要素の添字: 60 本中 1 本、負のずれ: 60 本中 5 本、文字列リテラル: 60 本中 6 本）。
+  夜間の CI（.github/workflows/fuzz.yml）で種を日替わりにして 1500 本 + 畳み込み 500 本、go の fuzz（FuzzParse / FuzzFormat /
+  FuzzCheck。fc 3 の新しい文法の種を足した）を回す。`rpRun` は ca65 / ld65 が何も出さずに失敗したとき（並列で重いときの
+  Windows の一時的な失敗）だけやり直す
 
 - **ランダムプログラムの差分テスト**（`internal/driver/randprog_test.go`、2026-09-19〜）: Csmith と同じ考え方で、
   4 つの整数型・配列・関数（fastcall / inline）・if / for / while / switch・全演算子を混ぜた小さなプログラムを生成し、

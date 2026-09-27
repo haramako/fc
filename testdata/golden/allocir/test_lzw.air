@@ -113,7 +113,7 @@
   0012 (:fastcall {l1 $23} {lit read_bit :_lzw_read_bit #"fastcall fn(u8):u16"})
   0013 (:push_result #"void")
   0014 (:push_arg #"u16" {l1 $23})
-  0015 (:push_arg #"u16" {lit nil -1 #"i8"})
+  0015 (:push_arg #"u16" {lit nil 65535 #"u16"})
   0016 (:push_arg #"*const u8" {pa {g $25 #"[13]u8" :_24}})
   0017 (:call nil {lit assert_equal :_unittest_assert_equal #"fn(u16,u16,*const u8):void"})
   0018 (:push_fastcall_result #"u16")
