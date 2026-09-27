@@ -4,14 +4,45 @@
 package fcdata
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 //go:embed fclib share
 var FS embed.FS
+
+var (
+	digestOnce sync.Once
+	digest     string
+)
+
+// Digest は同梱した fclib/ share/ の中身のハッシュ (展開先のキャッシュの名前に使う。中身が同じ fcc は同じ展開先を使い回す)。
+func Digest() string {
+	digestOnce.Do(func() {
+		h := sha256.New()
+		fs.WalkDir(FS, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			data, err := FS.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			h.Write([]byte(path))
+			h.Write([]byte{0})
+			h.Write(data)
+			h.Write([]byte{0})
+			return nil
+		})
+		digest = hex.EncodeToString(h.Sum(nil))
+	})
+	return digest
+}
 
 // Materialize は fclib/ share/ を dir に展開し、FC_HOME として使えるパスを返す。
 func Materialize(dir string) (string, error) {

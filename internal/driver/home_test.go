@@ -19,6 +19,16 @@ func isolatedHomeLookup(t *testing.T) string {
 	return dir
 }
 
+// blockHomeCache はキャッシュへの展開を失敗させる (一時ディレクトリへの展開を試すテスト用)。
+func blockHomeCache(t *testing.T, dir string) {
+	t.Helper()
+	blocked := filepath.Join(dir, "cache-is-a-file")
+	if err := os.WriteFile(blocked, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FC_CACHE_DIR", blocked)
+}
+
 func setHomeTempDir(t *testing.T, dir string) {
 	t.Helper()
 	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
@@ -32,6 +42,7 @@ func TestResolveFCHomeTempFailure(t *testing.T) {
 	if err := os.WriteFile(blocked, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("FC_CACHE_DIR", blocked)
 	setHomeTempDir(t, blocked)
 	home, cleanup, err := ResolveFCHome()
 	if cleanup != nil {
@@ -65,7 +76,13 @@ func TestResolveFCHomeTempFailure(t *testing.T) {
 
 func TestResolveFCHomeSuccessAndCleanup(t *testing.T) {
 	dir := isolatedHomeLookup(t)
-	setHomeTempDir(t, dir)
+	tmp := filepath.Join(dir, "tmp")
+	if err := os.Mkdir(tmp, 0700); err != nil {
+		t.Fatal(err)
+	}
+	blockHomeCache(t, dir)
+	setHomeTempDir(t, tmp)
+	dir = tmp
 	home, cleanup, err := ResolveFCHome()
 	if err != nil {
 		t.Fatal(err)
@@ -113,5 +130,34 @@ func TestResolveFCHomeExistingHomeSkipsTemp(t *testing.T) {
 				t.Fatalf("home=%q cleanup=%v error=%v", got, cleanup != nil, err)
 			}
 		})
+	}
+}
+
+// TestResolveFCHomeCache: 同梱の fclib/ share/ はキャッシュの home-<中身のハッシュ> に展開して使い回す (消さない。
+// -g の .s に入る fclib のパスが実行ごとに変わらないように)。
+func TestResolveFCHomeCache(t *testing.T) {
+	dir := isolatedHomeLookup(t)
+	cache := filepath.Join(dir, "cache")
+	t.Setenv("FC_CACHE_DIR", cache)
+	setHomeTempDir(t, filepath.Join(dir, "missing", "temp")) // 一時ディレクトリは使わない
+	var homes []string
+	for i := 0; i < 2; i++ {
+		home, cleanup, err := ResolveFCHome()
+		if err != nil || cleanup != nil {
+			t.Fatalf("home=%q cleanup=%v error=%v", home, cleanup != nil, err)
+		}
+		homes = append(homes, home)
+	}
+	if homes[0] != homes[1] || filepath.Dir(homes[0]) != cache || !strings.HasPrefix(filepath.Base(homes[0]), "home-") {
+		t.Fatalf("homes=%q (同じ %s/home-* のはず)", homes, cache)
+	}
+	for _, name := range []string{"fclib", "share", homeComplete} {
+		if _, err := os.Stat(filepath.Join(homes[0], name)); err != nil {
+			t.Errorf("missing %s: %v", name, err)
+		}
+	}
+	entries, _ := os.ReadDir(cache)
+	if len(entries) != 1 {
+		t.Errorf("キャッシュに展開の途中のものが残っている: %v", entries)
 	}
 }

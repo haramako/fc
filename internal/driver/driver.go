@@ -98,6 +98,7 @@ type Compiler struct {
 	prog     *sema.Program
 	layout   *bankLayout  // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
 	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
+	hashes   *hashMemo    // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -188,6 +189,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		return nil, err
 	}
 	result = &Result{BuildDir: c.buildDir}
+	c.hashes = newHashMemo() // fcc watch は同じ Compiler でビルドし直すので、ビルドごとに作り直す
 
 	// compile (ソースコード -> 中間コード) と compile2 (中間コード -> アセンブラファイル) の準備
 	var prog *sema.Program
@@ -273,12 +275,24 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 
 	result.Out = opt.Out
 	result.MapFile, result.DbgFile = c.link(baseObj, objs, opt)
-	if err := c.checkAddressVars(result.DbgFile); err != nil {
+	// dbgfile は要るときに 1 回だけ読む (castle では 13MB。検査と -g のラベルで 2 回読んでいた)
+	var dbgParsed *DbgFile
+	loadDbg := func() (*DbgFile, error) {
+		if dbgParsed == nil {
+			d, err := ParseDbgFile(result.DbgFile)
+			if err != nil {
+				return nil, err
+			}
+			dbgParsed = d
+		}
+		return dbgParsed, nil
+	}
+	if err := c.checkAddressVars(loadDbg); err != nil {
 		return nil, err
 	}
 	var logFile *LogFile
 	if opt.Debug || opt.SizeReport {
-		dbg, err := ParseDbgFile(result.DbgFile)
+		dbg, err := loadDbg()
 		if err != nil {
 			return nil, err
 		}
@@ -915,7 +929,7 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 // checkAddressVars は @(address: N) の変数が、リンクした RAM のセグメント (fc の ZP・BSS・静的フレーム・スタック、[ram.*]、
 // ほかの変数) と重ならないかを確かめる (fc の ZP の中に置くと、reg などと黙って重なっていた)。ROM・I/O の番地は RAM の
 // セグメントでないので対象外。重なりを意図するなら storage alias を使う。
-func (c *Compiler) checkAddressVars(dbgPath string) error {
+func (c *Compiler) checkAddressVars(loadDbg func() (*DbgFile, error)) error {
 	var vars []*ir.Def
 	for _, m := range c.prog.Modules.List() {
 		for _, d := range m.Defs {
@@ -927,7 +941,7 @@ func (c *Compiler) checkAddressVars(dbgPath string) error {
 	if len(vars) == 0 {
 		return nil
 	}
-	dbg, err := ParseDbgFile(dbgPath)
+	dbg, err := loadDbg()
 	if err != nil {
 		return err
 	}

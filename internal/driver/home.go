@@ -13,7 +13,13 @@ import (
 //  1. 環境変数 FC_HOME
 //  2. 実行ファイルの場所から上方向に探索
 //  3. カレントディレクトリから上方向に探索
-//  4. バイナリに同梱した embed.FS を一時ディレクトリに展開 (cleanup で削除する)
+//  4. バイナリに同梱した embed.FS をユーザーのキャッシュ (FC_CACHE_DIR、無ければ os.UserCacheDir()/fc) の
+//     home-<中身のハッシュ> に展開して使い回す (消さない)
+//  5. 4 ができなければ一時ディレクトリに展開 (cleanup で削除する)
+//
+// 4 は 2026-09-28 から。以前は実行のたびに別の一時ディレクトリに展開していて、-g の .s に入る fclib のパス
+// (`.dbg file`) が毎回変わり、fclib のコードを含むモジュールを毎回アセンブルし直していた (castle で 45 個中 18 個)。
+// ビルドの後に一時ディレクトリを消すので、Mesen から fclib のソースも開けなかった。
 //
 // cleanup は不要なとき nil。
 func ResolveFCHome() (home string, cleanup func(), err error) {
@@ -45,7 +51,10 @@ func ResolveFCHome() (home string, cleanup func(), err error) {
 			dir = parent
 		}
 	}
-	// embed.FS を展開する
+	// embed.FS をキャッシュに展開する (できなければ一時ディレクトリへ)
+	if home, err := cachedHome(); err == nil {
+		return home, nil, nil
+	}
 	tmp, err := os.MkdirTemp("", "fc-home-")
 	if err != nil {
 		tempEnv := "TMPDIR"
@@ -63,4 +72,47 @@ func ResolveFCHome() (home string, cleanup func(), err error) {
 		return "", nil, err
 	}
 	return home, func() { os.RemoveAll(tmp) }, nil
+}
+
+// homeComplete は展開し終えたキャッシュの印 (途中で止まった展開を使わない)。
+const homeComplete = ".fc-home-complete"
+
+// cachedHome は同梱の fclib/ share/ を、中身のハッシュで名前を付けたキャッシュのディレクトリに展開して返す (展開済みなら
+// そのまま)。同時に走る fcc は一時的な名前に展開してから名前を変え、先に置かれていればそれを使う。
+func cachedHome() (string, error) {
+	base := os.Getenv("FC_CACHE_DIR")
+	if base == "" {
+		d, err := os.UserCacheDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(d, "fc")
+	}
+	dir := filepath.Join(base, "home-"+fcdata.Digest()[:16])
+	if _, err := os.Stat(filepath.Join(dir, homeComplete)); err == nil {
+		return dir, nil
+	}
+	if err := os.MkdirAll(base, 0o777); err != nil {
+		return "", err
+	}
+	tmp, err := os.MkdirTemp(base, "tmp-home-")
+	if err != nil {
+		return "", err
+	}
+	if _, err := fcdata.Materialize(tmp); err != nil {
+		os.RemoveAll(tmp)
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(tmp, homeComplete), nil, 0o666); err != nil {
+		os.RemoveAll(tmp)
+		return "", err
+	}
+	if err := os.Rename(tmp, dir); err != nil {
+		os.RemoveAll(tmp)
+		// ほかの fcc が先に置いた
+		if _, serr := os.Stat(filepath.Join(dir, homeComplete)); serr != nil {
+			return "", err
+		}
+	}
+	return dir, nil
 }

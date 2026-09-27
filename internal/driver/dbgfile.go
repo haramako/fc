@@ -9,7 +9,6 @@ package driver
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,14 +38,36 @@ type DbgFile struct {
 	Symbols  []DbgSymbol
 }
 
-var (
-	reDbgField = regexp.MustCompile(`(\w+)=("(?:[^"]*)"|[^,]*)`)
-)
-
+// dbgFields はレコードの `key=value,key="value",...` を読む (値の引用符は外す。引用符の中の , は区切りにしない)。
+// 正規表現で読んでいたときは castle の 13MB の dbgfile に約 0.7 秒かかっていた (2026-09-28)。
 func dbgFields(line string) map[string]string {
-	r := map[string]string{}
-	for _, m := range reDbgField.FindAllStringSubmatch(line, -1) {
-		r[m[1]] = strings.Trim(m[2], `"`)
+	r := make(map[string]string, 8)
+	for len(line) > 0 {
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			break
+		}
+		key := line[:eq]
+		line = line[eq+1:]
+		var val string
+		if strings.HasPrefix(line, `"`) {
+			end := strings.IndexByte(line[1:], '"')
+			if end < 0 {
+				val, line = line[1:], ""
+			} else {
+				val, line = line[1:1+end], line[2+end:]
+			}
+			if i := strings.IndexByte(line, ','); i >= 0 {
+				line = line[i+1:]
+			} else {
+				line = ""
+			}
+		} else if i := strings.IndexByte(line, ','); i >= 0 {
+			val, line = line[:i], line[i+1:]
+		} else {
+			val, line = line, ""
+		}
+		r[key] = val
 	}
 	return r
 }
@@ -69,8 +90,8 @@ func ParseDbgFile(path string) (*DbgFile, error) {
 	d := &DbgFile{Segments: map[int]*DbgSegment{}}
 	for _, line := range strings.Split(string(b), "\n") {
 		kind, rest, ok := strings.Cut(strings.TrimSpace(line), "\t")
-		if !ok {
-			continue
+		if !ok || kind != "seg" && kind != "sym" {
+			continue // 大半は line / span (castle で 21 万行)。使うのは seg と sym だけ
 		}
 		f := dbgFields(rest)
 		switch kind {
