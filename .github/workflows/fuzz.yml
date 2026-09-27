@@ -1,0 +1,72 @@
+name: Fuzz
+
+# 夜間の大きな差分テストと go の fuzz。普段の CI (ci.yml) の `go test ./...` はランダムなプログラムを 30 本 (定数の畳み込みは
+# 10 本) しか回さず、go の fuzz は既存の入力で回すだけなので、ここで種を日替わりにして数を増やす。
+# 失敗したら、見つかった入力 (testdata/fuzz) を artifact に残す。手で回すときは workflow_dispatch で種と本数を指定できる。
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # 毎日 03:00 JST
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "乱数の種 (空なら日付)"
+        required: false
+      randn:
+        description: "TestRandomPrograms / TestRandomV3Programs の本数"
+        required: false
+        default: "1500"
+
+jobs:
+  random:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install cc65
+        run: sudo apt-get update && sudo apt-get install -y cc65
+
+      - name: Random programs (-O 0 / -O 2 / interpreter, self-checks)
+        run: |
+          SEED="${{ github.event.inputs.seed }}"
+          if [ -z "$SEED" ]; then SEED=$(date +%Y%m%d)000; fi
+          N="${{ github.event.inputs.randn }}"
+          if [ -z "$N" ]; then N=1500; fi
+          echo "seed $SEED, n $N"
+          go test ./internal/driver -run 'TestRandom' -randn "$N" -foldn 500 -randseed "$SEED" -timeout 140m
+
+  gofuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install cc65
+        run: sudo apt-get update && sudo apt-get install -y cc65
+
+      - name: FuzzParse
+        run: go test ./internal/syntax -run '^$' -fuzz '^FuzzParse$' -fuzztime 10m
+
+      - name: FuzzFormat
+        run: go test ./internal/syntax -run '^$' -fuzz '^FuzzFormat$' -fuzztime 10m
+
+      - name: FuzzCheck
+        run: go test ./internal/driver -run '^$' -fuzz '^FuzzCheck$' -fuzztime 20m
+
+      - name: Upload failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus
+          path: |
+            internal/syntax/testdata/fuzz
+            internal/driver/testdata/fuzz
