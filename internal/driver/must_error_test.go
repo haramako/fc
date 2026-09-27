@@ -5,6 +5,7 @@ package driver
 // 足したら、ここにも 1 行足す。
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -53,16 +54,17 @@ func TestMustError(t *testing.T) {
 		{"ポインタの乗算", "function f():void { var p:*u8; var q:*u8; var r = p * q; }", "cannot apply *"},
 		{"*void の算術", "function f():void { var p:*void; var q = p + 1; }", "no arithmetic on *void"},
 	}
-	for _, c := range cases {
+	for i, c := range cases {
 		c := c
-		t.Run(c.name, func(t *testing.T) {
+		// サブテストの名前は ASCII に (t.TempDir() のパスに入り、英語の Windows の ca65 は日本語のパスを開けない)
+		t.Run(fmt.Sprintf("err%02d", i+1), func(t *testing.T) {
 			t.Parallel()
 			_, err := buildFiles(t, map[string]string{"t.fc": pre + c.src + "\nfunction main():void { }\n"})
 			if err == nil {
-				t.Fatalf("エラーにならない: %s", c.src)
+				t.Fatalf("%s: エラーにならない: %s", c.name, c.src)
 			}
 			if !strings.Contains(err.Error(), c.want) {
-				t.Errorf("%s: got %v, want %q", c.src, err, c.want)
+				t.Errorf("%s: %s: got %v, want %q", c.name, c.src, err, c.want)
 			}
 		})
 	}
@@ -82,13 +84,13 @@ func TestMustWarn(t *testing.T) {
 		{"初期化していないローカル", "function f():u8 { var x:u8; return x; }", "read before"},
 		{"未知の属性", "function f():void @(noinlin: true) { }", "did you mean"},
 	}
-	for _, c := range cases {
+	for i, c := range cases {
 		c := c
-		t.Run(c.name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("warn%02d", i+1), func(t *testing.T) { // ASCII の名前 (TestMustError と同じ理由)
 			t.Parallel()
 			_, res, err := buildFilesDefs(t, map[string]string{"t.fc": pre + c.src + "\nfunction main():void { exit(0); }\n"}, nil)
 			if err != nil {
-				t.Fatalf("ビルド失敗: %v", err)
+				t.Fatalf("%s: ビルド失敗: %v", c.name, err)
 			}
 			for _, w := range res.Warnings {
 				if strings.Contains(w.Msg, c.want) {
@@ -99,7 +101,7 @@ func TestMustWarn(t *testing.T) {
 			for _, w := range res.Warnings {
 				ws = append(ws, w.Msg)
 			}
-			t.Errorf("警告 %q が出ない: %s\n出た警告: %v", c.want, c.src, ws)
+			t.Errorf("%s: 警告 %q が出ない: %s\n出た警告: %v", c.name, c.want, c.src, ws)
 		})
 	}
 }
