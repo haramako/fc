@@ -340,11 +340,21 @@ func ValLiteral(v Operand) *Value {
 }
 
 // ValIntLiteral は v が整数リテラルならその値を返す。
+// リテラルの一部を読む cast (オフセットがある、または Width で切り詰めた `cast<u16, 0/1>(65535)`) はそのバイトの値
+// (codegen の byte と同じ。リテラルの値そのものを返していて、split が 65535 の上位を 255 にしていた。fuzz で発覚)。
 func ValIntLiteral(v Operand) (int, bool) {
-	if lv := ValLiteral(v); lv != nil && lv.Kind == KindLiteral && lv.IsInt {
-		return lv.Int, true
+	lv := ValLiteral(v)
+	if lv == nil || lv.Kind != KindLiteral || !lv.IsInt {
+		return 0, false
 	}
-	return 0, false
+	n := lv.Int
+	if cv, ok := v.(*CastedValue); ok && cv.Type.Kind == types.Int && (cv.Offset != 0 || cv.Width < cv.Type.Size) {
+		n = (n >> (8 * cv.Offset)) & (1<<(8*cv.Width) - 1)
+		if cv.Width == cv.Type.Size && cv.Type.Signed && n >= 1<<(8*cv.Width-1) {
+			n -= 1 << (8 * cv.Width)
+		}
+	}
+	return n, true
 }
 
 // ValAssignable は v.assignable?

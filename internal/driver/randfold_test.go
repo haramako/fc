@@ -282,6 +282,7 @@ func TestConstFoldCases(t *testing.T) {
 		{"((65533 > ((-81 as i8) >> 9)) as u8)", "((65533 > (id_i8(-81) >> 9)) as u8)"},                                            // 型のない定数が i16 を超える: u16 で比べる
 		{"(((-5 as i8) < 271) as u8)", "((id_i8(-5) < 271) as u8)"},                                                                 // 型のない定数が i16 に収まる: 符号付きで比べる
 		{"((65534 >= (127 as i8)) as u8)", "((65534 >= id_i8(127)) as u8)"},
+		{"@min(((((@min(65537, 65535)) as u8)) as u16), (~(0 as u8)))", "@min(((((@min(65537, 65535)) as u8)) as u16), (~id_u8(0)))"}, // 切り詰めた定数の上位 (split)
 	}
 	cs := make([]string, len(cases))
 	vs := make([]string, len(cases))
