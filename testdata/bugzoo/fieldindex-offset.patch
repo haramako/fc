@@ -1,0 +1,14 @@
+# struct の配列のフィールドの添字で、フィールドのずれを足さない (わざと入れたバグ。5b89873 の最適化の検査用)
+diff --git a/internal/opt/fieldindex.go b/internal/opt/fieldindex.go
+index 2934fae..6b6f0a2 100644
+--- a/internal/opt/fieldindex.go
++++ b/internal/opt/fieldindex.go
+@@ -149,7 +149,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
+ 		}
+ 		for _, us := range uses {
+ 			use0 := ops[us.at]
+-			fa := ir.NewCastedValue(arr, u.ArrayOf(us.field, (at.Size-us.off)/us.field.Size), us.off)
++			fa := ir.NewCastedValue(arr, u.ArrayOf(us.field, (at.Size-us.off)/us.field.Size), 0)
+ 			var nop *ir.Op
+ 			switch use0.Code {
+ 			case ir.OpFieldPget, ir.OpPget:

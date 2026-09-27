@@ -97,7 +97,11 @@ func (g *rpGen) v3Stmt(f *rpFunc, depth int) string {
 func (g *rpGen) v3StmtText(f *rpFunc) string {
 	v := g.v3
 	b := func() string { return g.v3Byte(f) }
-	switch g.pick(30) {
+	k := g.pick(30)
+	if name := v3StmtFeat(k); !g.feat(name) {
+		return fmt.Sprintf("\tacc ^= %s;\n", b()) // 切った機能の文
+	}
+	switch k {
 	case 26, 27, 28, 29: // 自己検査 (randv3check_test.go)
 		return g.v3SelfCheck(f)
 	case 15: // 2 バイトの要素の 200 要素の配列 (129 番目以降を u8 の添字で引くと別の要素 (k - 128) だった。それも読む)
@@ -234,7 +238,7 @@ func (g *rpGen) v3Source() string {
 	}
 	fmt.Fprintf(&b, "const VT:[?]u8 = [%s];\n", strings.Join(vals, ", "))
 	b.WriteString("var vb:[24]u8;\nvar vs:[]u8;\nvar vc:Color;\nvar vhook:fn(u8):void;\nvar vcnt:u8;\n")
-	b.WriteString("var vbw:[200]u16 @(segment: \"BSS_EX\");\nstruct VS { a:u8; b:u16; c:i8; }\nvar vsa:[10]VS;\n")
+	b.WriteString("var vbw:[200]u16 @(segment: \"BSS_EX\");\nstruct VS { a:u8; b:u16; c:i8; }\nvar vsa:[10]VS;\nvar vm:[2][4]u8;\n")
 	b.WriteString("const VOPS:[?]fn(u8):u8 = [->fn(x:u8):u8 { return x + 1; }, ->fn(x:u8):u8 { return x ^ 90; }];\n")
 	if v.wideArr {
 		b.WriteString("var vbig:[260]u8 @(segment: \"BSS_EX\");\n")
@@ -268,6 +272,7 @@ func TestRandomV3Programs(t *testing.T) {
 			g := &rpGen{r: rand.New(rand.NewSource(seed)), v3: &rpV3{}}
 			g.genProgram()
 			res := rpCheck(t, g.sources())
+			rpRecord("TestRandomV3Programs", seed, res.kind, g) // FUZZ_STATS (効果の測定)
 			switch res.kind {
 			case "ok":
 			case "error":
@@ -282,7 +287,7 @@ func TestRandomV3Programs(t *testing.T) {
 			default:
 				rpMinimize(t, g, res.kind)
 				res = rpCheck(t, g.sources())
-				res.detail += "\n切り分け: " + rpLocate(t, g.sources())
+				res.detail += "\n切り分け: " + rpLocate(t, g.sources()) + "\n使った機能: " + strings.Join(g.usedFeatures(), ",")
 				t.Errorf("%s (seed %d):\n%s\n%s", res.kind, seed, g.allSource(), res.detail)
 			}
 		})
@@ -308,4 +313,31 @@ func TestRandomSourceStable(t *testing.T) {
 			}
 		}
 	}
+}
+
+// v3StmtFeat は v3StmtText の文の種類 (k) の機能の名前。
+func v3StmtFeat(k int) string {
+	switch {
+	case k <= 8, k == 11, k == 21:
+		return "v3slice"
+	case k == 9, k == 10, k == 12, k == 13, k == 14:
+		return "v3enum" // @null_fn / @len(enum) / enum と 1 バイトの switch
+	case k == 15:
+		return "v3big"
+	case k == 16:
+		return "v3negoff"
+	case k == 17, k == 18, k == 22:
+		return "v3foreach"
+	case k == 19:
+		return "v3range"
+	case k == 20:
+		return "v3caserange"
+	case k == 23:
+		return "v3aos"
+	case k == 24:
+		return "v3fnconst"
+	case k == 25:
+		return "v3fold"
+	}
+	return "v3self"
 }

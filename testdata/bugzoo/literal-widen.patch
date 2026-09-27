@@ -1,0 +1,14 @@
+# 符号付きのリテラルを広げても i8 のまま (8ecfbad。SSA が符号付きで比べる)
+diff --git a/internal/sema/hlc.go b/internal/sema/hlc.go
+index d2ee7b8..f1650a9 100644
+--- a/internal/sema/hlc.go
++++ b/internal/sema/hlc.go
+@@ -2657,7 +2657,7 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
+ 		if !ir.ValType(v).Signed {
+ 			return v
+ 		}
+-		if k, ok := ir.ValIntLiteral(v); ok {
++		if k, ok := ir.ValIntLiteral(v); ok && false {
+ 			// 符号付きのリテラルを広げる: 目的の型の値のリテラルにする (i8 のまま残すと、SSA の定数の評価が「どちらかが
+ 			// 符号付きなら符号付き」で比べて、変数の符号拡張と結果が違った: `(-7 as i8) >= (0 as u16)`。TestRandomConstFold)
+ 			return ir.NewIntLiteral("", typ, wrapInt(wrapInt(k, ir.ValType(v)), typ)) // 読み替えた型 (@bitcast の cast) で読んでから

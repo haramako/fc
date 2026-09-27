@@ -1,0 +1,14 @@
+# ポインタの負の添字・i8 のずれを符号拡張しない (cf63a3c)
+diff --git a/internal/sema/hlc.go b/internal/sema/hlc.go
+index d2ee7b8..28f1165 100644
+--- a/internal/sema/hlc.go
++++ b/internal/sema/hlc.go
+@@ -2851,7 +2851,7 @@ func (h *Hlc) compileCaseBody(s *syntax.SwitchStmt, ci int, body []syntax.Stmt,
+ // アドレスの下位に足すと上位の桁を借りず、`p[-1]` や `p[i]` (i:i8 = -2) が 255 / 254 先を読んでいた (survey 2026-09-27)。
+ func (h *Hlc) signedOffset(v ir.Operand) ir.Operand {
+ 	t := ir.ValType(v)
+-	if t.Kind != types.Int || !t.Signed || t.Size != 1 {
++	if true || t.Kind != types.Int || !t.Signed || t.Size != 1 {
+ 		return v
+ 	}
+ 	i16 := h.prog.Types.IntType(2, true)

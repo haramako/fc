@@ -1,0 +1,43 @@
+# sema: soa の名前を値の型に使うのをエラーにする (42f5734 の逆)
+diff --git b/internal/sema/hlc.go a/internal/sema/hlc.go
+index d2ee7b8..bd49ecf 100644
+--- b/internal/sema/hlc.go
++++ a/internal/sema/hlc.go
+@@ -1660,23 +1660,11 @@ func foldIntOp(op cop, v1, v2 int) int {
+ // typeOf resolves type identities and array lengths at every nesting depth.
+ // A named struct does not require its layout until it is used by value.
+ func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
+-	ty := h.typeOfRaw(t)
+-	if ty.IsSoa {
+-		// soa は型と実体が 1 対 1 で、値の型にはならない (`var v:E;` は E と同じ形の 2 つ目の実体ではなく、確保した領域を
+-		// 使わずに E を読み書きしていた)。型として書けるのはハンドル `*E` だけ
+-		n := shortName(ty.Name)
+-		panic(&diag.Error{Msg: fmt.Sprintf("soa %s is not a value type; use *%s for an element handle, or %s[i]", n, n, n)})
+-	}
+-	return ty
+-}
+-
+-// typeOfRaw は typeOf の本体。soa の型もそのまま返す (`*E` の要素のため)。
+-func (h *Hlc) typeOfRaw(t syntax.TypeExpr) *types.Type {
+ 	switch t := t.(type) {
+ 	case *syntax.NamedType:
+ 		return h.namedType(t)
+ 	case *syntax.PointerType:
+-		elem := h.typeOfRaw(t.Elem)
++		elem := h.typeOf(t.Elem)
+ 		if elem.IsSoa {
+ 			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
+ 		}
+diff --git b/internal/sema/struct.go a/internal/sema/struct.go
+index f29ce59..2d6c9e8 100644
+--- b/internal/sema/struct.go
++++ a/internal/sema/struct.go
+@@ -235,7 +235,7 @@ func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
+ 		}
+ 	}
+ 	if ty == nil {
+-		ty = h.typeOfRaw(t) // soa の名前 (`@sizeof(E)`) も通す (値の型にはならないが、大きさは従来どおり返す)
++		ty = h.typeEval(t)
+ 	}
+ 	h.completeType(ty)
+ 	if ty.Size < 0 {

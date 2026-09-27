@@ -1,0 +1,14 @@
+# for-each の要素のポインタへの代入を検査しない (cf63a3c。黙って捨てる)
+diff --git a/internal/sema/forin.go b/internal/sema/forin.go
+index 6a78d0b..80fb62b 100644
+--- a/internal/sema/forin.go
++++ b/internal/sema/forin.go
+@@ -241,7 +241,7 @@ func (h *Hlc) declareAlias(name string, t *types.Type, e *cexpr) {
+ // checkAliasAssign は for-each の要素のポインタ (式の別名) への代入をエラーにする (`p++`、`p = &b` が置き場所の無い
+ // 一時変数に入って黙って捨てられていた。survey 2026-09-27)。
+ func (h *Hlc) checkAliasAssign(lhs *cexpr) {
+-	if name, ok := h.aliasNodes[lhs]; ok {
++	if name, ok := h.aliasNodes[lhs]; ok && false {
+ 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to for-each variable `%s` (it is read-only; it points to the current element)", name)})
+ 	}
+ }

@@ -105,6 +105,7 @@ func (s *rpStmt) render(b *strings.Builder) {
 }
 
 type rpGen struct {
+	used    map[string]bool // 使った機能の名前 (randfeat_test.go)
 	r       *rand.Rand
 	wb      bool // 300 バイトのバッファ wb (walkLoop) を使う
 	globals []rpVar
@@ -622,6 +623,9 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 	if depth <= 0 && k >= 7 {
 		k = g.pick(7)
 	}
+	if name := rpStmtFeat[k]; name != "" && !g.feat(name) {
+		k = 0 // 切った機能の文は代入にする
+	}
 	switch k {
 	case 18, 19:
 		// 初期値なしで宣言した変数に、必ず 1 回以上回るループ (本体の先頭) か if / else の両方で代入してから、後ろで読む
@@ -729,6 +733,9 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 	case 15:
 		return g.ptrLoop(depth)
 	case 16:
+		if g.want("regpress", 0.35) {
+			return g.regPress(depth) // 常駐レジスタに負荷をかけるループ
+		}
 		// 減らしながらの for (展開の対象)
 		i := g.newLocal(rpTypes[0])
 		g.scope[len(g.scope)-1].readOnly = true
@@ -742,7 +749,7 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		return &rpStmt{parts: []string{fmt.Sprintf("%sfor (var %s:int = %d; %s; %s--) {\n", label, i.name, n, i.name, i.name), "}"}, kids: [][]*rpStmt{body}}
 	case 0, 1, 2:
 		lv, t := g.lvalue()
-		if u, ok := g.narrower(t); ok && g.chance(0.2) {
+		if u, ok := g.narrower(t); ok && g.want("widen", 0.2) {
 			return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(u, 3))) // 狭い型の値を暗黙に広げる (符号付きなら符号拡張)
 		}
 		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
@@ -897,7 +904,7 @@ func (g *rpGen) block(depth int) []*rpStmt {
 		if g.chance(0.2) {
 			t := g.typ()
 			init := g.expr(t, 2) // 自分自身を参照しないように、宣言の前に作る
-			if u, ok := g.narrower(t); ok && g.chance(0.3) {
+			if u, ok := g.narrower(t); ok && g.want("widen", 0.3) {
 				init = g.expr(u, 2) // 狭い型の値で初期化 (暗黙の拡張。i8 で i16 を初期化するときに符号拡張していなかった)
 			}
 			v := g.newLocal(t)
@@ -940,6 +947,9 @@ func (g *rpGen) reachableLabels() []string {
 	return r
 }
 
+// rpStmtFeat は文の種類 (stmt の k) の機能の名前 (切ったら代入にする)。
+var rpStmtFeat = map[int]string{11: "while", 12: "switch", 15: "walk", 16: "unroll", 17: "structcopy", 18: "uninit", 19: "uninit"}
+
 // narrower は t より狭い整数型 (暗黙に広げて代入・初期化できる。無ければ false)。
 func (g *rpGen) narrower(t rpType) (rpType, bool) {
 	if t.size != 2 {
@@ -959,8 +969,8 @@ func (g *rpGen) newLocal(t rpType) rpVar {
 // sig があれば関数ポインタ表の要素 (その型に合わせる。アドレスを取られるので inline / fastcall にしない)。
 func (g *rpGen) genFunc(name string, far bool, sig *rpFunc) *rpFunc {
 	f := &rpFunc{name: name, ret: g.typ(), far: far}
-	f.fastcall = g.chance(0.4)
-	f.inline = g.chance(0.3) && !far
+	f.fastcall = g.want("fastcall", 0.4)
+	f.inline = g.want("inline", 0.3) && !far
 	if sig != nil {
 		f.ret, f.fastcall, f.inline, f.inTable = sig.ret, false, false, true
 	}
@@ -1078,34 +1088,37 @@ func (g *rpGen) genProgram() {
 	for i, t := range rpTypes { // 全ての型の配列を 1 つずつ (ポインタの引数の相手)
 		g.arrays = append(g.arrays, rpVar{name: fmt.Sprintf("a%d", i), typ: t})
 	}
-	if g.chance(0.7) {
+	if g.want("struct", 0.7) {
 		for i := 0; i < g.pick(2)+2; i++ {
 			g.fields = append(g.fields, rpField{name: fmt.Sprintf("f%d", i), typ: g.typ()})
 		}
 	}
-	if len(g.fields) > 0 && g.chance(0.4) {
+	if len(g.fields) > 0 && g.want("soa", 0.4) {
 		g.soa = true // soa E:[8]S
 	}
-	if len(g.fields) > 0 && g.chance(0.4) {
+	if len(g.fields) > 0 && g.want("nested", 0.4) {
 		g.hasT, g.tArr, g.tX = true, g.typ(), g.typ() // struct T { s:S; arr:[4]tArr; x:tX; } と u0 / ua:[2]T
 	}
-	if len(g.fields) > 0 && g.chance(0.3) {
+	if len(g.fields) > 0 && g.want("alias", 0.3) {
 		// 同じ場所を配列 ab と struct w で読み書きする (ab は普通のグローバル配列としても使う)
 		g.alias = true
 		g.arrays = append(g.arrays, rpVar{name: "ab", typ: rpTypes[0]})
 	}
-	if len(g.fields) > 0 && g.chance(0.3) {
+	if len(g.fields) > 0 && g.want("sval", 0.3) {
 		g.genSv()
 	}
 	for i := 0; i < g.pick(3); i++ {
+		if !g.feat("const") {
+			continue
+		}
 		g.consts = append(g.consts, rpVar{name: fmt.Sprintf("ct%d", i), typ: g.typ(), readOnly: true})
 	}
-	if g.chance(0.5) {
+	if g.want("far", 0.5) {
 		g.hasFar = true
 		for i := 0; i < g.pick(2)+1; i++ {
 			g.genFunc(fmt.Sprintf("ff%d", i), true, nil)
 		}
-		if g.chance(0.4) {
+		if g.want("farfn", 0.4) {
 			// far1 の関数の farfn 表 (バンクを切り替えるトランポリン経由で呼ぶ)
 			g.fqSig = rpFunc{ret: g.typ()}
 			for i := 0; i < g.pick(3); i++ {
@@ -1119,10 +1132,10 @@ func (g *rpGen) genProgram() {
 	for i := 0; i < g.pick(3)+1; i++ {
 		g.genFunc(fmt.Sprintf("f%d", i), false, nil)
 	}
-	if g.chance(0.35) {
+	if g.want("rec", 0.35) {
 		g.genRec("r0")
 	}
-	if g.chance(0.5) {
+	if g.want("fptable", 0.5) {
 		// 関数ポインタ表: 同じ型の関数 2 つか 4 つ
 		g.fpSig = rpFunc{ret: g.typ()}
 		for i := 0; i < g.pick(3); i++ {
@@ -1164,7 +1177,7 @@ func (g *rpGen) genProgram() {
 			}
 		}
 	}
-	if g.chance(0.3) {
+	if g.want("lambda", 0.3) {
 		// ラムダ (引数と大域変数だけを見る)
 		scope, cur, sptr, hptr, ptr, lsv, larrays := g.scope, g.cur, g.sptr, g.hptr, g.ptr, g.lsv, g.larrays
 		a := rpVar{name: "a", typ: rpTypes[0]}
@@ -1174,7 +1187,7 @@ func (g *rpGen) genProgram() {
 		m.locals = append(m.locals, fmt.Sprintf("var lf:fn(int):int = ->fn(a:int):int { return %s; };", body))
 		g.lambda = true
 	}
-	if g.fpTable != nil && g.chance(0.5) {
+	if g.fpTable != nil && g.want("fnvar", 0.5) {
 		// 関数ポインタのローカル変数 (付け替えながら呼ぶ)
 		ps := make([]string, len(g.fpSig.params))
 		for i, p := range g.fpSig.params {
@@ -1203,7 +1216,7 @@ func (g *rpGen) declareArraysAndPtrs(f *rpFunc) {
 	if f.inline {
 		return // inline の本体は小さく
 	}
-	if g.chance(0.4) && (!f.inTable || os.Getenv("RP_TABLE_ARRAYS") != "") { // RP_TABLE_ARRAYS=1 で表の関数にも持たせる (以前の種の再現用)
+	if g.want("larray", 0.4) && (!f.inTable || os.Getenv("RP_TABLE_ARRAYS") != "") { // RP_TABLE_ARRAYS=1 で表の関数にも持たせる (以前の種の再現用)
 		// 表の関数は表経由で互いに呼び合う (再帰 = stack 関数) ので、ローカル配列 (32 バイト) を持たせると -O 0 で
 		// FC_STACK (128 バイト) をあふれてゼロページを壊す (種 312694: t1 64 + t2 27 + t3 36 バイトのフレームが重なり
 		// pc=$ffff で invalid opcode)。プログラムの問題であってコンパイラのバグではない
@@ -1684,6 +1697,7 @@ func TestRandomPrograms(t *testing.T) {
 			g := &rpGen{r: rand.New(rand.NewSource(seed))}
 			g.genProgram()
 			res := rpCheck(t, g.sources())
+			rpRecord("TestRandomPrograms", seed, res.kind, g) // FUZZ_STATS (効果の測定)
 			switch res.kind {
 			case "ok":
 			case "error":
@@ -1708,9 +1722,65 @@ func TestRandomPrograms(t *testing.T) {
 			default:
 				rpMinimize(t, g, res.kind)
 				res = rpCheck(t, g.sources())
-				res.detail += "\n切り分け: " + rpLocate(t, g.sources())
+				res.detail += "\n切り分け: " + rpLocate(t, g.sources()) + "\n使った機能: " + strings.Join(g.usedFeatures(), ",")
 				t.Errorf("%s (seed %d):\n%s\n%s", map[string]string{"differs": "-O 0 と -O 2 の出力が違う", "interp": "-O 0 / -O 2 とインタプリタ (最適化前の IR) の出力が違う", "panic": "コンパイラが panic", "hang": "両方のレベルで止まらない"}[res.kind], seed, g.allSource(), res.detail)
 			}
 		})
 	}
+}
+
+// regPress は常駐レジスタに負荷をかけるループ (機能 regpress)。過去の常駐のバグの形を集めたもの: 1 バイトのカウンタを
+// 2 バイトの要素に書く (3cba778: 上位の lda #0 が A の常駐を壊した)、2 バイトの減算の隣の 1 バイトの常駐 (TestResidentDec16)、
+// 呼び出しの直後の符号付きの比較 (復帰の ldx がフラグを壊した)、常駐の添字と融合した読み書き (Y の常駐の復帰と融合)。
+func (g *rpGen) regPress(depth int) *rpStmt {
+	mark := len(g.scope)
+	c := g.newLocal(rpTypes[0])
+	g.scope[len(g.scope)-1].readOnly = true
+	n := g.pick(6) + 2
+	var wide []rpVar
+	for _, a := range g.arraysAll() {
+		if a.typ.size == 2 {
+			wide = append(wide, a)
+		}
+	}
+	g.loops++
+	var body []*rpStmt
+	for k := 0; k < 2+g.pick(3); k++ {
+		switch g.pick(5) {
+		case 0:
+			if len(wide) > 0 {
+				a := wide[g.pick(len(wide))]
+				body = append(body, rpSimple(fmt.Sprintf("%s[%s] = %s;", a.name, g.index(), c.name)))
+			}
+		case 1:
+			var v16 []rpVar
+			for _, v := range g.scalars() {
+				if v.typ.size == 2 && !v.readOnly {
+					v16 = append(v16, v)
+				}
+			}
+			if len(v16) > 0 {
+				lv, t := g.lvalue()
+				body = append(body, rpSimple(fmt.Sprintf("%s -= 1;\n%s += %s;", v16[g.pick(len(v16))].name, lv, cast(c.name, rpTypes[0], t))))
+			}
+		case 2:
+			if fs := g.callables(); len(fs) > 0 {
+				f := fs[g.pick(len(fs))]
+				lv, t := g.lvalue()
+				body = append(body, rpSimple(fmt.Sprintf("if ((%s(%s) as sint16) < 0) {\n%s ^= %s;\n}", g.callName(f), g.args(f, 1), lv, g.lit(t))))
+			}
+		case 3:
+			as := g.arraysAll()
+			if len(as) == 0 {
+				continue
+			}
+			a := as[g.pick(len(as))]
+			body = append(body, rpSimple(fmt.Sprintf("%s[(%s & 7)] = %s[((%s + 1) & 7)] + %s;", a.name, c.name, a.name, c.name, cast(c.name, rpTypes[0], a.typ))))
+		default:
+			body = append(body, g.stmt(depth-1))
+		}
+	}
+	g.loops--
+	g.scope = g.scope[:mark] // 本体で宣言した変数もループの外には見えない
+	return &rpStmt{parts: []string{fmt.Sprintf("for (var %s:int = %d; %s; %s--) {\n", c.name, n, c.name, c.name), "}"}, kids: [][]*rpStmt{body}}
 }
