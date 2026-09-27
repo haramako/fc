@@ -618,11 +618,37 @@ func (g *rpGen) walkLoop() *rpStmt {
 
 // stmt は文 1 つ (複数行のこともある)。depth はブロックの入れ子の残り。
 func (g *rpGen) stmt(depth int) *rpStmt {
-	k := g.pick(18)
+	k := g.pick(20)
 	if depth <= 0 && k >= 7 {
 		k = g.pick(7)
 	}
 	switch k {
+	case 18, 19:
+		// 初期値なしで宣言した変数に、必ず 1 回以上回るループ (本体の先頭) か if / else の両方で代入してから、後ろで読む
+		// (SSA の φ(未定義, v) を v にして -O 2 でループの後の値が壊れていた。2026-09-27 の調査)
+		t := g.typ()
+		v := rpVar{name: fmt.Sprintf("l%d", g.nLocal), typ: t}
+		g.nLocal++
+		var s *rpStmt
+		if k == 18 {
+			i := g.newLocal(rpTypes[0])
+			g.scope[len(g.scope)-1].readOnly = true
+			n := g.pick(4) + 1
+			label := g.pushLabel()
+			g.loops++
+			first := rpSimple(fmt.Sprintf("%s = %s;", v.name, g.expr(t, 2)))
+			body := append([]*rpStmt{first}, g.block(depth-1)...)
+			g.loops--
+			g.popLabel(label)
+			g.scope = g.scope[:len(g.scope)-1]
+			s = &rpStmt{parts: []string{fmt.Sprintf("var %s:%s;\n%sfor (var %s:int = 0; %s < %d; %s++) {\n", v.name, t.name, label, i.name, i.name, n, i.name), "}"}, kids: [][]*rpStmt{body}}
+		} else {
+			thenB := append([]*rpStmt{rpSimple(fmt.Sprintf("%s = %s;", v.name, g.expr(t, 2)))}, g.block(depth-1)...)
+			elseB := append([]*rpStmt{rpSimple(fmt.Sprintf("%s = %s;", v.name, g.expr(t, 2)))}, g.block(depth-1)...)
+			s = &rpStmt{parts: []string{fmt.Sprintf("var %s:%s;\nif (%s) {\n", v.name, t.name, g.cond()), "} else {\n", "}"}, kids: [][]*rpStmt{thenB, elseB}}
+		}
+		g.scope = append(g.scope, v) // 後ろの文から読める
+		return s
 	case 17:
 		// struct の値のコピー (全フィールド。soa の要素の gather / scatter、ポインタ経由、重なりうる sa[i] = sa[j])
 		if len(g.fields) == 0 {
@@ -716,6 +742,9 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		return &rpStmt{parts: []string{fmt.Sprintf("%sfor (var %s:int = %d; %s; %s--) {\n", label, i.name, n, i.name, i.name), "}"}, kids: [][]*rpStmt{body}}
 	case 0, 1, 2:
 		lv, t := g.lvalue()
+		if u, ok := g.narrower(t); ok && g.chance(0.2) {
+			return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(u, 3))) // 狭い型の値を暗黙に広げる (符号付きなら符号拡張)
+		}
 		return rpSimple(fmt.Sprintf("%s = %s;", lv, g.expr(t, 3)))
 	case 3, 4:
 		lv, t := g.lvalue()
@@ -868,6 +897,9 @@ func (g *rpGen) block(depth int) []*rpStmt {
 		if g.chance(0.2) {
 			t := g.typ()
 			init := g.expr(t, 2) // 自分自身を参照しないように、宣言の前に作る
+			if u, ok := g.narrower(t); ok && g.chance(0.3) {
+				init = g.expr(u, 2) // 狭い型の値で初期化 (暗黙の拡張。i8 で i16 を初期化するときに符号拡張していなかった)
+			}
 			v := g.newLocal(t)
 			out = append(out, rpSimple(fmt.Sprintf("var %s:%s = %s;", v.name, v.typ.name, init)))
 			continue
@@ -906,6 +938,14 @@ func (g *rpGen) reachableLabels() []string {
 		r = append(r, l)
 	}
 	return r
+}
+
+// narrower は t より狭い整数型 (暗黙に広げて代入・初期化できる。無ければ false)。
+func (g *rpGen) narrower(t rpType) (rpType, bool) {
+	if t.size != 2 {
+		return t, false
+	}
+	return rpTypes[g.pick(2)], true // int か sint
 }
 
 func (g *rpGen) newLocal(t rpType) rpVar {

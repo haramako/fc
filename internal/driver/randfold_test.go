@@ -40,8 +40,34 @@ func (t rfType) lohi() (int, int) {
 	return 0, hi
 }
 
-// rfExpr は同じ式の定数の形 (c) と変数の形 (v)。
+// rfExpr は同じ式の定数の形 (c) と変数の形 (v)。v が `{` で始まれば printf まで含む 1 行の文 (widen)。
 type rfExpr struct{ c, v string }
+
+// widen はときどき、式を狭い型 T1 の値にしてから広い型 T2 の変数へ暗黙に代入する形にする (変数の形では暗黙の拡張、
+// 定数の形では `as`)。値の出どころは式・大域変数・配列の要素・struct のフィールド (i8 の値で i16 を初期化するときに
+// 符号拡張していなかった。-O 0 / -O 2 / インタプリタの判定では見えない)。
+func (g *rfGen) widen(e rfExpr) rfExpr {
+	if !g.chance(0.3) {
+		return e
+	}
+	t1 := rfTypes[g.pick(2)]   // u8 / i8
+	t2 := rfTypes[2+g.pick(2)] // u16 / i16
+	c := fmt.Sprintf("((((%s) as %s)) as %s)", e.c, t1.name, t2.name)
+	src := fmt.Sprintf("((%s) as %s)", e.v, t1.name)
+	var pre string
+	switch g.pick(4) {
+	case 1:
+		pre = fmt.Sprintf("gv_%s = %s; ", t1.name, src)
+		src = "gv_" + t1.name
+	case 2:
+		pre = fmt.Sprintf("ga_%s[1] = %s; ", t1.name, src)
+		src = fmt.Sprintf("ga_%s[1]", t1.name)
+	case 3:
+		pre = fmt.Sprintf("gs.f_%s = %s; ", t1.name, src)
+		src = "gs.f_" + t1.name
+	}
+	return rfExpr{c: c, v: fmt.Sprintf(`{ %svar w:%s = %s; printf(((w) as i16), "\n"); }`, pre, t2.name, src)}
+}
 
 // rfN は TestRandomConstFold のプログラム数 (1 本で 3 回ビルドするので既定は少なめ。`-foldn 500 -randseed N` で増やす)。
 var rfN = flag.Int("foldn", 10, "TestRandomConstFold のプログラム数")
@@ -146,10 +172,14 @@ func rfSource(exprs []string) string {
 	var b strings.Builder
 	b.WriteString("#fc 3\nuse * from stdio;\n")
 	for _, t := range rfTypes {
-		fmt.Fprintf(&b, "function id_%s(x:%s):%s @(noinline) { return x; }\n", t.name, t.name, t.name)
+		fmt.Fprintf(&b, "function id_%s(x:%s):%s @(noinline) { return x; } var gv_%s:%s; var ga_%s:[3]%s;\n", t.name, t.name, t.name, t.name, t.name, t.name, t.name)
 	}
-	b.WriteString("function main():void\n{\n")
+	b.WriteString("struct GS { a:u8; f_u8:u8; f_i8:i8; } var gs:GS; function main():void\n{\n")
 	for _, e := range exprs {
+		if strings.HasPrefix(e, "{") {
+			fmt.Fprintf(&b, "\t%s\n", e) // 文 (暗黙の拡張の初期化を通す形。1 行)
+			continue
+		}
 		fmt.Fprintf(&b, "\tprintf(((%s) as i16), \"\\n\");\n", e)
 	}
 	b.WriteString("\texit(0);\n}\n")
@@ -173,7 +203,7 @@ func TestRandomConstFold(t *testing.T) {
 			g := &rfGen{r: rand.New(rand.NewSource(seed))}
 			var es []rfExpr
 			for i := 0; i < 24; i++ {
-				es = append(es, g.expr(1+g.pick(4)))
+				es = append(es, g.widen(g.expr(1+g.pick(4))))
 			}
 			// 変数の形で型のエラーになる式を捨てる (エラーの行から式を引く)
 			var vo2 string
