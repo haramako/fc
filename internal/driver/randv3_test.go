@@ -89,7 +89,7 @@ func (g *rpGen) v3Stmt(f *rpFunc, depth int) string {
 	v := g.v3
 	v.n++
 	r := strings.NewReplacer("$s", fmt.Sprintf("s_%d", v.n), "$lo", fmt.Sprintf("lo_%d", v.n), "$hi", fmt.Sprintf("hi_%d", v.n),
-		"$k", fmt.Sprintf("k_%d", v.n), "$u", fmt.Sprintf("u_%d", v.n), "$w", fmt.Sprintf("w_%d", v.n))
+		"$k", fmt.Sprintf("k_%d", v.n), "$u", fmt.Sprintf("u_%d", v.n), "$w", fmt.Sprintf("w_%d", v.n), "$x", fmt.Sprintf("x_%d", v.n))
 	return r.Replace(g.v3StmtText(f))
 }
 
@@ -97,7 +97,48 @@ func (g *rpGen) v3Stmt(f *rpFunc, depth int) string {
 func (g *rpGen) v3StmtText(f *rpFunc) string {
 	v := g.v3
 	b := func() string { return g.v3Byte(f) }
-	switch g.pick(15) {
+	switch g.pick(30) {
+	case 26, 27, 28, 29: // 自己検査 (randv3check_test.go)
+		return g.v3SelfCheck(f)
+	case 15: // 2 バイトの要素の 200 要素の配列 (129 番目以降を u8 の添字で引くと別の要素 (k - 128) だった。それも読む)
+		return fmt.Sprintf("\t{\n\t\tvar $k = %s %% 200;\n\t\tvbw[$k] = (%s as u16) * 257;\n\t\tacc += vbw[$k] + vbw[(($k as u16) + 72) %% 200] + vbw[199 - $k];\n\t}\n", b(), b())
+	case 16: // ポインタの負の添字・i8 のずれ (上位の桁を借りていなかった)
+		return fmt.Sprintf("\t{\n\t\tvar $w:*u16 = &vbw[100];\n\t\tvar $k:i8 = ((%s %% 64) as i8) - 32;\n\t\t$w[$k] = %s;\n\t\tacc += $w[$k] + *($w + $k) + $w[-1];\n\t}\n", b(), b())
+	case 17: // for-each (値・添字付き・文字列リテラル)
+		switch g.pick(3) {
+		case 0:
+			return "\tfor (var $x in vb) {\n\t\tacc += $x;\n\t}\n"
+		case 1:
+			return "\tfor (var $k, $x in VT) {\n\t\tacc += $x ^ $k;\n\t}\n"
+		}
+		return "\tfor (var $x in \"ab\") {\n\t\tacc += $x;\n\t}\n"
+	case 18: // for-each の要素のポインタ (静的な配列は &vsa[i] の別名、ポインタの変数を回すときは 1 回だけ評価)
+		if g.chance(0.5) {
+			return fmt.Sprintf("\tfor (var $w in &vsa) {\n\t\t$w.b += %s;\n\t\t$w.c -= 1;\n\t\tacc += $w.b + ($w.c as u8);\n\t}\n", b())
+		}
+		return fmt.Sprintf("\t{\n\t\tvar $u = &vsa;\n\t\tfor (var $w in $u) {\n\t\t\t$w.a ^= %s;\n\t\t\tacc += $w.a;\n\t\t}\n\t}\n", b())
+	case 19: // 範囲 (実行時の端・空の範囲・型の最大値まで・型を書いた範囲)
+		switch g.pick(4) {
+		case 0:
+			return fmt.Sprintf("\tfor (var $k in %s %% 10..%s %% 20) {\n\t\tacc += $k;\n\t}\n", b(), b())
+		case 1:
+			return fmt.Sprintf("\tfor (var $k in %s %% 10..=%s %% 20) {\n\t\tacc += $k;\n\t}\n", b(), b())
+		case 2:
+			return "\tfor (var $k in 250..=255) {\n\t\tacc += $k;\n\t}\n"
+		}
+		return "\tfor (var $k:u16 in 250..300) {\n\t\tacc += $k;\n\t}\n"
+	case 20: // case の範囲 (比較 1 回の判定)
+		return fmt.Sprintf("\tswitch (%s) {\n\tcase 0..10:\n\t\tacc += 1;\n\tcase 10..=20, 30:\n\t\tacc += 2;\n\tcase 100..=255:\n\t\tacc += 3;\n\tdefault:\n\t\tacc += 4;\n\t}\n", b())
+	case 21: // 終わりを含む slice
+		return fmt.Sprintf("\tacc += vsum(vb[%s %% 8..=%s %% 8 + 8]);\n", b(), b())
+	case 22: // 初期値なしの変数に for-each で代入してから読む
+		return "\t{\n\t\tvar $u:u8;\n\t\tfor (var $x in VT) {\n\t\t\t$u = $x;\n\t\t}\n\t\tacc += $u;\n\t}\n"
+	case 23: // struct の配列のフィールドの読み書き (lda a+ofs,y の形)
+		return fmt.Sprintf("\t{\n\t\tvar $k = %s %% 10;\n\t\tvsa[$k].b = %s;\n\t\tvsa[$k].c += 1;\n\t\tacc += vsa[$k].b + (vsa[9 - $k].c as u8);\n\t}\n", b(), b())
+	case 24: // const の表の無名関数
+		return fmt.Sprintf("\tacc += VOPS[%s & 1](%s);\n", b(), b())
+	case 25: // 型付きの定数と @min / @max
+		return fmt.Sprintf("\tacc += (@min(%s, (200 as u8) + (100 as u8)) as u16) + (@max((%s as i8), 100) as u16);\n", b(), b())
 	case 0: // 範囲 (lo <= 7、hi <= 15 < 24)
 		return fmt.Sprintf("\t{\n\t\tvar $lo = %s %% 8;\n\t\tvar $hi = $lo + %s %% 9;\n\t\tvar $s:[]u8 = vb[$lo..$hi];\n\t\tacc += vsum($s);\n\t}\n", b(), b())
 	case 1: // 定数の配列の範囲 ([]const)
@@ -185,7 +226,7 @@ func (g *rpGen) v3ByteSwitch(f *rpFunc) string {
 func (g *rpGen) v3Source() string {
 	v := g.v3
 	var b strings.Builder
-	b.WriteString("#fc 3\nuse mem;\n")
+	b.WriteString("#fc 3\nuse mem;\nuse stdio;\n")
 	fmt.Fprintf(&b, "enum Color { %s }\n", strings.Join(v.enum, ", "))
 	vals := make([]string, len(v.vt))
 	for i, x := range v.vt {
@@ -193,6 +234,8 @@ func (g *rpGen) v3Source() string {
 	}
 	fmt.Fprintf(&b, "const VT:[?]u8 = [%s];\n", strings.Join(vals, ", "))
 	b.WriteString("var vb:[24]u8;\nvar vs:[]u8;\nvar vc:Color;\nvar vhook:fn(u8):void;\nvar vcnt:u8;\n")
+	b.WriteString("var vbw:[200]u16 @(segment: \"BSS_EX\");\nstruct VS { a:u8; b:u16; c:i8; }\nvar vsa:[10]VS;\n")
+	b.WriteString("const VOPS:[?]fn(u8):u8 = [->fn(x:u8):u8 { return x + 1; }, ->fn(x:u8):u8 { return x ^ 90; }];\n")
 	if v.wideArr {
 		b.WriteString("var vbig:[260]u8 @(segment: \"BSS_EX\");\n")
 	}

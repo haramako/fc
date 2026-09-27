@@ -145,6 +145,12 @@ func (m *machine) layout(modules []*ir.Module) *ir.Lambda {
 			}
 		}
 	}
+	// @null_fn (share/runtime.asm の rts だけの関数): 何もしない関数として呼べるようにする
+	nullFn := &ir.Lambda{Id: "__fc_null_fn", Ops: []*ir.Op{{Code: ir.OpReturn}}}
+	m.codeAddr[nullFn] = next
+	m.lambdas[next] = nullFn
+	m.syms[nullFn.Id] = next
+	next += 4
 	define := func(sd scoped, a int) {
 		if m.local[sd.scope] == nil {
 			m.local[sd.scope] = map[string]int{}
@@ -458,6 +464,9 @@ func signed(v uint64, n int) int64 {
 // invoke は l を args (引数ごとのバイト列) で呼び、戻り値のバイト列を返す。
 func (m *machine) invoke(l *ir.Lambda, args [][]byte) []byte {
 	if l.Extern || l.Ops == nil && l.Body == nil {
+		if fn, ok := natives[l.Id]; ok {
+			return fn(m, args)
+		}
 		unsupported("extern function %s", l.Id)
 	}
 	f := &frame{lmd: l, vars: map[*ir.Value]int{}}
@@ -780,4 +789,49 @@ func (m *machine) mulDivMod(f *frame, op *ir.Op) uint64 {
 		return uint64(q) & mask(n)
 	}
 	return uint64(x-q*y) & mask(n)
+}
+
+// natives は asm で書かれた fclib の関数のうち、インタプリタが Go で実行するもの (判定を飛ばさないため)。引数は引数ごとの
+// バイト列 (リトルエンディアン)。
+var natives = map[string]func(m *machine, args [][]byte) []byte{
+	// mem.copy(_to, _from, size): 前から 1 バイトずつ (fclib/mem.asm と同じ)
+	"_mem_copy": func(m *machine, args [][]byte) []byte {
+		to, from, n := le16(args, 0), le16(args, 1), le16(args, 2)
+		for i := 0; i < n; i++ {
+			m.mem[(to+i)&0xffff] = m.mem[(from+i)&0xffff]
+		}
+		return nil
+	},
+	// mem.set(p, c, size)
+	"_mem_set": func(m *machine, args [][]byte) []byte {
+		p, n := le16(args, 0), le16(args, 2)
+		var c byte
+		if len(args) > 1 && len(args[1]) > 0 {
+			c = args[1][0]
+		}
+		for i := 0; i < n; i++ {
+			m.mem[(p+i)&0xffff] = c
+		}
+		return nil
+	},
+	// mem.zero(p, size)
+	"_mem_zero": func(m *machine, args [][]byte) []byte {
+		p, n := le16(args, 0), le16(args, 1)
+		for i := 0; i < n; i++ {
+			m.mem[(p+i)&0xffff] = 0
+		}
+		return nil
+	},
+}
+
+// le16 は i 番目の引数を 2 バイトの符号なしの値として読む。
+func le16(args [][]byte, i int) int {
+	if i >= len(args) {
+		return 0
+	}
+	v := 0
+	for k := 0; k < 2 && k < len(args[i]); k++ {
+		v |= int(args[i][k]) << (8 * k)
+	}
+	return v
 }

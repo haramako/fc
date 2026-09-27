@@ -1475,6 +1475,13 @@ func rpRun(t *testing.T, files map[string]string, level int, maxCycles int64) (o
 	}
 	var o strings.Builder
 	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &o, OptimizeLevel: level, MaxCycles: maxCycles})
+	var ce *CommandError
+	for retry := 0; retry < 2 && errors.As(err, &ce) && strings.TrimSpace(ce.Result) == ""; retry++ {
+		// ca65 / ld65 が何も出さずに失敗した: 並列で重いときの一時的な失敗 (Windows) なのでやり直す (文言のある失敗は
+		// 生成器かコンパイラの問題なのでそのまま返す)
+		o.Reset()
+		code, err = NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &o, OptimizeLevel: level, MaxCycles: maxCycles})
+	}
 	if err != nil {
 		return "", err
 	}
@@ -1609,6 +1616,9 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 			detail := fmt.Sprintf("-O 0: %v\n-O 2: %v", err0, err2) // 両方のレベルの結果 (片方が上限、片方が panic のことがある)
 			if strings.HasPrefix(err.Error(), "panic:") && !strings.Contains(err.Error(), "zero page index wrapped") {
 				return rpResult{"panic", detail}
+			}
+			if strings.HasPrefix(err.Error(), "exit code 77") {
+				return rpResult{"selfcheck", detail} // 生成したプログラムの自己検査 (v3m の stdio.exit(77)) が食い違いを見つけた
 			}
 			return rpResult{"error", detail}
 		}
