@@ -695,7 +695,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				build := opts.Flag("build")
 				var init *cexpr
 				if build {
-					init = toC(h.buildConstInit(sp.Name.Name, sp))
+					e := h.buildConstInit(sp.Name.Name, sp)
+					if str, ok := e.(*syntax.StringLit); ok {
+						h.declareBuildString(sp.Name.Name, str.Value, s.PublicPos).Build = true
+						continue
+					}
+					init = toC(e)
 				} else if sp.Init != nil {
 					init = toC(sp.Init)
 				}
@@ -1261,6 +1266,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s not found (in fc 3 a variable declared in a switch case is visible only in that case; declare it before the switch)", c.name)})
 		}
 		v := h.scope.FindMust(c.name, true)
+		if str, ok := h.prog.buildStrings[v]; ok {
+			return h.constEval(cstr(str)) // 文字列の @(build) の const は使った場所で文字列リテラルに
+		}
 		if a := h.exprAliases[v]; a != nil {
 			return a // 評価済みの式そのもの (代入の検査は同じ node かで見る)
 		}
@@ -1352,7 +1360,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			return cv(h.enumMember(left.val.TypeRef, c.name)) // enum のメンバー (Type.Name)
 		}
 		if left.kind == cValue && left.val.Module != nil {
-			return cv(left.val.Module.LookupMust(c.name))
+			v := left.val.Module.LookupMust(c.name)
+			if str, ok := h.prog.buildStrings[v]; ok {
+				return h.constEval(cstr(str))
+			}
+			return cv(v)
 		}
 		// モジュールでなければ struct のフィールド参照 (実行時に評価する)
 		return &cexpr{kind: cOp, op: opField, args: []*cexpr{left}, name: c.name}

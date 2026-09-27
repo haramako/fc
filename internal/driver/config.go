@@ -130,7 +130,7 @@ func (cfg *ProjectConfig) defines(cli []string) (map[string]*sema.DefineUse, err
 	}
 	for _, d := range cli {
 		k, v, ok := strings.Cut(d, "=")
-		if !ok || !strings.Contains(k, ".") || v == "" {
+		if !ok || !strings.Contains(k, ".") { // 値は空でもよい (文字列の @(build) の const を "" に)
 			return nil, &diag.Error{Msg: fmt.Sprintf("-D %s: expected module.NAME=value", d)}
 		}
 		m[k] = &sema.DefineUse{Key: k, Value: v, Source: "-D"}

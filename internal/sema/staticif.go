@@ -132,9 +132,12 @@ func (h *Hlc) buildConstInit(name string, sp *syntax.VarSpec) syntax.Expr {
 	if h.inStaticIf {
 		panic(&diag.Error{Msg: fmt.Sprintf("@(build) const %s cannot be declared inside @if", name)})
 	}
-	isBool, ok := literalKind(sp.Init)
-	if !ok {
-		panic(&diag.Error{Msg: fmt.Sprintf("@(build) const %s must be initialized with a literal (true / false / integer)", name)})
+	kind := literalKind(sp.Init)
+	if kind == litNone {
+		panic(&diag.Error{Msg: fmt.Sprintf("@(build) const %s must be initialized with a literal (true / false / integer / string)", name)})
+	}
+	if kind == litString && sp.Type != nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("@(build) const %s: a string @(build) const cannot have a type", name)})
 	}
 	key := h.module.Id + "." + name
 	d := h.prog.Defines[key]
@@ -143,9 +146,13 @@ func (h *Hlc) buildConstInit(name string, sp *syntax.VarSpec) syntax.Expr {
 	}
 	d.Used = true
 	pos := sp.Init.Pos()
+	if kind == litString {
+		// 文字列はそのまま (-D module.NAME= で空文字列)
+		return &syntax.StringLit{ValuePos: pos, Value: d.Value, Text: strconv.Quote(d.Value)}
+	}
 	switch {
 	case d.Value == "true" || d.Value == "false":
-		if !isBool {
+		if kind != litBool {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s = %s (%s): %s is an integer @(build) const", key, d.Value, d.Source, name)})
 		}
 		return &syntax.BoolLit{ValuePos: pos, Value: d.Value == "true"}
@@ -154,7 +161,7 @@ func (h *Hlc) buildConstInit(name string, sp *syntax.VarSpec) syntax.Expr {
 		if err != nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s = %s (%s): the value must be true, false or an integer", key, d.Value, d.Source)})
 		}
-		if isBool {
+		if kind == litBool {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s = %s (%s): %s is a bool @(build) const", key, d.Value, d.Source, name)})
 		}
 		if n < 0 {
@@ -164,19 +171,44 @@ func (h *Hlc) buildConstInit(name string, sp *syntax.VarSpec) syntax.Expr {
 	}
 }
 
-// literalKind は e が bool / 整数のリテラル (負の整数を含む) か。
-func literalKind(e syntax.Expr) (isBool, ok bool) {
+// declareBuildString は文字列の @(build) の const を宣言する。データ (ROM の配列) は作らず、名前を使った場所で文字列
+// リテラルに置き換える (cIdent / cDot)。使わなければ ROM に何も出ないので、既定値 "" の宣言を足してもビルドが変わらない
+// (@textmap の .po のパスなど、定数式の組み込みに渡す用)。
+func (h *Hlc) declareBuildString(name, s string, publicPos syntax.Pos) *ir.Value {
+	v := h.constEval(cstr(s)).val
+	v.Name = name
+	h.addVar(v)
+	h.prog.buildStrings[v] = s
+	if h.scopeIsPublic(publicPos) {
+		v.Public = true
+	}
+	return v
+}
+
+type litKind int
+
+const (
+	litNone litKind = iota
+	litBool
+	litInt
+	litString
+)
+
+// literalKind は e が bool / 整数 (負の整数を含む) / 文字列のリテラルか。
+func literalKind(e syntax.Expr) litKind {
 	switch x := e.(type) {
 	case *syntax.BoolLit:
-		return true, true
+		return litBool
 	case *syntax.IntLit:
-		return false, true
+		return litInt
+	case *syntax.StringLit:
+		return litString
 	case *syntax.UnaryExpr:
 		if _, isInt := x.X.(*syntax.IntLit); isInt && x.Op == syntax.Minus {
-			return false, true
+			return litInt
 		}
 	}
-	return false, false
+	return litNone
 }
 
 // CheckDefines はビルドの後、上書きの値が宣言された @(build) の定数に当たったかを検査する。モジュールがビルドに
