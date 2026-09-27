@@ -336,7 +336,8 @@ func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Typ
 // 統合したもの (`[11902, -3]` は uint16 と sint8 で uint16) なので、宣言があればそちらを優先し、全要素が T に収まるなら
 // T の配列に作り直す。収まらない・整数の配列でないときはそのまま (compatibleAssign が報告する)。
 func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
-	if typ == nil || typ.Kind != types.Array || typ.Base.Kind != types.Int || v.Kind != ir.KindArrayLiteral {
+	// soa の型も Kind は Array だが配列ではなく、宣言がエラーだと Base が nil (fuzz で発覚)
+	if typ == nil || typ.Kind != types.Array || typ.IsSoa || typ.Base.Kind != types.Int || v.Kind != ir.KindArrayLiteral {
 		return v
 	}
 	vt := ir.ValType(v)

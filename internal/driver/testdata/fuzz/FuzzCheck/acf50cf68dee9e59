@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("soa Enemies:A;function A(A:Enemies=0):void{}")

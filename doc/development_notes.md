@@ -221,6 +221,8 @@ go test ./...                                    # 全部 (golden + examples + N
   続けて 5 時間は失敗なし（FuzzCheck 6240 万回、FuzzFormat 1.6 億回）。その次に FuzzFormat が 3 時間 12 分で `a. .B`
   （`.` の右辺が型名を省いた enum）が `a..B` に整形されて `..` になるのを発見（printer の `mergesWithPrev` に `..` が
   抜けていた。字句解析の 2 文字の記号と揃える）。
+  FuzzCheck（2 ワーカーに減らした。4 ワーカーでメモリ不足で止められたことがある）が 1 時間 22 分で、宣言がエラーの soa を
+  既定値つきの引数の型にすると落ちるのを発見（`fitArrayLiteral` が Kind == Array の soa の `Base`（nil）を読んだ。soa を除く）。
   注意: `go test -fuzz` を kill してもテストバイナリ（コーディネータとワーカー）が残って回り続ける。止めるときは
   `setsid` で起動してプロセスグループごと kill する
 - **常駐レジスタの正しさを実際の命令列から決める**（2026-09-23）: regalloc の「どの命令が A / X / Y を使うか」
