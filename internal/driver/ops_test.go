@@ -2705,3 +2705,31 @@ function main():void
 		}
 	}
 }
+
+// TestResidentStoreWiden: A に常駐する u8 のループ変数を i16 の配列の要素に書くと、上位を書く lda #0 が A を壊す。
+// regalloc が friendly (A のまま扱える) と見て退避しなかったので、l0@A の dec が 0 から始まってループが終わらなかった (fuzz で発覚)。
+func TestResidentStoreWiden(t *testing.T) {
+	t.Parallel()
+	src := `var g1:int;
+var a3:[16]sint16;
+function f2():sint16
+{
+	for (var l0:int = 6; l0; l0--) {
+		for (var l1:int16 = 0; l1 < 5; l1++) {
+			a3[3] = l0;
+		}
+	}
+	return a3[(g1 & 7) + 3];
+}
+function main():void
+{
+	printf(f2(), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if out, want := runEmuLevel(t, src, level), "1\n"; out != want {
+			t.Errorf("level %d: got %q, want %q", level, out, want)
+		}
+	}
+}
