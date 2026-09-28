@@ -98,7 +98,7 @@ func markArgY(lmd *ir.Lambda, lambdas map[string]*ir.Lambda) {
 			}
 			iy, il := p.args[np-2], p.args[np-1]
 			py, pl := ops[iy], ops[il]
-			if !isPushArg(py) || !isPushArg(pl) || nextOp(ops, il) != op {
+			if !ir.IsPushArg(py) || !ir.IsPushArg(pl) || nextOp(ops, il) != op {
 				continue
 			}
 			if !isValueOrCasted(py.In(0)) || !isValueOrCasted(pl.In(0)) || py.Type.Size != 1 {
@@ -146,12 +146,6 @@ func keepsY(op *ir.Op) bool {
 	}
 	return false
 }
-
-// isPushArg は push_arg (static の呼び先なら fastcall の印の付いた関数の呼び出しも同じ形)。
-func isPushArg(op *ir.Op) bool { return op.Code == ir.OpPushArg || op.Code == ir.OpPushFastcallArg }
-
-// isCallOp は call / fastcall。
-func isCallOp(op *ir.Op) bool { return op.Code == ir.OpCall || op.Code == ir.OpFastcall }
 
 // loadY は 1 バイトの値を Y に読む (Y にある値なら何もしない。A にある値や融合した添字付きオペランドは A 経由で tay)。
 func (l *Llc) loadY(v ir.Operand) []any {

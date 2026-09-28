@@ -73,10 +73,9 @@ func BuildCFG(lmd *Lambda) *CFG {
 		if op == nil {
 			continue
 		}
-		switch op.Code {
-		case OpLabel:
+		if op.Code == OpLabel {
 			leader[i] = true
-		case OpIf, OpIfTrue, OpIfCarry, OpIfNotCarry, OpJump, OpReturn, OpSwitch:
+		} else if op.Code.IsTerminator() {
 			leader[i+1] = true
 		}
 	}
@@ -112,7 +111,7 @@ func BuildCFG(lmd *Lambda) *CFG {
 			succs = []*Block{next()}
 		case last.Code == OpJump:
 			succs = []*Block{c.byLabel[last.Label]}
-		case last.Code == OpIf || last.Code == OpIfTrue || last.Code == OpIfCarry || last.Code == OpIfNotCarry:
+		case last.Code.IsCondBranch():
 			succs = []*Block{next(), c.byLabel[last.Label]}
 		case last.Code == OpSwitch:
 			succs = []*Block{next()}

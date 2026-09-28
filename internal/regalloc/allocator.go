@@ -65,10 +65,10 @@ func CalcLiveRange(lmd *ir.Lambda) {
 	flow := make([][]int, 0, len(lmd.Ops))
 	for i, op := range lmd.Ops {
 		var node []int
-		switch op.Code {
-		case ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpJump:
+		switch {
+		case op.Code.IsBranch():
 			node = append(node, labels[op.Label])
-		case ir.OpSwitch:
+		case op.Code == ir.OpSwitch:
 			// ジャンプテーブルの飛び先も後続 (無いと飛び先で使う変数の live range が切れて、別の変数と番地を共有していた。
 			// fuzz の密な switch で発覚)
 			for _, l := range op.Labels {
@@ -656,20 +656,16 @@ func DeleteUnuse(lmd *ir.Lambda) {
 		if op == nil {
 			continue
 		}
-		switch op.Code {
-		case ir.OpPget, ir.OpLoad,
-			// 副作用のない演算も、結果が使われなければ消す (`c == 32;` のような式文)。
-			// 残すと結果の一時変数に場所が割り付かず、コード生成で落ちる
-			ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
-			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot,
-			ir.OpIndex, ir.OpRef, ir.OpSignExtension, ir.OpIndexPget, ir.OpFieldPget, ir.OpRolC, ir.OpRorC:
-			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
-				ir.DropOp(lmd.Ops, i)
-			}
-		case ir.OpCall, ir.OpFastcall:
-			if op.Dst != nil && ir.UnderlyingValue(op.Dst) != nil && ir.UnderlyingValue(op.Dst).Unuse {
-				op.Dst = nil
-			}
+		// 副作用のない演算は、結果が使われなければ消す (`c == 32;` のような式文)。
+		// 残すと結果の一時変数に場所が割り付かず、コード生成で落ちる。呼び出しは残して戻り値だけ捨てる
+		if op.Dst == nil || ir.UnderlyingValue(op.Dst) == nil || !ir.UnderlyingValue(op.Dst).Unuse {
+			continue
+		}
+		switch {
+		case op.Code.IsPure():
+			ir.DropOp(lmd.Ops, i)
+		case op.Code.IsCall():
+			op.Dst = nil
 		}
 	}
 }

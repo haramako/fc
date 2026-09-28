@@ -234,8 +234,7 @@ func DropOp(ops []*Op, i int) {
 	if op == nil || len(op.Logs) == 0 {
 		return
 	}
-	switch op.Code {
-	case OpIf, OpIfTrue, OpIfCarry, OpIfNotCarry:
+	if op.Code.IsCondBranch() {
 		// 消す条件分岐 (成立しないと分かった): 成立したときの注釈は出さない
 		var rest []*LogPoint
 		for _, p := range op.Logs {

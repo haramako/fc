@@ -95,7 +95,7 @@ func (s *ssaForm) eliminateOneInduction() bool {
 			continue
 		}
 		pre := entries[0]
-		if last := cfg.Last(pre); last != nil && (isCond(last) || last.Code == ir.OpSwitch || last.Code == ir.OpReturn) {
+		if last := cfg.Last(pre); last != nil && (ir.IsCondBranch(last) || last.Code == ir.OpSwitch || last.Code == ir.OpReturn) {
 			ivTrace(4)
 			continue
 		}

@@ -1092,7 +1092,7 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			tail = append(tail, &ir.Op{Code: ir.OpLabel, Label: l})
 			tail = append(tail, mk...)
 			tail = append(tail, &ir.Op{Code: ir.OpJump, Label: to.Label})
-		case last != nil && isCondBranch(last) && last.Label == to.Label:
+		case last != nil && ir.IsCondBranch(last) && last.Label == to.Label:
 			// 条件分岐の飛び先: 辺を分割して末尾に新しいブロック
 			l := newLabel()
 			last.Label = l
@@ -1183,12 +1183,4 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 	}
 	out = append(out, tail...)
 	lmd.Ops = out
-}
-
-func isCondBranch(op *ir.Op) bool {
-	switch op.Code {
-	case ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry:
-		return true
-	}
-	return false
 }

@@ -155,24 +155,12 @@ func calleeSym(op *ir.Op) string {
 	return lit.Symbol
 }
 
-func isPushResult(op *ir.Op) bool {
-	return op != nil && (op.Code == ir.OpPushResult || op.Code == ir.OpPushFastcallResult)
-}
-
-func isPushArg(op *ir.Op) bool {
-	return op != nil && (op.Code == ir.OpPushArg || op.Code == ir.OpPushFastcallArg)
-}
-
-func isCall(op *ir.Op) bool {
-	return op != nil && (op.Code == ir.OpCall || op.Code == ir.OpFastcall)
-}
-
 // hasCallsOrOpaqueAsm は本体に呼び出しか、flagOnlyAsm でない asm があるか。別モジュールへの展開の判定に使う
 // (asm の中身は解析しないので、中で jsr したり元のモジュールだけに見えるシンボルを参照したりしうる。自動インラインは
 // asm を含む関数を最初から対象にしない (autoInlinable) ので、これが効くのは options(inline: true) の関数だけ)。
 func hasCallsOrOpaqueAsm(lmd *ir.Lambda) bool {
 	for _, op := range lmd.Ops {
-		if isCall(op) || (op != nil && op.Code == ir.OpAsm && !flagOnlyAsm(op.Text)) {
+		if ir.IsCall(op) || (op != nil && op.Code == ir.OpAsm && !flagOnlyAsm(op.Text)) {
 			return true
 		}
 	}
@@ -300,13 +288,13 @@ func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda, owners map[string
 		for j := k - 1; j >= 0; j-- {
 			o := caller.Ops[j]
 			switch {
-			case isCall(o):
+			case ir.IsCall(o):
 				depth++
-			case isPushResult(o) && depth > 0:
+			case ir.IsPushResult(o) && depth > 0:
 				depth--
-			case isPushResult(o):
+			case ir.IsPushResult(o):
 				p = j
-			case isPushArg(o) && depth == 0:
+			case ir.IsPushArg(o) && depth == 0:
 				args = append(args, j)
 			}
 			if p >= 0 {
@@ -320,9 +308,9 @@ func inlineCalls(caller *ir.Lambda, inl map[string]*ir.Lambda, owners map[string
 		pending := 0
 		for j := p - 1; j >= 0; j-- {
 			o := caller.Ops[j]
-			if isCall(o) {
+			if ir.IsCall(o) {
 				pending++
-			} else if isPushResult(o) {
+			} else if ir.IsPushResult(o) {
 				if pending == 0 {
 					pending = -1
 					break

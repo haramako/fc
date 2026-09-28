@@ -757,7 +757,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 					r.push("stx " + l.byte(op.ResidentX.Home, 0))
 				}
 				l.resXMem = true
-				restoreX = op.ResXOut && (l.holdX == 0 || (isCallOp(op) && l.holdX == 1))
+				restoreX = op.ResXOut && (l.holdX == 0 || (ir.IsCall(op) && l.holdX == 1))
 			}
 			// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
 			// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
@@ -778,7 +778,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 					r.push("sty " + l.byte(op.ResidentY.Home, 0))
 				}
 				l.resYMem = true
-				restoreY = op.ResYOut && !op.ArgY && !(op.HoldY && !isCallOp(op))
+				restoreY = op.ResYOut && !op.ArgY && !(op.HoldY && !ir.IsCall(op))
 			}
 			l.aHeld = d.UseY
 		}
@@ -1759,9 +1759,9 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			// 呼び出しの引数の保持中 (A の最後の引数、Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない
 			// (codegen の中の約束事なので、破っていたらコンパイルエラー)
 			hold := regsKept{
-				a: holdAIn && !isCallOp(op),
-				y: op.HoldY && !isCallOp(op),
-				x: holdXIn > 0 && !isCallOp(op) && op.Code != ir.OpPushResult,
+				a: holdAIn && !ir.IsCall(op),
+				y: op.HoldY && !ir.IsCall(op),
+				x: holdXIn > 0 && !ir.IsCall(op) && op.Code != ir.OpPushResult,
 			}
 			l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
 		}

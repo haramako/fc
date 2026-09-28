@@ -117,10 +117,10 @@ func ywalkBody(ops []*ir.Op, labelAt map[string]int, a, b, c int, p, t *ir.Value
 		if op == nil {
 			continue
 		}
-		switch op.Code {
-		case ir.OpReturn, ir.OpSwitch, ir.OpAsm:
+		switch {
+		case op.Code == ir.OpReturn || op.Code == ir.OpSwitch || op.Code == ir.OpAsm:
 			return false
-		case ir.OpJump, ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry:
+		case op.Code.IsBranch():
 			// 中の分岐はループの中 (L の後ろ、B まで) へだけ (break = 外へ、は出口で p を戻せないので対象外)
 			j, ok := labelAt[op.Label]
 			if !ok || j <= a || j > b {
@@ -132,7 +132,7 @@ func ywalkBody(ops []*ir.Op, labelAt map[string]int, a, b, c int, p, t *ir.Value
 			if inc < 0 {
 				top = false
 			}
-		case ir.OpLabel:
+		case op.Code == ir.OpLabel:
 			if inc < 0 {
 				top = false
 			} else {
@@ -179,14 +179,14 @@ func ywalkBody(ops []*ir.Op, labelAt map[string]int, a, b, c int, p, t *ir.Value
 		if op == nil || i == a-1 || i == c || (i > a && i < b) {
 			continue
 		}
-		switch op.Code {
-		case ir.OpJump, ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry:
+		switch {
+		case op.Code.IsBranch():
 			if op.Label == bLabel || op.Label == ops[a].Label {
 				return false
 			}
-		case ir.OpSwitch:
+		case op.Code == ir.OpSwitch:
 			return false // 飛び先の表 (念のため関数ごと対象外)
-		case ir.OpAsm:
+		case op.Code == ir.OpAsm:
 			if contains(op.Text, bLabel) || contains(op.Text, ops[a].Label) {
 				return false
 			}

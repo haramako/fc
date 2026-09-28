@@ -212,11 +212,10 @@ func recentlyTouched(ops []*ir.Op, opNo int, u *ir.Value) bool {
 		if op == nil {
 			continue
 		}
-		switch op.Code {
-		case ir.OpLabel, ir.OpJump, ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpSwitch, ir.OpReturn, ir.OpAsm:
+		if op.Code.IsBlockBoundary() || op.Code.IsOpaque() {
 			return false
 		}
-		if isCallOp(op) {
+		if ir.IsCall(op) {
 			return false // 呼び先が L などを使う
 		}
 		defs, uses := ir.DefUse(op)

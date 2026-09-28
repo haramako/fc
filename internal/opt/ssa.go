@@ -689,7 +689,7 @@ func (s *ssaForm) copySource(val *ssaVal, i int) *ir.Value {
 		return nil
 	}
 	op := s.lmd.Ops[i]
-	if op.Dst != nil && ir.UnderlyingValue(op.Dst) == y && !readsBeforeWrite(op.Code) {
+	if op.Dst != nil && ir.UnderlyingValue(op.Dst) == y && !op.Code.ReadsBeforeWrite() {
 		return nil
 	}
 	return y
@@ -793,7 +793,7 @@ func (s *ssaForm) sameOperandAt(def, k, i int) ir.Operand {
 	if resolve(us[k]) != s.valueAt(v, i) {
 		return nil
 	}
-	if op := s.lmd.Ops[i]; op.Dst != nil && ir.UnderlyingValue(op.Dst) == v && !readsBeforeWrite(op.Code) {
+	if op := s.lmd.Ops[i]; op.Dst != nil && ir.UnderlyingValue(op.Dst) == v && !op.Code.ReadsBeforeWrite() {
 		return nil
 	}
 	return o
@@ -807,7 +807,7 @@ func (s *ssaForm) eliminateDead() bool {
 		if op == nil || s.blockOf[i] == nil {
 			continue
 		}
-		if d := s.defAt[i]; d != nil && isPure(op.Code) {
+		if d := s.defAt[i]; d != nil && op.Code.IsPure() {
 			continue
 		}
 		for _, u := range s.useAt[i] {
@@ -838,23 +838,11 @@ func (s *ssaForm) eliminateDead() bool {
 		if op == nil {
 			continue
 		}
-		if d := s.defAt[i]; d != nil && isPure(op.Code) && !live[d] {
+		if d := s.defAt[i]; d != nil && op.Code.IsPure() && !live[d] {
 			d.v.LogStale = true // 死んだ代入: この後の @log は、生きている地点でしか値を読まない (ir/log.go)
 			ir.DropOp(s.lmd.Ops, i)
 			changed = true
 		}
 	}
 	return changed
-}
-
-// isPure は結果が使われなければ消してよい命令か (regalloc.DeleteUnuse と同じ集合)。
-func isPure(c ir.OpCode) bool {
-	switch c {
-	case ir.OpPget, ir.OpLoad,
-		ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
-		ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot,
-		ir.OpIndex, ir.OpRef, ir.OpSignExtension, ir.OpIndexPget, ir.OpFieldPget, ir.OpRolC, ir.OpRorC:
-		return true
-	}
-	return false
 }
