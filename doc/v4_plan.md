@@ -290,7 +290,7 @@ sema に一時的な検査を入れて（暗黙の変換 `cast`、二項演算�
   呼び出し規約を指定する手段（`@(abi: …)` など）を別に用意するかは決めるときに
   **決定（2026-09-29）: fc 4 から fastcall を完全になくす。** 本体のある関数の `@(fastcall)` は migrate が消す（コンパイラが呼び出し
   規約を決める。castle の測る場面のサイクル数と bench のサイクル数・大きさは外しても同じだった: どちらもゼロページに `sta` で引数を
-  書くため）。`fastcall fn` 型は fc 4 ではエラー。fclib の asm の fastcall の extern は、引数の多いもの（mem.set / zero / copy /
+  書くため）。`fastcall fn` 型は属性からだけ生まれる（型としては書けない）ので fc 4 のモジュールでは作れない（fc 3 のモジュールの fastcall の関数は呼べる）。fclib の asm の fastcall の extern は、引数の多いもの（mem.set / zero / copy /
   compare、nes の stdio.ppu_put）は fc に書き直すか asm のまま別の規約に、0〜1 個のもの（lzw.read_bit / read_vln / read_vln16、
   nes の stdio.print）は cc65 の規約（A / X）に。利用者の asm の fastcall の extern は migrate のエラーで案内する（castle・miku・
   darius には無い）。fc 3 のモジュールは今までどおり使える。**fclib はこの作業で fc 4 に移す（2026-09-29 決定）。**
@@ -310,6 +310,30 @@ sema に一時的な検査を入れて（暗黙の変換 `cast`、二項演算�
   - fc 3 は今のまま（extern の既定は stack、fastcall も使える）。migrate: 規約を書かない extern に `@(abi: "stack")` を足す、本体のある
     関数の fastcall を消す、fastcall の extern はエラー（asm を直す必要がある）
   - `FC_FASTCALL_REG` は fc 3 の fastcall と cc65 の規約の受け渡しのために残す（fc 3 をやめるときに外せる）
+
+  ✅ 実装 2026-09-29（仕様は language_reference.md §4.2・§4.5）:
+  - sema（`sema/abi.go` の `checkABI`）: abi の値、`scratch` は abi "frame" の extern だけ、"frame" と fastcall の併用はエラー。fc 4 では
+    fastcall と、abi を書かない extern がエラー
+  - frames: `ir.Lambda.FrameABI` / `Scratch`。abi "frame" の extern は呼び出しグラフの葉としてフレームを配置する（大きさは戻り値 + 引数 +
+    scratch）。本体のある abi "frame" の関数は asm から参照されても Entry にせず、レジスタ渡しもしない。`_frames.inc` に
+    `F_sym__<引数名>` と `F_sym__scratch`、fc から呼ばれない extern には仮の `F_sym = FC_SZP`（asm のファイルは丸ごと入るので、
+    参照が未定義だとアセンブルできない）。asm の extern のフレームはゼロページに要る（入らなければエラー、`zeropage: false` で RAM）
+  - 制約「葉」は検査にした: include した asm のファイルが参照する関数（asm から呼ばれうる関数）は、呼び出し元がグラフに見えないので
+    フレームをどの関数とも重ねない（`frames.Graph.hidden`。割り込みの木と同じ扱い。これは fastcall 以前からの Entry にもあった穴で、
+    asm から呼ばれる Entry の関数のフレームが呼ぶ側の fc の関数と重なりえた）。インラインアセンブラの参照は、それを含む関数からの
+    呼び出しの辺にする。検出できないのは同じモジュールの asm の関数どうしの呼び出し（extern への自分のモジュールの asm の参照は
+    定義のラベルと区別できない）で、仕様で禁止した
+  - asm のシンボルの検出（`ir.AsmSymbols`。sema と frames で別々だった正規表現をまとめた）を語の境界つきにした。以前は castle の
+    nsd.inc のコメント `nsd_main` から `_main` を拾って main が Entry になっていた（直すと castle の測る場面で -0.1〜-0.8% のサイクル）
+  - migrate（`migrate/v4.go` の `abiRules`）: 本体のある関数の fastcall を消す、abi を書かない extern に `abi: "stack"` を足す、
+    fastcall の extern はエラー
+  - fclib を fc 4 に移した: mem.set / zero / copy / compare、lzw の read_bit / read_vln / read_vln16 / unpack（scratch: 6）、
+    nes の stdio.print / ppu_put / wait_vsync を abi "frame" に（0〜1 個の引数のものも cc65 の規約ではなく frame にそろえた）。
+    lzw.asm は unpack から公開の関数を呼ばず、下請けの `lzw_bits` / `lzw_vln`（X / Y で受け取る）を呼ぶ形にし、mem.copy の呼び出しは
+    その場のループにした（同じモジュールの呼び出しの制約と、lzw が mem を使わなくて済むため）。nes の print_int16 / print_int8 は
+    fc に書き直した。rle / inflate は `abi: "stack"`
+  - 確かめたこと: stdout の golden・TestPlayCastle / TestSmoke* が同じ動作、bench のサイクル数と大きさは同じ。IR / asm / ROM の golden
+    は更新した。`TestRandomMigrate` は fc 2 のプログラムが fastcall を使うと ROM ではなく実行結果（-O 0 / -O 2）で比べる
 
 ## 3. 標準ライブラリの拡充（2026-09-28 方針）
 
@@ -342,7 +366,7 @@ slice が入ったので、v4 で fclib を大幅に拡充する。中身は未�
   引き分けるか、別の名前にするかを決める
 
 決めること: 拡充する範囲（文字列・バッファ・コンテナ・PPU・マッパー・数学・圧縮など）、今の API の扱い（残す / 置き換える）、
-版による引き分けの要否、`fastcall` の廃止の後の asm の規約。
+版による引き分けの要否。asm の規約は `abi: "frame"` に決まり、今の fclib は fc 4 に移した（§2）。
 
 ## 4. 進め方（案）
 
@@ -362,3 +386,4 @@ slice が入ったので、v4 で fclib を大幅に拡充する。中身は未�
    と元のソースの `as` で IR がずれない。ROM・golden は変わらなかった）、定数の畳み込みのシフトにも F1 の書き換え
    （`32 << (6 as u8)` は fc 3 では u8 の 0、fc 4 では 2048）
 3. `fastcall` の廃止（§2）と fclib の拡充・API の移行（§3）: 生成コードが変わる。動作で確かめる
+   （`fastcall` の廃止と fclib の fc 4 への移行 ✅ 2026-09-29）

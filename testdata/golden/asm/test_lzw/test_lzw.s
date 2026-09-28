@@ -21,11 +21,11 @@ __MODULE_TEST_LZW__ = 1
 	lda #0
 	sta 0+_lzw_bpos
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -40,11 +40,11 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -60,11 +60,11 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -80,11 +80,11 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -100,11 +100,11 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -120,11 +120,11 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -140,11 +140,11 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -160,11 +160,11 @@ __MODULE_TEST_LZW__ = 1
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #3
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit+0
 	lda 0+<F_test_lzw_test_read_bit+0
 	sta <F_unittest_assert_equal+0
@@ -198,11 +198,11 @@ _12:
 	lda #0
 	sta 0+_lzw_bpos
 	lda #4
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit2+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit2+0
 	lda 0+<F_test_lzw_test_read_bit2+0
 	sta <F_unittest_assert_equal+0
@@ -217,11 +217,11 @@ _12:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #16
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit2+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit2+0
 	lda 0+<F_test_lzw_test_read_bit2+0
 	sta <F_unittest_assert_equal+0
@@ -236,11 +236,11 @@ _12:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #4
-	sta <FC_FASTCALL_REG+2
+	sta <F_lzw_read_bit+2
 	jsr _lzw_read_bit
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+0
 	sta 0+<F_test_lzw_test_read_bit2+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_bit+1
 	sta 1+<F_test_lzw_test_read_bit2+0
 	lda 0+<F_test_lzw_test_read_bit2+0
 	sta <F_unittest_assert_equal+0
@@ -277,7 +277,7 @@ _28:
 	lda #0
 	sta 0+_lzw_bpos
 	jsr _lzw_read_vln
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_vln+0
 	sta 0+<F_test_lzw_test_read_vln+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -292,7 +292,7 @@ _28:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	jsr _lzw_read_vln
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_vln+0
 	sta 0+<F_test_lzw_test_read_vln+0
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -327,9 +327,9 @@ _39:
 	lda #0
 	sta 0+_lzw_bpos
 	jsr _lzw_read_vln16
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_vln16+0
 	sta 0+<F_test_lzw_test_read_vln16+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_vln16+1
 	sta 1+<F_test_lzw_test_read_vln16+0
 	lda 0+<F_test_lzw_test_read_vln16+0
 	sta <F_unittest_assert_equal+0
@@ -345,9 +345,9 @@ _39:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	jsr _lzw_read_vln16
-	lda <0+FC_FASTCALL_REG
+	lda <F_lzw_read_vln16+0
 	sta 0+<F_test_lzw_test_read_vln16+0
-	lda <1+FC_FASTCALL_REG
+	lda <F_lzw_read_vln16+1
 	sta 1+<F_test_lzw_test_read_vln16+0
 	lda 0+<F_test_lzw_test_read_vln16+0
 	sta <F_unittest_assert_equal+0
@@ -379,21 +379,18 @@ _test_lzw_buf: .res 256
 	;;;=============================
 .segment "test_lzw"
 .proc _test_lzw_test_unpack
-	ldx FC_SP
 	lda #.LOBYTE(_test_lzw_buf)
-	sta <S+2,x
+	sta <F_lzw_unpack+2
 	lda #.HIBYTE(_test_lzw_buf)
-	sta <S+3,x
+	sta <F_lzw_unpack+3
 	lda #.LOBYTE(PACKED)
-	sta <S+4,x
+	sta <F_lzw_unpack+4
 	lda #.HIBYTE(PACKED)
-	sta <S+5,x
-	ldx FC_SP
+	sta <F_lzw_unpack+5
 	jsr _lzw_unpack
-	ldx FC_SP
-	lda <0+S+0,x
+	lda <F_lzw_unpack+0
 	sta 0+<F_test_lzw_test_unpack+0
-	lda <1+S+0,x
+	lda <F_lzw_unpack+1
 	sta 1+<F_test_lzw_test_unpack+0
 	lda #.LOBYTE(UNPACKED)
 	sta <F_mem_strlen+1
@@ -415,19 +412,19 @@ _test_lzw_buf: .res 256
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #.LOBYTE(_test_lzw_buf)
-	sta <FC_FASTCALL_REG+1
+	sta <F_mem_compare+1
 	lda #.HIBYTE(_test_lzw_buf)
-	sta <FC_FASTCALL_REG+2
+	sta <F_mem_compare+2
 	lda #.LOBYTE(UNPACKED)
-	sta <FC_FASTCALL_REG+3
+	sta <F_mem_compare+3
 	lda #.HIBYTE(UNPACKED)
-	sta <FC_FASTCALL_REG+4
+	sta <F_mem_compare+4
 	lda 0+<F_test_lzw_test_unpack+0
-	sta <FC_FASTCALL_REG+5
+	sta <F_mem_compare+5
 	lda 1+<F_test_lzw_test_unpack+0
-	sta <FC_FASTCALL_REG+6
+	sta <F_mem_compare+6
 	jsr _mem_compare
-	lda <0+FC_FASTCALL_REG
+	lda <F_mem_compare+0
 	sta 0+<F_test_lzw_test_unpack+0
 	sta <F_unittest_assert_equal+0
 	lda #0

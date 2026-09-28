@@ -1,4 +1,4 @@
-#fc 3
+#fc 4
 @(bank: -1);
 @include("rle.asm");
-public function unpack(dest:*u8, src:*const u8):u16;
+public function unpack(dest:*u8, src:*const u8):u16 @(abi: "stack");

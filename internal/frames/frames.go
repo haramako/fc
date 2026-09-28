@@ -7,7 +7,6 @@ package frames
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -24,18 +23,25 @@ type Graph struct {
 	callees [][]int               // 直接呼び出しの辺 (Lambdas の添字)
 	depth   []int                 // 根からの最長距離 (static の部分グラフ上)
 	cycles  [][]int               // 再帰の連鎖 (閉路を含む強連結成分。Lambdas の添字)
+	hidden  []bool                // include した asm のファイルから呼ばれうる (呼び出し元がグラフに見えない) 関数
 }
 
 // Analyze は各関数の ABI を決める。
 //
-//   - extern: 型が fastcall なら ABIFastcall、それ以外は ABIStack
+//   - extern: options(abi: "frame") なら ABIStatic (呼ばれる側の葉としてフレームを配置する)、型が fastcall なら ABIFastcall、
+//     それ以外は ABIStack
+//   - options(abi: "frame") の本体のある関数: ABIStatic (asm から参照されても Entry にしない。レジスタ渡しもしない)
 //   - options(abi: "stack"): ABIStack
 //   - 呼び出しグラフの閉路に属する (再帰): ABIStack。間接呼び出しは「アドレスを取られた関数」全部への辺とみなす
 //   - それ以外: ABIStatic。アドレスを取られた関数 (関数ポインタ / const の表 / インラインアセンブラからの参照) と
 //     options(interrupt: true) の関数は Entry (スタック経由で引数を受け取り、プロローグで自分のフレームに写す)
+//
+// include した asm のファイルが参照する関数は、何の最中に呼ばれるか分からないので、Place でフレームをどの関数とも重ねない
+// (インラインアセンブラの参照は、それを含む関数からの呼び出しの辺にする)。
 func Analyze(mods []*ir.Module) (*Graph, error) {
 	g := &Graph{ByID: map[string]*ir.Lambda{}, index: map[*ir.Lambda]int{}}
 	var externs []*ir.Lambda
+	modOf := map[*ir.Lambda]*ir.Module{}
 	for _, m := range mods {
 		for _, d := range m.Defs {
 			if d.Kind != ir.DefCode {
@@ -43,8 +49,15 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			}
 			lmd := d.Lambda
 			g.ByID[lmd.Id] = lmd
+			modOf[lmd] = m
+			lmd.FrameABI = optText(lmd.Options, "abi") == "frame"
 			if lmd.Extern {
 				externs = append(externs, lmd)
+				if lmd.FrameABI {
+					// asm の関数の固定の静的フレーム: 呼ばれる側の葉としてフレームを配置する (asm の中の呼び出しは見えない)
+					g.index[lmd] = len(g.Lambdas)
+					g.Lambdas = append(g.Lambdas, lmd)
+				}
 				continue
 			}
 			g.index[lmd] = len(g.Lambdas)
@@ -53,6 +66,13 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	}
 	for _, lmd := range externs {
 		switch {
+		case lmd.FrameABI:
+			lmd.ABI = ir.ABIStatic
+			lmd.Scratch, _ = lmd.Options.Int("scratch")
+			lmd.FrameSize = lmd.Type.Base.Size + lmd.Scratch
+			for _, p := range lmd.Type.Params {
+				lmd.FrameSize += p.Size
+			}
 		case optText(lmd.Options, "abi") == "cc65":
 			if err := checkCc65(lmd); err != nil {
 				return nil, err
@@ -78,6 +98,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 
 	// アドレスを取られた関数 (Entry) と辺
 	entry := make([]bool, n)
+	hidden := make([]bool, n)
 	indirect := make([][]*ir.Op, n) // 関数ごとの間接呼び出し (飛び先は後で絞る)
 	g.callees = make([][]int, n)
 	// 関数ポインタのグローバル変数に代入された関数と、関数ポインタの const 表の要素 (間接呼び出しの飛び先を絞るため)
@@ -92,11 +113,42 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 		return ""
 	}
+	// markSym は fc のコードで関数のアドレスを取ったことを記録する (Entry)。abi: "frame" の関数はエラー (関数ポインタで
+	// 呼ぶにはスタックから写すプロローグが要る)
 	markSym := func(sym string) {
 		if l, ok := g.ByID[sym]; ok {
 			if i, ok := g.index[l]; ok {
-				entry[i] = true
+				switch {
+				case !l.FrameABI:
+					entry[i] = true
+				case addrErr == nil:
+					addrErr = &diag.Error{Msg: fmt.Sprintf("%s: cannot take the address of an abi \"frame\" function (it has no entry that takes the arguments from the stack)", l.Name), Pos: l.Pos}
+				}
 			}
+		}
+	}
+	// markAsmSym は asm のテキストが関数 sym を参照したことを記録する。呼び出し規約が分からないので Entry (abi: "frame" の
+	// 関数は asm から呼ぶための固定の規約なので Entry にしない)。caller はそのインラインアセンブラを含む関数 (呼び出しの辺を
+	// 足す)。include した asm のファイル (caller < 0、m はそれを include したモジュール) なら呼び出し元が見えないので hidden。
+	// ただし extern の関数へのそれ自身のモジュールの asm の参照は、定義のラベルと区別できないので数えない (abi: "frame" の
+	// asm の関数どうしは同じモジュールの中で呼び合えない。doc/language_reference.md §4.2)
+	markAsmSym := func(sym string, caller int, m *ir.Module) {
+		l, ok := g.ByID[sym]
+		if !ok {
+			return
+		}
+		j, ok := g.index[l]
+		if !ok {
+			return
+		}
+		if !l.FrameABI {
+			entry[j] = true
+		}
+		switch {
+		case caller >= 0:
+			g.callees[caller] = append(g.callees[caller], j)
+		case !l.Extern || modOf[l] != m:
+			hidden[j] = true
 		}
 	}
 	var markOperand func(ir.Operand)
@@ -142,7 +194,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	}
 	for _, m := range mods {
 		for _, sym := range m.AsmSymbols {
-			markSym(sym) // include した asm ファイルが参照する fc の関数は呼び出し規約が分からないので Entry
+			markAsmSym(sym, -1, m)
 		}
 	}
 	for i, lmd := range g.Lambdas {
@@ -198,8 +250,8 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 				markOperand(op.Src[0])
 			case ir.OpAsm:
 				// インラインアセンブラが関数名を参照していれば、呼び出し規約が分からないので Entry 扱い
-				for _, w := range reAsmSym.FindAllString(op.Text, -1) {
-					markSym(w)
+				for _, w := range ir.AsmSymbols(op.Text) {
+					markAsmSym(w, i, nil)
 				}
 			default:
 				for _, s := range op.Src {
@@ -252,7 +304,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	var work []int
 	hasMain := false
 	for i, lmd := range g.Lambdas {
-		if entry[i] || lmd.Id == "_main" || lmd.Options.Has("symbol") || aliased[lmd.Id] {
+		if entry[i] || hidden[i] || lmd.Id == "_main" || (lmd.Options.Has("symbol") && !lmd.Extern) || aliased[lmd.Id] {
 			reached[i] = true
 			work = append(work, i)
 		}
@@ -281,8 +333,14 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	// 再帰 (閉路) の検出: Tarjan の SCC
 	inCycle, cycles := tarjanCycles(n, g.callees)
 	g.cycles = cycles
+	g.hidden = hidden
 	for i, lmd := range g.Lambdas {
 		switch {
+		case lmd.FrameABI:
+			if inCycle[i] {
+				return nil, &diag.Error{Msg: fmt.Sprintf("%s: an abi \"frame\" function must not be recursive (its frame is static)", lmd.Name), Pos: lmd.Pos}
+			}
+			lmd.ABI = ir.ABIStatic // Entry・レジスタ渡しはしない (asm と同じ固定の規約)
 		case lmd.Options.Has("abi") && optText(lmd.Options, "abi") == "stack":
 			lmd.ABI = ir.ABIStack
 		case inCycle[i]:
@@ -355,11 +413,6 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	return g, nil
 }
 
-var reAsmSym = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
-
-// AsmSymbols はアセンブラのテキストが参照しうるシンボル (`_` で始まる語) を返す (fc の関数・変数のシンボルの形。
-// pipeline の markVolatile と共有)。
-func AsmSymbols(text string) []string { return reAsmSym.FindAllString(text, -1) }
 
 // indirectTargets は間接呼び出しの飛び先の関数 (シンボル) を絞れるなら返す。
 //   - グローバルの関数ポインタ変数 (直接、または `load t = g` の t): その変数に代入された関数 (リテラル以外の代入があれば不可)
@@ -568,8 +621,18 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 			}
 		}
 	}
+	// include した asm のファイルから呼ばれうる関数 (とその先) も、何の最中に呼ばれるか分からないので、どのフレームとも重ねない
+	hiddenTree := make([]bool, n)
+	for i := range g.hidden {
+		if g.hidden[i] {
+			hiddenTree[i] = true
+			for _, j := range g.reachable(i) {
+				hiddenTree[j] = true
+			}
+		}
+	}
 	conflict := func(a, b int) bool {
-		return a == b || reach[a][b] || reach[b][a] || irqTree[a] || irqTree[b]
+		return a == b || reach[a][b] || reach[b][a] || irqTree[a] || irqTree[b] || hiddenTree[a] || hiddenTree[b]
 	}
 	// 割り込みと通常の処理の両方から呼ばれる関数: 静的フレームは 1 つなので、通常の処理がその関数の中にいるときに
 	// 割り込みが来て同じ関数を呼ぶと、フレームが壊れる
@@ -661,6 +724,12 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 				continue
 			}
 		}
+		if lmd.Extern && wantZp {
+			// abi: "frame" の asm の関数はフレームを `(F_sym+k),y` のように間接の番地にも使うのでゼロページが要る
+			// (RAM でよいなら options(zeropage: false))
+			return nil, &diag.Error{Msg: fmt.Sprintf("the static frame of %s (abi \"frame\", %d bytes) does not fit in the zero page (FC_SZP %d bytes; raise options(static_zp: N), or declare zeropage: false if the assembler does not use it as a zero page address)",
+				lmd.Id, lmd.FrameSize, zpBudget), Pos: lmd.Pos}
+		}
 		at, ok := fit(ram, i, ramBudget)
 		if !ok {
 			return nil, &diag.Error{Msg: fmt.Sprintf("static frames do not fit: %s needs %d bytes (FC_SZP %d, FC_SRAM %d bytes; raise options(static_zp: N) / options(static_ram: N))",
@@ -691,10 +760,40 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 		}
 		inc = append(inc, fmt.Sprintf("%s = %s+%d\t; %d bytes, depth %d", lmd.FrameSym(), region, lmd.FrameBase, lmd.FrameSize, g.depth[i]))
 	}
+	inc = append(inc, frameABISymbols(g)...)
 	inc = append(inc, ".endif", "")
 	plan.Inc = inc
 	plan.Report = g.report(plan, len(zp), len(ram))
 	return plan, nil
+}
+
+// frameABISymbols は abi: "frame" の関数の、asm が使うシンボル (_frames.inc の行): 引数ごとの位置 `F_sym__名前` と作業領域の
+// 先頭 `F_sym__scratch`。使われない extern (fc から呼ばれない) にもフレームの名前を定義する (asm のファイルは丸ごと入るので、
+// 参照が未定義だとアセンブルできない。実行されないので番地はどこでもよい)。
+func frameABISymbols(g *Graph) []string {
+	var r []string
+	for _, lmd := range g.Lambdas {
+		if !lmd.FrameABI {
+			continue
+		}
+		sym := lmd.FrameSym()
+		if lmd.Unused {
+			r = append(r, fmt.Sprintf("%s = FC_SZP\t; unused", sym))
+		}
+		off := lmd.Type.Base.Size
+		for i, p := range lmd.Type.Params {
+			name := fmt.Sprint(i)
+			if i < len(lmd.Params) && lmd.Params[i].Name != "" {
+				name = lmd.Params[i].Name
+			}
+			r = append(r, fmt.Sprintf("%s__%s = %s+%d", sym, name, sym, off))
+			off += p.Size
+		}
+		if lmd.Scratch > 0 {
+			r = append(r, fmt.Sprintf("%s__scratch = %s+%d", sym, sym, off))
+		}
+	}
+	return r
 }
 
 // report は配置の要約: 種類ごとの数、領域の使用量、stack に残った理由 (再帰の連鎖と options)。

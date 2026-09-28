@@ -382,8 +382,6 @@ func (h *Hlc) placementOf(lmd *ir.Lambda) *ir.Module {
 	return lmd.Module
 }
 
-var reAsmSymbol = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
-
 // ReadSource はソースファイルを読み込む。改行は CRLF → LF に正規化する (文字列リテラル内の改行が OS で変わらないように)。
 func ReadSource(path string) ([]byte, error) {
 	b, err := os.ReadFile(path)

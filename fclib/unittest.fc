@@ -1,4 +1,4 @@
-#fc 3
+#fc 4
 public use stdio;
 
 public function assert_true(a:u8, message:*const u8):void

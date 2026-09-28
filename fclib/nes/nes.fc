@@ -1,4 +1,4 @@
-#fc 3
+#fc 4
 /** PPUレジスタ */
 
 public var PPU_CTRL1:u8 @(address: 0x2000);

@@ -207,7 +207,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			// asm が参照するシンボルを控える (fc の関数なら呼び出し規約を Entry に、変数なら volatile に)
 			if _, abs, err := h.deps.File(filename); err == nil {
 				if data, err := os.ReadFile(abs); err == nil {
-					h.module.AsmSymbols = append(h.module.AsmSymbols, reAsmSymbol.FindAllString(string(data), -1)...)
+					h.module.AsmSymbols = append(h.module.AsmSymbols, ir.AsmSymbols(string(data))...)
 				}
 			}
 		case "chr":

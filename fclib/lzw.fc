@@ -1,13 +1,13 @@
-#fc 3
-use mem;
+#fc 4
 
 public var addr:*u8 @(address: 0x7e);
 public var bpos:u8 @(address: 0x7d);
 public var cur:u8 @(address: 0x7c);
+var rbits:u16; // lzw.asm の lzw_bits の結果
 
-public function read_bit(n:u8):u16 @(fastcall);
-public function read_vln():u8 @(fastcall);
-public function read_vln16():u16 @(fastcall);
-public function unpack(dest:*u8, src:*const u8):u16;
+public function read_bit(n:u8):u16 @(abi: "frame");
+public function read_vln():u8 @(abi: "frame");
+public function read_vln16():u16 @(abi: "frame");
+public function unpack(dest:*u8, src:*const u8):u16 @(abi: "frame", scratch: 6);
 
 @include("lzw.asm");

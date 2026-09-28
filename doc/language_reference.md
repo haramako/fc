@@ -428,8 +428,8 @@ function add(a:int, b:int):int
 {
 	return a + b;
 }
-function tiny():void options(fastcall: true) { ... }   // 高速呼び出し規約（下記）
-function interrupt():void options(symbol: "_interrupt"); // 本体なし: アセンブラ側の定義を参照
+function put(addr:u16, data:*const u8, size:u8):void @(abi: "frame"); // 本体なし: asm の関数（規約の明示が必須。下記）
+function interrupt():void @(symbol: "_interrupt", abi: "stack");      // 本体なし: アセンブラ側の定義をシンボル名で参照
 function f():void options(segment: "game") { ... }     // 配置セグメント
 ```
 
@@ -463,11 +463,23 @@ draw(10, 20, 3);    // 明示した値を使う
 - ローカル変数（引数を除く）の中を指すアドレスを `return` すると警告（`return &x;`、`return a;`（配列 → ポインタ /
   slice）、`return a[1..3];`、`return &s.f;`）。ローカル変数は静的フレーム（§4.5）で、呼び出し経路の重ならない関数と
   番地を共有するので、返した後の呼び出しで上書きされる。return の式そのものだけを見る（`var p = &x; return p;` は追わない）
-- `fastcall`: **本体を持つ関数では意味を持たない**（非再帰の関数は全部静的フレーム §4.5 になる。互換のため受理する。
-  以前の「中から他の関数を呼べない」制限も無い）。本体の無い extern 関数（asm 定義）に付けると、引数・戻り値を
-  ゼロページの `FC_FASTCALL_REG`（既定 16 バイト、`options(fastcall_reg: N)`）で渡す規約になる。
-  base.asm を自前で持つプロジェクトは `FC_FASTCALL_REG: .res N` と `FC_FASTCALL_REG_SIZE = N`（`.export … : absolute`）を
-  合わせる（不足はリンク時の `.assert` で検出される）
+- 本体の無い関数（extern。asm で定義する）は、fc 4 では呼び出し規約 `abi`（`"frame"` / `"stack"` / `"cc65"`）の指定が必須で、
+  無ければエラー。fc 3 では書かなければ stack
+- `options(abi: "frame")`: asm で書いた関数（と asm から呼ぶ fc の関数）の固定の規約。fc の関数の static（§4.5）と同じ静的
+  フレーム `F_<sym>` に、戻り値（先頭）→ 引数（宣言の順に詰める。下位バイトが先）を置いて `jsr` する。**レジスタは使わない**
+  （fc の関数にかける A / Y で渡す最適化もしない）。呼ばれる側は A / X / Y を壊してよい。`_frames.inc` が引数ごとの位置
+  `F_<sym>__<引数名>` を定義する。`scratch: N`（extern だけ、0〜255）でフレームの引数の後ろに asm の作業領域 N バイト
+  （`F_<sym>__scratch`）を取る。asm の関数のフレームは呼び出しグラフの葉として、呼ぶ側の fc の関数のフレームと重ならないように
+  置かれる。asm が `(F_<sym>+k),y` と間接の番地に使えるようゼロページに置き、入らなければエラー（RAM でよければ
+  `zeropage: false`）。fc から呼ばれない extern の `F_<sym>` は仮の番地（`FC_SZP`）。再帰とアドレスの取得（関数ポインタ）は
+  不可。**asm の関数から同じモジュールの abi: "frame" の asm の関数を呼んではいけない**（asm の中の呼び出しは見えないので、
+  フレームが重なりうる。下請けは fc から見えないラベルにする: fclib/lzw.asm の `lzw_bits`）。例は fclib/mem.asm・fclib/lzw.asm
+- `fastcall`: **fc 4 では廃止**（エラー。規約はコンパイラが決める。asm の関数は `abi: "frame"`）。fc 3 では本体を持つ関数では
+  意味を持たず（非再帰の関数は全部静的フレーム §4.5）、本体の無い extern 関数に付けると引数・戻り値をゼロページの
+  `FC_FASTCALL_REG`（既定 16 バイト、`options(fastcall_reg: N)`）で渡す規約になる。base.asm を自前で持つプロジェクトは
+  `FC_FASTCALL_REG: .res N` と `FC_FASTCALL_REG_SIZE = N`（`.export … : absolute`）を合わせる（不足はリンク時の `.assert` で
+  検出される）。fc 3 → 4 の migrate は本体のある関数の fastcall を消し、fastcall の extern はエラーにする（asm を
+  `abi: "frame"` に書き直す: `FC_FASTCALL_REG+k` → `F_<sym>+k`）
 - `options(abi: "stack")`: 静的フレームにせず、スタック（`S+n,x`）の規約のままにする（§4.5）
 - `options(interrupt: true)`: 割り込みハンドラから呼ばれる関数（§4.5）
 - `options(zeropage: false)`: 静的フレームを RAM 側に置く
@@ -510,15 +522,19 @@ base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .r
 | 種類 | 対象 | 引数の渡し方 |
 |---|---|---|
 | static | 本体を持つ非再帰の関数（既定） | 呼び出し側が `F_g+k` に直接書き `jsr` |
+| frame | `options(abi: "frame")`（asm の関数、asm から呼ぶ fc の関数。§4.2） | static と同じ（戻り値 `F_g+0`、続いて引数を宣言の順）。レジスタでは渡さない |
 | entry | static のうち、アドレスを取られた関数（関数ポインタ・`const` の表・インラインアセンブラからの参照）と `options(interrupt: true)` | スタック経由（下の stack と同じ）。プロローグで自分のフレームに写す |
-| stack | 再帰する関数、`options(abi: "stack")`、本体の無い extern 関数 | スタック `S+k,x`（呼び出し側が `ldx FC_SP` で X をスタックの空き先頭にしてから書く）。extern 関数は X を保存すること |
-| fastcall | extern で `fastcall` 指定 | `FC_FASTCALL_REG` |
+| stack | 再帰する関数、`options(abi: "stack")`（fc 3 では本体の無い extern 関数の既定） | スタック `S+k,x`（呼び出し側が `ldx FC_SP` で X をスタックの空き先頭にしてから書く）。extern 関数は X を保存すること |
+| fastcall | fc 3 の extern で `fastcall` 指定（fc 4 では廃止） | `FC_FASTCALL_REG` |
 | cc65 | extern で `options(abi: "cc65")` | 唯一の引数を A（1 バイト）/ A,X（2 バイト）、戻り値を A / A,X（cc65 の `__fastcall__`。§4.2） |
 
 再帰の判定は呼び出しグラフの閉路で、関数ポインタ経由の呼び出しは「同じ関数型でアドレスを取られた関数の全部」
 への呼び出しとみなす。`bitcast` で関数ポインタの型を変えて呼ぶ再帰は検出できない（`options(abi: "stack")` を付ける）。
 `options(interrupt: true)` の関数から届く関数は全部 static でなければならず（X が何を指すか分からないため）、
-そのフレームは他のどの関数とも重ねない。
+そのフレームは他のどの関数とも重ねない。`include` した asm のファイルが参照する関数（asm から呼ばれうる関数）と、そこから
+届く関数のフレームも、何の最中に呼ばれるか分からないので他のどの関数とも重ねない（インラインアセンブラの参照は、それを
+含む関数からの呼び出しとみなす）。asm のテキストの参照は `_` で始まる語で数える（`nsd_main` の `_main` のような語の途中は
+数えない）。
 
 ### 4.7 使われない関数の除去
 

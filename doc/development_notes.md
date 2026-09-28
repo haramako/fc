@@ -513,6 +513,12 @@ go test ./...                                    # 全部 (golden + examples + N
   fc 4 の意味（`h.version() >= syntax.Version4`）と、fc 3 のモジュールでの書き換え（`h.rewriting()`）を対で入れ、
   `TestMigrateExamples`（castle / miku を fc 4 に移して ROM の golden と比べる）と `TestMigrateGoldenPrograms` /
   `TestMigrateBench`（fc 2 の test / bench を fc 4 まで移す）で確かめる
+- **asm から呼ばれる関数とフレーム**（2026-09-29。[v4_plan.md](v4_plan.md) §2）: 静的フレームの重ね方は呼び出しグラフの到達関係
+  だけで決まるので、グラフに見えない呼び出し（include した asm のファイルからの `jsr`）の先は `frames.Graph.hidden` にして
+  どのフレームとも重ねない（割り込みの木と同じ）。インラインアセンブラの参照は含む関数からの辺にする。asm のテキストから
+  fc のシンボルを拾うのは `ir.AsmSymbols` だけ（語の境界つき。語の途中の `_main` を拾うと、main が Entry になったり、hidden で
+  全部のフレームが重ならなくなって castle が入らなくなる）。abi "frame" の asm の関数どうしが同じモジュールの中で呼び合うのは
+  検出できない（定義のラベルと呼び出しを区別できない）ので仕様で禁止している
 - **調査用の設定**は `ir.Config`（FC_DISABLE / FC_TRACE_* / FC_DUMP_IR / FC_VERIFY_REGS）。環境変数を読むのは
   `ir.ConfigFromEnv` だけで、`BuildOptions.Config` → `sema.Program.Config` → `ir.Module.Config` と渡り、各段は `lmd.Cfg()` で
   引く。テストはビルドごとに別の設定を渡せる（`TestRandomMetamorphic` は同じプロセスで段を切って比べる）。

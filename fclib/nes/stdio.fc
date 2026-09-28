@@ -1,4 +1,4 @@
-#fc 3
+#fc 4
 /*
  * NES用の定義ファイル
  */
@@ -12,10 +12,23 @@ public var vsync_flag:u8;
 public var ppu_addr:u16;
 public var print_addr:u16;
 
-public function print_int16(n:u16):void;
-public function wait_vsync():void;
-public function print(str:*const u8):void @(fastcall);
-public function ppu_put(addr:u16, data:*const u8, size:u8):void @(fastcall);
+public function wait_vsync():void @(abi: "frame");
+public function print(str:*const u8):void @(abi: "frame");
+public function ppu_put(addr:u16, data:*const u8, size:u8):void @(abi: "frame");
+
+const HEX = "0123456789ABCDEF";
+
+// printf の整数 (16 進 4 桁)
+public function print_int16(n:u16):void
+{
+	var buf:[5]u8;
+	buf[0] = HEX[(n >> 12) as u8];
+	buf[1] = HEX[((n >> 8) as u8) & 15];
+	buf[2] = HEX[((n >> 4) as u8) & 15];
+	buf[3] = HEX[(n as u8) & 15];
+	buf[4] = 0;
+	print(&buf[0]);
+}
 
 // printf の符号付きの整数 (負なら '-' を付ける)
 public function print_sint16(n:i16):void
@@ -65,5 +78,5 @@ public function init():void
 	print_addr = 0x2000;
 }
 
-public function interrupt():void @(symbol: '_interrupt');
-public function interrupt_irq():void @(symbol: '_interrupt_irq');
+public function interrupt():void @(abi: "stack", symbol: '_interrupt');
+public function interrupt_irq():void @(abi: "stack", symbol: '_interrupt_irq');

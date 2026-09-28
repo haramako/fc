@@ -80,8 +80,8 @@ func Prepare(mods []*ir.Module, o *Options) (*Result, error) {
 	res.Lambdas = graph.ByID
 	o.Backend.SetLambdas(graph.ByID)
 	for _, lmd := range graph.Lambdas {
-		if lmd.Unused {
-			continue
+		if lmd.Unused || lmd.Extern {
+			continue // extern は abi: "frame" の asm の関数 (フレームの大きさは frames.Analyze が決めた)
 		}
 		if err := prepareLambda(lmd, o); err != nil {
 			if o.OptimizeLevel > 0 && strings.HasPrefix(err.Msg, "frame size over") {
@@ -181,7 +181,7 @@ func markVolatile(mods []*ir.Module) {
 			}
 			for _, op := range d.Lambda.Ops {
 				if op != nil && op.Code == ir.OpAsm {
-					for _, s := range frames.AsmSymbols(op.Text) {
+					for _, s := range ir.AsmSymbols(op.Text) {
 						syms[s] = true
 					}
 				}

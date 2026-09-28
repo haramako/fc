@@ -120,3 +120,52 @@ func TestPlaceOverlay(t *testing.T) {
 		t.Errorf("a=%v/%d zp=%d ram=%d", a.FrameZp, a.FrameBase, plan.ZpUsed, plan.RamUsed)
 	}
 }
+
+// TestPlaceHiddenCaller: include した asm のファイルから呼ばれうる関数は、何の最中に呼ばれるか分からないので、フレームを
+// どの関数とも重ねない。extern の関数への自分のモジュールの asm の参照は定義のラベルなので数えない。インラインアセンブラの
+// 参照は、それを含む関数からの呼び出しの辺。
+func TestPlaceHiddenCaller(t *testing.T) {
+	frame := ir.Options{{Key: "abi", Value: ir.OptionValue{Kind: ir.OptStr, Str: "frame"}}, {Key: "scratch", Value: ir.OptionValue{Kind: ir.OptInt, Int: 2}}}
+	main := lambda("_main", callOp("_a"), &ir.Op{Code: ir.OpAsm, Text: "\tjsr _leaf"})
+	a := lambda("_a")
+	leaf := lambda("_leaf")
+	cb := lambda("_cb")                                                          // m の asm のファイルから呼ばれる
+	ext := &ir.Lambda{Id: "_ext", Type: fnType(), Extern: true, Options: frame} // lib の asm の関数。m の asm から呼ばれる
+	own := &ir.Lambda{Id: "_own", Type: fnType(), Extern: true, Options: frame} // lib の asm の関数。lib の asm (定義) だけが参照
+	m := module(main, a, leaf, cb)
+	m.AsmSymbols = ir.AsmSymbols("\tjsr _cb\n\tjsr _ext\n; void nsd_main(void);\n")
+	lib := module(ext, own)
+	lib.Id = "lib"
+	lib.AsmSymbols = ir.AsmSymbols(".proc _ext\n.endproc\n.proc _own\n.endproc\n")
+	g, err := Analyze([]*ir.Module{m, lib})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if main.Entry || !cb.Entry || !leaf.Entry || ext.Entry {
+		t.Errorf("entry: main=%v cb=%v leaf=%v ext=%v", main.Entry, cb.Entry, leaf.Entry, ext.Entry)
+	}
+	if ext.Unused || !own.Unused || ext.FrameSize != 2 {
+		t.Errorf("ext unused=%v size=%d, own unused=%v", ext.Unused, ext.FrameSize, own.Unused)
+	}
+	mi := g.index[main]
+	if len(g.callees[mi]) != 2 || g.Lambdas[g.callees[mi][1]] != leaf {
+		t.Errorf("callees of main = %v (want a, leaf)", g.callees[mi])
+	}
+	main.FrameSize, a.FrameSize, leaf.FrameSize, cb.FrameSize = 1, 1, 1, 1
+	if _, err := Place(g, 16, 64); err != nil {
+		t.Fatal(err)
+	}
+	overlap := func(x, y *ir.Lambda) bool {
+		return x.FrameZp == y.FrameZp && x.FrameBase < y.FrameBase+y.FrameSize && y.FrameBase < x.FrameBase+x.FrameSize
+	}
+	if !overlap(a, leaf) {
+		t.Errorf("siblings a (%d) and leaf (%d) should share", a.FrameBase, leaf.FrameBase)
+	}
+	for _, x := range []*ir.Lambda{cb, ext} {
+		for _, y := range []*ir.Lambda{main, a, leaf, cb, ext} {
+			if x != y && overlap(x, y) {
+				t.Errorf("%s (%d+%d) overlaps %s (%d+%d)", x.Id, x.FrameBase, x.FrameSize, y.Id, y.FrameBase, y.FrameSize)
+			}
+		}
+	}
+}

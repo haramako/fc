@@ -423,6 +423,7 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 	for i, p := range params {
 		argTypes[i] = p.Type
 	}
+	h.checkABI(name, opts, body == nil)
 	typ := h.prog.Types.Func(argTypes, baseType, opts.Flag("fastcall"))
 	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil, Body: body}
 }

@@ -287,6 +287,11 @@ type Lambda struct {
 	RegArg    bool
 	RegArgY   bool
 	RegResult bool
+	// FrameABI は options(abi: "frame") の関数 (asm の関数と、asm から呼ぶ fc の関数の固定の規約。doc/v4_plan.md §2):
+	// static のフレームに戻り値 (0) → 引数 (宣言の順) → 作業領域 (Scratch バイト)。レジスタ渡し (RegArg など) はしない。
+	// asm から参照されても Entry にしない。extern ならフレームの大きさは frames.Analyze が決める
+	FrameABI bool
+	Scratch  int
 }
 
 // ABI は関数の呼び出し規約 (doc/v2_frame_alloc.md §6-1)。
