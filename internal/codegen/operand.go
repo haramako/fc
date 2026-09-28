@@ -26,9 +26,9 @@ func ifElse(cond bool, a, b string) string {
 func anyIfy(v []any) []any { return v }
 
 // loadYIdx は添字を Y に入れる。scaled なら添字はすでにバイト単位 (opt.scaleIndex)。
-func (l *Llc) loadYIdx(idx, ptr ir.Operand, scaled bool) []any {
+func (l *Llc) loadYIdx(idx ir.Operand, scale int) []any {
 	r := []any{}
-	if ir.ValType(ptr).Base.Size == 1 || scaled {
+	if scale == 1 {
 		if l.inY(idx) {
 			// 添字が Y に常駐している
 		} else if l.inA(idx) {
@@ -36,16 +36,44 @@ func (l *Llc) loadYIdx(idx, ptr ir.Operand, scaled bool) []any {
 		} else {
 			r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
 		}
-	} else if k, ok := ir.ValIntLiteral(idx); ok && k >= 0 && k*ir.ValType(ptr).Base.Size < 256 {
-		r = append(r, fmt.Sprintf("ldy #%d", k*ir.ValType(ptr).Base.Size)) // 定数の添字 (展開したループの `a16[3]`)
+	} else if k, ok := ir.ValIntLiteral(idx); ok && k >= 0 && k*scale < 256 {
+		r = append(r, fmt.Sprintf("ldy #%d", k*scale)) // 定数の添字 (展開したループの `a16[3]`)
 	} else {
 		r = append(r, l.loadA(idx, 0))
-		for i := 0; i < ir.ValType(ptr).Base.Size-1; i++ {
+		for i := 0; i < scale-1; i++ {
 			r = append(r, "asl a")
 		}
 		r = append(r, "tay")
 	}
 	return r
+}
+
+// loadYIdxDisp は 添字 * scale + disp を Y に入れる (ポインタ + 添字 + ずれの load_mem / store_mem。struct の配列フィールドを
+// ポインタ経由で引く opt.fuseArrayField の形)。和が 1 バイトに収まることは作る側が保証する (ir.Verify と v4_memops.md)。
+// disp が 0 なら loadYIdx と同じ。それ以外は A を通して計算するので A を壊す (store は keepA で値を守る)。添字が Y に
+// 常駐していれば Y も書き換わる (CompileLambda が常駐の退避 / 復帰にしてコンパイルし直す。regalloc.needsY も Y を使う
+// と見積もる)。
+func (l *Llc) loadYIdxDisp(idx ir.Operand, scale, disp int) []any {
+	if disp == 0 {
+		return l.loadYIdx(idx, scale)
+	}
+	if k, ok := ir.ValIntLiteral(idx); ok && k >= 0 && k*scale+disp < 256 {
+		return []any{fmt.Sprintf("ldy #%d", k*scale+disp)}
+	}
+	var r []any
+	switch {
+	case l.inA(idx):
+	case l.inY(idx):
+		r = append(r, "tya")
+	case l.inX(idx):
+		r = append(r, "txa")
+	default:
+		r = append(r, l.loadA(idx, 0))
+	}
+	for s := scale; s > 1; s >>= 1 {
+		r = append(r, "asl a")
+	}
+	return append(r, "clc", fmt.Sprintf("adc #%d", disp), "tay")
 }
 
 func (l *Llc) load(to, from ir.Operand) []any {
@@ -312,7 +340,7 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 	if l.fused != nil && n == 0 {
 		if tv, ok := v.(*ir.Value); ok {
 			if s, ok := l.fused[tv]; ok {
-				return s // 直前の index_pget と融合した添字付きオペランド (tab+0,y)
+				return s // 直前の 添字付きの load_mem と融合した添字付きオペランド (tab+0,y)
 			}
 		}
 	}

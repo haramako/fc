@@ -2,7 +2,7 @@ package opt
 
 // 関数ポインタ表の呼び出しの直接化 (devirtualization。doc/v2_ssa.md §8):
 //
-//	index p = &TBL[i]; pget f = *p          TBL は const の表で要素が全部関数 (castle の en_vtbl.PROCESS)
+//	index p = &TBL[i]; load_mem f = p          TBL は const の表で要素が全部関数 (castle の en_vtbl.PROCESS)
 //	push_result; push_arg ..; call d = f
 //	→
 //	switch i, #0, [@dv_0, @dv_1, ...]; jump @dv_end   (範囲外は何もしない: 配列の範囲外は元から未定義)
@@ -109,15 +109,15 @@ func devirtualizeOne(lmd *ir.Lambda, tables map[string][]string, lambdas map[str
 		if !ok || p.LocalType != ir.LTTemp {
 			continue
 		}
-		pget := ops[i+1]
-		if pget == nil || pget.Code != ir.OpPget || pget.Src[0] != ir.Operand(p) || len(ud.Uses[p]) != 1 {
+		ld := ops[i+1]
+		if ld == nil || ld.Code != ir.OpLoadMem || !plainDeref(ld, p) || len(ud.Uses[p]) != 1 {
 			continue
 		}
-		f, ok := pget.Dst.(*ir.Value)
+		f, ok := ld.Dst.(*ir.Value)
 		if !ok || f.LocalType != ir.LTTemp || len(ud.Uses[f]) != 1 || len(ud.Defs[f]) != 1 {
 			continue
 		}
-		// pget の直後から call まで: push_result と push_arg だけ
+		// load_mem の直後から call まで: push_result と push_arg だけ
 		c := i + 2
 		if ops[c] == nil || (ops[c].Code != ir.OpPushResult && ops[c].Code != ir.OpPushFastcallResult) {
 			continue

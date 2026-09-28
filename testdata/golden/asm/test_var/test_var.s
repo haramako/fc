@@ -81,8 +81,7 @@ _test_var_add2 = _test_var__D2
 	lda #.HIBYTE(_17)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #2
-	lda ARRAY+0,y
+	lda ARRAY+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -95,8 +94,7 @@ _test_var_add2 = _test_var__D2
 	lda #.HIBYTE(_22)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #4
-	lda STRING+0,y
+	lda STRING+4
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -131,8 +129,7 @@ _27:
 	;;;=============================
 .segment "test_var"
 .proc _test_var_test_pointer
-	ldy #1
-	lda _test_var_CONST+0,y
+	lda _test_var_CONST+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -145,10 +142,9 @@ _27:
 	lda #.HIBYTE(_32)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #1
 	lda #1
-	sta _test_var_array+0,y
-	lda _test_var_array+0,y
+	sta _test_var_array+1
+	lda _test_var_array+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -161,8 +157,7 @@ _27:
 	lda #.HIBYTE(_38)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #2
-	lda _test_var_CONST+0,y
+	lda _test_var_CONST+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -175,10 +170,9 @@ _27:
 	lda #.HIBYTE(_43)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #2
 	lda #2
-	sta _test_var_array+0,y
-	lda _test_var_array+0,y
+	sta _test_var_array+2
+	lda _test_var_array+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -207,17 +201,13 @@ _49:
 	;;;=============================
 .segment "test_var"
 .proc _test_var_test_array
-	ldy #0
 	lda #1
-	sta _test_var_array+0,y
-	tay
+	sta _test_var_array+0
 	lda #2
-	sta _test_var_array+0,y
-	tay
+	sta _test_var_array+1
 	lda #3
-	sta _test_var_array+0,y
-	ldy #0
-	lda _test_var_array+0,y
+	sta _test_var_array+2
+	lda _test_var_array+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -230,8 +220,7 @@ _49:
 	lda #.HIBYTE(_62)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #1
-	lda _test_var_array+0,y
+	lda _test_var_array+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -244,8 +233,7 @@ _49:
 	lda #.HIBYTE(_67)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #2
-	lda _test_var_array+0,y
+	lda _test_var_array+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -425,8 +413,7 @@ _99:
 	;;;=============================
 .segment "test_var"
 .proc _test_var_test_escape
-	ldy #0
-	lda STR+0,y
+	lda STR+0
 	cmp #0
 	sta 0+<F_test_var_test_escape+0
 	bpl @1
@@ -449,8 +436,7 @@ _99:
 	lda #.HIBYTE(_106)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #1
-	lda STR+0,y
+	lda STR+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1

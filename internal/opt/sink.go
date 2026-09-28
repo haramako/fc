@@ -5,13 +5,13 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// sinkAddress は単一使用のアドレス計算 (`index` / ポインタ + 定数の `add`) を、その使用 (`pget` / `pset`) の直前へ動かす。
+// sinkAddress は単一使用のアドレス計算 (`index` / ポインタ + 定数の `add`) を、その使用 (添字の無い `load_mem` / `store_mem`) の直前へ動かす。
 //
 // hlc は `p.x += 1` / SoA の `e.anim++` で左辺のアドレスを右辺の読み出しより先に出す:
 //
-//	index t = &a[i]; index_pget v = a[i]; add w = v, #1; pset *t = w
+//	index t = &a[i]; load_mem v = a, i; add w = v, #1; store_mem t, w
 //
-// t の定義と使用が離れているので fusePointer が `index_pset a[i] = w` にできない。使用の直前に寄せれば融合できる
+// t の定義と使用が離れているので fusePointer が `store_mem a, i, w` にできない。使用の直前に寄せれば融合できる
 // (fusePointer の前に走らせる)。動かしてよい条件:
 //   - 同じ基本ブロック内 (間にラベル・分岐・return・インラインアセンブラが無い)
 //   - 間の命令が計算の入力を書き換えない (入力の変数への定義。グローバル変数の入力は呼び出しをまたがない。
@@ -40,7 +40,7 @@ func sinkAddress(lmd *ir.Lambda) {
 				continue
 			}
 			use := ops[j]
-			if (use.Code != ir.OpPget && use.Code != ir.OpPset) || use.Src[0] != ir.Operand(t) {
+			if !plainDeref(use, t) {
 				continue
 			}
 			if !canSink(op, ops[i+1:j], refered) {
@@ -89,7 +89,7 @@ func canSink(op *ir.Op, between []*ir.Op, refered map[*ir.Value]bool) bool {
 				if uv.Kind == ir.KindGlobal && uv.Type.Kind != types.Array {
 					return false
 				}
-			case ir.OpPset, ir.OpIndexPset, ir.OpFieldPset:
+			case ir.OpStoreMem:
 				if uv.Kind == ir.KindGlobal && uv.Type.Kind != types.Array || refered[uv] {
 					return false
 				}

@@ -52,11 +52,11 @@ type Llc struct {
 	holdX  int                   // stack 系の呼び出しの push_result (ldx FC_SP) から call まで (入れ子の深さ): X = FC_SP のまま。X の常駐はメモリ側で扱い、復帰しない
 	aHeld  bool                  // A は res[A] で塞がっていて、この命令は res[A] を触らない (Y で代用する)
 
-	// 添字付きオペランドの融合: `sub d = x, t` / `lt d = x, t` の t が直前の index_pget (グローバルの 1 バイト配列) の結果なら、
-	// index_pget は Y (または X) を用意するだけにして、t を `tab+0,y` として読む (sta t; lda x; sbc t → lda x; sbc tab,y)。
+	// 添字付きオペランドの融合: `sub d = x, t` / `lt d = x, t` の t が直前の 添字付きの load_mem (グローバルの 1 バイト配列) の結果なら、
+	// 添字付きの load_mem は Y (または X) を用意するだけにして、t を `tab+0,y` として読む (sta t; lda x; sbc t → lda x; sbc tab,y)。
 	// 可換な演算は opt.commuteTemp が t を第 1 入力にするので、ここは非可換な sub / lt の第 2 入力だけ
 	fused   map[*ir.Value]string // t → オペランドの表記
-	fusedAt int                  // 融合した index_pget の命令番号 (直後の命令でだけ有効)
+	fusedAt int                  // 融合した 添字付きの load_mem の命令番号 (直後の命令でだけ有効)
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
@@ -292,15 +292,15 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	return asm.flatten(), inc.flatten(), nil
 }
 
-// fusableIndex は ops[i] (index_pget、グローバル配列) の結果を直後の sub / lt の第 2 入力に融合できるか。
+// fusableIndex は ops[i] (添字付きの load_mem、グローバル配列) の結果を直後の sub / lt の第 2 入力に融合できるか。
 // 結果は 1 バイトの一時変数で、その命令でしか使われない (live range が直後まで)。添字は Y に入れる (X に常駐していれば X)。
 // 直後の命令の第 1 入力が A に常駐している / 添字が A にある組み合わせは、tay が A を壊すので除く。
 func (l *Llc) fusableIndex(ops []*ir.Op, i int) (string, bool) {
 	op := ops[i]
-	if i+1 >= len(ops) || ops[i+1] == nil || ir.ValType(op.In(0)).Kind != types.Array || ir.ValKind(op.In(0)) != ir.KindGlobal {
+	if i+1 >= len(ops) || ops[i+1] == nil || op.Code != ir.OpLoadMem {
 		return "", false
 	}
-	if ir.ValType(op.In(0)).Base.Size != 1 && !op.Scaled {
+	if m := op.Mem(); !m.BaseIsArray() || m.Index == nil || m.Scale != 1 {
 		return "", false
 	}
 	t, ok := op.Dst.(*ir.Value)
@@ -397,7 +397,7 @@ func nextOp(ops []*ir.Op, i int) *ir.Op {
 }
 
 // restoreY は要素 size バイトのポインタ参照 (`lda (p),y; iny; lda (p),y`) の後で、添字が Y に常駐しているなら Y を戻す
-// (`q0[i] += 1` の index_pset が index_pget の iny でずれた Y で書いていた。fuzz で発覚)。
+// (`q0[i] += 1` の store_mem が load_mem の iny でずれた Y で書いていた。fuzz で発覚)。
 func (l *Llc) restoreY(idx ir.Operand, size int) []any {
 	var r []any
 	if l.inY(idx) {
@@ -694,18 +694,10 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsK
 			l.genIndex()
 		case ir.OpRef:
 			l.genRef()
-		case ir.OpPget:
-			l.genPget()
-		case ir.OpPset:
-			l.genPset()
-		case ir.OpIndexPget:
-			l.genIndexPget()
-		case ir.OpIndexPset:
-			l.genIndexPset()
-		case ir.OpFieldPget:
-			l.genFieldPget()
-		case ir.OpFieldPset:
-			l.genFieldPset()
+		case ir.OpLoadMem:
+			l.genLoadMem()
+		case ir.OpStoreMem:
+			l.genStoreMem()
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
@@ -815,7 +807,7 @@ func (l *Llc) newLabels(n int) []string {
 // extend_jump
 // ---------------------------------------------------------------
 
-// fnPtrToReg は ops[i] (グローバルの表の index_pget) が読む関数ポインタを、一時変数でなく reg に直接書いてよいとき、
+// fnPtrToReg は ops[i] (グローバルの表の 添字付きの load_mem) が読む関数ポインタを、一時変数でなく reg に直接書いてよいとき、
 // それを使う呼び出しの命令番号を返す (だめなら -1)。条件: 結果が near の関数ポインタの一時変数で、関数の中でその
 // 呼び出しにしか使われず、間にあるのが reg を使わない引数の積み込み (1〜2 バイトの値の push_result / push_arg) と
 // 引数の式の単純な演算 (load / add / sub / and / or / xor) だけ。
@@ -823,7 +815,7 @@ func (l *Llc) newLabels(n int) []string {
 // reg の写し 4 命令、12 サイクルが消える)。
 func fnPtrToReg(lmd *ir.Lambda, ops []*ir.Op, i int) int {
 	op := ops[i]
-	if op == nil || op.Code != ir.OpIndexPget || lmd.Cfg().Disabled("fnptr-reg") {
+	if op == nil || op.Code != ir.OpLoadMem || op.Mem().Index == nil || lmd.Cfg().Disabled("fnptr-reg") {
 		return -1
 	}
 	t, ok := op.Dst.(*ir.Value)
@@ -883,11 +875,11 @@ func fnPtrToReg(lmd *ir.Lambda, ops []*ir.Op, i int) int {
 	return call
 }
 
-// fnPtrInReg は ops[i] (関数ポインタの一時変数からの呼び出し) の呼び先を、それを定義した index_pget が reg に直接
+// fnPtrInReg は ops[i] (関数ポインタの一時変数からの呼び出し) の呼び先を、それを定義した 添字付きの load_mem が reg に直接
 // 書いたか (fnPtrToReg)。
 func fnPtrInReg(lmd *ir.Lambda, ops []*ir.Op, i int) bool {
 	for j := i - 1; j >= 0; j-- {
-		if b := ops[j]; b != nil && b.Code == ir.OpIndexPget && b.Dst == ops[i].Src[0] {
+		if b := ops[j]; b != nil && b.Code == ir.OpLoadMem && b.Dst == ops[i].Src[0] {
 			return fnPtrToReg(lmd, ops, j) == i
 		}
 	}

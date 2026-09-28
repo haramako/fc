@@ -47,7 +47,7 @@ func countOps(ir, op string) int {
 }
 
 // TestHlcCompoundAssignEvaluatesLhsTwice: `a[i] += 8` は (load X (add X 8)) に脱糖され、左辺の index を 2 回計算する
-// (index_pget / index_pset に融合されるので速い。左辺に呼び出しがあるときだけ 1 回にする: TestCompoundAssignCallOnce)。
+// (load_mem / store_mem に融合されるので速い。左辺に呼び出しがあるときだけ 1 回にする: TestCompoundAssignCallOnce)。
 func TestHlcCompoundAssignEvaluatesLhsTwice(t *testing.T) {
 	ir := mustCompileSrc(t, `
 var a:[4]int;
@@ -56,11 +56,11 @@ function main():void { var i:int; i = 1; a[i] += 8; }
 	if n := countOps(ir, "index"); n != 2 {
 		t.Errorf("index ops = %d, want 2\n%s", n, ir)
 	}
-	if n := countOps(ir, "pget"); n != 1 {
-		t.Errorf("pget ops = %d, want 1\n%s", n, ir)
+	if n := countOps(ir, "load_mem"); n != 1 {
+		t.Errorf("load_mem ops = %d, want 1\n%s", n, ir)
 	}
-	if n := countOps(ir, "pset"); n != 1 {
-		t.Errorf("pset ops = %d, want 1\n%s", n, ir)
+	if n := countOps(ir, "store_mem"); n != 1 {
+		t.Errorf("store_mem ops = %d, want 1\n%s", n, ir)
 	}
 }
 

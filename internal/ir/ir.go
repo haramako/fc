@@ -54,14 +54,10 @@ const (
 	OpNot                       // Dst = !Src[0]
 	OpBitNot                    // Dst = ~Src[0]
 	OpAsm                       // インラインアセンブラ (Text)
-	OpIndex                     // Dst = &Src[0][Src[1]]
+	OpIndex                     // Dst = &Src[0][Src[1]] (番地の計算。ポインタ値を作る)
 	OpRef                       // Dst = &Src[0]
-	OpPget                      // Dst = *Src[0]
-	OpPset                      // *Src[0] = Src[1]
-	OpIndexPget                 // Dst = Src[0][Src[1]]        (ピープホール最適化で生成)
-	OpIndexPset                 // Src[0][Src[1]] = Src[2]     (同上)
-	OpFieldPget                 // Dst = *(Src[0] + Src[1])     (同上。struct のフィールド: Src[1] は定数オフセット)
-	OpFieldPset                 // *(Src[0] + Src[1]) = Src[2]  (同上。Type はフィールドの型)
+	OpLoadMem                   // Dst = mem[Src[0] + Src[1]*Scale + Disp] (Src[1] が NoIndex なら添字無し。mem.go、doc/v4_memops.md)
+	OpStoreMem                  // mem[Src[0] + Src[1]*Scale + Disp .. +Width) = Src[2]
 	opCodeCount
 )
 
@@ -74,9 +70,7 @@ var opCodeNames = [...]string{
 	OpAdd: "add", OpSub: "sub", OpAnd: "and", OpOr: "or", OpXor: "xor",
 	OpMul: "mul", OpDiv: "div", OpMod: "mod", OpShiftLeft: "shift_left", OpShiftRight: "shift_right", OpRolC: "rolc", OpRorC: "rorc",
 	OpUminus: "uminus", OpEq: "eq", OpLt: "lt", OpNot: "not", OpBitNot: "bitnot", OpAsm: "asm",
-	OpIndex: "index", OpRef: "ref", OpPget: "pget", OpPset: "pset",
-	OpIndexPget: "index_pget", OpIndexPset: "index_pset",
-	OpFieldPget: "field_pget", OpFieldPset: "field_pset",
+	OpIndex: "index", OpRef: "ref", OpLoadMem: "load_mem", OpStoreMem: "store_mem",
 }
 
 // String は旧 IR の opcode 名を返す。
@@ -99,18 +93,23 @@ func (*PointeredArray) operandNode() {}
 // Op は IR の 1 命令。使うフィールドは OpCode ごとに決まっている (OpCode 定義のコメント参照)。
 type Op struct {
 	Code   OpCode
-	Dst    Operand         // 結果の格納先 (無い命令、または削除された戻り値では nil)
-	Src    []Operand       // 入力
-	Label  string          // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
-	Labels []string        // OpSwitch の飛び先 (添字順)
-	Type   *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
-	Text   string          // OpAsm のアセンブラ行
-	Far    bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
-	Scaled bool            // OpIndexPget / OpIndexPset: 添字が要素単位でなくバイト単位 (opt.scaleIndex が付ける。codegen は asl しない)
-	ArgY   bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
-	HoldY  bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
-	Pos    syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
-	Logs   []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
+	Dst    Operand     // 結果の格納先 (無い命令、または削除された戻り値では nil)
+	Src    []Operand   // 入力
+	Label  string      // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
+	Labels []string    // OpSwitch の飛び先 (添字順)
+	Type   *types.Type // OpPushResult / OpPushArg / OpPushFastcall* の型
+	Text   string      // OpAsm のアセンブラ行
+	Far    bool        // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
+	// OpLoadMem / OpStoreMem の番地 (mem.go): Scale は添字 1 につき進むバイト数 (添字が無ければ 0)、Disp は定数のずれ (バイト)、
+	// Width は store の書く幅 (load は Dst の型の大きさ)。eq / lt では Width は比較の幅 (sign.go)
+	Scale, Disp, Width int
+	// Sign は lt / div / mod / shift_right の符号 (符号付きの比較・床除算・算術シフト。sign.go)。作るときに決め (sema は
+	// InferWidthSign で入力の型から)、以後は入力を差し替えても変わらない。ほかの命令は SignNone
+	Sign  Sign
+	ArgY  bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
+	HoldY bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
+	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
+	Logs  []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
 
 	// ループ内の常駐 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md): レジスタ (RegA / RegY / RegX) ごとに、
 	// この命令でそのレジスタに置いたままにしている変数と、入口 / 出口で生きているか (regs.go)
@@ -123,6 +122,20 @@ func (op *Op) In(i int) Operand {
 		return op.Src[i]
 	}
 	return nil
+}
+
+// memIndexPositional は load_mem / store_mem の添字とずれのダンプ ("-" は添字無し)。
+func (op *Op) memIndexPositional() []any {
+	var r []any
+	if op.Src[1] == Operand(NoIndex) {
+		r = append(r, "-")
+	} else {
+		r = append(r, op.Src[1], fmt.Sprintf("scale=%d", op.Scale))
+	}
+	if op.Disp != 0 {
+		r = append(r, fmt.Sprintf("disp=%d", op.Disp))
+	}
+	return r
 }
 
 // positional は旧 IR と同じ位置引数の並び (opcode を除く) を返す (ダンプ用)。
@@ -146,21 +159,30 @@ func (op *Op) positional() []any {
 		r = append(r, op.Type, op.Src[0])
 	case OpAsm:
 		r = append(r, op.Text)
-	case OpPset, OpIndexPset, OpFieldPset:
-		for _, s := range op.Src {
-			r = append(r, s)
-		}
+	case OpStoreMem:
+		r = append(r, op.Src[0])
+		r = append(r, op.memIndexPositional()...)
+		r = append(r, op.Src[2], fmt.Sprintf("w=%d", op.Width))
+	case OpLoadMem:
+		r = append(r, op.Dst, op.Src[0])
+		r = append(r, op.memIndexPositional()...)
 	default:
 		// Dst を持つ命令 (call / fastcall の Dst は nil になりうる)
 		r = append(r, op.Dst)
 		for _, s := range op.Src {
 			r = append(r, s)
 		}
+		if op.Code.IsCompare() {
+			r = append(r, fmt.Sprintf("w=%d", op.Width))
+		}
+		switch {
+		case op.Sign == Signed:
+			r = append(r, "signed")
+		case op.Code.HasSign() && op.Sign == SignNone:
+			r = append(r, "sign=?") // 決めていない (Verify が落とす)
+		}
 		if op.Far {
 			r = append(r, "far")
-		}
-		if op.Scaled {
-			r = append(r, "scaled")
 		}
 	}
 	for reg, rs := range op.Res {
@@ -245,11 +267,11 @@ func (c CondReg) String() string {
 type DefKind uint8
 
 const (
-	DefEqu   DefKind = iota + 1 // シンボル = 値
-	DefBss                      // 未初期化領域
-	DefBlock                    // 定数データブロック
-	DefCode                     // 関数
-	DefExtern                   // asm 側の定義の参照 (値なしの const の options(symbol:)。codegen は `.global` を出すだけ)
+	DefEqu    DefKind = iota + 1 // シンボル = 値
+	DefBss                       // 未初期化領域
+	DefBlock                     // 定数データブロック
+	DefCode                      // 関数
+	DefExtern                    // asm 側の定義の参照 (値なしの const の options(symbol:)。codegen は `.global` を出すだけ)
 )
 
 var defKindNames = [...]string{DefEqu: "equ", DefBss: "bss", DefBlock: "block", DefCode: "code", DefExtern: "extern"}

@@ -59,7 +59,65 @@ function main():void { f(1); }
 `})
 	body := asm[strings.Index(asm, ".proc _t_f\n"):]
 	body = body[:strings.Index(body, ".endproc")]
-	if !strings.Contains(body, "sta _t_gs+1+0,y") || strings.Contains(body, "(F_t_f") {
+	if !strings.Contains(body, "sta _t_gs+1,y") || strings.Contains(body, "(F_t_f") {
 		t.Errorf("gs[i].b への書き込みが添字の形になっていない:\n%s", body)
+	}
+}
+
+// TestFieldPtr: struct の配列フィールドをポインタ経由で引く (opt.fuseArrayField) と、add と index の 16 ビットの番地の
+// 計算が消えて、ポインタ + 添字 + ずれの 1 命令 (`lda i; asl; clc; adc #k; tay; lda (p),y`) になる。要素 1・2・3 バイト、
+// 読みと書き、添字の式、Y に常駐しうる添字のループで、-O 0 と -O 2 の結果が同じ。
+func TestFieldPtr(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+struct P { id:u8; q:u8; }
+struct T3 { a:u8; w:u16; }
+struct D { pad:u8; items:[3]P; w:[4]u16; b:[5]u8; t3:[2]T3; tail:u8; }
+var ds:[2]D;
+function set(p:*D, i:u8, v:u8):void @(noinline) {
+	p.items[i].q = v;
+	p.items[i].id = v + 1;
+	p.w[i] = v as u16 * 300;
+	p.b[i + 1] = v;
+	p.t3[i & 1].w = v as u16 + 1000;
+}
+function sum(p:*D, k:u8):u16 @(noinline) {
+	var s:u16 = p.items[k].q;
+	s += p.items[k].id;
+	s += p.w[k];
+	s += p.b[k];
+	s += p.t3[k & 1].w;
+	return s;
+}
+function walk(p:*D, n:u8):u8 @(noinline) {
+	var s:u8 = 0;
+	for (var i = 0; i < n; i++) { s += p.b[i]; p.b[i] = s; }
+	return s;
+}
+function main():void {
+	for (var i = 0; i < 3; i++) { set(&ds[0], i, i + 10); set(&ds[1], i, i * 7); }
+	printf(sum(&ds[0], 0), " ", sum(&ds[0], 2), " ", sum(&ds[1], 1), "\n");
+	printf(walk(&ds[0], 5), " ", walk(&ds[1], 4), "\n");
+	for (var d in ds) { printf(d.pad, ",", d.items[0].id, ",", d.items[2].q, ",", d.w[2], ",", d.b[3], ",", d.b[4], ",", d.t3[0].w, ",", d.tail, " "); }
+	printf("\n");
+	exit(0);
+}
+`})
+	want := "4033 4648 3122\n33 21\n0,11,12,3600,33,33,1012,0 0,1,14,4200,21,0,1014,0 \n"
+	if err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
+	}
+	asm := compileAsmFiles(t, map[string]string{"t.fc": `#fc 3
+struct P { id:u8; q:u8; }
+struct D { pad:u8; items:[3]P; b:[5]u8; }
+var d0:D;
+function g(p:*D, i:u8):u8 @(noinline) { return p.items[i].q + p.b[i]; }
+function main():void { var x = g(&d0, 1); d0.pad = x; }
+`})
+	body := asm[strings.Index(asm, ".proc _t_g\n"):]
+	body = body[:strings.Index(body, ".endproc")]
+	if !strings.Contains(body, "adc #2") || !strings.Contains(body, "adc #7") || strings.Contains(body, "adc #0") {
+		t.Errorf("p.items[i].q / p.b[i] が (p),y の 1 回の参照になっていない:\n%s", body)
 	}
 }

@@ -10,7 +10,7 @@ import (
 func s8() *types.Type { return tu.IntType(1, true) }
 
 func op(code ir.OpCode, dst ir.Operand, srcs ...ir.Operand) *ir.Op {
-	return &ir.Op{Code: code, Dst: dst, Src: srcs}
+	return ir.InferWidthSign(&ir.Op{Code: code, Dst: dst, Src: srcs}) // 比較の幅と符号は sema と同じく型から (ir/sign.go)
 }
 
 func label(l string) *ir.Op             { return &ir.Op{Code: ir.OpLabel, Label: l} }
@@ -50,6 +50,30 @@ func TestSSAConstWrap(t *testing.T) {
 	)
 	propagateSSA(lmd)
 	check(t, lmd, "push_arg nil = #4", "push_arg nil = #-3")
+}
+
+// 比較・除算・右シフトの意味は命令の Width / Sign で決まり、入力の型では決まらない (ir/sign.go)。入力を型の違う値に
+// 差し替えても (常駐の差し替えが cast を落とす、propagateBytes が一時変数を型の違うリテラルにする) 結果は変わらない
+func TestSSASignFromOp(t *testing.T) {
+	x, a, b, c, d := local("x", u8()), tmp("a", u8()), tmp("b", u8()), tmp("c", u8()), tmp("d", u8())
+	lmd := lambda(
+		op(ir.OpLoad, x, lit(100, u8())),
+		// 入力は u8 だが、sema が i8 同士の比較として作ったもの: 100 < -56 は偽
+		&ir.Op{Code: ir.OpLt, Dst: a, Src: []ir.Operand{x, lit(200, u8())}, Width: 1, Sign: ir.Signed},
+		pushArg(u8(), a),
+		// 2 バイトの比較として作ったもの (入力が 1 バイトに狭まっても幅は 2): リテラル -56 は 2 バイトで $ffc8 (-56)、
+		// x はゼロ拡張で 100。-56 < 100 は真 (型の幅 1 で読むと 200 < 100 で偽)
+		&ir.Op{Code: ir.OpLt, Dst: b, Src: []ir.Operand{lit(-56, u8()), x}, Width: 2, Sign: ir.Signed},
+		pushArg(u8(), b),
+		// 算術右シフト: 200 (-56) >> 1 = -28 (228)
+		&ir.Op{Code: ir.OpShiftRight, Dst: c, Src: []ir.Operand{lit(200, u8()), lit(1, u8())}, Sign: ir.Signed},
+		pushArg(u8(), c),
+		// 符号付きの床除算: -56 / 100 = -1 (255)
+		&ir.Op{Code: ir.OpDiv, Dst: d, Src: []ir.Operand{lit(200, u8()), x}, Sign: ir.Signed},
+		pushArg(u8(), d),
+	)
+	propagateSSA(lmd)
+	check(t, lmd, "push_arg nil = #0", "push_arg nil = #1", "push_arg nil = #228", "push_arg nil = #255")
 }
 
 // cast の連鎖: `((x as int) as i16)` は下位バイトのゼロ拡張 (外側の型だけで読むと符号拡張してしまう)
@@ -225,7 +249,7 @@ func TestSSAExcluded(t *testing.T) {
 	lmd := lambda(
 		op(ir.OpLoad, x, lit(5, u8())),
 		op(ir.OpRef, p, x),
-		op(ir.OpPset, nil, p, lit(1, u8())),
+		ir.NewStoreMem(p, nil, 0, 0, 1, lit(1, u8())),
 		op(ir.OpAdd, tv, x, lit(1, u8())),
 		pushArg(u8(), tv),
 		op(ir.OpLoad, w, lit(0, u16())),
@@ -236,7 +260,7 @@ func TestSSAExcluded(t *testing.T) {
 	check(t, lmd,
 		"load x = #5",
 		"ref p = x",
-		"pset p, #1",
+		"store_mem p, #1, w=1",
 		"add t = x, #1",
 		"push_arg nil = t",
 		"load w = #0",

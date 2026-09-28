@@ -96,7 +96,7 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 				r = append(r, "asl a")
 			}
 		case ir.OpDiv:
-			if ir.ValType(s0).Signed {
+			if op.IsSigned() {
 				labels := l.newLabels(2)
 				negativeLabel, endLabel := labels[0], labels[1]
 				r = append(r, fmt.Sprintf("bmi %s", negativeLabel))
@@ -139,7 +139,7 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 			for k := 0; k < n; k++ {
 				for i := size - 1; i >= 0; i-- {
 					if i == size-1 {
-						if ir.ValType(dst).Signed {
+						if op.IsSigned() {
 							r = append(r, l.loadA(dst, i), "cmp #128", fmt.Sprintf("ror %s", l.byte(dst, i)))
 						} else {
 							r = append(r, fmt.Sprintf("lsr %s", l.byte(dst, i)))
@@ -166,7 +166,7 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		}
 		// __mul_8 / __div_8s / __mod_16s など (share/runtime.asm)。mul は符号で結果が変わらないので __mul_16 のみ
 		suffix := ifElse(ir.ValType(dst).Size == 1, "8", "16")
-		if ir.ValType(dst).Signed && op.Code != ir.OpMul {
+		if op.IsSigned() { // 除算・剰余の符号 (ir/sign.go。mul は符号で結果が変わらないので false)
 			suffix += "s"
 		}
 		r = append(r, fmt.Sprintf("jsr __%s_%s", op.Code.String(), suffix))

@@ -33,6 +33,10 @@ const (
 	fUsesCarry
 	// fOpaque は中身を解析しない命令 (インラインアセンブラ)。
 	fOpaque
+	// fHasSign は意味が Op.Sign で変わる命令 (符号付きの比較・床除算・算術シフト。sign.go)。
+	fHasSign
+	// fCompare は比較 (Op.Width が比較の幅。sign.go)。
+	fCompare
 )
 
 var opInfo = [opCodeCount]opFlags{
@@ -58,26 +62,22 @@ var opInfo = [opCodeCount]opFlags{
 	OpOr:                 fPure | fReadsBeforeWrite | fCommutative,
 	OpXor:                fPure | fReadsBeforeWrite | fCommutative,
 	OpMul:                fPure | fReadsBeforeWrite,
-	OpDiv:                fPure | fReadsBeforeWrite,
-	OpMod:                fPure | fReadsBeforeWrite,
+	OpDiv:                fPure | fReadsBeforeWrite | fHasSign,
+	OpMod:                fPure | fReadsBeforeWrite | fHasSign,
 	OpShiftLeft:          fPure | fReadsBeforeWrite,
-	OpShiftRight:         fPure | fReadsBeforeWrite,
+	OpShiftRight:         fPure | fReadsBeforeWrite | fHasSign,
 	OpRolC:               fPure | fUsesCarry,
 	OpRorC:               fPure | fUsesCarry,
 	OpUminus:             fPure | fReadsBeforeWrite,
-	OpEq:                 fPure | fReadsBeforeWrite | fCommutative,
-	OpLt:                 fPure | fReadsBeforeWrite,
+	OpEq:                 fPure | fReadsBeforeWrite | fCommutative | fCompare,
+	OpLt:                 fPure | fReadsBeforeWrite | fHasSign | fCompare,
 	OpNot:                fPure | fReadsBeforeWrite,
 	OpBitNot:             fPure | fReadsBeforeWrite,
 	OpAsm:                fOpaque | fTouchesGlobals,
 	OpIndex:              fPure | fReadsBeforeWrite,
 	OpRef:                fPure,
-	OpPget:               fPure | fReadsBeforeWrite,
-	OpPset:               fTouchesGlobals,
-	OpIndexPget:          fPure | fReadsBeforeWrite,
-	OpIndexPset:          fTouchesGlobals,
-	OpFieldPget:          fPure | fReadsBeforeWrite,
-	OpFieldPset:          fTouchesGlobals,
+	OpLoadMem:            fPure | fReadsBeforeWrite,
+	OpStoreMem:           fTouchesGlobals,
 }
 
 func (c OpCode) has(f opFlags) bool { return opInfo[c]&f != 0 }
@@ -132,6 +132,12 @@ func FeedsCarry(ops []*Op, i int) bool {
 
 // IsOpaque は中身を解析しない命令 (インラインアセンブラ) か。
 func (c OpCode) IsOpaque() bool { return c.has(fOpaque) }
+
+// HasSign は意味が Op.Sign で変わる命令 (lt / div / mod / shift_right) か。
+func (c OpCode) HasSign() bool { return c.has(fHasSign) }
+
+// IsCompare は比較 (eq / lt。Op.Width が比較の幅) か。
+func (c OpCode) IsCompare() bool { return c.has(fCompare) }
 
 // 以下は *Op を受ける形 (nil なら false)。命令列を i+1 のように覗くところで nil の穴を気にせず書ける。
 

@@ -29,12 +29,12 @@ var rmPasses = []string{"ssa", "mul", "sink", "fuse", "fuse-index", "indexoff", 
 
 // metaRun は files を -O 2 で動かした出力。disable は切る段 (FC_DISABLE と同じ綴り。"" なら普通のビルド)。
 // codegen の panic もエラーとして返す。
-func metaRun(t *testing.T, files map[string]string, disable string) (out string, err error) {
+func metaRun(t *testing.T, files map[string]string, disable string, maxCycles int64) (out string, err error) {
 	t.Helper()
 	cfg := ir.NewConfig(strings.Split(disable, ",")...)
 	cfg.SetVerifyRegs(true)
 	cfg.SetVerifyIR(true)
-	r := testBuild(t, buildSpec{Files: files, Run: true, MaxCycles: rpMaxCycles, Config: cfg, Recover: true})
+	r := testBuild(t, buildSpec{Files: files, Run: true, MaxCycles: maxCycles, Config: cfg, Recover: true})
 	return r.Stdout, r.Err
 }
 
@@ -52,7 +52,7 @@ func TestRandomMetamorphic(t *testing.T) {
 			g := &rpGen{r: rand.New(rand.NewSource(seed)), v3: &rpV3{}}
 			g.genProgram()
 			files := g.sources()
-			want, err := metaRun(t, files, "")
+			want, err := metaRun(t, files, "", rpMaxCycles)
 			if err != nil {
 				t.Skipf("普通のビルドが通らない / 止まらない (seed %d。TestRandomV3Programs の担当): %v", seed, firstLine(err.Error()))
 			}
@@ -67,7 +67,12 @@ func TestRandomMetamorphic(t *testing.T) {
 				variants = append(variants, strings.Join(ps, ","))
 			}
 			for _, v := range variants {
-				got, err := metaRun(t, files, v)
+				got, err := metaRun(t, files, v, rpMaxCycles)
+				if err != nil && strings.HasPrefix(err.Error(), "cycle limit") {
+					// 段を切ると遅くなって上限に掛かることがある (ssa を切って 43 倍の 20.1M サイクル: seed 8200040)。止まらないと
+					// 決める前に上限を上げて走らせ直す (rpCheck の -O 0 と同じ)
+					got, err = metaRun(t, files, v, rpMaxCycles*50)
+				}
 				if err != nil && (strings.Contains(err.Error()+got, "frame size over") || strings.Contains(err.Error()+got, "memory area overflow")) {
 					continue // 段を切ると大きくなって入らない (プログラムの問題)
 				}

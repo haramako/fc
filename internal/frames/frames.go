@@ -363,7 +363,7 @@ func AsmSymbols(text string) []string { return reAsmSym.FindAllString(text, -1) 
 
 // indirectTargets は間接呼び出しの飛び先の関数 (シンボル) を絞れるなら返す。
 //   - グローバルの関数ポインタ変数 (直接、または `load t = g` の t): その変数に代入された関数 (リテラル以外の代入があれば不可)
-//   - const 表の要素 (`index_pget t = TABLE, i` / `index p = TABLE, i; pget t = p`): 表の要素 (関数以外の要素があれば不可)
+//   - const 表の要素 (`load_mem t = TABLE, i` / `index p = TABLE, i; load_mem t = p`): 表の要素 (関数以外の要素があれば不可)
 func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned map[string][]string, unknown map[string]bool, tables map[string][]string) ([]string, bool) {
 	fromGlobal := func(o ir.Operand) ([]string, bool) {
 		v, ok := o.(*ir.Value)
@@ -411,9 +411,10 @@ func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned 
 		if f := ir.ValLiteral(def.Src[0]); f != nil && f.Kind == ir.KindLiteral && !f.IsInt && f.Symbol != "" {
 			return []string{f.Symbol}, true
 		}
-	case ir.OpIndexPget:
-		return fromTable(def.Src[0])
-	case ir.OpPget:
+	case ir.OpLoadMem:
+		if m := def.Mem(); m.Index != nil {
+			return fromTable(m.Base)
+		}
 		if p, ok := def.Src[0].(*ir.Value); ok && p.Kind == ir.KindLocal {
 			if pd := ud.Defs[p]; len(pd) == 1 && lmd.Ops[pd[0]].Code == ir.OpIndex {
 				return fromTable(lmd.Ops[pd[0]].Src[0])

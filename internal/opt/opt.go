@@ -133,20 +133,20 @@ func Passes() []Pass {
 		{Name: "ssa", Run: always(propagateSSA)},
 		{Name: "mul", Run: always(expandMul)},
 		{Name: "sink", Run: always(sinkAddress)},
-		{Name: "fuse", Run: always(fusePointer)},
+		{Name: "fuse", Run: alwaysU(fusePointer)},
 		{Name: "fieldindex", Run: foldFieldIndex},
-		{Name: "indexoff", Run: changes(foldIndexOffset)}, // fuse が index + pget / pset を index_pget / index_pset にした後
+		{Name: "indexoff", Run: changes(foldIndexOffset)}, // fuse が index + load_mem / store_mem を添字付きの load_mem / store_mem にした後
 		{Name: "coalesce", Run: always(coalesceCopies)},
 		{Name: "chain", Run: always(chainInPlace)},
 		{Name: "induction", Requires: []string{"ssa"}, Run: changes(eliminateInduction),
 			// 消したカウンタの加算と初期化、lim の計算の定数を畳む
 			Then: func(lmd *ir.Lambda, _ *types.Universe) { propagateSSA(lmd) }},
 		{Name: "unroll", Requires: []string{"ssa"}, Grows: true, Run: changes(unrollLoops),
-			Then: func(lmd *ir.Lambda, _ *types.Universe) {
+			Then: func(lmd *ir.Lambda, u *types.Universe) {
 				propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
 				compact(lmd)
 				if !lmd.Cfg().Disabled("fuse") {
-					fusePointer(lmd) // 添字が定数になった index + pget / pset (要素 2 バイトのポインタは定数の添字だけ融合できる)
+					fusePointer(lmd, u) // 添字が定数になった index + load_mem / store_mem (要素 2 バイトのポインタは定数の添字だけ融合できる)
 				}
 			}},
 		{Name: "narrow", Run: alwaysU(narrowBitTest)},

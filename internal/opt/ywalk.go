@@ -8,7 +8,7 @@ import (
 // walkPointerY は 1 ずつ進むポインタの下位バイトを添字 k (regalloc が Y に常駐させる) に移す (ループの回転の後):
 //
 //	jump B                               k = p.lo
-//	L: .. *p .. (pset p / pget *p)       if !(p < lim) goto X      (入口の検査は元のまま)
+//	L: .. *p .. (store_mem p / load_mem p)       if !(p < lim) goto X      (入口の検査は元のまま)
 //	   add p = p, #1                     p.lo = 0
 //	B: lt t = p, lim                →    L: .. p[k] ..             (lda (p),y)
 //	   if_true t goto L                     add k = k, #1          (iny)
@@ -25,7 +25,7 @@ import (
 // `lda (p),y; iny; bne; …; cpy lim; bne` になる。
 //
 // 条件: p はアドレスを取られないローカルの 1 バイト要素のポインタ (呼び先からは見えないので、ループの中の呼び出しは
-// よい)。ループ (L から帰りの分岐まで) の中の p の使用は `pget v = *p` / `pset *p = v`、定義は `add p = p, #1` の 1 つだけで、
+// よい)。ループ (L から帰りの分岐まで) の中の p の使用は `load_mem v = p` / `store_mem p, v`、定義は `add p = p, #1` の 1 つだけで、
 // 毎周必ず通る (ywalkBody)。ループから出る分岐 (break)・return・switch・asm が無い。lim はリテラルかループの中で
 // 定義されないローカル変数。
 func walkPointerY(lmd *ir.Lambda, u *types.Universe) bool {
@@ -162,7 +162,7 @@ func ywalkBody(ops []*ir.Op, labelAt map[string]int, a, b, c int, p, t *ir.Value
 				continue
 			}
 			// 1 バイトの読み書きの番地としてだけ
-			if (op.Code == ir.OpPget || op.Code == ir.OpPset) && k == 0 && op.Src[0] == ir.Operand(p) {
+			if k == 0 && plainDeref(op, p) {
 				continue
 			}
 			return false
@@ -227,7 +227,7 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	// 入口 (jump B の代わり): 元の検査、下位を k へ
 	out = append(out,
 		&ir.Op{Code: ir.OpLoad, Dst: k, Src: []ir.Operand{lo}, Pos: pos, Logs: ops[a-1].Logs},
-		&ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{p, lim}, Pos: pos},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{p, lim}, Pos: pos}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{g}, Label: xLabel, Pos: pos},
 		&ir.Op{Code: ir.OpLoad, Dst: lo, Src: []ir.Operand{ir.NewIntLiteral("", u8, 0)}, Pos: pos},
 	)
@@ -237,10 +237,14 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 			continue
 		}
 		switch {
-		case op.Code == ir.OpPget && op.Src[0] == ir.Operand(p):
-			out = append(out, &ir.Op{Code: ir.OpIndexPget, Dst: op.Dst, Src: []ir.Operand{p, k}, Pos: op.Pos, Logs: op.Logs})
-		case op.Code == ir.OpPset && op.Src[0] == ir.Operand(p):
-			out = append(out, &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{p, k, op.Src[1]}, Pos: op.Pos, Logs: op.Logs})
+		case op.Code == ir.OpLoadMem && op.Src[0] == ir.Operand(p):
+			nop := ir.NewLoadMem(op.Dst, p, k, 1, 0)
+			nop.Pos, nop.Logs = op.Pos, op.Logs
+			out = append(out, nop)
+		case op.Code == ir.OpStoreMem && op.Src[0] == ir.Operand(p):
+			nop := ir.NewStoreMem(p, k, 1, 0, op.Width, op.MemValue())
+			nop.Pos, nop.Logs = op.Pos, op.Logs
+			out = append(out, nop)
 		case op.Code == ir.OpAdd && op.Dst == ir.Operand(p):
 			out = append(out,
 				&ir.Op{Code: ir.OpAdd, Dst: k, Src: []ir.Operand{k, ir.NewIntLiteral("", u8, 1)}, Pos: op.Pos, Logs: op.Logs},
@@ -255,9 +259,9 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	L := ops[a].Label
 	out = append(out,
 		ops[b], // B
-		&ir.Op{Code: ir.OpEq, Dst: t1, Src: []ir.Operand{k, limByte(0)}, Pos: pos, Logs: condLogs},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpEq, Dst: t1, Src: []ir.Operand{k, limByte(0)}, Pos: pos, Logs: condLogs}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t1}, Label: L, Pos: pos},
-		&ir.Op{Code: ir.OpEq, Dst: t2, Src: []ir.Operand{hi, limByte(1)}, Pos: pos},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpEq, Dst: t2, Src: []ir.Operand{hi, limByte(1)}, Pos: pos}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t2}, Label: L, Pos: pos},
 		&ir.Op{Code: ir.OpLabel, Label: xLabel, Pos: pos},
 		&ir.Op{Code: ir.OpLoad, Dst: lo, Src: []ir.Operand{k}, Pos: pos},

@@ -7,8 +7,8 @@ import (
 
 // foldIndexOffset は `a[i + k]` (k は定数、a はグローバルの要素 1 バイトの配列) の添字の加算を配列のアドレス側に移す:
 //
-//	add t = i, #k; index_pget d = a, t     →  index_pget d = <k>a, i     (codegen: lda a+k,y)
-//	add t = i, #k; index_pset a, t, v      →  index_pset <k>a, i, v      (codegen: sta a+k,y)
+//	add t = i, #k; load_mem d = a, t       →  load_mem d = a, i, disp=k     (codegen: lda a+k,y)
+//	add t = i, #k; store_mem a, t, v       →  store_mem a, i, v, disp=k     (codegen: sta a+k,y)
 //
 // 添字が同じ i のままなので Y に置いた添字がそのまま使え、`clc; lda i; adc #k; tay` (約 10 サイクル) が消える
 // (castle の OAM への `buf[idx+1]` … `buf[idx+3]` は手書き asm の `iny` 相当になる)。
@@ -64,10 +64,10 @@ func foldIndexOffset(lmd *ir.Lambda) bool {
 				m = len(ops) // 直線の範囲を出た
 				continue
 			}
-			if (use.Code == ir.OpIndexPget || use.Code == ir.OpIndexPset) && use.In(1) == ir.Operand(t) && !use.Scaled {
-				if arr, ok := use.In(0).(*ir.Value); ok && arr.Kind == ir.KindGlobal && arr.Type.Kind == types.Array && arr.Type.Base.Size == 1 {
-					use.Src[0] = ir.NewCastedValue(arr, arr.Type, k)
+			if use.IsMem() && use.Src[1] == ir.Operand(t) && use.Scale == 1 {
+				if m := use.Mem(); m.BaseIsArray() && ir.ValType(m.Base).Base.Size == 1 {
 					use.Src[1] = base
+					use.Disp += k
 					nuse[t]--
 					changed = true
 				}

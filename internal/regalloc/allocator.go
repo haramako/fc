@@ -382,8 +382,8 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			}
 			// 結果を A に残す命令 (codegen が storeA で書く) であること
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
-				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpPget,
-				ir.OpIndexPget, ir.OpFieldPget, ir.OpShiftLeft, ir.OpShiftRight, ir.OpRolC, ir.OpRorC,
+				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpLoadMem,
+				ir.OpShiftLeft, ir.OpShiftRight, ir.OpRolC, ir.OpRorC,
 				ir.OpCall, ir.OpFastcall) { // 呼び出しの 1 バイトの戻り値も最後に A にある (RegResult なら lda 無しで)
 				continue
 			}
@@ -407,13 +407,17 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				continue
 			}
 			switch nextOp.Code {
-			case ir.OpIndexPget:
-				// 添字が A なら tay で Y に写す (codegen の loadYIdx)
-				if !isSameValue(nextOp.In(1), v) {
+			case ir.OpLoadMem:
+				// 添字が A なら tay で Y に写す (codegen の loadYIdx)。添字の無い参照はポインタが A (ずれの無いもの)
+				if m := nextOp.Mem(); m.Index != nil {
+					if !isSameValue(m.Index, v) {
+						continue
+					}
+				} else if m.Disp != 0 || !isSameValue(m.Base, v) {
 					continue
 				}
 			case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor,
-				ir.OpEq, ir.OpLt, ir.OpPget, ir.OpSub, ir.OpPushArg,
+				ir.OpEq, ir.OpLt, ir.OpSub, ir.OpPushArg,
 				ir.OpIf, ir.OpIfTrue, ir.OpReturn, ir.OpSwitch:
 				if !isSameValue(nextOp.In(0), v) {
 					continue
@@ -423,18 +427,9 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				if _, lit := ir.ValIntLiteral(nextOp.In(1)); !lit || !isSameValue(nextOp.In(0), v) {
 					continue
 				}
-			case ir.OpPset:
-				// 書く値が A (ポインタの準備が A を使うときは codegen が reg に退避する)
-				if !isSameValue(nextOp.In(1), v) {
-					continue
-				}
-			case ir.OpIndexPset:
-				// 添字 (tay) か書く値のどちらか
-				if !isSameValue(nextOp.In(1), v) && !isSameValue(nextOp.In(2), v) {
-					continue
-				}
-			case ir.OpFieldPset:
-				if !isSameValue(nextOp.In(2), v) {
+			case ir.OpStoreMem:
+				// 書く値が A (ポインタの準備が A を使うときは codegen が reg に退避する)、または添字 (tay)
+				if m := nextOp.Mem(); !isSameValue(nextOp.MemValue(), v) && !(m.Index != nil && isSameValue(m.Index, v)) {
 					continue
 				}
 			default:
@@ -487,7 +482,7 @@ func allocateCond(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				v.Location = ir.LocCond
 				v.CondPositive = true
 				// codegen の OpLt: 符号なしは C クリア ⇔ 真、符号付きは (V 補正後の) N セット ⇔ 真。サイズによらない
-				if ir.ValType(op.Src[0]).Signed || ir.ValType(op.Src[1]).Signed {
+				if op.IsSigned() {
 					v.CondReg = ir.CondNegative
 				} else {
 					v.CondReg = ir.CondCarry

@@ -16,8 +16,7 @@ _test_option_base_data:
 	;;;=============================
 .segment "test_option"
 .proc _test_option_test_address
-	ldy #1
-	lda _test_option_base_data+0,y
+	lda _test_option_base_data+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -30,8 +29,7 @@ _test_option_base_data:
 	lda #.HIBYTE(_5)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #1
-	lda _test_option_base_data+0,y
+	lda _test_option_base_data+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1

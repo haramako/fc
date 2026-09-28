@@ -51,7 +51,25 @@ func fmtOps(lmd *ir.Lambda) []string {
 			r = append(r, fmt.Sprintf("%s %s", op.Code, op.Label))
 		case ir.OpIf, ir.OpIfTrue:
 			r = append(r, fmt.Sprintf("%s %s %s", op.Code, srcs[0], op.Label))
-		case ir.OpReturn, ir.OpPset, ir.OpIndexPset, ir.OpFieldPset:
+		case ir.OpLoadMem, ir.OpStoreMem:
+			m := op.Mem()
+			parts := []string{opnd(m.Base)}
+			if m.Index != nil {
+				parts = append(parts, opnd(m.Index))
+				if m.Scale != 1 {
+					parts = append(parts, fmt.Sprintf("scale=%d", m.Scale))
+				}
+			}
+			if m.Disp != 0 {
+				parts = append(parts, fmt.Sprintf("disp=%d", m.Disp))
+			}
+			if op.Code == ir.OpLoadMem {
+				r = append(r, fmt.Sprintf("load_mem %s = %s", opnd(op.Dst), strings.Join(parts, ", ")))
+			} else {
+				parts = append(parts, opnd(op.MemValue()), fmt.Sprintf("w=%d", m.Width))
+				r = append(r, "store_mem "+strings.Join(parts, ", "))
+			}
+		case ir.OpReturn:
 			r = append(r, strings.TrimSpace(fmt.Sprintf("%s %s", op.Code, strings.Join(srcs, ", "))))
 		default:
 			r = append(r, fmt.Sprintf("%s %s = %s", op.Code, opnd(op.Dst), strings.Join(srcs, ", ")))
@@ -168,27 +186,108 @@ func TestFusePointer(t *testing.T) {
 	tv := tmp("t", tu.PointerTo(u8()))
 	lmd := lambda(
 		&ir.Op{Code: ir.OpAdd, Dst: tv, Src: []ir.Operand{p, lit(3, u8())}},
-		&ir.Op{Code: ir.OpPget, Dst: d, Src: []ir.Operand{tv}},
+		ir.NewLoadMem(d, tv, nil, 0, 0),
 		&ir.Op{Code: ir.OpAdd, Dst: tv, Src: []ir.Operand{p, lit(4, u8())}},
-		&ir.Op{Code: ir.OpPset, Src: []ir.Operand{tv, v}},
+		ir.NewStoreMem(tv, nil, 0, 0, 1, v),
 	)
 	// t は 2 回定義されるので融合しない (定義が 1 つで直後にだけ使う一時変数のみ)
-	fusePointer(lmd)
+	fusePointer(lmd, tu)
 	compact(lmd)
-	check(t, lmd, "add t = p, #3", "pget d = t", "add t = p, #4", "pset t, v")
+	check(t, lmd, "add t = p, #3", "load_mem d = t", "add t = p, #4", "store_mem t, v, w=1")
 
 	t1, t2 := tmp("t1", tu.PointerTo(u8())), tmp("t2", tu.PointerTo(u8()))
 	arr := ir.NewGlobal("arr", tu.ArrayOf(u8(), 10), "_arr")
 	i := local("i", u8())
 	lmd = lambda(
 		&ir.Op{Code: ir.OpAdd, Dst: t1, Src: []ir.Operand{p, lit(3, u8())}},
-		&ir.Op{Code: ir.OpPget, Dst: d, Src: []ir.Operand{t1}},
+		ir.NewLoadMem(d, t1, nil, 0, 0),
 		&ir.Op{Code: ir.OpIndex, Dst: t2, Src: []ir.Operand{arr, i}},
-		&ir.Op{Code: ir.OpPset, Src: []ir.Operand{t2, v}},
+		ir.NewStoreMem(t2, nil, 0, 0, 1, v),
 	)
-	fusePointer(lmd)
+	fusePointer(lmd, tu)
 	compact(lmd)
-	check(t, lmd, "field_pget d = p, #3", "index_pset arr, i, v")
+	check(t, lmd, "load_mem d = p, disp=3", "store_mem arr, i, v, w=1")
+}
+
+// TestFuseArrayField: struct の配列フィールドをポインタ経由で引く (`p.items[i].q`) と、add と index が 1 つの
+// load_mem / store_mem (ポインタ + 添字 + ずれ) になる。配列の外に出うる形 (ずれ + 配列全体が 256 を超える、途中で p が
+// 変わる) は add を畳まない。
+func TestFuseArrayField(t *testing.T) {
+	u16 := tu.IntType(2, false)
+	items := tu.ArrayOf(u16, 3) // [3]u16 (要素 2 バイト)
+	pd := local("p", tu.PointerTo(u8()))
+	d, v, i := local("d", u8()), local("v", u8()), local("i", u8())
+	t1, t2 := tmp("t1", tu.PointerTo(items)), tmp("t2", tu.PointerTo(u16))
+	elem := func(o ir.Operand) ir.Operand { return ir.NewCastedValue(o, tu.PointerTo(u16), 0) }
+	lmd := lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: t1, Src: []ir.Operand{pd, lit(1, u8())}},
+		&ir.Op{Code: ir.OpIndex, Dst: t2, Src: []ir.Operand{elem(t1), i}},
+		ir.NewLoadMem(d, ir.NewCastedValue(t2, tu.PointerTo(u8()), 0), nil, 0, 1),
+	)
+	fusePointer(lmd, tu)
+	compact(lmd)
+	check(t, lmd, "load_mem d = p, i, scale=2, disp=2")
+
+	// store: 右辺の計算が間に挟まる (add と index が参照から離れている)
+	w := tmp("w", u8())
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: t1, Src: []ir.Operand{pd, lit(1, u8())}},
+		&ir.Op{Code: ir.OpIndex, Dst: t2, Src: []ir.Operand{elem(t1), i}},
+		&ir.Op{Code: ir.OpAdd, Dst: w, Src: []ir.Operand{v, lit(3, u8())}},
+		ir.NewStoreMem(t2, nil, 0, 0, 2, w),
+	)
+	fusePointer(lmd, tu)
+	compact(lmd)
+	check(t, lmd, "add w = v, #3", "store_mem p, i, scale=2, disp=1, w, w=2")
+
+	// 途中で p が変わるなら add は畳まない (t1 を Base に)
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: t1, Src: []ir.Operand{pd, lit(1, u8())}},
+		&ir.Op{Code: ir.OpIndex, Dst: t2, Src: []ir.Operand{elem(t1), i}},
+		&ir.Op{Code: ir.OpLoad, Dst: pd, Src: []ir.Operand{lit(0, tu.PointerTo(u8()))}},
+		ir.NewStoreMem(t2, nil, 0, 0, 2, v),
+	)
+	fusePointer(lmd, tu)
+	compact(lmd)
+	check(t, lmd, "add t1 = p, #1", "load p = #0", "store_mem t1.0:2, i, scale=2, v, w=2")
+
+	// 要素 1 バイト: fusePointer が先に `load_mem d = <*u8>t1, i` にした形も add を畳む
+	bytes := tu.ArrayOf(u8(), 5)
+	b1 := tmp("b1", tu.PointerTo(bytes))
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: b1, Src: []ir.Operand{pd, lit(15, u8())}},
+		&ir.Op{Code: ir.OpIndex, Dst: t2, Src: []ir.Operand{ir.NewCastedValue(b1, tu.PointerTo(u8()), 0), i}},
+		ir.NewLoadMem(d, t2, nil, 0, 0),
+	)
+	fusePointer(lmd, tu)
+	compact(lmd)
+	check(t, lmd, "load_mem d = p, i, disp=15")
+
+	// ずれ + 配列全体が 256 を超える: add は畳まない (Y に収まらない)
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: b1, Src: []ir.Operand{pd, lit(252, u8())}},
+		&ir.Op{Code: ir.OpIndex, Dst: t2, Src: []ir.Operand{ir.NewCastedValue(b1, tu.PointerTo(u8()), 0), i}},
+		ir.NewLoadMem(d, t2, nil, 0, 0),
+	)
+	fusePointer(lmd, tu)
+	compact(lmd)
+	check(t, lmd, "add b1 = p, #252", "load_mem d = b1.0:2, i")
+
+	// 要素 3 バイト: 添字をバイト単位に (mul は expandMul がシフトと加算に)
+	e3 := tu.ArrayOf(u8(), 3)
+	a3 := tu.ArrayOf(e3, 2)
+	t3, t4 := tmp("t3", tu.PointerTo(a3)), tmp("t4", tu.PointerTo(e3))
+	lmd = lambda(
+		&ir.Op{Code: ir.OpAdd, Dst: t3, Src: []ir.Operand{pd, lit(20, u8())}},
+		&ir.Op{Code: ir.OpIndex, Dst: t4, Src: []ir.Operand{ir.NewCastedValue(t3, tu.PointerTo(e3), 0), i}},
+		ir.NewLoadMem(d, ir.NewCastedValue(t4, tu.PointerTo(u8()), 0), nil, 0, 2),
+	)
+	fusePointer(lmd, tu)
+	compact(lmd)
+	got := fmtOps(lmd)
+	if last := got[len(got)-1]; last != "load_mem d = p, t4*, disp=22" {
+		t.Errorf("要素 3 バイトの配列フィールド: %q", got)
+	}
 }
 
 func TestSinkAddress(t *testing.T) {
@@ -199,29 +298,29 @@ func TestSinkAddress(t *testing.T) {
 	build := func() *ir.Lambda {
 		return lambda(
 			&ir.Op{Code: ir.OpIndex, Dst: tp, Src: []ir.Operand{arr, i}},
-			&ir.Op{Code: ir.OpIndexPget, Dst: v, Src: []ir.Operand{arr, i}},
+			ir.NewLoadMem(v, arr, i, 1, 0),
 			&ir.Op{Code: ir.OpAdd, Dst: w, Src: []ir.Operand{v, lit(1, u8())}},
-			&ir.Op{Code: ir.OpPset, Src: []ir.Operand{tp, w}},
+			ir.NewStoreMem(tp, nil, 0, 0, 1, w),
 		)
 	}
 	lmd := build()
 	sinkAddress(lmd)
-	check(t, lmd, "index_pget v = arr, i", "add w = v, #1", "index t = arr, i", "pset t, w")
-	fusePointer(lmd)
+	check(t, lmd, "load_mem v = arr, i", "add w = v, #1", "index t = arr, i", "store_mem t, w, w=1")
+	fusePointer(lmd, tu)
 	compact(lmd)
-	check(t, lmd, "index_pget v = arr, i", "add w = v, #1", "index_pset arr, i, w")
+	check(t, lmd, "load_mem v = arr, i", "add w = v, #1", "store_mem arr, i, w, w=1")
 
 	// 間で添字が書き換わるなら動かさない
 	lmd = build()
 	lmd.Ops[2] = &ir.Op{Code: ir.OpAdd, Dst: i, Src: []ir.Operand{i, lit(1, u8())}}
 	sinkAddress(lmd)
-	check(t, lmd, "index t = arr, i", "index_pget v = arr, i", "add i = i, #1", "pset t, w")
+	check(t, lmd, "index t = arr, i", "load_mem v = arr, i", "add i = i, #1", "store_mem t, w, w=1")
 
 	// ラベルをまたがない
 	lmd = build()
 	lmd.Ops[2] = &ir.Op{Code: ir.OpLabel, Label: "L"}
 	sinkAddress(lmd)
-	check(t, lmd, "index t = arr, i", "index_pget v = arr, i", "label L", "pset t, w")
+	check(t, lmd, "index t = arr, i", "load_mem v = arr, i", "label L", "store_mem t, w, w=1")
 
 	// グローバルのポインタ変数 + 定数は呼び出しをまたがない (呼び出し先が書き換えるかもしれない)
 	gp := ir.NewGlobal("gp", tu.PointerTo(u8()), "_gp")
@@ -229,10 +328,10 @@ func TestSinkAddress(t *testing.T) {
 	lmd = lambda(
 		&ir.Op{Code: ir.OpAdd, Dst: tp, Src: []ir.Operand{gp, lit(2, u8())}},
 		&ir.Op{Code: ir.OpCall, Src: []ir.Operand{fn}},
-		&ir.Op{Code: ir.OpPset, Src: []ir.Operand{tp, w}},
+		ir.NewStoreMem(tp, nil, 0, 0, 1, w),
 	)
 	sinkAddress(lmd)
-	check(t, lmd, "add t = gp, #2", "call nil = f", "pset t, w")
+	check(t, lmd, "add t = gp, #2", "call nil = f", "store_mem t, w, w=1")
 }
 
 func TestNarrowBitTest(t *testing.T) {
@@ -290,7 +389,7 @@ func TestSimplifyJumps(t *testing.T) {
 	// ループの回転: hlc の while の形
 	lmd = lambda(
 		&ir.Op{Code: ir.OpLabel, Label: "@begin_1"},
-		&ir.Op{Code: ir.OpLt, Dst: c, Src: []ir.Operand{x, lit(10, u8())}},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpLt, Dst: c, Src: []ir.Operand{x, lit(10, u8())}}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{c}, Label: "@end_2"},
 		&ir.Op{Code: ir.OpAdd, Dst: x, Src: []ir.Operand{x, lit(1, u8())}},
 		&ir.Op{Code: ir.OpJump, Label: "@begin_1"},
@@ -341,10 +440,10 @@ func TestCarryBranch(t *testing.T) {
 	lmd = lambda(
 		&ir.Op{Code: ir.OpAnd, Dst: tv16, Src: []ir.Operand{x, lit(1, u16())}},
 		&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{tv16}, Label: "odd"},
-		&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}}),
 		&ir.Op{Code: ir.OpJump, Label: "end"},
 		&ir.Op{Code: ir.OpLabel, Label: "odd"},
-		&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}}),
 		&ir.Op{Code: ir.OpXor, Dst: x, Src: []ir.Operand{x, lit(0x1021, u16())}},
 		&ir.Op{Code: ir.OpLabel, Label: "end"},
 		&ir.Op{Code: ir.OpReturn},
@@ -379,22 +478,22 @@ func TestScaleIndex(t *testing.T) {
 	b1 := ir.NewGlobal("b1", tu.ArrayOf(u8(), 10), "_b1")
 	i, v, w := local("i", u8()), tmp("v", u16()), tmp("w", u16())
 	lmd := lambda(
-		&ir.Op{Code: ir.OpIndexPget, Dst: v, Src: []ir.Operand{arr, i}},
-		&ir.Op{Code: ir.OpIndexPget, Dst: w, Src: []ir.Operand{arr, i}},
-		&ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{b1, i, lit(1, u8())}}, // 要素 1 バイトは対象外
-		&ir.Op{Code: ir.OpAdd, Dst: i, Src: []ir.Operand{i, lit(1, u8())}},   // i が変わったら 2 倍し直す
-		&ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, i, v}},
+		ir.NewLoadMem(v, arr, i, 2, 0),
+		ir.NewLoadMem(w, arr, i, 2, 0),
+		ir.NewStoreMem(b1, i, 1, 0, 1, lit(1, u8())),                       // 要素 1 バイトは対象外
+		&ir.Op{Code: ir.OpAdd, Dst: i, Src: []ir.Operand{i, lit(1, u8())}}, // i が変わったら 2 倍し直す
+		ir.NewStoreMem(arr, i, 2, 0, 2, v),
 		&ir.Op{Code: ir.OpLabel, Label: "L"}, // ブロックをまたいでは共有しない
-		&ir.Op{Code: ir.OpIndexPget, Dst: w, Src: []ir.Operand{arr, i}},
+		ir.NewLoadMem(w, arr, i, 2, 0),
 	)
 	scaleIndex(lmd, tu)
 	check(t, lmd,
-		"shift_left i*2 = i, #1", "index_pget v = arr, i*2", "index_pget w = arr, i*2", "index_pset b1, i, #1",
-		"add i = i, #1", "shift_left i*2 = i, #1", "index_pset arr, i*2, v",
-		"label L", "shift_left i*2 = i, #1", "index_pget w = arr, i*2")
+		"shift_left i*2 = i, #1", "load_mem v = arr, i*2", "load_mem w = arr, i*2", "store_mem b1, i, #1, w=1",
+		"add i = i, #1", "shift_left i*2 = i, #1", "store_mem arr, i*2, v, w=2",
+		"label L", "shift_left i*2 = i, #1", "load_mem w = arr, i*2")
 	for _, op := range lmd.Ops {
-		if (op.Code == ir.OpIndexPget || op.Code == ir.OpIndexPset) && op.Scaled != (op.In(0) == arr) {
-			t.Errorf("Scaled が違う: %s", ir.DumpOp(op, nil))
+		if op.IsMem() && op.In(0) == arr && op.Scale != 1 {
+			t.Errorf("添字がバイト単位になっていない: %s", ir.DumpOp(op, nil))
 		}
 	}
 }
@@ -405,22 +504,22 @@ func TestCommuteTemp(t *testing.T) {
 	t1, t2, t3 := tmp("t1", u8()), tmp("t2", u8()), tmp("t3", u8())
 	w := local("w", u16())
 	lmd := lambda(
-		&ir.Op{Code: ir.OpIndexPget, Dst: t1, Src: []ir.Operand{tab, i}},
+		ir.NewLoadMem(t1, tab, i, 1, 0),
 		&ir.Op{Code: ir.OpAdd, Dst: d, Src: []ir.Operand{y, t1}}, // 入れ替える
-		&ir.Op{Code: ir.OpIndexPget, Dst: t2, Src: []ir.Operand{tab, i}},
+		ir.NewLoadMem(t2, tab, i, 1, 0),
 		&ir.Op{Code: ir.OpSub, Dst: d, Src: []ir.Operand{y, t2}}, // sub は可換でない
-		&ir.Op{Code: ir.OpIndexPget, Dst: t3, Src: []ir.Operand{tab, i}},
+		ir.NewLoadMem(t3, tab, i, 1, 0),
 		&ir.Op{Code: ir.OpLoad, Dst: y, Src: []ir.Operand{lit(1, u8())}},
 		&ir.Op{Code: ir.OpAnd, Dst: d, Src: []ir.Operand{y, t3}}, // 直前の定義でない
-		&ir.Op{Code: ir.OpIndexPget, Dst: t1, Src: []ir.Operand{tab, i}},
+		ir.NewLoadMem(t1, tab, i, 1, 0),
 		&ir.Op{Code: ir.OpAdd, Dst: w, Src: []ir.Operand{w, t1}}, // サイズが違う
 	)
 	commuteTemp(lmd)
 	check(t, lmd,
-		"index_pget t1 = tab, i", "add d = t1, y",
-		"index_pget t2 = tab, i", "sub d = y, t2",
-		"index_pget t3 = tab, i", "load y = #1", "and d = y, t3",
-		"index_pget t1 = tab, i", "add w = w, t1")
+		"load_mem t1 = tab, i", "add d = t1, y",
+		"load_mem t2 = tab, i", "sub d = y, t2",
+		"load_mem t3 = tab, i", "load y = #1", "and d = y, t3",
+		"load_mem t1 = tab, i", "add w = w, t1")
 }
 
 func TestInlineProgram(t *testing.T) {

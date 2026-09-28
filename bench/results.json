@@ -1,7 +1,7 @@
 {
   "bgdecode": {
-    "cycles": 1342562,
-    "size": 772,
+    "cycles": 1331810,
+    "size": 742,
     "out": "sum=47712"
   },
   "calls": {
@@ -40,8 +40,8 @@
     "out": "sum=8921"
   },
   "oam": {
-    "cycles": 2080876,
-    "size": 968,
+    "cycles": 2055532,
+    "size": 935,
     "out": "sum=25008"
   },
   "plasma": {
