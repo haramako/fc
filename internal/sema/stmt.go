@@ -261,7 +261,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		lam := &cexpr{kind: cLambda, pos: s.Pos(), lam: &lambdaLit{
 			name: s.Name.Name, params: params, result: s.Result, body: s.Body, options: parseOptions(s.Options),
 		}}
-		h.compileConstSpec(s.Name.Name, nil, lam, nil, s.PublicPos)
+		h.compileConstSpec(s.Name.Name, s.Name.End(), nil, lam, nil, s.PublicPos)
 
 	case *syntax.VarDecl:
 		if s.Alias {
@@ -281,7 +281,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				} else if sp.Init != nil {
 					init = toC(sp.Init)
 				}
-				h.compileConstSpec(sp.Name.Name, sp.Type, init, opts, s.PublicPos)
+				h.compileConstSpec(sp.Name.Name, sp.Name.End(), sp.Type, init, opts, s.PublicPos)
 				if build {
 					if v := h.scope.Local(sp.Name.Name); v != nil {
 						v.Build = true

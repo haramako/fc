@@ -57,6 +57,9 @@ type Value struct {
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
+	// StrConst は長さを初期値の文字列から決めた名前付きの配列定数 (`const NM = "joe"`、`const NM:[?]u8 = "joe"`)。fc 4 の
+	// モジュールからはリテラルと同じく長さ (@len・slice・for-each) に終端の 0 を含めない (データには残る。sema の strLen)
+	StrConst bool
 	Str      string
 
 	Public    bool

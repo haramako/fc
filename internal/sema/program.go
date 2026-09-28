@@ -38,6 +38,7 @@ type Program struct {
 	Rewrites        []Rewrite
 	RewriteErrors   []RewriteError
 	rewriteSeen     map[Rewrite]bool
+	strConsts       map[*ir.Value]*strConstDecl // 名前付きの文字列定数の宣言 (strconst.go)
 	// Warnings は意味解析で見つけた警告 (出現順)
 	Warnings []diag.Warning
 	// Errors は意味解析で見つけたエラー (出現順)。文ごとに回復して集める。MaxErrors で打ち切る

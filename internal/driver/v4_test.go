@@ -197,6 +197,68 @@ func TestV4TypedConst(t *testing.T) {
 	}
 }
 
+// strConstSrc は名前付きの文字列定数の長さの例 (版は %d)。
+const strConstSrc = `#fc %d
+use * from stdio;
+const NM = "joe";
+const NM2:[?]u8 = "ab";
+const NM3:[4]u8 = "xyz";
+function n(s:[]const u8):u8 { return @len(s); }
+function main():void
+{
+	printf(@len(NM), " ", @sizeof(NM), " ", n(NM), " ", n("joe"), " ", n(NM2), " ", @len(NM2), " ", @len(NM3), "\n");
+	var k:u8 = 0;
+	for (var c in NM) { k++; }
+	var s:[]const u8 = NM;
+	var s2 = NM[1..];
+	printf(k, " ", @len(s), " ", @len(s2), " ", NM[3], "\n");
+	exit(0);
+}
+`
+
+// TestV4StringConst: fc 4 は長さを初期値の文字列から決めた名前付きの定数も、リテラルと同じく長さに終端の 0 を含めない (データの
+// 0 は残る。長さを書いた配列は今のまま)。fc 3 から migrate すると、長さを見ている定数の宣言が長さつきになって fc 3 と同じ結果。
+func TestV4StringConst(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		ver  int
+		want string
+	}{
+		{4, "3 4 3 3 2 2 4\n3 3 2 0\n"},
+		{3, "4 4 4 3 3 3 4\n4 4 3 0\n"},
+	} {
+		out, err := buildBothLevels(t, map[string]string{"t.fc": fmt.Sprintf(strConstSrc, c.ver)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != c.want {
+			t.Errorf("fc %d: got %q, want %q", c.ver, out, c.want)
+		}
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(fmt.Sprintf(strConstSrc, 3)), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(res[path])
+	for _, want := range []string{`const NM:[4]u8 = "joe";`, `const NM2:[3]u8 = "ab";`, `const NM3:[4]u8 = "xyz";`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("migrate の結果に %q が無い:\n%s", want, got)
+		}
+	}
+	out, err := buildBothLevels(t, map[string]string{"t.fc": got})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "4 4 4 3 3 3 4\n4 4 3 0\n"; out != want {
+		t.Errorf("migrate した fc 4: got %q, want %q", out, want)
+	}
+}
+
 // TestV4MigrateWiden: A1・F1 で意味が変わる所は、migrate が今の型の `as` を足して fc 3 と同じ結果にする。
 func TestV4MigrateWiden(t *testing.T) {
 	t.Parallel()

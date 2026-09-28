@@ -163,7 +163,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 
 // compileConstSpec は const 宣言の 1 定数分 (関数宣言の脱糖にも使う)。
 // typ / val / opt はそれぞれ省略可 (nil)。
-func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
+func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
 	var newVal *ir.Value
 	if at, ok := typ.(*syntax.ArrayType); ok && at.IsSlice(h.version()) && val == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("const %s: a slice is a run-time value (use [?]T for a constant array)", name)})
@@ -215,6 +215,9 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)
+			if v.IsString && !explicitLength(typ) {
+				h.markStrConst(newVal, typ, nameEnd)
+			}
 		} else {
 			if opt.Has("symbol") {
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(symbol:) needs an array constant (or no value to refer to an assembler symbol)", name)})

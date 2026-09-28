@@ -150,7 +150,7 @@ func (h *Hlc) forInElems(s *syntax.ForInStmt) (forInLoop, func()) {
 	}
 	if bt.Kind == types.Array {
 		n := bt.Length
-		if ce := h.constEval(x); ce.kind == cValue && ce.val.IsString && !ptrMode && n > 0 {
+		if ce := h.constEval(x); ce.kind == cValue && h.strLen(ce.val) && !ptrMode && n > 0 {
 			n-- // 文字列リテラルは終端の 0 を回らない (`@len("abc")` や slice にしたときと同じ 3 文字。survey 2026-09-27)
 		}
 		it = h.prog.Types.IntType(1, false)
