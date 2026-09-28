@@ -214,14 +214,15 @@ func (l *Llc) keepA(val ir.Operand, pre []any) []any {
 	return append(r, "lda <reg+2")
 }
 
-// sameByte は 2 つのメモリ上のオペランドの i バイト目が同じ場所か (アドレス表記が同じ)。A / 即値なら false。
+// sameByte は 2 つのメモリ上のオペランドの i バイト目が同じ場所か (番地の記号とずれが同じ。綴りが違っても見る)。
+// A / 即値なら false。
 func (l *Llc) sameByte(a, b ir.Operand, i int) bool {
 	for _, v := range []ir.Operand{a, b} {
 		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || l.inX(v) || ir.ValLocation(v) == ir.LocCond {
 			return false
 		}
 	}
-	return l.byte(a, i) == l.byte(b, i)
+	return parseOperand(l.byte(a, i)).key() == parseOperand(l.byte(b, i)).key()
 }
 
 // sameStorage は 2 つのオペランドが同じ変数 (の一部) を指すか。

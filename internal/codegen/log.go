@@ -287,20 +287,16 @@ func (l *Llc) placeLogLabels(lines []string, sites []*LogSite) []string {
 	return out
 }
 
-// asmLine の種類 (markLogPrevs 用)。
+// asmLabel は行がラベルならその名前 (asm.go の解析)。
 func asmLabel(t string) (string, bool) {
-	if strings.HasSuffix(t, ":") && !strings.HasPrefix(t, ";") && !strings.Contains(t, " ") {
-		return strings.TrimSuffix(t, ":"), true
-	}
-	return "", false
+	a := parseAsmLine(t)
+	return a.Label, a.Kind == lkLabel
 }
 
+// asmIsInstr は行が命令 (または `sym = expr`) か。
 func asmIsInstr(t string) bool {
-	if t == "" || strings.HasPrefix(t, ";") || strings.HasPrefix(t, ".") {
-		return false
-	}
-	_, lab := asmLabel(t)
-	return !lab
+	k := parseAsmLine(t).Kind
+	return k == lkInstr || (k == lkDirective && !strings.HasPrefix(strings.TrimSpace(t), "."))
 }
 
 // markTakenLogs は分岐が成立したときだけの地点 (`;@fclogt N` の印の命令) を置く: 地点のラベルは飛び先のラベルの直後、
@@ -329,7 +325,7 @@ func markTakenLogs(out []string, byLabel map[string]*LogSite) []string {
 				if reIRComment.MatchString(u) {
 					break
 				}
-				if f := strings.Fields(u); len(f) == 2 && branchMnems[strings.ToLower(f[0])] && f[1] == target {
+				if a := parseAsmLine(u); a.isJump() && a.Arg.Raw == target {
 					branches = append(branches, j)
 				}
 			}
@@ -368,8 +364,6 @@ func markTakenLogs(out []string, byLabel map[string]*LogSite) []string {
 	}
 	return r
 }
-
-var branchMnems = map[string]bool{"jmp": true, "bcc": true, "bcs": true, "beq": true, "bne": true, "bmi": true, "bpl": true, "bvc": true, "bvs": true}
 
 // markLogPrevs は合流点の地点 (地点と次の命令の間に別のラベルがある) に、この地点の経路の直前の命令のラベルを付ける
 // (LogSite.Prevs)。直前の命令: 上から落ちてくる命令 (jmp / rts / rti / brk 以外) と、地点の前の同じ番地のラベルへの分岐。
@@ -416,7 +410,9 @@ func markLogPrevs(out []string, byLabel map[string]*LogSite) []string {
 		}
 		var at []int
 		if prev >= 0 {
-			if f := strings.Fields(strings.TrimSpace(out[prev])); !(f[0] == "jmp" || f[0] == "rts" || f[0] == "rti" || f[0] == "brk") {
+			switch parseAsmLine(out[prev]).Mnem {
+			case "jmp", "rts", "rti", "brk":
+			default:
 				at = append(at, prev)
 			}
 		}
@@ -432,7 +428,7 @@ func markLogPrevs(out []string, byLabel map[string]*LogSite) []string {
 				if !own[tok] {
 					continue
 				}
-				if k == 1 && branchMnems[strings.ToLower(f[0])] {
+				if k == 1 && parseAsmLine(u).isJump() {
 					at = append(at, j)
 				} else {
 					unknown = true // ジャンプ表・アドレスとしての参照
