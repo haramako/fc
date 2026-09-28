@@ -1594,6 +1594,12 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 		// -O 0 だけ上限に掛かった: far call や除算の入れ子で -O 0 が -O 2 の 4 倍かかることがある (21M 対 5.7M) ので、
 		// 止まらないと決める前に上限を上げて走らせ直す (最小化の途中で毎回 20M サイクル走らせるのを避ける意味もある)
 		o0, err0 = rpRun(t, files, -1, rpMaxCycles*50)
+		if hang(err0) {
+			// 50 倍 (10 億サイクル) でも終わらない: -O 2 が消した結果を使わないループ (far call の先の二重ループなど) を
+			// -O 0 は全部回すので、呼び出しの入れ子で桁違いに遅くなる (-O 2 の出力は上限なしで回した -O 0 と同じだった)。
+			// 食い違いとして最小化すると、文を消すうちに別の食い違い (初期化前の読み) に流れて誤報になっていた
+			return rpResult{"slow", fmt.Sprintf("-O 0: %v\n-O 2: %s", err0, o2)}
+		}
 	}
 	if hang(err0) != hang(err2) && (err0 == nil || hang(err0)) && (err2 == nil || hang(err2)) {
 		// 片方だけ止まらない (もう片方は正常): 出力の食い違いと同じ扱い
@@ -1628,7 +1634,31 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 
 
 // rpMinimize は同じ種類の失敗が残る範囲で文を消す (どの深さの文も。消せなかった文はその中身を試す)。
+// rpUninitReads は files の「代入の前に読むかもしれない」警告の数 (-O 0 でコンパイルだけ)。
+func rpUninitReads(t *testing.T, files map[string]string) int {
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), OptimizeLevel: -1})
+	if err != nil || res == nil {
+		return 0
+	}
+	n := 0
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Msg, "may be read before it is assigned") {
+			n++
+		}
+	}
+	return n
+}
+
 func rpMinimize(t *testing.T, g *rpGen, kind string) {
+	// 文を消して初期化前の読みが増えた版は捨てる (ループの中の代入を消すと、未定義の値で -O 0 と -O 2 が違って別の
+	// 食い違いになる。fuzz の誤報)
+	uninit := rpUninitReads(t, g.sources())
 	var visit func(list *[]*rpStmt) bool
 	visit = func(list *[]*rpStmt) bool {
 		changed := false
@@ -1638,7 +1668,7 @@ func rpMinimize(t *testing.T, g *rpGen, kind string) {
 				continue // 初期化文は消さない (rpStmt.keep)
 			}
 			*list = append((*list)[:i:i], (*list)[i+1:]...)
-			if rpCheck(t, g.sources()).kind == kind {
+			if rpCheck(t, g.sources()).kind == kind && rpUninitReads(t, g.sources()) <= uninit {
 				changed = true
 				i--
 				continue
@@ -1693,6 +1723,8 @@ func TestRandomPrograms(t *testing.T) {
 					t.Skipf("ソフトウェアスタックがあふれた (seed %d)", seed)
 				}
 				t.Fatalf("ビルド失敗 (生成器の問題) (seed %d):\n%s\n%s", seed, g.allSource(), res.detail)
+			case "slow":
+				t.Skipf("-O 0 だけ 10 億サイクルでも終わらない (seed %d)", seed)
 			case "hang":
 				// 両方のレベルで止まらない: 入れ子のループ × 呼び出しで単に重い (サイクルの上限を超える) のがほとんどで、
 				// 生成器の問題として飛ばす (コンパイラ共通のバグならほかの形でも出る)

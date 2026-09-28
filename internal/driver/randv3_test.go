@@ -282,6 +282,8 @@ func TestRandomV3Programs(t *testing.T) {
 					}
 				}
 				t.Fatalf("ビルド失敗 (生成器の問題) (seed %d):\n%s\n%s", seed, g.allSource(), res.detail)
+			case "slow":
+				t.Skipf("-O 0 だけ 10 億サイクルでも終わらない (seed %d)", seed)
 			case "hang":
 				t.Skipf("両方のレベルでサイクルの上限を超えた (seed %d)", seed)
 			default:
