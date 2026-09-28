@@ -1,0 +1,14 @@
+public function ff0():int
+{
+var l0:sint16 = 4;
+return ((!(l0 as int)) as int);
+}
+public function ff1(p0:int16, p1:sint16):int options(fastcall: true)
+{
+var l0:sint16 = 2;
+if (((p1 as int16) as int16) > (((!p0) as int16) as int16)) {
+for (var l5:int16 = 0; l5 < 6; l5++) {
+}
+}
+return (l0 as int);
+}

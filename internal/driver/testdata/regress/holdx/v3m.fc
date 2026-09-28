@@ -1,0 +1,31 @@
+#fc 3
+use stdio;
+var vb:[24]u8;
+var vbw:[200]u16 @(segment: "BSS_EX");
+function vsum(s:[]const u8):u16
+{
+	var n:u16 = 0;
+	return n;
+}
+{
+}
+public function v0(p0:u8, p1:u8):u16
+{
+	var acc:u16 = 0;
+	{
+		for (var x_1 in vb) {
+		}
+		for (var k_1 = 0; k_1 < 24; k_1++) {
+		}
+	}
+	{
+		var w_2:*u16 = &vbw[100];
+		var k_2:i8 = ((((p1 as u8) + 45) % 64) as i8) - 32;
+		if (w_2[k_2] != vbw[((100 as i16) + (k_2 as i16)) as u16] || *(w_2 - 1) != vbw[99]) {
+		}
+	}
+	switch ((p1 as u8)) {
+	case 0..10:
+	}
+	return acc as u16;
+}

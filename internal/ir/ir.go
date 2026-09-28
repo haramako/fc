@@ -108,6 +108,7 @@ type Op struct {
 	Sign  Sign
 	ArgY  bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
 	HoldY bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
+	HoldX bool            // stack 系の呼び出しの push_result と call の間の命令: X = FC_SP を保持中 (常駐は X を使わずメモリ側で。codegen.markHoldX)
 	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
 	Logs  []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
 

@@ -1,0 +1,96 @@
+use far1;
+use v3m;
+var g0:sint;
+var g1:sint16;
+var g2:sint16;
+var g3:int;
+var wb:[300]int options(segment: "BSS_EX");
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+var a3:[16]sint16;
+var ab:[16]int;
+struct S {
+	f0:int;
+	f1:sint;
+}
+var s0:S;
+var sa:[4]S;
+alias w:S = ab;
+function f0(ps:*S):int16 options(fastcall: true)
+{
+var la0:[16]sint16;
+var q0:*sint16 = &la0[2];
+var l3:int = 0;
+if ((((ps.f0 as sint) as sint) > (((*q0) as sint) as sint)) || (((ab[((g3 / 246) & 7)] + (ps.f1 as int)) % (((((s0.f1 as int) as int) != g3) as int) | 1)))) {
+L1: while ((((~(w.f1 as sint16)) as sint16) <= 23118) && l3 < 3) {
+}
+}
+return (ab[((a0[1] % 223) & 7)] as int16);
+}
+function f1():int16
+{
+var l0:int = 13;
+var la0:[16]sint;
+var q0:*sint = &la0[5];
+var ls:S = {2, (-124)};
+var l1:int = 0;
+L2: while (((((((*q0) as sint16) >> 4) - (far1.ff1(((*q0) as int16), (-21703)) as sint16)) as sint16) <= ((q0[((l0 + (g1 as int)) & 7)] as sint16) as sint16)) && l1 < 5) {
+}
+return a2[((((sa[((s0.f1 as int) & 3)].f0 as sint16) && (ls.f1 as sint16)) as int) & 7)];
+}
+function f2(p0:*sint16):sint options(fastcall: true)
+{
+var l0:int16 = 34571;
+var la0:[16]int16;
+if ((max((((sa[(((((la0[((sa[(((w.f1 as int) << ((g3 & 7) as int)) & 3)].f1 as int) & 7)] as sint) as sint) == g0) as int) & 3)].f0 as sint) / (g0 | 1)) as sint), ((-(l0 as sint)) as sint)) as sint) < ((g0 - (g3 as sint)) as sint)) {
+if (((((l0 % (l0 | 1)) || min(3, ((*p0) as sint16))) as sint16) as sint16) < (((v3m.v0(g3, ab[(g3 & 7)]) as sint16) - g1) as sint16)) {
+}
+}
+for (var l2:int = 8; l2; l2--) {
+for (var l5:int = 0; l5 < 2; l5++) {
+}
+}
+return (((((g1 as int) as int) >= ((g0 as int) as int)) as int16) as sint);
+}
+function t0(p0:int16):sint
+{
+var l0:int = 6;
+var q0:*sint16 = &a3[3];
+for (var l2:int = 2; l2; l2--) {
+if ((v3m.v0((l0 & l2), ((q0[7] as int) << ((l0 & 7) as int))) as sint16) < 0) {
+}
+}
+return ((((a0[((sa[((l0 * l0) & 3)].f1 as int) & 7)] as sint) << ((g3 & 7) as int)) && far1.ff0()) as sint);
+}
+function t1(p0:int16):sint
+{
+return (min(a1[7], g0) - ((((g0 as int16) as int16) >= ((a1[(g3 & 7)] as int16) as int16)) as sint));
+}
+function t2(p0:int16):sint
+{
+return ((a0[(110 & 7)] as sint) >> ((s0.f0 & 7) as int));
+}
+function t3(p0:int16):sint
+{
+for (var l1:int = 0; l1 < 4; l1++) {
+if (((g1 & g2) as int16)) {
+}
+}
+return (((g1 >> 4) && p0) as sint);
+}
+const fp0:[20]fn(int16):sint = [t0, t1, t2, t3, t0, t1, t2, t3, t0, t1, t2, t3, t0, t1, t2, t3, t0, t1, t2, t3];
+function main():void
+{
+var fv:fn(int16):sint = t3;
+var l0:int16 = 42638;
+var la0:[16]sint;
+var wp1:*int = &wb[0];
+var wn1:int16 = 0;
+for (var wi1:int16 = 0; wi1 < wn1; wi1++) {
+l0 ^= ((*wp1) as int16);
+}
+l0 <<= 0; l0 ^= 4;
+g1 = ((!max(((a3[((fp0[(((!(l0 as sint16)) as int) & 3)](l0) as int) & 7)] as int16) as int16), ((fv((la0[(((!s0.f1) as int) & 7)] as int16)) as int16) as int16))) as sint16);
+printf(g0, " ", g1, " ", g2, " ", g3, " ", a0[0], " ", a0[1], " ", a0[2], " ", a0[3], " ", a0[4], " ", a0[5], " ", a0[6], " ", a0[7], " ", a0[8], " ", a0[9], " ", a0[10], " ", a0[11], " ", a0[12], " ", a0[13], " ", a0[14], " ", a0[15], " ", a1[0], " ", a1[1], " ", a1[2], " ", a1[3], " ", a1[4], " ", a1[5], " ", a1[6], " ", a1[7], " ", a1[8], " ", a1[9], " ", a1[10], " ", a1[11], " ", a1[12], " ", a1[13], " ", a1[14], " ", a1[15], " ", a2[0], " ", a2[1], " ", a2[2], " ", a2[3], " ", a2[4], " ", a2[5], " ", a2[6], " ", a2[7], " ", a2[8], " ", a2[9], " ", a2[10], " ", a2[11], " ", a2[12], " ", a2[13], " ", a2[14], " ", a2[15], " ", a3[0], " ", a3[1], " ", a3[2], " ", a3[3], " ", a3[4], " ", a3[5], " ", a3[6], " ", a3[7], " ", a3[8], " ", a3[9], " ", a3[10], " ", a3[11], " ", a3[12], " ", a3[13], " ", a3[14], " ", a3[15], " ", ab[0], " ", ab[1], " ", ab[2], " ", ab[3], " ", ab[4], " ", ab[5], " ", ab[6], " ", ab[7], " ", ab[8], " ", ab[9], " ", ab[10], " ", ab[11], " ", ab[12], " ", ab[13], " ", ab[14], " ", ab[15], " ", s0.f0, " ", sa[0].f0, " ", sa[1].f0, " ", sa[2].f0, " ", sa[3].f0, " ", s0.f1, " ", sa[0].f1, " ", sa[1].f1, " ", sa[2].f1, " ", sa[3].f1, " ", "\n");
+}
