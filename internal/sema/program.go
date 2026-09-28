@@ -33,8 +33,6 @@ type Program struct {
 	Warnings []diag.Warning
 	// Errors は意味解析で見つけたエラー (出現順)。文ごとに回復して集める。MaxErrors で打ち切る
 	Errors diag.ErrorList
-	// CastKinds は v1 の `<T>x` の位置 → v2 で書くべき種類 (as / bitcast)。fcc migrate が使う
-	CastKinds map[syntax.Position]syntax.CastKind
 
 	declarations map[*ir.Module]*moduleDecls
 	typeDecls    map[*types.Type]*declaration
@@ -95,7 +93,6 @@ func NewProgram() *Program {
 		Types:          types.NewUniverse(),
 		Modules:        ir.NewModuleList(),
 		Sources:        map[string]*Source{},
-		CastKinds:      map[syntax.Position]syntax.CastKind{},
 		macros:         map[*ir.Value]MacroFn{},
 		constMacros:    map[*ir.Value]ConstMacroFn{},
 		buildStrings:   map[*ir.Value]string{},

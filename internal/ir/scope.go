@@ -29,13 +29,13 @@ type Scope struct {
 }
 
 // scopeAlias は選択的インポート 1 件。他モジュールの宣言 (Value) をこのスコープの名前に束縛する。
-// reexport なら外 (LookupPublic) からも見える (`public use a from mod;`)。
+// reexport なら外 (Lookup) からも見える (`public use a from mod;`)。
 type scopeAlias struct {
 	val      *Value
 	reexport bool
 }
 
-// scopeUse は glob 取り込み 1 件。reexport なら外 (LookupPublic) からもこの取り込みを辿れる
+// scopeUse は glob 取り込み 1 件。reexport なら外 (Lookup) からもこの取り込みを辿れる
 // (v1 は常に再輸出、v2 は `public use * from mod;` のときだけ。doc/v2_grammar.md §3.2)。
 type scopeUse struct {
 	mi       *ModuleInterface
@@ -134,7 +134,7 @@ func (s *Scope) Find(id string, withPrivate bool) *Value {
 		if !withPrivate && !u.reexport {
 			continue
 		}
-		if v := u.mi.LookupPublic(id); v != nil {
+		if v := u.mi.Lookup(id); v != nil {
 			if s.Owner != "" {
 				s.emitTrace(TraceEvent{Kind: TraceGlob, Scope: s.Owner, Via: u.mi.Id, Name: id, Value: v})
 			}

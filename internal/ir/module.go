@@ -166,8 +166,8 @@ func (m *Module) AddUse(mi *ModuleInterface) {
 // F-mod (分割コンパイル) ではこれをシリアライズしたものが `use` の入力になる。
 //
 // 可視性は宣言側モジュールの文法バージョンで決まる (doc/v2_grammar.md §3.2, §4.2):
-//   - `use * from mod;` (LookupPublic) はどちらのバージョンでも public だけを取り込む
-//   - `mod.name` のドット参照 (Lookup) は v1 モジュールでは private にも届き、v2 では public のみ (規則 S7)
+//   - `use * from mod;` と `mod.name` のドット参照 (Lookup) は public だけを見る (規則 S7。v1 のドット参照だけ
+//     private にも届いたが、v1 は削除した)
 type ModuleInterface struct {
 	Id    string
 	scope *Scope
@@ -180,11 +180,6 @@ func (m *Module) Interface() *ModuleInterface {
 
 // Lookup はドット参照 `mod.name` 用に公開宣言を探す (無ければ nil)。
 func (mi *ModuleInterface) Lookup(name string) *Value {
-	return mi.scope.Find(name, false)
-}
-
-// LookupPublic は `use * from` 用に公開宣言だけを探す (無ければ nil)。
-func (mi *ModuleInterface) LookupPublic(name string) *Value {
 	return mi.scope.Find(name, false)
 }
 

@@ -40,7 +40,7 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
 		// while (1) は無限ループ
 		return isTrueLiteral(s.Cond) && !hasBreakFor(s.Body, nil)
 	case *syntax.ForStmt:
-		return !s.IsV1() && (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
+		return (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
 	case *syntax.SwitchStmt:
 		return h.switchTerminates(s, nil)
 	case *syntax.LabeledStmt:
@@ -50,7 +50,7 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
 		case *syntax.WhileStmt:
 			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label)
 		case *syntax.ForStmt:
-			return !inner.IsV1() && (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
+			return (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
 		case *syntax.SwitchStmt:
 			return h.switchTerminates(inner, s.Label)
 		}

@@ -261,8 +261,6 @@ func mustString(c *cexpr) string {
 func describe(v ir.Operand) string {
 	if val := ir.UnderlyingValue(v); val != nil {
 		switch {
-		case val.Name != "" && val.Kind != ir.KindLiteral:
-			return "`" + val.Name + "`"
 		case val.Name != "":
 			return "`" + val.Name + "`"
 		case val.Kind == ir.KindLiteral && val.IsInt:
@@ -610,7 +608,8 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			case ".chr":
 				kind = "chr"
 			case ".rb":
-				kind = "macro"
+				// fc 1 の Ruby マクロ (削除済み)。案内だけ残す
+				panic(&diag.Error{Msg: fmt.Sprintf("include(%q): .rb macros are not supported (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
 			default:
 				panic(&diag.Error{Msg: fmt.Sprintf("unknown include extension %s", filename)})
 			}
@@ -624,8 +623,6 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 					h.module.AsmSymbols = append(h.module.AsmSymbols, reAsmSymbol.FindAllString(string(data), -1)...)
 				}
 			}
-		case "macro":
-			panic(&diag.Error{Msg: fmt.Sprintf("include(%q): .rb macros are not supported (printf / unittest_run_tests are built in; use `const T = textmap(\"...\")` for text tables)", filename)})
 		case "chr":
 			ref, _ := h.resolveFile(filename)
 			h.module.IncludeChrs = append(h.module.IncludeChrs, ref)
@@ -648,7 +645,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			// 選択的インポート (v2): 公開宣言を非修飾名で自スコープに束縛する。
 			// 束縛は宣言そのものの Value を共有する (別名ではなく同じ実体)。再輸出は public use のときだけ
 			for _, name := range s.Names {
-				v := m.LookupPublic(name.Name)
+				v := m.Lookup(name.Name)
 				if v == nil {
 					if m.LookupInternal(name.Name) != nil {
 						panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is private (declare it with `public` in module %s)", m.Id, name.Name, m.Id), Pos: syntax.At(h.module.Path, name.NamePos)})
@@ -768,21 +765,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileStatement(&syntax.LoopStmt{Body: &syntax.IfStmt{Cond: s.Cond, Then: s.Body, Else: &syntax.BreakStmt{}}})
 
 	case *syntax.ForStmt:
-		if s.IsV1() {
-			// v1: var = from; while (var < to) { body...; var = var + 1; }
-			// (continue がインクリメントを飛ばす v1 の癖もそのまま)
-			body := make([]syntax.Stmt, 0, len(s.Body.Stmts)+1)
-			body = append(body, s.Body.Stmts...)
-			body = append(body, &syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign,
-				Rhs: &syntax.BinaryExpr{X: s.Var, Op: syntax.Plus, Y: &syntax.IntLit{Value: 1, Text: "1"}}}})
-			h.compileStmts([]syntax.Stmt{
-				&syntax.ExprStmt{X: &syntax.AssignExpr{Lhs: s.Var, Op: syntax.Assign, Rhs: s.From}},
-				&syntax.WhileStmt{Cond: &syntax.BinaryExpr{X: s.Var, Op: syntax.Lt, Y: s.To}, Body: &syntax.Block{Stmts: body}},
-			})
-			break
-		}
-		// v2: { init; loop { if (cond) { body; step: step; } else break; } }
-		// v1 の for (while への脱糖) と同じ IR 形にして、移行しても生成コードが変わらないようにする。
+		// { init; loop { if (cond) { body; step: step; } else break; } } (while への脱糖と同じ IR の形)。
 		// continue は step に飛ぶ。step のラベルは continue がこの for を指すときだけ作る
 		// (ラベルを常に出すと asm に行が増える)。init の変数は for のスコープに閉じる
 		h.inScope(func() {
@@ -1385,7 +1368,6 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				h.checkCast(c.ck, x.val.Type, ty)
 			}
 			// 整数リテラルはサイズを持たないので、bitcast のサイズ検査はしない (`bitcast<*int>(0x2000)`, `bitcast<fn():int>(0)`)
-			h.recordCast(c, x.val.Type, ty)
 			if c.ck == syntax.CastAs {
 				h.checkCast(c.ck, x.val.Type, ty)
 			}
@@ -2020,7 +2002,6 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 	case cCast:
 		v := h.rval(e.args[0])
-		h.recordCast(e, ir.ValType(v), e.ty)
 		r = h.explicitCast(e.ck, v, e.ty)
 
 	case cStructLit:
@@ -2711,27 +2692,6 @@ func (h *Hlc) nullOf(t *types.Type) ir.Operand {
 		panic(&diag.Error{Msg: fmt.Sprintf("soa handle %s has no null (index 0 is a valid element)", t)})
 	}
 	panic(&diag.Error{Msg: fmt.Sprintf("null cannot be used as %s", t)})
-}
-
-// classifyCast は v1 の `<T>x` を v2 の `as` (数値変換) / `bitcast` (ビット読み替え) のどちらで書くべきかを返す
-// (fcc migrate 用)。同サイズの整数同士と、配列 → 同じ要素型のポインタは as。それ以外はビット読み替え。
-func classifyCast(from, to *types.Type) syntax.CastKind {
-	switch {
-	case from.Kind == types.Int && to.Kind == types.Int:
-		return syntax.CastAs
-	case from.Kind == types.Array && to.Kind == types.Pointer && from.Base == to.Base:
-		return syntax.CastAs
-	}
-	return syntax.CastBit
-}
-
-// recordCast はキャストの位置と種類を記録する (v1 のキャストを migrate が書き換えるため)。
-// 位置は型式の位置で引く (括弧付きの式では cexpr の pos が括弧の位置に上書きされるため)。
-func (h *Hlc) recordCast(c *cexpr, from, to *types.Type) {
-	if c.ck != syntax.CastLegacy || c.typ == nil {
-		return
-	}
-	h.prog.CastKinds[syntax.At(h.module.Path, c.typ.Pos())] = classifyCast(from, to)
 }
 
 // checkCast はキャストの種類ごとの規則を検査する (doc/v2_types_struct.md §3.5)。
