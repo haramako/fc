@@ -59,7 +59,7 @@ type BuildOptions struct {
 	LogEveryStatement bool
 	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
 	MisclassifyResident bool
-	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
+	SizeReport          bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
 	// Config は調査用の設定 (パスの入れ切り・トレース・検証。ir/config.go)。nil なら環境変数 (FC_DISABLE など) から作る
 	Config *ir.Config
 
@@ -105,9 +105,9 @@ type Compiler struct {
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
 	prog     *sema.Program
 	layout   *project.BankLayout // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
-	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
-	hashes   *hashMemo    // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
-	cfg      *ir.Config   // 調査用の設定 (BuildOptions.Config)
+	asmRuns  atomic.Int64        // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
+	hashes   *hashMemo           // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
+	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
 }
 
 func NewCompiler(fcHome string) *Compiler {
