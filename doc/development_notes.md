@@ -82,7 +82,8 @@ go test ./...                                    # 全部 (golden + examples + N
     `-randn 1000` で回す。直したバグは bugzoo に足す。新しい機能と既存の最適化の組み合わせのバグは足した直後に出やすい
     （2026-09-27 の struct の配列の最適化 5b89873 と v3 の生成器の形の組み合わせで、翌日に 3cba778 が出た）
   - 足した判定（2026-09-28）: `TestRandomMetamorphic`（fcc の実行ファイルで、普通 / インライン展開を全部切る / 最適化の段を
-    1〜3 個切る、の出力を比べる。切る段は BuildOptions.Config (ir.Config) でビルドごとに渡す。既定 4 本、`-metan`）、
+    1〜3 個切る、の出力を比べる。切る段は BuildOptions.Config (ir.Config) でビルドごとに渡す。既定 4 本、`-metan`。
+    段を切った版がサイクルの上限に掛かったら上限を 50 倍にして走らせ直す: ssa を切ると 40 倍遅くなるプログラムがある）、
     `TestRandomMutate`（生成した正しいプログラムを行・名前・型・数・キャストの単位で壊して Check に通し、panic だけを失敗にする。
     既定 10 本 × 20 通り、`-mutn`）、`TestTypeRuleMatrix`（型の種類 × 使う場所の「通る / エラー」の表を
     testdata/golden/typerules.txt と比べる。検査が緩む・厳しくなる変化が差分で見える）、生成器の `regpress`（常駐レジスタに
@@ -215,9 +216,10 @@ go test ./...                                    # 全部 (golden + examples + N
   関数ポインタ表の関数の名前 `t0`〜 とぶつからないよう、T の大域変数は `u0` / `ua`
 - 広げた生成器の 10 万本（種 3200000〜）の途中で 1 件: splitWords の後の伝播（`propagateBytes`）が、sint8 の一時変数
   （`l0 * 0`）を uint8 のリテラル 0 に置き換えて、`(7 << l4) >= (l0 * 0)`（1 バイトの符号付きの比較。224 は -32）を
-  符号なしの比較に変えていた（`TestPropagateBytesKeepsType`）。**比較・シフト・uminus の意味は入力の型で決まるので、
-  入力を置き換えるときは元の型を保つ**（リテラルは元の型で作り直し、型の違う一時変数は cast で包む。SSA の定数の
-  置き換えとコピーの伝播は元から型を保っている）。最小化は初期化文（main の先頭の大域変数・配列・struct・soa の代入と
+  符号なしの比較に変えていた（`TestPropagateBytesKeepsType`）。**入力を置き換えるときは元の型を保つ**（リテラルは元の型で
+  作り直し、型の違う一時変数は cast で包む。SSA の定数の置き換えとコピーの伝播は元から型を保っている）。2026-09-28 から
+  比較の幅と符号・除算と右シフトの符号は命令が持つ（`ir/sign.go`）ので、この類の食い違いは起きない。狭い入力のゼロ拡張と
+  uminus の読む幅は今も入力の大きさで決まる。最小化は初期化文（main の先頭の大域変数・配列・struct・soa の代入と
   ローカル配列の要素）を全部残すように（`rpStmt.keep`。以前は `laN[k] = …` だけで、大域配列の初期化が消えると
   未初期化の読み出しで emu とインタプリタの値が違った）
 - 続けて種 3400000〜3549999 の 15 万本（c762cb9、インタプリタとバンク切替込み）は失敗なし。2 回目に広げた生成器で、
@@ -508,12 +510,21 @@ go test ./...                                    # 全部 (golden + examples + N
   `genLoadMem` / `genStoreMem` は Base の種類（配列 / ポインタ）と添字の有無でアドレッシングを選ぶ。ポインタ経由の
   添字とずれは Y に足し込む（`(p),y` に変位は無い）ので、**添字 * scale + disp + 幅 ≤ 256 は作る側が保証する**
   （グローバルの配列は全体が 256 バイト以内、ポインタは配列の長さが型で分かる struct の配列フィールドだけ: fuseArrayField）。
+- **幅と符号**（`ir/sign.go`）: 意味が入力の幅・符号で変わる命令は、それを命令に持つ。eq / lt の `Op.Width`（比較の幅）と、
+  lt / div / mod / shift_right の `Op.Sign`（`ir.Unsigned` / `ir.Signed`。ほかの命令は `SignNone`）。sema は `Hlc.emit` で
+  `ir.InferWidthSign` が入力の型から決め（比較は広い方の幅で、どちらかが符号付きなら符号付き。除算は Dst の符号。右シフトは
+  入力の符号）、以後の段は `op.Width` / `op.IsSigned()` だけを見る。入力を差し替えても（cast を落とす、型の違うリテラルや
+  常駐の値にする、バイトに分ける）意味は変わらない。opt が命令を作るときは元の命令から写すか `InferWidthSign` で決め、
+  決め忘れ（比較の Width が 0、Sign が SignNone）は Verify が落とす。暗黙の変換（狭い入力のゼロ拡張、広い入力の下位の
+  切り詰め。リテラルは値のバイト）は命令にしない（規則は codegen の `byte`・interp の `byteOf`・opt の `castBits` の 1 つ。
+  符号拡張だけが `sign_extension`）。interp は差分テストの独立した判定役なので、sema の直後の IR を型から自分で解釈する。
 - **常駐の印**は `Op.Res[ir.RegA / RegY / RegX]`（`Residency{V, In, Out}`）。codegen の状態も `res[reg]` / `resMem[reg]`。
   退避・復帰・入口 / 出口の写しはレジスタのループで書く（A / Y / X で 3 回書かない）。
 - **opt の段**は `opt.Pass{Name, Requires, Grows, Run, Then, Repeat}` で宣言し、`Pass.Apply` が FC_DISABLE の判定・compact・
   @log の付け替え・トレース・IR の検証を一括で行う。段を足すときは変換だけを書き、`Passes()` に並べる（順序の依存は
   そこのコメントに）。fuzz の切り分け `rpLocate` も `Apply` で 1 段ずつ当てる。
-- **IR の検証器** `ir.Verify`（命令の種類とオペランドの数、Dst の有無、ラベルの一意性と飛び先、push の Type）。FC_VERIFY_IR=1
+- **IR の検証器** `ir.Verify`（命令の種類とオペランドの数、Dst の有無、ラベルの一意性と飛び先、push の Type、メモリの番地の形、
+  比較の幅と符号の決め忘れ）。FC_VERIFY_IR=1
   で opt の各段・常駐・割付の後に走り、テストと fuzz では常に有効（`verify_test.go` の init）。「一時変数の定義は 1 つ」は
   前提にしていない（`||` / `&&` の一時変数と常駐の一時変数が複数回書かれる）。
 - **ループの解析**は `ir/loops.go`（`CFG.DomTree()`、`CFG.Loops()` は Parent / Depth 付きで CFG にキャッシュ、`Preheader`、

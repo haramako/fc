@@ -341,12 +341,13 @@ func (s *ssaForm) counterStep(lp *ir.Loop, k *ir.Value, dom *ir.DomTree) (int, b
 func (s *ssaForm) headerExits(cmp, br *ir.Op, k *ir.Value, kv int) (bool, bool) {
 	cond := kv != 0
 	if cmp != nil {
+		// 比較の幅と符号は命令の (ir/sign.go): k は自分の大きさからゼロ拡張、リテラルは値のバイト
 		vals := [2]int{}
 		for i, o := range cmp.Src {
 			if o == ir.Operand(k) {
-				vals[i] = kv
+				vals[i] = normBits(bitsOf(kv, k.Type.Size), cmp.Width, cmp.IsSigned())
 			} else if n, ok := ir.ValIntLiteral(o); ok {
-				vals[i] = normInt(n, k.Type)
+				vals[i] = normBits(n, cmp.Width, cmp.IsSigned())
 			} else {
 				return false, false
 			}

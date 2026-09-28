@@ -227,7 +227,7 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	// 入口 (jump B の代わり): 元の検査、下位を k へ
 	out = append(out,
 		&ir.Op{Code: ir.OpLoad, Dst: k, Src: []ir.Operand{lo}, Pos: pos, Logs: ops[a-1].Logs},
-		&ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{p, lim}, Pos: pos},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{p, lim}, Pos: pos}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{g}, Label: xLabel, Pos: pos},
 		&ir.Op{Code: ir.OpLoad, Dst: lo, Src: []ir.Operand{ir.NewIntLiteral("", u8, 0)}, Pos: pos},
 	)
@@ -259,9 +259,9 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	L := ops[a].Label
 	out = append(out,
 		ops[b], // B
-		&ir.Op{Code: ir.OpEq, Dst: t1, Src: []ir.Operand{k, limByte(0)}, Pos: pos, Logs: condLogs},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpEq, Dst: t1, Src: []ir.Operand{k, limByte(0)}, Pos: pos, Logs: condLogs}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t1}, Label: L, Pos: pos},
-		&ir.Op{Code: ir.OpEq, Dst: t2, Src: []ir.Operand{hi, limByte(1)}, Pos: pos},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpEq, Dst: t2, Src: []ir.Operand{hi, limByte(1)}, Pos: pos}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t2}, Label: L, Pos: pos},
 		&ir.Op{Code: ir.OpLabel, Label: xLabel, Pos: pos},
 		&ir.Op{Code: ir.OpLoad, Dst: lo, Src: []ir.Operand{k}, Pos: pos},

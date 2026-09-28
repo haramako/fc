@@ -102,6 +102,17 @@ func verifyOp(op *Op, labels map[string]int) error {
 			return fmt.Errorf("displacement %d + width %d through a pointer does not fit in Y", m.Disp, m.Width)
 		}
 	}
+	// 幅と符号 (sign.go)
+	switch {
+	case op.Code.IsCompare() && op.Width <= 0:
+		return fmt.Errorf("comparison without a width")
+	case op.Code.HasSign() && op.Sign == SignNone:
+		return fmt.Errorf("%s without a sign", op.Code)
+	case !op.Code.HasSign() && op.Sign != SignNone:
+		return fmt.Errorf("sign on %s", op.Code)
+	case op.Width != 0 && !op.Code.IsCompare() && op.Code != OpStoreMem:
+		return fmt.Errorf("width on %s", op.Code)
+	}
 	if op.Code.IsBranch() {
 		if _, ok := labels[op.Label]; !ok {
 			return fmt.Errorf("label %s is not in the function", op.Label)

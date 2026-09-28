@@ -60,10 +60,6 @@ func carryBranch(lmd *ir.Lambda) {
 		default:
 			continue
 		}
-		if shiftCode == ir.OpShiftRight && x.Type.Signed && x.Type.Size == 1 {
-			// 符号付き 1 バイトの右シフトは lda; cmp #128; ror x で、C は cmp の結果になる → 対象外
-			continue
-		}
 		// 分岐の両側の先頭の命令
 		bi := cfg.BlockOf(cond.Label)
 		var fall *ir.Block
@@ -90,12 +86,16 @@ func carryBranch(lmd *ir.Lambda) {
 		}
 		ti, oki := isShiftOne(lmd, ud, ki, x, shiftCode)
 		tf, okf := isShiftOne(lmd, ud, kf, x, shiftCode)
-		if !oki || !okf {
+		if !oki || !okf || si.Sign != sf.Sign {
+			continue // 両方の枝が同じシフト (右シフトは符号も同じ) のときだけ 1 つにまとめられる
+		}
+		if si.IsSigned() && x.Type.Size == 1 {
+			// 符号付き 1 バイトの右シフトは lda; cmp #128; ror x で、C は cmp の結果になる → 対象外
 			continue
 		}
 		// 書き換え: and → シフト (x 自身に)、if → C の分岐、両方の枝の先頭のシフトを消す。
 		// 枝のシフトが一時変数 t に入れる形 (`shl t = x; xor x = t, k`) なら、t の使用を x に置き換える
-		ir.ReplaceOp(ops, i, &ir.Op{Code: shiftCode, Dst: x, Src: []ir.Operand{x, si.Src[1]}, Pos: si.Pos})
+		ir.ReplaceOp(ops, i, &ir.Op{Code: shiftCode, Dst: x, Src: []ir.Operand{x, si.Src[1]}, Sign: si.Sign, Pos: si.Pos})
 		if cond.Code == ir.OpIf {
 			cond.Code = ir.OpIfNotCarry // ビットが 0 (C クリア) なら L へ
 		} else {

@@ -30,7 +30,7 @@ func TestLoopsAndLiveness(t *testing.T) {
 		{Code: OpAdd, Dst: s, Src: []Operand{s, i}},
 		{Code: OpAdd, Dst: i, Src: []Operand{i, NewIntLiteral("", u8, 1)}},
 		{Code: OpLabel, Label: "@begin"},
-		{Code: OpLt, Dst: c, Src: []Operand{i, NewIntLiteral("", u8, 10)}},
+		InferWidthSign(&Op{Code: OpLt, Dst: c, Src: []Operand{i, NewIntLiteral("", u8, 10)}}),
 		{Code: OpIfTrue, Src: []Operand{c}, Label: "@body"},
 		{Code: OpReturn, Src: []Operand{s}},
 	}}

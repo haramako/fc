@@ -194,7 +194,9 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 		case ir.OpShiftRight:
 			n, _ := ir.ValIntLiteral(op.Src[1])
 			if n == 1 {
-				out = append(out, mk(ir.OpShiftRight, byteOf(op.Dst, 1), byteOf(op.Src[0], 1), op.Src[1]), mk(ir.OpRorC, byteOf(op.Dst, 0), byteOf(op.Src[0], 0)))
+				hi := mk(ir.OpShiftRight, byteOf(op.Dst, 1), byteOf(op.Src[0], 1), op.Src[1])
+				hi.Sign = ir.Unsigned // 算術右シフトは分けない (decomposable)
+				out = append(out, hi, mk(ir.OpRorC, byteOf(op.Dst, 0), byteOf(op.Src[0], 0)))
 			} else { // 8: lo = src の上位, hi = 0
 				out = append(out, mk(ir.OpLoad, byteOf(op.Dst, 0), byteOf(op.Src[0], 1)), mk(ir.OpLoad, byteOf(op.Dst, 1), ir.NewIntLiteral("", u8, 0)))
 			}
@@ -327,8 +329,8 @@ func decomposable(op *ir.Op, cands map[*ir.Value]bool) bool {
 		if !lit || !isWord(op.Dst, cands) {
 			return false
 		}
-		if op.Code == ir.OpShiftRight && ir.ValType(op.Src[0]).Signed {
-			return false
+		if op.IsSigned() {
+			return false // 算術右シフトはバイトに分けない (上位の符号を回し込む)
 		}
 		if n == 1 {
 			return isWord(op.Src[0], cands) // ローテートは C を通すので v = v << 1 の形だけ

@@ -359,8 +359,17 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 - [x] **メモリアクセスの集約** ([v4_memops.md](v4_memops.md)) ✅ 2026-09-28: 7 つのオペコード + `Scaled` + 配列への cast を
       `load_mem` / `store_mem` と `Base + Index * Scale + Disp`（store は `Width`）に。生成コードは変えていない（ROM はバイト一致）。
       定数の添字を Disp に畳んで絶対番地 (`lda a+3`) で読む最適化 (`constidx`) と、struct の配列フィールドをポインタ経由で
-      引く形のポインタ + 添字 + disp (`fieldptr`) も入れた。残り: 演算命令に幅と符号を明示する（zext / sext / trunc を命令に。「k バイト目」「比較は広い方の幅」「除算は Dst の符号」の規則は
-      sema の畳み込み・opt/ssa・codegen に手書きのまま。interp は差分テストの独立した判定役なので共有しない）
+      引く形のポインタ + 添字 + disp (`fieldptr`) も入れた。
+- [x] **演算命令の幅と符号** ✅ 2026-09-28 (`ir/sign.go`、development_notes.md「コードの構造」): eq / lt は比較の幅
+      `Op.Width`、lt / div / mod / shift_right は `Op.Sign` を持ち、sema が作るときに型から決める (`InferWidthSign`)。
+      「比較は広い方の幅、どちらかが符号付きなら符号付き」「除算は Dst の符号」「右シフトは入力の符号」を opt/ssa・unroll・
+      codegen・regalloc・carry・split がそれぞれ型から導いていたのを、命令の値を読む形に (入力を差し替えても意味が
+      変わらない。常駐の差し替えが cast を落として比較が符号付きになった、propagateBytes が型の違うリテラルにした、の 2 件の
+      バグの類)。決め忘れは Verify が落とす (Sign は未設定 / 符号なし / 符号付きの 3 値)。生成コードは変わらない (移行中に
+      「命令の値 = 型から導いた値」を Verify で全段・fuzz で確かめた)。**zext / sext / trunc の命令化はしない**: 暗黙の変換
+      (ゼロ拡張と切り詰め、リテラルは値のバイト) は規則が 1 つで各所の実装も 1 つずつ、符号拡張は元から命令
+      (`sign_extension`)。命令にすると IR が膨らみ、codegen が畳み直すことになる。sema の定数の畳み込み (式の型の規則) と
+      interp (差分テストの独立した判定役) は型から自分で導く
 - [ ] **sema の式に型付きの中間表現を**: `lval`（470 行）が型検査・暗黙変換・診断・IR 出力を同時にやり、式の型は IR を出す
       まで分からない（`f() == .A` の二重評価はこの構造の結果）。「検査して型・定数値・左辺値性を持つ木を作る段」と「IR を
       出す段」に分ける。あわせて sema が自分の Symbol / Scope を持ち、`ir.Scope` と `ir.Lambda.Body`（AST）を ir から出す。

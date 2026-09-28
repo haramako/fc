@@ -488,7 +488,7 @@ func (l *funcGen) genRotateCarry() {
 // genShift は ShiftLeft / ShiftRight のコード生成。
 func (l *funcGen) genShift() {
 	r, op, lmd := l.r, l.op, l.lmd
-	signed := ir.ValType(op.In(0)).Signed
+	signed := op.IsSigned() // 算術右シフト (ir/sign.go。左シフトでは false)
 	rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
 	if n, ok := ir.ValIntLiteral(op.In(1)); ok {
 		// 定数の場合
@@ -657,7 +657,7 @@ func (l *funcGen) genEq() {
 	}
 	labels := l.newLabels(2)
 	falseLabel, endLabel := labels[0], labels[1]
-	size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
+	size := op.Width // 比較の幅 (ir/sign.go。狭い入力の上位は byte が #0 と読む)
 	for i := 0; i < size; i++ {
 		r.push(l.loadA(op.In(0), i))
 		r.push(fmt.Sprintf("cmp %s", l.byte(op.In(1), i)))
@@ -703,8 +703,7 @@ func (l *funcGen) genLt() {
 	}
 	labels := l.newLabels(3)
 	trueLabel, endLabel, skipLabel := labels[0], labels[1], labels[2]
-	size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
-	signed := ir.ValType(op.In(0)).Signed || ir.ValType(op.In(1)).Signed
+	size, signed := op.Width, op.IsSigned() // 比較の幅と符号 (ir/sign.go)
 	if lmd.Cfg().Trace("signed") != "" && signed {
 		// 調査用: 符号付き比較の場所を列挙する
 		lit0, ok0 := ir.ValIntLiteral(op.In(0))

@@ -479,7 +479,7 @@ func allocateCond(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 				v.Location = ir.LocCond
 				v.CondPositive = true
 				// codegen の OpLt: 符号なしは C クリア ⇔ 真、符号付きは (V 補正後の) N セット ⇔ 真。サイズによらない
-				if ir.ValType(op.Src[0]).Signed || ir.ValType(op.Src[1]).Signed {
+				if op.IsSigned() {
 					v.CondReg = ir.CondNegative
 				} else {
 					v.CondReg = ir.CondCarry

@@ -93,7 +93,7 @@ func (s *ssaForm) eliminateOneInduction() bool {
 			continue
 		}
 		k, ok := cmp.Src[kIdx].(*ir.Value)
-		if !ok || !s.vars[k] || k.Type.Kind != types.Int || k.Type.Signed {
+		if !ok || !s.vars[k] || k.Type.Kind != types.Int || k.Type.Signed || cmp.IsSigned() {
 			ivTrace(s.lmd, 6)
 			continue
 		}
@@ -155,7 +155,7 @@ func (s *ssaForm) eliminateOneInduction() bool {
 		if !k0lit || (!lit && k0 != 0) {
 			g := ir.NewLocal("$guard", t.Type, ir.LTTemp)
 			s.lmd.Vars = append(s.lmd.Vars, g)
-			pro = append(pro, &ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{cmp.Src[0], cmp.Src[1]}, Pos: cmp.Pos},
+			pro = append(pro, &ir.Op{Code: ir.OpLt, Dst: g, Src: []ir.Operand{cmp.Src[0], cmp.Src[1]}, Width: cmp.Width, Sign: cmp.Sign, Pos: cmp.Pos},
 				&ir.Op{Code: ir.OpIf, Src: []ir.Operand{g}, Label: br.Label, Pos: br.Pos})
 		}
 		if !lit && k0lit && k0 == 0 {
@@ -165,7 +165,7 @@ func (s *ssaForm) eliminateOneInduction() bool {
 				&ir.Op{Code: ir.OpSub, Dst: diff, Src: []ir.Operand{limOperand(cmp.Src[1-kIdx], lit, lim, k.Type), k}, Pos: cmp.Pos},
 				&ir.Op{Code: ir.OpAdd, Dst: limV, Src: []ir.Operand{q.v, diff}, Pos: cmp.Pos})
 		}
-		newCmp := &ir.Op{Code: ir.OpLt, Dst: t, Src: []ir.Operand{q.v, limV}, Pos: cmp.Pos}
+		newCmp := ir.InferWidthSign(&ir.Op{Code: ir.OpLt, Dst: t, Src: []ir.Operand{q.v, limV}, Pos: cmp.Pos}) // ポインタの比較 (2 バイト、符号なし)
 		if kIdx == 1 {
 			newCmp.Src = []ir.Operand{limV, q.v}
 		}
@@ -352,7 +352,7 @@ func (s *ssaForm) maxOfVal(val *ssaVal, at *ir.Block, dom *ir.DomTree, depth int
 			if br := s.cfg.Last(d); br != nil && (br.Code == ir.OpIf || br.Code == ir.OpIfTrue) && len(ops) >= 2 {
 				ci := ops[len(ops)-2]
 				cmp := s.lmd.Ops[ci]
-				if cmp.Code == ir.OpLt && cmp.Dst == br.Src[0] && len(s.useAt[ci]) == 2 && s.useAt[ci][0] != nil && resolve(s.useAt[ci][0]) == val {
+				if cmp.Code == ir.OpLt && !cmp.IsSigned() && cmp.Dst == br.Src[0] && len(s.useAt[ci]) == 2 && s.useAt[ci][0] != nil && resolve(s.useAt[ci][0]) == val {
 					if lim, lit := ir.ValIntLiteral(cmp.Src[1]); lit && lim > 0 {
 						var trueSide *ir.Block
 						if br.Code == ir.OpIf {

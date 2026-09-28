@@ -487,7 +487,7 @@ func (s *ssaForm) evalConst(val *ssaVal) (int, bool) {
 	case ir.OpLoad:
 		return bitsOf(a, size), true
 	case ir.OpSignExtension:
-		return bitsOf(normInt(a, t0), size), true
+		return bitsOf(normBits(a, 1, true), size), true // 下位 1 バイトの符号拡張 (codegen・interp と同じく入力の型を見ない)
 	case ir.OpNot:
 		return bitsOf(b2i(bitsOf(a, t0.Size) == 0), size), true
 	case ir.OpBitNot:
@@ -514,7 +514,7 @@ func (s *ssaForm) evalConst(val *ssaVal) (int, bool) {
 	case ir.OpMul:
 		return bitsOf(a*b, size), true
 	case ir.OpDiv, ir.OpMod:
-		a, b = normInt(a, dt), normInt(b, dt)
+		a, b = normBits(a, dt.Size, op.IsSigned()), normBits(b, dt.Size, op.IsSigned()) // Dst の幅で、命令の符号 (ir/sign.go)
 		if b == 0 {
 			return 0, false
 		}
@@ -523,7 +523,7 @@ func (s *ssaForm) evalConst(val *ssaVal) (int, bool) {
 		}
 		return bitsOf(ir.FloorMod(a, b), size), true
 	case ir.OpShiftLeft, ir.OpShiftRight:
-		a, b = normBits(a, dt.Size, t0.Signed), normInt(b, t1)
+		a, b = normBits(a, dt.Size, op.IsSigned()), normInt(b, t1) // 右シフトの符号は命令の (左シフトは下位が同じなので問わない)
 		if b < 0 || b > 64 {
 			return 0, false
 		}
@@ -532,7 +532,7 @@ func (s *ssaForm) evalConst(val *ssaVal) (int, bool) {
 		}
 		return bitsOf(ir.Shr(a, b), size), true
 	case ir.OpEq, ir.OpLt:
-		w, signed := max(t0.Size, t1.Size), t0.Signed || t1.Signed
+		w, signed := op.Width, op.IsSigned() // 比較の幅と符号は命令の (ir/sign.go)
 		a, b = normBits(a, w, signed), normBits(b, w, signed)
 		if op.Code == ir.OpEq {
 			return bitsOf(b2i(a == b), size), true
@@ -746,6 +746,9 @@ func (s *ssaForm) simplify() bool {
 		if def == nil || len(def.Src) != 2 || ir.ValType(def.Dst) != ir.ValType(op.Src[0]) || ir.ValType(def.Dst).Signed {
 			continue // def が nil: rewrite が消した `load x = x` (fuzz で発覚)
 		}
+		if op.IsSigned() || def.IsSigned() {
+			continue // 符号付きの除算・算術シフトは畳まない (以下は符号なしの規則)
+		}
 		m2, ok := ir.ValIntLiteral(def.Src[1])
 		if !ok {
 			continue
@@ -769,7 +772,11 @@ func (s *ssaForm) simplify() bool {
 		default:
 			continue
 		}
-		ir.ReplaceOp(s.lmd.Ops, i, &ir.Op{Code: code, Dst: op.Dst, Src: []ir.Operand{y, ir.NewIntLiteral("", ir.ValType(op.Src[1]), k)}, Pos: op.Pos})
+		nop := &ir.Op{Code: code, Dst: op.Dst, Src: []ir.Operand{y, ir.NewIntLiteral("", ir.ValType(op.Src[1]), k)}, Pos: op.Pos}
+		if code.HasSign() {
+			nop.Sign = ir.Unsigned // 符号なしの連鎖だけを畳む
+		}
+		ir.ReplaceOp(s.lmd.Ops, i, nop)
 		changed = true
 	}
 	return changed

@@ -93,7 +93,7 @@ func isMemShift(op *ir.Op) bool {
 	if d == nil || d != s || ir.ValOffset(op.Dst) != ir.ValOffset(op.Src[0]) || !ir.PlainOperand(op.Dst) || !ir.PlainOperand(op.Src[0]) {
 		return false
 	}
-	if op.Code == ir.OpShiftRight && ir.ValType(op.Src[0]).Signed {
+	if op.Code == ir.OpShiftRight && op.IsSigned() {
 		return false
 	}
 	if size == 2 && n >= 8 {
@@ -239,7 +239,7 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 		}
 		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 {
 			// 符号付きの比較は sec; sbc; bvc; eor で A を壊す (cmp と違って) ので、v がその後も要るなら A のままではできない
-			signed := op.Code == ir.OpLt && (ir.ValType(op.Src[0]).Signed || ir.ValType(op.Src[1]).Signed)
+			signed := op.Code == ir.OpLt && op.IsSigned()
 			if !signed || !liveOut {
 				return true, 3
 			}
@@ -318,7 +318,7 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 		}
 	case ir.OpEq, ir.OpLt:
 		if isV(op.Src[0], v) && condPredicted(lmd, i) && cmpOperand(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
-			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed)) {
+			(op.Code == ir.OpEq || !op.IsSigned()) {
 			return true, 3 // lda v; cmp k → cpy k
 		}
 		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && cmpOperand(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
@@ -358,7 +358,7 @@ func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 		}
 	case ir.OpEq, ir.OpLt:
 		if isV(op.Src[0], v) && condPredicted(lmd, i) && cmpOperand(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
-			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed)) {
+			(op.Code == ir.OpEq || !op.IsSigned()) {
 			return true, 3 // cpx k
 		}
 		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && cmpOperand(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
@@ -449,7 +449,7 @@ func yVariant(lmd *ir.Lambda, i int) bool {
 	case ir.OpEq, ir.OpLt:
 		return condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && cmpOperand(op.Src[1]) &&
 			ir.ValType(op.Src[0]).Size == 1 && ir.ValType(op.Src[1]).Size == 1 &&
-			(op.Code == ir.OpEq || (!ir.ValType(op.Src[0]).Signed && !ir.ValType(op.Src[1]).Signed))
+			(op.Code == ir.OpEq || !op.IsSigned())
 	}
 	return false
 }

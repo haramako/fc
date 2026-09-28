@@ -93,20 +93,23 @@ func (*PointeredArray) operandNode() {}
 // Op は IR の 1 命令。使うフィールドは OpCode ごとに決まっている (OpCode 定義のコメント参照)。
 type Op struct {
 	Code   OpCode
-	Dst    Operand         // 結果の格納先 (無い命令、または削除された戻り値では nil)
-	Src    []Operand       // 入力
-	Label  string          // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
-	Labels []string        // OpSwitch の飛び先 (添字順)
-	Type   *types.Type     // OpPushResult / OpPushArg / OpPushFastcall* の型
-	Text   string          // OpAsm のアセンブラ行
-	Far    bool            // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
+	Dst    Operand     // 結果の格納先 (無い命令、または削除された戻り値では nil)
+	Src    []Operand   // 入力
+	Label  string      // OpLabel / OpIf / OpIfTrue / OpJump の飛び先
+	Labels []string    // OpSwitch の飛び先 (添字順)
+	Type   *types.Type // OpPushResult / OpPushArg / OpPushFastcall* の型
+	Text   string      // OpAsm のアセンブラ行
+	Far    bool        // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
 	// OpLoadMem / OpStoreMem の番地 (mem.go): Scale は添字 1 につき進むバイト数 (添字が無ければ 0)、Disp は定数のずれ (バイト)、
-	// Width は store の書く幅 (load は Dst の型の大きさ)
+	// Width は store の書く幅 (load は Dst の型の大きさ)。eq / lt では Width は比較の幅 (sign.go)
 	Scale, Disp, Width int
-	ArgY   bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
-	HoldY  bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
-	Pos    syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
-	Logs   []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
+	// Sign は lt / div / mod / shift_right の符号 (符号付きの比較・床除算・算術シフト。sign.go)。作るときに決め (sema は
+	// InferWidthSign で入力の型から)、以後は入力を差し替えても変わらない。ほかの命令は SignNone
+	Sign  Sign
+	ArgY  bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
+	HoldY bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
+	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
+	Logs  []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
 
 	// ループ内の常駐 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md): レジスタ (RegA / RegY / RegX) ごとに、
 	// この命令でそのレジスタに置いたままにしている変数と、入口 / 出口で生きているか (regs.go)
@@ -168,6 +171,15 @@ func (op *Op) positional() []any {
 		r = append(r, op.Dst)
 		for _, s := range op.Src {
 			r = append(r, s)
+		}
+		if op.Code.IsCompare() {
+			r = append(r, fmt.Sprintf("w=%d", op.Width))
+		}
+		switch {
+		case op.Sign == Signed:
+			r = append(r, "signed")
+		case op.Code.HasSign() && op.Sign == SignNone:
+			r = append(r, "sign=?") // 決めていない (Verify が落とす)
 		}
 		if op.Far {
 			r = append(r, "far")
@@ -255,11 +267,11 @@ func (c CondReg) String() string {
 type DefKind uint8
 
 const (
-	DefEqu   DefKind = iota + 1 // シンボル = 値
-	DefBss                      // 未初期化領域
-	DefBlock                    // 定数データブロック
-	DefCode                     // 関数
-	DefExtern                   // asm 側の定義の参照 (値なしの const の options(symbol:)。codegen は `.global` を出すだけ)
+	DefEqu    DefKind = iota + 1 // シンボル = 値
+	DefBss                       // 未初期化領域
+	DefBlock                     // 定数データブロック
+	DefCode                      // 関数
+	DefExtern                    // asm 側の定義の参照 (値なしの const の options(symbol:)。codegen は `.global` を出すだけ)
 )
 
 var defKindNames = [...]string{DefEqu: "equ", DefBss: "bss", DefBlock: "block", DefCode: "code", DefExtern: "extern"}

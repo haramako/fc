@@ -7,10 +7,10 @@ package sema
 // プログラム横断の状態と 2 相コンパイルの駆動は program.go。
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"regexp"
-	"bytes"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -301,6 +301,7 @@ func (h *Hlc) warn(format string, args ...any) {
 
 func (h *Hlc) emit(op *ir.Op) {
 	h.requireFunction()
+	ir.InferWidthSign(op) // 比較の幅と符号・除算とシフトの符号は、ここで入力の型から決めて命令に持たせる (ir/sign.go)
 	op.Pos = h.curPos
 	if len(h.pendingLogs) > 0 {
 		op.Logs = append(op.Logs, h.pendingLogs...)

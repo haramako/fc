@@ -389,7 +389,7 @@ func TestSimplifyJumps(t *testing.T) {
 	// ループの回転: hlc の while の形
 	lmd = lambda(
 		&ir.Op{Code: ir.OpLabel, Label: "@begin_1"},
-		&ir.Op{Code: ir.OpLt, Dst: c, Src: []ir.Operand{x, lit(10, u8())}},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpLt, Dst: c, Src: []ir.Operand{x, lit(10, u8())}}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{c}, Label: "@end_2"},
 		&ir.Op{Code: ir.OpAdd, Dst: x, Src: []ir.Operand{x, lit(1, u8())}},
 		&ir.Op{Code: ir.OpJump, Label: "@begin_1"},
@@ -440,10 +440,10 @@ func TestCarryBranch(t *testing.T) {
 	lmd = lambda(
 		&ir.Op{Code: ir.OpAnd, Dst: tv16, Src: []ir.Operand{x, lit(1, u16())}},
 		&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{tv16}, Label: "odd"},
-		&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}}),
 		&ir.Op{Code: ir.OpJump, Label: "end"},
 		&ir.Op{Code: ir.OpLabel, Label: "odd"},
-		&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpShiftRight, Dst: x, Src: []ir.Operand{x, one}}),
 		&ir.Op{Code: ir.OpXor, Dst: x, Src: []ir.Operand{x, lit(0x1021, u16())}},
 		&ir.Op{Code: ir.OpLabel, Label: "end"},
 		&ir.Op{Code: ir.OpReturn},
