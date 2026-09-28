@@ -11,7 +11,7 @@ package ir
 // FC_DISABLE=名前,名前,... で切れる名前: ssa mul indexoff induction unroll devirt autoinline sink fuse fieldindex coalesce
 // chain narrow scale commute carry split rotate dup ywalk inline resident func-resident step shift8 fuse-index fnptr-reg
 // switch peephole (doc/development_notes.md (7): 退行やバグは切って比べる)。FC_NO_RESIDENT=1 は resident と同じ。
-// FC_TRACE_<NAME>=値 は Trace("<name>") で引く (resident / signed / logs / log_id / induction / unroll / pc)。
+// FC_VERIFY_IR=1 は opt の各段の後に ir.Verify。FC_TRACE_<NAME>=値 は Trace("<name>") で引く (resident / signed / logs / log_id / induction / unroll / pc)。
 
 import (
 	"os"
@@ -24,6 +24,7 @@ type Config struct {
 	trace      map[string]string
 	dumpIR     bool // FC_DUMP_IR: 最適化と割付の後の IR を stderr に出す
 	verifyRegs bool // FC_VERIFY_REGS: 生成した命令列でレジスタの検査をする (テストと fuzz で有効。codegen/verify.go)
+	verifyIR   bool // FC_VERIFY_IR: opt の各段と常駐・割付の後に IR を検査する (テストと fuzz で有効。ir/verify.go)
 }
 
 // NewConfig は names を切った設定 (テスト用)。
@@ -50,6 +51,7 @@ func ConfigFromEnv() *Config {
 	}
 	c.dumpIR = os.Getenv("FC_DUMP_IR") != ""
 	c.verifyRegs = os.Getenv("FC_VERIFY_REGS") != ""
+	c.verifyIR = os.Getenv("FC_VERIFY_IR") != ""
 	return c
 }
 
@@ -61,6 +63,12 @@ func (c *Config) VerifyRegs() bool { return c != nil && c.verifyRegs }
 
 // SetVerifyRegs はレジスタの検査を入れ切りする (テスト用)。
 func (c *Config) SetVerifyRegs(on bool) { c.verifyRegs = on }
+
+// VerifyIR は IR の検査をするか (FC_VERIFY_IR)。
+func (c *Config) VerifyIR() bool { return c != nil && c.verifyIR }
+
+// SetVerifyIR は IR の検査を入れ切りする (テスト用)。
+func (c *Config) SetVerifyIR(on bool) { c.verifyIR = on }
 
 // Disabled は name のパス (機能) を切っているか。
 func (c *Config) Disabled(name string) bool { return c != nil && c.disabled[name] }

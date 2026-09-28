@@ -4,7 +4,6 @@ package driver
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,17 +13,11 @@ import (
 
 func buildErrors(t *testing.T, files map[string]string, main string) []*diag.Error {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
-	}
-	_, err := NewCompiler(absRepoRoot).Build(main, &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
-	if err == nil {
+	r := testBuild(t, buildSpec{Files: files, Main: main, CompileOnly: true})
+	if r.Err == nil {
 		t.Fatal("エラーになるべき")
 	}
-	return diag.Errors(err)
+	return diag.Errors(r.Err)
 }
 
 func TestMultipleErrors(t *testing.T) {

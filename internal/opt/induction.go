@@ -61,46 +61,28 @@ type ivDef struct {
 
 func (s *ssaForm) eliminateOneInduction() bool {
 	cfg := s.cfg
-	idom := cfg.Dominators()
-	dominates := func(a, b *ir.Block) bool {
-		for x := b; x != nil; x = idom[x] {
-			if x == a {
-				return true
-			}
-			if idom[x] == x {
-				return false
-			}
-		}
-		return false
-	}
+	dom := cfg.DomTree()
 	ops := s.lmd.Ops
 	for _, lp := range cfg.Loops() {
-		h := lp.Header
 		// ヘッダ: ラベル + `lt t = k, LIM` + `if t goto E` (E はループの外)
-		hops := cfg.Ops(h)
-		if len(hops) != 3 || ops[hops[0]].Code != ir.OpLabel || ops[hops[1]].Code != ir.OpLt || ops[hops[2]].Code != ir.OpIf {
+		cmp, br, hops, ok := s.loopHeader(lp)
+		if !ok || cmp == nil || cmp.Code != ir.OpLt || br.Code != ir.OpIf {
 			ivTrace(s.lmd, 1)
 			continue
 		}
-		cmp, br := ops[hops[1]], ops[hops[2]]
-		t, ok := cmp.Dst.(*ir.Value)
-		if !ok || t.LocalType != ir.LTTemp || br.Src[0] != ir.Operand(t) || lp.Contains(cfg.BlockOf(br.Label)) {
-			ivTrace(s.lmd, 2)
-			continue
-		}
+		t := cmp.Dst.(*ir.Value)
 		// 入口は 1 つで、その辺は分岐ではない
-		entries := cfg.Entries(lp)
-		if len(entries) != 1 {
+		pre := cfg.Preheader(lp)
+		if pre == nil {
 			ivTrace(s.lmd, 3)
 			continue
 		}
-		pre := entries[0]
 		if last := cfg.Last(pre); last != nil && (ir.IsCondBranch(last) || last.Code == ir.OpSwitch || last.Code == ir.OpReturn) {
 			ivTrace(s.lmd, 4)
 			continue
 		}
 		// 比較の向き: `k < LIM` または `LIM < k` (k は誘導変数の側)
-		ivs := s.inductionVars(lp, dominates)
+		ivs := s.inductionVars(lp, dom)
 		kIdx := 0
 		if v, ok := cmp.Src[0].(*ir.Value); !ok || ivs[v] == nil {
 			kIdx = 1
@@ -130,7 +112,7 @@ func (s *ssaForm) eliminateOneInduction() bool {
 		// 折り返さないこと: LIM + (歩幅の最大値) が k の型に収まる (歩幅の上限は maxValue: リテラル、型、支配する比較から)
 		// LIM が変数 (ループ不変) なら歩幅はリテラルの 1 だけ: k < LIM ≤ 型の最大値 なので k + 1 は折り返さない
 		kmax := 1<<(8*uint(k.Type.Size)) - 1
-		stepMax, ok := s.maxValue(kiv.def, kiv.stepIdx, idom)
+		stepMax, ok := s.maxValue(kiv.def, kiv.stepIdx, dom)
 		if !lit {
 			if n, one := ir.ValIntLiteral(kiv.step); !one || n != 1 || ir.ValType(cmp.Src[1-kIdx]).Size > k.Type.Size || ir.ValType(cmp.Src[1-kIdx]).Signed {
 				ivTrace(s.lmd, 12)
@@ -217,51 +199,20 @@ func (s *ssaForm) loopInvariantVar(o ir.Operand, lp *ir.Loop) bool {
 	if !ok || !s.vars[v] || v.Type.Kind != types.Int || v.Volatile {
 		return false
 	}
-	for b := range lp.Blocks {
-		for _, i := range s.cfg.Ops(b) {
-			if d := s.defAt[i]; d != nil && d.v == v {
-				return false
-			}
-		}
-	}
-	return true
+	return len(s.loopDefs(lp)[v]) == 0
 }
 
 // inductionVars はループ内で「毎周 1 回だけ `add v = v, s` (s はループ不変) で更新される」ローカル変数。
-func (s *ssaForm) inductionVars(lp *ir.Loop, dominates func(a, b *ir.Block) bool) map[*ir.Value]*ivDef {
-	defs := map[*ir.Value][]int{}
-	for b := range lp.Blocks {
-		for _, i := range s.cfg.Ops(b) {
-			if d := s.defAt[i]; d != nil {
-				defs[d.v] = append(defs[d.v], i)
-			}
-		}
-	}
-	everyIteration := func(b *ir.Block) bool {
-		for _, t := range lp.Tails {
-			if !dominates(b, t) {
-				return false
-			}
-		}
-		return true
-	}
+func (s *ssaForm) inductionVars(lp *ir.Loop, dom *ir.DomTree) map[*ir.Value]*ivDef {
+	defs := s.loopDefs(lp)
 	r := map[*ir.Value]*ivDef{}
-	for v, ds := range defs {
-		if len(ds) != 1 {
+	for v := range defs {
+		i, step, ok := s.singleStep(lp, dom, defs, v, false)
+		if !ok {
 			continue
 		}
-		i := ds[0]
 		op := s.lmd.Ops[i]
-		if op.Code != ir.OpAdd || op.Dst != ir.Operand(v) || !everyIteration(s.blockOf[i]) {
-			continue
-		}
-		self, step := 0, 1
-		if op.Src[0] != ir.Operand(v) {
-			self, step = 1, 0
-			if op.Src[1] != ir.Operand(v) {
-				continue
-			}
-		}
+		self := 1 - step
 		st := op.Src[step]
 		if _, lit := ir.ValIntLiteral(st); !lit {
 			sv, ok := st.(*ir.Value)
@@ -362,11 +313,11 @@ func ivTrace(lmd *ir.Lambda, n int) {
 
 // maxValue は命令 i の入力 k の値の上限 (符号なし)。リテラルはその値、型の最大値、定義が加算なら入力の上限の和、
 // φ (ループの変数) は「その使用位置を支配する `lt t = v, LIM; if t goto E` の真の側」にあれば LIM - 1。
-func (s *ssaForm) maxValue(i, k int, idom map[*ir.Block]*ir.Block) (int, bool) {
-	return s.maxValueDepth(i, k, idom, 4)
+func (s *ssaForm) maxValue(i, k int, dom *ir.DomTree) (int, bool) {
+	return s.maxValueDepth(i, k, dom, 4)
 }
 
-func (s *ssaForm) maxValueDepth(i, k int, idom map[*ir.Block]*ir.Block, depth int) (int, bool) {
+func (s *ssaForm) maxValueDepth(i, k int, dom *ir.DomTree, depth int) (int, bool) {
 	o := s.lmd.Ops[i].Src[k]
 	t := ir.ValType(o)
 	if t.Kind != types.Int || t.Signed || ir.ValOffset(o) != 0 {
@@ -379,10 +330,10 @@ func (s *ssaForm) maxValueDepth(i, k int, idom map[*ir.Block]*ir.Block, depth in
 	if k >= len(us) || us[k] == nil {
 		return 0, false
 	}
-	return s.maxOfVal(resolve(us[k]), s.blockOf[i], idom, depth), true
+	return s.maxOfVal(resolve(us[k]), s.blockOf[i], dom, depth), true
 }
 
-func (s *ssaForm) maxOfVal(val *ssaVal, at *ir.Block, idom map[*ir.Block]*ir.Block, depth int) int {
+func (s *ssaForm) maxOfVal(val *ssaVal, at *ir.Block, dom *ir.DomTree, depth int) int {
 	tmax := 1<<(8*uint(val.v.Type.Size)) - 1
 	if val.v.Type.Kind != types.Int || val.v.Type.Signed {
 		return tmax
@@ -396,7 +347,7 @@ func (s *ssaForm) maxOfVal(val *ssaVal, at *ir.Block, idom map[*ir.Block]*ir.Blo
 	if val.phi {
 		// 支配する比較 `lt t = v, LIM` の真の側 (if は落ちる先、if_true は飛び先) から at が支配されていれば LIM - 1
 		best := tmax
-		for d := at; d != nil; d = idom[d] {
+		for d := at; d != nil; d = dom.IDom(d) {
 			ops := s.cfg.Ops(d)
 			if br := s.cfg.Last(d); br != nil && (br.Code == ir.OpIf || br.Code == ir.OpIfTrue) && len(ops) >= 2 {
 				ci := ops[len(ops)-2]
@@ -411,13 +362,13 @@ func (s *ssaForm) maxOfVal(val *ssaVal, at *ir.Block, idom map[*ir.Block]*ir.Blo
 						} else {
 							trueSide = s.cfg.BlockOf(br.Label)
 						}
-						if trueSide != nil && trueSide != d && s.dominated(trueSide, at, idom) && lim-1 < best {
+						if trueSide != nil && trueSide != d && dom.Dominates(trueSide, at) && lim-1 < best {
 							best = lim - 1
 						}
 					}
 				}
 			}
-			if idom[d] == d {
+			if dom.IDom(d) == d {
 				break
 			}
 		}
@@ -429,12 +380,12 @@ func (s *ssaForm) maxOfVal(val *ssaVal, at *ir.Block, idom map[*ir.Block]*ir.Blo
 	op := s.lmd.Ops[val.def]
 	switch op.Code {
 	case ir.OpLoad:
-		if m, ok := s.maxValueDepth(val.def, 0, idom, depth-1); ok {
+		if m, ok := s.maxValueDepth(val.def, 0, dom, depth-1); ok {
 			return min(m, tmax)
 		}
 	case ir.OpAdd:
-		a, oka := s.maxValueDepth(val.def, 0, idom, depth-1)
-		b, okb := s.maxValueDepth(val.def, 1, idom, depth-1)
+		a, oka := s.maxValueDepth(val.def, 0, dom, depth-1)
+		b, okb := s.maxValueDepth(val.def, 1, dom, depth-1)
 		if oka && okb && a+b <= tmax {
 			return a + b
 		}
@@ -447,17 +398,4 @@ func (s *ssaForm) maxOfVal(val *ssaVal, at *ir.Block, idom map[*ir.Block]*ir.Blo
 		}
 	}
 	return tmax
-}
-
-// dominated は a が b を支配するか。
-func (s *ssaForm) dominated(a, b *ir.Block, idom map[*ir.Block]*ir.Block) bool {
-	for x := b; x != nil; x = idom[x] {
-		if x == a {
-			return true
-		}
-		if idom[x] == x {
-			return false
-		}
-	}
-	return false
 }

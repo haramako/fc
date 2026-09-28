@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -18,27 +16,11 @@ import (
 // logBuild は files を -g (Debug) でビルドして走らせ、(ROM、printf の出力、@log の出力、結果) を返す。
 func logBuild(t *testing.T, files map[string]string, level int, debug, every bool) (rom []byte, stdout, logOut string, res *Result, err error) {
 	t.Helper()
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v", r) // emu のソフトウェアスタックのあふれなど (fuzz のプログラムの問題)
-		}
-	}()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
+	r := testBuild(t, buildSpec{Files: files, Run: true, Level: level, MaxCycles: rpMaxCycles, Debug: debug, LogEvery: every, Recover: true})
+	if r.Err != nil {
+		return nil, "", "", nil, r.Err
 	}
-	var out, logs strings.Builder
-	res, err = NewCompiler(absRepoRoot).BuildContext(t.Context(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"),
-		Run: true, Stdout: &out, LogOut: &logs, MaxCycles: rpMaxCycles, OptimizeLevel: level, Debug: debug, LogEveryStatement: every})
-	if err != nil {
-		return nil, "", "", nil, err
-	}
-	if rom, err = os.ReadFile(filepath.Join(dir, "a.bin")); err != nil {
-		t.Fatal(err)
-	}
-	return rom, out.String(), logs.String(), res, nil
+	return r.ROM(t), r.Stdout, r.LogOut, r.Res, nil
 }
 
 // TestLogBasics: 書式 ({} / {0} / {:02x} / {:b} / {:X} / {{ }})、enum の名前、struct のフィールド・定数添字、ローカル・引数、

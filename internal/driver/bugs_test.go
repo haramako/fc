@@ -20,20 +20,14 @@ func runEmu(t *testing.T, body string) string {
 // runEmuLevel は最適化レベルを指定する runEmu (0 は既定の 2、-1 は -O 0)。
 func runEmuLevel(t *testing.T, body string, level int) string {
 	t.Helper()
-	dir := t.TempDir()
-	src := "#fc 2\nuse * from stdio;\n" + body
-	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
-		t.Fatal(err)
+	r := testBuild(t, buildSpec{Files: map[string]string{"t.fc": "#fc 2\nuse * from stdio;\n" + body}, Level: level, Run: true})
+	if r.Err != nil {
+		t.Fatalf("ビルド失敗: %v", r.Err)
 	}
-	var out strings.Builder
-	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, OptimizeLevel: level, MaxCycles: 50_000_000})
-	if err != nil {
-		t.Fatalf("ビルド失敗: %v", err)
+	if r.Res.ExitCode != 0 {
+		t.Fatalf("終了コード %d:\n%s", r.Res.ExitCode, r.Stdout)
 	}
-	if code != 0 {
-		t.Fatalf("終了コード %d:\n%s", code, out.String())
-	}
-	return out.String()
+	return r.Stdout
 }
 
 func TestBugGlobalPointerIndex(t *testing.T) {

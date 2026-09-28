@@ -1,13 +1,40 @@
 package ir
 
-// 支配木と自然ループ (レジスタ割付のループ検出用。doc/v2_regalloc.md)。
+// 支配木と自然ループ (レジスタ割付のループ検出と、opt のループの変換 (induction / unroll / split) が使う。doc/v2_regalloc.md)。
+// CFG に付いてキャッシュされる (CFG は命令列を変えたら作り直すもの)。
 
-// Dominators は各ブロックの直接支配ブロック (idom) を返す (入口は自分自身。到達できないブロックは nil)。
-// Cooper / Harvey / Kennedy の反復法。
-func (c *CFG) Dominators() map[*Block]*Block {
+import "sort"
+
+// DomTree は支配木。
+type DomTree struct {
+	idom map[*Block]*Block // 直接支配ブロック (入口は自分自身。到達できないブロックは無い)
+}
+
+// IDom は b の直接支配ブロック (入口なら b 自身、到達できなければ nil)。
+func (d *DomTree) IDom(b *Block) *Block { return d.idom[b] }
+
+// Dominates は a が b を支配するか (a == b も含む)。到達できないブロックは何も支配せず、支配もされない。
+func (d *DomTree) Dominates(a, b *Block) bool {
+	for x := b; x != nil; x = d.idom[x] {
+		if x == a {
+			return true
+		}
+		if d.idom[x] == x {
+			return false
+		}
+	}
+	return false
+}
+
+// DomTree は支配木 (Cooper / Harvey / Kennedy の反復法)。
+func (c *CFG) DomTree() *DomTree {
+	if c.dom != nil {
+		return c.dom
+	}
 	idom := map[*Block]*Block{}
+	c.dom = &DomTree{idom: idom}
 	if len(c.Blocks) == 0 {
-		return idom
+		return c.dom
 	}
 	// 逆後順 (reverse postorder) の番号
 	order := map[*Block]int{}
@@ -62,7 +89,7 @@ func (c *CFG) Dominators() map[*Block]*Block {
 			}
 		}
 	}
-	return idom
+	return c.dom
 }
 
 // Loop は自然ループ。
@@ -70,32 +97,42 @@ type Loop struct {
 	Header *Block
 	Blocks map[*Block]bool // ヘッダを含む
 	Tails  []*Block        // back edge の元 (Tail → Header)
+	Parent *Loop           // このループを含む最も内側のループ (最外なら nil)
+	Depth  int             // 入れ子の深さ (最外は 1)
 }
 
 // Contains はブロックがループに含まれるか。
 func (l *Loop) Contains(b *Block) bool { return l.Blocks[b] }
 
-// Loops は自然ループの一覧 (同じヘッダの back edge は 1 つのループにまとめる)。到達できないブロックは無視。
-func (c *CFG) Loops() []*Loop {
-	idom := c.Dominators()
-	dominates := func(a, b *Block) bool {
-		for x := b; ; x = idom[x] {
-			if x == a {
-				return true
-			}
-			if x == nil || idom[x] == x {
-				return x == a
-			}
+// EveryIteration はループの中のブロック b を毎周必ず通るか (全ての back edge の元を支配する)。
+func (l *Loop) EveryIteration(d *DomTree, b *Block) bool {
+	for _, t := range l.Tails {
+		if !d.Dominates(b, t) {
+			return false
 		}
 	}
+	return true
+}
+
+// Loops は自然ループの一覧 (同じヘッダの back edge は 1 つのループにまとめる。並びはヘッダの順)。到達できないブロックは無視。
+// 入れ子は Parent / Depth に入る。戻り値の並びは呼び出し側が並べ替えてよい (写し)。
+func (c *CFG) Loops() []*Loop {
+	if c.loops == nil {
+		c.loops = c.findLoops()
+	}
+	return append([]*Loop(nil), c.loops...)
+}
+
+func (c *CFG) findLoops() []*Loop {
+	d := c.DomTree()
 	byHeader := map[*Block]*Loop{}
-	var loops []*Loop
+	loops := []*Loop{}
 	for _, b := range c.Blocks {
-		if idom[b] == nil {
+		if d.idom[b] == nil {
 			continue
 		}
 		for _, s := range b.Succs {
-			if !dominates(s, b) {
+			if !d.Dominates(s, b) {
 				continue
 			}
 			lp := byHeader[s]
@@ -118,51 +155,27 @@ func (c *CFG) Loops() []*Loop {
 			}
 		}
 	}
-	return loops
-}
-
-// Innermost は他のループを含まないループだけを返す。
-func Innermost(loops []*Loop) []*Loop {
-	var r []*Loop
-	for _, a := range loops {
-		inner := true
-		for _, b := range loops {
-			if a == b || len(b.Blocks) >= len(a.Blocks) {
-				continue
-			}
-			nested := true
-			for x := range b.Blocks {
-				if !a.Blocks[x] {
-					nested = false
-					break
-				}
-			}
-			if nested {
-				inner = false
+	// 入れ子: ヘッダを含む他のループのうち最も小さいものが親 (ブロック数の昇順に見て最初に見つかるもの)
+	bySize := append([]*Loop(nil), loops...)
+	sort.SliceStable(bySize, func(i, j int) bool { return len(bySize[i].Blocks) < len(bySize[j].Blocks) })
+	for _, lp := range bySize {
+		for _, outer := range bySize {
+			if outer != lp && len(outer.Blocks) > len(lp.Blocks) && outer.Blocks[lp.Header] {
+				lp.Parent = outer
 				break
 			}
 		}
-		if inner {
-			r = append(r, a)
+	}
+	for _, lp := range loops {
+		lp.Depth = 1
+		for p := lp.Parent; p != nil; p = p.Parent {
+			lp.Depth++
 		}
 	}
-	return r
+	return loops
 }
 
-// Exits はループから外へ出る辺 (from はループ内、to はループ外)。
-func (c *CFG) Exits(l *Loop) [][2]*Block {
-	var r [][2]*Block
-	for b := range l.Blocks {
-		for _, s := range b.Succs {
-			if !l.Blocks[s] {
-				r = append(r, [2]*Block{b, s})
-			}
-		}
-	}
-	return r
-}
-
-// Entries はループへ入る辺 (from はループ外、to はヘッダ)。
+// Entries はループへ入る辺の元 (ループ外のブロックからヘッダへ)。
 func (c *CFG) Entries(l *Loop) []*Block {
 	var r []*Block
 	for _, p := range l.Header.Preds {
@@ -171,4 +184,12 @@ func (c *CFG) Entries(l *Loop) []*Block {
 		}
 	}
 	return r
+}
+
+// Preheader はループの入口が 1 つならそのブロック (無ければ nil)。ループに入る前に 1 度だけ行う処理はその末尾に置ける。
+func (c *CFG) Preheader(l *Loop) *Block {
+	if e := c.Entries(l); len(e) == 1 {
+		return e[0]
+	}
+	return nil
 }

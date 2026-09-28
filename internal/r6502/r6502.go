@@ -14,21 +14,22 @@ type Bus interface {
 	Set(addr, val int)
 }
 
-// Memory は R6502::Memory 相当 (疎なメモリ、未設定は0)。
+// Memory は 64K の平らなメモリ (未設定は 0)。以前は map[int]int で、差分テスト (数千万サイクル) の時間の大半が
+// ハッシュの参照だった。
 type Memory struct {
-	m map[int]int
+	m [0x10000]byte
 }
 
 func NewMemory() *Memory {
-	return &Memory{m: map[int]int{}}
+	return &Memory{}
 }
 
 func (m *Memory) Set(addr, val int) {
-	m.m[addr] = val & 0xff
+	m.m[addr&0xffff] = byte(val)
 }
 
 func (m *Memory) Get(addr int) int {
-	return m.m[addr]
+	return int(m.m[addr&0xffff])
 }
 
 // Mode はアドレッシングモード。

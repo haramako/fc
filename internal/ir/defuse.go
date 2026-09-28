@@ -61,6 +61,8 @@ type CFG struct {
 	Lambda  *Lambda
 	Blocks  []*Block
 	byLabel map[string]*Block
+	dom     *DomTree // DomTree のキャッシュ
+	loops   []*Loop  // Loops のキャッシュ
 }
 
 // BuildCFG は命令列からブロックと辺を作る。OpIf は「条件が 0 なら Label へ」なので飛び先と直後の両方が後続。

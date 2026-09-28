@@ -15,8 +15,6 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,23 +31,11 @@ var rmPasses = []string{"ssa", "mul", "sink", "fuse", "fuse-index", "indexoff", 
 // codegen の panic もエラーとして返す。
 func metaRun(t *testing.T, files map[string]string, disable string) (out string, err error) {
 	t.Helper()
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v", r)
-		}
-	}()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			return "", err
-		}
-	}
 	cfg := ir.NewConfig(strings.Split(disable, ",")...)
 	cfg.SetVerifyRegs(true)
-	var o strings.Builder
-	_, err = NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"),
-		Run: true, Stdout: &o, MaxCycles: rpMaxCycles, Config: cfg})
-	return o.String(), err
+	cfg.SetVerifyIR(true)
+	r := testBuild(t, buildSpec{Files: files, Run: true, MaxCycles: rpMaxCycles, Config: cfg, Recover: true})
+	return r.Stdout, r.Err
 }
 
 // TestRandomMetamorphic は段を切っても出力が変わらないことを確かめる。

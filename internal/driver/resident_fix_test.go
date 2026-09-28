@@ -6,12 +6,7 @@ package driver
 // (BuildOptions.MisclassifyResident)、自己修正が働いて (ResidentFixes > 0)、実行結果が普段のビルドと同じになることを確かめる。
 
 import (
-	"context"
-	"fmt"
 	"math/rand"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -44,20 +39,9 @@ func TestResidentSelfCorrection(t *testing.T) {
 // rfBuild は files をビルドして emu で走らせ、出力と、自己修正で直した命令の数を返す。
 func rfBuild(t *testing.T, files map[string]string, misclassify bool) (string, int, error) {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var o strings.Builder
-	res, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"),
-		Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &o, MaxCycles: 20_000_000, MisclassifyResident: misclassify})
-	if err != nil {
+	r := testBuild(t, buildSpec{Files: files, Run: true, MaxCycles: 20_000_000, Misclassify: misclassify})
+	if err := r.exitError(); err != nil {
 		return "", 0, err
 	}
-	if res.ExitCode != 0 {
-		return "", 0, fmt.Errorf("exit code %d: %s", res.ExitCode, o.String())
-	}
-	return o.String(), res.ResidentFixes, nil
+	return r.Stdout, r.Res.ResidentFixes, nil
 }

@@ -49,30 +49,20 @@ func unrollLoops(lmd *ir.Lambda) bool {
 
 func (s *ssaForm) unrollOne() bool {
 	cfg := s.cfg
-	idom := cfg.Dominators()
+	dom := cfg.DomTree()
 	ops := s.lmd.Ops
 	for _, lp := range cfg.Loops() {
 		h := lp.Header
-		hops := cfg.Ops(h)
-		if len(hops) < 2 || len(hops) > 3 || ops[hops[0]].Code != ir.OpLabel {
+		// ヘッダ: ラベル + [比較] + ループの外への条件分岐
+		cmp, br, hops, ok := s.loopHeader(lp)
+		if !ok {
 			unrollTrace(s.lmd, "bail1", h, 0, 0)
-			continue
-		}
-		br := ops[hops[len(hops)-1]]
-		if (br.Code != ir.OpIf && br.Code != ir.OpIfTrue) || lp.Contains(cfg.BlockOf(br.Label)) {
-			unrollTrace(s.lmd, "bail2", h, 0, 0)
 			continue
 		}
 		// ヘッダの条件が読むカウンタ k
 		var k *ir.Value
-		var cmp *ir.Op
-		if len(hops) == 3 {
-			cmp = ops[hops[1]]
-			if (cmp.Code != ir.OpLt && cmp.Code != ir.OpEq) || cmp.Dst != br.Src[0] {
-				continue
-			}
-			t, ok := cmp.Dst.(*ir.Value)
-			if !ok || t.LocalType != ir.LTTemp {
+		if cmp != nil {
+			if cmp.Code != ir.OpLt && cmp.Code != ir.OpEq {
 				continue
 			}
 			for _, o := range cmp.Src {
@@ -119,19 +109,19 @@ func (s *ssaForm) unrollOne() bool {
 			continue
 		}
 		// k の更新: ループ内の唯一の定義が毎周 1 回の add / sub k = k, リテラル
-		step, ok := s.counterStep(lp, k, idom)
+		step, ok := s.counterStep(lp, k, dom)
 		if !ok {
 			unrollTrace(s.lmd, "step", h, 0, 0)
 			unrollTrace(s.lmd, "bail6", h, 0, 0)
 			continue
 		}
 		// 入口: 1 つで、そこでの k がリテラル
-		entries := cfg.Entries(lp)
-		if len(entries) != 1 {
+		pre := cfg.Preheader(lp)
+		if pre == nil {
 			unrollTrace(s.lmd, "bail7", h, 0, 0)
 			continue
 		}
-		k0, ok := ir.ValIntLiteral(s.initialOperand(k, entries[0]))
+		k0, ok := ir.ValIntLiteral(s.initialOperand(k, pre))
 		if !ok {
 			unrollTrace(s.lmd, "bail8", h, 0, 0)
 			continue
@@ -331,31 +321,15 @@ func renameOperand(o ir.Operand, rename map[*ir.Value]*ir.Value) ir.Operand {
 }
 
 // counterStep はループ内での k の唯一の定義が毎周 1 回の `add / sub k = k, リテラル` ならその歩幅 (sub は負)。
-func (s *ssaForm) counterStep(lp *ir.Loop, k *ir.Value, idom map[*ir.Block]*ir.Block) (int, bool) {
-	var defs []int
-	for b := range lp.Blocks {
-		for _, i := range s.cfg.Ops(b) {
-			if d := s.defAt[i]; d != nil && d.v == k {
-				defs = append(defs, i)
-			}
-		}
-	}
-	if len(defs) != 1 {
+func (s *ssaForm) counterStep(lp *ir.Loop, k *ir.Value, dom *ir.DomTree) (int, bool) {
+	i, stepIdx, ok := s.singleStep(lp, dom, s.loopDefs(lp), k, true)
+	if !ok || stepIdx != 1 {
 		return 0, false
 	}
-	i := defs[0]
 	op := s.lmd.Ops[i]
-	if (op.Code != ir.OpAdd && op.Code != ir.OpSub) || op.Dst != ir.Operand(k) || op.Src[0] != ir.Operand(k) {
-		return 0, false
-	}
 	n, ok := ir.ValIntLiteral(op.Src[1])
 	if !ok {
 		return 0, false
-	}
-	for _, t := range lp.Tails {
-		if !s.dominated(s.blockOf[i], t, idom) {
-			return 0, false
-		}
 	}
 	if op.Code == ir.OpSub {
 		n = -n

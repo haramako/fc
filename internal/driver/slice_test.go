@@ -3,8 +3,6 @@ package driver
 // fc 3 の slice (`[]T` / `[]const T`、a[lo..hi]、@len / @slice / @ptr / @copy) のテスト。
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -14,18 +12,11 @@ func buildBothLevels(t *testing.T, files map[string]string) (string, error) {
 	t.Helper()
 	var outs [2]string
 	for i, level := range []int{-1, 0} {
-		dir := t.TempDir()
-		for name, src := range files {
-			if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-				t.Fatal(err)
-			}
+		r := testBuild(t, buildSpec{Files: files, Run: true, Level: level})
+		if r.Err != nil {
+			return "", r.Err
 		}
-		var out strings.Builder
-		_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, MaxCycles: 10_000_000, OptimizeLevel: level})
-		if err != nil {
-			return "", err
-		}
-		outs[i] = out.String()
+		outs[i] = r.Stdout
 	}
 	if outs[0] != outs[1] {
 		t.Errorf("-O 0 と -O 2 で出力が違う:\n-O 0: %q\n-O 2: %q", outs[0], outs[1])

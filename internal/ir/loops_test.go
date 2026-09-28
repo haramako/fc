@@ -46,11 +46,12 @@ func TestLoopsAndLiveness(t *testing.T) {
 	if ent := cfg.Entries(lp); len(ent) != 1 || ent[0] != cfg.Blocks[0] {
 		t.Errorf("entries = %v", ent)
 	}
-	if ex := cfg.Exits(lp); len(ex) != 1 || ex[0][0] != lp.Header || ex[0][1].Start != 8 {
-		t.Errorf("exits = %v", ex)
+	if lp.Parent != nil || lp.Depth != 1 || cfg.Preheader(lp) != cfg.Blocks[0] {
+		t.Errorf("nesting: parent %v depth %d preheader %v", lp.Parent, lp.Depth, cfg.Preheader(lp))
 	}
-	if inner := Innermost(loops); len(inner) != 1 {
-		t.Errorf("innermost = %d", len(inner))
+	d := cfg.DomTree()
+	if !d.Dominates(lp.Header, cfg.BlockOf("@body")) || d.Dominates(cfg.BlockOf("@body"), lp.Header) || !lp.EveryIteration(d, cfg.BlockOf("@body")) {
+		t.Errorf("dominators wrong")
 	}
 
 	lv := BuildLiveness(lmd)

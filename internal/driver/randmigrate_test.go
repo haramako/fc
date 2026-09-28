@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,22 +18,11 @@ import (
 // romBuild は files を emu でビルドして ROM (a.bin) を返す (走らせない)。コンパイラの panic もエラーにする。
 func romBuild(t *testing.T, files map[string]string, level int) (rom []byte, err error) {
 	t.Helper()
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v", r)
-		}
-	}()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
+	r := testBuild(t, buildSpec{Files: files, Level: level, Recover: true})
+	if r.Err != nil {
+		return nil, r.Err
 	}
-	out := filepath.Join(dir, "a.bin")
-	if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: out, OptimizeLevel: level}); err != nil {
-		return nil, err
-	}
-	return os.ReadFile(out)
+	return os.ReadFile(r.Out)
 }
 
 // v3Breaking は fc 3 で意図してエラーにした fc 2 の書き方 (migrate は書き換えない) のエラーか。
