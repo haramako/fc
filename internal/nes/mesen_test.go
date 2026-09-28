@@ -10,6 +10,7 @@ package nes
 //   2. C:\Applications\MesenCE\Mesen.exe (既定の導入場所)
 
 import (
+	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"fmt"
 	"os"
@@ -25,7 +26,7 @@ import (
 
 func runTool(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
-	cmd := exec.Command(driver.ToolPath(name), args...)
+	cmd := exec.Command(cc65.ToolPath(name), args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -163,7 +164,7 @@ func buildCastle(t *testing.T) (romPath, mapPath, dbgPath string) {
 // (seg の ooffs + (val - seg の start)。出力ファイルに置かれる ro セグメントだけ)。
 func parseLd65Dbg(t *testing.T, dbgPath string) []ProfileSymbol {
 	t.Helper()
-	d, err := driver.ParseDbgFile(dbgPath)
+	d, err := cc65.ParseDbgFile(dbgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +184,7 @@ func parseLd65Dbg(t *testing.T, dbgPath string) []ProfileSymbol {
 // parseLd65MapAll は dbgfile (ld65 --dbgfile) の全シンボル→アドレス (CPU アドレス) の表 (マップファイルの -vm の代わり)。
 func parseLd65MapAll(t *testing.T, dbgPath string) map[string]int {
 	t.Helper()
-	d, err := driver.ParseDbgFile(dbgPath)
+	d, err := cc65.ParseDbgFile(dbgPath)
 	if err != nil {
 		t.Fatal(err)
 	}

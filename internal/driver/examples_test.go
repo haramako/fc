@@ -9,6 +9,7 @@ package driver
 // (詳細は examples/README.md)。
 
 import (
+	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"os"
 	"os/exec"
@@ -23,7 +24,7 @@ const castleCompileLimit = 25 * time.Second // 単独で約 4 秒、go test ./..
 
 func runTool(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
-	cmd := exec.Command(ToolPath(name), args...)
+	cmd := exec.Command(cc65.ToolPath(name), args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

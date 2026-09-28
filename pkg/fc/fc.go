@@ -10,6 +10,8 @@
 package fc
 
 import (
+	"github.com/haramako/fc/internal/fchome"
+	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"errors"
 	"io"
@@ -92,7 +94,7 @@ type Compiler struct {
 
 // New は FC_HOME を解決してコンパイラを作る。同梱データを展開した場合は Close で削除する。
 func New() (*Compiler, error) {
-	home, cleanup, err := driver.ResolveFCHome()
+	home, cleanup, err := fchome.Resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +152,7 @@ func Format(src []byte, filename string) ([]byte, error) {
 // SizeReport は ld65 の --dbgfile (fcc build が ROM の隣に書く <out>.dbg、または自前のリンクで --dbgfile を指定したもの) から
 // セグメントと関数ごとのコードサイズの表示を作る (fcc size)。top は表示する関数の数 (0 なら全部)。
 func SizeReport(dbgFile string, top int) ([]string, error) {
-	d, err := driver.ParseDbgFile(dbgFile)
+	d, err := cc65.ParseDbgFile(dbgFile)
 	if err != nil {
 		return nil, err
 	}

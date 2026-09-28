@@ -3,6 +3,7 @@ package driver
 // fcc build -g (Mesen 用のデバッグ情報) と --size-report / fcc size。
 
 import (
+	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"os"
 	"path/filepath"
@@ -54,7 +55,7 @@ func TestDebugInfoAndSizeReport(t *testing.T) {
 	if !strings.Contains(joined, "bytes in ROM") || !strings.Contains(joined, "_t_f ") || !strings.Contains(joined, "_main ") {
 		t.Errorf("size report:\n%s", joined)
 	}
-	d, err := ParseDbgFile(res.DbgFile)
+	d, err := cc65.ParseDbgFile(res.DbgFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,19 +83,5 @@ func TestDebugInfoAndSizeReport(t *testing.T) {
 	}
 	if res2.DbgFile == "" {
 		t.Errorf("dbgfile はいつも書く (size report / 外部ツール用)")
-	}
-}
-
-// TestDbgFields: dbgfile のレコードのフィールドの読み方 (引用符の中の , は区切りでない。値の引用符は外す)。
-func TestDbgFields(t *testing.T) {
-	got := dbgFields(`id=3,name="a,b",size=0x10,type=lab,empty="",last`)
-	want := map[string]string{"id": "3", "name": "a,b", "size": "0x10", "type": "lab", "empty": ""}
-	if len(got) != len(want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	for k, v := range want {
-		if got[k] != v {
-			t.Errorf("%s: got %q, want %q", k, got[k], v)
-		}
 	}
 }

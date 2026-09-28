@@ -1,4 +1,4 @@
-package driver
+package fclog
 
 // fc 3 の @log (doc/v3_plan.md §9) のリンク後の処理: codegen の地点 (LogSite) のラベルと番地の式を dbgfile で値にして、
 //   - ROM の隣に <rom>.fclog.json (地点・書式・値の所在) と Mesen 2 用の <rom>.fclog.lua を書く
@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -78,9 +79,9 @@ type LogFileValue struct {
 	Bytes []LogFileValue `json:"bytes,omitempty"`
 }
 
-// buildLogFile は地点のラベルと番地を dbgfile で解決する。dir は ROM のある場所 (ソースのパスをそこからの相対にする)。
-func buildLogFile(sites []*codegen.LogSite, dbg *DbgFile, target string, rel func(string) string) (*LogFile, error) {
-	syms := map[string]DbgSymbol{}
+// Build は地点のラベルと番地を dbgfile で解決する。dir は ROM のある場所 (ソースのパスをそこからの相対にする)。
+func Build(sites []*codegen.LogSite, dbg *cc65.DbgFile, target string, rel func(string) string) (*LogFile, error) {
+	syms := map[string]cc65.DbgSymbol{}
 	for _, s := range dbg.Symbols {
 		if strings.HasPrefix(s.Name, "__fclog_") {
 			syms[s.Name] = s
@@ -190,8 +191,8 @@ func logFileArg(a *ir.LogArg) LogFileArg {
 	return r
 }
 
-// logWarnings は値が取れない地点の警告 (同じ @log の同じ引数は 1 回)。
-func logWarnings(sites []*codegen.LogSite) []diag.Warning {
+// Warnings は値が取れない地点の警告 (同じ @log の同じ引数は 1 回)。
+func Warnings(sites []*codegen.LogSite) []diag.Warning {
 	var ws []diag.Warning
 	seen := map[string]bool{}
 	for _, s := range sites {
@@ -217,8 +218,8 @@ func logWarnings(sites []*codegen.LogSite) []diag.Warning {
 	return ws
 }
 
-// writeLogFiles は <base>.fclog.json と <base>.fclog.lua を書く。
-func writeLogFiles(base string, lf *LogFile) error {
+// WriteFiles は <base>.fclog.json と <base>.fclog.lua を書く。
+func WriteFiles(base string, lf *LogFile) error {
 	b, err := json.MarshalIndent(lf, "", "  ")
 	if err != nil {
 		return err
@@ -229,14 +230,14 @@ func writeLogFiles(base string, lf *LogFile) error {
 	return os.WriteFile(base+".fclog.lua", []byte(mesenLogScript(lf)), 0o666)
 }
 
-// logReader は実行中の値の読み出し (emu の実行、テスト)。
-type logReader struct {
-	mem     func(addr int) int
-	a, x, y int
+// Reader は実行中の値の読み出し (emu の実行、テスト)。
+type Reader struct {
+	Mem     func(addr int) int
+	A, X, Y int
 }
 
-// formatLog は地点 site での @log の 1 行。
-func formatLog(p *LogFilePoint, site *LogFileSite, r logReader) string {
+// Format は地点 site での @log の 1 行。
+func Format(p *LogFilePoint, site *LogFileSite, r Reader) string {
 	var b strings.Builder
 	for _, part := range p.Parts {
 		if part.Arg < 0 {
@@ -253,18 +254,18 @@ func formatLog(p *LogFilePoint, site *LogFileSite, r logReader) string {
 	return b.String()
 }
 
-func readLogValue(v LogFileValue, size int, r logReader) (int, bool) {
+func readLogValue(v LogFileValue, size int, r Reader) (int, bool) {
 	switch v.Loc {
 	case "const":
 		return v.Value, true
 	case "reg":
 		switch v.Reg {
 		case "a":
-			return r.a, true
+			return r.A, true
 		case "x":
-			return r.x, true
+			return r.X, true
 		case "y":
-			return r.y, true
+			return r.Y, true
 		}
 	case "bytes":
 		n := 0
@@ -279,11 +280,11 @@ func readLogValue(v LogFileValue, size int, r logReader) (int, bool) {
 	case "mem", "stack":
 		addr := v.Addr
 		if v.Loc == "stack" {
-			addr = (addr + r.x) & 0xff // ゼロページのスタックフレーム (S + X)
+			addr = (addr + r.X) & 0xff // ゼロページのスタックフレーム (S + X)
 		}
 		n := 0
 		for i := 0; i < size; i++ {
-			n |= r.mem((addr+i)&0xffff) << (8 * i)
+			n |= r.Mem((addr+i)&0xffff) << (8 * i)
 		}
 		return n, true
 	}
@@ -343,27 +344,27 @@ func formatLogValue(a LogFileArg, part LogFilePart, v int) string {
 	return s
 }
 
-// logHooks は emu の実行用に、PC → (地点, @log) の表を作る。
-type logHook struct {
-	point *LogFilePoint
-	site  *LogFileSite
+// Hooks は emu の実行用に、PC → (地点, @log) の表を作る。
+type Hook struct {
+	Point *LogFilePoint
+	Site  *LogFileSite
 }
 
-func logHooks(lf *LogFile) map[int][]logHook {
+func Hooks(lf *LogFile) map[int][]Hook {
 	if lf == nil {
 		return nil
 	}
-	h := map[int][]logHook{}
+	h := map[int][]Hook{}
 	for i := range lf.Points {
 		p := &lf.Points[i]
 		for j := range p.Sites {
 			s := &p.Sites[j]
-			h[s.PC] = append(h[s.PC], logHook{p, s})
+			h[s.PC] = append(h[s.PC], Hook{Point: p, Site: s})
 		}
 	}
 	// 同じ PC の地点は注釈の順 (ソースの順)
 	for pc := range h {
-		sort.SliceStable(h[pc], func(a, b int) bool { return h[pc][a].site.Seq < h[pc][b].site.Seq })
+		sort.SliceStable(h[pc], func(a, b int) bool { return h[pc][a].Site.Seq < h[pc][b].Site.Seq })
 	}
 	return h
 }

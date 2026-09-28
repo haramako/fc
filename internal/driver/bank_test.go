@@ -5,6 +5,7 @@ package driver
 // emu ターゲットにはバンクが無いので、そちらの fuzz では「表は元のバンクに残ってコードだけ移る」バグは見えない。
 
 import (
+	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"fmt"
 	"math/rand"
@@ -57,7 +58,7 @@ func runNes(t *testing.T, files map[string]string, level int, n int) (out []int,
 	if err != nil {
 		t.Fatalf("ビルド失敗 (-O %d): %v", level, err)
 	}
-	d, err := ParseDbgFile(res.DbgFile)
+	d, err := cc65.ParseDbgFile(res.DbgFile)
 	if err != nil {
 		t.Fatal(err)
 	}

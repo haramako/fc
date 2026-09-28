@@ -1,4 +1,4 @@
-package driver
+package project
 
 // プロジェクトの設定ファイル fc.toml (doc/v3_plan.md §1 / §3)。ソースの基準ディレクトリから親へ向かって最初に見つかった
 // ものを使う。TOML の必要な分だけを読む: `[section]` / `[a.b]` の見出し、`key = value` (値は true / false / 整数 /
@@ -26,8 +26,8 @@ type ProjectConfig struct {
 	Sections map[string]map[string]string // 見出し → キー → 値の綴り (文字列は引用符を外したもの)
 }
 
-// findConfig は dir から親へ向かって fc.toml を探す (無ければ Path が "" の空の設定)。
-func findConfig(dir string) (*ProjectConfig, error) {
+// FindConfig は dir から親へ向かって fc.toml を探す (無ければ Path が "" の空の設定)。
+func FindConfig(dir string) (*ProjectConfig, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func stripComment(line string) string {
 }
 
 // defines は fc.toml の [define.<module>] と CLI の -D (`module.NAME=value`、後勝ち) から @(build) の const の上書きを作る。
-func (cfg *ProjectConfig) defines(cli []string) (map[string]*sema.DefineUse, error) {
+func (cfg *ProjectConfig) Defines(cli []string) (map[string]*sema.DefineUse, error) {
 	m := map[string]*sema.DefineUse{}
 	var sections []string
 	for s := range cfg.Sections {
@@ -138,8 +138,8 @@ func (cfg *ProjectConfig) defines(cli []string) (map[string]*sema.DefineUse, err
 	return m, nil
 }
 
-// copyDefines は上書きの表の写し (Used はビルドごとに付け直す)。
-func copyDefines(m map[string]*sema.DefineUse) map[string]*sema.DefineUse {
+// CopyDefines は上書きの表の写し (Used はビルドごとに付け直す)。
+func CopyDefines(m map[string]*sema.DefineUse) map[string]*sema.DefineUse {
 	r := make(map[string]*sema.DefineUse, len(m))
 	for k, v := range m {
 		c := *v
@@ -149,8 +149,8 @@ func copyDefines(m map[string]*sema.DefineUse) map[string]*sema.DefineUse {
 	return r
 }
 
-// moduleExists は libPath (dir 相対) のどこかに module.fc があるか。
-func moduleExists(dir string, libPath []string, module string) bool {
+// ModuleExists は libPath (dir 相対) のどこかに module.fc があるか。
+func ModuleExists(dir string, libPath []string, module string) bool {
 	for _, p := range libPath {
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(dir, p)

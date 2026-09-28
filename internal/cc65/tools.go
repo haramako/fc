@@ -1,4 +1,6 @@
-package driver
+// Package cc65 は外部のアセンブラ / リンカ (ca65 / ld65) の探索と、ld65 のデバッグ情報 (dbgfile) の読み込み。
+// Package cc65 は外部のアセンブラ / リンカ (ca65 / ld65) の探索と、ld65 のデバッグ情報 (dbgfile) の読み込み。
+package cc65
 
 // ca65 / ld65 の探索。リリースの配布物には cc65 の ca65 / ld65 を fcc と同じディレクトリに同梱する
 // (Windows / Linux。.goreleaser.yaml と .github/workflows/release.yml)。探索順:

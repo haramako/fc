@@ -1,4 +1,4 @@
-package driver
+package cc65
 
 // ld65 の --dbgfile (デバッグ情報) の読み込みと、それから作る生成物:
 //   - Mesen 2 / MesenCE 向けのラベルファイル .mlb (ROM と同じ名前で置くと自動で読まれる)

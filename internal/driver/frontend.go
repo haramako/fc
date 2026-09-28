@@ -7,6 +7,7 @@ package driver
 // fastcall_reg) と far call を反映していなかった (build と check でフレーム超過の判定がずれ得た)。
 
 import (
+	"github.com/haramako/fc/internal/project"
 	"fmt"
 
 	"github.com/haramako/fc/internal/codegen"
@@ -46,7 +47,7 @@ type frontResult struct {
 func (c *Compiler) compileFront(o *frontOptions) (*frontResult, error) {
 	for noGrow := map[string]bool{}; ; {
 		prog := sema.NewProgram()
-		prog.Defines = copyDefines(o.Defines)
+		prog.Defines = project.CopyDefines(o.Defines)
 		prog.Banks = c.banks()
 		prog.LogEnabled = o.Debug // @log の注釈は -g のときだけ (doc/v3_plan.md §9)
 		prog.LogEveryStatement = o.LogEveryStatement
