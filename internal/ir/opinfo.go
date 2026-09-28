@@ -118,6 +118,18 @@ func (c OpCode) MayTouchGlobals() bool { return c.has(fTouchesGlobals) }
 // UsesCarry は直前の命令が残した C フラグを読む命令か (rolc / rorc / if_carry / if_not_carry)。
 func (c OpCode) UsesCarry() bool { return c.has(fUsesCarry) }
 
+// FeedsCarry は ops[i] の次の命令 (nil を飛ばす) が ops[i] の残した C を読むか。その命令の結果が使われなくても、
+// C のために消せない (16 ビットの >> 1 を分けた `shift_right hi; rorc lo` で、使われない hi の shift を消して、rorc が
+// 前の式の C を拾っていた。fuzz の TestRandomConstFold で発覚)。
+func FeedsCarry(ops []*Op, i int) bool {
+	for j := i + 1; j < len(ops); j++ {
+		if ops[j] != nil {
+			return ops[j].Code.UsesCarry() && !ops[i].Code.IsBranch()
+		}
+	}
+	return false
+}
+
 // IsOpaque は中身を解析しない命令 (インラインアセンブラ) か。
 func (c OpCode) IsOpaque() bool { return c.has(fOpaque) }
 

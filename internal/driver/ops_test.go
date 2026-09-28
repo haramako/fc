@@ -2733,3 +2733,27 @@ function main():void
 		}
 	}
 }
+
+// TestSplitShiftCarry: 16 ビットの >> 1 を分けた `shift_right hi; rorc lo` で、上位が使われない (<< 8 で下位だけ) と
+// hi の shift を消していて、rorc が前の式の比較が残した C を拾っていた (-O 2 で -32768。fuzz の TestRandomConstFold で発覚)。
+func TestSplitShiftCarry(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+function id_u8(x:u8):u8 @(noinline) { return x; }
+function id_i8(x:i8):i8 @(noinline) { return x; }
+function id_u16(x:u16):u16 @(noinline) { return x; }
+function main():void
+{
+	printf((((@min(id_i8(125), (((id_u16(5724) < id_u8(255)) as u8) - (65545 ^ id_u8(0)))) * ((@bitcast(u8, ((id_i8(73)) as i8)) <= 208) as u8))) as i16), "\n");
+	printf((((((id_i8(44) & id_u16(0)) >> 1) << 8)) as i16), "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		out, err := rpRun(t, map[string]string{"t.fc": src}, level, rpMaxCycles)
+		if want := "125\n0\n"; err != nil || out != want {
+			t.Errorf("level %d: got %q (%v), want %q", level, out, err, want)
+		}
+	}
+}

@@ -807,7 +807,7 @@ func (s *ssaForm) eliminateDead() bool {
 		if op == nil || s.blockOf[i] == nil {
 			continue
 		}
-		if d := s.defAt[i]; d != nil && op.Code.IsPure() {
+		if d := s.defAt[i]; d != nil && op.Code.IsPure() && !ir.FeedsCarry(s.lmd.Ops, i) {
 			continue
 		}
 		for _, u := range s.useAt[i] {
@@ -838,7 +838,7 @@ func (s *ssaForm) eliminateDead() bool {
 		if op == nil {
 			continue
 		}
-		if d := s.defAt[i]; d != nil && op.Code.IsPure() && !live[d] {
+		if d := s.defAt[i]; d != nil && op.Code.IsPure() && !live[d] && !ir.FeedsCarry(s.lmd.Ops, i) {
 			d.v.LogStale = true // 死んだ代入: この後の @log は、生きている地点でしか値を読まない (ir/log.go)
 			ir.DropOp(s.lmd.Ops, i)
 			changed = true

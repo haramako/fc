@@ -89,6 +89,9 @@ func CalcLiveRange(lmd *ir.Lambda) {
 		for _, v := range uses {
 			record(v, false, i)
 		}
+		if op.Dst != nil && ir.FeedsCarry(lmd.Ops, i) {
+			record(op.Dst, false, i+1) // 次の命令が C を読む: 結果が使われなくても消さない (ir.FeedsCarry)
+		}
 	}
 
 	// 引数は、最初に定義されているものとする
