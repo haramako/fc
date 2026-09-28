@@ -368,3 +368,61 @@ function main():void
 		t.Errorf("fc 3: %q, fc 4: %q", before, after)
 	}
 }
+
+// TestV4MigrateCompoundNested: 複合代入の書き換え (`x op= y` → `x = (x op y) as T`) の右辺の中にも書き換え (`-l0` の
+// `as i8`) があると、右辺を含む置き換えと重なって "overlapping or invalid edit" になっていた (fuzz の TestRandomMigrate)。
+// 複合代入は前と後ろだけを書き換える。
+func TestV4MigrateCompoundNested(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+function f(l0:i8):u8
+{
+	var l2:u8 = 1;
+	l2 -= ((~204) ^ (-l0));
+	return l2;
+}
+function main():void
+{
+	printf(f(3), "\n");
+	exit(0);
+}
+`
+	want := `#fc 4
+use * from stdio;
+function f(l0:i8):u8
+{
+	var l2:u8 = 1;
+	l2 = (l2 - ((~204) ^ (-l0) as i8)) as u8;
+	return l2;
+}
+function main():void
+{
+	printf(f(3), "\n");
+	exit(0);
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(res[path]); got != want {
+		t.Fatalf("migrate:\n%s\nwant:\n%s", got, want)
+	}
+	before, err := buildBothLevels(t, map[string]string{"t.fc": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := buildBothLevels(t, map[string]string{"t.fc": want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Errorf("fc 3: %q, fc 4: %q", before, after)
+	}
+}

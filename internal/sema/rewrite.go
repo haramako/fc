@@ -121,12 +121,16 @@ func (h *Hlc) rewriteCompoundAs(rule string, a *syntax.AssignExpr, typ string) {
 		h.rewriteError(rule, "the compound assignment has no position")
 		return
 	}
-	lhs, rhs := string(src.Src[ls:le]), string(src.Src[rs:re])
+	lhs := string(src.Src[ls:le])
 	op := strings.TrimSuffix(strings.TrimSpace(string(src.Src[le:rs])), "=")
+	// 右辺そのものは書き換えず、前 (`x op=` → `x = (x op (`) と後ろ (`)) as T`) だけを変える。右辺の中にも書き換え
+	// (`-l0` → `-l0 as i8` など) があると、右辺を含む置き換えと重なっていた (fuzz の TestRandomMigrate で発覚)
+	open, close := "", ""
 	if !simpleExpr(src.Src[rs:re]) {
-		rhs = "(" + rhs + ")"
+		open, close = "(", ")"
 	}
-	h.addRewrite(rule, ls, re, fmt.Sprintf("%s = (%s %s %s) as %s", lhs, lhs, op, rhs, typ))
+	h.addRewrite(rule, ls, rs, fmt.Sprintf("%s = (%s %s %s", lhs, lhs, op, open))
+	h.addRewrite(rule, re, re, fmt.Sprintf("%s) as %s", close, typ))
 }
 
 // simpleExpr は b が `as` を後ろに付けてもそのまま読める式か: 1 語 (名前・数・`a.b`。前に `-` があってもよい: 単項演算子は
