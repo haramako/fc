@@ -437,8 +437,8 @@ go test ./...                                    # 全部 (golden + examples + N
   `home-<中身のハッシュ>` に展開して使い回す。`internal/driver/home.go`）。(1)〜(3) で ROM は変わらない。
   段ごとの時間を測るときは、`BuildContext` の段の間に時刻を出す一時的な変更を入れて測った（常設の仕組みは無い）
 - **実プロジェクトの退行の切り分け**（2026-09-19）: `FC_DISABLE=名前,名前,...` で最適化のパスを個別に切れる
-  （`ir.Disabled`。名前は `internal/ir/disable.go`: ssa mul indexoff induction unroll devirt autoinline sink fuse coalesce chain narrow scale commute carry split rotate dup
-  inline resident func-resident step shift8 fuse-index switch peephole）。`internal/nes/probe_test.go` は環境変数が
+  （`ir.Config.Disabled`。名前は `internal/ir/config.go`: ssa mul indexoff induction unroll devirt autoinline sink fuse coalesce chain narrow scale commute carry split rotate dup
+  inline resident func-resident step shift8 fuse-index fnptr-reg fieldindex ywalk switch peephole。ビルドごとに `BuildOptions.Config` でも渡せる）。`internal/nes/probe_test.go` は環境変数が
   無ければ Skip する調査用テストで、`TestProbeDiff` が 2 つの ROM（`FC_PROBE_ROM_A` / `_B`、`FC_PROBE_DBG` / `_B` の
   dbgfile で名前→番地）を同じ入力で並走させ、両方が vsync 待ちに入ったフレームだけゲームの状態（`FC_PROBE_PREFIX=_my_,_en_,...`
   の変数）を比べて最初に食い違う番地を出す。配置が同じ（同じソースでパスだけ切った）ROM 同士なら食い違いを A に合わせて続けられる。
@@ -479,6 +479,30 @@ go test ./...                                    # 全部 (golden + examples + N
   （`internal/nes` の Mesen テストは一時ディレクトリに複製してからビルドしている。
   共有すると片方の RemoveAll でもう片方のビルドが壊れ、単独実行では再現しない
   フレーク不良になる）
+
+## コードの構造（2026-09-28 の整理）
+
+パッケージの依存の向きは `internal/driver/deps_test.go` の `TestImportDirection` が固定している（足したら表に書く）。
+
+- **パイプライン**: `syntax`（goyacc の文法 `parser.y` と `checkVersion`）→ `sema`（`hlc.go` は文脈の型と共通の補助だけ。文は
+  `stmt.go`、宣言は `decl.go`、式は `expr.go`、定数の評価は `consteval.go`、型式は `typeexpr.go`）→ `ir` → `pipeline.Prepare`
+  （インライン展開・直接化 → volatile → `frames.Analyze` → 関数ごとに `opt.Optimize` → 引数の Y 渡しの印 → `regalloc` →
+  `frames.Place`。順序はここだけが持つ。codegen は `pipeline.Backend` として呼び出しの計画 (`MarkArgY` / `CheckStackPush`)
+  を提供する）→ `codegen`（`Llc` はモジュール単位、`funcGen`（genops.go）は関数単位で命令ごとのメソッド `genXxx`。
+  生成した asm の後処理（ピープホール・レジスタの検査・分岐の延長・@log の地点）は `asm.go` の解析した行 `asmLine` の上で
+  書く。ニーモニックの性質は `mnemTable` の 1 つ、番地の同一性は `operand.key()`（記号 + ずれ + 添字。綴りは見ない））。
+- **driver とその周り**: `driver` はビルドの手順（`compileFront` = sema → Prepare → フレーム超過のやり直し。build / check /
+  golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。設定ファイルと
+  バンクの配置は `project`、ca65 / ld65 の探索と dbgfile は `cc65`、@log の生成物は `fclog`、FC_HOME の解決は `fchome`、
+  emu ターゲットの実行とホストとのやり取りの取り決め ($fff0〜$ffff) は `emu`。
+- **調査用の設定**は `ir.Config`（FC_DISABLE / FC_TRACE_* / FC_DUMP_IR / FC_VERIFY_REGS）。環境変数を読むのは
+  `ir.ConfigFromEnv` だけで、`BuildOptions.Config` → `sema.Program.Config` → `ir.Module.Config` と渡り、各段は `lmd.Cfg()` で
+  引く。テストはビルドごとに別の設定を渡せる（`TestRandomMetamorphic` は同じプロセスで段を切って比べる）。
+- **命令の性質の表** `ir/opinfo.go`（副作用が無い・終端・分岐・呼び出し・可換・グローバルを触る・C を受け取る・asm）。
+  「この命令はどれか」の switch を書かずに `op.Code.IsPure()` などで引く。直線区間の障壁も `IsBlockBoundary()` に
+  足す形で書く（sink は C を受け取る命令と asm、fieldindex は呼び出しと asm、indexoff は境界だけ）。
+- **常駐の印**は `Op.Res[ir.RegA / RegY / RegX]`（`Residency{V, In, Out}`）。codegen の状態も `res[reg]` / `resMem[reg]`。
+  退避・復帰・入口 / 出口の写しはレジスタのループで書く（A / Y / X で 3 回書かない）。
 
 ## @log の注釈とパス（最適化を書くときの規則、2026-09-25）
 

@@ -333,6 +333,50 @@ do-while は「やること候補（すぐではない）」。
       インタプリタの判定の範囲、夜間の CI（fuzz.yml）、通ってはいけないプログラムの表（TestMustError / TestMustWarn）。
       development_notes.md の「差分テストの判定の弱点」 ✅ 2026-09-27
 
+## 構造の整理（残り。2026-09-28 の調査）
+
+2026-09-28 に `refactor/structure` で整理したもの: 前段の一本化（check が options を反映していなかった）、`ir/opinfo.go`、
+`ir.Config`、`pipeline`、`Op.Res`、codegen の `asm.go` と `funcGen`、sema の hlc.go の分割、driver の分割（cc65 / project /
+fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価の修正。残りは大きいものほど後ろ。
+
+- [ ] **regalloc の常駐の見積もりと codegen の命令選択の一本化**: `resident.go` の friendlyA / needsY などは codegen の出力を
+      手で写した予測表で、codegen 側にも同じ特例が分岐としてある。食い違いは `CompileLambda` が実際の出力から数えて最大 8 回
+      コンパイルし直して吸収している（`MisclassifyResident` / `ResidentFixes`）。「命令 × 置き場所 → 使う / 壊すレジスタ・
+      サイクル・出力」の規則表を 1 つにして両方が引けば、再コンパイルのループごと消える。`asm.go` の `mnemTable` に
+      実サイクル数を足せば見積もりの数字（3 / 6 / 1）も置き換えられる
+- [ ] **ABI / 呼び出しの計画の一本化**: Stack / Fastcall / Static / Cc65 に Entry・RegArg・RegArgY・RegResult・FrameZp が重なり、
+      入口のシンボルが最大 4 つ（`sym` / `__direct` / `__frame` / `__a`）。判定が 20 ファイル 150 か所に散る。frames が関数ごとに
+      `CallConv{Params []Loc, Result Loc, Entries}` を作り、呼び出しごとの計画を codegen の前に 1 回計算する
+      （`markArgY` / `resolveCall` / `pendingCall` / holdA / holdX / HoldY の状態機械をまとめる）
+- [ ] **IR の命令の同一性を `*Op` に**: DefUse / SSA / Liveness が `lmd.Ops` の添字で引き、消した命令を nil で残すので、
+      命令を 1 つ挿すと解析を全部作り直す。「1 か所直したら return して再構築」のループが 7 パス（上限は 8 / 16 / 20 / 32 と
+      場当たりで、達すると黙って止まる）、`compact()` が Passes に 11 か所、`ops[i+1] == nil` の穴で黙って効かない隣接判定が
+      6 か所。`*Op` を鍵にして def-use を差分で更新し、CFG / 支配木 / ループを無効化つきのキャッシュにする。同時に
+      `ir.Verify(lmd)`（オペランド数・Dst・ラベル・一時変数の規約）を各パスの後に走らせる
+- [ ] **メモリアクセスと幅・符号の表現**: Index / Pget / Pset / IndexPget / IndexPset / FieldPget / FieldPset の 7 つ +
+      `Scaled` + 配列への cast で、定数のずれの表し方が 3 通り、書く幅の出どころがオペコードごとに違う（fuzz で出たバグの多く
+      がここ）。`LoadMem / StoreMem` + `Addr{Base, Index, Scale, Disp, Width}` に集約し、演算命令に幅と符号を明示する
+      （zext / sext / trunc を命令に）。「k バイト目」「比較は広い方の幅」「除算は Dst の符号」の規則は sema の畳み込み・
+      opt/ssa・interp・codegen の 4 か所に手書きされているが、interp は差分テストの独立した判定役なので共有するなら
+      sema と opt/ssa の 2 つまで
+- [ ] **sema の式に型付きの中間表現を**: `lval`（470 行）が型検査・暗黙変換・診断・IR 出力を同時にやり、式の型は IR を出す
+      まで分からない（`f() == .A` の二重評価はこの構造の結果）。「検査して型・定数値・左辺値性を持つ木を作る段」と「IR を
+      出す段」に分ける。あわせて sema が自分の Symbol / Scope を持ち、`ir.Scope` と `ir.Lambda.Body`（AST）を ir から出す。
+      `ir.Value` は置き場所とリテラルだけに。`Hlc` の寿命の違う状態（モジュール / 関数 / 式）も分ける
+- [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
+      独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
+      `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
+- [ ] **ループ解析**: `Loops()` は平らな一覧で、支配の判定が 3 つ、カウンタ付きループの照合が induction / unroll / ywalk に
+      重複。`ir.LoopInfo`（ネストの木・preheader・ループ内の定義）と共通の `matchCountedLoop` に
+- [ ] **テストの共通部品**: driver の 12,000 行のテストに「TempDir に書いて Build」の包み関数が約 15 種類（MaxCycles や
+      ca65 の再試行の有無がまちまち）。`internal/fctest` に。ランダム生成器（約 3,000 行）を `internal/fuzzgen` に出せば
+      `tools/fuzzmeasure` が `go test -json` を経由せずに直接呼べる
+- [ ] **driver の `Compiler`** はビルド単位の状態（ctx / target / dir / buildDir / prog / layout）をフィールドに持つので同じ
+      Compiler で並行ビルドできない。ビルドごとの struct に分け、ld65 のメモリ配置（ZP / SRAM の番地が 3 か所に直書き）を
+      `MemoryMap` から ld65.cfg と base.s の両方に出す
+- [ ] sema の `Loader` が直接ディスクを読む（`fs.FS` にすればテストがメモリ上で済む）。`r6502.Memory` の `map[int]int` を
+      `[65536]byte` に（差分テストの速さ）。`fc3Seeds` が syntax と driver の fuzz に同じ内容で 2 つ
+
 ## 整理・判断待ち
 
 **記録のみ・修正しない（2026-09-20、ユーザー方針）:** interrupt 属性では、暗黙の乗除算・剰余ルーチンが
@@ -342,7 +386,7 @@ do-while は「やること候補（すぐではない）」。
 
 - [x] **v1 パーサの削除**: `fcc migrate` / `internal/migrate` / `.rb` マクロの互換 / `test/*.fc` の v1 版を削除。
       `#fc 2` は任意に、`#fc 1` はエラー。v1 だけの構文は「v2 ではこう書く」のエラーのまま残す ✅ 2026-09-19
-- [ ] `memo.txt`（初期の TODO メモ。ほとんど済み）の整理
+- [x] `memo.txt`（初期の TODO メモ）は追跡から外した ✅ 2026-09-28
 - [ ] `examples/castle` と実プロジェクト `C:\Work\castle` の同期（`tools/sync_examples.ps1`）と公開可否
 - [ ] castle 側（**SSA が終わってからまとめて反映**。2026-09-19 決定）: examples/castle に入れた変更（`data.asm` の
       `FC_SZP` / `FC_SRAM` / `FC_SP`、`mmc3.fc` の `options(static_zp:, static_ram:)`、`ppu.fc` のスプライト消去）、
