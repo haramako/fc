@@ -56,7 +56,7 @@ const (
 	OpAsm                       // インラインアセンブラ (Text)
 	OpIndex                     // Dst = &Src[0][Src[1]] (番地の計算。ポインタ値を作る)
 	OpRef                       // Dst = &Src[0]
-	OpLoadMem                   // Dst = mem[Src[0] + Src[1]*Scale + Disp] (Src[1] が NoIndex なら添字無し。mem.go、doc/v4_memops.md)
+	OpLoadMem                   // Dst = mem[Src[0] + Src[1]*Scale + Disp] (Src[1] が NoIndex なら添字無し。mem.go、doc/ir_memops.md)
 	OpStoreMem                  // mem[Src[0] + Src[1]*Scale + Disp .. +Width) = Src[2]
 	opCodeCount
 )

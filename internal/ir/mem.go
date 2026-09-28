@@ -1,6 +1,6 @@
 package ir
 
-// メモリアクセス命令 (load_mem / store_mem) の番地の形 (doc/v4_memops.md)。
+// メモリアクセス命令 (load_mem / store_mem) の番地の形 (doc/ir_memops.md)。
 
 import "github.com/haramako/fc/internal/types"
 

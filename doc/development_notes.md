@@ -510,7 +510,7 @@ go test ./...                                    # 全部 (golden + examples + N
 - **命令の性質の表** `ir/opinfo.go`（副作用が無い・終端・分岐・呼び出し・可換・グローバルを触る・C を受け取る・asm）。
   「この命令はどれか」の switch を書かずに `op.Code.IsPure()` などで引く。直線区間の障壁も `IsBlockBoundary()` に
   足す形で書く（sink は C を受け取る命令と asm、fieldindex は呼び出しと asm、indexoff は境界だけ）。
-- **メモリアクセス**は `load_mem` / `store_mem` の 2 命令（`ir/mem.go`、[v4_memops.md](v4_memops.md)）。番地は
+- **メモリアクセス**は `load_mem` / `store_mem` の 2 命令（`ir/mem.go`、[ir_memops.md](ir_memops.md)）。番地は
   `Base + Index * Scale + Disp`（store は `Width`）で、`op.Mem()` で引く（添字が無ければ `Index == nil`。Src[1] には番兵
   `ir.NoIndex` が入っている。DefUse の uses は Src の位置を保つので、SSA のように位置で引く側は NoIndex を変数と見ないこと）。
   `index`（`&a[i]` の番地の計算）はそのまま。fuse / fieldindex / indexoff / scale は Addr の畳み込みで、codegen の
