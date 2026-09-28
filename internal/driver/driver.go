@@ -55,6 +55,8 @@ type BuildOptions struct {
 	LogOut io.Writer
 	// LogEveryStatement はテスト用: 文ごとに変数を全部出す @log を置く (sema.Program.LogEveryStatement)
 	LogEveryStatement bool
+	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
+	MisclassifyResident bool
 	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
@@ -86,6 +88,8 @@ type Result struct {
 	Frames     []string         // 静的フレームの配置の要約 (fcc build -d で表示)
 	Defines    []sema.DefineUse // @(build) の const の上書き (fc.toml / -D。fcc build -d で表示)
 	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
+	// ResidentFixes は常駐レジスタの見積もりが外れて、退避 / 復帰に直した命令の数 (codegen.Llc.ResidentFixes)
+	ResidentFixes int
 }
 
 type Compiler struct {
@@ -248,6 +252,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 			return nil, err
 		}
 	}
+	result.ResidentFixes = llc.ResidentFixes
 
 	// assemble (アセンブラ -> オブジェクトファイル)。各 .s は独立なので並列にアセンブルする
 	// (.inc は上で全部書き終えている)。objs の並び = リンク順はモジュール順のまま
@@ -609,6 +614,7 @@ func (c *Compiler) newLlc(opt *BuildOptions, prog *sema.Program) *codegen.Llc {
 	}
 	llc.Limits.FastcallReg = c.fastcallRegSize()
 	llc.FarCall = prog.FarCallEnabled()
+	llc.MisclassifyResident = opt.MisclassifyResident
 	return llc
 }
 

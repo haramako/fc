@@ -65,3 +65,36 @@ func TestAllocatorUnit(t *testing.T) {
 		}
 	})
 }
+
+// allocRanges は live range の重ならないものを同じレジスタにまとめる (テスト用。生存区間の計算と overlapRange を確かめる)。
+// 返り値は各レジスタに入るキーの index のリスト。
+func allocRanges(ranges []*ir.LiveRange) [][]int {
+	var regs [][]int
+	var regRanges []*ir.LiveRange
+	for i, lr := range ranges {
+		found := false
+		for j := range regs {
+			if !overlapRange(regRanges[j], lr) {
+				regRanges[j] = joinRange(regRanges[j], lr)
+				regs[j] = append(regs[j], i)
+				found = true
+				break
+			}
+		}
+		if !found {
+			regs = append(regs, []int{i})
+			regRanges = append(regRanges, lr)
+		}
+	}
+	return regs
+}
+
+func joinRange(r1, r2 *ir.LiveRange) *ir.LiveRange {
+	r := &ir.LiveRange{Min: min(r1.Min, r2.Min), Max: max(r1.Max, r2.Max)}
+	for _, w := range append(append([]int{}, r1.Writes...), r2.Writes...) {
+		if w < r.Min || w > r.Max {
+			r.Writes = append(r.Writes, w)
+		}
+	}
+	return r
+}

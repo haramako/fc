@@ -31,10 +31,6 @@ func (m *Memory) Get(addr int) int {
 	return m.m[addr]
 }
 
-func (m *Memory) GetWord(addr int) int {
-	return m.Get(addr) + (m.Get(addr+1) << 8)
-}
-
 // Mode はアドレッシングモード。
 type Mode int
 

@@ -167,16 +167,6 @@ func isCall(op *ir.Op) bool {
 	return op != nil && (op.Code == ir.OpCall || op.Code == ir.OpFastcall)
 }
 
-// hasCalls は本体に呼び出し (またはインラインアセンブラ) があるか。
-func hasCalls(lmd *ir.Lambda) bool {
-	for _, op := range lmd.Ops {
-		if isCall(op) || (op != nil && op.Code == ir.OpAsm) {
-			return true
-		}
-	}
-	return false
-}
-
 // hasCallsOrOpaqueAsm は本体に呼び出しか、flagOnlyAsm でない asm があるか。別モジュールへの展開の判定に使う
 // (asm の中身は解析しないので、中で jsr したり元のモジュールだけに見えるシンボルを参照したりしうる。自動インラインは
 // asm を含む関数を最初から対象にしない (autoInlinable) ので、これが効くのは options(inline: true) の関数だけ)。

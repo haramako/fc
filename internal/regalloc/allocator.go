@@ -541,57 +541,6 @@ type allocEntry struct {
 	liveRange *ir.LiveRange
 }
 
-type AllocatorReg struct {
-	liveRange *ir.LiveRange
-	vars      []*ir.Value
-}
-
-type Allocator struct {
-	Regs []*AllocatorReg
-}
-
-func NewAllocator(vars []*allocEntry) *Allocator {
-	a := &Allocator{}
-	for _, e := range vars {
-		found := false
-		for _, reg := range a.Regs {
-			if !overlapRange(reg.liveRange, e.liveRange) {
-				reg.liveRange = joinRange(reg.liveRange, e.liveRange)
-				reg.vars = append(reg.vars, e.key)
-				found = true
-				break
-			}
-		}
-		if !found {
-			a.Regs = append(a.Regs, &AllocatorReg{liveRange: e.liveRange, vars: []*ir.Value{e.key}})
-		}
-	}
-	return a
-}
-
-// allocRanges は live range の重ならないものを同じレジスタにまとめる (NewAllocator の中核。単体テスト用に分離)。
-// 返り値は各レジスタに入るキーの index のリスト。
-func allocRanges(ranges []*ir.LiveRange) [][]int {
-	var regs [][]int
-	var regRanges []*ir.LiveRange
-	for i, lr := range ranges {
-		found := false
-		for j := range regs {
-			if !overlapRange(regRanges[j], lr) {
-				regRanges[j] = joinRange(regRanges[j], lr)
-				regs[j] = append(regs[j], i)
-				found = true
-				break
-			}
-		}
-		if !found {
-			regs = append(regs, []int{i})
-			regRanges = append(regRanges, lr)
-		}
-	}
-	return regs
-}
-
 func overlapRange(r1, r2 *ir.LiveRange) bool {
 	if r1.Max >= r2.Min && r1.Min <= r2.Max {
 		return true
@@ -607,16 +556,6 @@ func overlapRange(r1, r2 *ir.LiveRange) bool {
 		}
 	}
 	return false
-}
-
-func joinRange(r1, r2 *ir.LiveRange) *ir.LiveRange {
-	r := &ir.LiveRange{Min: min(r1.Min, r2.Min), Max: max(r1.Max, r2.Max)}
-	for _, w := range append(append([]int{}, r1.Writes...), r2.Writes...) {
-		if w < r.Min || w > r.Max {
-			r.Writes = append(r.Writes, w)
-		}
-	}
-	return r
 }
 
 // ---------------------------------------------------------------

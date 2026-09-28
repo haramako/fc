@@ -240,13 +240,6 @@ func (h *Hlc) inScope(f func()) {
 	h.scope = old
 }
 
-func (h *Hlc) attachScope(newScope *ir.Scope, f func()) {
-	old := h.scope
-	h.scope = newScope
-	f()
-	h.scope = old
-}
-
 // mustValue は評価済みの値であることを要求する (マクロ引数など)。
 func mustValue(c *cexpr) *ir.Value {
 	if c.kind != cValue {

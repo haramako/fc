@@ -28,12 +28,16 @@ type Llc struct {
 	FarCall       bool            // far call が有効 (各モジュールに farcall / FC_FARCALL の import を出す)
 	labelCount    int
 	ResidentFixes int // 常駐を触らないはずの命令が書いていて、退避 / 復帰に直した数 (regalloc の見積もりの外れ。CompileLambda)
-	codeSegment   string
-	curLambda     *ir.Lambda // 処理中の関数 (エラー位置の補完用)
-	curOp         *ir.Op     // 処理中の命令 (エラー位置の補完用)
-	zero          *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
-	types         *types.Universe
-	Lambdas       map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
+	// MisclassifyResident はテスト用: 常駐レジスタを退避する (ResClobber) と見積もった命令を「触らない」(ResFree) に
+	// する。本体がそのレジスタを書いていれば CompileLambda が見つけて退避 / 復帰に直す (自己修正が働くことを確かめる。
+	// 普段のビルドでは見積もりが外れないので、この経路は通らない)
+	MisclassifyResident bool
+	codeSegment         string
+	curLambda           *ir.Lambda // 処理中の関数 (エラー位置の補完用)
+	curOp               *ir.Op     // 処理中の命令 (エラー位置の補完用)
+	zero                *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
+	types               *types.Universe
+	Lambdas             map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
 	// NoGrow は展開をしない関数の Id (PrepareProgram が ir.Lambda.NoGrow にする)。FrameOver は PrepareProgram が
 	// frame size over で止まったときのその関数の Id (-O 2 のときだけ。driver が NoGrow に足してやり直す)
 	NoGrow    map[string]bool
@@ -45,8 +49,8 @@ type Llc struct {
 	DebugFile func(ref string) string
 	// LogSites は -g のときの @log の地点 (log.go。Compile の順に増える)
 	LogSites []*LogSite
-	dbgFiles  map[string]bool // このモジュールで宣言済みの .dbg file
-	dbgLast   string          // 直前に出した .dbg line (同じ行の命令の間では出さない)
+	dbgFiles map[string]bool // このモジュールで宣言済みの .dbg file
+	dbgLast  string          // 直前に出した .dbg line (同じ行の命令の間では出さない)
 
 	// ループ内の A / Y 常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタを占有している変数と、その扱い
 	res     *ir.Value // op.Resident (A)
@@ -687,7 +691,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 
 	pushArgSize := 0
 	pushFastcallArgSize := 0
-	var calls []*pendingCall // 積んでいる途中の呼び出し (内側が末尾)
+	var calls []*pendingCall                    // 積んでいる途中の呼び出し (内側が末尾)
 	verify := os.Getenv("FC_VERIFY_REGS") != "" // テストと fuzz で有効 (verifyRegs)
 
 	for opNo, op := range ops {
@@ -719,6 +723,20 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 		var d regalloc.Decision
 		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
 			d, _ = regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+			if l.MisclassifyResident {
+				// テスト用: 見積もりをわざと外す (下の forced が直す)。常駐の変数そのものを読み書きする命令は、退避して
+				// メモリ側で扱うしかない (レジスタのまま出せない形がある) ので対象外。実際に外れるのも「変数を触らない
+				// 命令がレジスタを書いていた」形
+				if d.A == regalloc.ResClobber && !opInvolves(op, op.Resident) {
+					d.A, d.UseY = regalloc.ResFree, false
+				}
+				if d.Y == regalloc.ResClobber && !opInvolves(op, op.ResidentY) {
+					d.Y = regalloc.ResFree
+				}
+				if d.X == regalloc.ResClobber && !opInvolves(op, op.ResidentX) {
+					d.X = regalloc.ResFree
+				}
+			}
 			// 前のコンパイルで、触らないはずの本体が書いていた常駐レジスタは退避 / 復帰する (CompileLambda)
 			if f := forced[opNo]; f.any() {
 				if f.a && d.A == regalloc.ResFree {
@@ -1921,6 +1939,20 @@ func simpleArg(s ir.Operand) bool {
 	case *ir.Value, *ir.CastedValue:
 		tp := ir.ValType(s)
 		return tp.Size <= 2 && tp.Kind != types.Struct && tp.Kind != types.Array
+	}
+	return false
+}
+
+// opInvolves は op が v を読むか書くか (regalloc.involves と同じ。MisclassifyResident 用)。
+func opInvolves(op *ir.Op, v *ir.Value) bool {
+	if v == nil {
+		return false
+	}
+	defs, uses := ir.DefUse(op)
+	for _, o := range append(defs, uses...) {
+		if ir.UnderlyingValue(o) == v {
+			return true
+		}
 	}
 	return false
 }

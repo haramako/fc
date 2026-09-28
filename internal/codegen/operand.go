@@ -91,40 +91,10 @@ func (l *Llc) load(to, from ir.Operand) []any {
 // loadA は Aレジスタへのロード。戻り値は string / nil / []string。
 func (l *Llc) loadA(v ir.Operand, n int) any {
 	if uv, ok := v.(*ir.Value); ok && uv.Location == ir.LocCond {
-		if n != 0 {
-			panic("load_a cond with n != 0")
-		}
-		switch uv.CondReg {
-		case ir.CondZero:
-			labels := l.newLabels(2)
-			trueLabel, endLabel := labels[0], labels[1]
-			return []string{
-				fmt.Sprintf("%s %s", ifElse(uv.CondPositive, "beq", "bne"), trueLabel),
-				"lda #0",
-				fmt.Sprintf("jmp %s", endLabel),
-				trueLabel + ":",
-				"lda #1",
-				endLabel + ":",
-			}
-		case ir.CondCarry:
-			if uv.CondPositive {
-				return []string{"lda #0", "rol a", "eor #1"}
-			}
-			return []string{"lda #0", "rol a"}
-		case ir.CondNegative:
-			labels := l.newLabels(2)
-			trueLabel, endLabel := labels[0], labels[1]
-			return []string{
-				fmt.Sprintf("%s %s", ifElse(uv.CondPositive, "bmi", "bpl"), trueLabel),
-				"lda #0",
-				fmt.Sprintf("jmp %s", endLabel),
-				trueLabel + ":",
-				"lda #1",
-				endLabel + ":",
-			}
-		default:
-			panic("invalid cond_reg")
-		}
+		// regalloc.allocateCond はフラグ (LocCond) を、直後の OpIf / OpIfTrue / OpNot だけが読む値にしか使わず、その 3 つは
+		// フラグを直接扱う (OpNot は結果が値でも自分で 0 / 1 を作る)。A に取り出す経路は無い (以前ここにあった変換は Ruby 版
+		// からの名残で、どこからも通らなかった。2026-09-28 のカバレッジの調査)
+		panic(fmt.Sprintf("internal: condition flag %s loaded into A (regalloc.allocateCond gives LocCond only to values read by the next if / not)", ir.OperandString(v)))
 	}
 	if l.inA(v) {
 		if n != 0 {
