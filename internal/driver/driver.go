@@ -4,10 +4,6 @@ package driver
 // base.asm / ld65.cfg のテンプレートは小さく静的なので text/template を使わず文字列生成している。
 
 import (
-	"github.com/haramako/fc/internal/emu"
-	"github.com/haramako/fc/internal/project"
-	"github.com/haramako/fc/internal/fclog"
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"fmt"
 	"io"
@@ -15,14 +11,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/emu"
+	"github.com/haramako/fc/internal/fclog"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/project"
 	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
