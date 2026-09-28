@@ -270,6 +270,16 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 						h.rewriteAs("shift-type", c.args[0], t.String())
 					}
 				}
+				if t != nil && c.op != opLand && c.op != opLor && c.op != opNot {
+					// A1 (widen.go): 広い型と出会う、印の付いた (折り返した) オペランドは、fc 4 では元の式をその幅で畳み込み直す
+					// (fc 3 のモジュールでは migrate に `as` を報告する)
+					if h.foldWidenArgs(c, args, t) {
+						v1 = args[0].val.Int
+						if len(args) > 1 {
+							v2 = args[1].val.Int
+						}
+					}
+				}
 				switch {
 				case t == nil || c.op == opLand || c.op == opLor || c.op == opNot:
 				case c.op == opEq || c.op == opNe || c.op == opLt || c.op == opGt || c.op == opLe || c.op == opGe:
@@ -316,7 +326,13 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 					return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), n)) // 比較・論理演算の定数畳み込みも bool
 				}
 				if t != nil {
-					return cv(ir.NewIntLiteral("", t, wrapInt(n, t))) // 型付きの定数は、変数と同じく型の幅で折り返す
+					w := wrapInt(n, t) // 型付きの定数は、変数と同じく型の幅で折り返す
+					if h.foldOverflows(c, args, t, n != w) {
+						lit := ir.NewIntLiteral("", t, w)
+						h.markTaint(lit, c)
+						return cv(lit)
+					}
+					return cv(ir.NewIntLiteral("", t, w))
 				}
 				return cv(h.IntValue(n))
 			}

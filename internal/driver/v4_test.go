@@ -136,6 +136,67 @@ func TestV4Widen(t *testing.T) {
 	}
 }
 
+// typedConstSrc は型付きの定数どうしの演算と A1 の例 (版は %d)。
+const typedConstSrc = `#fc %d
+use * from stdio;
+const A:u8 = 200;
+const B:u8 = 100;
+const C = A + B;
+function main():void
+{
+	var d:u16 = A + B;
+	var e:u16 = (200 as u8) + (100 as u8);
+	var f:u8 = A + B;
+	var g:u16 = ((A + B) / 2) as u8;
+	var h:u16 = (A + B) / 2;
+	var k:bool = (A + B) == (300 as u16);
+	var m:u16 = -(5 as u8);
+	var n:u16 = (A + B) as u8;
+	var w:u16 = 1;
+	w = w + ((253 as u8) | (127 as i8));
+	printf(d, " ", e, " ", f, " ", g, " ", h, " ", k, " ", m, " ", n, " ", C, " ", w, "\n");
+	exit(0);
+}
+`
+
+// TestV4TypedConst: 型付きの定数どうしの演算も、fc 4 では広がる式の中なら広い幅で計算する (畳み込みが折り返した値に元の式の
+// 印を付け、広い型と出会ったら元の式をその幅で畳み込み直す: widen.go)。`as` の中・const の宣言・代入先が 8 ビットなら折り返す。
+// fc 3 から migrate すると `as` が足されて fc 3 と同じ結果になる。
+func TestV4TypedConst(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		ver  int
+		want string
+	}{
+		{4, "300 300 44 22 150 1 65531 44 44 256\n"},
+		{3, "44 44 44 22 22 0 251 44 44 0\n"},
+	} {
+		out, err := buildBothLevels(t, map[string]string{"t.fc": fmt.Sprintf(typedConstSrc, c.ver)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != c.want {
+			t.Errorf("fc %d: got %q, want %q", c.ver, out, c.want)
+		}
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(fmt.Sprintf(typedConstSrc, 3)), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := buildBothLevels(t, map[string]string{"t.fc": string(res[path])})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "44 44 44 22 22 0 251 44 44 0\n"; out != want {
+		t.Errorf("migrate した fc 4: got %q, want %q\n%s", out, want, res[path])
+	}
+}
+
 // TestV4MigrateWiden: A1・F1 で意味が変わる所は、migrate が今の型の `as` を足して fc 3 と同じ結果にする。
 func TestV4MigrateWiden(t *testing.T) {
 	t.Parallel()

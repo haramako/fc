@@ -66,6 +66,8 @@ func (g *rfGen) widen(e rfExpr) rfExpr {
 		pre = fmt.Sprintf("gs.f_%s = %s; ", t1.name, src)
 		src = "gs.f_" + t1.name
 	}
+	// 定数の形も同じ文の形 (fc 4 では文でない式を 2 つの値を出す形に置くので、行ごとの値の数をそろえる)
+	c = fmt.Sprintf(`{ var w:%s = %s; printf(((w) as i16), "\n"); }`, t2.name, c)
 	return rfExpr{c: c, v: fmt.Sprintf(`{ %svar w:%s = %s; printf(((w) as i16), "\n"); }`, pre, t2.name, src)}
 }
 
@@ -167,10 +169,14 @@ func indexOfType(t rfType) int {
 	return 0
 }
 
-// rfSource は式の並びのプログラム (1 行 1 式。行番号 = 4 + 添字)。
-func rfSource(exprs []string) string {
+// rfSource は式の並びのプログラム (fc 3。1 行 1 式。行番号 = 4 + 添字)。
+func rfSource(exprs []string) string { return rfSourceV(exprs, 3) }
+
+// rfSourceV は版 ver の rfSource。fc 4 では各式を 16 ビットの値と足す形 (`w = w + (式)`、w:u16) にも置いて、A1 (式を式の中の
+// 一番広い型で計算する) で広がる所の定数の畳み込みも比べる (doc/v4_plan.md §1.3 A)。
+func rfSourceV(exprs []string, ver int) string {
 	var b strings.Builder
-	b.WriteString("#fc 3\nuse * from stdio;\n")
+	fmt.Fprintf(&b, "#fc %d\nuse * from stdio;\n", ver)
 	for _, t := range rfTypes {
 		fmt.Fprintf(&b, "function id_%s(x:%s):%s @(noinline) { return x; } var gv_%s:%s; var ga_%s:[3]%s;\n", t.name, t.name, t.name, t.name, t.name, t.name, t.name)
 	}
@@ -178,6 +184,10 @@ func rfSource(exprs []string) string {
 	for _, e := range exprs {
 		if strings.HasPrefix(e, "{") {
 			fmt.Fprintf(&b, "\t%s\n", e) // 文 (暗黙の拡張の初期化を通す形。1 行)
+			continue
+		}
+		if ver >= 4 {
+			fmt.Fprintf(&b, "\t{ var w:u16 = 1; w = w + (%s); printf((w as i16), \" \", ((%s) as i16), \"\\n\"); }\n", e, e)
 			continue
 		}
 		fmt.Fprintf(&b, "\tprintf(((%s) as i16), \"\\n\");\n", e)
@@ -190,7 +200,13 @@ func rfSource(exprs []string) string {
 const rfFirstLine = 2 + 4 + 2 + 1
 
 // TestRandomConstFold は定数の形と変数の形で同じ式の結果が同じかを比べる。
-func TestRandomConstFold(t *testing.T) {
+func TestRandomConstFold(t *testing.T) { runConstFold(t, 3) }
+
+// TestRandomConstFoldV4 は fc 4 の TestRandomConstFold (A1 で広がる所の型付きの定数の畳み込み: widen.go)。
+func TestRandomConstFoldV4(t *testing.T) { runConstFold(t, 4) }
+
+// runConstFold は版 ver のプログラムで TestRandomConstFold をする。
+func runConstFold(t *testing.T, ver int) {
 	t.Parallel()
 	base := *randSeed
 	if base == 0 {
@@ -212,7 +228,7 @@ func TestRandomConstFold(t *testing.T) {
 				for i, e := range es {
 					vs[i] = e.v
 				}
-				out, err := rpRun(t, map[string]string{"t.fc": rfSource(vs)}, 0, rpMaxCycles)
+				out, err := rpRun(t, map[string]string{"t.fc": rfSourceV(vs, ver)}, 0, rpMaxCycles)
 				if err == nil {
 					vo2 = out
 					break
@@ -229,7 +245,7 @@ func TestRandomConstFold(t *testing.T) {
 					drop[e.Pos.Line-rfFirstLine] = true
 				}
 				if len(drop) == 0 || try > 10 {
-					t.Fatalf("変数の形のビルド失敗 (seed %d):\n%s\n%v", seed, rfSource(vs), err)
+					t.Fatalf("変数の形のビルド失敗 (seed %d):\n%s\n%v", seed, rfSourceV(vs, ver), err)
 				}
 				var keep []rfExpr
 				for i, e := range es {
@@ -244,13 +260,13 @@ func TestRandomConstFold(t *testing.T) {
 			for i, e := range es {
 				vs[i], cs[i] = e.v, e.c
 			}
-			vo0, err := rpRun(t, map[string]string{"t.fc": rfSource(vs)}, -1, rpMaxCycles)
+			vo0, err := rpRun(t, map[string]string{"t.fc": rfSourceV(vs, ver)}, -1, rpMaxCycles)
 			if err != nil {
 				t.Fatalf("変数の形 -O 0 (seed %d): %v", seed, err)
 			}
-			co2, err := rpRun(t, map[string]string{"t.fc": rfSource(cs)}, 0, rpMaxCycles)
+			co2, err := rpRun(t, map[string]string{"t.fc": rfSourceV(cs, ver)}, 0, rpMaxCycles)
 			if err != nil {
-				t.Fatalf("定数の形のビルド失敗 (seed %d): 変数の形は通る\n%s\n%v", seed, rfSource(cs), err)
+				t.Fatalf("定数の形のビルド失敗 (seed %d): 変数の形は通る\n%s\n%v", seed, rfSourceV(cs, ver), err)
 			}
 			if vo0 != vo2 {
 				t.Errorf("変数の形の -O 0 と -O 2 が違う (seed %d)", seed)

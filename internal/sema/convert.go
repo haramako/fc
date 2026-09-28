@@ -23,6 +23,10 @@ func (h *Hlc) v4() bool { return h.version() >= syntax.Version4 }
 func (h *Hlc) convert(v ir.Operand, typ *types.Type, c *cexpr) ir.Operand {
 	vt := ir.ValType(v)
 	if typ.Kind == types.Int && typ.Enum == nil && (vt.Kind == types.Int || vt.Kind == types.Bool) && vt.Enum == nil && typ.Size <= 2 {
+		if typ.Size > vt.Size {
+			v = h.widenArith(v, typ) // A1: 代入先が広ければ式を代入先の幅で計算する (折り返した型付きの定数も。widen.go)
+			vt = ir.ValType(v)
+		}
 		if k, ok := ir.ValIntLiteral(v); ok {
 			if lo, hi := intRange(typ); k < lo || k > hi {
 				switch {
@@ -39,8 +43,6 @@ func (h *Hlc) convert(v ir.Operand, typ *types.Type, c *cexpr) ir.Operand {
 			case h.rewriting():
 				h.rewriteAs("narrowing", c, typ.String())
 			}
-		} else {
-			v = h.widenArith(v, typ) // A1: 代入先が広ければ式を代入先の幅で計算する (widen.go)
 		}
 	}
 	return h.cast(v, typ)
