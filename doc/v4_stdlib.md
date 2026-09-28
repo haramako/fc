@@ -323,8 +323,8 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    NES ランナーでの確かめ（PPU の中身、NMI のサイクル数）
 4. **広げる**: mmc3 / mmc1 / uxrom（far call と合わせて）、lzw / rle の slice の版、メタスプライト・メタタイル・属性、フェード、音の
    呼び出し口
-5. **移す**: miku を新しい API で書き直して確かめる（小さいので最初の実例に）。castle をどうするか（製品のコード）は別に決める。
-   古い fclib を消す
+5. **移す**: miku を新しい API で書き直して確かめる（fc の中のコピーで。小さいので最初の実例に）。castle は API が落ち着いてから
+   （§8 の 12。それまでは今の fclib のコピーでビルドを保つ）。古い fclib を消す
 
 ### 7.1 テスト（案）
 
@@ -390,7 +390,14 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
     変える（案）。lzw は castle の移行を決めるまで今のまま置く
 11. **固定小数**: 1/16 ピクセルの速度を散らして丸める `math.subpixel`（castle・miku の書き方）だけにするか、8.8 の補助（上位 / 下位、
     掛け算）も入れるか
-12. **castle・miku をいつ・どう移すか**: miku を最初の実例に書き直す案。castle は製品のコードなので判断をもらう
+12. **castle・miku をいつ・どう移すか** → **決定（2026-09-29）: miku だけ、fc の中のコピー（examples/miku）で新しい API に移して確かめる。
+    castle は v4 の API が落ち着いてから移す（当面は考えない）**。それまで castle は、fclib を置き換える前に今の fclib（castle が使う
+    mem / math / pad / nes / lzw と asm）を castle/src にコピーしてビルドを保つ（`use` の探索は「ソースのディレクトリ → fclib →
+    fclib/<target>」なのでコピーが先に見つかる。コピーした後に castle の ROM が golden と同じことを確かめる）。注意: fclib の名前に
+    結びついた組み込み（`cos` → `math.sin` など。castle は `cos` 23 か所）も castle のコピーにつながるので、組み込みを変えるときは古い形でも
+    動くようにする（TestExampleCastle が見張る）。`runtime_init.asm` / `farcall.asm` は `use` を通らずドライバが fclib/<target> から直に
+    入れるので、NMI をライブラリが持つようにするときは castle 用に今の形を残すか、プロジェクトが自分のものを出せるようにする。実プロジェクト
+    （examples/castle の元）を新しいコンパイラに上げるときも同じコピーが要る
 
 ---
 
