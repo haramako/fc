@@ -213,8 +213,13 @@ public function fill(addr:u16, v:u8, n:u8):void;
 public function try_put(addr:u16, data:[]const u8):bool;
 public function reserve(addr:u16, n:u8):[]u8;           // キューの中に n バイトの場所を取って返す (そこへ直接書く: 写しが要らない)
 public function room():u8;
+public function put_rle(addr:u16, src:[:u16]const u8):void;      // RLE のデータをキューの項目に (繰り返しは fill、直写しは写す項目。満杯なら次の NMI を待つ)
 public function write_now(addr:u16, data:[:u16]const u8):void;   // 描画を止めている間
 public function fill_now(addr:u16, v:u8, n:u16):void;
+// rle.to_vram(addr, src): 描画を止めている間に展開しながら PPUDATA へ流す (RAM のバッファが要らない。neslib の vram_unrle)
+// NMI の中では展開しない: vblank (OAM DMA を除いて約 1700 サイクル) が一番きつく、直写しの部分は普通の写しより遅く、1 フレームで
+// 送りきれないデータは途中の状態を持ち越す必要がある。RLE の「繰り返し」の良さはキューの fill の項目 (キュー 1 バイト、NMI で 1 バイト
+// 約 9 サイクル) で得られるので、主の側で put_rle が置き換える
 
 // pal
 public function set_all(p:[]const u8):void;
