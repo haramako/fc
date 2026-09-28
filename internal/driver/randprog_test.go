@@ -1586,9 +1586,9 @@ func rpLocate(t *testing.T, files map[string]string) (res string) {
 			}
 		}
 	}
-	for _, p := range opt.Passes(prog.Types) {
+	for _, p := range opt.Passes() {
 		for _, l := range lmds {
-			p.Run(l)
+			p.Apply(l, prog.Types)
 		}
 		out, ok := run()
 		if !ok {

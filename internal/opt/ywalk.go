@@ -29,9 +29,6 @@ import (
 // 毎周必ず通る (ywalkBody)。ループから出る分岐 (break)・return・switch・asm が無い。lim はリテラルかループの中で
 // 定義されないローカル変数。
 func walkPointerY(lmd *ir.Lambda, u *types.Universe) bool {
-	if lmd.Cfg().Disabled("ywalk") {
-		return false
-	}
 	changed := false
 	for n := 0; n < 8; n++ {
 		if !walkPointerYOne(lmd, u) {

@@ -46,6 +46,7 @@ func metaRun(t *testing.T, files map[string]string, disable string) (out string,
 	}
 	cfg := ir.NewConfig(strings.Split(disable, ",")...)
 	cfg.SetVerifyRegs(true)
+	cfg.SetVerifyIR(true)
 	var o strings.Builder
 	_, err = NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"),
 		Run: true, Stdout: &o, MaxCycles: rpMaxCycles, Config: cfg})

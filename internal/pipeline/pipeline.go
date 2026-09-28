@@ -108,17 +108,20 @@ func prepareLambda(lmd *ir.Lambda, o *Options) (err *diag.Error) {
 			panic(r)
 		}
 	}()
+	verify(lmd, "sema")
 	opt.Optimize(lmd, o.OptimizeLevel, o.Types)
 	opt.ZeroEmptyCasts(lmd)
 	prev := ir.SnapshotLogs(lmd)
 	o.Backend.MarkArgY(lmd) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
 	if o.OptimizeLevel > 0 {
 		regalloc.AllocateResident(lmd)
+		verify(lmd, "resident")
 	}
 	// -O 0 でも同じ割付器を使う (静的フレーム (ABIStatic) の関数はフレームでなく F_f の固定番地に置く必要があり、
 	// 以前あった「全部フレーム」の簡易版は静的フレームの導入後は壊れていた)
 	regalloc.AllocateRegister(lmd, o.Limits)
 	regalloc.DeleteUnuse(lmd)
+	verify(lmd, "regalloc")
 	ir.KeepLogs(lmd, prev)
 	o.Backend.CheckStackPush(lmd)
 	if lmd.Cfg().DumpIR() {
@@ -126,6 +129,16 @@ func prepareLambda(lmd *ir.Lambda, o *Options) (err *diag.Error) {
 		fmt.Fprint(os.Stderr, ir.DumpAllocLambda(lmd.Module.Id, lmd.Id, lmd))
 	}
 	return nil
+}
+
+// verify は FC_VERIFY_IR のとき IR を検査する (ir.Verify。opt の各段の後は opt.Pass.Apply が行う)。
+func verify(lmd *ir.Lambda, after string) {
+	if !lmd.Cfg().VerifyIR() {
+		return
+	}
+	if err := ir.Verify(lmd); err != nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("internal: IR verify after %s in %s: %v", after, lmd.Id, err)})
+	}
 }
 
 // snapshotProgramLogs は全関数の命令の並びを覚え、返す関数で @log の注釈を付け替える (ir.KeepLogs)。
