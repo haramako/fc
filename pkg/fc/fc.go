@@ -83,6 +83,18 @@ func (c *Compiler) Check(src string, opt CheckOptions) ([]Warning, error) {
 	return c.c.Check(src, &driver.CheckOptions{Target: opt.Target, Dir: opt.Dir, Defines: opt.Defines})
 }
 
+// MigrateOptions は Migrate の設定。
+type MigrateOptions struct {
+	Target  string   // 入口としてコンパイルするときのターゲット (TargetEmu (既定) / TargetNES。fclib の探し方)
+	Defines []string // @(build) の const の上書き (Options.Defines と同じ)
+}
+
+// Migrate は srcs (fc 2 / fc 3 / fc 4 のソース) を最新の版に書き換えた内容を返す (キーは srcs の要素。改行は LF)。
+// fc 3 → fc 4 は意味の変わる所の書き換えなので、各ファイルを入口にしたプログラムとしてコンパイルする (エラーは *Error)。
+func (c *Compiler) Migrate(srcs []string, opt MigrateOptions) (map[string][]byte, error) {
+	return c.c.Migrate(srcs, &driver.MigrateOptions{Target: opt.Target, Defines: opt.Defines})
+}
+
 // CommandError は外部コマンドの失敗。
 type CommandError = driver.CommandError
 

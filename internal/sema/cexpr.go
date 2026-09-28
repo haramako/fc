@@ -145,6 +145,7 @@ type cexpr struct {
 	rt    bool            // cArray: 実行時の値を要素に持つ (lval が一時変数に組み立てる。ty は文脈の配列型、無ければ nil)
 	incl  bool            // opSlice: `a[lo..=hi]` (hi を含む)
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
+	end   syntax.Pos      // 元の構文木上の終わりの位置 (fc 4 への書き換え: rewrite.go)
 }
 
 // ---------------------------------------------------------------
@@ -188,7 +189,7 @@ var unaryOps = map[syntax.Kind]cop{
 // toC は構文木の式を未評価の cexpr に変換する。
 func toC(e syntax.Expr) *cexpr {
 	c := toC0(e)
-	c.pos = e.Pos()
+	c.pos, c.end = e.Pos(), e.End()
 	return c
 }
 

@@ -219,7 +219,7 @@ func TestVersionPragma(t *testing.T) {
 
 	bad := []struct{ src, msg string }{
 		{"#fc 1\nvar a:int;\n", "fc 1 sources are no longer supported"},
-		{"#fc 4\n", "invalid version pragma"},
+		{"#fc 5\n", "invalid version pragma"},
 		{"#fc\n", "invalid version pragma"},
 		{"#fc 2 extra\n", "invalid version pragma"},
 		{"var a:int;\n#fc 2\n", "invalid token"},

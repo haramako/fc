@@ -29,6 +29,15 @@ type Program struct {
 
 	// Sources はモジュール id → 読み込んだソース (fcc migrate / ツール用。Loader が登録する)
 	Sources map[string]*Source
+	// Overlay はソースの中身の差し替え (OverlayKey(実パス) → 内容)。fcc migrate が fc 2 → 3 の書き換えをメモリの上で済ませてから
+	// fc 3 → 4 の書き換えを集めるときに使う
+	Overlay map[string][]byte
+	// CollectRewrites なら fc 3 のモジュールで fc 4 の意味と違う所を Rewrites に集める (rewrite.go。fcc migrate)。作れなかった所は
+	// RewriteErrors
+	CollectRewrites bool
+	Rewrites        []Rewrite
+	RewriteErrors   []RewriteError
+	rewriteSeen     map[Rewrite]bool
 	// Warnings は意味解析で見つけた警告 (出現順)
 	Warnings []diag.Warning
 	// Errors は意味解析で見つけたエラー (出現順)。文ごとに回復して集める。MaxErrors で打ち切る
@@ -346,9 +355,11 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := ReadSource(abs)
-	if err != nil {
-		return nil, &diag.Error{Msg: err.Error()}
+	src, ok := l.prog.Overlay[OverlayKey(abs)]
+	if !ok {
+		if src, err = ReadSource(abs); err != nil {
+			return nil, &diag.Error{Msg: err.Error()}
+		}
 	}
 	file, perr := syntax.Parse(src, ref)
 	if perr != nil {

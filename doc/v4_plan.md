@@ -290,6 +290,11 @@ slice が入ったので、v4 で fclib を大幅に拡充する。中身は未�
 
 ## 4. 進め方（案）
 
-1. `#fc 4` の受け付けと、型を見る migrate の土台（sema が位置つきで書き換えを報告する仕組み）
+1. `#fc 4` の受け付けと、型を見る migrate の土台（sema が位置つきで書き換えを報告する仕組み） ✅ 2026-09-28: `syntax.Version4`
+   （`LatestVersion`）、`sema.Rewrite` / `rewriteAs`（fc 3 のモジュールで fc 4 の意味と違う所を集める）・`Program.Overlay`、
+   `migrate.ToV4`、`driver.Compiler.Migrate`（fc 2 → 3 → 4。`fcc migrate` はこれ）。`TestMigrateExamples`（castle / miku を
+   fc 4 に移して ROM の golden と一致）、`TestMigrateGoldenPrograms` / `TestMigrateBench` は fc 4 まで移す。この時点の fc 4 は
+   fc 3 と同じ意味。migrate はソースが fc 3 としてコンパイルできることが要る（以前の構文だけの書き換えは、コンパイルの
+   エラーがあっても書き換えられた）
 2. 整数の規則（§1）と文字列定数の長さ（§2）: ROM を変えない移行。examples・test・bench の golden と一致することを確かめる
 3. `fastcall` の廃止（§2）と fclib の拡充・API の移行（§3）: 生成コードが変わる。動作で確かめる

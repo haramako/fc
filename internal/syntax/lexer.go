@@ -23,13 +23,14 @@ type Lexer struct {
 	verErr   *Error // プラグマの構文エラー (最初の Next で返す)
 }
 
-// 文法バージョン。fc 1 (2026-09 まで) は削除した。fc 3 は開発中 (doc/v3_plan.md)。ソースごとに先頭行の `#fc 2` /
-// `#fc 3` で選び、無ければ DefaultVersion (移行期間は fc 2)。fc 2 と fc 3 のソースは 1 つのプログラムに混ぜられる
-// (モジュールごとに Module.Version)。fc 2 → fc 3 の書き換えは `fcc migrate` (internal/migrate)。
+// 文法バージョン。fc 1 (2026-09 まで) は削除した。fc 4 は開発中 (doc/v4_plan.md。整数の規則など意味の変更)。ソースごとに
+// 先頭行の `#fc 2` / `#fc 3` / `#fc 4` で選び、無ければ DefaultVersion (移行期間は fc 2)。版の違うソースは 1 つのプログラムに
+// 混ぜられる (モジュールごとに Module.Version)。古い版からの書き換えは `fcc migrate` (internal/migrate)。
 const (
 	Version2       = 2
 	Version3       = 3
-	LatestVersion  = Version3
+	Version4       = 4
+	LatestVersion  = Version4
 	DefaultVersion = Version2
 )
 
@@ -47,7 +48,7 @@ func (l *Lexer) Pragma() string { return l.pragma }
 // Version はソースの文法バージョン (プラグマが無ければ DefaultVersion)。
 func (l *Lexer) Version() int { return l.version }
 
-// scanPragma は先頭行の `#fc 2` / `#fc 3` を読む。`#fc` で始まらなければ何もしない
+// scanPragma は先頭行の `#fc 2` / `#fc 3` / `#fc 4` を読む。`#fc` で始まらなければ何もしない
 // (それ以外の `#` は通常の字句解析でエラーになる)。`#fc 1` は fc 1 のソース (もう扱えない) なのでエラー。
 func (l *Lexer) scanPragma() {
 	if !bytes.HasPrefix(l.src, []byte("#fc")) {
@@ -65,12 +66,12 @@ func (l *Lexer) scanPragma() {
 		ver, _ = strconv.Atoi(fields[1])
 	}
 	switch ver {
-	case Version2, Version3:
+	case Version2, Version3, Version4:
 		l.version = ver
 	case 1:
 		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: "fc 1 sources are no longer supported (migrate with `fcc migrate` of fc 0.1 and write `#fc 2`)"}
 	default:
-		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: fmt.Sprintf("invalid version pragma %q (expected \"#fc 2\" or \"#fc 3\")", line)}
+		l.verErr = &Error{Filename: l.filename, Pos: l.pos(), Msg: fmt.Sprintf("invalid version pragma %q (expected \"#fc 2\", \"#fc 3\" or \"#fc 4\")", line)}
 	}
 	l.advance(n)
 }

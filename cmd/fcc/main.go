@@ -21,7 +21,7 @@ Commands:
     compile, c       compile to object files only
     run              build and run by emulator
     fmt              format source files (see fcc fmt -h)
-    migrate          rewrite fc 2 sources as fc 3 (see fcc migrate -h)
+    migrate          rewrite older sources as the latest fc (see fcc migrate -h)
     check            compile without producing files and report errors / warnings
     size             show code size per function from an ld65 --dbgfile (see fcc size -h)
     watch            rebuild whenever a source file changes (see fcc watch -h)

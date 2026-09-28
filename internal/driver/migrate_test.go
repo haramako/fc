@@ -1,9 +1,10 @@
 package driver
 
-// fc 2 → fc 3 の migrate の回帰テスト。castle / miku / bench / golden のテストプログラムと fclib のソースを
-// `fcc migrate` (internal/migrate) で fc 3 に書き換えてビルドし、fc 2 のままのビルドと ROM・バイナリがバイト単位で
-// 一致することを確かめる。fc 3 で文法を変えるときは、migrate の規則を足してここが通ることを確かめる
-// (doc/v3_plan.md の「V2 からの移行」)。
+// migrate の回帰テスト。castle / miku / bench / golden のテストプログラムと fclib のソースを `fcc migrate`
+// (Compiler.Migrate: fc 2 → 3 は internal/migrate の構文の書き換え、fc 3 → 4 は sema が集める意味の書き換え) で最新の版に
+// 書き換えてビルドし、元のままのビルドや golden と ROM・バイナリがバイト単位で一致することを確かめる。版で文法・意味を
+// 変えるときは、migrate の規則 (fc 3 → 4 は sema の Rewrite) を足してここが通ることを確かめる
+// (doc/v3_plan.md の「V2 からの移行」、doc/v4_plan.md §0)。
 
 import (
 	"bytes"
@@ -13,51 +14,81 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/haramako/fc/internal/migrate"
+	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 )
 
-// migrateTree は dir の下の .fc を全部 fc 3 に書き換える (書き換えた数を返す)。fc 2 として解析できないファイル
-// (test/errors.fc のようなエラーの検査用) はそのまま残す。
-func migrateTree(tb testing.TB, dir string) int {
+// fcFiles は dir の下の .fc のうち解析できるものを返す (test/errors.fc のようなエラーの検査用は除く)。skip が true の
+// ディレクトリには入らない。
+func fcFiles(tb testing.TB, dir string, skip func(path string) bool) []string {
 	tb.Helper()
-	n := 0
+	var files []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".fc") {
-			return err
-		}
-		src, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		src = bytes.ReplaceAll(src, []byte("\r\n"), []byte("\n"))
+		if d.IsDir() {
+			if path != dir && skip != nil && skip(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".fc") {
+			return nil
+		}
+		src, err := sema.ReadSource(path)
+		if err != nil {
+			return err
+		}
 		if _, perr := syntax.Parse(src, path); perr != nil {
 			return nil
 		}
-		out, err := migrate.Migrate(src, path)
-		if err != nil {
-			return err
-		}
-		f, err := syntax.Parse(out, path)
-		if err != nil || f.Version != syntax.Version3 {
-			tb.Fatalf("%s: migrate の結果が fc 3 でない: %v", path, err)
-		}
-		n++
-		return os.WriteFile(path, out, 0o666)
+		files = append(files, path)
+		return nil
 	})
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return files
+}
+
+// migrateFiles は files を c (FC_HOME) で最新の版に書き換えて上書きする (書き換えた数を返す)。
+func migrateFiles(tb testing.TB, c *Compiler, files []string, target string) int {
+	tb.Helper()
+	out, err := c.Migrate(files, &MigrateOptions{Target: target})
 	if err != nil {
 		tb.Fatalf("migrate: %v", err)
 	}
-	return n
+	for _, path := range files {
+		f, err := syntax.Parse(out[path], path)
+		if err != nil || f.Version != syntax.LatestVersion {
+			tb.Fatalf("%s: migrate の結果が fc %d でない: %v", path, syntax.LatestVersion, err)
+		}
+		if err := os.WriteFile(path, out[path], 0o666); err != nil {
+			tb.Fatal(err)
+		}
+	}
+	return len(files)
 }
 
-// migratedHome は fclib を fc 3 に書き換えた FC_HOME (fclib と share の写し) を t の一時ディレクトリに作る。
+// migrateTree は dir の下の .fc を全部最新の版に書き換える (書き換えた数を返す)。fclib は home の fclib。
+func migrateTree(tb testing.TB, home, dir, target string) int {
+	tb.Helper()
+	return migrateFiles(tb, NewCompiler(home), fcFiles(tb, dir, nil), target)
+}
+
+// migratedHome は fclib を最新の版に書き換えた FC_HOME を一時ディレクトリに作る。
 func migratedHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	copyDir(t, filepath.Join(absRepoRoot, "fclib"), filepath.Join(dir, "fclib"))
 	copyDir(t, filepath.Join(absRepoRoot, "share"), filepath.Join(dir, "share"))
-	if migrateTree(t, filepath.Join(dir, "fclib")) == 0 {
+	lib := filepath.Join(dir, "fclib")
+	isNes := func(p string) bool { return filepath.Base(p) == "nes" }
+	c := NewCompiler(dir)
+	n := migrateFiles(t, c, fcFiles(t, lib, isNes), "emu")
+	n += migrateFiles(t, c, fcFiles(t, filepath.Join(lib, "nes"), nil), "nes")
+	if n == 0 {
 		t.Fatal("fclib に .fc が無い")
 	}
 	return dir
@@ -90,7 +121,7 @@ func TestMigrateGoldenPrograms(t *testing.T) {
 	home := migratedHome(t)
 	dir := filepath.Join(t.TempDir(), "test")
 	copyDir(t, testDir(), dir)
-	migrateTree(t, dir)
+	migrateTree(t, home, dir, "emu")
 	matches, err := filepath.Glob(filepath.Join(absGoldenRoot, "bin", "*"))
 	if err != nil || len(matches) == 0 {
 		t.Fatalf("golden bin が見つからない: %v", err)
@@ -119,7 +150,7 @@ func TestMigrateBench(t *testing.T) {
 	orig := filepath.Join(absRepoRoot, "bench")
 	mig := filepath.Join(t.TempDir(), "bench")
 	copyDir(t, orig, mig)
-	migrateTree(t, mig)
+	migrateTree(t, home, mig, "emu")
 	files, _ := filepath.Glob(filepath.Join(orig, "*.fc"))
 	if len(files) == 0 {
 		t.Fatal("bench に .fc が無い")
@@ -137,7 +168,33 @@ func TestMigrateBench(t *testing.T) {
 				}
 				return out
 			}
-			sameBytes(t, build(home, mig, "v3"), build(absRepoRoot, orig, "v2"))
+			sameBytes(t, build(home, mig, "migrated"), build(absRepoRoot, orig, "orig"))
+		})
+	}
+}
+
+// TestMigrateExamples: examples の castle と miku (fc 3) を最新の版に migrate してビルドした ROM が、今の ROM の golden と
+// バイト単位で一致する (fc 3 → 4 は意味の変わる所に書き換えを足して、ROM を変えずに移す。doc/v4_plan.md §0)。
+func TestMigrateExamples(t *testing.T) {
+	t.Parallel()
+	for _, ex := range []struct{ name, src, main string }{
+		{"castle", "src", "main.fc"},
+		{"miku", ".", "miku.fc"},
+	} {
+		t.Run(ex.name, func(t *testing.T) {
+			t.Parallel()
+			root := filepath.Join(t.TempDir(), ex.name)
+			copyDir(t, filepath.Join(absRepoRoot, "examples", ex.name), root)
+			dir := filepath.Join(root, ex.src)
+			if migrateTree(t, absRepoRoot, dir, "nes") == 0 {
+				t.Fatal(".fc が無い")
+			}
+			rom := filepath.Join(root, ex.name+".nes")
+			code, err := NewCompiler(absRepoRoot).Build(ex.main, &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(root, "build")})
+			if err != nil || code != 0 {
+				t.Fatalf("ビルド失敗: %v (code %d)", err, code)
+			}
+			compareROM(t, rom, filepath.Join("examples", ex.name+".nes"))
 		})
 	}
 }

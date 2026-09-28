@@ -504,6 +504,15 @@ go test ./...                                    # 全部 (golden + examples + N
   golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。設定ファイルと
   バンクの配置は `project`、ca65 / ld65 の探索と dbgfile は `cc65`、@log の生成物は `fclog`、FC_HOME の解決は `fchome`、
   emu ターゲットの実行とホストとのやり取りの取り決め ($fff0〜$ffff) は `emu`。
+- **版と migrate**（2026-09-28。[v4_plan.md](v4_plan.md) §0）: 版は `syntax.Version2〜4`（`LatestVersion` = 4）で、モジュール
+  ごと（`ir.Module.Version`。sema は `h.version()` で規則を選ぶ）。`fcc migrate` は `driver.Compiler.Migrate`: fc 2 → 3 は
+  構文の書き換え（`internal/migrate` の `Rules`。ファイルごと）、fc 3 → 4 は意味の書き換えで、各ファイルを入口に sema で
+  コンパイルし（`sema.Program.CollectRewrites`。fc 2 → 3 の結果はメモリの上の `Program.Overlay` で渡す）、sema が fc 3 の
+  モジュールで fc 4 の意味と違う所を `Rewrite`（ソースの位置への挿入・置き換え。`sema/rewrite.go` の `rewriteAs` など）として
+  集め、`migrate.ToV4` が当てる。書き換えを作れない所は `RewriteErrors` で migrate をエラーにする。fc 4 の規則を足すときは、
+  fc 4 の意味（`h.version() >= syntax.Version4`）と、fc 3 のモジュールでの書き換え（`h.rewriting()`）を対で入れ、
+  `TestMigrateExamples`（castle / miku を fc 4 に移して ROM の golden と比べる）と `TestMigrateGoldenPrograms` /
+  `TestMigrateBench`（fc 2 の test / bench を fc 4 まで移す）で確かめる
 - **調査用の設定**は `ir.Config`（FC_DISABLE / FC_TRACE_* / FC_DUMP_IR / FC_VERIFY_REGS）。環境変数を読むのは
   `ir.ConfigFromEnv` だけで、`BuildOptions.Config` → `sema.Program.Config` → `ir.Module.Config` と渡り、各段は `lmd.Cfg()` で
   引く。テストはビルドごとに別の設定を渡せる（`TestRandomMetamorphic` は同じプロセスで段を切って比べる）。
