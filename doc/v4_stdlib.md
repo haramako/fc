@@ -403,6 +403,53 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
 
 ---
 
+## 9. ライブラリの取り込み（シンプルなパッケージマネージャ。案）
+
+2026-09-29 のユーザーの要望: **GitHub の URL かフォルダを指定したら、そこもライブラリとして使える。バージョン管理はシンプルな方法で
+よい。ライブラリの依存（ライブラリが別のライブラリを使う）は後でよい。**
+
+今の仕組み: `use` と `@include` の探索は `Compiler.libPath`（「ソースのディレクトリ → fclib → fclib/<target>」）の 1 か所から sema と
+`project.ModuleExists` に渡り、asm の include は ca65 の `-I`（fclib / fclib/<target>）。fc.toml は見出しと `key = value`（真偽・整数・
+文字列）だけを読む小さな読み込み器（`internal/project/config.go`。今は `[define.<module>]` だけ）。
+
+案:
+
+```toml
+# fc.toml
+[lib.nes_util]
+path = "../nes_util"                        # フォルダ (fc.toml からの相対)
+
+[lib.famistudio]
+git = "https://github.com/someone/fc-famistudio"
+rev = "v1.2.0"                              # タグ・ブランチ・コミット
+dir = "src"                                 # (任意) リポジトリの中のモジュールのある所
+```
+
+- **探索パス**: 「ソースのディレクトリ → fc.toml の順のライブラリ（それぞれ `<lib>` と `<lib>/<target>`）→ fclib → fclib/<target>」。
+  asm の `-I` にも同じ順で足す。モジュール名は今までどおり平ら（`use player;`）。2 つのライブラリに同じ名前のモジュールがあればエラー
+  （どれを使うかが fc.toml の順で黙って決まらないように）。ライブラリを fclib より前に置くので、ライブラリが fclib のモジュールを
+  置き換えられる（例: castle が今の fclib をこのリポジトリのコミットを指すライブラリとして使う: `git = "https://github.com/haramako/fc"`、
+  `rev = "<コミット>"`、`dir = "fclib"`。コピーの代わりになる）。置き換えたことは `fcc build -d` の要約に出す
+- **バージョン**: `rev` で固定する。タグ・ブランチは取ってきたときのコミットを **`fc.lock`**（`名前 = コミット`）に書き、以後のビルドは
+  そのコミットを使う（`fcc lib update [名前]` で進める）。範囲の指定や解決はしない
+- **取ってくる**: `git` コマンドで、ユーザーのキャッシュ（`os.UserCacheDir()/fc/lib/<ホスト>/<パス>@<コミット>`。コミットごとなので
+  中身は変わらず、プロジェクトの間で共有できる）に clone する。ビルドで無ければ自動で取ってくる（`--offline` で禁止）。private の
+  リポジトリも利用者の git の認証で取れる。git の無い環境向けの GitHub の tarball は後で
+- **コマンド**: `fcc lib fetch`（fc.lock のとおり揃える）/ `fcc lib update [名前]` / `fcc lib list`。fc.toml は手で書く（`fcc lib add`
+  は後で）
+- **安全**: ビルドはライブラリのコードを実行しない（ビルドのスクリプトの仕組みは作らない）。コンパイラが読むのはソース・asm・データの
+  ファイルだけ
+- **後で**: ライブラリの依存（ライブラリの fc.toml の `[lib.*]` を辿る）、名前の衝突を避ける `use ライブラリ/モジュール`、`fcc lib add`、
+  tarball での取得
+
+決めること:
+1. ライブラリを fclib より前に探す（置き換えられる。推し）か、後ろ（fclib が必ず勝つ）か
+2. ビルドで自動で取ってくる（推し）か、`fcc lib fetch` を明示で打つか
+3. キャッシュはユーザーのキャッシュで共有（推し）か、プロジェクトの中（`.fc-build/lib`）か
+4. キーの名前（`[lib.NAME]` / `path` / `git` / `rev` / `dir`）と `fc.lock` の名前
+
+---
+
 ## 付録: 調べている途中で見つけた不具合（castle・miku。製品のコードなので直していない）
 
 - castle `heap.fc:68` / `:77`: 空きかどうかを印のビットでなく印のバイト全体で比べていて、解放したブロックが隣とつながらない
