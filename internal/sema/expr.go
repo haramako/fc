@@ -260,7 +260,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				typ = h.prog.Types.Bool() // `!x` は 0 / 1
 			}
 			tmp := h.newTmp(typ)
-			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}})
+			op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}}
+			h.emit(op)
+			if e.op != opNot {
+				h.recordArith(tmp, op, e)
+			}
 			r = tmp
 
 		case opAdd, opSub, opMul, opDiv, opMod,
@@ -276,6 +280,17 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
 				break
 			}
+			if (e.op == opShiftLeft || e.op == opShiftRight) && h.shiftByLeft(e, left, right) {
+				// F1 (fc 4): シフトの結果は左辺の型。シフト量は型を揃えない
+				typ := ir.ValType(left)
+				tmp := h.newTmp(typ)
+				op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}}
+				h.emit(op)
+				h.recordArith(tmp, op, e, left)
+				r = tmp
+				break
+			}
+			origL, origR := left, right // 型のない定数の元の値 (A1 で広げるとき: widen.go)
 			left, right = h.adaptLiteral(left, right, false)
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
@@ -304,7 +319,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if typ.Kind == types.Pointer {
 				h.markReadOnly(tmp, h.readOnly(left)) // `p + 1` (p:*const T) も読み取り専用 (外れて書き込めていた。survey 2026-09-27)
 			}
-			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
+			op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}}
+			h.emit(op)
+			if typ.Kind == types.Int {
+				h.recordArith(tmp, op, e, origL, origR)
+			}
 			r = tmp
 
 		case opEq, opLt:
@@ -839,6 +858,7 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 // makeCompatible は互換型に変換する (キャストコード生成込み)。
 func (h *Hlc) makeCompatible(a, b ir.Operand) (*types.Type, ir.Operand, ir.Operand) {
 	typ := h.compatible(ir.ValType(a), ir.ValType(b))
+	a, b = h.widenArith(a, typ), h.widenArith(b, typ) // A1: 16 ビットの値と出会う 8 ビットの算術は部分木ごと広げる (widen.go)
 	a = h.cast(a, typ)
 	b = h.cast(b, typ)
 	return typ, a, b

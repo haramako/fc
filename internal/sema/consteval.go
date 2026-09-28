@@ -256,6 +256,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				// (`(0 as u8) + 242` と `(-5 as i8)` の剰余は i8 の -14 % -5。畳み込みが 242 のまま計算して実行時と違っていた。
 				// TestRandomConstFold で発覚)。シフトの量はそのまま
 				t := h.foldType(args, false)
+				if h.v4() && (c.op == opShiftLeft || c.op == opShiftRight) {
+					t = h.foldType(args[:1], false) // F1: シフトの結果は左辺の型
+				}
 				switch {
 				case t == nil || c.op == opLand || c.op == opLor || c.op == opNot:
 				case c.op == opEq || c.op == opNe || c.op == opLt || c.op == opGt || c.op == opLe || c.op == opGe:

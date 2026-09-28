@@ -39,6 +39,8 @@ func (h *Hlc) convert(v ir.Operand, typ *types.Type, c *cexpr) ir.Operand {
 			case h.rewriting():
 				h.rewriteAs("narrowing", c, typ.String())
 			}
+		} else {
+			v = h.widenArith(v, typ) // A1: 代入先が広ければ式を代入先の幅で計算する (widen.go)
 		}
 	}
 	return h.cast(v, typ)
@@ -64,4 +66,24 @@ func (h *Hlc) checkConstRange(name string, typ syntax.TypeExpr, declType *types.
 			h.rewriteAs("constant-range", val, declType.String())
 		}
 	}
+}
+
+// shiftByLeft はシフト `left << right` / `>>` の結果を左辺の型にするか (F1。doc/v4_plan.md §1.3)。fc 2 / fc 3 は両辺の互換型
+// (`x << n` (x:u8、n:u16) が u16)。fc 4 は左辺の型 (C・Go・Rust・Zig と同じ) で true を返す。fc 3 のモジュールで、互換型が
+// 左辺の型と違うときは、migrate に左辺を `x as T` (T は互換型) にする書き換えを報告する (fc 4 でも同じ型になる)。
+func (h *Hlc) shiftByLeft(e *cexpr, left, right ir.Operand) bool {
+	lt, rt := ir.ValType(left), ir.ValType(right)
+	if lt.Kind != types.Int || lt.Enum != nil || rt.Kind != types.Int && rt.Kind != types.Bool {
+		return false
+	}
+	if h.v4() {
+		return true // 左辺が型のない定数 (`1 << n`) なら、その値の型 (1 は u8。代入先が広ければ A1 で広がる)
+	}
+	if h.rewriting() {
+		l, r := h.adaptLiteralNoErr(left, right, false)
+		if ct := h.prog.Types.Compatible(ir.ValType(l), ir.ValType(r)); ct != nil && ct != lt && len(e.args) == 2 {
+			h.rewriteAs("shift-type", e.args[0], ct.String())
+		}
+	}
+	return false
 }

@@ -77,6 +77,102 @@ function main():void
 	}
 }
 
+// a1Src は A1 (代入先と式の中の一番広い型で計算) と F1 (シフトは左辺の型) の例 (版は %d)。
+const a1Src = `#fc %d
+use * from stdio;
+function put16(n:u16):void { printf(n, "\n"); }
+function ret16(a:u8, b:u8):u16 { return a + b; }
+function main():void
+{
+	var a:u8 = 200;
+	var b:u8 = 100;
+	var y:u8 = 5;
+	var x:u8 = 200;
+	var dx:i8 = -1;
+	var hi:u8 = 0x12;
+	var lo:u8 = 0x34;
+	var pts:u8 = 30;
+	var score:u16 = 1000;
+	var n7:u16 = 7;
+	var s1:i8 = 1;
+	var d:u16 = a + b;
+	var avg:u16 = (a + b) / 2;
+	var addr = 0x2000 + y * 64;
+	score += pts * 10;
+	var h:u16 = hi << 8 | lo;
+	var w:i16 = x + dx;
+	var m:i16 = -y;
+	var n:u16 = x + -1;
+	var c:u8 = a + b;
+	printf(d, " ", avg, " ", addr, " ", score, " ", h, " ", w, " ", m, " ", n, " ", c, "\n");
+	put16(a + b);
+	printf(ret16(a, b), " ", a + b > 250, " ", (a + b) as u16, "\n");
+	var r1:u16 = y << n7;
+	var r2 = a << s1;
+	var r2w:i16 = r2;
+	printf(r1, " ", r2w, "\n");
+	exit(0);
+}
+`
+
+// TestV4Widen: fc 4 は式を代入先・引数・戻り値の型と式の中の一番広い型の広いほうで計算する (A1)。代入先の無い比較、`as` の
+// 中は今の幅のまま。シフトの結果は左辺の型 (F1)。fc 3 は今までどおり 8 ビットで折り返す。
+func TestV4Widen(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		ver  int
+		want string
+	}{
+		{4, "300 150 8512 1300 4660 199 -5 199 44\n300\n300 0 44\n640 144\n"},
+		{3, "44 22 8256 1044 52 -57 251 199 44\n44\n44 0 44\n640 -112\n"},
+	} {
+		out, err := buildBothLevels(t, map[string]string{"t.fc": fmt.Sprintf(a1Src, c.ver)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != c.want {
+			t.Errorf("fc %d: got %q, want %q", c.ver, out, c.want)
+		}
+	}
+}
+
+// TestV4MigrateWiden: A1・F1 で意味が変わる所は、migrate が今の型の `as` を足して fc 3 と同じ結果にする。
+func TestV4MigrateWiden(t *testing.T) {
+	t.Parallel()
+	src := fmt.Sprintf(a1Src, 3)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(res[path])
+	for _, want := range []string{
+		"return (a + b) as u8;", "var d:u16 = (a + b) as u8;", "var avg:u16 = ((a + b) / 2) as u8;",
+		"var addr = 0x2000 + (y * 64) as u8;", "score += (pts * 10) as u8;", "var h:u16 = (hi << 8 | lo) as u8;",
+		"var w:i16 = (x + dx) as i8;", "var m:i16 = -y as u8;", "var n:u16 = (x + -1) as u8;", "var c:u8 = a + b;",
+		"put16((a + b) as u8);", "var r1:u16 = y as u16 << n7;", "var r2 = a as i8 << s1;",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("migrate の結果に %q が無い:\n%s", want, got)
+		}
+	}
+	before, err := buildBothLevels(t, map[string]string{"t.fc": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := buildBothLevels(t, map[string]string{"t.fc": got})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Errorf("fc 3: %q, fc 4: %q", before, after)
+	}
+}
+
 // TestV4MigrateRewrites: fc 3 のソースを migrate すると、fc 4 で意味が変わる所 (E / D) に `as` を足し、const の注釈を今の型に
 // 直す。書き換えた fc 4 のソースは fc 3 と同じ出力になる。
 func TestV4MigrateRewrites(t *testing.T) {

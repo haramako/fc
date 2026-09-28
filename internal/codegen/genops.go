@@ -578,10 +578,9 @@ func (l *funcGen) genUminus() {
 		if i == 0 {
 			r.push("sec")
 		}
-		r.push("lda #0")
-		if ir.ValType(op.In(0)).Size > i {
-			r.push(fmt.Sprintf("sbc %s", l.byte(op.In(0), i)))
-		}
+		// 入力より上のバイトも sbc #0 で借りを伝える (入力が結果より狭い: fc 4 の A1 で広げた単項マイナス。byte は上を #0 で読む。
+		// 以前は lda #0 だけで、`var m:i16 = -y` (y:u8 = 5) の上位が 0 になっていた)
+		r.push("lda #0", fmt.Sprintf("sbc %s", l.byte(op.In(0), i)))
 		r.push(l.storeA(op.Dst, i))
 	}
 }
