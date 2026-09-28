@@ -288,6 +288,14 @@ sema に一時的な検査を入れて（暗黙の変換 `cast`、二項演算�
 - **`fastcall` の廃止**（v3_plan.md §5 C「FC3 の最初の版では残す。廃止は後の版で別に決める」。ユーザー補足「fastcall は今後
   不要」）。生成コードが変わるので、移行の後の段（§0）。asm で書いた関数（fclib の mem.asm・stdio.asm、castle の asm）との
   呼び出し規約を指定する手段（`@(abi: …)` など）を別に用意するかは決めるときに
+  **決定（2026-09-29）: fc 4 から fastcall を完全になくす。** 本体のある関数の `@(fastcall)` は migrate が消す（コンパイラが呼び出し
+  規約を決める。castle の測る場面のサイクル数と bench のサイクル数・大きさは外しても同じだった: どちらもゼロページに `sta` で引数を
+  書くため）。`fastcall fn` 型は fc 4 ではエラー。fclib の asm の fastcall の extern は、引数の多いもの（mem.set / zero / copy /
+  compare、nes の stdio.ppu_put）は fc に書き直すか asm のまま別の規約に、0〜1 個のもの（lzw.read_bit / read_vln / read_vln16、
+  nes の stdio.print）は cc65 の規約（A / X）に。利用者の asm の fastcall の extern は migrate のエラーで案内する（castle・miku・
+  darius には無い）。fc 3 のモジュールは今までどおり使える。**fclib はこの作業で fc 4 に移す（2026-09-29 決定）。**
+  計測（2026-09-29、1000 バイト、呼び出しを含む）: fc で書いた copy は asm の +0.8%、set は +34%（ループの中で変わらない値
+  `c` を毎回読み直す。A に置いたままにする最適化で縮む見込み）。単純な関数を asm と fc のどちらで書くかは相談中
 
 ## 3. 標準ライブラリの拡充（2026-09-28 方針）
 
