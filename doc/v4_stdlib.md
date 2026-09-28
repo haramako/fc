@@ -211,6 +211,7 @@ public function put(addr:u16, data:[]const u8):void;     // 横。満杯なら�
 public function put_v(addr:u16, data:[]const u8):void;   // 縦
 public function fill(addr:u16, v:u8, n:u8):void;
 public function try_put(addr:u16, data:[]const u8):bool;
+public function reserve(addr:u16, n:u8):[]u8;           // キューの中に n バイトの場所を取って返す (そこへ直接書く: 写しが要らない)
 public function room():u8;
 public function write_now(addr:u16, data:[:u16]const u8):void;   // 描画を止めている間
 public function fill_now(addr:u16, v:u8, n:u16):void;
@@ -315,7 +316,12 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    `@try_format` の返し方（`bool` と書いた長さの struct か、長さ 0 で失敗か）。`Buf` に書き足す版（`@format(&b, ...)`）も要るか
 3. **独自のフォントの文字**: ASCII で書いて `str.map` で変換（推し）か、`fmt` に `zero` の文字を渡すか
 4. **VRAM のキュー**: データを写す stripe 形式（推し。アリーナとデータの寿命の問題が無くなる。castle の `en7.fc` のアリーナのあふれの
-   ような誤りが起きない）か、castle と同じくポインタを積む形（写さないので速い）か
+   ような誤りが起きない）か、castle と同じくポインタを積む形か。見積もり（命令表から。実測は §7 の 3 で）: NMI の側は写す形のほうが
+   速い（castle の `lda (from),y` / `sta` / `iny` / `cpy` / `bne` は 1 バイト約 17 サイクル、キューが固定の番地なら `lda buf,x` / `sta` /
+   `inx` / `dey` / `bne` で約 15、展開すればさらに縮む。vblank は OAM DMA を除いて約 1700 サイクルで、送れるのは約 100 バイト）。主の
+   側は写す分（1 バイト約 15〜20 サイクル）が増えるが、castle はバンクの都合で既に `ppu.alloc` のアリーナへ写していて、それの置き換えに
+   なる。その場で作るデータ（文字・数・埋め）は `vram.reserve` でキューの中へ直接書けば写しも無い（`@format(vram.reserve(a, 8), ...)`）。
+   写す形が損なのは固定のバンクの大きな表を毎フレーム送るときだけで、要ればポインタを積む種類の項目を後で足す
 5. **OAM のページの位置**: 既定を $0700（castle・miku と同じ。fc の既定の配置で空いている唯一のページ）にして `@(build)` の定数で
    変えられるようにする（推し）か、fc の既定の配置をずらして慣習の $0200 を空けるか
 6. **NMI の持ち主**: ライブラリが持って呼び出し口を出す（推し）か、NESFab のように利用者が NMI を書いてライブラリの送る関数を呼ぶか
