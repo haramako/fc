@@ -17,9 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
-	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/regalloc"
@@ -195,40 +193,21 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	result = &Result{BuildDir: c.buildDir}
 	c.hashes = newHashMemo() // fcc watch は同じ Compiler でビルドし直すので、ビルドごとに作り直す
 
-	// compile (ソースコード -> 中間コード) と compile2 (中間コード -> アセンブラファイル) の準備
-	var prog *sema.Program
-	var llc *codegen.Llc
-	var plan *frames.Plan
-	var perr error
+	// 前段: 意味解析 → 全関数の最適化と割付 → 静的フレームの配置 (frontend.go)
 	defs, derr := c.projectDefines(opt.Defines)
 	if derr != nil {
 		return nil, derr
 	}
-	for noGrow := map[string]bool{}; ; {
-		prog = sema.NewProgram()
-		prog.Defines = copyDefines(defs)
-		prog.Banks = c.banks()
-		prog.LogEnabled = opt.Debug // @log の注釈は -g のときだけ (doc/v3_plan.md §9)
-		prog.LogEveryStatement = opt.LogEveryStatement
-		if cerr := sema.CompileProgram(prog, opt.Dir, c.libPath(opt.Target), filename); cerr != nil {
-			return nil, cerr
-		}
-		if cerr := c.checkDefines(prog, opt.Target); cerr != nil {
-			return nil, cerr
-		}
-		c.prog = prog
-		llc = c.newLlc(opt, prog)
-		llc.NoGrow = noGrow
-		// フレームの静的割付 (doc/v2_frame_alloc.md §6-4): 呼び出し規約の決定 → 全関数の最適化と割付 → 配置 → _frames.inc
-		plan, perr = llc.PrepareProgram(prog.Modules.List(), c.staticZpSize(), c.staticRamSize())
-		if !retryFrameOver(llc, perr, noGrow) {
-			break
-		}
+	front, ferr := c.compileFront(&frontOptions{
+		Dir: opt.Dir, Target: opt.Target, Main: filename, Defines: defs, OptimizeLevel: opt.OptimizeLevel,
+		Debug: opt.Debug, LogEveryStatement: opt.LogEveryStatement,
+		MisclassifyResident: opt.MisclassifyResident, DebugFile: c.debugFileFunc(opt),
+	})
+	if ferr != nil {
+		return nil, ferr
 	}
-	if perr != nil {
-		return nil, perr
-	}
-	prog.Warnings = append(prog.Warnings, plan.Warnings...) // 割り込みと共有するフレームなど (frames.Place)
+	prog, llc, plan := front.Prog, front.Llc, front.Plan
+	c.prog = prog
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
 	result.Defines = sortedDefines(prog.Defines)
@@ -596,82 +575,22 @@ func sortedDefines(m map[string]*sema.DefineUse) []sema.DefineUse {
 	return r
 }
 
-// newLlc は prog のコード生成器を作る (PrepareProgram の前の設定まで)。
-func (c *Compiler) newLlc(opt *BuildOptions, prog *sema.Program) *codegen.Llc {
-	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
-	if opt.Debug {
-		outDir := filepath.Dir(opt.Out)
-		llc.DebugFile = func(ref string) string {
-			abs := ref
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(c.dir, ref)
-			}
-			if rel, err := filepath.Rel(outDir, abs); err == nil {
-				return filepath.ToSlash(rel)
-			}
-			return filepath.ToSlash(abs)
+// debugFileFunc は -g のときの .dbg に書くファイル名 (sema のファイル参照 (Dir 相対) を ROM の隣から辿れる相対パスに)。
+func (c *Compiler) debugFileFunc(opt *BuildOptions) func(ref string) string {
+	if !opt.Debug {
+		return nil
+	}
+	outDir := filepath.Dir(opt.Out)
+	return func(ref string) string {
+		abs := ref
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(c.dir, ref)
 		}
-	}
-	llc.Limits.FastcallReg = c.fastcallRegSize()
-	llc.FarCall = prog.FarCallEnabled()
-	llc.MisclassifyResident = opt.MisclassifyResident
-	return llc
-}
-
-// retryFrameOver は PrepareProgram の結果を見て、-O 2 のフレームが上限を超えた関数 (llc.FrameOver) をまだ noGrow に
-// 入れていなければ入れて true (展開を止めて sema からやり直す)。最適化は IR をその場で書き換えるので、やり直しは
-// 意味解析から。失敗したときだけ走るので、通るプログラムのコンパイル時間は変わらない。止めても超えるなら false
-// (エラーをそのまま返す。-O 0 でも超える大きすぎる関数)。
-func retryFrameOver(llc *codegen.Llc, err error, noGrow map[string]bool) bool {
-	if err == nil || llc.FrameOver == "" || noGrow[llc.FrameOver] {
-		return false
-	}
-	noGrow[llc.FrameOver] = true
-	return true
-}
-
-// staticZpSize / staticRamSize は静的フレームの領域の大きさ (options(static_zp: N) / options(static_ram: N)。
-// base.asm の FC_SZP / FC_SRAM の .res と一致させる。doc/v2_frame_alloc.md §6-5)。
-func (c *Compiler) staticZpSize() int {
-	if n, ok := c.prog.Options.Int("static_zp"); ok {
-		if n < 0 || n > 256 {
-			panic(&diag.Error{Msg: fmt.Sprintf("options(static_zp: %d): must be 0..256", n)})
+		if rel, err := filepath.Rel(outDir, abs); err == nil {
+			return filepath.ToSlash(rel)
 		}
-		return n
+		return filepath.ToSlash(abs)
 	}
-	return DefaultStaticZp
-}
-
-func (c *Compiler) staticRamSize() int {
-	if n, ok := c.prog.Options.Int("static_ram"); ok {
-		if n < 0 || n > 8192 {
-			panic(&diag.Error{Msg: fmt.Sprintf("options(static_ram: %d): must be 0..8192", n)})
-		}
-		return n
-	}
-	return DefaultStaticRam
-}
-
-// 静的フレームの領域の既定の大きさ (fc が生成する base.asm と一致)。
-//
-// fc が生成する base.asm のゼロページ配置: $00-$0F L (stack 関数のレジスタ領域)、$10-$1F reg、$20-$2F FC_FASTCALL_REG
-// (extern の fastcall 用、既定 16)、$30-$6F FC_SZP (静的フレーム、既定 64)、$70-$7F は `options(segment: "ZEROPAGE")` の
-// 変数用に空けておく、$80-$FF スタック S。$00-$7F に `options(address:)` で固定番地の変数を置くのは、base.asm を自前で
-// 持つプロジェクト (castle) だけにする (2026-09-16 決定。miku は固定番地をやめて BSS に)。
-const (
-	DefaultStaticZp  = 64
-	DefaultStaticRam = 512
-)
-
-// fastcallRegSize は FC_FASTCALL_REG の大きさ (options(fastcall_reg: N)。既定は regalloc.DefaultLimits)。
-func (c *Compiler) fastcallRegSize() int {
-	if n, ok := c.prog.Options.Int("fastcall_reg"); ok {
-		if n < 16 || n > 128 {
-			panic(&diag.Error{Msg: fmt.Sprintf("options(fastcall_reg: %d): must be 16..128", n)})
-		}
-		return n
-	}
-	return regalloc.DefaultLimits.FastcallReg
 }
 
 // baseAsmTemplate は base.s の雛形。
@@ -682,14 +601,14 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\t.exportzp FC_FASTCALL_REG\n" +
 		"\t.export FC_FARCALL\n" +
 		"\t.export FC_FASTCALL_REG_SIZE : absolute\n" +
-		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", c.fastcallRegSize()) +
+		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", validated(fastcallRegSize(c.prog))) +
 		"\t.exportzp FC_SZP\n" +
 		"\t.exportzp FC_SP\n" +
 		"\t.export FC_SRAM\n" +
 		"\t.export FC_SZP_SIZE : absolute\n" +
 		"\t.export FC_SRAM_SIZE : absolute\n" +
-		fmt.Sprintf("FC_SZP_SIZE = %d\n", c.staticZpSize()) +
-		fmt.Sprintf("FC_SRAM_SIZE = %d\n", c.staticRamSize()) +
+		fmt.Sprintf("FC_SZP_SIZE = %d\n", validated(staticZpSize(c.prog))) +
+		fmt.Sprintf("FC_SRAM_SIZE = %d\n", validated(staticRamSize(c.prog))) +
 		"\t.exportzp L \t\t\t\t\t; TODO: そのうち消すこと\n" +
 		"\t.exportzp reg\n" +
 		"\t.exportzp S\n" +

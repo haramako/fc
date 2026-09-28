@@ -5,7 +5,6 @@ package driver
 import (
 	"sort"
 
-	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
@@ -54,10 +53,17 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 	return collectWarnings(prog), nil
 }
 
-// compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。
-func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (*sema.Program, error) {
-	var prog *sema.Program
-	var llc *codegen.Llc
+// compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。前段は fcc build と同じ compileFront。
+func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (prog *sema.Program, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if ce, ok := r.(*diag.Error); ok {
+				err = ce
+				return
+			}
+			panic(r)
+		}
+	}()
 	c.dir = dir
 	if c.dir == "" {
 		c.dir = "."
@@ -66,35 +72,17 @@ func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (*sema
 	if err != nil {
 		return nil, err
 	}
-	for noGrow := map[string]bool{}; ; {
-		prog = sema.NewProgram()
-		prog.Defines = copyDefines(defs)
-		prog.Banks = c.banks()
-		if err := sema.CompileProgram(prog, dir, c.libPath(target), main); err != nil {
-			return nil, err
-		}
-		if err := c.checkDefines(prog, target); err != nil {
-			return nil, err
-		}
-		llc = codegen.NewLlc(2, prog.Types)
-		llc.NoGrow = noGrow
-		plan, err := llc.PrepareProgram(prog.Modules.List(), DefaultStaticZp, DefaultStaticRam)
-		if retryFrameOver(llc, err, noGrow) {
-			continue // fcc build と同じく、フレームが上限を超えた関数の展開を止めてやり直す
-		}
-		if err != nil {
-			return nil, err
-		}
-		prog.Warnings = append(prog.Warnings, plan.Warnings...)
-		break
+	front, err := c.compileFront(&frontOptions{Dir: dir, Target: target, Main: main, Defines: defs, OptimizeLevel: 2})
+	if err != nil {
+		return nil, err
 	}
-	for _, mod := range prog.Modules.List() {
+	for _, mod := range front.Prog.Modules.List() {
 		if mod.FromFcm {
 			continue
 		}
-		if _, _, err := llc.Compile(mod); err != nil {
+		if _, _, err := front.Llc.Compile(mod); err != nil {
 			return nil, err
 		}
 	}
-	return prog, nil
+	return front.Prog, nil
 }
