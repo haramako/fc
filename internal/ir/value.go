@@ -348,7 +348,9 @@ func ValIntLiteral(v Operand) (int, bool) {
 		return 0, false
 	}
 	n := lv.Int
-	if cv, ok := v.(*CastedValue); ok && cv.Type.Kind == types.Int && (cv.Offset != 0 || cv.Width < cv.Type.Size) {
+	// 元のリテラルの型より狭い cast (`cast<u8, 0>(65534 as u16)`)、符号の違う型への cast (`cast<u8>(-47)` は 209) も同じ
+	// (split が上位を 255 にしていた。fuzz で発覚)
+	if cv, ok := v.(*CastedValue); ok && cv.Type.Kind == types.Int {
 		n = (n >> (8 * cv.Offset)) & (1<<(8*cv.Width) - 1)
 		if cv.Width == cv.Type.Size && cv.Type.Signed && n >= 1<<(8*cv.Width-1) {
 			n -= 1 << (8 * cv.Width)
