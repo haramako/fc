@@ -20,7 +20,7 @@ import (
 // (push_result と call の間。fastcall の引数領域を壊す)、自分自身。
 // エラー: extern / interrupt / 再帰の関数への options(inline: true)。
 func InlineProgram(mods []*ir.Module) error {
-	if ir.Disabled("inline") {
+	if ir.ModulesCfg(mods).Disabled("inline") {
 		return nil
 	}
 	inl := map[string]*ir.Lambda{} // シンボル → inline 関数
@@ -41,7 +41,7 @@ func InlineProgram(mods []*ir.Module) error {
 			inl[lmd.Id] = lmd
 		}
 	}
-	if !ir.Disabled("autoinline") {
+	if !ir.ModulesCfg(mods).Disabled("autoinline") {
 		// 自動インライン: 印が無くても小さい関数 (autoInlinable) は展開する。呼び出し 1 回あたり 20〜30 サイクル
 		// (引数の受け渡し + jsr / rts + 戻り値) が消える。呼び出し箇所が多い関数は本体が特に小さいときだけ (ROM)
 		sites := map[string]int{}

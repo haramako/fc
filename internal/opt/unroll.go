@@ -55,12 +55,12 @@ func (s *ssaForm) unrollOne() bool {
 		h := lp.Header
 		hops := cfg.Ops(h)
 		if len(hops) < 2 || len(hops) > 3 || ops[hops[0]].Code != ir.OpLabel {
-			unrollTrace("bail1", h, 0, 0)
+			unrollTrace(s.lmd, "bail1", h, 0, 0)
 			continue
 		}
 		br := ops[hops[len(hops)-1]]
 		if (br.Code != ir.OpIf && br.Code != ir.OpIfTrue) || lp.Contains(cfg.BlockOf(br.Label)) {
-			unrollTrace("bail2", h, 0, 0)
+			unrollTrace(s.lmd, "bail2", h, 0, 0)
 			continue
 		}
 		// ヘッダの条件が読むカウンタ k
@@ -84,7 +84,7 @@ func (s *ssaForm) unrollOne() bool {
 			k = v
 		}
 		if k == nil || k.Type.Kind != types.Int {
-			unrollTrace("bail3", h, 0, 0)
+			unrollTrace(s.lmd, "bail3", h, 0, 0)
 			continue
 		}
 		// ループのブロックは連続
@@ -98,7 +98,7 @@ func (s *ssaForm) unrollOne() bool {
 			}
 		}
 		if first != h {
-			unrollTrace("bail4", h, 0, 0)
+			unrollTrace(s.lmd, "bail4", h, 0, 0)
 			continue
 		}
 		// 範囲 [first, last] にループ外のブロック (for の出口 `@else: jump @end` は本体と step の間に置かれる) が
@@ -115,25 +115,25 @@ func (s *ssaForm) unrollOne() bool {
 			}
 		}
 		if enters {
-			unrollTrace("bail5", h, 0, 0)
+			unrollTrace(s.lmd, "bail5", h, 0, 0)
 			continue
 		}
 		// k の更新: ループ内の唯一の定義が毎周 1 回の add / sub k = k, リテラル
 		step, ok := s.counterStep(lp, k, idom)
 		if !ok {
-			unrollTrace("step", h, 0, 0)
-			unrollTrace("bail6", h, 0, 0)
+			unrollTrace(s.lmd, "step", h, 0, 0)
+			unrollTrace(s.lmd, "bail6", h, 0, 0)
 			continue
 		}
 		// 入口: 1 つで、そこでの k がリテラル
 		entries := cfg.Entries(lp)
 		if len(entries) != 1 {
-			unrollTrace("bail7", h, 0, 0)
+			unrollTrace(s.lmd, "bail7", h, 0, 0)
 			continue
 		}
 		k0, ok := ir.ValIntLiteral(s.initialOperand(k, entries[0]))
 		if !ok {
-			unrollTrace("bail8", h, 0, 0)
+			unrollTrace(s.lmd, "bail8", h, 0, 0)
 			continue
 		}
 		// 回数のシミュレーション
@@ -151,8 +151,8 @@ func (s *ssaForm) unrollOne() bool {
 			kv = normInt(kv+step, k.Type)
 		}
 		if trips <= 0 {
-			unrollTrace("trips", h, trips, 0)
-			unrollTrace("bail9", h, 0, 0)
+			unrollTrace(s.lmd, "trips", h, trips, 0)
+			unrollTrace(s.lmd, "bail9", h, 0, 0)
 			continue
 		}
 		// 大きさ: コードになる命令だけ数える (ラベル、ヘッダへの jump、畳まれるカウンタの更新と検査は除く)
@@ -168,8 +168,8 @@ func (s *ssaForm) unrollOne() bool {
 		}
 		bodyOps -= len(hops) // ヘッダの検査 (ラベルは数えていないので 1 多く引くが目安なのでよい)
 		if bodyOps*trips > unrollMaxOps {
-			unrollTrace("too big", h, bodyOps, trips)
-			unrollTrace("bail10", h, 0, 0)
+			unrollTrace(s.lmd, "too big", h, bodyOps, trips)
+			unrollTrace(s.lmd, "bail10", h, 0, 0)
 			continue
 		}
 		// asm から参照されるラベル、asm 命令があれば諦める
@@ -182,7 +182,7 @@ func (s *ssaForm) unrollOne() bool {
 			}
 		}
 		if bad {
-			unrollTrace("bail11", h, 0, 0)
+			unrollTrace(s.lmd, "bail11", h, 0, 0)
 			continue
 		}
 		// ループ内で定義される一時変数 (使用もループ内だけ) は写しごとに別の変数に
@@ -217,7 +217,7 @@ func (s *ssaForm) unrollOne() bool {
 				}
 			}
 		}
-		if os.Getenv("FC_TRACE_UNROLL") != "" {
+		if s.lmd.Cfg().Trace("unroll") != "" {
 			fmt.Fprintf(os.Stderr, "unroll: %s trips=%d range=[%d,%d)"+string(rune(10)), h.Label, trips, h.Start, last.End)
 			for i := h.Start; i < last.End; i++ {
 				if ops[i] != nil {
@@ -393,8 +393,8 @@ func (s *ssaForm) headerExits(cmp, br *ir.Op, k *ir.Value, kv int) (bool, bool) 
 }
 
 // unrollTrace は調査用 (FC_TRACE_UNROLL=1)。
-func unrollTrace(why string, h *ir.Block, a, b int) {
-	if os.Getenv("FC_TRACE_UNROLL") != "" {
+func unrollTrace(lmd *ir.Lambda, why string, h *ir.Block, a, b int) {
+	if lmd.Cfg().Trace("unroll") != "" {
 		fmt.Fprintf(os.Stderr, "unroll: %s %s %d %d"+string(rune(10)), h.Label, why, a, b)
 	}
 }

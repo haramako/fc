@@ -12,6 +12,7 @@ import (
 	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/frames"
+	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 )
@@ -25,6 +26,7 @@ type frontOptions struct {
 	OptimizeLevel     int  // 0 (-O 0) または 2
 	Debug             bool // -g: @log の注釈を付ける
 	LogEveryStatement bool
+	Config            *ir.Config // 調査用の設定 (nil なら何も切らない)
 	// 以下は codegen.Llc へそのまま渡す (BuildContext だけが使う)
 	MisclassifyResident bool
 	DebugFile           func(ref string) string
@@ -47,6 +49,7 @@ func (c *Compiler) compileFront(o *frontOptions) (*frontResult, error) {
 		prog.Banks = c.banks()
 		prog.LogEnabled = o.Debug // @log の注釈は -g のときだけ (doc/v3_plan.md §9)
 		prog.LogEveryStatement = o.LogEveryStatement
+		prog.Config = o.Config
 		if err := sema.CompileProgram(prog, o.Dir, c.libPath(o.Target), o.Main); err != nil {
 			return nil, err
 		}

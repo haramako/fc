@@ -60,6 +60,8 @@ type Program struct {
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
 	// (driver/layout.go。doc/v3_plan.md §3)
 	Banks map[string]BankRef
+	// Config は調査用の設定 (パスの入れ切り・トレース。ir/config.go)。driver が BuildOptions から渡し、各モジュールに写す
+	Config *ir.Config
 	// LogEnabled なら @log を注釈として命令に付ける (fcc build -g。無ければ @log は検査だけで何も残さない)
 	LogEnabled bool
 	nextLogID  int
@@ -143,6 +145,7 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	}
 	mod = ir.NewModule(id, file.Filename, p.global)
 	mod.Version = file.Version
+	mod.Config = p.Config
 	if file.Version >= syntax.Version3 {
 		mod.Scope.Reserved = v3Reserved
 		mod.Scope.Hidden = v3Hidden

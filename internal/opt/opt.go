@@ -23,36 +23,44 @@ func Optimize(lmd *ir.Lambda, level int, u *types.Universe) {
 		prev := ir.SnapshotLogs(lmd) // @log の注釈を、消えた・動いた命令から付け替える (ir.KeepLogs)
 		p.Run(lmd)
 		ir.KeepLogs(lmd, prev)
-		if os.Getenv("FC_TRACE_LOGS") != "" {
-			var at []string
-			for i, op := range lmd.Ops {
-				if op != nil {
-					for _, lp := range op.Logs {
-						at = append(at, fmt.Sprintf("%d@%d(%s)", lp.ID, i, op.Code))
-					}
-				}
+		if tr := lmd.Cfg().Trace("logs"); tr != "" {
+			traceLogs(lmd, p.Name, tr == lmd.Id, lmd.Cfg().Trace("log_id"))
+		}
+	}
+}
+
+// traceLogs は調査用 (FC_TRACE_LOGS=1 で段ごとの @log の位置、FC_TRACE_LOGS=<関数の Id> でその関数の IR も。
+// FC_TRACE_LOG_ID=<ID> でその注釈の引数の値)。
+func traceLogs(lmd *ir.Lambda, pass string, detail bool, wantID string) {
+	var at []string
+	for i, op := range lmd.Ops {
+		if op != nil {
+			for _, lp := range op.Logs {
+				at = append(at, fmt.Sprintf("%d@%d(%s)", lp.ID, i, op.Code))
 			}
-			fmt.Fprintf(os.Stderr, "logs %s after %s: %v\n", lmd.Id, p.Name, at)
-			if os.Getenv("FC_TRACE_LOGS") == lmd.Id {
-				for i, op := range lmd.Ops {
-					if op != nil {
-						var ids []int
-						for _, lp := range op.Logs {
-							ids = append(ids, lp.ID)
-						}
-						var args []string
-						for _, lp := range op.Logs {
-							if want := os.Getenv("FC_TRACE_LOG_ID"); want != "" && fmt.Sprint(lp.ID) == want {
-								for _, a := range lp.Args {
-									args = append(args, a.Expr+"="+ir.OperandString(a.Val))
-								}
-							}
-						}
-						fmt.Fprintf(os.Stderr, "  %3d %v %s %v\n", i, ids, ir.DumpOp(op, nil), args)
-					}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "logs %s after %s: %v\n", lmd.Id, pass, at)
+	if !detail {
+		return
+	}
+	for i, op := range lmd.Ops {
+		if op == nil {
+			continue
+		}
+		var ids []int
+		for _, lp := range op.Logs {
+			ids = append(ids, lp.ID)
+		}
+		var args []string
+		for _, lp := range op.Logs {
+			if wantID != "" && fmt.Sprint(lp.ID) == wantID {
+				for _, a := range lp.Args {
+					args = append(args, a.Expr+"="+ir.OperandString(a.Val))
 				}
 			}
 		}
+		fmt.Fprintf(os.Stderr, "  %3d %v %s %v\n", i, ids, ir.DumpOp(op, nil), args)
 	}
 }
 
@@ -68,81 +76,81 @@ type Pass struct {
 func Passes(u *types.Universe) []Pass {
 	return []Pass{
 		{"ssa", func(lmd *ir.Lambda) {
-			if !ir.Disabled("ssa") {
+			if !lmd.Cfg().Disabled("ssa") {
 				propagateSSA(lmd)
 			}
 		}},
 		{"mul", func(lmd *ir.Lambda) {
-			if !ir.Disabled("mul") {
+			if !lmd.Cfg().Disabled("mul") {
 				expandMul(lmd)
 			}
 		}},
 		{"sink", func(lmd *ir.Lambda) {
-			if !ir.Disabled("sink") {
+			if !lmd.Cfg().Disabled("sink") {
 				sinkAddress(lmd)
 			}
 		}},
 		{"fuse", func(lmd *ir.Lambda) {
-			if !ir.Disabled("fuse") {
+			if !lmd.Cfg().Disabled("fuse") {
 				fusePointer(lmd)
 			}
 			compact(lmd)
 		}},
 		{"fieldindex", func(lmd *ir.Lambda) {
-			if !ir.Disabled("fieldindex") && foldFieldIndex(lmd, u) {
+			if !lmd.Cfg().Disabled("fieldindex") && foldFieldIndex(lmd, u) {
 				compact(lmd)
 			}
 		}},
 		{"indexoff", func(lmd *ir.Lambda) {
-			if !ir.Disabled("indexoff") && foldIndexOffset(lmd) {
+			if !lmd.Cfg().Disabled("indexoff") && foldIndexOffset(lmd) {
 				compact(lmd) // fuse が index + pget / pset を index_pget / index_pset にした後
 			}
 		}},
 		{"coalesce", func(lmd *ir.Lambda) {
-			if !ir.Disabled("coalesce") {
+			if !lmd.Cfg().Disabled("coalesce") {
 				coalesceCopies(lmd)
 			}
 			compact(lmd)
 		}},
 		{"chain", func(lmd *ir.Lambda) {
-			if !ir.Disabled("chain") {
+			if !lmd.Cfg().Disabled("chain") {
 				chainInPlace(lmd)
 			}
 		}},
 		{"induction", func(lmd *ir.Lambda) {
-			if !ir.Disabled("ssa") && !ir.Disabled("induction") && eliminateInduction(lmd) {
+			if !lmd.Cfg().Disabled("ssa") && !lmd.Cfg().Disabled("induction") && eliminateInduction(lmd) {
 				// coalesce の後 (`i += s` が `add i = i, s` になってから)。消したカウンタの加算と初期化、lim の計算の定数を畳む
 				propagateSSA(lmd)
 				compact(lmd)
 			}
 		}},
 		{"unroll", func(lmd *ir.Lambda) {
-			if !ir.Disabled("ssa") && !ir.Disabled("unroll") && !lmd.NoGrow && unrollLoops(lmd) {
+			if !lmd.Cfg().Disabled("ssa") && !lmd.Cfg().Disabled("unroll") && !lmd.NoGrow && unrollLoops(lmd) {
 				propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
 				compact(lmd)
-				if !ir.Disabled("fuse") {
+				if !lmd.Cfg().Disabled("fuse") {
 					fusePointer(lmd) // 添字が定数になった index + pget / pset (要素 2 バイトのポインタは定数の添字だけ融合できる)
 					compact(lmd)
 				}
 			}
 		}},
 		{"narrow", func(lmd *ir.Lambda) {
-			if !ir.Disabled("narrow") {
+			if !lmd.Cfg().Disabled("narrow") {
 				narrowBitTest(lmd, u)
 			}
 		}},
 		{"scale", func(lmd *ir.Lambda) {
-			if !ir.Disabled("scale") {
+			if !lmd.Cfg().Disabled("scale") {
 				scaleIndex(lmd, u)
 			}
 		}},
 		{"commute", func(lmd *ir.Lambda) {
-			if !ir.Disabled("commute") {
+			if !lmd.Cfg().Disabled("commute") {
 				commuteTemp(lmd)
 			}
 		}},
 		{"carry", func(lmd *ir.Lambda) {
-			for n := 0; n < 20 && !ir.Disabled("carry"); n++ {
+			for n := 0; n < 20 && !lmd.Cfg().Disabled("carry"); n++ {
 				before := len(lmd.Ops)
 				carryBranch(lmd)
 				compact(lmd)
@@ -152,7 +160,7 @@ func Passes(u *types.Universe) []Pass {
 			}
 		}},
 		{"split", func(lmd *ir.Lambda) {
-			if !ir.Disabled("split") {
+			if !lmd.Cfg().Disabled("split") {
 				splitWords(lmd, u)
 			}
 			compact(lmd)

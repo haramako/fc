@@ -56,6 +56,8 @@ type BuildOptions struct {
 	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
 	MisclassifyResident bool
 	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
+	// Config は調査用の設定 (パスの入れ切り・トレース・検証。ir/config.go)。nil なら環境変数 (FC_DISABLE など) から作る
+	Config *ir.Config
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / base.o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
@@ -101,6 +103,7 @@ type Compiler struct {
 	layout   *bankLayout  // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
 	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 	hashes   *hashMemo    // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
+	cfg      *ir.Config   // 調査用の設定 (BuildOptions.Config)
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -173,6 +176,10 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if opt.Stdout == nil {
 		opt.Stdout = os.Stdout
 	}
+	if opt.Config == nil {
+		opt.Config = ir.ConfigFromEnv()
+	}
+	c.cfg = opt.Config
 	c.target = opt.Target
 	c.dir = opt.Dir
 	if c.dir == "" {
@@ -200,7 +207,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 	front, ferr := c.compileFront(&frontOptions{
 		Dir: opt.Dir, Target: opt.Target, Main: filename, Defines: defs, OptimizeLevel: opt.OptimizeLevel,
-		Debug: opt.Debug, LogEveryStatement: opt.LogEveryStatement,
+		Debug: opt.Debug, LogEveryStatement: opt.LogEveryStatement, Config: opt.Config,
 		MisclassifyResident: opt.MisclassifyResident, DebugFile: c.debugFileFunc(opt),
 	})
 	if ferr != nil {
@@ -783,7 +790,8 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 	prevPC := -1 // 直前に実行した命令 (@log の合流点の地点: LogFileSite.Prevs)
 	benchUsed := false
 	var trace []int // FC_TRACE_PC=1: 直近の PC (invalid opcode の panic で表示する。調査用)
-	if os.Getenv("FC_TRACE_PC") != "" {
+	tracePC := c.cfg.Trace("pc") != ""
+	if tracePC {
 		defer func() {
 			if r := recover(); r != nil {
 				var b strings.Builder
@@ -796,7 +804,7 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 		}()
 	}
 	for mem.Get(0xffff) == 255 {
-		if trace != nil || os.Getenv("FC_TRACE_PC") != "" {
+		if tracePC {
 			trace = append(trace, cpu.Pc)
 			if len(trace) > 48 {
 				trace = trace[1:]

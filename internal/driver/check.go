@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 )
@@ -37,6 +38,7 @@ type CheckOptions struct {
 	Target  string   // emu (既定) / nes
 	Dir     string   // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
 	Defines []string // CLI の -D (fcc build と同じく fc.toml の後に当てる)
+	Config  *ir.Config // 調査用の設定 (nil なら環境変数から)
 }
 
 // Check は filename から始まるプログラムを意味解析・コード生成まで通し (ファイルは書かない)、
@@ -46,7 +48,11 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 	if target == "" {
 		target = "emu"
 	}
-	prog, err := c.compileNoWrite(opt.Dir, target, filename, opt.Defines)
+	cfg := opt.Config
+	if cfg == nil {
+		cfg = ir.ConfigFromEnv()
+	}
+	prog, err := c.compileNoWrite(opt.Dir, target, filename, opt.Defines, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +60,7 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 }
 
 // compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。前段は fcc build と同じ compileFront。
-func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (prog *sema.Program, err error) {
+func (c *Compiler) compileNoWrite(dir, target, main string, cli []string, cfg *ir.Config) (prog *sema.Program, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*diag.Error); ok {
@@ -72,7 +78,7 @@ func (c *Compiler) compileNoWrite(dir, target, main string, cli []string) (prog 
 	if err != nil {
 		return nil, err
 	}
-	front, err := c.compileFront(&frontOptions{Dir: dir, Target: target, Main: main, Defines: defs, OptimizeLevel: 2})
+	front, err := c.compileFront(&frontOptions{Dir: dir, Target: target, Main: main, Defines: defs, OptimizeLevel: 2, Config: cfg})
 	if err != nil {
 		return nil, err
 	}

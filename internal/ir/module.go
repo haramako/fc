@@ -138,6 +138,7 @@ type Module struct {
 	FromFcm        bool
 	Depends        []string
 	Defs           []*Def
+	Config         *Config // 調査用の設定 (config.go。sema.Program.Config を写す。nil なら何も切らない)
 }
 
 func NewModule(id, path string, globalScope *Scope) *Module {

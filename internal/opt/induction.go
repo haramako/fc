@@ -79,24 +79,24 @@ func (s *ssaForm) eliminateOneInduction() bool {
 		// ヘッダ: ラベル + `lt t = k, LIM` + `if t goto E` (E はループの外)
 		hops := cfg.Ops(h)
 		if len(hops) != 3 || ops[hops[0]].Code != ir.OpLabel || ops[hops[1]].Code != ir.OpLt || ops[hops[2]].Code != ir.OpIf {
-			ivTrace(1)
+			ivTrace(s.lmd, 1)
 			continue
 		}
 		cmp, br := ops[hops[1]], ops[hops[2]]
 		t, ok := cmp.Dst.(*ir.Value)
 		if !ok || t.LocalType != ir.LTTemp || br.Src[0] != ir.Operand(t) || lp.Contains(cfg.BlockOf(br.Label)) {
-			ivTrace(2)
+			ivTrace(s.lmd, 2)
 			continue
 		}
 		// 入口は 1 つで、その辺は分岐ではない
 		entries := cfg.Entries(lp)
 		if len(entries) != 1 {
-			ivTrace(3)
+			ivTrace(s.lmd, 3)
 			continue
 		}
 		pre := entries[0]
 		if last := cfg.Last(pre); last != nil && (ir.IsCondBranch(last) || last.Code == ir.OpSwitch || last.Code == ir.OpReturn) {
-			ivTrace(4)
+			ivTrace(s.lmd, 4)
 			continue
 		}
 		// 比較の向き: `k < LIM` または `LIM < k` (k は誘導変数の側)
@@ -107,24 +107,24 @@ func (s *ssaForm) eliminateOneInduction() bool {
 		}
 		lim, lit := ir.ValIntLiteral(cmp.Src[1-kIdx])
 		if !lit && !s.loopInvariantVar(cmp.Src[1-kIdx], lp) {
-			ivTrace(5)
+			ivTrace(s.lmd, 5)
 			continue
 		}
 		k, ok := cmp.Src[kIdx].(*ir.Value)
 		if !ok || !s.vars[k] || k.Type.Kind != types.Int || k.Type.Signed {
-			ivTrace(6)
+			ivTrace(s.lmd, 6)
 			continue
 		}
 		kiv := ivs[k]
 		if kiv == nil || len(s.useAt[hops[1]]) == 0 || resolve(s.useAt[hops[1]][kIdx]) != kiv.phi {
-			ivTrace(7)
+			ivTrace(s.lmd, 7)
 			continue
 		}
 		// k の使用は加算と比較だけ (ループの外の使用は、ループを通った版を読まないものに限る: 次のループで
 		// 初期化し直して使うのはよい)、t の使用は分岐だけ
 		loopVals := map[*ssaVal]bool{kiv.phi: true, s.defAt[kiv.def]: true}
 		if !s.onlyUses(k, lp, loopVals, kiv.def, hops[1]) || !s.onlyUses(t, lp, nil, hops[2]) {
-			ivTrace(8)
+			ivTrace(s.lmd, 8)
 			continue
 		}
 		// 折り返さないこと: LIM + (歩幅の最大値) が k の型に収まる (歩幅の上限は maxValue: リテラル、型、支配する比較から)
@@ -133,11 +133,11 @@ func (s *ssaForm) eliminateOneInduction() bool {
 		stepMax, ok := s.maxValue(kiv.def, kiv.stepIdx, idom)
 		if !lit {
 			if n, one := ir.ValIntLiteral(kiv.step); !one || n != 1 || ir.ValType(cmp.Src[1-kIdx]).Size > k.Type.Size || ir.ValType(cmp.Src[1-kIdx]).Signed {
-				ivTrace(12)
+				ivTrace(s.lmd, 12)
 				continue
 			}
 		} else if !ok || stepMax <= 0 || lim+stepMax > kmax {
-			ivTrace(11)
+			ivTrace(s.lmd, 11)
 			continue
 		}
 		// 相方: 同じ歩幅のポインタ
@@ -154,12 +154,12 @@ func (s *ssaForm) eliminateOneInduction() bool {
 			}
 		}
 		if q == nil {
-			ivTrace(9)
+			ivTrace(s.lmd, 9)
 			continue
 		}
 		// ヘッダの時点で q も加算前の版
 		if s.valueAt(q.v, hops[1]) != q.phi {
-			ivTrace(10)
+			ivTrace(s.lmd, 10)
 			continue
 		}
 		// 変換: 入口の辺の末尾に [検査] と lim の計算、ヘッダの比較を q < lim に
@@ -354,8 +354,8 @@ func (s *ssaForm) initialOperand(v *ir.Value, pre *ir.Block) ir.Operand {
 }
 
 // ivTrace は調査用 (FC_TRACE_INDUCTION=1 で、対象外になった条件の番号を出す)。
-func ivTrace(n int) {
-	if os.Getenv("FC_TRACE_INDUCTION") != "" {
+func ivTrace(lmd *ir.Lambda, n int) {
+	if lmd.Cfg().Trace("induction") != "" {
 		fmt.Fprintf(os.Stderr, "induction: bail %d\n", n)
 	}
 }

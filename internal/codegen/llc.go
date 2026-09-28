@@ -413,7 +413,7 @@ func (l *Llc) Prepare(lmd *ir.Lambda) {
 	l.allocRegister(lmd)
 	ir.KeepLogs(lmd, prev)
 	l.checkStackPush(lmd)
-	if os.Getenv("FC_DUMP_IR") != "" {
+	if lmd.Cfg().DumpIR() {
 		// 調査用: 最適化と割付の後の IR を stderr に出す (golden の allocir と同じ形式)
 		fmt.Fprint(os.Stderr, ir.DumpAllocLambda(lmd.Module.Id, lmd.Id, lmd))
 	}
@@ -579,7 +579,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			f := forced[opNo]
 			f.a, f.x, f.y = f.a || w.a, f.x || w.x, f.y || w.y
 			forced[opNo] = f
-			if os.Getenv("FC_TRACE_RESIDENT") != "" {
+			if lmd.Cfg().Trace("resident") != "" {
 				fmt.Fprintf(os.Stderr, "resident: %s op %d writes %+v; spill instead: %s\n", lmd.Id, opNo, w, ir.DumpOp(lmd.Ops[opNo], nil))
 			}
 		}
@@ -692,7 +692,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 	pushArgSize := 0
 	pushFastcallArgSize := 0
 	var calls []*pendingCall                    // 積んでいる途中の呼び出し (内側が末尾)
-	verify := os.Getenv("FC_VERIFY_REGS") != "" // テストと fuzz で有効 (verifyRegs)
+	verify := lmd.Cfg().VerifyRegs() // テストと fuzz で有効 (verifyRegs)
 
 	for opNo, op := range ops {
 		if op == nil {
@@ -1203,7 +1203,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
 			if n, ok := ir.ValIntLiteral(op.In(1)); ok {
 				// 定数の場合
-				if lines, ok := l.shiftByte(op, n, signed); ok && !ir.Disabled("shift8") {
+				if lines, ok := l.shiftByte(op, n, signed); ok && !lmd.Cfg().Disabled("shift8") {
 					r.push(lines) // 2 バイトの 8 以上のシフトはバイトの移動 (8.8 固定小数の `x >> 8` など)
 				} else if lines, ok := l.shiftInMemory(op, n, signed); ok {
 					r.push(lines)
@@ -1407,7 +1407,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			trueLabel, endLabel, skipLabel := labels[0], labels[1], labels[2]
 			size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
 			signed := ir.ValType(op.In(0)).Signed || ir.ValType(op.In(1)).Signed
-			if os.Getenv("FC_TRACE_SIGNED") != "" && signed {
+			if lmd.Cfg().Trace("signed") != "" && signed {
 				// 調査用: 符号付き比較の場所を列挙する
 				lit0, ok0 := ir.ValIntLiteral(op.In(0))
 				lit1, ok1 := ir.ValIntLiteral(op.In(1))
@@ -1650,7 +1650,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			}
 			// Y の常駐変数をこの命令の最後で復帰するなら融合しない (添字を入れた Y が直後の命令の前に常駐の値に戻って、
 			// `tab+0,y` が常駐の値で読んでいた: `sty k; ldy #2; ldy k; sbc tab+0,y`。fuzz で発覚)
-			if reg, ok := l.fusableIndex(ops, opNo); ok && !(reg == "y" && restoreY) && !ir.Disabled("fuse-index") {
+			if reg, ok := l.fusableIndex(ops, opNo); ok && !(reg == "y" && restoreY) && !lmd.Cfg().Disabled("fuse-index") {
 				// 直後の sub / lt の第 2 入力に融合: 添字をレジスタに用意して、結果の一時変数を `tab+0,y` として読ませる
 				if reg == "y" {
 					r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
@@ -1793,7 +1793,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 
 	lines = append(lines, ".endproc")
 
-	if l.OptimizeLevel > 0 && !ir.Disabled("peephole") {
+	if l.OptimizeLevel > 0 && !lmd.Cfg().Disabled("peephole") {
 		lines = peepholeA(lines)
 	}
 	lines = stripTestMarks(lines)
@@ -1859,7 +1859,7 @@ func (l *Llc) allocRegister(lmd *ir.Lambda) {
 // reg の写し 4 命令、12 サイクルが消える)。
 func fnPtrToReg(lmd *ir.Lambda, ops []*ir.Op, i int) int {
 	op := ops[i]
-	if op == nil || op.Code != ir.OpIndexPget || ir.Disabled("fnptr-reg") {
+	if op == nil || op.Code != ir.OpIndexPget || lmd.Cfg().Disabled("fnptr-reg") {
 		return -1
 	}
 	t, ok := op.Dst.(*ir.Value)

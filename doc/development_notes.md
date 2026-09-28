@@ -82,7 +82,7 @@ go test ./...                                    # 全部 (golden + examples + N
     `-randn 1000` で回す。直したバグは bugzoo に足す。新しい機能と既存の最適化の組み合わせのバグは足した直後に出やすい
     （2026-09-27 の struct の配列の最適化 5b89873 と v3 の生成器の形の組み合わせで、翌日に 3cba778 が出た）
   - 足した判定（2026-09-28）: `TestRandomMetamorphic`（fcc の実行ファイルで、普通 / インライン展開を全部切る / 最適化の段を
-    1〜3 個切る、の出力を比べる。FC_DISABLE はプロセスで 1 回だけ読まれるので別のプロセスで動かす。既定 4 本、`-metan`）、
+    1〜3 個切る、の出力を比べる。切る段は BuildOptions.Config (ir.Config) でビルドごとに渡す。既定 4 本、`-metan`）、
     `TestRandomMutate`（生成した正しいプログラムを行・名前・型・数・キャストの単位で壊して Check に通し、panic だけを失敗にする。
     既定 10 本 × 20 通り、`-mutn`）、`TestTypeRuleMatrix`（型の種類 × 使う場所の「通る / エラー」の表を
     testdata/golden/typerules.txt と比べる。検査が緩む・厳しくなる変化が差分で見える）、生成器の `regpress`（常駐レジスタに
