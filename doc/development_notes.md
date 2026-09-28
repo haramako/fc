@@ -521,7 +521,9 @@ go test ./...                                    # 全部 (golden + examples + N
   どのフレームとも重ねない（割り込みの木と同じ）。インラインアセンブラの参照は含む関数からの辺にする。asm のテキストから
   fc のシンボルを拾うのは `ir.AsmSymbols` だけ（語の境界つき。語の途中の `_main` を拾うと、main が Entry になったり、hidden で
   全部のフレームが重ならなくなって castle が入らなくなる）。abi "frame" の asm の関数どうしが同じモジュールの中で呼び合うのは
-  検出できない（定義のラベルと呼び出しを区別できない）ので仕様で禁止している
+  検出できない（定義のラベルと呼び出しを区別できない）ので仕様で禁止している。フレームを置く順は、ゼロページが必須の asm の
+  関数が先、残りは深い順（`Graph.depth`）。深さは閉路（再帰の連鎖）の内側の辺を数えずに求める（数えると閉路の先の関数の深さが
+  0 のまま残り、祖先より後に置かれてゼロページが埋まっていた。`TestDepthThroughCycle`）
 - **調査用の設定**は `ir.Config`（FC_DISABLE / FC_TRACE_* / FC_DUMP_IR / FC_VERIFY_REGS）。環境変数を読むのは
   `ir.ConfigFromEnv` だけで、`BuildOptions.Config` → `sema.Program.Config` → `ir.Module.Config` と渡り、各段は `lmd.Cfg()` で
   引く。テストはビルドごとに別の設定を渡せる（`TestRandomMetamorphic` は同じプロセスで段を切って比べる）。

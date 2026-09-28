@@ -378,12 +378,24 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 	}
 
-	// 深さ: 根 (呼び出し元の無い関数) からの最長距離。閉路は stack なので static の間では DAG
+	// 深さ: 根 (呼び出し元の無い関数) からの最長距離。閉路 (再帰の連鎖。stack) の内側の辺は数えない (残りは DAG)。閉路の辺も
+	// 数えると、閉路の節が入次数 0 にならず、その先 (再帰する関数から呼ばれる関数とその先) の深さが 0 のまま残って、配置の順
+	// (深い順) で祖先より後に回っていた (abi "frame" の asm の関数は祖先のフレームでゼロページが埋まった後でエラーになった)
+	comp := make([]int, n) // 閉路を含む強連結成分の番号 (-1 は閉路に属さない)
+	for i := range comp {
+		comp[i] = -1
+	}
+	for k, c := range cycles {
+		for _, v := range c {
+			comp[v] = k
+		}
+	}
+	inner := func(i, j int) bool { return i == j || comp[i] >= 0 && comp[i] == comp[j] }
 	g.depth = make([]int, n)
 	indeg := make([]int, n)
 	for i := range g.Lambdas {
 		for _, j := range g.callees[i] {
-			if j != i {
+			if !inner(i, j) {
 				indeg[j]++
 			}
 		}
@@ -398,7 +410,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		i := queue[0]
 		queue = queue[1:]
 		for _, j := range g.callees[i] {
-			if j == i {
+			if inner(i, j) {
 				continue
 			}
 			if g.depth[i]+1 > g.depth[j] {
@@ -412,7 +424,6 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	}
 	return g, nil
 }
-
 
 // indirectTargets は間接呼び出しの飛び先の関数 (シンボル) を絞れるなら返す。
 //   - グローバルの関数ポインタ変数 (直接、または `load t = g` の t): その変数に代入された関数 (リテラル以外の代入があれば不可)
@@ -667,8 +678,13 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 			order = append(order, i)
 		}
 	}
+	// 置く順: ゼロページが必須のフレーム (abi "frame" の asm の関数) を先に (fc の関数のフレームはゼロページからあふれても RAM に
+	// 置けるが、asm の関数は置けない)。残りは深い順 (呼び出しの連鎖の葉から: 兄弟どうしが同じ番地に重なる)、同じ深さなら小さい順
 	sort.SliceStable(order, func(x, y int) bool {
 		a, b := order[x], order[y]
+		if za, zb := needZp(g.Lambdas[a]), needZp(g.Lambdas[b]); za != zb {
+			return za
+		}
 		if g.depth[a] != g.depth[b] {
 			return g.depth[a] > g.depth[b]
 		}
@@ -711,10 +727,7 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 			lmd.FrameBase = 0
 			continue
 		}
-		wantZp := true
-		if v, ok := lmd.Options.Get("zeropage"); ok && v.Text() == "false" {
-			wantZp = false
-		}
+		wantZp := !zpOff(lmd)
 		if wantZp {
 			if at, ok := fit(zp, i, zpBudget); ok {
 				lmd.FrameZp = true
@@ -724,7 +737,7 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 				continue
 			}
 		}
-		if lmd.Extern && wantZp {
+		if needZp(lmd) {
 			// abi: "frame" の asm の関数はフレームを `(F_sym+k),y` のように間接の番地にも使うのでゼロページが要る
 			// (RAM でよいなら options(zeropage: false))
 			return nil, &diag.Error{Msg: fmt.Sprintf("the static frame of %s (abi \"frame\", %d bytes) does not fit in the zero page (FC_SZP %d bytes; raise options(static_zp: N), or declare zeropage: false if the assembler does not use it as a zero page address)",
@@ -766,6 +779,16 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 	plan.Report = g.report(plan, len(zp), len(ram))
 	return plan, nil
 }
+
+// zpOff は options(zeropage: false) (静的フレームを RAM 側に置く) か。
+func zpOff(lmd *ir.Lambda) bool {
+	v, ok := lmd.Options.Get("zeropage")
+	return ok && v.Text() == "false"
+}
+
+// needZp はフレームをゼロページに置かなければならないか (abi "frame" の asm の関数。フレームを `(F_sym+k),y` のように間接の
+// 番地にも使う)。
+func needZp(lmd *ir.Lambda) bool { return lmd.Extern && lmd.FrameABI && !zpOff(lmd) }
 
 // frameABISymbols は abi: "frame" の関数の、asm が使うシンボル (_frames.inc の行): 引数ごとの位置 `F_sym__名前` と作業領域の
 // 先頭 `F_sym__scratch`。使われない extern (fc から呼ばれない) にもフレームの名前を定義する (asm のファイルは丸ごと入るので、
