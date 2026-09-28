@@ -4,6 +4,7 @@ package driver
 // base.asm / ld65.cfg のテンプレートは小さく静的なので text/template を使わず文字列生成している。
 
 import (
+	"github.com/haramako/fc/internal/emu"
 	"github.com/haramako/fc/internal/project"
 	"github.com/haramako/fc/internal/fclog"
 	"github.com/haramako/fc/internal/cc65"
@@ -771,6 +772,7 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // $ffff が 255 以外になったら終了 (その値が終了コード)。
 // 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
 // logs は @log の地点 (PC → 表示。-g のとき)。命令の実行前に PC が地点なら 1 行出す。
+// execute は ROM を emu で実行し、終了コードとサイクル数を返す (internal/emu)。logs は @log の地点 (PC → 地点。fclog.Hooks)。
 func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]fclog.Hook, logOut io.Writer) (int, int64, error) {
 	if c.target != "emu" {
 		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
@@ -779,41 +781,13 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 	if err != nil {
 		return 0, 0, err
 	}
-	const startAddr = 0x1000
-	mem := r6502.NewMemory()
-	for i, b := range data {
-		mem.Set(startAddr+i, int(b))
-	}
-	cpu := r6502.NewCpu(mem)
-	cpu.Pc = startAddr
-	cpu.TrapZpWrap = true // FC_STACK (ZP 128 バイト) のあふれは S+k,x のページ越えとして見える
-	mem.Set(0xffff, 255)
-	mem.Set(0xfffe, 255)
-	var benchStart, benchCycles int64
-	prevPC := -1 // 直前に実行した命令 (@log の合流点の地点: LogFileSite.Prevs)
-	benchUsed := false
-	var trace []int // FC_TRACE_PC=1: 直近の PC (invalid opcode の panic で表示する。調査用)
-	tracePC := c.cfg.Trace("pc") != ""
-	if tracePC {
-		defer func() {
-			if r := recover(); r != nil {
-				var b strings.Builder
-				for _, pc := range trace {
-					fmt.Fprintf(&b, " $%04x", pc)
-				}
-				fmt.Fprintf(os.Stderr, "FC_TRACE_PC (last %d):%s\n", len(trace), b.String())
-				panic(r)
+	o := emu.Options{Out: out, MaxCycles: maxCycles, TracePC: c.cfg.Trace("pc") != ""}
+	if logs != nil {
+		o.OnStep = func(pc, prevPC int, cpu *r6502.Cpu, mem *r6502.Memory) {
+			hs := logs[pc]
+			if hs == nil {
+				return
 			}
-		}()
-	}
-	for mem.Get(0xffff) == 255 {
-		if tracePC {
-			trace = append(trace, cpu.Pc)
-			if len(trace) > 48 {
-				trace = trace[1:]
-			}
-		}
-		if hs := logs[cpu.Pc]; logs != nil && hs != nil {
 			r := fclog.Reader{Mem: mem.Get, A: cpu.A, X: cpu.X, Y: cpu.Y}
 			for _, h := range hs {
 				if h.Site.Prevs == nil || slices.Contains(h.Site.Prevs, prevPC) {
@@ -821,45 +795,12 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 				}
 			}
 		}
-		prevPC = cpu.Pc
-		if logs != nil && mem.Get(cpu.Pc) == 0x60 {
-			// rts の後は、戻り先の直前の jsr を直前の命令とみなす (呼び出しの直後の合流点の地点。Prevs は jsr を指す)
-			ret := mem.Get(0x100+(cpu.S+1)&0xff) | mem.Get(0x100+(cpu.S+2)&0xff)<<8
-			prevPC = (ret - 2) & 0xffff
-		}
-		cpu.StepSilent()
-		if maxCycles > 0 && cpu.Cycles > maxCycles {
-			return 0, 0, fmt.Errorf("cycle limit exceeded (%d cycles, pc=$%04x)", maxCycles, cpu.Pc)
-		}
-		if mem.Get(0xfffe) != 255 {
-			switch mem.Get(0xfffe) {
-			case 1:
-				addr := mem.Get(0xfff0) + (mem.Get(0xfff1) << 8)
-				var sb []byte
-				for mem.Get(addr) != 0 {
-					sb = append(sb, byte(mem.Get(addr)))
-					addr++
-				}
-				fmt.Fprint(out, string(sb))
-			case 2:
-				num := mem.Get(0xfff2) + (mem.Get(0xfff3) << 8)
-				fmt.Fprint(out, num)
-			case 3:
-				num := mem.Get(0xfff2) + (mem.Get(0xfff3) << 8)
-				fmt.Fprint(out, num, " ")
-			case 4:
-				benchStart = cpu.Cycles
-				benchUsed = true
-			case 5:
-				benchCycles += cpu.Cycles - benchStart
-			}
-			mem.Set(0xfffe, 255)
-		}
 	}
-	if !benchUsed {
-		benchCycles = cpu.Cycles
+	res, err := emu.Run(data, o)
+	if err != nil {
+		return 0, 0, err
 	}
-	return mem.Get(0xffff), benchCycles, nil
+	return res.Exit, res.Cycles, nil
 }
 
 // checkAddressVars は @(address: N) の変数が、リンクした RAM のセグメント (fc の ZP・BSS・静的フレーム・スタック、[ram.*]、
