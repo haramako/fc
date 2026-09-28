@@ -374,7 +374,7 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			if !isSameValue(op.Dst, v) {
 				continue
 			}
-			if op.ResOut {
+			if op.Res[ir.RegA].Out {
 				continue // ループ内の常駐変数がこの命令の後も A を塞いでいる
 			}
 			// 結果を A に残す命令 (codegen が storeA で書く) であること

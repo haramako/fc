@@ -689,7 +689,7 @@ func name(v *ir.Value) string {
 func hasResident(lmd *ir.Lambda, cfg *ir.CFG, r region) bool {
 	for b := range r {
 		for _, i := range cfg.Ops(b) {
-			if lmd.Ops[i].Resident != nil || lmd.Ops[i].ResidentY != nil || lmd.Ops[i].ResidentX != nil {
+			if lmd.Ops[i].HasResident() {
 				return true
 			}
 		}
@@ -930,6 +930,9 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		rY.Location, rY.Home, rY.Clean = ir.LocY, vY, readOnly(lmd, cfg, r, vY)
 		lmd.Vars = append(lmd.Vars, rY)
 	}
+	// レジスタごとの元の変数と常駐の一時変数 (nil なら常駐しない)
+	vs := [ir.NumRegs]*ir.Value{ir.RegA: vA, ir.RegY: vY, ir.RegX: vX}
+	rs := [ir.NumRegs]*ir.Value{ir.RegA: rA, ir.RegY: rY, ir.RegX: rX}
 	// 常駐変数に差し替える。cast (`(x as int)` の符号の読み替え) は残す: 落とすと `lt` の符号が変わる
 	// (`(f() as int) >= 0` が符号付きの比較になって偽になった。fuzz で発覚)
 	rebase := func(o ir.Operand, nv *ir.Value) ir.Operand {
@@ -963,17 +966,10 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 					op.Src[0], op.Src[1] = op.Src[1], op.Src[0]
 				}
 			}
-			if vA != nil {
-				op.Resident = rA
-				op.ResIn, op.ResOut = lv.LiveIn(i, vA), lv.LiveOut(i, vA)
-			}
-			if vY != nil {
-				op.ResidentY = rY
-				op.ResYIn, op.ResYOut = lv.LiveIn(i, vY), lv.LiveOut(i, vY)
-			}
-			if vX != nil {
-				op.ResidentX = rX
-				op.ResXIn, op.ResXOut = lv.LiveIn(i, vX), lv.LiveOut(i, vX)
+			for reg, v := range vs {
+				if v != nil {
+					op.Res[reg] = ir.Residency{V: rs[reg], In: lv.LiveIn(i, v), Out: lv.LiveOut(i, v)}
+				}
 			}
 			for k := range op.Src {
 				op.Src[k] = replace(op.Src[k])
@@ -1139,29 +1135,25 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			}
 		}
 	}
-	entryOps := func(at int) []*ir.Op {
+	entryOps := func(at int) []*ir.Op { // 入口の写し (メモリ → レジスタ)
 		var r []*ir.Op
-		if vA != nil && lv.LiveIn(at, vA) {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rA, Src: []ir.Operand{vA}, Resident: rA, ResOut: true})
-		}
-		if vY != nil && lv.LiveIn(at, vY) {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rY, Src: []ir.Operand{vY}, ResidentY: rY, ResYOut: true})
-		}
-		if vX != nil && lv.LiveIn(at, vX) {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rX, Src: []ir.Operand{vX}, ResidentX: rX, ResXOut: true})
+		for reg, v := range vs {
+			if v != nil && lv.LiveIn(at, v) {
+				op := &ir.Op{Code: ir.OpLoad, Dst: rs[reg], Src: []ir.Operand{v}}
+				op.Res[reg] = ir.Residency{V: rs[reg], Out: true}
+				r = append(r, op)
+			}
 		}
 		return r
 	}
 	exitOps := func(at int) []*ir.Op { // 書き戻し (Clean なら Home が最新なので不要)
 		var r []*ir.Op
-		if vA != nil && lv.LiveIn(at, vA) && !rA.Clean {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vA, Src: []ir.Operand{rA}, Resident: rA, ResIn: true})
-		}
-		if vY != nil && lv.LiveIn(at, vY) && !rY.Clean {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vY, Src: []ir.Operand{rY}, ResidentY: rY, ResYIn: true})
-		}
-		if vX != nil && lv.LiveIn(at, vX) && !rX.Clean {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vX, Src: []ir.Operand{rX}, ResidentX: rX, ResXIn: true})
+		for reg, v := range vs {
+			if v != nil && lv.LiveIn(at, v) && !rs[reg].Clean {
+				op := &ir.Op{Code: ir.OpLoad, Dst: v, Src: []ir.Operand{rs[reg]}}
+				op.Res[reg] = ir.Residency{V: rs[reg], In: true}
+				r = append(r, op)
+			}
 		}
 		return r
 	}

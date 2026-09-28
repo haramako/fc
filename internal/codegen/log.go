@@ -102,16 +102,12 @@ func (l *Llc) logLoc(lmd *ir.Lambda, opNo int, op *ir.Op, v ir.Operand, live fun
 		return LogLoc{Kind: "none", Why: "not a variable"}
 	}
 	// ループ内の常駐 (この命令の入口でレジスタにある。グローバルも、Home がそのグローバルの一時変数が常駐する)
-	for _, r := range []struct {
-		res *ir.Value
-		in  bool
-		reg string
-	}{{op.Resident, op.ResIn, "a"}, {op.ResidentY, op.ResYIn, "y"}, {op.ResidentX, op.ResXIn, "x"}} {
-		if r.res == nil || !r.in || ir.ValOffset(v) != 0 {
+	for reg, r := range op.Res {
+		if r.V == nil || !r.In || ir.ValOffset(v) != 0 {
 			continue
 		}
-		if r.res == u || (r.res.Home != nil && ir.UnderlyingValue(r.res.Home) == u && ir.ValOffset(r.res.Home) == 0) {
-			return LogLoc{Kind: "reg", Reg: r.reg}
+		if r.V == u || (r.V.Home != nil && ir.UnderlyingValue(r.V.Home) == u && ir.ValOffset(r.V.Home) == 0) {
+			return LogLoc{Kind: "reg", Reg: ir.Reg(reg).String()}
 		}
 	}
 	// 常駐のメモリ側 (Home) の変数: 常駐の値がレジスタで更新され、死んだ後は書き戻されないので、メモリ側が正しいのは

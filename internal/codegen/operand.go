@@ -189,32 +189,19 @@ func (l *Llc) pointerWrite(p ir.Operand, off int, val ir.Operand, size int) []an
 	return r
 }
 
-// inX は値がいま X レジスタにあるか (LocX。退避中 (resXMem) ならメモリ側 Home にある)。
-func (l *Llc) inX(v ir.Operand) bool {
-	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocX {
+// inReg は値がいまレジスタ reg にあるか (Location がそのレジスタ。ただしループ内の常駐変数を退避中 (resMem) なら
+// メモリ側 Home にある)。
+func (l *Llc) inReg(v ir.Operand, reg ir.Reg) bool {
+	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != reg.Loc() {
 		return false
 	}
 	uv := ir.UnderlyingValue(v)
-	return !(l.resXMem && uv.Home != nil && uv == l.resX)
+	return !(l.resMem[reg] && uv.Home != nil && uv == l.res[reg])
 }
 
-// inY は値がいま Y レジスタにあるか (LocY。退避中 (resYMem) ならメモリ側 Home にある)。
-func (l *Llc) inY(v ir.Operand) bool {
-	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocY {
-		return false
-	}
-	uv := ir.UnderlyingValue(v)
-	return !(l.resYMem && uv.Home != nil && uv == l.resY)
-}
-
-// inA は値がいま A レジスタにあるか (LocA。ただしループ内の常駐変数を退避中 (resMem) ならメモリ側 Home にある)。
-func (l *Llc) inA(v ir.Operand) bool {
-	if !isValueOrCasted(v) || ir.ValKind(v) != ir.KindLocal || ir.ValLocation(v) != ir.LocA {
-		return false
-	}
-	uv := ir.UnderlyingValue(v)
-	return !(l.resMem && uv.Home != nil && uv == l.res)
-}
+func (l *Llc) inA(v ir.Operand) bool { return l.inReg(v, ir.RegA) }
+func (l *Llc) inY(v ir.Operand) bool { return l.inReg(v, ir.RegY) }
+func (l *Llc) inX(v ir.Operand) bool { return l.inReg(v, ir.RegX) }
 
 // keepA は書く値 val が A にあり、その前に出す準備 pre (ポインタの reg へのコピーなど) が A を壊すとき、
 // A を reg+2 に退避して pre の後で戻す (pre が空なら pre のまま)。
@@ -266,19 +253,10 @@ func (l *Llc) toAsm(v ir.Operand) string {
 				return fmt.Sprintf("<FC_FASTCALL_REG+%d", ir.ValAddress(v))
 			case ir.LocStatic:
 				return staticAddr(l.curLambda, ir.ValAddress(v))
-			case ir.LocA:
-				if h := ir.UnderlyingValue(v).Home; h != nil && l.resMem {
+			case ir.LocA, ir.LocY, ir.LocX:
+				reg, _ := ir.RegOfLoc(ir.ValLocation(v))
+				if h := ir.UnderlyingValue(v).Home; h != nil && l.resMem[reg] {
 					return l.toAsm(h) // 常駐変数の退避中: メモリ側
-				}
-				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
-			case ir.LocY:
-				if h := ir.UnderlyingValue(v).Home; h != nil && l.resYMem {
-					return l.toAsm(h)
-				}
-				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
-			case ir.LocX:
-				if h := ir.UnderlyingValue(v).Home; h != nil && l.resXMem {
-					return l.toAsm(h)
 				}
 				panic(fmt.Sprintf("invalid location %s of %s", ir.ValLocation(v), ir.OperandString(v)))
 			default:

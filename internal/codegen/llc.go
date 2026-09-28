@@ -45,16 +45,12 @@ type Llc struct {
 	dbgFiles map[string]bool // このモジュールで宣言済みの .dbg file
 	dbgLast  string          // 直前に出した .dbg line (同じ行の命令の間では出さない)
 
-	// ループ内の A / Y 常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタを占有している変数と、その扱い
-	res     *ir.Value // op.Resident (A)
-	resMem  bool      // 退避中: res をメモリ (Home) として参照する
-	resY    *ir.Value // op.ResidentY
-	resYMem bool      // 退避中: resY をメモリ (Home) として参照する
-	holdA   bool      // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
-	holdX   int       // stack 系の呼び出しの push_result (ldx FC_SP) から call まで (入れ子の深さ): X = FC_SP のまま。X の常駐はメモリ側で扱い、復帰しない
-	resX    *ir.Value // op.ResidentX
-	resXMem bool      // 退避中: resX をメモリ (Home) として参照する
-	aHeld   bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
+	// ループ内の常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタ (ir.Reg) を占有している変数と、その扱い
+	res    [ir.NumRegs]*ir.Value // op.Res[reg].V
+	resMem [ir.NumRegs]bool      // 退避中: res[reg] をメモリ (Home) として参照する
+	holdA  bool                  // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
+	holdX  int                   // stack 系の呼び出しの push_result (ldx FC_SP) から call まで (入れ子の深さ): X = FC_SP のまま。X の常駐はメモリ側で扱い、復帰しない
+	aHeld  bool                  // A は res[A] で塞がっていて、この命令は res[A] を触らない (Y で代用する)
 
 	// 添字付きオペランドの融合: `sub d = x, t` / `lt d = x, t` の t が直前の index_pget (グローバルの 1 バイト配列) の結果なら、
 	// index_pget は Y (または X) を用意するだけにして、t を `tab+0,y` として読む (sta t; lda x; sbc t → lda x; sbc tab,y)。
@@ -65,6 +61,44 @@ type Llc struct {
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
 	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0)}
+}
+
+// ldReg / stReg はレジスタに読む / から書く命令。
+var (
+	ldReg = [ir.NumRegs]string{ir.RegA: "lda", ir.RegY: "ldy", ir.RegX: "ldx"}
+	stReg = [ir.NumRegs]string{ir.RegA: "sta", ir.RegY: "sty", ir.RegX: "stx"}
+)
+
+// beginOp は命令の処理の前に常駐の状態を op の印から取る (退避は無し)。
+func (l *Llc) beginOp(op *ir.Op) {
+	for reg := range op.Res {
+		l.res[reg] = op.Res[reg].V
+	}
+	l.resMem = [ir.NumRegs]bool{}
+	l.aHeld = false
+}
+
+// endOp は命令の処理の後に常駐の状態を消す。
+func (l *Llc) endOp() {
+	l.res = [ir.NumRegs]*ir.Value{}
+	l.resMem = [ir.NumRegs]bool{}
+	l.aHeld = false
+}
+
+// spillResident は常駐の変数をメモリ側 (Home) に書く命令。
+func (l *Llc) spillResident(op *ir.Op, reg ir.Reg) string {
+	return stReg[reg] + " " + l.byte(op.Res[reg].V.Home, 0)
+}
+
+// restoreResident は restore の立っているレジスタに常駐の値をメモリ側 (Home) から読み戻す命令 (order の順)。
+func (l *Llc) restoreResident(op *ir.Op, restore [ir.NumRegs]bool, order ...ir.Reg) []any {
+	var r []any
+	for _, reg := range order {
+		if restore[reg] {
+			r = append(r, ldReg[reg]+" "+l.byte(op.Res[reg].V.Home, 0))
+		}
+	}
+	return r
 }
 
 // asmLines は文字列 / nil / ネストした配列を保持する行バッファ。
@@ -280,7 +314,7 @@ func (l *Llc) fusableIndex(ops []*ir.Op, i int) (string, bool) {
 	if ir.ValType(next.Src[0]).Size != 1 {
 		return "", false
 	}
-	if ir.ValLocation(next.Src[0]) == ir.LocX || ir.ValLocation(next.Src[0]) == ir.LocY || next.Resident != nil {
+	if ir.ValLocation(next.Src[0]) == ir.LocX || ir.ValLocation(next.Src[0]) == ir.LocY || next.Res[ir.RegA].V != nil {
 		// cpx / cpy に添字付きのオペランドは無い (`cpx tab+0,y` を出していた。fuzz で発覚)。A に常駐変数があると
 		// 次の命令が Y で代用 (UseY: `ldy a; cpy b`) されることがあるので、それも融合しない (`cpy seq+0,y`)
 		return "", false
@@ -534,23 +568,23 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			l.fused = nil
 		}
 		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
-		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = op.Resident, false, op.ResidentY, false, op.ResidentX, false, false
-		restoreA, restoreY, restoreX := false, false, false
+		l.beginOp(op)
+		var restore [ir.NumRegs]bool // 命令の後でレジスタに戻す常駐
 		opStart, holdAIn, holdXIn := len(r.lines), l.holdA, l.holdX
 		var d regalloc.Decision
-		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
-			d, _ = regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+		if op.HasResident() {
+			d, _ = regalloc.Classify(lmd, opNo, op.Res[ir.RegA].V, op.Res[ir.RegY].V, op.Res[ir.RegX].V, op.Res[ir.RegA].In || op.Res[ir.RegA].Out, op.Res[ir.RegA].Out, op.Res[ir.RegY].In || op.Res[ir.RegY].Out)
 			if l.MisclassifyResident {
 				// テスト用: 見積もりをわざと外す (下の forced が直す)。常駐の変数そのものを読み書きする命令は、退避して
 				// メモリ側で扱うしかない (レジスタのまま出せない形がある) ので対象外。実際に外れるのも「変数を触らない
 				// 命令がレジスタを書いていた」形
-				if d.A == regalloc.ResClobber && !opInvolves(op, op.Resident) {
+				if d.A == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegA].V) {
 					d.A, d.UseY = regalloc.ResFree, false
 				}
-				if d.Y == regalloc.ResClobber && !opInvolves(op, op.ResidentY) {
+				if d.Y == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegY].V) {
 					d.Y = regalloc.ResFree
 				}
-				if d.X == regalloc.ResClobber && !opInvolves(op, op.ResidentX) {
+				if d.X == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegX].V) {
 					d.X = regalloc.ResFree
 				}
 			}
@@ -569,12 +603,12 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
 			// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
 			// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
-			if op.ResidentX != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
-				if op.ResXIn && !op.ResidentX.Clean && l.holdX == 0 {
-					r.push("stx " + l.byte(op.ResidentX.Home, 0))
+			if op.Res[ir.RegX].V != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
+				if op.Res[ir.RegX].In && !op.Res[ir.RegX].V.Clean && l.holdX == 0 {
+					r.push(l.spillResident(op, ir.RegX))
 				}
-				l.resXMem = true
-				restoreX = op.ResXOut && (l.holdX == 0 || (ir.IsCall(op) && l.holdX == 1))
+				l.resMem[ir.RegX] = true
+				restore[ir.RegX] = op.Res[ir.RegX].Out && (l.holdX == 0 || (ir.IsCall(op) && l.holdX == 1))
 			}
 			// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
 			// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
@@ -583,27 +617,27 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			if holdY && d.UseY {
 				d.UseY, d.A = false, regalloc.ResClobber
 			}
-			if op.Resident != nil && (d.A == regalloc.ResClobber || l.holdA) {
-				if op.ResIn && !op.Resident.Clean && !l.holdA {
-					r.push("sta " + l.byte(op.Resident.Home, 0))
+			if op.Res[ir.RegA].V != nil && (d.A == regalloc.ResClobber || l.holdA) {
+				if op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.holdA {
+					r.push(l.spillResident(op, ir.RegA))
 				}
-				l.resMem = true
-				restoreA = op.ResOut
+				l.resMem[ir.RegA] = true
+				restore[ir.RegA] = op.Res[ir.RegA].Out
 			}
-			if op.ResidentY != nil && (d.Y == regalloc.ResClobber || holdY) {
-				if op.ResYIn && !op.ResidentY.Clean && !op.HoldY {
-					r.push("sty " + l.byte(op.ResidentY.Home, 0))
+			if op.Res[ir.RegY].V != nil && (d.Y == regalloc.ResClobber || holdY) {
+				if op.Res[ir.RegY].In && !op.Res[ir.RegY].V.Clean && !op.HoldY {
+					r.push(l.spillResident(op, ir.RegY))
 				}
-				l.resYMem = true
-				restoreY = op.ResYOut && !op.ArgY && !(op.HoldY && !ir.IsCall(op))
+				l.resMem[ir.RegY] = true
+				restore[ir.RegY] = op.Res[ir.RegY].Out && !op.ArgY && !(op.HoldY && !ir.IsCall(op))
 			}
 			l.aHeld = d.UseY
 		}
 		bodyStart := len(r.lines)
 		keep := regsKept{
-			a: op.Resident != nil && !l.resMem && d.A == regalloc.ResFree,
-			y: op.ResidentY != nil && !l.resYMem && d.Y == regalloc.ResFree,
-			x: op.ResidentX != nil && !l.resXMem && d.X == regalloc.ResFree,
+			a: op.Res[ir.RegA].V != nil && !l.resMem[ir.RegA] && d.A == regalloc.ResFree,
+			y: op.Res[ir.RegY].V != nil && !l.resMem[ir.RegY] && d.Y == regalloc.ResFree,
+			x: op.Res[ir.RegX].V != nil && !l.resMem[ir.RegX] && d.X == regalloc.ResFree,
 		}
 
 		switch op.Code {
@@ -633,7 +667,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 				// A は常駐変数で塞がっている: Y で検査する
 				r.push(markTest(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0))))
 				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-			} else if restoreA {
+			} else if restore[ir.RegA] {
 				// A に常駐している変数を壊して検査し、飛び先でも A が要る: 飛ぶ側の経路でも復帰する
 				// (この後の共通の復帰は落ちてくる側にしか効かない)。条件を反転して飛ばない側を @f に逃がし、
 				// 飛ぶ側は `lda home; jmp L` を通す
@@ -652,7 +686,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 					}
 				}
 				r.push(taken + ":")
-				r.push("lda " + l.byte(op.Resident.Home, 0))
+				r.push("lda " + l.byte(op.Res[ir.RegA].V.Home, 0))
 				r.push(fmt.Sprintf("jmp %s", op.Label))
 				r.push(fall + ":")
 			} else if onTrue {
@@ -703,15 +737,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			}
 			r.push(fmt.Sprintf("cmp #%d", len(op.Labels)), fmt.Sprintf("bcs %s", fall), "ta"+ix,
 				fmt.Sprintf("lda %s,%s", hi, ix), "pha", fmt.Sprintf("lda %s,%s", lo, ix), "pha")
-			if restoreX {
-				r.push("ldx " + l.byte(op.ResidentX.Home, 0))
-			}
-			if restoreY {
-				r.push("ldy " + l.byte(op.ResidentY.Home, 0))
-			}
-			if restoreA {
-				r.push("lda " + l.byte(op.Resident.Home, 0))
-			}
+			r.push(l.restoreResident(op, restore, ir.RegX, ir.RegY, ir.RegA)...)
 			r.push("rts")
 			los := make([]string, len(op.Labels))
 			his := make([]string, len(op.Labels))
@@ -749,7 +775,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 				pushArgSize += op.Type.Size
 				r.push(l.loadSP(lmd)) // 引数 (S+k,x) の前に X をスタックの空き先頭に
 				l.holdX++             // call まで X = FC_SP のまま (X の常駐はここで退避済み。復帰は call の後)
-				restoreX = false
+				restore[ir.RegX] = false
 			case ckFastcallReg:
 				pushFastcallArgSize += op.Type.Size
 			}
@@ -772,10 +798,10 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 						pc.argOff++
 						// A の常駐変数は call まで A に戻さない (復帰の lda で引数が消える)。この引数が常駐変数そのもの
 						// (friendly: 退避していない) なら、call で退避しない代わりにここで書き戻す
-						if op.Resident != nil && op.ResIn && !op.Resident.Clean && !l.resMem {
-							r.push("sta " + l.byte(op.Resident.Home, 0))
+						if op.Res[ir.RegA].V != nil && op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.resMem[ir.RegA] {
+							r.push(l.spillResident(op, ir.RegA))
 						}
-						restoreA = false
+						restore[ir.RegA] = false
 						l.holdA = true
 						break
 					}
@@ -1467,7 +1493,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			}
 			// Y の常駐変数をこの命令の最後で復帰するなら融合しない (添字を入れた Y が直後の命令の前に常駐の値に戻って、
 			// `tab+0,y` が常駐の値で読んでいた: `sty k; ldy #2; ldy k; sbc tab+0,y`。fuzz で発覚)
-			if reg, ok := l.fusableIndex(ops, opNo); ok && !(reg == "y" && restoreY) && !lmd.Cfg().Disabled("fuse-index") {
+			if reg, ok := l.fusableIndex(ops, opNo); ok && !(reg == "y" && restore[ir.RegY]) && !lmd.Cfg().Disabled("fuse-index") {
 				// 直後の sub / lt の第 2 入力に融合: 添字をレジスタに用意して、結果の一時変数を `tab+0,y` として読ませる
 				if reg == "y" {
 					r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
@@ -1548,7 +1574,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
 		bodyEnd := len(r.lines)
-		if restoreA || restoreY || restoreX {
+		if restore != ([ir.NumRegs]bool{}) {
 			// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
 			// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
 			// C (符号なしの lt) はロードで変わらないので挟まない
@@ -1556,15 +1582,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			if cond {
 				r.push("php")
 			}
-			if restoreA {
-				r.push("lda " + l.byte(op.Resident.Home, 0))
-			}
-			if restoreY {
-				r.push("ldy " + l.byte(op.ResidentY.Home, 0))
-			}
-			if restoreX {
-				r.push("ldx " + l.byte(op.ResidentX.Home, 0))
-			}
+			r.push(l.restoreResident(op, restore, ir.RegA, ir.RegY, ir.RegX)...)
 			if cond {
 				r.push("plp")
 			}
@@ -1582,7 +1600,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			}
 			l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
 		}
-		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
+		l.endOp()
 	}
 
 	// 関数の中の const の表・文字列 (.proc の中のラベルなので、この関数の中からしか参照されない)。コード (インラインアセンブラを
