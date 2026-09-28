@@ -332,7 +332,15 @@ func registerSliceBuiltins(h *Hlc) {
 		bp := h.prog.Types.PointerTo(u8)
 		dp := h.operandValue(retypePtr(d.ptr, bp))
 		sp := h.operandValue(retypePtr(s.ptr, bp))
-		h.lval(ccall(cv(h.moduleFunc(mem.Interface(), "mem", "copy")), cv(dp), cv(sp), cv(h.operandValue(bytes))))
+		copyFn := h.moduleFunc(mem.Interface(), "mem", "copy")
+		if ft := ir.ValType(copyFn); ft.Kind == types.Func && len(ft.Params) == 2 {
+			// fc 4 の mem.copy(dst:[:u16]u8, src:[:u16]const u8) (doc/v4_stdlib.md §3.1)。旧 fclib の mem (プロジェクトの横に
+			// コピーしたもの) なら下の copy(to, from, size)
+			nb := h.operandValue(bytes)
+			h.lval(ccall(cv(copyFn), cv(h.newSlice(u8, dp, nb, false, true)), cv(h.newSlice(u8, sp, nb, true, true))))
+			return macroResult{expr: cv(h.operandValue(n))}
+		}
+		h.lval(ccall(cv(copyFn), cv(dp), cv(sp), cv(h.operandValue(bytes))))
 		return macroResult{expr: cv(h.operandValue(n))}
 	})
 }

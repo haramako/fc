@@ -128,7 +128,7 @@ function main():void
 	p[0] = 1;
 	l0 = la[0];
 	printf("ptr ", l0, "\n");
-	mem.set(la, 3, 4);
+	mem.fill(la, 3);
 	var s1 = sum(la, 4);
 	fill(la, 4);
 	var s2 = sum(la, 4);

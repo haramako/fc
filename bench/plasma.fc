@@ -3,7 +3,6 @@
 // sin テーブル引き + バイト加算で 32x30 の画面バッファを埋める。50 フレーム。
 // NES のエフェクト処理に一番近い形 (テーブル参照、バイト演算、行ポインタの更新)。
 use * from stdio;
-use math;
 
 const W = 32;
 const H = 30;
@@ -12,9 +11,30 @@ var xbuf:[32]int;
 var ybuf:[30]int;
 var c1A:int, c1B:int, c2A:int, c2B:int;
 
+// sin は旧 fclib の math.sin と同じもの (fclib の変更でこのベンチの結果が変わらないように、ここに持つ。2026-09-29)
+const sin_table = [0, 3, 6, 9, 12, 15, 18, 21, 24, 28, 31, 34, 37, 40, 43, 46, 48, 51, 54, 57, 60, 63, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88, 90, 92, 94, 96, 98, 100, 102, 104, 106, 108, 109, 111, 112, 114, 115, 117, 118, 119, 120, 121, 122, 123, 124, 124, 125, 126, 126, 127, 127, 127, 127, 127];
+
+function sin(x:sint8):sint8
+{
+	if (x >= 0) {
+		if (x < 64) {
+			return sin_table[x];
+		} else {
+			return sin_table[127 - x];
+		}
+	} else {
+		if (x < -64) {
+			return -sin_table[x - 128];
+		} else {
+			return -sin_table[255 - x];
+		}
+	}
+	return 0;
+}
+
 function sin8(x:int):int
 {
-	return (math.sin(x as sint8) as int) + 128;
+	return (sin(x as sint8) as int) + 128;
 }
 
 function doplasma():void

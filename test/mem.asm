@@ -1,3 +1,4 @@
+;;; 旧 fclib の mem.asm のコピー (2026-09-29。doc/v4_stdlib.md §7)
 .segment "mem"
 	
 ;; function memcpy(_to:int*, _from:int*, size:int):void

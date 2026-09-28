@@ -860,14 +860,17 @@ printf("x={:04X} {}\n", x, name);                 // console に出す
 | モジュール | 主な内容 |
 |---|---|
 | `stdio`（ターゲット別） | `print(str)`, `print_int16(n)`, `puts(str)`, `exit(code)`, NES では `wait_vsync()`, `ppu_put(...)` |
-| `mem` | `set(dst, value, size)`, `zero(dst, size)`, `copy(dst, src, size)`, `compare(a, b, size)`（size は u16。0 なら何もしない / 等しい）, `strcpy(dst, src)` など |
-| `math` | `sin(x)`, `atan(y, x)`, `rand()`, `sign(i)`, 乗算テーブル |
+| `mem`（fc 4 の新しい API。2026-09-29） | slice で受け取る: `fill(dst, v)`, `zero(dst)`, `copy(dst, src):u16`（短いほうの長さ。前から）, `move(dst, src):u16`（重なってよい）, `equal(a, b)`, `compare(a, b):i8`（辞書順で -1 / 0 / 1）, `find(s, v):u16`（無ければ `@len(s)`）。`[:u16]` の slice（`[]u8` からも暗黙に）。長さ 0 は何もしない。`@copy` はこれを呼ぶ |
+| `math`（fc 4 の新しい API。2026-09-29） | 角度は u8 の 256 段（0 = 右、64 = 下）: `sin(a)` / `cos(a)`（±127）, `atan2(dy:i16, dx:i16)`（全範囲）, `angle_to(x0, y0, x1, y1)`、`abs_i8` / `abs_i16`, `sign_i8` / `sign_i16`, `mul_u8(a, b):u16`, `sqrt_u16(n):u8`, `wrap_inc(x, n)` / `wrap_dec(x, n)`（メニューのカーソル）, `subpixel(v, phase)`（1/16 ピクセルの速度を 16 フレームに散らして丸める）。乱数は `rand` |
 | `nes`（NES） | PPU / APU / コントローラのレジスタ定義 |
 | `pad`（NES） | コントローラ入力 |
 | `unittest` | `assert_true(cond, msg)`, `assert_equal(a, b, msg)` |
 | `rle` / `lzw` / `inflate` | 圧縮データの展開 |
 
-fc 4 の新しい fclib（作り直しの途中。計画は [v4_stdlib.md](v4_stdlib.md)。上の表の今のモジュールは入れ替えるまで残す）:
+fc 4 の新しい fclib（作り直しの途中。計画は [v4_stdlib.md](v4_stdlib.md)。上の表の今のモジュールは入れ替えるまで残す。入れ替えた
+mem / math の旧版は、使っている所（examples/castle/src、examples/miku、test/）の横にコピーしてある: `use` はソースのディレクトリを
+先に探すので、旧版で書いたプロジェクトはコピーを置けばそのままビルドできる。組み込みの `@copy` / `cos` は読み込んだモジュールの
+関数の形を見て、旧版でも動く）:
 
 | モジュール | 主な内容 |
 |---|---|
