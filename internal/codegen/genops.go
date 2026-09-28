@@ -952,16 +952,13 @@ func (l *funcGen) genLoadMem() {
 		panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 	}
 	if !m.BaseIsArray() {
-		// ポインタ + 添字: ldy idx; lda (p),y
-		if m.Disp != 0 {
-			panic(fmt.Sprintf("internal: load_mem through a pointer with both an index and a displacement: %s", ir.DumpOp(op, nil)))
-		}
+		// ポインタ + 添字 (+ ずれ): ldy idx; lda (p),y (ずれがあれば Y = idx * scale + disp を A で計算)
 		base, setup := l.pointerBase(m.Base)
 		if m.Width > 1 && sameStorage(m.Base, op.Dst) {
 			base, setup = "reg", []any{l.loadA(m.Base, 0), "sta <reg+0", l.loadA(m.Base, 1), "sta <reg+1"}
 		}
 		// 添字を先に Y へ (添字が A にあるとき、ポインタを reg に写す setup が A を壊す。fuzz で発覚)
-		r.push(l.loadYIdx(m.Index, m.Scale))
+		r.push(l.loadYIdxDisp(m.Index, m.Scale, m.Disp))
 		r.push(setup)
 		for i := 0; i < m.Width; i++ {
 			if i > 0 {
@@ -970,7 +967,9 @@ func (l *funcGen) genLoadMem() {
 			r.push(fmt.Sprintf("lda (%s),y", base))
 			r.push(l.storeA(op.Dst, i))
 		}
-		r.push(l.restoreY(m.Index, m.Width))
+		if m.Disp == 0 {
+			r.push(l.restoreY(m.Index, m.Width))
+		}
 		return
 	}
 	// グローバルの配列 + 添字: lda a+disp,y (添字が X に常駐していれば ,x)
@@ -1023,12 +1022,9 @@ func (l *funcGen) genStoreMem() {
 		panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 	}
 	if !m.BaseIsArray() {
-		if m.Disp != 0 {
-			panic(fmt.Sprintf("internal: store_mem through a pointer with both an index and a displacement: %s", ir.DumpOp(op, nil)))
-		}
 		base, setup := l.pointerBase(m.Base)
-		pre := append(l.loadYIdx(m.Index, m.Scale), setup...) // 添字を先に Y へ (load_mem と同じ)
-		if m.Scale == 1 && len(setup) == 0 {
+		pre := append(l.loadYIdxDisp(m.Index, m.Scale, m.Disp), setup...) // 添字を先に Y へ (load_mem と同じ)
+		if m.Scale == 1 && m.Disp == 0 && len(setup) == 0 {
 			r.push(pre) // ldy だけなら A は壊れない
 		} else {
 			r.push(l.keepA(val, pre))
@@ -1040,7 +1036,9 @@ func (l *funcGen) genStoreMem() {
 			r.push(l.loadA(val, i))
 			r.push(fmt.Sprintf("sta (%s),y", base))
 		}
-		r.push(l.restoreY(m.Index, m.Width))
+		if m.Disp == 0 {
+			r.push(l.restoreY(m.Index, m.Width))
+		}
 		return
 	}
 	if l.inX(m.Index) {

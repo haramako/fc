@@ -48,6 +48,34 @@ func (l *Llc) loadYIdx(idx ir.Operand, scale int) []any {
 	return r
 }
 
+// loadYIdxDisp は 添字 * scale + disp を Y に入れる (ポインタ + 添字 + ずれの load_mem / store_mem。struct の配列フィールドを
+// ポインタ経由で引く opt.fuseArrayField の形)。和が 1 バイトに収まることは作る側が保証する (ir.Verify と v4_memops.md)。
+// disp が 0 なら loadYIdx と同じ。それ以外は A を通して計算するので A を壊す (store は keepA で値を守る)。添字が Y に
+// 常駐していれば Y も書き換わる (CompileLambda が常駐の退避 / 復帰にしてコンパイルし直す。regalloc.needsY も Y を使う
+// と見積もる)。
+func (l *Llc) loadYIdxDisp(idx ir.Operand, scale, disp int) []any {
+	if disp == 0 {
+		return l.loadYIdx(idx, scale)
+	}
+	if k, ok := ir.ValIntLiteral(idx); ok && k >= 0 && k*scale+disp < 256 {
+		return []any{fmt.Sprintf("ldy #%d", k*scale+disp)}
+	}
+	var r []any
+	switch {
+	case l.inA(idx):
+	case l.inY(idx):
+		r = append(r, "tya")
+	case l.inX(idx):
+		r = append(r, "txa")
+	default:
+		r = append(r, l.loadA(idx, 0))
+	}
+	for s := scale; s > 1; s >>= 1 {
+		r = append(r, "asl a")
+	}
+	return append(r, "clc", fmt.Sprintf("adc #%d", disp), "tay")
+}
+
 func (l *Llc) load(to, from ir.Operand) []any {
 	r := []any{}
 	voidPtr := ir.ValType(to).Kind == types.Pointer && ir.ValType(to).Base.Kind == types.Void // *void にはどのポインタも入る

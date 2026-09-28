@@ -86,8 +86,20 @@ func verifyOp(op *Op, labels map[string]int) error {
 		if m.Index != nil && (m.Scale <= 0 || ValType(m.Index).Size != 1) {
 			return fmt.Errorf("memory index must be 1 byte with a positive scale (scale %d)", m.Scale)
 		}
+		if m.Index != nil && m.Scale > 2 {
+			if _, lit := ValIntLiteral(m.Index); !lit {
+				return fmt.Errorf("memory index scale must be 1 or 2 (got %d; codegen scales with asl)", m.Scale)
+			}
+		}
+		if m.Disp < 0 {
+			return fmt.Errorf("negative memory displacement %d", m.Disp)
+		}
 		if bt := ValType(m.Base); !m.BaseIsArray() && (bt.Kind != types.Pointer || bt.Size != 2) {
 			return fmt.Errorf("memory base must be a global array or a 2-byte pointer (got %s)", bt)
+		}
+		if !m.BaseIsArray() && m.Disp+m.Width > 256 {
+			// (p),y: ずれと幅は Y に収まる (添字があれば、添字 * scale + ずれ + 幅 <= 256 を作る側が保証する)
+			return fmt.Errorf("displacement %d + width %d through a pointer does not fit in Y", m.Disp, m.Width)
 		}
 	}
 	if op.Code.IsBranch() {

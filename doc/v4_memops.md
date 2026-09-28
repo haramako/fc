@@ -51,10 +51,13 @@ store_mem base, index, v, scale=s, disp=k, w=n        mem[base + index*s + k .. 
 |---|---|---|
 | ポインタ | 無し | `ldy #disp+i; lda (p),y`（pointerRead / pointerWrite。ゼロページでなければ reg に写す） |
 | ポインタ | 有り (disp = 0) | `ldy i` (scale 1) / `ldy #k*scale` (定数) / `lda i; asl; tay` (scale 2)、`lda (p),y`、`iny` |
+| ポインタ | 有り (disp > 0) | `lda i; (asl); clc; adc #disp; tay`（`loadYIdxDisp`。A を壊し、添字が Y に常駐していれば Y も） |
 | グローバル配列 | 有り | `lda a+disp+i,y`（添字が X に常駐していれば `,x`） |
-| グローバル配列 | 無し | `lda a+disp+i`（今は生成しない。定数の添字を Disp に畳む最適化を入れたときに使う） |
+| グローバル配列 | 無し | `lda a+disp+i`（定数の添字を Disp に畳んだ形） |
 
-それ以外の組み合わせ（ポインタ + 添字 + disp、フレームの配列を Base に）は internal error。opt は作らない。
+`(p),y` には変位が無いので、ポインタ経由の添字とずれは Y に足し込む。**添字 * scale + disp + 幅 ≤ 256 は作る側が保証する**
+（Verify が見るのは静的な disp + 幅 ≤ 256 と、変数の添字の scale が 1・2 であることだけ）。作るのは fuseArrayField だけで、
+配列の長さが型で分かる添字（struct の配列フィールド）に限る。フレームの配列を Base にする形は無い（`index` でポインタにする）。
 
 ## 状態（2026-09-28）
 
@@ -63,7 +66,21 @@ fuzz（random 500、畳み込み 200、メタモルフィック 50、変異 30�
 
 4 のうち「定数の添字を Disp に畳む」（`opt.foldConstIndex`。fusePointer の最後。`FC_DISABLE=constidx`）も入れた:
 `ldy #k; lda a,y` → `lda a+k`（2 サイクル・2 バイト短く、Y を使わない）。bench は bgdecode −0.8%（サイズ −3.9%）、
-oam −1.2%（−1.8%）、castle のフレームは −0.1〜0.2%。ポインタ + 添字 + disp の形はまだ許していない。
+oam −1.2%（−1.8%）、castle のフレームは −0.1〜0.2%。
+
+4 の残り「ポインタ + 添字 + disp」も入れた（`opt.fuseArrayField`。fusePointer の最後。`FC_DISABLE=fieldptr`）。
+struct の配列フィールドをポインタ経由で引く `p.items[i].q` は、`add t1 = p, #k`（t1 は `*[L]U`）・`index t2 = <*U>t1, i`・
+`load_mem d = t2, disp=m` の 16 ビットの番地の計算だったのが `load_mem d = p, i, scale=sizeof(U), disp=k+m`
+（`lda i; asl; clc; adc #k+m; tay; lda (p),y`）になる。添字が長さ L 未満なのは言語の規則（範囲外の添字と配列の外への
+ポインタ演算は未定義。language_reference §6）で、k + 配列全体の大きさ ≤ 256 のときだけ作る。要素 3 バイト以上は
+fieldindex と同じく `mul j = i, #s`。add と index が参照から離れていても（store の右辺の計算が挟まる）、入力が参照までに
+書き換わらないことを sinkAddress の canSink で見て畳む。あわせて fieldindex も定数の添字を絶対番地に畳む
+（`objs[6].y = 240` が 8 命令から `lda #240; sta objs+43`。入れ子の `ds[1].items[2].id = 5` は `sta ds+13`）。
+
+castle・miku・golden のプログラムにはこの形が無く（計測した: ポインタ経由の配列フィールドの添字は 0 件）、ROM と asm は
+変わらない。bench は oam のサイズだけ −1.0%（上の定数の添字）。fuzz の生成器は `pt.arr[(e & 3)]`（struct T の配列
+フィールドをポインタ経由で）を作るので、60 本で 360 件ほど通る（要素 3 バイト以上は生成器が作らないので TestFieldPtr と
+opt の TestFuseArrayField で見る）。
 
 実装で引っかかった点:
 - `DefUse` の uses から番兵 `NoIndex` を抜くと Src の位置がずれ、SSA が store の値の位置に定数を伝播しなくなった（`a[0] = 1` の
@@ -79,4 +96,4 @@ oam −1.2%（−1.8%）、castle のフレームは −0.1〜0.2%。ポイン�
 2. sema / opt / regalloc / codegen / interp / frames を新しい形に。**生成する asm は変えない**（golden asm は綴りが変わる所
    （`_a+3+0,y` → `_a+3,y`）だけ。ROM はバイト一致のまま）。
 3. fuzz（TestRandomPrograms / V3 / ConstFold / Metamorphic / Mutate）を重めに回す。
-4. その後の最適化（別のコミット）: 定数の添字を Disp に畳んで絶対番地で読む、ポインタ + 添字 + disp を許す。
+4. その後の最適化（別のコミット）: 定数の添字を Disp に畳んで絶対番地で読む、ポインタ + 添字 + disp を許す（どちらも済み）。

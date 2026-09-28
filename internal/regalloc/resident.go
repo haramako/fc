@@ -288,17 +288,24 @@ func byteIndex(op *ir.Op) bool {
 	return m.Index != nil && m.Scale == 1
 }
 
+// directIndex は添字がそのまま Y に入る形か (byteIndex で、ポインタ経由ならずれが無い。ポインタ + 添字 + ずれは
+// Y = 添字 + ずれ を A で計算する: codegen.loadYIdxDisp)。
+func directIndex(op *ir.Op) bool {
+	m := op.Mem()
+	return byteIndex(op) && (m.BaseIsArray() || m.Disp == 0)
+}
+
 // friendlyY は v が Y に常駐しているとき、op を Y のまま実行できるか (添字と 1 バイトのカウンタの形)。
 func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 	op := lmd.Ops[i]
 	switch op.Code {
 	case ir.OpLoadMem:
 		// 要素 1 バイトの配列 / ゼロページのポインタの添字 (ldy が消える)
-		if byteIndex(op) && isV(op.In(1), v) && !isV(op.Dst, v) {
+		if directIndex(op) && isV(op.In(1), v) && !isV(op.Dst, v) {
 			return true, 3
 		}
 	case ir.OpStoreMem:
-		if byteIndex(op) && isV(op.In(1), v) && !isV(op.MemValue(), v) {
+		if directIndex(op) && isV(op.In(1), v) && !isV(op.MemValue(), v) {
 			return true, 3
 		}
 	case ir.OpAdd, ir.OpSub:
@@ -391,7 +398,7 @@ func needsY(op *ir.Op, vY *ir.Value) bool {
 		if m := op.Mem(); m.Index == nil {
 			return !m.BaseIsArray()
 		}
-		return !byteIndex(op) || !isV(op.In(1), vY)
+		return !directIndex(op) || !isV(op.In(1), vY)
 	case ir.OpPushArg, ir.OpPushFastcallArg:
 		return op.ArgY || op.HoldY // 呼び先の Y 渡しの引数を Y に読む / 保持中 (codegen.markArgY)
 	case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpRolC, ir.OpRorC,

@@ -41,7 +41,7 @@
   },
   "oam": {
     "cycles": 2055532,
-    "size": 944,
+    "size": 935,
     "out": "sum=25008"
   },
   "plasma": {

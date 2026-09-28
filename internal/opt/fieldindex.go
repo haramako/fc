@@ -100,6 +100,24 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 		if len(uses) != len(ud.Uses[t]) {
 			continue
 		}
+		if k, lit := ir.ValIntLiteral(idx); lit && k >= 0 && k*es+es <= at.Size && !lmd.Cfg().Disabled("constidx") {
+			// 定数の添字: 絶対番地 (`sta a+k*s+off`。foldConstIndex と同じ。fieldindex は fuse の後なので自分で畳む。
+			// 入れ子の配列フィールド `ds[1].items[2].id` は fuseArrayField の後にここに来る)
+			ir.DropOp(ops, n)
+			for _, us := range uses {
+				use0 := ops[us.at]
+				var nop *ir.Op
+				if use0.Code == ir.OpLoadMem {
+					nop = ir.NewLoadMem(use0.Dst, arr, nil, 0, k*es+us.off)
+				} else {
+					nop = ir.NewStoreMem(arr, nil, 0, k*es+us.off, us.width, use0.MemValue())
+				}
+				nop.Pos = use0.Pos
+				ir.ReplaceOp(ops, us.at, nop)
+			}
+			changed = true
+			continue
+		}
 		// j = i * s (s == 1 なら i のまま)
 		var j ir.Operand = idx
 		iv, plain := idx.(*ir.Value)

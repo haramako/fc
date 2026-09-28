@@ -505,7 +505,9 @@ go test ./...                                    # 全部 (golden + examples + N
   `Base + Index * Scale + Disp`（store は `Width`）で、`op.Mem()` で引く（添字が無ければ `Index == nil`。Src[1] には番兵
   `ir.NoIndex` が入っている。DefUse の uses は Src の位置を保つので、SSA のように位置で引く側は NoIndex を変数と見ないこと）。
   `index`（`&a[i]` の番地の計算）はそのまま。fuse / fieldindex / indexoff / scale は Addr の畳み込みで、codegen の
-  `genLoadMem` / `genStoreMem` は Base の種類（配列 / ポインタ）と添字の有無でアドレッシングを選ぶ。
+  `genLoadMem` / `genStoreMem` は Base の種類（配列 / ポインタ）と添字の有無でアドレッシングを選ぶ。ポインタ経由の
+  添字とずれは Y に足し込む（`(p),y` に変位は無い）ので、**添字 * scale + disp + 幅 ≤ 256 は作る側が保証する**
+  （グローバルの配列は全体が 256 バイト以内、ポインタは配列の長さが型で分かる struct の配列フィールドだけ: fuseArrayField）。
 - **常駐の印**は `Op.Res[ir.RegA / RegY / RegX]`（`Residency{V, In, Out}`）。codegen の状態も `res[reg]` / `resMem[reg]`。
   退避・復帰・入口 / 出口の写しはレジスタのループで書く（A / Y / X で 3 回書かない）。
 - **opt の段**は `opt.Pass{Name, Requires, Grows, Run, Then, Repeat}` で宣言し、`Pass.Apply` が FC_DISABLE の判定・compact・

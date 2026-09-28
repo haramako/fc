@@ -13,7 +13,7 @@ import (
 //	index t = &a[i]; store_mem t, v      → store_mem a, i, v, scale=es
 //
 // t はその場でしか使わない一時変数のときだけ (添字もずれも持たない参照だけ)。
-func fusePointer(lmd *ir.Lambda) {
+func fusePointer(lmd *ir.Lambda, u *types.Universe) {
 	ud := ir.BuildUseDef(lmd)
 	ops := lmd.Ops
 	// t が「この命令で定義され、直後の命令でだけ使われる」一時変数か
@@ -89,7 +89,154 @@ func fusePointer(lmd *ir.Lambda) {
 			ir.MergeDrop(ops, i, i+1)
 		}
 	}
+	fuseArrayField(lmd, u)
 	foldConstIndex(lmd)
+}
+
+// fuseArrayField は struct の配列フィールドをポインタ経由で引く参照を、ポインタ + 添字 + ずれの 1 命令にする:
+//
+//	add t1 = p, #k               t1 は *[L]U (配列フィールドの番地)
+//	index t2 = <*U>t1, i         配列の添字
+//	load_mem d = t2, disp=m      → load_mem d = p, i, scale=sizeof(U), disp=k+m     lda i; (asl); clc; adc #k+m; tay; lda (p),y
+//
+// 添字は配列の長さ L 未満 (範囲外の添字と、配列の外へのポインタ演算は未定義。language_reference §6) なので、
+// Y = i * sizeof(U) + k + m に読む幅を足しても k + (配列全体のバイト数) を超えない。それが 256 以下のときだけ。以前は
+// add と index で 16 ビットの番地を組み立てて `ldy #m; lda (t2),y` だった (`pt.arr[j]`、`p.items[i].price`)。
+//   - U が 3 バイト以上なら添字をバイト単位にする (`mul j = i, #s` を index の位置に。fieldindex と同じく expandMul が
+//     シフトと加算にする)。
+//   - fusePointer が先に `load_mem d = <*U>t1, i, scale=s` にした形 (要素 1 バイト、定数の添字) も、add を畳む。
+//   - t1 が add で作られていない (ずれ 0 の配列フィールド、*[L]U のポインタ変数) か add を動かせないときは、t1 を Base に
+//     する (k = 0)。add と index の入力が参照までに書き換わらないことは sinkAddress と同じ条件 (canSink) で見る。
+//
+// グローバルの配列は fieldindex が `lda a+k,y` にするので対象にしない (Base が配列フィールドのポインタのときだけ)。
+func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
+	if lmd.Cfg().Disabled("fieldptr") {
+		return
+	}
+	compact(lmd)
+	ud := ir.BuildUseDef(lmd)
+	ops := lmd.Ops
+	refered := map[*ir.Value]bool{}
+	for _, op := range ops {
+		if op.Code == ir.OpRef {
+			refered[ir.UnderlyingValue(op.Src[0])] = true
+		}
+	}
+	// arrayField は o が配列フィールドの番地 t1 (*[L]U) を要素のポインタ (*U) に読み替えたもの (配列の添字の元) なら t1 と U の大きさ、
+	// 配列全体の大きさを返す。
+	arrayField := func(o ir.Operand) (*ir.Value, int, int, bool) {
+		cv, ok := o.(*ir.CastedValue)
+		if !ok || cv.Offset != 0 || cv.Type.Kind != types.Pointer || cv.Type.Base == nil {
+			return nil, 0, 0, false
+		}
+		t1, ok := cv.From.(*ir.Value)
+		if !ok || t1.Type.Kind != types.Pointer || t1.Type.Size != 2 || t1.Type.Base == nil || t1.Type.Base.Kind != types.Array ||
+			t1.Type.Base.Base != cv.Type.Base || cv.Type.Base.Size <= 0 || t1.Type.Base.Size <= 0 {
+			return nil, 0, 0, false
+		}
+		return t1, cv.Type.Base.Size, t1.Type.Base.Size, true
+	}
+	// foldAdd は t1 が `add t1 = p, #k` (p はポインタ) で、その使用が at だけ、p が read (畳んだ命令が p を読む位置) までに
+	// 書き換わらないなら p, k とその add の位置
+	changed := false
+	foldAdd := func(t1 *ir.Value, at, read, size int) (ir.Operand, int, int, bool) {
+		if u1, single := ud.SingleUse(t1); !single || u1 != at || t1.LocalType != ir.LTTemp || len(ud.Defs[t1]) != 1 {
+			return nil, 0, 0, false
+		}
+		a := ud.Defs[t1][0]
+		add := ops[a]
+		if add == nil || add.Code != ir.OpAdd || a >= at || ir.UnderlyingValue(add.Dst) != t1 {
+			return nil, 0, 0, false
+		}
+		k, lit := ir.ValIntLiteral(add.Src[1])
+		p := add.Src[0]
+		if !lit || k < 0 || k+size > 256 || ir.ValType(p).Kind != types.Pointer || ir.ValType(p).Size != 2 || isVolatile(p) ||
+			!canSink(add, ops[a+1:read], refered) {
+			return nil, 0, 0, false
+		}
+		return p, k, a, true
+	}
+	for i, op := range ops {
+		if op == nil {
+			continue
+		}
+		// fusePointer が融合済みの `load_mem d = <*U>t1, i, scale=s` (要素 1 バイト・定数の添字): add を畳むだけ
+		if op.IsMem() && op.Src[1] != ir.Operand(ir.NoIndex) {
+			m := op.Mem()
+			t1, es, size, ok := arrayField(m.Base)
+			if !ok || m.Scale != es || m.Disp+m.Width > es {
+				continue
+			}
+			if p, k, a, ok := foldAdd(t1, i, i, size); ok {
+				op.Src[0] = p
+				op.Disp += k
+				ir.DropOp(ops, a)
+				changed = true
+			}
+			continue
+		}
+		if op.Code != ir.OpIndex {
+			continue
+		}
+		t1, es, size, ok := arrayField(op.Src[0])
+		idx := op.Src[1]
+		t2, isV := op.Dst.(*ir.Value)
+		if !ok || size > 256 || ir.ValType(idx).Size != 1 || !isV || t2.LocalType != ir.LTTemp || len(ud.Defs[t2]) != 1 {
+			continue
+		}
+		j, single := ud.SingleUse(t2)
+		if !single || j <= i {
+			continue
+		}
+		use := ops[j]
+		if use == nil || !use.IsMem() || ir.UnderlyingValue(use.Src[0]) != t2 || ir.ValOffset(use.Src[0]) != 0 ||
+			use.Src[1] != ir.Operand(ir.NoIndex) {
+			continue
+		}
+		m := use.Mem()
+		if m.Disp < 0 || m.Disp+m.Width > es || use.Code == ir.OpStoreMem && ir.UnderlyingValue(use.MemValue()) == t2 {
+			continue // 要素の中に収まる読み書き (フィールド) だけ
+		}
+		if !canSink(op, ops[i+1:j], refered) {
+			continue // 添字 (と t1) が参照までに書き換わる
+		}
+		var base ir.Operand = op.Src[0]
+		k := 0
+		if p, kk, a, ok := foldAdd(t1, i, j, size); ok {
+			base, k = p, kk
+			ir.DropOp(ops, a)
+		}
+		// 添字: 要素 1・2 バイトは scale で、それ以上はバイト単位の j = i * s を index の位置で作る (i は j までに変わらない)
+		var j0 ir.Operand = idx
+		scale := es
+		if es > 2 {
+			u8 := u.IntType(1, false)
+			jv := ir.NewLocal(t2.Name+"*", u8, ir.LTTemp)
+			lmd.Vars = append(lmd.Vars, jv)
+			ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpMul, Dst: jv, Src: []ir.Operand{asU8(idx, u8), ir.NewIntLiteral("", u8, es)}, Pos: op.Pos})
+			j0, scale = jv, 1
+		} else {
+			ir.DropOp(ops, i) // 注釈は元の位置に残す (sinkAddress と同じ)
+		}
+		var nop *ir.Op
+		if use.Code == ir.OpLoadMem {
+			nop = ir.NewLoadMem(use.Dst, base, j0, scale, k+m.Disp)
+		} else {
+			nop = ir.NewStoreMem(base, j0, scale, k+m.Disp, m.Width, use.MemValue())
+		}
+		nop.Pos = use.Pos
+		ir.ReplaceOp(ops, j, nop)
+		changed = true
+	}
+	if changed {
+		expandMul(lmd) // mul j = i, #s をシフトと加算に
+	}
+}
+
+// isVolatile は o の元の変数が volatile か (読む時点を動かせない)。
+func isVolatile(o ir.Operand) bool {
+	v := ir.UnderlyingValue(o)
+	return v != nil && v.Volatile
 }
 
 // foldConstIndex は定数の添字を Disp に畳む (`a[3]` → `load_mem d = a, disp=3`): グローバルの配列なら codegen が絶対番地
