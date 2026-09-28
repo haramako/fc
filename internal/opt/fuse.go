@@ -38,7 +38,7 @@ func fusePointer(lmd *ir.Lambda) {
 			if !isLit || k < 0 || k > 255 || ir.ValType(ptr).Kind != types.Pointer || ir.ValType(ptr).Size != 2 || !onlyNext(op.Dst, i) {
 				continue
 			}
-			if !plainDeref(next, op.Dst) {
+			if !fusableDeref(next, op.Dst) {
 				continue
 			}
 			m := next.Mem()
@@ -70,7 +70,7 @@ func fusePointer(lmd *ir.Lambda) {
 				ir.ValType(idx).Size != 1 { // インデックスのサイズが 1 バイト
 				continue
 			}
-			if !plainDeref(next, op.Dst) {
+			if !fusableDeref(next, op.Dst) {
 				continue
 			}
 			var nop *ir.Op
@@ -89,13 +89,41 @@ func fusePointer(lmd *ir.Lambda) {
 			ir.MergeDrop(ops, i, i+1)
 		}
 	}
+	foldConstIndex(lmd)
 }
 
-// plainDeref は op が t をそのまま番地にした (添字もずれも無い) load_mem / store_mem か。
-func plainDeref(op *ir.Op, t ir.Operand) bool {
-	if !op.IsMem() || !isSameOperand(op.Src[0], t) {
-		return false
+// foldConstIndex は定数の添字を Disp に畳む (`a[3]` → `load_mem d = a, disp=3`): グローバルの配列なら codegen が絶対番地
+// (`lda a+3`。`ldy #3; lda a,y` より 2 サイクル・2 バイト短く、Y を使わない) で、ポインタなら `ldy #k; lda (p),y` で読む
+// (以前と同じ命令列)。展開したループ (unroll) の `a16[3]` や struct の配列の定数の要素 `gs[2].b` が対象。
+func foldConstIndex(lmd *ir.Lambda) {
+	if lmd.Cfg().Disabled("constidx") {
+		return
 	}
-	m := op.Mem()
-	return m.Index == nil && m.Disp == 0
+	for _, op := range lmd.Ops {
+		if op == nil || !op.IsMem() {
+			continue
+		}
+		m := op.Mem()
+		if m.Index == nil {
+			continue
+		}
+		k, lit := ir.ValIntLiteral(m.Index)
+		if !lit || k < 0 || m.Disp+k*m.Scale+m.Width > 256 {
+			continue // 添字の式は 8 ビットで折り返さない前提 (doc/language_reference.md §6) なので 256 を超える形は作らない
+		}
+		op.Disp += k * m.Scale
+		op.Src[1] = ir.NoIndex
+		op.Scale = 0
+	}
+}
+
+// plainDeref は op が t そのもの (cast も無し) を番地にした、添字もずれも無い load_mem / store_mem か (sink / devirt / ywalk が
+// 動かす・書き換える対象)。
+func plainDeref(op *ir.Op, t ir.Operand) bool {
+	return op.IsMem() && op.Src[0] == t && op.Src[1] == ir.Operand(ir.NoIndex) && op.Disp == 0
+}
+
+// fusableDeref は op が t (先頭への cast でもよい) を番地にした、添字もずれも無い load_mem / store_mem か (fusePointer の対象)。
+func fusableDeref(op *ir.Op, t ir.Operand) bool {
+	return op.IsMem() && isSameOperand(op.Src[0], t) && op.Src[1] == ir.Operand(ir.NoIndex) && op.Disp == 0
 }

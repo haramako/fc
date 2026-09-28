@@ -386,7 +386,11 @@ func needsY(op *ir.Op, vY *ir.Value) bool {
 		ir.OpSwitch: // stack 関数ではジャンプテーブルの添字に Y を使う (static では X)
 		return true
 	case ir.OpLoadMem, ir.OpStoreMem:
-		// 添字の無いポインタ経由の参照は ldy #k を使う。添字がバイト単位で Y に常駐しているならそのまま
+		// 添字の無い参照: グローバルの配列は絶対番地 (Y を使わない)、ポインタ経由は ldy #k を使う。
+		// 添字がバイト単位で Y に常駐しているならそのまま
+		if m := op.Mem(); m.Index == nil {
+			return !m.BaseIsArray()
+		}
 		return !byteIndex(op) || !isV(op.In(1), vY)
 	case ir.OpPushArg, ir.OpPushFastcallArg:
 		return op.ArgY || op.HoldY // 呼び先の Y 渡しの引数を Y に読む / 保持中 (codegen.markArgY)

@@ -21,15 +21,12 @@ _test_memory_buf2: .res 512
 	;;;=============================
 .segment "test_memory"
 .proc _test_memory_test_copy
-	ldy #0
 	lda #1
-	sta _test_memory_buf1+0,y
-	tay
+	sta _test_memory_buf1+0
 	lda #2
-	sta _test_memory_buf1+0,y
-	ldy #255
+	sta _test_memory_buf1+1
 	lda #3
-	sta _test_memory_buf1+0,y
+	sta _test_memory_buf1+255
 	lda #0
 	sta <reg+0
 	lda #1
@@ -119,8 +116,7 @@ _test_memory_buf2: .res 512
 	lda #2
 	sta <FC_FASTCALL_REG+5
 	jsr _mem_copy
-	ldy #255
-	lda _test_memory_buf2+0,y
+	lda _test_memory_buf2+255
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -231,9 +227,8 @@ _test_memory_buf2: .res 512
 	lda #.HIBYTE(_33)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #255
 	lda #0
-	sta _test_memory_buf2+0,y
+	sta _test_memory_buf2+255
 	lda #.LOBYTE(_test_memory_buf1)
 	sta <FC_FASTCALL_REG+1
 	lda #.HIBYTE(_test_memory_buf1)
@@ -329,8 +324,7 @@ _45:
 	lda #0
 	sta <FC_FASTCALL_REG+4
 	jsr _mem_set
-	ldy #0
-	lda _test_memory_buf1+0,y
+	lda _test_memory_buf1+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -341,8 +335,7 @@ _45:
 	lda #.HIBYTE(_50)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #7
-	lda _test_memory_buf1+0,y
+	lda _test_memory_buf1+7
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -364,8 +357,7 @@ _45:
 	lda #0
 	sta <FC_FASTCALL_REG+4
 	jsr _mem_set
-	ldy #0
-	lda _test_memory_buf1+0,y
+	lda _test_memory_buf1+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -378,8 +370,7 @@ _45:
 	lda #.HIBYTE(_60)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #6
-	lda _test_memory_buf1+0,y
+	lda _test_memory_buf1+6
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -392,8 +383,7 @@ _45:
 	lda #.HIBYTE(_65)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	ldy #7
-	lda _test_memory_buf1+0,y
+	lda _test_memory_buf1+7
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1

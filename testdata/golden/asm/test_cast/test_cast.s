@@ -40,7 +40,7 @@ _test_cast_a1:
 	ldy #0
 	lda (F_test_cast_test_cast+2),y
 	sta 0+<F_test_cast_test_cast+0
-	iny
+	ldy #1
 	lda (F_test_cast_test_cast+2),y
 	sta 1+<F_test_cast_test_cast+0
 	lda 0+<F_test_cast_test_cast+0
@@ -63,15 +63,14 @@ _test_cast_a1:
 	ldy #0
 	lda (F_test_cast_test_cast+0),y
 	sta 0+<F_test_cast_test_cast+2
-	iny
+	ldy #1
 	lda (F_test_cast_test_cast+0),y
 	sta 1+<F_test_cast_test_cast+2
 	lda 0+<F_test_cast_test_cast+2
 	sta <F_unittest_assert_equal+0
 	lda 1+<F_test_cast_test_cast+2
 	sta <F_unittest_assert_equal+1
-	ldy #0
-	lda _test_cast_a1+0,y
+	lda _test_cast_a1+0
 	sta <F_unittest_assert_equal+2
 	lda #0
 	sta <F_unittest_assert_equal+3

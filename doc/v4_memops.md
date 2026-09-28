@@ -59,10 +59,19 @@ store_mem base, index, v, scale=s, disp=k, w=n        mem[base + index*s + k .. 
 ## 状態（2026-09-28）
 
 1〜3 は済み（`refactor/memops`）。golden の IR ダンプの形式だけが変わり、asm golden・examples の ROM はバイト一致。
-fuzz（random 500、畳み込み 200、メタモルフィック 50、変異 30）を通した。4 は未着手。
+fuzz（random 500、畳み込み 200、メタモルフィック 50、変異 30）を通した。
 
-実装で 1 つだけ引っかかった点: `DefUse` の uses から番兵 `NoIndex` を抜くと Src の位置がずれ、SSA が store の値の位置に定数を
-伝播しなくなった（`a[0] = 1` の `lda #1` が消えず、生成コードが変わった）。uses は Src をそのまま返す。
+4 のうち「定数の添字を Disp に畳む」（`opt.foldConstIndex`。fusePointer の最後。`FC_DISABLE=constidx`）も入れた:
+`ldy #k; lda a,y` → `lda a+k`（2 サイクル・2 バイト短く、Y を使わない）。bench は bgdecode −0.8%（サイズ −3.9%）、
+oam −1.2%（−1.8%）、castle のフレームは −0.1〜0.2%。ポインタ + 添字 + disp の形はまだ許していない。
+
+実装で引っかかった点:
+- `DefUse` の uses から番兵 `NoIndex` を抜くと Src の位置がずれ、SSA が store の値の位置に定数を伝播しなくなった（`a[0] = 1` の
+  `lda #1` が消えず、生成コードが変わった）。uses は Src をそのまま返す。
+- sink / devirt / ywalk が「t を番地にした参照」を探すとき、以前は `Src[0] == t`（cast 無し）の厳密な一致だった。fuse と同じ
+  「先頭への cast も同じ」判定 (`isSameOperand`) に広げると sink がより多く動かして命令の並びが変わり、oam が +7 バイトになった
+  (`plainDeref` は厳密な一致、`fusableDeref` は cast も同じと見る、で分けた）。生成コードを変えない移行では、照合の緩さを
+  変えないこと。
 
 ## 段階
 

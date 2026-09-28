@@ -358,7 +358,8 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       （`ir.Verify` は 2026-09-28 に入れた。CFG の中の支配木・ループのキャッシュも。命令列を変えたら CFG を作り直す前提はそのまま）
 - [x] **メモリアクセスの集約** ([v4_memops.md](v4_memops.md)) ✅ 2026-09-28: 7 つのオペコード + `Scaled` + 配列への cast を
       `load_mem` / `store_mem` と `Base + Index * Scale + Disp`（store は `Width`）に。生成コードは変えていない（ROM はバイト一致）。
-      残り: 定数の添字を Disp に畳んで絶対番地 (`lda a+3`) で読む、ポインタ + 添字 + disp の形を許す（今は internal error）、
+      定数の添字を Disp に畳んで絶対番地 (`lda a+3`) で読む最適化 (`constidx`) も入れた。残り: ポインタ + 添字 + disp の形を許す
+      （今は internal error）、
       演算命令に幅と符号を明示する（zext / sext / trunc を命令に。「k バイト目」「比較は広い方の幅」「除算は Dst の符号」の規則は
       sema の畳み込み・opt/ssa・codegen に手書きのまま。interp は差分テストの独立した判定役なので共有しない）
 - [ ] **sema の式に型付きの中間表現を**: `lval`（470 行）が型検査・暗黙変換・診断・IR 出力を同時にやり、式の型は IR を出す
