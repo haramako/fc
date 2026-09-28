@@ -19,6 +19,9 @@ import (
 type MigrateOptions struct {
 	Target  string   // 入口としてコンパイルするときのターゲット (fclib の探し方。既定 emu)
 	Defines []string // CLI の -D (fcc build と同じく fc.toml の後に当てる)
+	// Rules が空でなければ、fc 3 → 4 の書き換えのうちその規則 (sema.Rewrite.Rule) のものだけを当てる (テスト用: 範囲外の定数と
+	// 縮小だけを直して、A1・F1 の fc 4 の意味がそのまま効く fc 4 のプログラムを作る)
+	Rules []string
 }
 
 // Migrate は files (fc 2 / fc 3 / fc 4 のソース) を fc 4 に書き換えた内容を返す (キーは files の要素。改行は LF)。
@@ -72,7 +75,7 @@ func (c *Compiler) Migrate(files []string, opt *MigrateOptions) (map[string][]by
 		}
 		var errs []string
 		for _, e := range prog.RewriteErrors {
-			if _, ok := overlay[sema.OverlayKey(e.File)]; ok {
+			if _, ok := overlay[sema.OverlayKey(e.File)]; ok && ruleWanted(opt.Rules, e.Rule) {
 				errs = append(errs, e.Msg)
 			}
 		}
@@ -82,7 +85,7 @@ func (c *Compiler) Migrate(files []string, opt *MigrateOptions) (map[string][]by
 		for _, r := range prog.Rewrites {
 			k := sema.OverlayKey(r.File)
 			r.File = k
-			if _, ok := overlay[k]; ok && !seen[r] {
+			if _, ok := overlay[k]; ok && !seen[r] && ruleWanted(opt.Rules, r.Rule) {
 				seen[r] = true
 				rewrites[k] = append(rewrites[k], r)
 			}
@@ -97,6 +100,19 @@ func (c *Compiler) Migrate(files []string, opt *MigrateOptions) (map[string][]by
 		out[path] = res
 	}
 	return out, nil
+}
+
+// ruleWanted は書き換えの規則 rule を当てるか (rules が空ならすべて)。
+func ruleWanted(rules []string, rule string) bool {
+	if len(rules) == 0 {
+		return true
+	}
+	for _, r := range rules {
+		if r == rule {
+			return true
+		}
+	}
+	return false
 }
 
 // collectRewrites は path を入口にしたプログラムを意味解析まで通し、fc 3 → 4 の書き換えを集める。

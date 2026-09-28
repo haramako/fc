@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/haramako/fc/internal/migrate"
+	"github.com/haramako/fc/internal/sema"
 )
 
 // romBuild は files を emu でビルドして ROM (a.bin) を返す (走らせない)。コンパイラの panic もエラーにする。
@@ -27,9 +28,11 @@ func romBuild(t *testing.T, files map[string]string, level int) (rom []byte, err
 	return os.ReadFile(r.Out)
 }
 
-// v3Breaking は fc 3 で意図してエラーにした fc 2 の書き方 (migrate は書き換えない) のエラーか。
+// v3Breaking は fc 3 で意図してエラーにした fc 2 の書き方 (migrate は書き換えない) のエラーか。fc 4 への migrate が
+// 自動では書き換えられない形 (左辺に呼び出しのある複合代入の縮小: sema.CompoundCallMsg) も同じ扱い。
 func v3Breaking(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "visible only in that case") // switch の case ごとのスコープ
+	return err != nil && (strings.Contains(err.Error(), "visible only in that case") || // switch の case ごとのスコープ
+		strings.Contains(err.Error(), sema.CompoundCallMsg))
 }
 
 func TestRandomMigrate(t *testing.T) {

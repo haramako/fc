@@ -27,6 +27,7 @@ type Rewrite struct {
 // RewriteError は書き換えを作れなかった所。
 type RewriteError struct {
 	File string // 読み込みに使った実パス (分からなければ "")
+	Rule string
 	Msg  string
 }
 
@@ -67,13 +68,17 @@ func (h *Hlc) rewriteError(rule, why string) {
 	if src := h.prog.Sources[h.module.Id]; src != nil {
 		file = src.Abs
 	}
-	h.prog.RewriteErrors = append(h.prog.RewriteErrors, RewriteError{File: file, Msg: fmt.Sprintf("%s: %s: cannot rewrite for fc 4 (%s)", h.curPos, rule, why)})
+	h.prog.RewriteErrors = append(h.prog.RewriteErrors, RewriteError{File: file, Rule: rule, Msg: fmt.Sprintf("%s: %s: cannot rewrite for fc 4 (%s)", h.curPos, rule, why)})
 }
 
 // rewriteAs は式 c を `c as T` にする書き換えを足す (c が 1 語か括弧で囲まれていなければ `(c) as T`)。c の範囲が分からなければ
 // rewriteError。
 func (h *Hlc) rewriteAs(rule string, c *cexpr, typ string) {
 	if c != nil && c.compound != nil {
+		if c.compoundCall {
+			h.rewriteError(rule, CompoundCallMsg)
+			return
+		}
 		h.rewriteCompoundAs(rule, c.compound, typ)
 		return
 	}
@@ -98,6 +103,10 @@ func (h *Hlc) rewriteAs(rule string, c *cexpr, typ string) {
 	h.addRewrite(rule, s, s, "(")
 	h.addRewrite(rule, e, e, ") as "+typ)
 }
+
+// CompoundCallMsg は左辺に呼び出しのある複合代入を書き換えられないときの文言 (fc 4 では結果を左辺の型に `as` で直す必要が
+// あるが、文ごとの書き換え `x = (x op y) as T` は左辺の呼び出しを 2 回評価するので、手で一時変数に分けてもらう)。
+const CompoundCallMsg = "the left side of this compound assignment has a call; split it by hand (e.g. `var i = f(); a[i] = (a[i] + y) as T;`)"
 
 // rewriteCompoundAs は複合代入 `x op= y` を `x = (x op y) as T` に書き換える (脱糖した (op x y) の値を変換する所)。
 func (h *Hlc) rewriteCompoundAs(rule string, a *syntax.AssignExpr, typ string) {

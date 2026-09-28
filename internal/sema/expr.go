@@ -224,7 +224,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				// 複合代入 `X op= v` は (load X (op X v)) に脱糖されていて X を 2 回評価する。X に関数呼び出しが
 				// あるとき (`a[f()] += 1`) は呼び出しを先に 1 回だけ評価して値に置き換えてから続ける
 				lhs := h.hoistCalls(e.args[0])
-				e = &cexpr{kind: cOp, op: opLoad, args: []*cexpr{lhs, cop2(rhs.op, lhs, rhs.args[1])}, pos: e.pos}
+				inner := cop2(rhs.op, lhs, rhs.args[1])
+				inner.compound, inner.compoundCall = rhs.compound, true
+				e = &cexpr{kind: cOp, op: opLoad, args: []*cexpr{lhs, inner}, pos: e.pos}
 			}
 			if lhs := e.args[0]; lhs.kind == cOp && lhs.op == opField {
 				// struct のフィールドへの代入。SoA の 2 バイト以上のフィールドは 1 つのポインタで表せないのでここで扱う
