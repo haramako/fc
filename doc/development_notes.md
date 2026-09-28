@@ -512,7 +512,10 @@ go test ./...                                    # 全部 (golden + examples + N
   集め、`migrate.ToV4` が当てる。書き換えを作れない所は `RewriteErrors` で migrate をエラーにする。fc 4 の規則を足すときは、
   fc 4 の意味（`h.version() >= syntax.Version4`）と、fc 3 のモジュールでの書き換え（`h.rewriting()`）を対で入れ、
   `TestMigrateExamples`（castle / miku を fc 4 に移して ROM の golden と比べる）と `TestMigrateGoldenPrograms` /
-  `TestMigrateBench`（fc 2 の test / bench を fc 4 まで移す）で確かめる
+  `TestMigrateBench`（fc 2 の test / bench を fc 4 まで移す）で確かめる。同じ位置への挿入は報告の順に当たる（`internal/migrate` の `apply` の
+  安定ソート）ので、同じ式の外側に付く書き換えは後で報告する（F6 の `as` は A1 の `(式) as T` の後: `((x + vx) as i8) as u16`）。
+  A1 で広げた後の型を見る検査（F2 の値が必ず 0 になるシフト）は、広げるのが文の中で終わるので文の終わりに見る
+  （`compileStatementRecover` の `checkShifts`）
 - **asm から呼ばれる関数とフレーム**（2026-09-29。[v4_plan.md](v4_plan.md) §2）: 静的フレームの重ね方は呼び出しグラフの到達関係
   だけで決まるので、グラフに見えない呼び出し（include した asm のファイルからの `jsr`）の先は `frames.Graph.hidden` にして
   どのフレームとも重ねない（割り込みの木と同じ）。インラインアセンブラの参照は含む関数からの辺にする。asm のテキストから

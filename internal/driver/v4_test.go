@@ -29,6 +29,16 @@ func TestV4Errors(t *testing.T) {
 		{"D: 戻り値", "function f(w:u16):u8 { return w; }", "cannot convert u16 to u8 implicitly"},
 		{"D: 引数", "function f(w:u16):void { take(w); }", "cannot convert u16 to u8 implicitly"},
 		{"D: i16 → i8", "function f(s:i16):i8 { return s; }", "cannot convert i16 to i8 implicitly"},
+		{"F2: u8 << 8", "function f(hi:u8):void { var a = hi << 8; g = a as u8; }", "shifting u8 left by 8 always gives 0"},
+		{"F2: 8 ビットの代入先", "function f(hi:u8, lo:u8):void { g = hi << 8 | lo; }", "shifting u8 left by 8 always gives 0"},
+		{"F2: u8 >> 8", "function f(lo:u8):void { g = lo >> 8; }", "shifting u8 right by 8 always gives 0"},
+		{"F2: u16 << 16", "function f(w:u16):void { w = w << 16; g = w as u8; }", "shifting u16 left by 16 always gives 0"},
+		{"F4: 16 ビットに入らない", "const Z = [40000, -1];", "do not fit in one integer type"},
+		{"F6: u8 と i8", "function f(x:u8, v:i8):void { if (x < v) { g = 1; } }", "ordered comparison of signed i8 and unsigned u8 would compare as i8"},
+		{"F6: 座標 + 移動量と u8", "function f(x:u8, v:i8, lim:u8):void { if (x + v > lim) { g = 1; } }", "signed i8 and unsigned u8"},
+		{"F6: u16 と i8", "function f(w:u16, v:i8):void { if (w >= v) { g = 1; } }", "would compare as u16"},
+		{"F6: u16 と i16", "function f(w:u16, v:i16):void { if (w <= v) { g = 1; } }", "signed i16 and unsigned u16"},
+		{"F6: 型付きの定数", "const A:u8 = 200;\nconst B:i8 = -1;\nfunction f():void { if (A > B) { g = 1; } }", "signed i8 and unsigned u8"},
 	}
 	for i, c := range cases {
 		c := c
@@ -74,6 +84,96 @@ function main():void
 	}
 	if want := "300 255 198 52 44 253 255\n"; out != want {
 		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+// TestV4IntRulesF: fc 4 で通る F2・F4・F6 の形。A1 で広がるシフト、符号付きの `>>`、配列リテラルは定数の値を変えない型
+// (宣言の型があればそちら)、符号なしが狭い比較・`==`・型のない定数との比較。
+func TestV4IntRulesF(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use * from stdio;
+const T = [128, -1];
+const U = [1000, -1];
+const S = [200, 100];
+const D:[3]i16 = [128, -1, 5];
+function main():void
+{
+	var hi:u8 = 0x12;
+	var lo:u8 = 0x34;
+	var s:i8 = -100;
+	var x:u8 = 250;
+	var vx:i8 = -1;
+	var lim:u8 = 200;
+	var s16:i16 = -5;
+	var h:u16 = hi << 8 | lo;
+	var r = [vx, 200];
+	printf(h, " ", s >> 8, "\n");
+	printf(T[0], " ", T[1], " ", @sizeof(T), " ", U[1], " ", @sizeof(U), " ", @sizeof(S), " ", D[0], " ", r[1], " ", @sizeof(r), "\n");
+	printf(x < s16, " ", x == (-6 as i8), " ", (x + vx) as u8 > lim, " ", x + vx > 100, "\n");
+	exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "4660 -1\n128 -1 4 -1 4 2 128 200 4\n0 1 1 0\n"; out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+// TestV4MigrateIntRulesF: fc 3 の配列リテラルの型 (F4) と符号の混ざった比較 (F6) は、migrate が今の型の `as` を足して fc 3 と
+// 同じ結果にする。
+func TestV4MigrateIntRulesF(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+const T = [128, -1];
+const U = [1000, -1];
+const A:u8 = 200;
+const B:i8 = -1;
+function main():void
+{
+	var x:u8 = 250;
+	var vx:i8 = -1;
+	var lim:u8 = 200;
+	var w:u16 = 100;
+	var r = [vx, 200];
+	printf(T[0], " ", U[1], " ", r[1], " ", x < vx, " ", w > vx, " ", x + vx > lim, " ", A > B, "\n");
+	exit(0);
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(res[path])
+	for _, want := range []string{
+		"const T = [128 as i8, -1];", "const U = [1000, -1 as u16];", "var r = [vx, 200 as i8];",
+		"x as i8 < vx", "w > vx as u16", "x + vx > lim as i8", "A as i8 > B",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("migrate の結果に %q が無い:\n%s", want, got)
+		}
+	}
+	before, err := buildBothLevels(t, map[string]string{"t.fc": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "-128 65535 -56 1 0 1 0\n"; before != want {
+		t.Errorf("fc 3: got %q, want %q", before, want)
+	}
+	after, err := buildBothLevels(t, map[string]string{"t.fc": got})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Errorf("fc 3: %q, fc 4: %q", before, after)
 	}
 }
 
@@ -259,12 +359,19 @@ func TestV4StringConst(t *testing.T) {
 	}
 }
 
-// TestV4MigrateWiden: A1・F1 で意味が変わる所は、migrate が今の型の `as` を足して fc 3 と同じ結果にする。
+// TestV4MigrateWiden: A1・F1 で意味が変わる所は、migrate が今の型の `as` を足して fc 3 と同じ結果にする。fc 3 の `hi << 8`
+// (値が必ず 0) は、fc 3 と同じ意味の書き方が fc 4 の F2 のエラーになるので、migrate がエラーにする。
 func TestV4MigrateWiden(t *testing.T) {
 	t.Parallel()
-	src := fmt.Sprintf(a1Src, 3)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(fmt.Sprintf(a1Src, 3)), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{}); err == nil || !strings.Contains(err.Error(), "shift-zero") {
+		t.Errorf("hi << 8: err = %v, want shift-zero", err)
+	}
+	src := strings.Replace(fmt.Sprintf(a1Src, 3), "hi << 8 | lo", "hi << 7 | lo", 1)
 	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +382,7 @@ func TestV4MigrateWiden(t *testing.T) {
 	got := string(res[path])
 	for _, want := range []string{
 		"return (a + b) as u8;", "var d:u16 = (a + b) as u8;", "var avg:u16 = ((a + b) / 2) as u8;",
-		"var addr = 0x2000 + (y * 64) as u8;", "score += (pts * 10) as u8;", "var h:u16 = (hi << 8 | lo) as u8;",
+		"var addr = 0x2000 + (y * 64) as u8;", "score += (pts * 10) as u8;", "var h:u16 = (hi << 7 | lo) as u8;",
 		"var w:i16 = (x + dx) as i8;", "var m:i16 = -y as u8;", "var n:u16 = (x + -1) as u8;", "var c:u8 = a + b;",
 		"put16((a + b) as u8);", "var r1:u16 = y as u16 << n7;", "var r2 = a as i8 << s1;",
 	} {

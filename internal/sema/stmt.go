@@ -101,10 +101,14 @@ func (h *Hlc) compileStmts(stmts []syntax.Stmt) {
 // 以降の参照が巻き添えのエラーを出さないようにする。
 func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 	scope, loops, pending, fast := h.scope, len(h.loops), h.pendingLabel, h.fastCalling
+	shifts := len(h.shifts)
 	defer func() {
 		r := recover()
 		if r == nil {
 			return
+		}
+		if len(h.shifts) > shifts {
+			h.shifts = h.shifts[:shifts]
 		}
 		ce, ok := r.(*diag.Error)
 		if !ok || ce.Fatal {
@@ -120,6 +124,7 @@ func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 		h.declareBad(s)
 	}()
 	h.compileStatement(s)
+	h.checkShifts(shifts)
 }
 
 func (h *Hlc) compileStatement(s syntax.Stmt) {

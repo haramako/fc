@@ -375,6 +375,9 @@ func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
 			}
 		}
 	}
+	if e.ty == nil {
+		base = h.arrayElemType(base, vals, e.args, false) // F4 (fc 4): 定数の要素が入る型に
+	}
 	tmp := h.newTmp(h.prog.Types.ArrayOf(base, n))
 	for i := 0; i < n; i++ {
 		var v ir.Operand

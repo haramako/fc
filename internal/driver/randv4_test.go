@@ -17,8 +17,8 @@ import (
 	"testing"
 )
 
-// v4Rules は fc 4 でエラーになる所だけの書き換え (sema/convert.go)。
-var v4Rules = []string{"constant-range", "narrowing"}
+// v4Rules は fc 4 でエラーになる所だけの書き換え (sema/convert.go の E・D、sema/intrules.go の F6)。
+var v4Rules = []string{"constant-range", "narrowing", "sign-compare"}
 
 // migrateRules は files を一時ディレクトリに書き、Compiler.Migrate で rules の書き換えだけを当てて最新の版にした内容を返す。
 func migrateRules(t *testing.T, files map[string]string, rules []string) (map[string]string, error) {

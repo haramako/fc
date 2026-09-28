@@ -111,6 +111,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if typ == nil {
 			panic(&diag.Error{Msg: "cannot infer the element type of an empty array literal"})
 		}
+		if c.ty == nil || c.ty.Kind != types.Array {
+			typ = h.arrayElemType(typ, vals, c.args, true) // F4 (fc 4): 定数の要素の値を変えない型に (宣言の型があればそちらで作り直す)
+		}
 		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(typ, len(vals)), vals))
 
 	case cIncbin:
@@ -292,6 +295,15 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 						u0, u1 := args[0].val.Untyped, args[1].val.Untyped
 						switch {
 						case !u0 && !u1:
+							if c.op != opEq && c.op != opNe && mixedSign(args[0].val, args[1].val) {
+								// F6: 型付きの定数どうしの大小の比較も実行時と同じ
+								switch {
+								case h.v4():
+									panic(h.mixedSignError(args[0].val.Type, args[1].val.Type))
+								case h.rewriting():
+									h.rewriteMixedSign(args[0].val, args[1].val, [2]*cexpr{c.args[0], c.args[1]})
+								}
+							}
 							v1, v2 = wrapInt(v1, t), wrapInt(v2, t)
 						case u0 != u1:
 							// 型付きの側が符号付きなら、実行時はそれを符号拡張して、定数が i16 に収まれば符号付き (数学の値) で、

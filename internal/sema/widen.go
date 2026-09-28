@@ -19,8 +19,8 @@ import (
 // arithNode は式の中の算術の命令の結果 (一時変数) の記録。
 type arithNode struct {
 	op   *ir.Op
-	c    *cexpr        // 元の式 (書き換えの位置)
-	lits [2]*ir.Value  // 型のない定数のオペランドの元の値 (adaptLiteral の前。相手の型に切り詰める前の値)
+	c    *cexpr       // 元の式 (書き換えの位置)
+	lits [2]*ir.Value // 型のない定数のオペランドの元の値 (adaptLiteral の前。相手の型に切り詰める前の値)
 }
 
 // recordArith は算術の命令 op の結果 tmp を記録する (fc 4 と、書き換えを集めるときだけ)。lits は型のない定数のオペランドの元の値。
@@ -38,6 +38,7 @@ func (h *Hlc) recordArith(tmp *ir.Value, op *ir.Op, c *cexpr, lits ...ir.Operand
 		h.arith = map[*ir.Value]*arithNode{}
 	}
 	h.arith[tmp] = n
+	h.noteShift(tmp, op)
 }
 
 // widenArith は v が式の中の算術の結果で typ より狭ければ、fc 4 では部分木ごと typ の大きさで計算し直し、fc 3 では書き換えを

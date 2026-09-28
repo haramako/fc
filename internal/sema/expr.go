@@ -347,6 +347,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			// F6 (fc 4): 符号の違う整数の大小の比較で、互換型が片方の値を読み替えるものはエラー (intrules.go)
+			mixed := e.op == opLt && mixedSign(left, right)
+			if mixed && h.v4() {
+				panic(h.mixedSignError(ir.ValType(left), ir.ValType(right)))
+			}
 			left, right = h.adaptLiteral(left, right, true)
 			h.warnConstCompare(e.op, left, right)
 			if k, ok := h.foldBeyond16(e.op, left, right); ok {
@@ -365,7 +370,14 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if e.op == opEq && isVoidPtr(ir.ValType(right)) && !isVoidPtr(ir.ValType(left)) {
 				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
 			}
-			_, left, right = h.makeCompatible(left, right)
+			if mixed && h.rewriting() {
+				// 互換型に揃える (A1 の書き換え) の後に報告する: 同じ式に両方が付くとき `((x + vx) as i8) as u16` の順に当たる
+				l0, r0 := left, right
+				_, left, right = h.makeCompatible(left, right)
+				h.rewriteMixedSign(l0, r0, [2]*cexpr{a0, a1})
+			} else {
+				_, left, right = h.makeCompatible(left, right)
+			}
 			if e.op == opEq {
 				if bv, ok := h.boolEq(e, left, right); ok {
 					r = bv

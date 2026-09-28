@@ -33,10 +33,12 @@ type Hlc struct {
 
 	module *ir.Module
 	lmd    *ir.Lambda
-	curPos syntax.Position // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
+	curPos syntax.Position          // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
 	arith  map[*ir.Value]*arithNode // 式の中の算術の命令の結果 (A1 で広げる・fc 4 への書き換え: widen.go)
 	// 型付きの定数の畳み込みと A1 (widen.go): 折り返した畳み込みの結果の定数 → 元の式
 	taint map[*ir.Value]*cexpr
+	// 文の終わりに F2 (値が必ず 0 になるシフト) を見る、量が定数のシフトの結果 (intrules.go)
+	shifts []*ir.Value
 
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
