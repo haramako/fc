@@ -27,7 +27,7 @@ const devirtMaxTable = 16
 // DevirtualizeProgram は全モジュールの関数について表経由の呼び出しを直接化する (InlineProgram の後、frames.Analyze の前)。
 // farEnabled は options(farcall: true)。
 func DevirtualizeProgram(mods []*ir.Module, farEnabled bool) {
-	if ir.Disabled("devirt") {
+	if ir.ModulesCfg(mods).Disabled("devirt") {
 		return
 	}
 	byID := map[string]*ir.Module{}

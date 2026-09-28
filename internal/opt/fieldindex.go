@@ -38,9 +38,8 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			continue
 		}
 		if op.Code != ir.OpIndex {
-			switch op.Code {
-			case ir.OpLabel, ir.OpJump, ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpSwitch, ir.OpReturn,
-				ir.OpCall, ir.OpFastcall, ir.OpAsm:
+			switch {
+			case op.Code.IsBlockBoundary() || op.Code.IsCall() || op.Code.IsOpaque():
 				clear(shared)
 			default:
 				defs, _ := ir.DefUse(op)

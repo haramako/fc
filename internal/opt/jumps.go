@@ -26,22 +26,6 @@ func simplifyJumps(lmd *ir.Lambda) {
 	}
 }
 
-func isBranch(op *ir.Op) bool {
-	return op != nil && (isCond(op) || op.Code == ir.OpJump)
-}
-
-// isCond は条件分岐 (if / if_true / if_carry / if_not_carry) か。
-func isCond(op *ir.Op) bool {
-	if op == nil {
-		return false
-	}
-	switch op.Code {
-	case ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry:
-		return true
-	}
-	return false
-}
-
 // takeOnTaken は op の注釈のうち分岐が成立したときの分を外して返す (分岐の向きを変えるとき)。
 func takeOnTaken(op *ir.Op) []*ir.LogPoint {
 	var taken, rest []*ir.LogPoint
@@ -154,7 +138,7 @@ func threadJumps(lmd *ir.Lambda) bool {
 				}
 				continue
 			}
-			if !isBranch(op) {
+			if !ir.IsBranch(op) {
 				continue
 			}
 			if l, logs := resolve(op.Label); l != op.Label {
@@ -164,7 +148,7 @@ func threadJumps(lmd *ir.Lambda) bool {
 			}
 			// 直後のブロックへの jump / 条件分岐は不要 (`||` の片側が定数に畳まれると `if_true c goto next` が残る。
 			// 残すと飛ぶ辺と落ちる辺が同じブロックに入り、常駐の入口の写しが片方の辺にしか付かなかった。fuzz で発覚)
-			if (op.Code == ir.OpJump || isCond(op)) && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label == op.Label {
+			if (op.Code == ir.OpJump || ir.IsCondBranch(op)) && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label == op.Label {
 				for _, p := range op.Logs {
 					p.OnTaken = false // 成立しても落ちても次のブロック
 				}
@@ -192,7 +176,7 @@ func removeUnreachable(lmd *ir.Lambda) bool {
 			continue
 		}
 		for _, i := range cfg.Ops(b) {
-			if isBranch(ops[i]) {
+			if ir.IsBranch(ops[i]) {
 				refs[ops[i].Label]++
 			} else if ops[i] != nil && ops[i].Code == ir.OpSwitch {
 				for _, l := range ops[i].Labels {
@@ -237,7 +221,7 @@ func invertBranches(lmd *ir.Lambda) bool {
 	for bi := 0; bi+2 < len(cfg.Blocks); bi++ {
 		b, jb, lb := cfg.Blocks[bi], cfg.Blocks[bi+1], cfg.Blocks[bi+2]
 		last := cfg.Last(b)
-		if !isCond(last) {
+		if !ir.IsCondBranch(last) {
 			continue
 		}
 		jops := cfg.Ops(jb)
@@ -285,7 +269,7 @@ func invertBranches(lmd *ir.Lambda) bool {
 //
 // にする。本体の中の continue (jump L_begin) はそのまま条件へ飛ぶ。
 func rotateLoops(lmd *ir.Lambda) bool {
-	if ir.Disabled("rotate") {
+	if lmd.Cfg().Disabled("rotate") {
 		return false
 	}
 	cfg := ir.BuildCFG(lmd)
@@ -295,7 +279,7 @@ func rotateLoops(lmd *ir.Lambda) bool {
 			continue
 		}
 		cond := cfg.Last(b0)
-		if !isCond(cond) {
+		if !ir.IsCondBranch(cond) {
 			continue
 		}
 		end := cfg.BlockOf(cond.Label)
@@ -328,7 +312,7 @@ func rotateLoops(lmd *ir.Lambda) bool {
 		bodyLabel := newLabel(lmd, "body")
 		var out []*ir.Op
 		out = append(out, ops[:b0.Start]...)
-		if dup := cloneCond(lmd, cfg, b0); dup != nil && !ir.Disabled("dup") {
+		if dup := cloneCond(lmd, cfg, b0); dup != nil && !lmd.Cfg().Disabled("dup") {
 			// 条件が短い (比較 1 つ + 分岐) ときは、入口の条件はそのまま残して本体の末尾に条件の写しを置く (テストの複製):
 			//   L_begin: <cond>; if c goto L_end; L_body: <body>; <cond'>; if_true c' goto L_body; [jump L_end]
 			// 末尾の条件の直前にラベルが無いので、`dey` の直後の `cpy #0` がピープホールで消える (crc8 / crc16 の内側ループ)。
@@ -389,7 +373,7 @@ func cloneCond(lmd *ir.Lambda, cfg *ir.CFG, b0 *ir.Block) []*ir.Op {
 			body = append(body, lmd.Ops[i])
 		}
 	}
-	if len(body) < 1 || len(body) > 2 || !isCond(body[len(body)-1]) {
+	if len(body) < 1 || len(body) > 2 || !ir.IsCondBranch(body[len(body)-1]) {
 		return nil
 	}
 	if last := body[len(body)-1]; len(last.Src) > 0 && ir.ValType(last.Src[0]).Size != 1 {

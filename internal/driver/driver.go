@@ -4,6 +4,10 @@ package driver
 // base.asm / ld65.cfg のテンプレートは小さく静的なので text/template を使わず文字列生成している。
 
 import (
+	"github.com/haramako/fc/internal/emu"
+	"github.com/haramako/fc/internal/project"
+	"github.com/haramako/fc/internal/fclog"
+	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"fmt"
 	"io"
@@ -17,9 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/haramako/fc/internal/codegen"
 	"github.com/haramako/fc/internal/diag"
-	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/regalloc"
@@ -58,6 +60,8 @@ type BuildOptions struct {
 	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
 	MisclassifyResident bool
 	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
+	// Config は調査用の設定 (パスの入れ切り・トレース・検証。ir/config.go)。nil なら環境変数 (FC_DISABLE など) から作る
+	Config *ir.Config
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / base.o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
@@ -100,9 +104,10 @@ type Compiler struct {
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
 	prog     *sema.Program
-	layout   *bankLayout  // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
+	layout   *project.BankLayout // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
 	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 	hashes   *hashMemo    // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
+	cfg      *ir.Config   // 調査用の設定 (BuildOptions.Config)
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -175,6 +180,10 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if opt.Stdout == nil {
 		opt.Stdout = os.Stdout
 	}
+	if opt.Config == nil {
+		opt.Config = ir.ConfigFromEnv()
+	}
+	c.cfg = opt.Config
 	c.target = opt.Target
 	c.dir = opt.Dir
 	if c.dir == "" {
@@ -195,40 +204,21 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	result = &Result{BuildDir: c.buildDir}
 	c.hashes = newHashMemo() // fcc watch は同じ Compiler でビルドし直すので、ビルドごとに作り直す
 
-	// compile (ソースコード -> 中間コード) と compile2 (中間コード -> アセンブラファイル) の準備
-	var prog *sema.Program
-	var llc *codegen.Llc
-	var plan *frames.Plan
-	var perr error
+	// 前段: 意味解析 → 全関数の最適化と割付 → 静的フレームの配置 (frontend.go)
 	defs, derr := c.projectDefines(opt.Defines)
 	if derr != nil {
 		return nil, derr
 	}
-	for noGrow := map[string]bool{}; ; {
-		prog = sema.NewProgram()
-		prog.Defines = copyDefines(defs)
-		prog.Banks = c.banks()
-		prog.LogEnabled = opt.Debug // @log の注釈は -g のときだけ (doc/v3_plan.md §9)
-		prog.LogEveryStatement = opt.LogEveryStatement
-		if cerr := sema.CompileProgram(prog, opt.Dir, c.libPath(opt.Target), filename); cerr != nil {
-			return nil, cerr
-		}
-		if cerr := c.checkDefines(prog, opt.Target); cerr != nil {
-			return nil, cerr
-		}
-		c.prog = prog
-		llc = c.newLlc(opt, prog)
-		llc.NoGrow = noGrow
-		// フレームの静的割付 (doc/v2_frame_alloc.md §6-4): 呼び出し規約の決定 → 全関数の最適化と割付 → 配置 → _frames.inc
-		plan, perr = llc.PrepareProgram(prog.Modules.List(), c.staticZpSize(), c.staticRamSize())
-		if !retryFrameOver(llc, perr, noGrow) {
-			break
-		}
+	front, ferr := c.compileFront(&frontOptions{
+		Dir: opt.Dir, Target: opt.Target, Main: filename, Defines: defs, OptimizeLevel: opt.OptimizeLevel,
+		Debug: opt.Debug, LogEveryStatement: opt.LogEveryStatement, Config: opt.Config,
+		MisclassifyResident: opt.MisclassifyResident, DebugFile: c.debugFileFunc(opt),
+	})
+	if ferr != nil {
+		return nil, ferr
 	}
-	if perr != nil {
-		return nil, perr
-	}
-	prog.Warnings = append(prog.Warnings, plan.Warnings...) // 割り込みと共有するフレームなど (frames.Place)
+	prog, llc, plan := front.Prog, front.Llc, front.Plan
+	c.prog = prog
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
 	result.Defines = sortedDefines(prog.Defines)
@@ -281,10 +271,10 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	result.Out = opt.Out
 	result.MapFile, result.DbgFile = c.link(baseObj, objs, opt)
 	// dbgfile は要るときに 1 回だけ読む (castle では 13MB。検査と -g のラベルで 2 回読んでいた)
-	var dbgParsed *DbgFile
-	loadDbg := func() (*DbgFile, error) {
+	var dbgParsed *cc65.DbgFile
+	loadDbg := func() (*cc65.DbgFile, error) {
 		if dbgParsed == nil {
-			d, err := ParseDbgFile(result.DbgFile)
+			d, err := cc65.ParseDbgFile(result.DbgFile)
 			if err != nil {
 				return nil, err
 			}
@@ -295,7 +285,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if err := c.checkAddressVars(loadDbg); err != nil {
 		return nil, err
 	}
-	var logFile *LogFile
+	var logFile *fclog.LogFile
 	if opt.Debug || opt.SizeReport {
 		dbg, err := loadDbg()
 		if err != nil {
@@ -303,13 +293,13 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		}
 		if opt.Debug && len(llc.LogSites) > 0 {
 			// @log の地点 (<rom>.fclog.json / .fclog.lua)
-			if logFile, err = buildLogFile(llc.LogSites, dbg, opt.Target, llc.DebugFile); err != nil {
+			if logFile, err = fclog.Build(llc.LogSites, dbg, opt.Target, llc.DebugFile); err != nil {
 				return nil, err
 			}
-			if err := writeLogFiles(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)), logFile); err != nil {
+			if err := fclog.WriteFiles(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)), logFile); err != nil {
 				return nil, err
 			}
-			result.Warnings = append(result.Warnings, logWarnings(llc.LogSites)...)
+			result.Warnings = append(result.Warnings, fclog.Warnings(llc.LogSites)...)
 		}
 		if opt.Debug && opt.Target == "nes" {
 			battery := false
@@ -330,7 +320,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		if logOut == nil {
 			logOut = opt.Stdout
 		}
-		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles, logHooks(logFile), logOut)
+		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles, fclog.Hooks(logFile), logOut)
 		if err != nil {
 			return nil, err
 		}
@@ -560,17 +550,17 @@ func (c *Compiler) farcallAsm() string {
 // projectDefines は fc.toml (ソースの基準ディレクトリから親へ探す) と CLI の -D から @(build) の const の上書きを作る。
 // fc.toml のバンクの表も読んで c.layout に入れる。
 func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, error) {
-	cfg, err := findConfig(c.dir)
+	cfg, err := project.FindConfig(c.dir)
 	if err != nil {
 		return nil, err
 	}
-	if c.layout, err = cfg.layout(); err != nil {
+	if c.layout, err = cfg.Layout(); err != nil {
 		return nil, err
 	}
 	if c.layout != nil && c.layout.Fragment != "" && !filepath.IsAbs(c.layout.Fragment) {
 		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
 	}
-	return cfg.defines(cli)
+	return cfg.Defines(cli)
 }
 
 // banks は意味解析に渡すバンクの表 (fc.toml に無ければ nil)。
@@ -578,12 +568,12 @@ func (c *Compiler) banks() map[string]sema.BankRef {
 	if c.layout == nil {
 		return nil
 	}
-	return c.layout.semaBanks()
+	return c.layout.SemaBanks()
 }
 
 // checkDefines は上書きが宣言された @(build) の const に当たったかを検査する (ビルドに含まれないモジュールは警告)。
 func (c *Compiler) checkDefines(prog *sema.Program, target string) error {
-	return prog.CheckDefines(func(m string) bool { return moduleExists(c.dir, c.libPath(target), m) })
+	return prog.CheckDefines(func(m string) bool { return project.ModuleExists(c.dir, c.libPath(target), m) })
 }
 
 // sortedDefines は上書きの一覧 (キー順)。
@@ -596,82 +586,22 @@ func sortedDefines(m map[string]*sema.DefineUse) []sema.DefineUse {
 	return r
 }
 
-// newLlc は prog のコード生成器を作る (PrepareProgram の前の設定まで)。
-func (c *Compiler) newLlc(opt *BuildOptions, prog *sema.Program) *codegen.Llc {
-	llc := codegen.NewLlc(opt.OptimizeLevel, prog.Types)
-	if opt.Debug {
-		outDir := filepath.Dir(opt.Out)
-		llc.DebugFile = func(ref string) string {
-			abs := ref
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(c.dir, ref)
-			}
-			if rel, err := filepath.Rel(outDir, abs); err == nil {
-				return filepath.ToSlash(rel)
-			}
-			return filepath.ToSlash(abs)
+// debugFileFunc は -g のときの .dbg に書くファイル名 (sema のファイル参照 (Dir 相対) を ROM の隣から辿れる相対パスに)。
+func (c *Compiler) debugFileFunc(opt *BuildOptions) func(ref string) string {
+	if !opt.Debug {
+		return nil
+	}
+	outDir := filepath.Dir(opt.Out)
+	return func(ref string) string {
+		abs := ref
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(c.dir, ref)
 		}
-	}
-	llc.Limits.FastcallReg = c.fastcallRegSize()
-	llc.FarCall = prog.FarCallEnabled()
-	llc.MisclassifyResident = opt.MisclassifyResident
-	return llc
-}
-
-// retryFrameOver は PrepareProgram の結果を見て、-O 2 のフレームが上限を超えた関数 (llc.FrameOver) をまだ noGrow に
-// 入れていなければ入れて true (展開を止めて sema からやり直す)。最適化は IR をその場で書き換えるので、やり直しは
-// 意味解析から。失敗したときだけ走るので、通るプログラムのコンパイル時間は変わらない。止めても超えるなら false
-// (エラーをそのまま返す。-O 0 でも超える大きすぎる関数)。
-func retryFrameOver(llc *codegen.Llc, err error, noGrow map[string]bool) bool {
-	if err == nil || llc.FrameOver == "" || noGrow[llc.FrameOver] {
-		return false
-	}
-	noGrow[llc.FrameOver] = true
-	return true
-}
-
-// staticZpSize / staticRamSize は静的フレームの領域の大きさ (options(static_zp: N) / options(static_ram: N)。
-// base.asm の FC_SZP / FC_SRAM の .res と一致させる。doc/v2_frame_alloc.md §6-5)。
-func (c *Compiler) staticZpSize() int {
-	if n, ok := c.prog.Options.Int("static_zp"); ok {
-		if n < 0 || n > 256 {
-			panic(&diag.Error{Msg: fmt.Sprintf("options(static_zp: %d): must be 0..256", n)})
+		if rel, err := filepath.Rel(outDir, abs); err == nil {
+			return filepath.ToSlash(rel)
 		}
-		return n
+		return filepath.ToSlash(abs)
 	}
-	return DefaultStaticZp
-}
-
-func (c *Compiler) staticRamSize() int {
-	if n, ok := c.prog.Options.Int("static_ram"); ok {
-		if n < 0 || n > 8192 {
-			panic(&diag.Error{Msg: fmt.Sprintf("options(static_ram: %d): must be 0..8192", n)})
-		}
-		return n
-	}
-	return DefaultStaticRam
-}
-
-// 静的フレームの領域の既定の大きさ (fc が生成する base.asm と一致)。
-//
-// fc が生成する base.asm のゼロページ配置: $00-$0F L (stack 関数のレジスタ領域)、$10-$1F reg、$20-$2F FC_FASTCALL_REG
-// (extern の fastcall 用、既定 16)、$30-$6F FC_SZP (静的フレーム、既定 64)、$70-$7F は `options(segment: "ZEROPAGE")` の
-// 変数用に空けておく、$80-$FF スタック S。$00-$7F に `options(address:)` で固定番地の変数を置くのは、base.asm を自前で
-// 持つプロジェクト (castle) だけにする (2026-09-16 決定。miku は固定番地をやめて BSS に)。
-const (
-	DefaultStaticZp  = 64
-	DefaultStaticRam = 512
-)
-
-// fastcallRegSize は FC_FASTCALL_REG の大きさ (options(fastcall_reg: N)。既定は regalloc.DefaultLimits)。
-func (c *Compiler) fastcallRegSize() int {
-	if n, ok := c.prog.Options.Int("fastcall_reg"); ok {
-		if n < 16 || n > 128 {
-			panic(&diag.Error{Msg: fmt.Sprintf("options(fastcall_reg: %d): must be 16..128", n)})
-		}
-		return n
-	}
-	return regalloc.DefaultLimits.FastcallReg
 }
 
 // baseAsmTemplate は base.s の雛形。
@@ -682,14 +612,14 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\t.exportzp FC_FASTCALL_REG\n" +
 		"\t.export FC_FARCALL\n" +
 		"\t.export FC_FASTCALL_REG_SIZE : absolute\n" +
-		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", c.fastcallRegSize()) +
+		fmt.Sprintf("FC_FASTCALL_REG_SIZE = %d\n", validated(fastcallRegSize(c.prog))) +
 		"\t.exportzp FC_SZP\n" +
 		"\t.exportzp FC_SP\n" +
 		"\t.export FC_SRAM\n" +
 		"\t.export FC_SZP_SIZE : absolute\n" +
 		"\t.export FC_SRAM_SIZE : absolute\n" +
-		fmt.Sprintf("FC_SZP_SIZE = %d\n", c.staticZpSize()) +
-		fmt.Sprintf("FC_SRAM_SIZE = %d\n", c.staticRamSize()) +
+		fmt.Sprintf("FC_SZP_SIZE = %d\n", validated(staticZpSize(c.prog))) +
+		fmt.Sprintf("FC_SRAM_SIZE = %d\n", validated(staticRamSize(c.prog))) +
 		"\t.exportzp L \t\t\t\t\t; TODO: そのうち消すこと\n" +
 		"\t.exportzp reg\n" +
 		"\t.exportzp S\n" +
@@ -821,7 +751,7 @@ func (c *Compiler) sh(name string, args ...string) {
 
 // run は外部コマンドを実行し、失敗なら *CommandError を返す。
 func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, ToolPath(name), args...)
+	cmd := exec.CommandContext(ctx, cc65.ToolPath(name), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		code := -1
@@ -842,7 +772,8 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // $ffff が 255 以外になったら終了 (その値が終了コード)。
 // 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
 // logs は @log の地点 (PC → 表示。-g のとき)。命令の実行前に PC が地点なら 1 行出す。
-func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]logHook, logOut io.Writer) (int, int64, error) {
+// execute は ROM を emu で実行し、終了コードとサイクル数を返す (internal/emu)。logs は @log の地点 (PC → 地点。fclog.Hooks)。
+func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]fclog.Hook, logOut io.Writer) (int, int64, error) {
 	if c.target != "emu" {
 		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
 	}
@@ -850,92 +781,32 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 	if err != nil {
 		return 0, 0, err
 	}
-	const startAddr = 0x1000
-	mem := r6502.NewMemory()
-	for i, b := range data {
-		mem.Set(startAddr+i, int(b))
-	}
-	cpu := r6502.NewCpu(mem)
-	cpu.Pc = startAddr
-	cpu.TrapZpWrap = true // FC_STACK (ZP 128 バイト) のあふれは S+k,x のページ越えとして見える
-	mem.Set(0xffff, 255)
-	mem.Set(0xfffe, 255)
-	var benchStart, benchCycles int64
-	prevPC := -1 // 直前に実行した命令 (@log の合流点の地点: LogFileSite.Prevs)
-	benchUsed := false
-	var trace []int // FC_TRACE_PC=1: 直近の PC (invalid opcode の panic で表示する。調査用)
-	if os.Getenv("FC_TRACE_PC") != "" {
-		defer func() {
-			if r := recover(); r != nil {
-				var b strings.Builder
-				for _, pc := range trace {
-					fmt.Fprintf(&b, " $%04x", pc)
-				}
-				fmt.Fprintf(os.Stderr, "FC_TRACE_PC (last %d):%s\n", len(trace), b.String())
-				panic(r)
+	o := emu.Options{Out: out, MaxCycles: maxCycles, TracePC: c.cfg.Trace("pc") != ""}
+	if logs != nil {
+		o.OnStep = func(pc, prevPC int, cpu *r6502.Cpu, mem *r6502.Memory) {
+			hs := logs[pc]
+			if hs == nil {
+				return
 			}
-		}()
-	}
-	for mem.Get(0xffff) == 255 {
-		if trace != nil || os.Getenv("FC_TRACE_PC") != "" {
-			trace = append(trace, cpu.Pc)
-			if len(trace) > 48 {
-				trace = trace[1:]
-			}
-		}
-		if hs := logs[cpu.Pc]; logs != nil && hs != nil {
-			r := logReader{mem: mem.Get, a: cpu.A, x: cpu.X, y: cpu.Y}
+			r := fclog.Reader{Mem: mem.Get, A: cpu.A, X: cpu.X, Y: cpu.Y}
 			for _, h := range hs {
-				if h.site.Prevs == nil || slices.Contains(h.site.Prevs, prevPC) {
-					fmt.Fprintln(logOut, formatLog(h.point, h.site, r))
+				if h.Site.Prevs == nil || slices.Contains(h.Site.Prevs, prevPC) {
+					fmt.Fprintln(logOut, fclog.Format(h.Point, h.Site, r))
 				}
 			}
 		}
-		prevPC = cpu.Pc
-		if logs != nil && mem.Get(cpu.Pc) == 0x60 {
-			// rts の後は、戻り先の直前の jsr を直前の命令とみなす (呼び出しの直後の合流点の地点。Prevs は jsr を指す)
-			ret := mem.Get(0x100+(cpu.S+1)&0xff) | mem.Get(0x100+(cpu.S+2)&0xff)<<8
-			prevPC = (ret - 2) & 0xffff
-		}
-		cpu.StepSilent()
-		if maxCycles > 0 && cpu.Cycles > maxCycles {
-			return 0, 0, fmt.Errorf("cycle limit exceeded (%d cycles, pc=$%04x)", maxCycles, cpu.Pc)
-		}
-		if mem.Get(0xfffe) != 255 {
-			switch mem.Get(0xfffe) {
-			case 1:
-				addr := mem.Get(0xfff0) + (mem.Get(0xfff1) << 8)
-				var sb []byte
-				for mem.Get(addr) != 0 {
-					sb = append(sb, byte(mem.Get(addr)))
-					addr++
-				}
-				fmt.Fprint(out, string(sb))
-			case 2:
-				num := mem.Get(0xfff2) + (mem.Get(0xfff3) << 8)
-				fmt.Fprint(out, num)
-			case 3:
-				num := mem.Get(0xfff2) + (mem.Get(0xfff3) << 8)
-				fmt.Fprint(out, num, " ")
-			case 4:
-				benchStart = cpu.Cycles
-				benchUsed = true
-			case 5:
-				benchCycles += cpu.Cycles - benchStart
-			}
-			mem.Set(0xfffe, 255)
-		}
 	}
-	if !benchUsed {
-		benchCycles = cpu.Cycles
+	res, err := emu.Run(data, o)
+	if err != nil {
+		return 0, 0, err
 	}
-	return mem.Get(0xffff), benchCycles, nil
+	return res.Exit, res.Cycles, nil
 }
 
 // checkAddressVars は @(address: N) の変数が、リンクした RAM のセグメント (fc の ZP・BSS・静的フレーム・スタック、[ram.*]、
 // ほかの変数) と重ならないかを確かめる (fc の ZP の中に置くと、reg などと黙って重なっていた)。ROM・I/O の番地は RAM の
 // セグメントでないので対象外。重なりを意図するなら storage alias を使う。
-func (c *Compiler) checkAddressVars(loadDbg func() (*DbgFile, error)) error {
+func (c *Compiler) checkAddressVars(loadDbg func() (*cc65.DbgFile, error)) error {
 	var vars []*ir.Def
 	for _, m := range c.prog.Modules.List() {
 		for _, d := range m.Defs {

@@ -69,9 +69,8 @@ func canSink(op *ir.Op, between []*ir.Op, refered map[*ir.Value]bool) bool {
 		if b == nil {
 			continue
 		}
-		switch b.Code {
-		case ir.OpLabel, ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpJump, ir.OpSwitch, ir.OpReturn, ir.OpAsm, ir.OpRolC, ir.OpRorC:
-			return false
+		if b.Code.IsBlockBoundary() || b.Code.IsOpaque() || b.Code.UsesCarry() {
+			return false // 直線の区間の外、asm、C を受け取る命令 (前の命令と離せない) の手前まで
 		}
 		defs, _ := ir.DefUse(b)
 		for _, src := range op.Src {

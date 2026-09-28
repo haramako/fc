@@ -60,8 +60,7 @@ func foldIndexOffset(lmd *ir.Lambda) bool {
 			if use == nil {
 				continue
 			}
-			switch use.Code {
-			case ir.OpLabel, ir.OpJump, ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpSwitch, ir.OpReturn:
+			if use.Code.IsBlockBoundary() {
 				m = len(ops) // 直線の範囲を出た
 				continue
 			}

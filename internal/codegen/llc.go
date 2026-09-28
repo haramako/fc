@@ -13,9 +13,7 @@ import (
 	"strings"
 
 	"github.com/haramako/fc/internal/diag"
-	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
-	"github.com/haramako/fc/internal/opt"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/types"
 )
@@ -36,12 +34,7 @@ type Llc struct {
 	curLambda           *ir.Lambda // 処理中の関数 (エラー位置の補完用)
 	curOp               *ir.Op     // 処理中の命令 (エラー位置の補完用)
 	zero                *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
-	types               *types.Universe
-	Lambdas             map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
-	// NoGrow は展開をしない関数の Id (PrepareProgram が ir.Lambda.NoGrow にする)。FrameOver は PrepareProgram が
-	// frame size over で止まったときのその関数の Id (-O 2 のときだけ。driver が NoGrow に足してやり直す)
-	NoGrow    map[string]bool
-	FrameOver string
+	Lambdas             map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果。SetLambdas)
 
 	// DebugFile が nil でなければ、命令ごとに fc のソース位置を `.dbg line, "file", N` で .s に埋める (fcc build -g)。
 	// ld65 の --dbgfile に載り、Mesen が fc のソースをステップ実行できる。DebugFile は sema のファイル参照
@@ -52,16 +45,12 @@ type Llc struct {
 	dbgFiles map[string]bool // このモジュールで宣言済みの .dbg file
 	dbgLast  string          // 直前に出した .dbg line (同じ行の命令の間では出さない)
 
-	// ループ内の A / Y 常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタを占有している変数と、その扱い
-	res     *ir.Value // op.Resident (A)
-	resMem  bool      // 退避中: res をメモリ (Home) として参照する
-	resY    *ir.Value // op.ResidentY
-	resYMem bool      // 退避中: resY をメモリ (Home) として参照する
-	holdA   bool      // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
-	holdX   int       // stack 系の呼び出しの push_result (ldx FC_SP) から call まで (入れ子の深さ): X = FC_SP のまま。X の常駐はメモリ側で扱い、復帰しない
-	resX    *ir.Value // op.ResidentX
-	resXMem bool      // 退避中: resX をメモリ (Home) として参照する
-	aHeld   bool      // A は res で塞がっていて、この命令は res を触らない (Y で代用する)
+	// ループ内の常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタ (ir.Reg) を占有している変数と、その扱い
+	res    [ir.NumRegs]*ir.Value // op.Res[reg].V
+	resMem [ir.NumRegs]bool      // 退避中: res[reg] をメモリ (Home) として参照する
+	holdA  bool                  // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
+	holdX  int                   // stack 系の呼び出しの push_result (ldx FC_SP) から call まで (入れ子の深さ): X = FC_SP のまま。X の常駐はメモリ側で扱い、復帰しない
+	aHeld  bool                  // A は res[A] で塞がっていて、この命令は res[A] を触らない (Y で代用する)
 
 	// 添字付きオペランドの融合: `sub d = x, t` / `lt d = x, t` の t が直前の index_pget (グローバルの 1 バイト配列) の結果なら、
 	// index_pget は Y (または X) を用意するだけにして、t を `tab+0,y` として読む (sta t; lda x; sbc t → lda x; sbc tab,y)。
@@ -71,7 +60,45 @@ type Llc struct {
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
-	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0), types: u}
+	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0)}
+}
+
+// ldReg / stReg はレジスタに読む / から書く命令。
+var (
+	ldReg = [ir.NumRegs]string{ir.RegA: "lda", ir.RegY: "ldy", ir.RegX: "ldx"}
+	stReg = [ir.NumRegs]string{ir.RegA: "sta", ir.RegY: "sty", ir.RegX: "stx"}
+)
+
+// beginOp は命令の処理の前に常駐の状態を op の印から取る (退避は無し)。
+func (l *Llc) beginOp(op *ir.Op) {
+	for reg := range op.Res {
+		l.res[reg] = op.Res[reg].V
+	}
+	l.resMem = [ir.NumRegs]bool{}
+	l.aHeld = false
+}
+
+// endOp は命令の処理の後に常駐の状態を消す。
+func (l *Llc) endOp() {
+	l.res = [ir.NumRegs]*ir.Value{}
+	l.resMem = [ir.NumRegs]bool{}
+	l.aHeld = false
+}
+
+// spillResident は常駐の変数をメモリ側 (Home) に書く命令。
+func (l *Llc) spillResident(op *ir.Op, reg ir.Reg) string {
+	return stReg[reg] + " " + l.byte(op.Res[reg].V.Home, 0)
+}
+
+// restoreResident は restore の立っているレジスタに常駐の値をメモリ側 (Home) から読み戻す命令 (order の順)。
+func (l *Llc) restoreResident(op *ir.Op, restore [ir.NumRegs]bool, order ...ir.Reg) []any {
+	var r []any
+	for _, reg := range order {
+		if restore[reg] {
+			r = append(r, ldReg[reg]+" "+l.byte(op.Res[reg].V.Home, 0))
+		}
+	}
+	return r
 }
 
 // asmLines は文字列 / nil / ネストした配列を保持する行バッファ。
@@ -287,7 +314,7 @@ func (l *Llc) fusableIndex(ops []*ir.Op, i int) (string, bool) {
 	if ir.ValType(next.Src[0]).Size != 1 {
 		return "", false
 	}
-	if ir.ValLocation(next.Src[0]) == ir.LocX || ir.ValLocation(next.Src[0]) == ir.LocY || next.Resident != nil {
+	if ir.ValLocation(next.Src[0]) == ir.LocX || ir.ValLocation(next.Src[0]) == ir.LocY || next.Res[ir.RegA].V != nil {
 		// cpx / cpy に添字付きのオペランドは無い (`cpx tab+0,y` を出していた。fuzz で発覚)。A に常駐変数があると
 		// 次の命令が Y で代用 (UseY: `ldy a; cpy b`) されることがあるので、それも融合しない (`cpy seq+0,y`)
 		return "", false
@@ -381,182 +408,6 @@ func (l *Llc) restoreY(idx ir.Operand, size int) []any {
 	return r
 }
 
-// zeroEmptyCasts は元の値のどのバイトも読まない cast (Width 0: `cast<u8, 1>(t)` で t が 1 バイト。上位のゼロ拡張だけ) の
-// 入力を 0 のリテラルにする。byte はそのバイトを #0 と読むが、値がレジスタにあるときの経路 (loadA の A そのまま、tay、
-// cmp #0 など) はオフセットを見ずに値そのものを使っていた (`(f() as u16) & 0x3c00` が f() の下位で判定。fuzz で発覚)。
-func zeroEmptyCasts(lmd *ir.Lambda) {
-	for _, op := range lmd.Ops {
-		if op == nil {
-			continue
-		}
-		for i, src := range op.Src {
-			if cv, ok := src.(*ir.CastedValue); ok && cv.Width == 0 {
-				if _, isVal := cv.From.(*ir.Value); isVal {
-					op.Src[i] = ir.NewIntLiteral("", cv.Type, 0)
-				}
-			}
-		}
-	}
-}
-
-// Prepare は関数 1 つの最適化とレジスタ割付 (frames.Analyze の後、frames.Place の前に全関数について呼ぶ)。
-func (l *Llc) Prepare(lmd *ir.Lambda) {
-	l.curLambda = lmd
-	l.curOp = nil
-	opt.Optimize(lmd, l.OptimizeLevel, l.types)
-	zeroEmptyCasts(lmd)
-	prev := ir.SnapshotLogs(lmd)
-	markArgY(lmd, l.Lambdas) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
-	if l.OptimizeLevel > 0 {
-		regalloc.AllocateResident(lmd)
-	}
-	l.allocRegister(lmd)
-	ir.KeepLogs(lmd, prev)
-	l.checkStackPush(lmd)
-	if os.Getenv("FC_DUMP_IR") != "" {
-		// 調査用: 最適化と割付の後の IR を stderr に出す (golden の allocir と同じ形式)
-		fmt.Fprint(os.Stderr, ir.DumpAllocLambda(lmd.Module.Id, lmd.Id, lmd))
-	}
-}
-
-// snapshotProgramLogs は全関数の命令の並びを覚え、返す関数で @log の注釈を付け替える (ir.KeepLogs)。
-func snapshotProgramLogs(mods []*ir.Module) func() {
-	type snap struct {
-		lmd  *ir.Lambda
-		prev []*ir.Op
-	}
-	var snaps []snap
-	for _, m := range mods {
-		for _, d := range m.Defs {
-			if d.Kind == ir.DefCode {
-				if prev := ir.SnapshotLogs(d.Lambda); prev != nil {
-					snaps = append(snaps, snap{d.Lambda, prev})
-				}
-			}
-		}
-	}
-	return func() {
-		for _, s := range snaps {
-			ir.KeepLogs(s.lmd, s.prev)
-		}
-	}
-}
-
-// PrepareProgram はコード生成の前にプログラム全体で 1 回行う処理 (doc/v2_frame_alloc.md §6-4):
-// 呼び出し規約の決定 (frames.Analyze) → 全関数の最適化と割付 (Prepare) → 静的フレームの配置 (frames.Place)。
-// 戻り値の Plan.Inc を `_frames.inc` として書き、各モジュールの asm が include する。
-func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frames.Plan, error) {
-	if l.OptimizeLevel > 0 {
-		for _, m := range mods {
-			for _, d := range m.Defs {
-				if d.Kind == ir.DefCode && l.NoGrow[d.Lambda.Id] {
-					d.Lambda.NoGrow = true
-				}
-			}
-		}
-		keep := snapshotProgramLogs(mods) // @log の注釈を、置き換わった呼び出しから付け替える
-		if err := opt.InlineProgram(mods); err != nil {
-			return nil, err
-		}
-		opt.DevirtualizeProgram(mods, l.FarCall) // 表経由の呼び出しを直接に (frames.Analyze が直接の辺として見る)
-		keep()
-	}
-	markVolatile(mods)
-	graph, err := frames.Analyze(mods)
-	if err != nil {
-		return nil, err
-	}
-	l.Lambdas = graph.ByID
-	if err := l.PrepareAll(graph.Lambdas); err != nil {
-		return nil, err
-	}
-	return frames.Place(graph, staticZp, staticRam)
-}
-
-// markVolatile は asm (include したファイルとインラインアセンブラ) から参照されるグローバル変数を volatile にする
-// (options(address:) と options(volatile: true) は sema が付けている)。割り込みや asm が書き換える変数をレジスタに
-// 置いたままにしないため (doc/language_reference.md §2)。
-func markVolatile(mods []*ir.Module) {
-	syms := map[string]bool{}
-	for _, m := range mods {
-		for _, s := range m.AsmSymbols {
-			syms[s] = true
-		}
-	}
-	for _, m := range mods {
-		for _, d := range m.Defs {
-			if d.Kind != ir.DefCode || d.Lambda.Extern {
-				continue
-			}
-			for _, op := range d.Lambda.Ops {
-				if op != nil && op.Code == ir.OpAsm {
-					for _, s := range reAsmSym.FindAllString(op.Text, -1) {
-						syms[s] = true
-					}
-				}
-			}
-		}
-	}
-	if len(syms) == 0 {
-		return
-	}
-	mark := func(o ir.Operand) {
-		if o == nil {
-			return
-		}
-		if pa, ok := o.(*ir.PointeredArray); ok {
-			o = pa.From
-		}
-		if v := ir.UnderlyingValue(o); v != nil && v.Kind == ir.KindGlobal && syms[v.Symbol] {
-			v.Volatile = true
-		}
-	}
-	for _, m := range mods {
-		for _, d := range m.Defs {
-			if d.Kind != ir.DefCode || d.Lambda.Extern {
-				continue
-			}
-			for _, op := range d.Lambda.Ops {
-				if op == nil {
-					continue
-				}
-				mark(op.Dst)
-				for _, s := range op.Src {
-					mark(s)
-				}
-			}
-		}
-	}
-}
-
-var reAsmSym = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
-
-// PrepareAll は全関数の Prepare (エラーは関数の位置を補完して返す)。
-func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if ce, ok := r.(*diag.Error); ok {
-				if !ce.Pos.IsValid() && l.curLambda != nil {
-					ce.Pos = l.curLambda.Pos
-				}
-				if l.OptimizeLevel > 0 && l.curLambda != nil && strings.HasPrefix(ce.Msg, "frame size over") {
-					l.FrameOver = l.curLambda.Id
-				}
-				err = ce
-				return
-			}
-			panic(r)
-		}
-	}()
-	for _, lmd := range lmds {
-		if lmd.Unused {
-			continue
-		}
-		l.Prepare(lmd)
-	}
-	return nil
-}
-
 // CompileLambda は関数1つ分のアセンブリを生成する (Prepare 済みであること)。
 //
 // 常駐レジスタを「触らない」(regalloc.Classify の ResFree) とした命令の本体が実際にはそのレジスタを書いていたら、
@@ -568,7 +419,8 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 	saved := l.saveState()
 	forced := map[int]regsKept{}
 	for try := 0; ; try++ {
-		lines, writes := l.compileLambda(sym, lmd, forced)
+		g := &funcGen{Llc: l}
+		lines, writes := g.compileLambda(sym, lmd, forced)
 		if len(writes) == 0 {
 			return lines
 		}
@@ -579,7 +431,7 @@ func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
 			f := forced[opNo]
 			f.a, f.x, f.y = f.a || w.a, f.x || w.x, f.y || w.y
 			forced[opNo] = f
-			if os.Getenv("FC_TRACE_RESIDENT") != "" {
+			if lmd.Cfg().Trace("resident") != "" {
 				fmt.Fprintf(os.Stderr, "resident: %s op %d writes %+v; spill instead: %s\n", lmd.Id, opNo, w, ir.DumpOp(lmd.Ops[opNo], nil))
 			}
 		}
@@ -613,11 +465,13 @@ func (l *Llc) restoreState(s llcState) {
 
 // compileLambda は CompileLambda の 1 回分。forced の命令は常駐レジスタを退避 / 復帰する。戻り値の writes は、
 // 常駐を触らないとした命令の本体が書いていたレジスタ (空ならこのコンパイルで正しい)。
-func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept) ([]string, map[int]regsKept) {
+func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept) ([]string, map[int]regsKept) {
 	writes := map[int]regsKept{}
+	l.lmd = lmd
 	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
 	l.curOp = nil
-	ops := lmd.Ops
+	l.ops = lmd.Ops
+	ops := l.ops
 	siteStart := len(l.LogSites)
 	var lv *ir.Liveness
 	liveness := func() *ir.Liveness { // @log の値の生存 (地点がある関数だけ作る)
@@ -627,7 +481,8 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 		return lv
 	}
 
-	r := &asmLines{}
+	l.r = &asmLines{}
+	r := l.r
 
 	r.push(";;;=============================")
 	r.push(fmt.Sprintf(";;; function %s", lmd.Id))
@@ -689,16 +544,14 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 		r.push("txa", "clc", fmt.Sprintf("adc #%d", lmd.FrameSize), "sta FC_SP")
 	}
 
-	pushArgSize := 0
-	pushFastcallArgSize := 0
-	var calls []*pendingCall                    // 積んでいる途中の呼び出し (内側が末尾)
-	verify := os.Getenv("FC_VERIFY_REGS") != "" // テストと fuzz で有効 (verifyRegs)
+	verify := lmd.Cfg().VerifyRegs() // テストと fuzz で有効 (verifyRegs)
 
 	for opNo, op := range ops {
 		if op == nil {
 			continue
 		}
 		l.curOp = op
+		l.op, l.opNo = op, opNo
 		// IRコメント (golden比較では除去されるため、Go版独自の形式でよい)
 		cm := ir.DumpOp(op, nil)
 		if len(cm) > 120 {
@@ -717,23 +570,24 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			l.fused = nil
 		}
 		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
-		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = op.Resident, false, op.ResidentY, false, op.ResidentX, false, false
-		restoreA, restoreY, restoreX := false, false, false
+		l.beginOp(op)
+		l.restore = [ir.NumRegs]bool{} // 命令の後でレジスタに戻す常駐
+		restore := &l.restore
 		opStart, holdAIn, holdXIn := len(r.lines), l.holdA, l.holdX
 		var d regalloc.Decision
-		if op.Resident != nil || op.ResidentY != nil || op.ResidentX != nil {
-			d, _ = regalloc.Classify(lmd, opNo, op.Resident, op.ResidentY, op.ResidentX, op.ResIn || op.ResOut, op.ResOut, op.ResYIn || op.ResYOut)
+		if op.HasResident() {
+			d, _ = regalloc.Classify(lmd, opNo, op.Res[ir.RegA].V, op.Res[ir.RegY].V, op.Res[ir.RegX].V, op.Res[ir.RegA].In || op.Res[ir.RegA].Out, op.Res[ir.RegA].Out, op.Res[ir.RegY].In || op.Res[ir.RegY].Out)
 			if l.MisclassifyResident {
 				// テスト用: 見積もりをわざと外す (下の forced が直す)。常駐の変数そのものを読み書きする命令は、退避して
 				// メモリ側で扱うしかない (レジスタのまま出せない形がある) ので対象外。実際に外れるのも「変数を触らない
 				// 命令がレジスタを書いていた」形
-				if d.A == regalloc.ResClobber && !opInvolves(op, op.Resident) {
+				if d.A == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegA].V) {
 					d.A, d.UseY = regalloc.ResFree, false
 				}
-				if d.Y == regalloc.ResClobber && !opInvolves(op, op.ResidentY) {
+				if d.Y == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegY].V) {
 					d.Y = regalloc.ResFree
 				}
-				if d.X == regalloc.ResClobber && !opInvolves(op, op.ResidentX) {
+				if d.X == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegX].V) {
 					d.X = regalloc.ResFree
 				}
 			}
@@ -752,12 +606,12 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
 			// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
 			// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
-			if op.ResidentX != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
-				if op.ResXIn && !op.ResidentX.Clean && l.holdX == 0 {
-					r.push("stx " + l.byte(op.ResidentX.Home, 0))
+			if op.Res[ir.RegX].V != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
+				if op.Res[ir.RegX].In && !op.Res[ir.RegX].V.Clean && l.holdX == 0 {
+					r.push(l.spillResident(op, ir.RegX))
 				}
-				l.resXMem = true
-				restoreX = op.ResXOut && (l.holdX == 0 || (isCallOp(op) && l.holdX == 1))
+				l.resMem[ir.RegX] = true
+				restore[ir.RegX] = op.Res[ir.RegX].Out && (l.holdX == 0 || (ir.IsCall(op) && l.holdX == 1))
 			}
 			// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
 			// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
@@ -766,972 +620,97 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			if holdY && d.UseY {
 				d.UseY, d.A = false, regalloc.ResClobber
 			}
-			if op.Resident != nil && (d.A == regalloc.ResClobber || l.holdA) {
-				if op.ResIn && !op.Resident.Clean && !l.holdA {
-					r.push("sta " + l.byte(op.Resident.Home, 0))
+			if op.Res[ir.RegA].V != nil && (d.A == regalloc.ResClobber || l.holdA) {
+				if op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.holdA {
+					r.push(l.spillResident(op, ir.RegA))
 				}
-				l.resMem = true
-				restoreA = op.ResOut
+				l.resMem[ir.RegA] = true
+				restore[ir.RegA] = op.Res[ir.RegA].Out
 			}
-			if op.ResidentY != nil && (d.Y == regalloc.ResClobber || holdY) {
-				if op.ResYIn && !op.ResidentY.Clean && !op.HoldY {
-					r.push("sty " + l.byte(op.ResidentY.Home, 0))
+			if op.Res[ir.RegY].V != nil && (d.Y == regalloc.ResClobber || holdY) {
+				if op.Res[ir.RegY].In && !op.Res[ir.RegY].V.Clean && !op.HoldY {
+					r.push(l.spillResident(op, ir.RegY))
 				}
-				l.resYMem = true
-				restoreY = op.ResYOut && !op.ArgY && !(op.HoldY && !isCallOp(op))
+				l.resMem[ir.RegY] = true
+				restore[ir.RegY] = op.Res[ir.RegY].Out && !op.ArgY && !(op.HoldY && !ir.IsCall(op))
 			}
 			l.aHeld = d.UseY
 		}
 		bodyStart := len(r.lines)
 		keep := regsKept{
-			a: op.Resident != nil && !l.resMem && d.A == regalloc.ResFree,
-			y: op.ResidentY != nil && !l.resYMem && d.Y == regalloc.ResFree,
-			x: op.ResidentX != nil && !l.resXMem && d.X == regalloc.ResFree,
+			a: op.Res[ir.RegA].V != nil && !l.resMem[ir.RegA] && d.A == regalloc.ResFree,
+			y: op.Res[ir.RegY].V != nil && !l.resMem[ir.RegY] && d.Y == regalloc.ResFree,
+			x: op.Res[ir.RegX].V != nil && !l.resMem[ir.RegX] && d.X == regalloc.ResFree,
 		}
 
 		switch op.Code {
-
 		case ir.OpLabel:
-			r.push(op.Label + ":")
-			l.dbgLast = "" // 合流点の後は位置を出し直す
-
+			l.genLabel()
 		case ir.OpIf, ir.OpIfTrue:
-			// OpIf は値が 0 のとき、OpIfTrue は 0 でないときに Label へ
-			onTrue := op.Code == ir.OpIfTrue
-			if ir.ValLocation(op.In(0)) == ir.LocCond {
-				// コンディションレジスタの場合。CondPositive のとき「真 ⇔ フラグがセット」、ただし C だけは
-				// 「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)
-				r.push(fmt.Sprintf("%s %s", condJump(ir.UnderlyingValue(op.In(0)), onTrue), op.Label))
-			} else if l.inA(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
-				// A に常駐している値: フラグが A を反映しているとは限らない (直前が A の演算ならピープホールが cmp を消す)
-				r.push("cmp #0")
-				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-			} else if l.inY(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
-				r.push("cpy #0")
-				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-			} else if l.inX(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
-				r.push("cpx #0")
-				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-			} else if l.aHeld && ir.ValType(op.In(0)).Size == 1 {
-				// A は常駐変数で塞がっている: Y で検査する
-				r.push(markTest(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0))))
-				r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-			} else if restoreA {
-				// A に常駐している変数を壊して検査し、飛び先でも A が要る: 飛ぶ側の経路でも復帰する
-				// (この後の共通の復帰は落ちてくる側にしか効かない)。条件を反転して飛ばない側を @f に逃がし、
-				// 飛ぶ側は `lda home; jmp L` を通す
-				size := ir.ValType(op.In(0)).Size
-				labels := l.newLabels(2)
-				fall, taken := labels[0], labels[1]
-				for i := 0; i < size; i++ {
-					r.push(l.testA(op.In(0), i))
-					switch {
-					case onTrue && i < size-1:
-						r.push(fmt.Sprintf("bne %s", taken)) // どれかのバイトが 0 でなければ飛ぶ
-					case onTrue:
-						r.push(fmt.Sprintf("beq %s", fall))
-					default:
-						r.push(fmt.Sprintf("bne %s", fall)) // 全バイトが 0 なら飛ぶ
-					}
-				}
-				r.push(taken + ":")
-				r.push("lda " + l.byte(op.Resident.Home, 0))
-				r.push(fmt.Sprintf("jmp %s", op.Label))
-				r.push(fall + ":")
-			} else if onTrue {
-				// 値のどれかのバイトが 0 でなければ飛ぶ
-				for i := 0; i < ir.ValType(op.In(0)).Size; i++ {
-					r.push(l.testA(op.In(0), i))
-					r.push(fmt.Sprintf("bne %s", op.Label))
-				}
-			} else {
-				// 全バイトが 0 なら飛ぶ
-				thenLabel := l.newLabel()
-				size := ir.ValType(op.In(0)).Size
-				for i := 0; i < size; i++ {
-					r.push(l.testA(op.In(0), i))
-					if i == size-1 {
-						r.push(fmt.Sprintf("beq %s", op.Label))
-					} else {
-						r.push(fmt.Sprintf("bne %s", thenLabel))
-					}
-				}
-				r.push(thenLabel + ":")
-			}
-
+			l.genIf()
 		case ir.OpIfCarry:
-			r.push(fmt.Sprintf("bcs %s", op.Label))
-
+			l.genIfCarry()
 		case ir.OpIfNotCarry:
-			r.push(fmt.Sprintf("bcc %s", op.Label))
-
+			l.genIfNotCarry()
 		case ir.OpJump:
-			r.push(fmt.Sprintf("jmp %s", op.Label))
-
+			l.genJump()
 		case ir.OpSwitch:
-			// ジャンプテーブル: 飛び先 - 1 を下位 / 上位の表に並べ、pha; pha; rts で飛ぶ。範囲外は次の命令へ落ちる。
-			// 飛ぶ側の経路では常駐レジスタをここで復帰する (共通の復帰は落ちる側にしか効かない)
-			minV, _ := ir.ValIntLiteral(op.In(1))
-			labels := l.newLabels(3)
-			lo, hi, fall := labels[0], labels[1], labels[2]
-			r.push(l.loadA(op.In(0), 0))
-			if minV&255 != 0 {
-				r.push("sec", fmt.Sprintf("sbc #%d", minV&255))
-			}
-			// 表の添字は X。stack 関数 (再帰) では X がフレームポインタなので Y を使う (regalloc は switch を Y の clobber
-			// と見る)。devirtualization で再帰する関数に switch が入って発覚
-			ix := "x"
-			if lmd.ABI == ir.ABIStack {
-				ix = "y"
-			}
-			r.push(fmt.Sprintf("cmp #%d", len(op.Labels)), fmt.Sprintf("bcs %s", fall), "ta"+ix,
-				fmt.Sprintf("lda %s,%s", hi, ix), "pha", fmt.Sprintf("lda %s,%s", lo, ix), "pha")
-			if restoreX {
-				r.push("ldx " + l.byte(op.ResidentX.Home, 0))
-			}
-			if restoreY {
-				r.push("ldy " + l.byte(op.ResidentY.Home, 0))
-			}
-			if restoreA {
-				r.push("lda " + l.byte(op.Resident.Home, 0))
-			}
-			r.push("rts")
-			los := make([]string, len(op.Labels))
-			his := make([]string, len(op.Labels))
-			for k, t := range op.Labels {
-				los[k] = fmt.Sprintf("<(%s-1)", t)
-				his[k] = fmt.Sprintf(">(%s-1)", t)
-			}
-			r.push(lo+":", ".byte "+strings.Join(los, ","), hi+":", ".byte "+strings.Join(his, ","), fall+":")
-
+			l.genSwitch()
 		case ir.OpReturn:
-			if op.In(0) != nil {
-				r.push(l.load(lmd.Result, op.In(0)))
-			}
-			if lmd.Entry && lmd.Type.Base.Size > 0 {
-				// 呼び出し側はスタック (FC_SP の指す位置) から戻り値を読む。本体が X を使ったかもしれないので戻す
-				r.push("ldx FC_SP")
-				for i := 0; i < lmd.Type.Base.Size; i++ {
-					r.push(fmt.Sprintf("lda %s", staticAddr(lmd, i)), fmt.Sprintf("sta <S+%d,x", i))
-				}
-			}
-			if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
-				r.push("lda FC_SP", "sec", fmt.Sprintf("sbc #%d", lmd.FrameSize), "sta FC_SP") // 空き先頭を戻す
-			}
-			if lmd.RegResult {
-				r.push(fmt.Sprintf("lda %s", staticAddr(lmd, 0))) // 戻り値を A にも (直前が同じ lda / sta ならピープホールが消す)
-			}
-			r.push("rts")
-
+			l.genReturn()
 		case ir.OpPushResult, ir.OpPushFastcallResult:
-			// 呼び出しの開始。呼び先の種類 (static / stack / fastcall) で引数の置き場所が決まる (IR の flavor は見ない)
-			pc := l.resolveCall(ops, opNo)
-			calls = append(calls, pc)
-			switch pc.kind {
-			case ckStack:
-				pushArgSize += op.Type.Size
-				r.push(l.loadSP(lmd)) // 引数 (S+k,x) の前に X をスタックの空き先頭に
-				l.holdX++             // call まで X = FC_SP のまま (X の常駐はここで退避済み。復帰は call の後)
-				restoreX = false
-			case ckFastcallReg:
-				pushFastcallArgSize += op.Type.Size
-			}
-
+			l.genPushResult()
 		case ir.OpPushArg, ir.OpPushFastcallArg:
-			pc := calls[len(calls)-1]
-			if op.ArgY && pc.kind == ckStatic && !pc.far && pc.callee.RegArgY && pc.argOff == regArgYOffset(pc.callee) {
-				// 最後から 2 つ目の引数は Y に置いて呼ぶ (markArgY: 直後が最後の引数の push_arg、その直後が call)
-				r.push(l.loadY(op.In(0))...)
-				pc.inY = true
-				pc.argOff++
-				break
-			}
-			for i := 0; i < op.Type.Size; i++ {
-				r.push(l.loadA(op.In(0), i))
-				switch pc.kind {
-				case ckStatic:
-					if pc.callee.RegArg && !pc.far && pc.argOff == regArgOffset(pc.callee) && nextOp(ops, opNo) == pc.callOp {
-						pc.inA = true // 最後の引数は A のまま呼ぶ (直後が call のときだけ)
-						pc.argOff++
-						// A の常駐変数は call まで A に戻さない (復帰の lda で引数が消える)。この引数が常駐変数そのもの
-						// (friendly: 退避していない) なら、call で退避しない代わりにここで書き戻す
-						if op.Resident != nil && op.ResIn && !op.Resident.Clean && !l.resMem {
-							r.push("sta " + l.byte(op.Resident.Home, 0))
-						}
-						restoreA = false
-						l.holdA = true
-						break
-					}
-					r.push(fmt.Sprintf("sta %s", staticAddr(pc.callee, pc.argOff)))
-					pc.argOff++
-				case ckStack:
-					r.push(fmt.Sprintf("sta <S+%d,x", l.stackBase(lmd)+pushArgSize))
-					pushArgSize++
-				case ckFastcallReg:
-					r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", pushFastcallArgSize))
-					pushFastcallArgSize++
-				case ckCc65:
-					r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", i)) // 呼ぶ直前に A / X へ (引数は 1 つだけ)
-				}
-			}
-
+			l.genPushArg()
 		case ir.OpCall, ir.OpFastcall:
-			pc := calls[len(calls)-1]
-			calls = calls[:len(calls)-1]
-			l.holdA = false // A / Y の引数の保持はここまで (常駐の退避の抑制はこの命令の前で見た)
-			if pc.kind == ckStack && l.holdX > 0 {
-				l.holdX-- // X = FC_SP の保持はここまで (復帰の可否はこの命令の前で見た)
-			}
-			fnType := ir.ValType(op.In(0))
-			var sym string
-			if ir.ValKind(op.In(0)) == ir.KindLiteral {
-				sym = mangle(ir.ValLiteral(op.In(0)).Symbol)
-			}
-			switch pc.kind {
-			case ckStatic:
-				// 引数は呼び先のフレームに書いてある。static / entry の関数からは jsr、stack の関数からは X を進めて呼ぶ
-				target := sym
-				if pc.callee.Entry {
-					target = directSym(sym) // プロローグ (スタックからのコピー) を飛ばす
-				}
-				if pc.inY && pc.callee.RegArg && !pc.inA {
-					panic("Y argument in register but A argument in frame") // markArgY が保証する (直後が最後の引数、その直後が call)
-				}
-				switch {
-				case (pc.callee.RegArg && !pc.inA) || (pc.callee.RegArgY && !pc.inY && !pc.callee.RegArg):
-					target = frameSym(sym) // レジスタ渡しの引数もフレームに書いた: 入口の sty / sta を飛ばす
-				case pc.callee.RegArgY && !pc.inY:
-					target = aSym(sym) // Y の引数だけフレームに書いた (A の引数は A): sty だけ飛ばす
-				}
-				if op.Far {
-					r.push(l.farCallSetup(target))
-					r.push(l.callStatic(lmd, "farcall"))
-				} else {
-					r.push(l.callStatic(lmd, target))
-				}
-				if op.Dst != nil {
-					if pc.callee.RegResult && !op.Far && lmd.ABI != ir.ABIStack {
-						r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる (stack 関数は X を戻すのに A を使うので不可)
-					} else {
-						for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-							r.push(fmt.Sprintf("lda %s", staticAddr(pc.callee, i)))
-							r.push(l.storeA(op.Dst, i))
-						}
-					}
-				}
-			case ckStack:
-				for _, a := range fnType.Params {
-					pushArgSize -= a.Size
-				}
-				pushArgSize -= fnType.Base.Size
-				base := l.stackBase(lmd) + pushArgSize
-				if fnType.IsFarFunc() {
-					for i := 0; i < 3; i++ {
-						r.push(l.loadA(op.In(0), i))
-						r.push(fmt.Sprintf("sta FC_FARCALL+%d", i))
-					}
-					r.push(l.callStackish(lmd, "farcall"))
-				} else if op.Far {
-					// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いて farcall (ターゲット側のトランポリン) を呼ぶ
-					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
-					r.push(l.callStackish(lmd, "farcall"))
-				} else if sym != "" {
-					r.push(l.callStackish(lmd, sym))
-				} else {
-					// 関数ポインタから呼ぶ (表から読んだ index_pget が reg に直接書いたなら写さない)
-					if !fnPtrInReg(lmd, ops, opNo) {
-						r.push(l.loadA(op.In(0), 0))
-						r.push("sta <reg+0")
-						r.push(l.loadA(op.In(0), 1))
-						r.push("sta <reg+1")
-					}
-					r.push(l.callStackish(lmd, "jsr_reg"))
-				}
-				if op.Dst != nil {
-					r.push(l.loadSP(lmd)) // 呼び先が X を壊したかもしれない
-					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-						r.push(fmt.Sprintf("lda <%d+S+%d,x", i, base))
-						r.push(l.storeA(op.Dst, i))
-					}
-				}
-			case ckCc65:
-				// cc65 の __fastcall__: 引数を A (下位) / X (上位) に載せて jsr。戻り値は A / X (呼び先は A/X/Y を壊す)
-				for _, p := range fnType.Params {
-					r.push("lda <FC_FASTCALL_REG+0")
-					if p.Size == 2 {
-						r.push("ldx <FC_FASTCALL_REG+1")
-					}
-				}
-				r.push(fmt.Sprintf("jsr %s", sym))
-				if op.Dst != nil {
-					size := ir.ValType(op.Dst).Size
-					r.push("sta <FC_FASTCALL_REG+0")
-					if size == 2 {
-						r.push("stx <FC_FASTCALL_REG+1")
-					}
-					r.push(l.restoreX(lmd)...)
-					for i := 0; i < size; i++ {
-						r.push(fmt.Sprintf("lda <FC_FASTCALL_REG+%d", i))
-						r.push(l.storeA(op.Dst, i))
-					}
-				} else {
-					r.push(l.restoreX(lmd)...)
-				}
-			case ckFastcallReg:
-				pushFastcallArgSize = 0
-				if op.Far {
-					r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
-					r.push("jsr farcall")
-				} else if sym != "" {
-					r.push(fmt.Sprintf("jsr %s", sym))
-				} else {
-					if !fnPtrInReg(lmd, ops, opNo) {
-						r.push(l.loadA(op.In(0), 0))
-						r.push("sta <reg+0")
-						r.push(l.loadA(op.In(0), 1))
-						r.push("sta <reg+1")
-					}
-					r.push("jsr jsr_reg")
-				}
-				if op.Dst != nil {
-					for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-						r.push(fmt.Sprintf("lda <%d+FC_FASTCALL_REG", i))
-						r.push(l.storeA(op.Dst, i))
-					}
-				}
-			}
-
+			l.genCall()
 		case ir.OpLoad:
-			if l.inY(op.Dst) {
-				// Y に常駐する変数への代入: ldy x (A の一時変数なら tay)
-				if l.inA(op.In(0)) {
-					r.push("tay")
-				} else {
-					r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
-				}
-				break
-			}
-			if l.inY(op.In(0)) {
-				r.push(fmt.Sprintf("sty %s", l.byte(op.Dst, 0)))
-				break
-			}
-			if l.inX(op.Dst) {
-				if l.inA(op.In(0)) {
-					r.push("tax")
-				} else {
-					r.push(fmt.Sprintf("ldx %s", l.byte(op.In(0), 0)))
-				}
-				break
-			}
-			if l.inX(op.In(0)) {
-				r.push(fmt.Sprintf("stx %s", l.byte(op.Dst, 0)))
-				break
-			}
-			if l.aHeld {
-				// A は常駐変数で塞がっている: Y で写す
-				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-					if !l.sameByte(op.Dst, op.In(0), i) {
-						r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), i)), fmt.Sprintf("sty %s", l.byte(op.Dst, i)))
-					}
-				}
-				break
-			}
-			r.push(l.load(op.Dst, op.In(0)))
-
+			l.genLoad()
 		case ir.OpSignExtension:
-			labels := l.newLabels(2)
-			plsLabel, endLabel := labels[0], labels[1]
-			// TODO: サイズ1->2以上の場合を実装すること、いまはそれしかないから十分だけど
-			r.push(l.loadA(op.In(0), 0))
-			if l.inA(op.In(0)) {
-				// 入力が A にある (呼び出しの戻り値など) と lda が出ず、N が A を反映しているとは限らない
-				// (常駐 Y の復帰の ldy の後だった。fuzz で発覚)。直前が A の演算ならピープホールが消す
-				r.push("cmp #0")
-			}
-			r.push(l.storeA(op.Dst, 0))
-			r.push(fmt.Sprintf("bpl %s", plsLabel))
-			r.push("lda #255")
-			r.push(fmt.Sprintf("jmp %s", endLabel))
-			r.push(plsLabel + ":")
-			r.push("lda #0")
-			r.push(endLabel + ":")
-			r.push(l.storeA(op.Dst, 1))
-
+			l.genSignExtension()
 		case ir.OpAdd, ir.OpSub:
-			if lines, ok := l.incDec(op); ok {
-				r.push(lines)
-				break
-			}
-			carry, alu := "clc", "adc"
-			if op.Code == ir.OpSub {
-				carry, alu = "sec", "sbc"
-			}
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				if i == 0 {
-					r.push(carry)
-				}
-				r.push(l.loadA(op.In(0), i))
-				r.push(fmt.Sprintf("%s %s", alu, l.byte(op.In(1), i)))
-				r.push(l.storeA(op.Dst, i))
-			}
-
+			l.genAddSub()
 		case ir.OpAnd, ir.OpOr, ir.OpXor:
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				r.push(l.loadA(op.In(0), i))
-				as := map[ir.OpCode]string{ir.OpAnd: "and", ir.OpOr: "ora", ir.OpXor: "eor"}[op.Code]
-				r.push(fmt.Sprintf("%s %s", as, l.byte(op.In(1), i)))
-				r.push(l.storeA(op.Dst, i))
-			}
-
+			l.genBitwise()
 		case ir.OpMul, ir.OpDiv, ir.OpMod:
-			r.push(l.mulDivMod(op))
-
+			l.genMulDivMod()
 		case ir.OpRolC, ir.OpRorC:
-			// C を通す 1 バイトの回転 (直前の shift_left / shift_right / rolc が残した C を受ける。間に C を変える命令は無い)
-			mn := ifElse(op.Code == ir.OpRolC, "rol", "ror")
-			if l.inA(op.Dst) && l.inA(op.In(0)) {
-				r.push(mn + " a")
-			} else if isValueOrCasted(op.Dst) && !l.inA(op.Dst) && !l.inY(op.Dst) && !l.inX(op.Dst) &&
-				ir.ValLocation(op.Dst) != ir.LocCond && l.byte(op.Dst, 0) == l.byte(op.In(0), 0) {
-				r.push(mn + " " + l.byte(op.Dst, 0))
-			} else {
-				r.push(l.loadA(op.In(0), 0), mn+" a", l.storeA(op.Dst, 0))
-			}
-
+			l.genRotateCarry()
 		case ir.OpShiftLeft, ir.OpShiftRight:
-			signed := ir.ValType(op.In(0)).Signed
-			rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
-			if n, ok := ir.ValIntLiteral(op.In(1)); ok {
-				// 定数の場合
-				if lines, ok := l.shiftByte(op, n, signed); ok && !ir.Disabled("shift8") {
-					r.push(lines) // 2 バイトの 8 以上のシフトはバイトの移動 (8.8 固定小数の `x >> 8` など)
-				} else if lines, ok := l.shiftInMemory(op, n, signed); ok {
-					r.push(lines)
-				} else if ir.ValType(op.Dst).Size == 1 {
-					// サイズが1
-					r.push(l.loadA(op.In(0), 0))
-					for k := 0; k < n; k++ {
-						switch {
-						case signed && op.Code == ir.OpShiftRight:
-							r.push("cmp #128", "ror a") // 算術シフト (符号を C に立ててから回す)
-						case op.Code == ir.OpShiftLeft:
-							r.push("asl a")
-						default:
-							r.push("lsr a")
-						}
-					}
-					r.push(l.storeA(op.Dst, 0))
-				} else {
-					// サイズが２以上
-					r.push(anyIfy(l.load(op.Dst, op.In(0))))
-					for k := 0; k < n; k++ {
-						if op.Code == ir.OpShiftLeft {
-							// 左シフト
-							for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-								r.push(l.loadA(op.Dst, i))
-								if i == 0 {
-									r.push("clc")
-								}
-								r.push("rol a")
-								r.push(l.storeA(op.Dst, i))
-							}
-						} else {
-							// 右シフト
-							for i := ir.ValType(op.Dst).Size - 1; i >= 0; i-- {
-								r.push(l.loadA(op.Dst, i))
-								if i == ir.ValType(op.Dst).Size-1 {
-									if signed {
-										r.push("cmp #128")
-									} else {
-										r.push("clc")
-									}
-								}
-								r.push("ror a")
-								r.push(l.storeA(op.Dst, i))
-							}
-						}
-					}
-				}
-			} else {
-				// 定数でない場合
-				// TODO: もうちょっと整理して効率よくできるはず
-				if size := ir.ValType(op.Dst).Size; size != 1 {
-					// 2 バイト以上: 回数を Y に置き、値を Dst に写してから 1 ビットずつ回す (定数の回数の形と同じ)。
-					// 回数を先に読む (Dst と同じ変数のことがある: `x = w << x`)
-					labels := l.newLabels(2)
-					loopLabel, endLabel := labels[0], labels[1]
-					r.push(l.loadA(op.In(1), 0))
-					r.push("tay")
-					r.push(anyIfy(l.load(op.Dst, op.In(0))))
-					r.push(loopLabel + ":")
-					r.push("cpy #0")
-					r.push(fmt.Sprintf("beq %s", endLabel))
-					if op.Code == ir.OpShiftLeft {
-						for i := 0; i < size; i++ {
-							r.push(l.loadA(op.Dst, i))
-							if i == 0 {
-								r.push("clc")
-							}
-							r.push("rol a")
-							r.push(l.storeA(op.Dst, i))
-						}
-					} else {
-						for i := size - 1; i >= 0; i-- {
-							r.push(l.loadA(op.Dst, i))
-							if i == size-1 {
-								if signed {
-									r.push("cmp #128") // 算術右シフト
-								} else {
-									r.push("clc")
-								}
-							}
-							r.push("ror a")
-							r.push(l.storeA(op.Dst, i))
-						}
-					}
-					r.push("dey")
-					r.push(fmt.Sprintf("jmp %s", loopLabel))
-					r.push(endLabel + ":")
-					break
-				}
-				labels := l.newLabels(2)
-				loopLabel, endLabel := labels[0], labels[1]
-				r.push(l.loadA(op.In(1), 0))
-				r.push("tay")
-				r.push(l.loadA(op.In(0), 0))
-				r.push(loopLabel + ":")
-				r.push("cpy #0")
-				r.push(fmt.Sprintf("beq %s", endLabel))
-				if signed && op.Code == ir.OpShiftRight {
-					r.push("cmp #128") // 算術右シフト: 符号を C に立ててから回す
-				} else {
-					r.push("clc") // 左シフトは符号付きでも C を 0 に (符号を回し込んで `-109 << n` が 39 になっていた。fuzz で発覚)
-				}
-				r.push(fmt.Sprintf("%s a", rotate))
-				r.push("dey")
-				r.push(fmt.Sprintf("jmp %s", loopLabel))
-				r.push(endLabel + ":")
-				r.push(l.storeA(op.Dst, 0))
-			}
-
+			l.genShift()
 		case ir.OpUminus:
-			if ir.ValType(op.Dst).Kind != types.Int {
-				panic(&diag.Error{Msg: fmt.Sprintf("cannot negate non-integer type %s", ir.ValType(op.Dst))})
-			}
-			if l.inA(op.In(0)) && ir.ValType(op.Dst).Size == 1 {
-				// A にある値の 2 の補数
-				r.push("eor #255", "clc", "adc #1", l.storeA(op.Dst, 0))
-				break
-			}
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				if i == 0 {
-					r.push("sec")
-				}
-				r.push("lda #0")
-				if ir.ValType(op.In(0)).Size > i {
-					r.push(fmt.Sprintf("sbc %s", l.byte(op.In(0), i)))
-				}
-				r.push(l.storeA(op.Dst, i))
-			}
-
+			l.genUminus()
 		case ir.OpEq:
-			if l.inY(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
-				break
-			}
-			if l.inX(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-				r.push(fmt.Sprintf("cpx %s", l.byte(op.In(1), 0)))
-				break
-			}
-			// 可換なので第 2 入力がレジスタにあっても同じ (`on_idx == i` の i@X → cpx on_idx)
-			if l.inY(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
-				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(0), 0)))
-				break
-			}
-			if l.inX(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
-				r.push(fmt.Sprintf("cpx %s", l.byte(op.In(0), 0)))
-				break
-			}
-			if l.inA(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
-				r.push(fmt.Sprintf("cmp %s", l.byte(op.In(0), 0)))
-				break
-			}
-			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
-				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
-				break
-			}
-			labels := l.newLabels(2)
-			falseLabel, endLabel := labels[0], labels[1]
-			size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
-			for i := 0; i < size; i++ {
-				r.push(l.loadA(op.In(0), i))
-				r.push(fmt.Sprintf("cmp %s", l.byte(op.In(1), i)))
-				r.push(fmt.Sprintf("bne %s", falseLabel))
-			}
-			if ir.ValLocation(op.Dst) == ir.LocCond {
-				r.lines = r.lines[:len(r.lines)-1] // 最後のbneを消す
-				if size != 1 {
-					r.push(falseLabel + ":")
-				}
-			} else {
-				// falseのとき
-				r.push("lda #1")
-				r.push(l.storeA(op.Dst, 0))
-				r.push(fmt.Sprintf("jmp %s", endLabel))
-				// trueのとき
-				r.push(falseLabel + ":")
-				r.push("lda #0")
-				r.push(l.storeA(op.Dst, 0))
-				r.push(endLabel + ":")
-			}
-
+			l.genEq()
 		case ir.OpLt:
-			// a < b。フラグの意味 (LocCond のとき OpIf が見る):
-			//   符号なし: 多バイトの減算の借り = C クリア ⇔ a < b
-			//   符号付き: 減算結果の符号 (V でオーバーフローを補正) = N セット ⇔ a < b
-			// どちらか一方でも符号付きなら符号付き比較 (v1 は左辺しか見ておらず、多バイトや
-			// オーバーフローのある符号付き比較も壊れていた。2026-09-14 に書き直し)
-			if l.inY(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-				r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
-				break
-			}
-			if l.inX(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-				r.push(fmt.Sprintf("cpx %s", l.byte(op.In(1), 0)))
-				break
-			}
-			if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
-				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
-				break
-			}
-			labels := l.newLabels(3)
-			trueLabel, endLabel, skipLabel := labels[0], labels[1], labels[2]
-			size := max(ir.ValType(op.In(0)).Size, ir.ValType(op.In(1)).Size)
-			signed := ir.ValType(op.In(0)).Signed || ir.ValType(op.In(1)).Signed
-			if os.Getenv("FC_TRACE_SIGNED") != "" && signed {
-				// 調査用: 符号付き比較の場所を列挙する
-				lit0, ok0 := ir.ValIntLiteral(op.In(0))
-				lit1, ok1 := ir.ValIntLiteral(op.In(1))
-				fmt.Fprintf(os.Stderr, "SIGNED_LT %s mixed=%v bigliteral=%v %s:%s < %s:%s cond=%v\n", op.Pos,
-					ir.ValType(op.In(0)).Signed != ir.ValType(op.In(1)).Signed, ok0 && lit0 >= 128 || ok1 && lit1 >= 128,
-					ir.OperandString(op.In(0)), ir.ValType(op.In(0)), ir.OperandString(op.In(1)), ir.ValType(op.In(1)),
-					ir.ValLocation(op.Dst) == ir.LocCond)
-			}
-			if lit, ok := ir.ValIntLiteral(op.In(1)); signed && ok && lit == 0 {
-				// a < 0 (符号付き) は a の最上位バイトの符号ビットそのもの。値が A にあるときは cmp #0 で N を立て直す
-				// (呼び出しの後の常駐の復帰 `ldx` が N を壊していた。fuzz で発覚。不要ならピープホールが消す)
-				r.push(l.testA(op.In(0), size-1))
-			} else {
-				r.push(l.loadA(op.In(0), 0))
-				if size == 1 && signed {
-					r.push("sec")
-					r.push(fmt.Sprintf("sbc %s", l.byte(op.In(1), 0)))
-				} else {
-					r.push(fmt.Sprintf("cmp %s", l.byte(op.In(1), 0)))
-				}
-				for i := 1; i < size; i++ {
-					r.push(l.loadA(op.In(0), i))
-					r.push(fmt.Sprintf("sbc %s", l.byte(op.In(1), i)))
-				}
-				if signed {
-					r.push(fmt.Sprintf("bvc %s", skipLabel))
-					r.push("eor #$80")
-					r.push(skipLabel + ":")
-				}
-			}
-			if ir.ValLocation(op.Dst) != ir.LocCond {
-				// 値として 0 / 1 を作る
-				if signed {
-					r.push(fmt.Sprintf("bmi %s", trueLabel))
-					r.push("lda #0")
-					r.push(fmt.Sprintf("beq %s", endLabel)) // lda #0 で Z が立つ
-					r.push(trueLabel + ":")
-					r.push("lda #1")
-					r.push(endLabel + ":")
-				} else {
-					// A = C (a >= b) を反転
-					r.push("lda #0")
-					r.push("rol a")
-					r.push("eor #1")
-				}
-				r.push(l.storeA(op.Dst, 0))
-			}
-
+			l.genLt()
 		case ir.OpNot:
-			if ir.ValLocation(op.Dst) != ir.LocCond && ir.ValLocation(op.In(0)) == ir.LocCond {
-				// 入力がフラグで結果は値 (`!((a < b) as int16)` のように cast を挟むと regalloc が入力だけ cond にする):
-				// フラグで分岐して 0 / 1 を作る (lda はフラグを変えるので先に分岐する)
-				labels := l.newLabels(2)
-				trueLabel, endLabel := labels[0], labels[1]
-				r.push(fmt.Sprintf("%s %s", condJump(ir.UnderlyingValue(op.In(0)), true), trueLabel))
-				r.push("lda #1", fmt.Sprintf("jmp %s", endLabel), trueLabel+":", "lda #0", endLabel+":")
-				r.push(l.storeA(op.Dst, 0))
-			} else if ir.ValLocation(op.Dst) != ir.LocCond {
-				labels := l.newLabels(2)
-				trueLabel, endLabel := labels[0], labels[1]
-				// 全バイトが 0 のとき 1 (バイトごとに beq すると「どれかが 0」になってしまう。SSA の定数畳み込みとの
-				// 差分テストで発覚)
-				r.push(l.loadA(op.In(0), 0))
-				for i := 1; i < ir.ValType(op.In(0)).Size; i++ {
-					r.push(fmt.Sprintf("ora %s", l.byte(op.In(0), i)))
-				}
-				r.push(fmt.Sprintf("beq %s", trueLabel))
-				// falseのとき
-				r.push("lda #0")
-				r.push(l.storeA(op.Dst, 0))
-				r.push(fmt.Sprintf("jmp %s", endLabel))
-				// trueのとき
-				r.push(trueLabel + ":")
-				r.push("lda #1")
-				r.push(l.storeA(op.Dst, 0))
-				r.push(endLabel + ":")
-			}
-
+			l.genNot()
 		case ir.OpBitNot:
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				r.push(l.loadA(op.In(0), i))
-				r.push("eor #255")
-				r.push(l.storeA(op.Dst, i))
-			}
-
+			l.genBitNot()
 		case ir.OpAsm:
-			r.push(op.Text)
-
+			l.genAsm()
 		case ir.OpIndex:
-			if es := ir.ValType(op.In(0)).Base.Size; es != 1 && es != 2 {
-				r.push(l.indexLarge(op))
-			} else if ir.ValType(op.In(1)).Size == 1 {
-				// インデックスのサイズが１
-				if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
-					// フレーム上のローカル配列: 先頭は S + addr + X (ゼロページなので上位は 0。OpRef と同じ)
-					r.push(l.loadYIdx(op.In(1), op.In(0), false))
-					r.push("sty <reg+0")
-					r.push("txa")
-					r.push("clc")
-					r.push(fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(op.In(0))))
-					r.push("clc")
-					r.push("adc <reg+0")
-					r.push(l.storeA(op.Dst, 0))
-					r.push("lda #0")
-					r.push(l.storeA(op.Dst, 1))
-				} else if es == 2 && (ir.ValType(op.In(0)).Kind == types.Pointer || ir.ValType(op.In(0)).Size > 256) {
-					// 要素 2 バイトで i * 2 が 1 バイトに収まらないことがある (長さの分からないポインタ、128 要素を超える配列):
-					// 9 ビット目 (asl の C) を上位に足す (捨てていて `a[150]` (a:[200]u16) が a[22] だった。survey 2026-09-27)
-					r.push(l.loadA(op.In(1), 0), "asl a", "sta <reg+0", "lda #0", "rol a", "sta <reg+1", "clc")
-					if ir.ValType(op.In(0)).Kind == types.Array {
-						r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))), "adc <reg+0", l.storeA(op.Dst, 0),
-							fmt.Sprintf("lda #.HIBYTE(%s)", l.addrExpr(op.In(0))), "adc <reg+1", l.storeA(op.Dst, 1))
-					} else {
-						r.push(l.loadA(op.In(0), 0), "adc <reg+0", l.storeA(op.Dst, 0), l.loadA(op.In(0), 1), "adc <reg+1", l.storeA(op.Dst, 1))
-					}
-				} else if ir.ValType(op.In(0)).Kind == types.Array {
-					r.push(l.loadYIdx(op.In(1), op.In(0), false))
-					r.push("sty <reg+0")
-					r.push("clc")
-					r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))))
-					r.push("adc <reg+0")
-					r.push(l.storeA(op.Dst, 0))
-					r.push(fmt.Sprintf("lda #.HIBYTE(%s)", l.addrExpr(op.In(0))))
-					r.push("adc #0")
-					r.push(l.storeA(op.Dst, 1))
-				} else if ir.ValType(op.In(0)).Kind == types.Pointer {
-					r.push(l.loadYIdx(op.In(1), op.In(0), false))
-					r.push("sty <reg+0")
-					r.push("clc")
-					r.push(l.loadA(op.In(0), 0))
-					r.push("adc <reg+0")
-					r.push(l.storeA(op.Dst, 0))
-					r.push(l.loadA(op.In(0), 1))
-					r.push("adc #0")
-					r.push(l.storeA(op.Dst, 1))
-				} else {
-					panic("invalid index")
-				}
-			} else {
-				// インデックスのサイズが２
-				// TODO: ちゃんとする、テスト作る
-				if ir.ValType(op.In(0)).Kind == types.Array {
-					r.push(l.loadA(op.In(1), 0))
-					r.push("sta <reg+0")
-					r.push(l.loadA(op.In(1), 1))
-					r.push("sta <reg+1")
-
-					if ir.ValType(op.In(0)).Base.Size == 2 {
-						r.push("clc")
-						r.push("rol <reg+0")
-						r.push("rol <reg+1")
-					}
-
-					if ir.ValLocation(op.In(0)) == ir.LocFrame {
-						// フレーム上のローカル配列 (上記と同じ。インデックスの上位は 0 とみなす)
-						r.push("txa")
-						r.push("clc")
-						r.push(fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(op.In(0))))
-						r.push("clc")
-						r.push("adc <reg+0")
-						r.push(l.storeA(op.Dst, 0))
-						r.push("lda <reg+1")
-						r.push("adc #0")
-						r.push(l.storeA(op.Dst, 1))
-					} else {
-						r.push("lda <reg+0")
-						r.push("clc")
-						r.push(fmt.Sprintf("adc #.LOBYTE(%s)", l.addrExpr(op.In(0))))
-						r.push(l.storeA(op.Dst, 0))
-						r.push("lda <reg+1")
-						r.push(fmt.Sprintf("adc #.HIBYTE(%s)", l.addrExpr(op.In(0))))
-						r.push(l.storeA(op.Dst, 1))
-					}
-				} else if ir.ValType(op.In(0)).Kind == types.Pointer {
-					// ポインタ + 16 ビットの添字 (fc 3 の広い slice の範囲・添字)
-					r.push(l.loadA(op.In(1), 0))
-					r.push("sta <reg+0")
-					r.push(l.loadA(op.In(1), 1))
-					r.push("sta <reg+1")
-					if ir.ValType(op.In(0)).Base.Size == 2 {
-						r.push("asl <reg+0")
-						r.push("rol <reg+1")
-					}
-					r.push("clc")
-					r.push(l.loadA(op.In(0), 0))
-					r.push("adc <reg+0")
-					r.push(l.storeA(op.Dst, 0))
-					r.push(l.loadA(op.In(0), 1))
-					r.push("adc <reg+1")
-					r.push(l.storeA(op.Dst, 1))
-				} else {
-					panic("invalid index")
-				}
-			}
-
+			l.genIndex()
 		case ir.OpRef:
-			if ir.ValLocation(op.In(0)) == ir.LocFrame {
-				r.push("txa")
-				r.push("clc")
-				r.push(fmt.Sprintf("adc #.LOBYTE(S+%d)", ir.ValAddress(op.In(0))))
-				r.push(l.storeA(op.Dst, 0))
-				r.push("lda #0")
-				r.push(l.storeA(op.Dst, 1))
-			} else {
-				r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))))
-				r.push(l.storeA(op.Dst, 0))
-				r.push(fmt.Sprintf("lda #.HIBYTE(%s)", l.addrExpr(op.In(0))))
-				r.push(l.storeA(op.Dst, 1))
-			}
-
+			l.genRef()
 		case ir.OpPget:
-			r.push(l.pointerRead(op.In(0), 0, op.Dst, ir.ValType(op.Dst).Size))
-
+			l.genPget()
 		case ir.OpPset:
-			r.push(l.pointerWrite(op.In(0), 0, op.In(1), ir.ValType(op.In(0)).Base.Size))
-
-			// 最適化後のオペレータ
+			l.genPset()
 		case ir.OpIndexPget:
-			if !isByteInt(ir.ValType(op.In(1))) {
-				panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
-			}
-			if ir.ValType(op.In(0)).Kind == types.Pointer {
-				// ポインタ + 添字: ldy idx; lda (p),y
-				base, setup := l.pointerBase(op.In(0))
-				if ir.ValType(op.Dst).Size > 1 && sameStorage(op.In(0), op.Dst) {
-					base, setup = "reg", []any{l.loadA(op.In(0), 0), "sta <reg+0", l.loadA(op.In(0), 1), "sta <reg+1"}
-				}
-				// 添字を先に Y へ (添字が A にあるとき、ポインタを reg に写す setup が A を壊す。fuzz で発覚)
-				r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
-				r.push(setup)
-				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-					if i > 0 {
-						r.push("iny")
-					}
-					r.push(fmt.Sprintf("lda (%s),y", base))
-					r.push(l.storeA(op.Dst, i))
-				}
-				r.push(l.restoreY(op.In(1), ir.ValType(op.Dst).Size))
-				break
-			}
-			// Y の常駐変数をこの命令の最後で復帰するなら融合しない (添字を入れた Y が直後の命令の前に常駐の値に戻って、
-			// `tab+0,y` が常駐の値で読んでいた: `sty k; ldy #2; ldy k; sbc tab+0,y`。fuzz で発覚)
-			if reg, ok := l.fusableIndex(ops, opNo); ok && !(reg == "y" && restoreY) && !ir.Disabled("fuse-index") {
-				// 直後の sub / lt の第 2 入力に融合: 添字をレジスタに用意して、結果の一時変数を `tab+0,y` として読ませる
-				if reg == "y" {
-					r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
-				}
-				l.fused = map[*ir.Value]string{op.Dst.(*ir.Value): fmt.Sprintf("%s+0,%s", l.toAsm(op.In(0)), reg)}
-				l.fusedAt = opNo
-				break
-			}
-			store := func(i int) any { return l.storeA(op.Dst, i) }
-			if fnPtrToReg(lmd, ops, opNo) >= 0 {
-				store = func(i int) any { return fmt.Sprintf("sta <reg+%d", i) } // 呼び出しが reg から飛ぶ (写しを省く)
-			}
-			if l.inX(op.In(1)) {
-				// 添字が X に常駐 (グローバル配列、要素 1 バイトかバイト単位の添字)
-				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-					r.push(fmt.Sprintf("lda %s+%d,x", l.toAsm(op.In(0)), i))
-					r.push(store(i))
-				}
-				break
-			}
-			r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
-			for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-				r.push(fmt.Sprintf("lda %s+%d,y", l.toAsm(op.In(0)), i))
-				r.push(store(i))
-			}
-
+			l.genIndexPget()
 		case ir.OpIndexPset:
-			if !isByteInt(ir.ValType(op.In(1))) {
-				panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
-			}
-			if ir.ValType(op.In(0)).Kind == types.Pointer {
-				base, setup := l.pointerBase(op.In(0))
-				pre := append(l.loadYIdx(op.In(1), op.In(0), op.Scaled), setup...) // 添字を先に Y へ (index_pget と同じ)
-				if (ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled) && len(setup) == 0 {
-					r.push(pre) // ldy だけなら A は壊れない
-				} else {
-					r.push(l.keepA(op.In(2), pre))
-				}
-				for i := 0; i < ir.ValType(op.In(0)).Base.Size; i++ {
-					if i > 0 {
-						r.push("iny")
-					}
-					r.push(l.loadA(op.In(2), i))
-					r.push(fmt.Sprintf("sta (%s),y", base))
-				}
-				r.push(l.restoreY(op.In(1), ir.ValType(op.In(0)).Base.Size))
-				break
-			}
-			// 書く幅は要素の大きさ (値が小さいリテラル `a16[i] = 4` でも上位バイトまで書く。fuzz で発覚)
-			elemSize := ir.ValType(op.In(0)).Base.Size
-			if l.inX(op.In(1)) {
-				for i := 0; i < elemSize; i++ {
-					r.push(l.loadA(op.In(2), i))
-					r.push(fmt.Sprintf("sta %s+%d,x", l.toAsm(op.In(0)), i))
-				}
-				break
-			}
-			if elemSize == 1 || op.Scaled {
-				r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
-			} else {
-				r.push(l.keepA(op.In(2), l.loadYIdx(op.In(1), op.In(0), op.Scaled))) // lda idx; asl; tay は A を壊す
-			}
-			for i := 0; i < elemSize; i++ {
-				r.push(l.loadA(op.In(2), i))
-				r.push(fmt.Sprintf("sta %s+%d,y", l.toAsm(op.In(0)), i))
-			}
-
+			l.genIndexPset()
 		case ir.OpFieldPget:
-			// ポインタ + 定数オフセット経由の読み出し (struct のフィールド)
-			off, _ := ir.ValIntLiteral(op.In(1))
-			r.push(l.pointerRead(op.In(0), off, op.Dst, ir.ValType(op.Dst).Size))
-
+			l.genFieldPget()
 		case ir.OpFieldPset:
-			off, _ := ir.ValIntLiteral(op.In(1))
-			r.push(l.pointerWrite(op.In(0), off, op.In(2), op.Type.Size)) // Type はフィールドの型 (値が小さいリテラルでもフィールド全体を書く)
-
+			l.genFieldPset()
 		default:
 			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
 		}
 		bodyEnd := len(r.lines)
-		if restoreA || restoreY || restoreX {
+		if *restore != ([ir.NumRegs]bool{}) {
 			// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
 			// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
 			// C (符号なしの lt) はロードで変わらないので挟まない
@@ -1739,15 +718,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			if cond {
 				r.push("php")
 			}
-			if restoreA {
-				r.push("lda " + l.byte(op.Resident.Home, 0))
-			}
-			if restoreY {
-				r.push("ldy " + l.byte(op.ResidentY.Home, 0))
-			}
-			if restoreX {
-				r.push("ldx " + l.byte(op.ResidentX.Home, 0))
-			}
+			r.push(l.restoreResident(op, *restore, ir.RegA, ir.RegY, ir.RegX)...)
 			if cond {
 				r.push("plp")
 			}
@@ -1759,13 +730,13 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 			// 呼び出しの引数の保持中 (A の最後の引数、Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない
 			// (codegen の中の約束事なので、破っていたらコンパイルエラー)
 			hold := regsKept{
-				a: holdAIn && !isCallOp(op),
-				y: op.HoldY && !isCallOp(op),
-				x: holdXIn > 0 && !isCallOp(op) && op.Code != ir.OpPushResult,
+				a: holdAIn && !ir.IsCall(op),
+				y: op.HoldY && !ir.IsCall(op),
+				x: holdXIn > 0 && !ir.IsCall(op) && op.Code != ir.OpPushResult,
 			}
 			l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
 		}
-		l.res, l.resMem, l.resY, l.resYMem, l.resX, l.resXMem, l.aHeld = nil, false, nil, false, nil, false, false
+		l.endOp()
 	}
 
 	// 関数の中の const の表・文字列 (.proc の中のラベルなので、この関数の中からしか参照されない)。コード (インラインアセンブラを
@@ -1793,7 +764,7 @@ func (l *Llc) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept)
 
 	lines = append(lines, ".endproc")
 
-	if l.OptimizeLevel > 0 && !ir.Disabled("peephole") {
+	if l.OptimizeLevel > 0 && !lmd.Cfg().Disabled("peephole") {
 		lines = peepholeA(lines)
 	}
 	lines = stripTestMarks(lines)
@@ -1840,13 +811,6 @@ func (l *Llc) newLabels(n int) []string {
 	return r
 }
 
-func (l *Llc) allocRegister(lmd *ir.Lambda) {
-	// -O 0 でも同じ割付器を使う (静的フレーム (ABIStatic) の関数はフレームでなく F_f の固定番地に置く必要があり、
-	// 以前あった「全部フレーム」の簡易版は静的フレームの導入後は壊れていた)
-	regalloc.AllocateRegister(lmd, l.Limits)
-	regalloc.DeleteUnuse(lmd)
-}
-
 // ---------------------------------------------------------------
 // extend_jump
 // ---------------------------------------------------------------
@@ -1859,7 +823,7 @@ func (l *Llc) allocRegister(lmd *ir.Lambda) {
 // reg の写し 4 命令、12 サイクルが消える)。
 func fnPtrToReg(lmd *ir.Lambda, ops []*ir.Op, i int) int {
 	op := ops[i]
-	if op == nil || op.Code != ir.OpIndexPget || ir.Disabled("fnptr-reg") {
+	if op == nil || op.Code != ir.OpIndexPget || lmd.Cfg().Disabled("fnptr-reg") {
 		return -1
 	}
 	t, ok := op.Dst.(*ir.Value)

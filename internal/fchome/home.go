@@ -1,4 +1,6 @@
-package driver
+// Package fchome は fclib/ share/ を含むディレクトリ (FC_HOME) の解決 (無ければ同梱のものをキャッシュに展開する)。
+// Package fchome は fclib/ share/ を含むディレクトリ (FC_HOME) の解決 (無ければ同梱のものをキャッシュに展開する)。
+package fchome
 
 import (
 	"fmt"
@@ -9,7 +11,7 @@ import (
 	fcdata "github.com/haramako/fc"
 )
 
-// ResolveFCHome は fclib/ share/ を含むディレクトリ (FC_HOME) を探す。
+// Resolve は fclib/ share/ を含むディレクトリ (FC_HOME) を探す。
 //  1. 環境変数 FC_HOME
 //  2. 実行ファイルの場所から上方向に探索
 //  3. カレントディレクトリから上方向に探索
@@ -22,7 +24,7 @@ import (
 // ビルドの後に一時ディレクトリを消すので、Mesen から fclib のソースも開けなかった。
 //
 // cleanup は不要なとき nil。
-func ResolveFCHome() (home string, cleanup func(), err error) {
+func Resolve() (home string, cleanup func(), err error) {
 	if h := os.Getenv("FC_HOME"); h != "" {
 		return h, nil, nil
 	}

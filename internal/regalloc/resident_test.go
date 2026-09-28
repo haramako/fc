@@ -45,11 +45,11 @@ func TestAllocateResident(t *testing.T) {
 	var got []string
 	for _, op := range lmd.Ops {
 		res := ""
-		if op.Resident != nil {
-			res += fmt.Sprintf(" [a in=%v out=%v]", op.ResIn, op.ResOut)
+		if op.Res[ir.RegA].V != nil {
+			res += fmt.Sprintf(" [a in=%v out=%v]", op.Res[ir.RegA].In, op.Res[ir.RegA].Out)
 		}
-		if op.ResidentY != nil {
-			res += fmt.Sprintf(" [y in=%v out=%v]", op.ResYIn, op.ResYOut)
+		if op.Res[ir.RegY].V != nil {
+			res += fmt.Sprintf(" [y in=%v out=%v]", op.Res[ir.RegY].In, op.Res[ir.RegY].Out)
 		}
 		got = append(got, ir.DumpOp(op, nil)+res)
 	}

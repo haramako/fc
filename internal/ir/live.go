@@ -22,15 +22,6 @@ func BuildLiveness(lmd *Lambda) *Liveness { return buildLiveness(lmd, false) }
 // (関数の外から見える値なので、ループ内でレジスタに置いた値はそこで書き戻す必要がある)。
 func BuildLivenessWithGlobals(lmd *Lambda) *Liveness { return buildLiveness(lmd, true) }
 
-// MayTouchGlobals は op が (オペランドに現れない) グローバル変数を読み書きしうるか。
-func MayTouchGlobals(op *Op) bool {
-	switch op.Code {
-	case OpCall, OpFastcall, OpAsm, OpPset, OpIndexPset, OpFieldPset:
-		return true
-	}
-	return false
-}
-
 func buildLiveness(lmd *Lambda, globals bool) *Liveness {
 	lv := &Liveness{index: map[*Value]int{}}
 	local := func(o Operand) *Value {

@@ -37,14 +37,19 @@ func isIncDec(op *ir.Op) bool {
 	return isStep(op, 1)
 }
 
+// stepMax は iny × k で回す k の上限 (FC_DISABLE=step で 1 = 切る)。
+func stepMax(lmd *ir.Lambda) int {
+	if lmd.Cfg().Disabled("step") {
+		return 1
+	}
+	return StepMax
+}
+
 // isStep は `x = x ± k` (k は 1〜maxK の定数、1〜2 バイト) の形か。Y / X に常駐する 1 バイトの添字なら iny × k で回せる
 // (StepMax まで。castle の 4 バイト飛びのスプライト消去ループ)。
 func isStep(op *ir.Op, maxK int) bool {
 	if op.Code != ir.OpAdd && op.Code != ir.OpSub || len(op.Src) != 2 {
 		return false
-	}
-	if maxK > 1 && ir.Disabled("step") {
-		maxK = 1
 	}
 	k, lit := ir.ValIntLiteral(op.Src[1])
 	if !lit || k < 1 || k > maxK || ir.ValType(op.Dst).Size > 2 {
@@ -300,7 +305,7 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 			return true, 3
 		}
 	case ir.OpAdd, ir.OpSub:
-		if isStep(op, StepMax) && isV(op.Dst, v) {
+		if isStep(op, stepMax(lmd)) && isV(op.Dst, v) {
 			return true, stepGain(op) // inc x (5) → iny (2)。i += k: lda; clc; adc #k; sta (10) → iny × k (2k)
 		}
 	case ir.OpIf, ir.OpIfTrue:
@@ -342,7 +347,7 @@ func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 			return true, 3 // sta a,x
 		}
 	case ir.OpAdd, ir.OpSub:
-		if isStep(op, StepMax) && isV(op.Dst, v) {
+		if isStep(op, stepMax(lmd)) && isV(op.Dst, v) {
 			return true, stepGain(op) // inx / dex × k
 		}
 	case ir.OpIf, ir.OpIfTrue:
@@ -400,7 +405,7 @@ func needsY(op *ir.Op, vY *ir.Value) bool {
 }
 
 // freeA は op が A を使わずに実行できるか (Y での代用を除く)。
-func freeA(op *ir.Op) bool {
+func freeA(lmd *ir.Lambda, op *ir.Op) bool {
 	switch op.Code {
 	case ir.OpLabel, ir.OpJump, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpPushResult, ir.OpPushFastcallResult:
 		return true
@@ -408,7 +413,7 @@ func freeA(op *ir.Op) bool {
 		// 2 バイトの dec は `lda lo; bne; dec hi` で下位を見るので A を壊す (inc は inc lo; bne; inc hi で壊さない。
 		// A に常駐した g1 が `g0 -= 1` (16 ビット) で消えていた。fuzz で発覚)
 		incDecFree := isIncDec(op) && (op.Code == ir.OpAdd || ir.ValType(op.Dst).Size == 1)
-		return incDecFree || (isStep(op, StepMax) && (ir.ValLocation(op.Dst) == ir.LocY || ir.ValLocation(op.Dst) == ir.LocX))
+		return incDecFree || (isStep(op, stepMax(lmd)) && (ir.ValLocation(op.Dst) == ir.LocY || ir.ValLocation(op.Dst) == ir.LocX))
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		return isMemShift(op)
 	case ir.OpRolC, ir.OpRorC:
@@ -493,7 +498,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 			}
 		} else if touches(vA) {
 			d.A = ResClobber
-		} else if !freeA(op) && !(yFriendly && aFreeWithY(op)) && !(xFriendly && aFreeWithY(op)) {
+		} else if !freeA(lmd, op) && !(yFriendly && aFreeWithY(op)) && !(xFriendly && aFreeWithY(op)) {
 			if aLive && (vY == nil || !yLive) && yVariant(lmd, i) {
 				d.UseY = true // Y が空いているので Y で代用
 			} else {
@@ -520,7 +525,7 @@ func aFreeWithY(op *ir.Op) bool {
 // IR を書き換える (opt の後、AllocateRegister の前)。
 // 調査用: 環境変数 FC_NO_RESIDENT で無効化、FC_TRACE_RESIDENT で選んだ変数と見積もりを stderr に出す。
 func AllocateResident(lmd *ir.Lambda) {
-	if ir.Disabled("resident") {
+	if lmd.Cfg().Disabled("resident") {
 		return
 	}
 	funcTried := false
@@ -547,14 +552,14 @@ func AllocateResident(lmd *ir.Lambda) {
 			if vA == nil && vY == nil && vX == nil {
 				continue
 			}
-			if os.Getenv("FC_TRACE_RESIDENT") != "" {
+			if lmd.Cfg().Trace("resident") != "" {
 				fmt.Fprintf(os.Stderr, "resident: %s loop %s: A=%s Y=%s X=%s (gain %d/iter)\n", lmd.Id, lp.Header.Label, name(vA), name(vY), name(vX), gain)
 			}
 			makeResident(lmd, cfg, r, lv, vA, vY, vX)
 			done = true
 			break // IR が変わったので作り直す
 		}
-		if !done && !funcTried && !ir.Disabled("func-resident") {
+		if !done && !funcTried && !lmd.Cfg().Disabled("func-resident") {
 			// ループの外 (関数の直線部分) を 1 つの領域に。入口は関数の先頭 (1 回)、出口は return (退避で書き戻す)、
 			// ループは通過する区間 (境界の辺で退避 / 復帰。ループ側の写しとの順序は onEdge が保つ)
 			funcTried = true
@@ -570,7 +575,7 @@ func AllocateResident(lmd *ir.Lambda) {
 			}
 			vA, vY, vX, gain := bestPair(lmd, cfg, r, inner, lv, lmd.ABI != ir.ABIStack)
 			if vA != nil || vY != nil || vX != nil {
-				if os.Getenv("FC_TRACE_RESIDENT") != "" {
+				if lmd.Cfg().Trace("resident") != "" {
 					fmt.Fprintf(os.Stderr, "resident: %s func: A=%s Y=%s X=%s (gain %d)\n", lmd.Id, name(vA), name(vY), name(vX), gain)
 				}
 				makeResident(lmd, cfg, r, lv, vA, vY, vX)
@@ -684,7 +689,7 @@ func name(v *ir.Value) string {
 func hasResident(lmd *ir.Lambda, cfg *ir.CFG, r region) bool {
 	for b := range r {
 		for _, i := range cfg.Ops(b) {
-			if lmd.Ops[i].Resident != nil || lmd.Ops[i].ResidentY != nil || lmd.Ops[i].ResidentX != nil {
+			if lmd.Ops[i].HasResident() {
 				return true
 			}
 		}
@@ -925,6 +930,9 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 		rY.Location, rY.Home, rY.Clean = ir.LocY, vY, readOnly(lmd, cfg, r, vY)
 		lmd.Vars = append(lmd.Vars, rY)
 	}
+	// レジスタごとの元の変数と常駐の一時変数 (nil なら常駐しない)
+	vs := [ir.NumRegs]*ir.Value{ir.RegA: vA, ir.RegY: vY, ir.RegX: vX}
+	rs := [ir.NumRegs]*ir.Value{ir.RegA: rA, ir.RegY: rY, ir.RegX: rX}
 	// 常駐変数に差し替える。cast (`(x as int)` の符号の読み替え) は残す: 落とすと `lt` の符号が変わる
 	// (`(f() as int) >= 0` が符号付きの比較になって偽になった。fuzz で発覚)
 	rebase := func(o ir.Operand, nv *ir.Value) ir.Operand {
@@ -958,17 +966,10 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 					op.Src[0], op.Src[1] = op.Src[1], op.Src[0]
 				}
 			}
-			if vA != nil {
-				op.Resident = rA
-				op.ResIn, op.ResOut = lv.LiveIn(i, vA), lv.LiveOut(i, vA)
-			}
-			if vY != nil {
-				op.ResidentY = rY
-				op.ResYIn, op.ResYOut = lv.LiveIn(i, vY), lv.LiveOut(i, vY)
-			}
-			if vX != nil {
-				op.ResidentX = rX
-				op.ResXIn, op.ResXOut = lv.LiveIn(i, vX), lv.LiveOut(i, vX)
+			for reg, v := range vs {
+				if v != nil {
+					op.Res[reg] = ir.Residency{V: rs[reg], In: lv.LiveIn(i, v), Out: lv.LiveOut(i, v)}
+				}
 			}
 			for k := range op.Src {
 				op.Src[k] = replace(op.Src[k])
@@ -1092,7 +1093,7 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			tail = append(tail, &ir.Op{Code: ir.OpLabel, Label: l})
 			tail = append(tail, mk...)
 			tail = append(tail, &ir.Op{Code: ir.OpJump, Label: to.Label})
-		case last != nil && isCondBranch(last) && last.Label == to.Label:
+		case last != nil && ir.IsCondBranch(last) && last.Label == to.Label:
 			// 条件分岐の飛び先: 辺を分割して末尾に新しいブロック
 			l := newLabel()
 			last.Label = l
@@ -1134,29 +1135,25 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 			}
 		}
 	}
-	entryOps := func(at int) []*ir.Op {
+	entryOps := func(at int) []*ir.Op { // 入口の写し (メモリ → レジスタ)
 		var r []*ir.Op
-		if vA != nil && lv.LiveIn(at, vA) {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rA, Src: []ir.Operand{vA}, Resident: rA, ResOut: true})
-		}
-		if vY != nil && lv.LiveIn(at, vY) {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rY, Src: []ir.Operand{vY}, ResidentY: rY, ResYOut: true})
-		}
-		if vX != nil && lv.LiveIn(at, vX) {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: rX, Src: []ir.Operand{vX}, ResidentX: rX, ResXOut: true})
+		for reg, v := range vs {
+			if v != nil && lv.LiveIn(at, v) {
+				op := &ir.Op{Code: ir.OpLoad, Dst: rs[reg], Src: []ir.Operand{v}}
+				op.Res[reg] = ir.Residency{V: rs[reg], Out: true}
+				r = append(r, op)
+			}
 		}
 		return r
 	}
 	exitOps := func(at int) []*ir.Op { // 書き戻し (Clean なら Home が最新なので不要)
 		var r []*ir.Op
-		if vA != nil && lv.LiveIn(at, vA) && !rA.Clean {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vA, Src: []ir.Operand{rA}, Resident: rA, ResIn: true})
-		}
-		if vY != nil && lv.LiveIn(at, vY) && !rY.Clean {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vY, Src: []ir.Operand{rY}, ResidentY: rY, ResYIn: true})
-		}
-		if vX != nil && lv.LiveIn(at, vX) && !rX.Clean {
-			r = append(r, &ir.Op{Code: ir.OpLoad, Dst: vX, Src: []ir.Operand{rX}, ResidentX: rX, ResXIn: true})
+		for reg, v := range vs {
+			if v != nil && lv.LiveIn(at, v) && !rs[reg].Clean {
+				op := &ir.Op{Code: ir.OpLoad, Dst: v, Src: []ir.Operand{rs[reg]}}
+				op.Res[reg] = ir.Residency{V: rs[reg], In: true}
+				r = append(r, op)
+			}
 		}
 		return r
 	}
@@ -1183,12 +1180,4 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 	}
 	out = append(out, tail...)
 	lmd.Ops = out
-}
-
-func isCondBranch(op *ir.Op) bool {
-	switch op.Code {
-	case ir.OpIf, ir.OpIfTrue, ir.OpIfCarry, ir.OpIfNotCarry:
-		return true
-	}
-	return false
 }

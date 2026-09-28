@@ -177,7 +177,7 @@ driver が全モジュールの要約から配置を計算し `frames.s`（`F_ma
 ## 6. B の実装設計（2026-09-16。Q3 = 共通引数バッファ + プロローグコピー、Q4 = fastcall 統合、で決定）
 
 ブランチ `feature/static-frame`。**実装済み（2026-09-16）**。実装は `internal/frames`（解析と配置）、`regalloc.allocateStatic`、
-codegen の `call.go`（呼び出しの種類）、driver の `PrepareProgram`。結果は bench/README.md の第 3 弾の経過。
+codegen の `call.go`（呼び出しの種類）、`pipeline.Prepare`（順序）。結果は bench/README.md の第 3 弾の経過。
 
 実装で決めた細部（§6-1〜6-5 からの差分）:
 

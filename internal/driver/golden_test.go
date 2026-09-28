@@ -191,8 +191,11 @@ func TestGoldenIR(t *testing.T) {
 
 // newLlcForGolden は driver と同じ順で全関数の割付と静的フレームの配置まで済ませた Llc を返す。
 func newLlcForGolden(hlc *sema.Program) *codegen.Llc {
-	llc := codegen.NewLlc(2, hlc.Types)
-	if _, err := llc.PrepareProgram(hlc.Modules.List(), DefaultStaticZp, DefaultStaticRam); err != nil {
+	llc, err := newLlc(hlc, &frontOptions{OptimizeLevel: 2})
+	if err != nil {
+		panic(err)
+	}
+	if _, err := prepareProgram(hlc, llc, nil); err != nil {
 		panic(err)
 	}
 	return llc

@@ -335,11 +335,6 @@ func (p *printer) stmt(s Stmt) {
 
 	case *LoopStmt:
 		p.tokAt(s.Loop, "loop")
-		if s.Rparen.IsValid() {
-			// v1: loop()
-			p.tok("(")
-			p.tokAt(s.Rparen, ")")
-		}
 		p.body(s.Body)
 
 	case *LabeledStmt:
@@ -360,29 +355,19 @@ func (p *printer) stmt(s Stmt) {
 		p.tokAt(s.For, "for")
 		p.space()
 		p.tok("(")
-		if s.IsV1() {
-			p.ident(s.Var)
-			p.tok(",")
+		// for (init; cond; step)。省略部は空 (`for (;;)`)
+		if s.Init != nil {
+			p.simpleStmt(s.Init)
+		}
+		p.tok(";")
+		if s.Cond != nil {
 			p.space()
-			p.expr(s.From)
-			p.tok(",")
+			p.expr(s.Cond)
+		}
+		p.tok(";")
+		if s.Step != nil {
 			p.space()
-			p.expr(s.To)
-		} else {
-			// for (init; cond; step)。省略部は空 (`for (;;)`)
-			if s.Init != nil {
-				p.simpleStmt(s.Init)
-			}
-			p.tok(";")
-			if s.Cond != nil {
-				p.space()
-				p.expr(s.Cond)
-			}
-			p.tok(";")
-			if s.Step != nil {
-				p.space()
-				p.simpleStmt(s.Step)
-			}
+			p.simpleStmt(s.Step)
 		}
 		p.tokAt(s.Rparen, ")")
 		p.space()

@@ -481,3 +481,27 @@ function main():void
 		t.Errorf("fc 2 の *const: %v", err)
 	}
 }
+
+// TestV3EnumShortCallOnce: `f() == .A` / `.A == f()` の f() は 1 回だけ呼ばれる (以前は `.A` の型を知るために評価した結果を
+// 捨てて lval がもう一度出していたので 2 回呼ばれ、副作用が二重になっていた。構造の調査で発覚)。
+func TestV3EnumShortCallOnce(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+enum E { A, B }
+var calls:u8;
+function f():E { calls += 1; return .B; }
+function g(x:u8):E @(noinline: true) { calls += 1; if (x == 0) { return .A; } return .B; }
+function main():void
+{
+	if (f() == .A) { print("a"); }
+	if (.B == f()) { print("b"); }
+	if (g(0) != .A) { print("c"); }
+	print_int16(calls);
+	exit(0);
+}
+`})
+	if err != nil || out != "b3" {
+		t.Errorf("got %q, %v (want b3)", out, err)
+	}
+}

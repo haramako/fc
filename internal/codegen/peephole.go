@@ -17,19 +17,14 @@ package codegen
 //   - 検査のためだけのロード (codegen が testMark を付けた `lda x` / `ldy x`) は、N/Z が既に x の値を映していて
 //     (直前が `inc x` / `dec x` で、間にフラグを変える命令もラベルも無い) 直後が beq / bne / bmi / bpl なら削除
 //
-// 対象は fc が生成する形だけ (オペランドは文字列として同じかどうかで比べる。`0+<L+0` と `<L+0` は別扱い)。
+// 対象は fc が生成する形だけ。場所の同一性は asm.go の operand.key() (記号 + 定数のずれ + 添字) で見る。
 // 副作用が無いことを確認済みの命令だけ扱い、知らない命令は全部を空にする。
-// 追跡するのはゼロページの局所 (レジスタ領域 / フレーム / fastcall 領域 / reg) と即値だけ。グローバル変数は
+// 追跡するのはゼロページの局所 (レジスタ領域 / フレーム / fastcall 領域 / reg) と静的フレーム、即値だけ。グローバル変数は
 // options(address:) の I/O レジスタ ($2002 など。読むたびに値が変わる) と区別できないので追跡しない。
 
-import (
-	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
-)
+import "strings"
 
-// aState は「A の値と等しいことが分かっている場所」の集合。
+// aState は「A の値と等しいことが分かっている場所」の集合 (operand.key())。
 type aState map[string]bool
 
 type peepState struct {
@@ -40,30 +35,6 @@ type peepState struct {
 	y          string // Y の値と等しいことが分かっている場所 / 即値 ("" なら不明)
 	flagsMem   string // N/Z がこのメモリ位置の値を映している (inc / dec の直後。"" なら不明)
 }
-
-// canonAddr はオペランドの表記を正規化する: `k+<L+n` (byte の表記) と `<L+(n+k)` は同じ場所。別の綴りの同じ番地への
-// 書き込みで追跡が無効にならず (`sty 0+<F+6` の後の `sta 1+<F+5`)、必要な `ldy 0+<F+6` を消していた (fuzz で発覚)。
-func canonAddr(arg string) string {
-	m := addrOffsetRe.FindStringSubmatch(arg)
-	if m == nil {
-		return strings.TrimPrefix(arg, "0+")
-	}
-	k := 0
-	if m[1] != "" {
-		k, _ = strconv.Atoi(m[1])
-	}
-	n := 0
-	if m[4] != "" {
-		n, _ = strconv.Atoi(m[4])
-	}
-	if k+n == 0 {
-		return m[2] + m[3]
-	}
-	return fmt.Sprintf("%s%s+%d", m[2], m[3], k+n)
-}
-
-// addrOffsetRe: `k+<SYM+n` / `<SYM+n` / `SYM` (k, n は 10 進。`+0` は落とす)。
-var addrOffsetRe = regexp.MustCompile(`^(?:([0-9]+)\+)?(<?)([A-Za-z_][A-Za-z0-9_]*)(?:\+([0-9]+))?$`)
 
 func (s *peepState) reset() {
 	s.a = aState{}
@@ -76,49 +47,19 @@ func (s *peepState) reset() {
 
 // keepsFlagsMem は命令が flagsMem (N/Z がそのメモリ位置の値を映していること) を保つか。
 // フラグを変えない命令のうち、その位置を書かないと分かるものだけ (インデックス付き・間接の書き込みはどこを書くか分からない)。
-func (s *peepState) keepsFlagsMem(mnem, arg string, kind operandKind) bool {
-	switch mnem {
-	case "bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs", "clc", "sec", "cli", "sei", "cld", "nop":
-		return true
+func (s *peepState) keepsFlagsMem(a asmLine, key string, kind operandKind) bool {
+	switch a.Mnem {
 	case "sta", "stx", "sty":
-		return (kind == opLocal || kind == opOther) && !strings.Contains(arg, ",") && arg != s.flagsMem
+		return (kind == opLocal || kind == opOther) && a.Arg.Mode == amMem && key != s.flagsMem
 	}
-	return false
-}
-
-// branchOnNZ は行が N / Z だけを見る分岐か。
-func branchOnNZ(line string) bool {
-	f := strings.Fields(line)
-	if len(f) == 0 {
-		return false
-	}
-	switch f[0] {
-	case "beq", "bne", "bmi", "bpl":
-		return true
-	}
-	return false
-}
-
-// setsNZ は命令 (行) が N/Z を A 以外の (自分の) 結果で立てるか。直前の lda のフラグが要らないことの判定に使う
-// (分岐・sta・clc などは N/Z を保つので、その前の lda は消せない)。
-func setsNZ(line string) bool {
-	m := line
-	if k := strings.IndexAny(m, " \t"); k >= 0 {
-		m = m[:k]
-	}
-	switch m {
-	case "adc", "sbc", "and", "ora", "eor", "cmp", "cpx", "cpy", "asl", "lsr", "rol", "ror", "inc", "dec",
-		"inx", "iny", "dex", "dey", "ldx", "ldy", "lda", "tax", "tay", "txa", "tya", "pla":
-		return true
-	}
-	return false
+	return a.keepsNZ()
 }
 
 // operandKind はオペランドの種類。
 //   - opIndirect: `(p),y` / `(S+n,x)`。どこを書くか分からない (ポインタ経由でゼロページの変数を書くこともある)
 //   - opGlobalIndexed: `sym+0,y` / `sym,x`。グローバル配列への参照。ゼロページの局所とは重ならない
-//   - opLocal: `<L+n` / `0+<S+n,x` / `<reg+0` / `<FC_FASTCALL_REG+n`。ゼロページの局所 (フレームは X が関数内で一定なので
-//     文字列で同一性が決まる。X を変える命令で状態を捨てる)
+//   - opLocal: `<L+n` / `0+<S+n,x` / `<reg+0` / `<FC_FASTCALL_REG+n` / `F_f+n`。ゼロページの局所と静的フレーム (フレームは X が
+//     関数内で一定なので (記号, ずれ, 添字) で同一性が決まる。X を変える命令で状態を捨てる)
 //   - opImmediate: `#n`
 //   - opOther: グローバル変数など (I/O レジスタと区別できないので追跡しない)
 type operandKind uint8
@@ -131,22 +72,26 @@ const (
 	opImmediate
 )
 
-func classify(arg string) operandKind {
-	switch {
-	case strings.HasPrefix(arg, "("):
+func classify(o operand) operandKind {
+	switch o.Mode {
+	case amIndY, amIndX, amInd:
 		return opIndirect
-	case strings.HasPrefix(arg, "#"):
+	case amImm:
 		return opImmediate
-	case strings.Contains(arg, "<"), strings.HasPrefix(strings.TrimLeft(arg, "0123456789+"), "F_"):
+	case amOther:
+		return opOther
+	}
+	if o.Lo || strings.HasPrefix(o.Base, "F_") {
 		return opLocal // ゼロページの局所 / RAM 上の静的フレーム (I/O レジスタではないので追跡してよい)
-	case strings.Contains(arg, ","):
+	}
+	if o.Mode == amMemX || o.Mode == amMemY {
 		return opGlobalIndexed
 	}
 	return opOther
 }
 
-// wrote はメモリ位置 arg への書き込み (A は変わらない)。
-func (s *peepState) wrote(arg string, kind operandKind) {
+// wrote はメモリ位置 key への書き込み (A は変わらない)。
+func (s *peepState) wrote(key string, kind operandKind) {
 	switch kind {
 	case opIndirect:
 		s.a = aState{}
@@ -156,54 +101,66 @@ func (s *peepState) wrote(arg string, kind operandKind) {
 	case opGlobalIndexed, opOther:
 		// グローバルは追跡していないので影響なし
 	default:
-		delete(s.a, arg)
-		if s.y == arg {
+		delete(s.a, key)
+		if s.y == key {
 			s.y = ""
 		}
 	}
 }
 
+// forgetX は X が変わったとき: フレーム (`<S+n,x`) の指す先が変わるので、X の添字付きの追跡は捨てる。
+func (s *peepState) forgetX() {
+	for k := range s.a {
+		if strings.Contains(k, ",x") {
+			delete(s.a, k)
+		}
+	}
+	if strings.Contains(s.y, ",x") {
+		s.y = ""
+	}
+}
+
 func peepholeA(lines []string) []string {
 	out := make([]string, 0, len(lines))
-	s := &peepState{}
-	s.reset()
-	next := func(i int) string {
-		for j := i + 1; j < len(lines); j++ {
-			t := strings.TrimSpace(lines[j])
-			if t != "" && !strings.HasPrefix(t, ";") && !strings.HasPrefix(t, ".dbg") {
-				return t
+	parsed := make([]asmLine, len(lines))
+	for i, line := range lines {
+		parsed[i] = parseAsmLine(line)
+	}
+	skip := func(a asmLine) bool { // 命令の並びに影響しない行 (.dbg は fcc build -g のソース位置)
+		return a.Kind == lkBlank || a.Kind == lkComment || (a.Kind == lkDirective && strings.HasPrefix(strings.TrimSpace(a.Text), ".dbg"))
+	}
+	next := func(i int) asmLine {
+		for j := i + 1; j < len(parsed); j++ {
+			if !skip(parsed[j]) {
+				return parsed[j]
 			}
 		}
-		return ""
+		return asmLine{}
 	}
-	for i, line := range lines {
-		t := strings.TrimSpace(line)
-		if t == "" || strings.HasPrefix(t, ";") || strings.HasPrefix(t, ".dbg") {
-			out = append(out, line) // .dbg (fcc build -g のソース位置) は命令の並びに影響しない
+	s := &peepState{}
+	s.reset()
+	for i, a := range parsed {
+		if skip(a) {
+			out = append(out, a.Text)
 			continue
 		}
-		if strings.HasSuffix(t, ":") || strings.HasPrefix(t, ".") {
+		if a.Kind != lkInstr {
 			// ラベル・ディレクティブ: 合流点なので何も分からない
 			s.reset()
-			out = append(out, line)
+			out = append(out, a.Text)
 			continue
 		}
-		isTest := strings.HasSuffix(t, testMark)
-		t = strings.TrimSuffix(t, testMark)
-		mnem, arg := t, ""
-		if k := strings.IndexAny(t, " \t"); k >= 0 {
-			mnem, arg = t[:k], strings.TrimSpace(t[k+1:])
-		}
-		arg = canonAddr(arg)
-		kind := classify(arg)
+		mnem := a.Mnem
+		key := a.Arg.key()
+		kind := classify(a.Arg)
 		trackable := kind == opLocal
-		if isTest && s.flagsMem != "" && arg == s.flagsMem && branchOnNZ(next(i)) {
+		if a.Test && s.flagsMem != "" && key == s.flagsMem && next(i).branchOnNZ() {
 			continue // N/Z は既に arg の値 (`dec x; lda x; bne` の lda)。A / Y は変えないまま
 		}
 		setFlagsMem := "" // この命令の後で N/Z が映すメモリ位置 (下の switch の後で入れる)
-		if (mnem == "inc" || mnem == "dec") && arg != "a" && (kind == opLocal || kind == opOther) && !strings.Contains(arg, ",") {
-			setFlagsMem = arg
-		} else if !s.keepsFlagsMem(mnem, arg, kind) {
+		if (mnem == "inc" || mnem == "dec") && a.Arg.Mode == amMem && (kind == opLocal || kind == opOther) {
+			setFlagsMem = key
+		} else if !s.keepsFlagsMem(a, key, kind) {
 			s.flagsMem = ""
 		}
 		switch mnem {
@@ -211,7 +168,7 @@ func peepholeA(lines []string) []string {
 			"bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
 			// Y のフラグを保つ (ldy / iny / dey / tay は下で立てる)
 		case "cpy":
-			if arg == "#0" && s.flagsFromY && branchOnNZ(next(i)) {
+			if key == "#0" && s.flagsFromY && next(i).branchOnNZ() {
 				continue // N/Z は Y そのもの (`iny; cpy #0; bne` の cpy。以前は下の case に届く前にここで flagsFromY を落としていた)
 			}
 			s.flagsFromY = false
@@ -223,7 +180,7 @@ func peepholeA(lines []string) []string {
 			"bcc", "bcs", "beq", "bne", "bmi", "bpl", "bvc", "bvs":
 			// X のフラグを保つ (ldx / inx / dex / tax は下で立てる)
 		case "cpx":
-			if arg == "#0" && s.flagsFromX && branchOnNZ(next(i)) {
+			if key == "#0" && s.flagsFromX && next(i).branchOnNZ() {
 				continue // N/Z は X そのもの (`dex; cpx #0; bne` の cpx)
 			}
 			s.flagsFromX = false
@@ -232,31 +189,30 @@ func peepholeA(lines []string) []string {
 		}
 		switch mnem {
 		case "lda":
-			if (trackable || kind == opImmediate) && s.a[arg] && (s.flagsFromA || setsNZ(next(i))) {
+			if (trackable || kind == opImmediate) && s.a[key] && (s.flagsFromA || next(i).setsNZ()) {
 				// A は既にこの値で、フラグもそれを反映している (または次の命令がフラグを別の値で立て直すので要らない。
 				// ラベルの直後の `sta x; sec; lda x; sbc #32` など)
 				continue
 			}
 			s.a = aState{}
 			if trackable || kind == opImmediate {
-				s.a[arg] = true // 即値は変わらないので無効化は要らない
+				s.a[key] = true // 即値は変わらないので無効化は要らない
 			}
 			s.flagsFromA = true
 		case "ldy":
-			if (trackable || kind == opImmediate) && s.y == arg {
+			if (trackable || kind == opImmediate) && s.y == key {
 				// Y は既にこの値。直後が分岐 (ldy x; bne) ならフラグも Y を反映していることが要る
-				f := strings.Fields(next(i))
-				if s.flagsFromY || len(f) == 0 || !strings.HasPrefix(f[0], "b") {
+				if s.flagsFromY || !next(i).isBranch() {
 					continue
 				}
 			}
 			s.y = ""
 			if trackable || kind == opImmediate {
-				s.y = arg
+				s.y = key
 			}
-			if (trackable || kind == opImmediate) && s.a[arg] {
+			if (trackable || kind == opImmediate) && s.a[key] {
 				// A が既にこの値 (sta x; ldy x): tay (3 → 2 サイクル)。A は変わらずフラグは A = Y を反映する
-				line = strings.Replace(line, t, "tay", 1)
+				a = a.withInstr("tay", "")
 				s.flagsFromY = true
 				break
 			}
@@ -265,38 +221,33 @@ func peepholeA(lines []string) []string {
 		case "cpy":
 			s.flagsFromA = false
 		case "cmp":
-			if arg == "#0" && s.flagsFromA {
-				if f := strings.Fields(next(i)); len(f) > 0 {
-					switch f[0] {
-					case "beq", "bne", "bmi", "bpl":
-						continue // N/Z は A そのもの (C は見ない)
-					}
-				}
+			if key == "#0" && s.flagsFromA && next(i).branchOnNZ() {
+				continue // N/Z は A そのもの (C は見ない)
 			}
 			s.flagsFromA = false
 		case "sta":
 			if trackable {
-				s.a[arg] = true
-				if s.y == arg {
+				s.a[key] = true
+				if s.y == key {
 					s.y = ""
 				}
 			} else {
-				s.wrote(arg, kind)
+				s.wrote(key, kind)
 			}
 		case "stx":
-			s.wrote(arg, kind)
+			s.wrote(key, kind)
 		case "sty":
 			// Y の値を書く。Y == arg になるが、Y が即値ならそのままの方が使いやすい
-			s.wrote(arg, kind)
+			s.wrote(key, kind)
 			if trackable && s.y == "" {
-				s.y = arg
+				s.y = key
 			}
 		case "inc", "dec", "asl", "lsr", "rol", "ror":
-			if arg == "a" {
+			if a.Arg.Mode == amNone {
 				s.a = aState{}
 				s.flagsFromA = true
 			} else {
-				s.wrote(arg, kind)
+				s.wrote(key, kind)
 				s.flagsFromA = false
 			}
 		case "clc", "sec", "cli", "sei", "cld", "nop", "txs":
@@ -305,20 +256,12 @@ func peepholeA(lines []string) []string {
 			// A も Y もメモリも変えないが N/Z は別の値になる
 			s.flagsFromA = false
 		case "ldx", "inx", "dex", "tax":
-			if mnem == "ldx" && (trackable || kind == opImmediate) && s.a[arg] {
+			if mnem == "ldx" && (trackable || kind == opImmediate) && s.a[key] {
 				// A が既にこの値 (sta x; ldx x): tax (3 → 2 サイクル)
-				line = strings.Replace(line, t, "tax", 1)
+				a = a.withInstr("tax", "")
 				mnem = "tax"
 			}
-			// X が変わるとフレーム (`<S+n,x`) の指す先が変わるので、",x" を含む追跡は捨てる
-			for k := range s.a {
-				if strings.Contains(k, ",x") {
-					delete(s.a, k)
-				}
-			}
-			if strings.Contains(s.y, ",x") {
-				s.y = ""
-			}
+			s.forgetX()
 			s.flagsFromA = mnem == "tax" // tax は A の値を写すので N/Z は A を反映する
 			s.flagsFromX = true
 		case "iny", "dey":
@@ -336,15 +279,13 @@ func peepholeA(lines []string) []string {
 			s.a = aState{}
 			s.flagsFromA = true
 		default:
-			// A を書く (adc / sbc / and / ora / eor / pla / txa / tya ...)、
-			// jmp / jsr / rts / call マクロ / farcall など: 何も分からない。
-			// A を書く命令は N/Z を A から立てるが、jsr 等は分からないので安全側 (false)
+			// jmp / jsr / rts / call マクロ / farcall など: 何も分からない (jsr 等は N/Z も分からないので安全側の false)
 			s.reset()
 		}
 		if setFlagsMem != "" {
 			s.flagsMem = setFlagsMem
 		}
-		out = append(out, line)
+		out = append(out, a.Text)
 	}
 	return out
 }

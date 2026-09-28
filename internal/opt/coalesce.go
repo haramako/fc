@@ -24,11 +24,7 @@ func coalesceCopies(lmd *ir.Lambda) {
 		if op == nil || i+1 >= len(ops) || ops[i+1] == nil || op.Dst == nil {
 			continue
 		}
-		switch op.Code {
-		case ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
-			ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpBitNot, ir.OpNot, ir.OpEq, ir.OpLt,
-			ir.OpSignExtension, ir.OpIndex, ir.OpPget, ir.OpIndexPget, ir.OpFieldPget, ir.OpCall, ir.OpFastcall:
-		default:
+		if !op.Code.ReadsBeforeWrite() && !op.Code.IsCall() {
 			continue
 		}
 		next := ops[i+1]
@@ -93,11 +89,11 @@ func chainInPlace(lmd *ir.Lambda) {
 		if op == nil || i+1 >= len(ops) || ops[i+1] == nil || op.Dst == nil || len(op.Src) == 0 {
 			continue
 		}
-		if !readsBeforeWrite(op.Code) {
+		if !op.Code.ReadsBeforeWrite() {
 			continue
 		}
 		next := ops[i+1]
-		if next.Dst == nil || len(next.Src) == 0 || !readsBeforeWrite(next.Code) {
+		if next.Dst == nil || len(next.Src) == 0 || !next.Code.ReadsBeforeWrite() {
 			continue
 		}
 		t, ok := op.Dst.(*ir.Value)
@@ -117,18 +113,6 @@ func chainInPlace(lmd *ir.Lambda) {
 		op.Dst = x
 		next.Src[0] = x
 	}
-}
-
-// readsBeforeWrite は「全ての入力を読んでから結果を書く」ことが codegen で保証されている命令か
-// (Dst と Src が同じ場所でもよい)。
-func readsBeforeWrite(c ir.OpCode) bool {
-	switch c {
-	case ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpMul, ir.OpDiv, ir.OpMod,
-		ir.OpShiftLeft, ir.OpShiftRight, ir.OpUminus, ir.OpBitNot, ir.OpNot, ir.OpEq, ir.OpLt,
-		ir.OpSignExtension, ir.OpIndex, ir.OpPget, ir.OpIndexPget, ir.OpFieldPget:
-		return true
-	}
-	return false
 }
 
 // readsValue は srcs のどれかが x と同じ変数を (一部でも) 読むか。

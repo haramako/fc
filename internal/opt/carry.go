@@ -144,7 +144,7 @@ func isShiftOne(lmd *ir.Lambda, ud *ir.UseDef, k int, x *ir.Value, code ir.OpCod
 		return nil, false
 	}
 	u, single := ud.SingleUse(d)
-	if !single || u != k+1 || !readsBeforeWrite(lmd.Ops[u].Code) {
+	if !single || u != k+1 || !lmd.Ops[u].Code.ReadsBeforeWrite() {
 		return nil, false
 	}
 	// 置き換え後 `op x = x, b` になる。b が x を読むなら値が変わるので不可 (chainInPlace と同じ条件)

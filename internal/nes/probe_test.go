@@ -11,13 +11,13 @@ package nes
 // 例: FC_PROBE_ROM_A=a.nes FC_PROBE_ROM_B=b.nes FC_PROBE_DBG=a.dbg FC_PROBE_DBG_B=b.dbg go test ./internal/nes -run TestProbeDiff -v
 
 import (
+	"github.com/haramako/fc/internal/cc65"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/haramako/fc/internal/driver"
 )
 
 func TestProbeDiff(t *testing.T) {
@@ -32,7 +32,7 @@ func TestProbeDiff(t *testing.T) {
 	}
 	// 名前 → 番地と、次のラベルまでの長さ
 	loadSyms := func(path string) ([]sym, map[string]int, map[string]int) {
-		d, err := driver.ParseDbgFile(path)
+		d, err := cc65.ParseDbgFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -242,7 +242,7 @@ func TestProbePlay(t *testing.T) {
 	if rom == "" {
 		t.Skip()
 	}
-	d, err := driver.ParseDbgFile(os.Getenv("FC_PROBE_DBG"))
+	d, err := cc65.ParseDbgFile(os.Getenv("FC_PROBE_DBG"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestProbeSwitch(t *testing.T) {
 	if rom == "" {
 		t.Skip()
 	}
-	d, err := driver.ParseDbgFile(os.Getenv("FC_PROBE_DBG"))
+	d, err := cc65.ParseDbgFile(os.Getenv("FC_PROBE_DBG"))
 	if err != nil {
 		t.Fatal(err)
 	}

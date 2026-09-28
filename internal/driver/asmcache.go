@@ -18,6 +18,7 @@ package driver
 // いないビルドでも毎回 6,716 回ハッシュしていて、castle の assemble の段に約 0.7 秒かかっていた (2026-09-28)。
 
 import (
+	"github.com/haramako/fc/internal/cc65"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -142,7 +143,7 @@ func (c *Compiler) stampValid(stamp, obj string, args []string) bool {
 
 // toolID は ca65 の実体 (パス・大きさ・更新時刻)。ca65 を入れ替えたら再アセンブルする。
 func toolID() (string, error) {
-	p := ToolPath("ca65")
+	p := cc65.ToolPath("ca65")
 	if !filepath.IsAbs(p) {
 		if lp, err := exec.LookPath(p); err == nil {
 			p = lp

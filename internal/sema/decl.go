@@ -1,0 +1,300 @@
+package sema
+
+// 宣言 (var / const / struct) の処理と、宣言の置ける場所の検査。
+
+import (
+	"fmt"
+
+	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/syntax"
+	"github.com/haramako/fc/internal/types"
+)
+
+// declareBad はエラーになった宣言の名前を Bad 型で束縛する (未宣言のまま残すと使う側が全部 "not found" になる)。
+func (h *Hlc) declareBad(s syntax.Stmt) {
+	bad := func(id *syntax.Ident) {
+		if id == nil || h.scope.BoundHere(id.Name) {
+			return
+		}
+		v := h.addVar(ir.NewGlobal(id.Name, h.prog.Types.Bad(), "$bad"))
+		switch s := s.(type) {
+		case *syntax.VarDecl:
+			v.Public = s.PublicPos.IsValid()
+		case *syntax.FuncDecl:
+			v.Public = s.PublicPos.IsValid()
+		case *syntax.UseDecl:
+			v.Public = s.PublicPos.IsValid()
+		}
+	}
+	switch s := s.(type) {
+	case *syntax.VarDecl:
+		for _, sp := range s.Specs {
+			bad(sp.Name)
+		}
+	case *syntax.FuncDecl:
+		bad(s.Name)
+	case *syntax.StructDecl:
+		bad(s.Name)
+	case *syntax.SoaDecl:
+		bad(s.Name)
+	case *syntax.UseDecl:
+		if s.As != nil {
+			bad(s.As)
+		} else if !s.FromAll && len(s.Names) == 0 {
+			bad(s.Module)
+		}
+		for _, n := range s.Names {
+			bad(n)
+		}
+	}
+}
+
+func (h *Hlc) mustInModule() {
+	if h.lmd != nil {
+		panic(&diag.Error{Msg: "must be at module level (not inside a function)"})
+	}
+}
+
+// scopeIsPublic は宣言の可視性 (`public` が付いていれば公開。既定は private)。
+func (h *Hlc) scopeIsPublic(publicPos syntax.Pos) bool {
+	return publicPos.IsValid()
+}
+
+// optionValueOf は定数評価済みの値を options の値にする (整数 / 文字列 / シンボル)。
+func optionValueOf(v *ir.Value) ir.OptionValue {
+	switch {
+	case v.IsString:
+		return ir.OptionValue{Kind: ir.OptStr, Str: v.Str}
+	case v.Kind == ir.KindLiteral && v.IsInt:
+		return ir.OptionValue{Kind: ir.OptInt, Int: v.Int}
+	case v.Symbol != "":
+		return ir.OptionValue{Kind: ir.OptIdent, Str: v.Symbol}
+	}
+	panic(&diag.Error{Msg: "option value must be an integer or string"})
+}
+
+// compileVarSpec は var 宣言の 1 変数分。
+func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
+	name := sp.Name.Name
+	opt := parseOptions(sp.Options)
+	typ := h.typeEval(sp.Type)
+	var init ir.Operand
+	if sp.Init != nil {
+		c := h.withExpected(toC(sp.Init), typ)
+		if typ != nil && typ.Kind == types.Array {
+			if e := h.constEval(c); e.kind == cValue && e.val.Kind == ir.KindArrayLiteral {
+				c = cv(h.fitArrayLiteral(e.val, typ))
+			}
+		}
+		init = h.rval(c)
+		// `var a:[?]u8 = [1, 2, 3];`: 長さを初期値から決める (長さ未定のままフレームに領域が取られず、ほかのローカルを壊していた)
+		if it := ir.ValType(init); typ != nil && typ.Kind == types.Array && typ.Length < 0 && it.Kind == types.Array && it.Length >= 0 {
+			typ = h.prog.Types.ArrayOf(typ.Base, it.Length)
+		}
+	}
+	if init != nil && h.lmd == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("can't init global variable %s (globals start as 0; assign it in a function, or use const)", name)})
+	}
+	if typ != nil {
+		h.checkComplete(typ, "variable "+name)
+	}
+	// 型を省いた変数は、読み取り専用のポインタ・slice で初期化すると読み取り専用 (`var p = &TAB[i]` は *const T)
+	inferRO := false
+	if typ == nil {
+		typ = h.guessType(name, nil, init)
+		inferRO = typ != nil && (typ.Kind == types.Pointer || typ.IsSlice()) && h.readOnly(init)
+	}
+	if typ != nil && init != nil {
+		h.compatibleAssign("`"+name+"`", typ, ir.ValType(init))
+		if !inferRO {
+			h.warnDropConst("`"+name+"`", typ, init)
+		}
+	}
+	var vv *ir.Value
+	if h.lmd == nil {
+		var symbol string
+		if addr, ok := opt.Get("address"); ok {
+			// 固定番地 (メモリマップド I/O)。asm のシンボルへの束縛は const の options(symbol:) で (§4.1)
+			if addr.Kind != ir.OptInt {
+				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address:) takes a number; to refer to an assembler symbol, declare a const with options(symbol: \"%s\")", name, addr.Str)})
+			}
+			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: ir.NewIntLiteral("", typ, addr.Int),
+				AddressVar: h.module.Id + "." + name, Pos: h.curPos})
+		} else {
+			seg := h.groupBss
+			if sv, ok := opt.Get("segment"); ok {
+				seg = sv.Text()
+				if seg == "" {
+					seg = "BSS"
+				} // explicit legacy default overrides inherited bss
+			}
+			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg}
+			if sym, ok := symbolOption(opt); ok {
+				// options(symbol: "name"): fc が確保する領域のシンボル名を固定する (asm から参照するとき)
+				d.Sym = sym
+				h.addDefModule(d)
+				symbol = d.Sym
+			} else {
+				symbol = h.addDef(name, d)
+			}
+		}
+		st, ro := h.storageType(typ)
+		vv = h.addVar(ir.NewGlobal(name, st, symbol))
+		vv.ReadOnly = ro || inferRO
+		h.prog.storageGlobals[vv] = true
+		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
+	} else {
+		st, ro := h.storageType(typ)
+		vv = h.addVar(ir.NewLocal(name, st, ir.LTNone))
+		vv.ReadOnly = ro || inferRO
+	}
+	if h.scopeIsPublic(publicPos) {
+		vv.Public = true
+	}
+	if init != nil {
+		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
+		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.cast(init, vv.Type)}})
+	}
+}
+
+// compileConstSpec は const 宣言の 1 定数分 (関数宣言の脱糖にも使う)。
+// typ / val / opt はそれぞれ省略可 (nil)。
+func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
+	var newVal *ir.Value
+	if at, ok := typ.(*syntax.ArrayType); ok && at.IsSlice(h.version()) && val == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("const %s: a slice is a run-time value (use [?]T for a constant array)", name)})
+	}
+	if val != nil {
+		declType := h.typeEval(typ)
+		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
+		if cv.kind == cArray && cv.rt {
+			for _, e := range cv.args {
+				h.constEvalOperand(h.constSlice(e)) // 定数でない要素の理由 (constant value required / storage alias) を出す
+			}
+		}
+		if cv.kind != cValue {
+			if declType.IsSlice() {
+				panic(&diag.Error{Msg: fmt.Sprintf("const %s: a constant slice needs an array constant, an array literal or a string (use [?]T for a constant array)", name)})
+			}
+			panic(&diag.Error{Msg: fmt.Sprintf("const %s must be constant", name)})
+		}
+		if h.prog.storageAliases[cv.val] != nil {
+			panic(&diag.Error{Msg: fmt.Sprintf("const %s cannot read a storage alias at compile time", name)})
+		}
+		v := h.fitArrayLiteral(h.padArrayLiteral(name, cv.val, declType), declType)
+		if v.Kind == ir.KindArrayLiteral && declType != nil && declType.Kind == types.Array && declType.Base.Kind == types.Pointer {
+			// const PS:[N]*T = ["...", other_const, ...]: ポインタの配列。要素の文字列 / 配列リテラルは無名の配列定数に
+			// 切り出してそのアドレス、配列定数の名前 (address: で asm のシンボルに束縛したものも) はそのアドレスにする
+			// (.word で並ぶ)。型検査は変換した後の値で (要素が名前だけだと変換前は `[N][M]T` で `[N]*T` に合わない)
+			v = h.pointerElems(name, v, declType.Base)
+		}
+		checkRaggedLiteral(v)
+		t := h.guessType(name, declType, v)
+		if v.Type.Kind == types.Macro {
+			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
+			v.Name = name
+			newVal = h.addVar(v)
+		} else if v.Kind == ir.KindArrayLiteral {
+			if t.Kind == types.Pointer {
+				// const P:*T = [...] / "..." は配列定数の宣言 (ポインタ変数ではない)。データ自体を名前に束縛する
+				t = ir.ValType(v)
+			}
+			d := &ir.Def{Kind: ir.DefBlock, Type: t, Elems: v.Elems}
+			var symbol string
+			if sym, ok := symbolOption(opt); ok {
+				d.Sym = sym // シンボル名を固定 (asm から参照する表など)
+				h.addDefModule(d)
+				symbol = d.Sym
+			} else {
+				symbol = h.addDef(name, d)
+			}
+			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
+			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)
+		} else {
+			if opt.Has("symbol") {
+				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(symbol:) needs an array constant (or no value to refer to an assembler symbol)", name)})
+			}
+			var lit *ir.Value
+			if v.IsInt {
+				lit = ir.NewIntLiteral(name, t, v.Int)
+				lit.Untyped = v.Untyped && declType == nil // `const N = 200` は型のない定数、`const N:u8 = 200` は型付き
+			} else {
+				lit = ir.NewSymbolLiteral(name, t, v.Symbol)
+			}
+			newVal = h.addVar(lit)
+			if h.lmd == nil {
+				h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: t, Equ: lit})
+			}
+		}
+	} else {
+		// 値なしの const は asm 側の定義の参照: options(symbol: "...") が必須 (fc は `.global` を出す。同じモジュールに
+		// include した asm で定義していても、別のオブジェクトファイルでもよい)
+		if addr, ok := opt.Get("address"); ok && addr.Kind == ir.OptStr {
+			panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address: \"...\") is now options(symbol: \"%s\")", name, addr.Str)})
+		}
+		if sym, ok := symbolOption(opt); ok {
+			t := h.typeEval(typ)
+			h.addDefModule(&ir.Def{Sym: sym, Kind: ir.DefExtern, Type: t})
+			newVal = h.addVar(ir.NewGlobal(name, t, sym))
+		} else {
+			panic(&diag.Error{Msg: fmt.Sprintf("cannot define const without value %s (a const defined in assembler needs options(symbol: \"...\"))", name)})
+		}
+	}
+	if h.scopeIsPublic(publicPos) {
+		newVal.Public = true
+	}
+}
+
+// ---------------------------------------------------------------
+// 定数式の評価
+// ---------------------------------------------------------------
+
+// symbolOption は options(symbol: "name") の名前。識別子でなければエラー (空文字列だと codegen が
+// シンボル無しの大域変数として落ち、空白などを含むと壊れた asm を出していた。fuzz で発覚)。
+func symbolOption(opt ir.Options) (string, bool) {
+	v, ok := opt.Get("symbol")
+	if !ok {
+		return "", false
+	}
+	sym := v.Text()
+	if !asmSymbolRe.MatchString(sym) {
+		panic(&diag.Error{Msg: fmt.Sprintf("options(symbol: %q): not a valid assembler symbol name", sym)})
+	}
+	return sym, true
+}
+
+// compileStructDecl は `struct Name { f:T; ... }`。型名を Value (Kind == TypeName, TypeRef) としてスコープに束縛する。
+// 名前は先に束縛するので、フィールドから `*Name` で自己参照できる (値としての自己参照は checkComplete が弾く)。
+func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
+	h.mustInModule()
+	name := s.Name.Name
+	st := h.prog.Types.NewStruct(h.module.Id + "." + name)
+	if st.Size >= 0 {
+		panic(&diag.Error{Msg: fmt.Sprintf("struct %s already defined", name)})
+	}
+	if h.prog.typeDecls[st] != nil {
+		// The identity was registered during collection, but retain Vars order.
+		h.module.Vars = append(h.module.Vars, h.prog.typeDecls[st].identity)
+	} else {
+		tv := h.addVar(ir.NewTypeValue(name, h.prog.Types.TypeName(), st))
+		tv.Public = h.scopeIsPublic(s.PublicPos)
+	}
+	fields := make([]types.Field, 0, len(s.Fields))
+	for _, f := range s.Fields {
+		fname := f.Name.Name
+		for _, prev := range fields {
+			if prev.Name == fname {
+				panic(&diag.Error{Msg: fmt.Sprintf("field %s already defined in struct %s", fname, name)})
+			}
+		}
+		ft := h.typeEval(f.Type)
+		h.checkComplete(ft, "field "+fname)
+		if ft.Size < 0 {
+			panic(&diag.Error{Msg: fmt.Sprintf("field %s: array field must have a length", fname)})
+		}
+		fields = append(fields, types.Field{Name: fname, Type: ft})
+	}
+	h.prog.Types.SetFields(st, fields)
+}

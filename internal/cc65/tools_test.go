@@ -1,4 +1,4 @@
-package driver
+package cc65
 
 import (
 	"os"

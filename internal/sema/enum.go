@@ -85,24 +85,35 @@ func (h *Hlc) enumShort(c *cexpr, t *types.Type) *cexpr {
 }
 
 // resolveEnumShortPair は二項の比較で片方が `.Name` なら、もう片方の型で解決する (もう片方を先に評価する)。
+// もう片方が実行時の式なら、ここで 1 回だけ IR を出して cOperand にする (以前は型を知るために評価した結果を捨て、
+// lval がもう一度出していたので `f() == .A` の f() が 2 回呼ばれていた)。
 func (h *Hlc) resolveEnumShortPair(a, b *cexpr) (*cexpr, *cexpr) {
 	if a.kind == cEnumShort && b.kind != cEnumShort {
-		bb := h.constEval(b)
-		return h.enumShort(a, h.cexprType(bb)), bb
+		bb := h.evalOnce(b)
+		return h.enumShort(a, cexprType(bb)), bb
 	}
 	if b.kind == cEnumShort && a.kind != cEnumShort {
-		aa := h.constEval(a)
-		return aa, h.enumShort(b, h.cexprType(aa))
+		aa := h.evalOnce(a)
+		return aa, h.enumShort(b, cexprType(aa))
 	}
 	return a, b
 }
 
-// cexprType は評価済みの式の型 (定数ならその型。実行時の式なら評価して型を得る)。
-func (h *Hlc) cexprType(c *cexpr) *types.Type {
-	if c.kind == cValue {
-		return c.val.Type
+// evalOnce は式を評価し、定数ならその cValue、実行時の式なら IR を出して cOperand にする (以後 lval は再評価しない)。
+func (h *Hlc) evalOnce(c *cexpr) *cexpr {
+	e := h.constEval(c)
+	if e.kind == cValue || e.kind == cOperand {
+		return e
 	}
-	return ir.ValType(h.rval(c))
+	return &cexpr{kind: cOperand, opnd: h.rval(e), pos: c.pos}
+}
+
+// cexprType は評価済みの式 (cValue / cOperand) の型。
+func cexprType(c *cexpr) *types.Type {
+	if c.kind == cOperand {
+		return ir.ValType(c.opnd)
+	}
+	return c.val.Type
 }
 
 // checkEnumOp は enum の演算の規則: 比較は同じ enum 同士だけ、それ以外 (算術・ビット・論理) は不可。

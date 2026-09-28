@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"os"
 	"path/filepath"
@@ -45,7 +46,7 @@ function main():void options(segment:"CODE") {
 	if strings.TrimSpace(output.String()) != "33" {
 		t.Fatalf("output=%q", output.String())
 	}
-	dbg, err := ParseDbgFile(result.DbgFile)
+	dbg, err := cc65.ParseDbgFile(result.DbgFile)
 	if err != nil {
 		t.Fatal(err)
 	}

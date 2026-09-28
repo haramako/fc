@@ -14,9 +14,7 @@ func commuteTemp(lmd *ir.Lambda) {
 		if op == nil || prev == nil || prev.Dst == nil || len(op.Src) != 2 {
 			continue
 		}
-		switch op.Code {
-		case ir.OpAdd, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpEq:
-		default:
+		if !op.Code.IsCommutative() {
 			continue
 		}
 		t, ok := op.Src[1].(*ir.Value)

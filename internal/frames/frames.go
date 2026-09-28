@@ -357,6 +357,10 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 
 var reAsmSym = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
 
+// AsmSymbols はアセンブラのテキストが参照しうるシンボル (`_` で始まる語) を返す (fc の関数・変数のシンボルの形。
+// pipeline の markVolatile と共有)。
+func AsmSymbols(text string) []string { return reAsmSym.FindAllString(text, -1) }
+
 // indirectTargets は間接呼び出しの飛び先の関数 (シンボル) を絞れるなら返す。
 //   - グローバルの関数ポインタ変数 (直接、または `load t = g` の t): その変数に代入された関数 (リテラル以外の代入があれば不可)
 //   - const 表の要素 (`index_pget t = TABLE, i` / `index p = TABLE, i; pget t = p`): 表の要素 (関数以外の要素があれば不可)

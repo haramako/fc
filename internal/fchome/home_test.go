@@ -1,4 +1,4 @@
-package driver
+package fchome
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// ResolveFCHome must reach the embedded-library fallback: neither the temporary
+// Resolve must reach the embedded-library fallback: neither the temporary
 // working directory nor the go test executable's directory contains FC sources.
 func isolatedHomeLookup(t *testing.T) string {
 	t.Helper()
@@ -44,7 +44,7 @@ func TestResolveFCHomeTempFailure(t *testing.T) {
 	}
 	t.Setenv("FC_CACHE_DIR", blocked)
 	setHomeTempDir(t, blocked)
-	home, cleanup, err := ResolveFCHome()
+	home, cleanup, err := Resolve()
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -83,7 +83,7 @@ func TestResolveFCHomeSuccessAndCleanup(t *testing.T) {
 	blockHomeCache(t, dir)
 	setHomeTempDir(t, tmp)
 	dir = tmp
-	home, cleanup, err := ResolveFCHome()
+	home, cleanup, err := Resolve()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestResolveFCHomeExistingHomeSkipsTemp(t *testing.T) {
 			} else {
 				t.Chdir(filepath.Join(home, "nested"))
 			}
-			got, cleanup, err := ResolveFCHome()
+			got, cleanup, err := Resolve()
 			if cleanup != nil {
 				defer cleanup()
 			}
@@ -142,7 +142,7 @@ func TestResolveFCHomeCache(t *testing.T) {
 	setHomeTempDir(t, filepath.Join(dir, "missing", "temp")) // 一時ディレクトリは使わない
 	var homes []string
 	for i := 0; i < 2; i++ {
-		home, cleanup, err := ResolveFCHome()
+		home, cleanup, err := Resolve()
 		if err != nil || cleanup != nil {
 			t.Fatalf("home=%q cleanup=%v error=%v", home, cleanup != nil, err)
 		}
