@@ -10,14 +10,14 @@
 package fc
 
 import (
-	"github.com/haramako/fc/internal/fchome"
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"errors"
 	"io"
 
+	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
+	"github.com/haramako/fc/internal/fchome"
 	"github.com/haramako/fc/internal/syntax"
 )
 
@@ -50,6 +50,9 @@ type Options struct {
 
 	// Defines は @(build) の const の上書き (`module.NAME=value`。fc.toml の [define.<module>] の後に当てる)。
 	Defines []string
+
+	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対。ソースのディレクトリの後、fclib より前に探す)。
+	LibPath []string
 }
 
 // Result はビルドの結果 (生成物のパスと、Run 時の終了コード)。
@@ -144,6 +147,7 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		Jobs:          opt.Jobs,
 		Stdout:        opt.Stdout,
 		Defines:       opt.Defines,
+		LibPath:       opt.LibPath,
 	})
 }
 

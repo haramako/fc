@@ -50,7 +50,10 @@ func (e *CommandError) Error() string {
 }
 
 type BuildOptions struct {
-	Target        string // emu / nes (デフォルト emu)
+	Target string // emu / nes (デフォルト emu)
+	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対)。use / @include と asm の include で、ソースのディレクトリの後、fclib
+	// より前に探す (fcc test がテストするモジュールのディレクトリを足す。fc.toml の [lib.*] もここに入る: doc/v4_stdlib.md §9)
+	LibPath       []string
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
@@ -104,7 +107,8 @@ type Result struct {
 type Compiler struct {
 	FCHome   string // fclib/ share/ を含むディレクトリ
 	ctx      context.Context
-	jobs     int // ca65 の並列数
+	jobs     int      // ca65 の並列数
+	libDirs  []string // 追加のライブラリの探索先 (BuildOptions.LibPath を絶対パスにしたもの)
 	target   string
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
@@ -197,6 +201,16 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	c.buildDir = opt.BuildDir
 	if c.buildDir == "" {
 		c.buildDir = filepath.Join(c.dir, DefaultBuildDirName)
+	}
+	c.libDirs = nil
+	for _, d := range opt.LibPath {
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(c.dir, d)
+		}
+		if a, err := filepath.Abs(d); err == nil {
+			d = a
+		}
+		c.libDirs = append(c.libDirs, filepath.ToSlash(d))
 	}
 	c.jobs = opt.Jobs
 	if c.jobs <= 0 {
@@ -341,9 +355,11 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	return result, nil
 }
 
-// libPath は use / include の検索パス (カレント → fclib → fclib/<target>)。
+// libPath は use / include の検索パス (カレント → 追加のライブラリ (BuildOptions.LibPath) → fclib → fclib/<target>)。
 func (c *Compiler) libPath(target string) []string {
-	return []string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target))}
+	p := []string{"."}
+	p = append(p, c.libDirs...)
+	return append(p, filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target)))
 }
 
 // makeBase は base.s (ランタイムの土台: ZP のレジスタ・スタック・FC_FARCALL などの定義) を生成してアセンブルする。
@@ -768,6 +784,9 @@ func (c *Compiler) ca65Args(path string) []string {
 		"-I", filepath.Join(c.FCHome, "fclib"),
 		"-I", c.dir,
 		"-I", filepath.Join(c.FCHome, "fclib", c.target),
+	}
+	for _, d := range c.libDirs {
+		args = append(args, "-I", filepath.FromSlash(d))
 	}
 	if c.dir != "." {
 		// .incbin は -I でなく --bin-include-dir で探す (既定は作業ディレクトリ)

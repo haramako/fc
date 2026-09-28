@@ -22,6 +22,7 @@ Commands:
     run              build and run by emulator
     fmt              format source files (see fcc fmt -h)
     migrate          rewrite older sources as the latest fc (see fcc migrate -h)
+    test             run the @(test) functions of modules (see fcc test -h)
     check            compile without producing files and report errors / warnings
     size             show code size per function from an ld65 --dbgfile (see fcc size -h)
     watch            rebuild whenever a source file changes (see fcc watch -h)
@@ -56,6 +57,8 @@ func run() int {
 		return runFmt(args[1:])
 	case "migrate":
 		return runMigrate(args[1:])
+	case "test":
+		return runTest(args[1:])
 	case "version", "--version", "-v":
 		return runVersion()
 	case "check":

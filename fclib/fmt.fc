@@ -281,3 +281,47 @@ public function boolean(b:bool):void
 		str("false");
 	}
 }
+
+// ---- テスト (fcc test fclib/fmt.fc。普通のビルドではどこからも呼ばれないので出力されない) ----
+
+function same(a:[]const u8, b:[]const u8):bool
+{
+	if (@len(a) != @len(b)) {
+		return false;
+	}
+	for (var i, c in a) {
+		if (c != b[i]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function test_numbers():void @(test)
+{
+	var buf:[24]u8;
+	var n:u8 = 7;
+	var w:i16 = -300;
+	@assert(same(@format(buf, "[{:3}] [{:03}] [{}]", n, n, w), "[  7] [007] [-300]"));
+	@assert(same(@format(buf, "{:x} {:X} {:b}", 0xab as u8, 0xabcd as u16, 5 as u8), "ab ABCD 101"));
+	@assert(same(@format(buf, "[{:05}] [{:5}]", -42 as i16, -42 as i16), "[-0042] [  -42]"));
+}
+
+function test_strings():void @(test)
+{
+	var buf:[24]u8;
+	var s:[]const u8 = "ab";
+	var p:*const u8 = "cd";
+	var arr = "ef";
+	@assert(same(@format(buf, "{}{}{}{}", s, p, arr, true), "abcdeftrue"));
+	@assert(same(@format(buf, "{{{}}}", 1 as u8), "{1}"));
+}
+
+function test_direct():void @(test)
+{
+	var buf:[8]u8;
+	begin(buf);
+	dec_u16(65535, 0);
+	chr(33);
+	@assert(same(buf[..at], "65535!"));
+}

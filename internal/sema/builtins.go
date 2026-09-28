@@ -88,23 +88,14 @@ func registerBuiltins(p *Program) {
 	})
 
 	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		stdio := h.stdioModule("unittest_run_tests")
-		print := h.moduleFunc(stdio, "stdio", "print")
-		exit := h.moduleFunc(stdio, "stdio", "exit")
-		init := h.moduleFunc(stdio, "stdio", "init")
-		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
-		for _, id := range h.scope.IdList() {
-			if len(id) >= 5 && id[:5] == "test_" {
-				r.stmts = append(r.stmts,
-					ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
-					ccall(cident(id)),
-					ccall(cv(print), cstr("\n")),
-				)
-			}
+		if h.v4() {
+			return h.runTests4() // fc 4: @(test) の関数を集める (testing.go)
 		}
-		r.stmts = append(r.stmts, ccall(cv(exit), cint(0)))
-		return r
+		return runTestsV3(h)
 	})
+	// @run_tests_v3(): fc 3 までの @run_tests (スコープの test_* を呼んで stdio に出す)。fc 3 → 4 の migrate が @run_tests を
+	// これに書き換える (出力が変わらないように)
+	h.defmacro("@run_tests_v3", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult { return runTestsV3(h) })
 
 	// min(a, b) / max(a, b) / clamp(x, lo, hi): 型は引数の互換型で決まる (符号付きなら符号付き比較)。
 	// 定数なら畳み込み、そうでなければ比較して入れ替えるコードをその場に出す (関数呼び出しは無い)
@@ -143,6 +134,7 @@ func registerBuiltins(p *Program) {
 
 	registerSliceBuiltins(h)
 	registerFormatBuiltins(h)
+	registerTestingBuiltins(h)
 	registerLogBuiltin(h)
 
 	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。doc/v3_plan.md §3)
@@ -298,4 +290,24 @@ func (h *Hlc) moduleFunc(m *ir.ModuleInterface, mod, name string) *ir.Value {
 		panic(&diag.Error{Msg: fmt.Sprintf("module %s has no %s (needed by a builtin); is a %s.fc in your source directory hiding fclib's %s?", mod, name, mod, mod)})
 	}
 	return v
+}
+
+// runTestsV3 は fc 3 までの @run_tests: stdio.init の後、スコープの test_* の関数を宣言の順に「名前:」を出して呼び、stdio.exit(0)。
+func runTestsV3(h *Hlc) macroResult {
+	stdio := h.stdioModule("unittest_run_tests")
+	print := h.moduleFunc(stdio, "stdio", "print")
+	exit := h.moduleFunc(stdio, "stdio", "exit")
+	init := h.moduleFunc(stdio, "stdio", "init")
+	r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
+	for _, id := range h.scope.IdList() {
+		if len(id) >= 5 && id[:5] == "test_" {
+			r.stmts = append(r.stmts,
+				ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
+				ccall(cident(id)),
+				ccall(cv(print), cstr("\n")),
+			)
+		}
+	}
+	r.stmts = append(r.stmts, ccall(cv(exit), cint(0)))
+	return r
 }

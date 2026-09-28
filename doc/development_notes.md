@@ -516,6 +516,9 @@ go test ./...                                    # 全部 (golden + examples + N
   安定ソート）ので、同じ式の外側に付く書き換えは後で報告する（F6 の `as` は A1 の `(式) as T` の後: `((x + vx) as i8) as u16`）。
   A1 で広げた後の型を見る検査（F2 の値が必ず 0 になるシフト）は、広げるのが文の中で終わるので文の終わりに見る
   （`compileStatementRecover` の `checkShifts`）
+- **追加のライブラリの探索先**（2026-09-29）: `BuildOptions.LibPath`（pkg/fc の `Options.LibPath`）は use / `@include` と ca65 の `-I` の
+  探索先に、ソースのディレクトリの後・fclib の前で足す（`Compiler.libPath`・`ca65Args`）。`fcc test` がテストするモジュールの
+  ディレクトリを足すのに使い、fc.toml の `[lib.*]`（v4_stdlib.md §9）もここに入れる
 - **組み込みが読み込むモジュール**（2026-09-29）: `@format` / fc 4 の printf は fmt / console を `use` 無しで使う（`sema/format.go` の
   `builtinModule`: 読み込んでいなければ `useModule` で読み込み、今のモジュールの `AddUse` に足す。足さないと asm がそのモジュールの
   .inc を取り込まずシンボルが未定義になる）。関数の本体のコンパイル中に読み込んだモジュールも本体をコンパイルするよう、

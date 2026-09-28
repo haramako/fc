@@ -32,6 +32,7 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 	if err := abiRules(c); err != nil {
 		return nil, fmt.Errorf("%s: %v", filename, err)
 	}
+	runTestsRule(c)
 	c.Replace(0, len(f.Pragma), fmt.Sprintf("#fc %d", syntax.Version4))
 	out, err := apply(src, c.Edits)
 	if err != nil {
@@ -116,4 +117,15 @@ func removeEntry(c *Ctx, o *syntax.Options, e *syntax.OptionEntry) {
 		}
 		return
 	}
+}
+
+// runTestsRule は `@run_tests()` を `@run_tests_v3()` にする (構文だけで決まる): fc 4 の @run_tests は @(test) の関数を集めるが、
+// fc 3 はスコープの test_* の関数を集めて stdio に出していた (その動きを @run_tests_v3 に残してある。doc/v4_stdlib.md §7.1)。
+func runTestsRule(c *Ctx) {
+	syntax.Inspect(c.File, func(n syntax.Node) bool {
+		if id, ok := n.(*syntax.Ident); ok && id.Name == "@run_tests" {
+			c.Replace(id.NamePos.Offset, id.NamePos.Offset+len(id.Name), "@run_tests_v3")
+		}
+		return true
+	})
 }

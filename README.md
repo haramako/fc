@@ -48,6 +48,9 @@ fcc fmt -w src.fc           # ソースを整形 (-l: 変わるファイルを�
 go test ./...
 ```
 
+fc のモジュールのテスト（`@(test)` の関数。`@assert` / `@assert_eq`）は `fcc test mod.fc` で走らせる（emu で実行し、全部
+通れば終了コード 0。language_reference.md §7）。
+
 テストは `testdata/golden/` の golden データ (AST / IR / 割付後IR / アセンブリ / バイナリ /
 実行出力) との差分比較で行われます。golden は Go 自身の出力のスナップショットで、次で再生成します:
 
