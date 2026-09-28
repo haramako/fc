@@ -832,6 +832,18 @@ print(_T("めにゅー", null));           // 翻訳しない（デバッグ用�
 | `unittest` | `assert_true(cond, msg)`, `assert_equal(a, b, msg)` |
 | `rle` / `lzw` / `inflate` | 圧縮データの展開 |
 
+fc 4 の新しい fclib（作り直しの途中。計画は [v4_stdlib.md](v4_stdlib.md)。上の表の今のモジュールは入れ替えるまで残す）:
+
+| モジュール | 主な内容 |
+|---|---|
+| `console`（ターゲット別） | デバッグ出力: `write(s:[:u16]const u8)`（長さの分だけ。途中の 0 も）, `write_z(p)`（終端 0）, `newline()`, `exit(code)`, `init()`。emu はホストへ、NES は `init()` で描画を止めてネームテーブル 0 に直に書く（ASCII の並びのフォントの CHR が要る。`exit` は `exit_code` / `exited` を残して画面を出して止まる）。emu は `bench_start()` / `bench_end()` も |
+| `sys` | `panic(msg)`（`panic: msg` を console に出して終了コード 1）, `assert(cond, msg)` |
+| `fmt` | 数を文字にする: `dec_u8` / `dec_u16` / `dec_i8` / `dec_i16` / `hex_u8` / `hex_u16` / `bin_u8` / `bin_u16`（`(dst:[]u8, n, width, zero:bool, digits:*const u8):u8`。書いた長さを返し、`dst` が足りなければ `sys.panic`。`width` は最小の幅で右に寄せる、`zero` は 0 で埋める（符号の後ろ: `-05`）か空白（符号の前: `  -5`）、`digits` は 0〜9・A〜F・`-`・空白の 18 文字のコードで ASCII なら `fmt.ASCII`）。10 進は割り算を使わない |
+
+割り込みの入口 `_interrupt` / `_interrupt_irq`（share/runtime.asm の NMI / IRQ が呼ぶ）を定義するものが無いプログラムには、fc が
+何もしない入口を足す（fc の関数（`options(symbol:)` の extern も）か、`include` した asm がその名前を参照していれば、定義がある
+とみなす）。stdio を使わないプログラムが、入口が無いというリンクのエラーにならない。
+
 ---
 
 ## 9. v1 との違い（歴史）

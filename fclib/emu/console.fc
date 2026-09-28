@@ -1,0 +1,47 @@
+#fc 4
+// デバッグ出力 (emu: ホストへ。internal/emu のやり取り $fff0〜$ffff)。printf / @assert / sys.panic の出力先。
+@(bank: -1);
+
+var EMU_ADDR:*const u8 @(address: 0xfff0);
+var EMU_DATA:u16 @(address: 0xfff2);
+var EMU_PRINT:u8 @(address: 0xfffe);
+var EMU_EXIT:u8 @(address: 0xffff);
+
+public function init():void {}
+
+// s をそのまま出す (途中の 0 も)
+public function write(s:[:u16]const u8):void
+{
+	EMU_ADDR = @ptr(s);
+	EMU_DATA = @len(s);
+	EMU_PRINT = 6;
+}
+
+// 終端 0 の文字列を出す
+public function write_z(p:*const u8):void
+{
+	EMU_ADDR = p;
+	EMU_PRINT = 1;
+}
+
+public function newline():void
+{
+	write("\n");
+}
+
+// プログラムを終える (code が終了コード)
+public function exit(code:u8):void
+{
+	EMU_EXIT = code;
+}
+
+// ベンチマーク区間 (bench/)。bench_start から bench_end までのサイクル数をエミュレータが合計する
+public function bench_start():void
+{
+	EMU_PRINT = 4;
+}
+
+public function bench_end():void
+{
+	EMU_PRINT = 5;
+}

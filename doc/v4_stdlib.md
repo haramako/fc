@@ -316,7 +316,9 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
 ## 7. 進め方
 
 1. **決める**: §8 を決め、この文書を仕様にする ✅ 2026-09-29
-2. **どのターゲットでも使うもの**（emu で確かめられる）: mem / fmt / `@format` と printf / str / buf / math / rand / bits / hit /
+2. **どのターゲットでも使うもの**（emu で確かめられる。✅ 2026-09-29: console（emu / NES）・sys・fmt と、emu のやり取りの
+   「長さの分だけ出す」（$fffe に 6）、割り込みの入口が無ければ空の入口を足す。テストは `internal/driver/stdlib_test.go`（fmt は
+   Go の fmt と乱数で比べる）と `internal/nes/console_test.go`）: mem / fmt / `@format` と printf / str / buf / math / rand / bits / hit /
    sys / test / console（emu）。組み込み（§5）を直し、test/ の golden を更新する。`fmt` と `@format` は Go の `strconv` を参照にした
    fuzz、mem は参照の実装との比較、math は表をすべての入力で確かめる
 3. **NES の土台**: nes / frame / vram / pal / oam / pad / console（NES、内蔵のフォントの CHR）。「hello world」の最小の例と、内蔵の

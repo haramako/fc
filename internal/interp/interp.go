@@ -432,6 +432,12 @@ func (m *machine) store(a int, b byte) {
 			fmt.Fprint(&m.out, int(m.mem[portData])|int(m.mem[portData+1])<<8)
 		case 3:
 			fmt.Fprint(&m.out, int(m.mem[portData])|int(m.mem[portData+1])<<8, " ")
+		case 6:
+			p := int(m.mem[portAddr]) | int(m.mem[portAddr+1])<<8
+			n := int(m.mem[portData]) | int(m.mem[portData+1])<<8
+			for i := 0; i < n; i++ {
+				m.out.WriteByte(m.mem[(p+i)&0xffff])
+			}
 		}
 		m.mem[portPrint] = 255
 	case portExit:

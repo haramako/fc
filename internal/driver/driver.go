@@ -255,6 +255,12 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		sources = append(sources, filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
 	sources = append(sources, c.findShare("runtime.asm"), filepath.Join(c.FCHome, "fclib", opt.Target, "runtime_init.asm"))
+	if src, err := c.defaultInterrupts(prog.Modules.List()); err != nil {
+		return nil, err
+	} else if src != "" {
+		sources = append(sources, src)
+		objs = append(objs, strings.TrimSuffix(src, ".s")+".o")
+	}
 	if fc := c.farcallAsm(); fc != "" {
 		sources = append(sources, fc)
 	}
@@ -527,6 +533,36 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 	if err := writeIfChanged(filepath.Join(c.buildDir, "ld65.cfg"), []byte(cfg)); err != nil {
 		panic(err)
 	}
+}
+
+// defaultInterrupts は割り込みの入口 (_interrupt / _interrupt_irq。share/runtime.asm の NMI / IRQ が呼ぶ) を定義するものが
+// 無ければ、何もしない入口の asm (_interrupts.s) を書いてそのパスを返す (全部あれば "")。fc の関数 (Id がその名前。
+// options(symbol:) の extern も) か、include した asm がその名前を参照していれば (castle の ppu.asm の `.export _interrupt`)
+// 定義があるとみなす。stdio を使わないプログラム (console だけ) が、入口が無いというリンクのエラーになっていた。
+func (c *Compiler) defaultInterrupts(mods []*ir.Module) (string, error) {
+	defined := map[string]bool{}
+	for _, m := range mods {
+		for _, d := range m.Defs {
+			if d.Kind == ir.DefCode && d.Lambda != nil {
+				defined[d.Lambda.Id] = true
+			}
+		}
+		for _, s := range m.AsmSymbols {
+			defined[s] = true
+		}
+	}
+	var b strings.Builder
+	for _, sym := range []string{"_interrupt", "_interrupt_irq"} {
+		if !defined[sym] {
+			fmt.Fprintf(&b, "\t.export %s\n%s:\n", sym, sym)
+		}
+	}
+	if b.Len() == 0 {
+		return "", nil
+	}
+	src := "; fc が生成: 割り込みの入口を定義するモジュールが無いときの、何もしない入口\n.segment \"FC_RUNTIME\"\n" + b.String() + "\trts\n"
+	path := filepath.Join(c.buildDir, "_interrupts.s")
+	return path, writeIfChanged(path, []byte(src))
 }
 
 // farcallAsm は fc が用意する farcall トランポリン (doc/v2_farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では

@@ -1,9 +1,10 @@
 // Package emu は emu ターゲットの実行 (fcc run とテスト): ROM を LoadAddr に置いて 6502 (r6502) で走らせ、ホストとの
 // やり取りの取り決め ($fff0〜$ffff) で出力・ベンチ区間・終了コードを受ける (fclib/emu/stdio.fc がこの番地に書く)。
 //
-//	PortAddr  ($fff0, 2 バイト): 文字列の番地 (PortPrint = 1)
-//	PortData  ($fff2, 2 バイト): 数 (PortPrint = 2 / 3)
-//	PortPrint ($fffe): 1 = 文字列を出す、2 = 数を出す、3 = 数と空白を出す、4 = ベンチ区間の開始、5 = 終了。処理したら 255 に戻す
+//	PortAddr  ($fff0, 2 バイト): 文字列の番地 (PortPrint = 1 / 6)
+//	PortData  ($fff2, 2 バイト): 数 (PortPrint = 2 / 3)、バイト数 (PortPrint = 6)
+//	PortPrint ($fffe): 1 = 終端 0 の文字列を出す、2 = 数を出す、3 = 数と空白を出す、4 = ベンチ区間の開始、5 = 終了、
+//	                   6 = PortAddr から PortData バイトを出す (途中の 0 もそのまま: fclib/emu/console.fc)。処理したら 255 に戻す
 //	PortExit  ($ffff): 255 以外が書かれたら終了 (その値が終了コード)
 //
 // internal/interp (IR のインタプリタ) も同じ取り決めで stdio を実行する。
@@ -107,6 +108,14 @@ func Run(rom []byte, o Options) (Result, error) {
 				fmt.Fprint(out, mem.Get(PortData)+(mem.Get(PortData+1)<<8))
 			case 3:
 				fmt.Fprint(out, mem.Get(PortData)+(mem.Get(PortData+1)<<8), " ")
+			case 6:
+				addr := mem.Get(PortAddr) + (mem.Get(PortAddr+1) << 8)
+				n := mem.Get(PortData) + (mem.Get(PortData+1) << 8)
+				sb := make([]byte, n)
+				for i := range sb {
+					sb[i] = byte(mem.Get((addr + i) & 0xffff))
+				}
+				out.Write(sb)
 			case 4:
 				benchStart = cpu.Cycles
 				benchUsed = true

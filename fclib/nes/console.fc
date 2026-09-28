@@ -1,0 +1,69 @@
+#fc 4
+// デバッグ出力 (NES: 描画を止めている間に、PPU のネームテーブル 0 へ直に書く。文字のコードをそのままタイルの番号にするので、
+// ASCII の並びのフォントの CHR が要る)。printf / @assert / sys.panic の出力先。ゲームの画面は vram (NMI で送るキュー) を使う。
+@(bank: -1);
+use nes;
+
+public var addr:u16;       // 次に書く VRAM の番地
+// exit の終了コードと印 (テストのランナーが外から読むので volatile: 戻らない exit の中でレジスタに置いたままにならないように)
+public var exit_code:u8 @(volatile);
+public var exited:u8 @(volatile);
+
+// 描画と NMI を止め、パレットを置いて左上から書けるようにする
+public function init():void
+{
+	nes.PPU_CTRL1 = 0;
+	nes.PPU_CTRL2 = 0;
+	const PALETTE = [15, 48, 48, 48, 15, 48, 48, 48, 15, 48, 48, 48, 15, 48, 48, 48];
+	nes.PPU_ADDR = 0x3f;
+	nes.PPU_ADDR = 0x00;
+	for (var c in PALETTE) {
+		nes.PPU_DATA = c;
+	}
+	addr = 0x2000;
+}
+
+// s をそのまま書く ('\n' は次の行の頭へ)
+public function write(s:[:u16]const u8):void
+{
+	nes.PPU_ADDR = (addr >> 8) as u8;
+	nes.PPU_ADDR = addr as u8;
+	for (var c in s) {
+		if (c == 10) {
+			addr = (addr & 0xffe0) + 32;
+			nes.PPU_ADDR = (addr >> 8) as u8;
+			nes.PPU_ADDR = addr as u8;
+		} else {
+			nes.PPU_DATA = c;
+			addr += 1;
+		}
+	}
+}
+
+// 終端 0 の文字列を書く
+public function write_z(p:*const u8):void
+{
+	var n:u16 = 0;
+	while (p[n] != 0) {
+		n += 1;
+	}
+	write(@slice(p, n));
+}
+
+public function newline():void
+{
+	write("\n");
+}
+
+// 画面を出して止まる (NES には終わりが無い)。exit_code / exited をテストのランナーが読む
+public function exit(code:u8):void
+{
+	exit_code = code;
+	exited = 1;
+	nes.PPU_SCROLL = 0;
+	nes.PPU_SCROLL = 0;
+	nes.PPU_CTRL1 = 0;
+	nes.PPU_CTRL2 = 0b00001010;   // 背景を出す (左端の 8 ドットも)
+	while (true) {
+	}
+}

@@ -1,0 +1,175 @@
+#fc 4
+// 数を文字にする (@format と printf の中身。doc/v4_stdlib.md §4)。dst に書き、書いた長さを返す。dst が足りなければ sys.panic
+// で止まる。10 進は割り算を使わない (10 のべきを引く)。
+//   width: 最小の幅 (0 なら詰める)。右に寄せ、左を埋める
+//   zero:  0 で埋める (符号の後ろに: `{:03}` の -5 は "-05")。偽なら空白で埋める (符号の前に: "  -5")
+//   digits: 0〜9・A〜F・'-'・' ' の 18 文字のコード。ASCII なら ASCII、独自のフォントなら @format が @textmap で作った表
+@(bank: -1);
+use sys;
+
+public const ASCII = "0123456789ABCDEF- ";
+const MINUS = 16;
+const SPACE = 17;
+const POW10 = [10000, 1000, 100, 10];
+
+// 桁 tmp[0..len] (上位から。値は 0〜15) を、符号・幅・埋めで dst に書く
+function put(dst:[]u8, tmp:*const u8, len:u8, neg:bool, width:u8, zero:bool, digits:*const u8):u8
+{
+	var body = len;
+	if (neg) {
+		body += 1;
+	}
+	var total = body;
+	if (width > total) {
+		total = width;
+	}
+	if (total > @len(dst)) {
+		sys.panic("fmt: the buffer is too small");
+	}
+	var i:u8 = 0;
+	if (!zero) {
+		while (i + body < total) {
+			dst[i] = digits[SPACE];
+			i += 1;
+		}
+	}
+	if (neg) {
+		dst[i] = digits[MINUS];
+		i += 1;
+	}
+	while (i + len < total) {
+		dst[i] = digits[0];
+		i += 1;
+	}
+	for (var k:u8 = 0; k < len; k += 1) {
+		dst[i] = digits[tmp[k]];
+		i += 1;
+	}
+	return total;
+}
+
+// n の 10 進の桁を tmp に上位から書き、桁数を返す
+function dec16(tmp:*u8, n:u16):u8
+{
+	var len:u8 = 0;
+	for (var p in POW10) {
+		var d:u8 = 0;
+		while (n >= p) {
+			n -= p;
+			d += 1;
+		}
+		if (d != 0 || len != 0) {
+			tmp[len] = d;
+			len += 1;
+		}
+	}
+	tmp[len] = n as u8;
+	return len + 1;
+}
+
+function dec8(tmp:*u8, n:u8):u8
+{
+	var len:u8 = 0;
+	var d:u8 = 0;
+	while (n >= 100) {
+		n -= 100;
+		d += 1;
+	}
+	if (d != 0) {
+		tmp[len] = d;
+		len += 1;
+	}
+	d = 0;
+	while (n >= 10) {
+		n -= 10;
+		d += 1;
+	}
+	if (d != 0 || len != 0) {
+		tmp[len] = d;
+		len += 1;
+	}
+	tmp[len] = n;
+	return len + 1;
+}
+
+public function dec_u8(dst:[]u8, n:u8, width:u8, zero:bool, digits:*const u8):u8
+{
+	var tmp:[3]u8;
+	return put(dst, &tmp[0], dec8(&tmp[0], n), false, width, zero, digits);
+}
+
+public function dec_u16(dst:[]u8, n:u16, width:u8, zero:bool, digits:*const u8):u8
+{
+	var tmp:[5]u8;
+	return put(dst, &tmp[0], dec16(&tmp[0], n), false, width, zero, digits);
+}
+
+public function dec_i8(dst:[]u8, n:i8, width:u8, zero:bool, digits:*const u8):u8
+{
+	var tmp:[3]u8;
+	var u = @bitcast(u8, n);
+	if (n < 0) {
+		u = 0 - u;
+	}
+	return put(dst, &tmp[0], dec8(&tmp[0], u), n < 0, width, zero, digits);
+}
+
+public function dec_i16(dst:[]u8, n:i16, width:u8, zero:bool, digits:*const u8):u8
+{
+	var tmp:[5]u8;
+	var u = @bitcast(u16, n);
+	if (n < 0) {
+		u = 0 - u;
+	}
+	return put(dst, &tmp[0], dec16(&tmp[0], u), n < 0, width, zero, digits);
+}
+
+// 16 進 (0 を詰めて最低 1 桁)
+public function hex_u16(dst:[]u8, n:u16, width:u8, zero:bool, digits:*const u8):u8
+{
+	var tmp:[4]u8;
+	var len:u8 = 0;
+	var shift:u8 = 12;
+	for (var i:u8 = 0; i < 4; i += 1) {
+		var d = ((n >> shift) as u8) & 15;
+		if (d != 0 || len != 0 || i == 3) {
+			tmp[len] = d;
+			len += 1;
+		}
+		shift -= 4;
+	}
+	return put(dst, &tmp[0], len, false, width, zero, digits);
+}
+
+public function hex_u8(dst:[]u8, n:u8, width:u8, zero:bool, digits:*const u8):u8
+{
+	var tmp:[2]u8;
+	var len:u8 = 0;
+	if (n >= 16) {
+		tmp[0] = n >> 4;
+		len = 1;
+	}
+	tmp[len] = n & 15;
+	return put(dst, &tmp[0], len + 1, false, width, zero, digits);
+}
+
+// 2 進 (0 を詰めて最低 1 桁)
+public function bin_u16(dst:[]u8, n:u16, width:u8, zero:bool, digits:*const u8):u8
+{
+	var tmp:[16]u8;
+	var len:u8 = 0;
+	for (var i:u8 = 0; i < 16; i += 1) {
+		var b = ((n >> 15) as u8) & 1;
+		if (b != 0 || len != 0 || i == 15) {
+			tmp[len] = b;
+			len += 1;
+		}
+		n = n << 1;
+	}
+	return put(dst, &tmp[0], len, false, width, zero, digits);
+}
+
+public function bin_u8(dst:[]u8, n:u8, width:u8, zero:bool, digits:*const u8):u8
+{
+	return bin_u16(dst, n, width, zero, digits);
+}
