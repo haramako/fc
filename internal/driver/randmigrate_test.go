@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -78,6 +80,70 @@ func TestRandomMigrate(t *testing.T) {
 					t.Fatalf("-O %d: migrate で ROM が変わった (seed %d)\n%s\n// ---- migrate の後 ----\n%s", level, seed, g.allSource(), v3["t.fc"])
 				}
 			}
+			// 最新の版 (fc 4) まで: Compiler.Migrate (fc 3 → 4 は型を見て、意味の変わる所に今の意味の `as` などを足す)。
+			// ROM は元のままと同じ (fc 4 の整数の規則の実装と、書き換えの取りこぼしの両方を見る。doc/v4_plan.md §0)
+			v4, err := migrateToLatest(t, v2)
+			if v3Breaking(err) {
+				breaking.Add(1)
+				t.Skipf("fc 3 の非互換 (seed %d): %v", seed, err)
+			}
+			if err != nil {
+				t.Fatalf("fc 4 への migrate が失敗 (seed %d): %v\n%s", seed, err, g.allSource())
+			}
+			for _, level := range []int{-1, 0} {
+				want, err := romBuild(t, v2, level)
+				if err != nil {
+					t.Skipf("fc 2 のプログラムがビルドできない (seed %d): %+v", seed, err)
+				}
+				got, err := romBuild(t, v4, level)
+				if err != nil {
+					t.Fatalf("-O %d: fc 4 に migrate したプログラムがビルドできない (seed %d): %v\n%s\n// ---- migrate の後 ----\n%s", level, seed, err, g.allSource(), joinSources(v4))
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatalf("-O %d: fc 4 への migrate で ROM が変わった (seed %d)\n%s\n// ---- migrate の後 ----\n%s", level, seed, g.allSource(), joinSources(v4))
+				}
+			}
 		})
 	}
+}
+
+// migrateToLatest は files (ファイル名 → ソース) を一時ディレクトリに書き、Compiler.Migrate で最新の版に書き換えた内容を返す。
+func migrateToLatest(t *testing.T, files map[string]string) (map[string]string, error) {
+	t.Helper()
+	dir := t.TempDir()
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	paths := make([]string, len(names))
+	for i, name := range names {
+		paths[i] = filepath.Join(dir, name)
+		if err := os.WriteFile(paths[i], []byte(files[name]), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate(paths, &MigrateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for i, name := range names {
+		out[name] = string(res[paths[i]])
+	}
+	return out, nil
+}
+
+// joinSources はファイルを名前の順に並べた 1 つのテキスト (失敗の報告用)。
+func joinSources(files map[string]string) string {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, name := range names {
+		fmt.Fprintf(&b, "// ---- %s ----\n%s", name, files[name])
+	}
+	return b.String()
 }

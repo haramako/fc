@@ -146,6 +146,8 @@ type cexpr struct {
 	incl  bool            // opSlice: `a[lo..=hi]` (hi を含む)
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
 	end   syntax.Pos      // 元の構文木上の終わりの位置 (fc 4 への書き換え: rewrite.go)
+	// compound は複合代入 `x op= y` を脱糖した (op x y) の元の文 (fc 4 への書き換えは文ごと `x = (x op y) as T` にする)
+	compound *syntax.AssignExpr
 }
 
 // ---------------------------------------------------------------
@@ -229,7 +231,9 @@ func toC0(e syntax.Expr) *cexpr {
 		if op, ok := compoundOps[e.Op]; ok {
 			// 複合代入の脱糖 (load X (op X rhs))。X は同一ノードを共有する (定数評価は cmemo で 1 回。
 			// 実行時の評価は 2 回になるので、X に呼び出しがあれば hlc.go の opLoad で先に評価する)
-			return cop2(opLoad, lhs, cop2(op, lhs, toC(e.Rhs)))
+			inner := cop2(op, lhs, toC(e.Rhs))
+			inner.compound = e
+			return cop2(opLoad, lhs, inner)
 		}
 		return cop2(opLoad, lhs, toC(e.Rhs))
 	case *syntax.UnaryExpr:

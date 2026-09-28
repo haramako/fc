@@ -11,6 +11,7 @@ package sema
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/haramako/fc/internal/syntax"
 )
@@ -72,6 +73,10 @@ func (h *Hlc) rewriteError(rule, why string) {
 // rewriteAs は式 c を `c as T` にする書き換えを足す (c が 1 語か括弧で囲まれていなければ `(c) as T`)。c の範囲が分からなければ
 // rewriteError。
 func (h *Hlc) rewriteAs(rule string, c *cexpr, typ string) {
+	if c != nil && c.compound != nil {
+		h.rewriteCompoundAs(rule, c.compound, typ)
+		return
+	}
 	if c == nil || !c.pos.IsValid() || !c.end.IsValid() {
 		h.rewriteError(rule, "the expression has no position")
 		return
@@ -92,6 +97,27 @@ func (h *Hlc) rewriteAs(rule string, c *cexpr, typ string) {
 	}
 	h.addRewrite(rule, s, s, "(")
 	h.addRewrite(rule, e, e, ") as "+typ)
+}
+
+// rewriteCompoundAs は複合代入 `x op= y` を `x = (x op y) as T` に書き換える (脱糖した (op x y) の値を変換する所)。
+func (h *Hlc) rewriteCompoundAs(rule string, a *syntax.AssignExpr, typ string) {
+	src := h.prog.Sources[h.module.Id]
+	if src == nil || !a.Lhs.Pos().IsValid() || !a.Rhs.End().IsValid() {
+		h.rewriteError(rule, "the compound assignment has no position")
+		return
+	}
+	ls, le := a.Lhs.Pos().Offset, a.Lhs.End().Offset
+	rs, re := a.Rhs.Pos().Offset, a.Rhs.End().Offset
+	if !(0 <= ls && ls < le && le <= rs && rs < re && re <= len(src.Src)) {
+		h.rewriteError(rule, "the compound assignment has no position")
+		return
+	}
+	lhs, rhs := string(src.Src[ls:le]), string(src.Src[rs:re])
+	op := strings.TrimSuffix(strings.TrimSpace(string(src.Src[le:rs])), "=")
+	if !simpleExpr(src.Src[rs:re]) {
+		rhs = "(" + rhs + ")"
+	}
+	h.addRewrite(rule, ls, re, fmt.Sprintf("%s = (%s %s %s) as %s", lhs, lhs, op, rhs, typ))
 }
 
 // simpleExpr は b が `as` を後ろに付けてもそのまま読める式か: 1 語 (名前・数・`a.b`。前に `-` があってもよい: 単項演算子は

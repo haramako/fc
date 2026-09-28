@@ -27,6 +27,9 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 	defer h.enterExpr(c.pos)()
 	r := h.constEval0(c)
 	r.pos, r.end = c.pos, c.end // 位置 (エラー報告と fc 4 への書き換え: rewrite.go) は評価前の式のもの
+	if c.compound != nil {
+		r.compound = c.compound
+	}
 	h.cmemo[c] = r
 	return r
 }
@@ -256,8 +259,16 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				// (`(0 as u8) + 242` と `(-5 as i8)` の剰余は i8 の -14 % -5。畳み込みが 242 のまま計算して実行時と違っていた。
 				// TestRandomConstFold で発覚)。シフトの量はそのまま
 				t := h.foldType(args, false)
-				if h.v4() && (c.op == opShiftLeft || c.op == opShiftRight) {
-					t = h.foldType(args[:1], false) // F1: シフトの結果は左辺の型
+				if c.op == opShiftLeft || c.op == opShiftRight {
+					// F1: fc 4 のシフトの結果は左辺の型 (型のない左辺なら型のない値)。fc 3 は両辺で決めるので、違えば
+					// migrate に左辺を今の型の `as` にする書き換えを報告する (`32 << (6 as u8)` は fc 3 では u8 の 0)
+					tl := h.foldType(args[:1], false)
+					switch {
+					case h.v4():
+						t = tl
+					case h.rewriting() && t != nil && t != tl && len(c.args) == 2:
+						h.rewriteAs("shift-type", c.args[0], t.String())
+					}
 				}
 				switch {
 				case t == nil || c.op == opLand || c.op == opLor || c.op == opNot:

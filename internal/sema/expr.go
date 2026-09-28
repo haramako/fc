@@ -842,6 +842,12 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 		if from.Kind == types.Array {
 			return ir.NewPointeredArray(v, to)
 		}
+		if tv, ok := v.(*ir.Value); ok && from == to && to.Kind == types.Int {
+			// 同じ型への `as` は値そのもの (包まない。fc 3 → 4 の migrate が足す `(式) as T` で IR が変わらないように、どの版も)。
+			// `as` は A1 の区切りなので、式の中の算術の結果なら広げない印にする (widen.go)
+			delete(h.arith, tv)
+			return v
+		}
 		if to.Size > from.Size && from.Signed {
 			newV := h.newTmp(to)
 			h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: newV, Src: []ir.Operand{v}})
