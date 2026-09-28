@@ -746,6 +746,11 @@ func (s *ssaForm) simplify() bool {
 		if def == nil || len(def.Src) != 2 || ir.ValType(def.Dst) != ir.ValType(op.Src[0]) || ir.ValType(def.Dst).Signed {
 			continue // def が nil: rewrite が消した `load x = x` (fuzz で発覚)
 		}
+		if !ir.PlainOperand(op.Src[0]) || ir.ValOffset(op.Src[0]) != 0 {
+			// 入力が def の結果を切り詰めて読む (`cast<u16, 0/1>(x >> 1) >> 0` は下位 1 バイトだけ) なら畳めない
+			// (x >> 1 に畳んで上位を残していた。TestRandomConstFold で発覚)
+			continue
+		}
 		if op.IsSigned() || def.IsSigned() {
 			continue // 符号付きの除算・算術シフトは畳まない (以下は符号なしの規則)
 		}
