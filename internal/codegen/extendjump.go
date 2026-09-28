@@ -1,6 +1,10 @@
 package codegen
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/haramako/fc/internal/m6502"
+)
 
 // extend_jump: 分岐命令の飛び先が ±127 バイトを超えるとき 2 段階ジャンプ (`bne L` → `beq @n; jmp L; @n:`) に
 // 変換する (asm の後処理)。
@@ -54,7 +58,7 @@ func (l *Llc) extendJump(asm []string) []string {
 		if a.isBranch() && sizes[i] == 5 {
 			label := l.newLabel()
 			result.push([]string{
-				fmt.Sprintf("\t%s %s", mnemTable[a.Mnem].inverse, label),
+				fmt.Sprintf("\t%s %s", m6502.Table[a.Mnem].Inverse, label),
 				fmt.Sprintf("\tjmp %s", a.Arg.Raw),
 				label + ":",
 			})

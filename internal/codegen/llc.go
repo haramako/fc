@@ -5,7 +5,6 @@ package codegen
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"regexp"
 	"sort"
@@ -31,9 +30,9 @@ type Llc struct {
 	// 普段のビルドでは見積もりが外れないので、この経路は通らない)
 	MisclassifyResident bool
 	codeSegment         string
-	curLambda           *ir.Lambda // 処理中の関数 (エラー位置の補完用)
-	curOp               *ir.Op     // 処理中の命令 (エラー位置の補完用)
-	zero                *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
+	curLambda           *ir.Lambda            // 処理中の関数 (エラー位置の補完用)
+	curOp               *ir.Op                // 処理中の命令 (エラー位置の補完用)
+	zero                *ir.Value             // 定数 0 (mul の 0 倍の最適化用)
 	Lambdas             map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果。SetLambdas)
 
 	// DebugFile が nil でなければ、命令ごとに fc のソース位置を `.dbg line, "file", N` で .s に埋める (fcc build -g)。
@@ -410,63 +409,19 @@ func (l *Llc) restoreY(idx ir.Operand, size int) []any {
 
 // CompileLambda は関数1つ分のアセンブリを生成する (Prepare 済みであること)。
 //
-// 常駐レジスタを「触らない」(regalloc.Classify の ResFree) とした命令の本体が実際にはそのレジスタを書いていたら、
-// その命令だけ退避 / 復帰 (ResClobber) にして関数ごとコンパイルし直す。regalloc の「どの命令が A / X / Y を
-// 使うか」(freeA / needsX / needsY) は codegen の出力を手で写した見積もりで、食い違いが fuzz で何度も出た
-// (2 バイトの dec が A を壊す、cast を挟んだ if、Y 代用と融合 …)。正しさは実際に出した命令列から決め、見積もりは
-// 常駐の損得の計算にだけ使う (外れても遅くなるだけ)。FC_TRACE_RESIDENT で直した命令を stderr に出す。
+// 常駐レジスタの扱い (置いたまま実行する / 触らない / 退避する) は regalloc.Classify が決める。その「形」(Y に常駐する変数の
+// ldy / cpy / iny、A を使わないメモリ上の inc …) は regalloc の形の表 (regalloc/forms.go) で、codegen は同じ表で命令を出す
+// (以前は codegen の出力を手で写した予測表で、食い違いを関数ごと最大 8 回コンパイルし直して吸収していた)。表の外の予測
+// (汎用の出力が A / X / Y を使うか: needsX / needsY、A の値をそのまま扱う形) が外れて、触らないとした命令の本体が常駐
+// レジスタを書いていたら、その命令だけ退避 / 復帰にして出し直す (compileLambda)。テストと fuzz (FC_VERIFY_REGS) では
+// 食い違いそのものをコンパイルエラーにする。FC_TRACE_RESIDENT で出し直した命令を stderr に出す。
 func (l *Llc) CompileLambda(sym string, lmd *ir.Lambda) []string {
-	saved := l.saveState()
-	forced := map[int]regsKept{}
-	for try := 0; ; try++ {
-		g := &funcGen{Llc: l}
-		lines, writes := g.compileLambda(sym, lmd, forced)
-		if len(writes) == 0 {
-			return lines
-		}
-		if try >= 8 {
-			panic(&diag.Error{Msg: fmt.Sprintf("internal: resident registers did not converge in %s", lmd.Id)})
-		}
-		for opNo, w := range writes {
-			f := forced[opNo]
-			f.a, f.x, f.y = f.a || w.a, f.x || w.x, f.y || w.y
-			forced[opNo] = f
-			if lmd.Cfg().Trace("resident") != "" {
-				fmt.Fprintf(os.Stderr, "resident: %s op %d writes %+v; spill instead: %s\n", lmd.Id, opNo, w, ir.DumpOp(lmd.Ops[opNo], nil))
-			}
-		}
-		l.ResidentFixes += len(writes)
-		l.restoreState(saved)
-	}
+	g := &funcGen{Llc: l}
+	return g.compileLambda(sym, lmd)
 }
 
-// llcState はコンパイルし直すときに戻す状態 (ラベルの番号、.dbg、呼び出しの引数の保持、融合)。
-type llcState struct {
-	labelCount int
-	dbgFiles   map[string]bool
-	dbgLast    string
-	holdA      bool
-	holdX      int
-	fused      map[*ir.Value]string
-	fusedAt    int
-	logSites   int
-}
-
-func (l *Llc) saveState() llcState {
-	return llcState{labelCount: l.labelCount, dbgFiles: maps.Clone(l.dbgFiles), dbgLast: l.dbgLast,
-		holdA: l.holdA, holdX: l.holdX, fused: l.fused, fusedAt: l.fusedAt, logSites: len(l.LogSites)}
-}
-
-func (l *Llc) restoreState(s llcState) {
-	l.labelCount, l.dbgFiles, l.dbgLast, l.holdA, l.holdX, l.fused, l.fusedAt =
-		s.labelCount, maps.Clone(s.dbgFiles), s.dbgLast, s.holdA, s.holdX, s.fused, s.fusedAt
-	l.LogSites = l.LogSites[:s.logSites]
-}
-
-// compileLambda は CompileLambda の 1 回分。forced の命令は常駐レジスタを退避 / 復帰する。戻り値の writes は、
-// 常駐を触らないとした命令の本体が書いていたレジスタ (空ならこのコンパイルで正しい)。
-func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsKept) ([]string, map[int]regsKept) {
-	writes := map[int]regsKept{}
+// compileLambda は CompileLambda の本体。
+func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda) []string {
 	l.lmd = lmd
 	l.curLambda = lmd // エラー位置の補完用 (Compile の回復点で参照するので、ここでは戻さない)
 	l.curOp = nil
@@ -569,166 +524,28 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsK
 		if l.fused != nil && opNo != l.fusedAt+1 {
 			l.fused = nil
 		}
-		// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
-		l.beginOp(op)
-		l.restore = [ir.NumRegs]bool{} // 命令の後でレジスタに戻す常駐
-		restore := &l.restore
-		opStart, holdAIn, holdXIn := len(r.lines), l.holdA, l.holdX
-		var d regalloc.Decision
+		// 常駐を触らないはずの本体がそのレジスタを書いていたら、この命令だけ退避 / 復帰にして出し直す
+		// (regalloc の形の表・規則と codegen の出力の食い違い。テストと fuzz (FC_VERIFY_REGS) ではコンパイルエラー)
+		var snap opState
 		if op.HasResident() {
-			d, _ = regalloc.Classify(lmd, opNo, op.Res[ir.RegA].V, op.Res[ir.RegY].V, op.Res[ir.RegX].V, op.Res[ir.RegA].In || op.Res[ir.RegA].Out, op.Res[ir.RegA].Out, op.Res[ir.RegY].In || op.Res[ir.RegY].Out)
-			if l.MisclassifyResident {
-				// テスト用: 見積もりをわざと外す (下の forced が直す)。常駐の変数そのものを読み書きする命令は、退避して
-				// メモリ側で扱うしかない (レジスタのまま出せない形がある) ので対象外。実際に外れるのも「変数を触らない
-				// 命令がレジスタを書いていた」形
-				if d.A == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegA].V) {
-					d.A, d.UseY = regalloc.ResFree, false
-				}
-				if d.Y == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegY].V) {
-					d.Y = regalloc.ResFree
-				}
-				if d.X == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegX].V) {
-					d.X = regalloc.ResFree
-				}
-			}
-			// 前のコンパイルで、触らないはずの本体が書いていた常駐レジスタは退避 / 復帰する (CompileLambda)
-			if f := forced[opNo]; f.any() {
-				if f.a && d.A == regalloc.ResFree {
-					d.A, d.UseY = regalloc.ResClobber, false
-				}
-				if f.y && d.Y == regalloc.ResFree {
-					d.Y = regalloc.ResClobber
-				}
-				if f.x && d.X == regalloc.ResFree {
-					d.X = regalloc.ResClobber
-				}
-			}
-			// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
-			// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
-			// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
-			if op.Res[ir.RegX].V != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
-				if op.Res[ir.RegX].In && !op.Res[ir.RegX].V.Clean && l.holdX == 0 {
-					r.push(l.spillResident(op, ir.RegX))
-				}
-				l.resMem[ir.RegX] = true
-				restore[ir.RegX] = op.Res[ir.RegX].Out && (l.holdX == 0 || (ir.IsCall(op) && l.holdX == 1))
-			}
-			// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
-			// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
-			// A の最後の引数も同じ (push_arg で退避、call では退避しない)
-			holdY := op.ArgY || op.HoldY
-			if holdY && d.UseY {
-				d.UseY, d.A = false, regalloc.ResClobber
-			}
-			if op.Res[ir.RegA].V != nil && (d.A == regalloc.ResClobber || l.holdA) {
-				if op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.holdA {
-					r.push(l.spillResident(op, ir.RegA))
-				}
-				l.resMem[ir.RegA] = true
-				restore[ir.RegA] = op.Res[ir.RegA].Out
-			}
-			if op.Res[ir.RegY].V != nil && (d.Y == regalloc.ResClobber || holdY) {
-				if op.Res[ir.RegY].In && !op.Res[ir.RegY].V.Clean && !op.HoldY {
-					r.push(l.spillResident(op, ir.RegY))
-				}
-				l.resMem[ir.RegY] = true
-				restore[ir.RegY] = op.Res[ir.RegY].Out && !op.ArgY && !(op.HoldY && !ir.IsCall(op))
-			}
-			l.aHeld = d.UseY
+			snap = l.saveOp()
 		}
-		bodyStart := len(r.lines)
-		keep := regsKept{
-			a: op.Res[ir.RegA].V != nil && !l.resMem[ir.RegA] && d.A == regalloc.ResFree,
-			y: op.Res[ir.RegY].V != nil && !l.resMem[ir.RegY] && d.Y == regalloc.ResFree,
-			x: op.Res[ir.RegX].V != nil && !l.resMem[ir.RegX] && d.X == regalloc.ResFree,
-		}
-
-		switch op.Code {
-		case ir.OpLabel:
-			l.genLabel()
-		case ir.OpIf, ir.OpIfTrue:
-			l.genIf()
-		case ir.OpIfCarry:
-			l.genIfCarry()
-		case ir.OpIfNotCarry:
-			l.genIfNotCarry()
-		case ir.OpJump:
-			l.genJump()
-		case ir.OpSwitch:
-			l.genSwitch()
-		case ir.OpReturn:
-			l.genReturn()
-		case ir.OpPushResult, ir.OpPushFastcallResult:
-			l.genPushResult()
-		case ir.OpPushArg, ir.OpPushFastcallArg:
-			l.genPushArg()
-		case ir.OpCall, ir.OpFastcall:
-			l.genCall()
-		case ir.OpLoad:
-			l.genLoad()
-		case ir.OpSignExtension:
-			l.genSignExtension()
-		case ir.OpAdd, ir.OpSub:
-			l.genAddSub()
-		case ir.OpAnd, ir.OpOr, ir.OpXor:
-			l.genBitwise()
-		case ir.OpMul, ir.OpDiv, ir.OpMod:
-			l.genMulDivMod()
-		case ir.OpRolC, ir.OpRorC:
-			l.genRotateCarry()
-		case ir.OpShiftLeft, ir.OpShiftRight:
-			l.genShift()
-		case ir.OpUminus:
-			l.genUminus()
-		case ir.OpEq:
-			l.genEq()
-		case ir.OpLt:
-			l.genLt()
-		case ir.OpNot:
-			l.genNot()
-		case ir.OpBitNot:
-			l.genBitNot()
-		case ir.OpAsm:
-			l.genAsm()
-		case ir.OpIndex:
-			l.genIndex()
-		case ir.OpRef:
-			l.genRef()
-		case ir.OpLoadMem:
-			l.genLoadMem()
-		case ir.OpStoreMem:
-			l.genStoreMem()
-		default:
-			panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
-		}
-		bodyEnd := len(r.lines)
-		if *restore != ([ir.NumRegs]bool{}) {
-			// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
-			// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
-			// C (符号なしの lt) はロードで変わらないので挟まない
-			cond := ir.CondRestoreNeedsFlags(op)
-			if cond {
-				r.push("php")
+		var forced regsKept
+		for try := 0; ; try++ {
+			w := l.compileOp(opNo, op, forced, verify)
+			if !w.any() {
+				break
 			}
-			r.push(l.restoreResident(op, *restore, ir.RegA, ir.RegY, ir.RegX)...)
-			if cond {
-				r.push("plp")
+			if verify && !l.MisclassifyResident || try >= int(ir.NumRegs) {
+				panic(&diag.Error{Msg: fmt.Sprintf("internal: resident register written by an op classified as not touching it (%+v; regalloc forms / rules disagree with codegen) in %s: %s", w, lmd.Id, ir.DumpOp(op, nil))})
 			}
-		}
-		if w := keep.and(regsWritten(r.lines[bodyStart:bodyEnd])); w.any() {
-			writes[opNo] = w // 常駐を触らないはずの本体が書いた: この命令は退避 / 復帰にしてコンパイルし直す
-		}
-		if verify {
-			// 呼び出しの引数の保持中 (A の最後の引数、Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない
-			// (codegen の中の約束事なので、破っていたらコンパイルエラー)
-			hold := regsKept{
-				a: holdAIn && !ir.IsCall(op),
-				y: op.HoldY && !ir.IsCall(op),
-				x: holdXIn > 0 && !ir.IsCall(op) && op.Code != ir.OpPushResult,
+			if lmd.Cfg().Trace("resident") != "" {
+				fmt.Fprintf(os.Stderr, "resident: %s op %d writes %+v; spill instead: %s\n", lmd.Id, opNo, w, ir.DumpOp(op, nil))
 			}
-			l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
+			l.ResidentFixes++
+			l.restoreOp(snap)
+			forced = forced.or(w)
 		}
-		l.endOp()
 	}
 
 	// 関数の中の const の表・文字列 (.proc の中のラベルなので、この関数の中からしか参照されない)。コード (インラインアセンブラを
@@ -766,7 +583,208 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda, forced map[int]regsK
 	}
 
 	lmd.Asm = lines
-	return lines, writes
+	return lines
+}
+
+// compileOp は命令 1 つを出す (常駐の扱いの決定・退避と復帰・本体・レジスタの検査)。forced のレジスタは常駐を退避 / 復帰する。
+// 戻り値は、常駐を触らないとした本体が書いていたレジスタ (空ならこの命令は正しい)。
+func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) regsKept {
+	r, lmd := l.r, l.lmd
+	// A / Y 常駐: この命令の扱い (friendly / 触らない / 退避)
+	l.beginOp(op)
+	l.restore = [ir.NumRegs]bool{} // 命令の後でレジスタに戻す常駐
+	restore := &l.restore
+	opStart, holdAIn, holdXIn := len(r.lines), l.holdA, l.holdX
+	var d regalloc.Decision
+	if op.HasResident() {
+		d, _ = regalloc.Classify(lmd, opNo, op.Res[ir.RegA].V, op.Res[ir.RegY].V, op.Res[ir.RegX].V, op.Res[ir.RegA].In || op.Res[ir.RegA].Out, op.Res[ir.RegA].Out, op.Res[ir.RegY].In || op.Res[ir.RegY].Out)
+		if l.MisclassifyResident {
+			// テスト用: 見積もりをわざと外す (下の forced が直す)。常駐の変数そのものを読み書きする命令は、退避して
+			// メモリ側で扱うしかない (レジスタのまま出せない形がある) ので対象外。実際に外れるのも「変数を触らない
+			// 命令がレジスタを書いていた」形
+			if d.A == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegA].V) {
+				d.A, d.UseY = regalloc.ResFree, false
+			}
+			if d.Y == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegY].V) {
+				d.Y = regalloc.ResFree
+			}
+			if d.X == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegX].V) {
+				d.X = regalloc.ResFree
+			}
+		}
+		// 前の試みで、触らないはずの本体が書いていた常駐レジスタは退避 / 復帰する (compileLambda)
+		if f := forced; f.any() {
+			if f.a && d.A == regalloc.ResFree {
+				d.A, d.UseY = regalloc.ResClobber, false
+			}
+			if f.y && d.Y == regalloc.ResFree {
+				d.Y = regalloc.ResClobber
+			}
+			if f.x && d.X == regalloc.ResFree {
+				d.X = regalloc.ResClobber
+			}
+		}
+		// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
+		// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
+		// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
+		if op.Res[ir.RegX].V != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
+			if op.Res[ir.RegX].In && !op.Res[ir.RegX].V.Clean && l.holdX == 0 {
+				r.push(l.spillResident(op, ir.RegX))
+			}
+			l.resMem[ir.RegX] = true
+			restore[ir.RegX] = op.Res[ir.RegX].Out && (l.holdX == 0 || (ir.IsCall(op) && l.holdX == 1))
+		}
+		// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
+		// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
+		// A の最後の引数も同じ (push_arg で退避、call では退避しない)
+		holdY := op.ArgY || op.HoldY
+		if holdY && d.UseY {
+			d.UseY, d.A = false, regalloc.ResClobber
+		}
+		if op.Res[ir.RegA].V != nil && (d.A == regalloc.ResClobber || l.holdA) {
+			if op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.holdA {
+				r.push(l.spillResident(op, ir.RegA))
+			}
+			l.resMem[ir.RegA] = true
+			restore[ir.RegA] = op.Res[ir.RegA].Out
+		}
+		if op.Res[ir.RegY].V != nil && (d.Y == regalloc.ResClobber || holdY) {
+			if op.Res[ir.RegY].In && !op.Res[ir.RegY].V.Clean && !op.HoldY {
+				r.push(l.spillResident(op, ir.RegY))
+			}
+			l.resMem[ir.RegY] = true
+			restore[ir.RegY] = op.Res[ir.RegY].Out && !op.ArgY && !(op.HoldY && !ir.IsCall(op))
+		}
+		l.aHeld = d.UseY
+	}
+	bodyStart := len(r.lines)
+	keep := regsKept{
+		a: op.Res[ir.RegA].V != nil && !l.resMem[ir.RegA] && d.A == regalloc.ResFree,
+		y: op.Res[ir.RegY].V != nil && !l.resMem[ir.RegY] && d.Y == regalloc.ResFree,
+		x: op.Res[ir.RegX].V != nil && !l.resMem[ir.RegX] && d.X == regalloc.ResFree,
+	}
+
+	switch op.Code {
+	case ir.OpLabel:
+		l.genLabel()
+	case ir.OpIf, ir.OpIfTrue:
+		l.genIf()
+	case ir.OpIfCarry:
+		l.genIfCarry()
+	case ir.OpIfNotCarry:
+		l.genIfNotCarry()
+	case ir.OpJump:
+		l.genJump()
+	case ir.OpSwitch:
+		l.genSwitch()
+	case ir.OpReturn:
+		l.genReturn()
+	case ir.OpPushResult, ir.OpPushFastcallResult:
+		l.genPushResult()
+	case ir.OpPushArg, ir.OpPushFastcallArg:
+		l.genPushArg()
+	case ir.OpCall, ir.OpFastcall:
+		l.genCall()
+	case ir.OpLoad:
+		l.genLoad()
+	case ir.OpSignExtension:
+		l.genSignExtension()
+	case ir.OpAdd, ir.OpSub:
+		l.genAddSub()
+	case ir.OpAnd, ir.OpOr, ir.OpXor:
+		l.genBitwise()
+	case ir.OpMul, ir.OpDiv, ir.OpMod:
+		l.genMulDivMod()
+	case ir.OpRolC, ir.OpRorC:
+		l.genRotateCarry()
+	case ir.OpShiftLeft, ir.OpShiftRight:
+		l.genShift()
+	case ir.OpUminus:
+		l.genUminus()
+	case ir.OpEq:
+		l.genEq()
+	case ir.OpLt:
+		l.genLt()
+	case ir.OpNot:
+		l.genNot()
+	case ir.OpBitNot:
+		l.genBitNot()
+	case ir.OpAsm:
+		l.genAsm()
+	case ir.OpIndex:
+		l.genIndex()
+	case ir.OpRef:
+		l.genRef()
+	case ir.OpLoadMem:
+		l.genLoadMem()
+	case ir.OpStoreMem:
+		l.genStoreMem()
+	default:
+		panic(fmt.Sprintf("unknow op %s", ir.DumpOp(op, nil)))
+	}
+	bodyEnd := len(r.lines)
+	if *restore != ([ir.NumRegs]bool{}) {
+		// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
+		// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
+		// C (符号なしの lt) はロードで変わらないので挟まない
+		cond := ir.CondRestoreNeedsFlags(op)
+		if cond {
+			r.push("php")
+		}
+		r.push(l.restoreResident(op, *restore, ir.RegA, ir.RegY, ir.RegX)...)
+		if cond {
+			r.push("plp")
+		}
+	}
+	written := keep.and(regsWritten(r.lines[bodyStart:bodyEnd])) // 常駐を触らないはずの本体が書いたレジスタ
+	if verify {
+		// 呼び出しの引数の保持中 (A の最後の引数、Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない
+		// (codegen の中の約束事なので、破っていたらコンパイルエラー)
+		hold := regsKept{
+			a: holdAIn && !ir.IsCall(op),
+			y: op.HoldY && !ir.IsCall(op),
+			x: holdXIn > 0 && !ir.IsCall(op) && op.Code != ir.OpPushResult,
+		}
+		l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
+	}
+	l.endOp()
+	return written
+}
+
+// opState は命令 1 つを出し直すときに戻す状態 (出力の行、ラベルの番号、融合、呼び出しの引数の保持、.dbg)。
+type opState struct {
+	lines               int
+	labelCount          int
+	fused               map[*ir.Value]string
+	fusedAt             int
+	holdA               bool
+	holdX               int
+	calls               []pendingCall
+	pushArgSize         int
+	pushFastcallArgSize int
+	dbgLast             string
+	logSites            int
+}
+
+func (l *funcGen) saveOp() opState {
+	s := opState{lines: len(l.r.lines), labelCount: l.labelCount, fused: l.fused, fusedAt: l.fusedAt, holdA: l.holdA, holdX: l.holdX,
+		pushArgSize: l.pushArgSize, pushFastcallArgSize: l.pushFastcallArgSize, dbgLast: l.dbgLast, logSites: len(l.LogSites)}
+	for _, pc := range l.calls {
+		s.calls = append(s.calls, *pc)
+	}
+	return s
+}
+
+func (l *funcGen) restoreOp(s opState) {
+	l.r.lines = l.r.lines[:s.lines]
+	l.labelCount, l.fused, l.fusedAt, l.holdA, l.holdX = s.labelCount, s.fused, s.fusedAt, s.holdA, s.holdX
+	l.pushArgSize, l.pushFastcallArgSize, l.dbgLast = s.pushArgSize, s.pushFastcallArgSize, s.dbgLast
+	l.LogSites = l.LogSites[:s.logSites]
+	l.calls = l.calls[:0]
+	for i := range s.calls {
+		pc := s.calls[i]
+		l.calls = append(l.calls, &pc)
+	}
 }
 
 var reIndentExempt = regexp.MustCompile(`^([.@_a-zA-Z0-9][_a-zA-Z0-9]+:|\.segment|\.proc)`)
@@ -778,22 +796,7 @@ func (l *Llc) newLabel() string {
 
 // condJump はコンディションレジスタの値 v が真 (onTrue) / 偽のときに飛ぶ分岐命令。CondPositive のとき「真 ⇔ フラグが
 // セット」、ただし C だけは「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)。
-func condJump(v *ir.Value, onTrue bool) string {
-	trueIsSet := v.CondPositive
-	if v.CondReg == ir.CondCarry {
-		trueIsSet = !v.CondPositive
-	}
-	jumpIfSet := trueIsSet == onTrue
-	switch v.CondReg {
-	case ir.CondZero:
-		return ifElse(jumpIfSet, "beq", "bne")
-	case ir.CondCarry:
-		return ifElse(jumpIfSet, "bcs", "bcc")
-	case ir.CondNegative:
-		return ifElse(jumpIfSet, "bmi", "bpl")
-	}
-	panic("invalid cond_reg")
-}
+func condJump(v *ir.Value, onTrue bool) string { return regalloc.CondBranch(v, onTrue) }
 
 func (l *Llc) newLabels(n int) []string {
 	r := make([]string, n)

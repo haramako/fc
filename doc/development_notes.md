@@ -280,7 +280,13 @@ go test ./...                                    # 全部 (golden + examples + N
   ResFree にする）で見積もりをわざと外し、ランダムなプログラム 6 本で自己修正が働いて（約 5,600 命令を直す）実行結果が
   普段と同じになることを確かめる
   呼び出しの引数の保持（A の最後の引数、Y の引数、stack 系の X = FC_SP）の検査は codegen の中の約束事なので、
-  `FC_VERIFY_REGS` のコンパイルエラーのまま
+  `FC_VERIFY_REGS` のコンパイルエラーのまま。
+  **2026-09-28 から**: 常駐の形（Y に常駐する変数の ldy / cpy / iny、A が塞がっているときの Y での代用、A を使わない
+  メモリ上の inc / シフト / rol、フラグの分岐）は regalloc と codegen が同じ表（`regalloc/forms.go`）を引く。codegen は
+  表で命令を出し、regalloc は同じ命令列から「置いたまま実行できるか」「A を触らないか」と得（m6502 のサイクル数）を
+  計算する。関数ごとの作り直しは命令単位の出し直し（`compileOp` と `saveOp` / `restoreOp`）に置き換え、テストと fuzz
+  （`FC_VERIFY_REGS`）では食い違いそのものをコンパイルエラーにした（外れうるのは表の外の予測: needsX / needsY と、
+  汎用の出力が A の値をそのまま扱う形の規則）。`TestResidentSelfCorrection` の自己修正は命令単位で働く（約 7,400 命令）
 - **生成器をさらに広げた**（2026-09-23）: soa（`soa E:[8]S`。フィールドの読み書き、要素ハンドル `h:*E`、要素の
   gather / scatter）、struct の値のコピー（`s0 = sa[i]`、重なりうる `sa[i] = sa[j]`、`*ps = …`）、`ps:*S` の引数、
   far1 の関数の farfn 表（`const fq0:[2]farfn(…)` をトランポリン経由で呼ぶ）、main の関数ポインタのローカル変数
@@ -492,7 +498,8 @@ go test ./...                                    # 全部 (golden + examples + N
   `frames.Place`。順序はここだけが持つ。codegen は `pipeline.Backend` として呼び出しの計画 (`MarkArgY` / `CheckStackPush`)
   を提供する）→ `codegen`（`Llc` はモジュール単位、`funcGen`（genops.go）は関数単位で命令ごとのメソッド `genXxx`。
   生成した asm の後処理（ピープホール・レジスタの検査・分岐の延長・@log の地点）は `asm.go` の解析した行 `asmLine` の上で
-  書く。ニーモニックの性質は `mnemTable` の 1 つ、番地の同一性は `operand.key()`（記号 + ずれ + 添字。綴りは見ない））。
+  書く。ニーモニックの性質（書くレジスタ・フラグ・サイクル数）は `internal/m6502` の表 1 つ（regalloc の見積もりと共有）、
+  番地の同一性は `operand.key()`（記号 + ずれ + 添字。綴りは見ない））。
 - **driver とその周り**: `driver` はビルドの手順（`compileFront` = sema → Prepare → フレーム超過のやり直し。build / check /
   golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。設定ファイルと
   バンクの配置は `project`、ca65 / ld65 の探索と dbgfile は `cc65`、@log の生成物は `fclog`、FC_HOME の解決は `fchome`、
@@ -520,6 +527,14 @@ go test ./...                                    # 全部 (golden + examples + N
   符号拡張だけが `sign_extension`）。interp は差分テストの独立した判定役なので、sema の直後の IR を型から自分で解釈する。
 - **常駐の印**は `Op.Res[ir.RegA / RegY / RegX]`（`Residency{V, In, Out}`）。codegen の状態も `res[reg]` / `resMem[reg]`。
   退避・復帰・入口 / 出口の写しはレジスタのループで書く（A / Y / X で 3 回書かない）。
+- **常駐の形**（`regalloc/forms.go`）: 常駐のレジスタを使う・触らない特別な出し方（`Form`）を 1 回だけ書き、codegen は
+  それで命令を出し（genLoad / genIf / genEq / genLt / genAddSub / genShift / genRotateCarry。`codegen/forms.go` の
+  `placement` / `emitter`）、regalloc の `Classify`（`regalloc/classify.go`）は同じ形から friendly / free と得を決める。
+  形が決まる条件のうち、どのレジスタに何があるかは `Placement`（codegen は割付の後の実際、regalloc は常駐させたときの
+  見込み）、比較の結果がフラグに乗るかは引数（codegen は LocCond、regalloc は condPredicted）。得は形の命令列と
+  「常駐させないときの命令列」（`base`）のサイクル差（m6502。ゼロページで数える）。形を足すときは forms.go に 1 つ
+  足せば両方に効く。表の外（汎用の出力が A の値をそのまま扱う形・添字を Y / X のまま使う形・needsX / needsY）は
+  classify.go の規則で、外れたら codegen が命令単位で出し直す（テストと fuzz ではコンパイルエラー）。
 - **opt の段**は `opt.Pass{Name, Requires, Grows, Run, Then, Repeat}` で宣言し、`Pass.Apply` が FC_DISABLE の判定・compact・
   @log の付け替え・トレース・IR の検証を一括で行う。段を足すときは変換だけを書き、`Passes()` に並べる（順序の依存は
   そこのコメントに）。fuzz の切り分け `rpLocate` も `Apply` で 1 段ずつ当てる。
