@@ -59,7 +59,7 @@ function main():void { f(1); }
 `})
 	body := asm[strings.Index(asm, ".proc _t_f\n"):]
 	body = body[:strings.Index(body, ".endproc")]
-	if !strings.Contains(body, "sta _t_gs+1+0,y") || strings.Contains(body, "(F_t_f") {
+	if !strings.Contains(body, "sta _t_gs+1,y") || strings.Contains(body, "(F_t_f") {
 		t.Errorf("gs[i].b への書き込みが添字の形になっていない:\n%s", body)
 	}
 }

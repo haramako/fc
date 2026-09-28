@@ -225,7 +225,7 @@ func TestSSAExcluded(t *testing.T) {
 	lmd := lambda(
 		op(ir.OpLoad, x, lit(5, u8())),
 		op(ir.OpRef, p, x),
-		op(ir.OpPset, nil, p, lit(1, u8())),
+		ir.NewStoreMem(p, nil, 0, 0, 1, lit(1, u8())),
 		op(ir.OpAdd, tv, x, lit(1, u8())),
 		pushArg(u8(), tv),
 		op(ir.OpLoad, w, lit(0, u16())),
@@ -236,7 +236,7 @@ func TestSSAExcluded(t *testing.T) {
 	check(t, lmd,
 		"load x = #5",
 		"ref p = x",
-		"pset p, #1",
+		"store_mem p, #1, w=1",
 		"add t = x, #1",
 		"push_arg nil = t",
 		"load w = #0",

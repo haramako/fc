@@ -24,16 +24,23 @@ func DefUse(op *Op) (defs, uses []Operand) {
 		}
 		uses = op.Src[:1]
 	case OpAdd, OpSub, OpAnd, OpOr, OpXor, OpMul, OpDiv, OpMod, OpEq, OpLt,
-		OpShiftLeft, OpShiftRight, OpIndex, OpPget, OpIndexPget, OpFieldPget:
+		OpShiftLeft, OpShiftRight, OpIndex:
 		defs = []Operand{op.Dst}
 		uses = op.Src
-	case OpPset, OpIndexPset, OpFieldPset:
-		uses = op.Src
+	case OpLoadMem:
+		defs = []Operand{op.Dst}
+		uses = memUses(op)
+	case OpStoreMem:
+		uses = memUses(op)
 	default:
 		panic(fmt.Sprintf("DefUse: invalid op %v", DumpOp(op, nil)))
 	}
 	return
 }
+
+// memUses は load_mem / store_mem が使うオペランド。添字の番兵 NoIndex はリテラルなので変数の使用にはならないが、
+// SSA など「Src の添字順」で使用を引く側のために Src をそのまま返す (要素を抜くと位置がずれる)。
+func memUses(op *Op) []Operand { return op.Src }
 
 // IsPartialDef は Dst が変数の一部 (CastedValue の Offset つき、または元より小さい型) への書き込みか。
 // 一部への書き込みは残りのバイトを保つので、値の使用でもある。

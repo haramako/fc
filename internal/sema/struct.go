@@ -6,7 +6,7 @@ package sema
 //   - 変数 (ローカル / グローバル / 一時) の struct: ir.CastedValue{From: 変数, Type: フィールド型, Offset} で
 //     直接その場所を指す (実行時のポインタ計算なし。コード生成が sym+off / S+addr+off,x にする)
 //   - ポインタ経由 (`p.x` の p が *Struct、`arr[i].x`、`(*p).x`): ポインタ + オフセットを add で計算し、
-//     結果を *フィールド型 の左辺値 (pget / pset で読み書き) とする。オフセット 0 なら型ラベルの貼り替えだけ
+//     結果を *フィールド型 の左辺値 (load_mem / store_mem で読み書き) とする。オフセット 0 なら型ラベルの貼り替えだけ
 
 import (
 	"fmt"
@@ -266,7 +266,7 @@ func (h *Hlc) fieldRef(arg *cexpr, name string) fieldRef {
 		ptr := left
 		if lv {
 			ptr = h.newTmp(t)
-			h.emit(&ir.Op{Code: ir.OpPget, Dst: ptr, Src: []ir.Operand{left}})
+			h.emit(ir.NewLoadMem(ptr, left, nil, 0, 0))
 		}
 		return fieldRef{v: h.fieldViaPointer(ptr, t.Base, name), lv: true}
 	case t.Kind == types.Struct:

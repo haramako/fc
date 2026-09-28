@@ -7,12 +7,12 @@ import (
 
 // fusePointer はアドレス計算とその直後の参照を 1 命令にまとめる (codegen が 1 つのアドレッシングモードで出せる形):
 //
-//	add t = p + #k; pget d = *t      → field_pget d = *(p + k)      ldy #k; lda (p),y
-//	add t = p + #k; pset *t = v      → field_pset *(p + k) = v
-//	index t = &a[i]; pget d = *t     → index_pget d = a[i]          lda a,y (a が配列) / ldy i; lda (p),y (a がポインタ)
-//	index t = &a[i]; pset *t = v     → index_pset a[i] = v
+//	add t = p + #k; load_mem d = t       → load_mem d = p, disp=k        ldy #k; lda (p),y
+//	add t = p + #k; store_mem t, v       → store_mem p, v, disp=k
+//	index t = &a[i]; load_mem d = t      → load_mem d = a, i, scale=es    lda a,y (a が配列) / ldy i; lda (p),y (a がポインタ)
+//	index t = &a[i]; store_mem t, v      → store_mem a, i, v, scale=es
 //
-// t はその場でしか使わない一時変数のときだけ。
+// t はその場でしか使わない一時変数のときだけ (添字もずれも持たない参照だけ)。
 func fusePointer(lmd *ir.Lambda) {
 	ud := ir.BuildUseDef(lmd)
 	ops := lmd.Ops
@@ -38,18 +38,22 @@ func fusePointer(lmd *ir.Lambda) {
 			if !isLit || k < 0 || k > 255 || ir.ValType(ptr).Kind != types.Pointer || ir.ValType(ptr).Size != 2 || !onlyNext(op.Dst, i) {
 				continue
 			}
-			switch next.Code {
-			case ir.OpPget:
-				if isSameOperand(op.Dst, next.Src[0]) && k+ir.ValType(next.Dst).Size <= 256 {
-					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpFieldPget, Dst: next.Dst, Src: []ir.Operand{ptr, off}, Pos: next.Pos})
-					ir.MergeDrop(ops, i, i+1)
-				}
-			case ir.OpPset:
-				if isSameOperand(op.Dst, next.Src[0]) && k+ir.ValType(op.Dst).Base.Size <= 256 {
-					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpFieldPset, Src: []ir.Operand{ptr, off, next.Src[1]}, Type: ir.ValType(op.Dst).Base, Pos: next.Pos})
-					ir.MergeDrop(ops, i, i+1)
-				}
+			if !plainDeref(next, op.Dst) {
+				continue
 			}
+			m := next.Mem()
+			if k+m.Width > 256 {
+				continue
+			}
+			var nop *ir.Op
+			if next.Code == ir.OpLoadMem {
+				nop = ir.NewLoadMem(next.Dst, ptr, nil, 0, k)
+			} else {
+				nop = ir.NewStoreMem(ptr, nil, 0, k, m.Width, next.MemValue())
+			}
+			nop.Pos = next.Pos
+			ir.ReplaceOp(ops, i, nop)
+			ir.MergeDrop(ops, i, i+1)
 		case ir.OpIndex:
 			arr, idx := op.Src[0], op.Src[1]
 			es := ir.ValType(arr).Base.Size
@@ -66,20 +70,32 @@ func fusePointer(lmd *ir.Lambda) {
 				ir.ValType(idx).Size != 1 { // インデックスのサイズが 1 バイト
 				continue
 			}
-			switch next.Code {
-			case ir.OpPget:
-				if isSameOperand(op.Dst, next.Src[0]) {
-					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpIndexPget, Dst: next.Dst, Src: []ir.Operand{arr, idx}, Pos: next.Pos})
-					ir.MergeDrop(ops, i, i+1)
-				}
-			case ir.OpPset:
+			if !plainDeref(next, op.Dst) {
+				continue
+			}
+			var nop *ir.Op
+			if next.Code == ir.OpLoadMem {
+				nop = ir.NewLoadMem(next.Dst, arr, idx, es, 0)
+			} else {
 				// 書く幅は要素の大きさになるので、ポインタが要素の型 (struct の先頭フィールドへの cast ではない) のときだけ
 				// (`sa[i].f0 = 4` (S は 2 バイト) が隣のフィールドまで書いていた。fuzz で発覚)
-				if isSameOperand(op.Dst, next.Src[0]) && ir.ValType(next.Src[0]).Base.Size == ir.ValType(arr).Base.Size {
-					ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{arr, idx, next.Src[1]}, Pos: next.Pos})
-					ir.MergeDrop(ops, i, i+1)
+				if next.Width != es {
+					continue
 				}
+				nop = ir.NewStoreMem(arr, idx, es, 0, es, next.MemValue())
 			}
+			nop.Pos = next.Pos
+			ir.ReplaceOp(ops, i, nop)
+			ir.MergeDrop(ops, i, i+1)
 		}
 	}
+}
+
+// plainDeref は op が t をそのまま番地にした (添字もずれも無い) load_mem / store_mem か。
+func plainDeref(op *ir.Op, t ir.Operand) bool {
+	if !op.IsMem() || !isSameOperand(op.Src[0], t) {
+		return false
+	}
+	m := op.Mem()
+	return m.Index == nil && m.Disp == 0
 }

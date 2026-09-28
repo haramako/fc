@@ -4,9 +4,9 @@ package sema
 //
 //	soa Points:[4]Point;            // フィールドごとの配列 Points_x, Points_y, ... (2 バイト以上のフィールドはバイトごと)
 //	var p:*Points;                  // 要素ハンドル (types.SoaRef): 実体は 1 バイトのインデックス
-//	p.x = 1;                        // index Points_x, p → pset (最適化で index_pset: ldy p; sta Points_x,y)
+//	p.x = 1;                        // index Points_x, p → store_mem (最適化で 添字付きの store_mem: ldy p; sta Points_x,y)
 //	Points[2].y = 5;                // 添字はハンドルを作るだけ
-//	var pt:Point = *p; *p = pt;     // gather / scatter (リーフごとに index + pget/pset)
+//	var pt:Point = *p; *p = pt;     // gather / scatter (リーフごとに index + load_mem / store_mem)
 //	soa const T:[N]Point = [...];   // 初期値を転置して定数ブロックに
 //
 // ハンドルの「左辺値」(lval の leftValue が真) は要素そのもの (rval で gather、代入で scatter)、
@@ -301,12 +301,12 @@ func (h *Hlc) soaGatherSplit(sp *soaSplit) ir.Operand {
 	uint8T := h.prog.Types.IntType(1, false)
 	for i, lf := range sp.leaves {
 		p := h.soaLeafPtr(sp.ref, lf, uint8T)
-		h.emit(&ir.Op{Code: ir.OpPget, Dst: ir.NewCastedValue(tmp, uint8T, i), Src: []ir.Operand{p}})
+		h.emit(ir.NewLoadMem(ir.NewCastedValue(tmp, uint8T, i), p, nil, 0, 0))
 	}
 	return tmp
 }
 
-// soaStoreSplit は 2 バイト以上のフィールドへの代入 (バイトごとに pset)。
+// soaStoreSplit は 2 バイト以上のフィールドへの代入 (バイトごとに store_mem)。
 func (h *Hlc) soaStoreSplit(sp *soaSplit, v ir.Operand) {
 	h.soaCheckWritable(sp.ref)
 	h.compatible(sp.typ, ir.ValType(v))
@@ -325,7 +325,7 @@ func (h *Hlc) soaStoreSplit(sp *soaSplit, v ir.Operand) {
 	}
 	for i, lf := range sp.leaves {
 		p := h.soaLeafPtr(sp.ref, lf, uint8T)
-		h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{p, byteOf(i)}})
+		h.emit(ir.NewStoreMem(p, nil, 0, 0, ir.ValType(p).Base.Size, byteOf(i)))
 	}
 }
 
@@ -337,7 +337,7 @@ func (h *Hlc) soaGather(ref ir.Operand) ir.Operand {
 	uint8T := h.prog.Types.IntType(1, false)
 	for _, lf := range leaves {
 		p := h.soaLeafPtr(ref, lf, uint8T)
-		h.emit(&ir.Op{Code: ir.OpPget, Dst: ir.NewCastedValue(tmp, uint8T, lf.offset-base), Src: []ir.Operand{p}})
+		h.emit(ir.NewLoadMem(ir.NewCastedValue(tmp, uint8T, lf.offset-base), p, nil, 0, 0))
 	}
 	return tmp
 }
@@ -354,7 +354,7 @@ func (h *Hlc) soaScatter(ref ir.Operand, src ir.Operand) {
 	uint8T := h.prog.Types.IntType(1, false)
 	for _, lf := range leaves {
 		p := h.soaLeafPtr(ref, lf, uint8T)
-		h.emit(&ir.Op{Code: ir.OpPset, Src: []ir.Operand{p, ir.NewCastedValue(src, uint8T, lf.offset-base)}})
+		h.emit(ir.NewStoreMem(p, nil, 0, 0, ir.ValType(p).Base.Size, ir.NewCastedValue(src, uint8T, lf.offset-base)))
 	}
 }
 

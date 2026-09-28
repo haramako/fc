@@ -664,26 +664,12 @@ func (m *machine) run(f *frame) {
 			m.write(f, op.Dst, uint64(m.elemAddr(f, op.Src[0], op.Src[1], false)), 2)
 		case ir.OpRef:
 			m.write(f, op.Dst, uint64(m.addrOf(f, op.Src[0])), 2)
-		case ir.OpPget:
-			p := int(m.read(f, op.Src[0], 2))
-			m.writeBytes(f, op.Dst, m.loadBytes(p, size(op.Dst)))
-		case ir.OpPset:
-			p := int(m.read(f, op.Src[0], 2))
-			m.storeBytes(p, m.bytesOf(f, op.Src[1], ir.ValType(op.Src[0]).Base.Size))
-		case ir.OpIndexPget:
-			p := m.elemAddr(f, op.Src[0], op.Src[1], op.Scaled)
-			m.writeBytes(f, op.Dst, m.loadBytes(p, size(op.Dst)))
-		case ir.OpIndexPset:
-			p := m.elemAddr(f, op.Src[0], op.Src[1], op.Scaled)
-			m.storeBytes(p, m.bytesOf(f, op.Src[2], ir.ValType(op.Src[0]).Base.Size))
-		case ir.OpFieldPget:
-			off, _ := ir.ValIntLiteral(op.Src[1])
-			p := int(m.read(f, op.Src[0], 2)) + off
-			m.writeBytes(f, op.Dst, m.loadBytes(p, size(op.Dst)))
-		case ir.OpFieldPset:
-			off, _ := ir.ValIntLiteral(op.Src[1])
-			p := int(m.read(f, op.Src[0], 2)) + off
-			m.storeBytes(p, m.bytesOf(f, op.Src[2], op.Type.Size))
+		case ir.OpLoadMem:
+			mr := op.Mem()
+			m.writeBytes(f, op.Dst, m.loadBytes(m.memAddr(f, mr), mr.Width))
+		case ir.OpStoreMem:
+			mr := op.Mem()
+			m.storeBytes(m.memAddr(f, mr), m.bytesOf(f, op.MemValue(), mr.Width))
 		default:
 			unsupported("op %s", op.Code)
 		}
@@ -716,6 +702,23 @@ func (m *machine) elemAddr(f *frame, arr, idx ir.Operand, scaled bool) int {
 		i *= t.Base.Size
 	}
 	return (base + i) & 0xffff
+}
+
+// memAddr は load_mem / store_mem の番地 (Base + Index * Scale + Disp。Base はグローバルの配列ならその番地、ポインタなら値)。
+func (m *machine) memAddr(f *frame, mr ir.MemRef) int {
+	var base int
+	switch t := ir.ValType(mr.Base); t.Kind {
+	case types.Array:
+		base = m.addrOf(f, mr.Base)
+	case types.Pointer:
+		base = int(m.read(f, mr.Base, 2))
+	default:
+		unsupported("memory access through %s", t)
+	}
+	if mr.Index != nil {
+		base += int(m.read(f, mr.Index, size(mr.Index))) * mr.Scale
+	}
+	return (base + mr.Disp) & 0xffff
 }
 
 // callee は呼び出しの対象 (関数のシンボル、または関数ポインタの値)。

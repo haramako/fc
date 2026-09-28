@@ -356,12 +356,11 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       場当たりで、達すると黙って止まる）、`compact()` が Passes に 11 か所、`ops[i+1] == nil` の穴で黙って効かない隣接判定が
       6 か所。`*Op` を鍵にして def-use を差分で更新し、CFG / 支配木 / ループを無効化つきのキャッシュにする
       （`ir.Verify` は 2026-09-28 に入れた。CFG の中の支配木・ループのキャッシュも。命令列を変えたら CFG を作り直す前提はそのまま）
-- [ ] **メモリアクセスと幅・符号の表現**: Index / Pget / Pset / IndexPget / IndexPset / FieldPget / FieldPset の 7 つ +
-      `Scaled` + 配列への cast で、定数のずれの表し方が 3 通り、書く幅の出どころがオペコードごとに違う（fuzz で出たバグの多く
-      がここ）。`LoadMem / StoreMem` + `Addr{Base, Index, Scale, Disp, Width}` に集約し、演算命令に幅と符号を明示する
-      （zext / sext / trunc を命令に）。「k バイト目」「比較は広い方の幅」「除算は Dst の符号」の規則は sema の畳み込み・
-      opt/ssa・interp・codegen の 4 か所に手書きされているが、interp は差分テストの独立した判定役なので共有するなら
-      sema と opt/ssa の 2 つまで
+- [x] **メモリアクセスの集約** ([v4_memops.md](v4_memops.md)) ✅ 2026-09-28: 7 つのオペコード + `Scaled` + 配列への cast を
+      `load_mem` / `store_mem` と `Base + Index * Scale + Disp`（store は `Width`）に。生成コードは変えていない（ROM はバイト一致）。
+      残り: 定数の添字を Disp に畳んで絶対番地 (`lda a+3`) で読む、ポインタ + 添字 + disp の形を許す（今は internal error）、
+      演算命令に幅と符号を明示する（zext / sext / trunc を命令に。「k バイト目」「比較は広い方の幅」「除算は Dst の符号」の規則は
+      sema の畳み込み・opt/ssa・codegen に手書きのまま。interp は差分テストの独立した判定役なので共有しない）
 - [ ] **sema の式に型付きの中間表現を**: `lval`（470 行）が型検査・暗黙変換・診断・IR 出力を同時にやり、式の型は IR を出す
       まで分からない（`f() == .A` の二重評価はこの構造の結果）。「検査して型・定数値・左辺値性を持つ木を作る段」と「IR を
       出す段」に分ける。あわせて sema が自分の Symbol / Scope を持ち、`ir.Scope` と `ir.Lambda.Body`（AST）を ir から出す。

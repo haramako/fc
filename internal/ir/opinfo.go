@@ -72,12 +72,8 @@ var opInfo = [opCodeCount]opFlags{
 	OpAsm:                fOpaque | fTouchesGlobals,
 	OpIndex:              fPure | fReadsBeforeWrite,
 	OpRef:                fPure,
-	OpPget:               fPure | fReadsBeforeWrite,
-	OpPset:               fTouchesGlobals,
-	OpIndexPget:          fPure | fReadsBeforeWrite,
-	OpIndexPset:          fTouchesGlobals,
-	OpFieldPget:          fPure | fReadsBeforeWrite,
-	OpFieldPset:          fTouchesGlobals,
+	OpLoadMem:            fPure | fReadsBeforeWrite,
+	OpStoreMem:           fTouchesGlobals,
 }
 
 func (c OpCode) has(f opFlags) bool { return opInfo[c]&f != 0 }

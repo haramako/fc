@@ -6,10 +6,10 @@ import (
 )
 
 // scaleIndex は要素が 2 バイトの配列 / ポインタの添字 i (1 バイト) を、基本ブロックごとに 1 度だけ 2 倍した
-// 変数 i*2 に置き換える (`op.Scaled`: 添字はバイト単位):
+// 変数 i*2 に置き換える (scale=1: 添字はバイト単位):
 //
-//	index_pget a = px[i]; index_pget b = vx[i]        (codegen は毎回 lda i; asl a; tay)
-//	→ shift_left i*2 = i, #1; index_pget a = px[i*2] (scaled); index_pget b = vx[i*2] (scaled)
+//	load_mem a = px, i, scale=2; load_mem b = vx, i, scale=2        (codegen は毎回 lda i; asl a; tay)
+//	→ shift_left i*2 = i, #1; load_mem a = px, i*2, scale=1; load_mem b = vx, i*2, scale=1
 //
 // i*2 は普通のローカル変数なので、ループ内なら regalloc が Y に常駐させて `lda px,y` だけになる。
 // i が書き換えられたら (定義があったら) 次の使用で作り直す。ブロックをまたいでは共有しない。
@@ -22,11 +22,12 @@ func scaleIndex(lmd *ir.Lambda, u *types.Universe) {
 		valid := map[*ir.Value]bool{} // このブロックで i*2 が i と一致している
 		for _, k := range cfg.Ops(b) {
 			op := lmd.Ops[k]
-			if op.Code == ir.OpIndexPget || op.Code == ir.OpIndexPset {
-				arr, idx := op.In(0), op.In(1)
-				iv, ok := idx.(*ir.Value)
-				if !op.Scaled && ok && iv.Kind == ir.KindLocal && iv.Type.Size == 1 && iv.Type.Kind == types.Int &&
-					ir.ValType(arr).Base.Size == 2 && (ir.ValKind(arr) == ir.KindGlobal && ir.ValType(arr).Size <= 256 || ir.ValType(arr).Kind == types.Pointer) {
+			if op.IsMem() {
+				m := op.Mem()
+				arr := m.Base
+				iv, ok := m.Index.(*ir.Value)
+				if m.Scale == 2 && ok && iv.Kind == ir.KindLocal && iv.Type.Size == 1 && iv.Type.Kind == types.Int &&
+					(m.BaseIsArray() && ir.ValType(arr).Size <= 256 || ir.ValType(arr).Kind == types.Pointer) {
 					i2 := scaled[iv]
 					if i2 == nil {
 						i2 = ir.NewLocal(iv.Name+"*2", u8, ir.LTNone)
@@ -38,7 +39,7 @@ func scaleIndex(lmd *ir.Lambda, u *types.Universe) {
 						valid[iv] = true
 					}
 					op.Src[1] = i2
-					op.Scaled = true
+					op.Scale = 1
 				}
 			}
 			out = append(out, op)

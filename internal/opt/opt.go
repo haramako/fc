@@ -135,7 +135,7 @@ func Passes() []Pass {
 		{Name: "sink", Run: always(sinkAddress)},
 		{Name: "fuse", Run: always(fusePointer)},
 		{Name: "fieldindex", Run: foldFieldIndex},
-		{Name: "indexoff", Run: changes(foldIndexOffset)}, // fuse が index + pget / pset を index_pget / index_pset にした後
+		{Name: "indexoff", Run: changes(foldIndexOffset)}, // fuse が index + load_mem / store_mem を添字付きの load_mem / store_mem にした後
 		{Name: "coalesce", Run: always(coalesceCopies)},
 		{Name: "chain", Run: always(chainInPlace)},
 		{Name: "induction", Requires: []string{"ssa"}, Run: changes(eliminateInduction),
@@ -146,7 +146,7 @@ func Passes() []Pass {
 				propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
 				compact(lmd)
 				if !lmd.Cfg().Disabled("fuse") {
-					fusePointer(lmd) // 添字が定数になった index + pget / pset (要素 2 バイトのポインタは定数の添字だけ融合できる)
+					fusePointer(lmd) // 添字が定数になった index + load_mem / store_mem (要素 2 バイトのポインタは定数の添字だけ融合できる)
 				}
 			}},
 		{Name: "narrow", Run: alwaysU(narrowBitTest)},

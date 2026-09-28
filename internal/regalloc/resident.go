@@ -244,25 +244,20 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 				return true, 3
 			}
 		}
-	case ir.OpIndexPget:
-		if isV(op.Dst, v) && ir.ValType(op.In(1)).Size == 1 && !isV(op.In(1), v) {
-			return true, 3
+	case ir.OpLoadMem:
+		// 添字付きの読み出しだけ (添字の無いポインタ経由の読み出しは ldy #k を使い、結果を A に残す形ではない)
+		if m := op.Mem(); m.Index != nil {
+			if isV(op.Dst, v) && !isV(m.Index, v) {
+				return true, 3
+			}
+			if isV(m.Index, v) && !isV(op.Dst, v) && !liveOut {
+				return true, 1 // tay
+			}
 		}
-		if isV(op.In(1), v) && !isV(op.Dst, v) && !liveOut {
-			return true, 1 // tay
-		}
-	// 書く先が値より大きい (u8 の常駐を i16 の要素に書く) と、codegen は上位を lda #0 で書いて A を壊すので friendly にしない
-	// (`a3[3] = l0` (a3:[16]i16) の後の l0@A の dec が 0 から始まってループが終わらなかった。fuzz で発覚)
-	case ir.OpIndexPset:
-		if isV(op.In(2), v) && ir.ValType(op.In(1)).Size == 1 && !isV(op.In(1), v) && ir.ValType(op.In(0)).Base.Size <= ir.ValType(v).Size {
-			return true, 3
-		}
-	case ir.OpPset:
-		if isV(op.In(1), v) && ir.ValType(op.In(0)).Base.Size <= ir.ValType(v).Size {
-			return true, 3
-		}
-	case ir.OpFieldPset:
-		if isV(op.In(2), v) && op.Type.Size <= ir.ValType(v).Size {
+	case ir.OpStoreMem:
+		// 書く先が値より大きい (u8 の常駐を i16 の要素に書く) と、codegen は上位を lda #0 で書いて A を壊すので friendly にしない
+		// (`a3[3] = l0` (a3:[16]i16) の後の l0@A の dec が 0 から始まってループが終わらなかった。fuzz で発覚)
+		if m := op.Mem(); isV(op.MemValue(), v) && m.Width <= ir.ValType(v).Size && (m.Index == nil || !isV(m.Index, v)) {
 			return true, 3
 		}
 	case ir.OpPushArg, ir.OpPushFastcallArg:
@@ -286,22 +281,24 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 	return false, 0
 }
 
-// byteIndex は index_pget / index_pset の添字がそのまま Y / X に入る形か (要素 1 バイト、または opt.scaleIndex でバイト単位にした添字)。
+// byteIndex は load_mem / store_mem の添字がそのまま Y / X に入る形か (添字があってバイト単位: 要素 1 バイト、または
+// opt.scaleIndex でバイト単位にした添字)。
 func byteIndex(op *ir.Op) bool {
-	return ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled
+	m := op.Mem()
+	return m.Index != nil && m.Scale == 1
 }
 
 // friendlyY は v が Y に常駐しているとき、op を Y のまま実行できるか (添字と 1 バイトのカウンタの形)。
 func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 	op := lmd.Ops[i]
 	switch op.Code {
-	case ir.OpIndexPget:
+	case ir.OpLoadMem:
 		// 要素 1 バイトの配列 / ゼロページのポインタの添字 (ldy が消える)
-		if isV(op.In(1), v) && !isV(op.Dst, v) && byteIndex(op) {
+		if byteIndex(op) && isV(op.In(1), v) && !isV(op.Dst, v) {
 			return true, 3
 		}
-	case ir.OpIndexPset:
-		if isV(op.In(1), v) && !isV(op.In(2), v) && byteIndex(op) {
+	case ir.OpStoreMem:
+		if byteIndex(op) && isV(op.In(1), v) && !isV(op.MemValue(), v) {
 			return true, 3
 		}
 	case ir.OpAdd, ir.OpSub:
@@ -334,16 +331,14 @@ func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 // friendlyX は v が X に常駐しているとき、op を X のまま実行できるか (グローバル配列の添字と 1 バイトのカウンタ)。
 func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 	op := lmd.Ops[i]
-	globalArray := func(o ir.Operand) bool {
-		return ir.ValKind(o) == ir.KindGlobal && ir.ValType(o).Kind == types.Array && byteIndex(op)
-	}
+	globalArray := func(op *ir.Op) bool { return byteIndex(op) && op.Mem().BaseIsArray() }
 	switch op.Code {
-	case ir.OpIndexPget:
-		if isV(op.In(1), v) && !isV(op.Dst, v) && globalArray(op.In(0)) {
+	case ir.OpLoadMem:
+		if globalArray(op) && isV(op.In(1), v) && !isV(op.Dst, v) {
 			return true, 3 // lda a,x
 		}
-	case ir.OpIndexPset:
-		if isV(op.In(1), v) && !isV(op.In(2), v) && globalArray(op.In(0)) {
+	case ir.OpStoreMem:
+		if globalArray(op) && isV(op.In(1), v) && !isV(op.MemValue(), v) {
 			return true, 3 // sta a,x
 		}
 	case ir.OpAdd, ir.OpSub:
@@ -386,12 +381,13 @@ func needsX(op *ir.Op) bool {
 // needsY は op の codegen が (常駐変数としてでなく) Y を作業用に使うか。
 func needsY(op *ir.Op, vY *ir.Value) bool {
 	switch op.Code {
-	case ir.OpPget, ir.OpPset, ir.OpFieldPget, ir.OpFieldPset, ir.OpIndex,
+	case ir.OpIndex,
 		ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpCall, ir.OpFastcall, ir.OpAsm, ir.OpReturn, // return: グローバルの書き戻しのため
 		ir.OpSwitch: // stack 関数ではジャンプテーブルの添字に Y を使う (static では X)
 		return true
-	case ir.OpIndexPget, ir.OpIndexPset:
-		return !isV(op.In(1), vY) || !byteIndex(op)
+	case ir.OpLoadMem, ir.OpStoreMem:
+		// 添字の無いポインタ経由の参照は ldy #k を使う。添字がバイト単位で Y に常駐しているならそのまま
+		return !byteIndex(op) || !isV(op.In(1), vY)
 	case ir.OpPushArg, ir.OpPushFastcallArg:
 		return op.ArgY || op.HoldY // 呼び先の Y 渡しの引数を Y に読む / 保持中 (codegen.markArgY)
 	case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpRolC, ir.OpRorC,

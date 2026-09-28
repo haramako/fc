@@ -306,7 +306,7 @@ func (l *funcGen) genCall() {
 		} else if sym != "" {
 			r.push(l.callStackish(lmd, sym))
 		} else {
-			// 関数ポインタから呼ぶ (表から読んだ index_pget が reg に直接書いたなら写さない)
+			// 関数ポインタから呼ぶ (表から読んだ 添字付きの load_mem が reg に直接書いたなら写さない)
 			if !fnPtrInReg(lmd, ops, opNo) {
 				r.push(l.loadA(op.In(0), 0))
 				r.push("sta <reg+0")
@@ -813,7 +813,7 @@ func (l *funcGen) genIndex() {
 		// インデックスのサイズが１
 		if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
 			// フレーム上のローカル配列: 先頭は S + addr + X (ゼロページなので上位は 0。OpRef と同じ)
-			r.push(l.loadYIdx(op.In(1), op.In(0), false))
+			r.push(l.loadYIdx(op.In(1), ir.ValType(op.In(0)).Base.Size))
 			r.push("sty <reg+0")
 			r.push("txa")
 			r.push("clc")
@@ -834,7 +834,7 @@ func (l *funcGen) genIndex() {
 				r.push(l.loadA(op.In(0), 0), "adc <reg+0", l.storeA(op.Dst, 0), l.loadA(op.In(0), 1), "adc <reg+1", l.storeA(op.Dst, 1))
 			}
 		} else if ir.ValType(op.In(0)).Kind == types.Array {
-			r.push(l.loadYIdx(op.In(1), op.In(0), false))
+			r.push(l.loadYIdx(op.In(1), ir.ValType(op.In(0)).Base.Size))
 			r.push("sty <reg+0")
 			r.push("clc")
 			r.push(fmt.Sprintf("lda #.LOBYTE(%s)", l.addrExpr(op.In(0))))
@@ -844,7 +844,7 @@ func (l *funcGen) genIndex() {
 			r.push("adc #0")
 			r.push(l.storeA(op.Dst, 1))
 		} else if ir.ValType(op.In(0)).Kind == types.Pointer {
-			r.push(l.loadYIdx(op.In(1), op.In(0), false))
+			r.push(l.loadYIdx(op.In(1), ir.ValType(op.In(0)).Base.Size))
 			r.push("sty <reg+0")
 			r.push("clc")
 			r.push(l.loadA(op.In(0), 0))
@@ -932,54 +932,56 @@ func (l *funcGen) genRef() {
 	}
 }
 
-// genPget は Pget のコード生成。
-func (l *funcGen) genPget() {
-	r, op := l.r, l.op
-	r.push(l.pointerRead(op.In(0), 0, op.Dst, ir.ValType(op.Dst).Size))
-}
-
-// genPset は Pset のコード生成。
-func (l *funcGen) genPset() {
-	r, op := l.r, l.op
-	r.push(l.pointerWrite(op.In(0), 0, op.In(1), ir.ValType(op.In(0)).Base.Size))
-
-	// 最適化後のオペレータ
-}
-
-// genIndexPget は IndexPget のコード生成。
-func (l *funcGen) genIndexPget() {
-	r, op, opNo, ops, lmd := l.r, l.op, l.opNo, l.ops, l.lmd
+// genLoadMem は LoadMem のコード生成 (doc/v4_memops.md の表)。
+func (l *funcGen) genLoadMem() {
+	r, op, lmd, ops, opNo := l.r, l.op, l.lmd, l.ops, l.opNo
 	restore := &l.restore
-	if !isByteInt(ir.ValType(op.In(1))) {
+	m := op.Mem()
+	if m.Index == nil {
+		if m.BaseIsArray() {
+			// 添字の無いグローバルの配列: 絶対番地
+			for i := 0; i < m.Width; i++ {
+				r.push(fmt.Sprintf("lda %s+%d", l.toAsm(m.Base), m.Disp+i), l.storeA(op.Dst, i))
+			}
+			return
+		}
+		r.push(l.pointerRead(m.Base, m.Disp, op.Dst, m.Width))
+		return
+	}
+	if !isByteInt(ir.ValType(m.Index)) {
 		panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 	}
-	if ir.ValType(op.In(0)).Kind == types.Pointer {
+	if !m.BaseIsArray() {
 		// ポインタ + 添字: ldy idx; lda (p),y
-		base, setup := l.pointerBase(op.In(0))
-		if ir.ValType(op.Dst).Size > 1 && sameStorage(op.In(0), op.Dst) {
-			base, setup = "reg", []any{l.loadA(op.In(0), 0), "sta <reg+0", l.loadA(op.In(0), 1), "sta <reg+1"}
+		if m.Disp != 0 {
+			panic(fmt.Sprintf("internal: load_mem through a pointer with both an index and a displacement: %s", ir.DumpOp(op, nil)))
+		}
+		base, setup := l.pointerBase(m.Base)
+		if m.Width > 1 && sameStorage(m.Base, op.Dst) {
+			base, setup = "reg", []any{l.loadA(m.Base, 0), "sta <reg+0", l.loadA(m.Base, 1), "sta <reg+1"}
 		}
 		// 添字を先に Y へ (添字が A にあるとき、ポインタを reg に写す setup が A を壊す。fuzz で発覚)
-		r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
+		r.push(l.loadYIdx(m.Index, m.Scale))
 		r.push(setup)
-		for i := 0; i < ir.ValType(op.Dst).Size; i++ {
+		for i := 0; i < m.Width; i++ {
 			if i > 0 {
 				r.push("iny")
 			}
 			r.push(fmt.Sprintf("lda (%s),y", base))
 			r.push(l.storeA(op.Dst, i))
 		}
-		r.push(l.restoreY(op.In(1), ir.ValType(op.Dst).Size))
+		r.push(l.restoreY(m.Index, m.Width))
 		return
 	}
+	// グローバルの配列 + 添字: lda a+disp,y (添字が X に常駐していれば ,x)
 	// Y の常駐変数をこの命令の最後で復帰するなら融合しない (添字を入れた Y が直後の命令の前に常駐の値に戻って、
 	// `tab+0,y` が常駐の値で読んでいた: `sty k; ldy #2; ldy k; sbc tab+0,y`。fuzz で発覚)
 	if reg, ok := l.fusableIndex(ops, opNo); ok && !(reg == "y" && restore[ir.RegY]) && !lmd.Cfg().Disabled("fuse-index") {
 		// 直後の sub / lt の第 2 入力に融合: 添字をレジスタに用意して、結果の一時変数を `tab+0,y` として読ませる
 		if reg == "y" {
-			r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
+			r.push(l.loadYIdx(m.Index, m.Scale))
 		}
-		l.fused = map[*ir.Value]string{op.Dst.(*ir.Value): fmt.Sprintf("%s+0,%s", l.toAsm(op.In(0)), reg)}
+		l.fused = map[*ir.Value]string{op.Dst.(*ir.Value): fmt.Sprintf("%s+%d,%s", l.toAsm(m.Base), m.Disp, reg)}
 		l.fusedAt = opNo
 		return
 	}
@@ -987,76 +989,74 @@ func (l *funcGen) genIndexPget() {
 	if fnPtrToReg(lmd, ops, opNo) >= 0 {
 		store = func(i int) any { return fmt.Sprintf("sta <reg+%d", i) } // 呼び出しが reg から飛ぶ (写しを省く)
 	}
-	if l.inX(op.In(1)) {
+	if l.inX(m.Index) {
 		// 添字が X に常駐 (グローバル配列、要素 1 バイトかバイト単位の添字)
-		for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-			r.push(fmt.Sprintf("lda %s+%d,x", l.toAsm(op.In(0)), i))
+		for i := 0; i < m.Width; i++ {
+			r.push(fmt.Sprintf("lda %s+%d,x", l.toAsm(m.Base), m.Disp+i))
 			r.push(store(i))
 		}
 		return
 	}
-	r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
-	for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-		r.push(fmt.Sprintf("lda %s+%d,y", l.toAsm(op.In(0)), i))
+	r.push(l.loadYIdx(m.Index, m.Scale))
+	for i := 0; i < m.Width; i++ {
+		r.push(fmt.Sprintf("lda %s+%d,y", l.toAsm(m.Base), m.Disp+i))
 		r.push(store(i))
 	}
 }
 
-// genIndexPset は IndexPset のコード生成。
-func (l *funcGen) genIndexPset() {
+// genStoreMem は StoreMem のコード生成 (doc/v4_memops.md の表)。書く幅は m.Width (値が小さいリテラルでも上位まで書く)。
+func (l *funcGen) genStoreMem() {
 	r, op := l.r, l.op
-	if !isByteInt(ir.ValType(op.In(1))) {
+	m := op.Mem()
+	val := op.MemValue()
+	if m.Index == nil {
+		if m.BaseIsArray() {
+			for i := 0; i < m.Width; i++ {
+				r.push(l.loadA(val, i), fmt.Sprintf("sta %s+%d", l.toAsm(m.Base), m.Disp+i))
+			}
+			return
+		}
+		r.push(l.pointerWrite(m.Base, m.Disp, val, m.Width))
+		return
+	}
+	if !isByteInt(ir.ValType(m.Index)) {
 		panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 	}
-	if ir.ValType(op.In(0)).Kind == types.Pointer {
-		base, setup := l.pointerBase(op.In(0))
-		pre := append(l.loadYIdx(op.In(1), op.In(0), op.Scaled), setup...) // 添字を先に Y へ (index_pget と同じ)
-		if (ir.ValType(op.In(0)).Base.Size == 1 || op.Scaled) && len(setup) == 0 {
+	if !m.BaseIsArray() {
+		if m.Disp != 0 {
+			panic(fmt.Sprintf("internal: store_mem through a pointer with both an index and a displacement: %s", ir.DumpOp(op, nil)))
+		}
+		base, setup := l.pointerBase(m.Base)
+		pre := append(l.loadYIdx(m.Index, m.Scale), setup...) // 添字を先に Y へ (load_mem と同じ)
+		if m.Scale == 1 && len(setup) == 0 {
 			r.push(pre) // ldy だけなら A は壊れない
 		} else {
-			r.push(l.keepA(op.In(2), pre))
+			r.push(l.keepA(val, pre))
 		}
-		for i := 0; i < ir.ValType(op.In(0)).Base.Size; i++ {
+		for i := 0; i < m.Width; i++ {
 			if i > 0 {
 				r.push("iny")
 			}
-			r.push(l.loadA(op.In(2), i))
+			r.push(l.loadA(val, i))
 			r.push(fmt.Sprintf("sta (%s),y", base))
 		}
-		r.push(l.restoreY(op.In(1), ir.ValType(op.In(0)).Base.Size))
+		r.push(l.restoreY(m.Index, m.Width))
 		return
 	}
-	// 書く幅は要素の大きさ (値が小さいリテラル `a16[i] = 4` でも上位バイトまで書く。fuzz で発覚)
-	elemSize := ir.ValType(op.In(0)).Base.Size
-	if l.inX(op.In(1)) {
-		for i := 0; i < elemSize; i++ {
-			r.push(l.loadA(op.In(2), i))
-			r.push(fmt.Sprintf("sta %s+%d,x", l.toAsm(op.In(0)), i))
+	if l.inX(m.Index) {
+		for i := 0; i < m.Width; i++ {
+			r.push(l.loadA(val, i))
+			r.push(fmt.Sprintf("sta %s+%d,x", l.toAsm(m.Base), m.Disp+i))
 		}
 		return
 	}
-	if elemSize == 1 || op.Scaled {
-		r.push(l.loadYIdx(op.In(1), op.In(0), op.Scaled))
+	if m.Scale == 1 {
+		r.push(l.loadYIdx(m.Index, m.Scale))
 	} else {
-		r.push(l.keepA(op.In(2), l.loadYIdx(op.In(1), op.In(0), op.Scaled))) // lda idx; asl; tay は A を壊す
+		r.push(l.keepA(val, l.loadYIdx(m.Index, m.Scale))) // lda idx; asl; tay は A を壊す
 	}
-	for i := 0; i < elemSize; i++ {
-		r.push(l.loadA(op.In(2), i))
-		r.push(fmt.Sprintf("sta %s+%d,y", l.toAsm(op.In(0)), i))
+	for i := 0; i < m.Width; i++ {
+		r.push(l.loadA(val, i))
+		r.push(fmt.Sprintf("sta %s+%d,y", l.toAsm(m.Base), m.Disp+i))
 	}
-}
-
-// genFieldPget は FieldPget のコード生成。
-func (l *funcGen) genFieldPget() {
-	r, op := l.r, l.op
-	// ポインタ + 定数オフセット経由の読み出し (struct のフィールド)
-	off, _ := ir.ValIntLiteral(op.In(1))
-	r.push(l.pointerRead(op.In(0), off, op.Dst, ir.ValType(op.Dst).Size))
-}
-
-// genFieldPset は FieldPset のコード生成。
-func (l *funcGen) genFieldPset() {
-	r, op := l.r, l.op
-	off, _ := ir.ValIntLiteral(op.In(1))
-	r.push(l.pointerWrite(op.In(0), off, op.In(2), op.Type.Size)) // Type はフィールドの型 (値が小さいリテラルでもフィールド全体を書く)
 }

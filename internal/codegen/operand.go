@@ -26,9 +26,9 @@ func ifElse(cond bool, a, b string) string {
 func anyIfy(v []any) []any { return v }
 
 // loadYIdx は添字を Y に入れる。scaled なら添字はすでにバイト単位 (opt.scaleIndex)。
-func (l *Llc) loadYIdx(idx, ptr ir.Operand, scaled bool) []any {
+func (l *Llc) loadYIdx(idx ir.Operand, scale int) []any {
 	r := []any{}
-	if ir.ValType(ptr).Base.Size == 1 || scaled {
+	if scale == 1 {
 		if l.inY(idx) {
 			// 添字が Y に常駐している
 		} else if l.inA(idx) {
@@ -36,11 +36,11 @@ func (l *Llc) loadYIdx(idx, ptr ir.Operand, scaled bool) []any {
 		} else {
 			r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
 		}
-	} else if k, ok := ir.ValIntLiteral(idx); ok && k >= 0 && k*ir.ValType(ptr).Base.Size < 256 {
-		r = append(r, fmt.Sprintf("ldy #%d", k*ir.ValType(ptr).Base.Size)) // 定数の添字 (展開したループの `a16[3]`)
+	} else if k, ok := ir.ValIntLiteral(idx); ok && k >= 0 && k*scale < 256 {
+		r = append(r, fmt.Sprintf("ldy #%d", k*scale)) // 定数の添字 (展開したループの `a16[3]`)
 	} else {
 		r = append(r, l.loadA(idx, 0))
-		for i := 0; i < ir.ValType(ptr).Base.Size-1; i++ {
+		for i := 0; i < scale-1; i++ {
 			r = append(r, "asl a")
 		}
 		r = append(r, "tay")
@@ -312,7 +312,7 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 	if l.fused != nil && n == 0 {
 		if tv, ok := v.(*ir.Value); ok {
 			if s, ok := l.fused[tv]; ok {
-				return s // 直前の index_pget と融合した添字付きオペランド (tab+0,y)
+				return s // 直前の 添字付きの load_mem と融合した添字付きオペランド (tab+0,y)
 			}
 		}
 	}

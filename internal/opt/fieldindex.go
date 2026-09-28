@@ -7,14 +7,14 @@ import (
 
 // foldFieldIndex は struct の配列 (グローバル、全体が 256 バイト以内) の要素のフィールドの読み書きを、添字の読み書きにする:
 //
-//	index t = &a[i]; field_pget d = *(t + k)     →  mul j = i, #s; index_pget d = <k>a, j (scaled)   lda a+k,y
-//	index t = &a[i]; field_pset *(t + k) = v     →  mul j = i, #s; index_pset <k>a, j, v (scaled)    sta a+k,y
-//	index t = &a[i]; pget d = *t / pset *t = v   →  (k = 0。先頭のフィールド・要素全体)
+//	index t = &a[i]; load_mem d = t, disp=k      →  mul j = i, #s; load_mem d = a, j, scale=1, disp=k     lda a+k,y
+//	index t = &a[i]; store_mem t, v, disp=k      →  mul j = i, #s; store_mem a, j, v, scale=1, disp=k     sta a+k,y
+//	(k = 0 なら先頭のフィールド・要素全体)
 //
 // s は要素の大きさ。j = i * s は mul の展開 (expandMul) でシフトと加算になる。配列全体が 256 バイト以内なら、範囲内の
 // 添字 i で i * s + k + フィールドの大きさ は 256 以下なので 1 バイトの Y に収まる (範囲外の添字は未定義)。
 // 今までは `&a[i]` を 16 ビットで組み立てて `sta (p),y` にしていた (要素 1 つで約 20 命令。読み出しは先頭のフィールド
-// だけが fusePointer の index_pget になっていた)。SoA (`soa`) はフィールドごとの配列なので最初から `sta a_f,y`。
+// だけが fusePointer の 添字付きの load_mem になっていた)。SoA (`soa`) はフィールドごとの配列なので最初から `sta a_f,y`。
 func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 	ud := ir.BuildUseDef(lmd)
 	ops := lmd.Ops
@@ -67,62 +67,35 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 		if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 || len(ud.Uses[t]) == 0 {
 			continue
 		}
-		// t の使用が全部「t (か先頭への cast) を通したフィールドの読み書き」なら置き換える
+		// t の使用が全部「t (か先頭への cast) を通した、添字の無い読み書き」なら置き換える
 		type use struct {
 			at    int
 			off   int
-			field *types.Type
+			width int
 		}
 		var uses []use
 		for _, k := range ud.Uses[t] {
 			use0 := ops[k]
-			if use0 == nil {
+			if use0 == nil || !use0.IsMem() {
 				uses = nil
 				break
 			}
-			var off int
-			var ft *types.Type
-			switch use0.Code {
-			case ir.OpFieldPget, ir.OpFieldPset:
-				o, lit := ir.ValIntLiteral(use0.In(1))
-				if use0.In(0) != ir.Operand(t) || !lit {
-					uses = nil
-					break
-				}
-				off = o
-				if use0.Code == ir.OpFieldPget {
-					ft = ir.ValType(use0.Dst)
-				} else {
-					ft = use0.Type
-				}
-			case ir.OpPget, ir.OpPset:
-				p := use0.In(0)
-				if ir.UnderlyingValue(p) != t || ir.ValOffset(p) != 0 || ir.ValType(p).Kind != types.Pointer {
-					uses = nil
-					break
-				}
-				ft = ir.ValType(p).Base // pset は書く幅がポインタの先の大きさ (codegen の pointerWrite と同じ)
-				if use0.Code == ir.OpPget {
-					ft = ir.ValType(use0.Dst)
-				}
-			default:
-				uses = nil
-			}
-			if ft == nil || ft.Size <= 0 || off < 0 || off+ft.Size > es {
+			m := use0.Mem()
+			p := m.Base
+			if ir.UnderlyingValue(p) != t || ir.ValOffset(p) != 0 || ir.ValType(p).Kind != types.Pointer || m.Index != nil {
 				uses = nil
 				break
 			}
-			// ほかの使い方 (t を値として読む) が混ざっていないか: t は 1 つ目の入力だけ
-			for m, src := range use0.Src {
-				if m > 0 && ir.UnderlyingValue(src) == t {
-					ft = nil
-				}
-			}
-			if ft == nil {
+			if m.Width <= 0 || m.Disp < 0 || m.Disp+m.Width > es {
 				uses = nil
 				break
 			}
-			uses = append(uses, use{at: k, off: off, field: ft})
+			// ほかの使い方 (t を値として読む) が混ざっていないか: t は番地だけ
+			if use0.Code == ir.OpStoreMem && ir.UnderlyingValue(use0.MemValue()) == t {
+				uses = nil
+				break
+			}
+			uses = append(uses, use{at: k, off: m.Disp, width: m.Width})
 		}
 		if len(uses) != len(ud.Uses[t]) {
 			continue
@@ -148,16 +121,13 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 		}
 		for _, us := range uses {
 			use0 := ops[us.at]
-			fa := ir.NewCastedValue(arr, u.ArrayOf(us.field, (at.Size-us.off)/us.field.Size), us.off)
 			var nop *ir.Op
-			switch use0.Code {
-			case ir.OpFieldPget, ir.OpPget:
-				nop = &ir.Op{Code: ir.OpIndexPget, Dst: use0.Dst, Src: []ir.Operand{fa, j}, Pos: use0.Pos, Scaled: true}
-			case ir.OpFieldPset:
-				nop = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{fa, j, use0.In(2)}, Pos: use0.Pos, Scaled: true}
-			case ir.OpPset:
-				nop = &ir.Op{Code: ir.OpIndexPset, Src: []ir.Operand{fa, j, use0.In(1)}, Pos: use0.Pos, Scaled: true}
+			if use0.Code == ir.OpLoadMem {
+				nop = ir.NewLoadMem(use0.Dst, arr, j, 1, us.off)
+			} else {
+				nop = ir.NewStoreMem(arr, j, 1, us.off, us.width, use0.MemValue())
 			}
+			nop.Pos = use0.Pos
 			ir.ReplaceOp(ops, us.at, nop)
 		}
 		changed = true
