@@ -13,15 +13,8 @@ import (
 // buildFiles は files (ファイル名 → ソース) を t.fc から emu でビルドして走らせ、出力とエラーを返す。
 func buildFiles(t *testing.T, files map[string]string) (string, error) {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var out strings.Builder
-	_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, MaxCycles: 10_000_000})
-	return out.String(), err
+	r := testBuild(t, buildSpec{Files: files, Run: true})
+	return r.Stdout, r.Err
 }
 
 // TestV3IntTypes: fc 3 の整数型名は u8 / i8 / u16 / i16 だけ。fc 2 の名前 (int など) は案内つきのエラー、u8 などは宣言できない。
@@ -144,37 +137,18 @@ function main():void
 // compileAsmFiles は files を t.fc からコンパイルして _t.s を返す。
 func compileAsmFiles(t *testing.T, files map[string]string) string {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
+	r := testBuild(t, buildSpec{Files: files, CompileOnly: true})
+	if r.Err != nil {
+		t.Fatalf("コンパイル失敗: %v", r.Err)
 	}
-	if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}); err != nil {
-		t.Fatalf("コンパイル失敗: %v", err)
-	}
-	asm, err := os.ReadFile(filepath.Join(dir, "b", "_t.s"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(asm)
+	return r.Built(t, "_t.s")
 }
 
 // buildFilesDefs は buildFiles に CLI の -D を渡す版。
 func buildFilesDefs(t *testing.T, files map[string]string, defines []string) (string, *Result, error) {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o777); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var out strings.Builder
-	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, MaxCycles: 10_000_000, Defines: defines})
-	return out.String(), res, err
+	r := testBuild(t, buildSpec{Files: files, Run: true, Defines: defines})
+	return r.Stdout, r.Res, r.Err
 }
 
 // TestV3StaticIf: @if と @(build) の const。トップレベルの @if は use ごと選び、選ばれなかった側は名前解決しない

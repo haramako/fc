@@ -6,7 +6,6 @@ package driver
 
 import (
 	"github.com/haramako/fc/internal/cc65"
-	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -47,17 +46,11 @@ function bank_init():void
 // `_main_done` を返す。asm には _main.s の中身を返す。
 func runNes(t *testing.T, files map[string]string, level int, n int) (out []int, done int, asm string) {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			t.Fatal(err)
-		}
+	r := testBuild(t, buildSpec{Files: files, Main: "main.fc", Target: "nes", Level: level})
+	if r.Err != nil {
+		t.Fatalf("ビルド失敗 (-O %d): %v", level, r.Err)
 	}
-	rom := filepath.Join(dir, "a.nes")
-	res, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "main.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: rom, OptimizeLevel: level})
-	if err != nil {
-		t.Fatalf("ビルド失敗 (-O %d): %v", level, err)
-	}
+	dir, rom, res := r.Dir, r.Out, r.Res
 	d, err := cc65.ParseDbgFile(res.DbgFile)
 	if err != nil {
 		t.Fatal(err)

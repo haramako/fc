@@ -1475,33 +1475,11 @@ const rpMaxCycles = 20_000_000
 // error にして、次の種に進めるようにする)。
 func rpRun(t *testing.T, files map[string]string, level int, maxCycles int64) (out string, err error) {
 	t.Helper()
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v", r)
-		}
-	}()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
-			return "", err
-		}
-	}
-	var o strings.Builder
-	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &o, OptimizeLevel: level, MaxCycles: maxCycles})
-	var ce *CommandError
-	for retry := 0; retry < 2 && errors.As(err, &ce) && strings.TrimSpace(ce.Result) == ""; retry++ {
-		// ca65 / ld65 が何も出さずに失敗した: 並列で重いときの一時的な失敗 (Windows) なのでやり直す (文言のある失敗は
-		// 生成器かコンパイラの問題なのでそのまま返す)
-		o.Reset()
-		code, err = NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &o, OptimizeLevel: level, MaxCycles: maxCycles})
-	}
-	if err != nil {
+	r := testBuild(t, buildSpec{Files: files, Run: true, Level: level, MaxCycles: maxCycles, Recover: true})
+	if err := r.exitError(); err != nil {
 		return "", err
 	}
-	if code != 0 {
-		return "", fmt.Errorf("exit code %d: %s", code, o.String())
-	}
-	return o.String(), nil
+	return r.Stdout, nil
 }
 
 // rpInterpSteps はインタプリタで実行する IR 命令数の上限 (emu の 20M サイクルより十分多い。止まらない種は判定を飛ばす)。
