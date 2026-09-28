@@ -1,0 +1,44 @@
+#fc 4
+// 当たり判定 (doc/v4_stdlib.md §3.1)。u8 の座標 (画面) で、差を符号なしで比べる (i8 の abs の 128 未満の制限が無い)。座標は 256 で
+// 回るもの (0 と 255 は隣) として扱う。
+@(bank: -1);
+
+// [a, a+aw) と [b, b+bw) が重なるか (幅 0 は重ならない)。一方の始まりが他方の中にあるか: (b - a) < aw か (a - b) < bw
+public function span(a:u8, aw:u8, b:u8, bw:u8):bool
+{
+	return aw != 0 && bw != 0 && ((b - a) < aw || (a - b) < bw);
+}
+
+// 矩形 (左上と幅・高さ) が重なるか
+public function box(ax:u8, ay:u8, aw:u8, ah:u8, bx:u8, by:u8, bw:u8, bh:u8):bool
+{
+	return span(ax, aw, bx, bw) && span(ay, ah, by, bh);
+}
+
+// |a - b| < d か (d は 128 以下)
+public function near(a:u8, b:u8, d:u8):bool
+{
+	return (a - b) < d || (b - a) < d;
+}
+
+// ---- テスト ----
+
+function test_span():void @(test)
+{
+	@assert(span(10, 5, 12, 5));
+	@assert(span(12, 5, 10, 5));
+	@assert(!span(10, 5, 15, 5));    // 隣り合うだけ
+	@assert(!span(15, 5, 10, 5));
+	@assert(span(250, 10, 2, 4));    // 256 で回る
+	@assert(!span(10, 0, 10, 5));    // 幅 0
+	@assert(span(0, 200, 150, 10));  // 128 を超える距離でもよい
+}
+
+function test_box_near():void @(test)
+{
+	@assert(box(0, 0, 16, 16, 8, 8, 16, 16));
+	@assert(!box(0, 0, 16, 16, 8, 16, 16, 16));
+	@assert(near(100, 103, 4));
+	@assert(!near(100, 104, 4));
+	@assert(near(1, 254, 4));
+}

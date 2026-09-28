@@ -249,7 +249,9 @@ func (h *Hlc) format(args []*cexpr, what string) *ir.Value {
 	case d.ro:
 		panic(&diag.Error{Msg: what + ": the destination is read-only"})
 	case d.wide:
-		panic(&diag.Error{Msg: what + ": the destination must be at most 255 bytes (a []u8, not a [:u16]u8)"})
+		// [:u16]u8 の書き先は先頭の 255 バイトまで (buf.rest(&b) などをそのまま渡せるように)
+		n := h.rval(&cexpr{kind: cOp, op: opMin, args: []*cexpr{cv(h.operandValue(d.len)), cint(255)}})
+		d.len = h.rval(&cexpr{kind: cCast, args: []*cexpr{cv(h.operandValue(n))}, ty: u8, ck: syntax.CastAs})
 	}
 	a := h.fmtPrepare(what, args[1], args[2:])
 	n := h.fmtEmit(a, a.parts, h.newSlice(u8, d.ptr, d.len, false, false))

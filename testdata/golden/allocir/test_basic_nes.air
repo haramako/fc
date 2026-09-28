@@ -434,7 +434,7 @@
 )
 (alloc-lambda stdio _stdio_init _stdio_init frame_size=0 abi=static
  (vars
-  (var 0 pallet global #"[16]u8" val=:pallet loc=none unuse)
+  (var 0 pallet global #"[16]u8" val=:_L_pallet loc=none unuse)
  )
  (ops
   0000 (:load {g vsync_flag #"u8" :_stdio_vsync_flag} {lit nil 253 #"u8"})

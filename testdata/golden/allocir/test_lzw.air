@@ -179,8 +179,8 @@
 )
 (alloc-lambda test_lzw _test_lzw_test_unpack _test_lzw_test_unpack frame_size=3 abi=static
  (vars
-  (var 0 PACKED global #"[14]u8" val=:PACKED loc=none unuse)
-  (var 1 UNPACKED global #"[25]u8" val=:UNPACKED loc=none unuse)
+  (var 0 PACKED global #"[14]u8" val=:_L_PACKED loc=none unuse)
+  (var 1 UNPACKED global #"[25]u8" val=:_L_UNPACKED loc=none unuse)
   (var 2 $54 local #"u16" lt=temp loc=none unuse)
   (var 3 len local #"u16" loc=static addr=0)
   (var 4 $56 local #"u16" lt=temp loc=none unuse)

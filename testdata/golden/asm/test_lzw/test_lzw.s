@@ -383,18 +383,18 @@ _test_lzw_buf: .res 256
 	sta <F_lzw_unpack+2
 	lda #.HIBYTE(_test_lzw_buf)
 	sta <F_lzw_unpack+3
-	lda #.LOBYTE(PACKED)
+	lda #.LOBYTE(_L_PACKED)
 	sta <F_lzw_unpack+4
-	lda #.HIBYTE(PACKED)
+	lda #.HIBYTE(_L_PACKED)
 	sta <F_lzw_unpack+5
 	jsr _lzw_unpack
 	lda <F_lzw_unpack+0
 	sta 0+<F_test_lzw_test_unpack+0
 	lda <F_lzw_unpack+1
 	sta 1+<F_test_lzw_test_unpack+0
-	lda #.LOBYTE(UNPACKED)
+	lda #.LOBYTE(_L_UNPACKED)
 	sta <F_mem_strlen+1
-	lda #.HIBYTE(UNPACKED)
+	lda #.HIBYTE(_L_UNPACKED)
 	sta <F_mem_strlen+2
 	jsr _mem_strlen
 	sta 0+<F_test_lzw_test_unpack+2
@@ -415,9 +415,9 @@ _test_lzw_buf: .res 256
 	sta <F_mem_compare+1
 	lda #.HIBYTE(_test_lzw_buf)
 	sta <F_mem_compare+2
-	lda #.LOBYTE(UNPACKED)
+	lda #.LOBYTE(_L_UNPACKED)
 	sta <F_mem_compare+3
-	lda #.HIBYTE(UNPACKED)
+	lda #.HIBYTE(_L_UNPACKED)
 	sta <F_mem_compare+4
 	lda 0+<F_test_lzw_test_unpack+0
 	sta <F_mem_compare+5
@@ -437,9 +437,9 @@ _test_lzw_buf: .res 256
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
-PACKED:
+_L_PACKED:
 		.byte 12,82,44,182,203,101,190,64,51,40,200,145,37,192
-UNPACKED:
+_L_UNPACKED:
 		.byte 72,101,108,108,111,32,72,101,108,108,111,32,72,101,108,108
 		.byte 111,32,70,101,108,108,111,46,0
 _58:

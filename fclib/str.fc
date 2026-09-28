@@ -1,0 +1,133 @@
+#fc 4
+// バイト列としての文字列 (doc/v4_stdlib.md §3.1)。文字列は長さつきの []const u8 (終端の 0 は要らない)。終端 0 の文字列 (*const u8)
+// との橋渡しと、文字コードの変換 (ASCII を独自のフォントのコードに) も。
+@(bank: -1);
+use sys;
+
+public function equal(a:[:u16]const u8, b:[:u16]const u8):bool
+{
+	if (@len(a) != @len(b)) {
+		return false;
+	}
+	for (var i, c in a) {
+		if (c != b[i]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+public function starts_with(s:[:u16]const u8, prefix:[:u16]const u8):bool
+{
+	return @len(s) >= @len(prefix) && equal(s[..@len(prefix)], prefix);
+}
+
+public function ends_with(s:[:u16]const u8, suffix:[:u16]const u8):bool
+{
+	return @len(s) >= @len(suffix) && equal(s[@len(s) - @len(suffix)..], suffix);
+}
+
+// 最初の c の位置 (無ければ @len(s))
+public function find(s:[:u16]const u8, c:u8):u16
+{
+	for (var i, x in s) {
+		if (x == c) {
+			return i;
+		}
+	}
+	return @len(s);
+}
+
+// 最初の sub の位置 (無ければ @len(s)。sub が空なら 0)
+public function find_str(s:[:u16]const u8, sub:[:u16]const u8):u16
+{
+	if (@len(sub) > @len(s)) {
+		return @len(s);
+	}
+	var last = @len(s) - @len(sub);
+	for (var i:u16 = 0; i <= last; i += 1) {
+		if (equal(s[i..i + @len(sub)], sub)) {
+			return i;
+		}
+	}
+	return @len(s);
+}
+
+// 終端 0 の文字列の長さ
+public function len_z(p:*const u8):u16
+{
+	var n:u16 = 0;
+	while (p[n] != 0) {
+		n += 1;
+	}
+	return n;
+}
+
+// 終端 0 の文字列の、0 の前までの slice
+public function from_z(p:*const u8):[:u16]const u8
+{
+	return @slice(p, len_z(p));
+}
+
+// dst に s と終端の 0 を書き、書いた文字列 (0 を含めない) を返す。dst が足りなければ止まる
+public function to_z(dst:[:u16]u8, s:[:u16]const u8):[:u16]u8
+{
+	if (@len(s) >= @len(dst)) {
+		sys.panic("str.to_z: the buffer is too small");
+	}
+	for (var i, c in s) {
+		dst[i] = c;
+	}
+	dst[@len(s)] = 0;
+	return dst[..@len(s)];
+}
+
+// s の各バイトを table で引いた値にする (s[i] = table[s[i]]。ASCII で作った文字列を独自のフォントのコードに)
+public function map(s:[:u16]u8, table:*const u8):void
+{
+	for (var i:u16 = 0; i < @len(s); i += 1) {
+		s[i] = table[s[i]];
+	}
+}
+
+// ---- テスト ----
+
+function test_compare():void @(test)
+{
+	@assert(equal("abc", "abc") && !equal("abc", "abd") && !equal("ab", "abc"));
+	@assert(starts_with("hello", "he") && !starts_with("he", "hello"));
+	@assert(ends_with("hello", "llo") && !ends_with("hello", "he"));
+	@assert(starts_with("x", ""));
+}
+
+function test_find():void @(test)
+{
+	@assert_eq(find("hello", 108), 2);
+	@assert_eq(find("hello", 122), 5);
+	@assert_eq(find_str("hello world", "wor"), 6);
+	@assert_eq(find_str("hello", "xyz"), 5);
+	@assert_eq(find_str("hi", "hello"), 2);
+	@assert_eq(find_str("abc", ""), 0);
+}
+
+function test_z():void @(test)
+{
+	var p:*const u8 = "abcd";
+	@assert_eq(len_z(p), 4);
+	@assert(equal(from_z(p), "abcd"));
+	var buf:[8]u8;
+	var z = to_z(buf, "xy");
+	@assert(equal(z, "xy"));
+	@assert_eq(buf[2], 0);
+}
+
+function test_map():void @(test)
+{
+	const T = [10, 11, 12, 13];
+	var s:[3]u8;
+	s[0] = 2;
+	s[1] = 0;
+	s[2] = 3;
+	map(s, T);
+	@assert(s[0] == 12 && s[1] == 10 && s[2] == 13);
+}

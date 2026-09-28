@@ -81,7 +81,7 @@ _test_var_add2 = _test_var__D2
 	lda #.HIBYTE(_17)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda ARRAY+2
+	lda _L_ARRAY+2
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -94,7 +94,7 @@ _test_var_add2 = _test_var__D2
 	lda #.HIBYTE(_22)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda STRING+4
+	lda _L_STRING+4
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -106,9 +106,9 @@ _test_var_add2 = _test_var__D2
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
-ARRAY:
+_L_ARRAY:
 		.byte 1,2,3
-STRING:
+_L_STRING:
 		.byte 104,111,103,101,0
 _8:
 		.byte 99,111,110,115,116,0
@@ -413,7 +413,7 @@ _99:
 	;;;=============================
 .segment "test_var"
 .proc _test_var_test_escape
-	lda STR+0
+	lda _L_STR+0
 	cmp #0
 	sta 0+<F_test_var_test_escape+0
 	bpl @1
@@ -436,7 +436,7 @@ _99:
 	lda #.HIBYTE(_106)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda STR+1
+	lda _L_STR+1
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -450,7 +450,7 @@ _99:
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	rts
-STR:
+_L_STR:
 		.byte 10,255,0
 _106:
 		.byte 101,115,99,97,112,101,32,110,0

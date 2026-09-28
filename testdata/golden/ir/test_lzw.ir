@@ -177,8 +177,8 @@
   (args ())
   (result nil)
   (vars
-   (var 0 PACKED global #"[14]u8" val=:PACKED)
-   (var 1 UNPACKED global #"[25]u8" val=:UNPACKED)
+   (var 0 PACKED global #"[14]u8" val=:_L_PACKED)
+   (var 1 UNPACKED global #"[25]u8" val=:_L_UNPACKED)
    (var 2 $54 local #"u16" lt=temp)
    (var 3 len local #"u16")
    (var 4 $56 local #"u16" lt=temp)
@@ -186,8 +186,8 @@
    (var 6 $61 local #"u8" lt=temp)
   )
   (defs
-   (def PACKED block #"[14]u8" ({lit nil 12 #"u8"} {lit nil 82 #"u8"} {lit nil 44 #"u8"} {lit nil 182 #"u8"} {lit nil 203 #"u8"} {lit nil 101 #"u8"} {lit nil 190 #"u8"} {lit nil 64 #"u8"} {lit nil 51 #"u8"} {lit nil 40 #"u8"} {lit nil 200 #"u8"} {lit nil 145 #"u8"} {lit nil 37 #"u8"} {lit nil 192 #"u8"}))
-   (def UNPACKED block #"[25]u8" ({lit nil 72 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 32 #"u8"} {lit nil 72 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 32 #"u8"} {lit nil 72 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 32 #"u8"} {lit nil 70 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 46 #"u8"} {lit nil 0 #"u8"}))
+   (def _L_PACKED block #"[14]u8" ({lit nil 12 #"u8"} {lit nil 82 #"u8"} {lit nil 44 #"u8"} {lit nil 182 #"u8"} {lit nil 203 #"u8"} {lit nil 101 #"u8"} {lit nil 190 #"u8"} {lit nil 64 #"u8"} {lit nil 51 #"u8"} {lit nil 40 #"u8"} {lit nil 200 #"u8"} {lit nil 145 #"u8"} {lit nil 37 #"u8"} {lit nil 192 #"u8"}))
+   (def _L_UNPACKED block #"[25]u8" ({lit nil 72 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 32 #"u8"} {lit nil 72 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 32 #"u8"} {lit nil 72 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 32 #"u8"} {lit nil 70 #"u8"} {lit nil 101 #"u8"} {lit nil 108 #"u8"} {lit nil 108 #"u8"} {lit nil 111 #"u8"} {lit nil 46 #"u8"} {lit nil 0 #"u8"}))
    (def _58 block #"[4]u8" ({lit nil 108 #"u8"} {lit nil 101 #"u8"} {lit nil 110 #"u8"} {lit nil 0 #"u8"}))
    (def _62 block #"[8]u8" ({lit nil 99 #"u8"} {lit nil 111 #"u8"} {lit nil 109 #"u8"} {lit nil 112 #"u8"} {lit nil 97 #"u8"} {lit nil 114 #"u8"} {lit nil 101 #"u8"} {lit nil 0 #"u8"}))
   )

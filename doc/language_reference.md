@@ -841,7 +841,8 @@ printf("x={:04X} {}\n", x, name);                 // console に出す
   先に全部評価する
 - 引数: 整数は型の符号で 10 進（`x` / `X` / `b` は同じ大きさの符号なしとして）、bool は `true` / `false`（`{:d}` なら 0 / 1）、enum は
   数、`c` は 1 バイトの整数を 1 文字、`[]u8` はそのまま、u8 の配列は中の最初の 0 まで、`*u8` は終端 0 まで。幅は数だけ
-- `dst` が足りなければ止まる（`sys.panic`）。書き先の状態は fmt が持つ（割り込みの中では使わない）
+- `dst` が足りなければ止まる（`sys.panic`）。`[:u16]u8` の `dst` は先頭の 255 バイトまで使う。書き先の状態は fmt が持つ（割り込みの
+  中では使わない）
 - `printf` は部分ごとに console に出す（文字は `console.write_z`、文字列の引数は `write` / `write_z` / `write_z_in`、数は fmt の
   printf 用のバッファ 32 バイトに書いて出す）
 - fmt / console は `use` しなくても組み込みが読み込む
@@ -867,6 +868,11 @@ fc 4 の新しい fclib（作り直しの途中。計画は [v4_stdlib.md](v4_st
 |---|---|
 | `console`（ターゲット別） | デバッグ出力: `write(s:[:u16]const u8)`（長さの分だけ。途中の 0 も）, `write_z(p)`（終端 0）, `write_z_in(s)`（s の中の最初の 0 まで）, `newline()`, `exit(code)`, `init()`。emu はホストへ、NES は `init()` で描画を止めてネームテーブル 0 に直に書く（ASCII の並びのフォントの CHR が要る。`exit` は `exit_code` / `exited` を残して画面を出して止まる）。emu は `bench_start()` / `bench_end()` も |
 | `sys` | `panic(msg)`（`panic: msg` を console に出して終了コード 1）, `assert(cond, msg)` |
+| `rand` | 16 ビットの xorshift（7・9・8。周期 65535）: `seed(s)`（0 は 1）, `next_u16()`, `next_u8()`（上位バイト）, `below(n)`（0〜n-1）, `chance(p)`（p/256 で真）, `pick(weights:[]const u8)`（重み付きの選択） |
+| `bits` | ビット集合（i 番目は `s[i/8]` の `1 << (i%8)`）: `get` / `set` / `clear` / `flip(s, i:u8)`, `count(s):u16`、2 ビットの欄 `field2(b, i, v)` / `get2(b, i)`、`MASK` |
+| `hit` | 当たり判定（u8 の座標。差を符号なしで比べ、256 で回る）: `span(a, aw, b, bw)`（区間の重なり。幅 0 は重ならない）, `box(ax, ay, aw, ah, bx, by, bw, bh)`, `near(a, b, d)`（\|a-b\| < d） |
+| `str` | バイト列の文字列: `equal` / `starts_with` / `ends_with`, `find(s, c)` / `find_str(s, sub)`（無ければ `@len(s)`）, 終端 0 との橋渡し `len_z(p)` / `from_z(p)` / `to_z(dst, s)`, `map(s, table)`（`s[i] = table[s[i]]`: 独自のフォントのコードに） |
+| `buf` | 書き足していくバッファ `struct Buf { data:[:u16]u8; len:u16; }`: `init(storage)`, `clear`, `bytes`, `rest`, `room`, `push` / `append`（足りなければ止まる）, `try_push` / `try_append`（`bool`）, `advance(b, n)`（`rest` に直に書いた分: `buf.advance(&b, @len(@format(buf.rest(&b), ...)))`） |
 | `fmt` | 数や文字列を文字にして書く（`@format` / `printf` の中身）: `begin(dst:[]u8)` で書き先を決め、`dec_u8` / `dec_u16` / `dec_i8` / `dec_i16` / `hex_u8` / `hex_u16` / `bin_u8` / `bin_u16`（`(n, spec:u8)`）・`str(s:[]const u8)`・`str_z(p)`・`str_z_in(s)`・`chr(c)`・`boolean(b)` を順に呼ぶと先頭から書いていく（`fmt.at` が書いた長さ）。`spec` は幅（下位 5 ビット）\| `fmt.ZERO`（0 で埋める。符号の後ろ: `-05`。無ければ空白で符号の前: `  -5`）\| `fmt.LOWER`（16 進の小文字）。数字などの文字のコードは `fmt.codes`（0〜9・A〜F・a〜f・`-`・空白の 24 文字。`begin` が `fmt.ASCII` にする）。書き先が足りなければ `sys.panic`。10 進は割り算を使わない。printf 用に `begin_print()` / `print()` |
 
 割り込みの入口 `_interrupt` / `_interrupt_irq`（share/runtime.asm の NMI / IRQ が呼ぶ）を定義するものが無いプログラムには、fc が

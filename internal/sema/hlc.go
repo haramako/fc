@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -141,6 +142,11 @@ func defsFind(defs []*ir.Def, symbol string) bool {
 func (h *Hlc) addDef(name string, d *ir.Def) string {
 	if h.lmd != nil {
 		d.Sym = name
+		if !strings.HasPrefix(name, "_") && !strings.HasPrefix(name, "@") {
+			// 関数の中の const の表の名前はそのまま ca65 のラベルになる: `z:` / `a:` / `f:` (`zp:` / `abs:` / `far:` なども) は番地の
+			// 大きさの指定なので、`const Z = [...]` の `Z:` がアセンブルできなかった。前に付けて ca65 の言葉とぶつからないように
+			d.Sym = "_L_" + name
+		}
 		if !defsFind(h.lmd.Defs, d.Sym) {
 			h.lmd.Defs = append(h.lmd.Defs, d)
 		}

@@ -200,9 +200,9 @@ _49:
 	sta <F_stdio_ppu_put+0
 	lda #63
 	sta <F_stdio_ppu_put+1
-	lda #.LOBYTE(pallet)
+	lda #.LOBYTE(_L_pallet)
 	sta <F_stdio_ppu_put+2
-	lda #.HIBYTE(pallet)
+	lda #.HIBYTE(_L_pallet)
 	sta <F_stdio_ppu_put+3
 	lda #16
 	sta <F_stdio_ppu_put+4
@@ -212,7 +212,7 @@ _49:
 	lda #32
 	sta 1+_stdio_print_addr
 	rts
-pallet:
+_L_pallet:
 		.byte 15,61,16,48,0,17,33,49,0,18,34,50,0,19,35,51
 .endproc
 	.global _interrupt

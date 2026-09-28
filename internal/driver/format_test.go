@@ -135,7 +135,6 @@ func TestFormatErrors(t *testing.T) {
 		{"使わない引数", `console.write(@format(buf, "x", 1));`, "is not used in the format"},
 		{"文字列に幅", `console.write(@format(buf, "{:5}", "ab"));`, "a width is for numbers"},
 		{"書き先が読み取り専用", `console.write(@format(RO, "x"));`, "the destination is read-only"},
-		{"書き先が広い slice", `console.write(@format(big, "x"));`, "at most 255 bytes"},
 		{"書けない型", `var q:P; console.write(@format(buf, "{}", q));`, "cannot format a value of type"},
 		{"書式が定数でない", `var f:*const u8 = "{}"; console.write(@format(buf, f, 1));`, "the format must be a constant string"},
 	}

@@ -1,0 +1,96 @@
+#fc 4
+// 乱数 (doc/v4_stdlib.md §3.1)。16 ビットの xorshift (シフトは 7・9・8。周期 65535)。状態が 0 なら 1 に読み替える (大域変数は
+// 0 で始まるので seed を呼ばなくても動く。同じ列になるので、ゲームは Start を待つ間のフレームの数などで seed する)。
+@(bank: -1);
+
+var state:u16;
+
+// 種を決める (0 は 1 に読み替える)
+public function seed(s:u16):void
+{
+	state = s;
+}
+
+public function next_u16():u16
+{
+	var x = state;
+	if (x == 0) {
+		x = 1;
+	}
+	x ^= x << 7;
+	x ^= x >> 9;
+	x ^= x << 8;
+	state = x;
+	return x;
+}
+
+// 8 ビット (よく混ざる上位バイト)
+public function next_u8():u8
+{
+	return (next_u16() >> 8) as u8;
+}
+
+// 0 〜 n-1 (n が 0 なら 0)。(乱数 × n) の上位バイト
+public function below(n:u8):u8
+{
+	var p:u16 = next_u8() * n;
+	return (p >> 8) as u8;
+}
+
+// p / 256 の確率で真
+public function chance(p:u8):bool
+{
+	return next_u8() < p;
+}
+
+// 重み付きの選択: weights[i] に比例して i を返す (重みの合計が 0 なら 0)
+public function pick(weights:[]const u8):u8
+{
+	var total:u16 = 0;
+	for (var w in weights) {
+		total += w;
+	}
+	if (total == 0) {
+		return 0;
+	}
+	var r = next_u16() % total;
+	for (var i, w in weights) {
+		if (r < w) {
+			return i;
+		}
+		r -= w;
+	}
+	return @len(weights) - 1;
+}
+
+// ---- テスト ----
+
+function test_sequence():void @(test)
+{
+	seed(1);
+	@assert_eq(next_u16(), 0x8181);
+	@assert_eq(next_u16(), 0x6021);
+	seed(0);
+	@assert_eq(next_u16(), 0x8181);   // 0 は 1 と同じ
+}
+
+function test_below():void @(test)
+{
+	seed(12345);
+	for (var i:u8 = 0; i < 200; i += 1) {
+		@assert(below(7) < 7);
+	}
+	@assert_eq(below(0), 0);
+}
+
+function test_pick():void @(test)
+{
+	seed(99);
+	const W = [0, 5, 0, 3];
+	for (var i:u8 = 0; i < 100; i += 1) {
+		var k = pick(W);
+		@assert(k == 1 || k == 3);
+	}
+	const Z = [0, 0];
+	@assert_eq(pick(Z), 0);
+}
