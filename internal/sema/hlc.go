@@ -1211,7 +1211,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 // (値が確定すれば cValue、そうでなければ子が評価済みの演算ノード)。入力は変異しない。
 // 評価済みの木に再適用しても結果は変わらない。
 func (h *Hlc) constEval(c *cexpr) *cexpr {
-	if c.kind == cValue {
+	if c.kind == cValue || c.kind == cOperand {
 		return c
 	}
 	if h.cmemo == nil {
@@ -2014,6 +2014,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		} else {
 			r = e.val
 		}
+
+	case cOperand:
+		r = e.opnd // 既に評価して IR を出した式 (resolveEnumShortPair)
 
 	case cCast:
 		v := h.rval(e.args[0])

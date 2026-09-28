@@ -39,6 +39,7 @@ const (
 	cNull                   // null (型は文脈から。ty が決まれば 0 のリテラルになる)
 	cEnumShort              // fc 3 の `.Name` (enum のメンバー。型は文脈から (withExpected)。name)
 	cNullFn                 // fc 3 の @null_fn (何もしない関数。型は文脈の fn(...):void。無ければ fn():void)
+	cOperand                // 実行時に評価済みの式 (opnd)。lval はそのまま返す (二度出力しない。resolveEnumShortPair が作る)
 )
 
 // cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
@@ -129,6 +130,7 @@ type lambdaLit struct {
 type cexpr struct {
 	kind  ckind
 	val   *ir.Value
+	opnd  ir.Operand // cOperand: 評価済みのオペランド
 	n     int
 	s     string
 	name  string
