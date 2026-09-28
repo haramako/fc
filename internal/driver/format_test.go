@@ -155,3 +155,74 @@ func TestFormatErrors(t *testing.T) {
 		t.Errorf("use なし: out = %q, err = %v", out, err)
 	}
 }
+
+// TestFormatTextmap: 書式に textmap の変換器の呼び出しを書くと、`{…}` を解析してから文字の部分を文字表のコードにし、数字も
+// 文字表のコード (fmt.codes) で書く (実行時の数も、コンパイル時に畳み込む定数も)。
+func TestFormatTextmap(t *testing.T) {
+	t.Parallel()
+	// 表: ＿=0 　=1 ０..９=2..11 Ａ..Ｆ=12..17 ａ..ｆ=18..23 ー=24 Ｈ=25 Ｐ=26 (textmap は ASCII を全角にしてから引く。- は長音の ー)
+	table := "＿　０１２３４５６７８９ＡＢＣＤＥＦａｂｃｄｅｆーＨＰ"
+	out, err := buildBothLevels(t, map[string]string{
+		"t.txt": table,
+		"t.fc": `#fc 4
+use console;
+const _T = @textmap("t.txt");
+var buf:[16]u8;
+function dump(s:[]const u8):void
+{
+	for (var c in s) {
+		printf("{} ", c);
+	}
+	printf("\n");
+}
+function main():void
+{
+	var hp:u8 = 7;
+	var w:i16 = -26;
+	dump(@format(buf, _T("HP {:3}"), hp));
+	dump(@format(buf, _T("{:x}{}"), 171 as u8, w));
+	dump(@format(buf, _T("{}"), 5));
+	console.exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "25 26 1 1 1 9 \n18 19 24 4 8 \n7 \n"
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+// TestFormatTextmapPO: 書式は .po で `{…}` を含んだ全体を翻訳してから解析する (訳文の {1} / {0} で引数の順を変えられる)。
+func TestFormatTextmapPO(t *testing.T) {
+	t.Parallel()
+	table := "＿　０１２３４５６７８９ＡＢＣＤＥＦａｂｃｄｅｆーＨＰＭ"
+	// msgid は原文を全角にしたもの (textmap の照合のキー。英数字と / が全角、{ } と空白はそのまま)
+	po := "msgid \"\"\nmsgstr \"\"\n\nmsgid \"ＨＰ {}／{}\"\nmsgstr \"{1}M{0}\"\n"
+	out, err := buildBothLevels(t, map[string]string{
+		"t.txt": table,
+		"t.po":  po,
+		"t.fc": `#fc 4
+use console;
+const _T = @textmap("t.txt", "t.po");
+var buf:[16]u8;
+function main():void
+{
+	var hp:u8 = 7;
+	var mx:u8 = 30;
+	for (var c in @format(buf, _T("HP {}/{}"), hp, mx)) {
+		printf("{} ", c);
+	}
+	printf("\n");
+	console.exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "{1}M{0}" → 30 M 7 → ３ ０ Ｍ ７ = 5 2 27 9
+	if want := "5 2 27 9 \n"; out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}

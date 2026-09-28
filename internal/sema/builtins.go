@@ -166,38 +166,10 @@ func registerBuiltins(p *Program) {
 			}
 		}
 		m := ir.NewGlobal("", h.prog.Types.Macro(), "")
-		warned := map[string]bool{}
+		tm := &textmapConv{m: m, table: table, conv: conv, cat: cat, warned: map[string]bool{}}
+		h.prog.textmaps[m] = tm
 		h.prog.macros[m] = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-			if len(args) != 1 && len(args) != 2 {
-				panic(&diag.Error{Msg: "text conversion takes a string and an optional msgctxt string (or null not to translate)"})
-			}
-			src := mustString(args[0])
-			key := poKey{id: textKey(src)}
-			translate := true
-			if len(args) == 2 {
-				if args[1].kind == cNull {
-					translate = false // _T("…", null): 翻訳しない (デバッグ表示など。.pot にも入れない)
-				} else {
-					key.hasCtxt, key.ctxt = true, mustString(args[1])
-				}
-			}
-			text := src
-			if cat != nil && translate && src != "" { // "" はヘッダーの msgid と同じなので照合しない
-				if s, ok, reason := cat.lookup(key); ok {
-					text = s
-				} else {
-					h.textWarn(warned, "%s: no translation for %q%s in %s (%s); using the original text", textmapName(m), src, ctxtNote(key), cat.path, reason)
-				}
-			}
-			codes, added := conv.convReport(text)
-			if cat != nil && len(added) > 0 {
-				// 翻訳ありでは、文字表に無い文字を知らせる (表の後ろに足されて表示が化ける。同じ文字は最初の 1 回だけ)
-				var cs []string
-				for _, c := range added {
-					cs = append(cs, fmt.Sprintf("%q (U+%04X)", c, c))
-				}
-				h.textWarn(warned, "%s: %q has characters not in the character table %s: %s", textmapName(m), text, table, strings.Join(cs, ", "))
-			}
+			codes := tm.codes(h, tm.text(h, args))
 			codes = append(codes, 0)
 			elems := make([]*cexpr, len(codes))
 			for i, c := range codes {
@@ -207,6 +179,54 @@ func registerBuiltins(p *Program) {
 		}
 		return cv(m)
 	})
+}
+
+// textmapConv は textmap(...) が作った変換器 (`const _T = @textmap(...)` の _T)。@format(buf, _T("…"), ...) も使う (format.go)。
+type textmapConv struct {
+	m      *ir.Value // 変換器のマクロ値 (警告の名前)
+	table  string
+	conv   *TextConverter
+	cat    *poCatalog // .po (nil なら翻訳しない)
+	warned map[string]bool
+}
+
+// text は変換器の呼び出しの引数 (原文 [, msgctxt か null]) の、翻訳した文字列。
+func (t *textmapConv) text(h *Hlc, args []*cexpr) string {
+	if len(args) != 1 && len(args) != 2 {
+		panic(&diag.Error{Msg: "text conversion takes a string and an optional msgctxt string (or null not to translate)"})
+	}
+	src := mustString(h.constEval(args[0]))
+	key := poKey{id: textKey(src)}
+	translate := true
+	if len(args) == 2 {
+		if args[1].kind == cNull {
+			translate = false // _T("…", null): 翻訳しない (デバッグ表示など。.pot にも入れない)
+		} else {
+			key.hasCtxt, key.ctxt = true, mustString(h.constEval(args[1]))
+		}
+	}
+	if t.cat != nil && translate && src != "" { // "" はヘッダーの msgid と同じなので照合しない
+		if s, ok, reason := t.cat.lookup(key); ok {
+			return s
+		} else {
+			h.textWarn(t.warned, "%s: no translation for %q%s in %s (%s); using the original text", textmapName(t.m), src, ctxtNote(key), t.cat.path, reason)
+		}
+	}
+	return src
+}
+
+// codes は text を文字コードの並びにする (翻訳ありなら、文字表に無い文字を警告する)。
+func (t *textmapConv) codes(h *Hlc, text string) []int {
+	codes, added := t.conv.convReport(text)
+	if t.cat != nil && len(added) > 0 {
+		// 翻訳ありでは、文字表に無い文字を知らせる (表の後ろに足されて表示が化ける。同じ文字は最初の 1 回だけ)
+		var cs []string
+		for _, c := range added {
+			cs = append(cs, fmt.Sprintf("%q (U+%04X)", c, c))
+		}
+		h.textWarn(t.warned, "%s: %q has characters not in the character table %s: %s", textmapName(t.m), text, t.table, strings.Join(cs, ", "))
+	}
+	return codes
 }
 
 // readPO は .po を読む (同じファイルは 1 回だけ読む。_T / _M / _I が同じ .po を渡すため)。

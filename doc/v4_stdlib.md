@@ -275,7 +275,8 @@ public function poll():void;
 **printf**: `printf("書式", 引数...)` は `console` に出す。`@format` と同じ書式・同じ `fmt` の関数で、実装は小さな一時バッファに書いて
 `console.write` に渡すラッパー（部品ごとに書けば一時バッファは数の桁の分、8 バイトほどで済む）。NES でも 10 進になる（今は 16 進）。
 
-**独自のフォント**: `@format` は ASCII を書く。文字コードが ASCII と違うゲームは `str.map(s, 表)` でその場で変換する（castle の
+**独自のフォント**（✅ 2026-09-29。§8 の 3 の形: `@format(buf, _T("…"), ...)`、textmap の変換器は `sema/builtins.go` の
+`textmapConv` にして `@format` からも使う）: `@format` は ASCII を書く。文字コードが ASCII と違うゲームは `str.map(s, 表)` でその場で変換する（castle の
 `@textmap`）。数字だけ違うなら `fmt` の関数の `zero` の引数の案もある（§8）。
 
 ---

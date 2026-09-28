@@ -15,6 +15,10 @@ package sema
 // 引数の型と書き方: 整数は型の符号で 10 進 (x / X / b は同じ大きさの符号なしとして)、bool は true / false ({:d} なら 0 / 1)、
 // enum は数、c は 1 バイトの整数を 1 文字、u8 の slice はそのまま、u8 の配列は中の最初の 0 まで、*u8 は終端 0 まで。幅は数だけ。
 // fmt / console は使う所で読み込む (`use` が無くてもよい)。
+//
+// 独自のフォント: 書式に textmap の変換器の呼び出しを書くと (`@format(buf, _T("HP {:3}"), hp)`)、原文を .po で翻訳してから
+// `{…}` を解析し、文字の部分だけを文字コードにする (textmap は ASCII の記号を全角にするので、先に解析する)。数字などは変換器で
+// 作った 24 文字の表を begin の後に fmt.codes に置いて、実行時の数もフォントのコードで書く。
 
 import (
 	"fmt"
@@ -46,7 +50,12 @@ type fmtArgs struct {
 	parts []ir.LogPart
 	vals  []ir.Operand
 	texts []*string // 定数の文字列の引数はその綴り
+	codes []byte    // textmap の変換器の書式なら、fmtDigits の文字のコード (fmt.codes に置く。nil なら ASCII)
+	tm    *textmapConv
 }
+
+// fmtDigits は fmt.codes の表の文字の並び (fclib/fmt.fc の ASCII と同じ)。
+const fmtDigits = "0123456789ABCDEFabcdef- "
 
 // builtinModule は組み込みが使うモジュール (読み込んでいなければここで読み込む)。今のモジュールが use したことにする (asm が
 // そのモジュールの .inc を取り込み、シンボルを import するように)。
@@ -65,11 +74,22 @@ func (h *Hlc) builtinModule(name string) *ir.ModuleInterface {
 
 // fmtPrepare は書式 (定数の文字列の式) を取り出し、引数を左から評価して、書式を分解する。
 func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
-	fc := h.constEval(format)
-	if fc.kind != cValue || !fc.val.IsString {
-		panic(&diag.Error{Msg: what + ": the format must be a constant string (a string literal or a const; it is split at compile time)"})
-	}
 	a := &fmtArgs{what: what, vals: make([]ir.Operand, len(args)), texts: make([]*string, len(args))}
+	var formatText string
+	if format.kind == cOp && format.op == opCall && len(format.args) >= 2 {
+		if f := h.constEval(format.args[0]); f.kind == cValue {
+			a.tm = h.prog.textmaps[f.val]
+		}
+	}
+	if a.tm != nil {
+		formatText = a.tm.text(h, format.args[1:]) // 翻訳は `{…}` を含んだ書式の全体で
+	} else {
+		fc := h.constEval(format)
+		if fc.kind != cValue || !fc.val.IsString {
+			panic(&diag.Error{Msg: what + ": the format must be a constant string (a string literal or a const; it is split at compile time)"})
+		}
+		formatText = fc.val.Str
+	}
 	largs := make([]*ir.LogArg, len(args))
 	for i, c := range args {
 		if x := h.constEval(c); x.kind == cValue && x.val.IsString {
@@ -83,12 +103,60 @@ func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
 		a.vals[i] = v
 		largs[i] = &ir.LogArg{Expr: fmt.Sprintf("#%d", i), Type: ir.ValType(v)}
 	}
-	parts, err := parseLogFormat(fc.val.Str, largs)
+	parts, err := parseLogFormat(formatText, largs)
 	if err != nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s: %v", what, err)})
 	}
+	if a.tm != nil {
+		dc := a.tm.codes(h, fmtDigits)
+		if len(dc) != len(fmtDigits) {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s: the character table must map each of %q to one code (for the digits)", what, fmtDigits)})
+		}
+		a.codes = codeBytes(what, dc)
+		for i := range parts {
+			if parts[i].Arg < 0 {
+				parts[i].Text = string(codeBytes(what, a.tm.codes(h, parts[i].Text))) // 文字の部分だけを文字コードに
+			} else if t := ir.ValType(a.vals[parts[i].Arg]); t.Kind == types.Bool && parts[i].Spec.Verb == 0 {
+				panic(&diag.Error{Msg: fmt.Sprintf("%s: {} of a bool writes true / false in ASCII; use {:d} with a character table", what)})
+			}
+		}
+	}
 	a.parts = parts
 	return a
+}
+
+// codeBytes は文字コードの並びをバイトにする (1 バイトに入らなければエラー)。
+func codeBytes(what string, codes []int) []byte {
+	b := make([]byte, len(codes))
+	for i, c := range codes {
+		if c < 0 || c > 255 {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s: character code %d does not fit in a byte", what, c)})
+		}
+		b[i] = byte(c)
+	}
+	return b
+}
+
+// setCodes は fmt.codes を textmap の数字などの表にする (begin の後。ASCII なら何もしない)。表はモジュールに 1 つ。
+func (h *Hlc) setCodes(a *fmtArgs) {
+	if a.codes == nil {
+		return
+	}
+	key := h.module.Id + "\x00" + string(a.codes)
+	sym := h.prog.fmtCodes[key]
+	if sym == "" {
+		sym = fmt.Sprintf("_%s__fmt_codes%d", h.module.Id, len(h.prog.fmtCodes))
+		u8 := h.prog.Types.IntType(1, false)
+		elems := make([]ir.Operand, len(a.codes))
+		for i, c := range a.codes {
+			elems[i] = ir.NewIntLiteral("", u8, int(c))
+		}
+		h.addDefModule(&ir.Def{Kind: ir.DefBlock, Sym: sym, Type: h.prog.Types.ArrayOf(u8, len(elems)), Elems: elems})
+		h.prog.fmtCodes[key] = sym
+	}
+	fi := h.builtinModule("fmt")
+	codes := h.moduleFunc(fi, "fmt", "codes")
+	h.emit(&ir.Op{Code: ir.OpLoad, Dst: codes, Src: []ir.Operand{ir.NewSymbolLiteral("", ir.ValType(codes), sym)}})
 }
 
 // noWidth は幅を持てない引数 (文字列・文字) に幅が付いていればエラー。
@@ -110,7 +178,15 @@ func (a *fmtArgs) constText(p ir.LogPart) (string, bool) {
 	v := a.vals[p.Arg]
 	t := ir.ValType(v)
 	if k, lit := ir.ValIntLiteral(v); lit && p.Spec.Verb != 'c' && (t.Kind == types.Int || t.Kind == types.Bool) {
-		return formatConst(k, t, p.Spec), true
+		s := formatConst(k, t, p.Spec)
+		if a.codes != nil { // 数字などを文字表のコードに
+			b := []byte(s)
+			for i, c := range b {
+				b[i] = a.codes[strings.IndexByte(fmtDigits, c)]
+			}
+			s = string(b)
+		}
+		return s, true
 	}
 	return "", false
 }
@@ -152,6 +228,7 @@ func (a *fmtArgs) maxLen(p ir.LogPart) int {
 func (h *Hlc) fmtEmit(a *fmtArgs, parts []ir.LogPart, dst *ir.Value) *ir.Value {
 	fi := h.builtinModule("fmt")
 	h.lval(ccall(cv(h.moduleFunc(fi, "fmt", "begin")), cv(dst)))
+	h.setCodes(a)
 	h.fmtEmitParts(a, parts)
 	n := h.newTmp(h.prog.Types.IntType(1, false)) // 書いた長さ (今の fmt.at。後の書き込みが変える前に写す)
 	h.emit(&ir.Op{Code: ir.OpLoad, Dst: n, Src: []ir.Operand{h.moduleFunc(fi, "fmt", "at")}})
@@ -305,6 +382,7 @@ func (h *Hlc) printf4(args []*cexpr) {
 			write("write_z_in", cv(h.operandValue(v)))
 		default:
 			fmtCall("begin_print")
+			h.setCodes(a)
 			h.fmtEmitParts(a, []ir.LogPart{p})
 			fmtCall("print")
 		}
