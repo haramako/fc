@@ -41,13 +41,14 @@ func TestFmtReference(t *testing.T) {
 		name, verb string
 		lo, hi     int64
 		maxWidth   int
+		flags      int // spec に足すビット (0x40 = 16 進の小文字)
 	}
 	fns := []fn{
-		{"dec_u8", "d", 0, 255, 6}, {"dec_u16", "d", 0, 65535, 8}, {"dec_i8", "d", -128, 127, 6}, {"dec_i16", "d", -32768, 32767, 8},
-		{"hex_u8", "X", 0, 255, 5}, {"hex_u16", "X", 0, 65535, 6}, {"bin_u8", "b", 0, 255, 10}, {"bin_u16", "b", 0, 65535, 18},
+		{"dec_u8", "d", 0, 255, 6, 0}, {"dec_u16", "d", 0, 65535, 8, 0}, {"dec_i8", "d", -128, 127, 6, 0}, {"dec_i16", "d", -32768, 32767, 8, 0},
+		{"hex_u8", "X", 0, 255, 5, 0}, {"hex_u16", "x", 0, 65535, 6, 0x40}, {"bin_u8", "b", 0, 255, 10, 0}, {"bin_u16", "b", 0, 65535, 18, 0},
 	}
 	var src, want strings.Builder
-	src.WriteString("#fc 4\nuse console;\nuse fmt;\nvar buf:[20]u8;\nfunction show(n:u8):void { console.write(buf[..n]); console.newline(); }\n")
+	src.WriteString("#fc 4\nuse console;\nuse fmt;\nvar buf:[20]u8;\nfunction show():void { console.write(buf[..fmt.at]); console.newline(); }\n")
 	const perFunc = 20 // 呼び出しの引数の一時変数で静的フレームが 256 バイトを超えないように、関数を分ける
 	var lines []string
 	for i := 0; i < 240; i++ {
@@ -66,17 +67,21 @@ func TestFmtReference(t *testing.T) {
 			v = f.hi
 		}
 		width, zero := r.Intn(f.maxWidth+1), r.Intn(2) == 0
-		line := fmt.Sprintf("\tshow(fmt.%s(buf, %d, %d, %v, fmt.ASCII));", f.name, v, width, zero)
+		spec := width | f.flags
+		if zero {
+			spec |= 0x20
+		}
+		line := fmt.Sprintf("\tfmt.begin(buf); fmt.%s(%d, %d); show();", f.name, v, spec)
 		lines = append(lines, line)
 		src.WriteString(line + "\n")
-		spec := "%"
+		gs := "%"
 		if zero {
-			spec += "0"
+			gs += "0"
 		}
 		if width > 0 {
-			spec += fmt.Sprint(width)
+			gs += fmt.Sprint(width)
 		}
-		fmt.Fprintf(&want, spec+f.verb+"\n", v)
+		fmt.Fprintf(&want, gs+f.verb+"\n", v)
 	}
 	src.WriteString("}\nfunction main():void\n{\n")
 	for k := 0; k < 240/perFunc; k++ {
@@ -108,8 +113,9 @@ use fmt;
 var buf:[4]u8;
 function main():void
 {
-	var n = fmt.dec_u16(buf[..2], 12345, 0, false, fmt.ASCII);
-	console.write(buf[..n]);
+	fmt.begin(buf[..2]);
+	fmt.dec_u16(12345, 0);
+	console.write(buf[..fmt.at]);
 	console.exit(0);
 }
 `}})

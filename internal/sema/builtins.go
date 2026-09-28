@@ -39,17 +39,27 @@ func registerBuiltins(p *Program) {
 	})
 
 	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		if h.v4() {
+			// fc 4: 書式文字列で console に出す (@format と同じ書式。format.go)
+			h.printf4(args)
+			return macroResult{}
+		}
 		stdio := h.stdioModule("printf")
 		uint8p := h.prog.Types.PointerTo(h.prog.Types.IntType(1, false))
 		print := h.moduleFunc(stdio, "stdio", "print")
 		printInt16 := h.moduleFunc(stdio, "stdio", "print_int16")
 		r := macroResult{stmts: []*cexpr{}}
-		for _, arg := range args {
+		typs := make([]*types.Type, len(args))
+		if h.rewriting() {
+			defer func() { h.rewritePrintf(args, typs) }() // fc 4 の書式文字列の形に (format.go)
+		}
+		for i, arg := range args {
 			// 旧実装は引数が定数値 (変数・リテラル) しか受けなかった。式 (struct のフィールドなど) は先に評価して値にする
 			if arg.kind != cValue {
 				arg = cv(h.operandValue(h.rval(arg)))
 			}
 			typ := arg.val.Type
+			typs[i] = typ
 			switch {
 			case h.prog.Types.Compatible(uint8p, typ) != nil:
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
@@ -132,6 +142,7 @@ func registerBuiltins(p *Program) {
 	})
 
 	registerSliceBuiltins(h)
+	registerFormatBuiltins(h)
 	registerLogBuiltin(h)
 
 	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。doc/v3_plan.md §3)

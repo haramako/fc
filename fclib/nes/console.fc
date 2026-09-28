@@ -50,6 +50,16 @@ public function write_z(p:*const u8):void
 	write(@slice(p, n));
 }
 
+// s の中の最初の 0 まで (無ければ全部) 出す (u8 の配列を文字列として出すとき)
+public function write_z_in(s:[:u16]const u8):void
+{
+	var n:u16 = 0;
+	while (n < @len(s) && s[n] != 0) {
+		n += 1;
+	}
+	write(s[..n]);
+}
+
 public function newline():void
 {
 	write("\n");

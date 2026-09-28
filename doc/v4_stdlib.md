@@ -266,6 +266,12 @@ public function poll():void;
   ```
 - **実行時に書式を読む整形器は作らない**（2026-09-29 決定。実行時に言語を切り替えるなど、要るようになったら別のライブラリにする）
 
+**実装（2026-09-29）**: `@format` と fc 4 の printf は `sema/format.go`。fmt は書き先の状態（`begin` で決めた書き先・`at`・数字の表
+`codes`）を持ち、呼び出しは値と `spec`（幅 | ZERO | LOWER の 1 バイト）だけを渡す（呼び出しごとに書き先・位置・幅・埋め・表を渡すと
+`@format` の 1 回が 300 バイトを超えた。今は約 150 バイト）。printf は部分ごとに console に出す（数は fmt の printf 用のバッファに
+書いて `fmt.print`）。fc 2 / fc 3 のモジュールの printf は今までどおり（stdio）で、fc 3 → 4 の migrate が書式文字列に直す
+（`printf-format`）。組み込みは fmt / console を `use` しなくても読み込む（`builtinModule`）。
+
 **printf**: `printf("書式", 引数...)` は `console` に出す。`@format` と同じ書式・同じ `fmt` の関数で、実装は小さな一時バッファに書いて
 `console.write` に渡すラッパー（部品ごとに書けば一時バッファは数の桁の分、8 バイトほどで済む）。NES でも 10 進になる（今は 16 進）。
 
@@ -316,7 +322,7 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
 ## 7. 進め方
 
 1. **決める**: §8 を決め、この文書を仕様にする ✅ 2026-09-29
-2. **どのターゲットでも使うもの**（emu で確かめられる。✅ 2026-09-29: console（emu / NES）・sys・fmt と、emu のやり取りの
+2. **どのターゲットでも使うもの**（emu で確かめられる。✅ 2026-09-29: `@format` と fc 4 の printf（migrate の printf-format も）。✅ 2026-09-29: console（emu / NES）・sys・fmt と、emu のやり取りの
    「長さの分だけ出す」（$fffe に 6）、割り込みの入口が無ければ空の入口を足す。テストは `internal/driver/stdlib_test.go`（fmt は
    Go の fmt と乱数で比べる）と `internal/nes/console_test.go`）: mem / fmt / `@format` と printf / str / buf / math / rand / bits / hit /
    sys / test / console（emu）。組み込み（§5）を直し、test/ の golden を更新する。`fmt` と `@format` は Go の `strconv` を参照にした

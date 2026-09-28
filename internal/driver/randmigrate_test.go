@@ -93,8 +93,9 @@ func TestRandomMigrate(t *testing.T) {
 			if err != nil {
 				t.Fatalf("fc 4 への migrate が失敗 (seed %d): %v\n%s", seed, err, g.allSource())
 			}
-			if usesFastcall(v2) {
-				// fc 4 は fastcall を廃止した (migrate が本体のある関数の fastcall を消す)。生成コードは変わるので、実行結果で比べる
+			{
+				// fc 4 は fastcall を廃止し (migrate が本体のある関数の fastcall を消す)、printf は書式文字列で console に出す (migrate が
+				// 書き換える)。生成コードは変わるので、実行結果で比べる
 				for _, level := range []int{-1, 0} {
 					want, err := rpRun(t, v2, level, rpMaxCycles)
 					if err != nil {
@@ -106,23 +107,14 @@ func TestRandomMigrate(t *testing.T) {
 						// あふれた (ほかの fuzz と同じくプログラムが大きすぎる扱い)
 						t.Skipf("fc 4 に migrate したプログラムのソフトウェアスタックがあふれた (seed %d)", seed)
 					}
+					if err != nil && strings.Contains(err.Error(), "memory area overflow") {
+						// fc 4 の printf (書式文字列を fmt の呼び出しに展開する) は引数を並べる printf よりコードが大きく、-O 0 の
+						// 大きなプログラムが emu の ROM (28KB) からあふれた (プログラムが大きすぎる扱い)
+						t.Skipf("fc 4 に migrate したプログラムが ROM からあふれた (seed %d)", seed)
+					}
 					if err != nil || got != want {
 						t.Fatalf("-O %d: fc 4 への migrate で出力が変わった (seed %d): %v\n元: %s\n後: %s\n%s\n// ---- migrate の後 ----\n%s", level, seed, err, want, got, g.allSource(), joinSources(v4))
 					}
-				}
-				return
-			}
-			for _, level := range []int{-1, 0} {
-				want, err := romBuild(t, v2, level)
-				if err != nil {
-					t.Skipf("fc 2 のプログラムがビルドできない (seed %d): %+v", seed, err)
-				}
-				got, err := romBuild(t, v4, level)
-				if err != nil {
-					t.Fatalf("-O %d: fc 4 に migrate したプログラムがビルドできない (seed %d): %v\n%s\n// ---- migrate の後 ----\n%s", level, seed, err, g.allSource(), joinSources(v4))
-				}
-				if !bytes.Equal(got, want) {
-					t.Fatalf("-O %d: fc 4 への migrate で ROM が変わった (seed %d)\n%s\n// ---- migrate の後 ----\n%s", level, seed, g.allSource(), joinSources(v4))
 				}
 			}
 		})
@@ -168,14 +160,4 @@ func joinSources(files map[string]string) string {
 		fmt.Fprintf(&b, "// ---- %s ----\n%s", name, files[name])
 	}
 	return b.String()
-}
-
-// usesFastcall は fc 2 のソースに fastcall の関数があるか (fc 4 への migrate で生成コードが変わる)。
-func usesFastcall(files map[string]string) bool {
-	for _, src := range files {
-		if strings.Contains(src, "fastcall") {
-			return true
-		}
-	}
-	return false
 }

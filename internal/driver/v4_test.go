@@ -75,7 +75,7 @@ function main():void
 	var s:i8 = -3;
 	var u:u8 = s;
 	var n:u8 = NONE;
-	printf(B, " ", none(), " ", x, " ", lo, " ", c, " ", u, " ", n, "\n");
+	printf("{} {} {} {} {} {} {}\n", B, none(), x, lo, c, u, n);
 	exit(0);
 }
 `})
@@ -108,9 +108,9 @@ function main():void
 	var s16:i16 = -5;
 	var h:u16 = hi << 8 | lo;
 	var r = [vx, 200];
-	printf(h, " ", s >> 8, "\n");
-	printf(T[0], " ", T[1], " ", @sizeof(T), " ", U[1], " ", @sizeof(U), " ", @sizeof(S), " ", D[0], " ", r[1], " ", @sizeof(r), "\n");
-	printf(x < s16, " ", x == (-6 as i8), " ", (x + vx) as u8 > lim, " ", x + vx > 100, "\n");
+	printf("{} {}\n", h, s >> 8);
+	printf("{} {} {} {} {} {} {} {} {}\n", T[0], T[1], @sizeof(T), U[1], @sizeof(U), @sizeof(S), D[0], r[1], @sizeof(r));
+	printf("{:d} {:d} {:d} {:d}\n", x < s16, x == (-6 as i8), (x + vx) as u8 > lim, x + vx > 100);
 	exit(0);
 }
 `})
@@ -177,6 +177,21 @@ function main():void
 	}
 }
 
+// versionSrc は fc 3 と fc 4 で共有する雛形 tmpl (版は %d) の、版 ver のソース。fc 4 の printf は書式文字列なので、fc 4 版は
+// fc 3 版を printf の書き換え (printf-format) だけで migrate したもの (ほかは fc 4 の意味のまま)。
+func versionSrc(t *testing.T, tmpl string, ver int) string {
+	t.Helper()
+	src := fmt.Sprintf(tmpl, 3)
+	if ver < 4 {
+		return src
+	}
+	out, err := migrateRules(t, map[string]string{"t.fc": src}, []string{"printf-format"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out["t.fc"]
+}
+
 // a1Src は A1 (代入先と式の中の一番広い型で計算) と F1 (シフトは左辺の型) の例 (版は %d)。
 const a1Src = `#fc %d
 use * from stdio;
@@ -226,7 +241,7 @@ func TestV4Widen(t *testing.T) {
 		{4, "300 150 8512 1300 4660 199 -5 199 44\n300\n300 0 44\n640 144\n"},
 		{3, "44 22 8256 1044 52 -57 251 199 44\n44\n44 0 44\n640 -112\n"},
 	} {
-		out, err := buildBothLevels(t, map[string]string{"t.fc": fmt.Sprintf(a1Src, c.ver)})
+		out, err := buildBothLevels(t, map[string]string{"t.fc": versionSrc(t, a1Src, c.ver)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -271,7 +286,7 @@ func TestV4TypedConst(t *testing.T) {
 		{4, "300 300 44 22 150 1 65531 44 44 256\n"},
 		{3, "44 44 44 22 22 0 251 44 44 0\n"},
 	} {
-		out, err := buildBothLevels(t, map[string]string{"t.fc": fmt.Sprintf(typedConstSrc, c.ver)})
+		out, err := buildBothLevels(t, map[string]string{"t.fc": versionSrc(t, typedConstSrc, c.ver)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -327,7 +342,7 @@ func TestV4StringConst(t *testing.T) {
 		{4, "3 4 3 3 2 2 4\n3 3 2 0\n"},
 		{3, "4 4 4 3 3 3 4\n4 4 3 0\n"},
 	} {
-		out, err := buildBothLevels(t, map[string]string{"t.fc": fmt.Sprintf(strConstSrc, c.ver)})
+		out, err := buildBothLevels(t, map[string]string{"t.fc": versionSrc(t, strConstSrc, c.ver)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -434,7 +449,7 @@ use * from stdio;
 const B:u16 = 300;
 const F:i8 = -1;
 function none():u8 { return -1 as u8; }
-function put(n:u8):void { printf(n, "\n"); }
+function put(n:u8):void { printf("{}\n", n); }
 function main():void
 {
 	var w:u16 = 0x1234;
@@ -447,7 +462,7 @@ function main():void
 	var x:u8 = 200;
 	var vx:i8 = -1;
 	x = x + vx;
-	printf(B, " ", F, " ", none(), " ", c, " ", y, " ", lo, " ", x, "\n");
+	printf("{} {} {} {} {} {} {}\n", B, F, none(), c, y, lo, x);
 	exit(0);
 }
 `
@@ -505,7 +520,7 @@ function f(l0:i8):u8
 }
 function main():void
 {
-	printf(f(3), "\n");
+	printf("{}\n", f(3));
 	exit(0);
 }
 `

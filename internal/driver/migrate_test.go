@@ -8,6 +8,7 @@ package driver
 
 import (
 	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -134,16 +135,26 @@ func TestMigrateGoldenPrograms(t *testing.T) {
 			srcName, target := goldenKeyInfo(name)
 			tmp := t.TempDir()
 			out := filepath.Join(tmp, base)
-			code, err := NewCompiler(home).Build(srcName+".fc", &BuildOptions{Target: target, Out: out, Dir: dir, BuildDir: filepath.Join(tmp, "build")})
-			if err != nil || code != 0 {
-				t.Fatalf("ビルド失敗: %v (code %d)", err, code)
+			// fc 4 の printf は書式文字列で console に出す (migrate が書き換える) ので生成コードは変わる: emu は出力と終了コードを
+			// golden と比べ、nes はビルドできることを見る (doc/v4_stdlib.md §4。以前は ROM を比べていた)
+			var stdout bytes.Buffer
+			code, err := NewCompiler(home).Build(srcName+".fc", &BuildOptions{Target: target, Out: out, Dir: dir, BuildDir: filepath.Join(tmp, "build"),
+				Run: target == "emu", Stdout: &stdout, MaxCycles: testMaxCycles})
+			if err != nil {
+				t.Fatalf("ビルド失敗: %v", err)
 			}
-			sameBytes(t, out, m)
+			if target != "emu" {
+				return
+			}
+			compareText(t, name, stdout.String(), readGolden(t, "stdout/"+name+".txt"))
+			if want := strings.TrimSpace(readGolden(t, "stdout/"+name+".exit")); fmt.Sprint(code) != want {
+				t.Errorf("終了コード %d, golden %s", code, want)
+			}
 		})
 	}
 }
 
-// TestMigrateBench: bench/ のプログラムを fc 2 のままと migrate した後でビルドし、バイナリが一致する。
+// TestMigrateBench: bench/ のプログラムを fc 2 のままと migrate した後で走らせ、出力が一致する。
 func TestMigrateBench(t *testing.T) {
 	t.Parallel()
 	home := migratedHome(t)
@@ -160,15 +171,20 @@ func TestMigrateBench(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			tmp := t.TempDir()
-			build := func(fcHome, dir, tag string) string {
+			// fc 4 の printf は生成コードが変わる (migrate が書式文字列に書き換える) ので、走らせた出力を比べる
+			run := func(fcHome, dir, tag string) string {
+				var stdout bytes.Buffer
 				out := filepath.Join(tmp, tag+".bin")
-				code, err := NewCompiler(fcHome).Build(name+".fc", &BuildOptions{Target: "emu", Out: out, Dir: dir, BuildDir: filepath.Join(tmp, tag)})
+				code, err := NewCompiler(fcHome).Build(name+".fc", &BuildOptions{Target: "emu", Out: out, Dir: dir, BuildDir: filepath.Join(tmp, tag),
+					Run: true, Stdout: &stdout, MaxCycles: testMaxCycles})
 				if err != nil || code != 0 {
-					t.Fatalf("%s: ビルド失敗: %v (code %d)", tag, err, code)
+					t.Fatalf("%s: ビルド・実行の失敗: %v (code %d)", tag, err, code)
 				}
-				return out
+				return stdout.String()
 			}
-			sameBytes(t, build(home, mig, "migrated"), build(absRepoRoot, orig, "orig"))
+			if got, want := run(home, mig, "migrated"), run(absRepoRoot, orig, "orig"); got != want {
+				t.Errorf("migrate で出力が変わった:\n後: %q\n前: %q", got, want)
+			}
 		})
 	}
 }

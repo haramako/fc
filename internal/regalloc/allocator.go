@@ -80,9 +80,16 @@ func CalcLiveRange(lmd *ir.Lambda) {
 		flow = append(flow, node)
 
 		for _, v := range defines {
+			// 変数の一部 (struct のフィールド / SoA のバイト分割) への書き込みは残りを保つので、使用でもある。ただしコンパイラの
+			// 一時変数で、命令の順で最初に現れるのが部分の書き込みなら (slice を組み立てる最初のフィールド)、それより前に値は無い
+			// ので使用にしない (使用にすると関数の頭から生きていることになり、文ごとの slice の一時変数がフレームを共有できな
+			// かった)。名前のある変数はループの前の周の値を読むことがあるので今までどおり
+			first := false
+			if u := ir.UnderlyingValue(v); u != nil && u.LocalType == ir.LTTemp && udIndex[u] == nil {
+				first = true
+			}
 			record(v, true, i)
-			if ir.IsPartialDef(v) {
-				// 変数の一部 (struct のフィールド / SoA のバイト分割) への書き込みは残りを保つので、使用でもある
+			if ir.IsPartialDef(v) && !first {
 				record(v, false, i)
 			}
 		}
@@ -289,8 +296,8 @@ func allocateStatic(lmd *ir.Lambda) {
 		case v.LocalType == ir.LTResult || v.LocalType == ir.LTArg:
 		case homes[v]:
 			place(v) // 常駐変数の退避先 (ループの中では vA の名前で使うので live range が途切れる。専用の場所を与える)
-		case refered[v] || (v.Kind == ir.KindLocal && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct)):
-			place(v) // ポインタで触られうるので他と共有しない
+		case refered[v] || (v.Kind == ir.KindLocal && (v.Type.Kind == types.Array || v.Type.Kind == types.Struct && !v.Type.IsSlice())):
+			place(v) // ポインタで触られうるので他と共有しない (slice はポインタと長さの値で、& を取られなければポインタで触られない)
 		case v.LiveRange != nil:
 			packVars = append(packVars, &allocEntry{key: v, liveRange: v.LiveRange})
 		default:

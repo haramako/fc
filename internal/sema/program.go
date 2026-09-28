@@ -261,7 +261,9 @@ func (p *Program) ErrorList() error {
 
 // CompileAllBodies は登録済み全モジュールの関数本体をコンパイルする。
 func (p *Program) CompileAllBodies(deps Resolver) error {
-	for _, mod := range p.Modules.List() {
+	// 本体のコンパイル中に組み込み (printf / @format) がモジュールを読み込むことがある (builtinModule) ので、伸びた一覧も最後まで回す
+	for i := 0; i < len(p.Modules.List()); i++ {
+		mod := p.Modules.List()[i]
 		if mod.FromFcm {
 			continue
 		}

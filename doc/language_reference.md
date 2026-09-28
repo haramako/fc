@@ -776,7 +776,9 @@ var v:int16 = s as int16;                // s:sint8 = -1 なら -1 (符号拡張
 | `min(a, b)` / `max(a, b)` | 小さい方 / 大きい方。型は引数の互換型（片方が符号付きなら符号付き比較、`int16` と `int` なら `int16`）。定数なら畳み込み。関数呼び出しではなく、その場に比較と代入のコードを出す（fastcall 関数の中でも使える） |
 | `clamp(x, lo, hi)` | `lo` 以上 `hi` 以下に収める（`x < lo` なら `lo`、`hi < x` なら `hi`）。型・コードは `min` / `max` と同じ |
 | `asm("lda #1", "sta $2000")` | インラインアセンブラ（各引数が 1 行） |
-| `printf(a, b, ...)` | 引数の型で `stdio.print`（`*u8`）/ `print_slice`（`[]u8`。長さの分だけ）/ `print_int16`（符号なしの整数・bool・enum）/ `print_sint16`（符号付き。負なら `-`）を呼び分ける。それ以外の型（struct など）はエラー。`stdio` モジュールが必要 |
+| `printf(a, b, ...)`（fc 2 / fc 3） | 引数の型で `stdio.print`（`*u8`）/ `print_slice`（`[]u8`。長さの分だけ）/ `print_int16`（符号なしの整数・bool・enum）/ `print_sint16`（符号付き。負なら `-`）を呼び分ける。それ以外の型（struct など）はエラー。`stdio` モジュールが必要 |
+| `printf("書式", 引数...)`（fc 4） | `@format` と同じ書式で `console` に出す（下の §7.2）。書式は定数。fc 3 → 4 の migrate が引数を並べる形を書式文字列に直す（規則 `printf-format`: 文字列リテラルは書式に取り込み、bool は今の 0 / 1 のまま `{:d}`） |
+| `@format(dst, "書式", 引数...)`（fc 3 以降） | `dst`（`[]u8`、255 バイトまで）に書式どおりに書き、書いた部分の slice を返す（snprintf に当たる。§7.2） |
 | `unittest_run_tests()` | `stdio.init()` の後、スコープ内の `test_*` 関数を宣言順に呼び、`stdio.exit(0)` する（`stdio` が必要） |
 | `cos(x)` | `math.sin(x + 64)` に展開（`math` モジュールが必要）。`math.cos(x)` とも書ける |
 | `incbin("file")` | ファイルを配列定数として埋め込む |
@@ -818,6 +820,28 @@ print(_T("めにゅー", null));           // 翻訳しない（デバッグ用�
   `msgstr[n]` はエラー。
 - パスは表と同じく、`@textmap` を書いたソースファイルからの相対（`-D` で渡すときも）。
 
+
+### 7.2 `@format` と fc 4 の `printf`
+
+```fc
+var line:[32]u8;
+var s = @format(line, "HP {:3}/{}", hp, max_hp);   // "HP   7/300" (s は line の先頭からの slice)
+printf("x={:04X} {}\n", x, name);                 // console に出す
+```
+
+- 書式は `@log` と同じ: `{}`（順番）/ `{0}`（位置）、`{:5}`（幅。右に寄せる）/ `{:05}`（0 で埋める。符号の後ろ）、`{:d}` / `{:x}` /
+  `{:X}` / `{:b}` / `{:c}`、`{{` / `}}`。幅は 31 まで
+- 書式は定数の文字列で、**コンパイル時に分解**して fmt モジュールの関数の呼び出しの並びにする（実行時に書式を読まない。
+  `fmt.begin(dst); fmt.str("HP "); fmt.dec_u8(hp, 3); ...`）。文字の部分と定数の引数はコンパイル時に文字にする。引数は左から
+  先に全部評価する
+- 引数: 整数は型の符号で 10 進（`x` / `X` / `b` は同じ大きさの符号なしとして）、bool は `true` / `false`（`{:d}` なら 0 / 1）、enum は
+  数、`c` は 1 バイトの整数を 1 文字、`[]u8` はそのまま、u8 の配列は中の最初の 0 まで、`*u8` は終端 0 まで。幅は数だけ
+- `dst` が足りなければ止まる（`sys.panic`）。書き先の状態は fmt が持つ（割り込みの中では使わない）
+- `printf` は部分ごとに console に出す（文字は `console.write_z`、文字列の引数は `write` / `write_z` / `write_z_in`、数は fmt の
+  printf 用のバッファ 32 バイトに書いて出す）
+- fmt / console は `use` しなくても組み込みが読み込む
+- コードの大きさの目安（-O 2、`"HP {:3}/{}\n"` の 5 つの部分）: `@format` は 1 回約 150 バイト、`printf` は約 115 バイト
+
 ---
 
 ## 8. 標準ライブラリ（fclib）
@@ -836,9 +860,9 @@ fc 4 の新しい fclib（作り直しの途中。計画は [v4_stdlib.md](v4_st
 
 | モジュール | 主な内容 |
 |---|---|
-| `console`（ターゲット別） | デバッグ出力: `write(s:[:u16]const u8)`（長さの分だけ。途中の 0 も）, `write_z(p)`（終端 0）, `newline()`, `exit(code)`, `init()`。emu はホストへ、NES は `init()` で描画を止めてネームテーブル 0 に直に書く（ASCII の並びのフォントの CHR が要る。`exit` は `exit_code` / `exited` を残して画面を出して止まる）。emu は `bench_start()` / `bench_end()` も |
+| `console`（ターゲット別） | デバッグ出力: `write(s:[:u16]const u8)`（長さの分だけ。途中の 0 も）, `write_z(p)`（終端 0）, `write_z_in(s)`（s の中の最初の 0 まで）, `newline()`, `exit(code)`, `init()`。emu はホストへ、NES は `init()` で描画を止めてネームテーブル 0 に直に書く（ASCII の並びのフォントの CHR が要る。`exit` は `exit_code` / `exited` を残して画面を出して止まる）。emu は `bench_start()` / `bench_end()` も |
 | `sys` | `panic(msg)`（`panic: msg` を console に出して終了コード 1）, `assert(cond, msg)` |
-| `fmt` | 数を文字にする: `dec_u8` / `dec_u16` / `dec_i8` / `dec_i16` / `hex_u8` / `hex_u16` / `bin_u8` / `bin_u16`（`(dst:[]u8, n, width, zero:bool, digits:*const u8):u8`。書いた長さを返し、`dst` が足りなければ `sys.panic`。`width` は最小の幅で右に寄せる、`zero` は 0 で埋める（符号の後ろ: `-05`）か空白（符号の前: `  -5`）、`digits` は 0〜9・A〜F・`-`・空白の 18 文字のコードで ASCII なら `fmt.ASCII`）。10 進は割り算を使わない |
+| `fmt` | 数や文字列を文字にして書く（`@format` / `printf` の中身）: `begin(dst:[]u8)` で書き先を決め、`dec_u8` / `dec_u16` / `dec_i8` / `dec_i16` / `hex_u8` / `hex_u16` / `bin_u8` / `bin_u16`（`(n, spec:u8)`）・`str(s:[]const u8)`・`str_z(p)`・`str_z_in(s)`・`chr(c)`・`boolean(b)` を順に呼ぶと先頭から書いていく（`fmt.at` が書いた長さ）。`spec` は幅（下位 5 ビット）\| `fmt.ZERO`（0 で埋める。符号の後ろ: `-05`。無ければ空白で符号の前: `  -5`）\| `fmt.LOWER`（16 進の小文字）。数字などの文字のコードは `fmt.codes`（0〜9・A〜F・a〜f・`-`・空白の 24 文字。`begin` が `fmt.ASCII` にする）。書き先が足りなければ `sys.panic`。10 進は割り算を使わない。printf 用に `begin_print()` / `print()` |
 
 割り込みの入口 `_interrupt` / `_interrupt_irq`（share/runtime.asm の NMI / IRQ が呼ぶ）を定義するものが無いプログラムには、fc が
 何もしない入口を足す（fc の関数（`options(symbol:)` の extern も）か、`include` した asm がその名前を参照していれば、定義がある

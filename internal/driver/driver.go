@@ -29,6 +29,11 @@ import (
 	"github.com/haramako/fc/internal/syntax"
 )
 
+// toolSlots は外部のツール (ca65 / ld65) を同時に起動する数の上限 (プロセス全体。Compiler ごとの並列 (jobs) とは別)。テストのように
+// 1 つのプロセスで多くのビルドを並べると、ビルドごとに CPU の数だけ ca65 を起動して数百のプロセスになり、Windows がプロセスを
+// 作れなくなっていた ("Not enough memory resources are available to process this command")。
+var toolSlots = make(chan struct{}, max(4, 2*runtime.NumCPU()))
+
 // DefaultBuildDirName はソースディレクトリ直下に作る中間生成物ディレクトリの名前。
 const DefaultBuildDirName = ".fc-build"
 
@@ -787,12 +792,20 @@ func (c *Compiler) sh(name string, args ...string) {
 
 // run は外部コマンドを実行し、失敗なら *CommandError を返す。
 func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
+	select {
+	case toolSlots <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-toolSlots }()
 	cmd := exec.CommandContext(ctx, cc65.ToolPath(name), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		code := -1
 		if cmd.ProcessState != nil {
 			code = cmd.ProcessState.ExitCode()
+		} else {
+			out = append(out, err.Error()...) // 起動できなかった理由 (出力が無く、終了コード -1 だけが残っていた)
 		}
 		return &CommandError{
 			Msg:     fmt.Sprintf("%s returns %d", name, code),
