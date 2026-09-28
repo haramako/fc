@@ -238,3 +238,27 @@ function main():void
 		}
 	}
 }
+
+// TestStackAbiLocalArray: スタックの規約 (@(abi: "stack")) の関数のローカル配列をポインタとして使う (配列の先頭は
+// S + addr + X。codegen の loadA の PointeredArray の分岐)。2026-09-28 のカバレッジの調査までテストが無かった。
+func TestStackAbiLocalArray(t *testing.T) {
+	t.Parallel()
+	out, err := buildFiles(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+function sum(p:*u8, n:u8):u8 { var s:u8 = 0; for (var i:u8 = 0; i < n; i++) { s += p[i]; } return s; }
+function f(k:u8):u8 @(abi: "stack")
+{
+	var a:[4]u8;
+	a[0] = k; a[1] = 2; a[2] = 3; a[3] = 4;
+	var p:*u8 = a;
+	var q:*u8;
+	q = a;
+	var b:u8 = !(k == 3) as u8;
+	return sum(p, 4) + q[1] + b + sum(&a[1], 2);
+}
+function main():void { printf(f(1), " ", f(3), "\n"); exit(0); }
+`})
+	if err != nil || out != "18 19\n" {
+		t.Fatalf("got %q, %v (want %q)", out, err, "18 19\n")
+	}
+}

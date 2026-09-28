@@ -734,12 +734,3 @@ func (g *Graph) report(plan *Plan, nZp, nRam int) []string {
 	}
 	return r
 }
-
-// Summary は配置の要約 (デバッグ表示用)。
-func (g *Graph) Summary() string {
-	var b strings.Builder
-	for i, lmd := range g.Lambdas {
-		fmt.Fprintf(&b, "%s abi=%s entry=%v size=%d depth=%d\n", lmd.Id, lmd.ABI, lmd.Entry, lmd.FrameSize, g.depth[i])
-	}
-	return b.String()
-}

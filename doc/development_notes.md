@@ -53,6 +53,16 @@ go test ./...                                    # 全部 (golden + examples + N
 | 畳み込みの差分 | TestRandomConstFold（internal/driver） | 〜5秒 | 同じ式を型付きの定数と変数の 2 通りに書いて結果が一致（sema の誤りを見る） |
 | 通ってはいけない | TestMustError / TestMustWarn（internal/driver） | 〜1秒 | エラー・警告になるべきプログラムの表（検査が緩む退行） |
 
+- **カバレッジ**（2026-09-28）: `go test ./... -coverpkg=./... -coverprofile=cover.out` で、どのテストが通したかを問わず
+  全パッケージの通過を取る（パッケージごとの表示の % は「そのテストがモジュール全体の何 % を通ったか」なので、block ごとに
+  合わせて集計し直す）。普段の `go test`（ランダムなプログラムは既定の本数）でコンパイラ本体は 90〜96%、全体 90.7%。
+  通っていないのは主にエラーの文言（sema 約 100 文、driver 約 70 文）、起きないはずの panic、調査用のトレース、CLI
+  （`fcc watch` / `fcc migrate`）。この調査で、どこからも呼ばれない関数（`attachScope` / `GetWord` / `NewAllocator` /
+  `hasCalls` / `Summary`）と、通らない `loadA` の条件フラグの変換（Ruby 版の名残。今は内部エラーの panic）を消し、
+  テストの無かった常駐レジスタの自己修正（`TestResidentSelfCorrection`）とスタックの規約の関数のローカル配列
+  （`TestStackAbiLocalArray`）のテストを足した。`load` の配列 → ポインタの変換（配列は sema が PointeredArray に包むので
+  通らない見込み）は、最適化の途中で作られる可能性を否定しきれないので残している
+
 - **fuzz の効果の測定**（2026-09-28）: 生成器の機能と判定を足すだけでなく、効き目を測って「普段の `go test` に入れる / 夜間だけ /
   消す」を決めるための仕組み。
   - 機能の名前（internal/driver/randfeat_test.go の `rpFeatures`）: 生成器は機能を選ぶ所で `g.want(名前, 確率)` を呼ぶ。
@@ -263,6 +273,10 @@ go test ./...                                    # 全部 (golden + examples + N
   退避 / 復帰（ResClobber）にして関数ごとコンパイルし直す（ラベルの番号などは `saveState` で戻す）。見積もりは常駐の
   損得の計算にだけ使う（外れても遅くなるだけ）。直した数は `Llc.ResidentFixes`、中身は `FC_TRACE_RESIDENT=1`。
   castle / miku / golden では 0 回（出力は同じ）。`TestResidentDec16` の修正を戻しても 5 命令が退避に直って通る。
+  普段のビルドでは見積もりが外れないので、この経路はテストで通らなかった（2026-09-28 のカバレッジで 0）。
+  `TestResidentSelfCorrection` は `BuildOptions.MisclassifyResident`（テスト用。常駐の変数を触らない命令の ResClobber を
+  ResFree にする）で見積もりをわざと外し、ランダムなプログラム 6 本で自己修正が働いて（約 5,600 命令を直す）実行結果が
+  普段と同じになることを確かめる
   呼び出しの引数の保持（A の最後の引数、Y の引数、stack 系の X = FC_SP）の検査は codegen の中の約束事なので、
   `FC_VERIFY_REGS` のコンパイルエラーのまま
 - **生成器をさらに広げた**（2026-09-23）: soa（`soa E:[8]S`。フィールドの読み書き、要素ハンドル `h:*E`、要素の
