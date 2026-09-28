@@ -94,8 +94,12 @@ func (h *Hlc) rewriteAs(rule string, c *cexpr, typ string) {
 	h.addRewrite(rule, e, e, ") as "+typ)
 }
 
-// simpleExpr は b が `as` を後ろに付けてもそのまま読める式か: 1 語 (名前・数・`a.b`)、または全体が 1 組の括弧。
+// simpleExpr は b が `as` を後ろに付けてもそのまま読める式か: 1 語 (名前・数・`a.b`。前に `-` があってもよい: 単項演算子は
+// `as` より強い)、または全体が 1 組の括弧。
 func simpleExpr(b []byte) bool {
+	if len(b) > 1 && b[0] == '-' {
+		b = b[1:]
+	}
 	word := true
 	for _, ch := range b {
 		if !(ch == '_' || ch == '.' || ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z') {

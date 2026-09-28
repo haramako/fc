@@ -26,7 +26,7 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 	}
 	defer h.enterExpr(c.pos)()
 	r := h.constEval0(c)
-	r.pos = c.pos
+	r.pos, r.end = c.pos, c.end // 位置 (エラー報告と fc 4 への書き換え: rewrite.go) は評価前の式のもの
 	h.cmemo[c] = r
 	return r
 }

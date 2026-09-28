@@ -380,7 +380,7 @@ func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
 		var v ir.Operand
 		if i < len(vals) {
 			h.compatible(base, ir.ValType(vals[i]))
-			v = h.cast(vals[i], base)
+			v = h.convert(vals[i], base, e.args[i])
 		} else {
 			v = h.zeroValue(base)
 		}

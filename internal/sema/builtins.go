@@ -122,7 +122,13 @@ func registerBuiltins(p *Program) {
 		if len(args) != 1 {
 			panic(&diag.Error{Msg: "cos takes 1 argument"})
 		}
-		return macroResult{expr: ccall(cv(h.moduleFunc(m.Interface(), "math", "sin")), cop2(opAdd, args[0], cint(64)))}
+		arg := cop2(opAdd, args[0], cint(64))
+		if h.v4() || h.rewriting() {
+			// 角度の足し算は i8 で折り返す (`cos(127)` は sin(-65))。fc 4 は範囲外の定数を引数に渡せないので明示する。fc 3 も
+			// 値のバイトは同じ (書き換えを集めるときに、展開で作った位置の無い式を報告しないため)
+			arg = &cexpr{kind: cCast, args: []*cexpr{arg}, ty: h.prog.Types.IntType(1, true), ck: syntax.CastAs}
+		}
+		return macroResult{expr: ccall(cv(h.moduleFunc(m.Interface(), "math", "sin")), arg)}
 	})
 
 	registerSliceBuiltins(h)

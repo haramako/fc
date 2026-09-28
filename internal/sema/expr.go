@@ -191,7 +191,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if fv := structLitField(e, f.Name); fv != nil {
 				v = h.rval(fv)
 				h.compatible(f.Type, ir.ValType(v))
-				v = h.cast(v, f.Type)
+				v = h.convert(v, f.Type, fv)
 			} else {
 				v = h.zeroValue(f.Type)
 			}
@@ -234,6 +234,8 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 				if fr.split != nil {
 					right := h.rval(h.withExpected(e.args[1], fr.split.typ))
+					h.compatible(fr.split.typ, ir.ValType(right))
+					right = h.convert(right, fr.split.typ, e.args[1])
 					h.soaStoreSplit(fr.split, right)
 					r = right
 					break
@@ -427,7 +429,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					v := h.rval(h.withExpected(args[i], lmdType.Params[i]))
 					h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
 					h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], v)
-					return h.cast(v, lmdType.Params[i])
+					return h.convert(v, lmdType.Params[i], args[i])
 				}
 				argVals := make([]ir.Operand, len(args))
 				if pre {
@@ -629,7 +631,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		}
 		h.compatibleAssign("assignment", ir.ValType(left).Base, ir.ValType(right))
 		h.warnDropConst("assignment", ir.ValType(left).Base, right)
-		right = h.cast(right, ir.ValType(left).Base)
+		right = h.convert(right, ir.ValType(left).Base, rhs)
 		h.emit(ir.NewStoreMem(left, nil, 0, 0, ir.ValType(left).Base.Size, right))
 		return left
 	}
@@ -640,7 +642,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 	if !ir.ValAssignable(left) {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
-	right = h.cast(right, ir.ValType(left))
+	right = h.convert(right, ir.ValType(left), rhs)
 	// A typed storage alias can expose overlapping struct subobjects. Preserve
 	// the complete RHS before writing when a forward byte copy would overlap.
 	if root := ir.UnderlyingValue(left); root != nil && root == ir.UnderlyingValue(right) {

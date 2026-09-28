@@ -80,8 +80,10 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	opt := parseOptions(sp.Options)
 	typ := h.typeEval(sp.Type)
 	var init ir.Operand
+	var initC *cexpr
 	if sp.Init != nil {
 		c := h.withExpected(toC(sp.Init), typ)
+		initC = c
 		if typ != nil && typ.Kind == types.Array {
 			if e := h.constEval(c); e.kind == cValue && e.val.Kind == ir.KindArrayLiteral {
 				c = cv(h.fitArrayLiteral(e.val, typ))
@@ -155,7 +157,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if init != nil {
 		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
 		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.cast(init, vv.Type)}})
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convert(init, vv.Type, initC)}})
 	}
 }
 
@@ -192,6 +194,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 		}
 		checkRaggedLiteral(v)
 		t := h.guessType(name, declType, v)
+		h.checkConstRange(name, typ, declType, v, t, val)
 		if v.Type.Kind == types.Macro {
 			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
 			v.Name = name

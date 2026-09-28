@@ -421,11 +421,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				panic(&diag.Error{Msg: fmt.Sprintf("can't return without value from %s (returns %s)", h.lmd.Name, h.lmd.Type.Base)})
 			}
 			rt := h.lmd.Type.Base
-			v := h.rval(h.withExpected(toC(s.Value), rt))
+			rc := h.withExpected(toC(s.Value), rt)
+			v := h.rval(rc)
 			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
 			h.warnDropConst("return from "+h.lmd.Name, rt, v)
 			h.warnReturnLocalAddr(s.Value, rt)
-			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.cast(v, rt)}})
+			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.convert(v, rt, rc)}})
 		} else {
 			// void関数
 			if s.Value != nil {
