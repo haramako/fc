@@ -2757,3 +2757,51 @@ function main():void
 		}
 	}
 }
+
+// TestResidentHeldYStore: 呼び出しの引数を Y に保持中 (push_fastcall_arg から fastcall まで) は codegen が Y の常駐を退避して
+// メモリ側で扱うのに、regalloc の見積もりは `sty l0` (A を触らない) としていて、FC_VERIFY_REGS で内部エラーになった
+// (A で写していた。fuzz の TestRandomV3Programs で発覚)。
+func TestResidentHeldYStore(t *testing.T) {
+	t.Parallel()
+	src := `function ff0():sint
+{
+	var l0:sint16 = 31802;
+	var l1:sint = (-30);
+	var l2:int16 = 0;
+	if ((((l2 as int) - ((l0 as int) - (l2 as int))) as int) > 65) {
+	}
+	return l1;
+}
+function ff1(p0:int, p1:sint16):sint16 options(fastcall: true)
+{
+	var l1:sint16 = (-7033);
+	p1 = (ff0() as sint16);
+	return (l1 | (p0 as sint16));
+}
+function fq1(p0:int, p1:int):int16
+{
+	var l0:int16 = 2;
+	switch ((p0 & 7)) {
+	case 3, 7:
+		l0 = (((p1 as int16) + l0) & l0);
+	default:
+		for (var l3:int = 2; l3; l3--) {
+			l0 = (ff1((((p1 as sint) || (-253)) as int), ((l0 > ((p0 as int16) as int16)) as sint16)) as int16);
+		}
+	}
+	return l0;
+}
+function main():void
+{
+	printf(fq1(0, 1), " ", fq1(3, 5), "\n");
+	exit(0);
+}
+`
+	var outs []string
+	for _, level := range []int{-1, 0} {
+		outs = append(outs, runEmuLevel(t, src, level))
+	}
+	if outs[0] != outs[1] {
+		t.Errorf("-O 0 %q と -O 2 %q が違う", outs[0], outs[1])
+	}
+}

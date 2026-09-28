@@ -279,9 +279,12 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 			d.X = ResClobber
 		}
 	}
-	// Y (先に決める: Y のまま実行できる命令 (iny / cpy / ldy / sty / lda a,y) は A を使わない)
+	// Y (先に決める: Y のまま実行できる命令 (iny / cpy / ldy / sty / lda a,y) は A を使わない)。呼び出しの引数を Y に
+	// 保持中 (markArgY) は、codegen が Y の常駐を退避してメモリ側で扱い、Y での代用もしないので同じに見る
+	// (`sty l0` と見積もって A は触らないとしたのに、codegen はメモリの l0.lo を A で写していた。fuzz で発覚)
+	holdY := op.ArgY || op.HoldY
 	if vY != nil && involved(vY) {
-		if ok, save := friendlyY(lmd, i, vY); ok {
+		if ok, save := friendlyY(lmd, i, vY); ok && !holdY {
 			d.Y = ResFriendly
 			pa.in[ir.RegY] = vY
 			gain += save
@@ -304,7 +307,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 		} else if touches(vA) {
 			d.A = ResClobber
 		} else if !freeA(lmd, i, pa) {
-			if aLive && (vY == nil || !yLive) && yVariant(lmd, i) {
+			if aLive && (vY == nil || !yLive) && !holdY && yVariant(lmd, i) {
 				d.UseY = true // Y が空いているので Y で代用
 			} else {
 				d.A = ResClobber
