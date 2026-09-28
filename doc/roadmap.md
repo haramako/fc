@@ -342,11 +342,16 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 支配木とループの入れ子（`ir.DomTree` / `Loop.Parent`）と induction / unroll の照合の共有、driver のテストの共通の手順
 （`harness_test.go` の `testBuild`）、`r6502.Memory` の配列化。残りは大きいものほど後ろ。
 
-- [ ] **regalloc の常駐の見積もりと codegen の命令選択の一本化**: `resident.go` の friendlyA / needsY などは codegen の出力を
-      手で写した予測表で、codegen 側にも同じ特例が分岐としてある。食い違いは `CompileLambda` が実際の出力から数えて最大 8 回
-      コンパイルし直して吸収している（`MisclassifyResident` / `ResidentFixes`）。「命令 × 置き場所 → 使う / 壊すレジスタ・
-      サイクル・出力」の規則表を 1 つにして両方が引けば、再コンパイルのループごと消える。`asm.go` の `mnemTable` に
-      実サイクル数を足せば見積もりの数字（3 / 6 / 1）も置き換えられる
+- [x] **regalloc の常駐の見積もりと codegen の命令選択の一本化** ✅ 2026-09-28: 命令の性質とサイクル数を `internal/m6502` の
+      表 1 つに（codegen の後処理と regalloc の見積もりが共有）。常駐の形（Y / X に置いた変数の ldy / sty / cpy / iny、
+      A が塞がっているときの Y での代用、A を使わないメモリ上の inc / シフト / rol、フラグの分岐）を `regalloc/forms.go`
+      に 1 回だけ書き、codegen はそれで命令を出し、regalloc は同じ命令列から friendly / free と得（手書きの 3 / 6 / 1 を
+      m6502 のサイクル差に）を計算する。関数ごと最大 8 回の作り直しは命令単位の出し直しに置き換え、テストと fuzz では
+      食い違いをコンパイルエラーにした。生成コードは変わらない（golden・castle / miku の ROM・bench が同じ）。見積もりは
+      入口 / 出口の写し (`ldx i`) と cast を挟んだフラグの分岐を「A を壊す」と見ていた分だけ正確になった（選択は変わらず）。
+      残り: 表の外の予測（汎用の出力が A の値をそのまま扱う形の規則 friendlyA の残り、添字を Y / X のまま使う形、
+      needsX / needsY、allocateA / allocateCond の「この命令は A / フラグを受けられるか」）は予測のまま（codegen の出力から
+      導くには、置き場所が決まる前に命令を選ぶ構造 = 割付の前の命令選択が要る）
 - [ ] **ABI / 呼び出しの計画の一本化**: Stack / Fastcall / Static / Cc65 に Entry・RegArg・RegArgY・RegResult・FrameZp が重なり、
       入口のシンボルが最大 4 つ（`sym` / `__direct` / `__frame` / `__a`）。判定が 20 ファイル 150 か所に散る。frames が関数ごとに
       `CallConv{Params []Loc, Result Loc, Entries}` を作り、呼び出しごとの計画を codegen の前に 1 回計算する

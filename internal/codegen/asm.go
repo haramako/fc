@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/haramako/fc/internal/m6502"
 )
 
 // lineKind は行の種類。
@@ -237,46 +239,51 @@ func (a asmLine) withInstr(mnem, arg string) asmLine {
 // ニーモニックの性質
 // ---------------------------------------------------------------
 
-// mnemInfo は 6502 の命令 1 つの性質。
-type mnemInfo struct {
-	wA, wX, wY bool   // 書くレジスタ (asl / lsr / rol / ror の A は accumulator モードのときだけ)
-	nz         bool   // N / Z を自分の結果で立てる (accumulator / レジスタ / メモリのどれでも)
-	keepsNZ    bool   // N / Z を変えない (sta / 分岐 / clc など)
-	rel        bool   // 相対分岐
-	implied    bool   // オペランド無し (1 バイト)
-	inverse    string // rel: 条件を反転した分岐
-}
+// 命令の性質 (書くレジスタ・フラグ・サイクル数) は internal/m6502 の表 (regalloc の常駐の見積もりと共有する)。
 
-var mnemTable = map[string]mnemInfo{
-	"lda": {wA: true, nz: true}, "ldx": {wX: true, nz: true}, "ldy": {wY: true, nz: true},
-	"sta": {keepsNZ: true}, "stx": {keepsNZ: true}, "sty": {keepsNZ: true},
-	"adc": {wA: true, nz: true}, "sbc": {wA: true, nz: true}, "and": {wA: true, nz: true}, "ora": {wA: true, nz: true}, "eor": {wA: true, nz: true},
-	"cmp": {nz: true}, "cpx": {nz: true}, "cpy": {nz: true}, "bit": {nz: true},
-	"asl": {nz: true}, "lsr": {nz: true}, "rol": {nz: true}, "ror": {nz: true}, // A は accumulator モードのとき (mnemWrites)
-	"inc": {nz: true}, "dec": {nz: true},
-	"inx": {wX: true, nz: true, implied: true}, "dex": {wX: true, nz: true, implied: true},
-	"iny": {wY: true, nz: true, implied: true}, "dey": {wY: true, nz: true, implied: true},
-	"tax": {wX: true, nz: true, implied: true}, "tay": {wY: true, nz: true, implied: true},
-	"txa": {wA: true, nz: true, implied: true}, "tya": {wA: true, nz: true, implied: true},
-	"tsx": {wX: true, nz: true, implied: true}, "txs": {keepsNZ: true, implied: true},
-	"pha": {keepsNZ: true, implied: true}, "php": {keepsNZ: true, implied: true},
-	"pla": {wA: true, nz: true, implied: true}, "plp": {implied: true},
-	"clc": {keepsNZ: true, implied: true}, "sec": {keepsNZ: true, implied: true}, "cli": {keepsNZ: true, implied: true},
-	"sei": {keepsNZ: true, implied: true}, "cld": {keepsNZ: true, implied: true}, "sed": {keepsNZ: true, implied: true},
-	"clv": {keepsNZ: true, implied: true}, "nop": {keepsNZ: true, implied: true},
-	"brk": {implied: true}, "rti": {implied: true}, "rts": {keepsNZ: true, implied: true},
-	"jmp": {keepsNZ: true}, "jsr": {},
-	"bcc": {keepsNZ: true, rel: true, inverse: "bcs"}, "bcs": {keepsNZ: true, rel: true, inverse: "bcc"},
-	"beq": {keepsNZ: true, rel: true, inverse: "bne"}, "bne": {keepsNZ: true, rel: true, inverse: "beq"},
-	"bmi": {keepsNZ: true, rel: true, inverse: "bpl"}, "bpl": {keepsNZ: true, rel: true, inverse: "bmi"},
-	"bvc": {keepsNZ: true, rel: true, inverse: "bvs"}, "bvs": {keepsNZ: true, rel: true, inverse: "bvc"},
+// mode はオペランドのアドレッシングモード (m6502 の表の添字)。`<` の付いた記号・番地はゼロページ、それ以外は絶対と見る
+// (ca65 はゼロページのシンボルなら短い形にするが、見積もりを大きくする分には安全)。
+func (o operand) mode() m6502.Mode {
+	switch o.Mode {
+	case amNone:
+		return m6502.Imp
+	case amImm:
+		return m6502.Imm
+	case amMemX:
+		if o.Lo {
+			return m6502.ZPX
+		}
+		return m6502.AbsX
+	case amMemY:
+		if o.Lo {
+			return m6502.ZPY
+		}
+		return m6502.AbsY
+	case amIndY:
+		return m6502.IndY
+	case amIndX:
+		return m6502.IndX
+	case amInd:
+		return m6502.Ind
+	case amMem:
+		if o.Lo {
+			return m6502.ZP
+		}
+		return m6502.Abs
+	}
+	if strings.Contains(o.Raw, "<") {
+		return m6502.ZP
+	}
+	return m6502.Abs
 }
 
 // isBranch は相対分岐か。
-func (a asmLine) isBranch() bool { return a.Kind == lkInstr && mnemTable[a.Mnem].rel }
+func (a asmLine) isBranch() bool { return a.Kind == lkInstr && m6502.Table[a.Mnem].Rel }
 
 // isJump は jmp か相対分岐か (ラベルへ飛ぶ)。
-func (a asmLine) isJump() bool { return a.Kind == lkInstr && (a.Mnem == "jmp" || mnemTable[a.Mnem].rel) }
+func (a asmLine) isJump() bool {
+	return a.Kind == lkInstr && (a.Mnem == "jmp" || m6502.Table[a.Mnem].Rel)
+}
 
 // branchOnNZ は N / Z だけを見る分岐か (beq / bne / bmi / bpl。bcc / bcs は C を見る)。
 func (a asmLine) branchOnNZ() bool {
@@ -289,10 +296,10 @@ func (a asmLine) branchOnNZ() bool {
 
 // setsNZ は命令が N / Z を自分の結果で立てるか (知らない命令 (マクロ) は立てないと見る: 直前の lda のフラグが要るかの
 // 判定に使うので、安全側)。
-func (a asmLine) setsNZ() bool { return a.Kind == lkInstr && mnemTable[a.Mnem].nz }
+func (a asmLine) setsNZ() bool { return a.Kind == lkInstr && m6502.Table[a.Mnem].NZ }
 
 // keepsNZ は命令が N / Z を変えないか (知らない命令は変えると見る)。
-func (a asmLine) keepsNZ() bool { return a.Kind == lkInstr && mnemTable[a.Mnem].keepsNZ }
+func (a asmLine) keepsNZ() bool { return a.Kind == lkInstr && m6502.Table[a.Mnem].KeepsNZ }
 
 // writes は命令が書くレジスタ。jsr と知らない命令 (マクロ) は全部を書くと見る。ただし share/runtime.asm の乗除算は
 // A と Y を使い X は保つ (__div_16 は退避して戻す)。
@@ -300,22 +307,22 @@ func (a asmLine) writes() (wa, wx, wy bool) {
 	if a.Kind != lkInstr {
 		return
 	}
-	m, ok := mnemTable[a.Mnem]
-	if !ok || a.Mnem == "jsr" {
-		if a.Mnem == "jsr" {
-			for _, p := range []string{"__mul_", "__div_", "__mod_"} {
-				if strings.HasPrefix(a.Arg.Raw, p) {
-					return true, false, true
-				}
+	if a.Mnem == "jsr" {
+		for _, p := range []string{"__mul_", "__div_", "__mod_"} {
+			if strings.HasPrefix(a.Arg.Raw, p) {
+				return true, false, true
 			}
 		}
-		return true, true, true
 	}
-	switch a.Mnem {
-	case "asl", "lsr", "rol", "ror":
-		return a.Arg.Mode == amNone, false, false
+	return m6502.Writes(a.Mnem, a.Arg.mode())
+}
+
+// cycles は命令のサイクル数 (m6502 の表。知らない命令 (マクロ) は 0)。
+func (a asmLine) cycles() int {
+	if a.Kind != lkInstr {
+		return 0
 	}
-	return m.wA, m.wX, m.wY
+	return m6502.Cycles(a.Mnem, a.Arg.mode())
 }
 
 // size は命令のサイズ (バイト)。分岐は 2 (延長すれば 5: extendJump が決める)。call マクロは 11
@@ -335,16 +342,16 @@ func (a asmLine) size() int {
 	default:
 		return 0
 	}
-	m, ok := mnemTable[a.Mnem]
+	m, ok := m6502.Table[a.Mnem]
 	switch {
 	case !ok:
 		if a.Mnem == "call" {
 			return 11
 		}
 		return 10
-	case m.rel:
+	case m.Rel:
 		return 2
-	case m.implied || a.Arg.Mode == amNone:
+	case m.Implied || a.Arg.Mode == amNone:
 		return 1
 	case a.Mnem == "jmp" || a.Mnem == "jsr":
 		return 3

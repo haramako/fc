@@ -13,6 +13,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/types"
 )
 
@@ -47,24 +48,10 @@ func (l *funcGen) genIf() {
 	restore := &l.restore
 	// OpIf は値が 0 のとき、OpIfTrue は 0 でないときに Label へ
 	onTrue := op.Code == ir.OpIfTrue
-	if ir.ValLocation(op.In(0)) == ir.LocCond {
-		// コンディションレジスタの場合。CondPositive のとき「真 ⇔ フラグがセット」、ただし C だけは
-		// 「真 ⇔ C クリア」(比較 a < b は C クリアで真。regalloc.allocateCond 参照)
-		r.push(fmt.Sprintf("%s %s", condJump(ir.UnderlyingValue(op.In(0)), onTrue), op.Label))
-	} else if l.inA(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
-		// A に常駐している値: フラグが A を反映しているとは限らない (直前が A の演算ならピープホールが cmp を消す)
-		r.push("cmp #0")
-		r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-	} else if l.inY(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
-		r.push("cpy #0")
-		r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-	} else if l.inX(op.In(0)) && ir.ValType(op.In(0)).Size == 1 {
-		r.push("cpx #0")
-		r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
-	} else if l.aHeld && ir.ValType(op.In(0)).Size == 1 {
-		// A は常駐変数で塞がっている: Y で検査する
-		r.push(markTest(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0))))
-		r.push(fmt.Sprintf("%s %s", ifElse(onTrue, "bne", "beq"), op.Label))
+	if f, ok := regalloc.IfForm(op, l.place(), l.aHeld); ok {
+		// フラグ (比較の結果) なら分岐だけ、A / Y / X にある値は cmp / cpy / cpx #0、A が塞がっていれば Y で検査
+		// (A の値のフラグは A を反映しているとは限らない: 直前が A の演算ならピープホールが cmp を消す)
+		r.push(l.emitForm(f))
 	} else if restore[ir.RegA] {
 		// A に常駐している変数を壊して検査し、飛び先でも A が要る: 飛ぶ側の経路でも復帰する
 		// (この後の共通の復帰は落ちてくる側にしか効かない)。条件を反転して飛ばない側を @f に逃がし、
@@ -373,38 +360,9 @@ func (l *funcGen) genCall() {
 // genLoad は Load のコード生成。
 func (l *funcGen) genLoad() {
 	r, op := l.r, l.op
-	if l.inY(op.Dst) {
-		// Y に常駐する変数への代入: ldy x (A の一時変数なら tay)
-		if l.inA(op.In(0)) {
-			r.push("tay")
-		} else {
-			r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)))
-		}
-		return
-	}
-	if l.inY(op.In(0)) {
-		r.push(fmt.Sprintf("sty %s", l.byte(op.Dst, 0)))
-		return
-	}
-	if l.inX(op.Dst) {
-		if l.inA(op.In(0)) {
-			r.push("tax")
-		} else {
-			r.push(fmt.Sprintf("ldx %s", l.byte(op.In(0), 0)))
-		}
-		return
-	}
-	if l.inX(op.In(0)) {
-		r.push(fmt.Sprintf("stx %s", l.byte(op.Dst, 0)))
-		return
-	}
-	if l.aHeld {
-		// A は常駐変数で塞がっている: Y で写す
-		for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-			if !l.sameByte(op.Dst, op.In(0), i) {
-				r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), i)), fmt.Sprintf("sty %s", l.byte(op.Dst, i)))
-			}
-		}
+	if f, ok := regalloc.LoadForm(op, l.place(), l.aHeld); ok {
+		// Y / X に常駐する変数との写し (ldy / sty / ldx / stx)、A が塞がっていれば Y で写す
+		r.push(l.emitForm(f))
 		return
 	}
 	r.push(l.load(op.Dst, op.In(0)))
@@ -435,8 +393,10 @@ func (l *funcGen) genSignExtension() {
 // genAddSub は Add / Sub のコード生成。
 func (l *funcGen) genAddSub() {
 	r, op := l.r, l.op
-	if lines, ok := l.incDec(op); ok {
-		r.push(lines)
+	if f, ok := regalloc.StepForm(op, l.place(), l.emit(), regalloc.StepLimit(l.lmd)); ok {
+		// Y / X に常駐する添字の i += k は iny × k、メモリ上の x = x ± 1 は inc / dec (1 バイト 5 サイクル。
+		// clc; lda; adc #1; sta の 10 から)。結果を A に置く割付 (LocA) のときは A に値が要るので使わない (形が選ばれない)
+		r.push(l.emitForm(f))
 		return
 	}
 	carry, alu := "clc", "adc"
@@ -475,11 +435,8 @@ func (l *funcGen) genRotateCarry() {
 	r, op := l.r, l.op
 	// C を通す 1 バイトの回転 (直前の shift_left / shift_right / rolc が残した C を受ける。間に C を変える命令は無い)
 	mn := ifElse(op.Code == ir.OpRolC, "rol", "ror")
-	if l.inA(op.Dst) && l.inA(op.In(0)) {
-		r.push(mn + " a")
-	} else if isValueOrCasted(op.Dst) && !l.inA(op.Dst) && !l.inY(op.Dst) && !l.inX(op.Dst) &&
-		ir.ValLocation(op.Dst) != ir.LocCond && l.byte(op.Dst, 0) == l.byte(op.In(0), 0) {
-		r.push(mn + " " + l.byte(op.Dst, 0))
+	if f, ok := regalloc.RotForm(op, l.place(), l.emit()); ok {
+		r.push(l.emitForm(f)) // rol a / その場の rol x
 	} else {
 		r.push(l.loadA(op.In(0), 0), mn+" a", l.storeA(op.Dst, 0))
 	}
@@ -492,7 +449,9 @@ func (l *funcGen) genShift() {
 	rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
 	if n, ok := ir.ValIntLiteral(op.In(1)); ok {
 		// 定数の場合
-		if lines, ok := l.shiftByte(op, n, signed); ok && !lmd.Cfg().Disabled("shift8") {
+		if f, ok := regalloc.ShiftMemForm(op, l.place()); ok {
+			r.push(l.emitForm(f)) // メモリ上のその場のシフト (asl x / asl lo; rol hi。A を使わない)
+		} else if lines, ok := l.shiftByte(op, n, signed); ok && !lmd.Cfg().Disabled("shift8") {
 			r.push(lines) // 2 バイトの 8 以上のシフトはバイトの移動 (8.8 固定小数の `x >> 8` など)
 		} else if lines, ok := l.shiftInMemory(op, n, signed); ok {
 			r.push(lines)
@@ -630,29 +589,10 @@ func (l *funcGen) genUminus() {
 // genEq は Eq のコード生成。
 func (l *funcGen) genEq() {
 	r, op := l.r, l.op
-	if l.inY(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-		r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
-		return
-	}
-	if l.inX(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-		r.push(fmt.Sprintf("cpx %s", l.byte(op.In(1), 0)))
-		return
-	}
-	// 可換なので第 2 入力がレジスタにあっても同じ (`on_idx == i` の i@X → cpx on_idx)
-	if l.inY(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
-		r.push(fmt.Sprintf("cpy %s", l.byte(op.In(0), 0)))
-		return
-	}
-	if l.inX(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
-		r.push(fmt.Sprintf("cpx %s", l.byte(op.In(0), 0)))
-		return
-	}
-	if l.inA(op.In(1)) && ir.ValLocation(op.Dst) == ir.LocCond && ir.ValType(op.In(0)).Size == 1 {
-		r.push(fmt.Sprintf("cmp %s", l.byte(op.In(0), 0)))
-		return
-	}
-	if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
-		r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
+	// 結果がフラグなら、Y / X にある値は cpy / cpx (可換なので第 2 入力がレジスタにあっても同じ: `on_idx == i` の
+	// i@X → cpx on_idx)、A が塞がっていれば Y で比べる
+	if f, ok := regalloc.CmpForm(op, l.place(), ir.ValLocation(op.Dst) == ir.LocCond, l.aHeld); ok {
+		r.push(l.emitForm(f))
 		return
 	}
 	labels := l.newLabels(2)
@@ -689,16 +629,8 @@ func (l *funcGen) genLt() {
 	//   符号付き: 減算結果の符号 (V でオーバーフローを補正) = N セット ⇔ a < b
 	// どちらか一方でも符号付きなら符号付き比較 (v1 は左辺しか見ておらず、多バイトや
 	// オーバーフローのある符号付き比較も壊れていた。2026-09-14 に書き直し)
-	if l.inY(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-		r.push(fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
-		return
-	}
-	if l.inX(op.In(0)) && ir.ValLocation(op.Dst) == ir.LocCond {
-		r.push(fmt.Sprintf("cpx %s", l.byte(op.In(1), 0)))
-		return
-	}
-	if l.aHeld && ir.ValLocation(op.Dst) == ir.LocCond {
-		r.push(fmt.Sprintf("ldy %s", l.byte(op.In(0), 0)), fmt.Sprintf("cpy %s", l.byte(op.In(1), 0)))
+	if f, ok := regalloc.CmpForm(op, l.place(), ir.ValLocation(op.Dst) == ir.LocCond, l.aHeld); ok {
+		r.push(l.emitForm(f)) // 符号なしの 1 バイト: Y / X にある値は cpy / cpx、A が塞がっていれば Y で比べる
 		return
 	}
 	labels := l.newLabels(3)

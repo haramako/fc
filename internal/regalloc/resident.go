@@ -32,7 +32,7 @@ type Decision struct {
 	UseY    bool // A が常駐変数で塞がっているので、この命令は Y で代用する (ldy / sty / cpy)
 }
 
-// isIncDec は codegen の incDec と同じ条件 (x = x ± 1、1〜2 バイト、メモリ上)。
+// isIncDec は x = x ± 1 (1〜2 バイトの同じ変数) の形か (A のまま clc; adc #1 にする得の見積もり。メモリ上の inc は形の表の FormIncMem)。
 func isIncDec(op *ir.Op) bool {
 	return isStep(op, 1)
 }
@@ -59,15 +59,6 @@ func isStep(op *ir.Op, maxK int) bool {
 	// ゼロ拡張したバイトを含む cast (`x = ((x as uint8) as int16) + 1`) は x のその場の inc ではない (上位を 0 にする)
 	return d != nil && d == s && ir.ValOffset(op.Dst) == ir.ValOffset(op.Src[0]) && ir.ValType(op.Dst).Size == ir.ValType(op.Src[0]).Size &&
 		ir.PlainOperand(op.Dst) && ir.PlainOperand(op.Src[0])
-}
-
-// stepGain は isStep な命令を iny × k にしたときの得: k = 1 は inc x (5) → iny (2) で 3、k ≥ 2 は lda; clc; adc #k; sta (10) → 2k。
-func stepGain(op *ir.Op) int {
-	k, _ := ir.ValIntLiteral(op.Src[1])
-	if k == 1 {
-		return 3
-	}
-	return 10 - 2*k
 }
 
 // StepMax は Y / X に常駐する添字の `i += k` を iny × k にする k の上限 (k 回で 2k サイクル。5 以上は tya; clc; adc; tay の 8 と変わらない)。
@@ -185,102 +176,6 @@ func isV(o ir.Operand, v *ir.Value) bool {
 	return o != nil && v != nil && ir.UnderlyingValue(o) == v && ir.ValOffset(o) == 0 && ir.ValType(o).Size == 1
 }
 
-// friendlyA は v が A に常駐しているとき、op を A のまま実行できるか (できれば節約できるサイクル数の目安)。
-func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
-	op := lmd.Ops[i]
-	switch op.Code {
-	case ir.OpLoad:
-		if isV(op.Dst, v) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
-			return true, 3 // lda x (sta v が消える)
-		}
-		if isV(op.Src[0], v) && isMemByte(op.Dst) {
-			return true, 3 // sta x (lda v が消える)
-		}
-	case ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor:
-		if isIncDec(op) && isV(op.Dst, v) {
-			return true, 1 // inc x (5) → clc; adc #1 (4)
-		}
-		first := isV(op.Src[0], v) || (op.Code != ir.OpSub && isV(op.Src[1], v) && !isV(op.Src[0], v))
-		if !first || ir.ValType(op.Dst).Size != 1 {
-			break
-		}
-		other := op.Src[1]
-		if !isV(op.Src[0], v) {
-			other = op.Src[0]
-		}
-		if !isMemOrLit(other) || ir.ValType(other).Size != 1 {
-			break
-		}
-		if isV(op.Dst, v) {
-			return true, 6 // lda v … sta v が消える
-		}
-		if !liveOut && isMemByte(op.Dst) {
-			return true, 3
-		}
-	case ir.OpShiftLeft, ir.OpShiftRight:
-		if _, lit := ir.ValIntLiteral(op.Src[1]); lit && isV(op.Src[0], v) && (isV(op.Dst, v) || (!liveOut && isMemByte(op.Dst))) {
-			return true, 3 // asl a (2) vs asl mem (5)
-		}
-	case ir.OpUminus, ir.OpBitNot:
-		if isV(op.Src[0], v) && isV(op.Dst, v) {
-			return true, 3
-		}
-	case ir.OpRolC, ir.OpRorC:
-		if isV(op.Src[0], v) && isV(op.Dst, v) {
-			return true, 3 // rol mem (5) → rol a (2)
-		}
-	case ir.OpIf, ir.OpIfTrue:
-		if isV(op.Src[0], v) {
-			return true, 1 // lda v (3) → cmp #0 (2)
-		}
-	case ir.OpEq, ir.OpLt:
-		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
-			return true, 3 // 可換: cmp k
-		}
-		if isV(op.Src[0], v) && condPredicted(lmd, i) && isMemOrLit(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 {
-			// 符号付きの比較は sec; sbc; bvc; eor で A を壊す (cmp と違って) ので、v がその後も要るなら A のままではできない
-			signed := op.Code == ir.OpLt && op.IsSigned()
-			if !signed || !liveOut {
-				return true, 3
-			}
-		}
-	case ir.OpLoadMem:
-		// 添字付きの読み出しだけ (添字の無いポインタ経由の読み出しは ldy #k を使い、結果を A に残す形ではない)
-		if m := op.Mem(); m.Index != nil {
-			if isV(op.Dst, v) && !isV(m.Index, v) {
-				return true, 3
-			}
-			if isV(m.Index, v) && !isV(op.Dst, v) && !liveOut {
-				return true, 1 // tay
-			}
-		}
-	case ir.OpStoreMem:
-		// 書く先が値より大きい (u8 の常駐を i16 の要素に書く) と、codegen は上位を lda #0 で書いて A を壊すので friendly にしない
-		// (`a3[3] = l0` (a3:[16]i16) の後の l0@A の dec が 0 から始まってループが終わらなかった。fuzz で発覚)
-		if m := op.Mem(); isV(op.MemValue(), v) && m.Width <= ir.ValType(v).Size && (m.Index == nil || !isV(m.Index, v)) {
-			return true, 3
-		}
-	case ir.OpPushArg, ir.OpPushFastcallArg:
-		if isV(op.In(0), v) {
-			return true, 3
-		}
-	case ir.OpReturn:
-		if isV(op.In(0), v) {
-			// 戻り値を A から書く。ただしグローバルの常駐は return で書き戻さなければならないので friendly にしない
-			// (`g0 = g1; return g0` で g0 が書き戻されなかった。fuzz で発覚)
-			home := v
-			if v.Home != nil {
-				home = v.Home
-			}
-			if home.Kind == ir.KindGlobal {
-				return false, 0
-			}
-			return true, 3
-		}
-	}
-	return false, 0
-}
-
 // byteIndex は load_mem / store_mem の添字がそのまま Y / X に入る形か (添字があってバイト単位: 要素 1 バイト、または
 // opt.scaleIndex でバイト単位にした添字)。
 func byteIndex(op *ir.Op) bool {
@@ -293,86 +188,6 @@ func byteIndex(op *ir.Op) bool {
 func directIndex(op *ir.Op) bool {
 	m := op.Mem()
 	return byteIndex(op) && (m.BaseIsArray() || m.Disp == 0)
-}
-
-// friendlyY は v が Y に常駐しているとき、op を Y のまま実行できるか (添字と 1 バイトのカウンタの形)。
-func friendlyY(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
-	op := lmd.Ops[i]
-	switch op.Code {
-	case ir.OpLoadMem:
-		// 要素 1 バイトの配列 / ゼロページのポインタの添字 (ldy が消える)
-		if directIndex(op) && isV(op.In(1), v) && !isV(op.Dst, v) {
-			return true, 3
-		}
-	case ir.OpStoreMem:
-		if directIndex(op) && isV(op.In(1), v) && !isV(op.MemValue(), v) {
-			return true, 3
-		}
-	case ir.OpAdd, ir.OpSub:
-		if isStep(op, stepMax(lmd)) && isV(op.Dst, v) {
-			return true, stepGain(op) // inc x (5) → iny (2)。i += k: lda; clc; adc #k; sta (10) → iny × k (2k)
-		}
-	case ir.OpIf, ir.OpIfTrue:
-		if isV(op.Src[0], v) {
-			return true, 2 // lda v; bne → cpy #0; bne (直前が iny / dey ならピープホールが cpy を消す)
-		}
-	case ir.OpEq, ir.OpLt:
-		if isV(op.Src[0], v) && condPredicted(lmd, i) && cmpOperand(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
-			(op.Code == ir.OpEq || !op.IsSigned()) {
-			return true, 3 // lda v; cmp k → cpy k
-		}
-		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && cmpOperand(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
-			return true, 3 // 可換: cpy k
-		}
-	case ir.OpLoad:
-		if isV(op.Dst, v) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
-			return true, 3 // ldy x
-		}
-		if isV(op.Src[0], v) && isMemByte(op.Dst) {
-			return true, 3 // sty x
-		}
-	}
-	return false, 0
-}
-
-// friendlyX は v が X に常駐しているとき、op を X のまま実行できるか (グローバル配列の添字と 1 バイトのカウンタ)。
-func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
-	op := lmd.Ops[i]
-	globalArray := func(op *ir.Op) bool { return byteIndex(op) && op.Mem().BaseIsArray() }
-	switch op.Code {
-	case ir.OpLoadMem:
-		if globalArray(op) && isV(op.In(1), v) && !isV(op.Dst, v) {
-			return true, 3 // lda a,x
-		}
-	case ir.OpStoreMem:
-		if globalArray(op) && isV(op.In(1), v) && !isV(op.MemValue(), v) {
-			return true, 3 // sta a,x
-		}
-	case ir.OpAdd, ir.OpSub:
-		if isStep(op, stepMax(lmd)) && isV(op.Dst, v) {
-			return true, stepGain(op) // inx / dex × k
-		}
-	case ir.OpIf, ir.OpIfTrue:
-		if isV(op.Src[0], v) {
-			return true, 2 // cpx #0
-		}
-	case ir.OpEq, ir.OpLt:
-		if isV(op.Src[0], v) && condPredicted(lmd, i) && cmpOperand(op.Src[1]) && ir.ValType(op.Src[1]).Size == 1 &&
-			(op.Code == ir.OpEq || !op.IsSigned()) {
-			return true, 3 // cpx k
-		}
-		if op.Code == ir.OpEq && isV(op.Src[1], v) && condPredicted(lmd, i) && cmpOperand(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
-			return true, 3 // 可換: cpx k
-		}
-	case ir.OpLoad:
-		if isV(op.Dst, v) && isMemOrLit(op.Src[0]) && ir.ValType(op.Src[0]).Size == 1 {
-			return true, 3 // ldx x
-		}
-		if isV(op.Src[0], v) && isMemByte(op.Dst) {
-			return true, 3 // stx x
-		}
-	}
-	return false, 0
 }
 
 // needsX は op の codegen が X を使うか (stack 系の呼び出しは X = FC_SP にする。ランタイムの乗除算も X を壊しうる)。
@@ -407,123 +222,6 @@ func needsY(op *ir.Op, vY *ir.Value) bool {
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		_, lit := ir.ValIntLiteral(op.Src[1])
 		return !lit || op.HoldY
-	}
-	return false
-}
-
-// freeA は op が A を使わずに実行できるか (Y での代用を除く)。
-func freeA(lmd *ir.Lambda, op *ir.Op) bool {
-	switch op.Code {
-	case ir.OpLabel, ir.OpJump, ir.OpIfCarry, ir.OpIfNotCarry, ir.OpPushResult, ir.OpPushFastcallResult:
-		return true
-	case ir.OpAdd, ir.OpSub:
-		// 2 バイトの dec は `lda lo; bne; dec hi` で下位を見るので A を壊す (inc は inc lo; bne; inc hi で壊さない。
-		// A に常駐した g1 が `g0 -= 1` (16 ビット) で消えていた。fuzz で発覚)
-		incDecFree := isIncDec(op) && (op.Code == ir.OpAdd || ir.ValType(op.Dst).Size == 1)
-		return incDecFree || (isStep(op, stepMax(lmd)) && (ir.ValLocation(op.Dst) == ir.LocY || ir.ValLocation(op.Dst) == ir.LocX))
-	case ir.OpShiftLeft, ir.OpShiftRight:
-		return isMemShift(op)
-	case ir.OpRolC, ir.OpRorC:
-		return ir.UnderlyingValue(op.Dst) == ir.UnderlyingValue(op.Src[0]) && isMemByte(op.Dst) // rol mem
-	case ir.OpIf, ir.OpIfTrue:
-		// コンディションの一時変数なら分岐だけ。cast を挟んだ一時変数 (`if ((!x) as int16)`) はメモリから A に読むので不可
-		// (A に常駐した値を壊して飛んでいた。fuzz で発覚)
-		if _, plain := op.Src[0].(*ir.Value); !plain {
-			return false
-		}
-		// 2 バイトの一時変数 (`if ((g as sint16) << 5)`) はコンディションにはならず lda lo; ora hi で A を壊す
-		// (fuzz で発覚: A に常駐したグローバルがループの条件で消えた)
-		return ir.ValType(op.Src[0]).Size == 1 && ir.ValLocalType(op.Src[0]) == ir.LTTemp && !isMemByte(op.Src[0])
-	}
-	return false
-}
-
-// yVariant は A が塞がっているとき、op を Y で代用できるか (1〜2 バイトの load、1 バイト変数の if、1 バイト符号なしの比較)。
-func yVariant(lmd *ir.Lambda, i int) bool {
-	op := lmd.Ops[i]
-	switch op.Code {
-	case ir.OpLoad:
-		return isMemOrLit(op.Src[0]) && isMemOrLit(op.Dst) && ir.ValType(op.Dst).Size <= 2 && ir.ValType(op.Src[0]).Kind != types.Array
-	case ir.OpIf, ir.OpIfTrue:
-		return isMemByte(op.Src[0])
-	case ir.OpEq, ir.OpLt:
-		return condPredicted(lmd, i) && isMemOrLit(op.Src[0]) && cmpOperand(op.Src[1]) &&
-			ir.ValType(op.Src[0]).Size == 1 && ir.ValType(op.Src[1]).Size == 1 &&
-			(op.Code == ir.OpEq || !op.IsSigned())
-	}
-	return false
-}
-
-// Classify は vA が A に、vY が Y に、vX が X に常駐しているときの lmd.Ops[i] の扱い (どれも nil 可)。
-// aLive / yLive はその命令の入口または出口で変数が生きている (レジスタが塞がっている) か。
-// 戻り値の gain は friendly で節約できるサイクル数の目安 (合計)。
-func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bool) (Decision, int) {
-	op := lmd.Ops[i]
-	d := Decision{A: ResFree, Y: ResFree, X: ResFree}
-	gain := 0
-	// グローバル変数の常駐: 呼び出し・asm・ポインタ経由の書き込みはその変数を触りうるので退避 / 復帰する
-	touches := func(v *ir.Value) bool { return v != nil && v.Kind == ir.KindGlobal && ir.MayTouchGlobals(op) }
-	// codegen から呼ばれるときの v はレジスタの一時変数 (Home が元の変数)。cast を挟んだ使用 (`~(l1 as int16)`) は
-	// makeResident が置き換えない (元の変数のメモリを読む) ので、Home を触る命令も「この命令に関わる」= 退避が要る
-	involved := func(v *ir.Value) bool { return involves(op, v) || v != nil && v.Home != nil && involves(op, v.Home) }
-	// X (inx / cpx / ldx / stx は A も Y も使わない。lda a,x は A を使う)
-	xFriendly := false
-	if vX != nil {
-		if involved(vX) {
-			if ok, save := friendlyX(lmd, i, vX); ok {
-				d.X = ResFriendly
-				xFriendly = true
-				gain += save
-			} else {
-				d.X = ResClobber
-			}
-		} else if needsX(op) || touches(vX) {
-			d.X = ResClobber
-		}
-	}
-	// Y (先に決める: Y のまま実行できる命令 (iny / cpy / ldy / sty / lda a,y) は A を使わない)
-	yFriendly := false
-	if vY != nil && involved(vY) {
-		if ok, save := friendlyY(lmd, i, vY); ok {
-			d.Y = ResFriendly
-			yFriendly = true
-			gain += save
-		} else {
-			d.Y = ResClobber
-		}
-	} else if touches(vY) {
-		d.Y = ResClobber
-	}
-	// A
-	if vA != nil {
-		if involved(vA) {
-			if ok, save := friendlyA(lmd, i, vA, aOut); ok {
-				d.A = ResFriendly
-				gain += save
-			} else {
-				d.A = ResClobber
-			}
-		} else if touches(vA) {
-			d.A = ResClobber
-		} else if !freeA(lmd, op) && !(yFriendly && aFreeWithY(op)) && !(xFriendly && aFreeWithY(op)) {
-			if aLive && (vY == nil || !yLive) && yVariant(lmd, i) {
-				d.UseY = true // Y が空いているので Y で代用
-			} else {
-				d.A = ResClobber
-			}
-		}
-	}
-	if vY != nil && !involves(op, vY) && (needsY(op, vY) || d.UseY) {
-		d.Y = ResClobber
-	}
-	return d, gain
-}
-
-// aFreeWithY は Y に常駐する変数を扱う friendly な命令のうち、A を使わないもの (添字の lda a,y / sta a,y は A を使う)。
-func aFreeWithY(op *ir.Op) bool {
-	switch op.Code {
-	case ir.OpAdd, ir.OpSub, ir.OpIf, ir.OpIfTrue, ir.OpEq, ir.OpLt, ir.OpLoad:
-		return true
 	}
 	return false
 }
