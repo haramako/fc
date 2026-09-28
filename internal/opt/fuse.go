@@ -197,8 +197,8 @@ func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
 		if m.Disp < 0 || m.Disp+m.Width > es || use.Code == ir.OpStoreMem && ir.UnderlyingValue(use.MemValue()) == t2 {
 			continue // 要素の中に収まる読み書き (フィールド) だけ
 		}
-		if !canSink(op, ops[i+1:j], refered) {
-			continue // 添字 (と t1) が参照までに書き換わる
+		if !canSink(op, ops[i+1:j], refered) || isVolatile(idx) {
+			continue // 添字 (と t1) が参照までに書き換わる / 読む時点を動かせない (I/O レジスタ・割り込みが書く変数)
 		}
 		var base ir.Operand = op.Src[0]
 		k := 0
