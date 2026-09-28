@@ -57,13 +57,42 @@ func aSym(sym string) string { return sym + "__a" }
 // SetLambdas は全関数の表 (frames.Analyze の結果) を受け取る。
 func (l *Llc) SetLambdas(lambdas map[string]*ir.Lambda) { l.Lambdas = lambdas }
 
-// MarkArgY は markArgY (全関数の表は SetLambdas で受け取ったもの)。
-func (l *Llc) MarkArgY(lmd *ir.Lambda) { markArgY(lmd, l.Lambdas) }
+// MarkArgY は markArgY と markHoldX (全関数の表は SetLambdas で受け取ったもの)。
+func (l *Llc) MarkArgY(lmd *ir.Lambda) {
+	markArgY(lmd, l.Lambdas)
+	l.markHoldX(lmd)
+}
 
 // markArgY は lmd の呼び出しのうち、最後から 2 つ目の引数を Y で渡せるもの (push_arg の ArgY) に印を付ける
 // (最適化の後、割付の前。regalloc は印の付いた push_arg を Y を壊す命令と見て、Y の常駐をその前で書き戻す)。
 // 条件: 呼び先が分かっていて static で RegArgY、far でなく、最後の引数の push_arg の直後が call で、その 2 つの push_arg の
 // 間の命令 (最後の引数の式) が Y を使わない (最後の引数の読み出しは変数か cast か定数)。
+// markHoldX は stack 系の呼び出し (push_result で X = FC_SP にし、call までそのまま) の間の命令に HoldX を付ける。codegen は
+// その間 X の常駐を退避してメモリ側で扱う (genPushResult の holdX) ので、regalloc の見積もりも同じに見る
+// (`load l0 = l0.lo@X` を stx と見積もって A を触らないとしたのに、codegen はメモリから A で写していた。fuzz で発覚)。
+func (l *Llc) markHoldX(lmd *ir.Lambda) {
+	ops := lmd.Ops
+	for _, op := range ops {
+		if op != nil {
+			op.HoldX = false
+		}
+	}
+	for i, op := range ops {
+		if op == nil || op.Code != ir.OpPushResult {
+			continue
+		}
+		pc := l.resolveCall(ops, i)
+		if pc.kind != ckStack {
+			continue
+		}
+		for k := i + 1; k < len(ops) && ops[k] != pc.callOp; k++ {
+			if ops[k] != nil {
+				ops[k].HoldX = true
+			}
+		}
+	}
+}
+
 func markArgY(lmd *ir.Lambda, lambdas map[string]*ir.Lambda) {
 	type pending struct {
 		callOp *ir.Op

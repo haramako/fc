@@ -267,7 +267,8 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	// X (inx / cpx / ldx / stx は A も Y も使わない。lda a,x は A を使う)
 	if vX != nil {
 		if involved(vX) {
-			if ok, save := friendlyX(lmd, i, vX); ok {
+			// stack 系の呼び出しの引数を積んでいる間 (HoldX: X = FC_SP) は、codegen が X の常駐を退避してメモリ側で扱う
+			if ok, save := friendlyX(lmd, i, vX); ok && !op.HoldX {
 				d.X = ResFriendly
 				pa.in[ir.RegX] = vX
 				gain += save

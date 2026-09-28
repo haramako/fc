@@ -4,6 +4,8 @@ package driver
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -2803,5 +2805,24 @@ function main():void
 	}
 	if outs[0] != outs[1] {
 		t.Errorf("-O 0 %q と -O 2 %q が違う", outs[0], outs[1])
+	}
+}
+
+// TestResidentHoldXStore: stack 系の呼び出し (関数ポインタの表から呼ぶ) の push_result から call までは X = FC_SP を保持して
+// codegen が X の常駐 (l0.lo@X) を退避するのに、regalloc の見積もりは `stx l0` (A を触らない) としていて、FC_VERIFY_REGS で
+// 内部エラーになった (fuzz の TestRandomV3Programs の種 52947237 を最小化したもの。testdata/regress/holdx)。
+func TestResidentHoldXStore(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{}
+	for _, name := range []string{"t.fc", "far1.fc", "v3m.fc"} {
+		b, err := os.ReadFile(filepath.Join("testdata", "regress", "holdx", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = string(b)
+	}
+	// 最小化でループの上限が消えて止まらないプログラムなので、-O 2 のビルドが内部エラーにならないことだけを見る
+	if _, err := rpRun(t, files, 0, 100_000); err != nil && strings.Contains(err.Error(), "internal") {
+		t.Error(err)
 	}
 }
