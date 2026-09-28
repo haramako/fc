@@ -337,7 +337,10 @@ do-while は「やること候補（すぐではない）」。
 
 2026-09-28 に `refactor/structure` で整理したもの: 前段の一本化（check が options を反映していなかった）、`ir/opinfo.go`、
 `ir.Config`、`pipeline`、`Op.Res`、codegen の `asm.go` と `funcGen`、sema の hlc.go の分割、driver の分割（cc65 / project /
-fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価の修正。残りは大きいものほど後ろ。
+fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価の修正。続けて `refactor/opt-infra` で: opt の段を宣言的に
+（`Pass.Apply` が FC_DISABLE・compact・@log の付け替えを一括で）、`ir.Verify`（FC_VERIFY_IR。テストと fuzz では常に有効）、
+支配木とループの入れ子（`ir.DomTree` / `Loop.Parent`）と induction / unroll の照合の共有、driver のテストの共通の手順
+（`harness_test.go` の `testBuild`）、`r6502.Memory` の配列化。残りは大きいものほど後ろ。
 
 - [ ] **regalloc の常駐の見積もりと codegen の命令選択の一本化**: `resident.go` の friendlyA / needsY などは codegen の出力を
       手で写した予測表で、codegen 側にも同じ特例が分岐としてある。食い違いは `CompileLambda` が実際の出力から数えて最大 8 回
@@ -351,8 +354,8 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 - [ ] **IR の命令の同一性を `*Op` に**: DefUse / SSA / Liveness が `lmd.Ops` の添字で引き、消した命令を nil で残すので、
       命令を 1 つ挿すと解析を全部作り直す。「1 か所直したら return して再構築」のループが 7 パス（上限は 8 / 16 / 20 / 32 と
       場当たりで、達すると黙って止まる）、`compact()` が Passes に 11 か所、`ops[i+1] == nil` の穴で黙って効かない隣接判定が
-      6 か所。`*Op` を鍵にして def-use を差分で更新し、CFG / 支配木 / ループを無効化つきのキャッシュにする。同時に
-      `ir.Verify(lmd)`（オペランド数・Dst・ラベル・一時変数の規約）を各パスの後に走らせる
+      6 か所。`*Op` を鍵にして def-use を差分で更新し、CFG / 支配木 / ループを無効化つきのキャッシュにする
+      （`ir.Verify` は 2026-09-28 に入れた。CFG の中の支配木・ループのキャッシュも。命令列を変えたら CFG を作り直す前提はそのまま）
 - [ ] **メモリアクセスと幅・符号の表現**: Index / Pget / Pset / IndexPget / IndexPset / FieldPget / FieldPset の 7 つ +
       `Scaled` + 配列への cast で、定数のずれの表し方が 3 通り、書く幅の出どころがオペコードごとに違う（fuzz で出たバグの多く
       がここ）。`LoadMem / StoreMem` + `Addr{Base, Index, Scale, Disp, Width}` に集約し、演算命令に幅と符号を明示する
@@ -366,16 +369,16 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 - [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
-- [ ] **ループ解析**: `Loops()` は平らな一覧で、支配の判定が 3 つ、カウンタ付きループの照合が induction / unroll / ywalk に
-      重複。`ir.LoopInfo`（ネストの木・preheader・ループ内の定義）と共通の `matchCountedLoop` に
-- [ ] **テストの共通部品**: driver の 12,000 行のテストに「TempDir に書いて Build」の包み関数が約 15 種類（MaxCycles や
-      ca65 の再試行の有無がまちまち）。`internal/fctest` に。ランダム生成器（約 3,000 行）を `internal/fuzzgen` に出せば
-      `tools/fuzzmeasure` が `go test -json` を経由せずに直接呼べる
+- [x] **ループ解析**: `ir.DomTree`、`Loop.Parent / Depth`、`CFG.Preheader`、`Loop.EveryIteration` と、induction / unroll が
+      共有する `loopHeader` / `loopDefs` / `singleStep`（opt/loopmatch.go）✅ 2026-09-28。ywalk は回転後の線形の形を見るので別のまま
+- [ ] **テストの共通部品**: 「TempDir に書いて Build」は `harness_test.go` の `testBuild` に寄せた（✅ 2026-09-28。包み関数は
+      名前を残して中身だけ共通に）。残り: ランダム生成器（約 3,000 行）を `internal/fuzzgen` に出せば `tools/fuzzmeasure` が
+      `go test -json` を経由せずに直接呼べる
 - [ ] **driver の `Compiler`** はビルド単位の状態（ctx / target / dir / buildDir / prog / layout）をフィールドに持つので同じ
       Compiler で並行ビルドできない。ビルドごとの struct に分け、ld65 のメモリ配置（ZP / SRAM の番地が 3 か所に直書き）を
       `MemoryMap` から ld65.cfg と base.s の両方に出す
-- [ ] sema の `Loader` が直接ディスクを読む（`fs.FS` にすればテストがメモリ上で済む）。`r6502.Memory` の `map[int]int` を
-      `[65536]byte` に（差分テストの速さ）。`fc3Seeds` が syntax と driver の fuzz に同じ内容で 2 つ
+- [ ] sema の `Loader` が直接ディスクを読む（`fs.FS` にすればテストがメモリ上で済む）。`fc3Seeds` が syntax と driver の
+      fuzz に同じ内容で 2 つ（`r6502.Memory` の配列化は ✅ 2026-09-28）
 
 ## 整理・判断待ち
 

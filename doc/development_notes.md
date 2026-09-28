@@ -503,6 +503,16 @@ go test ./...                                    # 全部 (golden + examples + N
   足す形で書く（sink は C を受け取る命令と asm、fieldindex は呼び出しと asm、indexoff は境界だけ）。
 - **常駐の印**は `Op.Res[ir.RegA / RegY / RegX]`（`Residency{V, In, Out}`）。codegen の状態も `res[reg]` / `resMem[reg]`。
   退避・復帰・入口 / 出口の写しはレジスタのループで書く（A / Y / X で 3 回書かない）。
+- **opt の段**は `opt.Pass{Name, Requires, Grows, Run, Then, Repeat}` で宣言し、`Pass.Apply` が FC_DISABLE の判定・compact・
+  @log の付け替え・トレース・IR の検証を一括で行う。段を足すときは変換だけを書き、`Passes()` に並べる（順序の依存は
+  そこのコメントに）。fuzz の切り分け `rpLocate` も `Apply` で 1 段ずつ当てる。
+- **IR の検証器** `ir.Verify`（命令の種類とオペランドの数、Dst の有無、ラベルの一意性と飛び先、push の Type）。FC_VERIFY_IR=1
+  で opt の各段・常駐・割付の後に走り、テストと fuzz では常に有効（`verify_test.go` の init）。「一時変数の定義は 1 つ」は
+  前提にしていない（`||` / `&&` の一時変数と常駐の一時変数が複数回書かれる）。
+- **ループの解析**は `ir/loops.go`（`CFG.DomTree()`、`CFG.Loops()` は Parent / Depth 付きで CFG にキャッシュ、`Preheader`、
+  `Loop.EveryIteration`）。ループを変換する段は opt/loopmatch.go の `loopHeader` / `loopDefs` / `singleStep` を使う。
+- **テストの共通の手順**は `internal/driver/harness_test.go` の `testBuild(t, buildSpec)`。新しいテストは既存の包み関数
+  （`runEmu` / `buildFiles` / `buildBothLevels` …）か `testBuild` を使い、`NewCompiler(...).Build(...)` を直接書かない。
 
 ## @log の注釈とパス（最適化を書くときの規則、2026-09-25）
 
