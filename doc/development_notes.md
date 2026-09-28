@@ -366,9 +366,9 @@ go test ./...                                    # 全部 (golden + examples + N
   同じプログラムを `-O 0` でも走らせる `TestGoldenStdoutO0` が codegen を検証する（golden は同じファイル）
 - 性能退行の検知 (コンパイラ自身の速度): `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
 - **フレームの静的割付**（2026-09-16〜、[v2_frame_alloc.md](v2_frame_alloc.md) §6）: コンパイルの順序は
-  sema（全モジュール）→ `codegen.PrepareProgram`（`frames.Analyze` で ABI を決める → 全関数の opt + regalloc →
+  sema（全モジュール）→ `pipeline.Prepare`（`frames.Analyze` で ABI を決める → 全関数の opt + regalloc →
   `frames.Place` で配置）→ `_frames.inc` を書く → 各モジュールの codegen → ca65。**codegen を直接呼ぶテストは
-  `PrepareProgram` を先に呼ぶ**（golden の `newLlcForGolden`）。castle など base.asm を自前で持つプロジェクトは
+  `pipeline.Prepare` を先に呼ぶ**（golden の `newLlcForGolden`）。castle など base.asm を自前で持つプロジェクトは
   `FC_SZP` / `FC_SRAM` と `_SIZE` の export、スタックの空き先頭 `FC_SP` を足す（examples/castle/src/data.asm）
 - **最適化のパイプライン**（2026-09-16〜）: sema（IR 生成）→ `internal/opt`（IR→IR。`ir.BuildCFG` / `ir.BuildUseDef` の上に
   書く小さなパスの列: SSA の定数 / コピー伝播と DCE（先頭。[v2_ssa.md](v2_ssa.md)）、ポインタ融合、コピー除去、
@@ -402,7 +402,7 @@ go test ./...                                    # 全部 (golden + examples + N
   約 1.2 万行）の `fcc compile` は 2 秒以内、`go test ./internal/driver` の castle は 3 秒以内。
   **番をしているテスト**: `TestExampleCastle` はコンパイル時間をログに出し 10 秒を超えると fail、`go test ./bench` は
   12 本のビルドと実行が 30 秒を超えると fail（どちらも通常の 5 倍以上の余裕）
-- **インライン展開**（`opt.InlineProgram`、2026-09-19）は `codegen.PrepareProgram` の最初（`frames.Analyze` の前）に
+- **インライン展開**（`opt.InlineProgram`、2026-09-19）は `pipeline.Prepare` の最初（`frames.Analyze` の前）に
   プログラム全体で 1 回。IR の呼び出し列 `push_result; push_arg…; call` を、呼び先の変数・ラベルを付け替えた本体で
   置き換える（`return v` は `load 結果 = v; jump 終端`）。far call の `Far` フラグは sema が呼び先のモジュール基準で
   付けているので、**呼び出しを含む本体は別モジュールに写さない**（葉関数だけ）。他の呼び出しの引数の中も展開しない

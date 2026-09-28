@@ -217,3 +217,21 @@ func isSameOperand(a, b ir.Operand) bool {
 	}
 	return a == b
 }
+
+// ZeroEmptyCasts は元の値のどのバイトも読まない cast (Width 0: `cast<u8, 1>(t)` で t が 1 バイト。上位のゼロ拡張だけ) の
+// 入力を 0 のリテラルにする。byte はそのバイトを #0 と読むが、値がレジスタにあるときの経路 (loadA の A そのまま、tay、
+// cmp #0 など) はオフセットを見ずに値そのものを使っていた (`(f() as u16) & 0x3c00` が f() の下位で判定。fuzz で発覚)。
+func ZeroEmptyCasts(lmd *ir.Lambda) {
+	for _, op := range lmd.Ops {
+		if op == nil {
+			continue
+		}
+		for i, src := range op.Src {
+			if cv, ok := src.(*ir.CastedValue); ok && cv.Width == 0 {
+				if _, isVal := cv.From.(*ir.Value); isVal {
+					op.Src[i] = ir.NewIntLiteral("", cv.Type, 0)
+				}
+			}
+		}
+	}
+}

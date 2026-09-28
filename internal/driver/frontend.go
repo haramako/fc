@@ -13,6 +13,7 @@ import (
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/pipeline"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 )
@@ -60,16 +61,15 @@ func (c *Compiler) compileFront(o *frontOptions) (*frontResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		llc.NoGrow = noGrow
-		plan, perr := prepareProgram(prog, llc)
-		if retryFrameOver(llc, perr, noGrow) {
+		res, perr := prepareProgram(prog, llc, noGrow)
+		if retryFrameOver(res, perr, noGrow) {
 			continue
 		}
 		if perr != nil {
 			return nil, perr
 		}
-		prog.Warnings = append(prog.Warnings, plan.Warnings...) // 割り込みと共有するフレームなど (frames.Place)
-		return &frontResult{Prog: prog, Llc: llc, Plan: plan}, nil
+		prog.Warnings = append(prog.Warnings, res.Plan.Warnings...) // 割り込みと共有するフレームなど (frames.Place)
+		return &frontResult{Prog: prog, Llc: llc, Plan: res.Plan}, nil
 	}
 }
 
@@ -87,8 +87,9 @@ func newLlc(prog *sema.Program, o *frontOptions) (*codegen.Llc, error) {
 	return llc, nil
 }
 
-// prepareProgram は呼び出し規約の決定 → 全関数の最適化と割付 → 静的フレームの配置 (doc/v2_frame_alloc.md §6-4)。
-func prepareProgram(prog *sema.Program, llc *codegen.Llc) (*frames.Plan, error) {
+// prepareProgram は呼び出し規約の決定 → 全関数の最適化と割付 → 静的フレームの配置 (pipeline.Prepare。
+// doc/v2_frame_alloc.md §6-4)。noGrow は展開をしない関数 (やり直しのとき)。
+func prepareProgram(prog *sema.Program, llc *codegen.Llc, noGrow map[string]bool) (*pipeline.Result, error) {
 	zp, err := staticZpSize(prog)
 	if err != nil {
 		return nil, err
@@ -97,17 +98,20 @@ func prepareProgram(prog *sema.Program, llc *codegen.Llc) (*frames.Plan, error) 
 	if err != nil {
 		return nil, err
 	}
-	return llc.PrepareProgram(prog.Modules.List(), zp, ram)
+	return pipeline.Prepare(prog.Modules.List(), &pipeline.Options{
+		OptimizeLevel: llc.OptimizeLevel, Types: prog.Types, Limits: llc.Limits, FarCall: llc.FarCall,
+		StaticZp: zp, StaticRam: ram, NoGrow: noGrow, Backend: llc,
+	})
 }
 
-// retryFrameOver は PrepareProgram の結果を見て、-O 2 のフレームが上限を超えた関数 (llc.FrameOver) をまだ noGrow に
+// retryFrameOver は Prepare の結果を見て、-O 2 のフレームが上限を超えた関数 (res.FrameOver) をまだ noGrow に
 // 入れていなければ入れて true (展開を止めて sema からやり直す)。止めても超えるなら false
 // (エラーをそのまま返す。-O 0 でも超える大きすぎる関数)。
-func retryFrameOver(llc *codegen.Llc, err error, noGrow map[string]bool) bool {
-	if err == nil || llc.FrameOver == "" || noGrow[llc.FrameOver] {
+func retryFrameOver(res *pipeline.Result, err error, noGrow map[string]bool) bool {
+	if err == nil || res == nil || res.FrameOver == "" || noGrow[res.FrameOver] {
 		return false
 	}
-	noGrow[llc.FrameOver] = true
+	noGrow[res.FrameOver] = true
 	return true
 }
 

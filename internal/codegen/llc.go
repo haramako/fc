@@ -13,9 +13,7 @@ import (
 	"strings"
 
 	"github.com/haramako/fc/internal/diag"
-	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
-	"github.com/haramako/fc/internal/opt"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/types"
 )
@@ -36,12 +34,7 @@ type Llc struct {
 	curLambda           *ir.Lambda // 処理中の関数 (エラー位置の補完用)
 	curOp               *ir.Op     // 処理中の命令 (エラー位置の補完用)
 	zero                *ir.Value  // 定数 0 (mul の 0 倍の最適化用)
-	types               *types.Universe
-	Lambdas             map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果)
-	// NoGrow は展開をしない関数の Id (PrepareProgram が ir.Lambda.NoGrow にする)。FrameOver は PrepareProgram が
-	// frame size over で止まったときのその関数の Id (-O 2 のときだけ。driver が NoGrow に足してやり直す)
-	NoGrow    map[string]bool
-	FrameOver string
+	Lambdas             map[string]*ir.Lambda // Id → 関数 (全モジュール。呼び先の呼び出し規約を引く。frames.Analyze の結果。SetLambdas)
 
 	// DebugFile が nil でなければ、命令ごとに fc のソース位置を `.dbg line, "file", N` で .s に埋める (fcc build -g)。
 	// ld65 の --dbgfile に載り、Mesen が fc のソースをステップ実行できる。DebugFile は sema のファイル参照
@@ -71,7 +64,7 @@ type Llc struct {
 }
 
 func NewLlc(optimizeLevel int, u *types.Universe) *Llc {
-	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0), types: u}
+	return &Llc{OptimizeLevel: optimizeLevel, Limits: regalloc.DefaultLimits, zero: ir.NewIntLiteral("", u.IntType(1, false), 0)}
 }
 
 // asmLines は文字列 / nil / ネストした配列を保持する行バッファ。
@@ -379,182 +372,6 @@ func (l *Llc) restoreY(idx ir.Operand, size int) []any {
 		}
 	}
 	return r
-}
-
-// zeroEmptyCasts は元の値のどのバイトも読まない cast (Width 0: `cast<u8, 1>(t)` で t が 1 バイト。上位のゼロ拡張だけ) の
-// 入力を 0 のリテラルにする。byte はそのバイトを #0 と読むが、値がレジスタにあるときの経路 (loadA の A そのまま、tay、
-// cmp #0 など) はオフセットを見ずに値そのものを使っていた (`(f() as u16) & 0x3c00` が f() の下位で判定。fuzz で発覚)。
-func zeroEmptyCasts(lmd *ir.Lambda) {
-	for _, op := range lmd.Ops {
-		if op == nil {
-			continue
-		}
-		for i, src := range op.Src {
-			if cv, ok := src.(*ir.CastedValue); ok && cv.Width == 0 {
-				if _, isVal := cv.From.(*ir.Value); isVal {
-					op.Src[i] = ir.NewIntLiteral("", cv.Type, 0)
-				}
-			}
-		}
-	}
-}
-
-// Prepare は関数 1 つの最適化とレジスタ割付 (frames.Analyze の後、frames.Place の前に全関数について呼ぶ)。
-func (l *Llc) Prepare(lmd *ir.Lambda) {
-	l.curLambda = lmd
-	l.curOp = nil
-	opt.Optimize(lmd, l.OptimizeLevel, l.types)
-	zeroEmptyCasts(lmd)
-	prev := ir.SnapshotLogs(lmd)
-	markArgY(lmd, l.Lambdas) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
-	if l.OptimizeLevel > 0 {
-		regalloc.AllocateResident(lmd)
-	}
-	l.allocRegister(lmd)
-	ir.KeepLogs(lmd, prev)
-	l.checkStackPush(lmd)
-	if lmd.Cfg().DumpIR() {
-		// 調査用: 最適化と割付の後の IR を stderr に出す (golden の allocir と同じ形式)
-		fmt.Fprint(os.Stderr, ir.DumpAllocLambda(lmd.Module.Id, lmd.Id, lmd))
-	}
-}
-
-// snapshotProgramLogs は全関数の命令の並びを覚え、返す関数で @log の注釈を付け替える (ir.KeepLogs)。
-func snapshotProgramLogs(mods []*ir.Module) func() {
-	type snap struct {
-		lmd  *ir.Lambda
-		prev []*ir.Op
-	}
-	var snaps []snap
-	for _, m := range mods {
-		for _, d := range m.Defs {
-			if d.Kind == ir.DefCode {
-				if prev := ir.SnapshotLogs(d.Lambda); prev != nil {
-					snaps = append(snaps, snap{d.Lambda, prev})
-				}
-			}
-		}
-	}
-	return func() {
-		for _, s := range snaps {
-			ir.KeepLogs(s.lmd, s.prev)
-		}
-	}
-}
-
-// PrepareProgram はコード生成の前にプログラム全体で 1 回行う処理 (doc/v2_frame_alloc.md §6-4):
-// 呼び出し規約の決定 (frames.Analyze) → 全関数の最適化と割付 (Prepare) → 静的フレームの配置 (frames.Place)。
-// 戻り値の Plan.Inc を `_frames.inc` として書き、各モジュールの asm が include する。
-func (l *Llc) PrepareProgram(mods []*ir.Module, staticZp, staticRam int) (*frames.Plan, error) {
-	if l.OptimizeLevel > 0 {
-		for _, m := range mods {
-			for _, d := range m.Defs {
-				if d.Kind == ir.DefCode && l.NoGrow[d.Lambda.Id] {
-					d.Lambda.NoGrow = true
-				}
-			}
-		}
-		keep := snapshotProgramLogs(mods) // @log の注釈を、置き換わった呼び出しから付け替える
-		if err := opt.InlineProgram(mods); err != nil {
-			return nil, err
-		}
-		opt.DevirtualizeProgram(mods, l.FarCall) // 表経由の呼び出しを直接に (frames.Analyze が直接の辺として見る)
-		keep()
-	}
-	markVolatile(mods)
-	graph, err := frames.Analyze(mods)
-	if err != nil {
-		return nil, err
-	}
-	l.Lambdas = graph.ByID
-	if err := l.PrepareAll(graph.Lambdas); err != nil {
-		return nil, err
-	}
-	return frames.Place(graph, staticZp, staticRam)
-}
-
-// markVolatile は asm (include したファイルとインラインアセンブラ) から参照されるグローバル変数を volatile にする
-// (options(address:) と options(volatile: true) は sema が付けている)。割り込みや asm が書き換える変数をレジスタに
-// 置いたままにしないため (doc/language_reference.md §2)。
-func markVolatile(mods []*ir.Module) {
-	syms := map[string]bool{}
-	for _, m := range mods {
-		for _, s := range m.AsmSymbols {
-			syms[s] = true
-		}
-	}
-	for _, m := range mods {
-		for _, d := range m.Defs {
-			if d.Kind != ir.DefCode || d.Lambda.Extern {
-				continue
-			}
-			for _, op := range d.Lambda.Ops {
-				if op != nil && op.Code == ir.OpAsm {
-					for _, s := range reAsmSym.FindAllString(op.Text, -1) {
-						syms[s] = true
-					}
-				}
-			}
-		}
-	}
-	if len(syms) == 0 {
-		return
-	}
-	mark := func(o ir.Operand) {
-		if o == nil {
-			return
-		}
-		if pa, ok := o.(*ir.PointeredArray); ok {
-			o = pa.From
-		}
-		if v := ir.UnderlyingValue(o); v != nil && v.Kind == ir.KindGlobal && syms[v.Symbol] {
-			v.Volatile = true
-		}
-	}
-	for _, m := range mods {
-		for _, d := range m.Defs {
-			if d.Kind != ir.DefCode || d.Lambda.Extern {
-				continue
-			}
-			for _, op := range d.Lambda.Ops {
-				if op == nil {
-					continue
-				}
-				mark(op.Dst)
-				for _, s := range op.Src {
-					mark(s)
-				}
-			}
-		}
-	}
-}
-
-var reAsmSym = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
-
-// PrepareAll は全関数の Prepare (エラーは関数の位置を補完して返す)。
-func (l *Llc) PrepareAll(lmds []*ir.Lambda) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if ce, ok := r.(*diag.Error); ok {
-				if !ce.Pos.IsValid() && l.curLambda != nil {
-					ce.Pos = l.curLambda.Pos
-				}
-				if l.OptimizeLevel > 0 && l.curLambda != nil && strings.HasPrefix(ce.Msg, "frame size over") {
-					l.FrameOver = l.curLambda.Id
-				}
-				err = ce
-				return
-			}
-			panic(r)
-		}
-	}()
-	for _, lmd := range lmds {
-		if lmd.Unused {
-			continue
-		}
-		l.Prepare(lmd)
-	}
-	return nil
 }
 
 // CompileLambda は関数1つ分のアセンブリを生成する (Prepare 済みであること)。
@@ -1838,13 +1655,6 @@ func (l *Llc) newLabels(n int) []string {
 		r[i] = l.newLabel()
 	}
 	return r
-}
-
-func (l *Llc) allocRegister(lmd *ir.Lambda) {
-	// -O 0 でも同じ割付器を使う (静的フレーム (ABIStatic) の関数はフレームでなく F_f の固定番地に置く必要があり、
-	// 以前あった「全部フレーム」の簡易版は静的フレームの導入後は壊れていた)
-	regalloc.AllocateRegister(lmd, l.Limits)
-	regalloc.DeleteUnuse(lmd)
 }
 
 // ---------------------------------------------------------------

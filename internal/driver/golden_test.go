@@ -195,7 +195,7 @@ func newLlcForGolden(hlc *sema.Program) *codegen.Llc {
 	if err != nil {
 		panic(err)
 	}
-	if _, err := prepareProgram(hlc, llc); err != nil {
+	if _, err := prepareProgram(hlc, llc, nil); err != nil {
 		panic(err)
 	}
 	return llc

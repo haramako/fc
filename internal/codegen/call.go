@@ -52,6 +52,14 @@ func frameSym(sym string) string { return sym + "__frame" }
 // (`sty` の後ろ、`sta` の前)。
 func aSym(sym string) string { return sym + "__a" }
 
+// pipeline.Backend の実装 (pipeline.Prepare が最適化と割付の間で呼ぶ)。
+
+// SetLambdas は全関数の表 (frames.Analyze の結果) を受け取る。
+func (l *Llc) SetLambdas(lambdas map[string]*ir.Lambda) { l.Lambdas = lambdas }
+
+// MarkArgY は markArgY (全関数の表は SetLambdas で受け取ったもの)。
+func (l *Llc) MarkArgY(lmd *ir.Lambda) { markArgY(lmd, l.Lambdas) }
+
 // markArgY は lmd の呼び出しのうち、最後から 2 つ目の引数を Y で渡せるもの (push_arg の ArgY) に印を付ける
 // (最適化の後、割付の前。regalloc は印の付いた push_arg を Y を壊す命令と見て、Y の常駐をその前で書き戻す)。
 // 条件: 呼び先が分かっていて static で RegArgY、far でなく、最後の引数の push_arg の直後が call で、その 2 つの push_arg の
@@ -222,11 +230,11 @@ func staticAddr(lmd *ir.Lambda, off int) string {
 	return fmt.Sprintf("%s+%d", lmd.FrameSym(), off)
 }
 
-// checkStackPush は、スタックに積む引数 (S+k,x の k = 基点 + 積んでいる途中の引数と戻り値) が FC_STACK に収まるか
+// CheckStackPush は、スタックに積む引数 (S+k,x の k = 基点 + 積んでいる途中の引数と戻り値) が FC_STACK に収まるか
 // (k は ゼロページの番地の定数なので、超えると ca65 / ld65 の範囲エラーになる)。フレームだけの検査
 // (regalloc の FC_STACK) では、stack 系の関数が大きいフレームの後ろに引数を積むときに漏れていた (inline 関数を
 // 展開した再帰関数で `<S+128,x`。fuzz で発覚)。frame size over なので、-O 2 なら driver が展開を止めてやり直す。
-func (l *Llc) checkStackPush(lmd *ir.Lambda) {
+func (l *Llc) CheckStackPush(lmd *ir.Lambda) {
 	ops := lmd.Ops
 	var pending []*pendingCall
 	var marks []int
