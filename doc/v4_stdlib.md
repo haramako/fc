@@ -204,7 +204,7 @@ public function render_off():void;
 public function render_on():void;
 public function scroll(x:u8, y:u8, nt:u8):void;
 
-// vram (キューはデータを写す stripe 形式: §8)
+// vram (キューはデータを写す stripe 形式: 2026-09-29 決定。§8 の 4)
 public function addr(nt:u8, x:u8, y:u8):u16;
 public function attr_addr(nt:u8, x:u8, y:u8):u16;
 public function put(addr:u16, data:[]const u8):void;     // 横。満杯なら次の NMI を待ってから積む
@@ -315,7 +315,7 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
 2. **`@format` の形**: 書式文字列（`@log` と同じ `{}`。推し）か、引数を並べて修飾する形（`@format(buf, "HP ", @dec(hp, 3))`）か。
    `@try_format` の返し方（`bool` と書いた長さの struct か、長さ 0 で失敗か）。`Buf` に書き足す版（`@format(&b, ...)`）も要るか
 3. **独自のフォントの文字**: ASCII で書いて `str.map` で変換（推し）か、`fmt` に `zero` の文字を渡すか
-4. **VRAM のキュー**: データを写す stripe 形式（推し。アリーナとデータの寿命の問題が無くなる。castle の `en7.fc` のアリーナのあふれの
+4. **VRAM のキュー** → **データを写す stripe 形式に決定（2026-09-29）**。以下は決める前の検討: データを写す stripe 形式（推し。アリーナとデータの寿命の問題が無くなる。castle の `en7.fc` のアリーナのあふれの
    ような誤りが起きない）か、castle と同じくポインタを積む形か。見積もり（命令表から。実測は §7 の 3 で）: NMI の側は写す形のほうが
    速い（castle の `lda (from),y` / `sta` / `iny` / `cpy` / `bne` は 1 バイト約 17 サイクル、キューが固定の番地なら `lda buf,x` / `sta` /
    `inx` / `dey` / `bne` で約 15、展開すればさらに縮む。vblank は OAM DMA を除いて約 1700 サイクルで、送れるのは約 100 バイト）。主の
