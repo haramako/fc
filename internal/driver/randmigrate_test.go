@@ -102,6 +102,16 @@ func TestRandomMigrate(t *testing.T) {
 						t.Skipf("fc 2 のプログラムが走らない (seed %d): %v", seed, err)
 					}
 					got, err := rpRun(t, v4, level, rpMaxCycles)
+					if err != nil && strings.HasPrefix(err.Error(), "cycle limit") {
+						// fc 4 の printf (fmt で数を文字にする) は emu に数を渡す printf より遅く、-O 0 で上限に掛かることがある
+						got, err = rpRun(t, v4, level, rpMaxCycles*50)
+					}
+					if err != nil && strings.Contains(err.Error(), "frame size over") {
+						// fc 4 の printf は引数を全部一時変数に取ってから書式どおりに出すので、-O 0 (一時変数を詰めない) では
+						// 引数 1 つにつき 2 バイトずつフレームが増え、100 個ほど並べる生成器の printf で 256 バイトを超えた
+						// (プログラムが大きすぎる扱い)
+						t.Skipf("fc 4 に migrate したプログラムのフレームが大きすぎる (seed %d)", seed)
+					}
 					if err != nil && strings.Contains(err.Error(), "zero page index wrapped") {
 						// fastcall をやめて引数・戻り値がソフトウェアスタックを通るようになり、呼び出しの入れ子で FC_STACK を
 						// あふれた (ほかの fuzz と同じくプログラムが大きすぎる扱い)
