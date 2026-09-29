@@ -185,7 +185,7 @@ for _, p in ipairs(points) do
   end
 end
 for _, list in pairs(byPc) do
-  table.sort(list, function(x, y) return x.Site.seq < y.Site.seq end)
+  table.sort(list, function(x, y) return x.site.seq < y.site.seq end)
 end
 -- 合流点の地点 (prevs がある) は、この地点の経路の直前の命令 (prevs) を実行したときに準備し、地点に来たら出して準備を
 -- 解く (ループの先頭に付いた @log を後ろからの辺で来た周では出さない、何も出さない else の地点を then の後で出さない)。
@@ -233,11 +233,11 @@ for pc, list in pairs(byPc) do
     local abs = nil
     for _, e in ipairs(list) do
       local ok = true
-      if e.Site.prevs then
-        local a = armed[e.Site]
+      if e.site.prevs then
+        local a = armed[e.site]
         ok = a == true or (type(a) == "number" and (cycles() or a) - a <= 8)
-        armed[e.Site] = nil
-        local calls = armedCall[e.Site]
+        armed[e.site] = nil
+        local calls = armedCall[e.site]
         if calls and next(calls) ~= nil then
           local sp = emu.getState()["cpu.sp"]
           if calls[sp] then
@@ -246,11 +246,11 @@ for pc, list in pairs(byPc) do
           end
         end
       end
-      if ok and e.Site.prg >= 0 then
+      if ok and e.site.prg >= 0 then
         abs = abs or emu.convertAddress(address, emu.memType.nesMemory)
-        ok = abs ~= nil and abs.memType == prgRom and abs.address == e.Site.prg
+        ok = abs ~= nil and abs.memType == prgRom and abs.address == e.site.prg
       end
-      if ok then show(e.p, e.Site) end
+      if ok then show(e.p, e.site) end
     end
   end, emu.callbackType.exec, pc, pc)
 end

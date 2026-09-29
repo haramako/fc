@@ -657,7 +657,12 @@ ROM とプログラムの出力が変わらないこと（-O 0 / -O 2）を確�
    ROM を `fc_test_<名前>` に写し、その `.sav` を前後で消す（`mesenFreshRom`。手でプレイした `castle.sav` には触らない）
 5. **`emu.getState()` は重い**（1 回 100 マイクロ秒ほど。PPU まで含む全状態の表を作る）。exec コールバックの中で
    毎回呼ぶと数倍〜10 倍遅くなるので、レジスタ・サイクル数が要るときだけ呼ぶ
-6. Lua API 覚え書き: `emu.setInput(inputTable, port)`（inputPolled イベント内で呼ぶ。
+6. **Mesen が起動中だと Mesen のテストは飛ぶ**（単一インスタンスなので testrunner が既存の窓に渡る。`ensureMesenSettings`）。
+   手でプレイしている間は `go test ./...` が通っても Mesen の側は確かめていない。生成した Lua が Lua のエラーになると
+   testrunner は何も出さずに止まらない（2026-09-28 の driver を分けたときの名前の置き換えが `.fclog.lua` の中の `site` を
+   `Site` にしていて、TestMesenLog が 60 秒のタイムアウトで落ちていた。2026-09-29 に直し、`internal/fclog` の
+   TestMesenLogScriptFields が Mesen なしで見張る）。Go の名前を一括で置き換えるときは、文字列に埋め込んだ Lua / asm を除く
+7. Lua API 覚え書き: `emu.setInput(inputTable, port)`（inputPolled イベント内で呼ぶ。
    キーは a/b/select/start/up/down/left/right の bool）、
    `emu.read(addr, emu.memType.nesDebug, false)`（副作用なし読み取り）
 
