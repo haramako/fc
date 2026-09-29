@@ -206,7 +206,10 @@ type ResolvedLib struct {
 	Commit string // git のライブラリのコミット
 }
 
-// Resolve は cfg の [lib.*] を決め、git のものはキャッシュに揃えて fc.lock を書き直す。
+// Resolve は cfg の [lib.*] を決め、git のものはキャッシュに揃えて fc.lock を書き直す。ライブラリの依存: ライブラリの一番上
+// (path のフォルダ、git のリポジトリ) に fc.toml があれば、その [lib.*] も辿る (幅優先。探索の順もこの順)。同じ名前は、
+// プロジェクトの fc.toml に書いたものが勝ち (依存の版を選べる)、依存どうしで場所が違えばエラー。fc.lock はプロジェクトの隣に
+// 依存の git のライブラリも含めて書く。
 func (r *Resolver) Resolve(cfg *ProjectConfig) ([]ResolvedLib, error) {
 	libs, err := cfg.Libs()
 	if err != nil || len(libs) == 0 {
@@ -216,31 +219,70 @@ func (r *Resolver) Resolve(cfg *ProjectConfig) ([]ResolvedLib, error) {
 	if err != nil {
 		return nil, err
 	}
+	type item struct {
+		lib  Lib
+		from string // 書いた fc.toml
+		via  string // 依存のもとのライブラリ ("" はプロジェクトの fc.toml)
+	}
+	var queue []item
+	for _, l := range libs {
+		queue = append(queue, item{l, cfg.Path, ""})
+	}
+	seen := map[string]item{}
 	newLock := map[string]LockEntry{}
 	var res []ResolvedLib
-	for _, l := range libs {
+	for len(queue) > 0 {
+		it := queue[0]
+		queue = queue[1:]
+		l := it.lib
+		if prev, ok := seen[l.Name]; ok {
+			if prev.via == "" || sameLib(prev.lib, l) {
+				continue // プロジェクトの fc.toml が勝つ / 同じもの
+			}
+			return nil, &diag.Error{Msg: fmt.Sprintf("library %s: %s (library %s) and %s (library %s) point to different places; choose one with [lib.%s] in %s",
+				l.Name, prev.from, prev.via, it.from, it.via, l.Name, cfg.Path)}
+		}
+		seen[l.Name] = it
+		top := l.Path // 依存の fc.toml を探す所 (ライブラリの一番上)
 		if l.Git == "" {
 			if st, err := os.Stat(l.Path); err != nil || !st.IsDir() {
-				return nil, &diag.Error{Msg: fmt.Sprintf("%s: [lib.%s]: path %s is not a folder", cfg.Path, l.Name, l.Path)}
+				return nil, &diag.Error{Msg: fmt.Sprintf("%s: [lib.%s]: path %s is not a folder", it.from, l.Name, l.Path)}
 			}
 			res = append(res, ResolvedLib{Lib: l, Root: l.Path})
+		} else {
+			e, ok := lock[l.Name]
+			commit := e.Commit
+			if !ok || e.Git != l.Git || e.Rev != l.Rev || r.updating(l.Name) || commit == "" {
+				commit = ""
+			}
+			dir, commit, err := r.fetch(l, commit)
+			if err != nil {
+				return nil, &diag.Error{Msg: fmt.Sprintf("%s: [lib.%s]: %v", it.from, l.Name, err)}
+			}
+			root := filepath.Join(dir, filepath.FromSlash(l.Dir))
+			if st, err := os.Stat(root); err != nil || !st.IsDir() {
+				return nil, &diag.Error{Msg: fmt.Sprintf("%s: [lib.%s]: dir %q is not in the repository", it.from, l.Name, l.Dir)}
+			}
+			newLock[l.Name] = LockEntry{Git: l.Git, Rev: l.Rev, Commit: commit}
+			res = append(res, ResolvedLib{Lib: l, Root: root, Commit: commit})
+			top = dir
+		}
+		dep := filepath.Join(top, ConfigName)
+		data, err := os.ReadFile(dep)
+		if err != nil {
 			continue
 		}
-		e, ok := lock[l.Name]
-		commit := e.Commit
-		if !ok || e.Git != l.Git || e.Rev != l.Rev || r.updating(l.Name) || commit == "" {
-			commit = ""
-		}
-		dir, commit, err := r.fetch(l, commit)
+		dcfg, err := parseConfig(dep, data)
 		if err != nil {
-			return nil, &diag.Error{Msg: fmt.Sprintf("%s: [lib.%s]: %v", cfg.Path, l.Name, err)}
+			return nil, err
 		}
-		root := filepath.Join(dir, filepath.FromSlash(l.Dir))
-		if st, err := os.Stat(root); err != nil || !st.IsDir() {
-			return nil, &diag.Error{Msg: fmt.Sprintf("%s: [lib.%s]: dir %q is not in the repository", cfg.Path, l.Name, l.Dir)}
+		deps, err := dcfg.Libs()
+		if err != nil {
+			return nil, err
 		}
-		newLock[l.Name] = LockEntry{Git: l.Git, Rev: l.Rev, Commit: commit}
-		res = append(res, ResolvedLib{Lib: l, Root: root, Commit: commit})
+		for _, d := range deps {
+			queue = append(queue, item{d, dep, l.Name})
+		}
 	}
 	if len(newLock) > 0 || len(lock) > 0 {
 		if err := cfg.WriteLock(newLock); err != nil {
@@ -248,6 +290,11 @@ func (r *Resolver) Resolve(cfg *ProjectConfig) ([]ResolvedLib, error) {
 		}
 	}
 	return res, nil
+}
+
+// sameLib は a と b が同じ場所か (path、または git の URL・rev・dir)。
+func sameLib(a, b Lib) bool {
+	return a.Path == b.Path && a.Git == b.Git && a.Rev == b.Rev && a.Dir == b.Dir
 }
 
 func (r *Resolver) updating(name string) bool {

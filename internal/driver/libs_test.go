@@ -159,3 +159,39 @@ func TestLibGit(t *testing.T) {
 		t.Errorf("--offline: %v", err)
 	}
 }
+
+// TestLibDeps: ライブラリの一番上の fc.toml の [lib.*] も辿る (ライブラリが別のライブラリを使う)。依存どうしで同じ名前の
+// 場所が違えばエラーで、プロジェクトの fc.toml に書けばそれが勝つ。
+func TestLibDeps(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"proj/fc.toml": "[lib.a]\npath = \"../a\"\n",
+		"proj/t.fc": `#fc 4
+use console;
+use ua;
+function main():void
+{
+	printf("{}\n", ua.f());
+	console.exit(0);
+}
+`,
+		"a/fc.toml": "[lib.b]\npath = \"../b\"\n",
+		"a/ua.fc":   "#fc 4\nuse ub;\npublic function f():u8 { return ub.g() + 1; }\n",
+		"b/ub.fc":   "#fc 4\npublic function g():u8 { return 10; }\n",
+		"b2/ub.fc":  "#fc 4\npublic function g():u8 { return 20; }\n",
+		"c/fc.toml": "[lib.b]\npath = \"../b2\"\n",
+		"c/uc.fc":   "#fc 4\npublic function h():u8 { return 0; }\n",
+	})
+	if out, err := runProject(t, root, BuildOptions{}); err != nil || out != "11\n" {
+		t.Fatalf("依存を辿る: %q %v", out, err)
+	}
+	writeTree(t, root, map[string]string{"proj/fc.toml": "[lib.a]\npath = \"../a\"\n[lib.c]\npath = \"../c\"\n"})
+	if _, err := runProject(t, root, BuildOptions{}); err == nil || !strings.Contains(err.Error(), "library b:") || !strings.Contains(err.Error(), "point to different places") {
+		t.Errorf("依存どうしの食い違い: %v", err)
+	}
+	writeTree(t, root, map[string]string{"proj/fc.toml": "[lib.a]\npath = \"../a\"\n[lib.c]\npath = \"../c\"\n[lib.b]\npath = \"../b2\"\n"})
+	if out, err := runProject(t, root, BuildOptions{}); err != nil || out != "21\n" {
+		t.Errorf("プロジェクトの fc.toml が勝つ: %q %v", out, err)
+	}
+}
