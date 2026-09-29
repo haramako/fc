@@ -741,7 +741,11 @@ func (l *funcGen) genIndex() {
 		r.push(l.indexLarge(op))
 	} else if ir.ValType(op.In(1)).Size == 1 {
 		// インデックスのサイズが１
-		if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
+		if k, ok := ir.ValIntLiteral(op.In(1)); ok && ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) != ir.LocFrame {
+			// グローバルの配列の定数の添字 (`buf[2..]`): 番地は定数 (添字を Y に読んで足す形より 4 命令短い)
+			a := fmt.Sprintf("%s+%d", l.addrExpr(op.In(0)), (k&0xff)*es)
+			r.push(fmt.Sprintf("lda #.LOBYTE(%s)", a), l.storeA(op.Dst, 0), fmt.Sprintf("lda #.HIBYTE(%s)", a), l.storeA(op.Dst, 1))
+		} else if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
 			// フレーム上のローカル配列: 先頭は S + addr + X (ゼロページなので上位は 0。OpRef と同じ)
 			r.push(l.loadYIdx(op.In(1), ir.ValType(op.In(0)).Base.Size))
 			r.push("sty <reg+0")

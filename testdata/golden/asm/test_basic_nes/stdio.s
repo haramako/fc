@@ -40,16 +40,12 @@ _stdio_HEX:
 	ldy 0+<F_stdio_print_int16+7
 	lda _stdio_HEX+0,y
 	sta 0+<F_stdio_print_int16+9
-	ldy #0
-	sty <reg+0
-	clc
-	lda #.LOBYTE(F_stdio_print_int16+2)
-	adc <reg+0
+	lda #.LOBYTE(F_stdio_print_int16+2+0)
 	sta 0+<F_stdio_print_int16+7
-	lda #.HIBYTE(F_stdio_print_int16+2)
-	adc #0
+	lda #.HIBYTE(F_stdio_print_int16+2+0)
 	sta 1+<F_stdio_print_int16+7
 	lda 0+<F_stdio_print_int16+9
+	ldy #0
 	sta (F_stdio_print_int16+7),y
 	lda 1+<F_stdio_print_int16+0
 	sta 0+<F_stdio_print_int16+7
@@ -60,14 +56,9 @@ _stdio_HEX:
 	tay
 	lda _stdio_HEX+0,y
 	sta 0+<F_stdio_print_int16+9
-	ldy #1
-	sty <reg+0
-	clc
-	lda #.LOBYTE(F_stdio_print_int16+2)
-	adc <reg+0
+	lda #.LOBYTE(F_stdio_print_int16+2+1)
 	sta 0+<F_stdio_print_int16+7
-	lda #.HIBYTE(F_stdio_print_int16+2)
-	adc #0
+	lda #.HIBYTE(F_stdio_print_int16+2+1)
 	sta 1+<F_stdio_print_int16+7
 	lda 0+<F_stdio_print_int16+9
 	ldy #0
@@ -89,14 +80,9 @@ _stdio_HEX:
 	tay
 	lda _stdio_HEX+0,y
 	sta 0+<F_stdio_print_int16+9
-	ldy #2
-	sty <reg+0
-	clc
-	lda #.LOBYTE(F_stdio_print_int16+2)
-	adc <reg+0
+	lda #.LOBYTE(F_stdio_print_int16+2+2)
 	sta 0+<F_stdio_print_int16+7
-	lda #.HIBYTE(F_stdio_print_int16+2)
-	adc #0
+	lda #.HIBYTE(F_stdio_print_int16+2+2)
 	sta 1+<F_stdio_print_int16+7
 	lda 0+<F_stdio_print_int16+9
 	ldy #0
@@ -106,37 +92,22 @@ _stdio_HEX:
 	tay
 	lda _stdio_HEX+0,y
 	sta 0+<F_stdio_print_int16+9
-	ldy #3
-	sty <reg+0
-	clc
-	lda #.LOBYTE(F_stdio_print_int16+2)
-	adc <reg+0
+	lda #.LOBYTE(F_stdio_print_int16+2+3)
 	sta 0+<F_stdio_print_int16+7
-	lda #.HIBYTE(F_stdio_print_int16+2)
-	adc #0
+	lda #.HIBYTE(F_stdio_print_int16+2+3)
 	sta 1+<F_stdio_print_int16+7
 	lda 0+<F_stdio_print_int16+9
 	ldy #0
 	sta (F_stdio_print_int16+7),y
-	ldy #4
-	sty <reg+0
-	clc
-	lda #.LOBYTE(F_stdio_print_int16+2)
-	adc <reg+0
+	lda #.LOBYTE(F_stdio_print_int16+2+4)
 	sta 0+<F_stdio_print_int16+7
-	lda #.HIBYTE(F_stdio_print_int16+2)
-	adc #0
+	lda #.HIBYTE(F_stdio_print_int16+2+4)
 	sta 1+<F_stdio_print_int16+7
 	lda #0
-	tay
 	sta (F_stdio_print_int16+7),y
-	sty <reg+0
-	clc
-	lda #.LOBYTE(F_stdio_print_int16+2)
-	adc <reg+0
+	lda #.LOBYTE(F_stdio_print_int16+2+0)
 	sta 0+<F_stdio_print_int16+7
-	lda #.HIBYTE(F_stdio_print_int16+2)
-	adc #0
+	lda #.HIBYTE(F_stdio_print_int16+2+0)
 	sta 1+<F_stdio_print_int16+7
 	lda 0+<F_stdio_print_int16+7
 	sta <F_stdio_print+0
