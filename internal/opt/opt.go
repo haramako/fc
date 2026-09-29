@@ -155,6 +155,7 @@ func Passes() []Pass {
 		{Name: "narrow", Run: alwaysU(narrowBitTest)},
 		{Name: "scale", Run: alwaysU(scaleIndex)},
 		{Name: "commute", Run: always(commuteTemp)},
+		{Name: "avg", Run: averageBytes}, // 1 バイトどうしの平均を adc + ror a に (split の前に)
 		{Name: "carry", Repeat: 19, Run: func(lmd *ir.Lambda, _ *types.Universe) bool {
 			before := len(lmd.Ops)
 			carryBranch(lmd)

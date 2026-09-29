@@ -500,3 +500,36 @@ function main():void
 		}
 	}
 }
+
+// TestAverageBytes: 1 バイトどうしの平均 (`((a as u16 + b) / 2) as u8`・`>> 1`) は 8 ビットの足し算と ror a (opt.averageBytes)。
+// 全部の組で -O 0 と同じ値。
+func TestAverageBytes(t *testing.T) {
+	t.Parallel()
+	out, asm := buildShape(t, `#fc 4
+use console;
+function avg(a:u8, b:u8):u8 @(noinline) { return ((a as u16 + b) / 2) as u8; }
+function avg2(a:u8, b:u8):u8 @(noinline) { return ((a as u16 + b) >> 1) as u8; }
+function main():void
+{
+	var bad:u16 = 0;
+	for (var a:u16 = 0; a < 256; a += 1) {
+		for (var b:u16 = 0; b < 256; b += 1) {
+			var e = ((a + b) >> 1) as u8;
+			if (avg(a as u8, b as u8) != e || avg2(a as u8, b as u8) != e) {
+				bad += 1;
+			}
+		}
+	}
+	printf("{} {} {}\n", bad, avg(255, 255), avg2(200, 101));
+	console.exit(0);
+}
+`)
+	if out != "0 255 150\n" {
+		t.Errorf("got %q", out)
+	}
+	for _, f := range []string{"_t_avg", "_t_avg2"} {
+		if body := strings.Join(procBody(t, asm, f), "\n"); !strings.Contains(body, "ror a") || strings.Contains(body, "lsr") {
+			t.Errorf("%s が adc + ror a でない:\n%s", f, body)
+		}
+	}
+}

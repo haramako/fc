@@ -14,8 +14,8 @@
 // スタック領域から取る (再帰してもよい)。関数には偽の番地を振り、関数ポインタはその番地で呼び先を引く。
 //
 // 最適化後の IR も実行できる (fuzz の失敗をどの opt のパスが起こしたか切り分けるため): C フラグは shift_left /
-// shift_right が最後に押し出したビットで、直後の if_carry / rolc / rorc が受ける (opt.carryBranch と splitWords が
-// 作る形。間に C を変える命令は無い)。asm は扱わない (ErrUnsupported)。
+// shift_right が最後に押し出したビットか add の桁あふれで、直後の if_carry / rolc / rorc が受ける (opt.carryBranch と
+// splitWords と averageBytes が作る形。間に C を変える命令は無い)。asm は扱わない (ErrUnsupported)。
 package interp
 
 import (
@@ -641,6 +641,7 @@ func (m *machine) run(f *frame) {
 			switch op.Code {
 			case ir.OpAdd:
 				r = a + b
+				m.carry = r>>(8*n) != 0 // 1 バイトの足し算の 9 ビット目を直後の rorc が受ける (opt.averageBytes の平均)
 			case ir.OpSub:
 				r = a - b
 			case ir.OpAnd:

@@ -1,6 +1,9 @@
 package opt
 
-import "github.com/haramako/fc/internal/ir"
+import (
+	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/types"
+)
 
 // carryBranch は「最上位 (最下位) ビットを検査して、両方の枝で同じ 1 ビットシフトをする」形を、
 // 先にシフトして C フラグで分岐する形にする (CRC の内側ループ):
@@ -155,4 +158,97 @@ func isShiftOne(lmd *ir.Lambda, ud *ir.UseDef, k int, x *ir.Value, code ir.OpCod
 		}
 	}
 	return d, true
+}
+
+// averageBytes は 1 バイトどうしを 16 ビットで足して 1 ビット右へずらした値の下位 1 バイトだけを使う形 (平均
+// `((a as u16 + b) / 2) as u8`) を、8 ビットの足し算と、その C (9 ビット目) を上に入れる右回転にする:
+//
+//	add y = <u16>a, b; shift_right x = y, #1 (か div x = y, #2); ... <u8>x ...
+//	→ add t = a, b; rorc s = t; ... s ...                               (clc; lda a; adc b; ror a)
+//
+// 条件: a / b は 1 バイトの変数 (または 1 バイトの変数をゼロ拡張して読む cast) でリテラルでない (x += 1 は inc になって C を
+// 作らない)。y は右シフトでだけ使い、x は下位 1 バイトを読む cast でだけ使う。足し算と右シフトは隣 (間に C を変える命令が無い)。
+func averageBytes(lmd *ir.Lambda, u *types.Universe) bool {
+	ud := ir.BuildUseDef(lmd)
+	ops := lmd.Ops
+	u8 := u.IntType(1, false)
+	byteOf := func(o ir.Operand) (ir.Operand, bool) {
+		switch x := o.(type) {
+		case *ir.CastedValue:
+			if v, ok := x.From.(*ir.Value); ok && x.Width == 1 && x.Offset == 0 && v.Type.Size == 1 && v.Kind != ir.KindLiteral {
+				return v, true
+			}
+		case *ir.Value:
+			if x.Type.Size == 1 && x.Kind != ir.KindLiteral && isIntLike(x.Type) {
+				return x, true
+			}
+		}
+		return nil, false
+	}
+	lowByte := func(o ir.Operand, x *ir.Value) bool {
+		cv, ok := o.(*ir.CastedValue)
+		return ok && cv.From == ir.Operand(x) && cv.Offset == 0 && cv.Type.Size == 1 && cv.Width == 1
+	}
+	changed := false
+	for i := 0; i+1 < len(ops); i++ {
+		add, sh := ops[i], ops[i+1]
+		if add == nil || sh == nil || add.Code != ir.OpAdd {
+			continue
+		}
+		y, ok := add.Dst.(*ir.Value)
+		if !ok || y.LocalType != ir.LTTemp || y.Type.Size != 2 || y.Type.Signed || len(ud.Defs[y]) != 1 {
+			continue
+		}
+		a, okA := byteOf(add.Src[0])
+		b, okB := byteOf(add.Src[1])
+		if !okA || !okB {
+			continue
+		}
+		if sh.Code != ir.OpShiftRight && sh.Code != ir.OpDiv {
+			continue
+		}
+		k, lit := ir.ValIntLiteral(sh.Src[1])
+		if !lit || sh.IsSigned() || !(sh.Code == ir.OpShiftRight && k == 1 || sh.Code == ir.OpDiv && k == 2) || sh.Src[0] != ir.Operand(y) {
+			continue
+		}
+		if u, single := ud.SingleUse(y); !single || u != i+1 {
+			continue
+		}
+		x, ok := sh.Dst.(*ir.Value)
+		if !ok || x.LocalType != ir.LTTemp || x.Type.Size != 2 || len(ud.Defs[x]) != 1 {
+			continue
+		}
+		good := len(ud.Uses[x]) > 0
+		for _, j := range ud.Uses[x] {
+			if j <= i+1 || ops[j] == nil {
+				good = false
+				break
+			}
+			for _, s := range ops[j].Src {
+				if ir.UnderlyingValue(s) == x && !lowByte(s, x) {
+					good = false
+				}
+			}
+			if ops[j].Dst != nil && ir.UnderlyingValue(ops[j].Dst) == x {
+				good = false
+			}
+		}
+		if !good {
+			continue
+		}
+		t := ir.NewLocal("$avg", u8, ir.LTTemp)
+		s := ir.NewLocal("$avg", u8, ir.LTTemp)
+		lmd.Vars = append(lmd.Vars, t, s)
+		ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpAdd, Dst: t, Src: []ir.Operand{a, b}, Pos: add.Pos})
+		ir.ReplaceOp(ops, i+1, &ir.Op{Code: ir.OpRorC, Dst: s, Src: []ir.Operand{t}, Pos: sh.Pos})
+		for _, j := range ud.Uses[x] {
+			for k, o := range ops[j].Src {
+				if lowByte(o, x) {
+					ops[j].Src[k] = s
+				}
+			}
+		}
+		changed = true
+	}
+	return changed
 }
