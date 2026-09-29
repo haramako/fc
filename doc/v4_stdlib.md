@@ -190,7 +190,7 @@ public function near(a:u8, b:u8, d:u8):bool;                         // |a - b| 
 | `vram` | 番地（`addr(nt, x, y)`・属性の番地）、キュー（put 横 / put_v 縦 / fill / set / try_ / room）、描画を止めている間の直接書き（write_now / fill_now）、属性の 2 ビットの欄の更新、2×2 のメタタイル | ppu.put / alloc / pos / put_in_lock |
 | `pal` | 32 バイトのパレットを NMI で送る: set_all / set、明るさ（neslib の表を指すだけの方式）、fade（待つ版） | pal_down / pal_up と繰り返し |
 | `oam` | $0200（案）のシャドウ: begin（カーソルを戻す。ちらつかせの向きの切り替え）、spr、meta（画面の端で切る・反転）、固定の番号、reserve、hide_rest（frame.wait が呼ぶ） | sprite / gr_sprite2 / clear |
-| `pad` | 2 つのパッド、`struct Pad {held, pressed, released}`、poll（2 回読んで一致するまで: DMC）、ボタンの定数、（後で）押し続けの繰り返し | pad.fc |
+| `pad` | 2 つのパッド、`struct Pad {held, pressed, released, repeat}`、poll（2 回読んで一致するまで: DMC）、ボタンの定数、押し続けの繰り返し（repeat。✅ 2026-09-29） | pad.fc |
 | `mmc3` / `mmc1` / `uxrom` | PRG / CHR の切り替え（前の値を返す: 「切り替えて呼んで戻す」）、ミラーリング、MMC3 の走査線 IRQ、WRAM。far call のトランポリン（`farcall_*.asm`）とシャドウ・`select_shadow` の決まりを共有 | castle の mmc3.fc / macro.asm |
 | `sound` | 最初は NMI から呼ぶ音のドライバの呼び出し口だけ（NSD・FamiStudio などは利用者が持つ） | castle の sound.fc |
 
@@ -234,7 +234,7 @@ public function meta(x:i16, y:i16, m:[]const u8, flip:u8):void;   // {dx, dy, ti
 public function reserve(n:u8):void;
 
 // pad
-public struct Pad { held:u8; pressed:u8; released:u8; }
+public struct Pad { held:u8; pressed:u8; released:u8; repeat:u8; timer:u8; }   // repeat: 押した瞬間と、REPEAT_DELAY (16) フレーム後から REPEAT_RATE (4) ごと
 public var p1:Pad;
 public var p2:Pad;
 public function poll():void;

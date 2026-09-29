@@ -254,6 +254,49 @@ function main():void
 	p.checkVblank(t)
 }
 
+// TestNesPadRepeat: pad の repeat は押した瞬間と、押し続けて REPEAT_DELAY (16) フレーム後から REPEAT_RATE (4) フレームごとに立つ。
+// 押している途中で別のボタンを足すと、そのボタンだけが立って待ちが始めからになる。
+func TestNesPadRepeat(t *testing.T) {
+	t.Parallel()
+	p := buildNes(t, map[string]string{"t.fc": `#fc 4
+use frame;
+use pad;
+public var right:u8;
+public var up:u8;
+function main():void
+{
+	frame.init();
+	frame.render_on();
+	while (true) {
+		pad.poll();
+		if ((pad.p1.repeat & pad.RIGHT) != 0) {
+			right += 1;
+		}
+		if ((pad.p1.repeat & pad.UP) != 0) {
+			up += 1;
+		}
+		frame.wait();
+	}
+}
+`})
+	p.run(t, 5)
+	p.SetButtons(ButtonRight)
+	p.run(t, 30) // 0, 16, 20, 24, 28 フレーム目
+	if got := p.peek(t, "_t_right", 0); got != 5 {
+		t.Errorf("右を 30 フレーム押して %d 回 (5 回のはず)", got)
+	}
+	p.SetButtons(ButtonRight | ButtonUp) // 上を足す: 上だけが立ち、待ちが始めから
+	p.run(t, 10)
+	if r, u := p.peek(t, "_t_right", 0), p.peek(t, "_t_up", 0); r != 5 || u != 1 {
+		t.Errorf("上を足して 10 フレーム: right %d (5)、up %d (1)", r, u)
+	}
+	p.SetButtons(0)
+	p.run(t, 20)
+	if r, u := p.peek(t, "_t_right", 0), p.peek(t, "_t_up", 0); r != 5 || u != 1 {
+		t.Errorf("離した後: right %d、up %d", r, u)
+	}
+}
+
 // TestNesQueueFull: キューに収まる一番重い形 (1 バイトずつ写す項目で満杯) と OAM の DMA が、同じ NMI で vblank に収まる。
 // 満杯を超える put は分けて次の NMI を待ってから積み、全部が画面に届く。
 func TestNesQueueFull(t *testing.T) {

@@ -1,6 +1,7 @@
 #fc 4
 // パッド (doc/v4_stdlib.md §3.2)。poll をフレームに 1 回呼ぶと、p1 / p2 に押している (held)・今押した (pressed)・今離した
-// (released) ボタンが入る。DMC (音の再生) が読み取りに割り込んでビットがずれることがあるので、2 回続けて同じ値になるまで読み直す。
+// (released) ボタンと、キーリピート (repeat: 押した瞬間と、押し続けて REPEAT_DELAY フレーム後から REPEAT_RATE フレームごと。
+// メニューのカーソルの移動に) が入る。DMC (音の再生) が読み取りに割り込んでビットがずれることがあるので、2 回続けて同じ値になるまで読み直す。
 // 旧版 (pad.cur / pad.pushed) は examples/castle/src/pad.fc・examples/miku/pad.fc にコピーがある。
 //
 //   pad.poll();
@@ -17,10 +18,16 @@ public const DOWN = 0x04;
 public const LEFT = 0x02;
 public const RIGHT = 0x01;
 
+// キーリピートの間隔 (フレーム)。fc.toml の [define.pad] か -D pad.REPEAT_DELAY=20 で変えられる
+public const REPEAT_DELAY = 16 @(build);
+public const REPEAT_RATE = 4 @(build);
+
 public struct Pad {
 	held:u8;
 	pressed:u8;
 	released:u8;
+	repeat:u8;   // 押した瞬間と、押し続けている間の一定の間隔 (押しているボタン全部)
+	timer:u8;    // 次のリピートまでのフレーム
 }
 
 public var p1:Pad;
@@ -52,9 +59,25 @@ function read():void
 
 function update(p:*Pad, now:u8):void
 {
-	p.pressed = now & ~p.held;
+	var pressed = now & ~p.held;
+	p.pressed = pressed;
 	p.released = p.held & ~now;
 	p.held = now;
+	if (pressed != 0) {
+		// 新しく押したボタンだけを立てて、待ちを始めからにする
+		p.repeat = pressed;
+		p.timer = REPEAT_DELAY;
+		return;
+	}
+	p.repeat = 0;
+	if (now == 0) {
+		return;
+	}
+	p.timer -= 1;
+	if (p.timer == 0) {
+		p.repeat = now;
+		p.timer = REPEAT_RATE;
+	}
 }
 
 public function poll():void
