@@ -1,0 +1,56 @@
+#fc 4
+// LZ4 のブロック形式の展開 (doc/v4_stdlib.md §3.1・§8 の 10)。データは fc がコンパイル時に作る:
+//   const MAP = @lz4(@incbin("map.bin"));
+//   var n = lz4.unpack(buf, MAP);            // buf に展開して長さを返す (足りなければ止まる)
+// LZ 系なので展開した出力を読み返す: 書き先は RAM (VRAM へ直には書けない。ネームテーブルは rle で)。展開のコードは約 250 バイト。
+@(bank: -1);
+use sys;
+
+function unpack_raw(dst:*u8, dst_len:u16, src:*const u8, src_len:u16):u16 @(abi: "frame", scratch: 7);
+@include("lz4.asm");
+
+// src を dst に展開して書いた長さを返す。dst が足りないかデータが壊れていれば止まる
+public function unpack(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	var n = unpack_raw(@ptr(dst), @len(dst), @ptr(src), @len(src));   // (try_unpack を呼ぶと slice の写しが増える)
+	if (n == 0xffff) {
+		sys.panic("lz4: dst too small or broken data");
+	}
+	return n;
+}
+
+// unpack と同じだが、失敗なら 0xffff を返す (dst は途中まで書かれている)
+public function try_unpack(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	return unpack_raw(@ptr(dst), @len(dst), @ptr(src), @len(src));
+}
+
+// ---- テスト ----
+
+const TEXT = "LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 hello, hello, hello!";
+const PACKED = @lz4("LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 LZ4 hello, hello, hello!");
+const ZEROS = @lz4([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+var test_buf:[300]u8;
+
+function test_unpack():void @(test)
+{
+	@assert(@len(PACKED) < @len(TEXT));
+	var n = unpack(test_buf, PACKED);
+	@assert_eq(n, @len(TEXT));
+	for (var i:u8 = 0; i < @len(TEXT); i += 1) {
+		@assert(test_buf[i] == TEXT[i]);
+	}
+	test_buf[40] = 9;
+	@assert_eq(unpack(test_buf, ZEROS), 40);
+	@assert(test_buf[0] == 0 && test_buf[39] == 0 && test_buf[40] == 9);
+}
+
+function test_errors():void @(test)
+{
+	@assert_eq(try_unpack(test_buf[..10], PACKED), 0xffff);   // 書き先が足りない
+	const BAD = [0x10, 65, 5, 0];                             // 距離が書き先の頭より前
+	@assert_eq(try_unpack(test_buf, BAD), 0xffff);
+	const ZERO_OFF = [0x10, 65, 0, 0];
+	@assert_eq(try_unpack(test_buf, ZERO_OFF), 0xffff);
+	@assert_eq(try_unpack(test_buf, @lz4("")), 0);
+}

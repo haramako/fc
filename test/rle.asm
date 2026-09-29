@@ -1,3 +1,4 @@
+;;; 旧 fclib の rle のコピー (2026-09-29。fclib の rle を NES Screen Tool の形式に入れ替えた後も、test/test_rle.fc を保つため)
 ;;; http://codebase64.org/doku.php?id=base:rle_pack_unpack
 
 .segment "rle"

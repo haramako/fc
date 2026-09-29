@@ -42,7 +42,9 @@ func TestImportDirection(t *testing.T) {
 		"project":  {"sema", "diag"},
 		"fclog":    {"codegen", "cc65", "ir", "diag", "types"},
 		"interp":   {"ir", "types"},
-		"sema":     {"syntax", "types", "ir", "diag"},
+		"sema":     {"syntax", "types", "ir", "diag", "lz4", "rle"},
+		"lz4":      {}, // コンパイル時の圧縮 (@lz4 / @rle): 何にも依存しない葉
+		"rle":      {},
 		"migrate":  {"syntax", "types", "ir", "sema"},
 		"r6502":    {},
 		"nes":      {"r6502"},

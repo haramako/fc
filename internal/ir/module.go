@@ -28,9 +28,9 @@ type Def struct {
 	AddressVar string
 	Pos        syntax.Position
 
-	// Private は DefBss のうち、public でも options(symbol:) でもないモジュールの変数 (ほかのオブジェクトファイルから名前で
-	// 参照されない)。Unused はそのうち、出力する関数・定数の表・asm のどれからも参照されないもの (領域を取らない。
-	// pipeline.markUnusedGlobals が決める。@(test) の関数だけが使う変数など)
+	// Private は DefBss / DefBlock のうち、public でも options(symbol:) でもない fc 4 のモジュールの変数・配列定数 (ほかの
+	// オブジェクトファイルから名前で参照されない)。Unused はそのうち、出力する関数・定数の表・asm のどれからも参照されない
+	// もの (領域を取らない。pipeline.markUnusedGlobals が決める。@(test) の関数だけが使う変数・表など)
 	Private bool
 	Unused  bool
 }

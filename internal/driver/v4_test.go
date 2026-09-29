@@ -563,11 +563,14 @@ var never:u8;
 var placed:[4]u8 @(segment: "BSS");
 public var pub:u8;
 var named:u8 @(symbol: "_named_v");
+const TABLE_USED = [1, 2, 3, 4, 5];
+const TABLE_TEST = [6, 7, 8, 9, 10];
+public const TABLE_PUB = [11, 12, 13];
 function helper():void { only_helper[0] = 1; }
-function test_x():void @(test) { only_helper[1] = 2; }
+function test_x():void @(test) { only_helper[1] = TABLE_TEST[1]; }
 function main():void
 {
-	used_v = 3;
+	used_v = TABLE_USED[2];
 	printf("{} {}\n", used_v, old.get());
 	console.exit(0);
 }
@@ -575,12 +578,12 @@ function main():void
 	old := "#fc 3\nvar unused_old:u8;\npublic function get():u8 { return 5; }\n"
 	files := map[string]string{"t.fc": src, "old.fc": old}
 	s := compileAsmFiles(t, files)
-	for _, sym := range []string{"_t_used_v:", "_t_placed:", "_t_pub:", "_named_v:"} {
+	for _, sym := range []string{"_t_used_v:", "_t_placed:", "_t_pub:", "_named_v:", "_t_TABLE_USED:", "_t_TABLE_PUB:"} {
 		if !strings.Contains(s, sym) {
 			t.Errorf("%s が無い:\n%s", sym, s)
 		}
 	}
-	for _, sym := range []string{"_t_only_helper", "_t_never"} {
+	for _, sym := range []string{"_t_only_helper", "_t_never", "_t_TABLE_TEST"} {
 		if strings.Contains(s, sym) {
 			t.Errorf("%s が残っている", sym)
 		}

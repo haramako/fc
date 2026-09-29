@@ -512,3 +512,56 @@ func TestExampleHello(t *testing.T) {
 	}
 	p.checkVblank(t)
 }
+
+// TestNesRle: @rle で圧縮した画面を、描画を止めて write_rle_now で書き、描画中に put_rle でキューに積む (繰り返しは埋める項目)。
+func TestNesRle(t *testing.T) {
+	t.Parallel()
+	r := rand.New(rand.NewSource(3))
+	screen := make([]byte, 1024)
+	for i := range screen {
+		if i > 0 && r.Intn(4) != 0 {
+			screen[i] = screen[i-1]
+		} else {
+			screen[i] = byte(r.Intn(50))
+		}
+	}
+	row := make([]byte, 300)
+	for i := range row {
+		row[i] = byte(i/37) + 100
+	}
+	p := buildNes(t, map[string]string{"t.fc": `#fc 4
+use frame;
+use vram;
+const SCREEN = @rle(@incbin("screen.bin"));
+const ROW = @rle(@incbin("row.bin"));
+public var done:u8;
+function main():void
+{
+	frame.init();
+	vram.write_rle_now(0x2000, SCREEN);
+	frame.render_on();
+	vram.put_rle(0x2400, ROW);
+	frame.wait();
+	done = 1;
+	while (true) {
+		frame.wait();
+	}
+}
+`, "screen.bin": string(screen), "row.bin": string(row)})
+	p.run(t, 30)
+	if p.peek(t, "_t_done", 0) != 1 {
+		t.Fatal("終わらない")
+	}
+	for i := 0; i < 1024; i++ {
+		if got := p.readVram(0x2000 + i); got != screen[i] {
+			t.Fatalf("write_rle_now の %d バイト目: %d, want %d", i, got, screen[i])
+		}
+	}
+	// fc の既定の iNES のヘッダは縦のミラーなので、ネームテーブル 1 ($2400) は $2000 と別の所
+	for i := 0; i < len(row); i++ {
+		if got := p.readVram(0x2400 + i); got != row[i] {
+			t.Fatalf("put_rle の %d バイト目: %d, want %d", i, got, row[i])
+		}
+	}
+	p.checkVblank(t)
+}

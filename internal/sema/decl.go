@@ -225,6 +225,8 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 				symbol = d.Sym
 			} else {
 				symbol = h.addDef(name, d)
+				// fc 4: private なモジュールの配列定数も、出力するコードから参照されなければ出さない (pipeline.markUnusedGlobals)
+				d.Private = h.lmd == nil && h.v4() && !h.scopeIsPublic(publicPos)
 			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)

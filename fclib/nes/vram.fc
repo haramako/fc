@@ -196,6 +196,46 @@ public function set_attr(nt:u8, x:u8, y:u8, old:u8, p:u8):u8
 	return v;
 }
 
+// RLE (NES Screen Tool の形式: fclib/rle.fc。const T = @rle(...)) を展開しながら a から横に書く。繰り返しは埋める項目・続く値は
+// 写す項目になる (描画を止めていればその場で書く)。大きな画面は描画を止めて write_rle_now で
+public function put_rle(a:u16, src:[:u16]const u8):void
+{
+	if (@len(src) == 0) {
+		return;
+	}
+	var p = @ptr(src);
+	var end = p + @len(src);
+	var tag = *p;
+	p += 1;
+	var last:u8 = 0;
+	while (p != end) {
+		// 印までの値をまとめて写す (255 ずつ)
+		var q = p;
+		while (q != end && *q != tag && q - p < 255) {
+			q += 1;
+		}
+		if (q != p) {
+			var n = (q - p) as u8;
+			put(a, @slice(p, n));
+			a += n;
+			last = *(q - 1);
+			p = q;
+			continue;
+		}
+		p += 1;
+		if (p == end) {
+			return;
+		}
+		var n = *p;
+		p += 1;
+		if (n == 0) {
+			return;
+		}
+		fill(a, last, n);
+		a += n;
+	}
+}
+
 // ---- 描画を止めている間に直に書く ----
 
 function write_dir(a:u16, data:[:u16]const u8, flags:u8):void
@@ -236,5 +276,43 @@ public function fill_now(a:u16, v:u8, n:u16):void
 	while (n != 0) {
 		nes.PPUDATA = v;
 		n -= 1;
+	}
+}
+
+// RLE (NES Screen Tool の形式) を展開しながら a から横に書く (描画を止めている間だけ。RAM のバッファが要らない: neslib の
+// vram_unrle)
+public function write_rle_now(a:u16, src:[:u16]const u8):void
+{
+	if (@len(src) == 0) {
+		return;
+	}
+	nes.PPUCTRL = frame.ctrl & ~nes.CTRL_INC32;
+	nes.PPUADDR = (a >> 8) as u8;
+	nes.PPUADDR = a as u8;
+	var p = @ptr(src);
+	var end = p + @len(src);
+	var tag = *p;
+	p += 1;
+	var last:u8 = 0;
+	while (p != end) {
+		var c = *p;
+		p += 1;
+		if (c != tag) {
+			nes.PPUDATA = c;
+			last = c;
+			continue;
+		}
+		if (p == end) {
+			return;
+		}
+		var n = *p;
+		p += 1;
+		if (n == 0) {
+			return;
+		}
+		while (n != 0) {
+			nes.PPUDATA = last;
+			n -= 1;
+		}
 	}
 }

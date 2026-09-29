@@ -556,9 +556,9 @@ base.asm を自前で持つプロジェクトは `FC_SZP: .res N` / `FC_SRAM: .r
 `main`、`options(interrupt: true)` / `options(symbol: ...)` の関数、アドレスを取られた関数（関数ポインタへの代入、
 `const` の表、`include` した asm やインラインアセンブラからの参照）から呼び出しをどう辿っても届かない関数は、
 コンパイルはされるが**出力されない**（コードも静的フレームも消える。`public` でも同じ: プログラム全体で判断する）。
-fc 4 のモジュールの private な変数（`public` でも `options(symbol:)` でもなく、置き場所（`segment:` / `bss:`）を指定していないもの）も、
-出力する関数・定数の表・`include` した asm・インラインアセンブラのどれからも参照されなければ領域を取らない（どこからも呼ばれない
-関数や `@(test)` の関数だけが使うバッファで RAM を食わない。置き場所を指定した変数は整列の詰め物のように並びを当てにしうるので残す。
+fc 4 のモジュールの private な変数（`public` でも `options(symbol:)` でもなく、置き場所（`segment:` / `bss:`）を指定していないもの）と
+配列定数も、出力する関数・定数の表・`include` した asm・インラインアセンブラのどれからも参照されなければ領域を取らない（どこからも呼ばれない
+関数や `@(test)` の関数だけが使うバッファ・表で RAM・ROM を食わない。置き場所を指定した変数は整列の詰め物のように並びを当てにしうるので残す。
 fc 3 以前のモジュールは今までどおり。`FC_DISABLE=unused-globals` で切れる）。
 `fcc build -d` の要約に `unused (not emitted): N functions: ...` と出る。asm 側から `jsr` したい fc の関数は
 `options(symbol:)` を付けるか、asm ファイルを `include` してその中で参照する。出力されない関数のインラインアセンブラは
@@ -791,6 +791,8 @@ var v:int16 = s as int16;                // s:sint8 = -1 なら -1 (符号拡張
 | `@assert_eq(実際, 期待)` | 違えば「ファイル:行: assert_eq failed: 実際の綴り is 値 (want 値)」を console に出して終了コード 1。整数・bool・enum |
 | `cos(x)` | `math.sin(x + 64)` に展開（`math` モジュールが必要）。`math.cos(x)` とも書ける |
 | `incbin("file")` | ファイルを配列定数として埋め込む |
+| `@lz4(data)` | data（u8 の定数の配列: `@incbin("map.bin")`・配列リテラル・文字列）をコンパイル時に LZ4 のブロック形式に圧縮した u8 の配列の定数（`lz4.unpack` が展開する）。`const MAP = @lz4(@incbin("map.bin"));` |
+| `@rle(data)` | data を NES Screen Tool の RLE の形式（先頭が印、印 + n で直前の値を n 回、印 + 0 で終わり。neslib の `vram_unrle` と同じ）に圧縮した u8 の配列の定数（`rle.unpack`・`vram.write_rle_now`・`vram.put_rle` が展開する）。印に使える値（データに現れない値）が無ければエラー |
 | `textmap("table.txt" [, "tr.po"])` | 文字表を読み、文字列→文字コード配列の変換器（定数）を作る。.po を渡すと訳文に差し替える（§7.1） |
 
 ### 7.1 `textmap`
@@ -869,7 +871,9 @@ printf("x={:04X} {}\n", x, name);                 // console に出す
 | `nes`（NES。fc 4 の新しい名前。2026-09-29） | レジスタ（NESdev の名前: `PPUCTRL` / `PPUMASK` / `PPUSTATUS` / `OAMADDR` / `OAMDATA` / `PPUSCROLL` / `PPUADDR` / `PPUDATA` / `OAMDMA`、APU の `SQ1_VOL` など、`JOY1` / `JOY2` / `APU_FRAME`）とビットの定数（`CTRL_NMI` / `CTRL_INC32` / `MASK_BG` / `MASK_SPR` / `ATTR_FLIP_H` など）。旧版（`PPU_CTRL1` などの名前）は castle・miku の横にコピー |
 | `pad`（NES。fc 4 の新しい API。2026-09-29） | 2 つのパッド: `poll()`（フレームに 1 回。DMC の読み間違いに備えて 2 回続けて同じになるまで読む）で `p1` / `p2`（`struct Pad { held; pressed; released; }`）、ボタンの定数 `A` / `B` / `SELECT` / `START` / `UP` / `DOWN` / `LEFT` / `RIGHT`。旧版（`pad.update()` / `pad.cur`）は castle・miku の横にコピー |
 | `unittest` | `assert_true(cond, msg)`, `assert_equal(a, b, msg)` |
-| `rle` / `lzw` / `inflate` | 圧縮データの展開 |
+| `lzw` | 圧縮データの展開（castle の形式。castle の移行を決めるまで今のまま） |
+| `lz4`（fc 4 の新しいモジュール。2026-09-29） | LZ4 のブロック形式の展開: `unpack(dst:[:u16]u8, src:[:u16]const u8):u16`（書いた長さ。書き先が足りないかデータが壊れていれば止まる）/ `try_unpack`（失敗なら `0xffff`）。データは `@lz4(...)` で。LZ 系なので書き先は RAM。展開のコード（asm）は約 310 バイト、1 バイト約 26（文字）〜 75（短い一致の多いデータ）サイクル |
+| `rle`（fc 4 の新しい形式。2026-09-29） | NES Screen Tool の RLE の展開: `unpack(dst, src):u16` / `try_unpack`。データは `@rle(...)` で。描画を止めた画面へは `vram.write_rle_now`、描画中は `vram.put_rle`。旧版（codebase64 の形式）は test/ の横にコピー。inflate（未完成）は外した |
 
 fc 4 の新しい fclib（作り直しの途中。計画は [v4_stdlib.md](v4_stdlib.md)。上の表の今のモジュールは入れ替えるまで残す。入れ替えた
 mem / math の旧版は、使っている所（examples/castle/src、examples/miku、test/）の横にコピーしてある: `use` はソースのディレクトリを
@@ -881,7 +885,7 @@ mem / math の旧版は、使っている所（examples/castle/src、examples/mi
 | `console`（ターゲット別） | デバッグ出力: `write(s:[:u16]const u8)`（長さの分だけ。途中の 0 も）, `write_z(p)`（終端 0）, `write_z_in(s)`（s の中の最初の 0 まで）, `newline()`, `exit(code)`, `init()`。emu はホストへ、NES は `init()` で描画を止めてネームテーブル 0 に直に書く（ASCII の並びのフォントの CHR が要る: fc の内蔵のフォント `@include("font.chr")`。30 行で上に戻る。`exit` は `exit_code` / `exited` を残して画面を出して止まる）。NES は書いた文字と終了コードを $4018 / $4019 にも書く（製品の NES では何も起きない CPU の試験用の番地。内蔵の NES のランナーが受け取る: `fcc test -t nes`）。emu は `bench_start()` / `bench_end()` も |
 | `sys` | `panic(msg)`（`panic: msg` を console に出して終了コード 1）, `assert(cond, msg)` |
 | `frame`（NES） | NMI（asm。ライブラリが持つ）とフレームの同期: `init()`（NMI を有効に）, `wait()`（次の NMI まで。その NMI で OAM の DMA と VRAM のキューを送る）, `wait_n(n)`, `render_on()` / `render_off()`（次の NMI で変わり、戻ったときには変わっている）/ `render(mask)`, `rendering()`, `scroll(x, y, nt)`, `count`（NMI の数）, `hook`（NMI の最後に呼ぶ `fn():void`。asm か `@(interrupt)` の関数）。NMI は主の側が `wait` で待っているときだけ PPU に書く（処理落ちのフレームはスクロールなどだけ、描画を止めていて誰も待っていなければ PPU に触らない）。キューは `QUEUE_SIZE`（既定 128 バイト）と NMI の手間の上限 `BUDGET` を持つ（fc.toml の `[define.frame]` で変えられる） |
-| `vram`（NES） | 番地 `addr(nt, x, y)` / `attr_addr(nt, x, y)` / `attr_shift(x, y)`、キュー（描画を出している間は次の NMI で送り、止めている間はその場で書く）: `put(a, data)`（横）/ `put_v`（縦）/ `fill(a, v, n)` / `set(a, v)` / `try_put`（`bool`）/ `reserve(a, n):[]u8`（キューの中へ直に書く: `@format(vram.reserve(a, 5), ...)`）/ `room()` / `set_attr(nt, x, y, old, p)`。満杯・手間の上限ならキューだけを次の NMI で送ってから積む（大きな put は分けて積む）。描画を止めている間の直接の書き込み: `write_now(a, data:[:u16]const u8)` / `write_v_now` / `fill_now(a, v, n:u16)` |
+| `vram`（NES） | 番地 `addr(nt, x, y)` / `attr_addr(nt, x, y)` / `attr_shift(x, y)`、キュー（描画を出している間は次の NMI で送り、止めている間はその場で書く）: `put(a, data)`（横）/ `put_v`（縦）/ `fill(a, v, n)` / `set(a, v)` / `try_put`（`bool`）/ `reserve(a, n):[]u8`（キューの中へ直に書く: `@format(vram.reserve(a, 5), ...)`）/ `put_rle(a, src)`（RLE を繰り返しは埋める項目・続く値は写す項目にして積む）/ `room()` / `set_attr(nt, x, y, old, p)`。満杯・手間の上限ならキューだけを次の NMI で送ってから積む（大きな put は分けて積む）。描画を止めている間の直接の書き込み: `write_now(a, data:[:u16]const u8)` / `write_v_now` / `fill_now(a, v, n:u16)` / `write_rle_now(a, src)`（RLE を展開しながら。RAM のバッファが要らない） |
 | `pal`（NES） | 32 色の元の色と明るさを持ち、変えると明るさを掛けた色を vram のキューに積む: `set_all(p)`, `set(i, c)`, `get(i)`, `bright(level)`（0 真っ黒〜4 元の色〜8 真っ白）, `brightness()`, `fade(to, frames)`, `shade(c, d)`。16 / 20 / 24 / 28 番は PPU で 0 / 4 / 8 / 12 番と同じ所なので、背景の色を送る |
 | `oam`（NES） | OAM の写し `buf`（256 バイト。既定 $0700、fc.toml の `[define.oam] ADDR = 0x0300` などで変えられる）: `begin()`, `spr(x, y, tile, attr):bool`（満杯なら false）, `meta(x:i16, y:i16, m:[]const u8, flip)`（`{dx:i8, dy:i8, tile, attr}` の並び。画面の外は置かず、`ATTR_FLIP_H` / `ATTR_FLIP_V` で反転）, `end()`（置かなかった分を隠す）, `count()`, `reserve(k)` / `set(i, …)`（先頭の k 枚を固定に）, `hide(i)`。最初に使ったときに全部を隠してから `frame` の DMA を始める |
 | `rand` | 16 ビットの xorshift（7・9・8。周期 65535）: `seed(s)`（0 は 1）, `next_u16()`, `next_u8()`（上位バイト）, `below(n)`（0〜n-1）, `chance(p)`（p/256 で真）, `pick(weights:[]const u8)`（重み付きの選択） |

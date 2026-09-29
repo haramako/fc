@@ -1,0 +1,5 @@
+#fc 4
+// 旧 fclib の rle のコピー (2026-09-29。fclib の rle を NES Screen Tool の形式に入れ替えた後も、このテストを保つため。doc/v4_stdlib.md §7)
+@(bank: -1);
+@include("rle.asm");
+public function unpack(dest:*u8, src:*const u8):u16 @(abi: "stack");

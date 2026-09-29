@@ -1,4 +1,95 @@
 #fc 4
+// RLE (NES Screen Tool の形式: neslib の vram_unrle と同じ) の展開 (doc/v4_stdlib.md §3.1・§8 の 10)。データは fc がコンパイル時に
+// 作る:
+//   const TITLE = @rle(@incbin("title.nam"));
+//   var n = rle.unpack(buf, TITLE);        // RAM へ (足りなければ止まる)
+// 描画を止めた画面へ直に流すのは vram.write_rle_now、描画中にキューへ積むのは vram.put_rle (fclib/nes/vram.fc)。
+// 形式: 先頭の 1 バイトが印。印でないバイトはそのまま (直前の値として覚える)、印 + n は直前の値を n 回、印 + 0 で終わり。
+// 旧版 (codebase64 の形式) は test/rle.fc にコピーがある。
 @(bank: -1);
-@include("rle.asm");
-public function unpack(dest:*u8, src:*const u8):u16 @(abi: "stack");
+use sys;
+
+// src を dst に展開して書いた長さを返す。dst が足りないかデータが壊れていれば止まる
+public function unpack(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	var n = try_unpack(dst, src);
+	if (n == 0xffff) {
+		sys.panic("rle: dst too small or broken data");
+	}
+	return n;
+}
+
+// unpack と同じだが、失敗 (dst が足りない・終わりの印が無い) なら 0xffff を返す
+public function try_unpack(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	if (@len(src) == 0) {
+		return 0xffff;
+	}
+	var p = @ptr(src);
+	var end = p + @len(src);
+	var d = @ptr(dst);
+	var room = @len(dst);
+	var tag = *p;
+	p += 1;
+	var last:u8 = 0;
+	while (p != end) {
+		var c = *p;
+		p += 1;
+		if (c != tag) {
+			if (room == 0) {
+				return 0xffff;
+			}
+			*d = c;
+			d += 1;
+			room -= 1;
+			last = c;
+			continue;
+		}
+		if (p == end) {
+			return 0xffff;
+		}
+		var n = *p;
+		p += 1;
+		if (n == 0) {
+			return @len(dst) - room;
+		}
+		if (room < n) {
+			return 0xffff;
+		}
+		room -= n;
+		while (n != 0) {
+			*d = last;
+			d += 1;
+			n -= 1;
+		}
+	}
+	return 0xffff;
+}
+
+// ---- テスト ----
+
+const RUNS = [1, 2, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5];
+const PACKED = @rle([1, 2, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5]);
+var test_buf:[300]u8;
+
+function test_unpack():void @(test)
+{
+	@assert(@len(PACKED) < @len(RUNS));
+	@assert_eq(unpack(test_buf, PACKED), @len(RUNS));
+	for (var i:u8 = 0; i < @len(RUNS); i += 1) {
+		@assert(test_buf[i] == RUNS[i]);
+	}
+	// 255 を超える繰り返し (印 + 255 が続く)
+	const LONG = @rle("xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaay");
+	@assert_eq(@len(LONG), 10);   // 印, x, a, 印 255, 印 24, y, 印 0
+	@assert_eq(unpack(test_buf, LONG), 282);
+	@assert(test_buf[0] == 120 && test_buf[1] == 97 && test_buf[280] == 97 && test_buf[281] == 121);
+}
+
+function test_errors():void @(test)
+{
+	@assert_eq(try_unpack(test_buf[..5], PACKED), 0xffff);   // 書き先が足りない
+	const NO_END = [9, 1, 2, 9, 3];                            // 終わりの印が無い
+	@assert_eq(try_unpack(test_buf, NO_END), 0xffff);
+	@assert_eq(try_unpack(test_buf, @rle("")), 0);
+}

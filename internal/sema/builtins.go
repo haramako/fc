@@ -135,6 +135,7 @@ func registerBuiltins(p *Program) {
 	registerSliceBuiltins(h)
 	registerFormatBuiltins(h)
 	registerTestingBuiltins(h)
+	registerCompressBuiltins(h)
 	registerLogBuiltin(h)
 
 	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。doc/v3_plan.md §3)

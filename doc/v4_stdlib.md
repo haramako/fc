@@ -356,7 +356,10 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    fclib/nes/font.txt から TestFontChr が作る。**NES の console は $4018 / $4019 にも書き、ランナーが出力と終了コードを受け取る**。
    fc 4 の使われない private な変数は領域を取らないようにした（テストだけが使うバッファ。language_reference §4.7）
 4. **広げる**: mmc3 / mmc1 / uxrom（far call と合わせて）、lzw / rle の slice の版、メタスプライト・メタタイル・属性、フェード、音の
-   呼び出し口
+   呼び出し口。✅ 2026-09-29: LZ4（`internal/lz4` の圧縮・`@lz4`・`fclib/lz4.fc` の asm の展開。TestLz4Random が乱数のデータで
+   確かめる）と RLE（NES Screen Tool の形式: `internal/rle`・`@rle`・`rle.unpack`・`vram.write_rle_now` / `put_rle`。旧 rle は
+   test/ の横にコピー）、inflate を外した。メタスプライト（`oam.meta`）・フェード（`pal.fade`）・音の呼び出し口（`frame.hook`）は段 3 で。
+   `rle.to_vram` は NES の関数なので `vram.write_rle_now` にした（rle はどのターゲットでも使うモジュール）
    **同じ名前のモジュールの入れ替え（2026-09-29 決定）**: mem・math など今の fclib と同じ名前のモジュールを新しい API にするときは、
    今の版を使っている所の横にコピーして残す（castle の src、miku、test/、bench/ など。`use` はソースのディレクトリを先に探すので
    コピーが見つかる）。fclib の名前に結びついた組み込み（`@copy` → `mem.copy`、`cos` → `math.sin`）は、読み込んだモジュールの関数の

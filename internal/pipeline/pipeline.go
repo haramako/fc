@@ -104,6 +104,7 @@ func markUnusedGlobals(mods []*ir.Module) {
 	visit = func(o ir.Operand) {
 		switch x := o.(type) {
 		case *ir.Value:
+			// (private な配列定数の要素が参照するものも数える: 表そのものが使われなくても。控えめに残す)
 			if x == nil {
 				return
 			}
@@ -179,7 +180,7 @@ func markUnusedGlobals(mods []*ir.Module) {
 			continue
 		}
 		for _, d := range m.Defs {
-			if d.Kind == ir.DefBss && d.Private {
+			if (d.Kind == ir.DefBss || d.Kind == ir.DefBlock) && d.Private {
 				d.Unused = !used[d.Sym]
 			}
 		}

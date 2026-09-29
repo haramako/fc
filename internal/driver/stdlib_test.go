@@ -123,3 +123,60 @@ function main():void
 		t.Errorf("err = %v, stdout = %q", r.Err, r.Stdout)
 	}
 }
+
+// TestLz4Random: 乱数で作ったデータ (圧縮の効き方の違うもの) を @lz4(@incbin(...)) でコンパイル時に圧縮し、lz4.unpack で
+// 展開して元のデータと比べる (-O 0 / -O 2)。1 バイトの展開のサイクル数も出す。
+func TestLz4Random(t *testing.T) {
+	t.Parallel()
+	r := rand.New(rand.NewSource(1))
+	for k, n := range []int{1, 13, 200, 1000, 4000} {
+		data := make([]byte, n)
+		switch k % 3 {
+		case 0:
+			r.Read(data)
+		case 1:
+			for i := range data {
+				data[i] = byte(r.Intn(3))
+			}
+		default:
+			for i := range data {
+				data[i] = "fc lz4 fc lz4 "[i%14] ^ byte(r.Intn(8)/7)
+			}
+		}
+		src := `#fc 4
+use console;
+use lz4;
+const RAW = @incbin("d.bin");
+const PACKED = @lz4(@incbin("d.bin"));
+var buf:[4100]u8 @(segment: "BSS_EX");
+function main():void
+{
+	console.bench_start();
+	var n = lz4.unpack(buf, PACKED);
+	console.bench_end();
+	var bad:u16 = 0;
+	for (var i:u16 = 0; i < @len(RAW); i += 1) {
+		if (buf[i] != RAW[i]) {
+			bad += 1;
+		}
+	}
+	printf("{} {} {}\n", n, bad, @len(PACKED));
+	console.exit(0);
+}
+`
+		for _, level := range []int{-1, 0} {
+			res := testBuild(t, buildSpec{Files: map[string]string{"t.fc": src, "d.bin": string(data)}, Run: true, Level: level})
+			if res.Err != nil {
+				t.Fatalf("n=%d: %v", n, res.Err)
+			}
+			var gotN, bad, packed int
+			fmt.Sscan(res.Stdout, &gotN, &bad, &packed)
+			if gotN != n || bad != 0 {
+				t.Errorf("n=%d (-O %d): %q", n, level, res.Stdout)
+			}
+			if level == 0 {
+				t.Logf("%d バイト → %d バイト、展開 %d サイクル (1 バイト %.1f)", n, packed, res.Res.Cycles, float64(res.Res.Cycles)/float64(n))
+			}
+		}
+	}
+}

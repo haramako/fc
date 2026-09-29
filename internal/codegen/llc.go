@@ -216,6 +216,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			}
 			asm.push(fmt.Sprintf("%s: .res %d", mangle(d.Sym), d.Type.Size))
 		case ir.DefBlock:
+			if d.Unused {
+				continue // どこからも参照されない private な配列定数は出さない (pipeline.markUnusedGlobals)
+			}
 			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
