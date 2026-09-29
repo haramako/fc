@@ -24,7 +24,22 @@ export default defineConfig({
   },
 
   themeConfig: {
-    nav: [{ text: 'リリース', link: 'https://github.com/haramako/fc/releases' }],
+    nav: [
+      { text: 'はじめに', link: '/start/install' },
+      { text: 'サンプル', link: '/samples/' },
+    ],
+    sidebar: [
+      {
+        text: 'はじめに',
+        items: [
+          { text: 'インストール', link: '/start/install' },
+          { text: '最初のプログラム', link: '/start/hello-emu' },
+          { text: 'NES で Hello', link: '/start/hello-nes' },
+          { text: '小さなゲームを作る', link: '/start/first-game' },
+        ],
+      },
+      { text: 'サンプル集', link: '/samples/' },
+    ],
     socialLinks: [{ icon: 'github', link: 'https://github.com/haramako/fc' }],
 
     search: {

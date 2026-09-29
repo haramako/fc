@@ -2,6 +2,7 @@ package doccheck
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
 	"github.com/haramako/fc/internal/syntax"
 )
@@ -23,6 +25,30 @@ type codeBlock struct {
 }
 
 func (b *codeBlock) name() string { return b.file + ":" + strconv.Itoa(b.line) }
+
+// codeOrEmpty は中身 (b が nil なら "")。
+func (b *codeBlock) codeOrEmpty() string {
+	if b == nil {
+		return ""
+	}
+	return b.code
+}
+
+// cliErrors は fcc と同じ形のエラーの行 (`file:line:col: error: msg`。cmd/fcc の printErrors)。
+func cliErrors(err error) string {
+	es := diag.Errors(err)
+	if len(es) == 0 {
+		return err.Error()
+	}
+	var b strings.Builder
+	for _, e := range es {
+		fmt.Fprintf(&b, "%s: error: %s\n", e.Pos, e.Msg)
+	}
+	return b.String()
+}
+
+// fcFileRe は行の頭の「ファイル名.fc:」(エラーの位置)。
+var fcFileRe = regexp.MustCompile(`(?m)^[\w./-]+\.fc:`)
 
 var fenceRe = regexp.MustCompile("^([ \t]*)(`{3,}|~{3,})[ \t]*([^`]*)$")
 
@@ -92,7 +118,7 @@ func docsFiles(t *testing.T) []string {
 // TestDocsExamples: docs/ の ```fc のブロックを確かめる。印 (info string の fc の後の語) ごとに:
 //
 //	(無し)  断片。構文が通り、fcc fmt の書式と同じ (#fc の行が無ければ fc 4。トップレベルで読めなければ関数の本体として読む)
-//	run     emu でビルドして走らせ、終了コード 0 で、次の ```text のブロックと出力が同じ。警告も無いこと
+//	run     emu でビルドして走らせ、終了コード 0 で、次の ```text のブロック (次の ```fc より前) と出力が同じ。警告も無いこと
 //	test    fcc test と同じく @(test) の関数を走らせて通る
 //	nes     -t nes でビルドが通る (警告無し)
 //	error   ビルドがエラーになり、次の ```text のブロックがあればその文言を含む
@@ -110,9 +136,15 @@ func TestDocsExamples(t *testing.T) {
 			if b.lang != "fc" {
 				continue
 			}
-			var next *codeBlock // 次のブロック (出力の ```text)
-			if i+1 < len(blocks) && blocks[i+1].lang == "text" {
-				next = blocks[i+1]
+			var next *codeBlock // 出力の ```text (次の ```fc より前の最初のもの。間の ```bash などは飛ばす)
+			for _, n := range blocks[i+1:] {
+				if n.lang == "fc" {
+					break
+				}
+				if n.lang == "text" {
+					next = n
+					break
+				}
 			}
 			b := b
 			t.Run(b.name(), func(t *testing.T) {
@@ -179,8 +211,9 @@ func checkBlock(t *testing.T, root string, b, next *codeBlock) {
 		if r.err == nil {
 			t.Fatalf("%s: ```fc error なのにエラーにならない", b.name())
 		}
-		if next != nil && !strings.Contains(r.err.Error(), strings.TrimSpace(next.code)) {
-			t.Errorf("%s: エラーの文言が %s と違う\ngot:  %v\nwant: %s", b.name(), next.name(), r.err, strings.TrimSpace(next.code))
+		// ドキュメントには利用者が見る形 (`over.fc:7:2: error: ...`) で書くので、行の頭のファイル名はビルドした t.fc と読み替える
+		if want := fcFileRe.ReplaceAllString(strings.TrimSpace(next.codeOrEmpty()), "t.fc:"); !strings.Contains(cliErrors(r.err), want) {
+			t.Errorf("%s: エラーの文言が %s と違う\ngot:  %s\nwant: %s", b.name(), next.name(), cliErrors(r.err), want)
 		}
 	default:
 		t.Fatalf("%s: 知らない印 %q (run / test / nes / error / ignore)", b.name(), mode)

@@ -7,11 +7,14 @@ hero:
   tagline: C に近い言語で書いたプログラムを、6502 のアセンブリと NES の ROM にします
   actions:
     - theme: brand
+      text: はじめる
+      link: /start/install
+    - theme: alt
+      text: サンプルを見る
+      link: /samples/
+    - theme: alt
       text: GitHub
       link: https://github.com/haramako/fc
-    - theme: alt
-      text: ダウンロード
-      link: https://github.com/haramako/fc/releases
 
 features:
   - title: C に近い書き方

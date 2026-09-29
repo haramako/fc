@@ -7,8 +7,12 @@
 
 ## Ownership
 
-- `*.md` … サイトのページ（今はトップの `index.md` だけ。構成は計画の「サイトの構成」）
-- `.vitepress/config.mts` … サイトの設定（`base: '/fc/'`、fc の色付け、日本語の検索、`srcExclude`）
+- `*.md` … サイトのページ（`index.md`・`start/`・`samples/`。構成は計画の「サイトの構成」）
+- `.vitepress/config.mts` … サイトの設定（`base: '/fc/'`、ナビとサイドバー、fc の色付け、日本語の検索、`srcExclude`）。
+  ページを足したらサイドバーにも足す
+- `.vitepress/theme/` … 既定のテーマに足す CSS だけ（NES の画面を 2 倍にぼかさずに出す）
+- `public/samples/*.png` … サンプルの画面。QuickNES の画面をテストが書く（Windows で QuickNES のコアがあるとき）。サンプルを変えたら撮り直す:
+  `FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)$|TestSampleScreens'`
 - `package.json` / `package-lock.json` … Node の依存（VitePress）。Node は `docs/` に閉じる（ルートは Go だけ）
 - `language_reference.md` … 作り直す前の言語仕様。参考文献として残すだけでサイトには出さない（`srcExclude`）。新しい言語仕様ができたら消す
 - 公開は `.github/workflows/docs.yml`（`feature/v4` への push でビルドして Pages へ。`main` にマージしたら `main` に変える）

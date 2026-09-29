@@ -81,7 +81,7 @@ function move():void
 				}
 			}
 		}
-	} elsif (!floor_at(px, ((py >> 4) as u8) + 8)) {
+	} else if (!floor_at(px, ((py >> 4) as u8) + 8)) {
 		on_ground = false;   // 足場の端から落ちる
 		vy = 0;
 	}

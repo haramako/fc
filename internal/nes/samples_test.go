@@ -301,3 +301,35 @@ func TestExampleWave(t *testing.T) {
 		t.Errorf("波が動いていない")
 	}
 }
+
+// TestSampleScreens: 利用者向けのドキュメントのサンプル集 (docs/samples) の画面のうち、ほかのテストが撮らないもの (hello・miku4) を
+// QuickNES で撮る。FC_SAMPLE_PNG_DIR を与えたときだけ走る (jump・statusbar・wave はそれぞれのテストが同じ場所に書く):
+//
+//	FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)|TestSampleScreens'
+func TestSampleScreens(t *testing.T) {
+	if os.Getenv("FC_SAMPLE_PNG_DIR") == "" {
+		t.Skip("FC_SAMPLE_PNG_DIR が無い")
+	}
+	t.Parallel()
+	shots := []struct {
+		name, dir, main string
+		script          []struct{ buttons, frames int }
+	}{
+		// フェードが済んでから右下へ少し動かす
+		{"hello", "hello", "hello.fc", []struct{ buttons, frames int }{{0, 60}, {ButtonRight | ButtonDown, 12}, {0, 2}}},
+		// 少し進んで敵と弾が出たところ
+		{"miku4", "miku4", "miku.fc", []struct{ buttons, frames int }{{0, 30}, {ButtonLeft | ButtonA, 20}, {ButtonA, 120}}},
+	}
+	for _, s := range shots {
+		t.Run(s.name, func(t *testing.T) {
+			t.Parallel()
+			p := buildNes(t, exampleFiles(t, s.dir, s.main))
+			q := openQuickNES(t, romOf(t, p))
+			for _, st := range s.script {
+				q.SetButtons(0, byte(st.buttons))
+				q.RunFrames(st.frames)
+			}
+			saveSample(t, s.name, q.Image())
+		})
+	}
+}
