@@ -190,11 +190,22 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       `opt.splitSliceArgs`（段の名前 `sliceargs`）が「一時変数のポインタと長さを書いてすぐ push_arg」をポインタと長さの 2 つの
       push_arg（`Op.ArgCont`）にする（printf 2 回と vram.put 3 回の main が 271 → 211 バイト）。✅ 2026-09-29: `[]` → `[:u16]` の変換を
       挟むもの（元の値までたどり、u8 の長さは 1 バイトと上の桁の 0 の 2 つの push_arg に）、定数の添字の配列のアドレス（`buf[2..]` は
-      `lda #.LOBYTE(buf+2)` の即値。castle は ROM が変わり 0〜0.2% 速く、QuickNES の 3000 フレームの画面は前と同じ）。残り: インライン展開した関数の slice の引数も
-      一時変数へ写し直す（2026-09-29: `lz4.unpack` が `try_unpack` を inline で呼ぶと 155 バイト、`unpack_raw` を直に呼ぶと 123 バイト）
+      `lda #.LOBYTE(buf+2)` の即値。castle は ROM が変わり 0〜0.2% 速く、QuickNES の 3000 フレームの画面は前と同じ）。✅ 2026-09-29:
+      インライン展開した関数の slice の引数の写し（段 `aggcopy`: 3 バイト以上の値の `load L ← P` を伝播。例の包み関数 101 → 69 バイト）、
+      `s = s[n..]` の組み立ての一時の値（段 `aggbuild`: 部分をそのまま s に書く）
 - [ ] LZ4 の展開を速く（今は短い一致の多いデータで 1 バイト約 75 サイクル。列ごとの jsr と長さの読みの手間が大半）
 - [ ] fclib の NES のモジュールを縮める（2026-09-29 の miku4: vram 976 バイト（put_dir 347・fill 146・write_dir 133・reserve 126）、
-      frame の NMI 304、pal.shade 133。slice の受け渡しと 16 ビットの演算の生成コードが大きい。速さの要る所は asm に）
+      frame の NMI 304、pal.shade 133。slice の受け渡しと 16 ビットの演算の生成コードが大きい。速さの要る所は asm に）。
+      ✅ 2026-09-29 のコンパイラ側（vram 944 → 868）: インライン展開した bool の関数の結果をフラグのまま分岐（regalloc.allocateCond を
+      命令の順に）、`s = s[n..]`（aggbuild）、要素 1 バイトの `p + i` は添字をそのまま adc、X に常駐する添字でグローバルの配列に
+      書くループで Y を退避しない（needsY）、`(n as u16) << k` を上位と下位に分けて計算、定数の加減算の連鎖を畳む
+      （`room() - 3` → `125 - len`。inline した関数の戻り値の写しを辿る）、飛び先が return だけの jump をその場の return に。
+      続けて（vram 868 → 786、pad 213 → 173、en 1975 → 1884）: `(a >> 8) as u8` は a の上位を直に読む、`(i + n) - i` → n、
+      `return q[i..i + n]` は戻り値の領域に直に組み立てる、inline した関数に渡した `&g` を通す読み書き（写しとフィールドのずれを
+      辿る）は g の直の読み書き（pad.update）、0 との等値の比較は lda の Z をそのまま使う（`cmp #0` を出さない）。fclib 側:
+      vram.write_dir を `for (var v in data)`（[:u16] の添字で毎回番地を足す）からポインタを進めるループに。
+      残り: `[:u16]` の for-each の添字の読みを、ポインタを進める形にする（強さの軽減。write_dir と同じことをコンパイラで）、
+      `frames.Place` の ZP の選び方（深い順だと main のループの変数が RAM に落ちることがある: miku4 の main が +24 バイト）
 - [x] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ） ✅ 2026-09-29（警告は構文の lint
       `bitwiseWithComparison` として既にあった。見落としたのは `fcc test` が警告を出していなかったから: `fcc test` で出し、
       pkg/fc の TestFclibModuleTests と TestFclibNoWarnings が fclib のモジュールの警告を見張る）

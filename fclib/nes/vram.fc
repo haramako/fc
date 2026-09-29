@@ -97,13 +97,7 @@ function put_dir(a:u16, data:[]const u8, flags:u8):void
 		if (room() < 4 || budget() < COST_HEAD + 1) {
 			frame.flush();
 		}
-		var n = @len(s);
-		if (n > room() - 3) {
-			n = room() - 3;
-		}
-		if (n > budget() - COST_HEAD) {
-			n = budget() - COST_HEAD;
-		}
+		var n = @min(@len(s), @min(room() - 3, budget() - COST_HEAD));
 		frame.queue_cost += COST_HEAD + n;
 		var i = push_head(a, flags, n);
 		for (var k:u8 = 0; k < n; k += 1) {
@@ -251,8 +245,11 @@ function write_dir(a:u16, data:[:u16]const u8, flags:u8):void
 	nes.PPUCTRL = c;
 	nes.PPUADDR = (a >> 8) as u8;
 	nes.PPUADDR = a as u8;
-	for (var v in data) {
-		nes.PPUDATA = v;
+	var p = @ptr(data);
+	var end = p + @len(data);
+	while (p != end) {
+		nes.PPUDATA = *p;
+		p += 1;
 	}
 	if (flags != 0) {
 		nes.PPUCTRL = c & ~nes.CTRL_INC32;
