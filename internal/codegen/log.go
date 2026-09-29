@@ -113,6 +113,11 @@ func (l *Llc) logLoc(lmd *ir.Lambda, opNo int, op *ir.Op, v ir.Operand, live fun
 	// 常駐のメモリ側 (Home) の変数: 常駐の値がレジスタで更新され、死んだ後は書き戻されないので、メモリ側が正しいのは
 	// 常駐の値が生きていてここでは常駐していないとき (メモリ側に退避している) か、メモリ側の変数そのものが生きているとき
 	if rs := residentsOf(lmd, u); len(rs) > 0 {
+		if u.LogStale {
+			// メモリ側への代入が消えている (常駐の割付の後の litprop がループの変数の初期値の書き込みを消す): 常駐がレジスタに
+			// ない地点のメモリ側は初期値が入っていない (fuzz の TestLogZeroCost で食い違いが増えた)
+			return LogLoc{Kind: "none", Why: "optimized out"}
+		}
 		ok := liveHere(lmd, opNo, u, live)
 		for _, r := range rs {
 			ok = ok || liveHere(lmd, opNo, r, live)

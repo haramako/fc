@@ -328,3 +328,23 @@ func TestLogResidentHomeAtEntry(t *testing.T) {
 		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
 	}
 }
+
+// TestLogLitpropHome: 常駐の割付の後の litprop がループの変数の初期値の書き込み (`load i = 0`) を消すと、常駐のメモリ側 (Home) には
+// 初期値が入らないのに、常駐がレジスタにない地点の @log がメモリ側を読んでいた (fuzz の種 63000128。codegen の logLoc)。
+func TestLogLitpropHome(t *testing.T) {
+	t.Parallel()
+	g := &rpGen{r: rand.New(rand.NewSource(63000128))}
+	g.genProgram()
+	files := g.sources()
+	var logs []string
+	for _, level := range []int{-1, 0} {
+		_, _, l, _, err := logBuild(t, files, level, true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		logs = append(logs, l)
+	}
+	if bad, _ := compareLogValues(logs[0], logs[1]); bad != "" {
+		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
+	}
+}
