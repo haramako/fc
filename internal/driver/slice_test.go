@@ -305,3 +305,66 @@ function main():void
 		t.Errorf("got %q, %v\nwant %q", out, err, want)
 	}
 }
+
+// TestSliceArgsSplit: slice の引数を部品のまま積む (opt.splitSliceArgs。-O 2 だけ) 呼び出しの形を、-O 0 と比べる: 引数の中の
+// 呼び出し、スカラーと slice の並び、`[:u16]` の slice、再帰する (stack の規約の) 関数、関数ポインタ経由 (entry)、abi "frame" の
+// asm の関数 (lz4)、式の値が途中の呼び出しで変わるもの。
+func TestSliceArgsSplit(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+use lz4;
+var buf:[40]u8;
+var g:u8;
+const T = "abcdefghij";
+function sum(s:[]const u8):u16 @(noinline)
+{
+	var r:u16 = 0;
+	for (var c in s) {
+		r += c;
+	}
+	return r;
+}
+function mix(a:u8, s:[]const u8, b:u16, w:[:u16]const u8, c:u8):u16 @(noinline)
+{
+	return a + @len(s) * 10 + b + @len(w) * 100 + c + sum(s) + s[0];
+}
+function bump():u8 @(noinline)
+{
+	g += 1;
+	return g;
+}
+function rec(s:[]const u8, n:u8):u16
+{
+	if (n == 0) {
+		return sum(s);
+	}
+	return rec(s[1..], n - 1) + @len(s);
+}
+function via(f:fn([]const u8):u16, s:[]const u8):u16
+{
+	return f(s);
+}
+const PACKED = @lz4("xxxxxxxxxxyyyyyyyyyy");
+function main():void
+{
+	g = 3;
+	printf("{}\n", sum(T));
+	printf("{}\n", sum(T[2..g]));
+	printf("{}\n", sum(T[bump()..bump() + 3]));
+	printf("{}\n", mix(1, T[..g], 500, T, 7));
+	printf("{}\n", mix(bump(), T[g..], sum(T[..2]), T[1..bump()], g));
+	printf("{}\n", rec(T, 4));
+	printf("{}\n", via(sum, T[3..6]));
+	printf("{}\n", lz4.unpack(buf, PACKED));
+	printf("{}\n", sum(buf[..20]));
+	console.exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(out, "\n") != 9 {
+		t.Errorf("got %q", out)
+	}
+}

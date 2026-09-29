@@ -108,7 +108,7 @@ func markArgY(lmd *ir.Lambda, lambdas map[string]*ir.Lambda) {
 		case ir.OpPushResult, ir.OpPushFastcallResult:
 			stack = append(stack, &pending{})
 		case ir.OpPushArg, ir.OpPushFastcallArg:
-			if len(stack) > 0 {
+			if len(stack) > 0 && !op.ArgCont {
 				p := stack[len(stack)-1]
 				p.args = append(p.args, i)
 			}

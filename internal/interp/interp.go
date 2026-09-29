@@ -595,7 +595,11 @@ func (m *machine) run(f *frame) {
 			}
 			b := m.bytesOf(f, op.Src[0], op.Type.Size)
 			c := calls[len(calls)-1]
-			c.args = append(c.args, b)
+			if op.ArgCont && len(c.args) > 0 {
+				c.args[len(c.args)-1] = append(c.args[len(c.args)-1], b...) // slice の長さの側 (opt.splitSliceArgs)
+			} else {
+				c.args = append(c.args, b)
+			}
 		case ir.OpCall, ir.OpFastcall:
 			if len(calls) == 0 {
 				unsupported("call without push_result")

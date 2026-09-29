@@ -184,7 +184,10 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
 - [x] `fastcall` の廃止（asm で書いた関数との規約の指定をどうするかも） ✅ 2026-09-29（asm の関数は `@(abi: "frame")` と `scratch: N`、
       fc 4 の extern は abi の明示が必須、fclib を fc 4 に移した。v4_plan.md §2）
 - [ ] slice の引数の受け渡しを縮める: 呼び出し側のフレームで slice を組み立ててから呼び先のフレームへ写し直している（`@format` の 1 回
-      約 150 バイト・printf 約 115 バイトの大半。呼び先のフレームに直に組み立てれば半分ほど）。インライン展開した関数の slice の引数も
+      約 150 バイト・printf 約 115 バイトの大半。呼び先のフレームに直に組み立てれば半分ほど）。✅ 2026-09-29 の一部: -O 2 の
+      `opt.splitSliceArgs`（段の名前 `sliceargs`）が「一時変数のポインタと長さを書いてすぐ push_arg」をポインタと長さの 2 つの
+      push_arg（`Op.ArgCont`）にする（printf 2 回と vram.put 3 回の main が 271 → 211 バイト）。残り: `[]` → `[:u16]` の変換を挟むもの、
+      定数の添字の配列のアドレス（`buf[2..]` の `ldy #2; sty reg; adc reg`）。インライン展開した関数の slice の引数も
       一時変数へ写し直す（2026-09-29: `lz4.unpack` が `try_unpack` を inline で呼ぶと 155 バイト、`unpack_raw` を直に呼ぶと 123 バイト）
 - [ ] LZ4 の展開を速く（今は短い一致の多いデータで 1 バイト約 75 サイクル。列ごとの jsr と長さの読みの手間が大半）
 - [ ] fclib の NES のモジュールを縮める（2026-09-29 の miku4: vram 976 バイト（put_dir 347・fill 146・write_dir 133・reserve 126）、

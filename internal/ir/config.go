@@ -8,7 +8,7 @@ package ir
 // (driver が BuildOptions.Config の既定に使う) で、値はビルドごとに sema.Program → ir.Module に付き、各段は
 // lmd.Cfg() で引く。
 //
-// FC_DISABLE=名前,名前,... で切れる名前: ssa mul indexoff induction unroll devirt autoinline sink fuse fieldindex coalesce
+// FC_DISABLE=名前,名前,... で切れる名前: sliceargs ssa mul indexoff induction unroll devirt autoinline sink fuse fieldindex coalesce
 // chain narrow scale commute carry split rotate dup ywalk constidx fieldptr inline resident func-resident step shift8 fuse-index fnptr-reg
 // switch peephole unused-globals (doc/development_notes.md (7): 退行やバグは切って比べる)。FC_NO_RESIDENT=1 は resident と同じ。
 // FC_VERIFY_IR=1 は opt の各段の後に ir.Verify。FC_TRACE_<NAME>=値 は Trace("<name>") で引く (resident / signed / logs / log_id / induction / unroll / pc)。

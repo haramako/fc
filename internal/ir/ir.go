@@ -107,6 +107,9 @@ type Op struct {
 	// InferWidthSign で入力の型から)、以後は入力を差し替えても変わらない。ほかの命令は SignNone
 	Sign  Sign
 	ArgY  bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
+	// ArgCont は OpPushArg が前の push_arg の続き (slice の引数をポインタと長さに分けて積んだ長さの側: opt.splitSliceArgs)。
+	// 引数を数えるもの (markArgY、interp) は前の引数に続けて数える
+	ArgCont bool
 	HoldY bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
 	HoldX bool            // stack 系の呼び出しの push_result と call の間の命令: X = FC_SP を保持中 (常駐は X を使わずメモリ側で。codegen.markHoldX)
 	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)

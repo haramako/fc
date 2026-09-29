@@ -130,6 +130,7 @@ func changes(f func(lmd *ir.Lambda) bool) func(*ir.Lambda, *types.Universe) bool
 // coalesce の後 (`i += s` が `add i = i, s` になってから)、ywalk は jumps (ループの回転) の後。
 func Passes() []Pass {
 	return []Pass{
+		{Name: "sliceargs", Run: changes(splitSliceArgs)}, // sema の形 (部分の load の直後の push_arg) のうちに
 		{Name: "ssa", Run: always(propagateSSA)},
 		{Name: "mul", Run: always(expandMul)},
 		{Name: "sink", Run: always(sinkAddress)},
