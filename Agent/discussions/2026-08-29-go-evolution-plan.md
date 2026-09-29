@@ -35,7 +35,7 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
   **2026-09-12 にリポジトリから削除**（当初は凍結アーカイブの方針だったが、「Ruby 側を考慮しない」ことを
   明確にするため削除に変更）。参照はタグ `ruby-frozen`
 - 挙動を意図的に変える箇所は、Rubyとの比較ではなく **言語仕様書
-  (`doc/language_reference.md`) を正典に昇格**させて管理する
+  (`docs/language_reference.md`) を正典に昇格**させて管理する
 
 ### 進め方
 
@@ -169,7 +169,7 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 
 仕様として残すもの（文書化のみ）:
 
-- [ ] `doc/language_reference.md` を正典化: 上記の判断結果・数値リテラル・型変換規則・
+- [ ] `docs/language_reference.md` を正典化: 上記の判断結果・数値リテラル・型変換規則・
       演算子挙動を明文化し、テスト（言語仕様テストスイート）と対応付ける
 
 **合格条件**: 挙動golden・castleスモーク通過（asm/binスナップショットは意図的差分を
@@ -205,7 +205,7 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
 - [x] 文法バージョン宣言: **ファイル先頭行 `#fc 2`**（決定 2026-09-12、Agent/discussions/2026-09-12-v2-decisions.md §4）。宣言なし = v1。
       **AST は共通**、goyacc の文法は v1 ∪ v2 のスーパーセット 1 本 + `parse.checkVersion` のゲート ✅ 2026-09-14
 - [x] 文法 v2 の設計と実装（**設計メモ [Agent/discussions/2026-09-13-v2-grammar.md](2026-09-13-v2-grammar.md)、2026-09-14 レビュー済み・実装完了**）: 言語側の変更と **`use` の文法/セマンティクス変更（F-mod 用）を同じバージョンに同梱**する
-      （利用者にマイグレーションを 2 回強いない）。`doc/language_reference.md` を v2 仕様として改訂。
+      （利用者にマイグレーションを 2 回強いない）。`docs/language_reference.md` を v2 仕様として改訂。
       決定済み（2026-09-12、Agent/discussions/2026-09-12-v2-decisions.md §2）: `use * from` は維持、**選択的インポート
       （`use a, b from mod;`）を実装**、「複数ファイル = 1 モジュール」は検討項目
 - [x] `fcc migrate`: v1 で読み → 共通 AST → v2 プリンタで出力 ✅ 2026-09-14。fclib と test（`test/v2/` に複製）は

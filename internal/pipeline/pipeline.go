@@ -283,7 +283,7 @@ func snapshotProgramLogs(mods []*ir.Module) func() {
 
 // markVolatile は asm (include したファイルとインラインアセンブラ) から参照されるグローバル変数を volatile にする
 // (options(address:) と options(volatile: true) は sema が付けている)。割り込みや asm が書き換える変数をレジスタに
-// 置いたままにしないため (doc/language_reference.md §2)。
+// 置いたままにしないため (docs/language_reference.md §2)。
 func markVolatile(mods []*ir.Module) {
 	syms := map[string]bool{}
 	for _, m := range mods {

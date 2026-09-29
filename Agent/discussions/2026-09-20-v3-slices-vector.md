@@ -5,7 +5,7 @@
 以下の構文例は仮案であり、現在のコンパイラが受理する仕様ではない。
 現行 `#fc 2` への変更は行わず、将来の採用時は v2 → v3 の migrate を想定する。
 他の V3 候補を含む一覧は [FC V3 検討メモ](2026-09-20-v3-plan.md) を参照。
-現行仕様は [language_reference.md](../../doc/language_reference.md)、追加機能全体の検討は
+現行仕様は [language_reference.md](../../docs/language_reference.md)、追加機能全体の検討は
 [Agent/wiki/plans/language-feature-candidates.md](../wiki/plans/language-feature-candidates.md) を参照。
 標準・ユーザーライブラリの具体的な呼び出し例は [Agent/discussions/2026-09-20-v3-slices-api-examples.md](2026-09-20-v3-slices-api-examples.md)。
 長さの幅・引数コピーの実測、sentinel、移行機構の現状は [Agent/discussions/2026-09-20-v3-slice-tradeoffs.md](2026-09-20-v3-slice-tradeoffs.md)。

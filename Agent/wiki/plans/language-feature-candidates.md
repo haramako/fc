@@ -4,7 +4,7 @@
 **提案段階であり、採用・仕様・実装順を確定したものではない。構文例も仮案。**
 今回の依頼は検討とドキュメントへの記録のみで、機能の実装は行わない。
 
-参照した範囲は [language_reference.md](../../../doc/language_reference.md)、[Agent/wiki/plans/roadmap.md](roadmap.md)、
+参照した範囲は [language_reference.md](../../../docs/language_reference.md)、[Agent/wiki/plans/roadmap.md](roadmap.md)、
 各 v2 設計資料、`internal/syntax`・`internal/types`・`internal/sema`・データ出力、
 `fclib`、`examples/castle`・`examples/miku`。作業中の差分のレビューは対象外。
 struct・SoA・sizeof・インライン化・直接呼び出しの far call などは実装済みとして扱う。

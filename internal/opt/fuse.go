@@ -256,7 +256,7 @@ func foldConstIndex(lmd *ir.Lambda) {
 		}
 		k, lit := ir.ValIntLiteral(m.Index)
 		if !lit || k < 0 || m.Disp+k*m.Scale+m.Width > 256 {
-			continue // 添字の式は 8 ビットで折り返さない前提 (doc/language_reference.md §6) なので 256 を超える形は作らない
+			continue // 添字の式は 8 ビットで折り返さない前提 (docs/language_reference.md §6) なので 256 を超える形は作らない
 		}
 		op.Disp += k * m.Scale
 		op.Src[1] = ir.NoIndex

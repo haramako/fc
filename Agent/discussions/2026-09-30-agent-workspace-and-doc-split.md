@@ -28,3 +28,7 @@
 - `doc/` の人間向け文書を作る: `language_reference.md` は「文法 v2」のままなので fc 4 へ更新、利用ガイド・CLI・標準ライブラリのリファレンス
 - `wiki/design/` の各記事は設計当時の記述を含む。コードと食い違いに気づいたら記事側を直す（wiki の鮮度規則）
 - `wiki/placement-debugging.md` に、今は無い `internal/driver/dbgfile.go` / `home.go` へのリンクが残っている（移動前から切れていた）
+
+## 追記（同日）: doc/ → docs/
+
+GitHub Pages の既定のパスに合わせて `doc/` を `docs/` に改名した（上の記述の `doc/` は改名前の名前）。参照していたパス（`docs/language_reference.md`）とルートの AGENTS.md・`Agent/AGENTS.md`・README も更新。

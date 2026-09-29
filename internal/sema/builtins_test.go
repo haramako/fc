@@ -71,7 +71,7 @@ func TestBuiltins(t *testing.T) {
 	})
 }
 
-// TestTextmapPO: textmap(table, po) の翻訳 (doc/language_reference.md §7.1)。原文を \r を除いて全角にしたもの (msgid) と
+// TestTextmapPO: textmap(table, po) の翻訳 (docs/language_reference.md §7.1)。原文を \r を除いて全角にしたもの (msgid) と
 // msgctxt の組で .po を引き、訳があれば訳文を変換する。訳が無い・空・fuzzy なら原文のまま変換して警告する。
 func TestTextmapPO(t *testing.T) {
 	// 表: あ0 い1 う2 え3 お4 Ｈ5 Ｉ6 ↓7

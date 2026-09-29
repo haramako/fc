@@ -243,7 +243,7 @@ D は A の補助として `--syntax` を用意してもよい（宣言なしフ
 ## 5. 付随して見つかったこと（v2 で直す候補、判断不要）
 
 - `parser.y:85-86` の `id_list: tID` は到達不能な規則（racc 版の未定義非終端子の再現）。v2 文法では削除する
-- `doc/language_reference.md` の `use print from stdio;` は実装に存在しない。§2 の決定に合わせて書き直す
+- `docs/language_reference.md` の `use print from stdio;` は実装に存在しない。§2 の決定に合わせて書き直す
 - `fclib/stdmacro.rb` の `times` は展開結果が `compile_statement` で解釈できず、どこからも使われていない。削除候補
 
 ---

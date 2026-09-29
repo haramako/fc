@@ -212,7 +212,7 @@ Zig 風の sentinel 配列そのものを導入するなら、論理長と格納
 
 ## 4. migrate の現状と将来の移行
 
-**現行の migrate は残っていない。** [言語リファレンス](../../doc/language_reference.md) と
+**現行の migrate は残っていない。** [言語リファレンス](../../docs/language_reference.md) と
 [roadmap](../wiki/plans/roadmap.md) に、2026-09-19 に v1 処理系と `fcc migrate` を削除した記録がある。
 [CLI](../../cmd/fcc/main.go) に migrate コマンドはなく、`internal/migrate` も存在しない。
 [lexer](../../internal/syntax/lexer.go) の現行バージョンは 2。

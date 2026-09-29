@@ -1,13 +1,13 @@
 # fc
 
-**fc** は NES（ファミコン）用のコンパイラ。C 風の独自言語（FC 言語）を ca65 アセンブリにコンパイルし、ld65 でリンクして NES ROM（`.nes`）または実験用バイナリ（emu ターゲット）を作る。本体は Go（`cmd/fcc` の CLI と `pkg/fc` のライブラリ）。人間向けの説明は `README.md` と `doc/`。
+**fc** は NES（ファミコン）用のコンパイラ。C 風の独自言語（FC 言語）を ca65 アセンブリにコンパイルし、ld65 でリンクして NES ROM（`.nes`）または実験用バイナリ（emu ターゲット）を作る。本体は Go（`cmd/fcc` の CLI と `pkg/fc` のライブラリ）。人間向けの説明は `README.md` と `docs/`。
 
 **エージェント（Claude / Codex 等）は、この後に続く `Agent/AGENTS.md` も必ず読むこと**（作業領域の規約。Claude Code は末尾の `@Agent/AGENTS.md` で自動で読み込む）。
 
 ## Project-Wide Rules
 
-- **コミットメッセージは `<パッケージや領域>: <説明>`**（例: `regalloc: …`、`fclib/nes/vram: …`、`doc: …`）。`[AI]` 接頭辞は付けない
-- **`doc/` は人間向けのドキュメント**（言語仕様など）。エージェント向けの知識・経緯・計画は `Agent/` に置く
+- **コミットメッセージは `<パッケージや領域>: <説明>`**（例: `regalloc: …`、`fclib/nes/vram: …`、`docs: …`）。`[AI]` 接頭辞は付けない
+- **`docs/` は人間向けのドキュメント**（言語仕様など。GitHub Pages の既定の置き場所）。エージェント向けの知識・経緯・計画は `Agent/` に置く
 - **`Agent/` はエージェントの作業領域**（規約は `Agent/AGENTS.md`）。**会話の中で重要な決定・知見が出たら、エージェントは自動で `Agent/discussions/` に記録する**（指示を待たない）
 - **サブフォルダに `AGENTS.md` を追加・新設したら、同じ階層に内容 `@AGENTS.md` のみの `CLAUDE.md` スタブを置く**（Claude Code がそのサブツリーで作業を始めた時に DOX 契約を自動ロードさせるため）。既に中身のある `CLAUDE.md` がある場合は内容を `AGENTS.md` に統合し、`CLAUDE.md` は `@AGENTS.md` のみにする
 - 生成物は直接編集しない: `internal/syntax/parser.go`（`parser.y` から goyacc）、`testdata/golden/`（`-update` で再生成）
@@ -123,7 +123,7 @@ When the user requests a durable behavior change, record it here or in the relev
 
 - `Agent/AGENTS.md` — エージェント作業の蓄積領域。配下に `wiki/`（横断知識・設計・進行中の計画）・`discussions/`（会話と決定の歴史）・`issues/`（Issue 記録）・`scripts/`（補助スクリプト）
 
-Owned directly by root (no child doc): `cmd/`・`pkg/`・`internal/`（コンパイラ本体。パッケージの地図は `Agent/wiki/code-structure.md`）、`fclib/`（FC の標準ライブラリ）、`share/`（ランタイムアセンブリ・リンカ設定）、`test/`（FC のテストソース）、`testdata/`（golden）、`examples/`（実プロジェクト由来の回帰サンプル。`examples/README.md`）、`bench/`（生成コードのベンチ。`bench/README.md`）、`editors/`（エディタ拡張）、`tools/`（開発用ツール）、`doc/`（人間向けドキュメント）、`README.md`。
+Owned directly by root (no child doc): `cmd/`・`pkg/`・`internal/`（コンパイラ本体。パッケージの地図は `Agent/wiki/code-structure.md`）、`fclib/`（FC の標準ライブラリ）、`share/`（ランタイムアセンブリ・リンカ設定）、`test/`（FC のテストソース）、`testdata/`（golden）、`examples/`（実プロジェクト由来の回帰サンプル。`examples/README.md`）、`bench/`（生成コードのベンチ。`bench/README.md`）、`editors/`（エディタ拡張）、`tools/`（開発用ツール）、`docs/`（人間向けドキュメント。GitHub Pages）、`README.md`。
 
 以下で `Agent/AGENTS.md` を毎セッション読み込む（Claude Code の import。他エージェントはこの行を「必読ファイルの指示」として読むこと。DOX の「Read Before Editing」は `Agent/` 配下を触らないセッションでは読まれないため、discussions 自動記録を毎セッション発火させる目的で強制ロードする）：
 

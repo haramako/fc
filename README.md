@@ -40,7 +40,7 @@ fcc fmt -w src.fc           # ソースを整形 (-l: 変わるファイルを�
 | `-O LEVEL` | 最適化レベル (0-2, デフォルト 2) |
 | `-e` | ビルド後にエミュレータで実行 |
 
-言語仕様は [doc/language_reference.md](doc/language_reference.md) を参照してください。
+言語仕様は [docs/language_reference.md](docs/language_reference.md) を参照してください。
 
 ## テスト
 
@@ -84,7 +84,7 @@ test/             FC言語のテストソース
 examples/         実プロジェクト由来の回帰テスト用サンプル (miku / castle)
 testdata/golden/  golden データ
 tools/            サンプル同期ツール
-doc/              人間向けドキュメント (言語仕様)
+docs/             人間向けドキュメント (言語仕様。GitHub Pages)
 Agent/            開発の知識・設計・経緯・計画 (主にエージェント向け。AGENTS.md)
 ```
 
@@ -92,7 +92,7 @@ Agent/            開発の知識・設計・経緯・計画 (主にエージェ
 
 | ファイル | 内容 |
 |---|---|
-| [doc/language_reference.md](doc/language_reference.md) | FC言語の仕様 |
+| [docs/language_reference.md](docs/language_reference.md) | FC言語の仕様 |
 | [examples/README.md](examples/README.md) | サンプルの構成・同期方法・エミュレータテスト |
 | [bench/README.md](bench/README.md) | 生成コードのベンチマークと他コンパイラとの比較 |
 
