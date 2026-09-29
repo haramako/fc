@@ -195,7 +195,9 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
 - [ ] LZ4 の展開を速く（今は短い一致の多いデータで 1 バイト約 75 サイクル。列ごとの jsr と長さの読みの手間が大半）
 - [ ] fclib の NES のモジュールを縮める（2026-09-29 の miku4: vram 976 バイト（put_dir 347・fill 146・write_dir 133・reserve 126）、
       frame の NMI 304、pal.shade 133。slice の受け渡しと 16 ビットの演算の生成コードが大きい。速さの要る所は asm に）
-- [ ] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ）
+- [x] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ） ✅ 2026-09-29（警告は構文の lint
+      `bitwiseWithComparison` として既にあった。見落としたのは `fcc test` が警告を出していなかったから: `fcc test` で出し、
+      pkg/fc の TestFclibModuleTests と TestFclibNoWarnings が fclib のモジュールの警告を見張る）
 - [ ] 標準ライブラリの大幅な拡充（slice を使う）と、その API の移行（v4_plan.md §3）。2026-09-29: 互換は考えず作り直す、printf は
       `@format`（snprintf 相当）のラッパーに。計画と決めることは [v4_stdlib.md](v4_stdlib.md)。✅ 2026-09-29: 段 2（どのターゲットでも
       使うもの）と段 3（NES の土台: nes / frame / vram / pal / oam / pad、内蔵のフォント、examples/hello、`fcc test -t nes`）。残りは

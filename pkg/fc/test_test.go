@@ -46,6 +46,11 @@ func TestFclibModuleTests(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s (%s): %v", r.file, r.target, err)
 			}
+			// fclib のモジュールは警告なしでコンパイルできること (`a & b == c` の優先順位などの lint。fcc test が警告を出して
+			// いなかったので、fmt の `spec & ZERO == 0` を見落とした)
+			for _, w := range res.Warnings {
+				t.Errorf("%s (%s, -O %d): warning: %s: %s", r.file, r.target, level, w.Pos, w.Msg)
+			}
 			if res.ExitCode != 0 || !strings.HasSuffix(out.String(), " tests ok\n") {
 				t.Errorf("%s (%s, -O %d): exit %d\n%s", r.file, r.target, level, res.ExitCode, out.String())
 			}

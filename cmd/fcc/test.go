@@ -50,6 +50,9 @@ func runTest(args []string) int {
 		opt.OptimizeLevel = *level
 	}
 	res, err := compiler.Test(context.Background(), fs.Args(), opt)
+	if res != nil {
+		printWarnings(res.Warnings)
+	}
 	if err != nil {
 		printErrors(err)
 		return 1
