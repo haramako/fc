@@ -9,11 +9,13 @@ on:
     paths:
       - "docs/**"
       - "tools/vscode-fc/syntaxes/**"
+      - "examples/**"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "docs/**"
       - "tools/vscode-fc/syntaxes/**"
+      - "examples/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 

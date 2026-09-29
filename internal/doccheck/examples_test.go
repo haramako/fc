@@ -119,10 +119,13 @@ func docsFiles(t *testing.T) []string {
 //
 //	(無し)  断片。構文が通り、fcc fmt の書式と同じ (#fc の行が無ければ fc 4。トップレベルで読めなければ関数の本体として読む)
 //	run     emu でビルドして走らせ、終了コード 0 で、次の ```text のブロック (次の ```fc より前) と出力が同じ。警告も無いこと
-//	test    fcc test と同じく @(test) の関数を走らせて通る
+//	test    fcc test と同じく @(test) の関数を走らせて通る (次に ```text があれば出力も比べる)
 //	nes     -t nes でビルドが通る (警告無し)
 //	error   ビルドがエラーになり、次の ```text のブロックがあればその文言を含む
 //	ignore  確かめない (使うときは理由を書く)
+//
+// file=名前.fc を付けたブロックは、そのページの後のブロックが一緒にビルドするファイルになる (同じ名前がもうあれば後ろに足す:
+// 「score.fc の最後に足します」)。run / test / nes のブロックに付ければ、そのファイルを入口 (test ならテストするモジュール) にする。
 func TestDocsExamples(t *testing.T) {
 	root := repoRoot(t)
 	for _, path := range docsFiles(t) {
@@ -132,6 +135,7 @@ func TestDocsExamples(t *testing.T) {
 		}
 		rel, _ := filepath.Rel(root, path)
 		blocks := parseBlocks(filepath.ToSlash(rel), string(text))
+		page := map[string]string{} // file= で覚えたファイル
 		for i, b := range blocks {
 			if b.lang != "fc" {
 				continue
@@ -146,38 +150,66 @@ func TestDocsExamples(t *testing.T) {
 					break
 				}
 			}
+			mode, file := b.mode()
+			if file != "" {
+				if prev, ok := page[file]; ok {
+					page[file] = prev + "\n" + b.code
+				} else {
+					page[file] = b.code
+				}
+			}
+			files := map[string]string{}
+			for k, v := range page {
+				files[k] = v
+			}
 			b := b
 			t.Run(b.name(), func(t *testing.T) {
 				t.Parallel()
-				checkBlock(t, root, b, next)
+				checkBlock(t, root, b, next, mode, file, files)
 			})
 		}
 	}
 }
 
-func checkBlock(t *testing.T, root string, b, next *codeBlock) {
-	mode := ""
-	if len(b.attrs) > 0 {
-		mode = b.attrs[0]
-	}
-	src := b.code
-	if !strings.HasPrefix(src, "#fc") && mode != "ignore" && mode != "error" {
-		if mode != "" {
-			t.Fatalf("%s: ```fc %s のブロックは #fc 4 から始まる 1 つのプログラムにする", b.name(), mode)
+// mode は印 (= を含まない最初の語) と file= の値。
+func (b *codeBlock) mode() (mode, file string) {
+	for _, a := range b.attrs {
+		if k, v, ok := strings.Cut(a, "="); ok {
+			if k == "file" {
+				file = v
+			}
+		} else if mode == "" {
+			mode = a
 		}
-		src = "#fc 4\n" + src
+	}
+	return mode, file
+}
+
+func checkBlock(t *testing.T, root string, b, next *codeBlock, mode, file string, files map[string]string) {
+	entry := file
+	if entry == "" {
+		entry = "t.fc"
+		files[entry] = b.code
+	}
+	src := files[entry] // 入口のファイル (file= で足した分を含む)
+	if !strings.HasPrefix(src, "#fc") && mode != "ignore" && mode != "error" && mode != "" {
+		t.Fatalf("%s: ```fc %s のブロック (か file= のファイル) は #fc 4 から始まる 1 つのプログラムにする", b.name(), mode)
+	}
+	fragment := b.code
+	if !strings.HasPrefix(fragment, "#fc") {
+		fragment = "#fc 4\n" + fragment
 	}
 	switch mode {
 	case "ignore":
 		return
 	case "":
-		checkFormat(t, b, src)
+		checkFormat(t, b, fragment)
 	case "run":
-		checkFormat(t, b, src)
+		checkFormat(t, b, fragment)
 		if next == nil {
 			t.Fatalf("%s: ```fc run の後に出力の ```text のブロックが要る", b.name())
 		}
-		r := build(t, root, map[string]string{"t.fc": src}, "emu", true)
+		r := build(t, root, files, "emu", true, entry)
 		if r.err != nil {
 			t.Fatalf("%s: %v", b.name(), r.err)
 		}
@@ -189,9 +221,10 @@ func checkBlock(t *testing.T, root string, b, next *codeBlock) {
 			t.Errorf("%s: 出力が %s の ```text と違う\ngot:\n%s\nwant:\n%s", b.name(), next.name(), r.stdout, next.code)
 		}
 	case "test":
-		checkFormat(t, b, src)
-		main := "#fc 4\nuse t;\nfunction main():void { @run_tests(); }\n"
-		r := build(t, root, map[string]string{"t.fc": src, "main.fc": main}, "emu", true, "main.fc")
+		checkFormat(t, b, fragment)
+		const runner = "doccheck_main.fc"
+		files[runner] = "#fc 4\nuse " + strings.TrimSuffix(entry, ".fc") + ";\nfunction main():void { @run_tests(); }\n"
+		r := build(t, root, files, "emu", true, runner)
 		if r.err != nil {
 			t.Fatalf("%s: %v", b.name(), r.err)
 		}
@@ -199,20 +232,23 @@ func checkBlock(t *testing.T, root string, b, next *codeBlock) {
 		if r.res.ExitCode != 0 {
 			t.Errorf("%s: テストが通らない (終了コード %d)\n%s", b.name(), r.res.ExitCode, r.stdout)
 		}
+		if next != nil && r.stdout != next.code {
+			t.Errorf("%s: 出力が %s の ```text と違う\ngot:\n%s\nwant:\n%s", b.name(), next.name(), r.stdout, next.code)
+		}
 	case "nes":
-		checkFormat(t, b, src)
-		r := build(t, root, map[string]string{"t.fc": src}, "nes", false)
+		checkFormat(t, b, fragment)
+		r := build(t, root, files, "nes", false, entry)
 		if r.err != nil {
 			t.Fatalf("%s: %v", b.name(), r.err)
 		}
 		noWarnings(t, b, r)
 	case "error":
-		r := build(t, root, map[string]string{"t.fc": src}, "emu", false)
+		r := build(t, root, files, "emu", false, entry)
 		if r.err == nil {
 			t.Fatalf("%s: ```fc error なのにエラーにならない", b.name())
 		}
-		// ドキュメントには利用者が見る形 (`over.fc:7:2: error: ...`) で書くので、行の頭のファイル名はビルドした t.fc と読み替える
-		if want := fcFileRe.ReplaceAllString(strings.TrimSpace(next.codeOrEmpty()), "t.fc:"); !strings.Contains(cliErrors(r.err), want) {
+		// ドキュメントには利用者が見る形 (`over.fc:7:2: error: ...`) で書くので、行の頭のファイル名はビルドした入口の名前と読み替える
+		if want := fcFileRe.ReplaceAllString(strings.TrimSpace(next.codeOrEmpty()), entry+":"); !strings.Contains(cliErrors(r.err), want) {
 			t.Errorf("%s: エラーの文言が %s と違う\ngot:  %s\nwant: %s", b.name(), next.name(), cliErrors(r.err), want)
 		}
 	default:

@@ -1,6 +1,6 @@
 # 利用者向けドキュメント（GitHub Pages）の計画
 
-作成: 2026-09-30。「決めたこと」はすべて決まった。段 0 は済み、段 1 は途中（project と editor のページが残り）。
+作成: 2026-09-30。「決めたこと」はすべて決まった。段 0 は済み、段 1 は途中（editor のページが残り）。
 
 前提（2026-09-30 ユーザー決定）:
 - 人間向け、主に**利用者向け**（fc で NES のソフトを作る人）のドキュメントを `docs/` の下に作り、GitHub Pages で公開する
@@ -153,7 +153,7 @@ docs/
 1. **段 0 土台**: ✅ 2026-09-30: VitePress・fc の色付け・日本語の検索・トップ・`docs.yml`・`docs/AGENTS.md`・例の検査のテスト
    （`internal/doccheck`）・インストールのページ。残り: Pages の Source の切り替え（ユーザー）
 2. **段 1 はじめに**: `start/` の 6 ページとサンプル集。API が変わっても例の検査で気づける。✅ 2026-09-30: install・hello-emu・hello-nes・
-   first-game・サンプル集（画面は QuickNES）。残り: project（fc.toml・モジュール・fcc test）、editor（VS Code 拡張が 2 つあり、どちらを案内するか未決）
+   first-game・project・サンプル集（画面は QuickNES）。残り: editor（VS Code 拡張が 2 つあり、どちらを案内するか未決）
 3. **段 2 リファレンス（生成と表）**: `fcc doc` と `reference/std/`、`reference/fcc`・`fc-toml`・`targets`
 4. **段 3 言語仕様**: fc 4 の規則を 1 ページに。整数の規則など v4 で未決の所（`plans/v4-plan.md` の「決めること」の残り）は決まってから書く
 5. **段 4 ガイド**: `guide/` の各ページ。`overview` と `nes-basics` を先に

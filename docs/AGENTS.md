@@ -30,6 +30,8 @@
   - `run`: `#fc 4` から始まる 1 つのプログラム。emu で走らせ、終了コード 0・警告なしで、次の ` ```text ` のブロックと出力が同じ
   - `test`: `@(test)` の関数が通る。`nes`: `-t nes` でビルドが通る（警告なし）。`error`: エラーになり、次の ` ```text ` の文言を含む
   - `ignore`: 確かめない（使うときは理由を書く）
+  - `file=名前.fc`: そのページの後のブロックが一緒にビルドするファイルにする（同じ名前が既にあれば後ろに足す）。`run` / `test` に
+    付ければそのファイルを入口（テストするモジュール）にする。複数のファイルにまたがる例（`start/project.md`）に使う
 - examples のファイルを丸ごと見せるときは写さずに VitePress の `<<< @/../examples/…/x.fc` で読み込む（動くことは examples のテストが見る）
 - 生成物（`.vitepress/dist`・`.vitepress/cache`、これから作る `reference/std/`）はコミットしない。`reference/std/` は CI のビルドの中で作る
 - `AGENTS.md` / `CLAUDE.md` はサイトに出さない（`srcExclude`）

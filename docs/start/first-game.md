@@ -162,3 +162,5 @@ function main():void
 ## ソースの全体
 
 <<< @/../examples/jump/jump.fc
+
+次は、ファイルを分けてテストを書く[プロジェクト](./project)の作り方です。
