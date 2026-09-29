@@ -168,9 +168,11 @@ far call の判定に「N ≥ 0 なら切替バンク、無しか負なら固定
 | `bool` | 1 | | `true` / `false`、比較演算（`==` `!=` `<` …）と論理演算（`&&` `\|\|` `!`）の結果の型。値は 0 / 1。整数（`uint8`）と互換で、`if` の条件や `&`、整数の引数・戻り値・代入にそのまま使える（`var f = a < b;` の `f` は `bool`。`int` にしたいなら `var f:int = a < b;`）。整数との相互変換はビット列そのままで、整数を bool に入れても 0/1 に正規化しない（非ゼロ = 真）。bool 同士の `==` / `!=` は真理値で比べる（`(5 as bool) == true`、`(5 as bool) == (3 as bool)` は真。`b == true` は `if (b)` と同じコード） |
 | `void` | 0 | | 戻り値なし |
 
-fc.toml の `[target]`（mapper / prg / chr）と `[bank.<名前>]`（slot / index / segments）、`[ram.<名前>]`（start / size）、
+fc.toml の `[target]`（mapper / prg / chr（0 なら CHR-RAM）/ mirroring（vertical（既定）/ horizontal / four）/ battery）と `[bank.<名前>]`（slot / index / segments）、`[ram.<名前>]`（start / size）、
 `[linker] extra`（ld65.cfg の断片）を書くと、fc が ld65.cfg と iNES のヘッダを作る。モジュールは `@(bank: "名前")`（"fixed" は
 常に見えている領域）、手動の切り替えの番号は `@bank("名前")`。マッパーは NROM / MMC3 / UxROM / MMC1（[v3_plan.md](v3_plan.md) §3）。
+`[target]` があれば `-t` を省いたターゲットは nes（無ければ emu）。知らない見出し・キーはエラー（書き間違いを黙って無視しない）。
+`fcc run` の nes は内蔵の NES のランナーで `console.exit` まで走らせて console の出力を出す（画面は描かない。1 分で終わらなければエラー）。
 
 fc 3 の `@if (条件) { … } else @if (…) { … } else { … }` はコンパイル時に片方を選ぶ（条件はリテラルと `@(build)` の const だけ。
 選ばれなかった側は名前解決しない。トップレベルでも関数の中でも書け、新しいスコープは作らない）。`const DEBUG = false @(build);` は

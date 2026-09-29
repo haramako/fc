@@ -19,7 +19,7 @@ Usage: fcc <command> [options] <src.fc> ...
 Commands:
     build, b         build ROM / binary
     compile, c       compile to object files only
-    run              build and run by emulator
+    run              build and run (emu: the built-in emulator; nes: console output on the built-in NES runner)
     fmt              format source files (see fcc fmt -h)
     migrate          rewrite older sources as the latest fc (see fcc migrate -h)
     test             run the @(test) functions of modules (see fcc test -h)
@@ -35,7 +35,7 @@ Options:
     -d, --debug      show debug info (frames, far calls)
     -g               emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)
     --size-report    show code size per segment / function (needs linking)
-    -t, --target     target platform ( nes, emu )
+    -t, --target     target platform ( nes, emu; default: nes if fc.toml has [target], otherwise emu )
     -O LEVEL         optimize level (0-2)
     -D MOD.NAME=VAL  override a @(build) const (repeatable; applied after fc.toml [define.MOD])
     --offline        do not fetch git libraries of fc.toml [lib.*] (use the cache only)

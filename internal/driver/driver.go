@@ -88,6 +88,7 @@ type BuildOptions struct {
 
 // Result はビルドの結果。
 type Result struct {
+	Target     string         // ビルドしたターゲット (-t を省けば fc.toml の [target] の有無で決まる)
 	ExitCode   int            // Run 指定時のプログラムの終了コード (それ以外は 0)
 	Out        string         // 出力ファイル (CompileOnly なら "")
 	MapFile    string         // ld65 のマップファイル (CompileOnly なら "")
@@ -172,7 +173,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	c.ctx = ctx
 
 	if opt.Target == "" {
-		opt.Target = "emu"
+		opt.Target = defaultTarget(opt.Dir)
 	}
 	if opt.Target == "x6502" {
 		return nil, &diag.Error{Msg: "target x6502 is not supported by go port"}
@@ -226,7 +227,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if err := os.MkdirAll(c.buildDir, 0o777); err != nil {
 		return nil, err
 	}
-	result = &Result{BuildDir: c.buildDir}
+	result = &Result{BuildDir: c.buildDir, Target: c.target}
 	c.hashes = newHashMemo() // fcc watch は同じ Compiler でビルドし直すので、ビルドごとに作り直す
 
 	// 前段: 意味解析 → 全関数の最適化と割付 → 静的フレームの配置 (frontend.go)
@@ -361,6 +362,17 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	return result, nil
 }
 
+// defaultTarget は -t を省いたときのターゲット: fc.toml に [target] があれば nes、無ければ emu。
+func defaultTarget(dir string) string {
+	if dir == "" {
+		dir = "."
+	}
+	if cfg, err := project.FindConfig(dir); err == nil && cfg.Sections["target"] != nil {
+		return "nes"
+	}
+	return "emu"
+}
+
 // libPath は use / include の検索パス (カレント → 追加のライブラリ (BuildOptions.LibPath) → fclib → fclib/<target>)。
 func (c *Compiler) libPath(target string) []string {
 	p := []string{"."}
@@ -382,7 +394,11 @@ func (c *Compiler) makeBase() string {
 	if c.layout != nil && c.target == "nes" {
 		// fc.toml の [target] から (layout.go)
 		l := c.layout
-		str := c.baseAsmTemplate(l.PRGSize/0x4000, max(1, l.CHRSize/0x2000), 1, l.Profile.INES)
+		flags := l.Mirror
+		if l.Battery {
+			flags |= 2
+		}
+		str := c.baseAsmTemplate(l.PRGSize/0x4000, l.CHRSize/0x2000, flags, l.Profile.INES) // CHR 0 は CHR-RAM
 		if err := writeIfChanged(filepath.Join(c.buildDir, "base.s"), []byte(str)); err != nil {
 			panic(err)
 		}
@@ -862,7 +878,7 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // execute は ROM を emu で実行し、終了コードとサイクル数を返す (internal/emu)。logs は @log の地点 (PC → 地点。fclog.Hooks)。
 func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]fclog.Hook, logOut io.Writer) (int, int64, error) {
 	if c.target != "emu" {
-		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
+		return 0, 0, nil // x6502 はスコープ外。nes は pkg/fc が内蔵の NES のランナーで走らせる (internal/nes は driver を使うテストを持つ)
 	}
 	data, err := os.ReadFile(filename)
 	if err != nil {

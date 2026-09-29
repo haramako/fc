@@ -93,9 +93,50 @@ func parseConfig(path string, data []byte) (*ProjectConfig, error) {
 		if _, dup := cfg.Sections[section][k]; dup {
 			return nil, fail(fmt.Sprintf("duplicate key %s", k))
 		}
+		if section == "" {
+			return nil, fail(fmt.Sprintf("key %s is outside a section (write it under [target], [define.<module>], ...)", k))
+		}
 		cfg.Sections[section][k] = v
 	}
-	return cfg, sc.Err()
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	return cfg, cfg.validate()
+}
+
+// validate は見出しとキーの綴りを確かめる (知らない見出し・キーは書き間違いとしてエラー。値は使う所で確かめる)。
+// [bank.*] / [lib.*] のキーは layout.go / libs.go が、[define.*] のキーはモジュールの @(build) の const が決める。
+func (cfg *ProjectConfig) validate() error {
+	keys := map[string][]string{
+		"target": {"mapper", "prg", "chr", "mirroring", "battery"},
+		"linker": {"extra"},
+		"ram.":   {"start", "size"},
+	}
+	for _, sec := range cfg.Order {
+		fail := func(msg string) error {
+			return &diag.Error{Msg: fmt.Sprintf("%s: [%s]: %s", cfg.Path, sec, msg)}
+		}
+		name := sec
+		switch {
+		case sec == "target" || sec == "linker":
+		case strings.HasPrefix(sec, "ram."):
+			name = "ram."
+		case strings.HasPrefix(sec, "bank."), strings.HasPrefix(sec, "lib."), strings.HasPrefix(sec, "define."):
+			continue
+		default:
+			return fail("unknown section (known: target, bank.<name>, ram.<name>, linker, define.<module>, lib.<name>)")
+		}
+		for k := range cfg.Sections[sec] {
+			known := false
+			for _, w := range keys[name] {
+				known = known || k == w
+			}
+			if !known {
+				return fail(fmt.Sprintf("unknown key %s (%s)", k, strings.Join(keys[name], " / ")))
+			}
+		}
+	}
+	return nil
 }
 
 // stripComment は行の `#` から後ろを落とす (文字列の中の # は残す)。

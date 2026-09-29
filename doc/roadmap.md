@@ -375,8 +375,9 @@ do-while は「やること候補（すぐではない）」。
 - [ ] 中: マッパーのプロファイルからトランポリン・状態変数・reset の初期化を自動で（MMC3 の固定バンクの配置、`cli`）、fclib の mmc3 / mmc1 / uxrom
       （2026-09-29: fc 4 の fclib に uxrom / mmc1 / mmc3 のモジュール（トランポリン・状態変数・init・IRQ の呼び出し口）。残りは
       fc.toml からの自動の初期化）
-- [ ] 中: fc.toml の `[target]` に mirroring / battery / CHR-RAM、未知のキー・セクションをエラーに
-- [ ] 中: fc.toml の `[target]` があれば nes を既定に、`fcc run -t nes` の扱い、VS Code 拡張の既定のそろえ
+- [x] 中: fc.toml の `[target]` に mirroring / battery / CHR-RAM、未知のキー・セクションをエラーに ✅ 2026-09-29
+- [x] 中: fc.toml の `[target]` があれば nes を既定に、`fcc run -t nes` の扱い、VS Code 拡張の既定のそろえ ✅ 2026-09-29（`fcc run` の nes は
+      内蔵の NES のランナーで console.exit まで走らせて console の出力を出す。拡張の fc.target の既定は auto（-t を渡さない。0.1.3））
 - [ ] 低〜中: fclib の API の slice 版（`print`、mem）、lzw の ZP の固定番地と §4.5 の ZP の配置の文書、inflate の `unpack`
 - [x] 低: math（`sign` の戻り値、`atan` の範囲、i16 の abs、rand のシード、10 進・BCD の表示）、nes.fc の APU レジスタ・ビット定数、pad の 2P
       ✅ 2026-09-29（fc 4 の math・rand・fmt・nes・pad）

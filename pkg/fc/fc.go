@@ -12,12 +12,15 @@ package fc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"os"
 
 	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
 	"github.com/haramako/fc/internal/fchome"
+	"github.com/haramako/fc/internal/nes"
 	"github.com/haramako/fc/internal/syntax"
 )
 
@@ -137,7 +140,7 @@ func (c *Compiler) Close() {
 
 // Build は src をビルドする。
 func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result, error) {
-	return c.c.BuildContext(ctx, src, &driver.BuildOptions{
+	res, err := c.c.BuildContext(ctx, src, &driver.BuildOptions{
 		Target:        opt.Target,
 		Out:           opt.Out,
 		Run:           opt.Run,
@@ -153,7 +156,28 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		LibPath:       opt.LibPath,
 		Offline:       opt.Offline,
 	})
+	if err != nil || !opt.Run || opt.CompileOnly || res.Target != TargetNES {
+		return res, err
+	}
+	// NES の ROM は内蔵の NES のランナーで console.exit まで走らせる (画面は描かない: console の出力と終了コードだけ)
+	stdout := opt.Stdout
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	m, err := nes.LoadFile(res.Out)
+	if err != nil {
+		return res, err
+	}
+	m.Output = stdout
+	if err := m.RunUntilExit(NESRunFrames); err != nil {
+		return res, fmt.Errorf("%v: the built-in NES runner shows only console output (console.exit ends it); open the ROM in an emulator to see the screen", err)
+	}
+	res.ExitCode = m.ExitCode
+	return res, nil
 }
+
+// NESRunFrames は Run の NES の ROM を内蔵のランナーで走らせるフレーム数の上限 (1 分)。
+const NESRunFrames = 3600
 
 // Format は fc ソースを正規形に整形する (fcc fmt)。構文エラーは *Error で返す。
 // CRLF は LF に正規化される。

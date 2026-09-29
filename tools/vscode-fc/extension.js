@@ -27,7 +27,7 @@ function activate(context) {
 function check(doc) {
   const cfg = vscode.workspace.getConfiguration('fc');
   const fcc = cfg.get('fccPath') || 'fcc';
-  const target = cfg.get('target') || 'nes';
+  const target = cfg.get('target') || 'auto';
   let main = doc.fileName;
   const mainFile = cfg.get('mainFile');
   const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
@@ -35,7 +35,8 @@ function check(doc) {
     main = path.join(folder.uri.fsPath, mainFile);
   }
   const cwd = path.dirname(main);
-  const args = ['check', '--json', '-t', target, path.basename(main)];
+  // auto: -t を渡さない (fcc が fc.toml に [target] があれば nes、無ければ emu にする)
+  const args = ['check', '--json'].concat(target === 'auto' ? [] : ['-t', target], [path.basename(main)]);
   output.appendLine('> ' + fcc + ' ' + args.join(' ') + '  (cwd ' + cwd + ')');
   execFile(fcc, args, { cwd, windowsHide: true }, (err, stdout, stderr) => {
     if (err && err.code === 'ENOENT') {
