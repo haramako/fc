@@ -27,8 +27,28 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 		return nil, fmt.Errorf("%s: fc %d source cannot be rewritten as fc 4 directly (migrate it to fc 3 first)", filename, f.Version)
 	}
 	c := &Ctx{Src: src, File: f}
+	var copies []sema.Rewrite
 	for _, r := range rewrites {
+		if r.CopyEnd > r.CopyStart {
+			copies = append(copies, r)
+			continue
+		}
 		c.Replace(r.Start, r.End, r.Text)
+	}
+	// 範囲の写しを含む書き換え (複合代入の 2 つめの左辺): 写す範囲の中の書き換えを当ててから写す
+	base := append([]Edit{}, c.Edits...)
+	for _, r := range copies {
+		var inner []Edit
+		for _, e := range base {
+			if e.Start >= r.CopyStart && e.End <= r.CopyEnd {
+				inner = append(inner, Edit{Start: e.Start - r.CopyStart, End: e.End - r.CopyStart, Text: e.Text})
+			}
+		}
+		text, err := apply(src[r.CopyStart:r.CopyEnd], inner)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", filename, err)
+		}
+		c.Replace(r.Start, r.End, r.Text+string(text)+r.Suffix)
 	}
 	if err := abiRules(c); err != nil {
 		return nil, fmt.Errorf("%s: %v", filename, err)

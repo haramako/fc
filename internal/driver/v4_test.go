@@ -674,3 +674,56 @@ function main():void
 		t.Errorf("fc 3: got %q, %v", out, err)
 	}
 }
+
+// TestV4MigrateCompoundLhs: 複合代入の左辺の中にも書き換え (シフトの左辺の `156 as u8`) があると、左辺を含む置き換えと重なって
+// "overlapping or invalid edit" になっていた (fuzz の TestRandomMigrate)。2 つめの左辺は中の書き換えを当てた写し。
+func TestV4MigrateCompoundLhs(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+var a1:[16]u8;
+var k:u8;
+function main():void
+{
+	k = 2;
+	a1[((156 >> ((6 & 7) as u8)) & 7)] += (((-66) << 6) + (5 as i8));
+	printf(a1[7], "\n");
+	exit(0);
+}
+`
+	want := `#fc 4
+use * from stdio;
+var a1:[16]u8;
+var k:u8;
+function main():void
+{
+	k = 2;
+	a1[((156 as u8 >> ((6 & 7) as u8)) & 7)] = (a1[((156 as u8 >> ((6 & 7) as u8)) & 7)] + (((-66) << 6) + (5 as i8))) as u8;
+	printf("{}\n", a1[7]);
+	exit(0);
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(res[path]); got != want {
+		t.Fatalf("migrate:\n%s\nwant:\n%s", got, want)
+	}
+	before, err := buildBothLevels(t, map[string]string{"t.fc": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := buildBothLevels(t, map[string]string{"t.fc": want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Errorf("fc 3: %q, fc 4: %q", before, after)
+	}
+}

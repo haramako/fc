@@ -22,6 +22,10 @@ type Rewrite struct {
 	Start, End int    // バイト位置 (CRLF を LF にした後の内容で)
 	Text       string
 	Rule       string // 規則の名前 (表示・テスト用)
+	// CopyEnd > CopyStart なら、置き換えは Text + (ソースの [CopyStart:CopyEnd] にその範囲の中の書き換えを当てたもの) + Suffix
+	// (複合代入 `L op= R` → `L = (L op R) as T` の 2 つめの L。L の中の書き換えも写す。migrate.ToV4)
+	CopyStart, CopyEnd int
+	Suffix             string
 }
 
 // RewriteError は書き換えを作れなかった所。
@@ -46,12 +50,17 @@ func (h *Hlc) rewriting() bool {
 
 // addRewrite は書き換えを 1 つ足す。同じものは 1 つにまとめる (1 つのモジュールは入口ごとにコンパイルされうる)。
 func (h *Hlc) addRewrite(rule string, start, end int, text string) {
+	h.addRewriteCopy(rule, start, end, text, 0, 0, "")
+}
+
+// addRewriteCopy は [start:end] を text + (ソースの [cs:ce] に中の書き換えを当てたもの) + suffix にする書き換えを足す (Rewrite.CopyStart)。
+func (h *Hlc) addRewriteCopy(rule string, start, end int, text string, cs, ce int, suffix string) {
 	src := h.prog.Sources[h.module.Id]
 	if src == nil {
 		h.rewriteError(rule, "the source of the module is unknown")
 		return
 	}
-	r := Rewrite{File: src.Abs, Start: start, End: end, Text: text, Rule: rule}
+	r := Rewrite{File: src.Abs, Start: start, End: end, Text: text, Rule: rule, CopyStart: cs, CopyEnd: ce, Suffix: suffix}
 	if h.prog.rewriteSeen == nil {
 		h.prog.rewriteSeen = map[Rewrite]bool{}
 	}
@@ -121,15 +130,15 @@ func (h *Hlc) rewriteCompoundAs(rule string, a *syntax.AssignExpr, typ string) {
 		h.rewriteError(rule, "the compound assignment has no position")
 		return
 	}
-	lhs := string(src.Src[ls:le])
 	op := strings.TrimSuffix(strings.TrimSpace(string(src.Src[le:rs])), "=")
-	// 右辺そのものは書き換えず、前 (`x op=` → `x = (x op (`) と後ろ (`)) as T`) だけを変える。右辺の中にも書き換え
-	// (`-l0` → `-l0 as i8` など) があると、右辺を含む置き換えと重なっていた (fuzz の TestRandomMigrate で発覚)
+	// 左辺と右辺そのものは書き換えず、間 (` op= ` → ` = (L op (`。2 つめの L は中の書き換えも写す) と後ろ (`)) as T`) だけを
+	// 変える。左辺・右辺の中にも書き換え (`-l0` → `-l0 as i8`、添字の `156` → `156 as u8` など) があると、それを含む置き換えと
+	// 重なっていた (fuzz の TestRandomMigrate で発覚)
 	open, close := "", ""
 	if !simpleExpr(src.Src[rs:re]) {
 		open, close = "(", ")"
 	}
-	h.addRewrite(rule, ls, rs, fmt.Sprintf("%s = (%s %s %s", lhs, lhs, op, open))
+	h.addRewriteCopy(rule, le, rs, " = (", ls, le, fmt.Sprintf(" %s %s", op, open))
 	h.addRewrite(rule, re, re, fmt.Sprintf("%s) as %s", close, typ))
 }
 
