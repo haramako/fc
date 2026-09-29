@@ -727,3 +727,30 @@ function main():void
 		t.Errorf("fc 3: %q, fc 4: %q", before, after)
 	}
 }
+
+// TestConstCompareWidenedSign: 型付きの定数の大小の比較で、A1 で広げたオペランド (`(255 as u8) << 3` は i16 と出会うと u16 の
+// 2040) の符号の混在 (F6) は広げる前の型で見る (実行時と同じ。定数の形だけエラーになっていた。TestRandomConstFoldV4 の種
+// 700002)。値も実行時の形と同じ。
+func TestConstCompareWidenedSign(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+function id_u8(x:u8):u8 @(noinline) { return x; }
+function id_i16(x:i16):i16 @(noinline) { return x; }
+function main():void
+{
+	var a = (100 as i16) >= ((255 as u8) << 3);
+	var b = id_i16(100) >= (id_u8(255) << 3);
+	var c = (3000 as i16) >= ((255 as u8) << 3);
+	var d = id_i16(3000) >= (id_u8(255) << 3);
+	printf("{} {} {} {}\n", a, b, c, d);
+	console.exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "false false true true\n" {
+		t.Errorf("got %q", out)
+	}
+}

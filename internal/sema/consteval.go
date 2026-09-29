@@ -277,6 +277,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 						h.rewriteAs("shift-type", c.args[0], t.String())
 					}
 				}
+				// F6 の符号の混ざった大小の比較は、A1 で広げる前の型で見る (実行時も広げる前に検査する。`i16 >= (255 as u8) << 3` の
+				// 右は広げると u16 の 2040 になるが、元は u8 で i16 に収まる。TestRandomConstFoldV4 の種 700002)
+				mixed := len(args) > 1 && mixedSign(args[0].val, args[1].val)
 				if t != nil && c.op != opLand && c.op != opLor && c.op != opNot {
 					// A1 (widen.go): 広い型と出会う、印の付いた (折り返した) オペランドは、fc 4 では元の式をその幅で畳み込み直す
 					// (fc 3 のモジュールでは migrate に `as` を報告する)
@@ -299,7 +302,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 						u0, u1 := args[0].val.Untyped, args[1].val.Untyped
 						switch {
 						case !u0 && !u1:
-							if c.op != opEq && c.op != opNe && mixedSign(args[0].val, args[1].val) {
+							if c.op != opEq && c.op != opNe && mixed {
 								// F6: 型付きの定数どうしの大小の比較も実行時と同じ
 								switch {
 								case h.v4():
