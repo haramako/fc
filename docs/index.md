@@ -30,7 +30,7 @@ features:
 
 ## こんなコードです
 
-```fc
+```fc run
 #fc 4
 use console;
 

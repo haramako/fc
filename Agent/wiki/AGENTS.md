@@ -17,6 +17,11 @@
 - 記事の内容が特定ディレクトリに帰属すると判明したら、その `AGENTS.md` へ移す
 - 記事がコードと矛盾していると気づいたら、記事側を直すか削除する（コードが常に正・古い記事を放置しない）
 
+## Verification
+
+- `go test ./internal/doccheck`（`TestRepoDocRefs`）: 相対リンクの先、コメントや文書に書いた `Agent/`・`docs/` の `.md` のパス、その後の
+  `§N`（N で始まる見出し）と「の「言葉」」（本文にその言葉）が在ること。`discussions/` は過去の記録なので見ない
+
 ## Articles
 
 - [testing-and-fuzzing.md](testing-and-fuzzing.md) — `go test ./...` の層、差分 fuzz・Go native fuzz・バンク切替 fuzz の回し方、失敗した種と実プロジェクトの退行の調べ方、ベンチ

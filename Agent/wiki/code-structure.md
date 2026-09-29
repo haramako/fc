@@ -100,3 +100,4 @@
   `Loop.EveryIteration`）。ループを変換する段は opt/loopmatch.go の `loopHeader` / `loopDefs` / `singleStep` を使う。
 - **テストの共通の手順**は `internal/driver/harness_test.go` の `testBuild(t, buildSpec)`。新しいテストは既存の包み関数
   （`runEmu` / `buildFiles` / `buildBothLevels` …）か `testBuild` を使い、`NewCompiler(...).Build(...)` を直接書かない。
+  例外は `internal/doccheck`（テストだけのパッケージ。docs/ の例のビルドと文書への参照の検査。driver の外なので `testBuild` を使えない）

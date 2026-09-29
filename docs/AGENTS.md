@@ -21,7 +21,12 @@
 - コンパイラの内部の用語（IR・常駐・割付）を出さない。性能の話は利用者ができること（書き方・型の選び方）で語る
 - castle のもの（コード・テキスト・画面）を載せない。サンプルは examples の hello・life・jump・statusbar・wave・miku4
 - fc のコードは ` ```fc ` のブロックに書く。色付けは `tools/vscode-fc/syntaxes/fc.tmLanguage.json` をそのまま使う（文法を直せばサイトにも効く）
-- 例は `fcc run` / `fcc build` で実際に確かめ、`fcc fmt` の書式にし、出力は ` ```text ` で載せる（CI での自動の検査はまだ無い。計画の「例のコードを検査する」）
+- **例のコードは `go test ./internal/doccheck`（`TestDocsExamples`）が確かめる**。` ```fc ` の後に印を付ける:
+  - 印なし: 断片。構文が通り `fcc fmt` の書式どおり（`#fc` の行が無ければ fc 4、トップレベルで読めなければ関数の本体として読む）
+  - `run`: `#fc 4` から始まる 1 つのプログラム。emu で走らせ、終了コード 0・警告なしで、次の ` ```text ` のブロックと出力が同じ
+  - `test`: `@(test)` の関数が通る。`nes`: `-t nes` でビルドが通る（警告なし）。`error`: エラーになり、次の ` ```text ` の文言を含む
+  - `ignore`: 確かめない（使うときは理由を書く）
+- examples のファイルを丸ごと見せるときは写さずに VitePress の `<<< @/../examples/…/x.fc` で読み込む（動くことは examples のテストが見る）
 - 生成物（`.vitepress/dist`・`.vitepress/cache`、これから作る `reference/std/`）はコミットしない。`reference/std/` は CI のビルドの中で作る
 - `AGENTS.md` / `CLAUDE.md` はサイトに出さない（`srcExclude`）
 
@@ -35,6 +40,7 @@
 ## Verification
 
 - `npm run build --prefix docs` が通ること（切れたリンクがあると失敗する）
+- `go test ./internal/doccheck` が通ること（例のコード。`go test ./...` にも入る）
 
 ## Child DOX Index
 

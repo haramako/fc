@@ -1,0 +1,272 @@
+package doccheck
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/haramako/fc/internal/driver"
+	"github.com/haramako/fc/internal/syntax"
+)
+
+// codeBlock は Markdown のフェンスで囲まれたコードのブロック。
+type codeBlock struct {
+	file  string   // リポジトリのルートからのパス
+	line  int      // 開きのフェンスの行 (1 から)
+	lang  string   // info string の最初の語 (```fc run なら "fc")
+	attrs []string // 残りの語 (```fc run なら ["run"])
+	code  string
+}
+
+func (b *codeBlock) name() string { return b.file + ":" + strconv.Itoa(b.line) }
+
+var fenceRe = regexp.MustCompile("^([ \t]*)(`{3,}|~{3,})[ \t]*([^`]*)$")
+
+// parseBlocks は Markdown からフェンスのブロックを順に取り出す。
+func parseBlocks(file, text string) []*codeBlock {
+	var blocks []*codeBlock
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	for i := 0; i < len(lines); i++ {
+		m := fenceRe.FindStringSubmatch(lines[i])
+		if m == nil {
+			continue
+		}
+		indent, fence, info := m[1], m[2], strings.TrimSpace(m[3])
+		b := &codeBlock{file: file, line: i + 1}
+		if f := strings.FieldsFunc(info, func(r rune) bool { return r == ' ' || r == '\t' }); len(f) > 0 {
+			// VitePress の ```fc{1,3} / ```fc:line-numbers も言語は fc
+			b.lang = strings.FieldsFunc(f[0], func(r rune) bool { return r == '{' || r == ':' })[0]
+			b.attrs = f[1:]
+		}
+		var body []string
+		for i++; i < len(lines); i++ {
+			l := lines[i]
+			if t := strings.TrimLeft(l, " \t"); strings.HasPrefix(t, fence) && strings.TrimSpace(strings.TrimLeft(t, fence[:1])) == "" {
+				break
+			}
+			body = append(body, strings.TrimPrefix(l, indent))
+		}
+		if len(body) > 0 {
+			b.code = strings.Join(body, "\n") + "\n"
+		}
+		blocks = append(blocks, b)
+	}
+	return blocks
+}
+
+// docsFiles は docs/ のサイトのページ (VitePress の srcExclude と生成物・依存を除く)。
+func docsFiles(t *testing.T) []string {
+	t.Helper()
+	var files []string
+	root := filepath.Join(repoRoot(t), "docs")
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "node_modules", ".vitepress", "public":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		switch d.Name() {
+		case "AGENTS.md", "CLAUDE.md", "language_reference.md":
+			return nil
+		}
+		if strings.HasSuffix(p, ".md") {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+// TestDocsExamples: docs/ の ```fc のブロックを確かめる。印 (info string の fc の後の語) ごとに:
+//
+//	(無し)  断片。構文が通り、fcc fmt の書式と同じ (#fc の行が無ければ fc 4。トップレベルで読めなければ関数の本体として読む)
+//	run     emu でビルドして走らせ、終了コード 0 で、次の ```text のブロックと出力が同じ。警告も無いこと
+//	test    fcc test と同じく @(test) の関数を走らせて通る
+//	nes     -t nes でビルドが通る (警告無し)
+//	error   ビルドがエラーになり、次の ```text のブロックがあればその文言を含む
+//	ignore  確かめない (使うときは理由を書く)
+func TestDocsExamples(t *testing.T) {
+	root := repoRoot(t)
+	for _, path := range docsFiles(t) {
+		text, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rel, _ := filepath.Rel(root, path)
+		blocks := parseBlocks(filepath.ToSlash(rel), string(text))
+		for i, b := range blocks {
+			if b.lang != "fc" {
+				continue
+			}
+			var next *codeBlock // 次のブロック (出力の ```text)
+			if i+1 < len(blocks) && blocks[i+1].lang == "text" {
+				next = blocks[i+1]
+			}
+			b := b
+			t.Run(b.name(), func(t *testing.T) {
+				t.Parallel()
+				checkBlock(t, root, b, next)
+			})
+		}
+	}
+}
+
+func checkBlock(t *testing.T, root string, b, next *codeBlock) {
+	mode := ""
+	if len(b.attrs) > 0 {
+		mode = b.attrs[0]
+	}
+	src := b.code
+	if !strings.HasPrefix(src, "#fc") && mode != "ignore" && mode != "error" {
+		if mode != "" {
+			t.Fatalf("%s: ```fc %s のブロックは #fc 4 から始まる 1 つのプログラムにする", b.name(), mode)
+		}
+		src = "#fc 4\n" + src
+	}
+	switch mode {
+	case "ignore":
+		return
+	case "":
+		checkFormat(t, b, src)
+	case "run":
+		checkFormat(t, b, src)
+		if next == nil {
+			t.Fatalf("%s: ```fc run の後に出力の ```text のブロックが要る", b.name())
+		}
+		r := build(t, root, map[string]string{"t.fc": src}, "emu", true)
+		if r.err != nil {
+			t.Fatalf("%s: %v", b.name(), r.err)
+		}
+		noWarnings(t, b, r)
+		if r.res.ExitCode != 0 {
+			t.Errorf("%s: 終了コード %d", b.name(), r.res.ExitCode)
+		}
+		if r.stdout != next.code {
+			t.Errorf("%s: 出力が %s の ```text と違う\ngot:\n%s\nwant:\n%s", b.name(), next.name(), r.stdout, next.code)
+		}
+	case "test":
+		checkFormat(t, b, src)
+		main := "#fc 4\nuse t;\nfunction main():void { @run_tests(); }\n"
+		r := build(t, root, map[string]string{"t.fc": src, "main.fc": main}, "emu", true, "main.fc")
+		if r.err != nil {
+			t.Fatalf("%s: %v", b.name(), r.err)
+		}
+		noWarnings(t, b, r)
+		if r.res.ExitCode != 0 {
+			t.Errorf("%s: テストが通らない (終了コード %d)\n%s", b.name(), r.res.ExitCode, r.stdout)
+		}
+	case "nes":
+		checkFormat(t, b, src)
+		r := build(t, root, map[string]string{"t.fc": src}, "nes", false)
+		if r.err != nil {
+			t.Fatalf("%s: %v", b.name(), r.err)
+		}
+		noWarnings(t, b, r)
+	case "error":
+		r := build(t, root, map[string]string{"t.fc": src}, "emu", false)
+		if r.err == nil {
+			t.Fatalf("%s: ```fc error なのにエラーにならない", b.name())
+		}
+		if next != nil && !strings.Contains(r.err.Error(), strings.TrimSpace(next.code)) {
+			t.Errorf("%s: エラーの文言が %s と違う\ngot:  %v\nwant: %s", b.name(), next.name(), r.err, strings.TrimSpace(next.code))
+		}
+	default:
+		t.Fatalf("%s: 知らない印 %q (run / test / nes / error / ignore)", b.name(), mode)
+	}
+}
+
+// checkFormat は src が fcc fmt の書式どおりかを見る。トップレベルで読めなければ関数の本体として読む (文の断片)。
+func checkFormat(t *testing.T, b *codeBlock, src string) {
+	t.Helper()
+	got, err := syntax.Format([]byte(src), b.file)
+	if err == nil {
+		if string(got) != src {
+			t.Errorf("%s: fcc fmt の書式と違う\ngot:\n%s\nwant (fmt):\n%s", b.name(), src, got)
+		}
+		return
+	}
+	body := strings.TrimPrefix(src, "#fc 4\n")
+	var w strings.Builder
+	w.WriteString("#fc 4\nfunction f():void\n{\n")
+	for _, l := range strings.SplitAfter(body, "\n") {
+		if strings.TrimSpace(l) != "" {
+			w.WriteString("\t")
+		}
+		w.WriteString(l)
+	}
+	w.WriteString("}\n")
+	wrapped := w.String()
+	got2, err2 := syntax.Format([]byte(wrapped), b.file)
+	if err2 != nil {
+		t.Errorf("%s: 構文エラー: %v", b.name(), err)
+		return
+	}
+	if string(got2) != wrapped {
+		t.Errorf("%s: fcc fmt の書式と違う (関数の本体として整形)\ngot:\n%s\nwant (fmt):\n%s", b.name(), wrapped, got2)
+	}
+}
+
+func noWarnings(t *testing.T, b *codeBlock, r buildResult) {
+	t.Helper()
+	for _, w := range r.res.Warnings {
+		t.Errorf("%s: 警告: %v", b.name(), w)
+	}
+}
+
+type buildResult struct {
+	res    *driver.Result
+	stdout string
+	err    error
+}
+
+// build は files を一時ディレクトリに置いてビルドする (run なら emu で走らせる)。main は入口 (既定 t.fc)。
+func build(t *testing.T, root string, files map[string]string, target string, run bool, main ...string) buildResult {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entry := "t.fc"
+	if len(main) > 0 {
+		entry = main[0]
+	}
+	out := "a.bin"
+	if target == "nes" {
+		out = "a.nes"
+	}
+	for retry := 0; ; retry++ {
+		var stdout strings.Builder
+		opt := &driver.BuildOptions{Target: target, Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, out),
+			Run: run, Stdout: &stdout, MaxCycles: 50_000_000}
+		res, err := driver.NewCompiler(root).BuildContext(t.Context(), entry, opt)
+		// ca65 がまれに何も出さずに失敗する (Windows)。internal/driver の testBuild と同じくやり直す
+		var ce *driver.CommandError
+		if retry < 2 && errors.As(err, &ce) && strings.TrimSpace(ce.Result) == "" {
+			continue
+		}
+		return buildResult{res: res, stdout: stdout.String(), err: err}
+	}
+}
+
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
