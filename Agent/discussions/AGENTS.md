@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-09-30 [else if と elsif](2026-09-30-else-if-and-elsif.md) — `fcc fmt` が `else if` を続けて整形するようにした。elsif は fc 4 でなくす候補
 - 2026-09-30 [文書への参照の書き方](2026-09-30-doc-reference-style.md) — § の番号をやめ、ファイル名と見出しの言葉で指す。コードからは design/ か docs/ を指す
 - 2026-09-30 [利用者向けドキュメントの方針](2026-09-30-user-docs-direction.md) — docs/ に利用者向けを作り Pages で公開、fc 4 だけ書く、旧 language_reference は参考にして後で消す（計画は wiki/plans/user-docs.md）
 - 2026-09-30 [今のブランチへの直接コミット](2026-09-30-direct-commit-to-current-branch.md) — トピックブランチを切らず今のブランチ（feature/v4）に直接コミットしてよい

@@ -223,6 +223,10 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
 - [x] fc 4 の使われない private な変数は領域を取らない（@(test) の関数だけが使うバッファなど） ✅ 2026-09-29
 - [x] シンプルなパッケージマネージャ（fc.toml の `[lib.NAME]`: path / git + rev + dir、`fc.lock`、`fcc lib`） ✅ 2026-09-29
       （Agent/wiki/plans/v4-stdlib.md §9。✅ 2026-09-29: `fcc lib add`、`-d` の要約に置き換えを出す。✅ 2026-09-29: ライブラリの依存。残り: `use ライブラリ/モジュール`、tarball）
+- [ ] `elsif` をなくす（2026-09-30 ユーザー「`else if` が正しく動くなら、そのうち消してよい」。`elsif` は昔の整形の都合で入れたもので、
+      意味は `else if` と同じ: 構文木の `IfStmt.IsElsif` を見るのは整形だけ）。✅ 2026-09-30: `fcc fmt` が `} else if (...) {` を
+      `elsif` と同じく字下げせずに続けるようにした。残り: fc 4 で `elsif` をエラーにし、fc 3 → 4 の migrate が `else if` に書き換える
+      （examples の jump・miku4、test/math.fc の `elsif` も移す）。VS Code の文法の `elsif` も外す
 
 ## v3: 一般的な用途で不便な仕様（2026-09-26 調査）
 
