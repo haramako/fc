@@ -176,7 +176,9 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       エラー、F3（符号なしの単項マイナス）は今のまま、F4（型を書かない配列リテラル）は全部の定数が入る一番小さい型、F6（符号の
       読み替えになる大小の比較）はエラー。✅ 2026-09-28〜29 で全部実装（migrate も）
 - [x] `#fc 4` の受け付けと、sema の版による規則の切り替え ✅ 2026-09-28（規則はまだ fc 3 と同じ）
-- [x] fc 3 → fc 4 の migrate: ROM を変えない（2026-09-28 決定）。✅ 2026-09-28〜29（整数の規則 E・D・A1・F1 と文字列定数の長さ。
+- [x] fc 3 → fc 4 の migrate: ROM を変えない（2026-09-28 決定。2026-09-29: fc 2 / fc 3 の暗黙の縮小を明示の `as` と同じ cast の形の IR に
+      そろえた（値のままだと migrate が足す `as` で -O 2 のレジスタの割付が変わり ROM が変わっていた。fuzz の TestRandomMigrate の
+      種 53252143。TestV4MigrateNarrowingROM。今ある castle・miku・test・bench の ROM と数字は変わらない））。✅ 2026-09-28〜29（整数の規則 E・D・A1・F1 と文字列定数の長さ。
       fuzz: TestRandomMigrate / TestRandomProgramsV4 / TestRandomConstFoldV4）。型を見る規則（sema が v4 で意味が変わる式を位置つきで報告し、
       `as` を足す）。examples・test・bench の今の golden とバイト単位で比べる。生成コードが変わるもの（`fastcall` の廃止、
       fclib の新しい API）は後の段で、動作で確かめる

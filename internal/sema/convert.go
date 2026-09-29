@@ -43,6 +43,9 @@ func (h *Hlc) convert(v ir.Operand, typ *types.Type, c *cexpr) ir.Operand {
 			case h.rewriting():
 				h.rewriteAs("narrowing", c, typ.String())
 			}
+			// fc 2 / fc 3 の暗黙の縮小は、明示の `x as T` (explicitCast) と同じ cast の形にする (値のままだと IR が違い、migrate が
+			// 足す `as` で -O 2 の ROM が変わっていた: レジスタの割付が変わる。fuzz の TestRandomMigrate。cast の形のほうが最適化も効く)
+			return ir.NewCastedValue(v, typ, 0)
 		}
 	}
 	return h.cast(v, typ)
