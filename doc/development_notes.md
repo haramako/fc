@@ -96,6 +96,10 @@ go test ./...                                    # 全部 (golden + examples + N
     値の `==` / `!=`）、`defargs`（末尾の整数の引数に既定値、直接の呼び出しでときどき省く）、`shadow`（素のブロックで外の変数と
     同じ名前・型の変数）。足す前の確認で、インタプリタが配列の値の load（初期値つきのローカル配列）を番地のコピーにしていたのを
     直した（94ab120）。スキップ（ROM に入らない等）は 200 種で 13.5% → 16%（`arrlit` が一番効くので確率を低めに）
+  - fuzz が N100 機（16GB）のメモリを使い切って OOM killer がセッションごと落とした原因は、TestRandomMutate が壊して作った
+    `g0 << 99999999`（1 バイトの値の、型の幅を大きく超える定数の回数のシフト）: codegen の genShift と regalloc の
+    ShiftMemForm が 1 ビットずつ n 回の命令を並べていた（100 万で 200MB、1 億でメモリを食い尽くす）。回数を型の幅で
+    頭打ちに（`TestShiftCountBeyondWidth`）。fuzz の実行は差分 fuzz・FuzzCheck ともメモリの上限つき（systemd-run --scope）に
   - 常駐レジスタの自己修正（`ResidentFixes`）を「A のまま使う」(ResFriendly) 命令にも広げる案は、その命令が常駐の値を A に
     読み直すのも「A を書いた」と数えて収束しなかったので入れていない（2026-09-28）
 - **差分テストの判定の弱点と、足した検査**（2026-09-27）: TestRandomPrograms / TestRandomV3Programs の判定は -O 0・-O 2・

@@ -449,6 +449,11 @@ func (l *funcGen) genShift() {
 	rotate := ifElse(op.Code == ir.OpShiftLeft, "rol", "ror")
 	if n, ok := ir.ValIntLiteral(op.In(1)); ok {
 		// 定数の場合
+		if w := 8 * ir.ValType(op.Dst).Size; n > w {
+			// 型の幅以上のシフトは幅で頭打ち (幅だけ回せば 0 か符号で埋まり、それ以上は変わらない)。以下の形はどれも
+			// 1 ビットずつ n 回の命令を並べるので、`x << 99999999` でメモリを食い尽くしていた (fuzz の TestRandomMutate で発覚)
+			n = w
+		}
 		if f, ok := regalloc.ShiftMemForm(op, l.place()); ok {
 			r.push(l.emitForm(f)) // メモリ上のその場のシフト (asl x / asl lo; rol hi。A を使わない)
 		} else if lines, ok := l.shiftByte(op, n, signed); ok && !lmd.Cfg().Disabled("shift8") {

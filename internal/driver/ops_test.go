@@ -2840,3 +2840,21 @@ func TestStaticFramesRetryNoGrow(t *testing.T) {
 		t.Errorf("%s\n%s", res.kind, res.detail)
 	}
 }
+
+// TestShiftCountBeyondWidth: 型の幅以上の定数の回数のシフトは幅で頭打ちにして命令を並べる。1 ビットずつ n 回の命令を
+// 並べていたので、`x << 99999999` (fuzz の TestRandomMutate が壊して作った形) でコンパイラがメモリを食い尽くした。
+func TestShiftCountBeyondWidth(t *testing.T) {
+	t.Parallel()
+	asm := compileAsm(t, `var a:int; var b:sint; var c:int16; var d:sint16; var r:int; var s:sint16;
+function main():void
+{
+	r = a << 1000; a = a >> 1000; b = b >> 1000; r = b >> 1000;
+	c = c << 1000; s = c >> 1000; d = d >> 1000; s = d << 1000;
+	printf(a, b, c, d, r, s);
+}
+`)
+	n := len(regexp.MustCompile(`(?m)^\s*(asl|lsr|rol|ror)\b`).FindAllString(asm, -1))
+	if n > 8*16 {
+		t.Errorf("シフトの命令が %d 個 (型の幅で頭打ちなら 8 文で 128 個以下):\n%s", n, asm)
+	}
+}
