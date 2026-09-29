@@ -387,3 +387,77 @@ function main():void
 		t.Errorf("poll がポインタで読み書きしている:\n%s", body)
 	}
 }
+
+// TestWideForEachPointer: 要素 1 バイトで添字が 16 ビットの for-each ([:u16] の slice、256 要素を超える配列) は要素を指す
+// ポインタを進めるループ (sema の forInElems)。空・256 を超える長さ・continue / break・const の表で、値は Go で計算したもの。
+func TestWideForEachPointer(t *testing.T) {
+	t.Parallel()
+	out, asm := buildShape(t, `#fc 4
+use console;
+var big:[300]u8;
+function sum(s:[:u16]const u8):u16 @(noinline)
+{
+	var r:u16 = 0;
+	for (var c in s) {
+		if (c == 7) {
+			continue;
+		}
+		if (c == 250) {
+			break;
+		}
+		r += c;
+	}
+	return r;
+}
+function fill():u16 @(noinline)
+{
+	var k:u8 = 0;
+	for (var i:u16 = 0; i < 300; i += 1) {
+		big[i] = k;
+		k += 3;
+	}
+	var r:u16 = 0;
+	for (var c in big) {
+		r += c;
+	}
+	return r;
+}
+function main():void
+{
+	var f = fill();
+	printf("{} {} {} {}\n", f, sum(big), sum(big[..0]), sum(big[10..20]));
+	console.exit(0);
+}
+`)
+	big := make([]byte, 300)
+	k := byte(0)
+	for i := range big {
+		big[i] = k
+		k += 3
+	}
+	sum := func(s []byte) int {
+		r := 0
+		for _, c := range s {
+			if c == 7 {
+				continue
+			}
+			if c == 250 {
+				break
+			}
+			r += int(c)
+		}
+		return r & 0xffff
+	}
+	all := 0
+	for _, c := range big {
+		all += int(c)
+	}
+	want := fmt.Sprintf("%d %d %d %d\n", all, sum(big), 0, sum(big[10:20]))
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+	// 添字の 16 ビットの足し算 (adc <reg+1) が無い
+	if body := strings.Join(procBody(t, asm, "_t_sum"), "\n"); strings.Contains(body, "reg+1") {
+		t.Errorf("sum が 16 ビットの添字で読んでいる:\n%s", body)
+	}
+}

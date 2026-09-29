@@ -25,6 +25,7 @@ import (
 type forInLoop struct {
 	i    *ir.Value // ループの変数 (範囲の変数か添字。ユーザーのものでなければ一時変数)
 	end  *ir.Value // i がこれになったら抜ける (wrap でなければ i < end の間回る)
+	ptr  bool      // i は要素を指すポインタ (1 ずつ進め、i != end の間回る)
 	wrap bool      // 後ろで判定する形 (i++ の後 i != end の間回る)
 	pre  *cexpr    // wrap のときの、空でないかの検査 (nil なら無し)
 }
@@ -141,6 +142,26 @@ func (h *Hlc) forInElems(s *syntax.ForInStmt) (forInLoop, func()) {
 	default:
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot iterate over %s (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)", t)})
 	}
+	// 16 ビットの添字 ([:u16] の slice、256 要素を超える配列) で要素が 1 バイトなら、要素を指すポインタを進めるループにする
+	// (添字で回すと毎周 16 ビットの番地の足し算と (reg),y の読みになる。ポインタなら ywalk が `lda (p),y; iny` にする)
+	et := bt.Base // 要素の型
+	if bt.IsSlice() {
+		et = bt.SliceOf
+	}
+	if !ptrMode && s.Index == nil && et.Size == 1 && (bt.IsWideSlice() || bt.Kind == types.Array && bt.Length > 256) {
+		parts := h.sliceParts(base, "for")
+		p := h.forInVar(h.tmpName("$"), h.prog.Types.PointerTo(et))
+		h.markReadOnly(p, parts.ro)
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: p, Src: []ir.Operand{parts.ptr}})
+		end := h.newTmp(ir.ValType(p))
+		h.markReadOnly(end, parts.ro)
+		h.lval(cop2(opLoad, cv(end), cop2(opAdd, cv(p), &cexpr{kind: cOperand, opnd: parts.len})))
+		xv := h.forInVar(s.Elem.Name, et)
+		h.markLoopVar(xv)
+		return forInLoop{i: p, end: end, ptr: true}, func() {
+			h.writeLoopVar(xv, func() { h.lval(cop2(opLoad, cv(xv), cop2(opDeref, cv(p)))) })
+		}
+	}
 	// 長さと添字の型: 配列は定数 (256 以下なら u8)、slice は長さの型
 	var loop forInLoop
 	var it *types.Type
@@ -176,10 +197,6 @@ func (h *Hlc) forInElems(s *syntax.ForInStmt) (forInLoop, func()) {
 	}
 	if s.Index != nil {
 		h.markLoopVar(loop.i)
-	}
-	et := bt.Base // 要素の型
-	if bt.IsSlice() {
-		et = bt.SliceOf
 	}
 	elem := cop2(opIndex, base, cv(loop.i))
 	if ptrMode {
@@ -256,9 +273,17 @@ func (h *Hlc) checkLoopVarAssign(left ir.Operand) {
 // emitForInLoop はループの本体を出す。
 func (h *Hlc) emitForInLoop(s *syntax.ForInStmt, label *syntax.Ident, loop forInLoop, prologue func()) {
 	step := func() {
+		one := ir.NewIntLiteral("", ir.ValType(loop.i), 1)
+		if loop.ptr {
+			one = ir.NewIntLiteral("", h.prog.Types.IntType(1, false), 1) // 要素 1 バイトのポインタ: 1 バイト進める
+		}
 		h.writeLoopVar(loop.i, func() {
-			h.lval(cop2(opLoad, cv(loop.i), cop2(opAdd, cv(loop.i), cv(ir.NewIntLiteral("", ir.ValType(loop.i), 1)))))
+			h.lval(cop2(opLoad, cv(loop.i), cop2(opAdd, cv(loop.i), cv(one))))
 		})
+	}
+	cond := opLt
+	if loop.ptr {
+		cond = opNe // 末尾の 1 つ先が $10000 でも抜ける
 	}
 	body := func() {
 		if prologue != nil {
@@ -276,7 +301,7 @@ func (h *Hlc) emitForInLoop(s *syntax.ForInStmt, label *syntax.Ident, loop forIn
 		h.pushBreakable(breakable{continueLabel: stepLabel, breakLabel: labels[1]})
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[0]})
 		ifl := h.newLabels("then", "else", "end")
-		h.compileCond(cop2(opLt, cv(loop.i), cv(loop.end)), ifl[1], false)
+		h.compileCond(cop2(cond, cv(loop.i), cv(loop.end)), ifl[1], false)
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: ifl[0]})
 		h.inScope(func() {
 			body()
