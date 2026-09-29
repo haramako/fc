@@ -42,11 +42,12 @@ const (
 )
 
 type ssaForm struct {
-	lmd     *ir.Lambda
-	cfg     *ir.CFG
-	vars    map[*ir.Value]bool // 対象の変数
-	blockOf []*ir.Block        // 命令 → ブロック (到達できない命令は nil)
-	jumped  map[string]bool    // 飛び先になるラベル (untouched が作る)
+	lmd        *ir.Lambda
+	cfg        *ir.CFG
+	vars       map[*ir.Value]bool // 対象の変数
+	blockOf    []*ir.Block        // 命令 → ブロック (到達できない命令は nil)
+	jumped     map[string]bool    // 飛び先になるラベル (untouched が作る)
+	frozenVars map[*ir.Value]bool // どこからも書かれないローカル (frozen が作る)
 
 	cur        map[*ir.Block]map[*ir.Value]*ssaVal // ブロック内の最後の定義
 	entry      map[*ir.Block]map[*ir.Value]*ssaVal // ブロックの入口の版
@@ -593,6 +594,11 @@ func (s *ssaForm) rewrite() bool {
 			if y := s.highByteOf(resolve(val), o, i); y != nil {
 				op.Src[k] = y
 				changed = true
+				continue
+			}
+			if y := s.frozenSource(resolve(val), o); y != nil {
+				op.Src[k] = y
+				changed = true
 			}
 		}
 		// 番地が変数の参照 (`&g`: inline した関数に渡した struct のポインタ) のメモリの読み書きは、その変数の直の読み書きに
@@ -696,6 +702,72 @@ func (s *ssaForm) directMem(op *ir.Op, val *ssaVal) *ir.Op {
 		return &ir.Op{Code: ir.OpLoad, Dst: ir.NewCastedValue(g, ir.ValType(v), disp), Src: []ir.Operand{v}, Pos: op.Pos}
 	}
 	return nil
+}
+
+// frozenSource は使用 o の版が `load t = y` (y は関数の中でどこからも書かれずアドレスも取られないローカル (slice の引数の
+// ポインタ・長さの部分など) で、SSA の外の大きさのもの) の写しなら、y を読むオペランドを返す (`unpack_raw(@ptr(dst), ...)` が
+// @ptr の一時変数を経て写し直していた)。
+func (s *ssaForm) frozenSource(val *ssaVal, o ir.Operand) ir.Operand {
+	if val.def < 0 {
+		return nil
+	}
+	def := s.lmd.Ops[val.def]
+	if def == nil || def.Code != ir.OpLoad || def.Dst != ir.Operand(val.v) || !ir.PlainOperand(def.Src[0]) ||
+		ir.ValType(def.Src[0]) != val.v.Type {
+		return nil
+	}
+	y := ir.UnderlyingValue(def.Src[0])
+	if y == nil || y.Kind != ir.KindLocal || y.Volatile || s.vars[y] || !s.frozen()[y] {
+		return nil
+	}
+	if cv, ok := o.(*ir.CastedValue); ok {
+		return ir.RebaseCast(cv, def.Src[0])
+	}
+	return def.Src[0]
+}
+
+// frozen は関数の中でどの命令も書かず、アドレスも取られず asm からも触られないローカル (一度だけ作る)。
+func (s *ssaForm) frozen() map[*ir.Value]bool {
+	if s.frozenVars != nil {
+		return s.frozenVars
+	}
+	bad := map[*ir.Value]bool{}
+	s.frozenVars = map[*ir.Value]bool{}
+	for _, op := range s.lmd.Ops {
+		if op == nil {
+			continue
+		}
+		if v := ir.UnderlyingValue(op.Dst); v != nil && op.Dst != nil {
+			bad[v] = true
+		}
+		for _, o := range append([]ir.Operand{op.Dst}, op.Src...) {
+			if pa, ok := o.(*ir.PointeredArray); ok {
+				if v := ir.UnderlyingValue(pa.From); v != nil {
+					bad[v] = true
+				}
+			}
+			if cv, ok := o.(*ir.CastedValue); ok {
+				if pa, ok := cv.From.(*ir.PointeredArray); ok {
+					if v := ir.UnderlyingValue(pa.From); v != nil {
+						bad[v] = true
+					}
+				}
+			}
+		}
+		if op.Code == ir.OpRef || op.Code == ir.OpAsm {
+			for _, o := range op.Src {
+				if v := ir.UnderlyingValue(o); v != nil {
+					bad[v] = true
+				}
+			}
+		}
+	}
+	for _, v := range s.lmd.Vars {
+		if v.Kind == ir.KindLocal && !bad[v] {
+			s.frozenVars[v] = true
+		}
+	}
+	return s.frozenVars
 }
 
 // highByteOf は使用 o が 2 バイトの x の下位 1 バイト (`(a >> 8) as u8`) で、x の版が `x = y >> 8` なら、y の上位 1 バイトを
