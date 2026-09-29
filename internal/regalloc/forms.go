@@ -1,6 +1,6 @@
 package regalloc
 
-// 常駐のレジスタを使う・触らない特別な出し方 (形) の表 (2026-09-28。Agent/wiki/development-notes.md「コードの構造」)。
+// 常駐のレジスタを使う・触らない特別な出し方 (形) の表 (2026-09-28。Agent/wiki/code-structure.md)。
 //
 // codegen は命令をこの形で出し (genLoad / genIf / genEq / genLt / genAddSub / genShift / genRotateCarry)、regalloc は同じ形から
 // 「変数をレジスタに置いたまま実行できるか」(Classify の friendly)・「A を触らないか」(free) と、その得 (常駐させないときの

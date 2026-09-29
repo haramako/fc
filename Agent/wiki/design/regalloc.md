@@ -4,8 +4,8 @@
 「ループの中で毎回 `lda x … sta x` している 1 バイト変数を A に置いたまま回す」こと。
 
 **2026-09-28 の変更**: 下の分類（friendly / A-free / Y で代用）のうち特別な出し方の部分は、regalloc と codegen が同じ形の表
-（`regalloc/forms.go`）を引くようになった。得の数字も形の命令列から m6502 のサイクル数で数える（Agent/wiki/development-notes.md の
-「コードの構造」）。以下は設計当時の記述。
+（`regalloc/forms.go`）を引くようになった。得の数字も形の命令列から m6502 のサイクル数で数える（Agent/wiki/code-structure.md）。
+以下は設計当時の記述。
 
 SSA 化は先送りした。この割付は既存の IR（変数 + 命令列）の上で、命令ごとの生存集合（`LiveRangeCalculator` が
 持っていて区間に潰していたもの）を使えば作れて、SSA 化後もそのまま使える部品（領域の選択、コストモデル、

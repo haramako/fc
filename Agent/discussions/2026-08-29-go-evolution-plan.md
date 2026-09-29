@@ -126,7 +126,7 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
       片側でも符号付きなら符号付き比較、符号付きは `sbc` + V 補正（v1 は `cmp; bmi` でオーバーフロー時に誤り）、
       多バイトは借りの連鎖（v1 は上位バイトの結果を下位で上書きしていて 16 ビット比較全般が誤り）、
       `x < 0` は符号ビットだけ見る。fclib/math.fc の `x < 128`（符号なしのつもりの書き方）は `x >= 0` 等に直した。
-      **castle の実挙動は要手動検証**: 対象は [castle_signed_compare_sites.txt](../../doc/castle_signed_compare_sites.txt)（86 箇所）。
+      **castle の実挙動は要手動検証**: 対象は [castle_signed_compare_sites.txt](2026-08-29-castle-signed-compare-sites.txt)（86 箇所）。
       内蔵エミュ / MesenCE の自動プレイは通る。my_process セグメントが満杯に近く、比較の符号付き部分が
       伸びたため値を作る場合のコードを詰めた（`lda #0; rol a; eor #1`）
 - [x] **非void関数の return 忘れが素通りする**（memo.txt: do_debug_selectで発症）
@@ -341,7 +341,7 @@ R5 CI/リリース は R0 直後から並行可
 ## 作業ログ
 
 移植完了（`go-strict-clone` タグ）以降の記録。環境・運用の詳細は
-[Agent/wiki/development-notes.md](../wiki/development-notes.md) を参照。
+[Agent/wiki/AGENTS.md](../wiki/AGENTS.md) を参照。
 
 ### 2026-08-29 — 検証基盤の先行整備（本計画の一部を前倒し）
 
@@ -369,7 +369,7 @@ R5 CI/リリース は R0 直後から並行可
    （emu ターゲットでは rti を通らないため露見していなかった）
 6. **MesenCE 統合** — 2.2.1 を導入し `TestMesenPlayCastle`（`--testrunner` +
    生成Lua で自動プレイ、ld65 マップから取得した `_bg_cur_area` の変化で判定）。
-   ヘッドレス起動の罠は Agent/wiki/development-notes.md に記録
+   ヘッドレス起動の罠は Agent/wiki/mesen-and-debugging.md に記録
 
 結果、検証は**四段構え**になった:
 golden差分（コンパイラ出力）→ ROMバイト一致（実プロジェクト）→

@@ -15,4 +15,12 @@
 
 ## Log
 
-
+- 2026-09-30 [Agent/ の導入と doc/ の振り分け](2026-09-30-agent-workspace-and-doc-split.md) — doc/ を人間向けに絞り、設計は wiki/design・計画は wiki/plans・過去の検討はここへ。development_notes を分割
+- 2026-09-21 [アクティベーション単位のグローバル領域](2026-09-21-activation-memory-ideas.md) — 検討メモ
+- 2026-09-20 [FC V3 検討メモ](2026-09-20-v3-plan.md) — v3 の言語変更の検討と実装記録（v3 は main にマージ済み）
+- 2026-09-20 [slice の長さ・ABI・sentinel・移行](2026-09-20-v3-slice-tradeoffs.md) / [slice・固定容量 vector の設計案](2026-09-20-v3-slices-vector.md) / [slice・vector を使う API の利用案](2026-09-20-v3-slices-api-examples.md)
+- 2026-09-19 [fuzz で見つかったバグと生成器の拡張の記録](2026-09-19-fuzz-findings-log.md) — 種の範囲ごとの発見と固定したテスト名（追記型）
+- 2026-09-14 [v2 のアイデアメモ](2026-09-14-v2-idea.md)
+- 2026-09-13 [文法 v2 設計メモ](2026-09-13-v2-grammar.md)
+- 2026-09-12 [v2 未決事項の検討](2026-09-12-v2-decisions.md) / [v2 作業計画（R0〜R3）](2026-09-12-v2-plan.md) / [ブランチ運用の経緯](2026-09-12-branch-history.md)
+- 2026-08-29 [Go 実装の進化計画（脱・厳密クローン）](2026-08-29-go-evolution-plan.md)（添付: [castle の符号付き比較の箇所](2026-08-29-castle-signed-compare-sites.txt)）

@@ -1,6 +1,6 @@
 package nes
 
-// 実プロジェクトの退行の切り分け用 (環境変数が無ければ Skip。Agent/wiki/development-notes.md「実プロジェクトの退行の切り分け」):
+// 実プロジェクトの退行の切り分け用 (環境変数が無ければ Skip。Agent/wiki/testing-and-fuzzing.md「実プロジェクトの退行の切り分け」):
 //   TestProbeDiff: 2 つの ROM (FC_PROBE_ROM_A / _B。最適化のパスを FC_DISABLE で切ったものなど) を同じ入力で並走させ、
 //     両方が vsync 待ちに入ったフレームだけゲームの状態 (BSS / WRAM) を比べて、最初に食い違うフレームと番地を出す。
 //     FC_PROBE_DBG (/ _B) の dbgfile で番地 → 名前。FC_PROBE_PREFIX=_my_,_en_ で比べる変数を絞る。FC_PROBE_WATCH=名前,... で

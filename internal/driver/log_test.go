@@ -196,7 +196,7 @@ func TestLogZeroCost(t *testing.T) {
 	t.Cleanup(func() { // 並列の子のテストが全部終わった後
 		n, d := compared.Load(), differed.Load()
 		if float64(d) > float64(n)*logValueDiffLimit+logValueDiffSlack {
-			t.Errorf("@log の値が -O 0 と -O 2 で食い違った種が多すぎる: %d / %d (上限 %.0f%% + %d 個)。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue) が崩れていないか (Agent/wiki/development-notes.md)", d, n, logValueDiffLimit*100, logValueDiffSlack)
+			t.Errorf("@log の値が -O 0 と -O 2 で食い違った種が多すぎる: %d / %d (上限 %.0f%% + %d 個)。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue) が崩れていないか (Agent/wiki/log-annotation-rules.md)", d, n, logValueDiffLimit*100, logValueDiffSlack)
 		}
 	})
 	n := 20

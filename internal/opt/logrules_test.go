@@ -1,6 +1,6 @@
 package opt
 
-// @log の注釈 (ir.Op.Logs。Agent/wiki/development-notes.md「@log の注釈とパス」) を落とさないための規則の検査:
+// @log の注釈 (ir.Op.Logs。Agent/wiki/log-annotation-rules.md) を落とさないための規則の検査:
 // 命令列の要素を直接 nil にしたり別の命令に差し替えたりせず、ir.DropOp / ir.DiscardOp / ir.ReplaceOp / ir.MergeDrop を
 // 通す (注釈を次に実行される命令へ移す)。命令列を作り直すパス (out を組み立てて lmd.Ops = out) は検査できないので、
 // そのパスが自分で Logs を引き継ぐ。

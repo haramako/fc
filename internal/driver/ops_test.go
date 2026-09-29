@@ -1622,7 +1622,7 @@ function main():void
 	exit(0);
 }
 `)
-	// 期待値は Python で同じ計算を再現して求めた (Agent/wiki/development-notes.md)
+	// 期待値は Python で同じ計算を再現して求めた (Agent/wiki/testing-and-fuzzing.md)
 	if want := "255 0 255 7 0 3 0 1593\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
 	}

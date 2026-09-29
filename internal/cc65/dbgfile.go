@@ -4,7 +4,7 @@ package cc65
 //   - Mesen 2 / MesenCE 向けのラベルファイル .mlb (ROM と同じ名前で置くと自動で読まれる)
 //   - 関数ごとのコードサイズ (fcc build --size-report / fcc size)
 // ソース行の対応 (fc の行 → アドレス) は codegen が `.dbg line` で .s に埋め、ld65 が dbgfile の line レコードにする。
-// Mesen は ROM と同じ名前の .dbg も自動で読み、fc のソースをステップ実行できる (Agent/wiki/development-notes.md)。
+// Mesen は ROM と同じ名前の .dbg も自動で読み、fc のソースをステップ実行できる (Agent/wiki/mesen-and-debugging.md)。
 
 import (
 	"fmt"

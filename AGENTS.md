@@ -24,6 +24,21 @@ fcc fmt -w src.fc                                               # FC ソース�
 
 テストの層と fuzz の回し方は `Agent/wiki/testing-and-fuzzing.md`。
 
+## Branches & Environment
+
+- **開発は `feature/v4`**（fc 4 の言語・標準ライブラリの作り直し。計画は `Agent/wiki/plans/v4-plan.md`）。`feature/v3` は `main` にマージ済み。作業はトピックブランチを切って `feature/v4` に戻す
+- タグ: `v0.0.2`（2026-09-15、最適化前のベースライン）、`ruby-frozen`（Go 移植前の Ruby 版。`fclib/math.fc` / `share/runtime.asm` の sin / atan / rand / 乗算テーブルは `misc/table.rb` の生成物でタグから参照できる）、`go-strict-clone`（移植直後の基準点）。fc はもともと Ruby で書かれ 2026-08〜09 に Go に移植した。Ruby 版との互換は考慮しない
+- 以前のブランチ運用（feature/v2・static-frame の時代）は `Agent/discussions/2026-09-12-branch-history.md`
+
+| 項目 | 状態（Windows の開発機） |
+|---|---|
+| Go | 1.24.5 windows/amd64（CI は Linux + Windows） |
+| cc65 | `C:\Applications\cc65-snapshot-win32\bin\`（PATH 通過済み）。探索順は `FC_CC65_BIN` → fcc と同じディレクトリ → PATH |
+| MesenCE | 2.2.1 を `C:\Applications\MesenCE\Mesen.exe` に導入済み（導入と罠は `Agent/wiki/mesen-and-debugging.md`） |
+
+- castle 実プロジェクト側で Go 版を使うには `$env:FCC="C:\Work\fc\fcc.exe"`（Rakefile が FCC 環境変数を見る）
+- **PowerShell 5.1 のエンコーディング罠**: `Get-Content`/`Set-Content` は UTF-8 ファイルをシステム ANSI（Shift-JIS）で読むため、**ラウンドトリップすると日本語が全て文字化けする**（過去に計画書を一度破壊した）。ファイルの編集はエディタ/専用ツールで行い、PowerShell はビルド・git・コピーのみに使う。日本語を含む `.ps1` は **UTF-8 BOM 付き**でないと PS5.1 がパースエラーになる
+
 # DOX framework
 
 - DOX is highly performant AGENTS.md hierarchy installed here

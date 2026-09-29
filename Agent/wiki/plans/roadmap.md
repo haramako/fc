@@ -1,7 +1,7 @@
 # ロードマップ（未着手・未決の項目）
 
 2026-09-15 時点で残っている項目。済んだものは消す。設計の経緯は各 v2_*.md、日々の運用は
-[Agent/wiki/development-notes.md](../development-notes.md)、アイデア段階のものは [Agent/discussions/2026-09-14-v2-idea.md](../../discussions/2026-09-14-v2-idea.md)。
+[Agent/wiki/AGENTS.md](../AGENTS.md)、アイデア段階のものは [Agent/discussions/2026-09-14-v2-idea.md](../../discussions/2026-09-14-v2-idea.md)。
 （2026-09 以前の作業ログは [archive/](../../discussions/AGENTS.md) にある）
 
 ## 最適化（次の主題）
@@ -393,7 +393,7 @@ do-while は「やること候補（すぐではない）」。
 - [x] 同梱ライブラリ用の一時ディレクトリ作成失敗に、親ディレクトリ・OS エラー・環境変数による対処を表示。探索・展開方法は変更しない（[検討記録 §4](../placement-debugging.md)）。✅ 2026-09-20
 
 - [x] **デバッグ情報**: `fcc build -g` が ROM の隣に `.dbg`（fc のソース行入り）と `.mlb` を書く。Mesen が自動で読む
-      （development_notes「Mesen でのソースレベルデバッグ」） ✅ 2026-09-19
+      （Agent/wiki/mesen-and-debugging.md「Mesen でのソースレベルデバッグ」） ✅ 2026-09-19
 - [x] watch モード（`fcc watch`: ソースの更新時刻を 0.5 秒ごとに見て再ビルド）、エディタ連携（`fcc check --json` +
       `tools/vscode-fc/` の VS Code 拡張: ハイライトと保存時の診断。言語サーバは無し） ✅ 2026-09-19
 - [x] コードサイズレポート（`fcc build --size-report`、`fcc size game.dbg`。dbgfile のラベルから関数ごとの大きさ） ✅ 2026-09-19
@@ -404,7 +404,7 @@ do-while は「やること候補（すぐではない）」。
 - [x] 自動テストの強化（2026-09-27）: 定数の畳み込みと実行時の計算の差分テスト（TestRandomConstFold。畳み込みの型の食い違いを
       4 種類直した）、v3m の自己検査、生成器の拡張（初期値なしの変数・暗黙の拡張・大きな配列・負のずれ・fc 3 の新しい文法）、
       インタプリタの判定の範囲、夜間の CI（fuzz.yml）、通ってはいけないプログラムの表（TestMustError / TestMustWarn）。
-      Agent/wiki/development-notes.md の「差分テストの判定の弱点」 ✅ 2026-09-27
+      Agent/wiki/testing-and-fuzzing.md の「差分テストの判定の弱点」 ✅ 2026-09-27
 
 ## 構造の整理（残り。2026-09-28 の調査）
 
@@ -438,7 +438,7 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       `load_mem` / `store_mem` と `Base + Index * Scale + Disp`（store は `Width`）に。生成コードは変えていない（ROM はバイト一致）。
       定数の添字を Disp に畳んで絶対番地 (`lda a+3`) で読む最適化 (`constidx`) と、struct の配列フィールドをポインタ経由で
       引く形のポインタ + 添字 + disp (`fieldptr`) も入れた。
-- [x] **演算命令の幅と符号** ✅ 2026-09-28 (`ir/sign.go`、Agent/wiki/development-notes.md「コードの構造」): eq / lt は比較の幅
+- [x] **演算命令の幅と符号** ✅ 2026-09-28 (`ir/sign.go`、Agent/wiki/code-structure.md): eq / lt は比較の幅
       `Op.Width`、lt / div / mod / shift_right は `Op.Sign` を持ち、sema が作るときに型から決める (`InferWidthSign`)。
       「比較は広い方の幅、どちらかが符号付きなら符号付き」「除算は Dst の符号」「右シフトは入力の符号」を opt/ssa・unroll・
       codegen・regalloc・carry・split がそれぞれ型から導いていたのを、命令の値を読む形に (入力を差し替えても意味が
