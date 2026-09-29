@@ -209,3 +209,31 @@ func TestPlaceNeedZpFirst(t *testing.T) {
 		t.Errorf("ext=%v/%d b=%v/%d", ext.FrameZp, ext.FrameBase, b.FrameZp, b.FrameBase)
 	}
 }
+
+// TestPlaceSwapByRefs: 深い順に詰めると根 (main のループ) がゼロページからあふれるとき、フレームを参照する命令の少ない関数を
+// 代わりに RAM へ出す (ゼロページの参照の数の和が増えるときだけ)。
+func TestPlaceSwapByRefs(t *testing.T) {
+	x := ir.NewLocal("x", tu.IntType(1, false), ir.LTNone)
+	x.Location = ir.LocStatic
+	use := func(k int) []*ir.Op {
+		var ops []*ir.Op
+		for i := 0; i < k; i++ {
+			ops = append(ops, &ir.Op{Code: ir.OpLoad, Dst: x, Src: []ir.Operand{ir.NewIntLiteral("", tu.IntType(1, false), i)}})
+		}
+		return ops
+	}
+	a := lambda("_a", append(use(10), callOp("_b"))...)
+	b := lambda("_b", use(1)...)
+	g, err := Analyze([]*ir.Module{module(a, b)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.FrameSize, b.FrameSize = 3, 5
+	if _, err := Place(g, 6, 64); err != nil {
+		t.Fatal(err)
+	}
+	// 深い順なら b=0..5、a は 5..8 で入らない。参照の多い a をゼロページに、b を RAM に
+	if !a.FrameZp || a.FrameBase != 0 || b.FrameZp {
+		t.Errorf("a=%v/%d b=%v/%d", a.FrameZp, a.FrameBase, b.FrameZp, b.FrameBase)
+	}
+}

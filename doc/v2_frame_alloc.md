@@ -230,7 +230,10 @@ static / entry: 戻り値・引数の後ろに、全ローカル（`L` に置い
 - 衝突: f と g が同時に活性になりうる ⇔ 呼び出しグラフで一方から他方へ届く（推移閉包）。割り込み関数の部分木は全部と衝突
 - 領域は ZP（`FC_SZP`、`options(static_zp: N)`）と RAM（`FC_SRAM`、`options(static_ram: M)`）の 2 つ。ZP の候補は
   **深さ（根からの最長距離）の深い順**（葉に近いほど呼ばれる回数が多い、という近似）、同じ深さならフレームの小さい順。
-  順に「衝突する配置済みの関数と重ならない最小のオフセット」に置き、ZP に入らなければ RAM。`options(zeropage: false)` で RAM を強制
+  順に「衝突する配置済みの関数と重ならない最小のオフセット」に置き、ZP に入らなければ RAM。`options(zeropage: false)` で RAM を強制。
+  ZP からあふれた関数があれば、フレームを参照するオペランドの数（ZP に置いたときに縮むバイト数の目安。`frameRefs`）の少ない
+  衝突する関数を RAM へ出して置き直し、ZP の関数の参照の数の和が増えるなら採る（2026-09-29。深い順だと呼び出しの根
+  （main のループ）が最後になってあふれる: miku4 の main が +24 バイトだった）
 - 出力は `.fc-build/_frames.inc`: `.importzp FC_SZP` / `.import FC_SRAM` と `F_<sym> = FC_SZP+off` の並び。
   全モジュールの asm が include する。使用量は `.assert FC_SZP_SIZE >= n` で base.asm の `.res` と突き合わせる
 - codegen は ZP の関数では `<F_f+n`（`(F_f+n),y` の直接参照も可）、RAM の関数では `F_f+n`（ポインタは reg 経由）

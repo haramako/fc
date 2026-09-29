@@ -694,64 +694,141 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 		return a < b
 	})
 
-	var zp, ram []placed
-	fit := func(region []placed, i int, budget int) (int, bool) {
-		size := g.Lambdas[i].FrameSize
-		// 衝突する配置済みの区間を並べ、隙間を探す
-		var ivs []placed
-		for _, p := range region {
-			if conflict(i, g.index[p.lmd]) {
-				ivs = append(ivs, p)
-			}
-		}
-		sort.Slice(ivs, func(x, y int) bool { return ivs[x].start < ivs[y].start })
-		at := 0
-		for _, iv := range ivs {
-			if at+size <= iv.start {
-				break
-			}
-			if iv.end > at {
-				at = iv.end
-			}
-		}
-		if at+size > budget {
-			return 0, false
-		}
-		return at, true
+	// assign は order の順に置く (forced の関数はゼロページに置かない)。slots は関数ごとの置き場所
+	type slot struct {
+		zp, ram bool
+		at      int
 	}
-	plan := &Plan{Warnings: warnings}
-	for _, i := range order {
-		lmd := g.Lambdas[i]
-		if lmd.FrameSize == 0 {
-			lmd.FrameZp = true
-			lmd.FrameBase = 0
-			continue
+	assign := func(forced []bool) ([]slot, error) {
+		slots := make([]slot, n)
+		var zp, ram []placed
+		fit := func(region []placed, i int, budget int) (int, bool) {
+			size := g.Lambdas[i].FrameSize
+			// 衝突する配置済みの区間を並べ、隙間を探す
+			var ivs []placed
+			for _, p := range region {
+				if conflict(i, g.index[p.lmd]) {
+					ivs = append(ivs, p)
+				}
+			}
+			sort.Slice(ivs, func(x, y int) bool { return ivs[x].start < ivs[y].start })
+			at := 0
+			for _, iv := range ivs {
+				if at+size <= iv.start {
+					break
+				}
+				if iv.end > at {
+					at = iv.end
+				}
+			}
+			if at+size > budget {
+				return 0, false
+			}
+			return at, true
 		}
-		wantZp := !zpOff(lmd)
-		if wantZp {
-			if at, ok := fit(zp, i, zpBudget); ok {
-				lmd.FrameZp = true
-				lmd.FrameBase = at
-				zp = append(zp, placed{lmd, at, at + lmd.FrameSize})
-				plan.ZpUsed = max(plan.ZpUsed, at+lmd.FrameSize)
+		for _, i := range order {
+			lmd := g.Lambdas[i]
+			if lmd.FrameSize == 0 {
+				slots[i] = slot{zp: true}
 				continue
 			}
+			if !zpOff(lmd) && !forced[i] {
+				if at, ok := fit(zp, i, zpBudget); ok {
+					slots[i] = slot{zp: true, at: at}
+					zp = append(zp, placed{lmd, at, at + lmd.FrameSize})
+					continue
+				}
+			}
+			if needZp(lmd) {
+				// abi: "frame" の asm の関数はフレームを `(F_sym+k),y` のように間接の番地にも使うのでゼロページが要る
+				// (RAM でよいなら options(zeropage: false))
+				return nil, &diag.Error{Msg: fmt.Sprintf("the static frame of %s (abi \"frame\", %d bytes) does not fit in the zero page (FC_SZP %d bytes; raise options(static_zp: N), or declare zeropage: false if the assembler does not use it as a zero page address)",
+					lmd.Id, lmd.FrameSize, zpBudget), Pos: lmd.Pos}
+			}
+			at, ok := fit(ram, i, ramBudget)
+			if !ok {
+				return nil, &diag.Error{Msg: fmt.Sprintf("static frames do not fit: %s needs %d bytes (FC_SZP %d, FC_SRAM %d bytes; raise options(static_zp: N) / options(static_ram: N))",
+					lmd.Id, lmd.FrameSize, zpBudget, ramBudget), Pos: lmd.Pos}
+			}
+			slots[i] = slot{ram: true, at: at}
+			ram = append(ram, placed{lmd, at, at + lmd.FrameSize})
 		}
-		if needZp(lmd) {
-			// abi: "frame" の asm の関数はフレームを `(F_sym+k),y` のように間接の番地にも使うのでゼロページが要る
-			// (RAM でよいなら options(zeropage: false))
-			return nil, &diag.Error{Msg: fmt.Sprintf("the static frame of %s (abi \"frame\", %d bytes) does not fit in the zero page (FC_SZP %d bytes; raise options(static_zp: N), or declare zeropage: false if the assembler does not use it as a zero page address)",
-				lmd.Id, lmd.FrameSize, zpBudget), Pos: lmd.Pos}
+		return slots, nil
+	}
+	forced := make([]bool, n)
+	slots, err := assign(forced)
+	if err != nil {
+		return nil, err
+	}
+	// ゼロページからあふれた関数があれば、フレームを参照する命令の少ない関数を代わりに RAM へ出して入れ替えを試す (深い順の
+	// 詰め方では呼び出しの根 (main のループ) が最後になってあふれる。ゼロページの参照は 1 バイト・1 サイクル短い)。
+	// ゼロページに置いた関数の参照の数の和が増えるときだけ採る
+	refs := make([]int, n)
+	for i, lmd := range g.Lambdas {
+		refs[i] = frameRefs(lmd)
+	}
+	score := func(sl []slot) int {
+		t := 0
+		for i, x := range sl {
+			if x.zp {
+				t += refs[i]
+			}
 		}
-		at, ok := fit(ram, i, ramBudget)
-		if !ok {
-			return nil, &diag.Error{Msg: fmt.Sprintf("static frames do not fit: %s needs %d bytes (FC_SZP %d, FC_SRAM %d bytes; raise options(static_zp: N) / options(static_ram: N))",
-				lmd.Id, lmd.FrameSize, zpBudget, ramBudget), Pos: lmd.Pos}
+		return t
+	}
+	best := score(slots)
+	for iter := 0; iter < 16; iter++ {
+		var spilled []int
+		for _, i := range order {
+			if slots[i].ram && !zpOff(g.Lambdas[i]) && !forced[i] {
+				spilled = append(spilled, i)
+			}
 		}
-		lmd.FrameZp = false
-		lmd.FrameBase = at
-		ram = append(ram, placed{lmd, at, at + lmd.FrameSize})
-		plan.RamUsed = max(plan.RamUsed, at+lmd.FrameSize)
+		sort.SliceStable(spilled, func(x, y int) bool { return refs[spilled[x]] > refs[spilled[y]] })
+		improved := false
+		for _, f := range spilled {
+			var cands []int
+			for _, v := range order {
+				if slots[v].zp && !needZp(g.Lambdas[v]) && g.Lambdas[v].FrameSize > 0 && refs[v] < refs[f] && conflict(f, v) {
+					cands = append(cands, v)
+				}
+			}
+			sort.SliceStable(cands, func(x, y int) bool { return refs[cands[x]] < refs[cands[y]] })
+			for k, v := range cands {
+				if k >= 8 {
+					break
+				}
+				forced[v] = true
+				if sl, err := assign(forced); err == nil && score(sl) > best {
+					slots, best, improved = sl, score(sl), true
+					break
+				}
+				forced[v] = false
+			}
+			if improved {
+				break
+			}
+		}
+		if !improved {
+			break
+		}
+	}
+	plan := &Plan{Warnings: warnings}
+	nzp, nram := 0, 0
+	for _, i := range order {
+		lmd := g.Lambdas[i]
+		lmd.FrameZp = slots[i].zp
+		lmd.FrameBase = slots[i].at
+		if lmd.FrameSize == 0 {
+			continue
+		}
+		if slots[i].zp {
+			plan.ZpUsed = max(plan.ZpUsed, slots[i].at+lmd.FrameSize)
+			nzp++
+		} else if slots[i].ram {
+			plan.RamUsed = max(plan.RamUsed, slots[i].at+lmd.FrameSize)
+			nram++
+		}
 	}
 
 	// _frames.inc
@@ -776,8 +853,42 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 	inc = append(inc, frameABISymbols(g)...)
 	inc = append(inc, ".endif", "")
 	plan.Inc = inc
-	plan.Report = g.report(plan, len(zp), len(ram))
+	plan.Report = g.report(plan, nzp, nram)
 	return plan, nil
+}
+
+// frameRefs はフレーム (静的なローカル・引数・戻り値) を参照するオペランドの数 (ゼロページに置いたときに縮むバイト数の目安)。
+// asm の関数は数えられないので大きな値 (needZp で先に置く)。
+func frameRefs(lmd *ir.Lambda) int {
+	if lmd.Extern {
+		return 1 << 20
+	}
+	n := 0
+	var walk func(o ir.Operand)
+	walk = func(o ir.Operand) {
+		switch x := o.(type) {
+		case *ir.Value:
+			if x.Kind == ir.KindLocal && x.Location == ir.LocStatic {
+				n++
+			}
+		case *ir.CastedValue:
+			walk(x.From)
+		case *ir.PointeredArray:
+			walk(x.From)
+		}
+	}
+	for _, op := range lmd.Ops {
+		if op == nil {
+			continue
+		}
+		if op.Dst != nil {
+			walk(op.Dst)
+		}
+		for _, o := range op.Src {
+			walk(o)
+		}
+	}
+	return n
 }
 
 // zpOff は options(zeropage: false) (静的フレームを RAM 側に置く) か。

@@ -204,8 +204,9 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       `return q[i..i + n]` は戻り値の領域に直に組み立てる、inline した関数に渡した `&g` を通す読み書き（写しとフィールドのずれを
       辿る）は g の直の読み書き（pad.update）、0 との等値の比較は lda の Z をそのまま使う（`cmp #0` を出さない）。fclib 側:
       vram.write_dir を `for (var v in data)`（[:u16] の添字で毎回番地を足す）からポインタを進めるループに。
-      残り: `[:u16]` の for-each の添字の読みを、ポインタを進める形にする（強さの軽減。write_dir と同じことをコンパイラで）、
-      `frames.Place` の ZP の選び方（深い順だと main のループの変数が RAM に落ちることがある: miku4 の main が +24 バイト）
+      ✅ 2026-09-29: `frames.Place` の ZP の選び方（深い順だと main のループの変数が RAM に落ちていた: 参照の少ない関数を
+      代わりに RAM へ）。残り: `[:u16]` の for-each の添字の読みを、ポインタを進める形にする（強さの軽減。write_dir と同じことを
+      コンパイラで）
 - [x] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ） ✅ 2026-09-29（警告は構文の lint
       `bitwiseWithComparison` として既にあった。見落としたのは `fcc test` が警告を出していなかったから: `fcc test` で出し、
       pkg/fc の TestFclibModuleTests と TestFclibNoWarnings が fclib のモジュールの警告を見張る）
