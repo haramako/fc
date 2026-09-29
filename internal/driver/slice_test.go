@@ -345,6 +345,17 @@ function via(f:fn([]const u8):u16, s:[]const u8):u16
 {
 	return f(s);
 }
+// インライン展開する関数の slice の引数 (opt.propagateAggregateCopies が写しを消す)
+function edge(s:[]const u8, w:[:u16]const u8):u16 @(inline)
+{
+	return s[0] + s[@len(s) - 1] + @len(w) + sum(s);
+}
+function edge2(s:[]const u8):u16 @(noinline)
+{
+	var t = s;
+	t = t[1..];
+	return edge(s, T) + edge(t, s);
+}
 const PACKED = @lz4("xxxxxxxxxxyyyyyyyyyy");
 function main():void
 {
@@ -357,6 +368,7 @@ function main():void
 	printf("{}\n", rec(T, 4));
 	printf("{}\n", via(sum, T[3..6]));
 	printf("{}\n", lz4.unpack(buf, PACKED));
+	printf("{} {}\n", edge(T[2..5], T[..g]), edge2(T[4..]));
 	printf("{}\n", sum(buf[..20]));
 	console.exit(0);
 }
@@ -364,7 +376,7 @@ function main():void
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(out, "\n") != 9 {
+	if strings.Count(out, "\n") != 10 {
 		t.Errorf("got %q", out)
 	}
 }
