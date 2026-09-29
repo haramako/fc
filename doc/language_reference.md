@@ -817,6 +817,7 @@ var v:int16 = s as int16;                // s:sint8 = -1 なら -1 (符号拡張
 | `printf(a, b, ...)`（fc 2 / fc 3） | 引数の型で `stdio.print`（`*u8`）/ `print_slice`（`[]u8`。長さの分だけ）/ `print_int16`（符号なしの整数・bool・enum）/ `print_sint16`（符号付き。負なら `-`）を呼び分ける。それ以外の型（struct など）はエラー。`stdio` モジュールが必要 |
 | `printf("書式", 引数...)`（fc 4） | `@format` と同じ書式で `console` に出す（下の §7.2）。書式は定数。fc 3 → 4 の migrate が引数を並べる形を書式文字列に直す（規則 `printf-format`: 文字列リテラルは書式に取り込み、bool は今の 0 / 1 のまま `{:d}`） |
 | `@format(dst, "書式", 引数...)`（fc 3 以降） | `dst`（`[]u8`、255 バイトまで）に書式どおりに書き、書いた部分の slice を返す（snprintf に当たる。§7.2） |
+| `@try_format(dst, "書式", 引数...)` | `@format` と同じだが、`dst` が足りなければ止まらずに長さ 0 の slice を返す（書式を空にしない限り失敗と区別できる） |
 | `unittest_run_tests()` / `@run_tests()`（fc 2 / fc 3） | `stdio.init()` の後、スコープ内の `test_*` 関数を宣言順に呼び、`stdio.exit(0)` する（`stdio` が必要）。fc 4 では同じ動きを `@run_tests_v3()` と書く（fc 3 → 4 の migrate が書き換える） |
 | `@run_tests()`（fc 4） | `console.init()` の後、プログラムの全モジュールの `@(test)` の関数をモジュールの順・宣言の順に「モジュール.名前: 」と出してから呼び（通れば `ok`）、最後に「N tests ok」と出して `console.exit(0)`。`@(test)` の関数は引数も戻り値も無い。`fcc test mod.fc` は mod を use して `@run_tests()` を呼ぶ main を作って走らせる（`-t nes` なら内蔵の NES のランナーで） |
 | `@assert(式 [, "文言"])` | 式が偽なら「ファイル:行: assert failed: 式の綴り[: 文言]」を出して止まる（`sys.panic`。終了コード 1） |
@@ -871,6 +872,7 @@ print(_T("めにゅー", null));           // 翻訳しない（デバッグ用�
 var line:[32]u8;
 var s = @format(line, "HP {:3}/{}", hp, max_hp);   // "HP   7/300" (s は line の先頭からの slice)
 printf("x={:04X} {}\n", x, name);                 // console に出す
+vram.put(a, @try_format(line[..4], "{}", score)); // 入らなければ長さ 0 (何も書かない)
 ```
 
 - 書式は `@log` と同じ: `{}`（順番）/ `{0}`（位置）、`{:5}`（幅。右に寄せる）/ `{:05}`（0 で埋める。符号の後ろ）、`{:d}` / `{:x}` /

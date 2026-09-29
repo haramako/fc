@@ -47,6 +47,40 @@ function main():void
 	}
 }
 
+// TestTryFormat: @try_format は @format と同じに書き、書き先が足りなければ止まらずに長さ 0 の slice を返す (途中の数・文字列・
+// 1 文字のどこで足りなくなっても)。失敗の後の @format / printf は普通に動く (状態を begin が戻す)。
+func TestTryFormat(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+var buf:[8]u8;
+var big:[300]u8;
+function main():void
+{
+	var hp:u16 = 1234;
+	var s = @try_format(buf, "HP {}", hp);
+	console.write(s);
+	printf(" {}", @len(s));
+	printf(" {}", @len(@try_format(buf, "HP {:5}/{}", hp, 99)));   // 数で足りない
+	printf(" {}", @len(@try_format(buf, "abcdefgh{}", "x")));      // 文字列で足りない
+	printf(" {}", @len(@try_format(buf, "abcdefgh{:c}", 65 as u8)));   // 1 文字で足りない
+	printf(" {}", @len(@try_format(buf[..3], "{}{}{}{}", 1, 2, 3, 4)));
+	for (var i:u16 = 0; i < 300; i += 1) {
+		big[i] = 65;
+	}
+	printf(" {}", @len(@try_format(buf, "{}", big))); // 256 バイトを超える文字列 (u8 の配列は中の最初の 0 まで)
+	printf(" [{}]\n", @format(buf, "ok {}", 7));
+	console.exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "HP 1234 7 0 0 0 0 0 [ok 7]\n"; out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
+
 // TestFormatReference: @format の数を Go の fmt と比べる (乱数の値・種類・幅・埋め。変数と、コンパイル時に畳み込む定数の両方)。
 func TestFormatReference(t *testing.T) {
 	t.Parallel()

@@ -1,6 +1,7 @@
 #fc 4
 // 数や文字列を文字にして書く (@format と printf の中身。doc/v4_stdlib.md §4)。begin で書き先を決め、dec_u8 などを順に呼ぶと
-// 書き先の at から書いていく (at は書いた長さ)。書き先が足りなければ sys.panic で止まる。10 進は割り算を使わない (10 のべきを引く)。
+// 書き先の at から書いていく (at は書いた長さ)。書き先が足りなければ sys.panic で止まる (begin_try の後は止まらず、end_try が 0 を
+// 返す: @try_format)。10 進は割り算を使わない (10 のべきを引く)。
 //
 //   fmt.begin(buf);
 //   fmt.str("HP ");
@@ -26,6 +27,8 @@ const POW10 = [10000, 1000, 100, 10];
 var out:[]u8;
 public var codes:*const u8;   // 数字などの文字のコード (begin が ASCII にする)
 public var at:u8;             // 次に書く位置 (= 書いた長さ)
+var trying:bool;              // begin_try の後 (足りなくても止まらない)
+var failed:bool;              // begin_try の後で足りなかった (以後は何も書かない)
 var pbuf:[32]u8;              // printf の数などの部分 (begin_print / print。幅の上限 31 と 16 桁の 2 進が入る)
 
 // 書き先を dst にして、先頭から書く
@@ -34,6 +37,25 @@ public function begin(dst:[]u8):void
 	out = dst;
 	codes = ASCII;
 	at = 0;
+	trying = false;
+	failed = false;
+}
+
+// begin と同じだが、書き先が足りなくても止まらない (@try_format)。書いた長さは end_try で
+public function begin_try(dst:[]u8):void
+{
+	begin(dst);
+	trying = true;
+}
+
+// begin_try からの書いた長さ (足りなかったら 0)
+public function end_try():u8
+{
+	trying = false;
+	if (failed) {
+		return 0;
+	}
+	return at;
 }
 
 // printf の数などの部分: begin_print の後に dec_u8 などで書き、print で console に出す (呼び出し側で書き先の slice を作らない)
@@ -47,12 +69,22 @@ public function print():void
 	console.write(pbuf[..at]);
 }
 
-// あと n バイト書けるか (書けなければ止まる)
-function room(n:u8):void
+// あと n バイト書けるか (書けなければ止まる。begin_try の後なら false で、以後は何も書かない)
+function room(n:u8):bool
 {
-	if (n > @len(out) - at) {
+	if (!failed && n <= @len(out) - at) {
+		return true;
+	}
+	fail();
+	return false;
+}
+
+function fail():void
+{
+	if (!trying) {
 		sys.panic("fmt: the buffer is too small");
 	}
+	failed = true;
 }
 
 // 桁 tmp[0..len] (上位から。値は 0〜15) を、符号と spec で書く
@@ -66,7 +98,9 @@ function put(tmp:*const u8, len:u8, neg:bool, spec:u8):void
 	if (total < body) {
 		total = body;
 	}
-	room(total);
+	if (!room(total)) {
+		return;
+	}
 	var end = at + total;
 	var i = at;
 	if ((spec & ZERO) == 0) {
@@ -228,7 +262,9 @@ public function bin_u8(n:u8, spec:u8):void
 public function str(s:[]const u8):void
 {
 	var n = @len(s);
-	room(n);
+	if (!room(n)) {
+		return;
+	}
 	for (var k:u8 = 0; k < n; k += 1) {
 		out[at + k] = s[k];
 	}
@@ -249,7 +285,8 @@ public function str_z(p:*const u8):void
 function str_wide(s:[:u16]const u8):void
 {
 	if (@len(s) > 255) {
-		sys.panic("fmt: the buffer is too small");
+		fail();
+		return;
 	}
 	str(@slice(@ptr(s), @len(s) as u8));
 }
@@ -267,7 +304,9 @@ public function str_z_in(s:[:u16]const u8):void
 // 1 バイト書く
 public function chr(c:u8):void
 {
-	room(1);
+	if (!room(1)) {
+		return;
+	}
 	out[at] = c;
 	at += 1;
 }

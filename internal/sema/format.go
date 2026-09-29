@@ -35,6 +35,11 @@ func registerFormatBuiltins(h *Hlc) {
 	h.defmacro("@format", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		return macroResult{expr: cv(h.format(args, "@format"))}
 	})
+	// @try_format(dst, "書式", 引数...): @format と同じだが、dst が足りなければ止まらず長さ 0 の slice を返す (書式を空にしない
+	// 限り失敗と区別できる。`vram.put(a, @try_format(buf, ...))` は失敗なら何も書かない)
+	h.defmacro("@try_format", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		return macroResult{expr: cv(h.format(args, "@try_format"))}
+	})
 }
 
 // fclib/fmt.fc の spec のビット (幅は下位 5 ビット)
@@ -225,12 +230,20 @@ func (a *fmtArgs) maxLen(p ir.LogPart) int {
 }
 
 // fmtEmit は parts を書き先 dst (長さが u8 の slice の値) に書く呼び出しを出し、書いた長さ (一時変数) を返す。
-func (h *Hlc) fmtEmit(a *fmtArgs, parts []ir.LogPart, dst *ir.Value) *ir.Value {
+func (h *Hlc) fmtEmit(a *fmtArgs, parts []ir.LogPart, dst *ir.Value, try bool) *ir.Value {
 	fi := h.builtinModule("fmt")
-	h.lval(ccall(cv(h.moduleFunc(fi, "fmt", "begin")), cv(dst)))
+	begin := "begin"
+	if try {
+		begin = "begin_try" // 足りなくても止まらない
+	}
+	h.lval(ccall(cv(h.moduleFunc(fi, "fmt", begin)), cv(dst)))
 	h.setCodes(a)
 	h.fmtEmitParts(a, parts)
 	n := h.newTmp(h.prog.Types.IntType(1, false)) // 書いた長さ (今の fmt.at。後の書き込みが変える前に写す)
+	if try {
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: n, Src: []ir.Operand{h.rval(ccall(cv(h.moduleFunc(fi, "fmt", "end_try"))))}}) // 足りなければ 0
+		return n
+	}
 	h.emit(&ir.Op{Code: ir.OpLoad, Dst: n, Src: []ir.Operand{h.moduleFunc(fi, "fmt", "at")}})
 	return n
 }
@@ -331,7 +344,7 @@ func (h *Hlc) format(args []*cexpr, what string) *ir.Value {
 		d.len = h.rval(&cexpr{kind: cCast, args: []*cexpr{cv(h.operandValue(n))}, ty: u8, ck: syntax.CastAs})
 	}
 	a := h.fmtPrepare(what, args[1], args[2:])
-	n := h.fmtEmit(a, a.parts, h.newSlice(u8, d.ptr, d.len, false, false))
+	n := h.fmtEmit(a, a.parts, h.newSlice(u8, d.ptr, d.len, false, false), what == "@try_format")
 	return h.newSlice(u8, d.ptr, n, false, false)
 }
 
