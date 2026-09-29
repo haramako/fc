@@ -63,7 +63,7 @@
   （LSP なし）。`npm install && npm run check-grammar`（文法をリポジトリの全 .fc でトークン化して検査）、
   `npm run package` で VSIX、`code --install-extension fc-lang-*.vsix`。文法を足したら `syntaxes/fc.tmLanguage.json` と
   `scripts/check-grammar.js` の期待値を更新する
-- **ca65 / ld65 の探索**（2026-09-14〜）: `internal/driver/tools.go` の `ToolPath`。`FC_CC65_BIN` → fcc の実行ファイルと
+- **ca65 / ld65 の探索**（2026-09-14〜）: `internal/cc65/tools.go` の `ToolPath`。`FC_CC65_BIN` → fcc の実行ファイルと
   同じディレクトリ（と `cc65/`, `bin/`）→ PATH の順。リリース（`release.yml`）は Linux amd64（cc65 をソースから静的ビルド）と
   Windows（公式スナップショットの 32 ビット exe）に ca65 / ld65 を同梱する。`fcc version` が解決先を表示する
 - **CI / リリース**（2026-09-14〜）: push ごとに `.github/workflows/ci.yml`（Linux + Windows、cc65 導入、`go vet` / `go test`）。
@@ -143,7 +143,7 @@
   たびに同じファイルを並べ、変えていないビルドでも 6,716 回ハッシュしていた（記録は 1 回ずつ、ハッシュはビルドの中で使い回す）、
   (3) 配布版の fcc が同梱の fclib を実行ごとに別の一時ディレクトリへ展開し、-g の `.dbg file` のパスが毎回変わって 45 個中 18 個の
   モジュールを毎回アセンブルしていた（ユーザーのキャッシュ `FC_CACHE_DIR`、無ければ `os.UserCacheDir()/fc` の
-  `home-<中身のハッシュ>` に展開して使い回す。`internal/driver/home.go`）。(1)〜(3) で ROM は変わらない。
+  `home-<中身のハッシュ>` に展開して使い回す。`internal/fchome/home.go`）。(1)〜(3) で ROM は変わらない。
   段ごとの時間を測るときは、`BuildContext` の段の間に時刻を出す一時的な変更を入れて測った（常設の仕組みは無い）
 
 ## 実プロジェクトのビルド構成（参考）

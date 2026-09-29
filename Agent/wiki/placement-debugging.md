@@ -127,7 +127,7 @@ castle では `ld65.cfg` に IRQ 用のページ単位 MEMORY 領域と `irqcmd_
 したがって `farcall($DB6A)` になる報告は、このトランポリン構造で説明できる。
 ここでは上流 Mesen 2 のコード確認まで。報告環境の実行版・停止位置・表示そのものは未再現。
 
-FC は既に `.dbg` と `.mlb` を出し、[WriteMlb](../internal/driver/dbgfile.go) で物理 PRG ROM 位置のラベルを生成する。
+FC は既に `.dbg` と `.mlb` を出し、[WriteMlb](../../internal/cc65/dbgfile.go) で物理 PRG ROM 位置のラベルを生成する。
 シンボル不足は先に確認すべきだが、共有の farcall アドレスへ全呼び先の別名を付けても実行履歴は復元できない。
 
 対策候補:
@@ -147,7 +147,7 @@ V2 の課題として残す。Mesen の fork / 使用版による差もあるた
 
 ### 分かったこと
 
-[ResolveFCHome](../internal/driver/home.go) は次の順で標準ライブラリの所在を探す。
+[fchome.Resolve](../../internal/fchome/home.go) は次の順で標準ライブラリの所在を探す。
 
 1. `FC_HOME`
 2. fcc 実行ファイル位置から親ディレクトリへ `fclib/` と `share/` を探索
