@@ -183,7 +183,9 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 	}
 	if val != nil {
 		declType := h.typeEval(typ)
+		h.constIndex = h.v4()
 		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
+		h.constIndex = false
 		if cv.kind == cArray && cv.rt {
 			for _, e := range cv.args {
 				h.constEvalOperand(h.constSlice(e)) // 定数でない要素の理由 (constant value required / storage alias) を出す
@@ -231,6 +233,7 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)
+			h.prog.constArrays[newVal] = v
 			if v.IsString && !explicitLength(typ) {
 				h.markStrConst(newVal, typ, nameEnd)
 			}

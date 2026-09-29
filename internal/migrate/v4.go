@@ -7,6 +7,7 @@ package migrate
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
@@ -33,6 +34,7 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 		return nil, fmt.Errorf("%s: %v", filename, err)
 	}
 	runTestsRule(c)
+	quoteRule(c)
 	c.Replace(0, len(f.Pragma), fmt.Sprintf("#fc %d", syntax.Version4))
 	out, err := apply(src, c.Edits)
 	if err != nil {
@@ -125,6 +127,35 @@ func runTestsRule(c *Ctx) {
 	syntax.Inspect(c.File, func(n syntax.Node) bool {
 		if id, ok := n.(*syntax.Ident); ok && id.Name == "@run_tests" {
 			c.Replace(id.NamePos.Offset, id.NamePos.Offset+len(id.Name), "@run_tests_v3")
+		}
+		return true
+	})
+}
+
+// quoteRule は fc 3 のシングルクォートの文字列 `'...'` をダブルクォートにする (fc 4 の `'A'` は文字のリテラル)。シングルクォートの
+// 文字列はエスケープを解釈しないので、中の `\` と `"` は `\x5C` / `\x22` にして中身を変えない。
+func quoteRule(c *Ctx) {
+	syntax.Inspect(c.File, func(n syntax.Node) bool {
+		if s, ok := n.(*syntax.StringLit); ok && strings.HasPrefix(s.Text, "'") {
+			for _, e := range c.Edits {
+				if e.Start < s.EndPos.Offset && s.ValuePos.Offset < e.End {
+					return true // 意味の書き換え (printf の書式に取り込むなど) が既にこの文字列を置き換えている
+				}
+			}
+			var b strings.Builder
+			b.WriteByte('"')
+			for i := 0; i < len(s.Value); i++ {
+				switch ch := s.Value[i]; ch {
+				case '\\':
+					b.WriteString(`\x5C`)
+				case '"':
+					b.WriteString(`\x22`)
+				default:
+					b.WriteByte(ch)
+				}
+			}
+			b.WriteByte('"')
+			c.Replace(s.ValuePos.Offset, s.EndPos.Offset, b.String())
 		}
 		return true
 	})

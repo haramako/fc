@@ -1,0 +1,135 @@
+#fc 4
+// とても小さなジャンプアクション (fc 4 の NES の標準ライブラリのサンプル)。十字キーで歩き、A で跳ぶ (早く離すと低く跳ぶ)。
+// 足場には下から通り抜けて上に乗れる。コインを 3 つ取ると "CLEAR!"。絵は内蔵のフォントの文字だけ。
+//   fcc build -t nes -o jump.nes jump.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use hit;
+@include("font.chr");
+
+const PALETTE = [
+	0x0f, 0x30, 0x10, 0x00,  0x0f, 0x2a, 0x1a, 0x0a,  0x0f, 0x30, 0x10, 0x00,  0x0f, 0x30, 0x10, 0x00,   // 背景 (1 は緑: 足場)
+	0x0f, 0x27, 0x17, 0x07,  0x0f, 0x28, 0x18, 0x08,  0x0f, 0x30, 0x10, 0x00,  0x0f, 0x30, 0x10, 0x00,   // スプライト (0 自分、1 コイン)
+];
+const BLOCK = 0x7f;        // 塗りつぶしのタイル
+const COIN = '$';
+const GRAVITY = 4;         // 1/16 ピクセル / フレーム²
+const JUMP = -80;          // 跳んだときの速さ (1/16 ピクセル / フレーム。約 52 ピクセル上がる)
+const FALL_MAX = 64;
+
+// 足場 (タイルの x, y, 幅)。最後が床
+const FLOORS = [4, 21, 6,  14, 17, 6,  24, 13, 6,  8, 10, 5,  0, 26, 32];
+// コイン (ピクセルの x, y)
+const COINS = [52, 160, 132, 128, 212, 96];
+
+var px:u8;            // 自分の左上 (ピクセル)
+var py:u16;           // 自分の上の y (1/16 ピクセル)
+var vy:i8;            // 縦の速さ (1/16 ピクセル / フレーム。下が正)
+var on_ground:bool;
+var got:[3]bool;
+var score:u8;
+var line:[16]u8;
+
+// 足の下 (y = feet) に足場があるか (x は自分の左端)。重なりはタイルの単位で見る (床の幅 32 タイルは 256 ピクセルで u8 に入らない)
+function floor_at(x:u8, feet:u8):bool
+{
+	var left = x >> 3;
+	var right = (x + 7) >> 3;
+	for (var i:u8 = 0; i < @len(FLOORS); i += 3) {
+		var tx = FLOORS[i];
+		if (feet == FLOORS[i + 1] * 8 && right >= tx && left < tx + FLOORS[i + 2]) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function move():void
+{
+	var held = pad.p1.held;
+	if ((held & pad.LEFT) != 0 && px > 0) {
+		px -= 1;
+	}
+	if ((held & pad.RIGHT) != 0 && px < 248) {
+		px += 1;
+	}
+	// 跳ぶ・落ちる
+	if (on_ground && (pad.p1.pressed & pad.A) != 0) {
+		vy = JUMP;
+		on_ground = false;
+	}
+	if (!on_ground) {
+		if (vy < 0 && (held & pad.A) == 0) {
+			vy /= 2;   // 上がっている途中で A を離すと低く
+		}
+		var before = ((py >> 4) as u8) + 8;
+		vy = @min(vy + GRAVITY, FALL_MAX);
+		py = @bitcast(u16, @bitcast(i16, py) + vy);
+		var after = ((py >> 4) as u8) + 8;
+		if (vy > 0) {
+			// 落ちている間に足場の上の線を越えたら乗る
+			for (var feet = before + 1; feet <= after; feet += 1) {
+				if (floor_at(px, feet)) {
+					py = ((feet - 8) as u16) << 4;
+					vy = 0;
+					on_ground = true;
+					break;
+				}
+			}
+		}
+	} elsif (!floor_at(px, ((py >> 4) as u8) + 8)) {
+		on_ground = false;   // 足場の端から落ちる
+		vy = 0;
+	}
+}
+
+function coins():void
+{
+	var y = (py >> 4) as u8;
+	for (var i:u8 = 0; i < 3; i += 1) {
+		if (got[i]) {
+			continue;
+		}
+		var cx = COINS[i * 2];
+		var cy = COINS[i * 2 + 1];
+		if (hit.box(px, y, 8, 8, cx, cy, 8, 8)) {
+			got[i] = true;
+			score += 1;
+			vram.put(vram.addr(0, 2, 2), @format(line, "COIN {}/3", score));
+			if (score == 3) {
+				vram.put(vram.addr(0, 12, 6), "CLEAR!");
+			}
+		} else {
+			oam.spr(cx, cy - 1, COIN, 1);
+		}
+	}
+}
+
+function main():void
+{
+	frame.init();
+	for (var i:u8 = 0; i < @len(FLOORS); i += 3) {
+		vram.fill_now(vram.addr(0, FLOORS[i], FLOORS[i + 1]), BLOCK, FLOORS[i + 2]);
+	}
+	vram.fill_now(0x23c0 + 8, 0x55, 56);    // 足場を緑に (属性の 1 バイトが 4×4 タイル。文字のある上の 4 行は白のまま)
+	vram.write_now(vram.addr(0, 2, 2), "COIN 0/3");
+	vram.write_now(vram.addr(0, 18, 2), "A:JUMP");
+	pal.set_all(PALETTE);
+	px = 16;
+	py = (26 * 8 - 8) << 4;
+	on_ground = true;
+	frame.render_on();
+	while (true) {
+		pad.poll();
+		move();
+		oam.begin();
+		oam.spr(px, ((py >> 4) as u8) - 1, BLOCK, 0);
+		coins();
+		oam.end();
+		frame.wait();
+	}
+}

@@ -31,6 +31,9 @@ type Hlc struct {
 	fastCalling  bool
 	groupBss     string // innermost placement block; module default is applied after declarations
 	inStaticIf   bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
+	// constIndex は const の宣言の初期値を評価中 (fc 4): 定数の配列 (文字列) を定数の添字で引く式を畳む (`const C = "#"[0];`)。
+	// 関数の中の式では畳まない (生成コードが変わる。fc 3 → 4 の migrate は ROM を変えない)
+	constIndex bool
 
 	module *ir.Module
 	lmd    *ir.Lambda

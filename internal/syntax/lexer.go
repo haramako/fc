@@ -292,6 +292,17 @@ func (l *Lexer) Next() (Token, error) {
 		return tok(Identifier, n), nil
 	}
 
+	// fc 4 の文字のリテラル `'A'`: 整数のトークン (値は文字のコード。綴りは `'A'` のまま: sema は綴りで文字のリテラルと分かる)
+	if rest[0] == '\'' && l.version >= Version4 {
+		n, v, msg := scanChar(rest)
+		if msg != "" {
+			return Token{}, &Error{Filename: l.filename, Pos: start, Msg: msg}
+		}
+		t := tok(Number, n)
+		t.Int = v
+		return t, nil
+	}
+
 	// 文字列
 	if n, s, msg := scanString(rest); n > 0 {
 		if msg != "" {

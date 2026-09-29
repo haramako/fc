@@ -170,6 +170,14 @@ func registerBuiltins(p *Program) {
 		tm := &textmapConv{m: m, table: table, conv: conv, cat: cat, warned: map[string]bool{}}
 		h.prog.textmaps[m] = tm
 		h.prog.macros[m] = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+			if len(args) == 1 && args[0].kind == cInt && args[0].s == "char" {
+				// _T('あ'): 1 文字を表で引いた 1 つのコード (整数の定数。濁点などで 2 つ以上のコードになる文字はエラー)
+				c := tm.codes(h, string(rune(args[0].n)))
+				if len(c) != 1 {
+					panic(&diag.Error{Msg: fmt.Sprintf("%s converts to %d codes with the textmap (a character literal needs exactly 1; use a string: _T(\"...\"))", args[0].name, len(c))})
+				}
+				return macroResult{expr: cint(c[0])}
+			}
 			codes := tm.codes(h, tm.text(h, args))
 			codes = append(codes, 0)
 			elems := make([]*cexpr, len(codes))

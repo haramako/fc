@@ -456,7 +456,9 @@ func (h *Hlc) rewritePrintf(args []*cexpr, typs []*types.Type) {
 		if (a.kind == cStr || a.kind == cValue && a.val.IsString) && len(text) >= 2 && (text[0] == '"' || text[0] == '\'') && text[len(text)-1] == text[0] {
 			inner := strings.NewReplacer("{", "{{", "}", "}}").Replace(text[1 : len(text)-1])
 			if text[0] == '\'' {
-				inner = strings.ReplaceAll(inner, `"`, `\x22`) // 書式は "..." で書くので (fc の文字列に \" は無い)
+				// 書式は "..." で書くので (fc の文字列に \" は無い)。'...' はエスケープを解釈しないので \ も (\n が改行に化けないように)
+				inner = strings.ReplaceAll(inner, `\`, `\x5C`)
+				inner = strings.ReplaceAll(inner, `"`, `\x22`)
 			}
 			f.WriteString(inner)
 			lit[i] = true

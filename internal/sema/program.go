@@ -53,6 +53,7 @@ type Program struct {
 	lambdas        map[string]*ir.Lambda            // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
 	storageAliases map[*ir.Value]*ir.Value          // declaration binding -> canonical mutable global
 	storageGlobals map[*ir.Value]bool               // actual global var declarations (not ROM constants)
+	constArrays    map[*ir.Value]*ir.Value          // 名前付きの配列定数 → その配列リテラル (const の中の `TABLE[3]` を畳む)
 	defaults       map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
 	FarCalls    []FarCall
@@ -116,6 +117,7 @@ func NewProgram() *Program {
 		defaults:       map[*ir.Lambda]*functionDefaults{},
 		storageAliases: map[*ir.Value]*ir.Value{},
 		storageGlobals: map[*ir.Value]bool{},
+		constArrays:    map[*ir.Value]*ir.Value{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)

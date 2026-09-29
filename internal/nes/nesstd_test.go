@@ -20,6 +20,7 @@ import (
 type nesProg struct {
 	*Machine
 	syms map[string]int
+	rom  string // ROM のファイル
 }
 
 // buildNes は files (名前 → ソース。main は t.fc) を NES の ROM にしてランナーに載せる。
@@ -45,7 +46,7 @@ func buildNes(t *testing.T, files map[string]string) *nesProg {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &nesProg{Machine: m, syms: parseLd65MapAll(t, strings.TrimSuffix(rom, ".nes")+".dbg")}
+	return &nesProg{Machine: m, syms: parseLd65MapAll(t, strings.TrimSuffix(rom, ".nes")+".dbg"), rom: rom}
 }
 
 func (p *nesProg) run(t *testing.T, frames int) {

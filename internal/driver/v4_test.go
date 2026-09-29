@@ -597,3 +597,80 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestConstIndex: fc 4 の const の初期値では、定数の配列 (文字列・名前付きの配列定数) を定数の添字で引く式を畳む
+// (`const C = "#"[0];`。fc には文字のリテラルが無いので文字のコードに使う)。範囲の外はエラー。fc 3 は今までどおり定数にならない。
+func TestConstIndex(t *testing.T) {
+	t.Parallel()
+	out, err := buildFiles(t, map[string]string{"t.fc": `#fc 4
+use console;
+const HASH = "#"[0];
+const T = [5, 6, 300];
+const X = T[1] + 1;
+const Y = T[2];
+function main():void
+{
+	printf("{} {} {}\n", HASH, X, Y);
+	console.exit(0);
+}
+`})
+	if err != nil || out != "35 7 300\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	for src, want := range map[string]string{
+		"#fc 4\nconst T = [1, 2];\nconst Z = T[2];\nfunction main():void { }\n": "index 2 is out of the constant array (length 2)",
+		"#fc 3\nconst C = \"#\"[0];\nfunction main():void { }\n":                "const C must be constant",
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": src}); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: got %v, want /%s/", src, err, want)
+		}
+	}
+}
+
+// TestCharLiteral: fc 4 の文字のリテラル 'A' は文字のコードの定数 (エスケープは \n \t \0 \ \' \xNN)。ASCII 以外の文字は
+// @textmap の変換器に渡したときだけ使える (_T('あ') は表で引いた 1 つのコード。2 つ以上のコードになる文字はエラー)。
+// fc 3 の '...' は今までどおり文字列。
+func TestCharLiteral(t *testing.T) {
+	t.Parallel()
+	out, err := buildFiles(t, map[string]string{
+		"t.txt": "＿あかい゛",
+		"t.fc": `#fc 4
+use console;
+const _T = @textmap("t.txt");
+const HASH = '#';
+const TAB = ['a', 'b', '\n'];
+function main():void
+{
+	var c:u8 = 'A';
+	c += 1;
+	printf("{} {} {} {} {} {} {}\n", c, HASH, TAB[2], '\'', '\\', '\x7f', '\0');
+	printf("{} {}\n", _T('あ'), _T('い'));
+	switch (c) {
+	case 'B':
+		printf("B\n");
+	default:
+		printf("?\n");
+	}
+	console.exit(0);
+}
+`})
+	if err != nil || out != "66 35 10 39 92 127 0\n1 3\nB\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	for src, want := range map[string]string{
+		"#fc 4\nvar x:u8 = 'あ';\nfunction main():void { }\n":   "'あ' is not an ASCII character; convert it with a textmap converter (_T('あ'))",
+		"#fc 4\nvar x:u8 = 'ab';\nfunction main():void { }\n":   "'ab' is not one character (in fc 4 '...' is a character literal; write strings with \"...\")",
+		"#fc 4\nvar x:u8 = 'a;\nfunction main():void { }\n":    "unterminated character literal",
+		"#fc 4\nvar x:u8 = '\\q';\nfunction main():void { }\n": "invalid escape in character literal",
+		"#fc 4\nconst _T = @textmap(\"t.txt\");\nvar x:u8 = _T('が');\nfunction main():void { }\n": "'が' converts to 2 codes",
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": src, "t.txt": "＿あかい゛"}); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: got %v, want /%s/", src, err, want)
+		}
+	}
+	// fc 3 の '...' は文字列 (エスケープを解釈しない)
+	out, err = buildFiles(t, map[string]string{"t.fc": "#fc 3\nuse * from stdio;\nfunction main():void { printf('ab', \"\\n\"); exit(0); }\n"})
+	if err != nil || out != "ab\n" {
+		t.Errorf("fc 3: got %q, %v", out, err)
+	}
+}

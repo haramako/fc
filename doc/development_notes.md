@@ -483,6 +483,12 @@ go test ./...                                    # 全部 (golden + examples + N
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は
   [../examples/README.md](../examples/README.md)）
 - 内蔵NESランナーのスクリーンショット: `FC_NES_SNAPSHOT_DIR=<dir> go test ./internal/nes`（examples/hello は `FC_HELLO_PNG=<file>`）
+- **QuickNES で画面を確かめる**（2026-09-29）: `internal/quicknes` は libretro の QuickNES のコア（`FC_QUICKNES` か
+  `C:\Applications\libretro\quicknes_libretro.dll`）を cgo なしで（syscall で DLL を読み、コールバックは `syscall.NewCallback`）
+  動かし、`Open(rom)` → `SetButtons` / `RunFrames` → `Image()`（256×240。上下左右の切り落としはコアの設定で切る）/ `RAM()`。
+  内蔵のランナーは描画の途中の変化（スクロールの分割・ラスター効果）を描かないので、見た目はこちらで確かめる（MMC3 の走査線の
+  IRQ も動く）。コアはプロセスに 1 つだけなので Open から Close まで大域の錠を持つ（並列のテストは待つ）。無ければテストは Skip。
+  サンプルのテスト（`internal/nes/samples_test.go`）は `FC_SAMPLE_PNG_DIR=<dir>` で画面を PNG に書く
 - 内蔵NESランナー（internal/nes）の fc 向けの口（2026-09-29）: $4018 に書いた値を `Machine.Output` へ、$4019 に書いた値を終了コードに
   （`RunUntilExit`。NES の console が書く。`fcc test -t nes` が使う）、2P のパッド `SetButtons2`、描画中に vblank（NMI から
   `VblankCycles` = 2273 サイクル）の外で PPUDATA / OAM DMA に触った回数 `Stats.LateVramWrites` と、vblank の中で PPU に最後に

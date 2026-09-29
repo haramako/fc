@@ -1,0 +1,103 @@
+#fc 4
+// ライフゲーム (fc 4 の console のサンプル)。32×20 の端がつながった盤で、グライダー・点滅・ヒキガエルを動かし、世代ごとに
+// console に描く ('#' が生きているセル)。
+//   fcc run life.fc              (内蔵のエミュレータで。NES なら console の画面に)
+use console;
+use bits;
+use mem;
+
+const LIVE = '#';
+const DEAD = '.';
+const W = 32;
+const H = 20;
+const GENS = 8;
+
+var cur:[H * 4]u8;   // 1 行が 4 バイト (32 セル)
+var nxt:[H * 4]u8;
+var line:[W]u8;
+
+// 最初の形 (x, y)
+const START = [
+	1, 0, 2, 1, 0, 2, 1, 2, 2, 2,            // グライダー
+	20, 4, 21, 4, 22, 4,                      // 点滅 (周期 2)
+	10, 12, 11, 12, 12, 12, 9, 13, 10, 13, 11, 13,   // ヒキガエル (周期 2)
+];
+
+function row(s:[]u8, y:u8):[]u8
+{
+	return s[y * 4..y * 4 + 4];
+}
+
+// (x, y) のセル (生きていれば 1。x < W、y < H)
+function cell(x:u8, y:u8):u8
+{
+	if ((cur[(y << 2) | (x >> 3)] & bits.MASK[x & 7]) != 0) {
+		return 1;
+	}
+	return 0;
+}
+
+// 左 / 上の隣 (端はつながる)
+function before(v:u8, n:u8):u8
+{
+	if (v == 0) {
+		return n - 1;
+	}
+	return v - 1;
+}
+
+// 右 / 下の隣
+function after(v:u8, n:u8):u8
+{
+	if (v == n - 1) {
+		return 0;
+	}
+	return v + 1;
+}
+
+function step():void
+{
+	mem.zero(nxt);
+	for (var y:u8 = 0; y < H; y += 1) {
+		var up = before(y, H);
+		var down = after(y, H);
+		for (var x:u8 = 0; x < W; x += 1) {
+			var left = before(x, W);
+			var right = after(x, W);
+			var n = cell(left, up) + cell(x, up) + cell(right, up) + cell(left, y) + cell(right, y) +
+				cell(left, down) + cell(x, down) + cell(right, down);
+			if (n == 3 || (n == 2 && cell(x, y) != 0)) {
+				bits.set(row(nxt, y), x);
+			}
+		}
+	}
+	mem.copy(cur, nxt);
+}
+
+function draw(gen:u8):void
+{
+	printf("gen {}\n", gen);
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			line[x] = DEAD;
+			if (cell(x, y) != 0) {
+				line[x] = LIVE;
+			}
+		}
+		console.write(line);
+		console.newline();
+	}
+}
+
+function main():void
+{
+	console.init();
+	for (var i:u8 = 0; i < @len(START); i += 2) {
+		bits.set(row(cur, START[i + 1]), START[i]);
+	}
+	for (var g:u8 = 0; g <= GENS; g += 1) {
+		draw(g);
+		step();
+	}
+	console.exit(0);
+}

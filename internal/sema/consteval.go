@@ -4,6 +4,7 @@ package sema
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -52,6 +53,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	case cInt:
 		if c.s == "bool" {
 			return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), c.n))
+		}
+		if c.s == "char" && c.n > 0x7f && !strings.HasPrefix(c.name, "'\\") {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s is not an ASCII character; convert it with a textmap converter (_T(%s)) or write the code ('\\xNN')", c.name, c.name)})
 		}
 		return cv(h.IntValue(c.n))
 
@@ -353,6 +357,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		case opCall:
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
+				if i > 0 && a.kind == cInt && a.s == "char" && args[0].kind == cValue && h.prog.textmaps[args[0].val] != nil {
+					args[i] = a // _T('あ'): 文字のリテラルのまま変換器に渡す (ASCII 以外の文字は評価するとエラー)
+					continue
+				}
 				args[i] = h.constEval(a)
 			}
 			// 定数式で評価する組み込み (textmap など) はここで展開する
@@ -405,10 +413,37 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 					args[i] = h.constEval(a)
 				}
 			}
+			if c.op == opIndex && h.constIndex {
+				if e := h.constElem(args[0], args[1]); e != nil {
+					return e
+				}
+			}
 			return &cexpr{kind: cOp, op: c.op, args: args, ty: c.ty, incl: c.incl}
 		}
 	}
 	panic(fmt.Sprintf("invalid op %v", c.op))
+}
+
+// constElem は定数の配列 (配列リテラル・文字列・名前付きの配列定数) a の定数の添字 i の要素 (整数の要素でなければ nil)。
+func (h *Hlc) constElem(a, i *cexpr) *cexpr {
+	if a == nil || i == nil || a.kind != cValue || !i.isLiteralInt() {
+		return nil
+	}
+	arr := a.val
+	if lit, ok := h.prog.constArrays[arr]; ok {
+		arr = lit
+	}
+	if arr.Kind != ir.KindArrayLiteral {
+		return nil
+	}
+	n := i.val.Int
+	if n < 0 || n >= len(arr.Elems) {
+		panic(&diag.Error{Msg: fmt.Sprintf("index %d is out of the constant array (length %d)", n, len(arr.Elems))})
+	}
+	if e := ir.ValLiteral(arr.Elems[n]); e != nil && e.Kind == ir.KindLiteral && e.IsInt {
+		return cv(e)
+	}
+	return nil
 }
 
 // IntValue は値から型を推定した整数リテラル: 0〜255 → uint8、256 以上 → uint16、-128〜-1 → sint8、-129 以下 → sint16。

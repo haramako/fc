@@ -15,6 +15,8 @@ package sema
 // これは Hlc.cmemo (同一ノードの評価結果のメモ) で再現する。
 
 import (
+	"strings"
+
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/syntax"
@@ -205,6 +207,10 @@ func toC0(e syntax.Expr) *cexpr {
 		}
 		return cident(e.Name)
 	case *syntax.IntLit:
+		if strings.HasPrefix(e.Text, "'") {
+			// fc 4 の文字のリテラル (値は文字のコード。name に綴り: ASCII 以外は @textmap の変換器に渡すときだけ使える)
+			return &cexpr{kind: cInt, n: e.Value, s: "char", name: e.Text}
+		}
 		return cint(e.Value)
 	case *syntax.BoolLit:
 		if e.Value {
