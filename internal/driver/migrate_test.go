@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 )
@@ -190,7 +191,8 @@ func TestMigrateBench(t *testing.T) {
 }
 
 // TestMigrateExamples: examples の castle と miku (fc 3) を最新の版に migrate してビルドした ROM が、今の ROM の golden と
-// バイト単位で一致する (fc 3 → 4 は意味の変わる所に書き換えを足して、ROM を変えずに移す。doc/v4_plan.md §0)。
+// バイト単位で一致する (fc 3 → 4 は意味の変わる所に書き換えを足して、ROM を変えずに移す。doc/v4_plan.md §0)。ただし fc 4 の
+// 「使われない private な変数は領域を取らない」(RAM の並びが変わるだけで動きは同じ) は切って比べる。
 func TestMigrateExamples(t *testing.T) {
 	t.Parallel()
 	for _, ex := range []struct{ name, src, main string }{
@@ -206,7 +208,8 @@ func TestMigrateExamples(t *testing.T) {
 				t.Fatal(".fc が無い")
 			}
 			rom := filepath.Join(root, ex.name+".nes")
-			code, err := NewCompiler(absRepoRoot).Build(ex.main, &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(root, "build")})
+			code, err := NewCompiler(absRepoRoot).Build(ex.main, &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(root, "build"),
+				Config: ir.NewConfig("unused-globals")})
 			if err != nil || code != 0 {
 				t.Fatalf("ビルド失敗: %v (code %d)", err, code)
 			}

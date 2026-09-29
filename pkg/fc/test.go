@@ -5,14 +5,21 @@ package fc
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/haramako/fc/internal/nes"
 )
 
+// TestFrames は Target が TargetNES のテストを内蔵の NES のランナーで走らせるフレーム数の上限 (60 フレームで 1 秒)。
+const TestFrames = 60 * 120
+
 // Test は files (モジュールの .fc) の @(test) の関数を走らせる。files を use して @run_tests() を呼ぶ main を一時ディレクトリに
-// 作り、files のディレクトリを探索先 (Options.LibPath) に足してビルドし、emu なら実行する (結果の ExitCode が 0 なら全部通った。
-// 出力は Options.Stdout)。
+// 作り、files のディレクトリを探索先 (Options.LibPath) に足してビルドし、emu なら内蔵の 6502 のエミュレータで、nes なら内蔵の
+// NES のランナー (internal/nes。console の出力を $4018、終了コードを $4019 で受け取る) で実行する (結果の ExitCode が 0 なら
+// 全部通った。出力は Options.Stdout)。
 func (c *Compiler) Test(ctx context.Context, files []string, opt Options) (*Result, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("fcc test: no module is given")
@@ -55,5 +62,21 @@ func (c *Compiler) Test(ctx context.Context, files []string, opt Options) (*Resu
 	if opt.Out == "" {
 		opt.Out = filepath.Join(dir, "test.bin")
 	}
-	return c.Build(ctx, main, opt)
+	res, err := c.Build(ctx, main, opt)
+	if err != nil || opt.Target != TargetNES {
+		return res, err
+	}
+	m, err := nes.LoadFile(opt.Out)
+	if err != nil {
+		return res, err
+	}
+	m.Output = opt.Stdout
+	if m.Output == nil {
+		m.Output = io.Discard
+	}
+	if err := m.RunUntilExit(TestFrames); err != nil {
+		return res, fmt.Errorf("fcc test: %w", err)
+	}
+	res.ExitCode = m.ExitCode
+	return res, nil
 }

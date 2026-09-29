@@ -1,0 +1,121 @@
+#fc 4
+// スプライト (doc/v4_stdlib.md §3.2)。OAM の写し (256 バイト、ページの先頭) に並べ、frame.wait の NMI が DMA で送る。
+// 写しの番地は既定で $0700 (fc の既定の配置で空いている所)。fc.toml の [define.oam] ADDR = 0x0300 などで変えられる (256 の倍数。
+// fc の BSS・静的フレームと重ならない所に)。
+//
+//   oam.begin();
+//   oam.spr(x, y, tile, attr);         // 満杯 (64 枚) なら false
+//   oam.meta(x, y, PLAYER, 0);         // メタスプライト
+//   oam.end();                         // 使わなかった分を隠す
+//   frame.wait();
+//
+// reserve(n) で先頭の n 枚を固定にできる (スプライト 0 の当たりなど。set で置く。begin / spr / end は触らない)。
+@(bank: -1);
+use nes;
+use frame;
+
+public const ADDR = 0x0700 @(build);
+
+public var buf:[256]u8 @(address: ADDR);
+var n:u8;         // 次に使う枚数目
+var used:u8;      // 前の end のときの n (end がそこまで隠す)
+var first:u8;     // reserve した枚数
+
+// 最初に使うとき: 全部隠してから DMA を始める
+function start():void
+{
+	if (frame.oam_page == 0) {
+		for (var i:u8 = 0; i < 64; i += 1) {
+			buf[i << 2] = 0xff;
+		}
+		frame.oam_page = (ADDR >> 8) as u8;
+	}
+}
+
+// フレームの並べ始め (前のフレームの分は end まで残る)
+public function begin():void
+{
+	start();
+	n = first;
+}
+
+// 1 枚置く (y は画面の y - 1: NES のスプライトは 1 ライン下に出る)。満杯なら false
+public function spr(x:u8, y:u8, tile:u8, attr:u8):bool
+{
+	if (n >= 64) {
+		return false;
+	}
+	var i = n << 2;
+	buf[i] = y;
+	buf[i + 1] = tile;
+	buf[i + 2] = attr;
+	buf[i + 3] = x;
+	n += 1;
+	return true;
+}
+
+// メタスプライト: m は {dx:i8, dy:i8, tile, attr} の 4 バイトの並び。(x, y) からずらして置き、画面 (0〜255、0〜239) の外に
+// 出るものは置かない。flip は nes.ATTR_FLIP_H / ATTR_FLIP_V (8×8 のスプライトとして左右・上下を反転し、attr の反転のビットを
+// 入れ替える)。全部置けたら true
+public function meta(x:i16, y:i16, m:[]const u8, flip:u8):bool
+{
+	var ok = true;
+	for (var k:u8 = 0; k + 3 < @len(m); k += 4) {
+		var dx = @bitcast(i8, m[k]) as i16;
+		var dy = @bitcast(i8, m[k + 1]) as i16;
+		if ((flip & nes.ATTR_FLIP_H) != 0) {
+			dx = -dx - 8;
+		}
+		if ((flip & nes.ATTR_FLIP_V) != 0) {
+			dy = -dy - 8;
+		}
+		var sx = x + dx;
+		var sy = y + dy;
+		if (sx < 0 || sx > 255 || sy < 0 || sy > 239) {
+			continue;
+		}
+		ok = spr(sx as u8, sy as u8, m[k + 2], m[k + 3] ^ flip) && ok;
+	}
+	return ok;
+}
+
+// このフレームで置かなかった分 (前のフレームで使った所まで) を隠す
+public function end():void
+{
+	var i = n;
+	while (i < used) {
+		buf[i << 2] = 0xff;
+		i += 1;
+	}
+	used = n;
+}
+
+// 使った枚数 (reserve の分を含む)
+public function count():u8
+{
+	return n;
+}
+
+// 先頭の k 枚を固定にする (begin / spr / end が触らない。set で置く)
+public function reserve(k:u8):void
+{
+	start();
+	first = k;
+}
+
+// i 枚目に置く (reserve した固定のもの)
+public function set(i:u8, x:u8, y:u8, tile:u8, attr:u8):void
+{
+	start();
+	var j = i << 2;
+	buf[j] = y;
+	buf[j + 1] = tile;
+	buf[j + 2] = attr;
+	buf[j + 3] = x;
+}
+
+// i 枚目を隠す
+public function hide(i:u8):void
+{
+	buf[i << 2] = 0xff;
+}

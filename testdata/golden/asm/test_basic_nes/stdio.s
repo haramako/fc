@@ -172,16 +172,16 @@ _stdio_HEX:
 	sta <F_stdio_print+1
 	jsr _stdio_print
 	lda #200
-	sta 0+_nes_PPU_CTRL1
+	sta 0+_nes_PPUCTRL
 @then_53:
 	jsr _stdio_wait_vsync
 	lda #0
-	sta 0+_nes_PPU_SCROLL
-	sta 0+_nes_PPU_SCROLL
+	sta 0+_nes_PPUSCROLL
+	sta 0+_nes_PPUSCROLL
 	lda #200
-	sta 0+_nes_PPU_CTRL1
+	sta 0+_nes_PPUCTRL
 	lda #10
-	sta 0+_nes_PPU_CTRL2
+	sta 0+_nes_PPUMASK
 	jmp @then_53
 _47:
 		.byte 101,120,105,116,40,0

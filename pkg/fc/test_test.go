@@ -9,7 +9,8 @@ import (
 	"testing"
 )
 
-// TestFclibModuleTests: fclib のモジュールの @(test) の関数を fcc test (Compiler.Test) で走らせる (-O 0 / -O 2)。
+// TestFclibModuleTests: fclib のモジュールの @(test) の関数を fcc test (Compiler.Test) で走らせる (-O 0 / -O 2)。どのターゲット
+// でも使うモジュール (fclib/*.fc) は emu と NES のランナーの両方で、fclib/<target>/ のものはそのターゲットで。
 func TestFclibModuleTests(t *testing.T) {
 	t.Parallel()
 	c, err := New()
@@ -17,23 +18,36 @@ func TestFclibModuleTests(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	files, _ := filepath.Glob(filepath.Join("..", "..", "fclib", "*.fc"))
-	emu, _ := filepath.Glob(filepath.Join("..", "..", "fclib", "emu", "*.fc"))
+	glob := func(dir string) []string {
+		files, _ := filepath.Glob(filepath.Join("..", "..", "fclib", dir, "*.fc"))
+		return files
+	}
+	type run struct{ file, target string }
+	var runs []run
+	for _, f := range glob("") {
+		runs = append(runs, run{f, TargetEmu}, run{f, TargetNES})
+	}
+	for _, f := range glob("emu") {
+		runs = append(runs, run{f, TargetEmu})
+	}
+	for _, f := range glob("nes") {
+		runs = append(runs, run{f, TargetNES})
+	}
 	n := 0
-	for _, f := range append(files, emu...) {
-		src, err := os.ReadFile(f)
+	for _, r := range runs {
+		src, err := os.ReadFile(r.file)
 		if err != nil || !bytes.Contains(src, []byte("@(test)")) {
 			continue
 		}
 		n++
 		for _, level := range []int{-1, 2} {
 			var out bytes.Buffer
-			res, err := c.Test(context.Background(), []string{f}, Options{Stdout: &out, OptimizeLevel: level})
+			res, err := c.Test(context.Background(), []string{r.file}, Options{Target: r.target, Stdout: &out, OptimizeLevel: level})
 			if err != nil {
-				t.Fatalf("%s: %v", f, err)
+				t.Fatalf("%s (%s): %v", r.file, r.target, err)
 			}
 			if res.ExitCode != 0 || !strings.HasSuffix(out.String(), " tests ok\n") {
-				t.Errorf("%s (-O %d): exit %d\n%s", f, level, res.ExitCode, out.String())
+				t.Errorf("%s (%s, -O %d): exit %d\n%s", r.file, r.target, level, res.ExitCode, out.String())
 			}
 		}
 	}

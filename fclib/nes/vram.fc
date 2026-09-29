@@ -1,0 +1,240 @@
+#fc 4
+// VRAM (ネームテーブル・属性・パレット) の書き込み (doc/v4_stdlib.md §3.2)。put / put_v / fill は、描画を出している間は
+// frame のキューに積んで次の frame.wait の NMI で送り、描画を止めている間はその場で書く。キューはデータを写す (stripe 形式) ので、
+// 渡したデータは呼んだ後に変えてよい。キューが満杯なら、キューだけを次の NMI で送るのを待ってから積む (try_put は積まずに false)。
+// 大きな画面は描画を止めて write_now / fill_now で書く。
+//
+//   vram.put(vram.addr(0, 2, 3), @format(line, "HP {:3}", hp));
+//   @format(vram.reserve(vram.addr(0, 2, 4), 5), "{:05}", score);   // キューの中へ直に書く (写しが要らない)
+@(bank: -1);
+use nes;
+use sys;
+use frame;
+
+const VERTICAL = 0x80;
+const FILL = 0x40;
+// NMI で送る手間 (frame.BUDGET と同じ単位: 1 バイトを写す手間が 1)。写す項目は頭が約 7 と端数の 1 バイトずつの分で 10 + n、
+// 埋める項目は 12 + n × 3/4
+const COST_HEAD = 10;
+const COST_FILL_HEAD = 12;
+
+// ネームテーブル nt (0〜3) のタイル (x, y) の番地 (x は 0〜31、y は 0〜29)
+public function addr(nt:u8, x:u8, y:u8):u16
+{
+	return 0x2000 + ((nt as u16) << 10) + ((y as u16) << 5) + x;
+}
+
+// タイル (x, y) の属性のバイトの番地 (1 バイトが 4×4 タイル。その中の 2×2 ごとの 2 ビットは attr_shift)
+public function attr_addr(nt:u8, x:u8, y:u8):u16
+{
+	return 0x23c0 + ((nt as u16) << 10) + ((y >> 2) << 3) + (x >> 2);
+}
+
+// タイル (x, y) の 2×2 の区画が属性のバイトの中で使うビットの位置 (0 / 2 / 4 / 6)
+public function attr_shift(x:u8, y:u8):u8
+{
+	return (x & 2) | ((y & 2) << 1);
+}
+
+// キューの空き (バイト。項目は 3 バイトの頭 + データ)
+public function room():u8
+{
+	return frame.QUEUE_SIZE - frame.queue_len;
+}
+
+// キューに項目の頭を書き、データの位置を返す (呼ぶ側が空きを確かめてから)
+function push_head(a:u16, flags:u8, n:u8):u8
+{
+	var i = frame.queue_len;
+	frame.queue[i] = ((a >> 8) as u8) | flags;
+	i += 1;
+	frame.queue[i] = a as u8;
+	i += 1;
+	frame.queue[i] = n;
+	i += 1;
+	return i;
+}
+
+// NMI の手間の残り
+function budget():u8
+{
+	return frame.BUDGET - frame.queue_cost;
+}
+
+// 空きが n バイト、手間の残りが cost になるまでキューを送るのを待ち、手間を足す
+function need(n:u8, cost:u8):void
+{
+	if (n > frame.QUEUE_SIZE || cost > frame.BUDGET) {
+		sys.panic("vram: entry too large");
+	}
+	while (room() < n || budget() < cost) {
+		frame.flush();
+	}
+	frame.queue_cost += cost;
+}
+
+// 埋める項目の手間
+function fill_cost(n:u8):u8
+{
+	return COST_FILL_HEAD + (n >> 1) + (n >> 2);
+}
+
+// 積んだものを先に送る (描画を止めてその場で書く前に: 順番が入れ替わらないように)
+function drain():void
+{
+	if (frame.queue_len != 0) {
+		frame.flush();
+	}
+}
+
+function put_dir(a:u16, data:[]const u8, flags:u8):void
+{
+	if (!frame.rendering()) {
+		drain();
+		write_dir(a, data, flags);
+		return;
+	}
+	var s = data;
+	while (@len(s) != 0) {
+		// 空きと手間の残りに入る分ずつ (少なければ送ってから)
+		if (room() < 4 || budget() < COST_HEAD + 1) {
+			frame.flush();
+		}
+		var n = @len(s);
+		if (n > room() - 3) {
+			n = room() - 3;
+		}
+		if (n > budget() - COST_HEAD) {
+			n = budget() - COST_HEAD;
+		}
+		frame.queue_cost += COST_HEAD + n;
+		var i = push_head(a, flags, n);
+		for (var k:u8 = 0; k < n; k += 1) {
+			frame.queue[i] = s[k];
+			i += 1;
+		}
+		frame.queue_len = i;
+		s = s[n..];
+		if (flags == 0) {
+			a += n;
+		} else {
+			a += (n as u16) << 5;
+		}
+	}
+}
+
+// 横に並べて書く
+public function put(a:u16, data:[]const u8):void
+{
+	put_dir(a, data, 0);
+}
+
+// 縦に並べて書く (+32 ずつ)
+public function put_v(a:u16, data:[]const u8):void
+{
+	put_dir(a, data, VERTICAL);
+}
+
+// 空きが足りれば put して true、足りなければ何もせずに false (描画を止めていればいつも書く)
+public function try_put(a:u16, data:[]const u8):bool
+{
+	if (frame.rendering() && (room() < @len(data) + 3 || budget() < COST_HEAD + @len(data))) {
+		return false;
+	}
+	put(a, data);
+	return true;
+}
+
+// 1 バイトを書く
+public function set(a:u16, v:u8):void
+{
+	fill(a, v, 1);
+}
+
+// v を n 個、横に並べて書く (キューでは 4 バイト。128 個ずつに分ける)
+public function fill(a:u16, v:u8, n:u8):void
+{
+	if (!frame.rendering()) {
+		drain();
+		fill_now(a, v, n);
+		return;
+	}
+	while (n != 0) {
+		var k = n;
+		if (k > 128) {
+			k = 128;
+		}
+		need(4, fill_cost(k));
+		var i = push_head(a, FILL, k);
+		frame.queue[i] = v;
+		frame.queue_len = i + 1;
+		a += k;
+		n -= k;
+	}
+}
+
+// キューの中に n バイトの横の項目を取り、そのデータの場所を返す (そこへ直に書く。次の frame.wait の NMI で送る)。
+// 描画を止めていてもキューに積む (次に frame.wait / render_on で待ったときに送る)
+public function reserve(a:u16, n:u8):[]u8
+{
+	if (n == 0) {
+		return frame.queue[..0];
+	}
+	need(n + 3, COST_HEAD + n);
+	var i = push_head(a, 0, n);
+	frame.queue_len = i + n;
+	return frame.queue[i..i + n];
+}
+
+// 属性のタイル (x, y) の 2×2 の区画のパレットを p (0〜3) にする。old はその属性のバイトの今の値 (呼ぶ側が持っている写し。
+// PPU からは読まない)。新しい値を返す
+public function set_attr(nt:u8, x:u8, y:u8, old:u8, p:u8):u8
+{
+	var sh = attr_shift(x, y);
+	var v = (old & ~(3 << sh)) | ((p & 3) << sh);
+	set(attr_addr(nt, x, y), v);
+	return v;
+}
+
+// ---- 描画を止めている間に直に書く ----
+
+function write_dir(a:u16, data:[:u16]const u8, flags:u8):void
+{
+	var c = frame.ctrl & ~nes.CTRL_INC32;
+	if (flags != 0) {
+		c |= nes.CTRL_INC32;
+	}
+	nes.PPUCTRL = c;
+	nes.PPUADDR = (a >> 8) as u8;
+	nes.PPUADDR = a as u8;
+	for (var v in data) {
+		nes.PPUDATA = v;
+	}
+	if (flags != 0) {
+		nes.PPUCTRL = c & ~nes.CTRL_INC32;
+	}
+}
+
+// data を a から横に書く (描画を止めている間だけ。1 KB のネームテーブルも)
+public function write_now(a:u16, data:[:u16]const u8):void
+{
+	write_dir(a, data, 0);
+}
+
+// 縦に書く
+public function write_v_now(a:u16, data:[:u16]const u8):void
+{
+	write_dir(a, data, VERTICAL);
+}
+
+// v を n 個書く (描画を止めている間だけ)
+public function fill_now(a:u16, v:u8, n:u16):void
+{
+	nes.PPUCTRL = frame.ctrl & ~nes.CTRL_INC32;
+	nes.PPUADDR = (a >> 8) as u8;
+	nes.PPUADDR = a as u8;
+	while (n != 0) {
+		nes.PPUDATA = v;
+		n -= 1;
+	}
+}

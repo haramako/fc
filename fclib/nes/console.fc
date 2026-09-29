@@ -5,6 +5,10 @@
 use nes;
 
 public var addr:u16;       // 次に書く VRAM の番地
+// fc の NES のランナー (internal/nes) への出力: 書いた文字をそのまま出す / 終了コード。$4018〜$401F は CPU の試験用の番地で、
+// 製品の NES では何も起きない (マッパーも $4020 から)。画面は 30 行で上に戻るが、fcc test -t nes はこちらで全部を受け取る
+var DEBUG_OUT:u8 @(address: 0x4018);
+var DEBUG_EXIT:u8 @(address: 0x4019);
 // exit の終了コードと印 (テストのランナーが外から読むので volatile: 戻らない exit の中でレジスタに置いたままにならないように)
 public var exit_code:u8 @(volatile);
 public var exited:u8 @(volatile);
@@ -12,13 +16,13 @@ public var exited:u8 @(volatile);
 // 描画と NMI を止め、パレットを置いて左上から書けるようにする
 public function init():void
 {
-	nes.PPU_CTRL1 = 0;
-	nes.PPU_CTRL2 = 0;
+	nes.PPUCTRL = 0;
+	nes.PPUMASK = 0;
 	const PALETTE = [15, 48, 48, 48, 15, 48, 48, 48, 15, 48, 48, 48, 15, 48, 48, 48];
-	nes.PPU_ADDR = 0x3f;
-	nes.PPU_ADDR = 0x00;
+	nes.PPUADDR = 0x3f;
+	nes.PPUADDR = 0x00;
 	for (var c in PALETTE) {
-		nes.PPU_DATA = c;
+		nes.PPUDATA = c;
 	}
 	addr = 0x2000;
 }
@@ -26,16 +30,22 @@ public function init():void
 // s をそのまま書く ('\n' は次の行の頭へ)
 public function write(s:[:u16]const u8):void
 {
-	nes.PPU_ADDR = (addr >> 8) as u8;
-	nes.PPU_ADDR = addr as u8;
+	nes.PPUADDR = (addr >> 8) as u8;
+	nes.PPUADDR = addr as u8;
 	for (var c in s) {
+		DEBUG_OUT = c;
 		if (c == 10) {
 			addr = (addr & 0xffe0) + 32;
-			nes.PPU_ADDR = (addr >> 8) as u8;
-			nes.PPU_ADDR = addr as u8;
 		} else {
-			nes.PPU_DATA = c;
+			nes.PPUDATA = c;
 			addr += 1;
+		}
+		if (c == 10 || addr >= 0x23c0) {
+			if (addr >= 0x23c0) {
+				addr = 0x2000;   // 画面の下まで来たら上に戻る (属性の表に書かない)
+			}
+			nes.PPUADDR = (addr >> 8) as u8;
+			nes.PPUADDR = addr as u8;
 		}
 	}
 }
@@ -70,10 +80,11 @@ public function exit(code:u8):void
 {
 	exit_code = code;
 	exited = 1;
-	nes.PPU_SCROLL = 0;
-	nes.PPU_SCROLL = 0;
-	nes.PPU_CTRL1 = 0;
-	nes.PPU_CTRL2 = 0b00001010;   // 背景を出す (左端の 8 ドットも)
+	DEBUG_EXIT = code;
+	nes.PPUSCROLL = 0;
+	nes.PPUSCROLL = 0;
+	nes.PPUCTRL = 0;
+	nes.PPUMASK = 0b00001010;   // 背景を出す (左端の 8 ドットも)
 	while (true) {
 	}
 }

@@ -60,13 +60,13 @@ public function puts(str:*const u8):void
 public function exit(code:u8):void
 {
 	printf('exit(', code, ")\n");
-	PPU_CTRL1 = 0b11001000;
+	PPUCTRL = 0b11001000;
 	while (1) {
 		wait_vsync();
-		PPU_SCROLL = 0;
-		PPU_SCROLL = 0;
-		PPU_CTRL1 = 0b11001000;
-		PPU_CTRL2 = 0b00001010;
+		PPUSCROLL = 0;
+		PPUSCROLL = 0;
+		PPUCTRL = 0b11001000;
+		PPUMASK = 0b00001010;
 	}
 }
 

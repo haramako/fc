@@ -1,5 +1,4 @@
 	.export runtime_init
-	.include "_nes.s"
 
 .segment "FC_RUNTIME"
 	
@@ -18,7 +17,7 @@ runtime_init:
 	;; See: http://wiki.nesdev.com/w/index.php/PPU_power_up_state#Best_practice
 	ldx #4
 @loop:
-	bit _nes_PPU_STAT
+	bit $2002			; PPUSTATUS (nes モジュールの名前に頼らない: 使わないプログラムもある)
 	bpl @loop
 	dex
 	bne @loop

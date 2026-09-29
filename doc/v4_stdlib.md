@@ -320,6 +320,25 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
 
 ---
 
+### 6.3 実装（2026-09-29）
+
+- **NMI（fclib/nes/frame.asm）**: 主の側が `frame.wait`（`ready = 0x80`）か `frame.flush`（`0x40`: キューだけ。vram がキューの満杯の
+  ときに呼ぶ）で待っているときだけ、OAM の DMA（0x80 で `oam_page` が 0 でなければ）→ VRAM のキュー → `PPUADDR = 0` →
+  PPUCTRL / スクロール / PPUMASK。待っている間は主の側が PPU に触らないので、描画を止めていても安全に書ける。誰も待っていない NMI は、
+  描画中なら処理落ちのフレームとしてレジスタだけ、描画を止めていれば PPU に触らない（主の側が直に書いている途中かもしれない）。
+  最後にフレームの数と `hook`（`jmp (ind)` の $xxFF の不具合を避けて rti で飛ぶ）
+- **キュー**: `[番地の上位 | $80 縦 | $40 埋める, 下位, 長さ, データ…]`。NMI は 8 バイトずつ展開して写す（1 バイト約 10.4 サイクル、
+  埋めるのは約 6.8）。**大きさ（`QUEUE_SIZE` 128）だけでなく NMI の手間（`BUDGET` 140、1 バイトを写す手間が 1、項目の頭が 10）で
+  上限を持つ**: 小さな項目がたくさんだと頭の処理だけで vblank を超えるため。キューが満杯のときの 125 バイトの項目と OAM の DMA で
+  NMI の PPU の仕事は約 2110 / 2273 サイクル（キューの読みがページをまたぐと 1 バイト +1）。put は空きに入る分ずつに分け、fill は
+  128 個ずつ
+- **描画を止めている間**の put / put_v / fill はその場で書く（先に積んだものがあれば送ってから）。`reserve` はいつもキューに積む
+- **pal**: 明るさは主の側で計算して 32 バイトを vram のキューに積む（NMI は写すだけ）。$3F10 などは $3F00 などの写しなので背景の色を
+  送る（colors[16] の 0 が背景色を消していた）
+- **oam**: 最初に使ったとき（begin / reserve / set）に全部を隠してから DMA を始める（固定の枚を先に set してから begin すると、
+  最初の begin がそれを隠していた）。end は前のフレームで使った所まで隠す
+- **決めたこと**: OAM の置き場所のキーは `[define.oam] ADDR`（`@(address:)` に整数の const の名前を書けるようにした）
+
 ## 7. 進め方
 
 1. **決める**: §8 を決め、この文書を仕様にする ✅ 2026-09-29
@@ -331,7 +350,11 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    sys / test / console（emu）。組み込み（§5）を直し、test/ の golden を更新する。`fmt` と `@format` は Go の `strconv` を参照にした
    fuzz、mem は参照の実装との比較、math は表をすべての入力で確かめる
 3. **NES の土台**: nes / frame / vram / pal / oam / pad / console（NES、内蔵のフォントの CHR）。「hello world」の最小の例と、内蔵の
-   NES ランナーでの確かめ（PPU の中身、NMI のサイクル数）
+   NES ランナーでの確かめ（PPU の中身、NMI のサイクル数）。✅ 2026-09-29（§6.3 に実装の形。旧 nes / pad は castle・miku の横にコピー。
+   テストは `internal/nes/nesstd_test.go`（乱数の put / fill の並びを Go の模型と比べ、vblank の外で書かないかをランナーが数える）、
+   fclib のモジュールの `@(test)` は `fcc test -t nes` でも走らせる（`pkg/fc` の TestFclibModuleTests）。内蔵のフォントは
+   fclib/nes/font.txt から TestFontChr が作る。**NES の console は $4018 / $4019 にも書き、ランナーが出力と終了コードを受け取る**。
+   fc 4 の使われない private な変数は領域を取らないようにした（テストだけが使うバッファ。language_reference §4.7）
 4. **広げる**: mmc3 / mmc1 / uxrom（far call と合わせて）、lzw / rle の slice の版、メタスプライト・メタタイル・属性、フェード、音の
    呼び出し口
    **同じ名前のモジュールの入れ替え（2026-09-29 決定）**: mem・math など今の fclib と同じ名前のモジュールを新しい API にするときは、

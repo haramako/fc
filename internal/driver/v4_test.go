@@ -548,3 +548,48 @@ function main():void
 		t.Errorf("fc 3: %q, fc 4: %q", before, after)
 	}
 }
+
+// TestUnusedPrivateGlobals: fc 4 のモジュールの private な変数 (既定の BSS) は、出力する関数から参照されなければ領域を取らない
+// (どこからも呼ばれない関数・@(test) の関数だけが使う大きなバッファなど)。public・@(symbol:)・置き場所を指定したもの
+// (@(segment:)。整列の詰め物のように並びを当てにしうる)・fc 3 のモジュールの変数は今までどおり残す。
+func TestUnusedPrivateGlobals(t *testing.T) {
+	t.Parallel()
+	src := `#fc 4
+use console;
+use old;
+var used_v:u8;
+var only_helper:[300]u8;
+var never:u8;
+var placed:[4]u8 @(segment: "BSS");
+public var pub:u8;
+var named:u8 @(symbol: "_named_v");
+function helper():void { only_helper[0] = 1; }
+function test_x():void @(test) { only_helper[1] = 2; }
+function main():void
+{
+	used_v = 3;
+	printf("{} {}\n", used_v, old.get());
+	console.exit(0);
+}
+`
+	old := "#fc 3\nvar unused_old:u8;\npublic function get():u8 { return 5; }\n"
+	files := map[string]string{"t.fc": src, "old.fc": old}
+	s := compileAsmFiles(t, files)
+	for _, sym := range []string{"_t_used_v:", "_t_placed:", "_t_pub:", "_named_v:"} {
+		if !strings.Contains(s, sym) {
+			t.Errorf("%s が無い:\n%s", sym, s)
+		}
+	}
+	for _, sym := range []string{"_t_only_helper", "_t_never"} {
+		if strings.Contains(s, sym) {
+			t.Errorf("%s が残っている", sym)
+		}
+	}
+	r := testBuild(t, buildSpec{Files: files, CompileOnly: true})
+	if o := r.Built(t, "_old.s"); !strings.Contains(o, "_old_unused_old:") {
+		t.Errorf("fc 3 の変数が消えた:\n%s", o)
+	}
+	if out, err := buildFiles(t, files); err != nil || out != "3 5\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}

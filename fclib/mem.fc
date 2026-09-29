@@ -105,11 +105,15 @@ public function find(s:[:u16]const u8, v:u8):u16
 
 // ---- テスト ----
 
+// 256 バイトを超える slice のテスト用 (関数のフレームは 256 バイトまでなのでモジュールの変数に。テストの関数だけが使うので、
+// 普通のビルドでは領域を取らない)
+var test_a:[300]u8;
+var test_b:[300]u8;
+
 function test_fill_copy():void @(test)
 {
-	// 256 バイトを超える slice (emu の空いている RAM $8000〜。関数のフレームは 256 バイトまでなので配列は置けない)
-	var a = @slice(@bitcast(*u8, 0x8000 as u16), 300 as u16);
-	var b = @slice(@bitcast(*u8, 0x8200 as u16), 300 as u16);
+	var a:[:u16]u8 = test_a;
+	var b:[:u16]u8 = test_b;
 	fill(a, 7);
 	@assert(a[0] == 7 && a[299] == 7);
 	zero(a[1..299]);

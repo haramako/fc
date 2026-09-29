@@ -116,8 +116,15 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	var vv *ir.Value
 	if h.lmd == nil {
 		var symbol string
+		var bss *ir.Def
 		if addr, ok := opt.Get("address"); ok {
 			// 固定番地 (メモリマップド I/O)。asm のシンボルへの束縛は const の options(symbol:) で (§4.1)
+			if addr.Kind == ir.OptIdent {
+				// 整数の const の名前 (`@(address: ADDR)`。fc.toml で変えられる @(build) の const でもよい: fclib/nes/oam.fc)
+				if e := h.constEval(toC(sp.Options.Get("address"))); e.kind == cValue && e.val.Kind == ir.KindLiteral && e.val.IsInt {
+					addr = ir.OptionValue{Kind: ir.OptInt, Int: e.val.Int}
+				}
+			}
 			if addr.Kind != ir.OptInt {
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address:) takes a number; to refer to an assembler symbol, declare a const with options(symbol: \"%s\")", name, addr.Str)})
 			}
@@ -132,6 +139,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				} // explicit legacy default overrides inherited bss
 			}
 			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg}
+			bss = d
 			if sym, ok := symbolOption(opt); ok {
 				// options(symbol: "name"): fc が確保する領域のシンボル名を固定する (asm から参照するとき)
 				d.Sym = sym
@@ -146,6 +154,11 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		vv.ReadOnly = ro || inferRO
 		h.prog.storageGlobals[vv] = true
 		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
+		// fc 4: private で既定の BSS の変数は、出力するコードから参照されなければ領域を取らない (pipeline.markUnusedGlobals)。
+		// 置き場所を指定した変数 (@(segment:) / @(bss:)) は並びを当てにしている (整列の詰め物など) かもしれないので残す
+		if bss != nil && bss.Segment == "" && h.v4() && !opt.Has("symbol") && !h.scopeIsPublic(publicPos) {
+			bss.Private = true
+		}
 	} else {
 		st, ro := h.storageType(typ)
 		vv = h.addVar(ir.NewLocal(name, st, ir.LTNone))

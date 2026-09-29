@@ -204,6 +204,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			inc.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
 			asm.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
 		case ir.DefBss:
+			if d.Unused {
+				continue // どこからも参照されない private な変数は領域を取らない (pipeline.markUnusedGlobals)
+			}
 			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			if d.Segment != "" {

@@ -48,6 +48,7 @@ go test ./...                                    # 全部 (golden + examples + N
 | golden差分 | TestGolden*（internal/driver） | 数秒 | コンパイラ出力の全段階が基準と一致（stdout は `-O 0` でも同じ: TestGoldenStdoutO0） |
 | ROMバイト一致 | TestExampleMiku / TestExampleCastle | 〜5秒 | 実プロジェクト2つのROMがスナップショットと一致 |
 | 内蔵スモーク | TestSmoke* / TestPlayCastle（internal/nes） | 〜1秒 | 起動・NMI/IRQ・描画・自動プレイでの画面遷移 |
+| NES の fclib | TestNes* / TestExampleHello（internal/nes） | 〜1秒 | frame / vram / pal / oam / pad の画面・OAM・パッド、乱数の put の並びと Go の模型、NMI が vblank に収まる（`Stats.LateVramWrites` / `MaxVblankUse`） |
 | 実機精度 | TestMesenPlayCastle | 〜10秒 | MesenCE 上での自動プレイ（エリア変数で判定） |
 | 差分テスト | TestRandomPrograms（internal/driver） | 〜20秒 | ランダムな小プログラムを -O 0 / -O 2 で走らせて出力が一致 |
 | 畳み込みの差分 | TestRandomConstFold（internal/driver） | 〜5秒 | 同じ式を型付きの定数と変数の 2 通りに書いて結果が一致（sema の誤りを見る） |
@@ -481,7 +482,11 @@ go test ./...                                    # 全部 (golden + examples + N
   （CLI にはフラグ無し）
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は
   [../examples/README.md](../examples/README.md)）
-- 内蔵NESランナーのスクリーンショット: `FC_NES_SNAPSHOT_DIR=<dir> go test ./internal/nes`
+- 内蔵NESランナーのスクリーンショット: `FC_NES_SNAPSHOT_DIR=<dir> go test ./internal/nes`（examples/hello は `FC_HELLO_PNG=<file>`）
+- 内蔵NESランナー（internal/nes）の fc 向けの口（2026-09-29）: $4018 に書いた値を `Machine.Output` へ、$4019 に書いた値を終了コードに
+  （`RunUntilExit`。NES の console が書く。`fcc test -t nes` が使う）、2P のパッド `SetButtons2`、描画中に vblank（NMI から
+  `VblankCycles` = 2273 サイクル）の外で PPUDATA / OAM DMA に触った回数 `Stats.LateVramWrites` と、vblank の中で PPU に最後に
+  触った時刻の最大 `Stats.MaxVblankUse`。ランナーの vblank は 21 走査線なので、はみ出しはこの値で数える
 - **注意: `go test ./...` はパッケージを並列実行する**。examples をビルドするテストを
   新設するときは、リポジトリ内の `examples/*/src/.fc-build` を共有しないこと
   （`internal/nes` の Mesen テストは一時ディレクトリに複製してからビルドしている。

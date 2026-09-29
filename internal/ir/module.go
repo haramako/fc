@@ -27,6 +27,12 @@ type Def struct {
 	// 重なっていないかを確かめる (driver.checkAddressVars)
 	AddressVar string
 	Pos        syntax.Position
+
+	// Private は DefBss のうち、public でも options(symbol:) でもないモジュールの変数 (ほかのオブジェクトファイルから名前で
+	// 参照されない)。Unused はそのうち、出力する関数・定数の表・asm のどれからも参照されないもの (領域を取らない。
+	// pipeline.markUnusedGlobals が決める。@(test) の関数だけが使う変数など)
+	Private bool
+	Unused  bool
 }
 
 // OptionKind は OptionValue の種類。

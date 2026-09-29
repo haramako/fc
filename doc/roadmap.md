@@ -187,7 +187,10 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       約 150 バイト・printf 約 115 バイトの大半。呼び先のフレームに直に組み立てれば半分ほど）
 - [ ] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ）
 - [ ] 標準ライブラリの大幅な拡充（slice を使う）と、その API の移行（v4_plan.md §3）。2026-09-29: 互換は考えず作り直す、printf は
-      `@format`（snprintf 相当）のラッパーに。計画と決めることは [v4_stdlib.md](v4_stdlib.md)
+      `@format`（snprintf 相当）のラッパーに。計画と決めることは [v4_stdlib.md](v4_stdlib.md)。✅ 2026-09-29: 段 2（どのターゲットでも
+      使うもの）と段 3（NES の土台: nes / frame / vram / pal / oam / pad、内蔵のフォント、examples/hello、`fcc test -t nes`）。残りは
+      v4_stdlib.md §7 の段 4・5
+- [x] fc 4 の使われない private な変数は領域を取らない（@(test) の関数だけが使うバッファなど） ✅ 2026-09-29
 
 ## v3: 一般的な用途で不便な仕様（2026-09-26 調査）
 
@@ -333,15 +336,18 @@ do-while は「やること候補（すぐではない）」。
 
 ### fclib と NES の開発の流れ
 
-- [ ] 高: **する（2026-09-26 決定。後回し: far call の既定化と一緒に 2026-09-27）** 割り込みの定型文を不要に: `_interrupt` / `_interrupt_irq` が未定義なら空のハンドラを作る、
+- [x] 高: **する（2026-09-26 決定。後回し: far call の既定化と一緒に 2026-09-27）** 割り込みの定型文を不要に: `_interrupt` / `_interrupt_irq` が未定義なら空のハンドラを作る、
       stdio の NMI と利用者の NMI をぶつからないようにする（割り込みは asm で書く前提。fc で書きやすくする方向は優先しない）
-- [ ] 中: NES の stdio で hello world（init で NMI と描画を有効に、ASCII フォントの CHR）
-- [ ] 中: `nes/ppu.fc`（OAM と DMA、vblank のキュー、パレット・ネームテーブルの転送）と OAM の置き場所の文書
+      ✅ 2026-09-29（空の入口は fc が足す。fc 4 の fclib は `frame` が NMI を持ち、利用者は `frame.hook` に。旧 stdio は今までどおり）
+- [x] 中: NES の hello world（init で NMI と描画を有効に、ASCII フォントの CHR） ✅ 2026-09-29（examples/hello、fclib/nes/font.chr）
+- [x] 中: `nes/ppu.fc`（OAM と DMA、vblank のキュー、パレット・ネームテーブルの転送）と OAM の置き場所の文書 ✅ 2026-09-29（fc 4 の
+      frame / vram / pal / oam。OAM は既定 $0700、`[define.oam] ADDR`）
 - [ ] 中: マッパーのプロファイルからトランポリン・状態変数・reset の初期化を自動で（MMC3 の固定バンクの配置、`cli`）、fclib の mmc3 / mmc1 / uxrom
 - [ ] 中: fc.toml の `[target]` に mirroring / battery / CHR-RAM、未知のキー・セクションをエラーに
 - [ ] 中: fc.toml の `[target]` があれば nes を既定に、`fcc run -t nes` の扱い、VS Code 拡張の既定のそろえ
 - [ ] 低〜中: fclib の API の slice 版（`print`、mem）、lzw の ZP の固定番地と §4.5 の ZP の配置の文書、inflate の `unpack`
-- [ ] 低: math（`sign` の戻り値、`atan` の範囲、i16 の abs、rand のシード、10 進・BCD の表示）、nes.fc の APU レジスタ・ビット定数、pad の 2P
+- [x] 低: math（`sign` の戻り値、`atan` の範囲、i16 の abs、rand のシード、10 進・BCD の表示）、nes.fc の APU レジスタ・ビット定数、pad の 2P
+      ✅ 2026-09-29（fc 4 の math・rand・fmt・nes・pad）
 - [ ] 低: 文書が実装より古い所（struct の `==`（正式な仕様にする: 2026-09-26）、u16 の添字、代入の大きさ、ポインタ演算、ZP の配置。v3_plan.md §10.6）
 
 ## ツール・開発体験

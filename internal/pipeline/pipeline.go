@@ -90,8 +90,100 @@ func Prepare(mods []*ir.Module, o *Options) (*Result, error) {
 			return res, err
 		}
 	}
+	markUnusedGlobals(mods)
 	res.Plan, err = frames.Place(graph, o.StaticZp, o.StaticRam)
 	return res, err
+}
+
+// markUnusedGlobals は、出力する関数 (最適化の後の命令)・定数の表・equ・include した asm・インラインアセンブラのどれからも
+// 参照されないモジュールの private な変数 (fc 4 の既定の BSS のもの: Def.Private) に Unused を付ける (codegen が領域を
+// 取らない。@(test) の関数だけが使う大きなバッファなど、使わない機能の状態で RAM を食わないように)。
+func markUnusedGlobals(mods []*ir.Module) {
+	used := map[string]bool{}
+	var visit func(o ir.Operand)
+	visit = func(o ir.Operand) {
+		switch x := o.(type) {
+		case *ir.Value:
+			if x == nil {
+				return
+			}
+			if x.Symbol != "" {
+				used[x.Symbol] = true
+			}
+			for _, e := range x.Elems {
+				visit(e)
+			}
+			if x.Home != nil {
+				visit(x.Home) // レジスタに常駐させた一時変数のメモリ側 (入口・出口の写しが参照する)
+			}
+		case *ir.CastedValue:
+			visit(x.From)
+		case *ir.PointeredArray:
+			visit(x.From)
+		}
+	}
+	defs := func(ds []*ir.Def) {
+		for _, d := range ds {
+			switch d.Kind {
+			case ir.DefBlock:
+				for _, e := range d.Elems {
+					visit(e)
+				}
+			case ir.DefEqu:
+				visit(d.Equ)
+			}
+		}
+	}
+	for _, m := range mods {
+		for _, s := range m.AsmSymbols {
+			used[s] = true
+		}
+		defs(m.Defs)
+		for _, d := range m.Defs {
+			if d.Kind != ir.DefCode || d.Lambda.Unused {
+				continue
+			}
+			lmd := d.Lambda
+			defs(lmd.Defs)
+			for _, op := range lmd.Ops {
+				if op == nil {
+					continue
+				}
+				if op.Code == ir.OpAsm {
+					for _, s := range ir.AsmSymbols(op.Text) {
+						used[s] = true
+					}
+				}
+				visit(op.Dst)
+				for _, s := range op.Src {
+					visit(s)
+				}
+				for _, r := range op.Res {
+					if r.V != nil {
+						visit(r.V)
+					}
+				}
+				for _, l := range op.Logs {
+					for _, a := range l.Args {
+						visit(a.Val)
+						for _, b := range a.Bytes {
+							visit(b)
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, m := range mods {
+		if m.Cfg().Disabled("unused-globals") {
+			continue
+		}
+		for _, d := range m.Defs {
+			if d.Kind == ir.DefBss && d.Private {
+				d.Unused = !used[d.Sym]
+			}
+		}
+	}
 }
 
 // prepareLambda は関数 1 つの最適化とレジスタ割付 (エラーは関数の位置を補完して返す)。
