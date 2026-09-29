@@ -1,7 +1,7 @@
 package driver
 
 // fcc migrate の手順 (プログラム単位)。fc 2 → 3 は構文の書き換え (internal/migrate の Rules。ファイルごと)、fc 3 → 4 は意味の
-// 変わる所の書き換えで、プログラムとしてコンパイルして型を見る (sema の Rewrites。doc/v4_plan.md §0)。
+// 変わる所の書き換えで、プログラムとしてコンパイルして型を見る (sema の Rewrites。Agent/wiki/plans/v4-plan.md §0)。
 
 import (
 	"fmt"

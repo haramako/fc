@@ -1,6 +1,6 @@
 package main
 
-// fcc test: モジュールの @(test) の関数を走らせる (doc/v4_stdlib.md §7.1)。
+// fcc test: モジュールの @(test) の関数を走らせる (Agent/wiki/plans/v4-stdlib.md §7.1)。
 //
 //	fcc test [-t emu|nes] [-O level] <module.fc> ...
 //

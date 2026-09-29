@@ -9,10 +9,10 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 > 未着手: R2 の複数エラー報告・メッセージ改善、R3 のモジュール並列コンパイル（→ F-mod）、R4、R5、F-mod、F1〜F4。
 > 末尾の「作業ログ」を参照。着手時はチェックボックスと作業ログを更新していく。
 >
-> **2026-09-12 更新**: R0〜R3 の実行計画は **[v2_plan.md](v2_plan.md)**（ブランチ `feature/v2`）に
+> **2026-09-12 更新**: R0〜R3 の実行計画は **[Agent/discussions/2026-09-12-v2-plan.md](2026-09-12-v2-plan.md)**（ブランチ `feature/v2`）に
 > 詳細化した。R0〜R3 の進行管理はそちらが正典（**R0〜R3 は 2026-09-12 に完了**）。本書は全体像・背景・Part B（機能追加）の正典として残す。
 > 後続要件として **フォーマッタ / 文法バージョン機構 / 文法 v2**（F-fmt）と
-> **モジュール単位コンパイル**（F-mod）が追加され、その設計制約（v2_plan.md §1.3 C1〜C7）を R1/R3 で満たす。
+> **モジュール単位コンパイル**（F-mod）が追加され、その設計制約（Agent/discussions/2026-09-12-v2-plan.md §1.3 C1〜C7）を R1/R3 で満たす。
 
 ---
 
@@ -49,7 +49,7 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
 
 ### Phase R0 — 検証基盤の切り替え（最優先・0.5〜1日）
 
-- [x] スナップショットテスト機構: `go test ./... -update` で ir/allocir/asm/bin/stdout の ✅ v2_plan.md R0-1
+- [x] スナップショットテスト機構: `go test ./... -update` で ir/allocir/asm/bin/stdout の ✅ Agent/discussions/2026-09-12-v2-plan.md R0-1
       golden を **Go自身の出力から再生成**できるようにする（現 gen_golden.rb の役目を置換）
 - [x] `testdata/golden/ast` と `.pos` は Ruby 由来のまま凍結 → R1 で typed AST に置き換える際に廃止 ✅ R0-2 で廃止
 - [x] 実プロジェクト受け入れテスト → **先行実装済み (2026-08-29)**。当初案の
@@ -58,7 +58,7 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
       `TestExampleMiku` / `TestExampleCastle` が ROM のバイト一致まで検証する。
       実プロジェクトとの差分確認は `tools/sync_examples.ps1`
 - [x] ベンチマーク追加（castle フルコンパイル時間、test一式時間）— 以後の変更の性能退行検知 ✅ R0-3 `internal/driver/bench_test.go`
-- [x] 計画ドキュメント運用の切替（本ドキュメントを進行管理に昇格、go_port_plan.md はアーカイブ） ✅ R0〜R3 の進行管理は v2_plan.md、本書は全体像と Part B
+- [x] 計画ドキュメント運用の切替（本ドキュメントを進行管理に昇格、go_port_plan.md はアーカイブ） ✅ R0〜R3 の進行管理は Agent/discussions/2026-09-12-v2-plan.md、本書は全体像と Part B
 
 **合格条件**: `-update` でgolden再生成→再実行で差分ゼロ。castleスモーク通過。
 
@@ -126,7 +126,7 @@ Go移植（doc/go_port_plan.md、2026-08-28完了）の後続計画。
       片側でも符号付きなら符号付き比較、符号付きは `sbc` + V 補正（v1 は `cmp; bmi` でオーバーフロー時に誤り）、
       多バイトは借りの連鎖（v1 は上位バイトの結果を下位で上書きしていて 16 ビット比較全般が誤り）、
       `x < 0` は符号ビットだけ見る。fclib/math.fc の `x < 128`（符号なしのつもりの書き方）は `x >= 0` 等に直した。
-      **castle の実挙動は要手動検証**: 対象は [castle_signed_compare_sites.txt](castle_signed_compare_sites.txt)（86 箇所）。
+      **castle の実挙動は要手動検証**: 対象は [castle_signed_compare_sites.txt](../../doc/castle_signed_compare_sites.txt)（86 箇所）。
       内蔵エミュ / MesenCE の自動プレイは通る。my_process セグメントが満杯に近く、比較の符号付き部分が
       伸びたため値を作る場合のコードを詰めた（`lda #0; rol a; eor #1`）
 - [x] **非void関数の return 忘れが素通りする**（memo.txt: do_debug_selectで発症）
@@ -162,7 +162,7 @@ castle の `doc/memo.md`「FC BUG」の確認結果（2026-09-14、feature/v2 �
 | switch の case が空 | **修正済み**（2026-09-14） | `case 0:` の直後に `case 1:` を書ける（空の case は「何もしない」。fall through はしない）。`default:` も空でよい |
 | sint の掛け算が特定の順序でだめ | **再現せず** | `-3*2`, `2*-3`, `5*-2`, `-2*5` はすべて正しい。再現条件が別にある（混合型か桁あふれ？） |
 | min / max / clamp | 未実装（fclib） | |
-| frame size over の制限 | **緩和**（2026-09-14、[v2_frame_alloc.md](v2_frame_alloc.md) A） | レジスタをバイト単位で詰め、普通の関数はあふれをフレームへ。fastcall は FC_FASTCALL_REG を 32 に（`options(fastcall_reg: N)`）。根本解決（静的フレーム）は同メモ B |
+| frame size over の制限 | **緩和**（2026-09-14、[Agent/wiki/design/frame-alloc.md](../wiki/design/frame-alloc.md) A） | レジスタをバイト単位で詰め、普通の関数はあふれをフレームへ。fastcall は FC_FASTCALL_REG を 32 に（`options(fastcall_reg: N)`）。根本解決（静的フレーム）は同メモ B |
 | function の null 対応 | 未実装 | |
 
 クラッシュ 3 件は、少なくとも `diag.Error`（位置付きのコンパイルエラー）にするべきもの。
@@ -193,7 +193,7 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
 ### F-fmt — フォーマッタ・文法バージョン機構・文法 v2（R3 直後・F1 より先）
 
 2026-09-12 追加。文法を変更したいという要件から逆算した、R3 完了後の最初の仕事。
-前提は v2_plan.md の C1（ロスレス構文木）・C2（文法バージョン中立な AST）・C3（syntax/sema 分離）。
+前提は Agent/discussions/2026-09-12-v2-plan.md の C1（ロスレス構文木）・C2（文法バージョン中立な AST）・C3（syntax/sema 分離）。
 
 - [x] `internal/syntax/printer.go`: AST → ソース。コメント・空行の保持。`fcc fmt`（gofmt 相当、`-l`/`-w`/`-d`）✅ 2026-09-12。
       公開 API は `fc.Format`。スタイルは既存コードの多数派に合わせた（タブ、関数の `{` は次行、制御文は `if (c) {`、
@@ -202,29 +202,29 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
       コメント全保持、コーパス全体（test/fclib/examples = 53 ファイル）で実施（`syntax.TestFormatCorpus`）。
       これが廃止した ast golden の後継。加えて整形後の castle/miku をビルドして asm/ROM が一致することを手で確認済み
       （往復同値から従う性質なので自動テストにはしていない）
-- [x] 文法バージョン宣言: **ファイル先頭行 `#fc 2`**（決定 2026-09-12、v2_decisions.md §4）。宣言なし = v1。
+- [x] 文法バージョン宣言: **ファイル先頭行 `#fc 2`**（決定 2026-09-12、Agent/discussions/2026-09-12-v2-decisions.md §4）。宣言なし = v1。
       **AST は共通**、goyacc の文法は v1 ∪ v2 のスーパーセット 1 本 + `parse.checkVersion` のゲート ✅ 2026-09-14
-- [x] 文法 v2 の設計と実装（**設計メモ [v2_grammar.md](v2_grammar.md)、2026-09-14 レビュー済み・実装完了**）: 言語側の変更と **`use` の文法/セマンティクス変更（F-mod 用）を同じバージョンに同梱**する
+- [x] 文法 v2 の設計と実装（**設計メモ [Agent/discussions/2026-09-13-v2-grammar.md](2026-09-13-v2-grammar.md)、2026-09-14 レビュー済み・実装完了**）: 言語側の変更と **`use` の文法/セマンティクス変更（F-mod 用）を同じバージョンに同梱**する
       （利用者にマイグレーションを 2 回強いない）。`doc/language_reference.md` を v2 仕様として改訂。
-      決定済み（2026-09-12、v2_decisions.md §2）: `use * from` は維持、**選択的インポート
+      決定済み（2026-09-12、Agent/discussions/2026-09-12-v2-decisions.md §2）: `use * from` は維持、**選択的インポート
       （`use a, b from mod;`）を実装**、「複数ファイル = 1 モジュール」は検討項目
 - [x] `fcc migrate`: v1 で読み → 共通 AST → v2 プリンタで出力 ✅ 2026-09-14。fclib と test（`test/v2/` に複製）は
       移行済み。castle / miku は一時コピーで移行して ROM バイト一致を確認済み（リポジトリ内の examples は
       実プロジェクトとの同期の都合でオーナー判断待ち）。移行前後の asm 一致はマイグレータ自身が検証する。
       **元は現時点の v1 ソース**（手直し前提なし）。可視性の付け直し（デフォルト private 化、ドット参照 public のみ、
-      ラベル廃止）はプログラム全体の参照解析で `public` を付与する（v2_decisions.md §6）。
+      ラベル廃止）はプログラム全体の参照解析で `public` を付与する（Agent/discussions/2026-09-12-v2-decisions.md §6）。
       v1 sema の可視性規則は移行期間中維持し、宣言側モジュールのバージョンで規則を切り替える（v1/v2 混在可）
 - [ ] 複数バージョンの並存期間: v1 パーサを残す期間と削除条件を決める（castle / miku の実プロジェクトが v2 に移行したら
       v1 の受理を落とせる。`test/*.fc` は v1 の回帰として残している）
 
 ### F-mod — モジュール単位コンパイル
 
-2026-09-12 追加。前提は v2_plan.md の C4（モジュール単位 sema）・C5（採番の決定性）・R3-b の
+2026-09-12 追加。前提は Agent/discussions/2026-09-12-v2-plan.md の C4（モジュール単位 sema）・C5（採番の決定性）・R3-b の
 `sema.CompileModule` + `ir.ModuleInterface`。F-fmt（`use` 文法変更）の後に着手する。
 
 - [ ] `ir.ModuleInterface` のシリアライズ（`.fc-build/_<mod>.iface` 等）。importer のコード生成が依存する
       全情報（公開シンボル・型・定数値・options・将来の struct レイアウト/インライン関数）を含める
-- [ ] 依存グラフの構築と永続化。相互 `use` は**許容**（決定 2026-09-12、v2_decisions.md §1）:
+- [ ] 依存グラフの構築と永続化。相互 `use` は**許容**（決定 2026-09-12、Agent/discussions/2026-09-12-v2-decisions.md §1）:
       宣言フェーズを分離し、トップレベル定数はシンボル単位で遅延評価、値レベルの循環のみエラー。
       リンク順は発見順非依存（モジュール名順）、名前衝突規則 S1〜S6、グローバル `options` はメイン限定
 - [ ] 内容ハッシュ（ソース + 依存インターフェース + コンパイラバージョン）によるモジュール単位キャッシュ
@@ -256,7 +256,7 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
       public属性のscope移動、const属性のtype移動 — R1の型付き化と相性が良い）
 - [x] struct（レコード型）— memo にはないが 6502 ゲーム開発で最も効く追加。
       castle の並行配列パターン（en1〜en8等）を置き換えられる ✅ 2026-09-14（v2 の `struct` と、並行配列そのものを宣言する `soa`。
-      [v2_types_struct.md](v2_types_struct.md)。castle への適用は未）
+      [Agent/wiki/design/types-struct.md](../wiki/design/types-struct.md)。castle への適用は未）
 - [ ] インライン関数（memo）
 - [ ] goto（memo。イベント処理の状態機械で有用）
 - [ ] クロージャ（memo。コスト大・要件不明瞭なので最後尾。まず要否を再検討）
@@ -278,7 +278,7 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
 
 ### F4 — ツールチェーン・エコシステム
 
-- [ ] ~~マクロ機構の一般化~~ → **決定 2026-09-12（v2_decisions.md §3）: 汎用マクロ機構は作らない。**
+- [ ] ~~マクロ機構の一般化~~ → **決定 2026-09-12（Agent/discussions/2026-09-12-v2-decisions.md §3）: 汎用マクロ機構は作らない。**
       現存マクロ 7 個の実需要は用途別の小機能で足りる: 文字列エンコーディング表（`_T`/`_M`）、
       ビルド時定数（`VERSION_STR`）、`printf`/`unittest_run_tests` の組み込み昇格、`cos` は
       インライン関数（F2）、`times` は削除。表記は F-fmt の文法 v2 設計で決める。
@@ -298,7 +298,7 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
 - [ ] emu ターゲット強化: サイクルカウンタ、テスト用アサーションAPI
 - [ ] ca65/ld65 依存は**当面維持**（castle が data.asm 等の ca65 資産を持つため）。
       内製アセンブラ化は効果に対してリスクが大きく、現時点ではやらないと明記。
-      **再確認 2026-09-14**（v2_idea.md「ca65相当のアセンブラの組み込み」）: しばらく ca65 のまま。やるなら
+      **再確認 2026-09-14**（Agent/discussions/2026-09-14-v2-idea.md「ca65相当のアセンブラの組み込み」）: しばらく ca65 のまま。やるなら
       アセンブラ + リンカを両方（fc 出力だけ内製しても ld65 が残る）、cgo は単体バイナリの利点を失うので不可。
       再検討のトリガーはリンク時情報が要る最適化（プログラム全体のフレーム割付 / register spill、バンク配置）。
       配布の問題はリリースに cc65 バイナリ（zlib ライセンス）を同梱する方が安い
@@ -308,7 +308,7 @@ memo.txt（作者TODO）・castle開発での必要性・過去の試み
 ## 推奨実行順序
 
 ```
-R0 検証基盤 ──→ R1 型付きAST/IR ──→ R2 エラー報告 ──→ R3 パッケージ/API/決定性   (詳細: v2_plan.md)
+R0 検証基盤 ──→ R1 型付きAST/IR ──→ R2 エラー報告 ──→ R3 パッケージ/API/決定性   (詳細: Agent/discussions/2026-09-12-v2-plan.md)
                                                             │
                                                             └──→ F-fmt フォーマッタ/文法バージョン/文法v2
                                                                    │
@@ -341,7 +341,7 @@ R5 CI/リリース は R0 直後から並行可
 ## 作業ログ
 
 移植完了（`go-strict-clone` タグ）以降の記録。環境・運用の詳細は
-[development_notes.md](development_notes.md) を参照。
+[Agent/wiki/development-notes.md](../wiki/development-notes.md) を参照。
 
 ### 2026-08-29 — 検証基盤の先行整備（本計画の一部を前倒し）
 
@@ -361,7 +361,7 @@ R5 CI/リリース は R0 直後から並行可
    `examples/` へ（どちらも**無修正**）。example 単体ビルドの ROM が実プロジェクトでの
    ビルドと一致することを確認。ROM スナップショット回帰テストと
    `tools/sync_examples.ps1`（差分確認 / `-Update` で再取り込み）を整備。
-   `fs_data.bin` 等の生成物は「出来合い許容」ポリシー（[../examples/README.md](../examples/README.md)）
+   `fs_data.bin` 等の生成物は「出来合い許容」ポリシー（[../examples/README.md](../../examples/README.md)）
 5. **内蔵ヘッドレスNESランナー** (`internal/nes`) — NROM/MMC3 + PPUレジスタ近似 +
    NMI/スキャンラインIRQ近似 + BG/スプライトのスクリーンショット。
    `TestSmoke*` に加え `TestPlayCastle`（タイトルでA → 右移動+ジャンプ → 画面遷移検出）。
@@ -369,7 +369,7 @@ R5 CI/リリース は R0 直後から並行可
    （emu ターゲットでは rti を通らないため露見していなかった）
 6. **MesenCE 統合** — 2.2.1 を導入し `TestMesenPlayCastle`（`--testrunner` +
    生成Lua で自動プレイ、ld65 マップから取得した `_bg_cur_area` の変化で判定）。
-   ヘッドレス起動の罠は development_notes.md に記録
+   ヘッドレス起動の罠は Agent/wiki/development-notes.md に記録
 
 結果、検証は**四段構え**になった:
 golden差分（コンパイラ出力）→ ROMバイト一致（実プロジェクト）→

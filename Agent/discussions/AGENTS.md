@@ -15,5 +15,4 @@
 
 ## Log
 
-- 2026-09-05 [castle で育った Agent/ 規約を雛形へ逆移植](2026-09-05-port-castle-agent-rules.md) — `@Agent/AGENTS.md` 強制ロード・discussions 自動記録・`scripts/` 領域（記事はコードが正・TODO 昇格先 wiki はオーナーが fa21532 で先に反映）。`[AI]` 規約は据え置き
 

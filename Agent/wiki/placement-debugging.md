@@ -6,8 +6,8 @@ V3 の `@(...)` や型名変更とは分け、例は現行の `options(...)` で
 ## 1. モジュール・宣言グループの BSS 指定（実装済み）4
 
 `options(bss: "...");` と `block { ... } options(bss: "...");` を実装し、
-コミット `0e539d8` で main に取り込んだ。確定仕様は [v2_bss.md](v2_bss.md)、
-利用方法は [言語リファレンス §4.1](language_reference.md) を参照。
+コミット `0e539d8` で main に取り込んだ。確定仕様は [Agent/wiki/design/bss.md](design/bss.md)、
+利用方法は [言語リファレンス §4.1](../../doc/language_reference.md) を参照。
 
 ```fc
 options(bss: "BSS_EX");
@@ -120,7 +120,7 @@ castle では `ld65.cfg` に IRQ 用のページ単位 MEMORY 領域と `irqcmd_
 
 現行 FC / castle は `jsr farcall` の後、トランポリンから `jmp (FC_FARCALL)` で本当の関数へ飛ぶ。
 バンク切替がある経路では、さらに `jsr @indirect` → 間接 JMP → 復帰処理という構成。
-参照: [MMC3 参考実装](../fclib/nes/farcall_mmc3.asm)、`C:/Work/castle/src/mmc3.asm`。
+参照: [MMC3 参考実装](../../fclib/nes/farcall_mmc3.asm)、`C:/Work/castle/src/mmc3.asm`。
 
 [Mesen 2 の NesDebugger::ProcessCallStackUpdates](https://github.com/SourMesen/Mesen2/blob/master/Core/NES/Debugger/NesDebugger.cpp)
 では JSR 等でフレームを記録し、RTS / RTI で戻す。JMP によるフレームの呼び先更新はこの処理にない。

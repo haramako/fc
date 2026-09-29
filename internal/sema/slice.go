@@ -1,6 +1,6 @@
 package sema
 
-// fc 3 の slice `[]T` / `[]const T` (doc/v3_plan.md)。表現は struct { ptr:*T; len:u8 } の 3 バイトの値 (types.Slice)。
+// fc 3 の slice `[]T` / `[]const T` (Agent/discussions/2026-09-20-v3-plan.md)。表現は struct { ptr:*T; len:u8 } の 3 バイトの値 (types.Slice)。
 // 値のコピー・引数・戻り値は struct の仕組みのまま、ここでは作り方と使い方を書き換える:
 //
 //   - 配列 (長さの分かるもの) は slice に暗黙に変換できる (withExpected が opToSlice を挟む)。長さは配列の長さ、
@@ -334,7 +334,7 @@ func registerSliceBuiltins(h *Hlc) {
 		sp := h.operandValue(retypePtr(s.ptr, bp))
 		copyFn := h.moduleFunc(mem.Interface(), "mem", "copy")
 		if ft := ir.ValType(copyFn); ft.Kind == types.Func && len(ft.Params) == 2 {
-			// fc 4 の mem.copy(dst:[:u16]u8, src:[:u16]const u8) (doc/v4_stdlib.md §3.1)。旧 fclib の mem (プロジェクトの横に
+			// fc 4 の mem.copy(dst:[:u16]u8, src:[:u16]const u8) (Agent/wiki/plans/v4-stdlib.md §3.1)。旧 fclib の mem (プロジェクトの横に
 			// コピーしたもの) なら下の copy(to, from, size)
 			nb := h.operandValue(bytes)
 			h.lval(ccall(cv(copyFn), cv(h.newSlice(u8, dp, nb, false, true)), cv(h.newSlice(u8, sp, nb, true, true))))

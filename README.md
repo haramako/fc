@@ -91,12 +91,12 @@ doc/              ドキュメント
 
 | ファイル | 内容 |
 |---|---|
-| [doc/development_notes.md](doc/development_notes.md) | **開発時にまず読む**: 環境・ブランチ運用・テストの回し方・ハマりどころ |
+| [Agent/wiki/development-notes.md](Agent/wiki/development-notes.md) | **開発時にまず読む**: 環境・ブランチ運用・テストの回し方・ハマりどころ |
 | [doc/language_reference.md](doc/language_reference.md) | FC言語の仕様 |
-| [doc/roadmap.md](doc/roadmap.md) | 残っている仕事（最適化・言語機能・ツール） |
+| [Agent/wiki/plans/roadmap.md](Agent/wiki/plans/roadmap.md) | 残っている仕事（最適化・言語機能・ツール） |
 | [bench/README.md](bench/README.md) | 生成コードのベンチマークと他コンパイラとの比較 |
-| [doc/golden_dump_format.md](doc/golden_dump_format.md) | golden ダンプ正規形の仕様 |
-| [doc/v2_regalloc.md](doc/v2_regalloc.md) | レジスタ割付（ループ内の常駐）の設計 |
+| [Agent/wiki/golden-dump-format.md](Agent/wiki/golden-dump-format.md) | golden ダンプ正規形の仕様 |
+| [Agent/wiki/design/regalloc.md](Agent/wiki/design/regalloc.md) | レジスタ割付（ループ内の常駐）の設計 |
 | [examples/README.md](examples/README.md) | サンプルの構成・同期方法・エミュレータテスト |
 
 ## License

@@ -1,6 +1,6 @@
 package sema
 
-// 代入のような変換 (代入・初期化・引数・戻り値・struct / 配列の要素) の整数の規則 (doc/v4_plan.md §1.3)。
+// 代入のような変換 (代入・初期化・引数・戻り値・struct / 配列の要素) の整数の規則 (Agent/wiki/plans/v4-plan.md §1.3)。
 //   - E: 定数の値が代入先の型に収まらない (`var c:u8 = 300`、`return -1` (戻り値 u8)): fc 4 はエラー (明示の `as` で切り詰める)。
 //     fc 3 は今までどおり黙って切り詰め、migrate には `c as T` を報告する
 //   - D: 大きさが減る変換 (u16 / i16 → u8 / i8): fc 4 はエラー。fc 3 は下位バイト、migrate には `c as T`。同じ大きさで符号だけ
@@ -16,7 +16,7 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// v4 はコンパイル中のモジュールが fc 4 以降か (整数の規則などの意味の変更。doc/v4_plan.md)。
+// v4 はコンパイル中のモジュールが fc 4 以降か (整数の規則などの意味の変更。Agent/wiki/plans/v4-plan.md)。
 func (h *Hlc) v4() bool { return h.version() >= syntax.Version4 }
 
 // convert は代入のような変換で v を typ にする。c は値の式 (fc 3 → 4 の書き換えの位置。nil なら書き換えを作れない)。
@@ -73,7 +73,7 @@ func (h *Hlc) checkConstRange(name string, typ syntax.TypeExpr, declType *types.
 	}
 }
 
-// shiftByLeft はシフト `left << right` / `>>` の結果を左辺の型にするか (F1。doc/v4_plan.md §1.3)。fc 2 / fc 3 は両辺の互換型
+// shiftByLeft はシフト `left << right` / `>>` の結果を左辺の型にするか (F1。Agent/wiki/plans/v4-plan.md §1.3)。fc 2 / fc 3 は両辺の互換型
 // (`x << n` (x:u8、n:u16) が u16)。fc 4 は左辺の型 (C・Go・Rust・Zig と同じ) で true を返す。fc 3 のモジュールで、互換型が
 // 左辺の型と違うときは、migrate に左辺を `x as T` (T は互換型) にする書き換えを報告する (fc 4 でも同じ型になる)。
 func (h *Hlc) shiftByLeft(e *cexpr, left, right ir.Operand) bool {

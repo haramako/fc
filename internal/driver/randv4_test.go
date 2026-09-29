@@ -3,7 +3,7 @@ package driver
 // fuzz の fc 4 版 (TestRandomProgramsV4): 生成した fc 2 のプログラムを、fc 4 でエラーになる所 (範囲外の定数・大きさが減る
 // 暗黙の変換) にだけ `as` を足して fc 4 にし (Compiler.Migrate の MigrateOptions.Rules。A1・F1 の fc 4 の意味がそのまま効く)、
 // -O 0 / -O 2 / 最適化前の IR のインタプリタで出力を比べる。A1 で広げた IR (大きさの違うオペランド・符号拡張を足した部分木) を
-// 最適化と codegen が正しく扱うかを見る (doc/v4_plan.md §1.3 A)。sema の広げ方そのものの正しさは、型付きの定数と変数の差分
+// 最適化と codegen が正しく扱うかを見る (Agent/wiki/plans/v4-plan.md §1.3 A)。sema の広げ方そのものの正しさは、型付きの定数と変数の差分
 // (TestRandomConstFoldV4) と migrate の ROM の一致 (TestRandomMigrate) が見る。
 
 import (

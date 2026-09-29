@@ -1,5 +1,5 @@
 #fc 4
-// スプライト (doc/v4_stdlib.md §3.2)。OAM の写し (256 バイト、ページの先頭) に並べ、frame.wait の NMI が DMA で送る。
+// スプライト (Agent/wiki/plans/v4-stdlib.md §3.2)。OAM の写し (256 バイト、ページの先頭) に並べ、frame.wait の NMI が DMA で送る。
 // 写しの番地は既定で $0700 (fc の既定の配置で空いている所)。fc.toml の [define.oam] ADDR = 0x0300 などで変えられる (256 の倍数。
 // fc の BSS・静的フレームと重ならない所に)。
 //

@@ -84,7 +84,7 @@ func TestRandomMigrate(t *testing.T) {
 				}
 			}
 			// 最新の版 (fc 4) まで: Compiler.Migrate (fc 3 → 4 は型を見て、意味の変わる所に今の意味の `as` などを足す)。
-			// ROM は元のままと同じ (fc 4 の整数の規則の実装と、書き換えの取りこぼしの両方を見る。doc/v4_plan.md §0)
+			// ROM は元のままと同じ (fc 4 の整数の規則の実装と、書き換えの取りこぼしの両方を見る。Agent/wiki/plans/v4-plan.md §0)
 			v4, err := migrateToLatest(t, v2)
 			if v3Breaking(err) {
 				breaking.Add(1)

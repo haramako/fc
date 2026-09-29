@@ -1,4 +1,4 @@
-;;; farcall (MMC1 用の参考実装。doc/v3_plan.md §3、fc.toml の [target] mapper = "MMC1")
+;;; farcall (MMC1 用の参考実装。Agent/discussions/2026-09-20-v3-plan.md §3、fc.toml の [target] mapper = "MMC1")
 ;;;
 ;;; プロジェクトの固定の領域のモジュールから @include("farcall_mmc1.asm") する。
 ;;; 前提: MMC1 の PRG はモード 3 ($8000 の 16KB を切り替え、$C000 は最後のバンクに固定。電源投入時の既定。起動時に

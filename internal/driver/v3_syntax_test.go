@@ -1,6 +1,6 @@
 package driver
 
-// doc/roadmap.md の v3 で 2026-09-27 に「する」にした文法・検査 (return 忘れの検査の拡張、ローカル変数のアドレスを返す警告、
+// Agent/wiki/plans/roadmap.md の v3 で 2026-09-27 に「する」にした文法・検査 (return 忘れの検査の拡張、ローカル変数のアドレスを返す警告、
 // for-each、case の範囲と `..=`) のテスト。
 
 import (

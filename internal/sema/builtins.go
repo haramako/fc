@@ -1,6 +1,6 @@
 package sema
 
-// 組み込み機能 (doc/v2_grammar.md §3.5, §4.3)。
+// 組み込み機能 (Agent/discussions/2026-09-13-v2-grammar.md §3.5, §4.3)。
 //
 // include の有無に関係なく常に使える
 // 組み込みにした。グローバルスコープにマクロ値として登録する:
@@ -138,7 +138,7 @@ func registerBuiltins(p *Program) {
 	registerCompressBuiltins(h)
 	registerLogBuiltin(h)
 
-	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。doc/v3_plan.md §3)
+	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。Agent/discussions/2026-09-20-v3-plan.md §3)
 	h.defconstmacro("@bank", func(h *Hlc, args []*cexpr) *cexpr {
 		if len(args) != 1 || args[0].kind != cValue || !args[0].val.IsString {
 			panic(&diag.Error{Msg: "@bank takes 1 string argument (a bank name of fc.toml [bank.<name>])"})

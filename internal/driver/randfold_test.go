@@ -173,7 +173,7 @@ func indexOfType(t rfType) int {
 func rfSource(exprs []string) string { return rfSourceV(exprs, 3) }
 
 // rfSourceV は版 ver の rfSource。fc 4 では各式を 16 ビットの値と足す形 (`w = w + (式)`、w:u16) にも置いて、A1 (式を式の中の
-// 一番広い型で計算する) で広がる所の定数の畳み込みも比べる (doc/v4_plan.md §1.3 A)。
+// 一番広い型で計算する) で広がる所の定数の畳み込みも比べる (Agent/wiki/plans/v4-plan.md §1.3 A)。
 // rfPrintBegin / rfPrintEnd は式の中に埋め込む 1 つの値の printf の印 (版で書き方が違う: fc 3 は `printf(値, "\n")`、fc 4 は
 // `printf("{}\n", 値)`。rfSourceV が置き換える)。
 const (

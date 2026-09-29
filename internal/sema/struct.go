@@ -1,6 +1,6 @@
 package sema
 
-// struct (doc/v2_types_struct.md §4) の意味解析: struct リテラル、フィールド参照、sizeof。
+// struct (Agent/wiki/design/types-struct.md §4) の意味解析: struct リテラル、フィールド参照、sizeof。
 //
 // フィールド参照の落とし方:
 //   - 変数 (ローカル / グローバル / 一時) の struct: ir.CastedValue{From: 変数, Type: フィールド型, Offset} で

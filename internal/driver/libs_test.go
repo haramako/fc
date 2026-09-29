@@ -1,6 +1,6 @@
 package driver
 
-// fc.toml の [lib.*] のライブラリ (doc/v4_stdlib.md §9、internal/project/libs.go)。
+// fc.toml の [lib.*] のライブラリ (Agent/wiki/plans/v4-stdlib.md §9、internal/project/libs.go)。
 
 import (
 	"os"

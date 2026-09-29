@@ -4,15 +4,15 @@
 **提案段階であり、採用・仕様・実装順を確定したものではない。構文例も仮案。**
 今回の依頼は検討とドキュメントへの記録のみで、機能の実装は行わない。
 
-参照した範囲は [language_reference.md](language_reference.md)、[roadmap.md](roadmap.md)、
+参照した範囲は [language_reference.md](../../../doc/language_reference.md)、[Agent/wiki/plans/roadmap.md](roadmap.md)、
 各 v2 設計資料、`internal/syntax`・`internal/types`・`internal/sema`・データ出力、
 `fclib`、`examples/castle`・`examples/miku`。作業中の差分のレビューは対象外。
 struct・SoA・sizeof・インライン化・直接呼び出しの far call などは実装済みとして扱う。
 古いアイデアメモに残る未完了表記だけで、機能の有無を判断しない。
 
 後続の議論で挙がった slice・固定容量 vector は、将来の `#fc 3` 向けの未実装案として
-[v3_slices_vector.md](v3_slices_vector.md) に記録した。実装開始の指示ではない。
-後続の V3 全体の検討事項は [v3_plan.md](v3_plan.md) にまとめる。
+[Agent/discussions/2026-09-20-v3-slices-vector.md](../../discussions/2026-09-20-v3-slices-vector.md) に記録した。実装開始の指示ではない。
+後続の V3 全体の検討事項は [Agent/discussions/2026-09-20-v3-plan.md](../../discussions/2026-09-20-v3-plan.md) にまとめる。
 `len`・読み取り専用型と関連する追加候補で、以下の当初の推奨順も採用・実装順を確定するものではない。
 
 ## 推奨する着手順
@@ -60,9 +60,9 @@ var state:PlayerState = .Stand;
 
 ### 動機
 
-[my.fc](../examples/castle/src/my.fc) の `STATE_*` と `state:int`、
-[en_vtbl.fc](../examples/castle/src/en_vtbl.fc) の `TYPE_*`、
-[common.fc](../examples/castle/src/common.fc) の方向・バンク番号など、
+[my.fc](../../../examples/castle/src/my.fc) の `STATE_*` と `state:int`、
+[en_vtbl.fc](../../../examples/castle/src/en_vtbl.fc) の `TYPE_*`、
+[common.fc](../../../examples/castle/src/common.fc) の方向・バンク番号など、
 意味の異なる値が同じ整数型で表されている。
 これらを型で区別すれば、実行時の負担を増やさず取り違えを検出できる。
 
@@ -89,9 +89,9 @@ state = PlayerState.Jump;
 
 ### 動機
 
-[en_vtbl.fc](../examples/castle/src/en_vtbl.fc) は `EN_BANKS`・`CBANK_OF_TYPE`・`PROCESS`・`NEW_FUNC` を
+[en_vtbl.fc](../../../examples/castle/src/en_vtbl.fc) は `EN_BANKS`・`CBANK_OF_TYPE`・`PROCESS`・`NEW_FUNC` を
 同じ順番で並べている。表どうしの長さや、asm と共有する構造体のレイアウトをソース上で検査したい。
-`sizeof` は既存機能であり、配列長・フィールドオフセットも [types.go](../internal/types/types.go) に保持されている。
+`sizeof` は既存機能であり、配列長・フィールドオフセットも [types.go](../../../internal/types/types.go) に保持されている。
 
 ```fc
 // 構文案。Sprite は検査対象の構造体を想定
@@ -135,9 +135,9 @@ static_assert(offsetof(Sprite, x) == 3, "field offset mismatch");
 
 ### 動機
 
-現状の [types.go](../internal/types/types.go) のポインタ型には参照先の読み取り専用属性がなく、
+現状の [types.go](../../../internal/types/types.go) のポインタ型には参照先の読み取り専用属性がなく、
 `IsConst` は SoA コンテナ用。通常の ROM 配列や文字列からポインタを渡した後も、書き込み禁止を型で引き継ぎたい。
-[mem.fc](../fclib/mem.fc) の `copy` のコピー元や、文字列出力の引数が用途になる。
+[mem.fc](../../../fclib/mem.fc) の `copy` のコピー元や、文字列出力の引数が用途になる。
 
 ### 推奨範囲
 
@@ -152,18 +152,18 @@ static_assert(offsetof(Sprite, x) == 3, "field offset mismatch");
 
 ## 4. バンク情報を持つ関数ポインタ
 
-**2026-09-25 時点: `farfn(T):R` として実装済み**（f60f29e、[v2_far_function_pointers.md](v2_far_function_pointers.md)。3 バイト、
+**2026-09-25 時点: `farfn(T):R` として実装済み**（f60f29e、[Agent/wiki/design/far-function-pointers.md](../design/far-function-pointers.md)。3 バイト、
 `.bank(symbol)`、`fn` と分けて必要な表だけ使う、ABI・呼び出しグラフ・定数表・near / far の変換）。残りは:
 
 - バンク番号の取り出し `@bank(関数)` / `@bank(farfn の値)`: リンク時の値（`.bank(symbol)`、farfn の 3 バイト目）として先に入れる。
   手書きの ld65.cfg の経路とも両立する。`PROCESS` を farfn の表にすれば `EN_BANKS` の二重管理が無くなる。コンパイル時に
-  バンクを知る機能は v3_plan.md §3（配置の情報源）で扱う
+  バンクを知る機能は Agent/discussions/2026-09-20-v3-plan.md §3（配置の情報源）で扱う
 - 密なループで毎回バンクを戻さない呼び方: roadmap に「far call の復帰を関数の出口まで遅らせる」として記録（見込みは薄い）
 
 ### 動機
 
 直接呼び出しの far call は実装済みだが、関数ポインタ経由は対象外。
-[en.fc](../examples/castle/src/en.fc) の `process` / `setup` は、`EN_BANKS[t]` で切り替えてから
+[en.fc](../../../examples/castle/src/en.fc) の `process` / `setup` は、`EN_BANKS[t]` で切り替えてから
 `PROCESS[t](i)` / `NEW_FUNC[t](i)` を呼んでいる。関数とバンク番号を一体として管理したい。
 
 ```fc
@@ -186,13 +186,13 @@ PROCESS[t](i);
   敵処理での性能を測り、便利で正しい呼び出しと、頻繁に実行される箇所のバンク保持を分けて設計する。
 - 他バンクのデータ参照の自動化は別の課題とする。
 
-関連設計: [v2_farcall.md](v2_farcall.md)。
+関連設計: [Agent/wiki/design/farcall.md](../design/farcall.md)。
 
 ## 5. 配置制約
 
 ### 動機
 
-[bg.fc](../examples/castle/src/bg.fc) に、256 バイト境界を調整する `_padding_for_align` がある。
+[bg.fc](../../../examples/castle/src/bg.fc) に、256 バイト境界を調整する `_padding_for_align` がある。
 前に置く変数のサイズが変わるたびに、人が調整する必要がある。
 
 ```fc
@@ -213,8 +213,8 @@ var buffer:[256]int options(align: 256);
 ### 動機
 
 [ロードマップ](roadmap.md) の既存項目。
-[hlc.go](../internal/sema/hlc.go) の `compileVarSpec` は現在グローバル変数の初期化を拒否している。
-[ppu.fc](../examples/castle/src/ppu.fc) の `init` にあるコールバック設定など、初期値の一部を宣言の近くへ移せる。
+[hlc.go](../../../internal/sema/hlc.go) の `compileVarSpec` は現在グローバル変数の初期化を拒否している。
+[ppu.fc](../../../examples/castle/src/ppu.fc) の `init` にあるコールバック設定など、初期値の一部を宣言の近くへ移せる。
 
 ### 推奨範囲
 

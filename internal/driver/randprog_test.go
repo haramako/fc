@@ -881,7 +881,7 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 }
 
 // cmpSide は比較の片側の型 t の式。リテラル・変数などの葉以外は `as t` で包む: 定数だけの式 (`min(3416, -3)` も) は畳み込むと値から型が決まる
-// 型のない定数になり (`(3 - 5)` は -2)、相手の型に収まらないと比較がエラーになる (doc/v3_plan.md §10.2)。
+// 型のない定数になり (`(3 - 5)` は -2)、相手の型に収まらないと比較がエラーになる (Agent/discussions/2026-09-20-v3-plan.md §10.2)。
 func (g *rpGen) cmpSide(t rpType, depth int) string {
 	e := g.expr(t, depth)
 	if strings.Contains(e, "(") && !(t.signed && rpNegLit.MatchString(e)) { // 符号なしの `(-5)` は `-` を付けた葉

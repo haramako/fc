@@ -1,5 +1,5 @@
 #fc 4
-// 書き足していくバッファ (doc/v4_stdlib.md §3.1)。storage を借りて、先頭から len バイトを使う。push / append は足りなければ止まり、
+// 書き足していくバッファ (Agent/wiki/plans/v4-stdlib.md §3.1)。storage を借りて、先頭から len バイトを使う。push / append は足りなければ止まり、
 // try_ の版は何も変えずに false を返す。@format で残りに直に書くなら buf.advance(&b, @len(@format(buf.rest(&b), ...)))。
 @(bank: -1);
 use sys;

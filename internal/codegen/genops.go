@@ -890,7 +890,7 @@ func (l *funcGen) genRef() {
 	}
 }
 
-// genLoadMem は LoadMem のコード生成 (doc/ir_memops.md の表)。
+// genLoadMem は LoadMem のコード生成 (Agent/wiki/design/ir-memops.md の表)。
 func (l *funcGen) genLoadMem() {
 	r, op, lmd, ops, opNo := l.r, l.op, l.lmd, l.ops, l.opNo
 	restore := &l.restore
@@ -961,7 +961,7 @@ func (l *funcGen) genLoadMem() {
 	}
 }
 
-// genStoreMem は StoreMem のコード生成 (doc/ir_memops.md の表)。書く幅は m.Width (値が小さいリテラルでも上位まで書く)。
+// genStoreMem は StoreMem のコード生成 (Agent/wiki/design/ir-memops.md の表)。書く幅は m.Width (値が小さいリテラルでも上位まで書く)。
 func (l *funcGen) genStoreMem() {
 	r, op := l.r, l.op
 	m := op.Mem()

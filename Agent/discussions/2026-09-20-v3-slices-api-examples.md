@@ -1,6 +1,6 @@
 # FC3: slice・vector を使うライブラリ API の利用案
 
-作成: 2026-09-20。[slice・vector 設計案](v3_slices_vector.md) の具体例。
+作成: 2026-09-20。[slice・vector 設計案](2026-09-20-v3-slices-vector.md) の具体例。
 **全て未実装の API 案。型・関数名・構文・失敗時の契約を確定したものではない。**
 将来の `#fc 3` 向けの資料であり、現在の実装開始や既存ソースの書き換えを指示するものではない。
 既存の標準ライブラリや castle にこの API が既に存在するという意味ではない。
@@ -140,7 +140,7 @@ if (result.ok) {
 slice の `.ptr` をそのまま旧 API へ渡してよいとはしない。
 将来 `[:0]const uint8` のような終端保証を採用する場合は、その保証を持つビューから
 コピーせず旧 API に渡す方法も候補になる。通常の部分 slice は終端保証を持たない。
-`finish_z` などによる連結後の接続例は [sentinel の調査](v3_slice_tradeoffs.md#3-sentinel-終端の調査) を参照。
+`finish_z` などによる連結後の接続例は [sentinel の調査](2026-09-20-v3-slice-tradeoffs.md#3-sentinel-終端の調査) を参照。
 新しい長さ付き出力 API を作る場合も、emu / NES の既存実装が長さを受け取れるか確認して実装する。
 
 ### 例: 所有する固定容量 vector と、文字列ビューの一覧

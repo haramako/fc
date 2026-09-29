@@ -1,6 +1,6 @@
 package ir
 
-// 中間表現 (IR) の型定義 (doc/archive/v2_plan.md R1-d)。
+// 中間表現 (IR) の型定義 (Agent/discussions/2026-09-12-v2-plan.md R1-d)。
 //
 // HLC が生成し、レジスタ割付 (allocator.go) とコード生成 (llc.go) が消費する。
 // 旧実装では命令は []any (先頭が opcode のシンボル、以降が位置引数) だった。ここでは
@@ -56,7 +56,7 @@ const (
 	OpAsm                       // インラインアセンブラ (Text)
 	OpIndex                     // Dst = &Src[0][Src[1]] (番地の計算。ポインタ値を作る)
 	OpRef                       // Dst = &Src[0]
-	OpLoadMem                   // Dst = mem[Src[0] + Src[1]*Scale + Disp] (Src[1] が NoIndex なら添字無し。mem.go、doc/ir_memops.md)
+	OpLoadMem                   // Dst = mem[Src[0] + Src[1]*Scale + Disp] (Src[1] が NoIndex なら添字無し。mem.go、Agent/wiki/design/ir-memops.md)
 	OpStoreMem                  // mem[Src[0] + Src[1]*Scale + Disp .. +Width) = Src[2]
 	opCodeCount
 )
@@ -99,7 +99,7 @@ type Op struct {
 	Labels []string    // OpSwitch の飛び先 (添字順)
 	Type   *types.Type // OpPushResult / OpPushArg / OpPushFastcall* の型
 	Text   string      // OpAsm のアセンブラ行
-	Far    bool        // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。doc/v2_farcall.md)
+	Far    bool        // OpCall / OpFastcall: 別バンクの関数への呼び出し (farcall トランポリン経由。Agent/wiki/design/farcall.md)
 	// OpLoadMem / OpStoreMem の番地 (mem.go): Scale は添字 1 につき進むバイト数 (添字が無ければ 0)、Disp は定数のずれ (バイト)、
 	// Width は store の書く幅 (load は Dst の型の大きさ)。eq / lt では Width は比較の幅 (sign.go)
 	Scale, Disp, Width int
@@ -115,7 +115,7 @@ type Op struct {
 	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
 	Logs  []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
 
-	// ループ内の常駐 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md): レジスタ (RegA / RegY / RegX) ごとに、
+	// ループ内の常駐 (regalloc.AllocateResident が付ける。Agent/wiki/design/regalloc.md): レジスタ (RegA / RegY / RegX) ごとに、
 	// この命令でそのレジスタに置いたままにしている変数と、入口 / 出口で生きているか (regs.go)
 	Res [NumRegs]Residency
 }
@@ -231,8 +231,8 @@ const (
 	LocA                           // A レジスタ
 	LocCond                        // コンディションフラグ (CondReg)
 	LocFastcallReg                 // fastcall 用レジスタ (FC_FASTCALL_REG+addr)
-	LocStatic                      // 静的フレーム (F_<sym>+addr。doc/v2_frame_alloc.md §6)
-	LocY                           // Y レジスタ (ループ内の常駐。doc/v2_regalloc.md)
+	LocStatic                      // 静的フレーム (F_<sym>+addr。Agent/wiki/design/frame-alloc.md §6)
+	LocY                           // Y レジスタ (ループ内の常駐。Agent/wiki/design/regalloc.md)
 	LocX                           // X レジスタ (同上。static 関数だけ)
 )
 

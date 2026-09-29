@@ -1,4 +1,4 @@
-;;; frame.asm: NMI (fclib/nes/frame.fc、doc/v4_stdlib.md §6.2)
+;;; frame.asm: NMI (fclib/nes/frame.fc、Agent/wiki/plans/v4-stdlib.md §6.2)
 ;;;
 ;;; share/runtime.asm の interrupt が A / X / Y を積んでから jsr _interrupt する。順に:
 ;;;   1. 主の側が待っているとき (_frame_ready != 0) だけ: OAM の DMA (0x80 で、oam を使っていれば) → VRAM のキュー

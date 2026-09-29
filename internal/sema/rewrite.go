@@ -1,6 +1,6 @@
 package sema
 
-// fc 3 → fc 4 の migrate のための書き換えの報告 (doc/v4_plan.md §0)。
+// fc 3 → fc 4 の migrate のための書き換えの報告 (Agent/wiki/plans/v4-plan.md §0)。
 //
 // fc 4 は整数の規則などの意味を変えるので、構文だけを見る書き換え (fc 2 → 3。internal/migrate の Rules) では移せない。
 // Program.CollectRewrites なら、sema が fc 3 のモジュールを fc 3 の意味でコンパイルしながら、fc 4 で意味が変わる所を

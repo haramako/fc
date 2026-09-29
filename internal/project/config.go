@@ -1,6 +1,6 @@
 package project
 
-// プロジェクトの設定ファイル fc.toml (doc/v3_plan.md §1 / §3)。ソースの基準ディレクトリから親へ向かって最初に見つかった
+// プロジェクトの設定ファイル fc.toml (Agent/discussions/2026-09-20-v3-plan.md §1 / §3)。ソースの基準ディレクトリから親へ向かって最初に見つかった
 // ものを使う。TOML の必要な分だけを読む: `[section]` / `[a.b]` の見出し、`key = value` (値は true / false / 整数 /
 // "文字列")、`#` から行末のコメント。今使う見出しは [define.<module>] (@(build) の const の上書き)、[lib.<name>] (ライブラリ:
 // libs.go)、バンクの表 (layout.go)。

@@ -1,6 +1,6 @@
 package opt
 
-// SSA 形式による定数伝播 / コピー伝播 / 死んだ定義の除去 (doc/v2_ssa.md)。
+// SSA 形式による定数伝播 / コピー伝播 / 死んだ定義の除去 (Agent/wiki/design/ssa.md)。
 //
 // IR そのものは「変数 + 命令列」のまま変えない。関数の CFG の上に Braun らの方法 (Simple and Efficient Construction of
 // SSA Form, CC 2013) で各変数の「命令ごとの版」(ssaVal) と φ を作り、それを使って命令列を書き換える:

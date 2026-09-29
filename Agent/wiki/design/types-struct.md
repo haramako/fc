@@ -1,7 +1,7 @@
 # 型構文（Go/Zig 順）と struct の設計メモ
 
 作成: 2026-09-14（Opus 5）。**2026-09-14 レビュー済み（Q1〜Q8・S1〜S5 決定、§8）**。
-前提は [v2_grammar.md](v2_grammar.md)（文法 v2、実装済み）。
+前提は [Agent/discussions/2026-09-13-v2-grammar.md](../../discussions/2026-09-13-v2-grammar.md)（文法 v2、実装済み）。
 
 ---
 

@@ -1,5 +1,5 @@
 #fc 4
-// RLE (NES Screen Tool の形式: neslib の vram_unrle と同じ) の展開 (doc/v4_stdlib.md §3.1・§8 の 10)。データは fc がコンパイル時に
+// RLE (NES Screen Tool の形式: neslib の vram_unrle と同じ) の展開 (Agent/wiki/plans/v4-stdlib.md §3.1・§8 の 10)。データは fc がコンパイル時に
 // 作る:
 //   const TITLE = @rle(@incbin("title.nam"));
 //   var n = rle.unpack(buf, TITLE);        // RAM へ (足りなければ止まる)

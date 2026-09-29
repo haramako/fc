@@ -340,7 +340,7 @@ func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
 	return h.addVar(ir.NewLocal(h.tmpName("$"), typ, ir.LTTemp))
 }
 
-// isFarCall は呼び先 fn (関数のシンボルリテラル) が far call (farcall トランポリン経由) になるか (doc/v2_farcall.md §3.2):
+// isFarCall は呼び先 fn (関数のシンボルリテラル) が far call (farcall トランポリン経由) になるか (Agent/wiki/design/farcall.md §3.2):
 // options(farcall: true) が有効で、呼び先が別モジュールの切替バンクの関数で、options(near: true) が付いていないとき。
 // farfn は明示的に far call を選ぶ。通常の fn は呼ぶ側がバンクを管理する。
 func (h *Hlc) isFarCall(fn ir.Operand) bool {

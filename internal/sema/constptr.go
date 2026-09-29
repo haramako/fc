@@ -1,6 +1,6 @@
 package sema
 
-// fc 3 の読み取り専用ポインタ `*const T` (doc/language_feature_candidates.md §3)。const の配列・文字列リテラルの値
+// fc 3 の読み取り専用ポインタ `*const T` (Agent/wiki/plans/language-feature-candidates.md §3)。const の配列・文字列リテラルの値
 // (ir.Value.ReadOnly) と、そこから添字・アドレス・ポインタ経由のフィールドで作るポインタは *const。*T → *const T は
 // 暗黙に変換でき、*const T を通した書き込みと `as` で const を外すことはエラー、外すのは @bitcast だけ。読み取り専用の
 // データを *T として渡すのは、fc 3 の最初の版では警告 (fclib と利用側を *const に直してからエラーにする)。
@@ -50,7 +50,7 @@ func (h *Hlc) readOnly(op ir.Operand) bool {
 }
 
 // warnDropConst は読み取り専用のデータを書き換えられるポインタ (*T) として渡すときに警告する (fc 3 の最初の版は警告。
-// doc/language_feature_candidates.md §3)。
+// Agent/wiki/plans/language-feature-candidates.md §3)。
 func (h *Hlc) warnDropConst(what string, to *types.Type, from ir.Operand) {
 	if to == nil || (to.Kind != types.Pointer && !to.IsSlice()) || to.ReadOnly || !h.readOnly(from) || h.version() < syntax.Version3 {
 		return

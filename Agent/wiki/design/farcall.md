@@ -1,6 +1,6 @@
 # far call（バンクをまたぐ関数呼び出し）
 
-2026-09-15 設計メモ。v2_idea.md「interbank call を実装する」。実装済み（§7）。利用者向けの説明は language_reference.md §4.4。
+2026-09-15 設計メモ。Agent/discussions/2026-09-14-v2-idea.md「interbank call を実装する」。実装済み（§7）。利用者向けの説明は language_reference.md §4.4。
 
 ## 1. 動機
 
@@ -156,7 +156,7 @@ farcall:
 - `fn(...):T` は従来どおり 2 バイト。間接呼び出しのバンクは呼ぶ側が管理する。
 - `farfn(...):T` を 3 バイト（アドレス + バンク）の型として追加した。
   `options(farcall: true)` のもとで通常の呼び出し構文を使い、バンクを切り替えて呼び、元へ戻す。
-  仕様・castle での使い分けは [farcall 対応の関数ポインタ](v2_far_function_pointers.md)。
+  仕様・castle での使い分けは [farcall 対応の関数ポインタ](far-function-pointers.md)。
 - 他バンクの**データ**参照: 今までどおり `set_pbank` で切り替えて読む。
 - 割込みハンドラからの far call: 引き続き対象外。
 

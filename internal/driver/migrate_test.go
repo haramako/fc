@@ -4,7 +4,7 @@ package driver
 // (Compiler.Migrate: fc 2 → 3 は internal/migrate の構文の書き換え、fc 3 → 4 は sema が集める意味の書き換え) で最新の版に
 // 書き換えてビルドし、元のままのビルドや golden と ROM・バイナリがバイト単位で一致することを確かめる。版で文法・意味を
 // 変えるときは、migrate の規則 (fc 3 → 4 は sema の Rewrite) を足してここが通ることを確かめる
-// (doc/v3_plan.md の「V2 からの移行」、doc/v4_plan.md §0)。
+// (Agent/discussions/2026-09-20-v3-plan.md の「V2 からの移行」、Agent/wiki/plans/v4-plan.md §0)。
 
 import (
 	"bytes"
@@ -137,7 +137,7 @@ func TestMigrateGoldenPrograms(t *testing.T) {
 			tmp := t.TempDir()
 			out := filepath.Join(tmp, base)
 			// fc 4 の printf は書式文字列で console に出す (migrate が書き換える) ので生成コードは変わる: emu は出力と終了コードを
-			// golden と比べ、nes はビルドできることを見る (doc/v4_stdlib.md §4。以前は ROM を比べていた)
+			// golden と比べ、nes はビルドできることを見る (Agent/wiki/plans/v4-stdlib.md §4。以前は ROM を比べていた)
 			var stdout bytes.Buffer
 			code, err := NewCompiler(home).Build(srcName+".fc", &BuildOptions{Target: target, Out: out, Dir: dir, BuildDir: filepath.Join(tmp, "build"),
 				Run: target == "emu", Stdout: &stdout, MaxCycles: testMaxCycles})
@@ -191,7 +191,7 @@ func TestMigrateBench(t *testing.T) {
 }
 
 // TestMigrateExamples: examples の castle と miku (fc 3) を最新の版に migrate してビルドした ROM が、今の ROM の golden と
-// バイト単位で一致する (fc 3 → 4 は意味の変わる所に書き換えを足して、ROM を変えずに移す。doc/v4_plan.md §0)。ただし fc 4 の
+// バイト単位で一致する (fc 3 → 4 は意味の変わる所に書き換えを足して、ROM を変えずに移す。Agent/wiki/plans/v4-plan.md §0)。ただし fc 4 の
 // 「使われない private な変数は領域を取らない」(RAM の並びが変わるだけで動きは同じ) は切って比べる。
 func TestMigrateExamples(t *testing.T) {
 	t.Parallel()

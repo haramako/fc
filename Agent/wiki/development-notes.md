@@ -1,8 +1,8 @@
 # 開発メモ（環境・運用・ハマりどころ）
 
-fc を開発するときに知っておくべきこと。残っている仕事は [roadmap.md](roadmap.md)、
-言語仕様は [language_reference.md](language_reference.md)。
-（2026-09 以前の計画書・作業ログは [archive/](archive/)。fc はもともと Ruby で書かれていて 2026-08〜09 に Go に
+fc を開発するときに知っておくべきこと。残っている仕事は [Agent/wiki/plans/roadmap.md](plans/roadmap.md)、
+言語仕様は [language_reference.md](../../doc/language_reference.md)。
+（2026-09 以前の計画書・作業ログは [archive/](../discussions/AGENTS.md)。fc はもともと Ruby で書かれていて 2026-08〜09 に Go に
 移植した。Ruby 版はタグ `ruby-frozen` に残っている。Ruby 版との互換は以後考慮しない）
 
 ## ブランチ運用
@@ -340,19 +340,19 @@ go test ./...                                    # 全部 (golden + examples + N
   を `.proc` の中に置いて `.export` したら、同じモジュール内の呼び出しで未定義になった（castle の text で発覚。
   fc のテストは他モジュールからの参照しか無かった）。関数の途中に入口を作るときは `.endproc` で閉じて別の `.proc` にする
 
-- **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](language_reference.md)、設計の経緯は
-  [v2_grammar.md](v2_grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、
+- **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](../../doc/language_reference.md)、設計の経緯は
+  [Agent/discussions/2026-09-13-v2-grammar.md](../discussions/2026-09-13-v2-grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、
   `test/*.fc` の v1 版）。`test/*.fc` は v2 だけ。`syntax.File` / `ir.Module` にバージョンは無く、v1 だけの構文は
   `syntax.checkVersion` が「v2 ではこう書く」のエラーにする
-- **struct / soa**（2026-09-14〜、v2 のみ）: 設計と実装メモは [v2_types_struct.md](v2_types_struct.md)、仕様は
-  [language_reference.md](language_reference.md) §2.1 / §2.2。テストは `internal/driver/struct_test.go` / `soa_test.go`
+- **struct / soa**（2026-09-14〜、v2 のみ）: 設計と実装メモは [Agent/wiki/design/types-struct.md](design/types-struct.md)、仕様は
+  [language_reference.md](../../doc/language_reference.md) §2.1 / §2.2。テストは `internal/driver/struct_test.go` / `soa_test.go`
   （小さなプログラムを emu で実行）と `test/test_struct.fc` / `test_soa.fc`（unittest 形式。golden は無く、実行結果で判定）。
   `share/runtime.asm` の `__mul_16`（16 ビット乗算）は長らく `rts` だけの未実装で、このとき実装した（`j * 100` が 0 になっていた）
 - **far call**（2026-09-15〜）: `options(farcall: true)` で有効。判定は `sema.Hlc.isFarCall`（呼び先モジュールの
   `ir.Module.Switchable()` = `bank` ≥ 0 かつ `near` 無し）、`ir.Op.Far`、codegen の `farCallSetup`（`.bank()` を使うので
   ld65.cfg の MEMORY に `bank = N` が要る。fc 生成の cfg は自動）。トランポリンは `fclib/<target>/farcall.asm`
   （emu / MMC0 は fc が用意）、MMC3 は `fclib/nes/farcall_mmc3.asm` を参考にプロジェクトが用意。テストは
-  `internal/driver/farcall_test.go`。設計は [v2_farcall.md](v2_farcall.md)
+  `internal/driver/farcall_test.go`。設計は [Agent/wiki/design/farcall.md](design/farcall.md)
 - **エラー報告**（2026-09-15〜）: 意味解析のエラーは `panic(&diag.Error{})` のままだが、`compileStatementRecover` が文ごとに
   回復して `Program.Errors` に集める（スコープ・ループのスタックは文の前に戻す）。失敗した宣言の名前は `types.Bad` 型で束縛し、
   それに触れる式は `Suppressed` なエラーで黙って打ち切る（報告しない）。上限 `sema.MaxErrors` で `Fatal` を投げて打ち切り。
@@ -371,10 +371,10 @@ go test ./...                                    # 全部 (golden + examples + N
 - **`fcc check`**（2026-09-14〜）: ファイルを作らずにコンパイルしてエラーと警告を出す。警告は build でも出る
   （`file:line:col: warning: ...`）。構文の検査は `internal/syntax/lint.go`、意味解析側は `Hlc.warn`
 - **`fcc fmt`**（2026-09-12〜）: `fcc fmt -l <files>` で未整形のファイルを列挙、`-w` で上書き、`-d` で差分。
-  正規形は [internal/syntax/printer.go](../internal/syntax/printer.go) 先頭のコメントと `TestFormatStyle` が定義。
+  正規形は [internal/syntax/printer.go](../../internal/syntax/printer.go) 先頭のコメントと `TestFormatStyle` が定義。
   **リポジトリ内の .fc はまだ整形していない**（castle は製品コードなので一括整形はオーナー判断。整形しても asm は変わらない）
 - golden の再生成（feature/v2 以降）: **`go test ./internal/driver -run 'TestGolden|TestExample' -update`**。
-  Go 自身の出力で上書きする（形式は [golden_dump_format.md](golden_dump_format.md)）。**意図しない差分を `-update` で消さない**
+  Go 自身の出力で上書きする（形式は [Agent/wiki/golden-dump-format.md](golden-dump-format.md)）。**意図しない差分を `-update` で消さない**
   （`-update` の前に差分を読んで、意図した変化だけを受け入れる）
 - golden は `.gitattributes` で `eol=lf` に固定してあり、`-update` 後に `git status` がクリーンなら
   出力が完全一致している
@@ -384,13 +384,13 @@ go test ./...                                    # 全部 (golden + examples + N
   `-update` で生成する。`-O 2` は SSA の定数伝播で演算をほとんど畳んでしまう（test_op はほぼ消える）ので、
   同じプログラムを `-O 0` でも走らせる `TestGoldenStdoutO0` が codegen を検証する（golden は同じファイル）
 - 性能退行の検知 (コンパイラ自身の速度): `go test ./internal/driver -run xxx -bench BenchmarkCastle -benchmem`
-- **フレームの静的割付**（2026-09-16〜、[v2_frame_alloc.md](v2_frame_alloc.md) §6）: コンパイルの順序は
+- **フレームの静的割付**（2026-09-16〜、[Agent/wiki/design/frame-alloc.md](design/frame-alloc.md) §6）: コンパイルの順序は
   sema（全モジュール）→ `pipeline.Prepare`（`frames.Analyze` で ABI を決める → 全関数の opt + regalloc →
   `frames.Place` で配置）→ `_frames.inc` を書く → 各モジュールの codegen → ca65。**codegen を直接呼ぶテストは
   `pipeline.Prepare` を先に呼ぶ**（golden の `newLlcForGolden`）。castle など base.asm を自前で持つプロジェクトは
   `FC_SZP` / `FC_SRAM` と `_SIZE` の export、スタックの空き先頭 `FC_SP` を足す（examples/castle/src/data.asm）
 - **最適化のパイプライン**（2026-09-16〜）: sema（IR 生成）→ `internal/opt`（IR→IR。`ir.BuildCFG` / `ir.BuildUseDef` の上に
-  書く小さなパスの列: SSA の定数 / コピー伝播と DCE（先頭。[v2_ssa.md](v2_ssa.md)）、ポインタ融合、コピー除去、
+  書く小さなパスの列: SSA の定数 / コピー伝播と DCE（先頭。[Agent/wiki/design/ssa.md](design/ssa.md)）、ポインタ融合、コピー除去、
   ジャンプ整理、ループ回転…）→ `internal/regalloc` → `internal/codegen`
   （命令選択 + asm テキストのピープホール `peephole.go`）。パスを足したら `go test ./bench -v` で効果を見て、
   golden（asm / allocir）は差分を眺めてから `-update`。**ハマった点**: (1) 命令を融合したら regalloc の A 割付の
@@ -430,7 +430,7 @@ go test ./...                                    # 全部 (golden + examples + N
   `mod` / `sub`）まで消していた。梯子・敵との当たり・セーブポイントが「たまに効かない」という形で実プロジェクトの
   プレイで発覚（単体テストは引数が変数か定数だけだった）。今は push_arg をその場で引数への代入に置き換え、間の命令は
   残す（`TestInlineFunction` の e / f が番）
-- **Y での引数渡し**（2026-09-20、v2_frame_alloc.md §7.1）: 最後から 2 つ目の 1 バイト引数は Y。呼び出し側は
+- **Y での引数渡し**（2026-09-20、Agent/wiki/design/frame-alloc.md §7.1）: 最後から 2 つ目の 1 バイト引数は Y。呼び出し側は
   `push_arg` から `call` までの間の命令が Y を使わないときだけ（`codegen.markArgY` → `ArgY` / `HoldY`）。**ハマった点**:
   (1) 最初は `push_arg` / `call` だけ見ていて、castle の hot な関数（`fastcall: true` = `push_fastcall_arg` / `fastcall`）が
   全部 `__a` の入口に落ちて +0.8% 退行した。(2) `push_arg` を間の命令の下に沈める案は A の連鎖（演算の結果を A のまま
@@ -477,7 +477,7 @@ go test ./...                                    # 全部 (golden + examples + N
 - `fcc -O 0` は最適化パス・常駐・ピープホールを切る（`BuildOptions.OptimizeLevel` は 0 が「未指定 = 2」、-1 が -O 0）。
   レジスタ割付は -O 0 でも同じ `regalloc.AllocateRegister`（静的フレームの関数は固定番地に置く必要があるので、
   「全部フレーム」の簡易版は使えない）。`TestOptimizeLevel0` が番
-- **生成コードのベンチマーク**（2026-09-15〜）: `go test ./bench`。[bench/](../bench/README.md) の 12 本の .fc を emu で走らせ、
+- **生成コードのベンチマーク**（2026-09-15〜）: `go test ./bench`。[bench/](../../bench/README.md) の 12 本の .fc を emu で走らせ、
   `stdio.bench_start` / `bench_end` で囲んだ区間のサイクル数（`r6502.Cpu.Cycles`。ページクロス・分岐成立込みで決定的）と
   モジュールのセグメントサイズを `bench/results.json` と比べる。出力（チェックサム）の違いはコンパイラのバグ、
   サイクル数・サイズの違いは最適化の効果か退行で、どちらも `-update` で受け入れる（golden と同じ運用）。
@@ -486,12 +486,12 @@ go test ./...                                    # 全部 (golden + examples + N
   コンパイラのバグがすぐ見つかる
 - **castle のマクロベンチ**（2026-09-19）: `go test ./internal/nes -run CastleFrameCycles -v`。内蔵 NES ランナーが
   `_ppu_vsync_flag` を読む `lda; bne` の待ちループを idle と数え、局面ごとの 1 フレームの busy サイクルを
-  `bench/castle_frames.json` と比べる（`-update` で更新。[bench/README.md](../bench/README.md)）。bench/ の 12 本と
+  `bench/castle_frames.json` と比べる（`-update` で更新。[bench/README.md](../../bench/README.md)）。bench/ の 12 本と
   違って実ゲームの 1 フレームの重さが見える（フィールドで約 10,200 サイクル = 34%）。最適化の効果は両方で見る
 - ca65 は既定で CPU 数だけ並列に走る。ca65 のエラー調査などで逐次にしたいときは `fc.Options.Jobs = 1`
   （CLI にはフラグ無し）
 - examples と実プロジェクトの同期・差分確認: `tools/sync_examples.ps1`（詳細は
-  [../examples/README.md](../examples/README.md)）
+  [../examples/README.md](../../examples/README.md)）
 - 内蔵NESランナーのスクリーンショット: `FC_NES_SNAPSHOT_DIR=<dir> go test ./internal/nes`（examples/hello は `FC_HELLO_PNG=<file>`）
 - **QuickNES で画面を確かめる**（2026-09-29）: `internal/quicknes` は libretro の QuickNES のコア（`FC_QUICKNES` か
   `C:\Applications\libretro\quicknes_libretro.dll`）を cgo なしで（syscall で DLL を読み、コールバックは `syscall.NewCallback`）
@@ -528,7 +528,7 @@ go test ./...                                    # 全部 (golden + examples + N
   golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。設定ファイルと
   バンクの配置は `project`、ca65 / ld65 の探索と dbgfile は `cc65`、@log の生成物は `fclog`、FC_HOME の解決は `fchome`、
   emu ターゲットの実行とホストとのやり取りの取り決め ($fff0〜$ffff) は `emu`。
-- **版と migrate**（2026-09-28。[v4_plan.md](v4_plan.md) §0）: 版は `syntax.Version2〜4`（`LatestVersion` = 4）で、モジュール
+- **版と migrate**（2026-09-28。[Agent/wiki/plans/v4-plan.md](plans/v4-plan.md) §0）: 版は `syntax.Version2〜4`（`LatestVersion` = 4）で、モジュール
   ごと（`ir.Module.Version`。sema は `h.version()` で規則を選ぶ）。`fcc migrate` は `driver.Compiler.Migrate`: fc 2 → 3 は
   構文の書き換え（`internal/migrate` の `Rules`。ファイルごと）、fc 3 → 4 は意味の書き換えで、各ファイルを入口に sema で
   コンパイルし（`sema.Program.CollectRewrites`。fc 2 → 3 の結果はメモリの上の `Program.Overlay` で渡す）、sema が fc 3 の
@@ -542,7 +542,7 @@ go test ./...                                    # 全部 (golden + examples + N
   （`compileStatementRecover` の `checkShifts`）
 - **追加のライブラリの探索先**（2026-09-29）: `BuildOptions.LibPath`（pkg/fc の `Options.LibPath`）は use / `@include` と ca65 の `-I` の
   探索先に、ソースのディレクトリの後・fclib の前で足す（`Compiler.libPath`・`ca65Args`）。`fcc test` がテストするモジュールの
-  ディレクトリを足すのに使い、fc.toml の `[lib.*]`（v4_stdlib.md §9）もここに入れる
+  ディレクトリを足すのに使い、fc.toml の `[lib.*]`（Agent/wiki/plans/v4-stdlib.md §9）もここに入れる
 - **組み込みが読み込むモジュール**（2026-09-29）: `@format` / fc 4 の printf は fmt / console を `use` 無しで使う（`sema/format.go` の
   `builtinModule`: 読み込んでいなければ `useModule` で読み込み、今のモジュールの `AddUse` に足す。足さないと asm がそのモジュールの
   .inc を取り込まずシンボルが未定義になる）。関数の本体のコンパイル中に読み込んだモジュールも本体をコンパイルするよう、
@@ -557,7 +557,7 @@ go test ./...                                    # 全部 (golden + examples + N
   テストで多くのビルドを並べると、ビルドごとに CPU の数だけ ca65 を起動して数百のプロセスになり、Windows が "Not enough memory
   resources" でプロセスを作れなかった（起動できなかった理由がエラーから落ちていたのも直した: `CommandError.Result` に入れる）
 - **演算子の優先順位は C と同じ**: `spec & ZERO == 0` は `spec & (ZERO == 0)`。fmt で踏んだ（括弧を付ける）
-- **asm から呼ばれる関数とフレーム**（2026-09-29。[v4_plan.md](v4_plan.md) §2）: 静的フレームの重ね方は呼び出しグラフの到達関係
+- **asm から呼ばれる関数とフレーム**（2026-09-29。[Agent/wiki/plans/v4-plan.md](plans/v4-plan.md) §2）: 静的フレームの重ね方は呼び出しグラフの到達関係
   だけで決まるので、グラフに見えない呼び出し（include した asm のファイルからの `jsr`）の先は `frames.Graph.hidden` にして
   どのフレームとも重ねない（割り込みの木と同じ）。インラインアセンブラの参照は含む関数からの辺にする。asm のテキストから
   fc のシンボルを拾うのは `ir.AsmSymbols` だけ（語の境界つき。語の途中の `_main` を拾うと、main が Entry になったり、hidden で
@@ -571,7 +571,7 @@ go test ./...                                    # 全部 (golden + examples + N
 - **命令の性質の表** `ir/opinfo.go`（副作用が無い・終端・分岐・呼び出し・可換・グローバルを触る・C を受け取る・asm）。
   「この命令はどれか」の switch を書かずに `op.Code.IsPure()` などで引く。直線区間の障壁も `IsBlockBoundary()` に
   足す形で書く（sink は C を受け取る命令と asm、fieldindex は呼び出しと asm、indexoff は境界だけ）。
-- **メモリアクセス**は `load_mem` / `store_mem` の 2 命令（`ir/mem.go`、[ir_memops.md](ir_memops.md)）。番地は
+- **メモリアクセス**は `load_mem` / `store_mem` の 2 命令（`ir/mem.go`、[Agent/wiki/design/ir-memops.md](design/ir-memops.md)）。番地は
   `Base + Index * Scale + Disp`（store は `Width`）で、`op.Mem()` で引く（添字が無ければ `Index == nil`。Src[1] には番兵
   `ir.NoIndex` が入っている。DefUse の uses は Src の位置を保つので、SSA のように位置で引く側は NoIndex を変数と見ないこと）。
   `index`（`&a[i]` の番地の計算）はそのまま。fuse / fieldindex / indexoff / scale は Addr の畳み込みで、codegen の
@@ -615,7 +615,7 @@ go test ./...                                    # 全部 (golden + examples + N
 
 ## @log の注釈とパス（最適化を書くときの規則、2026-09-25）
 
-fc 3 の `@log` は命令を出さず、次の命令への注釈 `ir.Op.Logs` になる（`internal/ir/log.go`、[v3_plan.md](v3_plan.md) §9）。
+fc 3 の `@log` は命令を出さず、次の命令への注釈 `ir.Op.Logs` になる（`internal/ir/log.go`、[Agent/discussions/2026-09-20-v3-plan.md](../discussions/2026-09-20-v3-plan.md) §9）。
 最適化の判断には注釈を使わないので、生成コードは `@log` の有無で変わらない。そのかわり、命令を消す・作り直すパスは
 注釈を正しい地点へ運ぶ責任がある。IR のパス（`internal/opt`、regalloc）を書く・直すときは次の 3 つを守る。
 
@@ -708,4 +708,4 @@ Mesen は ROM を開くとき同じ名前の `.dbg` / `.mlb` を自動で読む�
   `options(linker_config: "../ld65.cfg")` / `options(link: "... NSD.lib")` で自前の土台・リンカ設定・NSD を指定する。
   以前は `fcc compile` → `ca65 data.asm` → `ld65` を Rakefile が並べていた。リンク順が Rakefile の glob 順から
   fc の順 (base, runtime, モジュール順, 追加) に変わったので ROM のバイト列は変わる。
-  生成物リソースは「出来合い許容」ポリシー。詳細は [../examples/README.md](../examples/README.md)）
+  生成物リソースは「出来合い許容」ポリシー。詳細は [../examples/README.md](../../examples/README.md)）

@@ -263,7 +263,7 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 	lmd.FrameSize = frameSize
 }
 
-// allocateStatic は静的フレーム (doc/v2_frame_alloc.md §6-2): 戻り値 (0)、引数、アドレスを取られた変数・配列・struct
+// allocateStatic は静的フレーム (Agent/wiki/design/frame-alloc.md §6-2): 戻り値 (0)、引数、アドレスを取られた変数・配列・struct
 // (専用の場所)、残りのローカルを live range で詰めたもの、の順に 1 つのフレームに置く。呼び先のフレームは重ならないので
 // 呼び出しをまたぐかどうかは関係ない。フレームは 256 バイトまで。
 func allocateStatic(lmd *ir.Lambda) {

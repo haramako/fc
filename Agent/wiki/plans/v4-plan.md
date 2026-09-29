@@ -9,7 +9,7 @@ fc 3 のモジュール（fclib など）を fc 4 のモジュールから使え
 同じ版で入れるもの（2026-09-28 決定）: 互換性のために fc 3 で後回しにした 2 件（名前付きの文字列定数の終端の 0、`fastcall` の廃止。
 §2）と、slice を使った標準ライブラリの大幅な拡充（§3）。どれも fc 3 からの移行（migrate）を合わせて用意する。
 
-fc 3 までの検討は [v3_plan.md](v3_plan.md)（整数は §10.2）。
+fc 3 までの検討は [Agent/discussions/2026-09-20-v3-plan.md](../../discussions/2026-09-20-v3-plan.md)（整数は §10.2）。
 
 ## 0. v4 にすると要るもの
 
@@ -53,7 +53,7 @@ sema と `ir.InferWidthSign` だけ。規則を変えても最適化・codegen �
 
 ### 1.2 経緯
 
-- 2026-09-26: 仕様の調査で問題になった（v3_plan.md §10.2）。ユーザーの方針:
+- 2026-09-26: 仕様の調査で問題になった（Agent/discussions/2026-09-20-v3-plan.md §10.2）。ユーザーの方針:
   - 処理を不用意に重くしたくないので、8 ビット同士の演算は 8 ビットのまま計算する
   - ただし外側（代入先が u16 のときなど）からは広げてほしい。「int が 8 ビットの C」で今の幅の規則は説明できる
     （C も 32 ビット int で代入先に合わせて 64 ビットに広げはしない）が、代入先の型に合わせる所だけは明確な規則にしたい
@@ -302,7 +302,7 @@ sema に一時的な検査を入れて（暗黙の変換 `cast`、二項演算�
   migrate は、fc 3 のモジュールで長さを見る所があれば、使う所ではなく宣言を長さつき（`const NM = "joe"` → `const NM:[4]u8 = "joe"`）
   に書き換える（使う所の IR が変わらない）。castle・miku・darius には名前付きの文字列定数が無く、test の test_var・test_basic・
   test_lzw の宣言が書き換わる
-- **`fastcall` の廃止**（v3_plan.md §5 C「FC3 の最初の版では残す。廃止は後の版で別に決める」。ユーザー補足「fastcall は今後
+- **`fastcall` の廃止**（Agent/discussions/2026-09-20-v3-plan.md §5 C「FC3 の最初の版では残す。廃止は後の版で別に決める」。ユーザー補足「fastcall は今後
   不要」）。生成コードが変わるので、移行の後の段（§0）。asm で書いた関数（fclib の mem.asm・stdio.asm、castle の asm）との
   呼び出し規約を指定する手段（`@(abi: …)` など）を別に用意するかは決めるときに
   **決定（2026-09-29）: fc 4 から fastcall を完全になくす。** 本体のある関数の `@(fastcall)` は migrate が消す（コンパイラが呼び出し
@@ -363,7 +363,7 @@ sema に一時的な検査を入れて（暗黙の変換 `cast`、二項演算�
 slice が入ったので、v4 で fclib を大幅に拡充する。中身は未決。
 
 **2026-09-29 決定: 今の fclib との互換はほぼ考えず作り直す。書式は snprintf に当たるもの（`@format`）だけを作り、printf はその
-ラッパーにする。** 計画（調べたこと・モジュールの構成・API の素案・決めること）は [v4_stdlib.md](v4_stdlib.md)。下の「移行の考え方」の
+ラッパーにする。** 計画（調べたこと・モジュールの構成・API の素案・決めること）は [Agent/wiki/plans/v4-stdlib.md](v4-stdlib.md)。下の「移行の考え方」の
 うち、今の API を残す・版で引き分ける案は要らなくなった（castle・miku の呼び出しは新しい API に直す）。
 
 今の fclib（fc 3、364 行）:
@@ -377,8 +377,8 @@ slice が入ったので、v4 で fclib を大幅に拡充する。中身は未�
 | unittest | assert_true / assert_equal | メッセージはポインタ |
 | nes | nes.fc（レジスタ）、pad（update とボタンの定数） | |
 
-これまでの検討: [v3_slices_api_examples.md](v3_slices_api_examples.md)（書き込みバッファ、長さ付き文字列、固定容量 vector、
-数値 ID の readonly FS、PPU 転送、castle のメッセージの組み立て）、[v3_slice_tradeoffs.md](v3_slice_tradeoffs.md) §4
+これまでの検討: [Agent/discussions/2026-09-20-v3-slices-api-examples.md](../../discussions/2026-09-20-v3-slices-api-examples.md)（書き込みバッファ、長さ付き文字列、固定容量 vector、
+数値 ID の readonly FS、PPU 転送、castle のメッセージの組み立て）、[Agent/discussions/2026-09-20-v3-slice-tradeoffs.md](../../discussions/2026-09-20-v3-slice-tradeoffs.md) §4
 （「文法の移行と、新しい API を使うための意味の変更は分けて確認する」。この節の migrate の現状の記述は古い）、roadmap の
 「fclib と NES の開発の流れ」（slice 版の print / mem、nes/ppu.fc、マッパーのライブラリ、math の直し、NES の stdio）。
 

@@ -14,7 +14,7 @@ ca65 アセンブリに変換し、ld65 でリンクして NES ROM（`-t nes`）
 
 - 1 ファイル = 1 モジュール。モジュール名はファイル名から `.fc` を除いたもの（`stdio.fc` → `stdio`）
 - 先頭行の `#fc 2` は任意（無くても v2。`#fc 1` はエラー）。`fcc fmt` は書いてあれば残す。fc 3 は `#fc 3`
-  （[v3_plan.md](v3_plan.md)）。開発中の fc 4 は `#fc 4`（[v4_plan.md](v4_plan.md)。整数の規則などの意味を変える版。
+  （[Agent/discussions/2026-09-20-v3-plan.md](../Agent/discussions/2026-09-20-v3-plan.md)）。開発中の fc 4 は `#fc 4`（[Agent/wiki/plans/v4-plan.md](../Agent/wiki/plans/v4-plan.md)。整数の規則などの意味を変える版。
   2026-09-28 の時点では fc 3 と同じ意味）。版はモジュールごとで、1 つのプログラムに混ぜられる。`fcc migrate` で最新の版に
   書き換える（fc 2 → 3 は構文、fc 3 → 4 は型を見て意味の変わる所に `as` などを足す。どちらも ROM を変えない）
 - ファイルは UTF-8。文字列リテラルの中にそのまま日本語を書ける（`textmap` で文字コードに変換できる）
@@ -48,7 +48,7 @@ public use a from mod;   // 選択的インポートを再輸出する
 
 モジュールは「ソースのディレクトリ → fc.toml の `[lib.*]` のライブラリ（書いた順に、それぞれ `<lib>` と `<lib>/<target>`）→
 `fclib/` → `fclib/<target>/`」の順に探す（`include` と asm の `.include` も同じ順）。ライブラリは fclib のモジュールを置き換えられる。
-2 つのライブラリに同じ名前のモジュールがあればエラー（2026-09-29。[v4_stdlib.md](v4_stdlib.md) §9）:
+2 つのライブラリに同じ名前のモジュールがあればエラー（2026-09-29。[Agent/wiki/plans/v4-stdlib.md](../Agent/wiki/plans/v4-stdlib.md) §9）:
 
 ```toml
 # fc.toml
@@ -170,27 +170,27 @@ far call の判定に「N ≥ 0 なら切替バンク、無しか負なら固定
 
 fc.toml の `[target]`（mapper / prg / chr（0 なら CHR-RAM）/ mirroring（vertical（既定）/ horizontal / four）/ battery）と `[bank.<名前>]`（slot / index / segments）、`[ram.<名前>]`（start / size）、
 `[linker] extra`（ld65.cfg の断片）を書くと、fc が ld65.cfg と iNES のヘッダを作る。モジュールは `@(bank: "名前")`（"fixed" は
-常に見えている領域）、手動の切り替えの番号は `@bank("名前")`。マッパーは NROM / MMC3 / UxROM / MMC1（[v3_plan.md](v3_plan.md) §3）。
+常に見えている領域）、手動の切り替えの番号は `@bank("名前")`。マッパーは NROM / MMC3 / UxROM / MMC1（[Agent/discussions/2026-09-20-v3-plan.md](../Agent/discussions/2026-09-20-v3-plan.md) §3）。
 `[target]` があれば `-t` を省いたターゲットは nes（無ければ emu）。知らない見出し・キーはエラー（書き間違いを黙って無視しない）。
 `fcc run` の nes は内蔵の NES のランナーで `console.exit` まで走らせて console の出力を出す（画面は描かない。1 分で終わらなければエラー）。
 
 fc 3 の `@if (条件) { … } else @if (…) { … } else { … }` はコンパイル時に片方を選ぶ（条件はリテラルと `@(build)` の const だけ。
 選ばれなかった側は名前解決しない。トップレベルでも関数の中でも書け、新しいスコープは作らない）。`const DEBUG = false @(build);` は
-fc.toml の `[define.<モジュール名>]` と `fcc build -D モジュール名.DEBUG=true` で値を上書きできる（[v3_plan.md](v3_plan.md) §1）。
+fc.toml の `[define.<モジュール名>]` と `fcc build -D モジュール名.DEBUG=true` で値を上書きできる（[Agent/discussions/2026-09-20-v3-plan.md](../Agent/discussions/2026-09-20-v3-plan.md) §1）。
 初期値は true / false / 整数 / 文字列のリテラル。文字列の `@(build)` の const（`const TEXT_PO = "" @(build);`。型は書けない）は
 データを作らず、名前を使った場所で文字列リテラルになる（使わなければ ROM に何も出ない）。`@textmap` の引数など、定数式の組み込みに
 渡せる。`-D モジュール名.TEXT_PO=` と値を空にすると空文字列。
 
 fc 3 では `options(...)` を `@(...)` と書く（真偽値の属性は `@(inline)` のように値を省ける。宣言の後ろならその宣言の属性、
-`@(...);` はモジュールへの指定、`@(bss: "…") { … }` は中の宣言の既定値。[v3_plan.md](v3_plan.md) §5 C）。
+`@(...);` はモジュールへの指定、`@(bss: "…") { … }` は中の宣言の既定値。[Agent/discussions/2026-09-20-v3-plan.md](../Agent/discussions/2026-09-20-v3-plan.md) §5 C）。
 
 fc 3 では組み込みを `@sizeof(T)` / `@bitcast(T, x)` / `@incbin("f")` / `@include("f", key: value, …)` / `@asm(…)` /
 `@textmap(…)` / `@min` / `@max` / `@clamp` / `@run_tests()` と書き、`sizeof` / `min` などは普通の名前として使える
-（[v3_plan.md](v3_plan.md) §5 A）。
+（[Agent/discussions/2026-09-20-v3-plan.md](../Agent/discussions/2026-09-20-v3-plan.md) §5 A）。
 
 fc 3 では整数型の名前は `u8` / `i8` / `u16` / `i16` だけで、fc 2 の名前はエラー（`fcc migrate` が書き換える）。`u8` / `i8` /
 `u16` / `i16` は fc 3 では変数・関数・型などの名前として宣言できない。エラーメッセージ・IR のダンプの型の表示はどちらの版でも
-短い名前（[v3_plan.md](v3_plan.md) §7）。
+短い名前（[Agent/discussions/2026-09-20-v3-plan.md](../Agent/discussions/2026-09-20-v3-plan.md) §7）。
 
 fc 3 の `[]T` / `[]const T` は slice（先頭のポインタと長さ `u8` の 3 バイトの値。要素は 255 個まで）。長さを初期値から決める配列は
 `[?]T` と書く（fc 2 の `[]T`。`fcc migrate` が書き換える）。長さの分かる配列は slice に暗黙に変換でき（文字列リテラルは終端の 0 を
@@ -203,7 +203,7 @@ fc 3 の `[]T` / `[]const T` は slice（先頭のポインタと長さ `u8` の
 `const T:[?]Data = [{items: [{1, 4}, {2, 3}], id: 50}]`、ジャグ配列 `const NAMES:[?][]const u8 = ["ab", "cde"]`）。
 const の struct のポインタのフィールドにも、配列の定数・リテラルのアドレスを入れられる。長さ `u16` の広い slice は `[:u16]T` / `[:u16]const T`（4 バイト。メモリのコピーなど 256 要素
 以上に使う。`[:u8]T` は `[]T` と同じ）。`[]T` → `[:u16]T` は暗黙、逆は `@slice(@ptr(s), n)`。256 要素以上の配列の範囲と、長さが
-`u16` の `@slice(p, n)` は広い slice（[v3_slices_vector.md](v3_slices_vector.md)）。
+`u16` の `@slice(p, n)` は広い slice（[Agent/discussions/2026-09-20-v3-slices-vector.md](../Agent/discussions/2026-09-20-v3-slices-vector.md)）。
 
 fc 3 の `@null_fn` は何もしない関数（`rts` だけ。share/runtime.asm）。戻り値の無い関数の型なら、引数・fastcall・farfn に
 よらずどれにでも入る（`ppu.irq_setup = @null_fn;`。型は `null` と同じく文脈から、無ければ `fn():void`）。呼ぶ側が引数を積み、
@@ -219,7 +219,7 @@ fc 3 の `@log("HP: {} / {}", hp, max_hp);` は、エミュレータ側で表示
 書式は `{}`（順番）/ `{0}`（位置）と `{:x}` / `{:04X}` / `{:b}` / `{:c}` / `{:d}`、`{{` / `}}`。引数は変数（グローバル・
 ローカル・引数）・定数・struct のフィールド・定数添字の要素で、enum はメンバー名、bool は true / false、ポインタは `$1234`
 と出る。`fcc build -g` のとき ROM の隣に `.fclog.json` と Mesen 2 用の `.fclog.lua` を書き、`fcc run -g`（emu）は出力に
-混ぜて出す。最適化で値が取れない地点は「?」（コンパイル時に警告）（[v3_plan.md](v3_plan.md) §9）。
+混ぜて出す。最適化で値が取れない地点は「?」（コンパイル時に警告）（[Agent/discussions/2026-09-20-v3-plan.md](../Agent/discussions/2026-09-20-v3-plan.md) §9）。
 | `[N]T` | N×size | | 配列。`[]T` は長さ省略（初期値か `address` から決まる） |
 | `*T` | 2 | | ポインタ。`null`（v2）を入れられる（ポインタと関数ポインタのみ。SoA ハンドルには null なし） |
 | `*void` | 2 | | 何を指すか問わないポインタ（v2）。どのポインタ・関数ポインタ・配列も暗黙に入る。戻すには `bitcast<*T>(p)`。参照はがし・添字・算術は不可 |
@@ -327,7 +327,7 @@ function update():void {
   `alias` は宣言の形でのみ特別扱いし、既存の変数名や関数名としても使用できる。
 - 別名を通した書き込みは元の変数や他の別名にも反映される。用途の切替・排他・初期化は利用者が管理する。
 
-詳細は [型付きストレージ alias](v2_storage_alias.md)。アクティベーションによる有効期間の管理は未実装の別案。
+詳細は [型付きストレージ alias](../Agent/wiki/design/storage-alias.md)。アクティベーションによる有効期間の管理は未実装の別案。
 
 ### 2.2 soa — SoA コンテナ
 
@@ -449,7 +449,7 @@ BSS 指定は固定アドレス変数、関数内ローカル、コード、ROM 
 可変 `soa` は展開した各フィールド配列に継承する。配置ブロックは連続配置・ページ内配置を保証しない。
 `bss` には空でないセグメント名の文字列を指定する。制御文字・引用符・バックスラッシュは使えない。
 そのセグメントのメモリ領域は ld65.cfg で定義する（標準設定にない名前は自前の cfg が必要）。
-ゼロクリア・保存領域の扱い・リンカ設定は自動では変更しない。詳細は [V2 BSS 配置](v2_bss.md)。
+ゼロクリア・保存領域の扱い・リンカ設定は自動では変更しない。詳細は [V2 BSS 配置](../Agent/wiki/design/bss.md)。
 
 `options(symbol: "name")` は関数（§4.2）・変数・配列定数に共通で、「定義があればその名前で出力し、無ければ
 アセンブラ側の定義を参照する」。参照のときは fc が `.global name` を出すので、同じモジュールに `include` した asm で
@@ -619,7 +619,7 @@ bg_mmc.fetch_area(a, d);                        // 固定バンクから: farcal
   どちらも他バンクのデータ参照や割り込みからの安全な再入は管理しない。
 - `fcc build -d` で far call になった箇所の一覧が出る
 
-設計の経緯は [v2_farcall.md](v2_farcall.md)。
+設計の経緯は [Agent/wiki/design/farcall.md](../Agent/wiki/design/farcall.md)。
 
 ### 4.2.1 バンク付き関数ポインタ
 
@@ -649,7 +649,7 @@ farfn への暗黙変換はできない。farfn → fn / `*void` / 整数への�
 明示的な farfn は `near` 属性の有無によらず実配置のバンクを使う。バンク番号は 0..255（リンク時検査）。
 呼び出しは通常の stack / Entry ABI を使い、cc65 ABI / legacy fastcall の関数は格納できない。
 型の宣言やコピーだけなら `options(farcall: true)` は不要。
-詳細・制約・検証は [farcall 対応の関数ポインタ](v2_far_function_pointers.md)。
+詳細・制約・検証は [farcall 対応の関数ポインタ](../Agent/wiki/design/far-function-pointers.md)。
 
 ### 4.3 ラムダ
 
@@ -910,7 +910,7 @@ vram.put(a, @try_format(line[..4], "{}", score)); // 入らなければ長さ 0 
 | `lz4`（fc 4 の新しいモジュール。2026-09-29） | LZ4 のブロック形式の展開: `unpack(dst:[:u16]u8, src:[:u16]const u8):u16`（書いた長さ。書き先が足りないかデータが壊れていれば止まる）/ `try_unpack`（失敗なら `0xffff`）。データは `@lz4(...)` で。LZ 系なので書き先は RAM。展開のコード（asm）は約 310 バイト、1 バイト約 26（文字）〜 75（短い一致の多いデータ）サイクル |
 | `rle`（fc 4 の新しい形式。2026-09-29） | NES Screen Tool の RLE の展開: `unpack(dst, src):u16` / `try_unpack`。データは `@rle(...)` で。描画を止めた画面へは `vram.write_rle_now`、描画中は `vram.put_rle`。旧版（codebase64 の形式）は test/ の横にコピー。inflate（未完成）は外した |
 
-fc 4 の新しい fclib（作り直しの途中。計画は [v4_stdlib.md](v4_stdlib.md)。上の表の今のモジュールは入れ替えるまで残す。入れ替えた
+fc 4 の新しい fclib（作り直しの途中。計画は [Agent/wiki/plans/v4-stdlib.md](../Agent/wiki/plans/v4-stdlib.md)。上の表の今のモジュールは入れ替えるまで残す。入れ替えた
 mem / math の旧版は、使っている所（examples/castle/src、examples/miku、test/）の横にコピーしてある: `use` はソースのディレクトリを
 先に探すので、旧版で書いたプロジェクトはコピーを置けばそのままビルドできる。組み込みの `@copy` / `cos` は読み込んだモジュールの
 関数の形を見て、旧版でも動く）:

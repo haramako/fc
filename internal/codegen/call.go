@@ -20,7 +20,7 @@ func (l *Llc) farCallSetup(sym string) []any {
 	}
 }
 
-// callKind は呼び出し 1 つの引数の渡し方 (呼び先の種類で決まる。doc/v2_frame_alloc.md §6-1)。
+// callKind は呼び出し 1 つの引数の渡し方 (呼び先の種類で決まる。Agent/wiki/design/frame-alloc.md §6-1)。
 type callKind uint8
 
 const (
@@ -305,7 +305,7 @@ func (l *Llc) stackBase(lmd *ir.Lambda) int {
 	return 0
 }
 
-// スタックの空き先頭はゼロページの FC_SP が持つ (doc/v2_regalloc.md §4)。X はレジスタとして自由に使える。
+// スタックの空き先頭はゼロページの FC_SP が持つ (Agent/wiki/design/regalloc.md §4)。X はレジスタとして自由に使える。
 //   - static / entry 関数: X を使わない (使うのはループ内の常駐)。stack 系の呼び先には `ldx FC_SP` してから
 //     S+k,x に引数を書いて jsr し、戻り値を読む前にもう一度 `ldx FC_SP` (呼び先が X を壊しうる)
 //   - stack (再帰) 関数: X = 自分のフレームの底。入口で FC_SP = X + FrameSize、return で戻す。呼び出しの後は

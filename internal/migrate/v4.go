@@ -1,6 +1,6 @@
 package migrate
 
-// fc 3 → fc 4 (doc/v4_plan.md §0)。fc 4 は意味を変えるので、書き換えは sema が fc 3 のソースをコンパイルしながら集める
+// fc 3 → fc 4 (Agent/wiki/plans/v4-plan.md §0)。fc 4 は意味を変えるので、書き換えは sema が fc 3 のソースをコンパイルしながら集める
 // (sema.Rewrite。internal/sema/rewrite.go)。ここはそれをソースに当てて `#fc 4` にするだけ。プログラム単位の手順
 // (fc 2 → 3 をメモリの上で済ませ、入口ごとにコンパイルして書き換えを集める) は driver の Compiler.Migrate。
 
@@ -70,7 +70,7 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 	return out, nil
 }
 
-// abiRules は関数の呼び出し規約の書き換え (構文だけで決まる。doc/v4_plan.md §2): fc 4 は fastcall を廃止し、extern (本体の
+// abiRules は関数の呼び出し規約の書き換え (構文だけで決まる。Agent/wiki/plans/v4-plan.md §2): fc 4 は fastcall を廃止し、extern (本体の
 // 無い関数) は規約の明示が必須。
 //   - 本体のある関数の fastcall は消す (コンパイラが規約を決める。生成コードは変わるが意味は同じ)
 //   - 規約を書かない extern は `abi: "stack"` を足す (fc 3 の extern の既定。asm はそのまま)
@@ -142,7 +142,7 @@ func removeEntry(c *Ctx, o *syntax.Options, e *syntax.OptionEntry) {
 }
 
 // runTestsRule は `@run_tests()` を `@run_tests_v3()` にする (構文だけで決まる): fc 4 の @run_tests は @(test) の関数を集めるが、
-// fc 3 はスコープの test_* の関数を集めて stdio に出していた (その動きを @run_tests_v3 に残してある。doc/v4_stdlib.md §7.1)。
+// fc 3 はスコープの test_* の関数を集めて stdio に出していた (その動きを @run_tests_v3 に残してある。Agent/wiki/plans/v4-stdlib.md §7.1)。
 func runTestsRule(c *Ctx) {
 	syntax.Inspect(c.File, func(n syntax.Node) bool {
 		if id, ok := n.(*syntax.Ident); ok && id.Name == "@run_tests" {

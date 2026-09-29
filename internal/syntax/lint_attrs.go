@@ -1,7 +1,7 @@
 package syntax
 
 // 属性 (`@(...)` / `options(...)`) の検査: 知らないキー (綴りの誤り) と、その宣言では何もしないキーを警告する
-// (`@(adress: 0x6000)` が黙って普通の RAM 変数になっていた。エラーにするかは後で決める。doc/roadmap.md の v3)。
+// (`@(adress: 0x6000)` が黙って普通の RAM 変数になっていた。エラーにするかは後で決める。Agent/wiki/plans/roadmap.md の v3)。
 
 import "sort"
 

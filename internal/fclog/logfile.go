@@ -1,6 +1,6 @@
 package fclog
 
-// fc 3 の @log (doc/v3_plan.md §9) のリンク後の処理: codegen の地点 (LogSite) のラベルと番地の式を dbgfile で値にして、
+// fc 3 の @log (Agent/discussions/2026-09-20-v3-plan.md §9) のリンク後の処理: codegen の地点 (LogSite) のラベルと番地の式を dbgfile で値にして、
 //   - ROM の隣に <rom>.fclog.json (地点・書式・値の所在) と Mesen 2 用の <rom>.fclog.lua を書く
 //   - emu ターゲットの実行 (fcc run、テスト) では、地点の PC に来たら値を読んで表示する (stdout に printf と同じ順で出る)
 // どちらも NES 側の命令は増やさない (地点はラベル、値はメモリとレジスタから読むだけ)。

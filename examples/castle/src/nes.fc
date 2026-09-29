@@ -1,5 +1,5 @@
 #fc 4
-// 旧 fclib の nes のコピー (2026-09-29。fclib を fc 4 の新しい API に入れ替えた後も、このプロジェクトのビルドを保つため。doc/v4_stdlib.md §7)
+// 旧 fclib の nes のコピー (2026-09-29。fclib を fc 4 の新しい API に入れ替えた後も、このプロジェクトのビルドを保つため。Agent/wiki/plans/v4-stdlib.md §7)
 /** PPUレジスタ */
 
 public var PPU_CTRL1:u8 @(address: 0x2000);

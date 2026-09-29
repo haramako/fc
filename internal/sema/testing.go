@@ -1,6 +1,6 @@
 package sema
 
-// テストの組み込み (doc/v4_stdlib.md §7.1): @assert / @assert_eq と、fc 4 の @run_tests (@(test) の関数を集めて順に呼ぶ)。
+// テストの組み込み (Agent/wiki/plans/v4-stdlib.md §7.1): @assert / @assert_eq と、fc 4 の @run_tests (@(test) の関数を集めて順に呼ぶ)。
 //
 //   @assert(式 [, "文言"])      式が偽なら「ファイル:行: assert failed: 式の綴り」を出して止まる (sys.panic。終了コード 1)
 //   @assert_eq(実際, 期待)       違えば「ファイル:行: assert_eq failed: 実際の綴り is 値 (want 値)」を出して止まる。整数・bool・enum

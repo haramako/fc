@@ -14,7 +14,7 @@
   needsY）、codegen（gen 6 つ）、interp（case 6 つ）が同じ分岐を持っていた。
 
 fuzz で出たバグの多く（`sa[i].f0 = 4` が隣のフィールドまで書く、`a16[i] = 4` が下位しか書かない、cast の幅の読み違え）は
-この表現に由来する（development_notes.md の fuzz の記録）。
+この表現に由来する（Agent/wiki/development-notes.md の fuzz の記録）。
 
 ## 表現
 

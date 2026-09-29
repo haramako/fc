@@ -1,6 +1,6 @@
 package driver
 
-// struct (doc/v2_types_struct.md §4) の実行テスト。
+// struct (Agent/wiki/design/types-struct.md §4) の実行テスト。
 
 import (
 	"os"

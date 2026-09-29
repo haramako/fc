@@ -1,7 +1,7 @@
 // Package project はプロジェクトの設定 (fc.toml) と、そのバンクの表からの配置の解決。ファイルの読み込み以外の入出力はしない。
 package project
 
-// fc.toml のバンクの表から配置を決める (doc/v3_plan.md §3)。マルチバンクのプログラムも fc だけで書け、ld65.cfg は
+// fc.toml のバンクの表から配置を決める (Agent/discussions/2026-09-20-v3-plan.md §3)。マルチバンクのプログラムも fc だけで書け、ld65.cfg は
 // 特殊な場合の脱出口 (options(linker_config:) で丸ごと、または [linker] extra で断片) にする。
 //
 //	[target]

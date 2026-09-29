@@ -1,5 +1,5 @@
 #fc 2
-// struct (doc/v2_types_struct.md §4) のテスト。v1 には無い機能なので test/ に対応するものはない。
+// struct (Agent/wiki/design/types-struct.md §4) のテスト。v1 には無い機能なので test/ に対応するものはない。
 use * from unittest;
 
 struct Point {

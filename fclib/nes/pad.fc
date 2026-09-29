@@ -1,5 +1,5 @@
 #fc 4
-// パッド (doc/v4_stdlib.md §3.2)。poll をフレームに 1 回呼ぶと、p1 / p2 に押している (held)・今押した (pressed)・今離した
+// パッド (Agent/wiki/plans/v4-stdlib.md §3.2)。poll をフレームに 1 回呼ぶと、p1 / p2 に押している (held)・今押した (pressed)・今離した
 // (released) ボタンと、キーリピート (repeat: 押した瞬間と、押し続けて REPEAT_DELAY フレーム後から REPEAT_RATE フレームごと。
 // メニューのカーソルの移動に) が入る。DMC (音の再生) が読み取りに割り込んでビットがずれることがあるので、2 回続けて同じ値になるまで読み直す。
 // 旧版 (pad.cur / pad.pushed) は examples/castle/src/pad.fc・examples/miku/pad.fc にコピーがある。

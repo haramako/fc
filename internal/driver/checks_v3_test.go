@@ -1,6 +1,6 @@
 package driver
 
-// doc/roadmap.md の v3 で「する」にした演算の制限と警告 (2026-09-26〜27 決定) のテスト。
+// Agent/wiki/plans/roadmap.md の v3 で「する」にした演算の制限と警告 (2026-09-26〜27 決定) のテスト。
 
 import (
 	"fmt"

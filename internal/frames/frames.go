@@ -1,4 +1,4 @@
-// Package frames はフレームの静的割付 (doc/v2_frame_alloc.md §6)。
+// Package frames はフレームの静的割付 (Agent/wiki/design/frame-alloc.md §6)。
 //
 // Analyze: 全モジュールの呼び出しグラフから各関数の呼び出し規約 (ir.ABI) を決める (sema の後、regalloc の前)。
 // Place: regalloc でフレームの大きさが決まった後、static な関数のフレームを固定アドレスに配置し、
@@ -833,7 +833,7 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 
 	// _frames.inc
 	inc := []string{
-		"; 静的フレームの配置 (fc が生成。doc/v2_frame_alloc.md §6)",
+		"; 静的フレームの配置 (fc が生成。Agent/wiki/design/frame-alloc.md §6)",
 		".ifndef __FC_FRAMES__",
 		"__FC_FRAMES__ = 1",
 		"\t.importzp FC_SZP",

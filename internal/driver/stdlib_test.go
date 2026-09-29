@@ -1,6 +1,6 @@
 package driver
 
-// 新しい fclib (doc/v4_stdlib.md) のテスト: console (emu)、sys、fmt。
+// 新しい fclib (Agent/wiki/plans/v4-stdlib.md) のテスト: console (emu)、sys、fmt。
 
 import (
 	"fmt"

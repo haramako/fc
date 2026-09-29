@@ -1,6 +1,6 @@
 package sema
 
-// コンパイル時の圧縮の組み込み (doc/v4_stdlib.md §8 の 10)。
+// コンパイル時の圧縮の組み込み (Agent/wiki/plans/v4-stdlib.md §8 の 10)。
 
 import (
 	"github.com/haramako/fc/internal/diag"

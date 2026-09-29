@@ -1,6 +1,6 @@
 package fc
 
-// fcc test (doc/v4_stdlib.md §7.1): モジュールの @(test) の関数を走らせる。
+// fcc test (Agent/wiki/plans/v4-stdlib.md §7.1): モジュールの @(test) の関数を走らせる。
 
 import (
 	"context"

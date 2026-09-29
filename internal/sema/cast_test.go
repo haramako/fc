@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestCastV2: `x as T` (数値変換) と `bitcast<T>(x)` (ビット読み替え)。doc/v2_types_struct.md §3.5
+// TestCastV2: `x as T` (数値変換) と `bitcast<T>(x)` (ビット読み替え)。Agent/wiki/design/types-struct.md §3.5
 func TestCastV2(t *testing.T) {
 	v2 := func(body string) map[string]string {
 		return map[string]string{"t.fc": "#fc 2\nvar a:[4]int;\nvar p:*int;\nvar w:u16;\nvar s:i8;\nvar f:fn(int):void;\nfunction g(x:int):void {}\nfunction main():void {\n" + body + "\n}\n"}

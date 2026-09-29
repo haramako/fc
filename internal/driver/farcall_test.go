@@ -1,6 +1,6 @@
 package driver
 
-// far call (doc/v2_farcall.md): 別バンクのモジュールの関数への呼び出しを farcall トランポリン経由にする。
+// far call (Agent/wiki/design/farcall.md): 別バンクのモジュールの関数への呼び出しを farcall トランポリン経由にする。
 // (小さい関数は自動インラインされて far call が消えるので、テストの関数は options(noinline: true))
 // emu の farcall はそのまま飛ぶだけなので、結果が正しいこと・生成コードが farcall を経由すること・
 // near になるべき呼び出しが直接 jsr のままであることを見る。
@@ -75,7 +75,7 @@ func TestFarCall(t *testing.T) {
 	if !strings.Contains(m, "jsr _far1_nearf") || !strings.Contains(m, "jsr _fixed1_twice") {
 		t.Errorf("main.s: nearf / twice は直接呼ぶべき")
 	}
-	// far call の飛び先は入口の sta を飛ばす `_far1_add__frame` (レジスタ渡し。doc/v2_frame_alloc.md §7)
+	// far call の飛び先は入口の sta を飛ばす `_far1_add__frame` (レジスタ渡し。Agent/wiki/design/frame-alloc.md §7)
 	if !strings.Contains(m, "lda #<.bank(_far1_add__frame)") || !strings.Contains(m, "sta FC_FARCALL+2") || !strings.Contains(m, ".global farcall") {
 		t.Errorf("main.s: FC_FARCALL の設定が無い")
 	}

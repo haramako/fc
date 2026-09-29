@@ -1,7 +1,7 @@
 // Package syntax は fc 言語の字句解析・構文解析・構文木を提供する。
 //
 // このパッケージは他の internal パッケージ (sema, ir, types) に依存しない
-// (doc/archive/v2_plan.md C3)。フォーマッタ等の純粋な構文ツールがここだけで動くこと。
+// (Agent/discussions/2026-09-12-v2-plan.md C3)。フォーマッタ等の純粋な構文ツールがここだけで動くこと。
 package syntax
 
 import "fmt"
@@ -92,7 +92,7 @@ const (
 	KwFallthrough // fallthrough (fc 3。switch の case の最後で次の case の本体へ)
 	KwIn          // in (fc 3 の for-each `for (var x in A)`)
 
-	// fc 3 の `@` の組み込み (doc/v3_plan.md §5 A)。型を取るもの・宣言になるものは専用のトークン、それ以外の
+	// fc 3 の `@` の組み込み (Agent/discussions/2026-09-20-v3-plan.md §5 A)。型を取るもの・宣言になるものは専用のトークン、それ以外の
 	// `@名前` は AtIdent (Text は `@名前`。名前つきの組み込みの呼び出し)。`@` の直後が `(` なら AtSign (属性)
 	AtSizeof  // @sizeof
 	AtBitcast // @bitcast

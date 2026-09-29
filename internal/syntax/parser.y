@@ -1,7 +1,7 @@
 /*
  * parser.y — fc 文法の goyacc 定義。型付き構文木 (ast.go) を生成する。
  *
- * v1 と v2 (doc/v2_grammar.md) のスーパーセットを 1 つの文法で受理し、
+ * v1 と v2 (Agent/discussions/2026-09-13-v2-grammar.md) のスーパーセットを 1 つの文法で受理し、
  * バージョンごとの受理範囲は parse.go の checkVersion で絞る。
  * v1 部分の規則と優先順位は Ruby racc 版の parser.y と 1:1 で対応させている
  * (到達不能だった `id_list: tID ...` 規則だけ削除)。v2 で足した規則には「v2」と注記する。

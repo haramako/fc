@@ -1,5 +1,5 @@
 #fc 4
-// NES のレジスタとビットの定数 (doc/v4_stdlib.md §3.2)。名前は NESdev の wiki のもの。
+// NES のレジスタとビットの定数 (Agent/wiki/plans/v4-stdlib.md §3.2)。名前は NESdev の wiki のもの。
 // 旧版 (PPU_CTRL1 などの名前) は examples/castle/src/nes.fc・examples/miku/nes.fc にコピーがある。
 
 // ---- PPU ----

@@ -4,11 +4,11 @@
 **将来の `#fc 3` 向けのアイデア記録。検討中・未実装。実装開始の指示ではない。**
 以下の構文例は仮案であり、現在のコンパイラが受理する仕様ではない。
 現行 `#fc 2` への変更は行わず、将来の採用時は v2 → v3 の migrate を想定する。
-他の V3 候補を含む一覧は [FC V3 検討メモ](v3_plan.md) を参照。
-現行仕様は [language_reference.md](language_reference.md)、追加機能全体の検討は
-[language_feature_candidates.md](language_feature_candidates.md) を参照。
-標準・ユーザーライブラリの具体的な呼び出し例は [v3_slices_api_examples.md](v3_slices_api_examples.md)。
-長さの幅・引数コピーの実測、sentinel、移行機構の現状は [v3_slice_tradeoffs.md](v3_slice_tradeoffs.md)。
+他の V3 候補を含む一覧は [FC V3 検討メモ](2026-09-20-v3-plan.md) を参照。
+現行仕様は [language_reference.md](../../doc/language_reference.md)、追加機能全体の検討は
+[Agent/wiki/plans/language-feature-candidates.md](../wiki/plans/language-feature-candidates.md) を参照。
+標準・ユーザーライブラリの具体的な呼び出し例は [Agent/discussions/2026-09-20-v3-slices-api-examples.md](2026-09-20-v3-slices-api-examples.md)。
+長さの幅・引数コピーの実測、sentinel、移行機構の現状は [Agent/discussions/2026-09-20-v3-slice-tradeoffs.md](2026-09-20-v3-slice-tradeoffs.md)。
 
 元のアイデアは `C:\Work\castle\doc\memo.md` の「FC スライス機能」。
 本書は、そのメモを読んだ後の議論と訂正を含め、FC 側で参照できるようにまとめたもの。
@@ -160,7 +160,7 @@ slice → array の長さ一致条件、vector の未使用領域の初期化・
 vector も初版は長さ 16 ビットに統一する案。フィールド順・実際の ABI は未決。
 小容量 vector の長さだけを 8 ビットに縮めるのは、メモリ使用量を見てから検討できる。
 8 / 16 ビットの型を併設する場合の複雑さと現行 ABI による比較実験は
-[長さ・ABI の試算](v3_slice_tradeoffs.md#1-長さを-8--16-ビットに分ける場合) を参照。
+[長さ・ABI の試算](2026-09-20-v3-slice-tradeoffs.md#1-長さを-8--16-ビットに分ける場合) を参照。
 
 長さが 16 ビットでも、長さの範囲が分かるループを必ず 16 ビット添字で実行する必要はない。
 例えば 256 要素を処理する専用ループは、8 ビットの添字が一周したことを終了条件にできる。
@@ -204,7 +204,7 @@ var text:[?]uint8 = "hoge";
 普通の `[5]uint8` の全体を `text[..]` で切り出す場合と、文字列リテラルからの変換は区別して決める必要がある。
 `textmap` の文字列も終端 0 を持つため、同じ整理が必要。
 castle の既存 API を調べた結果、通常の slice に加えて終端 0 を保証する読み取り専用 slice を
-候補に残す価値がある。[sentinel の調査](v3_slice_tradeoffs.md#3-sentinel-終端の調査) に詳細を記録した。
+候補に残す価値がある。[sentinel の調査](2026-09-20-v3-slice-tradeoffs.md#3-sentinel-終端の調査) に詳細を記録した。
 採用もリテラルの長さ規則も未確定であり、現行配列の要素数を黙って変更しない。
 
 `[?]T` と vector 候補の `[N?]T` は、意味が異なるのに見た目が近い。
@@ -357,7 +357,7 @@ slice を受け取るラッパ側で空・1〜255・256・それ以上を明示�
 
 ## 10. ライブラリ API の利用イメージ
 
-具体的な宣言・呼び出し例と契約案は [v3_slices_api_examples.md](v3_slices_api_examples.md) にまとめた。
+具体的な宣言・呼び出し例と契約案は [Agent/discussions/2026-09-20-v3-slices-api-examples.md](2026-09-20-v3-slices-api-examples.md) にまとめた。
 以下も未実装の提案であり、現行の API や確定した仕様ではない。
 
 | 用途 | API 案・データの流れ |

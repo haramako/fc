@@ -1,12 +1,12 @@
 # ロードマップ（未着手・未決の項目）
 
 2026-09-15 時点で残っている項目。済んだものは消す。設計の経緯は各 v2_*.md、日々の運用は
-[development_notes.md](development_notes.md)、アイデア段階のものは [v2_idea.md](v2_idea.md)。
-（2026-09 以前の作業ログは [archive/](archive/) にある）
+[Agent/wiki/development-notes.md](../development-notes.md)、アイデア段階のものは [Agent/discussions/2026-09-14-v2-idea.md](../../discussions/2026-09-14-v2-idea.md)。
+（2026-09 以前の作業ログは [archive/](../../discussions/AGENTS.md) にある）
 
 ## 最適化（次の主題）
 
-計測基盤は [../bench/](../bench/README.md)（`go test ./bench`）。v0.0.2 時点で fc は cc65 の 1.3〜2.2 倍、Oscar64 の 4〜10 倍
+計測基盤は [../bench/](../../../bench/README.md)（`go test ./bench`）。v0.0.2 時点で fc は cc65 の 1.3〜2.2 倍、Oscar64 の 4〜10 倍
 遅かった。2026-09-16 の第 1 弾で cc65 は抜いた（bench/README.md の比較表と経過）。
 
 - [x] A の値の追跡による冗長 `lda` の除去、一時変数経由のコピーの除去 ✅ 2026-09-16
@@ -34,7 +34,7 @@
 
 ### 第 3 弾: フレームの静的割付（B）✅ 2026-09-16（ブランチ `feature/static-frame`）
 
-[v2_frame_alloc.md](v2_frame_alloc.md) §6。bench: `calls` -21%、`entities` -21%、`textprint` -10%、`plasma` -10%。
+[Agent/wiki/design/frame-alloc.md](../design/frame-alloc.md) §6。bench: `calls` -21%、`entities` -21%、`textprint` -10%、`plasma` -10%。
 castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM 0）。stack は本当に自己再帰している 2 つだけ。
 
 - [x] 間接呼び出しの飛び先を「そのポインタ変数に代入された関数」「const 表の要素」に絞る（castle の偽の再帰 88 関数が消えた） ✅
@@ -42,7 +42,7 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] Entry 関数の直接呼び出しはプロローグを飛ばす（`__direct`） ✅
 - [ ] 関数ポインタのローカル変数・struct フィールド経由の呼び出しはまだ型ベース（同じ型の Entry 全部）
 
-### 第 4 弾（レジスタ割付。[v2_regalloc.md](v2_regalloc.md)）
+### 第 4 弾（レジスタ割付。[Agent/wiki/design/regalloc.md](../design/regalloc.md)）
 
 - [x] 最上位 / 最下位ビットの検査 + 両枝の 1 ビットシフトを C フラグ分岐に（`carryBranch`、`if_carry`） ✅ 2026-09-16
 - [x] `dec x` 直後の `if x` のフラグ再利用、A にある添字の `tay` ✅
@@ -65,23 +65,23 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       同じでも回転するように（`rotateLoops`）。castle のスプライト消去ループ 26 → 20 サイクル/スロット、フレーム −1〜3% ✅ 2026-09-19
 - [x] 非可換な形 `x - tab[i]` / `x < tab[i]` の第 2 入力を直前の index_pget と融合（codegen `fusableIndex`: 添字を Y / X に
       用意して一時変数を `tab+0,y` として読む。bench には形が無く、castle は数か所） ✅ 2026-09-19
-- [x] 2 バイト変数の上位 / 下位の分割（`opt.splitWords`、`rolc` / `rorc`。v2_regalloc.md §7。crc16 -13%。sieve のポインタは
+- [x] 2 バイト変数の上位 / 下位の分割（`opt.splitWords`、`rolc` / `rorc`。Agent/wiki/design/regalloc.md §7。crc16 -13%。sieve のポインタは
       加算で結合しているので対象外 = 誘導変数の統合（SSA の後）の仕事） ✅ 2026-09-19
 - [x] ループの回転で条件が末尾に来た後の `dey; cpy #0; bne`（ラベルが間に入る）を `dey; bne` に（テストの複製: 入口の条件は
       そのまま、本体の末尾に条件の写し (新しい一時変数) を置く。1 バイトの条件だけ。crc8 -13%、crc16 -7%） ✅ 2026-09-19
-- [x] SSA 化（Braun 方式）+ 定数伝播 / コピー伝播 / DCE（[v2_ssa.md](v2_ssa.md)。IR は変えず CFG の上の解析として持ち、
+- [x] SSA 化（Braun 方式）+ 定数伝播 / コピー伝播 / DCE（[Agent/wiki/design/ssa.md](../design/ssa.md)。IR は変えず CFG の上の解析として持ち、
       結果で命令列を書き換える。sieve -1.3%、bgdecode -0.6%、castle -0.1〜0.3%。`!` の 16 ビットの codegen バグも発覚） ✅ 2026-09-20
 - [x] SSA の上の代数の簡約（`y / 16 * 16` → `and #$f0`。castle フレーム −3.4%）と誘導変数の統合（`opt.eliminateInduction`。
-      比較にしか使われないカウンタをポインタの比較に。sieve −15.9%。v2_ssa.md §4–5） ✅ 2026-09-20
+      比較にしか使われないカウンタをポインタの比較に。sieve −15.9%。Agent/wiki/design/ssa.md §4–5） ✅ 2026-09-20
 - [x] 小さなループの完全展開（`opt.unrollLoops`。回数がリテラルで 8 回まで、本体 × 回数 ≤ 64 命令。crc8 −30%、crc16 −15%、
-      castle −0.7% / ROM +1.5 KB。v2_ssa.md §6） ✅ 2026-09-20
+      castle −0.7% / ROM +1.5 KB。Agent/wiki/design/ssa.md §6） ✅ 2026-09-20
 - [x] 定数との乗算のシフト・加減算への展開（`opt.expandMul`。立っているビットが 3 つまで、または 2^n − 1。
       math16 −5.5%、calls −3.6%、textprint −1.9%、castle −0.5%） ✅ 2026-09-20
 - [x] fuzz の生成器にポインタ・ローカル配列・struct・ポインタをずらすループ（初回で codegen のバグ 2 件と SSA の panic 1 件、
       次の 1000 本で fusePointer と splitWords の struct のバグ 2 件） ✅ 2026-09-20
-- [x] static 関数のレジスタ渡し（最後の 1 バイトの引数を A、1 バイトの戻り値を A。v2_frame_alloc.md §7。calls −6.5%、
+- [x] static 関数のレジスタ渡し（最後の 1 バイトの引数を A、1 バイトの戻り値を A。Agent/wiki/design/frame-alloc.md §7。calls −6.5%、
       plasma −3.2%、entities −2.6%、castle −1%） ✅ 2026-09-20
-- [x] 関数ポインタ表の呼び出しの直接化（`opt.DevirtualizeProgram`。const の表 16 要素まで。calls −5.6%。v2_ssa.md §7。
+- [x] 関数ポインタ表の呼び出しの直接化（`opt.DevirtualizeProgram`。const の表 16 要素まで。calls −5.6%。Agent/wiki/design/ssa.md §7。
       castle の `en_vtbl.PROCESS` は 83 要素で対象外: 上限を上げれば 1.6 KB の ROM で −4%） ✅ 2026-09-20
 - [x] 直接化しない関数ポインタ表の呼び出し `PROC[t](i)` は、表から一時変数を経ずに reg へ直接読む（codegen
       `fnPtrToReg`。間が引数の積み込みと単純な演算だけのとき。1 回 12 サイクル。castle area8b −0.6%。fuzz の 4 要素の表は
@@ -89,14 +89,14 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] fuzz に far call・密な switch・const 表・関数ポインタ表（switch 命令の飛び先が live range の流れに無いバグ、
       stack 関数の switch が X (フレームポインタ) を壊すバグ） ✅ 2026-09-20
 - [x] 最後から 2 つ目の引数を Y で渡す（`Lambda.RegArgY`、`codegen.markArgY`。本体の先頭で A / Y に引数がある形にして
-      ピープホールが先頭の `ldy` / `lda` を消す。calls −2.4%、castle −0.5%。v2_frame_alloc.md §7.1） ✅ 2026-09-20
+      ピープホールが先頭の `ldy` / `lda` を消す。calls −2.4%、castle −0.5%。Agent/wiki/design/frame-alloc.md §7.1） ✅ 2026-09-20
 - [x] `a[i + k]` の添字の加算を配列側に畳む（`opt.foldIndexOffset` → `sta a+k,y`。bgdecode −11.7%、castle の
-      `ppu.sprite_idx` が手書き asm より速く。添字の式は折り返さない規則を §6 に。v2_ssa.md §9） ✅ 2026-09-20
+      `ppu.sprite_idx` が手書き asm より速く。添字の式は折り返さない規則を §6 に。Agent/wiki/design/ssa.md §9） ✅ 2026-09-20
 - [x] 展開・自動インラインでフレームが 256 バイトを超えるときは引く（-O 2 で frame size over になった関数に
       `Lambda.NoGrow` を付け、インライン展開とループ展開をせずに sema からやり直す。`driver.retryFrameOver`。
       fuzz で 5000 本中 -O 2 だけ落ちていた 3 本が通るように。`TestFrameOverNoGrow`） ✅ 2026-09-24
 - [ ] far call にもレジスタで渡す（トランポリンの速い経路を X だけで書き、切替の経路で A / Y をスタックに退避。
-      FC_FARCALL の設定を引数の読み出しの前に。castle の `farcall` も書き換え。v2_frame_alloc.md §7.1）
+      FC_FARCALL の設定を引数の読み出しの前に。castle の `farcall` も書き換え。Agent/wiki/design/frame-alloc.md §7.1）
 - [ ] （検討メモ・やる見込みは薄い）far call のバンク復帰を関数の出口まで遅らせる: 関数 F の入口で呼び先のスロットの
       バンクを覚え、F の中の far call は「違えば切り替えて飛ぶだけ」の戻さない版のトランポリンで呼び、F の出口で
       1 回だけ戻す（castle の `en.process` の手動 `set_pbank` と同じ形。farfn の表でも同じバンクが続けば切り替えない）。
@@ -105,17 +105,17 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       ような明示の属性か、「far call の後でポインタを読まない・渡さない」関数に限る自動化になる（2026-09-24 検討）
 - [x] 小さな static 関数の自動インライン（12 命令以下でループ・呼び出し無し。6 命令以下は無条件、それより大きいものは
       呼び出し 2 か所まで。calls −22%、entities −16%、castle は ROM +1.6 KB で −0.2%。`options(noinline: true)` /
-      `FC_DISABLE=autoinline`。v2_ssa.md §8） ✅ 2026-09-20
+      `FC_DISABLE=autoinline`。Agent/wiki/design/ssa.md §8） ✅ 2026-09-20
 - [ ] SSA の上で: volatile でないグローバル / 配列要素の読み出しの前送り（呼び出し・ポインタ書き込み・asm を障壁に）、
       共通部分式、呼び出しをまたぐ mod/ref 解析。6502 では `lda a,y` と `lda t` の差が 1 サイクルで、値が定数になる場合以外は
-      効果が薄い（v2_ssa.md §7）
+      効果が薄い（Agent/wiki/design/ssa.md §7）
 - [ ] 書き換えルールの DSL（Go コンパイラの rulegen の縮小版）— パスが 10 個を超えて手書きの照合が辛くなってから
 - [ ] デッドストア除去、live range の精度（穴あき区間の共有）。✅ 2026-09-30 の一部: 常駐の割付の後のリテラルの伝播
       （`regalloc.PropagateLiteralLoads`、段の名前 `litprop`。ループの回転が前に出した最初の検査と常駐の入口の写しが読む初期値を
       リテラルにし、読まれなくなったループの変数の `lda #0; sta i` を消す。bench は 2〜6 バイト縮む）
 - [x] ポインタを 1 ずつ進めるループ（`*p = …; p += 1`）の下位バイトを Y で回す（`opt.walkPointerY`。`lda (p),y; iny;
       bne; inc p+1`、帰りは `cpy lim; bne`。誘導変数の統合を変数の上限にも広げ、ピープホールの `iny; cpy #0` の不具合も
-      直した。crc8 −19%、crc16 −9%、sieve −7.6%、oam −2.4%。v2_ssa.md §10） ✅ 2026-09-24
+      直した。crc8 −19%、crc16 −9%、sieve −7.6%、oam −2.4%。Agent/wiki/design/ssa.md §10） ✅ 2026-09-24
 - [x] struct の配列（グローバル、全体が 256 バイト以内）のフィールドの読み書きを `lda a+ofs,y` / `sta a+ofs,y` に
       （`opt.foldFieldIndex`。`index t = &a[i]` + フィールドの pget / pset を、`i * 要素の大きさ` の scaled な index_pget / pset に。
       同じブロックの同じ添字の積は使い回す。今までは先頭のフィールドの読み出し以外、`&a[i]` を 16 ビットで組み立てて `(p),y` で、
@@ -130,22 +130,22 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] **トップレベルの宣言順への依存を減らす**: 宣言名と `use` を先に収集し、関数・定数・型・配列長を依存関係に従って解決。
       後ろの関数を使う定数テーブル、後ろの定数を使う計算、相互 `use`、struct / SoA の前方参照に対応。
       値・サイズの循環は依存経路付きで診断し、ポインタ / SoA ハンドルを介する再帰は許可する。
-      ローカルの可視範囲・実行時評価順・配置属性の規則は維持。詳細は [言語リファレンス §1.3](language_reference.md#13-名前解決)。✅ 2026-09-20
+      ローカルの可視範囲・実行時評価順・配置属性の規則は維持。詳細は [言語リファレンス §1.3](../../../doc/language_reference.md#13-名前解決)。✅ 2026-09-20
 
-- [x] モジュール `options(bss: "...");` と `block { ... } options(bss: "...");` によるグローバル変数・可変 soa の既定配置。個別 `segment` 優先、モジュール間非伝播。詳細は [v2_bss.md](v2_bss.md)。✅ 2026-09-20
+- [x] モジュール `options(bss: "...");` と `block { ... } options(bss: "...");` によるグローバル変数・可変 soa の既定配置。個別 `segment` 優先、モジュール間非伝播。詳細は [Agent/wiki/design/bss.md](../design/bss.md)。✅ 2026-09-20
 
-V2 の追加検討（2026-09-20）は [配置・デバッグ環境の検討](v2_placement_debugging.md)。
+V2 の追加検討（2026-09-20）は [配置・デバッグ環境の検討](../placement-debugging.md)。
 モジュール / 宣言グループの BSS 指定、関数・変数のブロックを 256 バイト境界をまたがず配置する要求、
 Mesen の farcall スタック表示、一時ディレクトリ作成失敗の調査を記録する。BSS 指定と一時ディレクトリ失敗時の診断は実装済み、その他は検討段階。
 
-追加候補の検討記録（2026-09-20）は [language_feature_candidates.md](language_feature_candidates.md)。
+追加候補の検討記録（2026-09-20）は [Agent/wiki/plans/language-feature-candidates.md](language-feature-candidates.md)。
 `len` / `static_assert` → `enum` → 読み取り専用ポインタの順を推奨する提案で、採用・仕様・実装順は未確定。
 
-slice・固定容量 vector の後続の設計案は [v3_slices_vector.md](v3_slices_vector.md)
+slice・固定容量 vector の後続の設計案は [Agent/discussions/2026-09-20-v3-slices-vector.md](../../discussions/2026-09-20-v3-slices-vector.md)
 （将来の `#fc 3` 向け。検討中・未実装。今すぐ実装する項目ではない）。
 static if、CHR パディング、バンクの名前指定、差分コンパイル、組み込み・低頻度の予約語の `@` 表記、
 `options(...)` → `@(...)` の決定（未実装）、機能の使用許可の候補は
-[FC V3 検討メモ](v3_plan.md) に記録する。仕様確認中の項目を含み、実装開始は未指示。
+[FC V3 検討メモ](../../discussions/2026-09-20-v3-plan.md) に記録する。仕様確認中の項目を含み、実装開始は未指示。
 同メモ §7〜§9 に、`int` の廃止と整数型名、`char`、`printf` の見直しと NES エミュレータの
 PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記録する。
 
@@ -167,10 +167,10 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
 
 整数の規則の意味の変更から fc 4（`#fc 4`）にする。fc 2 / fc 3 の意味は変えず、新しい規則は `#fc 4` のモジュールだけに入れる
 （主要なプロジェクトと fclib は fc 3 に移行済みのため）。同じ版で、互換性のために後回しにした 2 件と標準ライブラリの拡充も
-入れる。設計と論点は [v4_plan.md](v4_plan.md)。
+入れる。設計と論点は [Agent/wiki/plans/v4-plan.md](v4-plan.md)。
 
-- [x] 整数の規則を決める（v4_plan.md §1.3 の A〜F: 外側からの拡張、8 ビットで上の桁を捨てる形の警告、符号の混在、暗黙の縮小、
-      範囲外の定数と const の型の注釈、シフトの結果の型など）。案ごとの影響は 2026-09-28 に数えた（v4_plan.md §1.5。
+- [x] 整数の規則を決める（Agent/wiki/plans/v4-plan.md §1.3 の A〜F: 外側からの拡張、8 ビットで上の桁を捨てる形の警告、符号の混在、暗黙の縮小、
+      範囲外の定数と const の型の注釈、シフトの結果の型など）。案ごとの影響は 2026-09-28 に数えた（Agent/wiki/plans/v4-plan.md §1.5。
       castle で A 19・B 187・C 77・D 4・E 19。B は意図どおりの書き方がほとんどで警告に向かず、C は全部が「符号付きが勝つ」に頼っている）。
       決定（2026-09-28）: E（範囲外の定数）はエラー（明示の `as` は通す）、D（大きさが減る暗黙の縮小）はエラー（同じ大きさの
       符号違いは通す）、A は A1（代入先と式の中の一番広い型で計算）、B（8 ビットで上の桁を捨てる形）は警告しない、C は今のまま
@@ -186,7 +186,7 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       fclib の新しい API）は後の段で、動作で確かめる
 - [x] 名前付きの文字列定数を slice にすると終端の 0 が入る件を直す（v4 だけ。migrate は宣言を長さつきに） ✅ 2026-09-29
 - [x] `fastcall` の廃止（asm で書いた関数との規約の指定をどうするかも） ✅ 2026-09-29（asm の関数は `@(abi: "frame")` と `scratch: N`、
-      fc 4 の extern は abi の明示が必須、fclib を fc 4 に移した。v4_plan.md §2）
+      fc 4 の extern は abi の明示が必須、fclib を fc 4 に移した。Agent/wiki/plans/v4-plan.md §2）
 - [ ] slice の引数の受け渡しを縮める: 呼び出し側のフレームで slice を組み立ててから呼び先のフレームへ写し直している（`@format` の 1 回
       約 150 バイト・printf 約 115 バイトの大半。呼び先のフレームに直に組み立てれば半分ほど）。✅ 2026-09-29 の一部: -O 2 の
       `opt.splitSliceArgs`（段の名前 `sliceargs`）が「一時変数のポインタと長さを書いてすぐ push_arg」をポインタと長さの 2 つの
@@ -216,23 +216,23 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
 - [x] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ） ✅ 2026-09-29（警告は構文の lint
       `bitwiseWithComparison` として既にあった。見落としたのは `fcc test` が警告を出していなかったから: `fcc test` で出し、
       pkg/fc の TestFclibModuleTests と TestFclibNoWarnings が fclib のモジュールの警告を見張る）
-- [ ] 標準ライブラリの大幅な拡充（slice を使う）と、その API の移行（v4_plan.md §3）。2026-09-29: 互換は考えず作り直す、printf は
-      `@format`（snprintf 相当）のラッパーに。計画と決めることは [v4_stdlib.md](v4_stdlib.md)。✅ 2026-09-29: 段 2（どのターゲットでも
+- [ ] 標準ライブラリの大幅な拡充（slice を使う）と、その API の移行（Agent/wiki/plans/v4-plan.md §3）。2026-09-29: 互換は考えず作り直す、printf は
+      `@format`（snprintf 相当）のラッパーに。計画と決めることは [Agent/wiki/plans/v4-stdlib.md](v4-stdlib.md)。✅ 2026-09-29: 段 2（どのターゲットでも
       使うもの）と段 3（NES の土台: nes / frame / vram / pal / oam / pad、内蔵のフォント、examples/hello、`fcc test -t nes`）。残りは
-      v4_stdlib.md §7 の段 4・5
+      Agent/wiki/plans/v4-stdlib.md §7 の段 4・5
 - [x] fc 4 の使われない private な変数は領域を取らない（@(test) の関数だけが使うバッファなど） ✅ 2026-09-29
 - [x] シンプルなパッケージマネージャ（fc.toml の `[lib.NAME]`: path / git + rev + dir、`fc.lock`、`fcc lib`） ✅ 2026-09-29
-      （v4_stdlib.md §9。✅ 2026-09-29: `fcc lib add`、`-d` の要約に置き換えを出す。✅ 2026-09-29: ライブラリの依存。残り: `use ライブラリ/モジュール`、tarball）
+      （Agent/wiki/plans/v4-stdlib.md §9。✅ 2026-09-29: `fcc lib add`、`-d` の要約に置き換えを出す。✅ 2026-09-29: ライブラリの依存。残り: `use ライブラリ/モジュール`、tarball）
 
 ## v3: 一般的な用途で不便な仕様（2026-09-26 調査）
 
-仕様全般を「普通に書いたら困るもの」の観点で調べた結果。再現と直す方向は [v3_plan.md §10](v3_plan.md)。
+仕様全般を「普通に書いたら困るもの」の観点で調べた結果。再現と直す方向は [Agent/discussions/2026-09-20-v3-plan.md §10](../../discussions/2026-09-20-v3-plan.md)。
 済んだもの: const の表の中の slice とポインタ、型を省いた変数の const の引き継ぎ（2026-09-26）。
 
 **決定（2026-09-26）:** 配列リテラルの要素がアドレスになる件、ポインタの加減算の単位、コンパイラが落ちる・asm が壊れるもの
 （case の文字列、インライン展開した関数の中の const 表、ローカルの `[?]` の配列）は**修正する**。名前付きの文字列定数の長さは
-互換性のため今はこのまま（後で直す候補）。整数の変換・拡張（拡張の規則、途中の上の桁を捨てる形の警告、符号の混在、リテラルの型、暗黙の縮小）は**保留**（検討の経過は v3_plan.md §10.2）。
-**2026-09-28: 整数の変換・拡張と名前付きの文字列定数の長さは fc 4 で直す（上の「v4」と v4_plan.md）。** 下の該当する項目は v4 で決める。
+互換性のため今はこのまま（後で直す候補）。整数の変換・拡張（拡張の規則、途中の上の桁を捨てる形の警告、符号の混在、リテラルの型、暗黙の縮小）は**保留**（検討の経過は Agent/discussions/2026-09-20-v3-plan.md §10.2）。
+**2026-09-28: 整数の変換・拡張と名前付きの文字列定数の長さは fc 4 で直す（上の「v4」と Agent/wiki/plans/v4-plan.md）。** 下の該当する項目は v4 で決める。
 警告にするもの: 必ず真・偽になる比較、未知・無効な属性（エラーにするかは後で）。
 割り込みは asm で書く前提で、未定義なら空のハンドラを作り stdio の NMI とぶつからないようにする。文字リテラル・条件式・
 do-while は「やること候補（すぐではない）」。
@@ -252,7 +252,7 @@ do-while は「やること候補（すぐではない）」。
 - [x] 高: **修正する（2026-09-26 決定）** `@(address:)` / fc.toml の `[ram.*]` と fc の ZP / SRAM の重なりを検出しない（OAM を $0200 に置くと FC_FARCALL と重なる） ✅ 2026-09-26（fix/v3-survey）
 - [ ] 高: **する（2026-09-26 決定。後回し: 割り込みの定型文と一緒に 2026-09-27）** `@(farcall)` を忘れると切替バンクの関数を `jsr` で呼んで黙って壊れる → fc.toml に切替バンクが
       あれば far call を既定で有効にする（トランポリン・状態変数はマッパーのプロファイルから自動で。手動で管理するモジュールは `@(near)`）
-- [ ] 中: **保留（2026-09-26）→ v4 で決める（2026-09-28。v4_plan.md §1.3 E）** スカラーの const の型の注釈が無視される（`const B:u8 = 300` が u16）。範囲内の値は今も宣言の型になり、
+- [ ] 中: **保留（2026-09-26）→ v4 で決める（2026-09-28。Agent/wiki/plans/v4-plan.md §1.3 E）** スカラーの const の型の注釈が無視される（`const B:u8 = 300` が u16）。範囲内の値は今も宣言の型になり、
       無視されるのは範囲外の値だけ（`300`・`-1` を u8、`200` を i8）なので、整数の変換の方針（範囲外の扱い）と一緒に決める。
       fc 2 の test_var が `const INT16:int = 65535` の値 65535 に頼っていて、migrate の ROM 一致の方針とも関係する
 - [x] 中: **する（2026-09-26 決定）** struct・配列・ポインタに算術・順序比較が通る → `==` / `!=`（中身の比較）は正式な仕様にし、
@@ -271,12 +271,12 @@ do-while は「やること候補（すぐではない）」。
 
 ### 言語: 整数と式
 
-- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。v4_plan.md §1.3 A）** 整数の拡張（案）: 式全体を「代入先の型」と「式の中で一番広い型」の広いほうで計算する
+- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。Agent/wiki/plans/v4-plan.md §1.3 A）** 整数の拡張（案）: 式全体を「代入先の型」と「式の中で一番広い型」の広いほうで計算する
       （`var d:u16 = a + b`、`score += pts * 10`、`0x2000 + y * 64`、u16 の引数が正しくなる。全部 8 ビットの式は今のまま）
-- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。v4_plan.md §1.3 B）** 8 ビットで計算して途中の上の桁を捨てる形を警告（`(x1 + x2) / 2`、`hp * 64 / max`、
+- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。Agent/wiki/plans/v4-plan.md §1.3 B）** 8 ビットで計算して途中の上の桁を捨てる形を警告（`(x1 + x2) / 2`、`hp * 64 / max`、
       `(v * 3) >> 2`、`a.x + a.w > b.x`）。値の範囲（定数・`& m`・`% n`）で収まると分かるものは除く。消す書き方は
       `(a + b) as u8`（8 ビットのつもり）と `a as u16 + b`（広げる）
-- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。v4_plan.md §1.3 C）** 符号の混在（u8 + i8 が i8 になる）。ほかの言語との比較と案は v3_plan.md §10.2
+- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。Agent/wiki/plans/v4-plan.md §1.3 C）** 符号の混在（u8 + i8 が i8 になる）。ほかの言語との比較と案は Agent/discussions/2026-09-20-v3-plan.md §10.2
 - [x] 高: **する（2026-09-27 決定）** リテラルの型: **リテラルは相手の型に合わせる**（Go・Rust と同じ。今は値だけで u8 / i8 / u16 / i16 が
       決まり、同じ大きさなら符号付きが勝つので `s < 200`（s:i8）が -56 との比較になる）。castle の `vx < 0`（i8 と非負のリテラル、
       約 60 か所）は今と同じ意味のまま。相手の型に収まらないリテラルは、**演算（`+ - * / % & | ^ << >>`）では相手の型に切り詰める**
@@ -286,7 +286,7 @@ do-while は「やること候補（すぐではない）」。
       規則（保留）とは別に入れられる ✅ 2026-09-27（feat/literal-typing。型のない定数 `ir.Value.Untyped` と `sema.adaptLiteral`。
       定数のほうが大きい型（`x * 300`、`0x2000 + y * 32`）は今までどおり広げる。castle・miku・darius の ROM は変わらない。darius の
       `i != -1` は作業ツリーで `i != 255` に直っていた（未コミット））
-- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。v4_plan.md §1.3 D / E）** 暗黙の縮小（範囲外の定数はエラー、変数の縮小は警告か文書を直す）
+- [ ] 高: **保留（2026-09-26）→ v4 で決める（2026-09-28。Agent/wiki/plans/v4-plan.md §1.3 D / E）** 暗黙の縮小（範囲外の定数はエラー、変数の縮小は警告か文書を直す）
 - [x] 高: **する（2026-09-26 決定）** 必ず真・偽になる比較を警告（`i < 256`（u8）の無限ループ、`hp - dmg < 0`）（符号なしと範囲外の正の定数・`< 0` だけ） ✅ 2026-09-27（feat/v3-checks）
 - [x] 高: **将来対応（2026-09-27）** 符号なしの値と負の定数の比較（`x == -1`、x は u8）を正しく警告かエラーにする。
       ✅ 2026-09-27 リテラルの型（上）でエラーになった（`-1 does not fit in u8`。castle・darius は書き換え済み）。今の規則
@@ -302,7 +302,7 @@ do-while は「やること候補（すぐではない）」。
 - [x] 中: 定数添字の範囲外をエラーに（値が飛び飛びの enum の表も） ✅ 2026-09-29（配列の定数の添字。slice・ポインタは長さが分からないので見ない。飛び飛びの enum の表は残り）
 - [ ] 低: `if (x = 0)` の警告、enum の `++` / `--`、const 表の定数添字を定数に（`MONS[1].hp`）
 - [x] 中: 最適化: u8 × u8 → u16（`m as u16 * n`）を 8×8→16 のルーチンに（今は 16×16 の `__mul_16`。`__mul_8t16` は「ほぼ未実装」）、
-      `((a as u16 + b) / 2) as u8` を `clc / lda / adc / ror a` に（v3_plan.md §10.2）。✅ 2026-09-29: 前半（`__mul_8t16` を x²/4 の
+      `((a as u16 + b) / 2) as u8` を `clc / lda / adc / ror a` に（Agent/discussions/2026-09-20-v3-plan.md §10.2）。✅ 2026-09-29: 前半（`__mul_8t16` を x²/4 の
       16 ビットの表引きで作り直し、0〜255 どうしの 16 ビットの掛け算で呼ぶ。約 400 → 約 60 サイクル。ランタイムの並びが変わるので
       ROM はみな変わり、bench は置き場所のページ跨ぎで ±0.4%。castle の画面は前と同じ）。✅ 2026-09-30: 後半の平均（opt の段
       `avg`: 8 ビットの add と、その桁あふれを上に入れる rorc。インタプリタの add も C を作る。TestAverageBytes）
@@ -357,7 +357,7 @@ do-while は「やること候補（すぐではない）」。
 
 ### 2 回目の調査（2026-09-27）
 
-詳細は v3_plan.md §10.7。
+詳細は Agent/discussions/2026-09-20-v3-plan.md §10.7。
 
 - [x] 判断の要らないバグ 15 件（SSA の φ と未定義、i8 の初期値の符号拡張、2 バイトの要素の 129 番目以降、ポインタの負の添字、
       型付きの定数の畳み込み、16 ビットを超える定数の比較、@min / case の定数、return 忘れの見逃し、ポインタの算術の const、
@@ -386,11 +386,11 @@ do-while は「やること候補（すぐではない）」。
 - [ ] 低〜中: fclib の API の slice 版（`print`、mem）、lzw の ZP の固定番地と §4.5 の ZP の配置の文書、inflate の `unpack`
 - [x] 低: math（`sign` の戻り値、`atan` の範囲、i16 の abs、rand のシード、10 進・BCD の表示）、nes.fc の APU レジスタ・ビット定数、pad の 2P
       ✅ 2026-09-29（fc 4 の math・rand・fmt・nes・pad）
-- [ ] 低: 文書が実装より古い所（struct の `==`（正式な仕様にする: 2026-09-26）、u16 の添字、代入の大きさ、ポインタ演算、ZP の配置。v3_plan.md §10.6）
+- [ ] 低: 文書が実装より古い所（struct の `==`（正式な仕様にする: 2026-09-26）、u16 の添字、代入の大きさ、ポインタ演算、ZP の配置。Agent/discussions/2026-09-20-v3-plan.md §10.6）
 
 ## ツール・開発体験
 
-- [x] 同梱ライブラリ用の一時ディレクトリ作成失敗に、親ディレクトリ・OS エラー・環境変数による対処を表示。探索・展開方法は変更しない（[検討記録 §4](v2_placement_debugging.md)）。✅ 2026-09-20
+- [x] 同梱ライブラリ用の一時ディレクトリ作成失敗に、親ディレクトリ・OS エラー・環境変数による対処を表示。探索・展開方法は変更しない（[検討記録 §4](../placement-debugging.md)）。✅ 2026-09-20
 
 - [x] **デバッグ情報**: `fcc build -g` が ROM の隣に `.dbg`（fc のソース行入り）と `.mlb` を書く。Mesen が自動で読む
       （development_notes「Mesen でのソースレベルデバッグ」） ✅ 2026-09-19
@@ -404,7 +404,7 @@ do-while は「やること候補（すぐではない）」。
 - [x] 自動テストの強化（2026-09-27）: 定数の畳み込みと実行時の計算の差分テスト（TestRandomConstFold。畳み込みの型の食い違いを
       4 種類直した）、v3m の自己検査、生成器の拡張（初期値なしの変数・暗黙の拡張・大きな配列・負のずれ・fc 3 の新しい文法）、
       インタプリタの判定の範囲、夜間の CI（fuzz.yml）、通ってはいけないプログラムの表（TestMustError / TestMustWarn）。
-      development_notes.md の「差分テストの判定の弱点」 ✅ 2026-09-27
+      Agent/wiki/development-notes.md の「差分テストの判定の弱点」 ✅ 2026-09-27
 
 ## 構造の整理（残り。2026-09-28 の調査）
 
@@ -434,11 +434,11 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       場当たりで、達すると黙って止まる）、`compact()` が Passes に 11 か所、`ops[i+1] == nil` の穴で黙って効かない隣接判定が
       6 か所。`*Op` を鍵にして def-use を差分で更新し、CFG / 支配木 / ループを無効化つきのキャッシュにする
       （`ir.Verify` は 2026-09-28 に入れた。CFG の中の支配木・ループのキャッシュも。命令列を変えたら CFG を作り直す前提はそのまま）
-- [x] **メモリアクセスの集約** ([ir_memops.md](ir_memops.md)) ✅ 2026-09-28: 7 つのオペコード + `Scaled` + 配列への cast を
+- [x] **メモリアクセスの集約** ([Agent/wiki/design/ir-memops.md](../design/ir-memops.md)) ✅ 2026-09-28: 7 つのオペコード + `Scaled` + 配列への cast を
       `load_mem` / `store_mem` と `Base + Index * Scale + Disp`（store は `Width`）に。生成コードは変えていない（ROM はバイト一致）。
       定数の添字を Disp に畳んで絶対番地 (`lda a+3`) で読む最適化 (`constidx`) と、struct の配列フィールドをポインタ経由で
       引く形のポインタ + 添字 + disp (`fieldptr`) も入れた。
-- [x] **演算命令の幅と符号** ✅ 2026-09-28 (`ir/sign.go`、development_notes.md「コードの構造」): eq / lt は比較の幅
+- [x] **演算命令の幅と符号** ✅ 2026-09-28 (`ir/sign.go`、Agent/wiki/development-notes.md「コードの構造」): eq / lt は比較の幅
       `Op.Width`、lt / div / mod / shift_right は `Op.Sign` を持ち、sema が作るときに型から決める (`InferWidthSign`)。
       「比較は広い方の幅、どちらかが符号付きなら符号付き」「除算は Dst の符号」「右シフトは入力の符号」を opt/ssa・unroll・
       codegen・regalloc・carry・split がそれぞれ型から導いていたのを、命令の値を読む形に (入力を差し替えても意味が
@@ -471,7 +471,7 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 **記録のみ・修正しない（2026-09-20、ユーザー方針）:** interrupt 属性では、暗黙の乗除算・剰余ルーチンが
 使う共有 `reg` を保護できず、割り込みによって通常処理の演算結果を壊し得る。
 タイミング上の要求から interrupt 属性はほぼ使わない想定のため、現時点では対策を実装しない。
-詳細は [V3 メモ §6 の既知の問題](v3_plan.md) を参照。
+詳細は [V3 メモ §6 の既知の問題](../../discussions/2026-09-20-v3-plan.md) を参照。
 
 - [x] **v1 パーサの削除**: `fcc migrate` / `internal/migrate` / `.rb` マクロの互換 / `test/*.fc` の v1 版を削除。
       `#fc 2` は任意に、`#fc 1` はエラー。v1 だけの構文は「v2 ではこう書く」のエラーのまま残す ✅ 2026-09-19
@@ -480,6 +480,6 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 - [ ] castle 側（**SSA が終わってからまとめて反映**。2026-09-19 決定）: examples/castle に入れた変更（`data.asm` の
       `FC_SZP` / `FC_SRAM` / `FC_SP`、`mmc3.fc` の `options(static_zp:, static_ram:)`、`ppu.fc` のスプライト消去）、
       `en.process` のバンク切り替えを「変わるときだけ」に、`bg.cell_type` / `bg.cell` の `options(inline: true)`、
-      NSD の `options(abi: "cc65")` 化、far call のラッパ撤去（v2_farcall.md §6）、en.fc の soa 化の実験。
+      NSD の `options(abi: "cc65")` 化、far call のラッパ撤去（Agent/wiki/design/farcall.md §6）、en.fc の soa 化の実験。
       その後 feature/static-frame → feature/v2 のマージ
 - [ ] ca65 / ld65 は当面維持（内製アセンブラはやらない。2026-09-14 決定）

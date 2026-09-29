@@ -1,6 +1,6 @@
 # FC3: slice の長さ・ABI・sentinel・移行の検討
 
-記録: 2026-09-20。[設計案](v3_slices_vector.md) と [API 利用例](v3_slices_api_examples.md) の補足。
+記録: 2026-09-20。[設計案](2026-09-20-v3-slices-vector.md) と [API 利用例](2026-09-20-v3-slices-api-examples.md) の補足。
 **将来の `#fc 3` のアイデア。未実装・未確定。今すぐ言語機能や migrate を実装する指示ではない。**
 現行ソースを使った測定は既存の struct の比較であり、FC3 の実装ではない。
 
@@ -114,8 +114,8 @@ function main():void {
 }
 ```
 
-実装の参照先: [引数のレジスタ割り当て](../internal/frames/frames.go)、
-[引数のバイト単位コピー](../internal/codegen/llc.go)。バンク切替込みの実ゲームの計測は行っていない。
+実装の参照先: [引数のレジスタ割り当て](../../internal/frames/frames.go)、
+[引数のバイト単位コピー](../../internal/codegen/llc.go)。バンク切替込みの実ゲームの計測は行っていない。
 
 ## 3. sentinel 終端の調査
 
@@ -142,7 +142,7 @@ Zig の `[:0]const u8` は実行時の長さを持ち、その位置の要素が
 | `src/event.fc` のアイテム取得文 | 文字列のコピー・連結 | 途中は ByteBuffer、旧表示 API に渡す最後に 0 を付ける |
 | `src/fs.fc` のバイナリ読み出し、PPU データ | データとサイズの管理 | 通常の slice。0 をデータとして扱い、終端規則は付けない |
 
-文字変換は [internal/sema/builtins.go](../internal/sema/builtins.go) の `textmap` が変換後のコード列に 0 を追加している。
+文字変換は [internal/sema/builtins.go](../../internal/sema/builtins.go) の `textmap` が変換後のコード列に 0 を追加している。
 したがって `_T(...)` も終端保証の供給元にできる。
 その長さは変換後のコード数であり、入力の UTF-8 バイト数や画面の文字幅ではない。
 castle の `_print` は改行・濁点などを解釈するため、コード数と描画タイル数も同一視しない。
@@ -212,10 +212,10 @@ Zig 風の sentinel 配列そのものを導入するなら、論理長と格納
 
 ## 4. migrate の現状と将来の移行
 
-**現行の migrate は残っていない。** [言語リファレンス](language_reference.md) と
-[roadmap](roadmap.md) に、2026-09-19 に v1 処理系と `fcc migrate` を削除した記録がある。
-[CLI](../cmd/fcc/main.go) に migrate コマンドはなく、`internal/migrate` も存在しない。
-[lexer](../internal/syntax/lexer.go) の現行バージョンは 2。
+**現行の migrate は残っていない。** [言語リファレンス](../../doc/language_reference.md) と
+[roadmap](../wiki/plans/roadmap.md) に、2026-09-19 に v1 処理系と `fcc migrate` を削除した記録がある。
+[CLI](../../cmd/fcc/main.go) に migrate コマンドはなく、`internal/migrate` も存在しない。
+[lexer](../../internal/syntax/lexer.go) の現行バージョンは 2。
 v1 入力への診断に出る migrate は **fc 0.1 系の過去のツール**を指し、現在使えるコマンドではない。
 
 今回の案を採用するときは、将来の v2 → v3 移行手段を別途設計する必要がある。

@@ -1,6 +1,6 @@
 package opt
 
-// 関数ポインタ表の呼び出しの直接化 (devirtualization。doc/v2_ssa.md §8):
+// 関数ポインタ表の呼び出しの直接化 (devirtualization。Agent/wiki/design/ssa.md §8):
 //
 //	index p = &TBL[i]; load_mem f = p          TBL は const の表で要素が全部関数 (castle の en_vtbl.PROCESS)
 //	push_result; push_arg ..; call d = f

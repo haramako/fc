@@ -1,5 +1,5 @@
 // Package rle は NES Screen Tool の RLE の形式 (neslib の vram_unrle が読むもの) の圧縮と展開。fc の組み込み @rle がコンパイル時に
-// 圧縮し、fclib/rle.fc と fclib/nes/vram.fc が展開する (doc/v4_stdlib.md §8 の 10)。
+// 圧縮し、fclib/rle.fc と fclib/nes/vram.fc が展開する (Agent/wiki/plans/v4-stdlib.md §8 の 10)。
 //
 // 形式: 先頭の 1 バイトが印 (データに現れない値)。続く並びで、印でないバイトはそのまま出し (直前の値として覚える)、印の次の
 // バイト n が 0 なら終わり、そうでなければ直前の値を n 回出す。

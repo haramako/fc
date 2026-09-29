@@ -1,6 +1,6 @@
 package codegen
 
-// fc 3 の @log の地点 (doc/v3_plan.md §9、ir/log.go)。fcc build -g のとき、注釈 (Op.Logs) の付いた命令ごとに:
+// fc 3 の @log の地点 (Agent/discussions/2026-09-20-v3-plan.md §9、ir/log.go)。fcc build -g のとき、注釈 (Op.Logs) の付いた命令ごとに:
 //
 //   - IR のコメント行に印 `;@fclog N` を付けておき、ピープホールなどの後で、その行の前に地点のラベル `__fclog_N:` を置く
 //     (印はコメントなので最適化には見えない。ラベルは ca65 の `@` ローカルラベルのスコープを切るので、地点のある関数だけ

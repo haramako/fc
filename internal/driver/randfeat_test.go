@@ -1,6 +1,6 @@
 package driver
 
-// fuzz の生成器の機能の名前と入れ切り (効果の測定のため。doc/development_notes.md「fuzz の効果の測定」)。
+// fuzz の生成器の機能の名前と入れ切り (効果の測定のため。Agent/wiki/development-notes.md「fuzz の効果の測定」)。
 //
 //	go test ./internal/driver -run TestRandom -fuzzoff soa,far     // soa と far call を作らない
 //	go test ./internal/driver -run TestRandom -fuzzonly uninit      // 名前の付いた機能は uninit だけ (ほかは切る)

@@ -1,5 +1,5 @@
 #fc 4
-// 自機と共通のもの (examples/miku の fc 4 の標準ライブラリへの移植。doc/v4_stdlib.md §7 の 5)
+// 自機と共通のもの (examples/miku の fc 4 の標準ライブラリへの移植。Agent/wiki/plans/v4-stdlib.md §7 の 5)
 use math;
 use oam;
 
