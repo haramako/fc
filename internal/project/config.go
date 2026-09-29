@@ -2,7 +2,8 @@ package project
 
 // プロジェクトの設定ファイル fc.toml (doc/v3_plan.md §1 / §3)。ソースの基準ディレクトリから親へ向かって最初に見つかった
 // ものを使う。TOML の必要な分だけを読む: `[section]` / `[a.b]` の見出し、`key = value` (値は true / false / 整数 /
-// "文字列")、`#` から行末のコメント。今使う見出しは [define.<module>] (@(build) の const の上書き)。
+// "文字列")、`#` から行末のコメント。今使う見出しは [define.<module>] (@(build) の const の上書き)、[lib.<name>] (ライブラリ:
+// libs.go)、バンクの表 (layout.go)。
 
 import (
 	"bufio"
@@ -24,6 +25,7 @@ const ConfigName = "fc.toml"
 type ProjectConfig struct {
 	Path     string                       // 見つからなければ ""
 	Sections map[string]map[string]string // 見出し → キー → 値の綴り (文字列は引用符を外したもの)
+	Order    []string                     // 見出しの書いた順 ([lib.*] の探索の順)
 }
 
 // FindConfig は dir から親へ向かって fc.toml を探す (無ければ Path が "" の空の設定)。
@@ -67,6 +69,7 @@ func parseConfig(path string, data []byte) (*ProjectConfig, error) {
 			}
 			if cfg.Sections[section] == nil {
 				cfg.Sections[section] = map[string]string{}
+				cfg.Order = append(cfg.Order, section)
 			}
 			continue
 		}

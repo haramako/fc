@@ -54,6 +54,8 @@ type BuildOptions struct {
 	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対)。use / @include と asm の include で、ソースのディレクトリの後、fclib
 	// より前に探す (fcc test がテストするモジュールのディレクトリを足す。fc.toml の [lib.*] もここに入る: doc/v4_stdlib.md §9)
 	LibPath       []string
+	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー。doc/v4_stdlib.md §9)
+	Offline bool
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
@@ -108,7 +110,9 @@ type Compiler struct {
 	FCHome   string // fclib/ share/ を含むディレクトリ
 	ctx      context.Context
 	jobs     int      // ca65 の並列数
-	libDirs  []string // 追加のライブラリの探索先 (BuildOptions.LibPath を絶対パスにしたもの)
+	libDirs  []string // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
+	optLibs  []string // BuildOptions.LibPath を絶対パスにしたもの
+	offline  bool     // BuildOptions.Offline
 	target   string
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
@@ -202,7 +206,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if c.buildDir == "" {
 		c.buildDir = filepath.Join(c.dir, DefaultBuildDirName)
 	}
-	c.libDirs = nil
+	c.optLibs = nil
 	for _, d := range opt.LibPath {
 		if !filepath.IsAbs(d) {
 			d = filepath.Join(c.dir, d)
@@ -210,8 +214,10 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		if a, err := filepath.Abs(d); err == nil {
 			d = a
 		}
-		c.libDirs = append(c.libDirs, filepath.ToSlash(d))
+		c.optLibs = append(c.optLibs, filepath.ToSlash(d))
 	}
+	c.libDirs = c.optLibs
+	c.offline = opt.Offline
 	c.jobs = opt.Jobs
 	if c.jobs <= 0 {
 		c.jobs = runtime.NumCPU()
@@ -617,6 +623,19 @@ func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, err
 	if c.layout != nil && c.layout.Fragment != "" && !filepath.IsAbs(c.layout.Fragment) {
 		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
 	}
+	// fc.toml の [lib.*] (git のものは取ってくる) を、BuildOptions.LibPath の後・fclib の前の探索先に
+	libs, err := (&project.Resolver{Offline: c.offline, Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, "fcc: "+f+"\n", a...) }}).Resolve(cfg)
+	if err != nil {
+		return nil, err
+	}
+	dirs, err := project.LibDirs(libs, c.target)
+	if err != nil {
+		return nil, err
+	}
+	c.libDirs = append([]string{}, c.optLibs...)
+	for _, d := range dirs {
+		c.libDirs = append(c.libDirs, filepath.ToSlash(d))
+	}
 	return cfg.Defines(cli)
 }
 
@@ -781,13 +800,13 @@ func (c *Compiler) ca65Args(path string) []string {
 		"-o", obj,
 		"-I", filepath.Join(c.FCHome, "share"),
 		"-I", c.buildDir,
-		"-I", filepath.Join(c.FCHome, "fclib"),
 		"-I", c.dir,
-		"-I", filepath.Join(c.FCHome, "fclib", c.target),
 	}
+	// use と同じ順: ソースのディレクトリ → ライブラリ → fclib (ライブラリが fclib の asm を置き換えられるように)
 	for _, d := range c.libDirs {
 		args = append(args, "-I", filepath.FromSlash(d))
 	}
+	args = append(args, "-I", filepath.Join(c.FCHome, "fclib"), "-I", filepath.Join(c.FCHome, "fclib", c.target))
 	if c.dir != "." {
 		// .incbin は -I でなく --bin-include-dir で探す (既定は作業ディレクトリ)
 		args = append(args, "--bin-include-dir", c.dir)

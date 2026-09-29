@@ -23,6 +23,7 @@ Commands:
     fmt              format source files (see fcc fmt -h)
     migrate          rewrite older sources as the latest fc (see fcc migrate -h)
     test             run the @(test) functions of modules (see fcc test -h)
+    lib              fetch / update / list the libraries of fc.toml [lib.*] (see fcc lib)
     check            compile without producing files and report errors / warnings
     size             show code size per function from an ld65 --dbgfile (see fcc size -h)
     watch            rebuild whenever a source file changes (see fcc watch -h)
@@ -37,6 +38,7 @@ Options:
     -t, --target     target platform ( nes, emu )
     -O LEVEL         optimize level (0-2)
     -D MOD.NAME=VAL  override a @(build) const (repeatable; applied after fc.toml [define.MOD])
+    --offline        do not fetch git libraries of fc.toml [lib.*] (use the cache only)
 `
 
 func main() {
@@ -59,6 +61,8 @@ func run() int {
 		return runMigrate(args[1:])
 	case "test":
 		return runTest(args[1:])
+	case "lib":
+		return runLib(args[1:])
 	case "version", "--version", "-v":
 		return runVersion()
 	case "check":
@@ -81,6 +85,7 @@ func run() int {
 	optLevel := fs.Int("O", 2, "optimize level (0-2)")
 	var defines stringList
 	fs.Var(&defines, "D", "override a @(build) const: module.NAME=value (repeatable)")
+	offline := fs.Bool("offline", false, "do not fetch git libraries")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 1
 	}
@@ -94,6 +99,7 @@ func run() int {
 		Debug:         *gFlag,
 		SizeReport:    *sizeFlag,
 		Defines:       defines,
+		Offline:       *offline,
 	}
 	switch com {
 	case "run":

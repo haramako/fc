@@ -46,6 +46,27 @@ public use a from mod;   // 選択的インポートを再輸出する
 
 相互 `use`（A が B を use し、B が A を use する）は許される。
 
+モジュールは「ソースのディレクトリ → fc.toml の `[lib.*]` のライブラリ（書いた順に、それぞれ `<lib>` と `<lib>/<target>`）→
+`fclib/` → `fclib/<target>/`」の順に探す（`include` と asm の `.include` も同じ順）。ライブラリは fclib のモジュールを置き換えられる。
+2 つのライブラリに同じ名前のモジュールがあればエラー（2026-09-29。[v4_stdlib.md](v4_stdlib.md) §9）:
+
+```toml
+# fc.toml
+[lib.util]
+path = "../nes_util"                        # フォルダ (fc.toml からの相対)
+
+[lib.sound]
+git = "https://github.com/someone/fc-sound" # git のリポジトリ
+rev = "v1.2.0"                              # タグ・ブランチ・コミット (無ければ既定のブランチ)
+dir = "src"                                 # (任意) リポジトリの中のモジュールのある所
+```
+
+git のライブラリはビルドのときにユーザーのキャッシュ（`os.UserCacheDir()/fc/lib`。`FC_LIB_CACHE` で変えられる）へ `git` で
+取ってきて、そのコミットを fc.toml の隣の `fc.lock` に書く。以後のビルドは fc.lock のコミットを使う（fc.toml の git / rev を
+変えれば取り直す）。`fcc lib update [名前]` で rev の今のコミットに進め、`fcc lib fetch` で fc.lock のとおりに揃え、`fcc lib list`
+で並べる。`fcc build --offline` は取ってこない（キャッシュに無ければエラー）。ビルドはライブラリのコードを実行しない。
+ライブラリがほかのライブラリを使う（依存）のは後で。
+
 ### 1.2 可視性
 
 宣言（`var` / `const` / `function`）と `use` は**デフォルトで private**（モジュール内だけで見える）。
@@ -103,7 +124,7 @@ include("util.asm");      // ca65 ソースをこのモジュールのアセン�
 include("font.chr");      // CHR データ（拡張子で判定）
 ```
 
-ファイルは検索パス（ソースのディレクトリ → `fclib/` → `fclib/<target>/`）から探す。
+ファイルは検索パス（ソースのディレクトリ → fc.toml のライブラリ → `fclib/` → `fclib/<target>/`。§1.1）から探す。
 
 ### 1.5 `options` — モジュール属性
 

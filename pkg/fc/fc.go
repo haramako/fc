@@ -53,6 +53,9 @@ type Options struct {
 
 	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対。ソースのディレクトリの後、fclib より前に探す)。
 	LibPath []string
+
+	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー)。
+	Offline bool
 }
 
 // Result はビルドの結果 (生成物のパスと、Run 時の終了コード)。
@@ -148,6 +151,7 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		Stdout:        opt.Stdout,
 		Defines:       opt.Defines,
 		LibPath:       opt.LibPath,
+		Offline:       opt.Offline,
 	})
 }
 

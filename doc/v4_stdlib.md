@@ -488,6 +488,14 @@ dir = "src"                                 # (任意) リポジトリの中の�
 **決定（2026-09-29）: 下の 4 つとも推しのとおり**（fclib より前に探す、ビルドで自動で取ってくる、キャッシュはユーザーのキャッシュで
 共有、キーの名前はこの案のまま）。
 
+**実装（2026-09-29）**: `internal/project/libs.go`（`Libs` / `Resolver` / `LibDirs`。fc.toml の見出しの順を `ProjectConfig.Order` に
+持つようにした）、driver の `projectDefines` が build / check / migrate で決めて `libDirs` に入れる（asm の `-I` も「ソースの
+ディレクトリ → ライブラリ → fclib」の順に直した。前は fclib がソースのディレクトリより先だった）、`pkg/fc` の `LibFetch` /
+`LibUpdate` / `LibList`、`fcc lib`・`fcc build --offline`。git は bare の写し（`git/<キー>.git`）を持ち、コミットごとに
+`clone --shared --no-checkout` → `checkout --detach` で `src/<キー>@<コミット>` に取り出す（一時の名前で作ってから名前を変える）。
+テストは `internal/driver/libs_test.go`（path のライブラリ・<lib>/<target>・asm・fclib の置き換え・名前の衝突、ローカルの git の
+リポジトリでの fc.lock の固定・update・タグ・--offline）。`fcc build -d` の要約に置き換えを出すのは後で
+
 決めたときの検討:
 1. ライブラリを fclib より前に探す（置き換えられる。推し）か、後ろ（fclib が必ず勝つ）か
 2. ビルドで自動で取ってくる（推し）か、`fcc lib fetch` を明示で打つか

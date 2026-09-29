@@ -49,7 +49,11 @@ go test ./...
 ```
 
 fc のモジュールのテスト（`@(test)` の関数。`@assert` / `@assert_eq`）は `fcc test mod.fc` で走らせる（emu で実行し、全部
-通れば終了コード 0。language_reference.md §7）。
+通れば終了コード 0。`-t nes` なら内蔵の NES のランナーで。language_reference.md §7）。
+
+ほかのフォルダや git のリポジトリのモジュールは、fc.toml の `[lib.NAME]`（`path = "../lib"` か `git = "URL"` / `rev` / `dir`）で
+使える。git のものはビルドのときにユーザーのキャッシュへ取ってきて、コミットを `fc.lock` に固定する（`fcc lib fetch` /
+`update` / `list`。language_reference.md §1.1）。
 
 テストは `testdata/golden/` の golden データ (AST / IR / 割付後IR / アセンブリ / バイナリ /
 実行出力) との差分比較で行われます。golden は Go 自身の出力のスナップショットで、次で再生成します:

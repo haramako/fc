@@ -127,6 +127,7 @@ func (c *Compiler) collectRewrites(path, target string, cli []string, overlay ma
 		}
 	}()
 	c.dir = filepath.Dir(path)
+	c.target = target // (fc.toml のライブラリの <lib>/<target>)
 	defs, err := c.projectDefines(cli)
 	if err != nil {
 		return nil, err

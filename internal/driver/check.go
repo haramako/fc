@@ -74,6 +74,7 @@ func (c *Compiler) compileNoWrite(dir, target, main string, cli []string, cfg *i
 	if c.dir == "" {
 		c.dir = "."
 	}
+	c.target = target // (fc.toml のライブラリの <lib>/<target>)
 	defs, err := c.projectDefines(cli)
 	if err != nil {
 		return nil, err
