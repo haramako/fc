@@ -347,6 +347,8 @@ do-while は「やること候補（すぐではない）」。
 - [x] 中: `nes/ppu.fc`（OAM と DMA、vblank のキュー、パレット・ネームテーブルの転送）と OAM の置き場所の文書 ✅ 2026-09-29（fc 4 の
       frame / vram / pal / oam。OAM は既定 $0700、`[define.oam] ADDR`）
 - [ ] 中: マッパーのプロファイルからトランポリン・状態変数・reset の初期化を自動で（MMC3 の固定バンクの配置、`cli`）、fclib の mmc3 / mmc1 / uxrom
+      （2026-09-29: fc 4 の fclib に uxrom / mmc1 / mmc3 のモジュール（トランポリン・状態変数・init・IRQ の呼び出し口）。残りは
+      fc.toml からの自動の初期化）
 - [ ] 中: fc.toml の `[target]` に mirroring / battery / CHR-RAM、未知のキー・セクションをエラーに
 - [ ] 中: fc.toml の `[target]` があれば nes を既定に、`fcc run -t nes` の扱い、VS Code 拡張の既定のそろえ
 - [ ] 低〜中: fclib の API の slice 版（`print`、mem）、lzw の ZP の固定番地と §4.5 の ZP の配置の文書、inflate の `unpack`

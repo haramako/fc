@@ -359,7 +359,9 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    呼び出し口。✅ 2026-09-29: LZ4（`internal/lz4` の圧縮・`@lz4`・`fclib/lz4.fc` の asm の展開。TestLz4Random が乱数のデータで
    確かめる）と RLE（NES Screen Tool の形式: `internal/rle`・`@rle`・`rle.unpack`・`vram.write_rle_now` / `put_rle`。旧 rle は
    test/ の横にコピー）、inflate を外した。メタスプライト（`oam.meta`）・フェード（`pal.fade`）・音の呼び出し口（`frame.hook`）は段 3 で。
-   `rle.to_vram` は NES の関数なので `vram.write_rle_now` にした（rle はどのターゲットでも使うモジュール）
+   `rle.to_vram` は NES の関数なので `vram.write_rle_now` にした（rle はどのターゲットでも使うモジュール）。✅ 2026-09-29: uxrom / mmc1 /
+   mmc3（`fclib/nes/*.fc`。uxrom と mmc1 は今の farcall_uxrom.asm / farcall_mmc1.asm を include、mmc3 は BANK_SELECT の写しも書く
+   トランポリンと IRQ の入口（`irq_hook`）の `mapper_mmc3.asm`。テストは `internal/driver/mapper_test.go`）
    **同じ名前のモジュールの入れ替え（2026-09-29 決定）**: mem・math など今の fclib と同じ名前のモジュールを新しい API にするときは、
    今の版を使っている所の横にコピーして残す（castle の src、miku、test/、bench/ など。`use` はソースのディレクトリを先に探すので
    コピーが見つかる）。fclib の名前に結びついた組み込み（`@copy` → `mem.copy`、`cos` → `math.sin`）は、読み込んだモジュールの関数の
