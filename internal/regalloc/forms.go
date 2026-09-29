@@ -246,6 +246,9 @@ func ShiftMemForm(op *ir.Op, p Placement) (Form, bool) {
 		return Form{}, false
 	}
 	n, _ := ir.ValIntLiteral(op.In(1))
+	if w := 8 * ir.ValType(op.Dst).Size; n > w {
+		n = w // 型の幅以上は幅で頭打ち (codegen の genShift と同じ。asl x を n 個並べるので)
+	}
 	return Form{Kind: FormShiftMem, Op: op, K: n}, true
 }
 
