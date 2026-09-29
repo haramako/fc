@@ -53,6 +53,7 @@ export default defineConfig({
       {
         text: 'リファレンス',
         items: [
+          { text: '言語仕様', link: '/reference/language' },
           { text: '標準ライブラリ', link: '/reference/std/' },
           { text: 'fcc コマンド', link: '/reference/fcc' },
           { text: 'fc.toml', link: '/reference/fc-toml' },
@@ -78,6 +79,7 @@ export default defineConfig({
         {
           text: 'リファレンス',
           items: [
+            { text: '言語仕様', link: '/reference/language' },
             { text: '標準ライブラリ', link: '/reference/std/' },
             { text: 'fcc コマンド', link: '/reference/fcc' },
             { text: 'fc.toml', link: '/reference/fc-toml' },
