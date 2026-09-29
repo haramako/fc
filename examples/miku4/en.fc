@@ -1,0 +1,324 @@
+#fc 4
+// 敵と敵の弾 (examples/miku の en.fc と en.asm を fc 4 の標準ライブラリへ移植)。角度は math の 256 段 (画面の座標: 64 = 下)
+use math;
+use rand;
+use hit;
+use frame;
+use vram;
+use * from common;
+
+const MAX = 16;
+var type:[MAX]u8;
+var x_:[MAX]u8;
+var y_:[MAX]u8;
+var p1_:[MAX]u8;
+var p2_:[MAX]u8;
+var p3_:[MAX]u8;
+var p4_:[MAX]u8;
+var wait:u8;
+
+public const BUL_MAX = 32;
+var bul_type:[BUL_MAX]u8;
+var bul_x:[BUL_MAX]u8; // フリーリストの next としても使う
+var bul_y:[BUL_MAX]u8;
+var bul_vx:[BUL_MAX]i8;
+var bul_vy:[BUL_MAX]i8;
+var bul_free:u8; // フリーリストの先頭
+
+const SPR_EN_BUL = 0xe0;
+
+/*********************************************
+ * 敵関係のルーチン
+ *********************************************/
+
+public function init():void
+{
+	bul_free = 0;
+	for (var i:u8 = 0; i < BUL_MAX; i += 1) {
+		bul_x[i] = i + 1;
+	}
+}
+
+public function process():void
+{
+	// 敵の出現
+	if (wait == 0) {
+		if (rand.below(8) == 0) {
+			billy_new();
+		} else {
+			en_1_new();
+		}
+		wait = 30 + rand.next_u8() / 4;
+	} else {
+		wait -= 1;
+	}
+
+	for (var i:u8 = 0; i < MAX; i += 1) {
+		PROCESS[type[i]](i);
+	}
+}
+
+function new():u8
+{
+	for (var i:u8 = 0; i < MAX; i += 1) {
+		if (type[i] == 0) {
+			return i;
+		}
+	}
+	return 255;
+}
+
+// 敵の弾の処理 (元は en.asm)
+public function bul_process():void
+{
+	for (var i:u8 = 0; i < BUL_MAX; i += 1) {
+		if (bul_type[i] == 0) {
+			continue;
+		}
+		bul_y[i] = move(bul_y[i], bul_vy[i]);
+		bul_x[i] = move(bul_x[i], bul_vx[i]);
+		sprite(bul_x[i] - 4, bul_y[i] - 4, SPR_EN_BUL + anim, 1);
+		// 自機との当たり判定
+		if (my_muteki == 0 && hit.near(my_x, bul_x[i], 8) && hit.near(my_y, bul_y[i], 8)) {
+			my_bang = 1;
+			bul_kill(i);
+			continue;
+		}
+		// 画面の外
+		if (bul_y[i] < 8 || bul_y[i] >= 240 || bul_x[i] < 8 || bul_x[i] >= 240) {
+			bul_kill(i);
+		}
+	}
+}
+
+function bul_kill(i:u8):void
+{
+	bul_type[i] = 0;
+	bul_x[i] = bul_free;
+	bul_free = i;
+}
+
+// 新しい敵の弾のインデックス (取れなければ 255)
+function bul_new():u8
+{
+	if (bul_free >= BUL_MAX) {
+		return 255;
+	}
+	var n = bul_free;
+	bul_free = bul_x[bul_free];
+	return n;
+}
+
+// 角度を指定して way 方向に弾を打つ
+function bul_nway(x:u8, y:u8, angle:u8, speed:i8, way:u8, spread:u8):void
+{
+	angle -= (way * spread) / 2;
+	for (var i:u8 = 0; i < way; i += 1) {
+		var n = bul_new();
+		if (n == 255) {
+			return;
+		}
+		bul_type[n] = 1;
+		bul_x[n] = x;
+		bul_y[n] = y;
+		bul_vx[n] = math.cos(angle) / speed;
+		bul_vy[n] = math.sin(angle) / speed;
+		angle += spread;
+	}
+}
+
+// 敵と自機の弾の当たり判定
+function check_hit(i:u8):bool
+{
+	for (var j:u8 = 0; j < MY_BUL_MAX; j += 1) {
+		if (my_bul_type[j] == 1 && hit.near(x_[i], my_bul_x[j], 12) && hit.near(y_[i], my_bul_y[j], 12)) {
+			my_bul_type[j] = 2;
+			my_bul_vx[j] = 0;
+			return true;
+		}
+	}
+	return false;
+}
+
+function none_process(i:u8):void
+{
+}
+
+/*********************************************
+ * 敵 1
+ *********************************************/
+const SPR_ENEMY = 0xc0;
+
+function en_1_new():void
+{
+	var i = new();
+	if (i != 255) {
+		type[i] = 1;
+		x_[i] = rand.next_u8() / 2 + 64;
+		y_[i] = 16;
+		p1_[i] = 0;
+		p2_[i] = 0;
+		p4_[i] = 4;
+	}
+}
+
+function en_1_process(i:u8):void
+{
+	var pal:u8 = 1;
+
+	// 自機の弾との当たり判定
+	if (check_hit(i)) {
+		p4_[i] -= 1;
+		pal = 0;
+		if (p4_[i] == 0) {
+			type[i] = 0;
+			return;
+		}
+	}
+
+	switch (p1_[i]) {
+	case 0:
+		y_[i] += 2;
+		p2_[i] += 1;
+		if (p2_[i] == 40) {
+			p1_[i] = 1;
+			p2_[i] = 0;
+			p3_[i] = math.angle_to(x_[i], y_[i], my_x, my_y);
+		}
+	case 1:
+		p2_[i] += 1;
+		// 弾を打つ
+		if (p2_[i] % 32 == 0) {
+			var angle = math.angle_to(x_[i], y_[i], my_x, my_y);
+			var x1 = p2_[i] / 32 % 2;
+			bul_nway(x_[i], y_[i], angle, 6, 3 + x1, 12);
+		}
+		if (p2_[i] == 120) {
+			p1_[i] = 2;
+		}
+	case 2:
+		// 自機から離れていく
+		x_[i] -= @bitcast(u8, math.cos(p3_[i]) / 32);
+		y_[i] -= @bitcast(u8, math.sin(p3_[i]) / 32);
+		if (outside(x_[i], y_[i])) {
+			type[i] = 0;
+			return;
+		}
+	}
+
+	put_sprite2x2(x_[i] - 8, y_[i] - 8, SPR_ENEMY, pal);
+}
+
+/*********************************************
+ * ビリー・ヘリントン (背景に描く敵)
+ *********************************************/
+
+const BILLY_NORMAL:[?]u8 = [0x80, 0x81, 0x82, 0x83,
+	0x90, 0x91, 0x92, 0x93,
+	0xA0, 0xA1, 0xa2, 0xa3,
+	0xb0, 0xb1, 0xb2, 0xb3];
+
+const BILLY_SMOKE:[?]u8 = [0x84, 0x85, 0x86, 0x87,
+	0x94, 0x95, 0x96, 0x97,
+	0xa4, 0xa5, 0xa6, 0xa7,
+	0xb4, 0xb5, 0xb6, 0xb7];
+
+const BANG:[?]u8 = [0x88, 0x89, 0x98, 0x99,
+	0x8a, 0x8b, 0x9a, 0x9b,
+	0x8c, 0x8d, 0x9c, 0x9d,
+	0x8e, 0x8f, 0x9e, 0x9f,
+	0x00, 0x00, 0x00, 0x00];
+
+function billy_new():void
+{
+	var i = new();
+	if (i != 255) {
+		var cy = (frame.scroll_y / 8 + 4) % 30;
+		var cx = rand.below(24) + 4;
+		type[i] = 2;
+		x_[i] = cx * 8;
+		p1_[i] = 0;
+		p2_[i] = cy; // スクロール上の位置
+		p4_[i] = 0;
+	}
+}
+
+function billy_process(i:u8):void
+{
+	// 画面上の位置を計算
+	var y = p2_[i] * 8;
+	if (y > frame.scroll_y) {
+		y = y - frame.scroll_y;
+	} else {
+		y = 240 + y - frame.scroll_y;
+	}
+	y_[i] = y;
+
+	// 自機の弾との当たり判定
+	var p1 = p1_[i];
+	if (p1 != 255 && check_hit(i)) {
+		p4_[i] -= 1;
+		if (p4_[i] == 0) {
+			p1_[i] = 255;
+			return;
+		}
+	}
+
+	var p4 = p4_[i];
+	var cx = x_[i] / 8;
+	var cy = p2_[i];
+	if (p1 == 0) {
+		if (p4 % 4 == 0) {
+			gr_print(cx - 2, cy, BILLY_SMOKE[(p4 / 4 % 4) * 4..], 4, 1);
+		}
+		if (p4 % 16 == 0) {
+			p4 = p4 / 16;
+			if (p4 < 3) {
+				gr_print(cx - 2, cy - 1 - p4, BILLY_NORMAL, 4, p4 + 1);
+			} else {
+				gr_print(cx - 2, cy - 3, BILLY_NORMAL, 4, 4);
+				p1_[i] = 2;
+				p4_[i] = 16;
+			}
+		}
+		p4_[i] += 1;
+	} elsif (p1 == 255) {
+		// 死亡時
+		if (p4 % 4 == 0) {
+			p4 = p4 / 4;
+			if (p4 < 13) {
+				bang(cx - 1, cy - 2, p4);
+				bang(cx, cy - 3, p4 - 2);
+				bang(cx, cy - 1, p4 - 4);
+				bang(cx - 2, cy - 3, p4 - 6);
+				bang(cx - 2, cy - 1, p4 - 8);
+			} else {
+				type[i] = 0;
+			}
+		}
+		p4_[i] += 1;
+	}
+
+	if (outside(120, y)) {
+		type[i] = 0;
+	}
+}
+
+function bang(cx:u8, cy:u8, n:u8):void
+{
+	if (n < 5) {
+		gr_print(cx, cy, BANG[n * 4..], 2, 2);
+	}
+}
+
+// data を width × height のタイルとして (cx, cy) から背景に描く (VRAM のキューに積む)
+function gr_print(cx:u8, cy:u8, data:[]const u8, width:u8, height:u8):void
+{
+	var i:u8 = 0;
+	for (var y:u8 = 0; y < height; y += 1) {
+		vram.put(pos(cx, cy + y), data[i..i + width]);
+		i += width;
+	}
+}
+
+const PROCESS:[?]fn(u8):void = [none_process, en_1_process, billy_process];

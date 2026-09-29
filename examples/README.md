@@ -14,6 +14,7 @@
 |---|---|---|
 | `miku/` | `C:\Work\fc-miku` | `fcc build -t nes miku.fc`（fc標準ドライバのみでROM生成） |
 | `castle/` | `C:\Work\castle` | `cd src && fcc build -t nes -o ../castle.nes main.fc`（main.fc の `options(base / linker_config / link)` で自前の data.asm・ld65.cfg・NSD を指定。実プロジェクトの Rakefile も同じ `fcc build`） |
+| `miku4/` | `miku/` を書き直したもの（2026-09-29） | `fcc build -t nes -o miku4.nes miku.fc`。miku を fc 4 の NES の標準ライブラリ（frame / vram / pal / oam / pad / math / rand / hit）で書き直した、API を実際のゲームで確かめるための例。`internal/nes` の TestExampleMiku4 がスクロール・自機の移動・敵と弾を確かめる |
 | `hello/` | このリポジトリ（2026-09-29） | `fcc build -t nes -o hello.nes hello.fc`。実プロジェクト由来ではなく、fc 4 の NES の標準ライブラリ（frame / vram / pal / oam / pad と内蔵のフォント）の最小の例。ROM の golden は無く、`internal/nes` の TestExampleHello が画面とパッドの動きを確かめる |
 
 castle は `textmap` によるテキスト変換（ソースの `textmap("../tmp/font/*.chr.txt")` で表を指定）、独自リンカ設定、

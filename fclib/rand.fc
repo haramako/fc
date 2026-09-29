@@ -11,18 +11,9 @@ public function seed(s:u16):void
 	state = s;
 }
 
-public function next_u16():u16
-{
-	var x = state;
-	if (x == 0) {
-		x = 1;
-	}
-	x ^= x << 7;
-	x ^= x >> 9;
-	x ^= x << 8;
-	state = x;
-	return x;
-}
+// x ^= x << 7; x ^= x >> 9; x ^= x << 8 (rand.asm。fc で書くと 16 ビットのずらしで 140 バイトほどになる)
+public function next_u16():u16 @(abi: "frame");
+@include("rand.asm");
 
 // 8 ビット (よく混ざる上位バイト)
 public function next_u8():u8

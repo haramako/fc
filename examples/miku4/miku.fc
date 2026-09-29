@@ -1,0 +1,175 @@
+#fc 4
+// examples/miku (fc-miku 由来の縦スクロールのシューティング) を fc 4 の標準ライブラリで書き直したもの (doc/v4_stdlib.md §7 の 5)。
+// 元の ppu モジュール (NMI・VRAM のキュー・スプライト) は frame / vram / pal / oam、pad は新しい pad、表を引く math は新しい math と
+// rand にした。ゲームの中身は同じ (乱数の列と角度の細かい所は違う)。
+//   fcc build -t nes -o miku4.nes miku.fc
+@(bank_count: 4);
+@(char_banks: 1);
+
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use math;
+use rand;
+use * from common;
+use en;
+
+@include("miku.chr");
+
+const SPR_MIKU = 0x80;
+const SPR_MIKU_BANG = 0x88;
+const SPR_NEGI = 0xa0;
+
+function my_process():void
+{
+	// 自機の移動
+	if (my_stat == 0) {
+		var held = pad.p1.held;
+		if ((held & pad.UP) != 0) {
+			my_y -= 2;
+		}
+		if ((held & pad.DOWN) != 0) {
+			my_y += 2;
+		}
+		if ((held & pad.LEFT) != 0) {
+			my_x -= 2;
+		}
+		if ((held & pad.RIGHT) != 0) {
+			my_x += 2;
+		}
+		my_x = @clamp(my_x, 16, 240);
+		my_y = @clamp(my_y, 32, 216);
+
+		// 死亡!
+		if (my_bang != 0) {
+			my_stat = 1;
+			my_muteki = 1;
+			my_wait = 64;
+			my_bang = 0;
+			for (var i:u8 = 0; i < MY_BUL_MAX; i += 1) {
+				var a = i * 32 + my_wait;
+				my_bul_type[i] = 3;
+				my_bul_vx[i] = (math.cos(a) / 2 + 2) / 4;
+				my_bul_vy[i] = (math.sin(a) / 2 + 2) / 4;
+				my_bul_x[i] = my_x;
+				my_bul_y[i] = my_y;
+			}
+		}
+
+		// 弾を打つ
+		if (my_wait == 0) {
+			if ((held & pad.A) != 0) {
+				for (var n:u8 = 0; n < MY_BUL_MAX; n += 1) {
+					if (my_bul_type[n] == 0) {
+						my_bul_type[n] = 1;
+						my_bul_x[n] = my_x;
+						my_bul_y[n] = my_y - 8;
+						my_bul_idx = (my_bul_idx + 1) % MY_BUL_MAX;
+						my_wait = 4;
+						break;
+					}
+				}
+			}
+		} else {
+			my_wait -= 1;
+		}
+
+		if (my_muteki_count != 0) {
+			my_muteki_count -= (giff + 1) / 4;
+			if (my_muteki_count == 0) {
+				my_muteki = 0;
+			}
+		}
+
+		put_sprite2x2(my_x - 8, my_y - 8, SPR_MIKU + anim * 2, my_muteki_count % 2);
+	} else {
+		if (my_wait != 0) {
+			my_wait -= 1;
+		} else {
+			for (var i:u8 = 0; i < MY_BUL_MAX; i += 1) {
+				my_bul_type[i] = 0;
+			}
+			my_stat = 0;
+			my_wait = 0;
+			my_muteki_count = 60;
+		}
+	}
+}
+
+// 自機の弾の処理
+function my_bul_process():void
+{
+	for (var i:u8 = 0; i < MY_BUL_MAX; i += 1) {
+		switch (my_bul_type[i]) {
+		case 1:
+			// 通常時
+			if (my_bul_y[i] > 8) {
+				my_bul_y[i] -= 6;
+				sprite(my_bul_x[i] - 4, my_bul_y[i] - 4, SPR_NEGI + anim, 0);
+				sprite(my_bul_x[i] - 4, my_bul_y[i] + 4, SPR_NEGI + anim + 16, 0);
+			} else {
+				my_bul_type[i] = 0;
+			}
+		case 2:
+			// 弾の消滅エフェクト
+			if (my_bul_vx[i] >= 8) {
+				my_bul_type[i] = 0;
+			} else {
+				sprite(my_bul_x[i] - 4, my_bul_y[i] - 4, SPR_MIKU_BANG + @bitcast(u8, my_bul_vx[i] / 2), 0);
+			}
+			my_bul_vx[i] += 1;
+		case 3:
+			// 死亡時の爆発
+			my_bul_x[i] = move(my_bul_x[i], my_bul_vx[i]);
+			my_bul_y[i] = move(my_bul_y[i], my_bul_vy[i]);
+			sprite(my_bul_x[i] - 4, my_bul_y[i] - 4, SPR_MIKU_BANG + (anim_count / 2) % 4, 0);
+		}
+	}
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;    // スプライトのパターンは $1000 から
+	pal.set_all(PALLET);
+	vram.fill_now(0x23c0, 0, 64);        // 属性
+	my_x = 128;
+	my_y = 180;
+	rand.seed(1);
+	en.init();
+	frame.render_on();
+
+	while (true) {
+		// 縦のスクロール (1 行分動くたびに、出てくる行を空白と草で描く)
+		var scroll = giff16 / 8;
+		if (scroll != 0) {
+			var s = frame.scroll_y - scroll;
+			if (s >= 240) {
+				s -= 16;
+			}
+			frame.scroll(0, s, 0);
+			if (s % 8 == 0) {
+				var cy = s / 8;
+				vram.fill(pos(0, cy), 0x20, 32);
+				vram.set(pos(rand.next_u8() / 8, cy), 0x77);
+			}
+		}
+
+		anim_count += 1;
+		anim = anim_count / 8 % 4;
+		giff16 = math.DITHER[anim_count % 16];
+		giff = giff16 / 4;
+
+		pad.poll();
+		oam.begin();
+		en.bul_process();
+		my_process();
+		en.process();
+		my_bul_process();
+		oam.end();
+		frame.wait();
+	}
+}

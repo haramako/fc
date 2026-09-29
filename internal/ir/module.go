@@ -28,11 +28,12 @@ type Def struct {
 	AddressVar string
 	Pos        syntax.Position
 
-	// Private は DefBss / DefBlock のうち、public でも options(symbol:) でもない fc 4 のモジュールの変数・配列定数 (ほかの
-	// オブジェクトファイルから名前で参照されない)。Unused はそのうち、出力する関数・定数の表・asm のどれからも参照されない
-	// もの (領域を取らない。pipeline.markUnusedGlobals が決める。@(test) の関数だけが使う変数・表など)
-	Private bool
-	Unused  bool
+	// Droppable は、参照されなければ出さなくてよい fc 4 のモジュールの変数・配列定数: private で既定の BSS の変数と、
+	// options(symbol:) の無い配列定数 (public でもよい: 別のモジュールの fc のコードからの参照は命令に現れる。asm から名前で
+	// 参照する表は symbol: を付ける)。Unused はそのうち、出力する関数・定数の表・asm のどれからも参照されないもの (領域を
+	// 取らない。pipeline.markUnusedGlobals が決める。@(test) の関数だけが使う変数・表、使わない関数の表など)
+	Droppable bool
+	Unused    bool
 }
 
 // OptionKind は OptionValue の種類。

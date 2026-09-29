@@ -1,0 +1,66 @@
+#fc 4
+// 自機と共通のもの (examples/miku の fc 4 の標準ライブラリへの移植。doc/v4_stdlib.md §7 の 5)
+use math;
+use oam;
+
+public var anim:u8;
+public var anim_count:u8;
+public var giff:u8;
+public var giff16:u8;
+
+public var my_stat:u8;
+public var my_muteki:u8;
+public var my_muteki_count:u8;
+public var my_bang:u8;
+public var my_x:u8;
+public var my_y:u8;
+public var my_wait:u8;
+
+public const MY_BUL_MAX = 8;
+public var my_bul_type:[MY_BUL_MAX]u8;
+public var my_bul_x:[MY_BUL_MAX]u8;
+public var my_bul_y:[MY_BUL_MAX]u8;
+public var my_bul_vx:[MY_BUL_MAX]i8;
+public var my_bul_vy:[MY_BUL_MAX]i8;
+public var my_bul_idx:u8;
+
+public const PALLET:[32]u8 = [0x0f, 0x27, 0x38, 0x30, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13,
+	0x19, 0x0b, 0x2b, 0x30, 0x0f, 0x04, 0x26, 0x36, 0x0f, 0x11, 0x12, 0x13, 0x0f, 0x11, 0x12, 0x13];
+
+public function outside(x:u8, y:u8):bool
+{
+	return x < 8 || x > 240 || y < 8 || y > 240;
+}
+
+// 1/16 ピクセルの速度 v で p を動かす (フレームで散らして丸める: 元の `(v + giff16) / 16`)
+public function move(p:u8, v:i8):u8
+{
+	return p + @bitcast(u8, math.subpixel(v, anim_count));
+}
+
+// スプライト 1 枚 (元の ppu.sprite と同じく y は画面の y。OAM には y - 1 を書く)
+public function sprite(x:u8, y:u8, pat:u8, mode:u8):void
+{
+	oam.spr(x, y - 1, pat, mode);
+}
+
+public function put_sprite2x2(x:u8, y:u8, pat:u8, mode:u8):void
+{
+	sprite(x, y, pat, mode);
+	sprite(x + 8, y, pat + 1, mode);
+	sprite(x, y + 8, pat + 16, mode);
+	sprite(x + 8, y + 8, pat + 17, mode);
+}
+
+// ネームテーブル 0 のタイル (x, y) の番地 (y は i8 として -30〜59 を 0〜29 に回す: 縦のスクロールの画面)
+public function pos(x:u8, y:u8):u16
+{
+	var yy = @bitcast(i8, y);
+	if (yy < 0) {
+		yy += 30;
+	}
+	if (yy >= 30) {
+		yy -= 30;
+	}
+	return 0x2000 + ((@bitcast(u8, yy) as u16) << 5) + x;
+}

@@ -96,7 +96,7 @@ func Prepare(mods []*ir.Module, o *Options) (*Result, error) {
 }
 
 // markUnusedGlobals は、出力する関数 (最適化の後の命令)・定数の表・equ・include した asm・インラインアセンブラのどれからも
-// 参照されないモジュールの private な変数 (fc 4 の既定の BSS のもの: Def.Private) に Unused を付ける (codegen が領域を
+// 参照されないモジュールの変数・配列定数 (fc 4 の Def.Droppable) に Unused を付ける (codegen が領域を
 // 取らない。@(test) の関数だけが使う大きなバッファなど、使わない機能の状態で RAM を食わないように)。
 func markUnusedGlobals(mods []*ir.Module) {
 	used := map[string]bool{}
@@ -180,7 +180,7 @@ func markUnusedGlobals(mods []*ir.Module) {
 			continue
 		}
 		for _, d := range m.Defs {
-			if (d.Kind == ir.DefBss || d.Kind == ir.DefBlock) && d.Private {
+			if (d.Kind == ir.DefBss || d.Kind == ir.DefBlock) && d.Droppable {
 				d.Unused = !used[d.Sym]
 			}
 		}

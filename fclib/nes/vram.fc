@@ -8,7 +8,6 @@
 //   @format(vram.reserve(vram.addr(0, 2, 4), 5), "{:05}", score);   // キューの中へ直に書く (写しが要らない)
 @(bank: -1);
 use nes;
-use sys;
 use frame;
 
 const VERTICAL = 0x80;
@@ -61,12 +60,10 @@ function budget():u8
 	return frame.BUDGET - frame.queue_cost;
 }
 
-// 空きが n バイト、手間の残りが cost になるまでキューを送るのを待ち、手間を足す
+// 空きが n バイト、手間の残りが cost になるまでキューを送るのを待ち、手間を足す (n は QUEUE_SIZE、cost は BUDGET 以下: 呼ぶ側が
+// 分けるか切り詰める)
 function need(n:u8, cost:u8):void
 {
-	if (n > frame.QUEUE_SIZE || cost > frame.BUDGET) {
-		sys.panic("vram: entry too large");
-	}
 	while (room() < n || budget() < cost) {
 		frame.flush();
 	}
@@ -174,11 +171,18 @@ public function fill(a:u16, v:u8, n:u8):void
 }
 
 // キューの中に n バイトの横の項目を取り、そのデータの場所を返す (そこへ直に書く。次の frame.wait の NMI で送る)。
-// 描画を止めていてもキューに積む (次に frame.wait / render_on で待ったときに送る)
+// 描画を止めていてもキューに積む (次に frame.wait / render_on で待ったときに送る)。1 つの項目に入らない長さ (既定で 125 バイト
+// より長い) なら、入るだけに切り詰めた slice を返す
 public function reserve(a:u16, n:u8):[]u8
 {
 	if (n == 0) {
 		return frame.queue[..0];
+	}
+	if (n > frame.QUEUE_SIZE - 3) {
+		n = frame.QUEUE_SIZE - 3;
+	}
+	if (n > frame.BUDGET - COST_HEAD) {
+		n = frame.BUDGET - COST_HEAD;
 	}
 	need(n + 3, COST_HEAD + n);
 	var i = push_head(a, 0, n);

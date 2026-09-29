@@ -367,7 +367,13 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    コピーが見つかる）。fclib の名前に結びついた組み込み（`@copy` → `mem.copy`、`cos` → `math.sin`）は、読み込んだモジュールの関数の
    形を見て古い形でも動かす
 5. **移す**: miku を新しい API で書き直して確かめる（fc の中のコピーで。小さいので最初の実例に）。castle は API が落ち着いてから
-   （§8 の 12。それまでは今の fclib のコピーでビルドを保つ）。古い fclib を消す
+   （§8 の 12。それまでは今の fclib のコピーでビルドを保つ）。古い fclib を消す。✅ 2026-09-29: **examples/miku4**（examples/miku は
+   ROM の golden のためそのまま残し、別のコピーを fc 4 の frame / vram / pal / oam / pad / math / rand / hit で書き直した。ppu.asm・
+   en.asm は要らなくなった。`internal/nes` の TestExampleMiku4 が動きを確かめる）。ROM は元の 14729 バイトに対して 16010 バイト
+   （+1.3 KB: vram 976・frame 355・pal 251 が元の手書きの asm の ppu 594 より大きい）。移して見つけたこと: rand.next_u16 を asm に
+   （fc の 16 ビットのずらしで 144 バイト → 約 40）、vram の panic が sys と console（約 360 バイト）を引き込んでいた（reserve は
+   切り詰めるようにした）、public の配列定数（math の ATAN 256 バイトなど）が使わなくても出ていた（fc 4 は出さないようにした）、
+   math.DITHER を public に（1/16 ピクセルの散らしの表）
 
 ### 7.1 テスト（案）
 

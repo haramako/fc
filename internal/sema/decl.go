@@ -157,7 +157,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		// fc 4: private で既定の BSS の変数は、出力するコードから参照されなければ領域を取らない (pipeline.markUnusedGlobals)。
 		// 置き場所を指定した変数 (@(segment:) / @(bss:)) は並びを当てにしている (整列の詰め物など) かもしれないので残す
 		if bss != nil && bss.Segment == "" && h.v4() && !opt.Has("symbol") && !h.scopeIsPublic(publicPos) {
-			bss.Private = true
+			bss.Droppable = true
 		}
 	} else {
 		st, ro := h.storageType(typ)
@@ -225,8 +225,9 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 				symbol = d.Sym
 			} else {
 				symbol = h.addDef(name, d)
-				// fc 4: private なモジュールの配列定数も、出力するコードから参照されなければ出さない (pipeline.markUnusedGlobals)
-				d.Private = h.lmd == nil && h.v4() && !h.scopeIsPublic(publicPos)
+				// fc 4: モジュールの配列定数も (public でも)、出力するコードから参照されなければ出さない
+				// (pipeline.markUnusedGlobals。math を使っても ATAN の表を使わなければ ROM を食わない)
+				d.Droppable = h.lmd == nil && h.v4()
 			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)

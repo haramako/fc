@@ -565,3 +565,65 @@ function main():void
 	}
 	p.checkVblank(t)
 }
+
+// TestExampleMiku4: examples/miku4 (miku を fc 4 の標準ライブラリで書き直したもの) がビルドでき、スクロールしながら自機が
+// 十字キーで動き、弾を打ち、敵と敵の弾が出て、NMI の書き込みが vblank に収まる。FC_MIKU4_PNG で画面を PNG に書く。
+func TestExampleMiku4(t *testing.T) {
+	t.Parallel()
+	src := filepath.Join("..", "..", "examples", "miku4")
+	files := map[string]string{}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		name := e.Name()
+		if name == "miku.fc" {
+			name = "t.fc"
+		}
+		files[name] = string(b)
+	}
+	p := buildNes(t, files)
+	p.run(t, 30)
+	x0 := p.peek(t, "_common_my_x", 0)
+	p.SetButtons(ButtonLeft | ButtonA)
+	p.run(t, 20)
+	p.SetButtons(0)
+	if x := p.peek(t, "_common_my_x", 0); x > x0-36 || x < x0-40 { // 20 フレームで 2 ずつ (読み取りの遅れの分だけ少ない)
+		t.Errorf("自機の x: %d → %d", x0, x)
+	}
+	p.run(t, 300)
+	// 自機 (4 枚) のほかにスプライトがある (弾・敵・敵の弾)
+	visible := 0
+	for i := 0; i < 64; i++ {
+		if p.oam[i*4] < 0xef {
+			visible++
+		}
+	}
+	if visible <= 4 {
+		t.Errorf("見えるスプライトが %d 枚", visible)
+	}
+	// スクロールしながら描いた草 ('w') がネームテーブルにある
+	grass := 0
+	for a := 0x2000; a < 0x23c0; a++ {
+		if p.readVram(a) == 'w' {
+			grass++
+		}
+	}
+	if grass < 5 {
+		t.Errorf("草が %d", grass)
+	}
+	if path := os.Getenv("FC_MIKU4_PNG"); path != "" {
+		if err := p.WriteScreenshot(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p.checkVblank(t)
+}

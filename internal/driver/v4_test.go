@@ -549,9 +549,9 @@ function main():void
 	}
 }
 
-// TestUnusedPrivateGlobals: fc 4 のモジュールの private な変数 (既定の BSS) は、出力する関数から参照されなければ領域を取らない
-// (どこからも呼ばれない関数・@(test) の関数だけが使う大きなバッファなど)。public・@(symbol:)・置き場所を指定したもの
-// (@(segment:)。整列の詰め物のように並びを当てにしうる)・fc 3 のモジュールの変数は今までどおり残す。
+// TestUnusedPrivateGlobals: fc 4 のモジュールの private な変数 (既定の BSS) と配列定数 (public でも) は、出力する関数から
+// 参照されなければ領域を取らない (どこからも呼ばれない関数・@(test) の関数だけが使う大きなバッファ・表など)。public の変数・
+// @(symbol:)・置き場所を指定したもの (@(segment:)。整列の詰め物のように並びを当てにしうる)・fc 3 のモジュールの変数は残す。
 func TestUnusedPrivateGlobals(t *testing.T) {
 	t.Parallel()
 	src := `#fc 4
@@ -566,6 +566,7 @@ var named:u8 @(symbol: "_named_v");
 const TABLE_USED = [1, 2, 3, 4, 5];
 const TABLE_TEST = [6, 7, 8, 9, 10];
 public const TABLE_PUB = [11, 12, 13];
+const TABLE_SYM:[3]u8 = [14, 15, 16] @(symbol: "_t_sym");
 function helper():void { only_helper[0] = 1; }
 function test_x():void @(test) { only_helper[1] = TABLE_TEST[1]; }
 function main():void
@@ -578,12 +579,12 @@ function main():void
 	old := "#fc 3\nvar unused_old:u8;\npublic function get():u8 { return 5; }\n"
 	files := map[string]string{"t.fc": src, "old.fc": old}
 	s := compileAsmFiles(t, files)
-	for _, sym := range []string{"_t_used_v:", "_t_placed:", "_t_pub:", "_named_v:", "_t_TABLE_USED:", "_t_TABLE_PUB:"} {
+	for _, sym := range []string{"_t_used_v:", "_t_placed:", "_t_pub:", "_named_v:", "_t_TABLE_USED:", "_t_sym:"} {
 		if !strings.Contains(s, sym) {
 			t.Errorf("%s が無い:\n%s", sym, s)
 		}
 	}
-	for _, sym := range []string{"_t_only_helper", "_t_never", "_t_TABLE_TEST"} {
+	for _, sym := range []string{"_t_only_helper", "_t_never", "_t_TABLE_TEST", "_t_TABLE_PUB"} {
 		if strings.Contains(s, sym) {
 			t.Errorf("%s が残っている", sym)
 		}
