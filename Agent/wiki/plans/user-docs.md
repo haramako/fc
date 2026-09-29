@@ -46,7 +46,7 @@
   project               プロジェクト: fc.toml、複数のモジュールと use、public、fcc test
   editor                VS Code 拡張（色付け・fcc fmt・fcc check）
 /guide/
-  overview              fc の一巡り（C との違い: 型、slice、for、elsif、使わないものは出ない）
+  overview              fc の一巡り（C との違い: 型、slice、for、使わないものは出ない）
   nes-basics            NES の作り方: frame のループと NMI、VRAM のキュー、パレット、スプライト（oam）、パッド、用語
   memory-and-speed      速く小さく書く: 8 ビットと 16 ビット、ゼロページ、静的フレーム、[]T と [:u16]T、fcc size / --size-report
   banks                 バンク切り替え: マッパー（UxROM / MMC1 / MMC3）、@(bank)、far call、関数ポインタ
@@ -81,7 +81,7 @@
   Hugo の Chroma・Jekyll の Rouge・MkDocs の Pygments は独自の字句解析器が要り、Pages 標準の Jekyll はプラグインも使えない
 - ローカル検索の日本語は `Intl.Segmenter` で語に分ける（MiniSearch の `tokenize`。VitePress が関数を文字列にしてブラウザへ渡すので、
   関数の中だけで完結させる）。「内蔵」「エミュレータ」で引けることを確かめた。home のレイアウトのページは最初の見出しより前が索引に入らない
-- VitePress 1.6.4。`npm audit` の警告（esbuild / vite）は開発サーバーのもので、公開する静的なファイルには関わらない
+- VitePress 1.6.4（vite は `overrides` で 6.4.3 以上。「気をつけること」）
 
 置き方（今あるもの＋これから足すもの）:
 
@@ -168,10 +168,12 @@ docs/
 - **fc 4 の API はまだ動く**（fclib の作り直しの途中）: 関数の一覧は生成に任せ、手で書くページの例は検査で壊れたら気づくようにする
 - **Pages は公開**: castle のものを載せない。サンプルの画面・ROM も公開してよいものだけ
 - ドキュメントの例が長いテストの時間を増やさないよう、検査は並列にして emu で走らせる（NES は印のあるものだけ）
-- 段 0 で気づいたこと:
-  - emu のプログラムは `console.exit(0)` で終える。`main` から戻るとランタイムの `jmp *` で止まり、`fcc run` が終わらない
-    （直すなら emu だけ main の後に終了する形に。直るまでは hello-emu で必ず書かせる）
-  - fc の else-if は `elsif`。`else if` と書くと `else` の中の `if` になり、`fcc fmt` が字下げを 1 段深くする（overview で触れる）
+- 段 0 で気づいて直したこと（2026-09-30）:
+  - emu で `main` から戻ると `fcc run` が終わらなかった → 終了コード 0 で終わるようにした。例に `console.exit(0)` は要らない
+    （NES では `main` から戻らない。`fcc run -t nes` は 3600 フレームで「終わらなかった」と止まる）
+  - `else if` を `fcc fmt` が `else` の中の `if` として字下げしていた → `} else if (...) {` と続けるようにした。例は `else if` で書く
+    （`elsif` は fc 4 でなくす候補。`plans/roadmap.md` の v4）
+- VitePress 1.6.4 の依存の vite 5 に開発サーバーの脆弱性があるので、`overrides` で vite 6.4.3 以上にした（`docs/AGENTS.md`）
 
 ---
 

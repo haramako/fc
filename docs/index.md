@@ -51,7 +51,6 @@ function main():void
 {
 	console.init();
 	printf("{}\n", @format(line, "HI-SCORE {:05}", max_of(SCORES)));
-	console.exit(0);
 }
 ```
 

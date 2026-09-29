@@ -28,7 +28,9 @@
 ## Work Guidance
 
 - 手元で見る: `npm ci --prefix docs` の後 `npm run dev --prefix docs`（http://localhost:5173/fc/）
-- `npm audit` の警告（esbuild / vite）は開発サーバーのもので、公開する静的なファイルには関わらない。開発サーバーを外に公開しない
+- `package.json` の `overrides` で vite を 6.4.3 以上にしている（VitePress 1.6.4 の依存の vite 5 と esbuild 0.21 に開発サーバーの
+  脆弱性があり、vite 5 には直した版が無い。vite 6 でビルド・開発サーバー・検索が動くことを確かめた）。VitePress を vite 6 以降に
+  依存する版に上げたら `overrides` を外す。`npm audit` が 0 件であることを見る
 
 ## Verification
 
