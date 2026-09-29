@@ -1,6 +1,6 @@
 # 利用者向けドキュメント（GitHub Pages）の計画
 
-作成: 2026-09-30。「決めたこと」はすべて決まった。段 0〜2 は済み。次は段 3（言語仕様）。
+作成: 2026-09-30。「決めたこと」はすべて決まった。段 0〜3 は済み。次は段 4（ガイド）と段 5（後始末）。
 
 前提（2026-09-30 ユーザー決定）:
 - 人間向け、主に**利用者向け**（fc で NES のソフトを作る人）のドキュメントを `docs/` の下に作り、GitHub Pages で公開する
@@ -156,7 +156,9 @@ docs/
 3. **段 2 リファレンス（生成と表）**: `fcc doc` と `reference/std/`、`reference/fcc`・`fc-toml`・`targets`。✅ 2026-09-30: `fcc doc`（`internal/fcdoc`。端末と `-md`）、
    `reference/std/`（CI と `npm run dev` / `build` の前に生成）、fclib のコメントを整えて public の関数に全部説明を付けた（`TestStdDocs`）、
    `reference/fcc`・`fc-toml`・`targets`
-4. **段 3 言語仕様**: fc 4 の規則を 1 ページに。整数の規則など v4 で未決の所（`plans/v4-plan.md` の「決めること」の残り）は決まってから書く
+4. **段 3 言語仕様**: fc 4 の規則を 1 ページに。✅ 2026-09-30: `reference/language`（整数の規則は v4 で全部決まって実装済みだった）。
+   例 23 個を `fc run` / `fc error` / `fc test` で確かめる。書いていて分かったこと: 文字列のエスケープは `\n` と `\xNN` だけ、
+   関数の中の `var s = "abc"` は終端の 0 を含む配列（`@len` は 4）、`@copy` は `use mem;` が要る、添字は `u16` も書ける
 5. **段 4 ガイド**: `guide/` の各ページ。`overview` と `nes-basics` を先に
 6. **段 5 後始末**: 旧 `docs/language_reference.md` を消す。コードのコメントの `docs/language_reference.md §N`（約 20 か所）と
    `Agent/discussions/2026-09-20-v3-plan.md` を仕様として指す所（約 40 か所）を、新しい言語仕様の見出しか `Agent/wiki/design/` に
