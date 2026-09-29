@@ -9,8 +9,8 @@ package driver
 // 食い違ったら文を 1 つずつ消して最小化し、そのプログラムと両方の出力をログに出す (ops_test.go に足す材料)。
 // -O 0 と -O 2 が同じでも、最適化前の IR をインタプリタ (internal/interp) で実行した出力と違えば失敗にする (両方の
 // レベルで同じように間違える codegen のバグを拾う。`-randinterp=false` で切る)。
-// 未定義動作は生成しない: 0 除算 (除数は `| 1` か 0 でないリテラル)、範囲外の添字 (`& 7`)、2 バイト値の変数シフト
-// (シフト量はリテラル)、無限ループ (回数は上限つき)。
+// 未定義動作は生成しない: 0 除算 (除数は `| 1` か 0 でないリテラル)、範囲外の添字 (`& 7`)、型の幅以上のシフト
+// (変数の量は 1 バイトの値なら `& 7`、2 バイトの値なら `& 15`)、無限ループ (回数は上限つき)。
 
 import (
 	"errors"
@@ -52,8 +52,9 @@ type rpVar struct {
 	readOnly bool // ループ変数 (本体で書き換えると回数が保証できない)、ループでずらしているポインタ
 	ptr      bool
 	fresh    bool
-	sptr     bool // struct へのポインタの引数 `ps:*S` (呼ぶ側は &sa[e & 3] か &s0)
-	small    bool // 再帰の深さの引数 (呼ぶ側は `(e & 3)`)
+	sptr     bool     // struct へのポインタの引数 `ps:*S` (呼ぶ側は &sa[e & 3] か &s0)
+	small    bool     // 再帰の深さの引数 (呼ぶ側は `(e & 3)`)
+	def      string   // 引数の既定値 (defargs。空なら無し。呼ぶ側は省けるのは末尾の既定値つきの引数だけ)
 	vals     []string // const の表の値 (最初の source で決めて持つ。呼ぶたびに乱数で作り直すと最小化で別のプログラムになる)
 }
 
@@ -285,8 +286,12 @@ func (g *rpGen) expr(t rpType, depth int) string {
 		}
 		return fmt.Sprintf("(%s %s %s)", g.expr(t, depth-1), op, d)
 	case 4:
-		// シフト: 量はリテラル (2 バイト値は変数の量が使えない)。8 ビットの値なら変数の量も
+		// シフト: 量はリテラルか変数 (1 バイトの値は & 7、2 バイトの値は & 15。8f7a140 から 2 バイトの値も変数の量が使える)
 		op := []string{"<<", ">>"}[g.pick(2)]
+		if t.size == 2 && g.want("shift16", 0.4) {
+			// 左は `as` で 2 バイトに固定する (リテラルだと型のない定数になり、量が変数なので 1 バイトの演算になりうる)
+			return fmt.Sprintf("((%s as %s) %s ((%s & 15) as int))", g.leaf(t), t.name, op, g.expr(rpTypes[0], depth-1))
+		}
 		if t.size == 1 && g.chance(0.4) {
 			// 左は 1 バイトの変数か配列の要素 (式だと定数畳み込みで 2 バイトになりうる: `(137 << 3) >> n`)
 			// 量も 1 バイトに (定数畳み込みで 2 バイトになった式 `(688 / x) & 7` は量に使えない)
@@ -294,6 +299,9 @@ func (g *rpGen) expr(t rpType, depth int) string {
 		}
 		return fmt.Sprintf("(%s %s %d)", g.expr(t, depth-1), op, g.pick(8))
 	case 5:
+		if len(g.fields) > 0 && g.want("structeq", 0.15) {
+			return g.structEq(t)
+		}
 		// 比較 (bool) を整数として使う
 		u := g.typ()
 		op := []string{"<", "<=", "==", "!=", ">", ">="}[g.pick(6)]
@@ -332,7 +340,12 @@ func (g *rpGen) expr(t rpType, depth int) string {
 // args は呼び出しの実引数 (ポインタの引数には同じ要素型の配列の要素へのポインタ)。
 func (g *rpGen) args(f *rpFunc, depth int) string {
 	args := make([]string, len(f.params))
-	for i, p := range f.params {
+	n := len(f.params)
+	for n > 0 && f.params[n-1].def != "" && g.chance(0.5) {
+		n-- // 既定値つきの末尾の引数を省く (defargs)
+	}
+	args = args[:n]
+	for i, p := range f.params[:n] {
 		if p.sptr {
 			args[i] = "&s0"
 			if g.chance(0.6) {
@@ -901,6 +914,16 @@ func (g *rpGen) block(depth int) []*rpStmt {
 	var out []*rpStmt
 	mark := len(g.scope)
 	for i := 0; i < n; i++ {
+		if g.cur != nil && !g.cur.inTable && !g.cur.rec && g.want("arrlit", 0.03) {
+			out = append(out, g.arrayLitLocal())
+			continue
+		}
+		if depth > 0 && g.want("shadow", 0.05) {
+			if s := g.shadowBlock(depth); s != nil {
+				out = append(out, s)
+				continue
+			}
+		}
 		if g.chance(0.2) {
 			t := g.typ()
 			init := g.expr(t, 2) // 自分自身を参照しないように、宣言の前に作る
@@ -958,6 +981,76 @@ func (g *rpGen) narrower(t rpType) (rpType, bool) {
 	return rpTypes[g.pick(2)], true // int か sint
 }
 
+// structEq は struct の値の比較 `(a == b)` を整数 t にしたもの (structeq。f2488d6 から struct・配列は == / != が書ける)。
+// S の値 (s0、sa の要素、ポインタ ps 経由、ローカルの lsv、同じ場所の w) か、入れ子の S と配列フィールドを持つ T の値。
+func (g *rpGen) structEq(t rpType) string {
+	srcs := []string{"s0", fmt.Sprintf("sa[(%s & 3)]", g.expr(rpTypes[0], 1))}
+	if g.sptr != "" {
+		srcs = append(srcs, "*"+g.sptr)
+	}
+	if g.lsv != "" {
+		srcs = append(srcs, g.lsv)
+	}
+	if g.alias {
+		srcs = append(srcs, "w")
+	}
+	if g.hasT && g.chance(0.3) {
+		srcs = []string{"u0", fmt.Sprintf("ua[(%s & 1)]", g.expr(rpTypes[0], 1))}
+		if g.ptr != "" {
+			srcs = append(srcs, "*"+g.ptr)
+		}
+	}
+	op := []string{"==", "!="}[g.pick(2)]
+	return fmt.Sprintf("((%s %s %s) as %s)", srcs[g.pick(len(srcs))], op, srcs[g.pick(len(srcs))], t.name)
+}
+
+// arrayLitLocal は実行時の値を要素に持つ配列リテラルで初期化したローカル配列を宣言し、要素を書き換えて読む文
+// (arrlit。315fa71 から配列リテラルの要素に実行時の値が書ける)。配列はこの文の中でだけ使う (添字は & (長さ - 1))。
+func (g *rpGen) arrayLitLocal() *rpStmt {
+	t := g.typ()
+	n := []int{2, 4}[g.pick(2)]
+	elems := make([]string, n)
+	for i := range elems {
+		if g.chance(0.3) {
+			elems[i] = g.lit(t)
+		} else {
+			// 定数だけの式は型のない定数になり、要素の型が値から決まって宣言の型と合わなくなる (`[(3 - 5), x]` が [2]i8)
+			elems[i] = g.cmpSide(t, 2)
+		}
+	}
+	name := fmt.Sprintf("al%d", g.nLocal) // q%d はポインタ変数の名前
+	g.nLocal++
+	idx := func() string { return fmt.Sprintf("(%s & %d)", g.expr(rpTypes[0], 1), n-1) }
+	lv, lt := g.lvalue()
+	return rpSimple(fmt.Sprintf("var %s:[%d]%s = [%s];\n%s[%s] ^= %s;\n%s = %s;", name, n, t.name, strings.Join(elems, ", "),
+		name, idx(), g.expr(t, 1), lv, cast(fmt.Sprintf("%s[%s]", name, idx()), t, lt)))
+}
+
+// shadowBlock は素のブロック `{ var x:T = e; ... }` で、見えている整数の変数 x と同じ名前・型の変数を宣言する
+// (shadow。9c5b646 から素のブロックにスコープがある)。ブロックの中の x は内側の変数で、外の x はブロックの後に元の値のまま。
+// 読み取り専用の変数 (ループ変数) と再帰の深さの引数は隠さない (本体が外の値を前提にする)。
+func (g *rpGen) shadowBlock(depth int) *rpStmt {
+	var cands []rpVar
+	for _, v := range g.scalars() {
+		if !v.readOnly && !v.small {
+			cands = append(cands, v)
+		}
+	}
+	if len(cands) == 0 {
+		return nil
+	}
+	v := cands[g.pick(len(cands))]
+	init := g.expr(v.typ, 2)
+	if regexp.MustCompile(`\b` + v.name + `\b`).MatchString(init) {
+		init = g.lit(v.typ) // 初期値の式に同じ名前があると、外と内のどちらを指すかの規則に頼ることになる
+	}
+	mark := len(g.scope)
+	g.scope = append(g.scope, rpVar{name: v.name, typ: v.typ})
+	body := g.block(depth - 1)
+	g.scope = g.scope[:mark]
+	return &rpStmt{parts: []string{fmt.Sprintf("{\nvar %s:%s = %s;\n", v.name, v.typ.name, init), "}"}, kids: [][]*rpStmt{body}}
+}
+
 func (g *rpGen) newLocal(t rpType) rpVar {
 	v := rpVar{name: fmt.Sprintf("l%d", g.nLocal), typ: t}
 	g.nLocal++
@@ -1003,8 +1096,17 @@ func (g *rpGen) genFunc(name string, far bool, sig *rpFunc) *rpFunc {
 		f.params = append(f.params, p)
 		g.scope = append(g.scope, p)
 	}
+	if sig == nil && len(f.params) > 0 && g.want("defargs", 0.3) {
+		// 末尾から続く整数の引数に既定値 (呼ぶ側は省ける。struct へのポインタの引数はこの後ろに付くので、付けたら既定値は外す)
+		for i := len(f.params) - 1; i >= 0 && !f.params[i].ptr && g.chance(0.7); i-- {
+			f.params[i].def = g.lit(f.params[i].typ)
+		}
+	}
 	if !far && sig == nil && len(g.fields) > 0 && g.chance(0.25) {
 		// struct へのポインタの引数 (呼ぶ側は &s0 か &sa[e & 3])
+		for i := range f.params {
+			f.params[i].def = "" // 既定値つきの引数の後ろに既定値なしの引数は置けない
+		}
 		p := rpVar{name: "ps", sptr: true}
 		f.params = append(f.params, p)
 		g.scope = append(g.scope, p)
@@ -1408,6 +1510,9 @@ func (g *rpGen) writeFunc(b *strings.Builder, f *rpFunc, prefix string) {
 		}
 		if p.sptr {
 			ps[i] = p.name + ":*S"
+		}
+		if p.def != "" {
+			ps[i] += " = " + p.def
 		}
 	}
 	var opts []string
