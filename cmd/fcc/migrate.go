@@ -9,7 +9,7 @@ package main
 //	  -d           差分を表示する
 //	  -t / -D      fc 3 → 4 で各ファイルを入口にコンパイルするときのターゲットと @(build) の上書き (fcc check と同じ)
 //
-// fc 2 → 3 は構文の書き換え (internal/migrate)、fc 3 → 4 は型を見る意味の書き換え (sema の Rewrite。doc/v4_plan.md §0) で、
+// fc 2 → 3 は構文の書き換え (internal/migrate)、fc 3 → 4 は型を見る意味の書き換え (sema の Rewrite。Agent/wiki/plans/v4-plan.md §0) で、
 // 渡したファイルをまとめて書き換える (ほかのファイルが use するモジュールも渡す)。最新の版のソースはそのまま (何度かけても
 // 同じ)。入力が CRLF なら出力も CRLF にする。
 

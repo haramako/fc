@@ -816,7 +816,7 @@ func (h *Hlc) nullOf(t *types.Type) ir.Operand {
 	panic(&diag.Error{Msg: fmt.Sprintf("null cannot be used as %s", t)})
 }
 
-// checkCast はキャストの種類ごとの規則を検査する (doc/v2_types_struct.md §3.5)。
+// checkCast はキャストの種類ごとの規則を検査する (Agent/wiki/design/types-struct.md §3.5)。
 func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 	switch kind {
 	case syntax.CastAs:

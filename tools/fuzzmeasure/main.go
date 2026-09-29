@@ -1,4 +1,4 @@
-// fuzzmeasure は fuzz と自動テストの効果を測る (doc/development_notes.md「fuzz の効果の測定」)。
+// fuzzmeasure は fuzz と自動テストの効果を測る (Agent/wiki/testing-and-fuzzing.md「fuzz の効果の測定」)。
 //
 //	go run ./tools/fuzzmeasure zoo   [-bugs a,b] [-randn 200] [-foldn 100] [-seed 1] [-off feat,..] [-run REGEXP]
 //	go run ./tools/fuzzmeasure cover [-randn 100] [-seed 1] [-feats a,b]

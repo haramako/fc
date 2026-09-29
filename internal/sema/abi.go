@@ -1,6 +1,6 @@
 package sema
 
-// 関数の呼び出し規約の指定 (options(abi:) / scratch / fastcall) の検査 (doc/v4_plan.md §2)。
+// 関数の呼び出し規約の指定 (options(abi:) / scratch / fastcall) の検査 (Agent/wiki/plans/v4-plan.md §2)。
 //
 //	abi: "frame"  asm の関数と、asm から呼ぶ fc の関数の固定の規約: 静的フレーム F_sym に戻り値 (0) → 引数 (宣言の順)。
 //	              レジスタは使わない。scratch: N で引数の後ろに作業領域 N バイト (frames.Analyze が配置する)

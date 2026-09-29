@@ -1,5 +1,5 @@
 #fc 4
-// fc 4 の NES の標準ライブラリの最小の例 (doc/v4_stdlib.md §3.2): 文字を出して黒からフェードし、十字キーでスプライトを動かす。
+// fc 4 の NES の標準ライブラリの最小の例 (Agent/wiki/plans/v4-stdlib.md §3.2): 文字を出して黒からフェードし、十字キーでスプライトを動かす。
 //   fcc build -t nes -o hello.nes hello.fc
 use frame;
 use vram;

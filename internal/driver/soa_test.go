@@ -1,6 +1,6 @@
 package driver
 
-// soa コンテナ (doc/v2_types_struct.md §4.5) のテスト。
+// soa コンテナ (Agent/wiki/design/types-struct.md §4.5) のテスト。
 
 import (
 	"os"

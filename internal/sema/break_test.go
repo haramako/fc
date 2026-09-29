@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestBreakV2: break / continue とラベル (doc/v2_grammar.md §3.7)。
+// TestBreakV2: break / continue とラベル (Agent/discussions/2026-09-13-v2-grammar.md §3.7)。
 // ラベルなし break は最も内側のループまたは switch、continue はループ。`break L;` / `continue L;`
 func TestBreakV2(t *testing.T) {
 	body := func(version int, stmts string) map[string]string {

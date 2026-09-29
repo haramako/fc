@@ -1,6 +1,6 @@
 package syntax
 
-// 型付き構文木 (doc/archive/v2_plan.md R1-b)。
+// 型付き構文木 (Agent/discussions/2026-09-12-v2-plan.md R1-b)。
 //
 // 設計原則:
 //   - 全ノードが Pos()/End() を持つ (C1: ロスレス。フォーマッタがコメントと共に元の構造を復元できる)
@@ -99,7 +99,7 @@ type IfStmt struct {
 	Else    Stmt
 }
 
-// StaticIfStmt は fc 3 の `@if (cond) { ... } else { ... }` / `else @if (...)` (doc/v3_plan.md §1)。条件はリテラルと
+// StaticIfStmt は fc 3 の `@if (cond) { ... } else { ... }` / `else @if (...)` (Agent/discussions/2026-09-20-v3-plan.md §1)。条件はリテラルと
 // `@(build)` の定数だけで、選ばれなかった側は名前解決・型検査をしない。新しいスコープは作らない。
 type StaticIfStmt struct {
 	At      Pos // `@if`

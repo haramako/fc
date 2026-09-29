@@ -1,6 +1,6 @@
 package sema
 
-// fc 3 の for-each (doc/v3_plan.md §10、2026-09-27 決定):
+// fc 3 の for-each (Agent/discussions/2026-09-20-v3-plan.md §10、2026-09-27 決定):
 //
 //	for (var x in A) { … }         // 配列・slice の要素の値 (コピー。読み取り専用)
 //	for (var i, x in A) { … }      // 添字と要素

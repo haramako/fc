@@ -7,7 +7,7 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// splitWords は 2 バイトのローカル変数 v を上位 / 下位の 1 バイト変数 v.lo / v.hi に分ける (doc/v2_regalloc.md §7)。
+// splitWords は 2 バイトのローカル変数 v を上位 / 下位の 1 バイト変数 v.lo / v.hi に分ける (Agent/wiki/design/regalloc.md §7)。
 // 分けた後は 1 バイトの演算の並びになるので、既存の A / Y / X の常駐が半分ずつを扱え、バイトごとの定数畳み込みで
 // `crc ^= x << 8` の下位の xor が消える。
 //

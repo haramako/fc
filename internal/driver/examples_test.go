@@ -19,7 +19,7 @@ import (
 )
 
 // castleCompileLimit はコンパイル時間の退行を捕まえる閾値 (手元で約 1.8 秒。常駐の候補探索が候補数の 3 乗になって
-// 55 秒になったのを見落としたことがある。doc/development_notes.md (11))。マシン差を見て目安の 5 倍。
+// 55 秒になったのを見落としたことがある。Agent/wiki/implementation-notes.md「最適化のパイプライン」(11))。マシン差を見て目安の 5 倍。
 const castleCompileLimit = 25 * time.Second // 単独で約 4 秒、go test ./... の並列で約 11 秒 (2026-09-28。10 秒だと並列で落ちた)
 
 func runTool(t *testing.T, dir string, name string, args ...string) {

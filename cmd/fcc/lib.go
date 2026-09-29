@@ -1,6 +1,6 @@
 package main
 
-// fcc lib: fc.toml の [lib.*] のライブラリ (doc/v4_stdlib.md §9)。
+// fcc lib: fc.toml の [lib.*] のライブラリ (Agent/wiki/plans/v4-stdlib.md §9)。
 //
 //	fcc lib fetch              fc.lock のとおりに揃える (無いものは取ってきて fc.lock を書く。fcc build も自動でする)
 //	fcc lib update [name...]   git のライブラリを rev の今のコミットに進めて fc.lock を書き直す (名前が無ければ全部)

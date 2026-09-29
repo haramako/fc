@@ -1,7 +1,7 @@
 // Package types は fc 言語の型と、その同一性 (インターン) を管理する。
 //
 // 型は Universe 経由で作る。同じ構造の型は同じ *Type になるので、ポインタ比較で同一性を判定できる。
-// Universe はコンパイラのインスタンスごとに 1 つ持つ (パッケージレベルの可変状態を持たない: doc/archive/v2_plan.md R1-g)。
+// Universe はコンパイラのインスタンスごとに 1 つ持つ (パッケージレベルの可変状態を持たない: Agent/discussions/2026-09-12-v2-plan.md R1-g)。
 package types
 
 import (
@@ -62,7 +62,7 @@ type Type struct {
 	str      string
 }
 
-// EnumInfo は enum 型のメンバー (宣言順)。doc/language_feature_candidates.md §1。
+// EnumInfo は enum 型のメンバー (宣言順)。Agent/wiki/plans/language-feature-candidates.md §1。
 type EnumInfo struct {
 	Name    string // モジュール修飾名 (mod.Name)
 	Members []EnumMember
@@ -226,7 +226,7 @@ type intSpec struct {
 	signed bool
 }
 
-// IntTypeNames は整数型の名前 (fc 3 の正式名。fc 2 でも使える) → (サイズ, 符号)。doc/v3_plan.md §7。
+// IntTypeNames は整数型の名前 (fc 3 の正式名。fc 2 でも使える) → (サイズ, 符号)。Agent/discussions/2026-09-20-v3-plan.md §7。
 var IntTypeNames = map[string]intSpec{
 	"u8": {1, false}, "i8": {1, true}, "u16": {2, false}, "i16": {2, true},
 }
@@ -272,7 +272,7 @@ func (u *Universe) PointerTo(base *Type) *Type {
 	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, str: "*" + base.str})
 }
 
-// Slice は要素 elem の slice の型 `[]elem` / `[]const elem` (wide なら長さ u16 の `[:u16]elem`。doc/v3_slices_vector.md)。
+// Slice は要素 elem の slice の型 `[]elem` / `[]const elem` (wide なら長さ u16 の `[:u16]elem`。Agent/discussions/2026-09-20-v3-slices-vector.md)。
 // 表現は struct { ptr:*elem; len:u8 } の 3 バイト (wide は len:u16 の 4 バイト)。普通の slice の要素は 255 個まで: 添字・ループが
 // 8 ビットで済むように。値のコピー・引数・戻り値・フィールドの参照は struct の仕組みで扱い、添字・範囲・長さは意味解析が書き換える。
 func (u *Universe) Slice(elem *Type, ro, wide bool) *Type {
@@ -307,7 +307,7 @@ func (t *Type) SliceLen() *Type { return t.Fields[1].Type }
 // IsWideSlice は長さ u16 の slice (`[:u16]T`) か。
 func (t *Type) IsWideSlice() bool { return t.IsSlice() && t.SliceLen().Size == 2 }
 
-// ConstPointerTo は base への読み取り専用のポインタ型 `*const base` (doc/language_feature_candidates.md §3)。
+// ConstPointerTo は base への読み取り専用のポインタ型 `*const base` (Agent/wiki/plans/language-feature-candidates.md §3)。
 func (u *Universe) ConstPointerTo(base *Type) *Type {
 	return u.intern(&Type{Kind: Pointer, Size: 2, Base: base, Length: -1, ReadOnly: true, str: "*const " + base.str})
 }

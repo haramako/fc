@@ -1,6 +1,6 @@
 package driver
 
-// 2026-09-27 の 2 回目の調査 (doc/v3_plan.md §10.7) で見つけたバグの回帰テスト。
+// 2026-09-27 の 2 回目の調査 (Agent/discussions/2026-09-20-v3-plan.md §10.7) で見つけたバグの回帰テスト。
 
 import (
 	"fmt"

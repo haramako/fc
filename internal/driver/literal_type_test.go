@@ -1,6 +1,6 @@
 package driver
 
-// 型のない整数定数 (リテラル・型を書かない const) は演算・比較で相手の型に合わせる (doc/v3_plan.md §10.2、2026-09-27 決定)。
+// 型のない整数定数 (リテラル・型を書かない const) は演算・比較で相手の型に合わせる (Agent/discussions/2026-09-20-v3-plan.md §10.2、2026-09-27 決定)。
 
 import (
 	"strings"

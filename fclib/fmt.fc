@@ -1,5 +1,5 @@
 #fc 4
-// 数や文字列を文字にして書く (@format と printf の中身。doc/v4_stdlib.md §4)。begin で書き先を決め、dec_u8 などを順に呼ぶと
+// 数や文字列を文字にして書く (@format と printf の中身。Agent/wiki/plans/v4-stdlib.md §4)。begin で書き先を決め、dec_u8 などを順に呼ぶと
 // 書き先の at から書いていく (at は書いた長さ)。書き先が足りなければ sys.panic で止まる (begin_try の後は止まらず、end_try が 0 を
 // 返す: @try_format)。10 進は割り算を使わない (10 のべきを引く)。
 //

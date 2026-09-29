@@ -3,7 +3,7 @@ package syntax
 // 文の無い case の検査 (fc 3): fc の case は落ちない (fall through しない) ので、C の書き方で `case 2: case 3: r = 7;` と並べると
 // x == 2 のときは何もしない。後ろに case / default が続く文の無い case を警告し、`case 2, 3:` / `fallthrough;` を案内する。
 // 何もしない case は書くので、`:` から次の case までにコメントがあれば (`// 何もしない`) 警告しない (`break;` などの文も)。
-// doc/roadmap.md の v3 (2026-09-26 決定)。
+// Agent/wiki/plans/roadmap.md の v3 (2026-09-26 決定)。
 
 func (l *linter) emptyCases(f *File) {
 	if f.Version < Version3 {

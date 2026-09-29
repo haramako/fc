@@ -1,5 +1,5 @@
 #fc 4
-// メモリ (バイト列) の操作 (doc/v4_stdlib.md §3.1)。どれも slice で受け取る ([]u8 からも暗黙に)。長さ 0 は何もしない。
+// メモリ (バイト列) の操作 (Agent/wiki/plans/v4-stdlib.md §3.1)。どれも slice で受け取る ([]u8 からも暗黙に)。長さ 0 は何もしない。
 // fill / copy / move の本体は asm (mem.asm。1 バイトあたり fill 約 11、copy 約 16、move 約 18 サイクル)。
 @(bank: -1);
 

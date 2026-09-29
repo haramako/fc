@@ -106,7 +106,7 @@ func (o Options) Has(key string) bool {
 }
 
 // Flag は真偽値の属性 (inline / fastcall / volatile など) が真か: キーがあり、値が true か 0 以外の整数
-// (`inline: false` / `inline: 0` は偽。fc 3 の `@(inline)` は true)。doc/v3_plan.md §5 C。
+// (`inline: false` / `inline: 0` は偽。fc 3 の `@(inline)` は true)。Agent/discussions/2026-09-20-v3-plan.md §5 C。
 func (o Options) Flag(key string) bool {
 	v, ok := o.Get(key)
 	if !ok {
@@ -168,11 +168,11 @@ func (m *Module) AddUse(mi *ModuleInterface) {
 	m.Uses = append(m.Uses, mi)
 }
 
-// ModuleInterface は importer から見えるモジュールの外面 (doc/archive/v2_plan.md C4)。
+// ModuleInterface は importer から見えるモジュールの外面 (Agent/discussions/2026-09-12-v2-plan.md C4)。
 // 宣言の検索と識別だけを提供し、Lambda 本体や IR には触れさせない。
 // F-mod (分割コンパイル) ではこれをシリアライズしたものが `use` の入力になる。
 //
-// 可視性は宣言側モジュールの文法バージョンで決まる (doc/v2_grammar.md §3.2, §4.2):
+// 可視性は宣言側モジュールの文法バージョンで決まる (Agent/discussions/2026-09-13-v2-grammar.md §3.2, §4.2):
 //   - `use * from mod;` と `mod.name` のドット参照 (Lookup) は public だけを見る (規則 S7。v1 のドット参照だけ
 //     private にも届いたが、v1 は削除した)
 type ModuleInterface struct {
@@ -275,7 +275,7 @@ type Lambda struct {
 	FrameSize int
 	ZpUsed    int // レジスタ割付後: 普通の関数は L の使用バイト数、fastcall は FC_FASTCALL_REG の使用バイト数 (引数・戻り値込み)
 
-	// 呼び出し規約とフレームの配置 (internal/frames が決める。doc/v2_frame_alloc.md §6)
+	// 呼び出し規約とフレームの配置 (internal/frames が決める。Agent/wiki/design/frame-alloc.md §6)
 	ABI       ABI
 	Entry     bool // static のうち、アドレスを取られた関数 (呼び出し側はスタック経由で渡し、プロローグで自分のフレームに写す)
 	Interrupt bool // options(interrupt: true): 割り込みから呼ばれる (フレームは全関数と重ねない)
@@ -285,7 +285,7 @@ type Lambda struct {
 	NoGrow    bool
 	FrameZp   bool // static: フレームがゼロページ (FC_SZP) にある
 	FrameBase int  // static: 領域内のオフセット (配置後)
-	// レジスタ渡し (static だけ。doc/v2_frame_alloc.md §7): RegArg は最後の引数 (1 バイト) を A で受け取る (呼び出し側が
+	// レジスタ渡し (static だけ。Agent/wiki/design/frame-alloc.md §7): RegArg は最後の引数 (1 バイト) を A で受け取る (呼び出し側が
 	// A に置いて `sym` / `sym__direct` から入り、入口の `sta` でフレームに写す。フレームに書いた呼び出し (far call、
 	// 引数と call の間に他の命令がある) は `sta` の後ろの `sym__frame` から入る)。RegResult は 1 バイトの戻り値を
 	// フレームに書いたうえで A にも置いて返す (呼び出し側はフレームを読まない)。RegArgY は最後から 2 つ目の引数 (1 バイト) を
@@ -294,14 +294,14 @@ type Lambda struct {
 	RegArg    bool
 	RegArgY   bool
 	RegResult bool
-	// FrameABI は options(abi: "frame") の関数 (asm の関数と、asm から呼ぶ fc の関数の固定の規約。doc/v4_plan.md §2):
+	// FrameABI は options(abi: "frame") の関数 (asm の関数と、asm から呼ぶ fc の関数の固定の規約。Agent/wiki/plans/v4-plan.md §2):
 	// static のフレームに戻り値 (0) → 引数 (宣言の順) → 作業領域 (Scratch バイト)。レジスタ渡し (RegArg など) はしない。
 	// asm から参照されても Entry にしない。extern ならフレームの大きさは frames.Analyze が決める
 	FrameABI bool
 	Scratch  int
 }
 
-// ABI は関数の呼び出し規約 (doc/v2_frame_alloc.md §6-1)。
+// ABI は関数の呼び出し規約 (Agent/wiki/design/frame-alloc.md §6-1)。
 type ABI uint8
 
 const (
@@ -327,7 +327,7 @@ func (l *Lambda) FrameSym() string { return "F" + Mangle(l.Id) }
 func Mangle(str string) string { return strings.ReplaceAll(str, "$", "_D") }
 
 // Switchable はこのモジュールが切替バンクに載っているか (`options(bank: N)` で N >= 0。`options(near: true)` なら固定扱い)。
-// doc/v2_farcall.md §3.2
+// Agent/wiki/design/farcall.md §3.2
 func (m *Module) Switchable() bool {
 	if m.Options.Flag("near") {
 		return false

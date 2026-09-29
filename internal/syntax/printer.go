@@ -1,6 +1,6 @@
 package syntax
 
-// フォーマッタ (doc/archive/go_evolution_plan.md F-fmt)。構文木をコメント付きで正規形に印字する。
+// フォーマッタ (Agent/discussions/2026-08-29-go-evolution-plan.md F-fmt)。構文木をコメント付きで正規形に印字する。
 //
 // 方針は gofmt と同じ:
 //   - トークンの並びは変えない (括弧もそのまま)。変えるのは空白・改行・インデントだけ。

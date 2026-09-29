@@ -1,5 +1,5 @@
 #fc 4
-// examples/miku (fc-miku 由来の縦スクロールのシューティング) を fc 4 の標準ライブラリで書き直したもの (doc/v4_stdlib.md §7 の 5)。
+// examples/miku (fc-miku 由来の縦スクロールのシューティング) を fc 4 の標準ライブラリで書き直したもの (Agent/wiki/plans/v4-stdlib.md §7 の 5)。
 // 元の ppu モジュール (NMI・VRAM のキュー・スプライト) は frame / vram / pal / oam、pad は新しい pad、表を引く math は新しい math と
 // rand にした。ゲームの中身は同じ (乱数の列と角度の細かい所は違う)。
 //   fcc build -t nes -o miku4.nes miku.fc

@@ -52,9 +52,9 @@ func (e *CommandError) Error() string {
 type BuildOptions struct {
 	Target string // emu / nes (デフォルト emu)
 	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対)。use / @include と asm の include で、ソースのディレクトリの後、fclib
-	// より前に探す (fcc test がテストするモジュールのディレクトリを足す。fc.toml の [lib.*] もここに入る: doc/v4_stdlib.md §9)
+	// より前に探す (fcc test がテストするモジュールのディレクトリを足す。fc.toml の [lib.*] もここに入る: Agent/wiki/plans/v4-stdlib.md §9)
 	LibPath       []string
-	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー。doc/v4_stdlib.md §9)
+	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー。Agent/wiki/plans/v4-stdlib.md §9)
 	Offline bool
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
@@ -75,14 +75,14 @@ type BuildOptions struct {
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / base.o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
-	// CLI はどちらも既定のままなので外部挙動は従来どおり (doc/archive/v2_plan.md G6)。
+	// CLI はどちらも既定のままなので外部挙動は従来どおり (Agent/discussions/2026-09-12-v2-plan.md G6)。
 	Dir      string
 	BuildDir string
 
 	// Jobs は ca65 を同時に走らせる数。0 なら CPU 数。1 で逐次。
 	Jobs int
 
-	// Defines は CLI の -D (`module.NAME=value`)。fc.toml の [define.<module>] の後に当てる (doc/v3_plan.md §1)
+	// Defines は CLI の -D (`module.NAME=value`)。fc.toml の [define.<module>] の後に当てる (Agent/discussions/2026-09-20-v3-plan.md §1)
 	Defines []string
 }
 
@@ -611,7 +611,7 @@ func (c *Compiler) defaultInterrupts(mods []*ir.Module) (string, error) {
 	return path, writeIfChanged(path, []byte(src))
 }
 
-// farcallAsm は fc が用意する farcall トランポリン (doc/v2_farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では
+// farcallAsm は fc が用意する farcall トランポリン (Agent/wiki/design/farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では
 // 「そのまま飛ぶ」だけの fclib/<target>/farcall.asm を使う。バンク切替のあるマッパーはプロジェクトが farcall を用意する。
 func (c *Compiler) farcallAsm() string {
 	if c.target == "nes" {

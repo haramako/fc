@@ -1,6 +1,6 @@
 package nes
 
-// fc 4 の NES の標準ライブラリ (fclib/nes の frame / vram / pal / oam / pad。doc/v4_stdlib.md §3.2) を内蔵ランナーで走らせ、
+// fc 4 の NES の標準ライブラリ (fclib/nes の frame / vram / pal / oam / pad。Agent/wiki/plans/v4-stdlib.md §3.2) を内蔵ランナーで走らせ、
 // ネームテーブル・パレット・OAM・vblank の中に収まっているかを見る。
 
 import (

@@ -1622,7 +1622,7 @@ function main():void
 	exit(0);
 }
 `)
-	// 期待値は Python で同じ計算を再現して求めた (development_notes.md)
+	// 期待値は Python で同じ計算を再現して求めた (Agent/wiki/testing-and-fuzzing.md)
 	if want := "255 0 255 7 0 3 0 1593\n"; out != want {
 		t.Errorf("got %q\nwant %q", out, want)
 	}
@@ -1760,7 +1760,7 @@ function main():void
 	}
 }
 
-// TestRegArgY: static 関数の最後から 2 つ目の 1 バイト引数は Y で渡す (doc/v2_frame_alloc.md §7)。呼び出し側は
+// TestRegArgY: static 関数の最後から 2 つ目の 1 バイト引数は Y で渡す (Agent/wiki/design/frame-alloc.md §7)。呼び出し側は
 // 「push_arg の間の命令が Y を使わない」ときだけ Y に置き (演算は可、添字・入れ子の呼び出しは不可 → `__a` から入る)、
 // 呼び先は `sty` で写す。関数ポインタ経由 (Entry) はスタックから `ldy` して `__direct` へ。最後の引数が 2 バイトなら Y だけ。
 func TestRegArgY(t *testing.T) {

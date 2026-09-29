@@ -1,6 +1,6 @@
 package sema
 
-// @format(dst, "書式", 引数...) と fc 4 の printf("書式", 引数...) (doc/v4_stdlib.md §4)。
+// @format(dst, "書式", 引数...) と fc 4 の printf("書式", 引数...) (Agent/wiki/plans/v4-stdlib.md §4)。
 //
 // @format は dst ([]u8) に書式どおりに書き、書いた部分の slice を返す (snprintf に当たる)。書式は定数の文字列で、コンパイル時に
 // 分解して fmt モジュールの関数の呼び出しの並びにする (`fmt.begin(dst); fmt.str("HP "); fmt.dec_u8(hp, 3); ...` と、fmt.at を

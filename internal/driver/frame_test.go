@@ -1,6 +1,6 @@
 package driver
 
-// レジスタ割付 (doc/v2_frame_alloc.md §3): バイト単位の詰め込み、フレームへのあふれ、fastcall 領域の大きさ。
+// レジスタ割付 (Agent/wiki/design/frame-alloc.md §3): バイト単位の詰め込み、フレームへのあふれ、fastcall 領域の大きさ。
 
 import (
 	"context"

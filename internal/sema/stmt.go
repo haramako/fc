@@ -68,7 +68,7 @@ func forHasContinue(body *syntax.Block, label *syntax.Ident) bool {
 	return found
 }
 
-// findBreakable は break / continue の飛び先を決める (doc/v2_grammar.md §3.7)。
+// findBreakable は break / continue の飛び先を決める (Agent/discussions/2026-09-13-v2-grammar.md §3.7)。
 //   - ラベル付きならそのラベルの文
 //   - ラベルなし: break は最も内側のループまたは switch (v1 では switch を積まないのでループのみ)、
 //     continue は最も内側のループ
@@ -228,7 +228,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		id := s.Module.Name
 		m := h.useModule(id)
 		h.module.AddUse(m)
-		// 再輸出は `public use` のときだけ (doc/v2_grammar.md §3.2)
+		// 再輸出は `public use` のときだけ (Agent/discussions/2026-09-13-v2-grammar.md §3.2)
 		reexport := s.PublicPos.IsValid()
 		switch {
 		case s.FromAll:

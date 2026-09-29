@@ -1,6 +1,6 @@
 package fc
 
-// fcc lib: fc.toml の [lib.*] のライブラリ (doc/v4_stdlib.md §9)。
+// fcc lib: fc.toml の [lib.*] のライブラリ (Agent/wiki/plans/v4-stdlib.md §9)。
 
 import (
 	"fmt"

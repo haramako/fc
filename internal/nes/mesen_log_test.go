@@ -1,7 +1,7 @@
 package nes
 
 // @log の Mesen 2 用スクリプト (<rom>.fclog.lua) を MesenCE (--testrunner) で実際に動かし、emu ターゲットの表示
-// (fcc run -g) と行ごとに同じになることを確かめる (doc/v3_plan.md §9)。testrunner では emu.log が stdout に出ないので、
+// (fcc run -g) と行ごとに同じになることを確かめる (Agent/discussions/2026-09-20-v3-plan.md §9)。testrunner では emu.log が stdout に出ないので、
 // emu.log を print に差し替えてから生成したスクリプトを読む。
 
 import (

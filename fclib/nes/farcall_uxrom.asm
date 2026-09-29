@@ -1,4 +1,4 @@
-;;; farcall (UxROM 用の参考実装。doc/v3_plan.md §3、fc.toml の [target] mapper = "UxROM")
+;;; farcall (UxROM 用の参考実装。Agent/discussions/2026-09-20-v3-plan.md §3、fc.toml の [target] mapper = "UxROM")
 ;;;
 ;;; プロジェクトの固定の領域のモジュールから @include("farcall_uxrom.asm") する。
 ;;; 前提: プロジェクトが今のバンクを持つ変数 `var uxrom_bank:u8 @(symbol: "_uxrom_bank");` を用意し、起動時に

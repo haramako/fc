@@ -1,6 +1,6 @@
 package ir
 
-// 支配木と自然ループ (レジスタ割付のループ検出と、opt のループの変換 (induction / unroll / split) が使う。doc/v2_regalloc.md)。
+// 支配木と自然ループ (レジスタ割付のループ検出と、opt のループの変換 (induction / unroll / split) が使う。Agent/wiki/design/regalloc.md)。
 // CFG に付いてキャッシュされる (CFG は命令列を変えたら作り直すもの)。
 
 import "sort"

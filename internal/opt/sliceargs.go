@@ -1,6 +1,6 @@
 package opt
 
-// slice の引数を部品のまま積む (doc/roadmap.md の「slice の引数の受け渡しを縮める」)。
+// slice の引数を部品のまま積む (Agent/wiki/plans/roadmap.md の「slice の引数の受け渡しを縮める」)。
 
 import (
 	"github.com/haramako/fc/internal/ir"

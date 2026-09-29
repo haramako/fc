@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestForV2: C 型 for と ++ / -- (doc/v2_grammar.md §3.10)。
+// TestForV2: C 型 for と ++ / -- (Agent/discussions/2026-09-13-v2-grammar.md §3.10)。
 func TestForV2(t *testing.T) {
 	v2 := func(body string) map[string]string {
 		return map[string]string{"t.fc": "#fc 2\nfunction main():void {\nvar x:int;\nvar y:int;\n" + body + "\n}\n"}

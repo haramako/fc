@@ -1,6 +1,6 @@
 package driver
 
-// fc.toml のバンクの表から配置を作るテスト (doc/v3_plan.md §3、layout.go)。MMC3 で名前つきのバンクに表を置き、固定の
+// fc.toml のバンクの表から配置を作るテスト (Agent/discussions/2026-09-20-v3-plan.md §3、layout.go)。MMC3 で名前つきのバンクに表を置き、固定の
 // 領域の main から far call で読む。内蔵 NES ランナーで走らせ、値・呼び出しの後のバンクの復帰・@bank の番号・名前つきの
 // RAM 領域・cfg の断片を確かめる。
 

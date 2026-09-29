@@ -1,6 +1,6 @@
 package driver
 
-// @format (doc/v4_stdlib.md §4) のテスト: 書式をコンパイル時に分解して fmt の関数の呼び出しにする。
+// @format (Agent/wiki/plans/v4-stdlib.md §4) のテスト: 書式をコンパイル時に分解して fmt の関数の呼び出しにする。
 
 import (
 	"fmt"

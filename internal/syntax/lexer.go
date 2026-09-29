@@ -23,7 +23,7 @@ type Lexer struct {
 	verErr   *Error // プラグマの構文エラー (最初の Next で返す)
 }
 
-// 文法バージョン。fc 1 (2026-09 まで) は削除した。fc 4 は開発中 (doc/v4_plan.md。整数の規則など意味の変更)。ソースごとに
+// 文法バージョン。fc 1 (2026-09 まで) は削除した。fc 4 は開発中 (Agent/wiki/plans/v4-plan.md。整数の規則など意味の変更)。ソースごとに
 // 先頭行の `#fc 2` / `#fc 3` / `#fc 4` で選び、無ければ DefaultVersion (移行期間は fc 2)。版の違うソースは 1 つのプログラムに
 // 混ぜられる (モジュールごとに Module.Version)。古い版からの書き換えは `fcc migrate` (internal/migrate)。
 const (

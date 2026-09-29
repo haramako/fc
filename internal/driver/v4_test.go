@@ -1,6 +1,6 @@
 package driver
 
-// fc 4 の整数の規則 (doc/v4_plan.md §1.3) と、fc 3 → 4 の migrate の書き換え (sema の Rewrite) のテスト。
+// fc 4 の整数の規則 (Agent/wiki/plans/v4-plan.md §1.3) と、fc 3 → 4 の migrate の書き換え (sema の Rewrite) のテスト。
 
 import (
 	"fmt"

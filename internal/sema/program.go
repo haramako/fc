@@ -3,7 +3,7 @@ package sema
 // Program はプログラム全体 (全モジュール) にまたがる意味解析の状態。
 // 個々のモジュールの解析は Hlc (モジュール単位のコンテキスト) が行い、モジュール横断の
 // 情報 (型のインターン表・モジュール一覧・グローバル options・組み込みマクロ) だけをここに置く
-// (doc/archive/v2_plan.md C4: モジュール単位の sema)。
+// (Agent/discussions/2026-09-12-v2-plan.md C4: モジュール単位の sema)。
 //
 // CompileModule first collects declarations and imports across the module graph,
 // then resolves types, constants and signatures on demand. CompileBodies runs
@@ -69,7 +69,7 @@ type Program struct {
 	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
 	Defines map[string]*DefineUse
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
-	// (driver/layout.go。doc/v3_plan.md §3)
+	// (driver/layout.go。Agent/discussions/2026-09-20-v3-plan.md §3)
 	Banks map[string]BankRef
 	// Config は調査用の設定 (パスの入れ切り・トレース。ir/config.go)。driver が BuildOptions から渡し、各モジュールに写す
 	Config *ir.Config
@@ -382,7 +382,7 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 	return l.prog.CompileModule(file, l)
 }
 
-// V3Builtins は fc 3 で `@` を付けて呼ぶ組み込みの名前 → fc 3 の綴り (doc/v3_plan.md §5 A)。fc 3 のモジュールからは
+// V3Builtins は fc 3 で `@` を付けて呼ぶ組み込みの名前 → fc 3 の綴り (Agent/discussions/2026-09-20-v3-plan.md §5 A)。fc 3 のモジュールからは
 // `@` の無い名前では見えない (利用者が同じ名前を宣言できる)。@sizeof / @bitcast / @incbin / @include は構文 (syntax)。
 // fcc migrate の書き換えにも使う。
 var V3Builtins = map[string]string{
@@ -400,7 +400,7 @@ var v3Hidden = func() map[string]string {
 	return m
 }()
 
-// v3Reserved は fc 3 のモジュールで宣言できない名前 (doc/v3_plan.md §7)。
+// v3Reserved は fc 3 のモジュールで宣言できない名前 (Agent/discussions/2026-09-20-v3-plan.md §7)。
 var v3Reserved = func() map[string]string {
 	m := map[string]string{}
 	for n := range types.IntTypeNames {

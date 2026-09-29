@@ -1,6 +1,6 @@
 package sema
 
-// SoA コンテナ `soa` (doc/v2_types_struct.md §4.5)。
+// SoA コンテナ `soa` (Agent/wiki/design/types-struct.md §4.5)。
 //
 //	soa Points:[4]Point;            // フィールドごとの配列 Points_x, Points_y, ... (2 バイト以上のフィールドはバイトごと)
 //	var p:*Points;                  // 要素ハンドル (types.SoaRef): 実体は 1 バイトのインデックス

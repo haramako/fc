@@ -1,6 +1,6 @@
 package driver
 
-// fc 4 の fclib の mapper のモジュール (fclib/nes/uxrom.fc / mmc1.fc / mmc3.fc。doc/v4_stdlib.md §3.2)。
+// fc 4 の fclib の mapper のモジュール (fclib/nes/uxrom.fc / mmc1.fc / mmc3.fc。Agent/wiki/plans/v4-stdlib.md §3.2)。
 
 import "testing"
 

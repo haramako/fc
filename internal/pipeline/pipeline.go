@@ -1,4 +1,4 @@
-// Package pipeline は意味解析の後、コード生成の前にプログラム全体で行う処理の順序を持つ (doc/v2_frame_alloc.md §6-4):
+// Package pipeline は意味解析の後、コード生成の前にプログラム全体で行う処理の順序を持つ (Agent/wiki/design/frame-alloc.md §6-4):
 //
 //	インライン展開・関数ポインタ表の直接化 (opt) → asm から参照される変数を volatile に → 呼び出し規約の決定 (frames.Analyze)
 //	→ 関数ごとに 最適化 (opt.Optimize) → 引数の Y 渡しの印 (codegen) → 常駐レジスタ (regalloc.AllocateResident)

@@ -1,6 +1,6 @@
 package driver
 
-// castle の doc/memo.md「FC BUG」由来の回帰テスト (doc/archive/go_evolution_plan.md R4 の表)。
+// castle の doc/memo.md「FC BUG」由来の回帰テスト (Agent/discussions/2026-08-29-go-evolution-plan.md R4 の表)。
 // 小さなプログラムを emu で実行して出力を見る。
 
 import (

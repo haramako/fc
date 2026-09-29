@@ -10,7 +10,7 @@ import (
 	"github.com/haramako/fc/internal/ir"
 )
 
-// TestBuiltins: include("*.rb") なしで使える組み込み (doc/v2_grammar.md §3.5)。
+// TestBuiltins: include("*.rb") なしで使える組み込み (Agent/discussions/2026-09-13-v2-grammar.md §3.5)。
 func TestBuiltins(t *testing.T) {
 	t.Run("printf without include (v2)", func(t *testing.T) {
 		ir := mustCompileFiles(t, map[string]string{

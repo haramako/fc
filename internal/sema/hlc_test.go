@@ -195,7 +195,7 @@ func mustCompileFiles(t *testing.T, files map[string]string, main string) string
 	return ir.DumpProgram(prog.Options, prog.Modules.List())
 }
 
-// TestVisibilityV2: モジュールはデフォルト private、ドット参照は public のみ、再輸出は public use (doc/v2_grammar.md §3.2)。
+// TestVisibilityV2: モジュールはデフォルト private、ドット参照は public のみ、再輸出は public use (Agent/discussions/2026-09-13-v2-grammar.md §3.2)。
 func TestVisibilityV2(t *testing.T) {
 	m2 := "#fc 2\nvar a:int;\npublic var b:int;\n"
 	cases := []struct {

@@ -1,6 +1,6 @@
 package project
 
-// ライブラリの取り込み (シンプルなパッケージマネージャ。doc/v4_stdlib.md §9)。fc.toml の [lib.NAME] に、フォルダ (path) か git の
+// ライブラリの取り込み (シンプルなパッケージマネージャ。Agent/wiki/plans/v4-stdlib.md §9)。fc.toml の [lib.NAME] に、フォルダ (path) か git の
 // リポジトリ (git / rev / dir) を書くと、そのモジュールを use できる。探索は「ソースのディレクトリ → fc.toml の順のライブラリ
 // (それぞれ <lib> と <lib>/<target>) → fclib → fclib/<target>」で、ライブラリは fclib のモジュールを置き換えられる。
 //
@@ -180,7 +180,7 @@ func (cfg *ProjectConfig) WriteLock(m map[string]LockEntry) error {
 	sort.Strings(names)
 	var b bytes.Buffer
 	b.WriteString("# fc.lock: fcc が書く (手で直さない)。fc.toml の [lib.*] の git のライブラリを、取ってきたときのコミットに固定する\n")
-	b.WriteString("# (fcc lib update [名前] で進める。doc/v4_stdlib.md §9)\n")
+	b.WriteString("# (fcc lib update [名前] で進める。Agent/wiki/plans/v4-stdlib.md §9)\n")
 	for _, n := range names {
 		e := m[n]
 		fmt.Fprintf(&b, "\n[lib.%s]\ngit = %q\nrev = %q\ncommit = %q\n", n, e.Git, e.Rev, e.Commit)
