@@ -33,6 +33,26 @@ function main():void
 	}
 }
 
+// TestMainReturnExitsEmu: emu では main から戻ると終了コード 0 で終わる (console.exit を呼ばなくても fcc run が終わる。
+// fclib/emu/runtime_main_return.inc)。前は runtime の jmp * で止まったままだった。
+func TestMainReturnExitsEmu(t *testing.T) {
+	t.Parallel()
+	r := testBuild(t, buildSpec{Files: map[string]string{"t.fc": `#fc 4
+use console;
+function main():void
+{
+	console.init();
+	printf("hi\n");
+}
+`}, Run: true, MaxCycles: 1_000_000})
+	if r.Err != nil {
+		t.Fatal(r.Err)
+	}
+	if r.Res.ExitCode != 0 || r.Stdout != "hi\n" {
+		t.Errorf("exit %d, out %q; want 0, %q", r.Res.ExitCode, r.Stdout, "hi\n")
+	}
+}
+
 // TestFmtReference: fmt の数の変換を Go の fmt と比べる (乱数の値・幅・埋め)。
 func TestFmtReference(t *testing.T) {
 	t.Parallel()

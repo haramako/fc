@@ -56,7 +56,7 @@
 	stx FC_SP						; スタックの空き先頭 (S+0)
 
 	jsr _main
-    jmp *
+	.include "runtime_main_return.inc"	; main から戻った後 (fclib/<target>/。nes は止まる、emu は終了コード 0 で終える)
 .endproc
 
 .proc interrupt

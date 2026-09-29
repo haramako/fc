@@ -133,6 +133,10 @@
   **テストで「この関数が出力される」ことを見るときは `options(noinline: true)` を付ける**（`TestUnusedFunctions` /
   `TestDebugInfoAndSizeReport` / `TestFarCall` は小さな関数が消えて落ちた）。const の別名（`const D2 = f`）で参照される
   関数は呼び出しが全部展開されても出力が要る（`frames.Analyze` が DefEqu を根に足す）
+- **main から戻った後**（2026-09-30）: `share/runtime.asm` の start は `jsr _main` の後に `fclib/<target>/runtime_main_return.inc`
+  を include する（ca65 の `-I` に `fclib/<target>` がある）。nes は `jmp *`（ROM は前と同じ）、emu は `inc $ffff`（終了の番地は
+  255 で始まるので 0 になり、終了コード 0 で終わる。`jmp *` と同じ 3 バイトなので後ろのランタイムの番地はずれない）。前は emu も
+  `jmp *` で、`console.exit` を呼ばないプログラムは `fcc run` が終わらなかった（TestMainReturnExitsEmu）
 - **ca65 のオブジェクトの再利用**（2026-09-25、`internal/driver/asmcache.go`）: ビルドディレクトリの `<obj>.stamp` に
   ca65 が読んだ全ファイルの内容のハッシュを記録し、同じなら ca65 を起動しない。アセンブルの結果が怪しいときは
   `FC_NO_ASM_CACHE=1` で切るか、ビルドディレクトリ（`.fc-build`）を消す
