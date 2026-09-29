@@ -102,6 +102,7 @@ type Result struct {
 	StaticRam  int
 	Frames     []string         // 静的フレームの配置の要約 (fcc build -d で表示)
 	Defines    []sema.DefineUse // @(build) の const の上書き (fc.toml / -D。fcc build -d で表示)
+	Libs       []string         // fc.toml の [lib.*] の要約: ライブラリと、そこから使ったモジュール (fclib を置き換えたもの) (fcc build -d で表示)
 	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
 	// ResidentFixes は常駐レジスタの見積もりが外れて、退避 / 復帰に直した命令の数 (codegen.Llc.ResidentFixes)
 	ResidentFixes int
@@ -112,6 +113,7 @@ type Compiler struct {
 	ctx      context.Context
 	jobs     int      // ca65 の並列数
 	libDirs  []string // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
+	libs     []project.ResolvedLib // fc.toml の [lib.*] (fcc build -d の要約)
 	optLibs  []string // BuildOptions.LibPath を絶対パスにしたもの
 	offline  bool     // BuildOptions.Offline
 	target   string
@@ -248,6 +250,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
 	result.Defines = sortedDefines(prog.Defines)
+	result.Libs = c.libSummary(prog)
 	if err := writeIfChanged(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n"))); err != nil {
 		return nil, err
 	}
@@ -648,11 +651,52 @@ func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, err
 	if err != nil {
 		return nil, err
 	}
+	c.libs = libs
 	c.libDirs = append([]string{}, c.optLibs...)
 	for _, d := range dirs {
 		c.libDirs = append(c.libDirs, filepath.ToSlash(d))
 	}
 	return cfg.Defines(cli)
+}
+
+// libSummary は fc.toml の [lib.*] の要約の行: ライブラリごとに場所と、使ったモジュール (fclib の同じ名前のモジュールを
+// 置き換えたものには印)。
+func (c *Compiler) libSummary(prog *sema.Program) []string {
+	var lines []string
+	for _, l := range c.libs {
+		src := l.Root
+		if l.Git != "" {
+			src = fmt.Sprintf("%s@%s (%s)", l.Git, shortCommit(l.Commit), l.Root)
+		}
+		lines = append(lines, fmt.Sprintf("  %s: %s", l.Name, src))
+		root, _ := filepath.Abs(l.Root)
+		var mods []string
+		for _, m := range prog.Modules.List() {
+			p, _ := filepath.Abs(m.Path)
+			if rel, err := filepath.Rel(root, p); err != nil || strings.HasPrefix(rel, "..") {
+				continue
+			}
+			name := m.Id
+			for _, d := range []string{filepath.Join(c.FCHome, "fclib"), filepath.Join(c.FCHome, "fclib", c.target)} {
+				if _, err := os.Stat(filepath.Join(d, filepath.Base(m.Path))); err == nil {
+					name += " (replaces fclib)"
+					break
+				}
+			}
+			mods = append(mods, name)
+		}
+		if len(mods) > 0 {
+			lines = append(lines, "    uses "+strings.Join(mods, ", "))
+		}
+	}
+	return lines
+}
+
+func shortCommit(c string) string {
+	if len(c) > 10 {
+		return c[:10]
+	}
+	return c
 }
 
 // banks は意味解析に渡すバンクの表 (fc.toml に無ければ nil)。

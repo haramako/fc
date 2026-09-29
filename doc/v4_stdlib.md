@@ -494,11 +494,11 @@ dir = "src"                                 # (任意) リポジトリの中の�
 - **取ってくる**: `git` コマンドで、ユーザーのキャッシュ（`os.UserCacheDir()/fc/lib/<ホスト>/<パス>@<コミット>`。コミットごとなので
   中身は変わらず、プロジェクトの間で共有できる）に clone する。ビルドで無ければ自動で取ってくる（`--offline` で禁止）。private の
   リポジトリも利用者の git の認証で取れる。git の無い環境向けの GitHub の tarball は後で
-- **コマンド**: `fcc lib fetch`（fc.lock のとおり揃える）/ `fcc lib update [名前]` / `fcc lib list`。fc.toml は手で書く（`fcc lib add`
-  は後で）
+- **コマンド**: `fcc lib fetch`（fc.lock のとおり揃える）/ `fcc lib update [名前]` / `fcc lib list` / `fcc lib add 名前 場所 [-rev r]
+  [-dir d]`（fc.toml に書き足して取ってくる。場所はフォルダか git の URL。✅ 2026-09-29）
 - **安全**: ビルドはライブラリのコードを実行しない（ビルドのスクリプトの仕組みは作らない）。コンパイラが読むのはソース・asm・データの
   ファイルだけ
-- **後で**: ライブラリの依存（ライブラリの fc.toml の `[lib.*]` を辿る）、名前の衝突を避ける `use ライブラリ/モジュール`、`fcc lib add`、
+- **後で**: ライブラリの依存（ライブラリの fc.toml の `[lib.*]` を辿る）、名前の衝突を避ける `use ライブラリ/モジュール`、
   tarball での取得
 
 **決定（2026-09-29）: 下の 4 つとも推しのとおり**（fclib より前に探す、ビルドで自動で取ってくる、キャッシュはユーザーのキャッシュで
@@ -510,7 +510,8 @@ dir = "src"                                 # (任意) リポジトリの中の�
 `LibUpdate` / `LibList`、`fcc lib`・`fcc build --offline`。git は bare の写し（`git/<キー>.git`）を持ち、コミットごとに
 `clone --shared --no-checkout` → `checkout --detach` で `src/<キー>@<コミット>` に取り出す（一時の名前で作ってから名前を変える）。
 テストは `internal/driver/libs_test.go`（path のライブラリ・<lib>/<target>・asm・fclib の置き換え・名前の衝突、ローカルの git の
-リポジトリでの fc.lock の固定・update・タグ・--offline）。`fcc build -d` の要約に置き換えを出すのは後で
+リポジトリでの fc.lock の固定・update・タグ・--offline）。✅ 2026-09-29: `fcc build -d` の要約（`libs:`: ライブラリの場所と、使ったモジュール。fclib を置き換えたものに
+`(replaces fclib)`）、`fcc lib add`（`project.AddLib` が fc.toml に書き足し、取ってくるのに失敗したら元に戻す。pkg/fc の TestLibAdd）
 
 決めたときの検討:
 1. ライブラリを fclib より前に探す（置き換えられる。推し）か、後ろ（fclib が必ず勝つ）か

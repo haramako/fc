@@ -82,6 +82,65 @@ var libNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func validLibName(s string) bool { return libNameRe.MatchString(s) }
 
+// AddLib は fc.toml (dir から親へ探す。無ければ dir に作る) に [lib.name] を書き足し、元の中身を返す (取ってくるのに失敗したら
+// 呼ぶ側が書き戻す)。src が URL (`://`・`git@`・`.git` で終わる) なら git、フォルダなら path (fc.toml からの相対)。
+func AddLib(dir, name, src, rev, sub string) (path string, old []byte, existed bool, err error) {
+	if !validLibName(name) {
+		return "", nil, false, &diag.Error{Msg: fmt.Sprintf("library name %q: use letters, digits, _ or -", name)}
+	}
+	cfg, err := FindConfig(dir)
+	if err != nil {
+		return "", nil, false, err
+	}
+	path, existed = cfg.Path, cfg.Path != ""
+	if !existed {
+		path = filepath.Join(dir, ConfigName)
+	} else if old, err = os.ReadFile(path); err != nil {
+		return "", nil, false, err
+	}
+	if _, dup := cfg.Sections["lib."+name]; dup {
+		return "", nil, false, &diag.Error{Msg: fmt.Sprintf("%s: [lib.%s] is already there", path, name)}
+	}
+	var b strings.Builder
+	b.Write(old)
+	if len(old) > 0 && !bytes.HasSuffix(old, []byte("\n")) {
+		b.WriteString("\n")
+	}
+	if len(old) > 0 {
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "[lib.%s]\n", name)
+	if strings.Contains(src, "://") || strings.HasPrefix(src, "git@") || strings.HasSuffix(src, ".git") {
+		fmt.Fprintf(&b, "git = %q\n", src)
+		if rev != "" {
+			fmt.Fprintf(&b, "rev = %q\n", rev)
+		}
+		if sub != "" {
+			fmt.Fprintf(&b, "dir = %q\n", sub)
+		}
+	} else {
+		abs, err := filepath.Abs(src)
+		if err != nil {
+			return "", nil, false, err
+		}
+		if st, err := os.Stat(abs); err != nil || !st.IsDir() {
+			return "", nil, false, &diag.Error{Msg: fmt.Sprintf("%s is not a folder or a git URL", src)}
+		}
+		if rev != "" || sub != "" {
+			return "", nil, false, &diag.Error{Msg: "-rev and -dir are for git libraries"}
+		}
+		rel, err := filepath.Rel(filepath.Dir(path), abs)
+		if err != nil {
+			rel = abs
+		}
+		fmt.Fprintf(&b, "path = %q\n", filepath.ToSlash(rel))
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o666); err != nil {
+		return "", nil, false, err
+	}
+	return path, old, existed, nil
+}
+
 // LockEntry は fc.lock の 1 つ (git のライブラリ)。
 type LockEntry struct {
 	Git, Rev, Commit string

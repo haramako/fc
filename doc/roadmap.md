@@ -220,7 +220,7 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       v4_stdlib.md §7 の段 4・5
 - [x] fc 4 の使われない private な変数は領域を取らない（@(test) の関数だけが使うバッファなど） ✅ 2026-09-29
 - [x] シンプルなパッケージマネージャ（fc.toml の `[lib.NAME]`: path / git + rev + dir、`fc.lock`、`fcc lib`） ✅ 2026-09-29
-      （v4_stdlib.md §9。残り: ライブラリの依存、`use ライブラリ/モジュール`、`fcc lib add`、tarball、`-d` の要約に置き換えを出す）
+      （v4_stdlib.md §9。✅ 2026-09-29: `fcc lib add`、`-d` の要約に置き換えを出す。残り: ライブラリの依存、`use ライブラリ/モジュール`、tarball）
 
 ## v3: 一般的な用途で不便な仕様（2026-09-26 調査）
 

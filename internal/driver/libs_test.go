@@ -62,6 +62,16 @@ function main():void
 	if out, err := runProject(t, root, BuildOptions{}); err != nil || out != "42 7 99\n" {
 		t.Fatalf("got %q, %v", out, err)
 	}
+	// fcc build -d の要約: ライブラリの場所と、使ったモジュール (fclib を置き換えたものに印)
+	dir := filepath.Join(root, "proj")
+	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "t.fc", &BuildOptions{Target: "emu", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "t.bin")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := strings.Join(res.Libs, "\n"); !strings.Contains(s, "util: ") || !strings.Contains(s, "greet") || !strings.Contains(s, "tgt") ||
+		!strings.Contains(s, "rand (replaces fclib)") || strings.Contains(s, "greet (replaces") {
+		t.Errorf("要約:\n%s", s)
+	}
 	writeTree(t, root, map[string]string{
 		"proj/fc.toml": "[lib.util]\npath = \"../util\"\n\n[lib.other]\npath = \"../other\"\n",
 		"other/greet.fc": "#fc 4\npublic function n():u8 { return 1; }\n",

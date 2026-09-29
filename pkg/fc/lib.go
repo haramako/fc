@@ -50,6 +50,25 @@ func resolveLibs(dir string, update []string) ([]LibInfo, error) {
 	return infos, nil
 }
 
+// LibAdd は fc.toml (dir から親へ探す。無ければ dir に作る) に [lib.name] を書き足して取ってくる。src はフォルダか git の URL。
+// 取ってくるのに失敗したら fc.toml を元に戻す。
+func LibAdd(dir, name, src, rev, sub string) ([]LibInfo, error) {
+	path, old, existed, err := project.AddLib(dir, name, src, rev, sub)
+	if err != nil {
+		return nil, err
+	}
+	infos, err := resolveLibs(dir, nil)
+	if err != nil {
+		if existed {
+			os.WriteFile(path, old, 0o666)
+		} else {
+			os.Remove(path)
+		}
+		return nil, err
+	}
+	return infos, nil
+}
+
 // LibList は fc.toml の [lib.*] と fc.lock を読んで並べる (取ってこない)。
 func LibList(dir string) ([]LibInfo, error) {
 	cfg, err := project.FindConfig(dir)

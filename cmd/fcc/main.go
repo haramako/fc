@@ -136,6 +136,13 @@ func run() int {
 		for _, line := range res.Frames {
 			fmt.Fprintln(os.Stderr, line)
 		}
+		if len(res.Libs) > 0 {
+			// fc.toml の [lib.*] と、そこから使ったモジュール (fclib を置き換えたもの)
+			fmt.Fprintln(os.Stderr, "libs:")
+			for _, line := range res.Libs {
+				fmt.Fprintln(os.Stderr, line)
+			}
+		}
 		if len(res.Defines) > 0 {
 			// @(build) の const の上書き (値と出所)
 			fmt.Fprintf(os.Stderr, "defines: %d\n", len(res.Defines))
