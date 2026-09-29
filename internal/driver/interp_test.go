@@ -21,3 +21,22 @@ func TestInterpArrayValueLoad(t *testing.T) {
 		t.Errorf("interp の出力 %q, 期待 %q", out, want)
 	}
 }
+
+// TestInterpWideStructEq: 9 バイト以上の struct の `==` をインタプリタが全部のバイトで比べる (8 バイトまでしか読まず、
+// 後ろの方のフィールドだけが違う値を等しいとしていた。fuzz の種 123400)。
+func TestInterpWideStructEq(t *testing.T) {
+	t.Parallel()
+	src := "#fc 2\nuse * from stdio;\n" +
+		"struct S { f0:sint; f1:int16; }\nstruct T { s:S; arr:[4]sint16; x:sint16; }\n" +
+		"var u0:T;\nvar ua:[2]T;\nfunction main():void {\n" +
+		"\tua[0].x = 1;\n" +
+		"\tprintf((ua[0] == u0) as int, \" \", (ua[1] == u0) as int, \" \", (ua[0] != u0) as int, \"\n\");\n" +
+		"\texit(0);\n}\n"
+	out, ok, err := rpInterp(t, map[string]string{"t.fc": src})
+	if !ok || err != nil {
+		t.Fatalf("interp: ok=%v err=%v", ok, err)
+	}
+	if want := "0 1 1\n"; out != want {
+		t.Errorf("interp の出力 %q, 期待 %q", out, want)
+	}
+}

@@ -664,6 +664,11 @@ func (m *machine) run(f *frame) {
 			m.write(f, op.Dst, ^m.read(f, op.Src[0], n), n)
 		case ir.OpEq, ir.OpLt:
 			n := max(size(op.Src[0]), size(op.Src[1]))
+			if n > 8 {
+				// 9 バイト以上の struct の `==` (read は 8 バイトまでで、上の方のフィールドの違いを見落としていた。fuzz で発覚)
+				m.writeBool(f, op.Dst, string(m.bytesOf(f, op.Src[0], n)) == string(m.bytesOf(f, op.Src[1], n)))
+				break
+			}
 			a, b := m.read(f, op.Src[0], n), m.read(f, op.Src[1], n)
 			var t bool
 			if op.Code == ir.OpEq {
