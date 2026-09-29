@@ -155,6 +155,11 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 				r = append(r, l.storeA(dst, i))
 			}
 		}
+	} else if op.Code == ir.OpMul && ir.ValType(dst).Size == 2 && byteValue(s0) && byteValue(s1) {
+		// 0〜255 どうしの 16 ビットの掛け算 (`(a as u16) * b`): 8×8→16 の表引き (__mul_8t16。__mul_16 の 16 回の
+		// 足し算より 1 桁速い)
+		r = append(r, l.loadA(s0, 0), "sta <reg+0", l.loadA(s1, 0), "sta <reg+2", "jsr __mul_8t16",
+			"lda <reg+4", l.storeA(dst, 0), "lda <reg+5", l.storeA(dst, 1))
 	} else {
 		// 定数でない場合
 		for i := 0; i < ir.ValType(dst).Size; i++ {
@@ -175,6 +180,18 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		}
 	}
 	return r
+}
+
+// byteValue は o の値が 0〜255 か (1 バイトの値・1 バイトをゼロ拡張して読む cast (広い演算の狭いオペランドの上位は #0)、
+// その範囲のリテラル)。
+func byteValue(o ir.Operand) bool {
+	if k, ok := ir.ValIntLiteral(o); ok {
+		return k >= 0 && k < 256
+	}
+	if cv, ok := o.(*ir.CastedValue); ok {
+		return cv.Width == 1
+	}
+	return ir.ValType(o).Size == 1
 }
 
 func log2(n int) int {

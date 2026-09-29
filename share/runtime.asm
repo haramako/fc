@@ -217,36 +217,45 @@ __mul_8s = __mul_8
 __fc_null_fn = __mul_8::null_rts
 
 
-;;; uint8xuint8=>uint16の掛け算
-;;; reg(4,6) = reg0 * reg2
-;;; USING: reg[0,2,4,6,7]
-;;; TODO: 中途半端な実装(ほぼ未実装)
+;;; uint8xuint8=>uint16の掛け算 (u8 をゼロ拡張した u16 どうしの掛け算: `(a as u16) * b`)
+;;; reg(4,5) = reg0 * reg2
+;;; a*b = f(a+b) - f(|a-b|)、f(x) = x*x/4 の切り捨て (a+b と a-b は偶奇が同じなので端数が消える)。表は 16 ビット (l / h)、
+;;; a+b が 256 以上なら 1 の表
+;;; USING: reg[0,2,4,5,6,7]、Y
 .proc __mul_8t16
-        lda reg+0             ; reg6 = (reg0-reg2)^2/4
+        lda reg+0             ; Y = |reg0 - reg2|
         sec
         sbc reg+2
+        bcs @pos
+        eor #$ff
+        adc #1                ; (C = 0)
+@pos:
         tay
-        bcs @pl1
-        lda __mul_tbl_l1,y
-        jmp @pl1_end
-@pl1:
-        lda __mul_tbl_l0,y
-@pl1_end:
+        lda __mul_tbl_l0,y    ; reg(6,7) = f(|a-b|)
         sta reg+6
-        lda reg+0             ; a = (reg0+reg2)^2/4
+        lda __mul_tbl_h0,y
+        sta reg+7
+        lda reg+0             ; Y = reg0 + reg2 (C は 256 以上か)
         clc
         adc reg+2
         tay
-        bcc @pl2
-        lda __mul_tbl_l1,y
-        jmp @pl2_end
-@pl2:
+        bcs @big
+        sec                   ; reg(4,5) = f(a+b) - f(|a-b|)
         lda __mul_tbl_l0,y
-@pl2_end:
-        sta reg+7
-        sec                     ; reg4 = a - reg6
         sbc reg+6
         sta reg+4
+        lda __mul_tbl_h0,y
+        sbc reg+7
+        sta reg+5
+        rts
+@big:
+        sec
+        lda __mul_tbl_l1,y
+        sbc reg+6
+        sta reg+4
+        lda __mul_tbl_h1,y
+        sbc reg+7
+        sta reg+5
         rts
 .endproc
         

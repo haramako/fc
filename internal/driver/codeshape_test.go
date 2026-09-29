@@ -461,3 +461,42 @@ function main():void
 		t.Errorf("sum が 16 ビットの添字で読んでいる:\n%s", body)
 	}
 }
+
+// TestMul8x8To16: 0〜255 どうしの 16 ビットの掛け算 (`(a as u16) * b`、定数の 3 も) は __mul_8t16 (表引き) を呼び、全部の組で
+// 正しい (codegen.byteValue、share/runtime.asm)。
+func TestMul8x8To16(t *testing.T) {
+	t.Parallel()
+	out, asm := buildShape(t, `#fc 4
+use console;
+function mul(a:u8, b:u8):u16 @(noinline) { return (a as u16) * b; }
+function mul3(a:u8):u16 @(noinline) { return (a as u16) * 201; }
+function main():void
+{
+	var bad:u16 = 0;
+	var e3:u16 = 0;
+	for (var a:u16 = 0; a < 256; a += 1) {
+		if (mul3(a as u8) != e3) {
+			bad += 1;
+		}
+		e3 += 201;
+		var e:u16 = 0; // a * b を足し算で (-O 0 の __mul_16 は 1 回 400 サイクルほどで遅い)
+		for (var b:u16 = 0; b < 256; b += 1) {
+			if (mul(a as u8, b as u8) != e) {
+				bad += 1;
+			}
+			e += a;
+		}
+	}
+	printf("{} {}\n", bad, mul(255, 255));
+	console.exit(0);
+}
+`)
+	if out != "0 65025\n" {
+		t.Errorf("got %q", out)
+	}
+	for _, f := range []string{"_t_mul", "_t_mul3"} {
+		if body := strings.Join(procBody(t, asm, f), "\n"); !strings.Contains(body, "jsr __mul_8t16") {
+			t.Errorf("%s が __mul_8t16 を呼ばない:\n%s", f, body)
+		}
+	}
+}

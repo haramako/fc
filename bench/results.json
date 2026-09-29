@@ -1,11 +1,11 @@
 {
   "bgdecode": {
-    "cycles": 1328994,
+    "cycles": 1328738,
     "size": 728,
     "out": "sum=47712"
   },
   "calls": {
-    "cycles": 138447,
+    "cycles": 137947,
     "size": 478,
     "out": "sum=663"
   },
@@ -20,7 +20,7 @@
     "out": "crc8=149"
   },
   "entities": {
-    "cycles": 736394,
+    "cycles": 739301,
     "size": 1024,
     "out": "sum=20554"
   },
@@ -35,7 +35,7 @@
     "out": "sum=18392"
   },
   "math16": {
-    "cycles": 2541805,
+    "cycles": 2548193,
     "size": 1081,
     "out": "sum=8921"
   },
@@ -45,7 +45,7 @@
     "out": "sum=25008"
   },
   "plasma": {
-    "cycles": 2063617,
+    "cycles": 2063666,
     "size": 588,
     "out": "sum=15293"
   },
@@ -55,7 +55,7 @@
     "out": "count=1900"
   },
   "textprint": {
-    "cycles": 4378513,
+    "cycles": 4373768,
     "size": 726,
     "out": "sum=9948"
   }
