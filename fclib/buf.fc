@@ -1,0 +1,125 @@
+#fc 4
+// 書き足していくバッファ (Agent/wiki/plans/v4-stdlib.md §3.1)。storage を借りて、先頭から len バイトを使う。push / append は足りなければ止まり、
+// try_ の版は何も変えずに false を返す。@format で残りに直に書くなら buf.advance(&b, @len(@format(buf.rest(&b), ...)))。
+@(bank: -1);
+use sys;
+
+public struct Buf {
+	data:[:u16]u8;
+	len:u16;
+}
+
+public function init(storage:[:u16]u8):Buf
+{
+	var b:Buf;
+	b.data = storage;
+	b.len = 0;
+	return b;
+}
+
+public function clear(b:*Buf):void
+{
+	b.len = 0;
+}
+
+// 書いた部分
+public function bytes(b:*const Buf):[:u16]const u8
+{
+	return b.data[..b.len];
+}
+
+// 残り (まだ書いていない部分)
+public function rest(b:*Buf):[:u16]u8
+{
+	return b.data[b.len..];
+}
+
+public function room(b:*const Buf):u16
+{
+	return @len(b.data) - b.len;
+}
+
+public function try_push(b:*Buf, c:u8):bool
+{
+	if (b.len >= @len(b.data)) {
+		return false;
+	}
+	b.data[b.len] = c;
+	b.len += 1;
+	return true;
+}
+
+public function push(b:*Buf, c:u8):void
+{
+	if (!try_push(b, c)) {
+		sys.panic("buf: full");
+	}
+}
+
+public function try_append(b:*Buf, s:[:u16]const u8):bool
+{
+	if (@len(s) > @len(b.data) - b.len) {
+		return false;
+	}
+	for (var i, c in s) {
+		b.data[b.len + i] = c;
+	}
+	b.len += @len(s);
+	return true;
+}
+
+public function append(b:*Buf, s:[:u16]const u8):void
+{
+	if (!try_append(b, s)) {
+		sys.panic("buf: full");
+	}
+}
+
+// rest に直に書いた n バイトを書いたことにする (足りなければ止まる)
+public function advance(b:*Buf, n:u16):void
+{
+	if (n > @len(b.data) - b.len) {
+		sys.panic("buf: full");
+	}
+	b.len += n;
+}
+
+// ---- テスト ----
+
+function same(a:[:u16]const u8, b:[:u16]const u8):bool
+{
+	if (@len(a) != @len(b)) {
+		return false;
+	}
+	for (var i, c in a) {
+		if (c != b[i]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function test_append():void @(test)
+{
+	var storage:[8]u8;
+	var b = init(storage);
+	append(&b, "ab");
+	push(&b, 99);
+	@assert(same(bytes(&b), "abc"));
+	@assert_eq(room(&b), 5);
+	@assert(!try_append(&b, "123456"));
+	@assert(same(bytes(&b), "abc"));
+	@assert(try_append(&b, "12345"));
+	@assert(!try_push(&b, 0));
+	clear(&b);
+	@assert_eq(@len(bytes(&b)), 0);
+}
+
+function test_format():void @(test)
+{
+	var storage:[16]u8;
+	var b = init(storage);
+	append(&b, "HP ");
+	advance(&b, @len(@format(rest(&b), "{:3}", 7 as u8)));
+	@assert(same(bytes(&b), "HP   7"));
+}

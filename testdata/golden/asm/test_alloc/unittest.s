@@ -45,7 +45,7 @@ __MODULE_UNITTEST__ = 1
 	lda #1
 	sta 0+_stdio_EMU_PRINT
 	sta 0+_stdio_EMU_EXIT
-	jmp @end_3
+	rts
 @else_2:
 	lda #.LOBYTE(_11)
 	sta 0+<F_unittest_assert_true+3
@@ -57,7 +57,6 @@ __MODULE_UNITTEST__ = 1
 	sta 1+_stdio_EMU_ADDR
 	lda #1
 	sta 0+_stdio_EMU_PRINT
-@end_3:
 	rts
 _6:
 		.byte 10,69,82,82,79,82,58,32,0
@@ -141,7 +140,7 @@ _11:
 	lda #1
 	sta 0+_stdio_EMU_PRINT
 	sta 0+_stdio_EMU_EXIT
-	jmp @end_15
+	rts
 @else_14:
 	lda #.LOBYTE(_30)
 	sta 0+<F_unittest_assert_equal+6
@@ -153,7 +152,6 @@ _11:
 	sta 1+_stdio_EMU_ADDR
 	lda #1
 	sta 0+_stdio_EMU_PRINT
-@end_15:
 	rts
 _21:
 		.byte 10,69,82,82,79,82,58,32,0

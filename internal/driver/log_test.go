@@ -1,6 +1,6 @@
 package driver
 
-// fc 3 の @log のテスト (doc/v3_plan.md §9)。表示は emu の実行 (fcc run -g) で確かめる。
+// fc 3 の @log のテスト (Agent/discussions/2026-09-20-v3-plan.md §9)。表示は emu の実行 (fcc run -g) で確かめる。
 
 import (
 	"bytes"
@@ -186,7 +186,7 @@ function main():void
 
 // TestLogZeroCost: fuzz のプログラムの全部の文の前に、見えている変数を全部出す @log を置いても、ROM とプログラムの出力が
 // 変わらない (-O 0 / -O 2)。@log の値は、両方のレベルで取れた値を比べる。食い違いは種ごとにはログに出すだけ (丸ごと
-// 畳まれたループの写しが同じ命令に集まる形などで、-O 2 の地点が元の地点からずれることがある。doc/v3_plan.md §9) だが、
+// 畳まれたループの写しが同じ命令に集まる形などで、-O 2 の地点が元の地点からずれることがある。Agent/discussions/2026-09-20-v3-plan.md §9) だが、
 // 食い違った種が比べた種の logValueDiffLimit を超えたら失敗 (最適化のパスの変更で注釈の扱いが崩れたことに気づくため。
 // 2026-09-26 の時点で 1816 個中 12 個 (0.7%)。fuzz の 1 周の 200 個前後では 1% だと 1 個しか許さず、偶然の 2〜4 個で
 // 落ちていたので、logValueDiffSlack 個の余裕を足す)。
@@ -196,7 +196,7 @@ func TestLogZeroCost(t *testing.T) {
 	t.Cleanup(func() { // 並列の子のテストが全部終わった後
 		n, d := compared.Load(), differed.Load()
 		if float64(d) > float64(n)*logValueDiffLimit+logValueDiffSlack {
-			t.Errorf("@log の値が -O 0 と -O 2 で食い違った種が多すぎる: %d / %d (上限 %.0f%% + %d 個)。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue) が崩れていないか (doc/development_notes.md)", d, n, logValueDiffLimit*100, logValueDiffSlack)
+			t.Errorf("@log の値が -O 0 と -O 2 で食い違った種が多すぎる: %d / %d (上限 %.0f%% + %d 個)。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue) が崩れていないか (Agent/wiki/log-annotation-rules.md)", d, n, logValueDiffLimit*100, logValueDiffSlack)
 		}
 	})
 	n := 20
@@ -314,6 +314,26 @@ func compareLogValues(o0, o2 string) (bad string, countDiffs int) {
 func TestLogResidentHomeAtEntry(t *testing.T) {
 	t.Parallel()
 	g := &rpGen{r: rand.New(rand.NewSource(50042125))}
+	g.genProgram()
+	files := g.sources()
+	var logs []string
+	for _, level := range []int{-1, 0} {
+		_, _, l, _, err := logBuild(t, files, level, true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		logs = append(logs, l)
+	}
+	if bad, _ := compareLogValues(logs[0], logs[1]); bad != "" {
+		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
+	}
+}
+
+// TestLogLitpropHome: 常駐の割付の後の litprop がループの変数の初期値の書き込み (`load i = 0`) を消すと、常駐のメモリ側 (Home) には
+// 初期値が入らないのに、常駐がレジスタにない地点の @log がメモリ側を読んでいた (fuzz の種 63000128。codegen の logLoc)。
+func TestLogLitpropHome(t *testing.T) {
+	t.Parallel()
+	g := &rpGen{r: rand.New(rand.NewSource(63000128))}
 	g.genProgram()
 	files := g.sources()
 	var logs []string

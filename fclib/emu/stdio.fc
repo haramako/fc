@@ -9,13 +9,13 @@ public var EMU_DATA:u16 @(address: 0xfff2);
 public var EMU_PRINT:u8 @(address: 0xFFFE);
 public var EMU_EXIT:u8 @(address: 0xFFFF);
 
-public function print_int16(n:u16):void @(fastcall)
+public function print_int16(n:u16):void
 {
 	EMU_DATA = n;
 	EMU_PRINT = 2;
 }
 
-public function print(str:*const u8):void @(fastcall)
+public function print(str:*const u8):void
 {
 	EMU_ADDR = str;
 	EMU_PRINT = 1;
@@ -48,18 +48,18 @@ public function puts(str:*const u8):void
 	printf(str, "\n");
 }
 
-public function exit(code:u8):void @(fastcall)
+public function exit(code:u8):void
 {
 	EMU_EXIT = code;
 }
 
 // ベンチマーク区間 (bench/)。bench_start から bench_end までのサイクル数をエミュレータが合計する
-public function bench_start():void @(fastcall)
+public function bench_start():void
 {
 	EMU_PRINT = 4;
 }
 
-public function bench_end():void @(fastcall)
+public function bench_end():void
 {
 	EMU_PRINT = 5;
 }

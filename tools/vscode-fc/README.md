@@ -13,7 +13,7 @@ VS Code を再起動する。`fcc` にパスが通っていない場合は設定
 | 設定 | 既定 | 意味 |
 |---|---|---|
 | `fc.fccPath` | `fcc` | fcc の実行ファイル |
-| `fc.target` | `nes` | `fcc check -t` に渡すターゲット |
+| `fc.target` | `auto` | `fcc check -t` に渡すターゲット（`auto` は渡さない: fcc が fc.toml に `[target]` があれば nes、無ければ emu にする。fc.toml を使わない NES のプロジェクトは `nes` に） |
 | `fc.checkOnSave` | `true` | 保存時に検査する |
 | `fc.mainFile` | (空) | 検査の起点 (ワークスペース相対)。空なら保存したファイル自身 |
 

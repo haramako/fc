@@ -14,6 +14,12 @@
 |---|---|---|
 | `miku/` | `C:\Work\fc-miku` | `fcc build -t nes miku.fc`（fc標準ドライバのみでROM生成） |
 | `castle/` | `C:\Work\castle` | `cd src && fcc build -t nes -o ../castle.nes main.fc`（main.fc の `options(base / linker_config / link)` で自前の data.asm・ld65.cfg・NSD を指定。実プロジェクトの Rakefile も同じ `fcc build`） |
+| `miku4/` | `miku/` を書き直したもの（2026-09-29） | `fcc build -t nes -o miku4.nes miku.fc`。miku を fc 4 の NES の標準ライブラリ（frame / vram / pal / oam / pad / math / rand / hit）で書き直した、API を実際のゲームで確かめるための例。`internal/nes` の TestExampleMiku4 がスクロール・自機の移動・敵と弾を確かめる |
+| `life/` | このリポジトリ（2026-09-29） | `fcc run life.fc`。console のサンプル: ライフゲーム（32×20、端がつながる。bits・printf・文字のリテラル）。`internal/nes` の TestExampleLife が emu と NES の出力を Go のライフゲームと比べる |
+| `jump/` | このリポジトリ（2026-09-29） | `fcc build -t nes -o jump.nes jump.fc`。とても小さなジャンプアクション（1/16 ピクセルの速さと重力、足場に上から乗る、コイン 3 つ、`@format`）。TestExampleJump が内蔵のランナーと QuickNES で確かめる |
+| `statusbar/` | このリポジトリ（2026-09-29） | ラスター効果: 上の 4 行（ステータスバー）は止めたまま、下だけ横にスクロールし続ける。MMC3 の走査線の IRQ（fc.toml で mapper = "MMC3"）の呼び出し口を asm（split.asm）で書き、スクロールを書き換える。TestExampleStatusbar が QuickNES の画面で「バーは同じ・下は動く」を確かめる |
+| `wave/` | このリポジトリ（2026-09-29） | ラスター効果: 8 ラインごとの IRQ で帯ごとの横のスクロールを sin でずらし、縦の線を波打たせる（wave.asm）。主の側が次のフレームの分を計算し、vblank の間に写す。TestExampleWave が QuickNES の画面で帯ごとに線の位置が違うことを確かめる |
+| `hello/` | このリポジトリ（2026-09-29） | `fcc build -t nes -o hello.nes hello.fc`。実プロジェクト由来ではなく、fc 4 の NES の標準ライブラリ（frame / vram / pal / oam / pad と内蔵のフォント）の最小の例。ROM の golden は無く、`internal/nes` の TestExampleHello が画面とパッドの動きを確かめる |
 
 castle は `textmap` によるテキスト変換（ソースの `textmap("../tmp/font/*.chr.txt")` で表を指定）、独自リンカ設定、
 NSD サウンドドライバを含む、コンパイラ機能をほぼ全部通るサンプルになっている。

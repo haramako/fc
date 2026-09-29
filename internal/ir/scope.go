@@ -36,7 +36,7 @@ type scopeAlias struct {
 }
 
 // scopeUse は glob 取り込み 1 件。reexport なら外 (Lookup) からもこの取り込みを辿れる
-// (v1 は常に再輸出、v2 は `public use * from mod;` のときだけ。doc/v2_grammar.md §3.2)。
+// (v1 は常に再輸出、v2 は `public use * from mod;` のときだけ。Agent/discussions/2026-09-13-v2-grammar.md §3.2)。
 type scopeUse struct {
 	mi       *ModuleInterface
 	reexport bool

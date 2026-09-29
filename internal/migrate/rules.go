@@ -30,7 +30,7 @@ func renameV3Keywords(c *Ctx) {
 }
 
 // renameIntTypes は型の位置の fc 2 だけの整数型名 (モジュール名の付かない NamedType) を fc 3 の名前にする。
-// 変数名・コメント・文字列の中の同じ綴りは書き換えない (構文木の型名だけを見る)。doc/v3_plan.md §7。
+// 変数名・コメント・文字列の中の同じ綴りは書き換えない (構文木の型名だけを見る)。Agent/discussions/2026-09-20-v3-plan.md §7。
 func renameIntTypes(c *Ctx) {
 	syntax.Inspect(c.File, func(n syntax.Node) bool {
 		nt, ok := n.(*syntax.NamedType)
@@ -55,7 +55,7 @@ func inferArrays(c *Ctx) {
 	})
 }
 
-// atBuiltins は fc 2 の組み込みの書き方を fc 3 の `@` の形にする (doc/v3_plan.md §5 A)。名前で引く組み込み (asm / min など) の
+// atBuiltins は fc 2 の組み込みの書き方を fc 3 の `@` の形にする (Agent/discussions/2026-09-20-v3-plan.md §5 A)。名前で引く組み込み (asm / min など) の
 // 呼び出しは、同じファイルのトップレベルで同じ名前を宣言していなければ書き換える (use で取り込んだ同名の関数は見分けられない)。
 func atBuiltins(c *Ctx) {
 	declared := map[string]bool{}
@@ -103,7 +103,7 @@ func atBuiltins(c *Ctx) {
 	})
 }
 
-// attributes は fc 2 の `options(...)` を fc 3 の `@(...)` にする (doc/v3_plan.md §5 C)。真偽値の属性 (ir.FlagOptions) の
+// attributes は fc 2 の `options(...)` を fc 3 の `@(...)` にする (Agent/discussions/2026-09-20-v3-plan.md §5 C)。真偽値の属性 (ir.FlagOptions) の
 // `: true` は省いて `@(inline)` にする。`block { ... } options(k: v);` は `@(k: v) { ... }`。include の options は at-builtins が
 // 名前つきの引数にまとめるので触らない。
 func attributes(c *Ctx) {

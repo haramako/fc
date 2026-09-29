@@ -4,6 +4,7 @@ package sema
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -26,7 +27,10 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 	}
 	defer h.enterExpr(c.pos)()
 	r := h.constEval0(c)
-	r.pos = c.pos
+	r.pos, r.end = c.pos, c.end // 位置 (エラー報告と fc 4 への書き換え: rewrite.go) は評価前の式のもの
+	if c.compound != nil {
+		r.compound = c.compound
+	}
 	h.cmemo[c] = r
 	return r
 }
@@ -49,6 +53,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	case cInt:
 		if c.s == "bool" {
 			return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), c.n))
+		}
+		if c.s == "char" && c.n > 0x7f && !strings.HasPrefix(c.name, "'\\") {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s is not an ASCII character; convert it with a textmap converter (_T(%s)) or write the code ('\\xNN')", c.name, c.name)})
 		}
 		return cv(h.IntValue(c.n))
 
@@ -107,6 +114,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		}
 		if typ == nil {
 			panic(&diag.Error{Msg: "cannot infer the element type of an empty array literal"})
+		}
+		if c.ty == nil || c.ty.Kind != types.Array {
+			typ = h.arrayElemType(typ, vals, c.args, true) // F4 (fc 4): 定数の要素の値を変えない型に (宣言の型があればそちらで作り直す)
 		}
 		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(typ, len(vals)), vals))
 
@@ -256,6 +266,30 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				// (`(0 as u8) + 242` と `(-5 as i8)` の剰余は i8 の -14 % -5。畳み込みが 242 のまま計算して実行時と違っていた。
 				// TestRandomConstFold で発覚)。シフトの量はそのまま
 				t := h.foldType(args, false)
+				if c.op == opShiftLeft || c.op == opShiftRight {
+					// F1: fc 4 のシフトの結果は左辺の型 (型のない左辺なら型のない値)。fc 3 は両辺で決めるので、違えば
+					// migrate に左辺を今の型の `as` にする書き換えを報告する (`32 << (6 as u8)` は fc 3 では u8 の 0)
+					tl := h.foldType(args[:1], false)
+					switch {
+					case h.v4():
+						t = tl
+					case h.rewriting() && t != nil && t != tl && len(c.args) == 2:
+						h.rewriteAs("shift-type", c.args[0], t.String())
+					}
+				}
+				// F6 の符号の混ざった大小の比較は、A1 で広げる前の型で見る (実行時も広げる前に検査する。`i16 >= (255 as u8) << 3` の
+				// 右は広げると u16 の 2040 になるが、元は u8 で i16 に収まる。TestRandomConstFoldV4 の種 700002)
+				mixed := len(args) > 1 && mixedSign(args[0].val, args[1].val)
+				if t != nil && c.op != opLand && c.op != opLor && c.op != opNot {
+					// A1 (widen.go): 広い型と出会う、印の付いた (折り返した) オペランドは、fc 4 では元の式をその幅で畳み込み直す
+					// (fc 3 のモジュールでは migrate に `as` を報告する)
+					if h.foldWidenArgs(c, args, t) {
+						v1 = args[0].val.Int
+						if len(args) > 1 {
+							v2 = args[1].val.Int
+						}
+					}
+				}
 				switch {
 				case t == nil || c.op == opLand || c.op == opLor || c.op == opNot:
 				case c.op == opEq || c.op == opNe || c.op == opLt || c.op == opGt || c.op == opLe || c.op == opGe:
@@ -268,6 +302,15 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 						u0, u1 := args[0].val.Untyped, args[1].val.Untyped
 						switch {
 						case !u0 && !u1:
+							if c.op != opEq && c.op != opNe && mixed {
+								// F6: 型付きの定数どうしの大小の比較も実行時と同じ
+								switch {
+								case h.v4():
+									panic(h.mixedSignError(args[0].val.Type, args[1].val.Type))
+								case h.rewriting():
+									h.rewriteMixedSign(args[0].val, args[1].val, [2]*cexpr{c.args[0], c.args[1]})
+								}
+							}
 							v1, v2 = wrapInt(v1, t), wrapInt(v2, t)
 						case u0 != u1:
 							// 型付きの側が符号付きなら、実行時はそれを符号拡張して、定数が i16 に収まれば符号付き (数学の値) で、
@@ -302,7 +345,13 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 					return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), n)) // 比較・論理演算の定数畳み込みも bool
 				}
 				if t != nil {
-					return cv(ir.NewIntLiteral("", t, wrapInt(n, t))) // 型付きの定数は、変数と同じく型の幅で折り返す
+					w := wrapInt(n, t) // 型付きの定数は、変数と同じく型の幅で折り返す
+					if h.foldOverflows(c, args, t, n != w) {
+						lit := ir.NewIntLiteral("", t, w)
+						h.markTaint(lit, c)
+						return cv(lit)
+					}
+					return cv(ir.NewIntLiteral("", t, w))
 				}
 				return cv(h.IntValue(n))
 			}
@@ -311,6 +360,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		case opCall:
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
+				if i > 0 && a.kind == cInt && a.s == "char" && args[0].kind == cValue && h.prog.textmaps[args[0].val] != nil {
+					args[i] = a // _T('あ'): 文字のリテラルのまま変換器に渡す (ASCII 以外の文字は評価するとエラー)
+					continue
+				}
 				args[i] = h.constEval(a)
 			}
 			// 定数式で評価する組み込み (textmap など) はここで展開する
@@ -363,10 +416,37 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 					args[i] = h.constEval(a)
 				}
 			}
+			if c.op == opIndex && h.constIndex {
+				if e := h.constElem(args[0], args[1]); e != nil {
+					return e
+				}
+			}
 			return &cexpr{kind: cOp, op: c.op, args: args, ty: c.ty, incl: c.incl}
 		}
 	}
 	panic(fmt.Sprintf("invalid op %v", c.op))
+}
+
+// constElem は定数の配列 (配列リテラル・文字列・名前付きの配列定数) a の定数の添字 i の要素 (整数の要素でなければ nil)。
+func (h *Hlc) constElem(a, i *cexpr) *cexpr {
+	if a == nil || i == nil || a.kind != cValue || !i.isLiteralInt() {
+		return nil
+	}
+	arr := a.val
+	if lit, ok := h.prog.constArrays[arr]; ok {
+		arr = lit
+	}
+	if arr.Kind != ir.KindArrayLiteral {
+		return nil
+	}
+	n := i.val.Int
+	if n < 0 || n >= len(arr.Elems) {
+		panic(&diag.Error{Msg: fmt.Sprintf("index %d is out of the constant array (length %d)", n, len(arr.Elems))})
+	}
+	if e := ir.ValLiteral(arr.Elems[n]); e != nil && e.Kind == ir.KindLiteral && e.IsInt {
+		return cv(e)
+	}
+	return nil
 }
 
 // IntValue は値から型を推定した整数リテラル: 0〜255 → uint8、256 以上 → uint16、-128〜-1 → sint8、-129 以下 → sint16。
@@ -393,6 +473,7 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 	for i, p := range params {
 		argTypes[i] = p.Type
 	}
+	h.checkABI(name, opts, body == nil)
 	typ := h.prog.Types.Func(argTypes, baseType, opts.Flag("fastcall"))
 	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil, Body: body}
 }

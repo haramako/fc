@@ -3,7 +3,7 @@ package sema
 // Program はプログラム全体 (全モジュール) にまたがる意味解析の状態。
 // 個々のモジュールの解析は Hlc (モジュール単位のコンテキスト) が行い、モジュール横断の
 // 情報 (型のインターン表・モジュール一覧・グローバル options・組み込みマクロ) だけをここに置く
-// (doc/archive/v2_plan.md C4: モジュール単位の sema)。
+// (Agent/discussions/2026-09-12-v2-plan.md C4: モジュール単位の sema)。
 //
 // CompileModule first collects declarations and imports across the module graph,
 // then resolves types, constants and signatures on demand. CompileBodies runs
@@ -29,6 +29,16 @@ type Program struct {
 
 	// Sources はモジュール id → 読み込んだソース (fcc migrate / ツール用。Loader が登録する)
 	Sources map[string]*Source
+	// Overlay はソースの中身の差し替え (OverlayKey(実パス) → 内容)。fcc migrate が fc 2 → 3 の書き換えをメモリの上で済ませてから
+	// fc 3 → 4 の書き換えを集めるときに使う
+	Overlay map[string][]byte
+	// CollectRewrites なら fc 3 のモジュールで fc 4 の意味と違う所を Rewrites に集める (rewrite.go。fcc migrate)。作れなかった所は
+	// RewriteErrors
+	CollectRewrites bool
+	Rewrites        []Rewrite
+	RewriteErrors   []RewriteError
+	rewriteSeen     map[Rewrite]bool
+	strConsts       map[*ir.Value]*strConstDecl // 名前付きの文字列定数の宣言 (strconst.go)
 	// Warnings は意味解析で見つけた警告 (出現順)
 	Warnings []diag.Warning
 	// Errors は意味解析で見つけたエラー (出現順)。文ごとに回復して集める。MaxErrors で打ち切る
@@ -43,12 +53,15 @@ type Program struct {
 	lambdas        map[string]*ir.Lambda            // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
 	storageAliases map[*ir.Value]*ir.Value          // declaration binding -> canonical mutable global
 	storageGlobals map[*ir.Value]bool               // actual global var declarations (not ROM constants)
+	constArrays    map[*ir.Value]*ir.Value          // 名前付きの配列定数 → その配列リテラル (const の中の `TABLE[3]` を畳む)
 	defaults       map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
 	FarCalls    []FarCall
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
+	textmaps    map[*ir.Value]*textmapConv // textmap(...) の変換器 (@format が書式の変換に使う)
+	fmtCodes    map[string]string          // @format の textmap の数字などの表 (モジュールと表 → シンボル)
 	// buildStrings は文字列の @(build) の const → 値 (データを作らず、使った場所で文字列リテラルにする。staticif.go)
 	buildStrings map[*ir.Value]string
 	poCatalogs   map[string]*poCatalog // 読んだ .po (実パス → 訳の表。textmap の翻訳。po.go)
@@ -56,7 +69,7 @@ type Program struct {
 	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
 	Defines map[string]*DefineUse
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
-	// (driver/layout.go。doc/v3_plan.md §3)
+	// (driver/layout.go。Agent/discussions/2026-09-20-v3-plan.md §3)
 	Banks map[string]BankRef
 	// Config は調査用の設定 (パスの入れ切り・トレース。ir/config.go)。driver が BuildOptions から渡し、各モジュールに写す
 	Config *ir.Config
@@ -95,6 +108,8 @@ func NewProgram() *Program {
 		Sources:        map[string]*Source{},
 		macros:         map[*ir.Value]MacroFn{},
 		constMacros:    map[*ir.Value]ConstMacroFn{},
+		textmaps:       map[*ir.Value]*textmapConv{},
+		fmtCodes:       map[string]string{},
 		buildStrings:   map[*ir.Value]string{},
 		poCatalogs:     map[string]*poCatalog{},
 		soas:           map[*types.Type]*soaInfo{},
@@ -102,6 +117,7 @@ func NewProgram() *Program {
 		defaults:       map[*ir.Lambda]*functionDefaults{},
 		storageAliases: map[*ir.Value]*ir.Value{},
 		storageGlobals: map[*ir.Value]bool{},
+		constArrays:    map[*ir.Value]*ir.Value{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)
@@ -251,7 +267,9 @@ func (p *Program) ErrorList() error {
 
 // CompileAllBodies は登録済み全モジュールの関数本体をコンパイルする。
 func (p *Program) CompileAllBodies(deps Resolver) error {
-	for _, mod := range p.Modules.List() {
+	// 本体のコンパイル中に組み込み (printf / @format) がモジュールを読み込むことがある (builtinModule) ので、伸びた一覧も最後まで回す
+	for i := 0; i < len(p.Modules.List()); i++ {
+		mod := p.Modules.List()[i]
 		if mod.FromFcm {
 			continue
 		}
@@ -346,9 +364,11 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := ReadSource(abs)
-	if err != nil {
-		return nil, &diag.Error{Msg: err.Error()}
+	src, ok := l.prog.Overlay[OverlayKey(abs)]
+	if !ok {
+		if src, err = ReadSource(abs); err != nil {
+			return nil, &diag.Error{Msg: err.Error()}
+		}
 	}
 	file, perr := syntax.Parse(src, ref)
 	if perr != nil {
@@ -362,7 +382,7 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 	return l.prog.CompileModule(file, l)
 }
 
-// V3Builtins は fc 3 で `@` を付けて呼ぶ組み込みの名前 → fc 3 の綴り (doc/v3_plan.md §5 A)。fc 3 のモジュールからは
+// V3Builtins は fc 3 で `@` を付けて呼ぶ組み込みの名前 → fc 3 の綴り (Agent/discussions/2026-09-20-v3-plan.md §5 A)。fc 3 のモジュールからは
 // `@` の無い名前では見えない (利用者が同じ名前を宣言できる)。@sizeof / @bitcast / @incbin / @include は構文 (syntax)。
 // fcc migrate の書き換えにも使う。
 var V3Builtins = map[string]string{
@@ -380,7 +400,7 @@ var v3Hidden = func() map[string]string {
 	return m
 }()
 
-// v3Reserved は fc 3 のモジュールで宣言できない名前 (doc/v3_plan.md §7)。
+// v3Reserved は fc 3 のモジュールで宣言できない名前 (Agent/discussions/2026-09-20-v3-plan.md §7)。
 var v3Reserved = func() map[string]string {
 	m := map[string]string{}
 	for n := range types.IntTypeNames {

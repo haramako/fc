@@ -1,7 +1,7 @@
 package syntax
 
 // 属性 (`@(...)` / `options(...)`) の検査: 知らないキー (綴りの誤り) と、その宣言では何もしないキーを警告する
-// (`@(adress: 0x6000)` が黙って普通の RAM 変数になっていた。エラーにするかは後で決める。doc/roadmap.md の v3)。
+// (`@(adress: 0x6000)` が黙って普通の RAM 変数になっていた。エラーにするかは後で決める。Agent/wiki/plans/roadmap.md の v3)。
 
 import "sort"
 
@@ -10,12 +10,12 @@ var knownAttrs = map[string]bool{
 	"abi": true, "address": true, "bank": true, "bank_count": true, "base": true, "bss": true, "build": true,
 	"char_banks": true, "farcall": true, "fastcall": true, "fastcall_reg": true, "inline": true, "interrupt": true,
 	"link": true, "linker_config": true, "mapper": true, "near": true, "noinline": true, "org": true, "segment": true,
-	"static_ram": true, "static_zp": true, "symbol": true, "volatile": true, "zeropage": true,
+	"scratch": true, "static_ram": true, "static_zp": true, "symbol": true, "test": true, "volatile": true, "zeropage": true,
 }
 
 // attrsFor は宣言の種類ごとに意味を持つキー (nil なら種類では絞らない: モジュールの属性)。
 var attrsFor = map[string]map[string]bool{
-	"a function":        {"inline": true, "noinline": true, "fastcall": true, "interrupt": true, "symbol": true, "segment": true, "abi": true, "zeropage": true, "near": true},
+	"a function":        {"inline": true, "noinline": true, "fastcall": true, "interrupt": true, "symbol": true, "segment": true, "abi": true, "scratch": true, "zeropage": true, "near": true, "test": true},
 	"a global variable": {"address": true, "symbol": true, "segment": true, "volatile": true},
 	"a const":           {"symbol": true, "build": true, "address": true},
 	"a soa":             {"segment": true},

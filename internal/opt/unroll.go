@@ -1,6 +1,6 @@
 package opt
 
-// 小さなループの完全展開 (doc/v2_ssa.md §7)。回数がリテラルから決まる短いループ (crc8 / crc16 の `for (j = 8; j; j--)`) を
+// 小さなループの完全展開 (Agent/wiki/design/ssa.md §7)。回数がリテラルから決まる短いループ (crc8 / crc16 の `for (j = 8; j; j--)`) を
 // 本体の写しの並びにする。Oscar64 の crc8 が fc の 3 倍速いのはこれ (8 回の `asl; bcc; eor` を直線に並べる)。
 //
 //	k = k0                              k = k0

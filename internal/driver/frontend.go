@@ -49,7 +49,7 @@ func (c *Compiler) compileFront(o *frontOptions) (*frontResult, error) {
 		prog := sema.NewProgram()
 		prog.Defines = project.CopyDefines(o.Defines)
 		prog.Banks = c.banks()
-		prog.LogEnabled = o.Debug // @log の注釈は -g のときだけ (doc/v3_plan.md §9)
+		prog.LogEnabled = o.Debug // @log の注釈は -g のときだけ (Agent/discussions/2026-09-20-v3-plan.md §9)
 		prog.LogEveryStatement = o.LogEveryStatement
 		prog.Config = o.Config
 		if err := sema.CompileProgram(prog, o.Dir, c.libPath(o.Target), o.Main); err != nil {
@@ -89,7 +89,7 @@ func newLlc(prog *sema.Program, o *frontOptions) (*codegen.Llc, error) {
 }
 
 // prepareProgram は呼び出し規約の決定 → 全関数の最適化と割付 → 静的フレームの配置 (pipeline.Prepare。
-// doc/v2_frame_alloc.md §6-4)。noGrow は展開をしない関数 (やり直しのとき)。
+// Agent/wiki/design/frame-alloc.md §6-4)。noGrow は展開をしない関数 (やり直しのとき)。
 func prepareProgram(prog *sema.Program, llc *codegen.Llc, noGrow map[string]bool) (*pipeline.Result, error) {
 	zp, err := staticZpSize(prog)
 	if err != nil {

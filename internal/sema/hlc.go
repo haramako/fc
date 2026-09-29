@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -30,10 +31,18 @@ type Hlc struct {
 	fastCalling  bool
 	groupBss     string // innermost placement block; module default is applied after declarations
 	inStaticIf   bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
+	// constIndex は const の宣言の初期値を評価中 (fc 4): 定数の配列 (文字列) を定数の添字で引く式を畳む (`const C = "#"[0];`)。
+	// 関数の中の式では畳まない (生成コードが変わる。fc 3 → 4 の migrate は ROM を変えない)
+	constIndex bool
 
 	module *ir.Module
 	lmd    *ir.Lambda
-	curPos syntax.Position // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
+	curPos syntax.Position          // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
+	arith  map[*ir.Value]*arithNode // 式の中の算術の命令の結果 (A1 で広げる・fc 4 への書き換え: widen.go)
+	// 型付きの定数の畳み込みと A1 (widen.go): 折り返した畳み込みの結果の定数 → 元の式
+	taint map[*ir.Value]*cexpr
+	// 文の終わりに F2 (値が必ず 0 になるシフト) を見る、量が定数のシフトの結果 (intrules.go)
+	shifts []*ir.Value
 
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
@@ -136,6 +145,11 @@ func defsFind(defs []*ir.Def, symbol string) bool {
 func (h *Hlc) addDef(name string, d *ir.Def) string {
 	if h.lmd != nil {
 		d.Sym = name
+		if !strings.HasPrefix(name, "_") && !strings.HasPrefix(name, "@") {
+			// 関数の中の const の表の名前はそのまま ca65 のラベルになる: `z:` / `a:` / `f:` (`zp:` / `abs:` / `far:` なども) は番地の
+			// 大きさの指定なので、`const Z = [...]` の `Z:` がアセンブルできなかった。前に付けて ca65 の言葉とぶつからないように
+			d.Sym = "_L_" + name
+		}
 		if !defsFind(h.lmd.Defs, d.Sym) {
 			h.lmd.Defs = append(h.lmd.Defs, d)
 		}
@@ -326,7 +340,7 @@ func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
 	return h.addVar(ir.NewLocal(h.tmpName("$"), typ, ir.LTTemp))
 }
 
-// isFarCall は呼び先 fn (関数のシンボルリテラル) が far call (farcall トランポリン経由) になるか (doc/v2_farcall.md §3.2):
+// isFarCall は呼び先 fn (関数のシンボルリテラル) が far call (farcall トランポリン経由) になるか (Agent/wiki/design/farcall.md §3.2):
 // options(farcall: true) が有効で、呼び先が別モジュールの切替バンクの関数で、options(near: true) が付いていないとき。
 // farfn は明示的に far call を選ぶ。通常の fn は呼ぶ側がバンクを管理する。
 func (h *Hlc) isFarCall(fn ir.Operand) bool {
@@ -378,8 +392,6 @@ func (h *Hlc) placementOf(lmd *ir.Lambda) *ir.Module {
 	}
 	return lmd.Module
 }
-
-var reAsmSymbol = regexp.MustCompile(`_[A-Za-z0-9_$]+`)
 
 // ReadSource はソースファイルを読み込む。改行は CRLF → LF に正規化する (文字列リテラル内の改行が OS で変わらないように)。
 func ReadSource(path string) ([]byte, error) {

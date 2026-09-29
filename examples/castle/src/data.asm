@@ -52,7 +52,7 @@
 FC_FASTCALL_REG_SIZE = $10
 	.export FC_FASTCALL_REG_SIZE : absolute
 
-;; fc の静的フレーム (fc の doc/v2_frame_alloc.md §6)。mmc3.fc の options(static_zp: 64, static_ram: 256) と一致させる。
+;; fc の静的フレーム (fc の Agent/wiki/design/frame-alloc.md §6)。mmc3.fc の options(static_zp: 64, static_ram: 256) と一致させる。
 ;; スタックは再帰関数と asm 定義の関数だけが使うので半分 ($40) にして、残りを静的フレームに充てる
 FC_SZP_SIZE = $40
 FC_SRAM_SIZE = $100						; RAM 側は WRAM (BSS_EX) に置く。実際の必要量は数十バイト

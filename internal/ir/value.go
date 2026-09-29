@@ -57,12 +57,15 @@ type Value struct {
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
+	// StrConst は長さを初期値の文字列から決めた名前付きの配列定数 (`const NM = "joe"`、`const NM:[?]u8 = "joe"`)。fc 4 の
+	// モジュールからはリテラルと同じく長さ (@len・slice・for-each) に終端の 0 を含めない (データには残る。sema の strLen)
+	StrConst bool
 	Str      string
 
 	Public    bool
 	LocalType LocalType
 	// Volatile はグローバル変数で、読むたび / 書くたびに意味がある (レジスタに置いたままにできない):
-	// options(address:) の I/O レジスタ、asm から参照される変数、options(volatile: true) (doc/language_reference.md §2)
+	// options(address:) の I/O レジスタ、asm から参照される変数、options(volatile: true) (docs/language_reference.md §2)
 	Volatile bool
 	Build    bool // fc 3 の @(build) の const (@if の条件に使える。値はビルドの設定で上書きできる)
 	ReadOnly bool // 書き換えられないデータ (const の配列・文字列リテラル)。そこから作るポインタは *const になる

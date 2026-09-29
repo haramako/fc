@@ -1,0 +1,116 @@
+#fc 4
+// フレームの同期と NMI (Agent/wiki/plans/v4-stdlib.md §3.2・§6.2)。NMI はこのモジュールの asm (frame.asm) が持つ: 主の側が wait で
+// 「このフレームの分ができた」ことを知らせたときだけ、次の NMI で OAM (oam を使っていれば) と VRAM のキュー (vram・pal が積む) を
+// 送る。処理が間に合わずに NMI が来たフレームは、スクロールなどのレジスタとフレームの数だけ (作りかけのスプライトを見せない)。
+// 描画を止めている間は、主の側が PPU に直に書いているかもしれないので、待っているとき以外は PPU に触らない。
+//
+//   frame.init();          // NMI を有効に (最初に 1 回)
+//   ... 画面を作る (vram.write_now など) ...
+//   frame.render_on();
+//   while (true) { pad.poll(); ... oam.begin(); ... oam.end(); frame.wait(); }
+//
+// NMI から呼ぶもの (音のドライバなど) は hook に入れる。NMI の最後に毎フレーム呼ばれる。asm か @(interrupt) の fc の関数に
+// すること (fc の普通の関数は静的フレームが主の側の関数と重なる。@(interrupt) でも掛け算・割り算・ポインタ経由の読み書きは
+// 共有の作業域を壊しうる: Agent/discussions/2026-09-20-v3-plan.md §6)。
+@(bank: -1);
+use nes;
+@include("frame.asm");
+
+// VRAM のキューの大きさ (バイト、255 まで。vram.put の項目は 3 バイトの頭 + データ)。fc.toml の [define.frame] で変えられる
+public const QUEUE_SIZE = 128 @(build);
+// 1 回の NMI でキューを送る手間の上限 (1 バイトを写す手間 (約 10.4 サイクル、キューの読みがページをまたげば 11.4) を 1 とする。
+// 項目の頭は約 10、埋める項目は 1 バイトが約 0.7)。vblank (約 2273 サイクル) から NMI の入口・OAM の DMA (513)・レジスタの分
+// (合わせて約 640) を引いた残りに余裕を見たもの。vram は足すと超える項目を積む前にキューを送る (TestNesQueueFull が vblank に
+// 収まるかを見張る)
+public const BUDGET = 140 @(build);
+
+public var count:u16;           // NMI の数 (描画を止めていても数える)
+public var ctrl:u8;             // NMI が PPUCTRL に書く値 (NMI のビットは NMI が立てる。scroll がネームテーブルのビットを変える)
+public var mask:u8;             // NMI が PPUMASK に書く値 (render_on / render_off が変える)
+public var scroll_x:u8;
+public var scroll_y:u8;
+public var hook:fn():void;      // NMI の最後に呼ぶ (null なら呼ばない)
+public var oam_page:u8;         // OAM の DMA のページ (oam が入れる。0 なら DMA しない)
+public var queue:[QUEUE_SIZE]u8;   // VRAM のキュー (vram が積む。[番地の上位 | 0x80 縦 | 0x40 埋める, 番地の下位, 長さ, データ…])
+public var queue_len:u8;
+public var queue_cost:u8;       // キューの手間 (BUDGET と同じ単位)
+var ready:u8;                   // 0x80: このフレームの分ができた (OAM とキューを送る)。0x40: キューだけ送る。NMI が 0 に戻す
+
+// ネームテーブルと属性 ($2000〜$2FFF) を 0 で埋めてから、NMI を有効にする (描画はまだ止めたまま)。ほかの関数より先に呼ぶ。
+// 電源を入れたときの VRAM の中身は決まっていない (QuickNES でも 0 でない) ので、書かなかった所の属性が変わる。埋めるのに約 2 フレーム
+public function init():void
+{
+	nes.PPUCTRL = 0;
+	nes.PPUADDR = 0x20;
+	nes.PPUADDR = 0x00;
+	for (var hi:u8 = 0; hi < 16; hi += 1) {
+		var lo:u8 = 0;
+		while (true) {
+			nes.PPUDATA = 0;
+			lo += 1;
+			if (lo == 0) {
+				break;
+			}
+		}
+	}
+	ctrl = nes.CTRL_NMI;
+	mask = 0;
+	nes.PPUCTRL = ctrl;
+}
+
+// 次の NMI まで待つ。その NMI で OAM と VRAM のキューを送る
+public function wait():void
+{
+	ready = 0x80;
+	while (ready != 0) {
+	}
+}
+
+public function wait_n(n:u8):void
+{
+	while (n != 0) {
+		wait();
+		n -= 1;
+	}
+}
+
+// キューだけを次の NMI で送り、それを待つ (vram がキューの満杯のときに呼ぶ。作りかけの OAM は送らない)
+public function flush():void
+{
+	ready = 0x40;
+	while (ready != 0) {
+	}
+}
+
+// 背景とスプライトを出す (次の NMI から)
+public function render_on():void
+{
+	render(nes.MASK_BG | nes.MASK_SPR | nes.MASK_BG_LEFT | nes.MASK_SPR_LEFT);
+}
+
+// 描画を止める。戻ったときには止まっているので、vram.write_now などで直に書ける
+public function render_off():void
+{
+	render(0);
+}
+
+// PPUMASK の値を指定して、次の NMI まで待つ
+public function render(m:u8):void
+{
+	mask = m;
+	wait();
+}
+
+// 描画を出しているか (mask の背景かスプライトのビット)
+public function rendering():bool
+{
+	return (mask & (nes.MASK_BG | nes.MASK_SPR)) != 0;
+}
+
+// スクロール (nt はネームテーブルの番号 0〜3。x / y の 256 の位)。次の NMI から
+public function scroll(x:u8, y:u8, nt:u8):void
+{
+	scroll_x = x;
+	scroll_y = y;
+	ctrl = (ctrl & ~nes.CTRL_NT_MASK) | (nt & nes.CTRL_NT_MASK);
+}

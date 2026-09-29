@@ -1,31 +1,139 @@
-#fc 3
+#fc 4
+// メモリ (バイト列) の操作 (Agent/wiki/plans/v4-stdlib.md §3.1)。どれも slice で受け取る ([]u8 からも暗黙に)。長さ 0 は何もしない。
+// fill / copy / move の本体は asm (mem.asm。1 バイトあたり fill 約 11、copy 約 16、move 約 18 サイクル)。
 @(bank: -1);
 
+function fill_raw(dst:*u8, n:u16, v:u8):void @(abi: "frame");
+function copy_raw(dst:*u8, src:*const u8, n:u16):void @(abi: "frame");
+function move_back_raw(dst:*u8, src:*const u8, n:u16):void @(abi: "frame");
 @include("mem.asm");
 
-public function set(p:*u8, c:u8, size:u16):void @(fastcall);
-public function zero(p:*u8, size:u16):void @(fastcall);
-public function copy(_to:*u8, _from:*const u8, size:u16):void @(fastcall);
-public function compare(p1:*const u8, p2:*const u8, size:u16):u8 @(fastcall);
-
-public function strlen(str:*const u8):u8 @(fastcall)
+public function fill(dst:[:u16]u8, v:u8):void
 {
-	var n = 0;
-	while (str[n]) {
-		n += 1;
+	fill_raw(@ptr(dst), @len(dst), v);
+}
+
+public function zero(dst:[:u16]u8):void
+{
+	fill(dst, 0);
+}
+
+// 短いほうの長さだけ前から写し、写した長さを返す (重なっていてよいのは dst が src より前のときだけ。そうでなければ move)
+public function copy(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	var n = @len(dst);
+	if (@len(src) < n) {
+		n = @len(src);
+	}
+	copy_raw(@ptr(dst), @ptr(src), n);
+	return n;
+}
+
+// copy と同じだが、重なっていてもよい
+public function move(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	var n = @len(dst);
+	if (@len(src) < n) {
+		n = @len(src);
+	}
+	var d = @ptr(dst);
+	var s = @ptr(src);
+	if (@bitcast(u16, d) <= @bitcast(u16, s)) {
+		copy_raw(d, s, n);
+	} else {
+		move_back_raw(d, s, n);
 	}
 	return n;
 }
 
-public function strcpy(to:*u8, str:*const u8):u8 @(fastcall)
+public function equal(a:[:u16]const u8, b:[:u16]const u8):bool
 {
-	var i = 0;
-	while (1) {
-		var c = str[i];
-		to[i] = c;
-		if (!c) {
+	return @len(a) == @len(b) && compare(a, b) == 0;
+}
+
+// 辞書順の比較: a が小さければ -1、同じなら 0、大きければ 1 (短いほうが先に尽きれば、短いほうが小さい)
+public function compare(a:[:u16]const u8, b:[:u16]const u8):i8
+{
+	var n = @len(a);
+	if (@len(b) < n) {
+		n = @len(b);
+	}
+	var p = @ptr(a);
+	var q = @ptr(b);
+	while (n != 0) {
+		if (*p != *q) {
+			if (*p < *q) {
+				return -1;
+			}
+			return 1;
+		}
+		p += 1;
+		q += 1;
+		n -= 1;
+	}
+	if (@len(a) < @len(b)) {
+		return -1;
+	}
+	if (@len(a) > @len(b)) {
+		return 1;
+	}
+	return 0;
+}
+
+// 最初の v の位置 (無ければ @len(s))
+public function find(s:[:u16]const u8, v:u8):u16
+{
+	var p = @ptr(s);
+	for (var i:u16 = 0; i < @len(s); i += 1) {
+		if (p[i] == v) {
 			return i;
 		}
-		i += 1;
 	}
+	return @len(s);
+}
+
+// ---- テスト ----
+
+// 256 バイトを超える slice のテスト用 (関数のフレームは 256 バイトまでなのでモジュールの変数に。テストの関数だけが使うので、
+// 普通のビルドでは領域を取らない)
+var test_a:[300]u8;
+var test_b:[300]u8;
+
+function test_fill_copy():void @(test)
+{
+	var a:[:u16]u8 = test_a;
+	var b:[:u16]u8 = test_b;
+	fill(a, 7);
+	@assert(a[0] == 7 && a[299] == 7);
+	zero(a[1..299]);
+	@assert(a[0] == 7 && a[1] == 0 && a[298] == 0 && a[299] == 7);
+	@assert_eq(copy(b, a), 300);
+	@assert(equal(a, b));
+	@assert_eq(copy(b[..2], "xyz"), 2);
+	@assert(b[0] == 120 && b[1] == 121 && b[2] == 0);
+	fill(a[..0], 1);   // 長さ 0 は何もしない
+	@assert_eq(a[0], 7);
+}
+
+function test_move():void @(test)
+{
+	var a:[8]u8;
+	for (var i:u8 = 0; i < 8; i += 1) {
+		a[i] = i;
+	}
+	@assert_eq(move(a[2..], a[..6]), 6);   // 後ろへ重なって写す
+	@assert(a[2] == 0 && a[7] == 5);
+	@assert_eq(move(a[..6], a[2..]), 6);   // 前へ
+	@assert(a[0] == 0 && a[5] == 5);
+}
+
+function test_compare():void @(test)
+{
+	@assert_eq(compare("abc", "abc"), 0);
+	@assert_eq(compare("abc", "abd"), -1);
+	@assert_eq(compare("b", "abc"), 1);
+	@assert_eq(compare("ab", "abc"), -1);
+	@assert(!equal("ab", "abc"));
+	@assert_eq(find("hello", 111), 4);
+	@assert_eq(find("hello", 122), 5);
 }

@@ -1,6 +1,6 @@
 package sema
 
-// fc 3 の static if (`@if`) と、ビルドで上書きできる const (`@(build)`)。doc/v3_plan.md §1。
+// fc 3 の static if (`@if`) と、ビルドで上書きできる const (`@(build)`)。Agent/discussions/2026-09-20-v3-plan.md §1。
 //
 //   - `public const DEBUG = false @(build);` はモジュールが既定値つきで宣言する。値は Program.Defines
 //     (fc.toml の [define.<module>] と CLI の -D) で上書きできる。トップレベルの const だけ、初期値はリテラルだけ、@if の中は不可

@@ -75,8 +75,8 @@ Oscar64 1.32 `-O3`、vbcc `-O4 -speed`、SDCC 4.5 `--opt-code-speed`（2026-03 �
 | `crc16` | 9.2 s | 1.99 s | 1.70 s | **1.54 s** | 4.3 s | 1.7 s | 1.6 s | 2.6 s | 2.6 s |
 
 2026-09-25 の列はポインタの下位を Y で回す最適化（`opt.walkPointerY`）と、上限が変数のループの誘導変数の統合の後
-（[../doc/v2_ssa.md](../doc/v2_ssa.md) §5、§10）。crc16 は Oscar64 を上回り、crc8 は 1.7 倍、sieve は 1.6 倍。
-2026-09-20 の列は SSA の上の最適化（[../doc/v2_ssa.md](../doc/v2_ssa.md): 誘導変数の統合で sieve −16%、ループの展開で
+（[../Agent/wiki/design/ssa.md](../Agent/wiki/design/ssa.md) §5、§10）。crc16 は Oscar64 を上回り、crc8 は 1.7 倍、sieve は 1.6 倍。
+2026-09-20 の列は SSA の上の最適化（[../Agent/wiki/design/ssa.md](../Agent/wiki/design/ssa.md): 誘導変数の統合で sieve −16%、ループの展開で
 crc8 −30% / crc16 −15%）の後。crc16 は Oscar64 に並び、sieve と crc8 は 1.8〜2 倍。残りは 16 ビットのポインタの
 下位バイトを Y に置いて回す（sieve）、展開した `asl; bcc; eor` の分岐を無くす（crc8 のテーブル化は別の話）といった
 レジスタ割付・命令選択の領域。
@@ -163,7 +163,7 @@ crc を A に置いたまま `asl; bcc; eor` を回すレジスタ割付で、SS
 ### 経過（2026-09-16、第 3 弾: フレームの静的割付。第 2 弾 → 現在）
 
 非再帰の関数のフレームを固定アドレス（`F_<sym>`、ゼロページ 64 バイト + RAM）に置き、`S+n,x` と `call` マクロをやめた
-（[../doc/v2_frame_alloc.md](../doc/v2_frame_alloc.md) §6）。`fib` は再帰なので対象外（変化なし）。
+（[../Agent/wiki/design/frame-alloc.md](../Agent/wiki/design/frame-alloc.md) §6）。`fib` は再帰なので対象外（変化なし）。
 
 | bench | 第 2 弾 cycles | 現在 | | 第 2 弾 size | 現在 | | v0.0.2 比 |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -184,7 +184,7 @@ crc を A に置いたまま `asl; bcc; eor` を回すレジスタ割付で、SS
 
 CRC の形（最上位ビットを検査して両方の枝で 1 ビットシフト）を「シフトしてから C で分岐」に（`if_carry`）、
 ループごとに 1 バイト変数を A に 1 つ、添字 / カウンタを Y と X に 1 つずつ置いたまま回す割付
-（[../doc/v2_regalloc.md](../doc/v2_regalloc.md)）。X を空けるためにスタックの空き先頭を X からゼロページの `FC_SP` に
+（[../Agent/wiki/design/regalloc.md](../Agent/wiki/design/regalloc.md)）。X を空けるためにスタックの空き先頭を X からゼロページの `FC_SP` に
 移した（再帰関数と関数ポインタ経由の呼び出しに数サイクル乗る: `fib` +17%、`calls` +4%）。
 crc8 の内側ループは `asl a; bcc; eor #29; dey; bne` になった。
 その後、要素 2 バイトの配列の添字の 2 倍をブロック内で共有（`opt.scaleIndex`。math16 の `i*2` が Y に常駐）、

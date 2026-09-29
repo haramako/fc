@@ -1,10 +1,11 @@
 package driver
 
-// fc.toml のバンクの表から配置を作るテスト (doc/v3_plan.md §3、layout.go)。MMC3 で名前つきのバンクに表を置き、固定の
+// fc.toml のバンクの表から配置を作るテスト (Agent/discussions/2026-09-20-v3-plan.md §3、layout.go)。MMC3 で名前つきのバンクに表を置き、固定の
 // 領域の main から far call で読む。内蔵 NES ランナーで走らせ、値・呼び出しの後のバンクの復帰・@bank の番号・名前つきの
 // RAM 領域・cfg の断片を確かめる。
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,6 +147,14 @@ func TestLayoutErrors(t *testing.T) {
 		{base, "@(bank: \"nope\");\n", `unknown bank "nope"`},
 		{"", "@(bank: \"a\");\n", `bank names need a bank table in fc.toml`},
 		{base, "function f():u8 { return @bank(\"fixed\"); }\n", "the fixed area has no bank number"},
+		{base + "mirror = \"h\"\n", "", "[target]: unknown key mirror"},
+		{base + "mirroring = \"diagonal\"\n", "", `mirroring = "diagonal"`},
+		{base + "battery = 1\n", "", "battery = 1"},
+		{base + "chr = \"12K\"\n", "", "must be a multiple of 8K"},
+		{"[targets]\nmapper = \"NROM\"\n", "", "[targets]: unknown section"},
+		{"mapper = \"NROM\"\n", "", "key mapper is outside a section"},
+		{base + "[linker]\nextras = \"a.cfg\"\n", "", "[linker]: unknown key extras"},
+		{base + "[ram.s]\nstart = 0x6000\nlen = 1\n", "", "[ram.s]: unknown key len"},
 	} {
 		dir := t.TempDir()
 		if c.toml != "" {
@@ -155,6 +164,34 @@ func TestLayoutErrors(t *testing.T) {
 		_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.nes"), CompileOnly: true})
 		if err == nil || !strings.Contains(err.Error(), c.msg) {
 			t.Errorf("%q / %q: got %v, want /%s/", c.toml, c.src, err, c.msg)
+		}
+	}
+}
+
+// TestLayoutHeader: [target] の mirroring / battery / chr = 0 (CHR-RAM) が iNES のヘッダに入る (既定は vertical、CHR ROM 8K)。
+// -t を省くと fc.toml に [target] があれば nes になる。
+func TestLayoutHeader(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		toml       string
+		chr, flags byte
+		size       int
+	}{
+		{"[target]\nmapper = \"NROM\"\n", 1, 0x01, 16 + 0x8000 + 0x2000},
+		{"[target]\nmapper = \"NROM\"\nchr = \"0\"\nmirroring = \"horizontal\"\nbattery = true\n", 0, 0x02, 16 + 0x8000},
+		{"[target]\nmapper = \"MMC3\"\nchr = \"16K\"\nmirroring = \"four\"\n", 2, 0x48, 16 + 0x8000 + 0x4000},
+	} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "fc.toml"), []byte(c.toml), 0o666)
+		os.WriteFile(filepath.Join(dir, "t.fc"), []byte("#fc 4\nfunction main():void { }\n"), 0o666)
+		out := filepath.Join(dir, "a.nes")
+		res, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: out})
+		if err != nil {
+			t.Fatalf("%q: %v", c.toml, err)
+		}
+		rom, _ := os.ReadFile(out)
+		if res.Target != "nes" || len(rom) != c.size || rom[5] != c.chr || rom[6] != c.flags {
+			t.Errorf("%q: target %s, %d バイト、CHR %d、byte 6 = $%02X (want %d バイト、CHR %d、$%02X)", c.toml, res.Target, len(rom), rom[5], rom[6], c.size, c.chr, c.flags)
 		}
 	}
 }

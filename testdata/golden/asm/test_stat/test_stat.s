@@ -203,7 +203,6 @@ _80:
 .proc _test_stat_test_switch
 	lda #0
 	sta 0+<F_test_stat_test_switch+1
-	sta 0+<F_test_stat_test_switch+0
 	cmp #6
 	bcs @end_83
 	tax

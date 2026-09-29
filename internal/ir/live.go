@@ -3,7 +3,7 @@ package ir
 import "github.com/haramako/fc/internal/types"
 
 // 命令ごとの生存解析 (ローカル変数)。regalloc の LiveRangeCalculator は結果を区間に潰すが、こちらは集合のまま持つ
-// (ループ内の A 常駐の判定に使う。doc/v2_regalloc.md)。
+// (ループ内の A 常駐の判定に使う。Agent/wiki/design/regalloc.md)。
 
 // Liveness は各命令の入口 / 出口で生きているローカル変数。
 type Liveness struct {

@@ -11,6 +11,7 @@ import "github.com/haramako/fc/internal/ir"
 //  5. 分岐の反転: `if !c goto L1; jump L2; L1:` → `if c goto L2`
 //  6. ループの回転: 先頭で条件を見て末尾で先頭に戻る形を、末尾で条件を見て本体の先頭へ戻る形にする
 //     (1 周あたり jmp 1 つ = 3 サイクル減り、分岐が短くなる)
+//  7. 最後に、飛び先が値の無い return だけの jump をその場の return にする
 //
 // 変化がなくなるまで繰り返す。
 func simplifyJumps(lmd *ir.Lambda) {
@@ -21,9 +22,33 @@ func simplifyJumps(lmd *ir.Lambda) {
 		changed = rotateLoops(lmd) || changed
 		compact(lmd)
 		if !changed {
-			return
+			break
 		}
 	}
+	if jumpsToReturn(lmd) {
+		removeUnreachable(lmd)
+		compact(lmd)
+	}
+}
+
+// jumpsToReturn は 7: 残った jump の飛び先が値の無い return だけのブロックなら、その場で return する (関数の終わりへ抜ける
+// `jmp @end` → rts。分岐の反転・ループの回転の後に残ったものだけ)。飛び先のブロックの注釈 (ラベルの後と return の前の地点) は
+// 新しい return の前の地点として引き継ぐ。
+func jumpsToReturn(lmd *ir.Lambda) bool {
+	cfg := ir.BuildCFG(lmd)
+	changed := false
+	for i, op := range lmd.Ops {
+		if op == nil || op.Code != ir.OpJump {
+			continue
+		}
+		if ret, logs := returnAt(cfg, op.Label); ret != nil && len(ret.Src) == 0 {
+			nop := &ir.Op{Code: ir.OpReturn, Pos: op.Pos}
+			ir.AppendLogs(nop, ir.CloneLogs(logs, nil))
+			ir.ReplaceOp(lmd.Ops, i, nop)
+			changed = true
+		}
+	}
+	return changed
 }
 
 // takeOnTaken は op の注釈のうち分岐が成立したときの分を外して返す (分岐の向きを変えるとき)。
@@ -146,6 +171,7 @@ func threadJumps(lmd *ir.Lambda) bool {
 				op.Label = l
 				changed = true
 			}
+
 			// 直後のブロックへの jump / 条件分岐は不要 (`||` の片側が定数に畳まれると `if_true c goto next` が残る。
 			// 残すと飛ぶ辺と落ちる辺が同じブロックに入り、常駐の入口の写しが片方の辺にしか付かなかった。fuzz で発覚)
 			if (op.Code == ir.OpJump || ir.IsCondBranch(op)) && b.Index+1 < len(cfg.Blocks) && cfg.Blocks[b.Index+1].Label == op.Label {
@@ -158,6 +184,36 @@ func threadJumps(lmd *ir.Lambda) bool {
 		}
 	}
 	return changed
+}
+
+// returnAt はラベル label へ飛んで入ったブロックが return だけ (ラベルを除く) なら、その return と、飛んで入った後に通る注釈
+// (label より後のラベルと return の注釈) を返す。
+func returnAt(cfg *ir.CFG, label string) (*ir.Op, []*ir.LogPoint) {
+	b := cfg.BlockOf(label)
+	if b == nil {
+		return nil, nil
+	}
+	ops := cfg.Lambda.Ops
+	var ret *ir.Op
+	var logs []*ir.LogPoint
+	entered := false
+	for _, i := range cfg.Ops(b) {
+		op := ops[i]
+		if entered {
+			logs = append(logs, op.Logs...)
+		}
+		switch {
+		case op.Code == ir.OpLabel:
+			if op.Label == label {
+				entered = true
+			}
+		case op.Code == ir.OpReturn && ret == nil && entered:
+			ret = op
+		default:
+			return nil, nil
+		}
+	}
+	return ret, logs
 }
 
 // removeUnreachable は 3・4 (到達不能なブロックと、参照されないラベル)。

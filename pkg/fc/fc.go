@@ -10,14 +10,17 @@
 package fc
 
 import (
-	"github.com/haramako/fc/internal/fchome"
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"os"
 
+	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
+	"github.com/haramako/fc/internal/fchome"
+	"github.com/haramako/fc/internal/nes"
 	"github.com/haramako/fc/internal/syntax"
 )
 
@@ -50,6 +53,12 @@ type Options struct {
 
 	// Defines は @(build) の const の上書き (`module.NAME=value`。fc.toml の [define.<module>] の後に当てる)。
 	Defines []string
+
+	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対。ソースのディレクトリの後、fclib より前に探す)。
+	LibPath []string
+
+	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー)。
+	Offline bool
 }
 
 // Result はビルドの結果 (生成物のパスと、Run 時の終了コード)。
@@ -81,6 +90,18 @@ type CheckOptions struct {
 // Check は src から始まるプログラムを検査する (ファイルは書かない)。警告を返し、エラーは *Error。
 func (c *Compiler) Check(src string, opt CheckOptions) ([]Warning, error) {
 	return c.c.Check(src, &driver.CheckOptions{Target: opt.Target, Dir: opt.Dir, Defines: opt.Defines})
+}
+
+// MigrateOptions は Migrate の設定。
+type MigrateOptions struct {
+	Target  string   // 入口としてコンパイルするときのターゲット (TargetEmu (既定) / TargetNES。fclib の探し方)
+	Defines []string // @(build) の const の上書き (Options.Defines と同じ)
+}
+
+// Migrate は srcs (fc 2 / fc 3 / fc 4 のソース) を最新の版に書き換えた内容を返す (キーは srcs の要素。改行は LF)。
+// fc 3 → fc 4 は意味の変わる所の書き換えなので、各ファイルを入口にしたプログラムとしてコンパイルする (エラーは *Error)。
+func (c *Compiler) Migrate(srcs []string, opt MigrateOptions) (map[string][]byte, error) {
+	return c.c.Migrate(srcs, &driver.MigrateOptions{Target: opt.Target, Defines: opt.Defines})
 }
 
 // CommandError は外部コマンドの失敗。
@@ -119,7 +140,7 @@ func (c *Compiler) Close() {
 
 // Build は src をビルドする。
 func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result, error) {
-	return c.c.BuildContext(ctx, src, &driver.BuildOptions{
+	res, err := c.c.BuildContext(ctx, src, &driver.BuildOptions{
 		Target:        opt.Target,
 		Out:           opt.Out,
 		Run:           opt.Run,
@@ -132,8 +153,31 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		Jobs:          opt.Jobs,
 		Stdout:        opt.Stdout,
 		Defines:       opt.Defines,
+		LibPath:       opt.LibPath,
+		Offline:       opt.Offline,
 	})
+	if err != nil || !opt.Run || opt.CompileOnly || res.Target != TargetNES {
+		return res, err
+	}
+	// NES の ROM は内蔵の NES のランナーで console.exit まで走らせる (画面は描かない: console の出力と終了コードだけ)
+	stdout := opt.Stdout
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	m, err := nes.LoadFile(res.Out)
+	if err != nil {
+		return res, err
+	}
+	m.Output = stdout
+	if err := m.RunUntilExit(NESRunFrames); err != nil {
+		return res, fmt.Errorf("%v: the built-in NES runner shows only console output (console.exit ends it); open the ROM in an emulator to see the screen", err)
+	}
+	res.ExitCode = m.ExitCode
+	return res, nil
 }
+
+// NESRunFrames は Run の NES の ROM を内蔵のランナーで走らせるフレーム数の上限 (1 分)。
+const NESRunFrames = 3600
 
 // Format は fc ソースを正規形に整形する (fcc fmt)。構文エラーは *Error で返す。
 // CRLF は LF に正規化される。

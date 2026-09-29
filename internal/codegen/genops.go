@@ -458,6 +458,8 @@ func (l *funcGen) genShift() {
 			r.push(l.emitForm(f)) // メモリ上のその場のシフト (asl x / asl lo; rol hi。A を使わない)
 		} else if lines, ok := l.shiftByte(op, n, signed); ok && !lmd.Cfg().Disabled("shift8") {
 			r.push(lines) // 2 バイトの 8 以上のシフトはバイトの移動 (8.8 固定小数の `x >> 8` など)
+		} else if lines, ok := l.shiftZeroExt(op, n); ok {
+			r.push(lines)
 		} else if lines, ok := l.shiftInMemory(op, n, signed); ok {
 			r.push(lines)
 		} else if ir.ValType(op.Dst).Size == 1 {
@@ -583,10 +585,9 @@ func (l *funcGen) genUminus() {
 		if i == 0 {
 			r.push("sec")
 		}
-		r.push("lda #0")
-		if ir.ValType(op.In(0)).Size > i {
-			r.push(fmt.Sprintf("sbc %s", l.byte(op.In(0), i)))
-		}
+		// 入力より上のバイトも sbc #0 で借りを伝える (入力が結果より狭い: fc 4 の A1 で広げた単項マイナス。byte は上を #0 で読む。
+		// 以前は lda #0 だけで、`var m:i16 = -y` (y:u8 = 5) の上位が 0 になっていた)
+		r.push("lda #0", fmt.Sprintf("sbc %s", l.byte(op.In(0), i)))
 		r.push(l.storeA(op.Dst, i))
 	}
 }
@@ -604,8 +605,13 @@ func (l *funcGen) genEq() {
 	falseLabel, endLabel := labels[0], labels[1]
 	size := op.Width // 比較の幅 (ir/sign.go。狭い入力の上位は byte が #0 と読む)
 	for i := 0; i < size; i++ {
-		r.push(l.loadA(op.In(0), i))
-		r.push(fmt.Sprintf("cmp %s", l.byte(op.In(1), i)))
+		ld := l.loadA(op.In(0), i)
+		r.push(ld)
+		// 0 との比較は、読んだ命令 (lda / 常駐でない値の計算) が Z を立てているので cmp #0 は要らない (2 バイトの `n != 0` の
+		// 上位の cmp #0 は直後がラベルでピープホールが消せなかった)
+		if b := l.byte(op.In(1), i); b != "#0" || ld == nil {
+			r.push("cmp " + b)
+		}
 		r.push(fmt.Sprintf("bne %s", falseLabel))
 	}
 	if ir.ValLocation(op.Dst) == ir.LocCond {
@@ -747,7 +753,11 @@ func (l *funcGen) genIndex() {
 		r.push(l.indexLarge(op))
 	} else if ir.ValType(op.In(1)).Size == 1 {
 		// インデックスのサイズが１
-		if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
+		if k, ok := ir.ValIntLiteral(op.In(1)); ok && ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) != ir.LocFrame {
+			// グローバルの配列の定数の添字 (`buf[2..]`): 番地は定数 (添字を Y に読んで足す形より 4 命令短い)
+			a := fmt.Sprintf("%s+%d", l.addrExpr(op.In(0)), (k&0xff)*es)
+			r.push(fmt.Sprintf("lda #.LOBYTE(%s)", a), l.storeA(op.Dst, 0), fmt.Sprintf("lda #.HIBYTE(%s)", a), l.storeA(op.Dst, 1))
+		} else if ir.ValType(op.In(0)).Kind == types.Array && ir.ValLocation(op.In(0)) == ir.LocFrame {
 			// フレーム上のローカル配列: 先頭は S + addr + X (ゼロページなので上位は 0。OpRef と同じ)
 			r.push(l.loadYIdx(op.In(1), ir.ValType(op.In(0)).Base.Size))
 			r.push("sty <reg+0")
@@ -769,6 +779,18 @@ func (l *funcGen) genIndex() {
 			} else {
 				r.push(l.loadA(op.In(0), 0), "adc <reg+0", l.storeA(op.Dst, 0), l.loadA(op.In(0), 1), "adc <reg+1", l.storeA(op.Dst, 1))
 			}
+		} else if es == 1 && !l.inY(op.In(1)) && !framePointeredArray(op.In(0)) {
+			// 要素 1 バイト: 添字をそのまま足す (Y に読んで <reg に置き直さない)
+			lo, hi := l.byte(op.In(0), 0), l.byte(op.In(0), 1)
+			if ir.ValType(op.In(0)).Kind == types.Array {
+				lo, hi = fmt.Sprintf("#.LOBYTE(%s)", l.addrExpr(op.In(0))), fmt.Sprintf("#.HIBYTE(%s)", l.addrExpr(op.In(0)))
+			}
+			if l.inA(op.In(1)) {
+				r.push("clc", "adc "+lo)
+			} else {
+				r.push("clc", "lda "+lo, "adc "+l.byte(op.In(1), 0))
+			}
+			r.push(l.storeA(op.Dst, 0), "lda "+hi, "adc #0", l.storeA(op.Dst, 1))
 		} else if ir.ValType(op.In(0)).Kind == types.Array {
 			r.push(l.loadYIdx(op.In(1), ir.ValType(op.In(0)).Base.Size))
 			r.push("sty <reg+0")
@@ -868,7 +890,7 @@ func (l *funcGen) genRef() {
 	}
 }
 
-// genLoadMem は LoadMem のコード生成 (doc/v4_memops.md の表)。
+// genLoadMem は LoadMem のコード生成 (Agent/wiki/design/ir-memops.md の表)。
 func (l *funcGen) genLoadMem() {
 	r, op, lmd, ops, opNo := l.r, l.op, l.lmd, l.ops, l.opNo
 	restore := &l.restore
@@ -939,7 +961,7 @@ func (l *funcGen) genLoadMem() {
 	}
 }
 
-// genStoreMem は StoreMem のコード生成 (doc/v4_memops.md の表)。書く幅は m.Width (値が小さいリテラルでも上位まで書く)。
+// genStoreMem は StoreMem のコード生成 (Agent/wiki/design/ir-memops.md の表)。書く幅は m.Width (値が小さいリテラルでも上位まで書く)。
 func (l *funcGen) genStoreMem() {
 	r, op := l.r, l.op
 	m := op.Mem()

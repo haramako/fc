@@ -35,7 +35,7 @@ func collectWarnings(prog *sema.Program) []diag.Warning {
 
 // CheckOptions は fcc check の設定。
 type CheckOptions struct {
-	Target  string   // emu (既定) / nes
+	Target  string   // emu / nes (省けば fc.toml に [target] があれば nes、無ければ emu)
 	Dir     string   // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
 	Defines []string // CLI の -D (fcc build と同じく fc.toml の後に当てる)
 	Config  *ir.Config // 調査用の設定 (nil なら環境変数から)
@@ -46,7 +46,7 @@ type CheckOptions struct {
 func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, error) {
 	target := opt.Target
 	if target == "" {
-		target = "emu"
+		target = defaultTarget(opt.Dir)
 	}
 	cfg := opt.Config
 	if cfg == nil {
@@ -74,6 +74,7 @@ func (c *Compiler) compileNoWrite(dir, target, main string, cli []string, cfg *i
 	if c.dir == "" {
 		c.dir = "."
 	}
+	c.target = target // (fc.toml のライブラリの <lib>/<target>)
 	defs, err := c.projectDefines(cli)
 	if err != nil {
 		return nil, err

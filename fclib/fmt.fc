@@ -1,0 +1,366 @@
+#fc 4
+// 数や文字列を文字にして書く (@format と printf の中身。Agent/wiki/plans/v4-stdlib.md §4)。begin で書き先を決め、dec_u8 などを順に呼ぶと
+// 書き先の at から書いていく (at は書いた長さ)。書き先が足りなければ sys.panic で止まる (begin_try の後は止まらず、end_try が 0 を
+// 返す: @try_format)。10 進は割り算を使わない (10 のべきを引く)。
+//
+//   fmt.begin(buf);
+//   fmt.str("HP ");
+//   fmt.dec_u8(hp, 3);            // spec: 幅 3
+//   var s = buf[..fmt.at];
+//
+// 書き先の状態はこのモジュールが持つ (呼び出しごとに書き先を渡すと @format の 1 回が 300 バイトを超えた)。割り込みの中では使わない。
+// spec: 最小の幅 (下位 5 ビット、0〜31。右に寄せて左を埋める) | ZERO (0 で埋める。符号の後ろに: `{:03}` の -5 は "-05"。無ければ
+// 空白で符号の前に: "  -5") | LOWER (16 進の小文字)。数字などの文字のコードは codes (0〜9・A〜F・a〜f・'-'・' ' の 24 文字)。
+// begin が ASCII にする。独自のフォントなら begin の後に codes を @textmap で作った表にする (@format がする)。
+@(bank: -1);
+use sys;
+use console;
+
+public const ASCII = "0123456789ABCDEFabcdef- ";
+public const ZERO = 0x20;
+public const LOWER = 0x40;
+const WIDTH = 0x1f;
+const MINUS = 22;
+const SPACE = 23;
+const POW10 = [10000, 1000, 100, 10];
+
+var out:[]u8;
+public var codes:*const u8;   // 数字などの文字のコード (begin が ASCII にする)
+public var at:u8;             // 次に書く位置 (= 書いた長さ)
+var trying:bool;              // begin_try の後 (足りなくても止まらない)
+var failed:bool;              // begin_try の後で足りなかった (以後は何も書かない)
+var pbuf:[32]u8;              // printf の数などの部分 (begin_print / print。幅の上限 31 と 16 桁の 2 進が入る)
+
+// 書き先を dst にして、先頭から書く
+public function begin(dst:[]u8):void
+{
+	out = dst;
+	codes = ASCII;
+	at = 0;
+	trying = false;
+	failed = false;
+}
+
+// begin と同じだが、書き先が足りなくても止まらない (@try_format)。書いた長さは end_try で
+public function begin_try(dst:[]u8):void
+{
+	begin(dst);
+	trying = true;
+}
+
+// begin_try からの書いた長さ (足りなかったら 0)
+public function end_try():u8
+{
+	trying = false;
+	if (failed) {
+		return 0;
+	}
+	return at;
+}
+
+// printf の数などの部分: begin_print の後に dec_u8 などで書き、print で console に出す (呼び出し側で書き先の slice を作らない)
+public function begin_print():void
+{
+	begin(pbuf);
+}
+
+public function print():void
+{
+	console.write(pbuf[..at]);
+}
+
+// あと n バイト書けるか (書けなければ止まる。begin_try の後なら false で、以後は何も書かない)
+function room(n:u8):bool
+{
+	if (!failed && n <= @len(out) - at) {
+		return true;
+	}
+	fail();
+	return false;
+}
+
+function fail():void
+{
+	if (!trying) {
+		sys.panic("fmt: the buffer is too small");
+	}
+	failed = true;
+}
+
+// 桁 tmp[0..len] (上位から。値は 0〜15) を、符号と spec で書く
+function put(tmp:*const u8, len:u8, neg:bool, spec:u8):void
+{
+	var body = len;
+	if (neg) {
+		body += 1;
+	}
+	var total = spec & WIDTH;
+	if (total < body) {
+		total = body;
+	}
+	if (!room(total)) {
+		return;
+	}
+	var end = at + total;
+	var i = at;
+	if ((spec & ZERO) == 0) {
+		while (i + body < end) {
+			out[i] = codes[SPACE];
+			i += 1;
+		}
+	}
+	if (neg) {
+		out[i] = codes[MINUS];
+		i += 1;
+	}
+	while (i + len < end) {
+		out[i] = codes[0];
+		i += 1;
+	}
+	var lower:u8 = 0;
+	if ((spec & LOWER) != 0) {
+		lower = 6;   // a〜f は A〜F の 6 つ後ろ
+	}
+	for (var k:u8 = 0; k < len; k += 1) {
+		var d = tmp[k];
+		if (d >= 10) {
+			d += lower;
+		}
+		out[i] = codes[d];
+		i += 1;
+	}
+	at = end;
+}
+
+// n の 10 進の桁を tmp に上位から書き、桁数を返す
+function dec16(tmp:*u8, n:u16):u8
+{
+	var len:u8 = 0;
+	for (var p in POW10) {
+		var d:u8 = 0;
+		while (n >= p) {
+			n -= p;
+			d += 1;
+		}
+		if (d != 0 || len != 0) {
+			tmp[len] = d;
+			len += 1;
+		}
+	}
+	tmp[len] = n as u8;
+	return len + 1;
+}
+
+function dec8(tmp:*u8, n:u8):u8
+{
+	var len:u8 = 0;
+	var d:u8 = 0;
+	while (n >= 100) {
+		n -= 100;
+		d += 1;
+	}
+	if (d != 0) {
+		tmp[len] = d;
+		len += 1;
+	}
+	d = 0;
+	while (n >= 10) {
+		n -= 10;
+		d += 1;
+	}
+	if (d != 0 || len != 0) {
+		tmp[len] = d;
+		len += 1;
+	}
+	tmp[len] = n;
+	return len + 1;
+}
+
+public function dec_u8(n:u8, spec:u8):void
+{
+	var tmp:[3]u8;
+	put(&tmp[0], dec8(&tmp[0], n), false, spec);
+}
+
+public function dec_u16(n:u16, spec:u8):void
+{
+	var tmp:[5]u8;
+	put(&tmp[0], dec16(&tmp[0], n), false, spec);
+}
+
+public function dec_i8(n:i8, spec:u8):void
+{
+	var tmp:[3]u8;
+	var u = @bitcast(u8, n);
+	if (n < 0) {
+		u = 0 - u;
+	}
+	put(&tmp[0], dec8(&tmp[0], u), n < 0, spec);
+}
+
+public function dec_i16(n:i16, spec:u8):void
+{
+	var tmp:[5]u8;
+	var u = @bitcast(u16, n);
+	if (n < 0) {
+		u = 0 - u;
+	}
+	put(&tmp[0], dec16(&tmp[0], u), n < 0, spec);
+}
+
+// 16 進 (0 を詰めて最低 1 桁)
+public function hex_u16(n:u16, spec:u8):void
+{
+	var tmp:[4]u8;
+	var len:u8 = 0;
+	var shift:u8 = 12;
+	for (var i:u8 = 0; i < 4; i += 1) {
+		var d = ((n >> shift) as u8) & 15;
+		if (d != 0 || len != 0 || i == 3) {
+			tmp[len] = d;
+			len += 1;
+		}
+		shift -= 4;
+	}
+	put(&tmp[0], len, false, spec);
+}
+
+public function hex_u8(n:u8, spec:u8):void
+{
+	var tmp:[2]u8;
+	var len:u8 = 0;
+	if (n >= 16) {
+		tmp[0] = n >> 4;
+		len = 1;
+	}
+	tmp[len] = n & 15;
+	put(&tmp[0], len + 1, false, spec);
+}
+
+// 2 進 (0 を詰めて最低 1 桁)
+public function bin_u16(n:u16, spec:u8):void
+{
+	var tmp:[16]u8;
+	var len:u8 = 0;
+	for (var i:u8 = 0; i < 16; i += 1) {
+		var b = ((n >> 15) as u8) & 1;
+		if (b != 0 || len != 0 || i == 15) {
+			tmp[len] = b;
+			len += 1;
+		}
+		n = n << 1;
+	}
+	put(&tmp[0], len, false, spec);
+}
+
+public function bin_u8(n:u8, spec:u8):void
+{
+	bin_u16(n, spec);
+}
+
+// s をそのまま書く
+public function str(s:[]const u8):void
+{
+	var n = @len(s);
+	if (!room(n)) {
+		return;
+	}
+	for (var k:u8 = 0; k < n; k += 1) {
+		out[at + k] = s[k];
+	}
+	at += n;
+}
+
+// 終端 0 の文字列を書く
+public function str_z(p:*const u8):void
+{
+	var n:u16 = 0;
+	while (p[n] != 0) {
+		n += 1;
+	}
+	str_wide(@slice(p, n));
+}
+
+// 長さが u16 の文字列を書く (255 バイトを超えれば書き先も足りない)
+function str_wide(s:[:u16]const u8):void
+{
+	if (@len(s) > 255) {
+		fail();
+		return;
+	}
+	str(@slice(@ptr(s), @len(s) as u8));
+}
+
+// s の中の最初の 0 まで (無ければ全部) 書く (u8 の配列を文字列として書くとき: 文字列で初期化した配列は終端の 0 を含む)
+public function str_z_in(s:[:u16]const u8):void
+{
+	var n:u16 = 0;
+	while (n < @len(s) && s[n] != 0) {
+		n += 1;
+	}
+	str_wide(s[..n]);
+}
+
+// 1 バイト書く
+public function chr(c:u8):void
+{
+	if (!room(1)) {
+		return;
+	}
+	out[at] = c;
+	at += 1;
+}
+
+// true / false を書く (ASCII)
+public function boolean(b:bool):void
+{
+	if (b) {
+		str("true");
+	} else {
+		str("false");
+	}
+}
+
+// ---- テスト (fcc test fclib/fmt.fc。普通のビルドではどこからも呼ばれないので出力されない) ----
+
+function same(a:[]const u8, b:[]const u8):bool
+{
+	if (@len(a) != @len(b)) {
+		return false;
+	}
+	for (var i, c in a) {
+		if (c != b[i]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function test_numbers():void @(test)
+{
+	var buf:[24]u8;
+	var n:u8 = 7;
+	var w:i16 = -300;
+	@assert(same(@format(buf, "[{:3}] [{:03}] [{}]", n, n, w), "[  7] [007] [-300]"));
+	@assert(same(@format(buf, "{:x} {:X} {:b}", 0xab as u8, 0xabcd as u16, 5 as u8), "ab ABCD 101"));
+	@assert(same(@format(buf, "[{:05}] [{:5}]", -42 as i16, -42 as i16), "[-0042] [  -42]"));
+}
+
+function test_strings():void @(test)
+{
+	var buf:[24]u8;
+	var s:[]const u8 = "ab";
+	var p:*const u8 = "cd";
+	var arr = "ef";
+	@assert(same(@format(buf, "{}{}{}{}", s, p, arr, true), "abcdeftrue"));
+	@assert(same(@format(buf, "{{{}}}", 1 as u8), "{1}"));
+}
+
+function test_direct():void @(test)
+{
+	var buf:[8]u8;
+	begin(buf);
+	dec_u16(65535, 0);
+	chr(33);
+	@assert(same(buf[..at], "65535!"));
+}

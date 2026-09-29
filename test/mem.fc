@@ -1,0 +1,32 @@
+#fc 4
+// 旧 fclib の mem のコピー (2026-09-29。fclib を fc 4 の新しい API に入れ替えた後も、このプロジェクトのビルドを保つため。Agent/wiki/plans/v4-stdlib.md §7)
+@(bank: -1);
+
+@include("mem.asm");
+
+public function set(p:*u8, c:u8, size:u16):void @(abi: "frame");
+public function zero(p:*u8, size:u16):void @(abi: "frame");
+public function copy(_to:*u8, _from:*const u8, size:u16):void @(abi: "frame");
+public function compare(p1:*const u8, p2:*const u8, size:u16):u8 @(abi: "frame");
+
+public function strlen(str:*const u8):u8
+{
+	var n = 0;
+	while (str[n]) {
+		n += 1;
+	}
+	return n;
+}
+
+public function strcpy(to:*u8, str:*const u8):u8
+{
+	var i = 0;
+	while (1) {
+		var c = str[i];
+		to[i] = c;
+		if (!c) {
+			return i;
+		}
+		i += 1;
+	}
+}

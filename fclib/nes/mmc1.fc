@@ -1,0 +1,85 @@
+#fc 4
+// MMC1 (SxROM。Agent/wiki/plans/v4-stdlib.md §3.2): PRG はモード 3 ($8000〜$BFFF の 16KB を切り替え、$C000〜 は最後のバンクに固定)、CHR は 8KB か
+// 4KB × 2、ミラーリング。far call のトランポリン (farcall_mmc1.asm) も入る (fc.toml の [target] mapper = "MMC1" と @(farcall))。
+// レジスタへは 1 ビットずつ 5 回書く (途中で IRQ が入らないように sei / cli で囲む。NMI の中ではバンクを切り替えないこと)。
+//   mmc1.init();
+//   var old = mmc1.prg(@bank("a"));
+@(bank: -1);
+
+public var bank:u8 @(symbol: "_mmc1_bank");   // 今 $8000 に入れている PRG のバンク
+@include("farcall_mmc1.asm");
+
+var CONTROL:u8 @(address: 0x8000);
+var CHR0:u8 @(address: 0xa000);
+var CHR1:u8 @(address: 0xc000);
+var PRG:u8 @(address: 0xe000);
+
+// control のビット
+public const MIRROR_ONE_LOW = 0;     // 1 画面 (下の)
+public const MIRROR_ONE_HIGH = 1;    // 1 画面 (上の)
+public const MIRROR_VERTICAL = 2;
+public const MIRROR_HORIZONTAL = 3;
+public const PRG_MODE3 = 0x0c;       // $8000 を切り替え、$C000 は最後に固定 (電源投入時。far call の前提)
+public const CHR_4K = 0x10;          // CHR を 4KB × 2 (無ければ 8KB: chr0 の偶数のバンク)
+
+public var ctrl:u8;                  // 最後に書いた control
+
+// シリアルの受け口を空にし、PRG モード 3・CHR 8KB・縦のミラーにして PRG のバンク 0 を入れる
+public function init():void
+{
+	CONTROL = 0x80;
+	control(PRG_MODE3 | MIRROR_VERTICAL);
+	prg(0);
+}
+
+public function control(v:u8):void
+{
+	ctrl = v;
+	@asm("sei");
+	for (var i:u8 = 0; i < 5; i += 1) {
+		CONTROL = v;
+		v >>= 1;
+	}
+	@asm("cli");
+}
+
+public function mirror(m:u8):void
+{
+	control((ctrl & ~3) | (m & 3));
+}
+
+// $8000 に PRG のバンク b (16KB) を入れ、前のバンクを返す
+public function prg(b:u8):u8
+{
+	var old = bank;
+	bank = b;
+	@asm("sei");
+	for (var i:u8 = 0; i < 5; i += 1) {
+		PRG = b;
+		b >>= 1;
+	}
+	@asm("cli");
+	return old;
+}
+
+// CHR の $0000 のバンク (4KB 単位。8KB のモードでは偶数を渡すと $0000〜$1FFF)
+public function chr0(b:u8):void
+{
+	@asm("sei");
+	for (var i:u8 = 0; i < 5; i += 1) {
+		CHR0 = b;
+		b >>= 1;
+	}
+	@asm("cli");
+}
+
+// CHR の $1000 のバンク (4KB のモードだけ)
+public function chr1(b:u8):void
+{
+	@asm("sei");
+	for (var i:u8 = 0; i < 5; i += 1) {
+		CHR1 = b;
+		b >>= 1;
+	}
+	@asm("cli");
+}

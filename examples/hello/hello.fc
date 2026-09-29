@@ -1,0 +1,54 @@
+#fc 4
+// fc 4 の NES の標準ライブラリの最小の例: 文字を出して黒からフェードし、十字キーでスプライトを動かす。
+//   fcc build -t nes -o hello.nes hello.fc
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+@include("font.chr");   // fc の内蔵のフォント (fclib/nes/font.chr。タイルの番号 = ASCII)
+
+const PALETTE = [
+	0x0f, 0x30, 0x10, 0x00,   0x0f, 0x21, 0x11, 0x01,   0x0f, 0x30, 0x10, 0x00,   0x0f, 0x30, 0x10, 0x00,   // 背景
+	0x0f, 0x27, 0x17, 0x07,   0x0f, 0x30, 0x10, 0x00,   0x0f, 0x30, 0x10, 0x00,   0x0f, 0x30, 0x10, 0x00,   // スプライト
+];
+const BLOCK = 0x7f;       // フォントの塗りつぶしのタイル
+
+var line:[16]u8;
+
+function main():void
+{
+	frame.init();
+	// 描画を止めている間に画面を作る
+	vram.write_now(vram.addr(0, 9, 10), "HELLO, WORLD!");
+	vram.write_now(vram.addr(0, 7, 20), "MOVE WITH D-PAD");
+	vram.fill_now(vram.attr_addr(0, 8, 10), 0x55, 4);   // 1 行目の文字 (x 8〜23) は背景のパレット 1 (水色。属性の 1 バイトが 4×4 タイル)
+	pal.set_all(PALETTE);
+	pal.bright(0);
+	frame.render_on();
+	pal.fade(4, 4);
+
+	var x:u8 = 124;
+	var y:u8 = 130;
+	while (true) {
+		pad.poll();
+		var held = pad.p1.held;
+		if ((held & pad.LEFT) != 0) {
+			x -= 1;
+		}
+		if ((held & pad.RIGHT) != 0) {
+			x += 1;
+		}
+		if ((held & pad.UP) != 0) {
+			y -= 1;
+		}
+		if ((held & pad.DOWN) != 0) {
+			y += 1;
+		}
+		oam.begin();
+		oam.spr(x, y, BLOCK, 0);
+		oam.end();
+		vram.put(vram.addr(0, 10, 14), @format(line, "X {:3}  Y {:3}", x, y));
+		frame.wait();
+	}
+}

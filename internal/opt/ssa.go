@@ -1,6 +1,6 @@
 package opt
 
-// SSA 形式による定数伝播 / コピー伝播 / 死んだ定義の除去 (doc/v2_ssa.md)。
+// SSA 形式による定数伝播 / コピー伝播 / 死んだ定義の除去 (Agent/wiki/design/ssa.md)。
 //
 // IR そのものは「変数 + 命令列」のまま変えない。関数の CFG の上に Braun らの方法 (Simple and Efficient Construction of
 // SSA Form, CC 2013) で各変数の「命令ごとの版」(ssaVal) と φ を作り、それを使って命令列を書き換える:
@@ -13,6 +13,8 @@ package opt
 // 一部だけ書かれる (struct のフィールド、2 バイトの半分) 変数、アドレスを取られた変数、配列、戻り値は対象外。
 
 import (
+	"strings"
+
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/types"
 )
@@ -40,10 +42,12 @@ const (
 )
 
 type ssaForm struct {
-	lmd     *ir.Lambda
-	cfg     *ir.CFG
-	vars    map[*ir.Value]bool // 対象の変数
-	blockOf []*ir.Block        // 命令 → ブロック (到達できない命令は nil)
+	lmd        *ir.Lambda
+	cfg        *ir.CFG
+	vars       map[*ir.Value]bool // 対象の変数
+	blockOf    []*ir.Block        // 命令 → ブロック (到達できない命令は nil)
+	jumped     map[string]bool    // 飛び先になるラベル (untouched が作る)
+	frozenVars map[*ir.Value]bool // どこからも書かれないローカル (frozen が作る)
 
 	cur        map[*ir.Block]map[*ir.Value]*ssaVal // ブロック内の最後の定義
 	entry      map[*ir.Block]map[*ir.Value]*ssaVal // ブロックの入口の版
@@ -585,6 +589,24 @@ func (s *ssaForm) rewrite() bool {
 			if y := s.copySource(resolve(val), i); y != nil {
 				op.Src[k] = rebase(o, y)
 				changed = true
+				continue
+			}
+			if y := s.highByteOf(resolve(val), o, i); y != nil {
+				op.Src[k] = y
+				changed = true
+				continue
+			}
+			if y := s.frozenSource(resolve(val), o); y != nil {
+				op.Src[k] = y
+				changed = true
+			}
+		}
+		// 番地が変数の参照 (`&g`: inline した関数に渡した struct のポインタ) のメモリの読み書きは、その変数の直の読み書きに
+		if op.IsMem() && op.Src[1] == ir.Operand(ir.NoIndex) && len(s.useAt[i]) > 0 && s.useAt[i][0] != nil {
+			if nop := s.directMem(op, resolve(s.useAt[i][0])); nop != nil {
+				ir.ReplaceOp(ops, i, nop)
+				changed = true
+				op = nop
 			}
 		}
 		// 定数になった定義はリテラルの load に (使用が全部リテラルに置き換わっていれば次の DCE で消える)
@@ -627,6 +649,162 @@ func (s *ssaForm) rewrite() bool {
 		changed = true
 	}
 	return changed
+}
+
+// directMem は添字の無い load_mem / store_mem の番地の版 val が `ref t = g` (写しを辿る) なら、g の Disp バイト目からの
+// 直の load にした命令を返す (`lda (t),y` と番地の組み立てが消える: pad.poll が inline した update(&p1, a))。g は volatile で
+// ないグローバル・ローカル (その一部の cast も)。読み書きの幅が g に収まるときだけ。
+func (s *ssaForm) directMem(op *ir.Op, val *ssaVal) *ir.Op {
+	disp := 0 // フィールドの番地 (`add t = p, #k`) のずれ
+	for n := 0; n < 8 && val.def >= 0; n++ {
+		d := s.lmd.Ops[val.def]
+		if d == nil {
+			return nil
+		}
+		if k, lit := ir.ValIntLiteral(d.Src[len(d.Src)-1]); d.Code == ir.OpAdd && lit && k >= 0 && ir.ValType(d.Dst).Kind == types.Pointer &&
+			ir.ValType(d.Src[0]).Kind == types.Pointer && ir.PlainOperand(d.Src[0]) {
+			u := s.useAt[val.def]
+			if len(u) == 0 || u[0] == nil {
+				return nil
+			}
+			disp += k
+			val = resolve(u[0])
+			continue
+		}
+		if d.Code == ir.OpLoad && ir.ValType(d.Src[0]).Kind == types.Pointer && ir.PlainOperand(d.Src[0]) {
+			u := s.useAt[val.def]
+			if len(u) == 0 || u[0] == nil {
+				return nil
+			}
+			val = resolve(u[0])
+			continue
+		}
+		if d.Code != ir.OpRef {
+			return nil
+		}
+		g := d.Src[0]
+		gv := ir.UnderlyingValue(g)
+		if gv == nil || gv.Volatile || gv.Kind != ir.KindGlobal && gv.Kind != ir.KindLocal || !ir.PlainOperand(g) {
+			return nil
+		}
+		m := op.Mem()
+		disp += m.Disp
+		if m.Disp < 0 || disp+m.Width > ir.ValType(g).Size {
+			return nil
+		}
+		if op.Code == ir.OpLoadMem {
+			return &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{ir.NewCastedValue(g, ir.ValType(op.Dst), disp)}, Pos: op.Pos}
+		}
+		v := op.MemValue()
+		if ir.ValType(v).Size != m.Width {
+			return nil
+		}
+		return &ir.Op{Code: ir.OpLoad, Dst: ir.NewCastedValue(g, ir.ValType(v), disp), Src: []ir.Operand{v}, Pos: op.Pos}
+	}
+	return nil
+}
+
+// frozenSource は使用 o の版が `load t = y` (y は関数の中でどこからも書かれずアドレスも取られないローカル (slice の引数の
+// ポインタ・長さの部分など) で、SSA の外の大きさのもの) の写しなら、y を読むオペランドを返す (`unpack_raw(@ptr(dst), ...)` が
+// @ptr の一時変数を経て写し直していた)。
+func (s *ssaForm) frozenSource(val *ssaVal, o ir.Operand) ir.Operand {
+	if val.def < 0 {
+		return nil
+	}
+	def := s.lmd.Ops[val.def]
+	if def == nil || def.Code != ir.OpLoad || def.Dst != ir.Operand(val.v) || !ir.PlainOperand(def.Src[0]) ||
+		ir.ValType(def.Src[0]) != val.v.Type {
+		return nil
+	}
+	y := ir.UnderlyingValue(def.Src[0])
+	if y == nil || y.Kind != ir.KindLocal || y.Volatile || s.vars[y] || !s.frozen()[y] {
+		return nil
+	}
+	if cv, ok := o.(*ir.CastedValue); ok {
+		return ir.RebaseCast(cv, def.Src[0])
+	}
+	return def.Src[0]
+}
+
+// frozen は関数の中でどの命令も書かず、アドレスも取られず asm からも触られないローカル (一度だけ作る)。
+func (s *ssaForm) frozen() map[*ir.Value]bool {
+	if s.frozenVars != nil {
+		return s.frozenVars
+	}
+	bad := map[*ir.Value]bool{}
+	s.frozenVars = map[*ir.Value]bool{}
+	for _, op := range s.lmd.Ops {
+		if op == nil {
+			continue
+		}
+		if v := ir.UnderlyingValue(op.Dst); v != nil && op.Dst != nil {
+			bad[v] = true
+		}
+		for _, o := range append([]ir.Operand{op.Dst}, op.Src...) {
+			if pa, ok := o.(*ir.PointeredArray); ok {
+				if v := ir.UnderlyingValue(pa.From); v != nil {
+					bad[v] = true
+				}
+			}
+			if cv, ok := o.(*ir.CastedValue); ok {
+				if pa, ok := cv.From.(*ir.PointeredArray); ok {
+					if v := ir.UnderlyingValue(pa.From); v != nil {
+						bad[v] = true
+					}
+				}
+			}
+		}
+		if op.Code == ir.OpRef || op.Code == ir.OpAsm {
+			for _, o := range op.Src {
+				if v := ir.UnderlyingValue(o); v != nil {
+					bad[v] = true
+				}
+			}
+		}
+	}
+	for _, v := range s.lmd.Vars {
+		if v.Kind == ir.KindLocal && !bad[v] {
+			s.frozenVars[v] = true
+		}
+	}
+	return s.frozenVars
+}
+
+// highByteOf は使用 o が 2 バイトの x の下位 1 バイト (`(a >> 8) as u8`) で、x の版が `x = y >> 8` なら、y の上位 1 バイトを
+// 読むオペランドを返す (y は i でも同じ版のとき。16 ビットのずらしと一時の値が消える: PPUADDR に番地の上位を書く所)。
+func (s *ssaForm) highByteOf(val *ssaVal, o ir.Operand, i int) ir.Operand {
+	cv, ok := o.(*ir.CastedValue)
+	if !ok || !cv.Plain() || cv.Offset != 0 || cv.Type.Size != 1 || val.def < 0 {
+		return nil
+	}
+	d := s.lmd.Ops[val.def]
+	if d == nil || d.Code != ir.OpShiftRight || d.Dst != cv.From || ir.ValType(d.Dst).Size != 2 || ir.ValType(d.Src[0]).Size != 2 {
+		return nil
+	}
+	if n, ok := ir.ValIntLiteral(d.Src[1]); !ok || n != 8 {
+		return nil
+	}
+	y := s.sameOperandAt(val.def, 0, i)
+	if y == nil || !ir.PlainOperand(y) && !isZeroExt(y) {
+		return nil
+	}
+	return ir.NewCastedValue(y, cv.Type, 1) // 下位だけのゼロ拡張なら Width 0 (値は 0)
+}
+
+// exactOperand は a と b が同じ読み方の同じ値か (同じ変数、または同じ変数の同じ cast)。
+func exactOperand(a, b ir.Operand) bool {
+	if a == b {
+		return true
+	}
+	ca, ok1 := a.(*ir.CastedValue)
+	cb, ok2 := b.(*ir.CastedValue)
+	return ok1 && ok2 && ca.From == cb.From && ca.Type == cb.Type && ca.Offset == cb.Offset && ca.Width == cb.Width
+}
+
+// isZeroExt は o が 1 バイトをゼロ拡張して読む cast か。
+func isZeroExt(o ir.Operand) bool {
+	cv, ok := o.(*ir.CastedValue)
+	return ok && cv.Width < cv.Type.Size
 }
 
 // rewriteLogs は命令 i の @log の引数を、その地点での版の定数・コピー元に置き換える (注釈は使用に数えないので、
@@ -709,12 +887,15 @@ func rebase(o ir.Operand, y *ir.Value) ir.Operand {
 //	and d = (and y, m2), m      → and d = y, m & m2
 //	or  d = (or y, m2), m       → or  d = y, m | m2
 //	shift d = (shift y, j), k   → shift d = y, j + k   (同じ向き)
+//	add / sub d = (add / sub y, j), k → add d = y, ±j ± k
+//	add / sub d = (sub j, y), k → sub d = j ± k, y   (inline した `room() - 3` が `128 - len - 3` になる)
 //
 // 中間の版 x の定義から y を取るので、使用位置でも y が同じ版でなければならない (valueAt)。x は他で使われていれば残る。
 func (s *ssaForm) simplify() bool {
 	changed := false
 	for i, op := range s.lmd.Ops {
-		if op == nil || s.blockOf[i] == nil || s.defAt[i] == nil || len(op.Src) != 2 {
+		// 結果の置き場所は問わない (グローバル・戻り値の slice の長さの部分も。置き換えた命令も同じ所に書く)
+		if op == nil || s.blockOf[i] == nil || op.Dst == nil || len(op.Src) != 2 {
 			continue
 		}
 		dt := ir.ValType(op.Dst)
@@ -731,8 +912,8 @@ func (s *ssaForm) simplify() bool {
 			}
 		}
 		m, ok := ir.ValIntLiteral(op.Src[1])
-		if !ok {
-			continue
+		if !ok && op.Code != ir.OpSub {
+			continue // 定数でない第 2 入力は (a + b) - a だけ
 		}
 		us := s.useAt[i]
 		if len(us) == 0 || us[0] == nil {
@@ -743,6 +924,23 @@ func (s *ssaForm) simplify() bool {
 			continue
 		}
 		def := s.lmd.Ops[x.def]
+		// 写し (`load $5 = room0.$result`: inline した関数の戻り値) を辿る (rewrite が写しを消すのは次の周)。命令の並びで前へ
+		// 戻る一本道だけ (ループを回って自分や後ろの命令に着くと、その入力は i での版と比べられない: `n -= 1` を n + 0 にしていた)。
+		// 写し先がコンパイラの作った変数 (名前に $) のときだけ: ユーザーの変数の写しを畳むとその変数が死に、@log で見えなくなる
+		// (TestLogBasics の inline した f の c)
+		for n := 0; n < 8 && x.def < i && def != nil && def.Code == ir.OpLoad && ir.PlainOperand(def.Src[0]) &&
+			ir.ValOffset(def.Src[0]) == 0 && ir.ValType(def.Src[0]) == ir.ValType(def.Dst) &&
+			strings.Contains(ir.UnderlyingValue(def.Dst).Name, "$"); n++ {
+			u := s.useAt[x.def]
+			if len(u) == 0 || u[0] == nil {
+				break
+			}
+			if y := resolve(u[0]); y.def < 0 || y.def >= x.def {
+				break
+			}
+			x = resolve(u[0])
+			def = s.lmd.Ops[x.def]
+		}
 		if def == nil || len(def.Src) != 2 || ir.ValType(def.Dst) != ir.ValType(op.Src[0]) || ir.ValType(def.Dst).Signed {
 			continue // def が nil: rewrite が消した `load x = x` (fuzz で発覚)
 		}
@@ -753,6 +951,36 @@ func (s *ssaForm) simplify() bool {
 		}
 		if op.IsSigned() || def.IsSigned() {
 			continue // 符号付きの除算・算術シフトは畳まない (以下は符号なしの規則)
+		}
+		if !ok {
+			if def.Code != ir.OpAdd {
+				continue
+			}
+			// (a + b) - a → b、(a + b) - b → a (`q[i..i + n]` の長さ)
+			for k := 0; k < 2; k++ {
+				other := s.sameOperandAt(x.def, 1-k, i)
+				if exactOperand(op.Src[1], def.Src[k]) && s.sameOperandAt(x.def, k, i) != nil && other != nil &&
+					ir.ValType(other).Size == dt.Size {
+					ir.ReplaceOp(s.lmd.Ops, i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{other}, Pos: op.Pos})
+					changed = true
+					break
+				}
+			}
+			continue
+		}
+		if k1, ok := ir.ValIntLiteral(def.Src[0]); ok && def.Code == ir.OpSub && (op.Code == ir.OpAdd || op.Code == ir.OpSub) {
+			// (k1 - y) ± m → (k1 ± m) - y
+			y := s.sameOperandAt(x.def, 1, i)
+			if y == nil || ir.ValType(y) != ir.ValType(def.Src[1]) || ir.ValType(y).Size != dt.Size || ir.ValType(y).Signed {
+				continue
+			}
+			k := k1 + m
+			if op.Code == ir.OpSub {
+				k = k1 - m
+			}
+			ir.ReplaceOp(s.lmd.Ops, i, &ir.Op{Code: ir.OpSub, Dst: op.Dst, Src: []ir.Operand{ir.NewIntLiteral("", ir.ValType(def.Src[0]), bitsOf(k, dt.Size)), y}, Pos: op.Pos})
+			changed = true
+			continue
 		}
 		m2, ok := ir.ValIntLiteral(def.Src[1])
 		if !ok {
@@ -774,6 +1002,15 @@ func (s *ssaForm) simplify() bool {
 			code, k = ir.OpOr, bitsOf(m|m2, dt.Size)
 		case (op.Code == ir.OpShiftLeft || op.Code == ir.OpShiftRight) && def.Code == op.Code && m >= 0 && m2 >= 0 && m+m2 < bits:
 			code, k = op.Code, m+m2
+		case (op.Code == ir.OpAdd || op.Code == ir.OpSub) && (def.Code == ir.OpAdd || def.Code == ir.OpSub):
+			// (y ± m2) ± m → y + (±m2 ± m)
+			if def.Code == ir.OpSub {
+				m2 = -m2
+			}
+			if op.Code == ir.OpSub {
+				m = -m
+			}
+			code, k = ir.OpAdd, bitsOf(m2+m, dt.Size)
 		default:
 			continue
 		}
@@ -797,6 +1034,9 @@ func (s *ssaForm) sameOperandAt(def, k, i int) ir.Operand {
 	if _, lit := ir.ValIntLiteral(o); lit {
 		return o
 	}
+	if g := ir.UnderlyingValue(o); g != nil && g.Kind == ir.KindGlobal && !g.Volatile && ir.PlainOperand(o) && s.untouched(g, def, i) {
+		return o // グローバルは、同じブロックの間の命令が副作用も g への書き込みも無ければ同じ値 (inline した room() - 3)
+	}
 	us := s.useAt[def]
 	if k >= len(us) || us[k] == nil {
 		return nil
@@ -809,6 +1049,33 @@ func (s *ssaForm) sameOperandAt(def, k, i int) ir.Operand {
 		return nil
 	}
 	return o
+}
+
+// untouched は命令 def から i へ一本道で (間のラベルはどこからも飛んで来ない: inline した関数の出口)、その間 (と i の書き込み)
+// がグローバル g を書き換えないか (間は副作用の無い命令だけ)。
+func (s *ssaForm) untouched(g *ir.Value, def, i int) bool {
+	if def >= i || s.blockOf[def] == nil || s.blockOf[i] == nil {
+		return false
+	}
+	if s.jumped == nil {
+		s.jumped = map[string]bool{}
+		for _, o := range s.lmd.Ops {
+			if o != nil && o.Code != ir.OpLabel {
+				for _, l := range append([]string{o.Label}, o.Labels...) {
+					s.jumped[l] = true
+				}
+			}
+		}
+	}
+	for _, o := range s.lmd.Ops[def+1 : i] {
+		if o == nil || o.Code == ir.OpLabel && !s.jumped[o.Label] {
+			continue
+		}
+		if !o.Code.IsPure() || ir.UnderlyingValue(o.Dst) == g {
+			return false
+		}
+	}
+	return true
 }
 
 // eliminateDead は使われない版の定義 (副作用の無い命令) を消す。

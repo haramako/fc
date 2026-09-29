@@ -1,125 +1,88 @@
-.segment "mem"
-	
-;; function memcpy(_to:int*, _from:int*, size:int):void
-;; {
-;;   var i = 0;
-;;   while( i < size ){
-;;     p[i] = c;
-;;     i += 1;
-;;   }
-;; }
-;;; USING Y
-_mem_copy:
-	;; fastcall: _to = FC_FASTCALL_REG+0,1、_from = +2,3、size = +4,5 (ポインタと size はその場で進める)
-	lda FC_FASTCALL_REG+5
+;;; mem.asm: mem.fc の fill / copy / move の本体 (abi "frame"、ほかの関数を呼ばない)。256 バイトずつのページは Y を一回りさせ、
+;;; 端数は X で数える (1 バイトあたり fill 約 11、copy 約 16、後ろからの move 約 18 サイクル)。
 
-;;; 256byteごとのコピー
-	beq @end
-@loop:
+;;; fill_raw(dst:*u8, n:u16, v:u8): dst から n バイトを v にする
+_mem_fill_raw:
+	lda F_mem_fill_raw__v
 	ldy #0
-:	lda (FC_FASTCALL_REG+2),y
-	sta (FC_FASTCALL_REG+0),y
+	ldx F_mem_fill_raw__n+1		; 256 バイトのページの数
+	beq @part
+@page:
+	sta (F_mem_fill_raw__dst),y
 	iny
-	bne :-
-	inc FC_FASTCALL_REG+3
-	inc FC_FASTCALL_REG+1
-	dec FC_FASTCALL_REG+5
-	bne @loop
-@end:	
-	
-
-;;; 残りのコピー
-	lda FC_FASTCALL_REG+4
-	beq @end2
-    ldy #0
-:	lda (FC_FASTCALL_REG+2),y
-    sta (FC_FASTCALL_REG+0),y
-    iny
-    cpy FC_FASTCALL_REG+4
-    bne :-
-@end2:
-
-    rts
-        
-;; function set(p:*u8, c:u8, size:u16):void
-;;; USING Y
-_mem_set:
-	;; fastcall: p = FC_FASTCALL_REG+0,1、c = +2、size = +3,4 (ポインタと size はその場で進める。size 0 なら何もしない)
-	lda FC_FASTCALL_REG+2
-	ldy FC_FASTCALL_REG+4
-	beq @rest
-@page:						; 256 バイトごと
-	ldy #0
-:	sta (FC_FASTCALL_REG+0),y
-	iny
-	bne :-
-	inc FC_FASTCALL_REG+1
-	dec FC_FASTCALL_REG+4
 	bne @page
-@rest:						; 残り (後ろから)
-	ldy FC_FASTCALL_REG+3
-	beq @end
-:	dey
-	sta (FC_FASTCALL_REG+0),y
-	bne :-
-@end:
+	inc F_mem_fill_raw__dst+1
+	dex
+	bne @page
+@part:
+	ldx F_mem_fill_raw__n		; 端数 (Y = 0)
+	beq @done
+@rest:
+	sta (F_mem_fill_raw__dst),y
+	iny
+	dex
+	bne @rest
+@done:
 	rts
 
-;; function zero(p:*u8, size:u16):void
-;;; USING Y
-_mem_zero:
-	;; fastcall: p = FC_FASTCALL_REG+0,1、size = +2,3 (ポインタと size はその場で進める。size 0 なら何もしない)
-	lda #0
-	ldy FC_FASTCALL_REG+3
-	beq @rest
-@page:
+;;; copy_raw(dst:*u8, src:*const u8, n:u16): src から dst へ前から n バイト写す (dst が src より後ろで重なると壊れる)
+_mem_copy_raw:
 	ldy #0
-:	sta (FC_FASTCALL_REG+0),y
+	ldx F_mem_copy_raw__n+1
+	beq @part
+@page:
+	lda (F_mem_copy_raw__src),y
+	sta (F_mem_copy_raw__dst),y
 	iny
-	bne :-
-	inc FC_FASTCALL_REG+1
-	dec FC_FASTCALL_REG+3
 	bne @page
+	inc F_mem_copy_raw__src+1
+	inc F_mem_copy_raw__dst+1
+	dex
+	bne @page
+@part:
+	ldx F_mem_copy_raw__n
+	beq @done
 @rest:
-	ldy FC_FASTCALL_REG+2
-	beq @end
-:	dey
-	sta (FC_FASTCALL_REG+0),y
-	bne :-
-@end:
+	lda (F_mem_copy_raw__src),y
+	sta (F_mem_copy_raw__dst),y
+	iny
+	dex
+	bne @rest
+@done:
 	rts
 
-;; function compare(p1:*const u8, p2:*const u8, size:u16):u8 (等しければ 0、違えば 1)
-;;; USING Y
-_mem_compare:
-	;; fastcall: 戻り値 = FC_FASTCALL_REG+0、p1 = +1,2、p2 = +3,4、size = +5,6 (ポインタと size はその場で進める。size 0 なら等しい)
-	lda FC_FASTCALL_REG+6
-	beq @rest
-@page:
-	ldy #0
-:	lda (FC_FASTCALL_REG+1),y
-	cmp (FC_FASTCALL_REG+3),y
-	bne @fail
-	iny
-	bne :-
-	inc FC_FASTCALL_REG+2
-	inc FC_FASTCALL_REG+4
-	dec FC_FASTCALL_REG+6
-	bne @page
+;;; move_back_raw(dst:*u8, src:*const u8, n:u16): 後ろから n バイト写す (dst が src より後ろで重なるとき)。
+;;; 最後のページの端数を先に、残りのページを後ろから
+_mem_move_back_raw:
+	clc				; ポインタの上位をページの数だけ進める (端数はその上から Y で)
+	lda F_mem_move_back_raw__src+1
+	adc F_mem_move_back_raw__n+1
+	sta F_mem_move_back_raw__src+1
+	clc
+	lda F_mem_move_back_raw__dst+1
+	adc F_mem_move_back_raw__n+1
+	sta F_mem_move_back_raw__dst+1
+	ldy F_mem_move_back_raw__n
+	beq @pages
 @rest:
-	ldy FC_FASTCALL_REG+5
-	beq @equal
-:	dey
-	lda (FC_FASTCALL_REG+1),y
-	cmp (FC_FASTCALL_REG+3),y
-	bne @fail
+	dey
+	lda (F_mem_move_back_raw__src),y
+	sta (F_mem_move_back_raw__dst),y
 	tya
-	bne :-
-@equal:
-	lda #0
-	sta FC_FASTCALL_REG+0
-	rts
-@fail:
-	lda #1
-	sta FC_FASTCALL_REG+0
+	bne @rest
+@pages:
+	ldx F_mem_move_back_raw__n+1	; (Y = 0)
+	beq @done
+@page:
+	dec F_mem_move_back_raw__src+1
+	dec F_mem_move_back_raw__dst+1
+@back:
+	dey
+	lda (F_mem_move_back_raw__src),y
+	sta (F_mem_move_back_raw__dst),y
+	tya
+	bne @back
+	dex
+	bne @page
+@done:
 	rts

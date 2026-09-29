@@ -49,7 +49,7 @@ func (l *Llc) loadYIdx(idx ir.Operand, scale int) []any {
 }
 
 // loadYIdxDisp は 添字 * scale + disp を Y に入れる (ポインタ + 添字 + ずれの load_mem / store_mem。struct の配列フィールドを
-// ポインタ経由で引く opt.fuseArrayField の形)。和が 1 バイトに収まることは作る側が保証する (ir.Verify と v4_memops.md)。
+// ポインタ経由で引く opt.fuseArrayField の形)。和が 1 バイトに収まることは作る側が保証する (ir.Verify と Agent/wiki/design/ir-memops.md)。
 // disp が 0 なら loadYIdx と同じ。それ以外は A を通して計算するので A を壊す (store は keepA で値を守る)。添字が Y に
 // 常駐していれば Y も書き換わる (CompileLambda が常駐の退避 / 復帰にしてコンパイルし直す。regalloc.needsY も Y を使う
 // と見積もる)。
@@ -146,6 +146,12 @@ func (l *Llc) addrExpr(v ir.Operand) string {
 		return fmt.Sprintf("%s+%d", l.curLambda.FrameSym(), ir.ValAddress(v))
 	}
 	return l.toAsm(v)
+}
+
+// framePointeredArray は v がフレーム上のローカル配列をポインタとして使うものか (先頭の番地は S + addr + X: byte では表せない)。
+func framePointeredArray(v ir.Operand) bool {
+	pa, ok := v.(*ir.PointeredArray)
+	return ok && ir.ValLocation(pa.From) == ir.LocFrame
 }
 
 func isValueOrCasted(v ir.Operand) bool {

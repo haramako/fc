@@ -1,0 +1,20 @@
+#fc 4
+// プログラムを止める (panic / assert)。console に出して終了コード 1 で終える (NES は画面を出して止まる。console.init の後で
+// 使う: 描画中の画面に直に書くので)。
+@(bank: -1);
+use console;
+
+public function panic(msg:[:u16]const u8):void
+{
+	console.write("panic: ");
+	console.write(msg);
+	console.newline();
+	console.exit(1);
+}
+
+public function assert(cond:bool, msg:[:u16]const u8):void
+{
+	if (!cond) {
+		panic(msg);
+	}
+}

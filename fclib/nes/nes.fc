@@ -1,18 +1,69 @@
-#fc 3
-/** PPUレジスタ */
+#fc 4
+// NES のレジスタとビットの定数 (Agent/wiki/plans/v4-stdlib.md §3.2)。名前は NESdev の wiki のもの。
+// 旧版 (PPU_CTRL1 などの名前) は examples/castle/src/nes.fc・examples/miku/nes.fc にコピーがある。
 
-public var PPU_CTRL1:u8 @(address: 0x2000);
-public var PPU_CTRL2:u8 @(address: 0x2001);
-public var PPU_STAT:u8 @(address: 0x2002);
-public var PPU_SPR_ADDR:u8 @(address: 0x2003);
-public var PPU_SPR_DATA:u8 @(address: 0x2004);
-public var PPU_SCROLL:u8 @(address: 0x2005);
-public var PPU_ADDR:u8 @(address: 0x2006);
-public var PPU_DATA:u8 @(address: 0x2007);
-public var SPRITE_DMA:u8 @(address: 0x4014);
+// ---- PPU ----
+public var PPUCTRL:u8 @(address: 0x2000);
+public var PPUMASK:u8 @(address: 0x2001);
+public var PPUSTATUS:u8 @(address: 0x2002);
+public var OAMADDR:u8 @(address: 0x2003);
+public var OAMDATA:u8 @(address: 0x2004);
+public var PPUSCROLL:u8 @(address: 0x2005);
+public var PPUADDR:u8 @(address: 0x2006);
+public var PPUDATA:u8 @(address: 0x2007);
+public var OAMDMA:u8 @(address: 0x4014);
 
-public var PAD_CTRL:u8 @(address: 0x4016);
-public var PAD_DATA:u8 @(address: 0x4017);
+// PPUCTRL
+public const CTRL_NMI = 0x80;        // vblank の始めに NMI
+public const CTRL_SPR_8X16 = 0x20;   // スプライトを 8×16 に
+public const CTRL_BG_1000 = 0x10;    // 背景のパターンを $1000 から
+public const CTRL_SPR_1000 = 0x08;   // スプライトのパターンを $1000 から (8×8 のとき)
+public const CTRL_INC32 = 0x04;      // PPUDATA の後に番地を 32 進める (縦に書く)
+public const CTRL_NT_MASK = 0x03;    // ネームテーブルの選択 (スクロールの 256 の位)
 
-public var APU_DMC:u8 @(address: 0x4010);
-public var APU_INTERRUPT:u8 @(address: 0x4017);
+// PPUMASK
+public const MASK_EMPH_BLUE = 0x80;
+public const MASK_EMPH_GREEN = 0x40;
+public const MASK_EMPH_RED = 0x20;
+public const MASK_SPR = 0x10;        // スプライトを出す
+public const MASK_BG = 0x08;         // 背景を出す
+public const MASK_SPR_LEFT = 0x04;   // 左端の 8 ドットにもスプライトを出す
+public const MASK_BG_LEFT = 0x02;    // 左端の 8 ドットにも背景を出す
+public const MASK_GRAY = 0x01;
+
+// PPUSTATUS
+public const STATUS_VBLANK = 0x80;
+public const STATUS_SPR0 = 0x40;     // スプライト 0 の当たり
+public const STATUS_OVERFLOW = 0x20;
+
+// OAM の 1 枚 (4 バイト) の属性
+public const ATTR_FLIP_V = 0x80;
+public const ATTR_FLIP_H = 0x40;
+public const ATTR_BEHIND = 0x20;     // 背景の後ろ
+public const ATTR_PAL_MASK = 0x03;
+
+// ---- APU ----
+public var SQ1_VOL:u8 @(address: 0x4000);
+public var SQ1_SWEEP:u8 @(address: 0x4001);
+public var SQ1_LO:u8 @(address: 0x4002);
+public var SQ1_HI:u8 @(address: 0x4003);
+public var SQ2_VOL:u8 @(address: 0x4004);
+public var SQ2_SWEEP:u8 @(address: 0x4005);
+public var SQ2_LO:u8 @(address: 0x4006);
+public var SQ2_HI:u8 @(address: 0x4007);
+public var TRI_LINEAR:u8 @(address: 0x4008);
+public var TRI_LO:u8 @(address: 0x400a);
+public var TRI_HI:u8 @(address: 0x400b);
+public var NOISE_VOL:u8 @(address: 0x400c);
+public var NOISE_LO:u8 @(address: 0x400e);
+public var NOISE_HI:u8 @(address: 0x400f);
+public var DMC_FREQ:u8 @(address: 0x4010);
+public var DMC_RAW:u8 @(address: 0x4011);
+public var DMC_START:u8 @(address: 0x4012);
+public var DMC_LEN:u8 @(address: 0x4013);
+public var SND_CHN:u8 @(address: 0x4015);
+
+// ---- コントローラ ----
+public var JOY1:u8 @(address: 0x4016);   // 書くと両方のパッドの読み取りを始める (1 → 0)。読むと 1P の次のボタン (bit 0)
+public var JOY2:u8 @(address: 0x4017);   // 読むと 2P の次のボタン。書くと APU のフレームカウンタ (APU_FRAME と同じ番地)
+public var APU_FRAME:u8 @(address: 0x4017);

@@ -15,6 +15,8 @@ package sema
 // これは Hlc.cmemo (同一ノードの評価結果のメモ) で再現する。
 
 import (
+	"strings"
+
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/syntax"
@@ -145,6 +147,11 @@ type cexpr struct {
 	rt    bool            // cArray: 実行時の値を要素に持つ (lval が一時変数に組み立てる。ty は文脈の配列型、無ければ nil)
 	incl  bool            // opSlice: `a[lo..=hi]` (hi を含む)
 	pos   syntax.Pos      // 元の構文木上の位置 (エラー報告用)
+	end   syntax.Pos      // 元の構文木上の終わりの位置 (fc 4 への書き換え: rewrite.go)
+	// compound は複合代入 `x op= y` を脱糖した (op x y) の元の文 (fc 4 への書き換えは文ごと `x = (x op y) as T` にする)。
+	// compoundCall は x に呼び出しがある (先に 1 回だけ評価する: 文ごとの書き換えは呼び出しを 2 回にするので自動ではできない)
+	compound     *syntax.AssignExpr
+	compoundCall bool
 }
 
 // ---------------------------------------------------------------
@@ -188,7 +195,7 @@ var unaryOps = map[syntax.Kind]cop{
 // toC は構文木の式を未評価の cexpr に変換する。
 func toC(e syntax.Expr) *cexpr {
 	c := toC0(e)
-	c.pos = e.Pos()
+	c.pos, c.end = e.Pos(), e.End()
 	return c
 }
 
@@ -200,6 +207,10 @@ func toC0(e syntax.Expr) *cexpr {
 		}
 		return cident(e.Name)
 	case *syntax.IntLit:
+		if strings.HasPrefix(e.Text, "'") {
+			// fc 4 の文字のリテラル (値は文字のコード。name に綴り: ASCII 以外は @textmap の変換器に渡すときだけ使える)
+			return &cexpr{kind: cInt, n: e.Value, s: "char", name: e.Text}
+		}
 		return cint(e.Value)
 	case *syntax.BoolLit:
 		if e.Value {
@@ -228,7 +239,9 @@ func toC0(e syntax.Expr) *cexpr {
 		if op, ok := compoundOps[e.Op]; ok {
 			// 複合代入の脱糖 (load X (op X rhs))。X は同一ノードを共有する (定数評価は cmemo で 1 回。
 			// 実行時の評価は 2 回になるので、X に呼び出しがあれば hlc.go の opLoad で先に評価する)
-			return cop2(opLoad, lhs, cop2(op, lhs, toC(e.Rhs)))
+			inner := cop2(op, lhs, toC(e.Rhs))
+			inner.compound = e
+			return cop2(opLoad, lhs, inner)
 		}
 		return cop2(opLoad, lhs, toC(e.Rhs))
 	case *syntax.UnaryExpr:

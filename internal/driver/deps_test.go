@@ -1,6 +1,6 @@
 package driver
 
-// パッケージ間の import 方向を固定する (doc/archive/v2_plan.md R3-a / C3)。
+// パッケージ間の import 方向を固定する (Agent/discussions/2026-09-12-v2-plan.md R3-a / C3)。
 // 特に syntax は他の internal パッケージに依存しないこと (フォーマッタが sema 無しで動くため)。
 
 import (
@@ -42,11 +42,15 @@ func TestImportDirection(t *testing.T) {
 		"project":  {"sema", "diag"},
 		"fclog":    {"codegen", "cc65", "ir", "diag", "types"},
 		"interp":   {"ir", "types"},
-		"sema":     {"syntax", "types", "ir", "diag"},
+		"sema":     {"syntax", "types", "ir", "diag", "lz4", "rle"},
+		"lz4":      {}, // コンパイル時の圧縮 (@lz4 / @rle): 何にも依存しない葉
+		"rle":      {},
 		"migrate":  {"syntax", "types", "ir", "sema"},
 		"r6502":    {},
 		"nes":      {"r6502"},
-		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu"},
+		"quicknes": {}, // libretro の QuickNES のコア (画面を確かめるテスト用)
+		"doccheck": {}, // 文書を確かめるテストだけ (テストは driver と syntax を使う)
+		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu", "migrate"},
 	}
 	for pkg, ok := range allowed {
 		okSet := map[string]bool{}

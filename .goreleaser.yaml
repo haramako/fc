@@ -28,9 +28,9 @@ archives:
     files:
       - README.md
       - LICENSE.txt
-      - doc/language_reference.md
+      - docs/language_reference.md
       # 同梱の ca65 / ld65 (cc65。Windows / Linux amd64)。release.yml が dist-cc65/<os>_<arch>/ に用意する。
-      # fcc は自分の実行ファイルと同じディレクトリの ca65 / ld65 を最初に探す (internal/driver/tools.go)
+      # fcc は自分の実行ファイルと同じディレクトリの ca65 / ld65 を最初に探す (internal/cc65/tools.go)
       - src: "dist-cc65/{{ .Os }}_{{ .Arch }}/*"
         strip_parent: true
 
@@ -42,4 +42,5 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - "^doc:"
+      # doc: / docs: / agent: / Agent/wiki: など (大文字小文字を区別しない)
+      - "(?i)^(docs?|agent)(/[^:]*)?:"

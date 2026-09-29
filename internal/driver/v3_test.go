@@ -1,6 +1,6 @@
 package driver
 
-// fc 3 (`#fc 3`) の言語の規則のテスト (doc/v3_plan.md)。fc 2 と fc 3 のモジュールは 1 つのプログラムに混ぜられる。
+// fc 3 (`#fc 3`) の言語の規則のテスト (Agent/discussions/2026-09-20-v3-plan.md)。fc 2 と fc 3 のモジュールは 1 つのプログラムに混ぜられる。
 
 import (
 	"bytes"

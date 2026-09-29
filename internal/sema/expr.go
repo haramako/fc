@@ -191,7 +191,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if fv := structLitField(e, f.Name); fv != nil {
 				v = h.rval(fv)
 				h.compatible(f.Type, ir.ValType(v))
-				v = h.cast(v, f.Type)
+				v = h.convert(v, f.Type, fv)
 			} else {
 				v = h.zeroValue(f.Type)
 			}
@@ -224,7 +224,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				// 複合代入 `X op= v` は (load X (op X v)) に脱糖されていて X を 2 回評価する。X に関数呼び出しが
 				// あるとき (`a[f()] += 1`) は呼び出しを先に 1 回だけ評価して値に置き換えてから続ける
 				lhs := h.hoistCalls(e.args[0])
-				e = &cexpr{kind: cOp, op: opLoad, args: []*cexpr{lhs, cop2(rhs.op, lhs, rhs.args[1])}, pos: e.pos}
+				inner := cop2(rhs.op, lhs, rhs.args[1])
+				inner.compound, inner.compoundCall = rhs.compound, true
+				e = &cexpr{kind: cOp, op: opLoad, args: []*cexpr{lhs, inner}, pos: e.pos}
 			}
 			if lhs := e.args[0]; lhs.kind == cOp && lhs.op == opField {
 				// struct のフィールドへの代入。SoA の 2 バイト以上のフィールドは 1 つのポインタで表せないのでここで扱う
@@ -234,6 +236,8 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 				if fr.split != nil {
 					right := h.rval(h.withExpected(e.args[1], fr.split.typ))
+					h.compatible(fr.split.typ, ir.ValType(right))
+					right = h.convert(right, fr.split.typ, e.args[1])
 					h.soaStoreSplit(fr.split, right)
 					r = right
 					break
@@ -258,7 +262,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				typ = h.prog.Types.Bool() // `!x` は 0 / 1
 			}
 			tmp := h.newTmp(typ)
-			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}})
+			op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}}
+			h.emit(op)
+			if e.op != opNot {
+				h.recordArith(tmp, op, e)
+			}
 			r = tmp
 
 		case opAdd, opSub, opMul, opDiv, opMod,
@@ -274,6 +282,17 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
 				break
 			}
+			if (e.op == opShiftLeft || e.op == opShiftRight) && h.shiftByLeft(e, left, right) {
+				// F1 (fc 4): シフトの結果は左辺の型。シフト量は型を揃えない
+				typ := ir.ValType(left)
+				tmp := h.newTmp(typ)
+				op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}}
+				h.emit(op)
+				h.recordArith(tmp, op, e, left)
+				r = tmp
+				break
+			}
+			origL, origR := left, right // 型のない定数の元の値 (A1 で広げるとき: widen.go)
 			left, right = h.adaptLiteral(left, right, false)
 			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
 			if cerr != nil {
@@ -302,7 +321,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if typ.Kind == types.Pointer {
 				h.markReadOnly(tmp, h.readOnly(left)) // `p + 1` (p:*const T) も読み取り専用 (外れて書き込めていた。survey 2026-09-27)
 			}
-			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
+			op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}}
+			h.emit(op)
+			if typ.Kind == types.Int {
+				h.recordArith(tmp, op, e, origL, origR)
+			}
 			r = tmp
 
 		case opEq, opLt:
@@ -324,6 +347,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			// F6 (fc 4): 符号の違う整数の大小の比較で、互換型が片方の値を読み替えるものはエラー (intrules.go)
+			mixed := e.op == opLt && mixedSign(left, right)
+			if mixed && h.v4() {
+				panic(h.mixedSignError(ir.ValType(left), ir.ValType(right)))
+			}
 			left, right = h.adaptLiteral(left, right, true)
 			h.warnConstCompare(e.op, left, right)
 			if k, ok := h.foldBeyond16(e.op, left, right); ok {
@@ -342,7 +370,14 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if e.op == opEq && isVoidPtr(ir.ValType(right)) && !isVoidPtr(ir.ValType(left)) {
 				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
 			}
-			_, left, right = h.makeCompatible(left, right)
+			if mixed && h.rewriting() {
+				// 互換型に揃える (A1 の書き換え) の後に報告する: 同じ式に両方が付くとき `((x + vx) as i8) as u16` の順に当たる
+				l0, r0 := left, right
+				_, left, right = h.makeCompatible(left, right)
+				h.rewriteMixedSign(l0, r0, [2]*cexpr{a0, a1})
+			} else {
+				_, left, right = h.makeCompatible(left, right)
+			}
 			if e.op == opEq {
 				if bv, ok := h.boolEq(e, left, right); ok {
 					r = bv
@@ -427,7 +462,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					v := h.rval(h.withExpected(args[i], lmdType.Params[i]))
 					h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
 					h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], v)
-					return h.cast(v, lmdType.Params[i])
+					return h.convert(v, lmdType.Params[i], args[i])
 				}
 				argVals := make([]ir.Operand, len(args))
 				if pre {
@@ -579,6 +614,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if ir.ValType(left).Kind == types.Pointer {
 				right = h.signedOffset(right) // p[-1]、p[i] (i:i8) は負のずれ
 			}
+			if at := ir.ValType(left); at.Kind == types.Array && at.Length > 0 {
+				// 配列の定数の添字は長さの中 (範囲外の読み書きは隣の変数を黙って壊す。slice・ポインタは長さが分からないので見ない)
+				if k, ok := ir.ValIntLiteral(right); ok && (k < 0 || k >= at.Length) {
+					panic(&diag.Error{Msg: fmt.Sprintf("index %d is out of range for %s (type %s: 0..%d)", k, describe(left), at, at.Length-1)})
+				}
+			}
 			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))
 			h.markReadOnly(tmp, h.readOnly(left))
 			h.emit(&ir.Op{Code: ir.OpIndex, Dst: tmp, Src: []ir.Operand{left, right}})
@@ -629,7 +670,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		}
 		h.compatibleAssign("assignment", ir.ValType(left).Base, ir.ValType(right))
 		h.warnDropConst("assignment", ir.ValType(left).Base, right)
-		right = h.cast(right, ir.ValType(left).Base)
+		right = h.convert(right, ir.ValType(left).Base, rhs)
 		h.emit(ir.NewStoreMem(left, nil, 0, 0, ir.ValType(left).Base.Size, right))
 		return left
 	}
@@ -640,7 +681,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 	if !ir.ValAssignable(left) {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
-	right = h.cast(right, ir.ValType(left))
+	right = h.convert(right, ir.ValType(left), rhs)
 	// A typed storage alias can expose overlapping struct subobjects. Preserve
 	// the complete RHS before writing when a forward byte copy would overlap.
 	if root := ir.UnderlyingValue(left); root != nil && root == ir.UnderlyingValue(right) {
@@ -775,7 +816,7 @@ func (h *Hlc) nullOf(t *types.Type) ir.Operand {
 	panic(&diag.Error{Msg: fmt.Sprintf("null cannot be used as %s", t)})
 }
 
-// checkCast はキャストの種類ごとの規則を検査する (doc/v2_types_struct.md §3.5)。
+// checkCast はキャストの種類ごとの規則を検査する (Agent/wiki/design/types-struct.md §3.5)。
 func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 	switch kind {
 	case syntax.CastAs:
@@ -821,6 +862,12 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 		if from.Kind == types.Array {
 			return ir.NewPointeredArray(v, to)
 		}
+		if tv, ok := v.(*ir.Value); ok && from == to && to.Kind == types.Int {
+			// 同じ型への `as` は値そのもの (包まない。fc 3 → 4 の migrate が足す `(式) as T` で IR が変わらないように、どの版も)。
+			// `as` は A1 の区切りなので、式の中の算術の結果なら広げない印にする (widen.go)
+			delete(h.arith, tv)
+			return v
+		}
 		if to.Size > from.Size && from.Signed {
 			newV := h.newTmp(to)
 			h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: newV, Src: []ir.Operand{v}})
@@ -837,6 +884,7 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 // makeCompatible は互換型に変換する (キャストコード生成込み)。
 func (h *Hlc) makeCompatible(a, b ir.Operand) (*types.Type, ir.Operand, ir.Operand) {
 	typ := h.compatible(ir.ValType(a), ir.ValType(b))
+	a, b = h.widenArith(a, typ), h.widenArith(b, typ) // A1: 16 ビットの値と出会う 8 ビットの算術は部分木ごと広げる (widen.go)
 	a = h.cast(a, typ)
 	b = h.cast(b, typ)
 	return typ, a, b

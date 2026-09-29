@@ -1,5 +1,0 @@
-#fc 3
-@(bank: -1);
-@include("inflate.asm");
-
-function unpack(dest:*u8, src:*const u8):u16;

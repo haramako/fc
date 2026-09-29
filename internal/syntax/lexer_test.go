@@ -211,7 +211,7 @@ func TestKindString(t *testing.T) {
 	}
 }
 
-// TestLexerErrors: 不正なリテラルはエラーにする (doc/v2_grammar.md §3.9)。
+// TestLexerErrors: 不正なリテラルはエラーにする (Agent/discussions/2026-09-13-v2-grammar.md §3.9)。
 func TestLexerErrors(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{"0b2", "invalid digit '2' in base 2 literal"},

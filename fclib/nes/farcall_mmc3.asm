@@ -1,4 +1,4 @@
-;;; farcall (MMC3 用の参考実装。doc/v2_farcall.md §3.4)
+;;; farcall (MMC3 用の参考実装。Agent/wiki/design/farcall.md §3.4)
 ;;;
 ;;; プロジェクトにコピーして、mmc3 モジュールから include("farcall_mmc3.asm") する。
 ;;; 前提: fc の mmc3 モジュールが pbank_bak:[2]int (各スロットの今のバンク) を持ち、

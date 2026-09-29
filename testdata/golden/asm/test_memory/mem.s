@@ -6,7 +6,6 @@ __MODULE_MEM__ = 1
 .segment "mem"
 	.include "mem.asm"
 	.global _mem_set
-	.global _mem_zero
 	.global _mem_copy
 	.global _mem_compare
 	.export _mem_strcpy

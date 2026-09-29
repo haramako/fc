@@ -17,7 +17,7 @@ import (
 //
 //	go test ./internal/fc -run 'TestGolden|TestExample' -update
 //
-// (形式は doc/golden_dump_format.md)
+// (形式は Agent/wiki/golden-dump-format.md)
 
 var update = flag.Bool("update", false, "golden を現在の出力で書き換える")
 

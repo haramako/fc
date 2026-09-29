@@ -2,7 +2,7 @@ package ir
 
 import "github.com/haramako/fc/internal/types"
 
-// 幅と符号: 意味が入力の幅・符号で変わる命令は、それを命令自身に持つ (2026-09-28。doc/development_notes.md「コードの構造」)。
+// 幅と符号: 意味が入力の幅・符号で変わる命令は、それを命令自身に持つ (2026-09-28。Agent/wiki/code-structure.md)。
 //
 //	eq / lt       Width 比較の幅 (バイト)。入力はこの幅で読む (変数はゼロ拡張、リテラルは値のバイト: codegen の byte と同じ)
 //	lt            Sign  符号付きの比較か

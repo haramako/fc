@@ -24,6 +24,11 @@ func TestMustError(t *testing.T) {
 		{"case の範囲 (空)", "function f(u:u8):void { switch (u) { case 3..3: g = 1; } }", "is empty"},
 		{"case の範囲 (重なり)", "function f(u:u8):void { switch (u) { case 0..5: g = 1; case 4: g = 2; } }", "duplicate case value 4"},
 		{"case の範囲 (型)", "function f(u:u8):void { switch (u) { case 200..=300: g = 1; } }", "does not fit in u8"},
+		// 配列の定数の添字 (範囲外は隣の変数を黙って壊す)
+		{"配列の定数の添字 (書く)", "function f():void { A[4] = 1; }", "index 4 is out of range for `A` (type [4]u8: 0..3)"},
+		{"配列の定数の添字 (const の表)", "function f():u8 { return T[3]; }", "index 3 is out of range for `T`"},
+		{"配列の定数の添字 (負)", "function f():u8 { return A[-1]; }", "index -1 is out of range"},
+		{"配列の定数の添字 (struct の配列のフィールド)", "struct Q { v:[2]u8; }\nvar q:Q;\nfunction f():u8 { return q.v[2]; }", "index 2 is out of range"},
 		// 読み取り専用
 		{"const の表への書き込み", "function f():void { var p = &T[0]; *p = 1; }", "read-only"},
 		{"*const の算術で const が外れない", "function f():void { var p:*const u8 = T; var q = p + 1; *q = 2; }", "read-only"},

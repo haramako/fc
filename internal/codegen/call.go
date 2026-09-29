@@ -20,14 +20,14 @@ func (l *Llc) farCallSetup(sym string) []any {
 	}
 }
 
-// callKind は呼び出し 1 つの引数の渡し方 (呼び先の種類で決まる。doc/v2_frame_alloc.md §6-1)。
+// callKind は呼び出し 1 つの引数の渡し方 (呼び先の種類で決まる。Agent/wiki/design/frame-alloc.md §6-1)。
 type callKind uint8
 
 const (
 	ckStack  callKind = iota // S+k,x に積む (stack / entry / 関数ポインタ経由)
 	ckStatic                 // 呼び先の静的フレーム F_g+k に直接書く
 	ckFastcallReg
-	ckCc65 // cc65 の __fastcall__: 引数は FC_FASTCALL_REG に置いてから A / X に、戻り値は A / X (doc/language_reference.md §4.5)                 // FC_FASTCALL_REG に積む (extern の fastcall)
+	ckCc65 // cc65 の __fastcall__: 引数は FC_FASTCALL_REG に置いてから A / X に、戻り値は A / X (docs/language_reference.md §4.5)                 // FC_FASTCALL_REG に積む (extern の fastcall)
 )
 
 // pendingCall は push_result から call までの 1 つの呼び出し。
@@ -108,7 +108,7 @@ func markArgY(lmd *ir.Lambda, lambdas map[string]*ir.Lambda) {
 		case ir.OpPushResult, ir.OpPushFastcallResult:
 			stack = append(stack, &pending{})
 		case ir.OpPushArg, ir.OpPushFastcallArg:
-			if len(stack) > 0 {
+			if len(stack) > 0 && !op.ArgCont {
 				p := stack[len(stack)-1]
 				p.args = append(p.args, i)
 			}
@@ -305,7 +305,7 @@ func (l *Llc) stackBase(lmd *ir.Lambda) int {
 	return 0
 }
 
-// スタックの空き先頭はゼロページの FC_SP が持つ (doc/v2_regalloc.md §4)。X はレジスタとして自由に使える。
+// スタックの空き先頭はゼロページの FC_SP が持つ (Agent/wiki/design/regalloc.md §3 の「X の開放」)。X はレジスタとして自由に使える。
 //   - static / entry 関数: X を使わない (使うのはループ内の常駐)。stack 系の呼び先には `ldx FC_SP` してから
 //     S+k,x に引数を書いて jsr し、戻り値を読む前にもう一度 `ldx FC_SP` (呼び先が X を壊しうる)
 //   - stack (再帰) 関数: X = 自分のフレームの底。入口で FC_SP = X + FrameSize、return で戻す。呼び出しの後は

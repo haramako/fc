@@ -1,6 +1,6 @@
 package driver
 
-// castle の doc/memo.md「FC BUG」由来の回帰テスト (doc/archive/go_evolution_plan.md R4 の表)。
+// castle の doc/memo.md「FC BUG」由来の回帰テスト (Agent/discussions/2026-08-29-go-evolution-plan.md R4 の表)。
 // 小さなプログラムを emu で実行して出力を見る。
 
 import (
@@ -128,7 +128,7 @@ function main():void
 	p[0] = 1;
 	l0 = la[0];
 	printf("ptr ", l0, "\n");
-	mem.set(la, 3, 4);
+	mem.fill(la, 3);
 	var s1 = sum(la, 4);
 	fill(la, 4);
 	var s2 = sum(la, 4);

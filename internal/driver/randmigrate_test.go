@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/haramako/fc/internal/migrate"
+	"github.com/haramako/fc/internal/sema"
 )
 
 // romBuild は files を emu でビルドして ROM (a.bin) を返す (走らせない)。コンパイラの panic もエラーにする。
@@ -25,9 +28,11 @@ func romBuild(t *testing.T, files map[string]string, level int) (rom []byte, err
 	return os.ReadFile(r.Out)
 }
 
-// v3Breaking は fc 3 で意図してエラーにした fc 2 の書き方 (migrate は書き換えない) のエラーか。
+// v3Breaking は fc 3 で意図してエラーにした fc 2 の書き方 (migrate は書き換えない) のエラーか。fc 4 への migrate が
+// 自動では書き換えられない形 (左辺に呼び出しのある複合代入の縮小: sema.CompoundCallMsg) も同じ扱い。
 func v3Breaking(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "visible only in that case") // switch の case ごとのスコープ
+	return err != nil && (strings.Contains(err.Error(), "visible only in that case") || // switch の case ごとのスコープ
+		strings.Contains(err.Error(), sema.CompoundCallMsg))
 }
 
 func TestRandomMigrate(t *testing.T) {
@@ -78,6 +83,91 @@ func TestRandomMigrate(t *testing.T) {
 					t.Fatalf("-O %d: migrate で ROM が変わった (seed %d)\n%s\n// ---- migrate の後 ----\n%s", level, seed, g.allSource(), v3["t.fc"])
 				}
 			}
+			// 最新の版 (fc 4) まで: Compiler.Migrate (fc 3 → 4 は型を見て、意味の変わる所に今の意味の `as` などを足す)。
+			// ROM は元のままと同じ (fc 4 の整数の規則の実装と、書き換えの取りこぼしの両方を見る。Agent/wiki/plans/v4-plan.md §0)
+			v4, err := migrateToLatest(t, v2)
+			if v3Breaking(err) {
+				breaking.Add(1)
+				t.Skipf("fc 3 の非互換 (seed %d): %v", seed, err)
+			}
+			if err != nil {
+				t.Fatalf("fc 4 への migrate が失敗 (seed %d): %v\n%s", seed, err, g.allSource())
+			}
+			{
+				// fc 4 は fastcall を廃止し (migrate が本体のある関数の fastcall を消す)、printf は書式文字列で console に出す (migrate が
+				// 書き換える)。生成コードは変わるので、実行結果で比べる
+				for _, level := range []int{-1, 0} {
+					want, err := rpRun(t, v2, level, rpMaxCycles)
+					if err != nil {
+						t.Skipf("fc 2 のプログラムが走らない (seed %d): %v", seed, err)
+					}
+					got, err := rpRun(t, v4, level, rpMaxCycles)
+					if err != nil && strings.HasPrefix(err.Error(), "cycle limit") {
+						// fc 4 の printf (fmt で数を文字にする) は emu に数を渡す printf より遅く、-O 0 で上限に掛かることがある
+						got, err = rpRun(t, v4, level, rpMaxCycles*50)
+					}
+					if err != nil && strings.Contains(err.Error(), "frame size over") {
+						// fc 4 の printf は引数を全部一時変数に取ってから書式どおりに出すので、-O 0 (一時変数を詰めない) では
+						// 引数 1 つにつき 2 バイトずつフレームが増え、100 個ほど並べる生成器の printf で 256 バイトを超えた
+						// (プログラムが大きすぎる扱い)
+						t.Skipf("fc 4 に migrate したプログラムのフレームが大きすぎる (seed %d)", seed)
+					}
+					if err != nil && strings.Contains(err.Error(), "zero page index wrapped") {
+						// fastcall をやめて引数・戻り値がソフトウェアスタックを通るようになり、呼び出しの入れ子で FC_STACK を
+						// あふれた (ほかの fuzz と同じくプログラムが大きすぎる扱い)
+						t.Skipf("fc 4 に migrate したプログラムのソフトウェアスタックがあふれた (seed %d)", seed)
+					}
+					if err != nil && strings.Contains(err.Error(), "memory area overflow") {
+						// fc 4 の printf (書式文字列を fmt の呼び出しに展開する) は引数を並べる printf よりコードが大きく、-O 0 の
+						// 大きなプログラムが emu の ROM (28KB) からあふれた (プログラムが大きすぎる扱い)
+						t.Skipf("fc 4 に migrate したプログラムが ROM からあふれた (seed %d)", seed)
+					}
+					if err != nil || got != want {
+						t.Fatalf("-O %d: fc 4 への migrate で出力が変わった (seed %d): %v\n元: %s\n後: %s\n%s\n// ---- migrate の後 ----\n%s", level, seed, err, want, got, g.allSource(), joinSources(v4))
+					}
+				}
+			}
 		})
 	}
+}
+
+// migrateToLatest は files (ファイル名 → ソース) を一時ディレクトリに書き、Compiler.Migrate で最新の版に書き換えた内容を返す。
+func migrateToLatest(t *testing.T, files map[string]string) (map[string]string, error) {
+	t.Helper()
+	dir := t.TempDir()
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	paths := make([]string, len(names))
+	for i, name := range names {
+		paths[i] = filepath.Join(dir, name)
+		if err := os.WriteFile(paths[i], []byte(files[name]), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate(paths, &MigrateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for i, name := range names {
+		out[name] = string(res[paths[i]])
+	}
+	return out, nil
+}
+
+// joinSources はファイルを名前の順に並べた 1 つのテキスト (失敗の報告用)。
+func joinSources(files map[string]string) string {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, name := range names {
+		fmt.Fprintf(&b, "// ---- %s ----\n%s", name, files[name])
+	}
+	return b.String()
 }

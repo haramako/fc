@@ -1,13 +1,15 @@
 // Package project はプロジェクトの設定 (fc.toml) と、そのバンクの表からの配置の解決。ファイルの読み込み以外の入出力はしない。
 package project
 
-// fc.toml のバンクの表から配置を決める (doc/v3_plan.md §3)。マルチバンクのプログラムも fc だけで書け、ld65.cfg は
+// fc.toml のバンクの表から配置を決める (Agent/discussions/2026-09-20-v3-plan.md §3)。マルチバンクのプログラムも fc だけで書け、ld65.cfg は
 // 特殊な場合の脱出口 (options(linker_config:) で丸ごと、または [linker] extra で断片) にする。
 //
 //	[target]
 //	mapper = "MMC3"      # マッパーのプロファイル (MapperProfiles)
 //	prg = "64K"          # PRG ROM の大きさ
-//	chr = "8K"           # CHR ROM の大きさ
+//	chr = "8K"           # CHR ROM の大きさ (0 なら CHR-RAM: iNES のヘッダの CHR の数が 0)
+//	mirroring = "vertical"  # ネームテーブルのミラーリング (vertical (既定) / horizontal / four。マッパーが切り替えるなら初めの値)
+//	battery = true       # $6000-$7FFF をバッテリーで保つ (iNES のヘッダ)
 //	[bank.en]            # 論理名。モジュールは @(bank: "en")、プログラムからは @bank("en") で番号
 //	slot = 0xA000        # 切り替えのスロット (プロファイルの Slots のどれか)
 //	index = 3            # 番号を固定するときだけ (省けば空いている番号を小さい順に)
@@ -67,6 +69,8 @@ type BankLayout struct {
 	Profile  *MapperProfile
 	PRGSize  int
 	CHRSize  int
+	Mirror   int  // iNES のヘッダの byte 6 のミラーリングのビット (1 = vertical、0 = horizontal、8 = four screen)
+	Battery  bool // iNES のヘッダの byte 6 の bit 1
 	Banks    []*BankDef // 番号順
 	RAM      []*RAMDef
 	Fragment string // [linker] extra (cfg の断片のパス。fc.toml からの相対は解決済み)
@@ -126,8 +130,30 @@ func (cfg *ProjectConfig) Layout() (*BankLayout, error) {
 	if l.PRGSize, err = parseSize(target["prg"], "32K"); err != nil {
 		return nil, fail("[target] prg: %v", err)
 	}
-	if l.CHRSize, err = parseSize(target["chr"], "8K"); err != nil {
+	if c := strings.ToUpper(target["chr"]); c == "0" || c == "0K" {
+		l.CHRSize = 0 // CHR-RAM
+	} else if l.CHRSize, err = parseSize(target["chr"], "8K"); err != nil {
 		return nil, fail("[target] chr: %v", err)
+	}
+	if l.CHRSize%0x2000 != 0 {
+		return nil, fail("[target] chr = %s must be a multiple of 8K (0 for CHR-RAM)", target["chr"])
+	}
+	switch m := strings.ToLower(target["mirroring"]); m {
+	case "", "vertical", "v":
+		l.Mirror = 1
+	case "horizontal", "h":
+		l.Mirror = 0
+	case "four", "4":
+		l.Mirror = 8
+	default:
+		return nil, fail("[target] mirroring = %q (vertical / horizontal / four)", target["mirroring"])
+	}
+	switch target["battery"] {
+	case "", "false":
+	case "true":
+		l.Battery = true
+	default:
+		return nil, fail("[target] battery = %s (true / false)", target["battery"])
 	}
 	if prof.Name == "NROM" && l.PRGSize == 0x4000 {
 		l.Profile = &MapperProfile{Name: "NROM", INES: 0, BankSize: 0x4000, FixedAddr: 0xC000, FixedBanks: 1} // 16K は $C000 (ミラー)

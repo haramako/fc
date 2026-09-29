@@ -1,0 +1,61 @@
+package main
+
+// fcc test: モジュールの @(test) の関数を走らせる (Agent/wiki/plans/v4-stdlib.md §7.1)。
+//
+//	fcc test [-t emu|nes] [-O level] <module.fc> ...
+//
+// 渡したモジュールを use して @run_tests() を呼ぶ main を作り、emu (既定) か内蔵の NES のランナーで実行する。@(test) の関数を「モジュール.名前: 」と出してから
+// 呼び、@assert / @assert_eq が落ちればそこで止まる (終了コード 1)。全部通れば「N tests ok」と出して終了コード 0。
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+
+	"github.com/haramako/fc/pkg/fc"
+)
+
+const testUsage = `Usage: fcc test [-t emu|nes] [-O level] <module.fc> ...
+    -t    target (emu: the built-in 6502 emulator, nes: the built-in NES runner)
+    -O    optimize level (0-2)
+`
+
+func runTest(args []string) int {
+	fs := flag.NewFlagSet("fcc test", flag.ExitOnError)
+	fs.Usage = func() { fmt.Print(testUsage) }
+	level := fs.Int("O", 2, "optimize level")
+	target := fs.String("t", fc.TargetEmu, "target")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if fs.NArg() == 0 {
+		fmt.Print(testUsage)
+		return 0
+	}
+	compiler, err := fc.New()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer compiler.Close()
+	if *target != fc.TargetEmu && *target != fc.TargetNES {
+		fmt.Fprintf(os.Stderr, "fcc test: unknown target %q (emu / nes)\n", *target)
+		return 1
+	}
+	opt := fc.Options{Target: *target, Stdout: os.Stdout}
+	if *level == 0 {
+		opt.OptimizeLevel = -1
+	} else {
+		opt.OptimizeLevel = *level
+	}
+	res, err := compiler.Test(context.Background(), fs.Args(), opt)
+	if res != nil {
+		printWarnings(res.Warnings)
+	}
+	if err != nil {
+		printErrors(err)
+		return 1
+	}
+	return res.ExitCode
+}

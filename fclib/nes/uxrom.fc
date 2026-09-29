@@ -1,0 +1,26 @@
+#fc 4
+// UxROM (Agent/wiki/plans/v4-stdlib.md §3.2): $8000〜$BFFF の 16KB を切り替える ($C000〜 は最後のバンクに固定)。far call のトランポリン
+// (farcall_uxrom.asm) も入るので、fc.toml の [target] mapper = "UxROM" と @(farcall) で別のバンクの関数をそのまま呼べる。
+//   uxrom.init();                    // 最初に (バンク 0 を入れる)
+//   var old = uxrom.prg(@bank("a"));  // 切り替えて前のバンクを返す (「切り替えて呼んで戻す」)
+// NMI の中ではバンクを切り替えないこと (far call の途中かもしれない)。
+@(bank: -1);
+
+public var bank:u8 @(symbol: "_uxrom_bank");   // 今 $8000 に入れているバンク
+const BANKS:[16]u8 @(symbol: "uxrom_banks");   // farcall_uxrom.asm の表 (バスの衝突を避けて、書く値と同じ値の番地に書く)
+@include("farcall_uxrom.asm");
+
+public function init():void
+{
+	prg(0);
+}
+
+// $8000 にバンク b を入れ、前のバンクを返す
+public function prg(b:u8):u8
+{
+	var old = bank;
+	bank = b;
+	var p = @bitcast(*u8, &BANKS[b & 15]);
+	*p = b;
+	return old;
+}

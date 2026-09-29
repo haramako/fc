@@ -1,0 +1,4 @@
+[target]
+mapper = "MMC3"
+prg = "32K"
+chr = "8K"

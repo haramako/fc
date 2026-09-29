@@ -1,6 +1,6 @@
 package syntax
 
-// フォーマッタ (doc/archive/go_evolution_plan.md F-fmt)。構文木をコメント付きで正規形に印字する。
+// フォーマッタ (Agent/discussions/2026-08-29-go-evolution-plan.md F-fmt)。構文木をコメント付きで正規形に印字する。
 //
 // 方針は gofmt と同じ:
 //   - トークンの並びは変えない (括弧もそのまま)。変えるのは空白・改行・インデントだけ。
@@ -675,13 +675,18 @@ func (p *printer) ifStmt(s *IfStmt) {
 	if s.Else == nil {
 		return
 	}
-	// `} else` / `} elsif` は同じ行。Then が単文なら次の行
+	// `} else` / `} elsif` / `} else if` は同じ行。Then が単文なら次の行
 	if _, ok := s.Then.(*Block); ok {
 		p.space()
 	} else {
 		p.newline()
 	}
-	if e, ok := s.Else.(*IfStmt); ok && e.IsElsif {
+	if e, ok := s.Else.(*IfStmt); ok {
+		// `else if` は elsif と同じく字下げを深くせずに続ける (else の中の if 文としてでなく)
+		if !e.IsElsif {
+			p.tok("else")
+			p.space()
+		}
 		p.ifStmt(e)
 		return
 	}

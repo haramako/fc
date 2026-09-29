@@ -4,10 +4,6 @@ package driver
 // base.asm / ld65.cfg のテンプレートは小さく静的なので text/template を使わず文字列生成している。
 
 import (
-	"github.com/haramako/fc/internal/emu"
-	"github.com/haramako/fc/internal/project"
-	"github.com/haramako/fc/internal/fclog"
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"fmt"
 	"io"
@@ -15,19 +11,28 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
+	"github.com/haramako/fc/internal/emu"
+	"github.com/haramako/fc/internal/fclog"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/project"
 	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 )
+
+// toolSlots は外部のツール (ca65 / ld65) を同時に起動する数の上限 (プロセス全体。Compiler ごとの並列 (jobs) とは別)。テストのように
+// 1 つのプロセスで多くのビルドを並べると、ビルドごとに CPU の数だけ ca65 を起動して数百のプロセスになり、Windows がプロセスを
+// 作れなくなっていた ("Not enough memory resources are available to process this command")。
+var toolSlots = make(chan struct{}, max(4, 2*runtime.NumCPU()))
 
 // DefaultBuildDirName はソースディレクトリ直下に作る中間生成物ディレクトリの名前。
 const DefaultBuildDirName = ".fc-build"
@@ -45,7 +50,12 @@ func (e *CommandError) Error() string {
 }
 
 type BuildOptions struct {
-	Target        string // emu / nes (デフォルト emu)
+	Target string // emu / nes (デフォルト emu)
+	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対)。use / @include と asm の include で、ソースのディレクトリの後、fclib
+	// より前に探す (fcc test がテストするモジュールのディレクトリを足す。fc.toml の [lib.*] もここに入る: Agent/wiki/plans/v4-stdlib.md §9)
+	LibPath       []string
+	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー。Agent/wiki/plans/v4-stdlib.md §9)
+	Offline bool
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
@@ -59,25 +69,26 @@ type BuildOptions struct {
 	LogEveryStatement bool
 	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
 	MisclassifyResident bool
-	SizeReport    bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
+	SizeReport          bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
 	// Config は調査用の設定 (パスの入れ切り・トレース・検証。ir/config.go)。nil なら環境変数 (FC_DISABLE など) から作る
 	Config *ir.Config
 
 	// Dir はソースの基準ディレクトリ (use / include / incbin の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / base.o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
-	// CLI はどちらも既定のままなので外部挙動は従来どおり (doc/archive/v2_plan.md G6)。
+	// CLI はどちらも既定のままなので外部挙動は従来どおり (Agent/discussions/2026-09-12-v2-plan.md G6)。
 	Dir      string
 	BuildDir string
 
 	// Jobs は ca65 を同時に走らせる数。0 なら CPU 数。1 で逐次。
 	Jobs int
 
-	// Defines は CLI の -D (`module.NAME=value`)。fc.toml の [define.<module>] の後に当てる (doc/v3_plan.md §1)
+	// Defines は CLI の -D (`module.NAME=value`)。fc.toml の [define.<module>] の後に当てる (Agent/discussions/2026-09-20-v3-plan.md §1)
 	Defines []string
 }
 
 // Result はビルドの結果。
 type Result struct {
+	Target     string         // ビルドしたターゲット (-t を省けば fc.toml の [target] の有無で決まる)
 	ExitCode   int            // Run 指定時のプログラムの終了コード (それ以外は 0)
 	Out        string         // 出力ファイル (CompileOnly なら "")
 	MapFile    string         // ld65 のマップファイル (CompileOnly なら "")
@@ -91,6 +102,7 @@ type Result struct {
 	StaticRam  int
 	Frames     []string         // 静的フレームの配置の要約 (fcc build -d で表示)
 	Defines    []sema.DefineUse // @(build) の const の上書き (fc.toml / -D。fcc build -d で表示)
+	Libs       []string         // fc.toml の [lib.*] の要約: ライブラリと、そこから使ったモジュール (fclib を置き換えたもの) (fcc build -d で表示)
 	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
 	// ResidentFixes は常駐レジスタの見積もりが外れて、退避 / 復帰に直した命令の数 (codegen.Llc.ResidentFixes)
 	ResidentFixes int
@@ -99,15 +111,19 @@ type Result struct {
 type Compiler struct {
 	FCHome   string // fclib/ share/ を含むディレクトリ
 	ctx      context.Context
-	jobs     int // ca65 の並列数
+	jobs     int      // ca65 の並列数
+	libDirs  []string // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
+	libs     []project.ResolvedLib // fc.toml の [lib.*] (fcc build -d の要約)
+	optLibs  []string // BuildOptions.LibPath を絶対パスにしたもの
+	offline  bool     // BuildOptions.Offline
 	target   string
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
 	prog     *sema.Program
 	layout   *project.BankLayout // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
-	asmRuns  atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
-	hashes   *hashMemo    // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
-	cfg      *ir.Config   // 調査用の設定 (BuildOptions.Config)
+	asmRuns  atomic.Int64        // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
+	hashes   *hashMemo           // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
+	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -159,7 +175,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	c.ctx = ctx
 
 	if opt.Target == "" {
-		opt.Target = "emu"
+		opt.Target = defaultTarget(opt.Dir)
 	}
 	if opt.Target == "x6502" {
 		return nil, &diag.Error{Msg: "target x6502 is not supported by go port"}
@@ -193,6 +209,18 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if c.buildDir == "" {
 		c.buildDir = filepath.Join(c.dir, DefaultBuildDirName)
 	}
+	c.optLibs = nil
+	for _, d := range opt.LibPath {
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(c.dir, d)
+		}
+		if a, err := filepath.Abs(d); err == nil {
+			d = a
+		}
+		c.optLibs = append(c.optLibs, filepath.ToSlash(d))
+	}
+	c.libDirs = c.optLibs
+	c.offline = opt.Offline
 	c.jobs = opt.Jobs
 	if c.jobs <= 0 {
 		c.jobs = runtime.NumCPU()
@@ -201,7 +229,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	if err := os.MkdirAll(c.buildDir, 0o777); err != nil {
 		return nil, err
 	}
-	result = &Result{BuildDir: c.buildDir}
+	result = &Result{BuildDir: c.buildDir, Target: c.target}
 	c.hashes = newHashMemo() // fcc watch は同じ Compiler でビルドし直すので、ビルドごとに作り直す
 
 	// 前段: 意味解析 → 全関数の最適化と割付 → 静的フレームの配置 (frontend.go)
@@ -222,6 +250,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	result.Warnings = collectWarnings(prog)
 	result.FarCalls = prog.FarCalls
 	result.Defines = sortedDefines(prog.Defines)
+	result.Libs = c.libSummary(prog)
 	if err := writeIfChanged(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n"))); err != nil {
 		return nil, err
 	}
@@ -255,6 +284,12 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		sources = append(sources, filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
 	sources = append(sources, c.findShare("runtime.asm"), filepath.Join(c.FCHome, "fclib", opt.Target, "runtime_init.asm"))
+	if src, err := c.defaultInterrupts(prog.Modules.List()); err != nil {
+		return nil, err
+	} else if src != "" {
+		sources = append(sources, src)
+		objs = append(objs, strings.TrimSuffix(src, ".s")+".o")
+	}
 	if fc := c.farcallAsm(); fc != "" {
 		sources = append(sources, fc)
 	}
@@ -330,15 +365,28 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	return result, nil
 }
 
-// libPath は use / include の検索パス (カレント → fclib → fclib/<target>)。
+// defaultTarget は -t を省いたときのターゲット: fc.toml に [target] があれば nes、無ければ emu。
+func defaultTarget(dir string) string {
+	if dir == "" {
+		dir = "."
+	}
+	if cfg, err := project.FindConfig(dir); err == nil && cfg.Sections["target"] != nil {
+		return "nes"
+	}
+	return "emu"
+}
+
+// libPath は use / include の検索パス (カレント → 追加のライブラリ (BuildOptions.LibPath) → fclib → fclib/<target>)。
 func (c *Compiler) libPath(target string) []string {
-	return []string{".", filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target))}
+	p := []string{"."}
+	p = append(p, c.libDirs...)
+	return append(p, filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target)))
 }
 
 // makeBase は base.s (ランタイムの土台: ZP のレジスタ・スタック・FC_FARCALL などの定義) を生成してアセンブルする。
 // options(base: "data.asm") があれば生成せず、そのファイル (Dir 相対) をアセンブルする (castle のように ZP 配置や
 // iNES ヘッダを自前で持つプロジェクト。fc の領域 (L / reg / FC_FASTCALL_REG / FC_SZP / FC_SRAM / FC_SP / FC_FARCALL) を
-// 同じ名前で定義すること。doc/language_reference.md §1.5)。戻り値はリンクに渡すオブジェクト。
+// 同じ名前で定義すること。docs/language_reference.md §1.5)。戻り値はリンクに渡すオブジェクト。
 func (c *Compiler) makeBase() string {
 	opts := c.prog.Options
 	if base, ok := opts.Get("base"); ok && base.Kind == ir.OptStr {
@@ -349,7 +397,11 @@ func (c *Compiler) makeBase() string {
 	if c.layout != nil && c.target == "nes" {
 		// fc.toml の [target] から (layout.go)
 		l := c.layout
-		str := c.baseAsmTemplate(l.PRGSize/0x4000, max(1, l.CHRSize/0x2000), 1, l.Profile.INES)
+		flags := l.Mirror
+		if l.Battery {
+			flags |= 2
+		}
+		str := c.baseAsmTemplate(l.PRGSize/0x4000, l.CHRSize/0x2000, flags, l.Profile.INES) // CHR 0 は CHR-RAM
 		if err := writeIfChanged(filepath.Join(c.buildDir, "base.s"), []byte(str)); err != nil {
 			panic(err)
 		}
@@ -529,7 +581,37 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 	}
 }
 
-// farcallAsm は fc が用意する farcall トランポリン (doc/v2_farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では
+// defaultInterrupts は割り込みの入口 (_interrupt / _interrupt_irq。share/runtime.asm の NMI / IRQ が呼ぶ) を定義するものが
+// 無ければ、何もしない入口の asm (_interrupts.s) を書いてそのパスを返す (全部あれば "")。fc の関数 (Id がその名前。
+// options(symbol:) の extern も) か、include した asm がその名前を参照していれば (castle の ppu.asm の `.export _interrupt`)
+// 定義があるとみなす。stdio を使わないプログラム (console だけ) が、入口が無いというリンクのエラーになっていた。
+func (c *Compiler) defaultInterrupts(mods []*ir.Module) (string, error) {
+	defined := map[string]bool{}
+	for _, m := range mods {
+		for _, d := range m.Defs {
+			if d.Kind == ir.DefCode && d.Lambda != nil {
+				defined[d.Lambda.Id] = true
+			}
+		}
+		for _, s := range m.AsmSymbols {
+			defined[s] = true
+		}
+	}
+	var b strings.Builder
+	for _, sym := range []string{"_interrupt", "_interrupt_irq"} {
+		if !defined[sym] {
+			fmt.Fprintf(&b, "\t.export %s\n%s:\n", sym, sym)
+		}
+	}
+	if b.Len() == 0 {
+		return "", nil
+	}
+	src := "; fc が生成: 割り込みの入口を定義するモジュールが無いときの、何もしない入口\n.segment \"FC_RUNTIME\"\n" + b.String() + "\trts\n"
+	path := filepath.Join(c.buildDir, "_interrupts.s")
+	return path, writeIfChanged(path, []byte(src))
+}
+
+// farcallAsm は fc が用意する farcall トランポリン (Agent/wiki/design/farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では
 // 「そのまま飛ぶ」だけの fclib/<target>/farcall.asm を使う。バンク切替のあるマッパーはプロジェクトが farcall を用意する。
 func (c *Compiler) farcallAsm() string {
 	if c.target == "nes" {
@@ -560,7 +642,61 @@ func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, err
 	if c.layout != nil && c.layout.Fragment != "" && !filepath.IsAbs(c.layout.Fragment) {
 		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
 	}
+	// fc.toml の [lib.*] (git のものは取ってくる) を、BuildOptions.LibPath の後・fclib の前の探索先に
+	libs, err := (&project.Resolver{Offline: c.offline, Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, "fcc: "+f+"\n", a...) }}).Resolve(cfg)
+	if err != nil {
+		return nil, err
+	}
+	dirs, err := project.LibDirs(libs, c.target)
+	if err != nil {
+		return nil, err
+	}
+	c.libs = libs
+	c.libDirs = append([]string{}, c.optLibs...)
+	for _, d := range dirs {
+		c.libDirs = append(c.libDirs, filepath.ToSlash(d))
+	}
 	return cfg.Defines(cli)
+}
+
+// libSummary は fc.toml の [lib.*] の要約の行: ライブラリごとに場所と、使ったモジュール (fclib の同じ名前のモジュールを
+// 置き換えたものには印)。
+func (c *Compiler) libSummary(prog *sema.Program) []string {
+	var lines []string
+	for _, l := range c.libs {
+		src := l.Root
+		if l.Git != "" {
+			src = fmt.Sprintf("%s@%s (%s)", l.Git, shortCommit(l.Commit), l.Root)
+		}
+		lines = append(lines, fmt.Sprintf("  %s: %s", l.Name, src))
+		root, _ := filepath.Abs(l.Root)
+		var mods []string
+		for _, m := range prog.Modules.List() {
+			p, _ := filepath.Abs(m.Path)
+			if rel, err := filepath.Rel(root, p); err != nil || strings.HasPrefix(rel, "..") {
+				continue
+			}
+			name := m.Id
+			for _, d := range []string{filepath.Join(c.FCHome, "fclib"), filepath.Join(c.FCHome, "fclib", c.target)} {
+				if _, err := os.Stat(filepath.Join(d, filepath.Base(m.Path))); err == nil {
+					name += " (replaces fclib)"
+					break
+				}
+			}
+			mods = append(mods, name)
+		}
+		if len(mods) > 0 {
+			lines = append(lines, "    uses "+strings.Join(mods, ", "))
+		}
+	}
+	return lines
+}
+
+func shortCommit(c string) string {
+	if len(c) > 10 {
+		return c[:10]
+	}
+	return c
 }
 
 // banks は意味解析に渡すバンクの表 (fc.toml に無ければ nil)。
@@ -724,10 +860,13 @@ func (c *Compiler) ca65Args(path string) []string {
 		"-o", obj,
 		"-I", filepath.Join(c.FCHome, "share"),
 		"-I", c.buildDir,
-		"-I", filepath.Join(c.FCHome, "fclib"),
 		"-I", c.dir,
-		"-I", filepath.Join(c.FCHome, "fclib", c.target),
 	}
+	// use と同じ順: ソースのディレクトリ → ライブラリ → fclib (ライブラリが fclib の asm を置き換えられるように)
+	for _, d := range c.libDirs {
+		args = append(args, "-I", filepath.FromSlash(d))
+	}
+	args = append(args, "-I", filepath.Join(c.FCHome, "fclib"), "-I", filepath.Join(c.FCHome, "fclib", c.target))
 	if c.dir != "." {
 		// .incbin は -I でなく --bin-include-dir で探す (既定は作業ディレクトリ)
 		args = append(args, "--bin-include-dir", c.dir)
@@ -751,12 +890,20 @@ func (c *Compiler) sh(name string, args ...string) {
 
 // run は外部コマンドを実行し、失敗なら *CommandError を返す。
 func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
+	select {
+	case toolSlots <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-toolSlots }()
 	cmd := exec.CommandContext(ctx, cc65.ToolPath(name), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		code := -1
 		if cmd.ProcessState != nil {
 			code = cmd.ProcessState.ExitCode()
+		} else {
+			out = append(out, err.Error()...) // 起動できなかった理由 (出力が無く、終了コード -1 だけが残っていた)
 		}
 		return &CommandError{
 			Msg:     fmt.Sprintf("%s returns %d", name, code),
@@ -775,7 +922,7 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // execute は ROM を emu で実行し、終了コードとサイクル数を返す (internal/emu)。logs は @log の地点 (PC → 地点。fclog.Hooks)。
 func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]fclog.Hook, logOut io.Writer) (int, int64, error) {
 	if c.target != "emu" {
-		return 0, 0, nil // x6502 はスコープ外、nes は実行不可
+		return 0, 0, nil // x6502 はスコープ外。nes は pkg/fc が内蔵の NES のランナーで走らせる (internal/nes は driver を使うテストを持つ)
 	}
 	data, err := os.ReadFile(filename)
 	if err != nil {

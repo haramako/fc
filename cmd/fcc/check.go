@@ -12,7 +12,7 @@ import (
 )
 
 const checkUsage = `Usage: fcc check [-t target] [--json] <src.fc> ...
-    -t, --target     target platform ( nes, emu )
+    -t, --target     target platform ( nes, emu; default: nes if fc.toml has [target], otherwise emu )
     --json           print diagnostics as JSON lines ({"file","line","col","severity","message"}) for editors
     -D MOD.NAME=VAL  override a @(build) const (same as fcc build)
 `

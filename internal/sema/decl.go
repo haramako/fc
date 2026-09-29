@@ -80,8 +80,10 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	opt := parseOptions(sp.Options)
 	typ := h.typeEval(sp.Type)
 	var init ir.Operand
+	var initC *cexpr
 	if sp.Init != nil {
 		c := h.withExpected(toC(sp.Init), typ)
+		initC = c
 		if typ != nil && typ.Kind == types.Array {
 			if e := h.constEval(c); e.kind == cValue && e.val.Kind == ir.KindArrayLiteral {
 				c = cv(h.fitArrayLiteral(e.val, typ))
@@ -114,8 +116,15 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	var vv *ir.Value
 	if h.lmd == nil {
 		var symbol string
+		var bss *ir.Def
 		if addr, ok := opt.Get("address"); ok {
 			// 固定番地 (メモリマップド I/O)。asm のシンボルへの束縛は const の options(symbol:) で (§4.1)
+			if addr.Kind == ir.OptIdent {
+				// 整数の const の名前 (`@(address: ADDR)`。fc.toml で変えられる @(build) の const でもよい: fclib/nes/oam.fc)
+				if e := h.constEval(toC(sp.Options.Get("address"))); e.kind == cValue && e.val.Kind == ir.KindLiteral && e.val.IsInt {
+					addr = ir.OptionValue{Kind: ir.OptInt, Int: e.val.Int}
+				}
+			}
 			if addr.Kind != ir.OptInt {
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(address:) takes a number; to refer to an assembler symbol, declare a const with options(symbol: \"%s\")", name, addr.Str)})
 			}
@@ -130,6 +139,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				} // explicit legacy default overrides inherited bss
 			}
 			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg}
+			bss = d
 			if sym, ok := symbolOption(opt); ok {
 				// options(symbol: "name"): fc が確保する領域のシンボル名を固定する (asm から参照するとき)
 				d.Sym = sym
@@ -144,6 +154,11 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		vv.ReadOnly = ro || inferRO
 		h.prog.storageGlobals[vv] = true
 		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
+		// fc 4: private で既定の BSS の変数は、出力するコードから参照されなければ領域を取らない (pipeline.markUnusedGlobals)。
+		// 置き場所を指定した変数 (@(segment:) / @(bss:)) は並びを当てにしている (整列の詰め物など) かもしれないので残す
+		if bss != nil && bss.Segment == "" && h.v4() && !opt.Has("symbol") && !h.scopeIsPublic(publicPos) {
+			bss.Droppable = true
+		}
 	} else {
 		st, ro := h.storageType(typ)
 		vv = h.addVar(ir.NewLocal(name, st, ir.LTNone))
@@ -155,20 +170,22 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if init != nil {
 		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
 		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.cast(init, vv.Type)}})
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convert(init, vv.Type, initC)}})
 	}
 }
 
 // compileConstSpec は const 宣言の 1 定数分 (関数宣言の脱糖にも使う)。
 // typ / val / opt はそれぞれ省略可 (nil)。
-func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
+func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
 	var newVal *ir.Value
 	if at, ok := typ.(*syntax.ArrayType); ok && at.IsSlice(h.version()) && val == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("const %s: a slice is a run-time value (use [?]T for a constant array)", name)})
 	}
 	if val != nil {
 		declType := h.typeEval(typ)
+		h.constIndex = h.v4()
 		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
+		h.constIndex = false
 		if cv.kind == cArray && cv.rt {
 			for _, e := range cv.args {
 				h.constEvalOperand(h.constSlice(e)) // 定数でない要素の理由 (constant value required / storage alias) を出す
@@ -192,6 +209,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 		}
 		checkRaggedLiteral(v)
 		t := h.guessType(name, declType, v)
+		h.checkConstRange(name, typ, declType, v, t, val)
 		if v.Type.Kind == types.Macro {
 			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
 			v.Name = name
@@ -209,9 +227,16 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
 				symbol = d.Sym
 			} else {
 				symbol = h.addDef(name, d)
+				// fc 4: モジュールの配列定数も (public でも)、出力するコードから参照されなければ出さない
+				// (pipeline.markUnusedGlobals。math を使っても ATAN の表を使わなければ ROM を食わない)
+				d.Droppable = h.lmd == nil && h.v4()
 			}
 			newVal = h.addVar(ir.NewGlobal(name, t, symbol))
 			newVal.ReadOnly = true // const の配列は ROM (fc 3 の *const)
+			h.prog.constArrays[newVal] = v
+			if v.IsString && !explicitLength(typ) {
+				h.markStrConst(newVal, typ, nameEnd)
+			}
 		} else {
 			if opt.Has("symbol") {
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(symbol:) needs an array constant (or no value to refer to an assembler symbol)", name)})

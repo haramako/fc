@@ -1,6 +1,6 @@
 package sema
 
-// fc 3 の slice `[]T` / `[]const T` (doc/v3_plan.md)。表現は struct { ptr:*T; len:u8 } の 3 バイトの値 (types.Slice)。
+// fc 3 の slice `[]T` / `[]const T` (Agent/discussions/2026-09-20-v3-plan.md)。表現は struct { ptr:*T; len:u8 } の 3 バイトの値 (types.Slice)。
 // 値のコピー・引数・戻り値は struct の仕組みのまま、ここでは作り方と使い方を書き換える:
 //
 //   - 配列 (長さの分かるもの) は slice に暗黙に変換できる (withExpected が opToSlice を挟む)。長さは配列の長さ、
@@ -110,7 +110,7 @@ func (h *Hlc) lowByte(v ir.Operand) ir.Operand {
 // isStringLit は c が文字列リテラル (評価すると IsString の配列の定数) か。
 func (h *Hlc) isStringLit(c *cexpr) bool {
 	e := h.constEval(c)
-	return e.kind == cValue && e.val.IsString
+	return e.kind == cValue && h.strLen(e.val)
 }
 
 // retypePtr はポインタの値 p を型 pt のポインタとして見る (配列から作ったポインタは、そのまま型だけを替える)。
@@ -245,7 +245,7 @@ func registerSliceBuiltins(h *Hlc) {
 			}
 			if t := a.val.Type; t.Kind == types.Array && !t.IsSoa && t.Length >= 0 {
 				n := t.Length
-				if a.val.IsString && n > 0 {
+				if h.strLen(a.val) && n > 0 {
 					n--
 				}
 				return cv(h.IntValue(n))
@@ -332,7 +332,15 @@ func registerSliceBuiltins(h *Hlc) {
 		bp := h.prog.Types.PointerTo(u8)
 		dp := h.operandValue(retypePtr(d.ptr, bp))
 		sp := h.operandValue(retypePtr(s.ptr, bp))
-		h.lval(ccall(cv(h.moduleFunc(mem.Interface(), "mem", "copy")), cv(dp), cv(sp), cv(h.operandValue(bytes))))
+		copyFn := h.moduleFunc(mem.Interface(), "mem", "copy")
+		if ft := ir.ValType(copyFn); ft.Kind == types.Func && len(ft.Params) == 2 {
+			// fc 4 の mem.copy(dst:[:u16]u8, src:[:u16]const u8) (Agent/wiki/plans/v4-stdlib.md §3.1)。旧 fclib の mem (プロジェクトの横に
+			// コピーしたもの) なら下の copy(to, from, size)
+			nb := h.operandValue(bytes)
+			h.lval(ccall(cv(copyFn), cv(h.newSlice(u8, dp, nb, false, true)), cv(h.newSlice(u8, sp, nb, true, true))))
+			return macroResult{expr: cv(h.operandValue(n))}
+		}
+		h.lval(ccall(cv(copyFn), cv(dp), cv(sp), cv(h.operandValue(bytes))))
 		return macroResult{expr: cv(h.operandValue(n))}
 	})
 }
@@ -372,6 +380,9 @@ func (h *Hlc) constSlice(c *cexpr) *cexpr {
 		}
 	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && !v.Type.IsSoa && v.Symbol != "" && v.Type.Length >= 0:
 		n, sym = v.Type.Length, v.Symbol
+		if h.strLen(v) && n > 0 {
+			n-- // 名前付きの文字列定数 (fc 4): リテラルと同じく終端の 0 を含めない
+		}
 	default:
 		return c
 	}

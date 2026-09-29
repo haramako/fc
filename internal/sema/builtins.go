@@ -1,6 +1,6 @@
 package sema
 
-// 組み込み機能 (doc/v2_grammar.md §3.5, §4.3)。
+// 組み込み機能 (Agent/discussions/2026-09-13-v2-grammar.md §3.5, §4.3)。
 //
 // include の有無に関係なく常に使える
 // 組み込みにした。グローバルスコープにマクロ値として登録する:
@@ -39,17 +39,27 @@ func registerBuiltins(p *Program) {
 	})
 
 	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		if h.v4() {
+			// fc 4: 書式文字列で console に出す (@format と同じ書式。format.go)
+			h.printf4(args)
+			return macroResult{}
+		}
 		stdio := h.stdioModule("printf")
 		uint8p := h.prog.Types.PointerTo(h.prog.Types.IntType(1, false))
 		print := h.moduleFunc(stdio, "stdio", "print")
 		printInt16 := h.moduleFunc(stdio, "stdio", "print_int16")
 		r := macroResult{stmts: []*cexpr{}}
-		for _, arg := range args {
+		typs := make([]*types.Type, len(args))
+		if h.rewriting() {
+			defer func() { h.rewritePrintf(args, typs) }() // fc 4 の書式文字列の形に (format.go)
+		}
+		for i, arg := range args {
 			// 旧実装は引数が定数値 (変数・リテラル) しか受けなかった。式 (struct のフィールドなど) は先に評価して値にする
 			if arg.kind != cValue {
 				arg = cv(h.operandValue(h.rval(arg)))
 			}
 			typ := arg.val.Type
+			typs[i] = typ
 			switch {
 			case h.prog.Types.Compatible(uint8p, typ) != nil:
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
@@ -78,23 +88,14 @@ func registerBuiltins(p *Program) {
 	})
 
 	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-		stdio := h.stdioModule("unittest_run_tests")
-		print := h.moduleFunc(stdio, "stdio", "print")
-		exit := h.moduleFunc(stdio, "stdio", "exit")
-		init := h.moduleFunc(stdio, "stdio", "init")
-		r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
-		for _, id := range h.scope.IdList() {
-			if len(id) >= 5 && id[:5] == "test_" {
-				r.stmts = append(r.stmts,
-					ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
-					ccall(cident(id)),
-					ccall(cv(print), cstr("\n")),
-				)
-			}
+		if h.v4() {
+			return h.runTests4() // fc 4: @(test) の関数を集める (testing.go)
 		}
-		r.stmts = append(r.stmts, ccall(cv(exit), cint(0)))
-		return r
+		return runTestsV3(h)
 	})
+	// @run_tests_v3(): fc 3 までの @run_tests (スコープの test_* を呼んで stdio に出す)。fc 3 → 4 の migrate が @run_tests を
+	// これに書き換える (出力が変わらないように)
+	h.defmacro("@run_tests_v3", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult { return runTestsV3(h) })
 
 	// min(a, b) / max(a, b) / clamp(x, lo, hi): 型は引数の互換型で決まる (符号付きなら符号付き比較)。
 	// 定数なら畳み込み、そうでなければ比較して入れ替えるコードをその場に出す (関数呼び出しは無い)
@@ -122,13 +123,22 @@ func registerBuiltins(p *Program) {
 		if len(args) != 1 {
 			panic(&diag.Error{Msg: "cos takes 1 argument"})
 		}
-		return macroResult{expr: ccall(cv(h.moduleFunc(m.Interface(), "math", "sin")), cop2(opAdd, args[0], cint(64)))}
+		arg := cop2(opAdd, args[0], cint(64))
+		if h.v4() || h.rewriting() {
+			// 角度の足し算は i8 で折り返す (`cos(127)` は sin(-65))。fc 4 は範囲外の定数を引数に渡せないので明示する。fc 3 も
+			// 値のバイトは同じ (書き換えを集めるときに、展開で作った位置の無い式を報告しないため)
+			arg = &cexpr{kind: cCast, args: []*cexpr{arg}, ty: h.prog.Types.IntType(1, true), ck: syntax.CastAs}
+		}
+		return macroResult{expr: ccall(cv(h.moduleFunc(m.Interface(), "math", "sin")), arg)}
 	})
 
 	registerSliceBuiltins(h)
+	registerFormatBuiltins(h)
+	registerTestingBuiltins(h)
+	registerCompressBuiltins(h)
 	registerLogBuiltin(h)
 
-	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。doc/v3_plan.md §3)
+	// @bank("name") は fc.toml の [bank.<name>] の番号 (コンパイル時に決まる u8。手動のバンク切り替え用。Agent/discussions/2026-09-20-v3-plan.md §3)
 	h.defconstmacro("@bank", func(h *Hlc, args []*cexpr) *cexpr {
 		if len(args) != 1 || args[0].kind != cValue || !args[0].val.IsString {
 			panic(&diag.Error{Msg: "@bank takes 1 string argument (a bank name of fc.toml [bank.<name>])"})
@@ -157,38 +167,18 @@ func registerBuiltins(p *Program) {
 			}
 		}
 		m := ir.NewGlobal("", h.prog.Types.Macro(), "")
-		warned := map[string]bool{}
+		tm := &textmapConv{m: m, table: table, conv: conv, cat: cat, warned: map[string]bool{}}
+		h.prog.textmaps[m] = tm
 		h.prog.macros[m] = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
-			if len(args) != 1 && len(args) != 2 {
-				panic(&diag.Error{Msg: "text conversion takes a string and an optional msgctxt string (or null not to translate)"})
-			}
-			src := mustString(args[0])
-			key := poKey{id: textKey(src)}
-			translate := true
-			if len(args) == 2 {
-				if args[1].kind == cNull {
-					translate = false // _T("…", null): 翻訳しない (デバッグ表示など。.pot にも入れない)
-				} else {
-					key.hasCtxt, key.ctxt = true, mustString(args[1])
+			if len(args) == 1 && args[0].kind == cInt && args[0].s == "char" {
+				// _T('あ'): 1 文字を表で引いた 1 つのコード (整数の定数。濁点などで 2 つ以上のコードになる文字はエラー)
+				c := tm.codes(h, string(rune(args[0].n)))
+				if len(c) != 1 {
+					panic(&diag.Error{Msg: fmt.Sprintf("%s converts to %d codes with the textmap (a character literal needs exactly 1; use a string: _T(\"...\"))", args[0].name, len(c))})
 				}
+				return macroResult{expr: cint(c[0])}
 			}
-			text := src
-			if cat != nil && translate && src != "" { // "" はヘッダーの msgid と同じなので照合しない
-				if s, ok, reason := cat.lookup(key); ok {
-					text = s
-				} else {
-					h.textWarn(warned, "%s: no translation for %q%s in %s (%s); using the original text", textmapName(m), src, ctxtNote(key), cat.path, reason)
-				}
-			}
-			codes, added := conv.convReport(text)
-			if cat != nil && len(added) > 0 {
-				// 翻訳ありでは、文字表に無い文字を知らせる (表の後ろに足されて表示が化ける。同じ文字は最初の 1 回だけ)
-				var cs []string
-				for _, c := range added {
-					cs = append(cs, fmt.Sprintf("%q (U+%04X)", c, c))
-				}
-				h.textWarn(warned, "%s: %q has characters not in the character table %s: %s", textmapName(m), text, table, strings.Join(cs, ", "))
-			}
+			codes := tm.codes(h, tm.text(h, args))
 			codes = append(codes, 0)
 			elems := make([]*cexpr, len(codes))
 			for i, c := range codes {
@@ -198,6 +188,54 @@ func registerBuiltins(p *Program) {
 		}
 		return cv(m)
 	})
+}
+
+// textmapConv は textmap(...) が作った変換器 (`const _T = @textmap(...)` の _T)。@format(buf, _T("…"), ...) も使う (format.go)。
+type textmapConv struct {
+	m      *ir.Value // 変換器のマクロ値 (警告の名前)
+	table  string
+	conv   *TextConverter
+	cat    *poCatalog // .po (nil なら翻訳しない)
+	warned map[string]bool
+}
+
+// text は変換器の呼び出しの引数 (原文 [, msgctxt か null]) の、翻訳した文字列。
+func (t *textmapConv) text(h *Hlc, args []*cexpr) string {
+	if len(args) != 1 && len(args) != 2 {
+		panic(&diag.Error{Msg: "text conversion takes a string and an optional msgctxt string (or null not to translate)"})
+	}
+	src := mustString(h.constEval(args[0]))
+	key := poKey{id: textKey(src)}
+	translate := true
+	if len(args) == 2 {
+		if args[1].kind == cNull {
+			translate = false // _T("…", null): 翻訳しない (デバッグ表示など。.pot にも入れない)
+		} else {
+			key.hasCtxt, key.ctxt = true, mustString(h.constEval(args[1]))
+		}
+	}
+	if t.cat != nil && translate && src != "" { // "" はヘッダーの msgid と同じなので照合しない
+		if s, ok, reason := t.cat.lookup(key); ok {
+			return s
+		} else {
+			h.textWarn(t.warned, "%s: no translation for %q%s in %s (%s); using the original text", textmapName(t.m), src, ctxtNote(key), t.cat.path, reason)
+		}
+	}
+	return src
+}
+
+// codes は text を文字コードの並びにする (翻訳ありなら、文字表に無い文字を警告する)。
+func (t *textmapConv) codes(h *Hlc, text string) []int {
+	codes, added := t.conv.convReport(text)
+	if t.cat != nil && len(added) > 0 {
+		// 翻訳ありでは、文字表に無い文字を知らせる (表の後ろに足されて表示が化ける。同じ文字は最初の 1 回だけ)
+		var cs []string
+		for _, c := range added {
+			cs = append(cs, fmt.Sprintf("%q (U+%04X)", c, c))
+		}
+		h.textWarn(t.warned, "%s: %q has characters not in the character table %s: %s", textmapName(t.m), text, t.table, strings.Join(cs, ", "))
+	}
+	return codes
 }
 
 // readPO は .po を読む (同じファイルは 1 回だけ読む。_T / _M / _I が同じ .po を渡すため)。
@@ -281,4 +319,24 @@ func (h *Hlc) moduleFunc(m *ir.ModuleInterface, mod, name string) *ir.Value {
 		panic(&diag.Error{Msg: fmt.Sprintf("module %s has no %s (needed by a builtin); is a %s.fc in your source directory hiding fclib's %s?", mod, name, mod, mod)})
 	}
 	return v
+}
+
+// runTestsV3 は fc 3 までの @run_tests: stdio.init の後、スコープの test_* の関数を宣言の順に「名前:」を出して呼び、stdio.exit(0)。
+func runTestsV3(h *Hlc) macroResult {
+	stdio := h.stdioModule("unittest_run_tests")
+	print := h.moduleFunc(stdio, "stdio", "print")
+	exit := h.moduleFunc(stdio, "stdio", "exit")
+	init := h.moduleFunc(stdio, "stdio", "init")
+	r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
+	for _, id := range h.scope.IdList() {
+		if len(id) >= 5 && id[:5] == "test_" {
+			r.stmts = append(r.stmts,
+				ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
+				ccall(cident(id)),
+				ccall(cv(print), cstr("\n")),
+			)
+		}
+	}
+	r.stmts = append(r.stmts, ccall(cv(exit), cint(0)))
+	return r
 }

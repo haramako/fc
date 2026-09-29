@@ -1,6 +1,6 @@
 package driver
 
-// ca65 のオブジェクトの再利用 (差分ビルドの第 1 段。doc/v3_plan.md §4)。
+// ca65 のオブジェクトの再利用 (差分ビルドの第 1 段。Agent/discussions/2026-09-20-v3-plan.md §4)。
 //
 // アセンブルするたびに、ca65 が読んだ全ファイル (`.s` 本体、.include した .inc / .asm、.incbin したファイル。ca65 の
 // --create-dep で得る) の内容のハッシュと、ca65 自身 (パス・大きさ・更新時刻) と引数を `<obj>.stamp` に記録する。次の

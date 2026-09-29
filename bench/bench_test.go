@@ -61,7 +61,7 @@ func TestBench(t *testing.T) {
 		name := strings.TrimSuffix(filepath.Base(file), ".fc")
 		got[name] = run(t, repoRoot, benchDir, name)
 	}
-	// コンパイル時間の退行の番 (手元で 12 本のビルドと実行が 3〜4 秒。doc/development_notes.md (11))
+	// コンパイル時間の退行の番 (手元で 12 本のビルドと実行が 3〜4 秒。Agent/wiki/implementation-notes.md「最適化のパイプライン」(11))
 	elapsed := time.Since(start)
 	t.Logf("12 本のビルドと実行: %.2f 秒", elapsed.Seconds())
 	if elapsed > 30*time.Second {

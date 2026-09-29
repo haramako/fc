@@ -31,7 +31,7 @@ func RegOfLoc(loc Location) (Reg, bool) {
 	return 0, false
 }
 
-// Residency は命令 1 つでのレジスタ 1 つの常駐の印 (regalloc.AllocateResident が付ける。doc/v2_regalloc.md)。
+// Residency は命令 1 つでのレジスタ 1 つの常駐の印 (regalloc.AllocateResident が付ける。Agent/wiki/design/regalloc.md)。
 type Residency struct {
 	V   *Value // この命令でそのレジスタに置いたままにしている変数 (Location はそのレジスタ、Home がメモリ側)。nil なら無し
 	In  bool   // V が命令の入口で生きている (レジスタに値がある)

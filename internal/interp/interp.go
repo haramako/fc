@@ -14,8 +14,8 @@
 // スタック領域から取る (再帰してもよい)。関数には偽の番地を振り、関数ポインタはその番地で呼び先を引く。
 //
 // 最適化後の IR も実行できる (fuzz の失敗をどの opt のパスが起こしたか切り分けるため): C フラグは shift_left /
-// shift_right が最後に押し出したビットで、直後の if_carry / rolc / rorc が受ける (opt.carryBranch と splitWords が
-// 作る形。間に C を変える命令は無い)。asm は扱わない (ErrUnsupported)。
+// shift_right が最後に押し出したビットか add の桁あふれで、直後の if_carry / rolc / rorc が受ける (opt.carryBranch と
+// splitWords と averageBytes が作る形。間に C を変える命令は無い)。asm は扱わない (ErrUnsupported)。
 package interp
 
 import (
@@ -432,6 +432,12 @@ func (m *machine) store(a int, b byte) {
 			fmt.Fprint(&m.out, int(m.mem[portData])|int(m.mem[portData+1])<<8)
 		case 3:
 			fmt.Fprint(&m.out, int(m.mem[portData])|int(m.mem[portData+1])<<8, " ")
+		case 6:
+			p := int(m.mem[portAddr]) | int(m.mem[portAddr+1])<<8
+			n := int(m.mem[portData]) | int(m.mem[portData+1])<<8
+			for i := 0; i < n; i++ {
+				m.out.WriteByte(m.mem[(p+i)&0xffff])
+			}
 		}
 		m.mem[portPrint] = 255
 	case portExit:
@@ -589,7 +595,11 @@ func (m *machine) run(f *frame) {
 			}
 			b := m.bytesOf(f, op.Src[0], op.Type.Size)
 			c := calls[len(calls)-1]
-			c.args = append(c.args, b)
+			if op.ArgCont && len(c.args) > 0 {
+				c.args[len(c.args)-1] = append(c.args[len(c.args)-1], b...) // slice の長さの側 (opt.splitSliceArgs)
+			} else {
+				c.args = append(c.args, b)
+			}
 		case ir.OpCall, ir.OpFastcall:
 			if len(calls) == 0 {
 				unsupported("call without push_result")
@@ -631,6 +641,7 @@ func (m *machine) run(f *frame) {
 			switch op.Code {
 			case ir.OpAdd:
 				r = a + b
+				m.carry = r>>(8*n) != 0 // 1 バイトの足し算の 9 ビット目を直後の rorc が受ける (opt.averageBytes の平均)
 			case ir.OpSub:
 				r = a - b
 			case ir.OpAnd:
@@ -654,6 +665,11 @@ func (m *machine) run(f *frame) {
 			m.write(f, op.Dst, ^m.read(f, op.Src[0], n), n)
 		case ir.OpEq, ir.OpLt:
 			n := max(size(op.Src[0]), size(op.Src[1]))
+			if n > 8 {
+				// 9 バイト以上の struct の `==` (read は 8 バイトまでで、上の方のフィールドの違いを見落としていた。fuzz で発覚)
+				m.writeBool(f, op.Dst, string(m.bytesOf(f, op.Src[0], n)) == string(m.bytesOf(f, op.Src[1], n)))
+				break
+			}
 			a, b := m.read(f, op.Src[0], n), m.read(f, op.Src[1], n)
 			var t bool
 			if op.Code == ir.OpEq {

@@ -19,9 +19,11 @@ Usage: fcc <command> [options] <src.fc> ...
 Commands:
     build, b         build ROM / binary
     compile, c       compile to object files only
-    run              build and run by emulator
+    run              build and run (emu: the built-in emulator; nes: console output on the built-in NES runner)
     fmt              format source files (see fcc fmt -h)
-    migrate          rewrite fc 2 sources as fc 3 (see fcc migrate -h)
+    migrate          rewrite older sources as the latest fc (see fcc migrate -h)
+    test             run the @(test) functions of modules (see fcc test -h)
+    lib              fetch / update / list the libraries of fc.toml [lib.*] (see fcc lib)
     check            compile without producing files and report errors / warnings
     size             show code size per function from an ld65 --dbgfile (see fcc size -h)
     watch            rebuild whenever a source file changes (see fcc watch -h)
@@ -33,9 +35,10 @@ Options:
     -d, --debug      show debug info (frames, far calls)
     -g               emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)
     --size-report    show code size per segment / function (needs linking)
-    -t, --target     target platform ( nes, emu )
+    -t, --target     target platform ( nes, emu; default: nes if fc.toml has [target], otherwise emu )
     -O LEVEL         optimize level (0-2)
     -D MOD.NAME=VAL  override a @(build) const (repeatable; applied after fc.toml [define.MOD])
+    --offline        do not fetch git libraries of fc.toml [lib.*] (use the cache only)
 `
 
 func main() {
@@ -56,6 +59,10 @@ func run() int {
 		return runFmt(args[1:])
 	case "migrate":
 		return runMigrate(args[1:])
+	case "test":
+		return runTest(args[1:])
+	case "lib":
+		return runLib(args[1:])
 	case "version", "--version", "-v":
 		return runVersion()
 	case "check":
@@ -78,6 +85,7 @@ func run() int {
 	optLevel := fs.Int("O", 2, "optimize level (0-2)")
 	var defines stringList
 	fs.Var(&defines, "D", "override a @(build) const: module.NAME=value (repeatable)")
+	offline := fs.Bool("offline", false, "do not fetch git libraries")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 1
 	}
@@ -91,6 +99,7 @@ func run() int {
 		Debug:         *gFlag,
 		SizeReport:    *sizeFlag,
 		Defines:       defines,
+		Offline:       *offline,
 	}
 	switch com {
 	case "run":
@@ -127,6 +136,13 @@ func run() int {
 		for _, line := range res.Frames {
 			fmt.Fprintln(os.Stderr, line)
 		}
+		if len(res.Libs) > 0 {
+			// fc.toml の [lib.*] と、そこから使ったモジュール (fclib を置き換えたもの)
+			fmt.Fprintln(os.Stderr, "libs:")
+			for _, line := range res.Libs {
+				fmt.Fprintln(os.Stderr, line)
+			}
+		}
 		if len(res.Defines) > 0 {
 			// @(build) の const の上書き (値と出所)
 			fmt.Fprintf(os.Stderr, "defines: %d\n", len(res.Defines))
@@ -143,7 +159,7 @@ func run() int {
 		fmt.Println(line)
 	}
 	if *debugFlag && len(res.FarCalls) > 0 {
-		// far call (別バンクへの呼び出し) の一覧: 熱い経路が far になっていないかの確認用 (doc/v2_farcall.md §4)
+		// far call (別バンクへの呼び出し) の一覧: 熱い経路が far になっていないかの確認用 (Agent/wiki/design/farcall.md §4)
 		fmt.Fprintf(os.Stderr, "far calls: %d\n", len(res.FarCalls))
 		for _, f := range res.FarCalls {
 			fmt.Fprintf(os.Stderr, "  %s: %s -> %s\n", f.Pos, f.Caller, f.Callee)

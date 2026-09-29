@@ -66,7 +66,9 @@ func (g *rfGen) widen(e rfExpr) rfExpr {
 		pre = fmt.Sprintf("gs.f_%s = %s; ", t1.name, src)
 		src = "gs.f_" + t1.name
 	}
-	return rfExpr{c: c, v: fmt.Sprintf(`{ %svar w:%s = %s; printf(((w) as i16), "\n"); }`, pre, t2.name, src)}
+	// 定数の形も同じ文の形 (fc 4 では文でない式を 2 つの値を出す形に置くので、行ごとの値の数をそろえる)
+	c = fmt.Sprintf(`{ var w:%s = %s; %s((w) as i16)%s; }`, t2.name, c, rfPrintBegin, rfPrintEnd)
+	return rfExpr{c: c, v: fmt.Sprintf(`{ %svar w:%s = %s; %s((w) as i16)%s; }`, pre, t2.name, src, rfPrintBegin, rfPrintEnd)}
 }
 
 // rfN は TestRandomConstFold のプログラム数 (1 本で 3 回ビルドするので既定は少なめ。`-foldn 500 -randseed N` で増やす)。
@@ -167,17 +169,38 @@ func indexOfType(t rfType) int {
 	return 0
 }
 
-// rfSource は式の並びのプログラム (1 行 1 式。行番号 = 4 + 添字)。
-func rfSource(exprs []string) string {
+// rfSource は式の並びのプログラム (fc 3。1 行 1 式。行番号 = 4 + 添字)。
+func rfSource(exprs []string) string { return rfSourceV(exprs, 3) }
+
+// rfSourceV は版 ver の rfSource。fc 4 では各式を 16 ビットの値と足す形 (`w = w + (式)`、w:u16) にも置いて、A1 (式を式の中の
+// 一番広い型で計算する) で広がる所の定数の畳み込みも比べる (Agent/wiki/plans/v4-plan.md §1.3 A)。
+// rfPrintBegin / rfPrintEnd は式の中に埋め込む 1 つの値の printf の印 (版で書き方が違う: fc 3 は `printf(値, "\n")`、fc 4 は
+// `printf("{}\n", 値)`。rfSourceV が置き換える)。
+const (
+	rfPrintBegin = "PRINT_BEGIN("
+	rfPrintEnd   = ")PRINT_END"
+)
+
+func rfSourceV(exprs []string, ver int) string {
 	var b strings.Builder
-	b.WriteString("#fc 3\nuse * from stdio;\n")
+	fmt.Fprintf(&b, "#fc %d\nuse * from stdio;\n", ver)
 	for _, t := range rfTypes {
 		fmt.Fprintf(&b, "function id_%s(x:%s):%s @(noinline) { return x; } var gv_%s:%s; var ga_%s:[3]%s;\n", t.name, t.name, t.name, t.name, t.name, t.name, t.name)
 	}
 	b.WriteString("struct GS { a:u8; f_u8:u8; f_i8:i8; } var gs:GS; function main():void\n{\n")
 	for _, e := range exprs {
 		if strings.HasPrefix(e, "{") {
-			fmt.Fprintf(&b, "\t%s\n", e) // 文 (暗黙の拡張の初期化を通す形。1 行)
+			// 文 (暗黙の拡張の初期化を通す形。1 行)。埋め込んだ printf の印を版の書き方に
+			if ver >= 4 {
+				e = strings.NewReplacer(rfPrintBegin, "printf(\"{}\\n\", ", rfPrintEnd, ")").Replace(e)
+			} else {
+				e = strings.NewReplacer(rfPrintBegin, "printf(", rfPrintEnd, ", \"\\n\")").Replace(e)
+			}
+			fmt.Fprintf(&b, "\t%s\n", e)
+			continue
+		}
+		if ver >= 4 {
+			fmt.Fprintf(&b, "\t{ var w:u16 = 1; w = w + (%s); printf(\"{} {}\\n\", (w as i16), ((%s) as i16)); }\n", e, e)
 			continue
 		}
 		fmt.Fprintf(&b, "\tprintf(((%s) as i16), \"\\n\");\n", e)
@@ -190,7 +213,13 @@ func rfSource(exprs []string) string {
 const rfFirstLine = 2 + 4 + 2 + 1
 
 // TestRandomConstFold は定数の形と変数の形で同じ式の結果が同じかを比べる。
-func TestRandomConstFold(t *testing.T) {
+func TestRandomConstFold(t *testing.T) { runConstFold(t, 3) }
+
+// TestRandomConstFoldV4 は fc 4 の TestRandomConstFold (A1 で広がる所の型付きの定数の畳み込み: widen.go)。
+func TestRandomConstFoldV4(t *testing.T) { runConstFold(t, 4) }
+
+// runConstFold は版 ver のプログラムで TestRandomConstFold をする。
+func runConstFold(t *testing.T, ver int) {
 	t.Parallel()
 	base := *randSeed
 	if base == 0 {
@@ -212,7 +241,7 @@ func TestRandomConstFold(t *testing.T) {
 				for i, e := range es {
 					vs[i] = e.v
 				}
-				out, err := rpRun(t, map[string]string{"t.fc": rfSource(vs)}, 0, rpMaxCycles)
+				out, err := rpRun(t, map[string]string{"t.fc": rfSourceV(vs, ver)}, 0, rpMaxCycles)
 				if err == nil {
 					vo2 = out
 					break
@@ -229,7 +258,7 @@ func TestRandomConstFold(t *testing.T) {
 					drop[e.Pos.Line-rfFirstLine] = true
 				}
 				if len(drop) == 0 || try > 10 {
-					t.Fatalf("変数の形のビルド失敗 (seed %d):\n%s\n%v", seed, rfSource(vs), err)
+					t.Fatalf("変数の形のビルド失敗 (seed %d):\n%s\n%v", seed, rfSourceV(vs, ver), err)
 				}
 				var keep []rfExpr
 				for i, e := range es {
@@ -244,13 +273,13 @@ func TestRandomConstFold(t *testing.T) {
 			for i, e := range es {
 				vs[i], cs[i] = e.v, e.c
 			}
-			vo0, err := rpRun(t, map[string]string{"t.fc": rfSource(vs)}, -1, rpMaxCycles)
+			vo0, err := rpRun(t, map[string]string{"t.fc": rfSourceV(vs, ver)}, -1, rpMaxCycles)
 			if err != nil {
 				t.Fatalf("変数の形 -O 0 (seed %d): %v", seed, err)
 			}
-			co2, err := rpRun(t, map[string]string{"t.fc": rfSource(cs)}, 0, rpMaxCycles)
+			co2, err := rpRun(t, map[string]string{"t.fc": rfSourceV(cs, ver)}, 0, rpMaxCycles)
 			if err != nil {
-				t.Fatalf("定数の形のビルド失敗 (seed %d): 変数の形は通る\n%s\n%v", seed, rfSource(cs), err)
+				t.Fatalf("定数の形のビルド失敗 (seed %d): 変数の形は通る\n%s\n%v", seed, rfSourceV(cs, ver), err)
 			}
 			if vo0 != vo2 {
 				t.Errorf("変数の形の -O 0 と -O 2 が違う (seed %d)", seed)
@@ -279,13 +308,13 @@ func TestConstFoldCases(t *testing.T) {
 		{"(((-7 as i8) >= @min((255 as u8), (0 as u16))) as u8)", "((id_i8(-7) >= @min(id_u8(255), id_u16(0))) as u8)"},           // 符号付きのリテラルを広げる
 		{"(@bitcast(i8, (255 as u8)) * (-27779 as i16))", "(@bitcast(i8, id_u8(255)) * id_i16(-27779))"},                          // 読み替えた型で読んでから広げる
 		{"((@min((~(-121 as i8)), (-128 as i8)) <= 65544) as u8)", "((@min((~id_i8(-121)), id_i8(-128)) <= 65544) as u8)"},        // 両方とも定数の 16 ビットを超える比較
-		{"((65533 > ((-81 as i8) >> 9)) as u8)", "((65533 > (id_i8(-81) >> 9)) as u8)"},                                            // 型のない定数が i16 を超える: u16 で比べる
-		{"(((-5 as i8) < 271) as u8)", "((id_i8(-5) < 271) as u8)"},                                                                 // 型のない定数が i16 に収まる: 符号付きで比べる
+		{"((65533 > ((-81 as i8) >> 9)) as u8)", "((65533 > (id_i8(-81) >> 9)) as u8)"},                                           // 型のない定数が i16 を超える: u16 で比べる
+		{"(((-5 as i8) < 271) as u8)", "((id_i8(-5) < 271) as u8)"},                                                               // 型のない定数が i16 に収まる: 符号付きで比べる
 		{"((65534 >= (127 as i8)) as u8)", "((65534 >= id_i8(127)) as u8)"},
-		{"@min(((((@min(65537, 65535)) as u8)) as u16), (~(0 as u8)))", "@min(((((@min(65537, 65535)) as u8)) as u16), (~id_u8(0)))"}, // 切り詰めた定数の上位 (split)
+		{"@min(((((@min(65537, 65535)) as u8)) as u16), (~(0 as u8)))", "@min(((((@min(65537, 65535)) as u8)) as u16), (~id_u8(0)))"},                                                                                // 切り詰めた定数の上位 (split)
 		{"@max(@bitcast(u8, ((@max((-65), 65534)) as i8)), @bitcast(u16, ((((4 as i8) + (0 as u8))) as i16)))", "@max(@bitcast(u8, ((@max((-65), 65534)) as i8)), @bitcast(u16, (((id_i8(4) + id_u8(0))) as i16)))"}, // 狭めた定数 (split)
-		{"@max(((@min(180, (-47))) as u8), ((((61 * (-18 as i8)) | (65532 / ((65535 as u16) | 1)))) as i16))", "@max(((@min(180, (-47))) as u8), ((((61 * id_i8(-18)) | (65532 / (id_u16(65535) | 1)))) as i16))"}, // 符号の違う型にした定数 (split)
-		{"(@bitcast(u16, ((@bitcast(u8, ((((42272 as u16) >> 1)) as i8))) as i16)) >> 0)", "(@bitcast(u16, ((@bitcast(u8, (((id_u16(42272) >> 1)) as i8))) as i16)) >> 0)"}, // 切り詰めた値のシフトの連鎖 (ssa)
+		{"@max(((@min(180, (-47))) as u8), ((((61 * (-18 as i8)) | (65532 / ((65535 as u16) | 1)))) as i16))", "@max(((@min(180, (-47))) as u8), ((((61 * id_i8(-18)) | (65532 / (id_u16(65535) | 1)))) as i16))"},   // 符号の違う型にした定数 (split)
+		{"(@bitcast(u16, ((@bitcast(u8, ((((42272 as u16) >> 1)) as i8))) as i16)) >> 0)", "(@bitcast(u16, ((@bitcast(u8, (((id_u16(42272) >> 1)) as i8))) as i16)) >> 0)"},                                          // 切り詰めた値のシフトの連鎖 (ssa)
 	}
 	cs := make([]string, len(cases))
 	vs := make([]string, len(cases))

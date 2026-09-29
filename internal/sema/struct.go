@@ -1,6 +1,6 @@
 package sema
 
-// struct (doc/v2_types_struct.md §4) の意味解析: struct リテラル、フィールド参照、sizeof。
+// struct (Agent/wiki/design/types-struct.md §4) の意味解析: struct リテラル、フィールド参照、sizeof。
 //
 // フィールド参照の落とし方:
 //   - 変数 (ローカル / グローバル / 一時) の struct: ir.CastedValue{From: 変数, Type: フィールド型, Offset} で
@@ -375,12 +375,15 @@ func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
 			}
 		}
 	}
+	if e.ty == nil {
+		base = h.arrayElemType(base, vals, e.args, false) // F4 (fc 4): 定数の要素が入る型に
+	}
 	tmp := h.newTmp(h.prog.Types.ArrayOf(base, n))
 	for i := 0; i < n; i++ {
 		var v ir.Operand
 		if i < len(vals) {
 			h.compatible(base, ir.ValType(vals[i]))
-			v = h.cast(vals[i], base)
+			v = h.convert(vals[i], base, e.args[i])
 		} else {
 			v = h.zeroValue(base)
 		}

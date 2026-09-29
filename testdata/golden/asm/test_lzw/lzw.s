@@ -4,11 +4,13 @@
 	.importzp FC_SP
 __MODULE_LZW__ = 1
 .segment "lzw"
-	.include "_mem.inc"
 	.include "lzw.asm"
 _lzw_addr = 126
 _lzw_bpos = 125
 _lzw_cur = 124
+	.export _lzw_rbits
+.segment "BSS"
+_lzw_rbits: .res 2
 	.global _lzw_read_bit
 	.global _lzw_read_vln
 	.global _lzw_read_vln16

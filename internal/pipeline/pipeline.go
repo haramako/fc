@@ -1,4 +1,4 @@
-// Package pipeline は意味解析の後、コード生成の前にプログラム全体で行う処理の順序を持つ (doc/v2_frame_alloc.md §6-4):
+// Package pipeline は意味解析の後、コード生成の前にプログラム全体で行う処理の順序を持つ (Agent/wiki/design/frame-alloc.md §6-4):
 //
 //	インライン展開・関数ポインタ表の直接化 (opt) → asm から参照される変数を volatile に → 呼び出し規約の決定 (frames.Analyze)
 //	→ 関数ごとに 最適化 (opt.Optimize) → 引数の Y 渡しの印 (codegen) → 常駐レジスタ (regalloc.AllocateResident)
@@ -80,8 +80,8 @@ func Prepare(mods []*ir.Module, o *Options) (*Result, error) {
 	res.Lambdas = graph.ByID
 	o.Backend.SetLambdas(graph.ByID)
 	for _, lmd := range graph.Lambdas {
-		if lmd.Unused {
-			continue
+		if lmd.Unused || lmd.Extern {
+			continue // extern は abi: "frame" の asm の関数 (フレームの大きさは frames.Analyze が決めた)
 		}
 		if err := prepareLambda(lmd, o); err != nil {
 			if o.OptimizeLevel > 0 && strings.HasPrefix(err.Msg, "frame size over") {
@@ -90,8 +90,121 @@ func Prepare(mods []*ir.Module, o *Options) (*Result, error) {
 			return res, err
 		}
 	}
+	markUnusedGlobals(mods)
 	res.Plan, err = frames.Place(graph, o.StaticZp, o.StaticRam)
+	if err != nil && o.OptimizeLevel > 0 {
+		// 静的フレームの領域に収まらない: 展開 (インライン展開したローカル配列の写しなど) で大きくなったフレームのことが
+		// ある (-O 0 なら収まる)。まだ展開を止めていない関数のうちフレームがいちばん大きいものの展開を止めてやり直す
+		// (frame size over と同じ。driver.retryFrameOver。fuzz の TestRandomPrograms で、main → t0 → f1 の静的フレームが
+		// -O 0 の 212 バイトから -O 2 で 518 バイトになり、-O 2 だけ失敗していた)
+		if de, ok := err.(*diag.Error); ok && strings.HasPrefix(de.Msg, "static frames do not fit") {
+			var big *ir.Lambda
+			for _, lmd := range graph.Lambdas {
+				if lmd.Unused || lmd.Extern || lmd.NoGrow {
+					continue
+				}
+				if big == nil || lmd.FrameSize > big.FrameSize {
+					big = lmd
+				}
+			}
+			if big != nil {
+				res.FrameOver = big.Id
+			}
+		}
+	}
 	return res, err
+}
+
+// markUnusedGlobals は、出力する関数 (最適化の後の命令)・定数の表・equ・include した asm・インラインアセンブラのどれからも
+// 参照されないモジュールの変数・配列定数 (fc 4 の Def.Droppable) に Unused を付ける (codegen が領域を
+// 取らない。@(test) の関数だけが使う大きなバッファなど、使わない機能の状態で RAM を食わないように)。
+func markUnusedGlobals(mods []*ir.Module) {
+	used := map[string]bool{}
+	var visit func(o ir.Operand)
+	visit = func(o ir.Operand) {
+		switch x := o.(type) {
+		case *ir.Value:
+			// (private な配列定数の要素が参照するものも数える: 表そのものが使われなくても。控えめに残す)
+			if x == nil {
+				return
+			}
+			if x.Symbol != "" {
+				used[x.Symbol] = true
+			}
+			for _, e := range x.Elems {
+				visit(e)
+			}
+			if x.Home != nil {
+				visit(x.Home) // レジスタに常駐させた一時変数のメモリ側 (入口・出口の写しが参照する)
+			}
+		case *ir.CastedValue:
+			visit(x.From)
+		case *ir.PointeredArray:
+			visit(x.From)
+		}
+	}
+	defs := func(ds []*ir.Def) {
+		for _, d := range ds {
+			switch d.Kind {
+			case ir.DefBlock:
+				for _, e := range d.Elems {
+					visit(e)
+				}
+			case ir.DefEqu:
+				visit(d.Equ)
+			}
+		}
+	}
+	for _, m := range mods {
+		for _, s := range m.AsmSymbols {
+			used[s] = true
+		}
+		defs(m.Defs)
+		for _, d := range m.Defs {
+			if d.Kind != ir.DefCode || d.Lambda.Unused {
+				continue
+			}
+			lmd := d.Lambda
+			defs(lmd.Defs)
+			for _, op := range lmd.Ops {
+				if op == nil {
+					continue
+				}
+				if op.Code == ir.OpAsm {
+					for _, s := range ir.AsmSymbols(op.Text) {
+						used[s] = true
+					}
+				}
+				visit(op.Dst)
+				for _, s := range op.Src {
+					visit(s)
+				}
+				for _, r := range op.Res {
+					if r.V != nil {
+						visit(r.V)
+					}
+				}
+				for _, l := range op.Logs {
+					for _, a := range l.Args {
+						visit(a.Val)
+						for _, b := range a.Bytes {
+							visit(b)
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, m := range mods {
+		if m.Cfg().Disabled("unused-globals") {
+			continue
+		}
+		for _, d := range m.Defs {
+			if (d.Kind == ir.DefBss || d.Kind == ir.DefBlock) && d.Droppable {
+				d.Unused = !used[d.Sym]
+			}
+		}
+	}
 }
 
 // prepareLambda は関数 1 つの最適化とレジスタ割付 (エラーは関数の位置を補完して返す)。
@@ -116,6 +229,10 @@ func prepareLambda(lmd *ir.Lambda, o *Options) (err *diag.Error) {
 	if o.OptimizeLevel > 0 {
 		regalloc.AllocateResident(lmd)
 		verify(lmd, "resident")
+		if !lmd.Cfg().Disabled("litprop") {
+			regalloc.PropagateLiteralLoads(lmd) // ループの変数の初期値の書き込み (常駐の入口の写しが読む)
+			verify(lmd, "litprop")
+		}
 	}
 	// -O 0 でも同じ割付器を使う (静的フレーム (ABIStatic) の関数はフレームでなく F_f の固定番地に置く必要があり、
 	// 以前あった「全部フレーム」の簡易版は静的フレームの導入後は壊れていた)
@@ -166,7 +283,7 @@ func snapshotProgramLogs(mods []*ir.Module) func() {
 
 // markVolatile は asm (include したファイルとインラインアセンブラ) から参照されるグローバル変数を volatile にする
 // (options(address:) と options(volatile: true) は sema が付けている)。割り込みや asm が書き換える変数をレジスタに
-// 置いたままにしないため (doc/language_reference.md §2)。
+// 置いたままにしないため (docs/language_reference.md §2)。
 func markVolatile(mods []*ir.Module) {
 	syms := map[string]bool{}
 	for _, m := range mods {
@@ -181,7 +298,7 @@ func markVolatile(mods []*ir.Module) {
 			}
 			for _, op := range d.Lambda.Ops {
 				if op != nil && op.Code == ir.OpAsm {
-					for _, s := range frames.AsmSymbols(op.Text) {
+					for _, s := range ir.AsmSymbols(op.Text) {
 						syms[s] = true
 					}
 				}

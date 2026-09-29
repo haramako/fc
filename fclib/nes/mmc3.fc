@@ -1,0 +1,95 @@
+#fc 4
+// MMC3 (TxROM。Agent/wiki/plans/v4-stdlib.md §3.2): PRG の 8KB × 2 ($8000 / $A000) と CHR (2KB × 2 + 1KB × 4) の切り替え、ミラーリング、
+// カートリッジの RAM、走査線の IRQ。far call のトランポリンも入る (fc.toml の [target] mapper = "MMC3" と @(farcall))。
+//   mmc3.init();
+//   var old = mmc3.prg(0, @bank("a"));   // $8000 に入れて前のバンクを返す
+//   mmc3.irq_hook = split;               // IRQ の呼び出し口 (asm か @(interrupt) の関数)
+//   mmc3.irq(120);                       // 120 走査線ほど後で IRQ
+// 切り替えは sei / cli で囲む。NMI (frame.hook) でバンクを切り替えるなら、終わりに BANK_SELECT ($8000) に mmc3.select を書き戻す。
+@(bank: -1);
+
+var BANK_SELECT:u8 @(address: 0x8000);
+var BANK_DATA:u8 @(address: 0x8001);
+var MIRRORING:u8 @(address: 0xa000);
+var PRG_RAM:u8 @(address: 0xa001);
+var IRQ_LATCH:u8 @(address: 0xc000);
+var IRQ_RELOAD:u8 @(address: 0xc001);
+var IRQ_DISABLE:u8 @(address: 0xe000);
+var IRQ_ENABLE:u8 @(address: 0xe001);
+
+public var select:u8;                                  // 最後に BANK_SELECT に書いた値
+public var prg_banks:[2]u8 @(symbol: "_mmc3_prg_banks");   // 今の PRG のバンク ($8000 / $A000)
+public var chr_banks:[6]u8;                            // 今の CHR のバンク (R0〜R5)
+public var irq_hook:fn():void;                         // IRQ の呼び出し口 (null なら受け取るだけ)
+@include("mapper_mmc3.asm");
+
+public const MIRROR_VERTICAL = 0;
+public const MIRROR_HORIZONTAL = 1;
+
+// PRG: $8000 = 0、$A000 = 1。CHR: 0〜7 を順に (2KB の R0 / R1 は 0 / 2、1KB の R2〜R5 は 4〜7)。縦のミラー、IRQ は止め、
+// カートリッジの RAM を使えるようにする
+public function init():void
+{
+	IRQ_DISABLE = 0;
+	chr(0, 0);
+	chr(1, 2);
+	chr(2, 4);
+	chr(3, 5);
+	chr(4, 6);
+	chr(5, 7);
+	prg(0, 0);
+	prg(1, 1);
+	mirroring(MIRROR_VERTICAL);
+	PRG_RAM = 0x80;
+}
+
+function set(reg:u8, v:u8):void
+{
+	@asm("sei");
+	select = reg;
+	BANK_SELECT = reg;
+	BANK_DATA = v;
+	@asm("cli");
+}
+
+// PRG の 8KB のバンク (slot 0 = $8000、1 = $A000) を入れ、前のバンクを返す
+public function prg(slot:u8, b:u8):u8
+{
+	slot &= 1;
+	var old = prg_banks[slot];
+	prg_banks[slot] = b;
+	set(slot + 6, b);
+	return old;
+}
+
+// CHR のバンク (reg 0 / 1 は $0000 / $0800 の 2KB (偶数)、2〜5 は $1000 / $1400 / $1800 / $1C00 の 1KB) を入れ、前のバンクを返す
+public function chr(reg:u8, b:u8):u8
+{
+	if (reg > 5) {
+		return 0;
+	}
+	var old = chr_banks[reg];
+	chr_banks[reg] = b;
+	set(reg, b);
+	return old;
+}
+
+public function mirroring(m:u8):void
+{
+	MIRRORING = m & 1;
+}
+
+// line 走査線ほど後 (描画中の走査線を数える) に IRQ。呼び出し口は irq_hook
+public function irq(line:u8):void
+{
+	IRQ_DISABLE = 0;
+	IRQ_LATCH = line;
+	IRQ_RELOAD = 0;
+	IRQ_ENABLE = 0;
+	@asm("cli");
+}
+
+public function irq_off():void
+{
+	IRQ_DISABLE = 0;
+}

@@ -1,0 +1,6 @@
+/* NES の画面 (256×240) は 2 倍に、ぼかさずに拡大する */
+.vp-doc img[src*="/samples/"] {
+  width: 512px;
+  max-width: 100%;
+  image-rendering: pixelated;
+}

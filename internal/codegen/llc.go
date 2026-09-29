@@ -44,7 +44,7 @@ type Llc struct {
 	dbgFiles map[string]bool // このモジュールで宣言済みの .dbg file
 	dbgLast  string          // 直前に出した .dbg line (同じ行の命令の間では出さない)
 
-	// ループ内の常駐 (doc/v2_regalloc.md): 処理中の命令でレジスタ (ir.Reg) を占有している変数と、その扱い
+	// ループ内の常駐 (Agent/wiki/design/regalloc.md): 処理中の命令でレジスタ (ir.Reg) を占有している変数と、その扱い
 	res    [ir.NumRegs]*ir.Value // op.Res[reg].V
 	resMem [ir.NumRegs]bool      // 退避中: res[reg] をメモリ (Home) として参照する
 	holdA  bool                  // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
@@ -204,6 +204,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			inc.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
 			asm.push(fmt.Sprintf("%s = %s", mangle(d.Sym), val))
 		case ir.DefBss:
+			if d.Unused {
+				continue // どこからも参照されない private な変数は領域を取らない (pipeline.markUnusedGlobals)
+			}
 			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			if d.Segment != "" {
@@ -213,6 +216,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			}
 			asm.push(fmt.Sprintf("%s: .res %d", mangle(d.Sym), d.Type.Size))
 		case ir.DefBlock:
+			if d.Unused {
+				continue // どこからも参照されない private な配列定数は出さない (pipeline.markUnusedGlobals)
+			}
 			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
 			asm.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
@@ -449,7 +455,7 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda) []string {
 		r.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
 	}
 	if lmd.RegArg || lmd.RegArgY {
-		// レジスタ渡しの入口 (doc/v2_frame_alloc.md §7): 呼び出し側は最後の引数を A、その前を Y に置いて `sym` / `sym__direct`
+		// レジスタ渡しの入口 (Agent/wiki/design/frame-alloc.md §7): 呼び出し側は最後の引数を A、その前を Y に置いて `sym` / `sym__direct`
 		// から入り、`sty` / `sta` でフレームに写す。レジスタに置けなかった引数はフレームに書いてあるので、その前の入口
 		// (`sym__frame`: 両方フレーム、`sym__a`: Y だけフレーム) がレジスタに読んでから同じ `sty` / `sta` に落ちる
 		// (本体の先頭では常に A / Y に引数があり、ピープホールが先頭の lda / ldy を消す)。.proc の中のラベルは同じファイルの

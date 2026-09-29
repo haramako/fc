@@ -68,7 +68,7 @@ func forHasContinue(body *syntax.Block, label *syntax.Ident) bool {
 	return found
 }
 
-// findBreakable は break / continue の飛び先を決める (doc/v2_grammar.md §3.7)。
+// findBreakable は break / continue の飛び先を決める (Agent/discussions/2026-09-13-v2-grammar.md §3.7)。
 //   - ラベル付きならそのラベルの文
 //   - ラベルなし: break は最も内側のループまたは switch (v1 では switch を積まないのでループのみ)、
 //     continue は最も内側のループ
@@ -101,10 +101,14 @@ func (h *Hlc) compileStmts(stmts []syntax.Stmt) {
 // 以降の参照が巻き添えのエラーを出さないようにする。
 func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 	scope, loops, pending, fast := h.scope, len(h.loops), h.pendingLabel, h.fastCalling
+	shifts := len(h.shifts)
 	defer func() {
 		r := recover()
 		if r == nil {
 			return
+		}
+		if len(h.shifts) > shifts {
+			h.shifts = h.shifts[:shifts]
 		}
 		ce, ok := r.(*diag.Error)
 		if !ok || ce.Fatal {
@@ -120,6 +124,7 @@ func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 		h.declareBad(s)
 	}()
 	h.compileStatement(s)
+	h.checkShifts(shifts)
 }
 
 func (h *Hlc) compileStatement(s syntax.Stmt) {
@@ -207,7 +212,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			// asm が参照するシンボルを控える (fc の関数なら呼び出し規約を Entry に、変数なら volatile に)
 			if _, abs, err := h.deps.File(filename); err == nil {
 				if data, err := os.ReadFile(abs); err == nil {
-					h.module.AsmSymbols = append(h.module.AsmSymbols, reAsmSymbol.FindAllString(string(data), -1)...)
+					h.module.AsmSymbols = append(h.module.AsmSymbols, ir.AsmSymbols(string(data))...)
 				}
 			}
 		case "chr":
@@ -223,7 +228,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		id := s.Module.Name
 		m := h.useModule(id)
 		h.module.AddUse(m)
-		// 再輸出は `public use` のときだけ (doc/v2_grammar.md §3.2)
+		// 再輸出は `public use` のときだけ (Agent/discussions/2026-09-13-v2-grammar.md §3.2)
 		reexport := s.PublicPos.IsValid()
 		switch {
 		case s.FromAll:
@@ -261,7 +266,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		lam := &cexpr{kind: cLambda, pos: s.Pos(), lam: &lambdaLit{
 			name: s.Name.Name, params: params, result: s.Result, body: s.Body, options: parseOptions(s.Options),
 		}}
-		h.compileConstSpec(s.Name.Name, nil, lam, nil, s.PublicPos)
+		h.compileConstSpec(s.Name.Name, s.Name.End(), nil, lam, nil, s.PublicPos)
 
 	case *syntax.VarDecl:
 		if s.Alias {
@@ -281,7 +286,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				} else if sp.Init != nil {
 					init = toC(sp.Init)
 				}
-				h.compileConstSpec(sp.Name.Name, sp.Type, init, opts, s.PublicPos)
+				h.compileConstSpec(sp.Name.Name, sp.Name.End(), sp.Type, init, opts, s.PublicPos)
 				if build {
 					if v := h.scope.Local(sp.Name.Name); v != nil {
 						v.Build = true
@@ -421,11 +426,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				panic(&diag.Error{Msg: fmt.Sprintf("can't return without value from %s (returns %s)", h.lmd.Name, h.lmd.Type.Base)})
 			}
 			rt := h.lmd.Type.Base
-			v := h.rval(h.withExpected(toC(s.Value), rt))
+			rc := h.withExpected(toC(s.Value), rt)
+			v := h.rval(rc)
 			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
 			h.warnDropConst("return from "+h.lmd.Name, rt, v)
 			h.warnReturnLocalAddr(s.Value, rt)
-			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.cast(v, rt)}})
+			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.convert(v, rt, rc)}})
 		} else {
 			// void関数
 			if s.Value != nil {

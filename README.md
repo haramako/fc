@@ -40,13 +40,20 @@ fcc fmt -w src.fc           # ソースを整形 (-l: 変わるファイルを�
 | `-O LEVEL` | 最適化レベル (0-2, デフォルト 2) |
 | `-e` | ビルド後にエミュレータで実行 |
 
-言語仕様は [doc/language_reference.md](doc/language_reference.md) を参照してください。
+言語仕様は [docs/language_reference.md](docs/language_reference.md) を参照してください。
 
 ## テスト
 
 ```bash
 go test ./...
 ```
+
+fc のモジュールのテスト（`@(test)` の関数。`@assert` / `@assert_eq`）は `fcc test mod.fc` で走らせる（emu で実行し、全部
+通れば終了コード 0。`-t nes` なら内蔵の NES のランナーで。language_reference.md §7）。
+
+ほかのフォルダや git のリポジトリのモジュールは、fc.toml の `[lib.NAME]`（`path = "../lib"` か `git = "URL"` / `rev` / `dir`）で
+使える。git のものはビルドのときにユーザーのキャッシュへ取ってきて、コミットを `fc.lock` に固定する（`fcc lib fetch` /
+`update` / `list`。language_reference.md §1.1）。
 
 テストは `testdata/golden/` の golden データ (AST / IR / 割付後IR / アセンブリ / バイナリ /
 実行出力) との差分比較で行われます。golden は Go 自身の出力のスナップショットで、次で再生成します:
@@ -77,20 +84,20 @@ test/             FC言語のテストソース
 examples/         実プロジェクト由来の回帰テスト用サンプル (miku / castle)
 testdata/golden/  golden データ
 tools/            サンプル同期ツール
-doc/              ドキュメント
+docs/             利用者向けドキュメントのサイト (VitePress。GitHub Pages)
+Agent/            開発の知識・設計・経緯・計画 (主にエージェント向け。AGENTS.md)
 ```
 
 ## ドキュメント
 
 | ファイル | 内容 |
 |---|---|
-| [doc/development_notes.md](doc/development_notes.md) | **開発時にまず読む**: 環境・ブランチ運用・テストの回し方・ハマりどころ |
-| [doc/language_reference.md](doc/language_reference.md) | FC言語の仕様 |
-| [doc/roadmap.md](doc/roadmap.md) | 残っている仕事（最適化・言語機能・ツール） |
-| [bench/README.md](bench/README.md) | 生成コードのベンチマークと他コンパイラとの比較 |
-| [doc/golden_dump_format.md](doc/golden_dump_format.md) | golden ダンプ正規形の仕様 |
-| [doc/v2_regalloc.md](doc/v2_regalloc.md) | レジスタ割付（ループ内の常駐）の設計 |
+| [docs/language_reference.md](docs/language_reference.md) | FC言語の仕様 |
 | [examples/README.md](examples/README.md) | サンプルの構成・同期方法・エミュレータテスト |
+| [bench/README.md](bench/README.md) | 生成コードのベンチマークと他コンパイラとの比較 |
+
+開発者向けの知識・設計・経緯・計画は [Agent/](Agent/AGENTS.md) にまとめている（主にコーディングエージェント向け。規約はルートの
+[AGENTS.md](AGENTS.md)）。入口は [Agent/wiki/AGENTS.md](Agent/wiki/AGENTS.md)（テストと fuzz、コードの構造、設計、ロードマップ）。
 
 ## License
 

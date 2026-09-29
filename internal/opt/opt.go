@@ -130,6 +130,9 @@ func changes(f func(lmd *ir.Lambda) bool) func(*ir.Lambda, *types.Universe) bool
 // coalesce の後 (`i += s` が `add i = i, s` になってから)、ywalk は jumps (ループの回転) の後。
 func Passes() []Pass {
 	return []Pass{
+		{Name: "aggcopy", Run: changes(propagateAggregateCopies)}, // インライン展開の引数の slice の写し
+		{Name: "aggbuild", Run: changes(assembleInPlace)},         // `s = s[n..]` の組み立ての一時の値
+		{Name: "sliceargs", Run: changes(splitSliceArgs)},         // sema の形 (部分の load の直後の push_arg) のうちに
 		{Name: "ssa", Run: always(propagateSSA)},
 		{Name: "mul", Run: always(expandMul)},
 		{Name: "sink", Run: always(sinkAddress)},
@@ -152,6 +155,7 @@ func Passes() []Pass {
 		{Name: "narrow", Run: alwaysU(narrowBitTest)},
 		{Name: "scale", Run: alwaysU(scaleIndex)},
 		{Name: "commute", Run: always(commuteTemp)},
+		{Name: "avg", Run: averageBytes}, // 1 バイトどうしの平均を adc + ror a に (split の前に)
 		{Name: "carry", Repeat: 19, Run: func(lmd *ir.Lambda, _ *types.Universe) bool {
 			before := len(lmd.Ops)
 			carryBranch(lmd)

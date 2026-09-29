@@ -155,6 +155,11 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 				r = append(r, l.storeA(dst, i))
 			}
 		}
+	} else if op.Code == ir.OpMul && ir.ValType(dst).Size == 2 && byteValue(s0) && byteValue(s1) {
+		// 0〜255 どうしの 16 ビットの掛け算 (`(a as u16) * b`): 8×8→16 の表引き (__mul_8t16。__mul_16 の 16 回の
+		// 足し算より 1 桁速い)
+		r = append(r, l.loadA(s0, 0), "sta <reg+0", l.loadA(s1, 0), "sta <reg+2", "jsr __mul_8t16",
+			"lda <reg+4", l.storeA(dst, 0), "lda <reg+5", l.storeA(dst, 1))
 	} else {
 		// 定数でない場合
 		for i := 0; i < ir.ValType(dst).Size; i++ {
@@ -175,6 +180,18 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		}
 	}
 	return r
+}
+
+// byteValue は o の値が 0〜255 か (1 バイトの値・1 バイトをゼロ拡張して読む cast (広い演算の狭いオペランドの上位は #0)、
+// その範囲のリテラル)。
+func byteValue(o ir.Operand) bool {
+	if k, ok := ir.ValIntLiteral(o); ok {
+		return k >= 0 && k < 256
+	}
+	if cv, ok := o.(*ir.CastedValue); ok {
+		return cv.Width == 1
+	}
+	return ir.ValType(o).Size == 1
 }
 
 func log2(n int) int {
@@ -231,6 +248,43 @@ func (l *Llc) shiftByte(op *ir.Op, n int, signed bool) ([]any, bool) {
 		return nil, false // 符号付きの 9 以上は稀 (1 ビットずつ)
 	}
 	return []any{l.loadA(op.In(0), 1), l.storeA(op.Dst, 0), "asl a", "lda #0", "sbc #0", "eor #255", l.storeA(op.Dst, 1)}, true
+}
+
+// shiftZeroExt は 1 バイトをゼロ拡張した 2 バイトの値の 1〜7 の左シフト (`(n as u16) << 5`: 番地の計算)。上位は元の値を
+// 右にずらしたもの (1 ビットずつ asl lo; rol hi を回すと 5 で 20 命令・約 60 サイクル):
+//
+//	<< 1:      lda x; asl a; sta lo; lda #0; rol a; sta hi
+//	<< 2:      lda #0; sta hi; lda x; asl a; rol hi; asl a; rol hi; sta lo
+//	<< 3〜7:   lda x; lsr a × (8-n); sta hi; lda x; asl a × n; sta lo
+func (l *Llc) shiftZeroExt(op *ir.Op, n int) ([]any, bool) {
+	src, ok := op.In(0).(*ir.CastedValue)
+	if op.Code != ir.OpShiftLeft || n < 1 || n > 7 || !ok || src.Width != 1 || ir.ValType(op.Dst).Size != 2 || src.Type.Size != 2 {
+		return nil, false
+	}
+	for _, v := range []ir.Operand{op.Dst, src} {
+		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || l.inX(v) || ir.ValLocation(v) == ir.LocCond {
+			return nil, false
+		}
+	}
+	if sameStorage(op.Dst, src) {
+		return nil, false
+	}
+	x, lo, hi := "lda "+l.byte(src, 0), l.byte(op.Dst, 0), l.byte(op.Dst, 1)
+	switch {
+	case n == 1:
+		return []any{x, "asl a", "sta " + lo, "lda #0", "rol a", "sta " + hi}, true
+	case n == 2:
+		return []any{"lda #0", "sta " + hi, x, "asl a", "rol " + hi, "asl a", "rol " + hi, "sta " + lo}, true
+	}
+	r := []any{x}
+	for k := 0; k < 8-n; k++ {
+		r = append(r, "lsr a")
+	}
+	r = append(r, "sta "+hi, x)
+	for k := 0; k < n; k++ {
+		r = append(r, "asl a")
+	}
+	return append(r, "sta "+lo), true
 }
 
 // shiftInMemory は定数シフトをメモリ上で行う (Dst がメモリにある 1 / 2 バイトのとき)。

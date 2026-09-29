@@ -83,3 +83,33 @@ func TestRun(t *testing.T) {
 		t.Errorf("exit=%d out=%q", res.ExitCode, out.String())
 	}
 }
+
+// TestRunNES: Run の NES の ROM は内蔵の NES のランナーで console.exit まで走らせ、console の出力と終了コードを返す。
+// 終わらなければエラー (画面は描かないのでエミュレータで開く)。
+func TestRunNES(t *testing.T) {
+	t.Parallel()
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	dir := t.TempDir()
+	write := func(src string) {
+		if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("#fc 4\nuse console;\nfunction main():void\n{\n\tconsole.init();\n\tprintf(\"hello {}\n\", 42);\n\tconsole.exit(3);\n}\n")
+	var out bytes.Buffer
+	res, err := c.Build(context.Background(), "t.fc", Options{Target: TargetNES, Dir: dir, Out: filepath.Join(dir, "t.nes"), Run: true, Stdout: &out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "hello 42\n" || res.ExitCode != 3 {
+		t.Errorf("出力 %q、終了コード %d", out.String(), res.ExitCode)
+	}
+	write("#fc 4\nfunction main():void\n{\n\twhile (true) {\n\t}\n}\n")
+	if _, err := c.Build(context.Background(), "t.fc", Options{Target: TargetNES, Dir: dir, Out: filepath.Join(dir, "t.nes"), Run: true, Stdout: &out}); err == nil || !strings.Contains(err.Error(), "did not exit") {
+		t.Errorf("終わらないプログラム: %v", err)
+	}
+}

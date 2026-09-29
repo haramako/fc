@@ -16,6 +16,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"os"
 	"sort"
 
@@ -40,6 +41,10 @@ const (
 	vblankScanline    = 241
 )
 
+// VblankCycles は NMI (vblank の始め) から描画の準備 (pre-render の走査線) までの CPU サイクル数 (NTSC の 20 走査線)。
+// 描画中はこの間しか VRAM に書けない。このランナーは vblank を 21 走査線回すので、LateVramWrites はこの値で数える。
+const VblankCycles = 2273
+
 // Stats は動作確認用の統計。
 type Stats struct {
 	Frames               int
@@ -49,6 +54,11 @@ type Stats struct {
 	VramWrites           int
 	OamDmaCount          int
 	RenderingEverEnabled bool
+	// LateVramWrites は描画を出している間に vblank (NMI から VblankCycles) の外で PPUDATA に書いた / OAM DMA をした回数
+	// (実機では画面が乱れる。NMI の仕事が vblank に収まっているかを見る)
+	LateVramWrites int
+	// MaxVblankUse は vblank の中で PPU のレジスタ ($2000-$2007、OAM DMA) に最後に触った時刻の、NMI からのサイクル数の最大
+	MaxVblankUse int64
 }
 
 type Machine struct {
@@ -106,10 +116,20 @@ type Machine struct {
 	palette     [32]byte
 	oam         [256]byte
 
-	// コントローラ1
+	// コントローラ 1 / 2
 	buttons  byte
+	buttons2 byte
 	strobe   bool
 	shiftIdx int
+	shift2   int
+
+	vblankAt int64 // 今の vblank の始め (NMI) の Cpu.Cycles。vblank の外は -1
+
+	// fc の console (fclib/nes/console.fc) の出力: $4018 に書いた文字を Output に、$4019 に書いた値を終了コードに
+	// ($4018〜$401F は CPU の試験用の番地で、製品の NES では何も起きない)
+	Output   io.Writer
+	Exited   bool
+	ExitCode int
 }
 
 // New は iNES 形式の ROM からマシンを作る。
@@ -143,6 +163,7 @@ func New(rom []byte) (*Machine, error) {
 	case 2:
 		m.updateUxromBanks()
 	}
+	m.vblankAt = -1
 	m.Cpu = r6502.NewCpu(m)
 	return m, nil
 }
@@ -158,6 +179,9 @@ func LoadFile(path string) (*Machine, error) {
 
 // SetButtons はコントローラ1の状態を設定する。
 func (m *Machine) SetButtons(b byte) { m.buttons = b }
+
+// SetButtons2 はコントローラ2の状態を設定する (ビットは SetButtons と同じ)。
+func (m *Machine) SetButtons2(b byte) { m.buttons2 = b }
 
 func (m *Machine) renderingEnabled() bool { return m.mask&0x18 != 0 }
 
@@ -182,6 +206,8 @@ func (m *Machine) Get(addr int) int {
 		return m.readPpuReg(addr & 7)
 	case addr == 0x4016:
 		return m.readController()
+	case addr == 0x4017:
+		return m.readController2()
 	case addr < 0x4020:
 		return 0 // APU等
 	case addr >= 0x6000 && addr < 0x8000:
@@ -202,10 +228,18 @@ func (m *Machine) Set(addr, val int) {
 		m.writePpuReg(addr&7, v)
 	case addr == 0x4014:
 		m.oamDma(v)
+	case addr == 0x4018:
+		if m.Output != nil {
+			m.Output.Write([]byte{v})
+		}
+	case addr == 0x4019:
+		m.Exited = true
+		m.ExitCode = int(v)
 	case addr == 0x4016:
 		m.strobe = v&1 != 0
 		if m.strobe {
 			m.shiftIdx = 0
+			m.shift2 = 0
 		}
 	case addr < 0x4020:
 		// APU等: 無視
@@ -237,7 +271,37 @@ func (m *Machine) readController() int {
 	return int(bit)
 }
 
+func (m *Machine) readController2() int {
+	if m.strobe {
+		return int(m.buttons2 & 1)
+	}
+	var bit byte = 1
+	if m.shift2 < 8 {
+		bit = (m.buttons2 >> m.shift2) & 1
+	}
+	m.shift2++
+	return int(bit)
+}
+
+// notePpuAccess は PPU のレジスタへの書き込みの時刻を vblank と比べる (data: PPUDATA / OAM DMA)。
+func (m *Machine) notePpuAccess(data bool) {
+	if !m.renderingEnabled() {
+		return
+	}
+	d := m.Cpu.Cycles - m.vblankAt
+	if m.vblankAt < 0 || d > VblankCycles {
+		if data {
+			m.Stats.LateVramWrites++
+		}
+		return
+	}
+	if d > m.Stats.MaxVblankUse {
+		m.Stats.MaxVblankUse = d
+	}
+}
+
 func (m *Machine) oamDma(page byte) {
+	m.notePpuAccess(true)
 	base := int(page) << 8
 	for i := 0; i < 256; i++ {
 		m.oam[(int(m.oamAddr)+i)&0xff] = byte(m.Get(base + i))
@@ -275,6 +339,7 @@ func (m *Machine) readPpuReg(reg int) int {
 }
 
 func (m *Machine) writePpuReg(reg int, v byte) {
+	m.notePpuAccess(reg == 7)
 	switch reg {
 	case 0:
 		m.ctrl = v
@@ -524,6 +589,19 @@ func (m *Machine) RunFrames(n int) (err error) {
 	return nil
 }
 
+// RunUntilExit は console の exit ($4019 への書き込み) まで、最大 maxFrames フレーム実行する (終わらなければエラー)。
+func (m *Machine) RunUntilExit(maxFrames int) error {
+	for i := 0; i < maxFrames && !m.Exited; i++ {
+		if err := m.RunFrames(1); err != nil {
+			return err
+		}
+	}
+	if !m.Exited {
+		return fmt.Errorf("did not exit in %d frames (pc=$%04x)", maxFrames, m.Cpu.Pc)
+	}
+	return nil
+}
+
 func (m *Machine) runFrame() {
 	frameStart := m.Cpu.Cycles
 	idle := int64(0)
@@ -553,6 +631,7 @@ func (m *Machine) runFrame() {
 		}
 		if scanline == vblankScanline-1 {
 			m.status |= 0x80
+			m.vblankAt = m.Cpu.Cycles
 			m.Stats.Frames++
 			if m.ctrl&0x80 != 0 {
 				m.Stats.NmiCount++
@@ -561,6 +640,7 @@ func (m *Machine) runFrame() {
 		}
 	}
 	m.status &= 0x7f
+	m.vblankAt = -1
 	if m.IdleFlag != 0 {
 		m.FrameBusy = append(m.FrameBusy, m.Cpu.Cycles-frameStart-idle)
 	}

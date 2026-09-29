@@ -1,0 +1,132 @@
+#fc 4
+// パレット (Agent/wiki/plans/v4-stdlib.md §3.2)。32 色 (背景 16 + スプライト 16) の元の色と明るさを持ち、変えたら明るさを掛けた色を vram の
+// キューに積む (次の frame.wait の NMI で送る。NMI は写すだけで、明るさの計算は主の側)。
+//
+//   pal.set_all(PALETTE);
+//   pal.bright(0); frame.render_on(); pal.fade(4, 4);   // 黒から 4 フレームごとに明るく
+@(bank: -1);
+use vram;
+use frame;
+
+public const BLACK = 0x0f;
+public const WHITE = 0x30;
+
+var colors:[32]u8;     // 明るさ 4 の色
+var level:u8;          // 明るさ - 4 (0 が元の色。RAM の初期値の 0 で元の色になるように)
+
+// p を先頭から並べる (32 色まで。短ければ残りはそのまま)
+public function set_all(p:[]const u8):void
+{
+	var n = @len(p);
+	if (n > 32) {
+		n = 32;
+	}
+	for (var i:u8 = 0; i < n; i += 1) {
+		colors[i] = p[i];
+	}
+	upload();
+}
+
+// i 番の色 (0〜31。16〜31 はスプライト。16 / 20 / 24 / 28 は PPU で 0 / 4 / 8 / 12 と同じ所なので、そちらの色が出る)
+public function set(i:u8, c:u8):void
+{
+	colors[i & 31] = c;
+	upload();
+}
+
+public function get(i:u8):u8
+{
+	return colors[i & 31];
+}
+
+// 明るさ: 0 (真っ黒) 〜 4 (元の色) 〜 8 (真っ白)
+public function bright(l:u8):void
+{
+	if (l > 8) {
+		l = 8;
+	}
+	level = l - 4;
+	upload();
+}
+
+public function brightness():u8
+{
+	return level + 4;
+}
+
+// 今の明るさから to まで 1 段ずつ変える (1 段ごとに frames フレーム待つ。描画を出していること)
+public function fade(to:u8, frames:u8):void
+{
+	var l = brightness();
+	while (l != to) {
+		if (l < to) {
+			l += 1;
+		} else {
+			l -= 1;
+		}
+		bright(l);
+		frame.wait_n(frames);
+	}
+}
+
+// 明るさ 4 + d の色 (d は -4〜4)。暗くするときは 1 段ごとに $10 を引き、無くなれば黒。明るくするときは $10 を足し、$3x を超えれば白。
+// 黒 ($xE / $xF) は明るくすると $00 → $10 → $20 → $30 の灰色に
+public function shade(c:u8, d:i8):u8
+{
+	if (d == 0) {
+		return c;
+	}
+	var lo = c & 0x0f;
+	var hi = c >> 4;
+	if (d < 0) {
+		var k = @bitcast(u8, -d);
+		if (lo >= 0x0e || hi < k) {
+			return BLACK;
+		}
+		c -= k << 4;
+		if (c == 0x0d) {
+			return BLACK;   // $0D は「黒より黒い」色 (テレビによっては同期が乱れる)
+		}
+		return c;
+	}
+	var k = @bitcast(u8, d);
+	if (lo >= 0x0e) {
+		return (k - 1) << 4;
+	}
+	if (hi + k > 3) {
+		return WHITE;
+	}
+	return c + (k << 4);
+}
+
+function upload():void
+{
+	var dst = vram.reserve(0x3f00, 32);
+	var d = @bitcast(i8, level);
+	for (var i:u8 = 0; i < 32; i += 1) {
+		// $3F10 / $3F14 / $3F18 / $3F1C は $3F00 / $3F04 / $3F08 / $3F0C と同じ所 (PPU の写し): 背景の色を書く (スプライトの色 0 は
+		// 透明なので使われない。colors[16] などに 0 が入っていても背景色を消さないように)
+		var j = i;
+		if ((i & 0x13) == 0x10) {
+			j = i & 0x0f;
+		}
+		dst[i] = shade(colors[j], d);
+	}
+}
+
+// ---- テスト ----
+
+function test_shade():void @(test)
+{
+	@assert_eq(shade(0x21, 0), 0x21);
+	@assert_eq(shade(0x21, -1), 0x11);
+	@assert_eq(shade(0x21, -2), 0x01);
+	@assert_eq(shade(0x21, -3), BLACK);
+	@assert_eq(shade(0x1d, -1), BLACK);
+	@assert_eq(shade(0x0f, -1), BLACK);
+	@assert_eq(shade(0x21, 1), 0x31);
+	@assert_eq(shade(0x21, 2), WHITE);
+	@assert_eq(shade(0x0f, 1), 0x00);
+	@assert_eq(shade(0x0f, 4), 0x30);
+	@assert_eq(shade(0x16, 4), WHITE);
+}
