@@ -133,3 +133,5 @@ rev = "v1.2.0"
   `fcc build -D pad.REPEAT_DELAY=20`
 - `[lib.名前]` のモジュールは `use` で使えます。git のものはビルドのときに取ってきて、使ったコミットを `fc.lock` に書きます。
   `fcc lib update` で新しいコミットに進め、`fcc lib list` で一覧を出します
+
+次は[エディタ](./editor)の設定です。

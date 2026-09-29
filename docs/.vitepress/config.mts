@@ -37,6 +37,7 @@ export default defineConfig({
           { text: 'NES で Hello', link: '/start/hello-nes' },
           { text: '小さなゲームを作る', link: '/start/first-game' },
           { text: 'プロジェクト', link: '/start/project' },
+          { text: 'エディタ', link: '/start/editor' },
         ],
       },
       { text: 'サンプル集', link: '/samples/' },

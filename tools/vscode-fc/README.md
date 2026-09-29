@@ -1,7 +1,7 @@
 # fc (VS Code 拡張)
 
-fc ソースのシンタックスハイライトと、保存時の `fcc check --json` による診断 (Problems パネル) を提供する薄い拡張。
-言語サーバは持たない。
+fc ソースのシンタックスハイライト、`fcc fmt` による整形、保存時の `fcc check --json` による診断 (Problems パネル) を提供する
+薄い拡張。言語サーバは持たない。
 
 ## 導入
 
@@ -17,18 +17,17 @@ VS Code を再起動する。`fcc` にパスが通っていない場合は設定
 | `fc.checkOnSave` | `true` | 保存時に検査する |
 | `fc.mainFile` | (空) | 検査の起点 (ワークスペース相対)。空なら保存したファイル自身 |
 
-castle のように `use` で辿るプログラムは、`fc.mainFile` を `src/main.fc` にしておくと、どのファイルを保存しても
-プログラム全体が検査され、他モジュールのエラーもそのファイルに付く。
+`use` で辿るプログラムは、`fc.mainFile` を `src/main.fc` のようにしておくと、どのファイルを保存してもプログラム全体が
+検査され、他モジュールのエラーもそのファイルに付く。
 
 コマンド `fc: Check current file` で手動でも検査できる。fcc の出力は「fc」出力チャネルに残る。
 
-## 言語対応
+## 整形
 
-現行 v2 の alias、BSS 配置ブロック、farfn、デフォルト引数に対応するハイライトとスニペットを同梱。
-`alias` / `palias`、`bss` / `bssblock`、`farfn`、`functiondefault`、`inline` で挿入できる。
-診断には各機能に対応した最新の `fcc` を使う。検討段階の V3 構文は対象外。
+「ドキュメントのフォーマット」(Shift+Alt+F) で `fcc fmt` の書式にする。保存のたびに整形するには、設定で
+`"[fc]": { "editor.formatOnSave": true }`。構文エラーがあるときは整形せず、ステータスバーと「fc」出力チャネルに出す。
 
-言語用のファイルは [editors/vscode](../../editors/vscode/) と共通。
-変更はそちらで行い、`npm run sync-language` で反映し、`npm run check-grammar` で検査する。
-VSIX パッケージとフォーマット機能が必要なら `editors/vscode/` 版を使用する。
-両者は同じ拡張 ID (`haramako.fc-lang`) のため、どちらか一方を導入する。
+## 言語のファイル
+
+`syntaxes/fc.tmLanguage.json` は利用者向けドキュメントのサイト (docs/) の fc のコードの色付けにも使う (`docs/.vitepress/config.mts`)。
+文法を変えたら `npm run build --prefix docs` でサイトのビルドが通ることも確かめる。

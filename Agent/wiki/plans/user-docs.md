@@ -1,6 +1,6 @@
 # 利用者向けドキュメント（GitHub Pages）の計画
 
-作成: 2026-09-30。「決めたこと」はすべて決まった。段 0 は済み、段 1 は途中（editor のページが残り）。
+作成: 2026-09-30。「決めたこと」はすべて決まった。段 0 は済み、段 1 も済み。
 
 前提（2026-09-30 ユーザー決定）:
 - 人間向け、主に**利用者向け**（fc で NES のソフトを作る人）のドキュメントを `docs/` の下に作り、GitHub Pages で公開する
@@ -76,8 +76,7 @@
 
 ### サイトの生成器: VitePress（段 0 で入れた）
 
-- **Shiki が TextMate の文法をそのまま読める**。`tools/vscode-fc/syntaxes/fc.tmLanguage.json`（VS Code 拡張の文法。
-  `editors/vscode/` の古い写しではなく、fc 4 の文字のリテラルに対応したこちら）を `.vitepress/config.mts` で読んで ` ```fc ` に色を付ける。
+- **Shiki が TextMate の文法をそのまま読める**。`tools/vscode-fc/syntaxes/fc.tmLanguage.json`（VS Code 拡張の文法）を `.vitepress/config.mts` で読んで ` ```fc ` に色を付ける。
   Hugo の Chroma・Jekyll の Rouge・MkDocs の Pygments は独自の字句解析器が要り、Pages 標準の Jekyll はプラグインも使えない
 - ローカル検索の日本語は `Intl.Segmenter` で語に分ける（MiniSearch の `tokenize`。VitePress が関数を文字列にしてブラウザへ渡すので、
   関数の中だけで完結させる）。「内蔵」「エミュレータ」で引けることを確かめた。home のレイアウトのページは最初の見出しより前が索引に入らない
@@ -153,7 +152,7 @@ docs/
 1. **段 0 土台**: ✅ 2026-09-30: VitePress・fc の色付け・日本語の検索・トップ・`docs.yml`・`docs/AGENTS.md`・例の検査のテスト
    （`internal/doccheck`）・インストールのページ。残り: Pages の Source の切り替え（ユーザー）
 2. **段 1 はじめに**: `start/` の 6 ページとサンプル集。API が変わっても例の検査で気づける。✅ 2026-09-30: install・hello-emu・hello-nes・
-   first-game・project・サンプル集（画面は QuickNES）。残り: editor（VS Code 拡張が 2 つあり、どちらを案内するか未決）
+   first-game・project・editor・サンプル集（画面は QuickNES）。VS Code 拡張は `tools/vscode-fc` に 1 つにした（古い `editors/vscode` の整形を移して消した）
 3. **段 2 リファレンス（生成と表）**: `fcc doc` と `reference/std/`、`reference/fcc`・`fc-toml`・`targets`
 4. **段 3 言語仕様**: fc 4 の規則を 1 ページに。整数の規則など v4 で未決の所（`plans/v4-plan.md` の「決めること」の残り）は決まってから書く
 5. **段 4 ガイド**: `guide/` の各ページ。`overview` と `nes-basics` を先に

@@ -59,10 +59,9 @@
   呼び出し側は `diag.ErrorList`（`errors.As` で先頭 1 件、`diag.Errors(err)` で全部）。新しいエラーを足すときは
   「主語（`describe(v)`）と型を添える」「巻き添えなら Suppressed」を守る。パースエラーは goyacc の verbose 出力を
   `tokenDisplay` で綴りに直している
-- **VS Code 拡張**（2026-09-15〜）: `editors/vscode/`。TextMate 文法 + `fcc fmt` / `fcc check` を呼ぶだけの薄い拡張
-  （LSP なし）。`npm install && npm run check-grammar`（文法をリポジトリの全 .fc でトークン化して検査）、
-  `npm run package` で VSIX、`code --install-extension fc-lang-*.vsix`。文法を足したら `syntaxes/fc.tmLanguage.json` と
-  `scripts/check-grammar.js` の期待値を更新する
+- **VS Code 拡張**（2026-09-15〜）: `tools/vscode-fc/`（plain JS、ビルド不要）。TextMate 文法 + `fcc fmt`（整形）/
+  `fcc check --json`（保存時の診断）を呼ぶだけの薄い拡張（LSP なし）。2026-09-30 に、古い `editors/vscode/`（VSIX と文法の検査
+  スクリプトがあった）の整形をこちらに移して `editors/` を消した。文法は docs/ のサイトの色付けにも使う
 - **ca65 / ld65 の探索**（2026-09-14〜）: `internal/cc65/tools.go` の `ToolPath`。`FC_CC65_BIN` → fcc の実行ファイルと
   同じディレクトリ（と `cc65/`, `bin/`）→ PATH の順。リリース（`release.yml`）は Linux amd64（cc65 をソースから静的ビルド）と
   Windows（公式スナップショットの 32 ビット exe）に ca65 / ld65 を同梱する。`fcc version` が解決先を表示する

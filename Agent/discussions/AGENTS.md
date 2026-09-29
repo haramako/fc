@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-09-30 [VS Code 拡張を 1 つにする](2026-09-30-vscode-extension.md) — tools/vscode-fc に整形を移し、古い editors/vscode を消した
 - 2026-09-30 [開発を main に移す](2026-09-30-move-to-main.md) — 旧 main に v0.0.3 のタグ、feature/v4 を main にマージ。go install …@main が使える
 - 2026-09-30 [else if と elsif](2026-09-30-else-if-and-elsif.md) — `fcc fmt` が `else if` を続けて整形するようにした。elsif は fc 4 でなくす候補
 - 2026-09-30 [文書への参照の書き方](2026-09-30-doc-reference-style.md) — § の番号をやめ、ファイル名と見出しの言葉で指す。コードからは design/ か docs/ を指す
