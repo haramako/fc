@@ -1,5 +1,5 @@
 #fc 4
-// 書き足していくバッファ (Agent/wiki/plans/v4-stdlib.md §3.1)。storage を借りて、先頭から len バイトを使う。push / append は足りなければ止まり、
+// 書き足していくバッファ。storage を借りて、先頭から len バイトを使う。push / append は足りなければ止まり、
 // try_ の版は何も変えずに false を返す。@format で残りに直に書くなら buf.advance(&b, @len(@format(buf.rest(&b), ...)))。
 @(bank: -1);
 use sys;
@@ -9,6 +9,7 @@ public struct Buf {
 	len:u16;
 }
 
+// storage を使う空のバッファ
 public function init(storage:[:u16]u8):Buf
 {
 	var b:Buf;
@@ -17,6 +18,7 @@ public function init(storage:[:u16]u8):Buf
 	return b;
 }
 
+// 空にする (storage の中身はそのまま)
 public function clear(b:*Buf):void
 {
 	b.len = 0;
@@ -34,11 +36,13 @@ public function rest(b:*Buf):[:u16]u8
 	return b.data[b.len..];
 }
 
+// 残りのバイト数
 public function room(b:*const Buf):u16
 {
 	return @len(b.data) - b.len;
 }
 
+// 1 バイト足す。足りなければ何もせずに false
 public function try_push(b:*Buf, c:u8):bool
 {
 	if (b.len >= @len(b.data)) {
@@ -49,6 +53,7 @@ public function try_push(b:*Buf, c:u8):bool
 	return true;
 }
 
+// 1 バイト足す。足りなければ止まる
 public function push(b:*Buf, c:u8):void
 {
 	if (!try_push(b, c)) {
@@ -56,6 +61,7 @@ public function push(b:*Buf, c:u8):void
 	}
 }
 
+// s を足す。足りなければ何もせずに false
 public function try_append(b:*Buf, s:[:u16]const u8):bool
 {
 	if (@len(s) > @len(b.data) - b.len) {
@@ -68,6 +74,7 @@ public function try_append(b:*Buf, s:[:u16]const u8):bool
 	return true;
 }
 
+// s を足す。足りなければ止まる
 public function append(b:*Buf, s:[:u16]const u8):void
 {
 	if (!try_append(b, s)) {

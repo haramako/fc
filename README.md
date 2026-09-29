@@ -29,6 +29,7 @@ fcc build -t nes src.fc     # NES ROM を生成 (a.nes)
 fcc run src.fc              # ビルドして内蔵6502エミュレータで実行
 fcc compile src.fc          # コンパイルのみ
 fcc fmt -w src.fc           # ソースを整形 (-l: 変わるファイルを列挙, -d: 差分表示)
+fcc doc vram                # 標準ライブラリのモジュールの説明 (fcc doc だけなら一覧)
 ```
 
 オプション:

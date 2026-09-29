@@ -1,11 +1,10 @@
 #fc 4
-// RLE (NES Screen Tool の形式: neslib の vram_unrle と同じ) の展開 (Agent/wiki/plans/v4-stdlib.md §3.1・§8 の 10)。データは fc がコンパイル時に
+// RLE (NES Screen Tool の形式: neslib の vram_unrle と同じ) の展開。データは fc がコンパイル時に
 // 作る:
 //   const TITLE = @rle(@incbin("title.nam"));
 //   var n = rle.unpack(buf, TITLE);        // RAM へ (足りなければ止まる)
 // 描画を止めた画面へ直に流すのは vram.write_rle_now、描画中にキューへ積むのは vram.put_rle (fclib/nes/vram.fc)。
 // 形式: 先頭の 1 バイトが印。印でないバイトはそのまま (直前の値として覚える)、印 + n は直前の値を n 回、印 + 0 で終わり。
-// 旧版 (codebase64 の形式) は test/rle.fc にコピーがある。
 @(bank: -1);
 use sys;
 

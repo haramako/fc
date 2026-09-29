@@ -1,6 +1,5 @@
 #fc 4
-// NES のレジスタとビットの定数 (Agent/wiki/plans/v4-stdlib.md §3.2)。名前は NESdev の wiki のもの。
-// 旧版 (PPU_CTRL1 などの名前) は examples/castle/src/nes.fc・examples/miku/nes.fc にコピーがある。
+// NES のレジスタとビットの定数。名前は NESdev の wiki のもの。
 
 // ---- PPU ----
 public var PPUCTRL:u8 @(address: 0x2000);

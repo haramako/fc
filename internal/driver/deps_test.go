@@ -49,7 +49,8 @@ func TestImportDirection(t *testing.T) {
 		"r6502":    {},
 		"nes":      {"r6502"},
 		"quicknes": {}, // libretro の QuickNES のコア (画面を確かめるテスト用)
-		"doccheck": {}, // 文書を確かめるテストだけ (テストは driver と syntax を使う)
+		"doccheck": {},
+		"fcdoc":    {"syntax"}, // fcc doc (モジュールのドキュメント) // 文書を確かめるテストだけ (テストは driver と syntax を使う)
 		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu", "migrate"},
 	}
 	for pkg, ok := range allowed {

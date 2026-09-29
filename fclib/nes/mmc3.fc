@@ -1,5 +1,5 @@
 #fc 4
-// MMC3 (TxROM。Agent/wiki/plans/v4-stdlib.md §3.2): PRG の 8KB × 2 ($8000 / $A000) と CHR (2KB × 2 + 1KB × 4) の切り替え、ミラーリング、
+// MMC3 (TxROM): PRG の 8KB × 2 ($8000 / $A000) と CHR (2KB × 2 + 1KB × 4) の切り替え、ミラーリング、
 // カートリッジの RAM、走査線の IRQ。far call のトランポリンも入る (fc.toml の [target] mapper = "MMC3" と @(farcall))。
 //   mmc3.init();
 //   var old = mmc3.prg(0, @bank("a"));   // $8000 に入れて前のバンクを返す
@@ -74,6 +74,7 @@ public function chr(reg:u8, b:u8):u8
 	return old;
 }
 
+// ミラーを m (MIRROR_VERTICAL / MIRROR_HORIZONTAL) にする
 public function mirroring(m:u8):void
 {
 	MIRRORING = m & 1;
@@ -89,6 +90,7 @@ public function irq(line:u8):void
 	@asm("cli");
 }
 
+// 走査線の IRQ を止める
 public function irq_off():void
 {
 	IRQ_DISABLE = 0;

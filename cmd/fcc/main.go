@@ -1,7 +1,7 @@
 // fcc は FC コンパイラの CLI。
 //
 //	Usage: fcc <command> [options] <src.fc> ...
-//	  command: build(b) / compile(c) / run / fmt / migrate / check
+//	  command: build(b) / compile(c) / run / fmt / migrate / check / doc
 package main
 
 import (
@@ -25,6 +25,7 @@ Commands:
     test             run the @(test) functions of modules (see fcc test -h)
     lib              fetch / update / list the libraries of fc.toml [lib.*] (see fcc lib)
     check            compile without producing files and report errors / warnings
+    doc              show the public declarations of a module and their comments (see fcc doc -h)
     size             show code size per function from an ld65 --dbgfile (see fcc size -h)
     watch            rebuild whenever a source file changes (see fcc watch -h)
     version          show version
@@ -67,6 +68,8 @@ func run() int {
 		return runVersion()
 	case "check":
 		return runCheck(args[1:])
+	case "doc":
+		return runDoc(args[1:])
 	case "size":
 		return runSize(args[1:])
 	case "watch":

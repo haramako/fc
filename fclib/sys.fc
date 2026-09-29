@@ -4,6 +4,7 @@
 @(bank: -1);
 use console;
 
+// "panic: " と msg を console に出して止まる (emu は終了コード 1 で終わる)
 public function panic(msg:[:u16]const u8):void
 {
 	console.write("panic: ");
@@ -12,6 +13,7 @@ public function panic(msg:[:u16]const u8):void
 	console.exit(1);
 }
 
+// cond が偽なら panic
 public function assert(cond:bool, msg:[:u16]const u8):void
 {
 	if (!cond) {

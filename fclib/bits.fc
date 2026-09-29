@@ -1,24 +1,28 @@
 #fc 4
-// ビット集合と 2 ビットの欄 (Agent/wiki/plans/v4-stdlib.md §3.1)。i 番目のビットは s[i / 8] の 1 << (i % 8) (下位から)。添字は u8 (256 個まで)。
+// ビット集合と 2 ビットの欄。i 番目のビットは s[i / 8] の 1 << (i % 8) (下位から)。添字は u8 (256 個まで)。
 @(bank: -1);
 
 public const MASK = [1, 2, 4, 8, 16, 32, 64, 128];
 
+// i 番目のビットが立っているか
 public function get(s:[]const u8, i:u8):bool
 {
 	return (s[i >> 3] & MASK[i & 7]) != 0;
 }
 
+// i 番目のビットを立てる
 public function set(s:[]u8, i:u8):void
 {
 	s[i >> 3] |= MASK[i & 7];
 }
 
+// i 番目のビットを下ろす
 public function clear(s:[]u8, i:u8):void
 {
 	s[i >> 3] &= ~MASK[i & 7];
 }
 
+// i 番目のビットを反転する
 public function flip(s:[]u8, i:u8):void
 {
 	s[i >> 3] ^= MASK[i & 7];

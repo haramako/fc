@@ -1,5 +1,5 @@
 #fc 4
-// メモリ (バイト列) の操作 (Agent/wiki/plans/v4-stdlib.md §3.1)。どれも slice で受け取る ([]u8 からも暗黙に)。長さ 0 は何もしない。
+// メモリ (バイト列) の操作。どれも slice で受け取る ([]u8 からも暗黙に)。長さ 0 は何もしない。
 // fill / copy / move の本体は asm (mem.asm。1 バイトあたり fill 約 11、copy 約 16、move 約 18 サイクル)。
 @(bank: -1);
 
@@ -8,11 +8,13 @@ function copy_raw(dst:*u8, src:*const u8, n:u16):void @(abi: "frame");
 function move_back_raw(dst:*u8, src:*const u8, n:u16):void @(abi: "frame");
 @include("mem.asm");
 
+// dst を全部 v にする
 public function fill(dst:[:u16]u8, v:u8):void
 {
 	fill_raw(@ptr(dst), @len(dst), v);
 }
 
+// dst を全部 0 にする
 public function zero(dst:[:u16]u8):void
 {
 	fill(dst, 0);
@@ -46,6 +48,7 @@ public function move(dst:[:u16]u8, src:[:u16]const u8):u16
 	return n;
 }
 
+// 長さと中身が同じか
 public function equal(a:[:u16]const u8, b:[:u16]const u8):bool
 {
 	return @len(a) == @len(b) && compare(a, b) == 0;

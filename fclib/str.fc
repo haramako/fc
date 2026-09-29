@@ -1,9 +1,10 @@
 #fc 4
-// バイト列としての文字列 (Agent/wiki/plans/v4-stdlib.md §3.1)。文字列は長さつきの []const u8 (終端の 0 は要らない)。終端 0 の文字列 (*const u8)
+// バイト列としての文字列。文字列は長さつきの []const u8 (終端の 0 は要らない)。終端 0 の文字列 (*const u8)
 // との橋渡しと、文字コードの変換 (ASCII を独自のフォントのコードに) も。
 @(bank: -1);
 use sys;
 
+// 長さと中身が同じか
 public function equal(a:[:u16]const u8, b:[:u16]const u8):bool
 {
 	if (@len(a) != @len(b)) {
@@ -17,11 +18,13 @@ public function equal(a:[:u16]const u8, b:[:u16]const u8):bool
 	return true;
 }
 
+// s が prefix で始まるか
 public function starts_with(s:[:u16]const u8, prefix:[:u16]const u8):bool
 {
 	return @len(s) >= @len(prefix) && equal(s[..@len(prefix)], prefix);
 }
 
+// s が suffix で終わるか
 public function ends_with(s:[:u16]const u8, suffix:[:u16]const u8):bool
 {
 	return @len(s) >= @len(suffix) && equal(s[@len(s) - @len(suffix)..], suffix);

@@ -1,5 +1,5 @@
 #fc 4
-// デバッグ出力 (emu: ホストへ。internal/emu のやり取り $fff0〜$ffff)。printf / @assert / sys.panic の出力先。
+// デバッグ出力 (emu: fcc の内蔵のエミュレータが端末に出す。番地 $fff0〜$ffff でやり取りする)。printf / @assert / sys.panic の出力先。
 @(bank: -1);
 
 var EMU_ADDR:*const u8 @(address: 0xfff0);
@@ -7,6 +7,7 @@ var EMU_DATA:u16 @(address: 0xfff2);
 var EMU_PRINT:u8 @(address: 0xfffe);
 var EMU_EXIT:u8 @(address: 0xffff);
 
+// 何もしない (NES の console と同じ呼び方にするため)
 public function init():void {}
 
 // s をそのまま出す (途中の 0 も)
@@ -34,6 +35,7 @@ public function write_z_in(s:[:u16]const u8):void
 	write(s[..n]);
 }
 
+// 改行する
 public function newline():void
 {
 	write("\n");
@@ -45,12 +47,13 @@ public function exit(code:u8):void
 	EMU_EXIT = code;
 }
 
-// ベンチマーク区間 (bench/)。bench_start から bench_end までのサイクル数をエミュレータが合計する
+// ベンチマーク区間の始まり。bench_start から bench_end までのサイクル数をエミュレータが合計する
 public function bench_start():void
 {
 	EMU_PRINT = 4;
 }
 
+// ベンチマーク区間の終わり
 public function bench_end():void
 {
 	EMU_PRINT = 5;

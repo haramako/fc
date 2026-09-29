@@ -1,5 +1,5 @@
 #fc 4
-// VRAM (ネームテーブル・属性・パレット) の書き込み (Agent/wiki/plans/v4-stdlib.md §3.2)。put / put_v / fill は、描画を出している間は
+// VRAM (ネームテーブル・属性・パレット) の書き込み。put / put_v / fill は、描画を出している間は
 // frame のキューに積んで次の frame.wait の NMI で送り、描画を止めている間はその場で書く。キューはデータを写す (stripe 形式) ので、
 // 渡したデータは呼んだ後に変えてよい。キューが満杯なら、キューだけを次の NMI で送るのを待ってから積む (try_put は積まずに false)。
 // 大きな画面は描画を止めて write_now / fill_now で書く。

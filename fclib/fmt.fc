@@ -1,5 +1,5 @@
 #fc 4
-// 数や文字列を文字にして書く (@format と printf の中身。Agent/wiki/plans/v4-stdlib.md §4)。begin で書き先を決め、dec_u8 などを順に呼ぶと
+// 数や文字列を文字にして書く (@format と printf の中身)。begin で書き先を決め、dec_u8 などを順に呼ぶと
 // 書き先の at から書いていく (at は書いた長さ)。書き先が足りなければ sys.panic で止まる (begin_try の後は止まらず、end_try が 0 を
 // 返す: @try_format)。10 進は割り算を使わない (10 のべきを引く)。
 //
@@ -64,6 +64,7 @@ public function begin_print():void
 	begin(pbuf);
 }
 
+// begin_print の後に書いた分を console に出す
 public function print():void
 {
 	console.write(pbuf[..at]);
@@ -176,18 +177,21 @@ function dec8(tmp:*u8, n:u8):u8
 	return len + 1;
 }
 
+// 10 進で書く (spec は幅と ZERO)
 public function dec_u8(n:u8, spec:u8):void
 {
 	var tmp:[3]u8;
 	put(&tmp[0], dec8(&tmp[0], n), false, spec);
 }
 
+// 10 進で書く (spec は幅と ZERO)
 public function dec_u16(n:u16, spec:u8):void
 {
 	var tmp:[5]u8;
 	put(&tmp[0], dec16(&tmp[0], n), false, spec);
 }
 
+// 符号付きの 10 進で書く (負なら -。spec は幅と ZERO)
 public function dec_i8(n:i8, spec:u8):void
 {
 	var tmp:[3]u8;
@@ -198,6 +202,7 @@ public function dec_i8(n:i8, spec:u8):void
 	put(&tmp[0], dec8(&tmp[0], u), n < 0, spec);
 }
 
+// 符号付きの 10 進で書く (負なら -。spec は幅と ZERO)
 public function dec_i16(n:i16, spec:u8):void
 {
 	var tmp:[5]u8;
@@ -225,6 +230,7 @@ public function hex_u16(n:u16, spec:u8):void
 	put(&tmp[0], len, false, spec);
 }
 
+// 16 進で書く (spec は幅と ZERO・LOWER)
 public function hex_u8(n:u8, spec:u8):void
 {
 	var tmp:[2]u8;
@@ -253,6 +259,7 @@ public function bin_u16(n:u16, spec:u8):void
 	put(&tmp[0], len, false, spec);
 }
 
+// 2 進で書く (spec は幅と ZERO)
 public function bin_u8(n:u8, spec:u8):void
 {
 	bin_u16(n, spec);

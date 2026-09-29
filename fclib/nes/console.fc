@@ -70,6 +70,7 @@ public function write_z_in(s:[:u16]const u8):void
 	write(s[..n]);
 }
 
+// 改行する
 public function newline():void
 {
 	write("\n");

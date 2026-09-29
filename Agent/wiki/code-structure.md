@@ -101,3 +101,5 @@
 - **テストの共通の手順**は `internal/driver/harness_test.go` の `testBuild(t, buildSpec)`。新しいテストは既存の包み関数
   （`runEmu` / `buildFiles` / `buildBothLevels` …）か `testBuild` を使い、`NewCompiler(...).Build(...)` を直接書かない。
   例外は `internal/doccheck`（テストだけのパッケージ。docs/ の例のビルドと文書への参照の検査。driver の外なので `testBuild` を使えない）
+- **`internal/fcdoc`**（2026-09-30）: `fcc doc`。構文木から public の宣言と直前のコメントを集め、端末の文字とサイトの Markdown にする
+  （`syntax` だけに依存。`pkg/fc` の `StdDocs` / `DocFile` / `DocIndex` が包む）
