@@ -216,6 +216,9 @@ public function room():u8;
 public function put_rle(addr:u16, src:[:u16]const u8):void;      // RLE のデータをキューの項目に (繰り返しは fill、直写しは写す項目。満杯なら次の NMI を待つ)
 public function write_now(addr:u16, data:[:u16]const u8):void;   // 描画を止めている間
 public function fill_now(addr:u16, v:u8, n:u16):void;
+public function set_attr(nt:u8, x:u8, y:u8, old:u8, p:u8):u8;   // 属性の 2 ビットの欄 (old は呼ぶ側の写し。新しい値を返す)
+public function put_meta(nt:u8, mx:u8, my:u8, t:[]const u8):void;          // メタタイル (16×16 = 2×2 タイル: 左上・右上・左下・右下) を (mx, my) に
+public function set_meta_attr(nt:u8, mx:u8, my:u8, attrs:[]u8, p:u8):void;  // メタタイルのパレット (attrs は呼ぶ側の属性の写し 64 バイト)
 // rle.to_vram(addr, src): 描画を止めている間に展開しながら PPUDATA へ流す (RAM のバッファが要らない。neslib の vram_unrle)
 // NMI の中では展開しない: vblank (OAM DMA を除いて約 1700 サイクル) が一番きつく、直写しの部分は普通の写しより遅く、1 フレームで
 // 送りきれないデータは途中の状態を持ち越す必要がある。RLE の「繰り返し」の良さはキューの fill の項目 (キュー 1 バイト、NMI で 1 バイト

@@ -297,6 +297,52 @@ function main():void
 	}
 }
 
+// TestNesMetatile: vram.put_meta が 2×2 のタイルを置き (描画中はキューで、止めていればその場で)、set_meta_attr が属性の写しを
+// 書き換えて 1 バイトを送る。
+func TestNesMetatile(t *testing.T) {
+	t.Parallel()
+	p := buildNes(t, map[string]string{"t.fc": `#fc 4
+use frame;
+use vram;
+const BLOCK = [1, 2, 3, 4];
+const WALL = [5, 6, 7, 8];
+var attrs:[64]u8;
+function main():void
+{
+	frame.init();
+	vram.put_meta(0, 0, 0, BLOCK);       // 描画を止めている間はその場で
+	vram.set_meta_attr(0, 0, 0, attrs, 1);
+	frame.render_on();
+	vram.put_meta(0, 3, 2, WALL);        // (6, 4) から
+	vram.put_meta(1, 15, 14, BLOCK);     // 右下の端: (30, 28) の $2400 側
+	vram.set_meta_attr(0, 3, 2, attrs, 2);  // 属性の 9 バイト目 ($23C9) の右上 (bit 2〜3)
+	vram.set_meta_attr(0, 2, 3, attrs, 3);  // 同じバイトの左下 (bit 4〜5)
+	frame.wait();
+	while (true) {
+		frame.wait();
+	}
+}
+`})
+	p.run(t, 20) // (frame.init が VRAM を消すのに数フレーム)
+	check := func(a int, want ...byte) {
+		t.Helper()
+		for k, w := range want {
+			if got := p.readVram(a + k); got != w {
+				t.Errorf("$%04X: %d, want %d", a+k, got, w)
+			}
+		}
+	}
+	check(0x2000, 1, 2)
+	check(0x2020, 3, 4)
+	check(0x2000+4*32+6, 5, 6)
+	check(0x2000+5*32+6, 7, 8)
+	check(0x2400+28*32+30, 1, 2)
+	check(0x2400+29*32+30, 3, 4)
+	check(0x23c0, 1)
+	check(0x23c9, 2<<2|3<<4)
+	p.checkVblank(t)
+}
+
 // TestNesQueueFull: キューに収まる一番重い形 (1 バイトずつ写す項目で満杯) と OAM の DMA が、同じ NMI で vblank に収まる。
 // 満杯を超える put は分けて次の NMI を待ってから積み、全部が画面に届く。
 func TestNesQueueFull(t *testing.T) {
