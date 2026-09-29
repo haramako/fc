@@ -1,0 +1,55 @@
+#fc 4
+// ゆらゆら (ラスター効果のサンプル): MMC3 の走査線の IRQ を 8 ラインごとに入れ、帯ごとに横のスクロールを sin でずらして画面を
+// 波打たせる (IRQ の中は asm: wave.asm)。帯ごとの位置は主の側が次のフレームの分を計算しておき、vblank の間に写す。
+//   fcc build -t nes -o wave.nes wave.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use math;
+use mmc3;
+@include("font.chr");
+@include("wave.asm");
+
+const BANDS = 30;                            // 240 ライン / 8
+const PALETTE = [0x0f, 0x21, 0x11, 0x01,  0x0f, 0x30, 0x10, 0x00];
+const BLOCK = 0x7f;
+
+var wave_x:[32]u8 @(symbol: "wave_x");      // IRQ が読む帯ごとの横のスクロール
+var wave_band:u8 @(symbol: "wave_band");     // 次の IRQ の帯
+function wave():void @(abi: "stack", symbol: "wave_irq");   // wave.asm
+var next:[BANDS]u8;
+var phase:u8;
+
+function main():void
+{
+	mmc3.init();                             // 縦のミラー (横にずらすと隣のネームテーブルが見える: 同じ絵を描く)
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;         // MMC3 が走査線を数えるため (背景 $0000・スプライト $1000)
+	for (var nt:u8 = 0; nt < 2; nt += 1) {
+		for (var y:u8 = 0; y < 30; y += 1) {
+			for (var x:u8 = 0; x < 32; x += 4) {
+				vram.fill_now(vram.addr(nt, x, y), BLOCK, 1);   // 縦の線 (4 タイルごと)
+			}
+		}
+		vram.write_now(vram.addr(nt, 9, 14), " FC 4  WAVE ");
+		vram.fill_now(vram.attr_addr(nt, 8, 12), 0x55, 4);   // 文字の所はパレット 1 (白)
+	}
+	pal.set_all(PALETTE);
+	mmc3.irq_hook = wave;
+	frame.render_on();
+	while (true) {
+		// 次のフレームの帯ごとの位置 (±15 ドット)
+		phase += 3;
+		for (var b:u8 = 0; b < BANDS; b += 1) {
+			next[b] = @bitcast(u8, math.sin(phase + b * 10) >> 3);
+		}
+		frame.scroll(next[0], 0, 0);             // 1 本目の帯は NMI が書く
+		frame.wait();
+		for (var b:u8 = 1; b < BANDS; b += 1) {  // vblank の間に写す (描画中に IRQ が読むので、計算しながらは書かない)
+			wave_x[b] = next[b];
+		}
+		wave_band = 1;
+		mmc3.irq(7);                             // 8 ラインごと (数え終わると 7 から数え直す)
+	}
+}

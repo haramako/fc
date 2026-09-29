@@ -36,9 +36,23 @@ public var queue_len:u8;
 public var queue_cost:u8;       // キューの手間 (BUDGET と同じ単位)
 var ready:u8;                   // 0x80: このフレームの分ができた (OAM とキューを送る)。0x40: キューだけ送る。NMI が 0 に戻す
 
-// NMI を有効にする (描画はまだ止めたまま)。ほかの関数より先に呼ぶ
+// ネームテーブルと属性 ($2000〜$2FFF) を 0 で埋めてから、NMI を有効にする (描画はまだ止めたまま)。ほかの関数より先に呼ぶ。
+// 電源を入れたときの VRAM の中身は決まっていない (QuickNES でも 0 でない) ので、書かなかった所の属性が変わる。埋めるのに約 2 フレーム
 public function init():void
 {
+	nes.PPUCTRL = 0;
+	nes.PPUADDR = 0x20;
+	nes.PPUADDR = 0x00;
+	for (var hi:u8 = 0; hi < 16; hi += 1) {
+		var lo:u8 = 0;
+		while (true) {
+			nes.PPUDATA = 0;
+			lo += 1;
+			if (lo == 0) {
+				break;
+			}
+		}
+	}
 	ctrl = nes.CTRL_NMI;
 	mask = 0;
 	nes.PPUCTRL = ctrl;

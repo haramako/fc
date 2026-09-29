@@ -366,6 +366,11 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    今の版を使っている所の横にコピーして残す（castle の src、miku、test/、bench/ など。`use` はソースのディレクトリを先に探すので
    コピーが見つかる）。fclib の名前に結びついた組み込み（`@copy` → `mem.copy`、`cos` → `math.sin`）は、読み込んだモジュールの関数の
    形を見て古い形でも動かす
+**サンプル（2026-09-29）**: examples/life（console のライフゲーム）・jump（ジャンプアクション）・statusbar（MMC3 の IRQ で
+   画面の分割）・wave（8 ラインごとの IRQ で波打たせる）。見た目は `internal/quicknes`（libretro の QuickNES）の画面で確かめる。
+   作って分かったこと: 文字のリテラルが要る（fc 4 の `'A'` を足した）、電源を入れたときの VRAM は不定（QuickNES でも属性が 0 で
+   なかった）ので `frame.init` が $2000〜$2FFF を 0 で埋める、MMC3 の走査線を数えるにはスプライトのパターンを $1000 にする
+   （`frame.ctrl |= nes.CTRL_SPR_1000`）、latch を N にすると N ライン目から新しいスクロール（statusbar は 32 で 4 行ちょうど）
 5. **移す**: miku を新しい API で書き直して確かめる（fc の中のコピーで。小さいので最初の実例に）。castle は API が落ち着いてから
    （§8 の 12。それまでは今の fclib のコピーでビルドを保つ）。古い fclib を消す。✅ 2026-09-29: **examples/miku4**（examples/miku は
    ROM の golden のためそのまま残し、別のコピーを fc 4 の frame / vram / pal / oam / pad / math / rand / hit で書き直した。ppu.asm・

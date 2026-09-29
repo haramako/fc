@@ -217,3 +217,87 @@ func TestExampleJump(t *testing.T) {
 		t.Errorf("QuickNES の画面で、足場の上に自分が見えない")
 	}
 }
+
+// regionEqual は a と b の y0〜y1 の行が同じか。
+func regionEqual(a, b *image.RGBA, y0, y1 int) bool {
+	for y := y0; y < y1; y++ {
+		for x := 0; x < a.Bounds().Dx(); x++ {
+			if a.RGBAAt(x, y) != b.RGBAAt(x, y) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// TestExampleStatusbar: examples/statusbar (MMC3 の IRQ で画面を分割)。内蔵のランナーでは毎フレーム IRQ が来てスクロールが
+// 進む。QuickNES の画面では、ステータスバー (上の 4 行) は時間がたっても同じで、下の画面だけが動いている。
+func TestExampleStatusbar(t *testing.T) {
+	t.Parallel()
+	p := buildNes(t, exampleFiles(t, "statusbar", "statusbar.fc"))
+	p.run(t, 60)
+	irq0 := p.Stats.IrqCount
+	x0 := p.peek(t, "split_x", 0)
+	p.run(t, 10)
+	if d := p.Stats.IrqCount - irq0; d < 9 || d > 11 {
+		t.Errorf("10 フレームで IRQ が %d 回", d)
+	}
+	if d := (p.peek(t, "split_x", 0) - x0 + 256) % 256; d != 10 {
+		t.Errorf("10 フレームでスクロールが %d 進んだ", d)
+	}
+	p.checkVblank(t)
+
+	q := openQuickNES(t, romOf(t, p))
+	q.RunFrames(60)
+	a := q.Image()
+	q.RunFrames(20)
+	b := q.Image()
+	saveSample(t, "statusbar", b)
+	// FRAME の数の行 (y 16〜23) は変わるので、見出しの行 (y 8〜15) と区切りの行 (y 24〜31) だけ比べる
+	if !regionEqual(a, b, 8, 16) || !regionEqual(a, b, 25, 31) {
+		t.Errorf("ステータスバーが動いている")
+	}
+	if regionEqual(a, b, 40, 232) {
+		t.Errorf("下の画面が動いていない")
+	}
+}
+
+// barX は img の y の行で、最初に明るい点 (縦の線) がある x (無ければ -1)。
+func barX(img *image.RGBA, y int) int {
+	for x := 0; x < img.Bounds().Dx(); x++ {
+		if c := img.RGBAAt(x, y); int(c.R)+int(c.G)+int(c.B) > 200 {
+			return x
+		}
+	}
+	return -1
+}
+
+// TestExampleWave: examples/wave (8 ラインごとの IRQ で横のスクロールをずらす)。内蔵のランナーでは 1 フレームに約 30 回 IRQ が
+// 来る。QuickNES の画面では、縦の線の位置が帯ごとに違い (波打ち)、時間で変わる。
+func TestExampleWave(t *testing.T) {
+	t.Parallel()
+	p := buildNes(t, exampleFiles(t, "wave", "wave.fc"))
+	p.run(t, 30)
+	irq0 := p.Stats.IrqCount
+	p.run(t, 1)
+	if d := p.Stats.IrqCount - irq0; d < 27 || d > 31 {
+		t.Errorf("1 フレームの IRQ が %d 回", d)
+	}
+	p.checkVblank(t)
+
+	q := openQuickNES(t, romOf(t, p))
+	q.RunFrames(40)
+	a := q.Image()
+	saveSample(t, "wave", a)
+	xs := map[int]bool{}
+	for y := 4; y < 232; y += 8 {
+		xs[barX(a, y)%16] = true // 縦の線は 32 ドットごと: 線の間隔の中の位置
+	}
+	if len(xs) < 4 {
+		t.Errorf("帯ごとの縦の線の位置が %d 通りしかない (波打っていない)", len(xs))
+	}
+	q.RunFrames(5)
+	if regionEqual(a, q.Image(), 0, 232) {
+		t.Errorf("波が動いていない")
+	}
+}

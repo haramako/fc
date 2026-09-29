@@ -1,0 +1,58 @@
+#fc 4
+// 画面の分割 (ラスター効果のサンプル): 上の 4 行 (ステータスバー) は止めたまま、下だけ横にスクロールし続ける。MMC3 の走査線の
+// IRQ でステータスバーの下からスクロールを書き換える (IRQ の中は asm: split.asm)。fc.toml で mapper を MMC3 にしている。
+//   fcc build -t nes -o statusbar.nes statusbar.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use mmc3;
+@include("font.chr");
+@include("split.asm");
+
+const BAR_LINES = 32;                        // ステータスバーの走査線の数 (4 行)
+const PALETTE = [0x02, 0x30, 0x10, 0x00,  0x0f, 0x28, 0x18, 0x08];   // 0: 下の画面 (紺に白)、1: ステータスバー (黒に黄)
+const PATTERN = "FC 4 RASTER SPLIT * SCROLL -> * ";   // 32 文字 (1 行)
+
+var split_x:u8 @(symbol: "split_x");         // IRQ が書く横のスクロール
+var split_ctrl:u8 @(symbol: "split_ctrl");   // IRQ が書く PPUCTRL (ネームテーブルの選択 = スクロールの 256 の位)
+function split():void @(abi: "stack", symbol: "split_irq");   // split.asm (IRQ の呼び出し口)
+
+var x:u16;
+var line:[8]u8;
+
+// 下の画面: 両方のネームテーブルに、行ごとにずらした PATTERN を並べる (斜めの模様になる)
+function draw_field(nt:u8):void
+{
+	for (var y:u8 = 4; y < 30; y += 1) {
+		var r = (y * 3) % 32;
+		vram.write_now(vram.addr(nt, 0, y), PATTERN[r..]);
+		vram.write_now(vram.addr(nt, 32 - r, y), PATTERN[..r]);
+	}
+}
+
+function main():void
+{
+	mmc3.init();                         // 縦のミラー: ネームテーブル 0 と 1 が左右に並ぶ
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;     // MMC3 は PPU の番地の A12 の立ち上がりで走査線を数える (背景 $0000・スプライト $1000)
+	draw_field(0);
+	draw_field(1);
+	vram.write_now(vram.addr(0, 2, 1), "STATUS BAR (FIXED)");
+	vram.write_now(vram.addr(0, 2, 2), "FRAME");
+	vram.fill_now(vram.addr(0, 0, 3), '-', 32);
+	vram.fill_now(0x23c0, 0x55, 8);      // 上の 4 行は背景のパレット 1
+	pal.set_all(PALETTE);
+	mmc3.irq_hook = split;
+	frame.render_on();
+	while (true) {
+		x = (x + 1) & 511;
+		split_x = x as u8;
+		split_ctrl = frame.ctrl | nes.CTRL_NMI | ((x >> 8) as u8);
+		if ((frame.count & 7) == 0) {
+			vram.put(vram.addr(0, 8, 2), @format(line, "{:5}", frame.count));
+		}
+		frame.wait();
+		mmc3.irq(BAR_LINES);             // vblank の間に仕掛ける: ステータスバーの走査線を数え終わったら IRQ
+	}
+}

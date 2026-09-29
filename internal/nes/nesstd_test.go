@@ -293,7 +293,7 @@ function main():void
 	}
 }
 `})
-	p.run(t, 12)
+	p.run(t, 16)
 	for i := 0; i < 200; i++ {
 		if got := p.readVram(0x2400 + i); got != byte(i) {
 			t.Fatalf("分けた put の %d バイト目: %d", i, got)
