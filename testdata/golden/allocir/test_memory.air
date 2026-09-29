@@ -499,7 +499,7 @@
  )
  (ops
   0000 (:load {l3 i} {lit nil 0 #"u8"})
-  0001 (:load {l10 i@Y} {l3 i} "y=i@Y")
+  0001 (:load {l10 i@Y} {lit nil 0 #"u8"} "y=i@Y")
   0002 (:label "@then_11" "a=c@A" "y=i@Y")
   0003 (:load_mem {l9 c@A} {l2 str} {l10 i@Y} "scale=1" "a=c@A" "y=i@Y")
   0004 (:store_mem {l1 to} {l10 i@Y} "scale=1" {l9 c@A} "w=1" "a=c@A" "y=i@Y")

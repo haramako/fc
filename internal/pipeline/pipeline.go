@@ -229,6 +229,10 @@ func prepareLambda(lmd *ir.Lambda, o *Options) (err *diag.Error) {
 	if o.OptimizeLevel > 0 {
 		regalloc.AllocateResident(lmd)
 		verify(lmd, "resident")
+		if !lmd.Cfg().Disabled("litprop") {
+			regalloc.PropagateLiteralLoads(lmd) // ループの変数の初期値の書き込み (常駐の入口の写しが読む)
+			verify(lmd, "litprop")
+		}
 	}
 	// -O 0 でも同じ割付器を使う (静的フレーム (ABIStatic) の関数はフレームでなく F_f の固定番地に置く必要があり、
 	// 以前あった「全部フレーム」の簡易版は静的フレームの導入後は壊れていた)

@@ -284,7 +284,7 @@
  )
  (ops
   0000 (:load {l2 n} {lit nil 0 #"u8"})
-  0001 (:load {l6 n@Y} {l2 n} "y=n@Y")
+  0001 (:load {l6 n@Y} {lit nil 0 #"u8"} "y=n@Y")
   0002 (:jump "@begin_1")
   0003 (:label "@body_3" "y=n@Y")
   0004 (:add {l6 n@Y} {l6 n@Y} {lit nil 1 #"u8"} "y=n@Y")

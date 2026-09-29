@@ -595,6 +595,11 @@ go test ./...                                    # 全部 (golden + examples + N
 - **opt の段**は `opt.Pass{Name, Requires, Grows, Run, Then, Repeat}` で宣言し、`Pass.Apply` が FC_DISABLE の判定・compact・
   @log の付け替え・トレース・IR の検証を一括で行う。段を足すときは変換だけを書き、`Passes()` に並べる（順序の依存は
   そこのコメントに）。fuzz の切り分け `rpLocate` も `Apply` で 1 段ずつ当てる。
+- **常駐の割付の後の IR を変えるとき**（2026-09-30）: 常駐の一時変数（`i@Y` など。`Value.Home` が退避先）への書き込みは、
+  IR の上で読まれていなくても消してはいけない。ループ・関数の出口の書き戻し（`sty home`）、退避と復帰は codegen が `Op.Res`
+  の印から出すので、`ir.BuildUseDef` には使用として現れない（`regalloc.PropagateLiteralLoads` が castle の
+  `my_process.anchor_throw` の `anchor_vx@Y` への書き込みを消し、Mesen の自動プレイだけが落ちた。内蔵のランナーの
+  自動プレイと fuzz は通った）。変わらない（`Clean`）常駐の退避先も、復帰で読まれるので中身が要る
 - **IR の検証器** `ir.Verify`（命令の種類とオペランドの数、Dst の有無、ラベルの一意性と飛び先、push の Type、メモリの番地の形、
   比較の幅と符号の決め忘れ）。FC_VERIFY_IR=1
   で opt の各段・常駐・割付の後に走り、テストと fuzz では常に有効（`verify_test.go` の init）。「一時変数の定義は 1 つ」は

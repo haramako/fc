@@ -533,3 +533,51 @@ function main():void
 		}
 	}
 }
+
+// TestLiteralLoadsResident: 常駐の割付の後のリテラルの伝播 (regalloc.PropagateLiteralLoads) は、常駐の一時変数への書き込みを
+// 消さない (関数の出口の書き戻し `sty g` は codegen が出すので IR の上では読まれていない。castle の anchor_throw の形)。
+// ループの変数の初期値の書き込み (`lda #0; sta i`) は消える。
+func TestLiteralLoadsResident(t *testing.T) {
+	t.Parallel()
+	out, asm := buildShape(t, `#fc 4
+use console;
+var g:i8;
+var d:u8;
+var h:u8;
+var buf:[8]u8;
+var k:u8;
+function throw():void @(noinline)
+{
+	h = 3;
+	if (d == 0) {
+		g = 8;
+	} else {
+		g = -8;
+	}
+	h += 1;
+}
+function copy(n:u8):void @(noinline)
+{
+	for (var i:u8 = 0; i < n; i += 1) {
+		buf[k] = i;
+		k += 1;
+	}
+}
+function main():void
+{
+	throw();
+	var a = g;
+	d = 1;
+	throw();
+	copy(5);
+	printf("{} {} {} {} {}\n", a, g, h, k, buf[4]);
+	console.exit(0);
+}
+`)
+	if out != "8 -8 4 5 4\n" {
+		t.Errorf("got %q", out)
+	}
+	if body := strings.Join(procBody(t, asm, "_t_copy"), "\n"); strings.Contains(body, "lda #0\n\tsta 0+<F_t_copy") || strings.Contains(body, "lda #0\nsta 0+<F_t_copy") {
+		t.Errorf("ループの変数の初期値を書いている:\n%s", body)
+	}
+}
