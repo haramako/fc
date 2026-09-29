@@ -2826,3 +2826,17 @@ func TestResidentHoldXStore(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// TestStaticFramesRetryNoGrow: -O 2 の展開 (インライン展開したローカル配列の写し) で main → t0 → f1 の静的フレームが
+// 212 バイトから 518 バイトになり、FC_SRAM (512) に収まらず -O 2 だけ "static frames do not fit" で失敗していた。
+// frame size over と同じく、フレームの大きい関数から展開を止めてやり直す (fuzz の TestRandomPrograms。testdata/regress/staticframe)。
+func TestStaticFramesRetryNoGrow(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("testdata", "regress", "staticframe", "t.fc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := rpCheck(t, map[string]string{"t.fc": string(b)}); res.kind != "ok" {
+		t.Errorf("%s\n%s", res.kind, res.detail)
+	}
+}

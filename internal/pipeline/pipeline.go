@@ -92,6 +92,26 @@ func Prepare(mods []*ir.Module, o *Options) (*Result, error) {
 	}
 	markUnusedGlobals(mods)
 	res.Plan, err = frames.Place(graph, o.StaticZp, o.StaticRam)
+	if err != nil && o.OptimizeLevel > 0 {
+		// 静的フレームの領域に収まらない: 展開 (インライン展開したローカル配列の写しなど) で大きくなったフレームのことが
+		// ある (-O 0 なら収まる)。まだ展開を止めていない関数のうちフレームがいちばん大きいものの展開を止めてやり直す
+		// (frame size over と同じ。driver.retryFrameOver。fuzz の TestRandomPrograms で、main → t0 → f1 の静的フレームが
+		// -O 0 の 212 バイトから -O 2 で 518 バイトになり、-O 2 だけ失敗していた)
+		if de, ok := err.(*diag.Error); ok && strings.HasPrefix(de.Msg, "static frames do not fit") {
+			var big *ir.Lambda
+			for _, lmd := range graph.Lambdas {
+				if lmd.Unused || lmd.Extern || lmd.NoGrow {
+					continue
+				}
+				if big == nil || lmd.FrameSize > big.FrameSize {
+					big = lmd
+				}
+			}
+			if big != nil {
+				res.FrameOver = big.Id
+			}
+		}
+	}
 	return res, err
 }
 
