@@ -7,7 +7,7 @@ V3 の `@(...)` や型名変更とは分け、例は現行の `options(...)` で
 
 `options(bss: "...");` と `block { ... } options(bss: "...");` を実装し、
 コミット `0e539d8` で main に取り込んだ。確定仕様は [Agent/wiki/design/bss.md](design/bss.md)、
-利用方法は [言語リファレンス §4.1](../../docs/language_reference.md) を参照。
+利用方法は docs/reference/language.md の「モジュールの属性」を参照（fc 3 以降は `@(bss: "...");` と `@(bss: "...") { ... }`）。
 
 ```fc
 options(bss: "BSS_EX");

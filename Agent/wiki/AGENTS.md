@@ -31,6 +31,8 @@
 - [mesen-and-debugging.md](mesen-and-debugging.md) — MesenCE の導入と罠、`fcc build -g` のソースレベルデバッグ、エディタ連携、コードサイズ
 - [placement-debugging.md](placement-debugging.md) — 配置指定・Mesen のスタック表示・一時ディレクトリの検討
 - [golden-dump-format.md](golden-dump-format.md) — golden ダンプの正規形の仕様
+- [fc4-facts.md](fc4-facts.md) — fc 4 の言語の、実行して確かめた挙動と間違えやすい点（仕様の正は docs/reference/language.md）
+- [docs-site.md](docs-site.md) — 利用者向けドキュメントのサイト（VitePress・例の検査・fcc doc・サンプルの画面・Pages）の仕組みと踏んだ罠
 
 ### design/（実装済み機能の設計）
 

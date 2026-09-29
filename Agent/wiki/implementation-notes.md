@@ -40,12 +40,12 @@
   を `.proc` の中に置いて `.export` したら、同じモジュール内の呼び出しで未定義になった（castle の text で発覚。
   fc のテストは他モジュールからの参照しか無かった）。関数の途中に入口を作るときは `.endproc` で閉じて別の `.proc` にする
 
-- **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。仕様は [language_reference.md](../../docs/language_reference.md)、設計の経緯は
+- **文法 v2**（2026-09-14〜）: 先頭行 `#fc 2`（任意）。今の言語（fc 4）の仕様は `docs/reference/language.md`（例はテストが確かめる）、v2 の設計の経緯は
   [Agent/discussions/2026-09-13-v2-grammar.md](../discussions/2026-09-13-v2-grammar.md)。**v1 は 2026-09-19 に削除**（`fcc migrate`、`internal/migrate`、`.rb` マクロの互換、
   `test/*.fc` の v1 版）。`test/*.fc` は v2 だけ。`syntax.File` / `ir.Module` にバージョンは無く、v1 だけの構文は
   `syntax.checkVersion` が「v2 ではこう書く」のエラーにする
 - **struct / soa**（2026-09-14〜、v2 のみ）: 設計と実装メモは [Agent/wiki/design/types-struct.md](design/types-struct.md)、仕様は
-  [language_reference.md](../../docs/language_reference.md) §2.1 / §2.2。テストは `internal/driver/struct_test.go` / `soa_test.go`
+  docs/reference/language.md の「struct」「soa」。テストは `internal/driver/struct_test.go` / `soa_test.go`
   （小さなプログラムを emu で実行）と `test/test_struct.fc` / `test_soa.fc`（unittest 形式。golden は無く、実行結果で判定）。
   `share/runtime.asm` の `__mul_16`（16 ビット乗算）は長らく `rts` だけの未実装で、このとき実装した（`j * 100` が 0 になっていた）
 - **far call**（2026-09-15〜）: `options(farcall: true)` で有効。判定は `sema.Hlc.isFarCall`（呼び先モジュールの

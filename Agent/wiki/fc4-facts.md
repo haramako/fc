@@ -1,0 +1,39 @@
+# fc 4 の確かな事実（実行して確かめたもの）
+
+fc 4 の言語の仕様の正は `docs/reference/language.md`（例は `internal/doccheck` が毎回ビルドして、出力とエラーの文言まで
+確かめる）。この記事は、仕様を書くときに実際に `fcc run` で確かめた挙動のうち、エージェントが間違えやすいもの・仕様の外の実装の
+事実をまとめる（2026-09-30。コードと食い違ったら記事を直す）。
+
+## 書き方
+
+- ファイルの 1 行目に `#fc 4`。無ければ fc 2 として読む（`syntax.DefaultVersion`）
+- else-if は `} else if (...) {` と書く（`fcc fmt` が 1 行に続ける。2026-09-30）。`elsif` も同じ意味で残っているが、fc 4 で
+  なくす候補（`plans/roadmap.md` の v4）なので新しいコードでは使わない
+- 組み込みは `@` で始まる（`@sizeof`・`@bitcast(T, x)`・`@incbin`・`@include`・`@asm`・`@min`…）。属性は `@(…)`（fc 2 の `options(…)` ではない）
+- グローバル変数は初期値を書けない（`can't init global variable`。0 で始まる）
+- 文字列のエスケープは `\n` と `\xNN` だけ（`"\t"` は `\` と `t` のまま）。文字のリテラル `'\t'` は使える
+- 関数の中の `var s = "abc";` は終端の 0 を含む 4 バイトの配列の変数（`@len(s)` は 4）。`const S = "abc";` は `@len` が 3、`@sizeof` が 4
+- 長さの違う文字列の配列は型が要る: `const NAMES:[?][]const u8 = ["ab", "cde"];`（書かないと「長さが違う」エラー）
+- `@copy` は `use mem;` が要る。`printf` / `@format` は fmt / console を `use` しなくても組み込みが読み込むが、
+  `console.init()` を書くなら `use console;`
+- asm から見える名前は `_モジュール名_名前`（`score.best` は `_score_best`）。固定するなら `@(symbol: "名前")`
+- 添字は `u16` も書ける（256 要素を超える配列）
+- enum の基になる型は省くと `u8`。型の分かる所で `.NAME` と書ける。`@len(Enum)` はメンバーの数
+
+## 整数（v4 の規則。`plans/v4-plan.md` の「整数の規則」で決めたもの）
+
+- `var w:u16 = a + b`（a, b:u8 = 200, 100）は 300、`var t = a + b` は 44（代入先の型が無ければ 8 ビット）
+- `var h:u16 = hi << 8 | lo` は通る（16 ビットで計算）。`var h = hi << 8` はエラー（必ず 0）
+- `var x:u8 = w`（w:u16）はエラー、`var x:u8 = 300` / `var y:i8 = 200` もエラー。`x = x + vx`（u8 と i8）は通る
+- `x < v`（u8 と i8）、`w > v`（u16 と i8）はエラー。`x == v`（u8 の 250 と i8 の -6）は `true`
+- `var n:i16 = -b`（b:u8 = 5）は -5（代入先で広がる）
+- `-7 / 2` は -4、`-7 % 2` は 1、`7 / -2` は -4（床除算）
+- `var arr = [128, -1]` は `[2]i16`
+
+## 実行
+
+- emu で `main` から戻ると終了コード 0 で終わる（2026-09-30 から。`fclib/emu/runtime_main_return.inc`）。NES は `jmp *` で止まったまま、
+  `fcc run -t nes` は 3600 フレーム（1 分）で「終わらなかった」のエラー
+- `fcc run` の emu のサイクルの上限は無い（テストの `testBuild` と `internal/doccheck` は 5000 万）
+- `fcc fmt` は揃えのための空白（行末のコメントの前・配列の要素の間）を 1 つに詰め、手で折り返した式を 1 行につなぐ
+  （examples のソースは揃えを残すため整形していない）

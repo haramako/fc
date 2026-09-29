@@ -72,7 +72,7 @@ oam −1.2%（−1.8%）、castle のフレームは −0.1〜0.2%。
 struct の配列フィールドをポインタ経由で引く `p.items[i].q` は、`add t1 = p, #k`（t1 は `*[L]U`）・`index t2 = <*U>t1, i`・
 `load_mem d = t2, disp=m` の 16 ビットの番地の計算だったのが `load_mem d = p, i, scale=sizeof(U), disp=k+m`
 （`lda i; asl; clc; adc #k+m; tay; lda (p),y`）になる。添字が長さ L 未満なのは言語の規則（範囲外の添字と配列の外への
-ポインタ演算は未定義。language_reference §6）で、k + 配列全体の大きさ ≤ 256 のときだけ作る。要素 3 バイト以上は
+ポインタ演算は未定義。docs/reference/language.md の「添字と slice」「ポインタ」）で、k + 配列全体の大きさ ≤ 256 のときだけ作る。要素 3 バイト以上は
 fieldindex と同じく `mul j = i, #s`。add と index が参照から離れていても（store の右辺の計算が挟まる）、入力が参照までに
 書き換わらないことを sinkAddress の canSink で見て畳む。あわせて fieldindex も定数の添字を絶対番地に畳む
 （`objs[6].y = 240` が 8 命令から `lda #240; sta objs+43`。入れ子の `ds[1].items[2].id = 5` は `sta ds+13`）。
