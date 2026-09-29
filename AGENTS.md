@@ -7,7 +7,7 @@
 ## Project-Wide Rules
 
 - **コミットメッセージは `<パッケージや領域>: <説明>`**（例: `regalloc: …`、`fclib/nes/vram: …`、`docs: …`）。`[AI]` 接頭辞は付けない
-- **`docs/` は人間向けのドキュメント**（言語仕様など。GitHub Pages の既定の置き場所）。エージェント向けの知識・経緯・計画は `Agent/` に置く
+- **`docs/` は人間向け（主に利用者向け）のドキュメントのサイト**（VitePress で作り GitHub Pages で公開。規約は `docs/AGENTS.md`）。エージェント向けの知識・経緯・計画は `Agent/` に置く
 - **`Agent/` はエージェントの作業領域**（規約は `Agent/AGENTS.md`）。**会話の中で重要な決定・知見が出たら、エージェントは自動で `Agent/discussions/` に記録する**（指示を待たない）
 - **サブフォルダに `AGENTS.md` を追加・新設したら、同じ階層に内容 `@AGENTS.md` のみの `CLAUDE.md` スタブを置く**（Claude Code がそのサブツリーで作業を始めた時に DOX 契約を自動ロードさせるため）。既に中身のある `CLAUDE.md` がある場合は内容を `AGENTS.md` に統合し、`CLAUDE.md` は `@AGENTS.md` のみにする
 - 生成物は直接編集しない: `internal/syntax/parser.go`（`parser.y` から goyacc）、`testdata/golden/`（`-update` で再生成）
@@ -26,7 +26,7 @@ fcc fmt -w src.fc                                               # FC ソース�
 
 ## Branches & Environment
 
-- **開発は `feature/v4`**（fc 4 の言語・標準ライブラリの作り直し。計画は `Agent/wiki/plans/v4-plan.md`）。`feature/v3` は `main` にマージ済み。作業はトピックブランチを切って `feature/v4` に戻す
+- **開発は `feature/v4`**（fc 4 の言語・標準ライブラリの作り直し。計画は `Agent/wiki/plans/v4-plan.md`）。`feature/v3` は `main` にマージ済み。**作業は今のブランチ（通常は `feature/v4`）に直接コミットしてよい**（fuzz で見つけたバグの修正も含む。トピックブランチは要らない）
 - タグ: `v0.0.2`（2026-09-15、最適化前のベースライン）、`ruby-frozen`（Go 移植前の Ruby 版。`fclib/math.fc` / `share/runtime.asm` の sin / atan / rand / 乗算テーブルは `misc/table.rb` の生成物でタグから参照できる）、`go-strict-clone`（移植直後の基準点）。fc はもともと Ruby で書かれ 2026-08〜09 に Go に移植した。Ruby 版との互換は考慮しない
 - 以前のブランチ運用（feature/v2・static-frame の時代）は `Agent/discussions/2026-09-12-branch-history.md`
 
@@ -122,8 +122,9 @@ When the user requests a durable behavior change, record it here or in the relev
 ## Child DOX Index
 
 - `Agent/AGENTS.md` — エージェント作業の蓄積領域。配下に `wiki/`（横断知識・設計・進行中の計画）・`discussions/`（会話と決定の歴史）・`issues/`（Issue 記録）・`scripts/`（補助スクリプト）
+- `docs/AGENTS.md` — 利用者向けドキュメントのサイト（VitePress、GitHub Pages）。書き方の約束・ビルドと公開
 
-Owned directly by root (no child doc): `cmd/`・`pkg/`・`internal/`（コンパイラ本体。パッケージの地図は `Agent/wiki/code-structure.md`）、`fclib/`（FC の標準ライブラリ）、`share/`（ランタイムアセンブリ・リンカ設定）、`test/`（FC のテストソース）、`testdata/`（golden）、`examples/`（実プロジェクト由来の回帰サンプル。`examples/README.md`）、`bench/`（生成コードのベンチ。`bench/README.md`）、`editors/`（エディタ拡張）、`tools/`（開発用ツール）、`docs/`（人間向けドキュメント。GitHub Pages）、`README.md`。
+Owned directly by root (no child doc): `cmd/`・`pkg/`・`internal/`（コンパイラ本体。パッケージの地図は `Agent/wiki/code-structure.md`）、`fclib/`（FC の標準ライブラリ）、`share/`（ランタイムアセンブリ・リンカ設定）、`test/`（FC のテストソース）、`testdata/`（golden）、`examples/`（実プロジェクト由来の回帰サンプル。`examples/README.md`）、`bench/`（生成コードのベンチ。`bench/README.md`）、`editors/`（エディタ拡張）、`tools/`（開発用ツール）、`README.md`。
 
 以下で `Agent/AGENTS.md` を毎セッション読み込む（Claude Code の import。他エージェントはこの行を「必読ファイルの指示」として読むこと。DOX の「Read Before Editing」は `Agent/` 配下を触らないセッションでは読まれないため、discussions 自動記録を毎セッション発火させる目的で強制ロードする）：
 

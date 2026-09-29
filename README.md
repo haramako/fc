@@ -84,7 +84,7 @@ test/             FC言語のテストソース
 examples/         実プロジェクト由来の回帰テスト用サンプル (miku / castle)
 testdata/golden/  golden データ
 tools/            サンプル同期ツール
-docs/             人間向けドキュメント (言語仕様。GitHub Pages)
+docs/             利用者向けドキュメントのサイト (VitePress。GitHub Pages)
 Agent/            開発の知識・設計・経緯・計画 (主にエージェント向け。AGENTS.md)
 ```
 

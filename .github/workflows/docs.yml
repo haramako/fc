@@ -1,0 +1,65 @@
+name: docs
+
+# docs/ の VitePress のサイトをビルドして GitHub Pages に公開する (https://haramako.github.io/fc/)。
+# リポジトリの設定で Pages の Source を「GitHub Actions」にしておくこと。
+
+on:
+  push:
+    branches: [feature/v4]   # main にマージしたら main に変える (github-pages 環境の許可するブランチも)
+    paths:
+      - "docs/**"
+      - "tools/vscode-fc/syntaxes/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "tools/vscode-fc/syntaxes/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: docs
+
+      # 切れたリンクがあると失敗する
+      - name: Build
+        run: npm run build
+        working-directory: docs
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

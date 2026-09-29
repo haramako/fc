@@ -15,6 +15,9 @@
 
 ## Log
 
+- 2026-09-30 [文書への参照の書き方](2026-09-30-doc-reference-style.md) — § の番号をやめ、ファイル名と見出しの言葉で指す。コードからは design/ か docs/ を指す
+- 2026-09-30 [利用者向けドキュメントの方針](2026-09-30-user-docs-direction.md) — docs/ に利用者向けを作り Pages で公開、fc 4 だけ書く、旧 language_reference は参考にして後で消す（計画は wiki/plans/user-docs.md）
+- 2026-09-30 [今のブランチへの直接コミット](2026-09-30-direct-commit-to-current-branch.md) — トピックブランチを切らず今のブランチ（feature/v4）に直接コミットしてよい
 - 2026-09-30 [Agent/ の導入と doc/ の振り分け](2026-09-30-agent-workspace-and-doc-split.md) — doc/ を人間向けに絞り、設計は wiki/design・計画は wiki/plans・過去の検討はここへ。development_notes を分割
 - 2026-09-21 [アクティベーション単位のグローバル領域](2026-09-21-activation-memory-ideas.md) — 検討メモ
 - 2026-09-20 [FC V3 検討メモ](2026-09-20-v3-plan.md) — v3 の言語変更の検討と実装記録（v3 は main にマージ済み）
