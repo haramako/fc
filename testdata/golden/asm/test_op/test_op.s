@@ -1581,18 +1581,9 @@ _test_op_gw: .res 2
 	;;;=============================
 .segment "test_op"
 .proc _test_op_test_pointer_op
-	lda #.LOBYTE(_test_op_gi)
-	sta 0+<F_test_op_test_pointer_op+3
-	lda #.HIBYTE(_test_op_gi)
-	sta 1+<F_test_op_test_pointer_op+3
-	lda 0+<F_test_op_test_pointer_op+3
-	sta 0+<F_test_op_test_pointer_op+5
-	lda 1+<F_test_op_test_pointer_op+3
-	sta 1+<F_test_op_test_pointer_op+5
 	lda #99
 	sta 0+_test_op_gi
-	ldy #0
-	lda (F_test_op_test_pointer_op+5),y
+	lda 0+_test_op_gi
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -1606,8 +1597,7 @@ _test_op_gw: .res 2
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #98
-	ldy #0
-	sta (F_test_op_test_pointer_op+5),y
+	sta 0+_test_op_gi
 	lda 0+_test_op_gi
 	sta <F_unittest_assert_equal+0
 	lda #0
@@ -1621,27 +1611,17 @@ _test_op_gw: .res 2
 	lda #.HIBYTE(_564)
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
-	lda #.LOBYTE(_test_op_gw)
-	sta 0+<F_test_op_test_pointer_op+3
-	lda #.HIBYTE(_test_op_gw)
-	sta 1+<F_test_op_test_pointer_op+3
-	lda 0+<F_test_op_test_pointer_op+3
-	sta 0+<F_test_op_test_pointer_op+5
-	lda 1+<F_test_op_test_pointer_op+3
-	sta 1+<F_test_op_test_pointer_op+5
 	lda #15
 	sta 0+_test_op_gw
 	lda #39
 	sta 1+_test_op_gw
-	ldy #0
-	lda (F_test_op_test_pointer_op+5),y
-	sta 0+<F_test_op_test_pointer_op+3
-	ldy #1
-	lda (F_test_op_test_pointer_op+5),y
-	sta 1+<F_test_op_test_pointer_op+3
-	lda 0+<F_test_op_test_pointer_op+3
+	lda 0+_test_op_gw
+	sta 0+<F_test_op_test_pointer_op+0
+	lda 1+_test_op_gw
+	sta 1+<F_test_op_test_pointer_op+0
+	lda 0+<F_test_op_test_pointer_op+0
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_op_test_pointer_op+3
+	lda 1+<F_test_op_test_pointer_op+0
 	sta <F_unittest_assert_equal+1
 	lda #15
 	sta <F_unittest_assert_equal+2
@@ -1653,11 +1633,9 @@ _test_op_gw: .res 2
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #14
-	ldy #0
-	sta (F_test_op_test_pointer_op+5),y
+	sta 0+_test_op_gw
 	lda #39
-	ldy #1
-	sta (F_test_op_test_pointer_op+5),y
+	sta 1+_test_op_gw
 	lda 0+_test_op_gw
 	sta <F_unittest_assert_equal+0
 	lda 1+_test_op_gw
@@ -1672,17 +1650,6 @@ _test_op_gw: .res 2
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #99
-	sta 0+<F_test_op_test_pointer_op+0
-	lda #.LOBYTE(F_test_op_test_pointer_op+0)
-	sta 0+<F_test_op_test_pointer_op+3
-	lda #.HIBYTE(F_test_op_test_pointer_op+0)
-	sta 1+<F_test_op_test_pointer_op+3
-	lda 0+<F_test_op_test_pointer_op+3
-	sta 0+<F_test_op_test_pointer_op+5
-	lda 1+<F_test_op_test_pointer_op+3
-	sta 1+<F_test_op_test_pointer_op+5
-	ldy #0
-	lda (F_test_op_test_pointer_op+5),y
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -1696,9 +1663,6 @@ _test_op_gw: .res 2
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #98
-	sta 0+<F_test_op_test_pointer_op+0
-	ldy #0
-	lda (F_test_op_test_pointer_op+5),y
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -1712,26 +1676,8 @@ _test_op_gw: .res 2
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #15
-	sta 0+<F_test_op_test_pointer_op+1
-	lda #39
-	sta 1+<F_test_op_test_pointer_op+1
-	lda #.LOBYTE(F_test_op_test_pointer_op+1)
-	sta 0+<F_test_op_test_pointer_op+3
-	lda #.HIBYTE(F_test_op_test_pointer_op+1)
-	sta 1+<F_test_op_test_pointer_op+3
-	lda 0+<F_test_op_test_pointer_op+3
-	sta 0+<F_test_op_test_pointer_op+5
-	lda 1+<F_test_op_test_pointer_op+3
-	sta 1+<F_test_op_test_pointer_op+5
-	ldy #0
-	lda (F_test_op_test_pointer_op+5),y
-	sta 0+<F_test_op_test_pointer_op+3
-	ldy #1
-	lda (F_test_op_test_pointer_op+5),y
-	sta 1+<F_test_op_test_pointer_op+3
-	lda 0+<F_test_op_test_pointer_op+3
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_op_test_pointer_op+3
+	lda #39
 	sta <F_unittest_assert_equal+1
 	lda #15
 	sta <F_unittest_assert_equal+2
@@ -1743,18 +1689,8 @@ _test_op_gw: .res 2
 	sta <F_unittest_assert_equal+5
 	jsr _unittest_assert_equal
 	lda #14
-	sta 0+<F_test_op_test_pointer_op+1
-	lda #39
-	sta 1+<F_test_op_test_pointer_op+1
-	ldy #0
-	lda (F_test_op_test_pointer_op+5),y
-	sta 0+<F_test_op_test_pointer_op+3
-	ldy #1
-	lda (F_test_op_test_pointer_op+5),y
-	sta 1+<F_test_op_test_pointer_op+3
-	lda 0+<F_test_op_test_pointer_op+3
 	sta <F_unittest_assert_equal+0
-	lda 1+<F_test_op_test_pointer_op+3
+	lda #39
 	sta <F_unittest_assert_equal+1
 	lda #14
 	sta <F_unittest_assert_equal+2

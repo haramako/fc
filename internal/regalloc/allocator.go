@@ -6,6 +6,8 @@ package regalloc
 
 import (
 	"fmt"
+	"slices"
+
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/types"
@@ -454,9 +456,13 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 }
 
 // allocateCond はコンディションレジスタを割り当てられるなら割り当てる。
+// OpNot は元の値がフラグのときだけフラグにできるので、命令の順 (live range の始まりの順) に見る (インライン展開した関数の
+// $result は変数の並びで計算の一時の値より前にあり、`eq t; not $result t; if_true $result` の $result を先に見てしまう)。
 func allocateCond(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 	var condVars []*ir.Value
-	for _, e := range registerVars {
+	order := slices.Clone(registerVars)
+	slices.SortStableFunc(order, func(a, b *allocEntry) int { return a.key.LiveRange.Min - b.key.LiveRange.Min })
+	for _, e := range order {
 		v := e.key
 		if v.Type.Size != 1 {
 			continue

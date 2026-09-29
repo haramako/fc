@@ -246,10 +246,12 @@ func TestSSASimplify(t *testing.T) {
 // アドレスを取られた変数・一部だけ書かれる変数は対象外
 func TestSSAExcluded(t *testing.T) {
 	x, w, p, tv := local("x", u8()), local("w", u16()), local("p", tu.PointerTo(u8())), tmp("t", u8())
+	k := ir.NewLocal("k", u8(), ir.LTArg)
+	// 添字のある書き込みは番地が分からない (添字の無い `*p = 1` は directMem が x への直の書き込みにする)
 	lmd := lambda(
 		op(ir.OpLoad, x, lit(5, u8())),
 		op(ir.OpRef, p, x),
-		ir.NewStoreMem(p, nil, 0, 0, 1, lit(1, u8())),
+		ir.NewStoreMem(p, k, 1, 0, 1, lit(1, u8())),
 		op(ir.OpAdd, tv, x, lit(1, u8())),
 		pushArg(u8(), tv),
 		op(ir.OpLoad, w, lit(0, u16())),
@@ -260,11 +262,33 @@ func TestSSAExcluded(t *testing.T) {
 	check(t, lmd,
 		"load x = #5",
 		"ref p = x",
-		"store_mem p, #1, w=1",
+		"store_mem p, k, #1, w=1",
 		"add t = x, #1",
 		"push_arg nil = t",
 		"load w = #0",
 		"load w.1:1 = #2",
 		"push_arg nil = w",
+	)
+}
+
+// TestSSADirectMem: 番地が変数の参照 (`&g`、写しとフィールドのずれ `+ #k` を辿る) の添字の無い load_mem / store_mem は、
+// その変数の直の読み書きになる (directMem。inline した関数に渡した struct のポインタ)。
+func TestSSADirectMem(t *testing.T) {
+	g := ir.NewGlobal("g", tu.ArrayOf(u8(), 3), "_g")
+	p, q, f := local("p", tu.PointerTo(u8())), tmp("q", tu.PointerTo(u8())), tmp("f", tu.PointerTo(u8()))
+	v, d := local("v", u8()), local("d", u8())
+	lmd := lambda(
+		op(ir.OpRef, q, g),
+		op(ir.OpLoad, p, q),
+		op(ir.OpAdd, f, p, lit(1, u8())),
+		ir.NewStoreMem(f, nil, 0, 1, 1, v),
+		ir.NewLoadMem(d, p, nil, 0, 0),
+		pushArg(u8(), d),
+	)
+	propagateSSA(lmd)
+	check(t, lmd,
+		"load g.2:1 = v",
+		"load d = g.0:1",
+		"push_arg nil = d",
 	)
 }

@@ -488,7 +488,10 @@ go test ./...                                    # 全部 (golden + examples + N
   動かし、`Open(rom)` → `SetButtons` / `RunFrames` → `Image()`（256×240。上下左右の切り落としはコアの設定で切る）/ `RAM()`。
   内蔵のランナーは描画の途中の変化（スクロールの分割・ラスター効果）を描かないので、見た目はこちらで確かめる（MMC3 の走査線の
   IRQ も動く）。コアはプロセスに 1 つだけなので Open から Close まで大域の錠を持つ（並列のテストは待つ）。無ければテストは Skip。
-  サンプルのテスト（`internal/nes/samples_test.go`）は `FC_SAMPLE_PNG_DIR=<dir>` で画面を PNG に書く
+  サンプルのテスト（`internal/nes/samples_test.go`）は `FC_SAMPLE_PNG_DIR=<dir>` で画面を PNG に書く。
+  **ROM が変わるコンパイラの変更は castle を前と後で比べる**: `FC_QN_OLD=前.nes FC_QN_NEW=後.nes go test ./internal/quicknes
+  -run ComparePlay -v`（`TestComparePlay`: タイトル → 開始 → 右へ歩いて跳ぶ 3000 フレームを同じ入力で動かし、30 フレームごとの
+  画面 100 枚を比べる。前の ROM は `testdata/golden/examples/castle.nes`、後は `fcc build -t nes main.fc` を examples/castle/src の写しで）
 - 内蔵NESランナー（internal/nes）の fc 向けの口（2026-09-29）: $4018 に書いた値を `Machine.Output` へ、$4019 に書いた値を終了コードに
   （`RunUntilExit`。NES の console が書く。`fcc test -t nes` が使う）、2P のパッド `SetButtons2`、描画中に vblank（NMI から
   `VblankCycles` = 2273 サイクル）の外で PPUDATA / OAM DMA に触った回数 `Stats.LateVramWrites` と、vblank の中で PPU に最後に
@@ -612,6 +615,11 @@ fc 3 の `@log` は命令を出さず、次の命令への注釈 `ir.Op.Logs` �
 3. **変数の値の意味を変える変換は印を立てる。** ループの中で変数の更新を別の変数に置き換える（ywalk のポインタ `p` を
    `p` と `k` の組にする）なら `Value.LogNoValue`、死んだ代入を消すなら `Value.LogStale`（SSA の eliminateDead）。
    立てないと `@log` が古い値を「正しい値」として出す。いちばん気づきにくい。
+4. **asm の後処理では制御の流れを変えない**（2026-09-29）。`@log` の地点のラベル（`__fclog_N`）は分岐の延長の後で置く
+   （`placeLogLabels`）ので、asm の上で `jmp L` の飛び先を付け替えたり `jsr f; rts` を `jmp f`（末尾呼び出し）にしたりすると、
+   飛び先のラベルの地点・呼び出しの直後の地点が消える。`-g` / `@log` のときだけやめると ROM が変わる（`TestLogZeroCost`）。
+   飛び先が値の無い return だけの jump は IR で注釈を引き継いで行う（`opt/jumps.go` の `jumpsToReturn`）。末尾呼び出しは
+   呼び出しの直後の地点を置く所が無いので行わない。
 
 検査: `TestLogZeroCost`（`internal/driver/log_test.go`）は fuzz のプログラムの全部の文の前に変数を全部出す `@log` を置き、
 ROM とプログラムの出力が変わらないこと（-O 0 / -O 2）を確かめ、`@log` の値を -O 0 と -O 2 で比べる。値の食い違った種が

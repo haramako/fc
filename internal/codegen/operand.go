@@ -148,6 +148,12 @@ func (l *Llc) addrExpr(v ir.Operand) string {
 	return l.toAsm(v)
 }
 
+// framePointeredArray は v がフレーム上のローカル配列をポインタとして使うものか (先頭の番地は S + addr + X: byte では表せない)。
+func framePointeredArray(v ir.Operand) bool {
+	pa, ok := v.(*ir.PointeredArray)
+	return ok && ir.ValLocation(pa.From) == ir.LocFrame
+}
+
 func isValueOrCasted(v ir.Operand) bool {
 	switch v.(type) {
 	case *ir.Value, *ir.CastedValue:

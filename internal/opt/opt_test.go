@@ -386,6 +386,19 @@ func TestSimplifyJumps(t *testing.T) {
 	simplifyJumps(lmd)
 	check(t, lmd, "if_true c L2", "load x = #1", "label L2", "return")
 
+	// 残った jump の飛び先が return だけ: その場で return (if / else の then の終わり)
+	lmd = lambda(
+		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{c}, Label: "L1"},
+		&ir.Op{Code: ir.OpLoad, Dst: x, Src: []ir.Operand{lit(1, u8())}},
+		&ir.Op{Code: ir.OpJump, Label: "L2"},
+		&ir.Op{Code: ir.OpLabel, Label: "L1"},
+		&ir.Op{Code: ir.OpLoad, Dst: x, Src: []ir.Operand{lit(2, u8())}},
+		&ir.Op{Code: ir.OpLabel, Label: "L2"},
+		&ir.Op{Code: ir.OpReturn},
+	)
+	simplifyJumps(lmd)
+	check(t, lmd, "if c L1", "load x = #1", "return", "label L1", "load x = #2", "return")
+
 	// ループの回転: hlc の while の形
 	lmd = lambda(
 		&ir.Op{Code: ir.OpLabel, Label: "@begin_1"},

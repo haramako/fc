@@ -233,6 +233,43 @@ func (l *Llc) shiftByte(op *ir.Op, n int, signed bool) ([]any, bool) {
 	return []any{l.loadA(op.In(0), 1), l.storeA(op.Dst, 0), "asl a", "lda #0", "sbc #0", "eor #255", l.storeA(op.Dst, 1)}, true
 }
 
+// shiftZeroExt は 1 バイトをゼロ拡張した 2 バイトの値の 1〜7 の左シフト (`(n as u16) << 5`: 番地の計算)。上位は元の値を
+// 右にずらしたもの (1 ビットずつ asl lo; rol hi を回すと 5 で 20 命令・約 60 サイクル):
+//
+//	<< 1:      lda x; asl a; sta lo; lda #0; rol a; sta hi
+//	<< 2:      lda #0; sta hi; lda x; asl a; rol hi; asl a; rol hi; sta lo
+//	<< 3〜7:   lda x; lsr a × (8-n); sta hi; lda x; asl a × n; sta lo
+func (l *Llc) shiftZeroExt(op *ir.Op, n int) ([]any, bool) {
+	src, ok := op.In(0).(*ir.CastedValue)
+	if op.Code != ir.OpShiftLeft || n < 1 || n > 7 || !ok || src.Width != 1 || ir.ValType(op.Dst).Size != 2 || src.Type.Size != 2 {
+		return nil, false
+	}
+	for _, v := range []ir.Operand{op.Dst, src} {
+		if !isValueOrCasted(v) || ir.ValKind(v) == ir.KindLiteral || l.inA(v) || l.inY(v) || l.inX(v) || ir.ValLocation(v) == ir.LocCond {
+			return nil, false
+		}
+	}
+	if sameStorage(op.Dst, src) {
+		return nil, false
+	}
+	x, lo, hi := "lda "+l.byte(src, 0), l.byte(op.Dst, 0), l.byte(op.Dst, 1)
+	switch {
+	case n == 1:
+		return []any{x, "asl a", "sta " + lo, "lda #0", "rol a", "sta " + hi}, true
+	case n == 2:
+		return []any{"lda #0", "sta " + hi, x, "asl a", "rol " + hi, "asl a", "rol " + hi, "sta " + lo}, true
+	}
+	r := []any{x}
+	for k := 0; k < 8-n; k++ {
+		r = append(r, "lsr a")
+	}
+	r = append(r, "sta "+hi, x)
+	for k := 0; k < n; k++ {
+		r = append(r, "asl a")
+	}
+	return append(r, "sta "+lo), true
+}
+
 // shiftInMemory は定数シフトをメモリ上で行う (Dst がメモリにある 1 / 2 バイトのとき)。
 //
 //	1 バイト:  asl x / lsr x                 (lda; clc; rol a; sta の 10 サイクルが 5 に)

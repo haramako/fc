@@ -35,14 +35,13 @@ __MODULE_UNITTEST__ = 1
 	jsr _stdio_print
 	lda #1
 	jsr _stdio_exit
-	jmp @end_3
+	rts
 @else_2:
 	lda #.LOBYTE(_11)
 	sta <F_stdio_print+0
 	lda #.HIBYTE(_11)
 	sta <F_stdio_print+1
 	jsr _stdio_print
-@end_3:
 	rts
 _6:
 		.byte 10,69,82,82,79,82,58,32,0
@@ -102,14 +101,13 @@ _11:
 	jsr _stdio_print
 	lda #1
 	jsr _stdio_exit
-	jmp @end_15
+	rts
 @else_14:
 	lda #.LOBYTE(_30)
 	sta <F_stdio_print+0
 	lda #.HIBYTE(_30)
 	sta <F_stdio_print+1
 	jsr _stdio_print
-@end_15:
 	rts
 _21:
 		.byte 10,69,82,82,79,82,58,32,0

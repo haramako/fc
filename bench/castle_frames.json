@@ -1,25 +1,25 @@
 {
   "area8b_idle": {
     "frames": 300,
-    "avg": 12181,
-    "max": 15835,
+    "avg": 12164,
+    "max": 15813,
     "over": 0
   },
   "area8b_jump": {
     "frames": 540,
-    "avg": 12646,
-    "max": 16105,
+    "avg": 12629,
+    "max": 16091,
     "over": 0
   },
   "field": {
     "frames": 1080,
-    "avg": 8670,
-    "max": 29873,
+    "avg": 8657,
+    "max": 29871,
     "over": 2
   },
   "start": {
     "frames": 300,
-    "avg": 6979,
+    "avg": 6966,
     "max": 29872,
     "over": 9
   },

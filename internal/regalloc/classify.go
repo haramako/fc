@@ -315,7 +315,11 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 			}
 		}
 	}
-	if vY != nil && !involves(op, vY) && (needsY(op, vY) || d.UseY) {
+	xKept := vX // X のまま実行する常駐 (添字に使えば Y は要らない)
+	if d.X != ResFriendly {
+		xKept = nil
+	}
+	if vY != nil && !involves(op, vY) && (needsY(op, vY, xKept) || d.UseY) {
 		d.Y = ResClobber
 	}
 	return d, gain

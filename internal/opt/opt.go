@@ -131,6 +131,7 @@ func changes(f func(lmd *ir.Lambda) bool) func(*ir.Lambda, *types.Universe) bool
 func Passes() []Pass {
 	return []Pass{
 		{Name: "aggcopy", Run: changes(propagateAggregateCopies)}, // インライン展開の引数の slice の写し
+		{Name: "aggbuild", Run: changes(assembleInPlace)},         // `s = s[n..]` の組み立ての一時の値
 		{Name: "sliceargs", Run: changes(splitSliceArgs)},         // sema の形 (部分の load の直後の push_arg) のうちに
 		{Name: "ssa", Run: always(propagateSSA)},
 		{Name: "mul", Run: always(expandMul)},

@@ -201,7 +201,7 @@ func needsX(op *ir.Op) bool {
 }
 
 // needsY は op の codegen が (常駐変数としてでなく) Y を作業用に使うか。
-func needsY(op *ir.Op, vY *ir.Value) bool {
+func needsY(op *ir.Op, vY, vX *ir.Value) bool {
 	switch op.Code {
 	case ir.OpIndex,
 		ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpCall, ir.OpFastcall, ir.OpAsm, ir.OpReturn, // return: グローバルの書き戻しのため
@@ -210,8 +210,12 @@ func needsY(op *ir.Op, vY *ir.Value) bool {
 	case ir.OpLoadMem, ir.OpStoreMem:
 		// 添字の無い参照: グローバルの配列は絶対番地 (Y を使わない)、ポインタ経由は ldy #k を使う。
 		// 添字がバイト単位で Y に常駐しているならそのまま
-		if m := op.Mem(); m.Index == nil {
+		m := op.Mem()
+		if m.Index == nil {
 			return !m.BaseIsArray()
+		}
+		if m.BaseIsArray() && byteIndex(op) && vX != nil && isV(op.In(1), vX) {
+			return false // グローバルの配列の添字が X に常駐 (lda a,x / sta a,x)
 		}
 		return !directIndex(op) || !isV(op.In(1), vY)
 	case ir.OpPushArg, ir.OpPushFastcallArg:

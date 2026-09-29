@@ -124,3 +124,187 @@ func opReads(op *ir.Op, v *ir.Value) bool {
 	}
 	return false
 }
+
+// assembleInPlace は部分ごとに組み立てた一時の値を丸ごと写すのをやめ、部分を写し先へ直に書く:
+//
+//	index $12 ← s.ptr, n          index s.ptr ← s.ptr, n
+//	sub   $13 ← s.len, n          sub   s.len ← s.len, n
+//	load  $14.ptr ← $12      →
+//	load  $14.len ← $13
+//	load  s ← $14
+//
+// sema は `s = s[n..]` / `t = s[..n]` / struct の値をこの形に作る (3 バイト以上の値は SSA の外)。写し先 D はアドレスを取られない
+// ローカルで、組み立ての間 (最初の部分の load から丸ごとの写しまで) は副作用の無い命令だけ。部分を D に書く所から写しまでに
+// D のそのバイトを読み書きする命令が無いこと。さらに部分の値が 1 度だけ使う一時の値なら、それを計算する命令の結果を直に書く
+// (間に D のそのバイトに触れる命令が無く、副作用の無い命令だけのとき)。
+func assembleInPlace(lmd *ir.Lambda) bool {
+	ops := lmd.Ops
+	pinned := map[*ir.Value]bool{} // アドレスを取られた・asm と @log が触る変数
+	defs := map[*ir.Value][]int{}
+	uses := map[*ir.Value][]int{}
+	for i, op := range ops {
+		if op == nil {
+			continue
+		}
+		if op.Code == ir.OpRef || op.Code == ir.OpAsm {
+			for _, s := range op.Src {
+				if v := ir.UnderlyingValue(s); v != nil {
+					pinned[v] = true
+				}
+			}
+		}
+		for _, s := range append([]ir.Operand{op.Dst}, op.Src...) {
+			if pa, ok := s.(*ir.PointeredArray); ok {
+				if v := ir.UnderlyingValue(pa.From); v != nil {
+					pinned[v] = true
+				}
+			}
+		}
+		for _, lp := range op.Logs {
+			for _, a := range lp.Args {
+				if v := ir.UnderlyingValue(a.Val); v != nil {
+					pinned[v] = true
+				}
+				for _, b := range a.Bytes {
+					if v := ir.UnderlyingValue(b); v != nil {
+						pinned[v] = true
+					}
+				}
+			}
+		}
+		if v := ir.UnderlyingValue(op.Dst); v != nil && op.Dst != nil {
+			defs[v] = append(defs[v], i)
+		}
+		for _, s := range op.Src {
+			if v := ir.UnderlyingValue(s); v != nil {
+				uses[v] = append(uses[v], i)
+			}
+		}
+	}
+	// pure は (a, b) の命令がすべて副作用も分岐も無いか
+	pure := func(a, b int) bool {
+		for _, o := range ops[a+1 : b] {
+			if o != nil && !o.Code.IsPure() {
+				return false
+			}
+		}
+		return true
+	}
+	// clear は (a, b) の命令が d のバイト [lo, hi) を読み書きしないか
+	clear := func(a, b int, d *ir.Value, lo, hi int) bool {
+		for _, o := range ops[a+1 : b] {
+			if o == nil {
+				continue
+			}
+			for _, s := range append([]ir.Operand{o.Dst}, o.Src...) {
+				if overlaps(s, d, lo, hi) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	changed := false
+	for i, op := range ops {
+		if op == nil || op.Code != ir.OpLoad && (op.Code != ir.OpReturn || len(op.Src) == 0 || lmd.Result == nil) {
+			continue
+		}
+		t, ok := op.Src[0].(*ir.Value)
+		d, ok2 := op.Dst.(*ir.Value)
+		if op.Code == ir.OpReturn {
+			d, ok2 = lmd.Result, true // `return s[..n]`: 戻り値の領域に直に組み立てる
+		}
+		if !ok || !ok2 || t == d || t.LocalType != ir.LTTemp || t.Kind != ir.KindLocal || d.Kind != ir.KindLocal ||
+			t.Type.Size < 3 || t.Type.Size != d.Type.Size || pinned[t] || pinned[d] || t.Home != nil || d.Home != nil ||
+			len(uses[t]) != 1 || uses[t][0] != i {
+			continue
+		}
+		// t の定義はすべて i より前の部分の load で、重ならずに全部のバイトを覆う
+		var parts []*ir.Op
+		covered := make([]bool, t.Type.Size)
+		first := i
+		good := true
+		for _, k := range defs[t] {
+			p := ops[k]
+			cv, ok := p.Dst.(*ir.CastedValue)
+			if k > i || p.Code != ir.OpLoad || !ok || !cv.Plain() || cv.From != ir.Operand(t) {
+				good = false
+				break
+			}
+			for b := cv.Offset; b < cv.Offset+cv.Type.Size; b++ {
+				if b >= len(covered) || covered[b] {
+					good = false
+					break
+				}
+				covered[b] = true
+			}
+			first = min(first, k)
+			parts = append(parts, p)
+		}
+		if !good || len(parts) == 0 || !pure(first-1, i) {
+			continue
+		}
+		for _, c := range covered {
+			good = good && c
+		}
+		if !good {
+			continue
+		}
+		for _, k := range defs[t] {
+			cv := ops[k].Dst.(*ir.CastedValue)
+			if !clear(k, i, d, cv.Offset, cv.Offset+cv.Type.Size) {
+				good = false
+				break
+			}
+		}
+		if !good {
+			continue
+		}
+		for _, k := range defs[t] {
+			p := ops[k]
+			cv := p.Dst.(*ir.CastedValue)
+			dst := ir.NewCastedValue(d, cv.Type, cv.Offset)
+			p.Dst = dst
+			// 部分の値が 1 度だけ使う一時の値なら、それを計算する命令に直に書かせる
+			x, ok := p.Src[0].(*ir.Value)
+			if !ok || x.LocalType != ir.LTTemp || x.Kind != ir.KindLocal || pinned[x] || len(defs[x]) != 1 || len(uses[x]) != 1 ||
+				uses[x][0] != k {
+				continue
+			}
+			j := defs[x][0]
+			q := ops[j]
+			if j > k || q.Dst != ir.Operand(x) || !q.Code.ReadsBeforeWrite() || !sameBits(q.Code, cv.Type, x.Type) ||
+				!pure(j, k) || !clear(j, k, d, cv.Offset, cv.Offset+cv.Type.Size) {
+				continue
+			}
+			q.Dst = dst
+			ir.DropOp(ops, k)
+		}
+		if op.Code == ir.OpReturn {
+			op.Src[0] = d
+		} else {
+			ir.DropOp(ops, i)
+		}
+		changed = true
+	}
+	return changed
+}
+
+// overlaps は o が変数 v のバイト [lo, hi) に触れうるか (ポインタで指す先の配列は v の中身を読むものとみなす)。
+func overlaps(o ir.Operand, v *ir.Value, lo, hi int) bool {
+	switch x := o.(type) {
+	case *ir.Value:
+		return x == v
+	case *ir.CastedValue:
+		if ir.UnderlyingValue(x) != v {
+			return overlaps(x.From, v, lo, hi)
+		}
+		if _, ok := x.From.(*ir.Value); !ok {
+			return true
+		}
+		return x.Offset < hi && lo < x.Offset+x.Type.Size
+	case *ir.PointeredArray:
+		return overlaps(x.From, v, lo, hi)
+	}
+	return false
+}

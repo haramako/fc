@@ -47,11 +47,7 @@ _stdio_HEX:
 	lda 0+<F_stdio_print_int16+9
 	ldy #0
 	sta (F_stdio_print_int16+7),y
-	lda 1+<F_stdio_print_int16+0
-	sta 0+<F_stdio_print_int16+7
-	lda #0
-	sta 1+<F_stdio_print_int16+7
-	lda 0+<F_stdio_print_int16+7
+	lda 0+<F_stdio_print_int16+1
 	and #15
 	tay
 	lda _stdio_HEX+0,y
