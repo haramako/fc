@@ -180,3 +180,84 @@ function main():void
 		}
 	}
 }
+
+// TestMemSpeed: mem.fill / copy / move (重なりを後ろから) / zero の 1000 バイトのサイクル数を出し、中身を確かめる (-O 0 / -O 2)。
+// asm の版の速さの退行を見張る (上限は 1 バイトあたり)。
+func TestMemSpeed(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, call string
+		limit      float64 // 1 バイトあたりのサイクル数の上限
+	}{
+		{"fill", "mem.fill(a, 7);", 12},
+		{"copy", "mem.copy(b, a);", 20},
+		{"move", "mem.move(a[1..], a);", 22},
+		{"zero", "mem.zero(b);", 12},
+	} {
+		src := `#fc 4
+use console;
+use mem;
+var a:[1000]u8 @(segment: "BSS_EX");
+var b:[1000]u8 @(segment: "BSS_EX");
+function main():void
+{
+	for (var i:u16 = 0; i < 1000; i += 1) {
+		a[i] = i as u8;
+		b[i] = 0x55;
+	}
+	console.bench_start();
+	` + c.call + `
+	console.bench_end();
+	var sa:u16 = 0;
+	var sb:u16 = 0;
+	for (var i:u16 = 0; i < 1000; i += 1) {
+		sa = (sa << 1 | sa >> 15) ^ a[i];
+		sb = (sb << 1 | sb >> 15) ^ b[i];
+	}
+	printf("{} {}\n", sa, sb);
+	console.exit(0);
+}
+`
+		// 参照 (Go)
+		a, b := make([]byte, 1000), make([]byte, 1000)
+		for i := range a {
+			a[i], b[i] = byte(i), 0x55
+		}
+		switch c.name {
+		case "fill":
+			for i := range a {
+				a[i] = 7
+			}
+		case "copy":
+			copy(b, a)
+		case "move":
+			copy(a[1:], a)
+		case "zero":
+			clear(b)
+		}
+		sum := func(x []byte) uint16 {
+			s := uint16(0)
+			for _, v := range x {
+				s = (s<<1 | s>>15) ^ uint16(v)
+			}
+			return s
+		}
+		want := fmt.Sprintf("%d %d\n", sum(a), sum(b))
+		for _, level := range []int{-1, 0} {
+			res := testBuild(t, buildSpec{Files: map[string]string{"t.fc": src}, Run: true, Level: level})
+			if res.Err != nil {
+				t.Fatalf("%s: %v", c.name, res.Err)
+			}
+			if res.Stdout != want {
+				t.Errorf("%s (-O %d): %q, want %q", c.name, level, res.Stdout, want)
+			}
+			if level == 0 {
+				per := float64(res.Res.Cycles) / 1000
+				t.Logf("%s: 1000 バイトで %d サイクル (1 バイト %.1f)", c.name, res.Res.Cycles, per)
+				if per > c.limit {
+					t.Errorf("%s: 1 バイト %.1f サイクル (上限 %.0f)", c.name, per, c.limit)
+				}
+			}
+		}
+	}
+}

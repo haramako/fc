@@ -1,16 +1,16 @@
 #fc 4
 // メモリ (バイト列) の操作 (doc/v4_stdlib.md §3.1)。どれも slice で受け取る ([]u8 からも暗黙に)。長さ 0 は何もしない。
+// fill / copy / move の本体は asm (mem.asm。1 バイトあたり fill 約 11、copy 約 16、move 約 18 サイクル)。
 @(bank: -1);
+
+function fill_raw(dst:*u8, n:u16, v:u8):void @(abi: "frame");
+function copy_raw(dst:*u8, src:*const u8, n:u16):void @(abi: "frame");
+function move_back_raw(dst:*u8, src:*const u8, n:u16):void @(abi: "frame");
+@include("mem.asm");
 
 public function fill(dst:[:u16]u8, v:u8):void
 {
-	var p = @ptr(dst);
-	var n = @len(dst);
-	while (n != 0) {
-		*p = v;
-		p += 1;
-		n -= 1;
-	}
+	fill_raw(@ptr(dst), @len(dst), v);
 }
 
 public function zero(dst:[:u16]u8):void
@@ -25,15 +25,7 @@ public function copy(dst:[:u16]u8, src:[:u16]const u8):u16
 	if (@len(src) < n) {
 		n = @len(src);
 	}
-	var d = @ptr(dst);
-	var s = @ptr(src);
-	var k = n;
-	while (k != 0) {
-		*d = *s;
-		d += 1;
-		s += 1;
-		k -= 1;
-	}
+	copy_raw(@ptr(dst), @ptr(src), n);
 	return n;
 }
 
@@ -47,12 +39,9 @@ public function move(dst:[:u16]u8, src:[:u16]const u8):u16
 	var d = @ptr(dst);
 	var s = @ptr(src);
 	if (@bitcast(u16, d) <= @bitcast(u16, s)) {
-		return copy(dst, src);
-	}
-	var k = n;
-	while (k != 0) {
-		k -= 1;
-		d[k] = s[k];
+		copy_raw(d, s, n);
+	} else {
+		move_back_raw(d, s, n);
 	}
 	return n;
 }

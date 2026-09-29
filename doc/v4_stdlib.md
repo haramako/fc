@@ -343,8 +343,8 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
 
 1. **決める**: §8 を決め、この文書を仕様にする ✅ 2026-09-29
 2. **どのターゲットでも使うもの**（emu で確かめられる。✅ 2026-09-29: mem・math を新しい API に入れ替え（旧版は castle・miku・test/ の
-   横にコピー。bench の plasma は旧来の sin を自分に持つ）。mem は今は fc だけで、asm の速い版は後で（旧 mem.asm の fill は fc より速い:
-   v4_plan.md §2 の計測）。✅ 2026-09-29: rand・bits・hit・str・buf（それぞれのモジュールに @(test)）。✅ 2026-09-29: `@format` と fc 4 の printf（migrate の printf-format も）。✅ 2026-09-29: console（emu / NES）・sys・fmt と、emu のやり取りの
+   横にコピー。bench の plasma は旧来の sin を自分に持つ）。mem の fill / copy / move の本体は asm（mem.asm。✅ 2026-09-29: 1 バイトあたり
+   fill 39 → 11.6、copy 50 → 16.9、後ろからの move 103 → 18.2 サイクル。TestMemSpeed が上限を見張る）。✅ 2026-09-29: rand・bits・hit・str・buf（それぞれのモジュールに @(test)）。✅ 2026-09-29: `@format` と fc 4 の printf（migrate の printf-format も）。✅ 2026-09-29: console（emu / NES）・sys・fmt と、emu のやり取りの
    「長さの分だけ出す」（$fffe に 6）、割り込みの入口が無ければ空の入口を足す。テストは `internal/driver/stdlib_test.go`（fmt は
    Go の fmt と乱数で比べる）と `internal/nes/console_test.go`）: mem / fmt / `@format` と printf / str / buf / math / rand / bits / hit /
    sys / test / console（emu）。組み込み（§5）を直し、test/ の golden を更新する。`fmt` と `@format` は Go の `strconv` を参照にした
