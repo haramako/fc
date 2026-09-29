@@ -614,6 +614,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if ir.ValType(left).Kind == types.Pointer {
 				right = h.signedOffset(right) // p[-1]、p[i] (i:i8) は負のずれ
 			}
+			if at := ir.ValType(left); at.Kind == types.Array && at.Length > 0 {
+				// 配列の定数の添字は長さの中 (範囲外の読み書きは隣の変数を黙って壊す。slice・ポインタは長さが分からないので見ない)
+				if k, ok := ir.ValIntLiteral(right); ok && (k < 0 || k >= at.Length) {
+					panic(&diag.Error{Msg: fmt.Sprintf("index %d is out of range for %s (type %s: 0..%d)", k, describe(left), at, at.Length-1)})
+				}
+			}
 			tmp := h.newTmp(h.prog.Types.PointerTo(ir.ValType(left).Base))
 			h.markReadOnly(tmp, h.readOnly(left))
 			h.emit(&ir.Op{Code: ir.OpIndex, Dst: tmp, Src: []ir.Operand{left, right}})
