@@ -62,7 +62,13 @@
           "patterns": [{ "include": "#string-escapes" }]
         },
         {
-          "comment": "単引用符の文字列はエスケープなし",
+          "comment": "fc 4 の文字のリテラル 'A' / '\\n' / '\\x41' / 'あ' (1 文字だけ。fc 3 の単引用符の文字列より先に試す)",
+          "name": "constant.character.fc",
+          "match": "'(?:\\\\(?:[nt0\\\\']|x[0-9A-Fa-f]{2})|[^'\\\\\\n])'",
+          "captures": { "0": { "name": "constant.character.fc" } }
+        },
+        {
+          "comment": "fc 2 / fc 3 の単引用符の文字列 (エスケープなし)",
           "name": "string.quoted.single.fc",
           "begin": "'",
           "end": "'",
