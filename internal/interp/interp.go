@@ -607,6 +607,12 @@ func (m *machine) run(f *frame) {
 				m.writeBytes(f, op.Dst, b)
 			}
 		case ir.OpLoad:
+			if ir.ValType(op.Dst).Kind == types.Array && ir.ValType(op.Src[0]).Kind == types.Array {
+				// 配列の値のコピー (初期値つきのローカル配列 `var t:[2]u8 = [3, 5]` は ROM の表から丸ごと load する)。
+				// byteOf は配列を番地 (ポインタへの変換) として読むので、中身は番地から写す
+				m.writeBytes(f, op.Dst, m.loadBytes(m.addrOf(f, op.Src[0]), size(op.Dst)))
+				break
+			}
 			m.writeBytes(f, op.Dst, m.bytesOf(f, op.Src[0], size(op.Dst)))
 		case ir.OpSignExtension:
 			n := size(op.Dst)
