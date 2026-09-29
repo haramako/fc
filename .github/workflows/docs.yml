@@ -5,7 +5,7 @@ name: docs
 
 on:
   push:
-    branches: [feature/v4]   # main にマージしたら main に変える (github-pages 環境の許可するブランチも)
+    branches: [main]
     paths:
       - "docs/**"
       - "tools/vscode-fc/syntaxes/**"

@@ -1,6 +1,6 @@
 # サンプル集
 
-リポジトリの [examples](https://github.com/haramako/fc/tree/feature/v4/examples) にある fc 4 のサンプルです。
+リポジトリの [examples](https://github.com/haramako/fc/tree/main/examples) にある fc 4 のサンプルです。
 どれも標準ライブラリだけで書いていて、リポジトリのテストが毎回ビルドして動きを確かめています。
 
 ## hello — 文字とスプライト
@@ -14,7 +14,7 @@
 fcc build -t nes -o hello.nes hello.fc
 ```
 
-[examples/hello](https://github.com/haramako/fc/tree/feature/v4/examples/hello)
+[examples/hello](https://github.com/haramako/fc/tree/main/examples/hello)
 
 ## jump — ジャンプアクション
 
@@ -27,7 +27,7 @@ fcc build -t nes -o hello.nes hello.fc
 fcc build -t nes -o jump.nes jump.fc
 ```
 
-[examples/jump](https://github.com/haramako/fc/tree/feature/v4/examples/jump)
+[examples/jump](https://github.com/haramako/fc/tree/main/examples/jump)
 
 ## life — ライフゲーム
 
@@ -47,7 +47,7 @@ gen 0
 ....................###.........
 ```
 
-[examples/life](https://github.com/haramako/fc/tree/feature/v4/examples/life)
+[examples/life](https://github.com/haramako/fc/tree/main/examples/life)
 
 ## statusbar — 画面の分割
 
@@ -60,7 +60,7 @@ gen 0
 fcc build -t nes -o statusbar.nes statusbar.fc
 ```
 
-[examples/statusbar](https://github.com/haramako/fc/tree/feature/v4/examples/statusbar)
+[examples/statusbar](https://github.com/haramako/fc/tree/main/examples/statusbar)
 
 ## wave — ゆらゆら
 
@@ -73,7 +73,7 @@ MMC3 の走査線の割り込みを 8 ラインごとに入れ、帯ごとに横
 fcc build -t nes -o wave.nes wave.fc
 ```
 
-[examples/wave](https://github.com/haramako/fc/tree/feature/v4/examples/wave)
+[examples/wave](https://github.com/haramako/fc/tree/main/examples/wave)
 
 ## miku4 — 縦スクロールのシューティング
 
@@ -86,7 +86,7 @@ fcc build -t nes -o wave.nes wave.fc
 fcc build -t nes -o miku4.nes miku.fc
 ```
 
-[examples/miku4](https://github.com/haramako/fc/tree/feature/v4/examples/miku4)
+[examples/miku4](https://github.com/haramako/fc/tree/main/examples/miku4)
 
 ## 画面を撮り直す
 

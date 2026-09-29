@@ -10,4 +10,4 @@
 
 ## Items
 
-- [ ] 開発ブランチの名前を `/` の無いものにする（`go install github.com/haramako/fc/cmd/fcc@feature/v4` は Go が受け付けない。変えたら docs/start/install.md の手順を go install に）(2026-09-30)
+（なし）

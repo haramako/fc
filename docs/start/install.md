@@ -4,7 +4,7 @@ fc を使うには、コンパイラの `fcc` と、アセンブラとリンカ�
 `fcc` は fc のソースを 6502 のアセンブリにし、`ca65` と `ld65` を呼んで ROM にします。
 
 ::: info fc 4 はまだリリースしていません
-リリースのページにあるバイナリは fc 4 より前のものです。fc 4 を使うには、GitHub の `feature/v4` ブランチのソースから `fcc` をビルドします。
+リリースのページにあるバイナリは fc 4 より前のものです。fc 4 は GitHub の `main` ブランチのソースから `fcc` をビルドします。
 :::
 
 ## Go と cc65 を用意する
@@ -18,13 +18,21 @@ fc を使うには、コンパイラの `fcc` と、アセンブラとリンカ�
 ## fcc をビルドする
 
 ```bash
-git clone -b feature/v4 https://github.com/haramako/fc.git
+go install github.com/haramako/fc/cmd/fcc@main
+```
+
+`fcc` は `go env GOPATH` の `bin` にできます（そこにパスを通してください）。`fcc` は標準ライブラリを中に持っているので、
+1 つのファイルだけでどこでも動きます。
+
+ソースを手元に置いてビルドするなら:
+
+```bash
+git clone https://github.com/haramako/fc.git
 cd fc
 go build -o fcc ./cmd/fcc
 ```
 
-Windows では `-o fcc.exe` にします。できた `fcc` は標準ライブラリを中に持っているので、1 つのファイルだけでどこでも動きます。
-パスの通った場所に置いてください。
+Windows では `-o fcc.exe` にします。
 
 ## 確かめる
 

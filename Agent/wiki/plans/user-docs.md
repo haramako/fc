@@ -135,10 +135,10 @@ docs/
 
 ### 公開（GitHub Actions）
 
-- `.github/workflows/docs.yml`（段 0 で置いた）: `feature/v4` への push で `docs/**`・文法・ワークフローが変わったとき、
+- `.github/workflows/docs.yml`（段 0 で置いた）: `main` への push で `docs/**`・`examples/**`・文法・ワークフローが変わったとき、
   `npm ci` → `npm run build` → `actions/upload-pages-artifact` → `actions/deploy-pages`。PR ではビルドだけ（切れたリンクで落ちる）
-- **公開するブランチは `feature/v4`**（2026-09-30 決定。`main` にマージしたら `main` に変える。github-pages 環境の許可するブランチも）
-- リポジトリの Pages の設定は「ブランチから公開（`feature/v4` の `/docs`、Jekyll）」になっている。VitePress はビルドが要るので、
+- **公開するブランチは `main`**（2026-09-30 に `feature/v4` を `main` にマージした。github-pages 環境の許可するブランチも `main` に）
+- リポジトリの Pages の設定は「ブランチから公開（`feature/v4` の `/docs`、Jekyll）」だった。VitePress はビルドが要るので、
   Source を「GitHub Actions」に切り替える（切り替えるまで、`docs/` を push すると Jekyll が VitePress の Markdown をそのまま変換してしまう）
 
 ### 版
@@ -183,7 +183,7 @@ docs/
 
 1. **生成器**: VitePress
 2. **言語**: 日本語だけ（英語版は作らない。VitePress の i18n で後から足せる）
-3. **公開するブランチ**: `feature/v4`。`main` にマージしたら `main` に変える
+3. **公開するブランチ**: `feature/v4`。`main` にマージしたら `main` に変える（→ 同日に `main` へ移った）
 4. **miku4**: サンプルに載せてよい
 5. **文体**: はじめに・ガイドは「です・ます」、リファレンスは「である」
 6. **生成した `reference/std/`**: コミットしない。CI のビルドの中で作る

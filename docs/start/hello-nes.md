@@ -6,7 +6,7 @@
 
 ## ソース
 
-リポジトリの [examples/hello/hello.fc](https://github.com/haramako/fc/blob/feature/v4/examples/hello/hello.fc) です。
+リポジトリの [examples/hello/hello.fc](https://github.com/haramako/fc/blob/main/examples/hello/hello.fc) です。
 
 <<< @/../examples/hello/hello.fc
 

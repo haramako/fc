@@ -15,7 +15,7 @@
   `FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)$|TestSampleScreens'`
 - `package.json` / `package-lock.json` … Node の依存（VitePress）。Node は `docs/` に閉じる（ルートは Go だけ）
 - `language_reference.md` … 作り直す前の言語仕様。参考文献として残すだけでサイトには出さない（`srcExclude`）。新しい言語仕様ができたら消す
-- 公開は `.github/workflows/docs.yml`（`feature/v4` への push でビルドして Pages へ。`main` にマージしたら `main` に変える）
+- 公開は `.github/workflows/docs.yml`（`main` への push でビルドして Pages へ）
 
 ## Local Contracts
 

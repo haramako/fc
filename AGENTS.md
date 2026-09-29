@@ -26,8 +26,8 @@ fcc fmt -w src.fc                                               # FC ソース�
 
 ## Branches & Environment
 
-- **開発は `feature/v4`**（fc 4 の言語・標準ライブラリの作り直し。計画は `Agent/wiki/plans/v4-plan.md`）。`feature/v3` は `main` にマージ済み。**作業は今のブランチ（通常は `feature/v4`）に直接コミットしてよい**（fuzz で見つけたバグの修正も含む。トピックブランチは要らない）
-- タグ: `v0.0.2`（2026-09-15、最適化前のベースライン）、`ruby-frozen`（Go 移植前の Ruby 版。`fclib/math.fc` / `share/runtime.asm` の sin / atan / rand / 乗算テーブルは `misc/table.rb` の生成物でタグから参照できる）、`go-strict-clone`（移植直後の基準点）。fc はもともと Ruby で書かれ 2026-08〜09 に Go に移植した。Ruby 版との互換は考慮しない
+- **開発は `main`**（2026-09-30 に `feature/v4` をマージして移った。fc 4 の言語・標準ライブラリの作り直しの計画は `Agent/wiki/plans/v4-plan.md`）。**作業は今のブランチに直接コミットしてよい**（fuzz で見つけたバグの修正も含む。トピックブランチは要らない）
+- タグ: `v0.0.3`（2026-09-30、fc 4 の開発をマージする前の main = fc 3）、`v0.0.2`（2026-09-15、最適化前のベースライン）、`ruby-frozen`（Go 移植前の Ruby 版。`fclib/math.fc` / `share/runtime.asm` の sin / atan / rand / 乗算テーブルは `misc/table.rb` の生成物でタグから参照できる）、`go-strict-clone`（移植直後の基準点）。fc はもともと Ruby で書かれ 2026-08〜09 に Go に移植した。Ruby 版との互換は考慮しない
 - 以前のブランチ運用（feature/v2・static-frame の時代）は `Agent/discussions/2026-09-12-branch-history.md`
 
 | 項目 | 状態（Windows の開発機） |

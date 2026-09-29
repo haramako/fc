@@ -5,7 +5,7 @@
 
 ![jump の画面](/samples/jump.png)
 
-ソースは [examples/jump/jump.fc](https://github.com/haramako/fc/blob/feature/v4/examples/jump/jump.fc)（135 行）です。
+ソースは [examples/jump/jump.fc](https://github.com/haramako/fc/blob/main/examples/jump/jump.fc)（135 行）です。
 全体はページの最後に載せています。
 
 ```bash
