@@ -7,10 +7,12 @@
 
 ## Ownership
 
-- `*.md` … サイトのページ（`index.md`・`start/`・`samples/`。構成は計画の「サイトの構成」）
+- `*.md` … サイトのページ（`index.md`・`start/`・`samples/`・`reference/`。構成は計画の「サイトの構成」）
 - `.vitepress/config.mts` … サイトの設定（`base: '/fc/'`、ナビとサイドバー、fc の色付け、日本語の検索、`srcExclude`）。
   ページを足したらサイドバーにも足す
 - `.vitepress/theme/` … 既定のテーマに足す CSS だけ（NES の画面を 2 倍にぼかさずに出す）
+- `reference/std/` … 標準ライブラリのページ。`fcc doc -md` が fclib のコメントから作る生成物でコミットしない（`npm run gen`。
+  `npm run dev` / `build` の前にも走る）。直すときは fclib のコメントを直す（約束は `internal/fcdoc` のパッケージのコメント）
 - `public/samples/*.png` … サンプルの画面。QuickNES の画面をテストが書く（Windows で QuickNES のコアがあるとき）。サンプルを変えたら撮り直す:
   `FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)$|TestSampleScreens'`
 - `package.json` / `package-lock.json` … Node の依存（VitePress）。Node は `docs/` に閉じる（ルートは Go だけ）
@@ -33,7 +35,7 @@
   - `file=名前.fc`: そのページの後のブロックが一緒にビルドするファイルにする（同じ名前が既にあれば後ろに足す）。`run` / `test` に
     付ければそのファイルを入口（テストするモジュール）にする。複数のファイルにまたがる例（`start/project.md`）に使う
 - examples のファイルを丸ごと見せるときは写さずに VitePress の `<<< @/../examples/…/x.fc` で読み込む（動くことは examples のテストが見る）
-- 生成物（`.vitepress/dist`・`.vitepress/cache`、これから作る `reference/std/`）はコミットしない。`reference/std/` は CI のビルドの中で作る
+- 生成物（`.vitepress/dist`・`.vitepress/cache`・`reference/std/`）はコミットしない。`reference/std/` は CI のビルドの中でも作る
 - `AGENTS.md` / `CLAUDE.md` はサイトに出さない（`srcExclude`）
 
 ## Work Guidance

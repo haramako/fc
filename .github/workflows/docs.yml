@@ -10,12 +10,22 @@ on:
       - "docs/**"
       - "tools/vscode-fc/syntaxes/**"
       - "examples/**"
+      - "fclib/**"                  # 標準ライブラリのページ (fcc doc -md)
+      - "cmd/fcc/**"
+      - "internal/fcdoc/**"
+      - "internal/syntax/**"
+      - "pkg/fc/**"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "docs/**"
       - "tools/vscode-fc/syntaxes/**"
       - "examples/**"
+      - "fclib/**"                  # 標準ライブラリのページ (fcc doc -md)
+      - "cmd/fcc/**"
+      - "internal/fcdoc/**"
+      - "internal/syntax/**"
+      - "pkg/fc/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -31,6 +41,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # npm run build の前 (prebuild) に go run ./cmd/fcc doc -md で標準ライブラリのページを作る
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
       - uses: actions/setup-node@v4
         with:

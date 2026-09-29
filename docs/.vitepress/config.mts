@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 
@@ -9,6 +9,29 @@ const fcGrammar = JSON.parse(
     'utf-8',
   ),
 )
+
+// 標準ライブラリのページ (fcc doc -md が reference/std に作る。npm run gen) のサイドバー
+function stdSidebar() {
+  const dir = fileURLToPath(new URL('../reference/std/', import.meta.url))
+  const pages = (sub: string) =>
+    existsSync(dir + sub)
+      ? readdirSync(dir + sub)
+          .filter((f) => f.endsWith('.md') && f !== 'index.md')
+          .map((f) => f.slice(0, -3))
+          .sort()
+      : []
+  const group = (text: string, sub: string) => ({
+    text,
+    collapsed: false,
+    items: pages(sub).map((m) => ({ text: m, link: `/reference/std/${sub}${m}` })),
+  })
+  return [
+    { text: '一覧', link: '/reference/std/' },
+    group('どのターゲットでも', ''),
+    group('NES', 'nes/'),
+    group('emu', 'emu/'),
+  ]
+}
 
 export default defineConfig({
   lang: 'ja-JP',
@@ -27,21 +50,42 @@ export default defineConfig({
     nav: [
       { text: 'はじめに', link: '/start/install' },
       { text: 'サンプル', link: '/samples/' },
-    ],
-    sidebar: [
       {
-        text: 'はじめに',
+        text: 'リファレンス',
         items: [
-          { text: 'インストール', link: '/start/install' },
-          { text: '最初のプログラム', link: '/start/hello-emu' },
-          { text: 'NES で Hello', link: '/start/hello-nes' },
-          { text: '小さなゲームを作る', link: '/start/first-game' },
-          { text: 'プロジェクト', link: '/start/project' },
-          { text: 'エディタ', link: '/start/editor' },
+          { text: '標準ライブラリ', link: '/reference/std/' },
+          { text: 'fcc コマンド', link: '/reference/fcc' },
+          { text: 'fc.toml', link: '/reference/fc-toml' },
+          { text: 'ターゲット', link: '/reference/targets' },
         ],
       },
-      { text: 'サンプル集', link: '/samples/' },
     ],
+    sidebar: {
+      '/reference/std/': [{ text: '標準ライブラリ', items: stdSidebar() }],
+      '/': [
+        {
+          text: 'はじめに',
+          items: [
+            { text: 'インストール', link: '/start/install' },
+            { text: '最初のプログラム', link: '/start/hello-emu' },
+            { text: 'NES で Hello', link: '/start/hello-nes' },
+            { text: '小さなゲームを作る', link: '/start/first-game' },
+            { text: 'プロジェクト', link: '/start/project' },
+            { text: 'エディタ', link: '/start/editor' },
+          ],
+        },
+        { text: 'サンプル集', link: '/samples/' },
+        {
+          text: 'リファレンス',
+          items: [
+            { text: '標準ライブラリ', link: '/reference/std/' },
+            { text: 'fcc コマンド', link: '/reference/fcc' },
+            { text: 'fc.toml', link: '/reference/fc-toml' },
+            { text: 'ターゲット', link: '/reference/targets' },
+          ],
+        },
+      ],
+    },
     socialLinks: [{ icon: 'github', link: 'https://github.com/haramako/fc' }],
 
     search: {

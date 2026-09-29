@@ -1,6 +1,6 @@
 # 利用者向けドキュメント（GitHub Pages）の計画
 
-作成: 2026-09-30。「決めたこと」はすべて決まった。段 0 は済み、段 1 も済み。
+作成: 2026-09-30。「決めたこと」はすべて決まった。段 0〜2 は済み。次は段 3（言語仕様）。
 
 前提（2026-09-30 ユーザー決定）:
 - 人間向け、主に**利用者向け**（fc で NES のソフトを作る人）のドキュメントを `docs/` の下に作り、GitHub Pages で公開する
@@ -115,7 +115,7 @@ docs/
 
 ### 標準ライブラリのリファレンスの生成（pkg.go.dev に当たる）
 
-- **`fcc doc` を作る**（`go doc` と同じ使い方）。`fcc doc vram` / `fcc doc vram.put` は端末に、`fcc doc -md -o DIR` はサイト用の Markdown
+- ✅ **`fcc doc` を作る**（`go doc` と同じ使い方）。`fcc doc vram` / `fcc doc vram.put` は端末に、`fcc doc -md -o DIR` はサイト用の Markdown
 - `internal/syntax` で読んで、`public` の宣言（関数・定数・変数・struct・enum）のシグネチャと直前のコメントを集める
 - **ドキュメントコメントの約束（Go と同じ形）**: `public` の宣言の直前に空行なしで続く `//` の塊。モジュールの説明は `#fc 4` の後の
   最初の塊。字下げした行は例として等幅で出す
@@ -153,7 +153,9 @@ docs/
    （`internal/doccheck`）・インストールのページ。残り: Pages の Source の切り替え（ユーザー）
 2. **段 1 はじめに**: `start/` の 6 ページとサンプル集。API が変わっても例の検査で気づける。✅ 2026-09-30: install・hello-emu・hello-nes・
    first-game・project・editor・サンプル集（画面は QuickNES）。VS Code 拡張は `tools/vscode-fc` に 1 つにした（古い `editors/vscode` の整形を移して消した）
-3. **段 2 リファレンス（生成と表）**: `fcc doc` と `reference/std/`、`reference/fcc`・`fc-toml`・`targets`
+3. **段 2 リファレンス（生成と表）**: `fcc doc` と `reference/std/`、`reference/fcc`・`fc-toml`・`targets`。✅ 2026-09-30: `fcc doc`（`internal/fcdoc`。端末と `-md`）、
+   `reference/std/`（CI と `npm run dev` / `build` の前に生成）、fclib のコメントを整えて public の関数に全部説明を付けた（`TestStdDocs`）、
+   `reference/fcc`・`fc-toml`・`targets`
 4. **段 3 言語仕様**: fc 4 の規則を 1 ページに。整数の規則など v4 で未決の所（`plans/v4-plan.md` の「決めること」の残り）は決まってから書く
 5. **段 4 ガイド**: `guide/` の各ページ。`overview` と `nes-basics` を先に
 6. **段 5 後始末**: 旧 `docs/language_reference.md` を消す。コードのコメントの `docs/language_reference.md §N`（約 20 か所）と

@@ -84,11 +84,13 @@ func parseBlocks(file, text string) []*codeBlock {
 	return blocks
 }
 
-// docsFiles は docs/ のサイトのページ (VitePress の srcExclude と生成物・依存を除く)。
+// docsFiles は docs/ のサイトのページ (VitePress の srcExclude と生成物・依存を除く。reference/std は fcc doc が標準ライブラリの
+// コメントから作るページで、コメントの中の例は断片なので見ない)。
 func docsFiles(t *testing.T) []string {
 	t.Helper()
 	var files []string
 	root := filepath.Join(repoRoot(t), "docs")
+	std := filepath.Join(root, "reference", "std")
 	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -96,6 +98,9 @@ func docsFiles(t *testing.T) []string {
 		if d.IsDir() {
 			switch d.Name() {
 			case "node_modules", ".vitepress", "public":
+				return filepath.SkipDir
+			}
+			if p == std {
 				return filepath.SkipDir
 			}
 			return nil
