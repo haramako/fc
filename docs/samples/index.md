@@ -87,11 +87,3 @@ fcc build -t nes -o miku4.nes miku.fc
 ```
 
 [examples/miku4](https://github.com/haramako/fc/tree/main/examples/miku4)
-
-## 画面を撮り直す
-
-このページの画面は、リポジトリのテストが QuickNES で撮ったものです（Windows で QuickNES のコアがあるとき）。
-
-```bash
-FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)$|TestSampleScreens'
-```

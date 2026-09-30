@@ -8,6 +8,8 @@
 ## Ownership
 
 - `*.md` … サイトのページ（`index.md`・`start/`・`samples/`・`reference/`。構成は計画の「サイトの構成」）
+- `reference/language.md` … 基本の言語仕様。ABI は `reference/assembly.md`、バンク切り替えは `reference/banks.md`、
+  初期化と領域の使い方は `reference/memory.md` に分け、言語仕様・ターゲット・設定からリンクする
 - `.vitepress/config.mts` … サイトの設定（`base: '/fc/'`、ナビとサイドバー、fc の色付け、日本語の検索、`srcExclude`）。
   ページを足したらサイドバーにも足す
 - `.vitepress/theme/` … 既定のテーマに足す CSS だけ（NES の画面を 2 倍にぼかさずに出す）
@@ -16,7 +18,6 @@
 - `public/samples/*.png` … サンプルの画面。QuickNES の画面をテストが書く（Windows で QuickNES のコアがあるとき）。サンプルを変えたら撮り直す:
   `FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)$|TestSampleScreens'`
 - `package.json` / `package-lock.json` … Node の依存（VitePress）。Node は `docs/` に閉じる（ルートは Go だけ）
-- `language_reference.md` … 作り直す前の言語仕様。参考文献として残すだけでサイトには出さない（`srcExclude`）。新しい言語仕様ができたら消す
 - 公開は `.github/workflows/docs.yml`（`main` への push でビルドして Pages へ）
 
 ## Local Contracts
@@ -24,6 +25,7 @@
 - **fc 4（`#fc 4`）のことだけ書く**。fc 3 以前の規則・移行・歴史は書かない（「以前は」「fc 3 では」と書かない）
 - 日本語だけ。はじめに・ガイドは「です・ます」、リファレンスは「である」
 - `Agent/` へリンクしない（Pages に無い）。リポジトリのファイルへは GitHub の絶対 URL
+- 日本語の見出しへリンクするときは、必要に応じて `{#english-id}` を明示し、生成 HTML の id と一致することを確認する（濁点の正規化に注意）
 - コンパイラの内部の用語（IR・常駐・割付）を出さない。性能の話は利用者ができること（書き方・型の選び方）で語る
 - castle のもの（コード・テキスト・画面）を載せない。サンプルは examples の hello・life・jump・statusbar・wave・miku4
 - fc のコードは ` ```fc ` のブロックに書く。色付けは `tools/vscode-fc/syntaxes/fc.tmLanguage.json` をそのまま使う（文法を直せばサイトにも効く）
@@ -35,6 +37,7 @@
   - `file=名前.fc`: そのページの後のブロックが一緒にビルドするファイルにする（同じ名前が既にあれば後ろに足す）。`run` / `test` に
     付ければそのファイルを入口（テストするモジュール）にする。複数のファイルにまたがる例（`start/project.md`）に使う
 - examples のファイルを丸ごと見せるときは写さずに VitePress の `<<< @/../examples/…/x.fc` で読み込む（動くことは examples のテストが見る）
+- サンプル集には利用者向けの説明を置く。画面の撮影などサイト保守の手順はこの規約と `Agent/wiki/docs-site.md` に置く
 - 生成物（`.vitepress/dist`・`.vitepress/cache`・`reference/std/`）はコミットしない。`reference/std/` は CI のビルドの中でも作る
 - `AGENTS.md` / `CLAUDE.md` はサイトに出さない（`srcExclude`）
 
@@ -49,6 +52,7 @@
 
 - `npm run build --prefix docs` が通ること（切れたリンクがあると失敗する）
 - `go test ./internal/doccheck` が通ること（例のコード。`go test ./...` にも入る）
+- サイトビルドと例の検査は別々に実行する。サイトビルドだけで例を実行したことにしない。生成 API ページの例は doccheck の対象外
 
 ## Child DOX Index
 

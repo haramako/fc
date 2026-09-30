@@ -41,7 +41,7 @@ fcc doc vram                # 標準ライブラリのモジュールの説明 (
 | `-O LEVEL` | 最適化レベル (0-2, デフォルト 2) |
 | `-e` | ビルド後にエミュレータで実行 |
 
-言語仕様は [docs/language_reference.md](docs/language_reference.md) を参照してください。
+詳しい書き方は[言語仕様](https://haramako.github.io/fc/reference/language)を参照してください。
 
 ## テスト
 
@@ -50,11 +50,11 @@ go test ./...
 ```
 
 fc のモジュールのテスト（`@(test)` の関数。`@assert` / `@assert_eq`）は `fcc test mod.fc` で走らせる（emu で実行し、全部
-通れば終了コード 0。`-t nes` なら内蔵の NES のランナーで。language_reference.md §7）。
+通れば終了コード 0。`-t nes` なら内蔵の NES のランナーで。[テストの説明](https://haramako.github.io/fc/reference/fcc#test)）。
 
 ほかのフォルダや git のリポジトリのモジュールは、fc.toml の `[lib.NAME]`（`path = "../lib"` か `git = "URL"` / `rev` / `dir`）で
 使える。git のものはビルドのときにユーザーのキャッシュへ取ってきて、コミットを `fc.lock` に固定する（`fcc lib fetch` /
-`update` / `list`。language_reference.md §1.1）。
+`update` / `list`。[ライブラリの設定](https://haramako.github.io/fc/reference/fc-toml#lib-名前)）。
 
 テストは `testdata/golden/` の golden データ (AST / IR / 割付後IR / アセンブリ / バイナリ /
 実行出力) との差分比較で行われます。golden は Go 自身の出力のスナップショットで、次で再生成します:
@@ -92,7 +92,7 @@ Agent/            開発の知識・設計・経緯・計画 (主にエージェ
 
 | ファイル | 内容 |
 |---|---|
-| [docs/language_reference.md](docs/language_reference.md) | FC言語の仕様 |
+| [言語仕様](https://haramako.github.io/fc/reference/language) | FC言語の仕様 |
 | [examples/README.md](examples/README.md) | サンプルの構成・同期方法・エミュレータテスト |
 | [bench/README.md](bench/README.md) | 生成コードのベンチマークと他コンパイラとの比較 |
 

@@ -106,7 +106,7 @@ func docsFiles(t *testing.T) []string {
 			return nil
 		}
 		switch d.Name() {
-		case "AGENTS.md", "CLAUDE.md", "language_reference.md":
+		case "AGENTS.md", "CLAUDE.md":
 			return nil
 		}
 		if strings.HasSuffix(p, ".md") {

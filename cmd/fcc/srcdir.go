@@ -7,7 +7,7 @@ import (
 )
 
 // splitSrc はコマンドラインのソース (`fcc build m1/main.fc`) を、基準ディレクトリとファイル名に分ける。use / include は
-// ソースのディレクトリから探す (language_reference §1.4。作業ディレクトリから探していて、親ディレクトリで実行すると
+// ソースのディレクトリから探す (docs/reference/assembly.md の「ファイルとシンボル」。作業ディレクトリから探していて、親ディレクトリで実行すると
 // `file a.fc not found` だった)。ディレクトリが付いていなければ ("main.fc") 今までどおり作業ディレクトリ。
 // 出力 (-o) は作業ディレクトリ基準のまま。
 func splitSrc(src string) (dir, file string) {

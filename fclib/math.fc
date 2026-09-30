@@ -146,7 +146,7 @@ public function wrap_dec(x:u8, n:u8):u8
 	return x - 1;
 }
 
-// 1/16 ピクセルの速度 v の、このフレームの移動量 (phase はフレームの数など)。16 フレームで v / 16 ピクセル進むように、端数を
+// 1/16 ピクセルの速度 v の、このフレームの移動量 (phase はフレームの数など)。16 フレームで v ピクセル (1 フレーム平均 v / 16) 進むように、端数を
 // フレームに散らして丸める (下向き)。pos += math.subpixel(vx, frame)
 public function subpixel(v:i8, phase:u8):i8
 {

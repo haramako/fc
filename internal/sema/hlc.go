@@ -245,7 +245,7 @@ func (h *Hlc) readFile(name string) []byte {
 // Lambdaのコンパイル
 // ---------------------------------------------------------------
 
-// switchTableMin はジャンプテーブルにする case の数の下限 (比較の連鎖と表の損益分岐点。language_reference.md §5)。
+// switchTableMin はジャンプテーブルにする case の数の下限 (比較の連鎖と表の損益分岐点。docs/reference/language.md の「switch」)。
 const switchTableMin = 10
 
 func (h *Hlc) compileLambda(lmd *ir.Lambda) {

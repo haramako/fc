@@ -99,7 +99,7 @@ func fusePointer(lmd *ir.Lambda, u *types.Universe) {
 //	index t2 = <*U>t1, i         配列の添字
 //	load_mem d = t2, disp=m      → load_mem d = p, i, scale=sizeof(U), disp=k+m     lda i; (asl); clc; adc #k+m; tay; lda (p),y
 //
-// 添字は配列の長さ L 未満 (範囲外の添字と、配列の外へのポインタ演算は未定義。language_reference §6) なので、
+// 添字は配列の長さ L 未満 (範囲外の添字と、配列の外へのポインタ演算は未定義。docs/reference/language.md の「ポインタ」) なので、
 // Y = i * sizeof(U) + k + m に読む幅を足しても k + (配列全体のバイト数) を超えない。それが 256 以下のときだけ。以前は
 // add と index で 16 ビットの番地を組み立てて `ldy #m; lda (t2),y` だった (`pt.arr[j]`、`p.items[i].price`)。
 //   - U が 3 バイト以上なら添字をバイト単位にする (`mul j = i, #s` を index の位置に。fieldindex と同じく expandMul が
@@ -256,7 +256,7 @@ func foldConstIndex(lmd *ir.Lambda) {
 		}
 		k, lit := ir.ValIntLiteral(m.Index)
 		if !lit || k < 0 || m.Disp+k*m.Scale+m.Width > 256 {
-			continue // 添字の式は 8 ビットで折り返さない前提 (docs/language_reference.md §6) なので 256 を超える形は作らない
+			continue // 添字の式は 8 ビットで折り返さない前提 (docs/reference/language.md の「添字と slice」) なので 256 を超える形は作らない
 		}
 		op.Disp += k * m.Scale
 		op.Src[1] = ir.NoIndex

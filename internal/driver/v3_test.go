@@ -247,7 +247,7 @@ public function value():u8 { return 42; }
 }
 
 // TestV3BuildString: 文字列の @(build) の const。データを作らず使った場所で文字列リテラルになる (使わなければ ROM が
-// 変わらない)。@textmap の引数に渡せ、-D / fc.toml で .po を切り替えられる (language_reference.md §7.1)。
+// 変わらない)。@textmap の引数に渡せ、-D / fc.toml で .po を切り替えられる (docs/reference/language.md の「独自の文字表と翻訳」)。
 func TestV3BuildString(t *testing.T) {
 	t.Parallel()
 	files := map[string]string{

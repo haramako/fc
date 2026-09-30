@@ -386,7 +386,7 @@ func (c *Compiler) libPath(target string) []string {
 // makeBase は base.s (ランタイムの土台: ZP のレジスタ・スタック・FC_FARCALL などの定義) を生成してアセンブルする。
 // options(base: "data.asm") があれば生成せず、そのファイル (Dir 相対) をアセンブルする (castle のように ZP 配置や
 // iNES ヘッダを自前で持つプロジェクト。fc の領域 (L / reg / FC_FASTCALL_REG / FC_SZP / FC_SRAM / FC_SP / FC_FARCALL) を
-// 同じ名前で定義すること。docs/language_reference.md §1.5)。戻り値はリンクに渡すオブジェクト。
+// 同じ名前で定義すること。docs/reference/assembly.md の「リンクと土台の指定」)。戻り値はリンクに渡すオブジェクト。
 func (c *Compiler) makeBase() string {
 	opts := c.prog.Options
 	if base, ok := opts.Get("base"); ok && base.Kind == ir.OptStr {

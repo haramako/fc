@@ -39,8 +39,8 @@ export default defineConfig({
   description: 'NES（ファミコン）のためのコンパイラ',
   base: '/fc/',
   cleanUrls: true,
-  // エージェント向けの規約と、作り直す前の言語仕様（参考文献。サイトが揃ったら消す）はサイトに出さない
-  srcExclude: ['AGENTS.md', 'CLAUDE.md', 'language_reference.md'],
+  // エージェント向けの規約はサイトに出さない
+  srcExclude: ['AGENTS.md', 'CLAUDE.md'],
 
   markdown: {
     languages: [{ ...fcGrammar, name: 'fc' }],
@@ -58,6 +58,9 @@ export default defineConfig({
           { text: 'fcc コマンド', link: '/reference/fcc' },
           { text: 'fc.toml', link: '/reference/fc-toml' },
           { text: 'ターゲット', link: '/reference/targets' },
+          { text: 'アセンブリとの連携', link: '/reference/assembly' },
+          { text: 'バンクと far call', link: '/reference/banks' },
+          { text: 'メモリ配置', link: '/reference/memory' },
         ],
       },
     ],
@@ -84,6 +87,14 @@ export default defineConfig({
             { text: 'fcc コマンド', link: '/reference/fcc' },
             { text: 'fc.toml', link: '/reference/fc-toml' },
             { text: 'ターゲット', link: '/reference/targets' },
+          ],
+        },
+        {
+          text: '応用',
+          items: [
+            { text: 'アセンブリとの連携', link: '/reference/assembly' },
+            { text: 'バンクと far call', link: '/reference/banks' },
+            { text: 'メモリ配置', link: '/reference/memory' },
           ],
         },
       ],

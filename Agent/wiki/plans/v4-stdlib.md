@@ -306,7 +306,7 @@ public function poll():void;
 ライブラリが持つ RAM（案）: OAM のシャドウ 256（ページの先頭。DMA のため）、VRAM のキュー 128〜192（NMI の時間で送れるのは
 約 160 バイト + OAM DMA）、パレット 32、パッド 6、フレームの数 2、乱数 2、NMI の印 1。OAM のシャドウの位置はハードウェアでは
 自由（$4014 に書いたページ N の $N00〜$NFF を送る。256 バイト境界にそろっていればどこでもよい。$0200 は neslib などの慣習）だが、
-fc の既定の配置では fc が $0200〜$06FF を使うので、空いているのは $0700 かカートリッジの RAM だけ（language_reference §4.5。
+fc の既定の配置では fc が $0200〜$06FF を使うので、空いているのは $0700 かカートリッジの RAM だけ（docs/reference/memory.md の「NES の RAM」。
 castle・miku も $0700）。**既定は今の配置のまま $0700 にして、fc.toml で指定できるようにする（2026-09-29 決定。$0300 にして fc の
 配置をずらす案も考えたが、ずらす利点が無い）**。ライブラリの作業域（VRAM のキュー・パレット・パッド・フレームの数など）は BSS から取る。
 ゼロページは asm の関数のフレーム（`abi: "frame"`）とキューの位置くらいにとどめる。
@@ -357,7 +357,7 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    テストは `internal/nes/nesstd_test.go`（乱数の put / fill の並びを Go の模型と比べ、vblank の外で書かないかをランナーが数える）、
    fclib のモジュールの `@(test)` は `fcc test -t nes` でも走らせる（`pkg/fc` の TestFclibModuleTests）。内蔵のフォントは
    fclib/nes/font.txt から TestFontChr が作る。**NES の console は $4018 / $4019 にも書き、ランナーが出力と終了コードを受け取る**。
-   fc 4 の使われない private な変数は領域を取らないようにした（テストだけが使うバッファ。language_reference §4.7）
+   fc 4 の使われない private な変数は領域を取らないようにした（テストだけが使うバッファ。docs/reference/memory.md の「使われないものは出力しない」）
 4. **広げる**: mmc3 / mmc1 / uxrom（far call と合わせて）、lzw / rle の slice の版、メタスプライト・メタタイル・属性、フェード、音の
    呼び出し口。✅ 2026-09-29: LZ4（`internal/lz4` の圧縮・`@lz4`・`fclib/lz4.fc` の asm の展開。TestLz4Random が乱数のデータで
    確かめる）と RLE（NES Screen Tool の形式: `internal/rle`・`@rle`・`rle.unpack`・`vram.write_rle_now` / `put_rle`。旧 rle は

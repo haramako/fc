@@ -131,7 +131,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	// 関数は asm から呼ぶための固定の規約なので Entry にしない)。caller はそのインラインアセンブラを含む関数 (呼び出しの辺を
 	// 足す)。include した asm のファイル (caller < 0、m はそれを include したモジュール) なら呼び出し元が見えないので hidden。
 	// ただし extern の関数へのそれ自身のモジュールの asm の参照は、定義のラベルと区別できないので数えない (abi: "frame" の
-	// asm の関数どうしは同じモジュールの中で呼び合えない。docs/language_reference.md §4.2)
+	// asm の関数どうしは同じモジュールの中で呼び合えない。docs/reference/assembly.md の「frame」)
 	markAsmSym := func(sym string, caller int, m *ir.Module) {
 		l, ok := g.ByID[sym]
 		if !ok {

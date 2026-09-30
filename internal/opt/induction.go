@@ -21,7 +21,7 @@ package opt
 //     加算なら入力の上限の和、ループの変数なら支配する比較 `v < LIM'` から (maxValue。sieve の prime = i + i + 3 は
 //     外側の `i < 8191` から 16383 以下)
 //   - q + (LIM - k0) がポインタとして折り返さないことは「ポインタ演算が配列の末尾 + 1 を超えるのは未定義」
-//     (C と同じ規則。language_reference.md §6) から従う。k0 > LIM のとき LIM - k0 が負になって lim が q の下に
+//     (C と同じ規則。docs/reference/language.md の「ポインタ」) から従う。k0 > LIM のとき LIM - k0 が負になって lim が q の下に
 //     回り込むのは、入口の検査でループに入らないので起きない
 //   - ヘッダは「ラベル + 比較 + 分岐」だけ、外からの入口は 1 つで、その辺は jump か fallthrough (分岐ではない)
 

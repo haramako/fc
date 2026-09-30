@@ -1,6 +1,6 @@
 # far call（バンクをまたぐ関数呼び出し）
 
-2026-09-15 設計メモ。Agent/discussions/2026-09-14-v2-idea.md「interbank call を実装する」。実装済み（§7）。利用者向けの説明は docs/reference/language.md の「バンクと far call」。
+2026-09-15 設計メモ。Agent/discussions/2026-09-14-v2-idea.md「interbank call を実装する」。実装済み（§7）。利用者向けの説明は docs/reference/banks.md。
 
 ## 1. 動機
 

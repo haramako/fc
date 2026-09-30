@@ -298,7 +298,7 @@ function str_wide(s:[:u16]const u8):void
 	str(@slice(@ptr(s), @len(s) as u8));
 }
 
-// s の中の最初の 0 まで (無ければ全部) 書く (u8 の配列を文字列として書くとき: 文字列で初期化した配列は終端の 0 を含む)
+// s の中の最初の 0 まで (無ければ全部) 書く。文字列に終端の 0 は自動で付かないので、必要なら明示して入れる
 public function str_z_in(s:[:u16]const u8):void
 {
 	var n:u16 = 0;

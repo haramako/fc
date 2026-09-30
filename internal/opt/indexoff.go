@@ -13,7 +13,7 @@ import (
 // 添字が同じ i のままなので Y に置いた添字がそのまま使え、`clc; lda i; adc #k; tay` (約 10 サイクル) が消える
 // (castle の OAM への `buf[idx+1]` … `buf[idx+3]` は手書き asm の `iny` 相当になる)。
 // 前提: 添字の式 `i + k` は 8 ビットで折り返さない (i + k > 255 は範囲外の添字と同じ未定義。
-// docs/language_reference.md §6)。折り返しを当てにした `[256]` のリングバッファは書けない。
+// docs/reference/language.md の「添字と slice」)。折り返しを当てにした `[256]` のリングバッファは書けない。
 // 一時変数 t は定義が 1 つで、使用が index の添字だけのものを対象にし、定義から使用まで直線 (ラベル・分岐を挟まない)
 // で i が書き換えられないこと。使用が全部置き換わったら add を消す。
 func foldIndexOffset(lmd *ir.Lambda) bool {

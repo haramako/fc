@@ -16,6 +16,9 @@ https://haramako.github.io/fc/ （`docs/`）を作って公開する仕組みと
 
 ## 手元での作業
 
+- 基本の言語仕様は `docs/reference/language.md`、応用は `assembly.md`・`banks.md`・`memory.md`。サイドバーの「応用」から開く。
+  旧仕様の参照は現行ページへ移し、リリースの同梱文書も README からサイトを案内する形にした（2026-10-01）。
+
 - 見る: `npm ci --prefix docs` → `npm run dev --prefix docs`（http://localhost:5173/fc/）。Claude のデスクトップアプリでは
   `.claude/launch.json` の `docs`（`preview_start`）
 - 確かめる: `go test ./internal/doccheck` と `npm run build --prefix docs`（切れたリンクで落ちる）
@@ -25,6 +28,17 @@ https://haramako.github.io/fc/ （`docs/`）を作って公開する仕組みと
   （QuickNES は Windows の libretro のコア `C:\Applications\libretro\quicknes_libretro.dll`。CI の Linux では撮れない）
 
 ## 罠（踏んだもの）
+
+- **日本語見出しへのリンク**（2026-10-01、生成 HTML の id と href を照合）: 濁点を含む見出しの自動 id は Unicode の分解形に
+  なることがある。本文に直接書いた合成形のフラグメントと一致しないため、ページ間で参照する見出しには `{#calling-conventions}`
+  のような英字の id を明示する。VitePress のビルド成功だけでは見出しリンクの正しさを保証しない。
+
+- **検査の範囲**（2026-10-01 確認）: `npm run build` は標準ライブラリのページ生成と VitePress ビルドだけで、掲載例の実行はしない。
+  `go test ./internal/doccheck` は別に必要。印のない fc ブロックは構文・書式だけ、生成した `reference/std/` の例は対象外。
+  この日に `go test ./internal/doccheck ./internal/fcdoc ./pkg/fc` とサイトビルドが通った。
+- **生成 API 説明の照合**（2026-10-01、fc 4 の小さなプログラムを `fcc run -t emu` で実行）:
+  `math.subpixel(16, phase)` を phase=0〜15 で足した値は 16。16 フレームの移動量は v ピクセルであり、v / 16 ではない。
+  `var s = "abc"; @sizeof(s)` は 3 で終端 0 を自動付加しない。math.subpixel / fmt.str_z_in のコメントもこの挙動に合わせた。
 
 - **Vue が `{{` を式として読む**: Markdown の本文や表の中の `` `{{` `` でビルドが落ちる（コードのブロックは VitePress が v-pre に
   するので平気）。`::: v-pre` で囲む。`fcc doc -md` の出力はページ全体を `::: v-pre` で囲んでいる

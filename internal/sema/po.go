@@ -1,6 +1,6 @@
 package sema
 
-// gettext の .po の読み込み (textmap の翻訳。docs/language_reference.md §7.1)。
+// gettext の .po の読み込み (textmap の翻訳。docs/reference/language.md の「独自の文字表と翻訳」)。
 //
 // 扱うもの: msgctxt / msgid / msgstr (複数行に分かれた文字列、エスケープ \\ \" \n \t \r)、コメント (# #. #: #|)、
 // フラグ行 `#, fuzzy`、廃止エントリ `#~` (無視する)、ヘッダー (msgctxt の無い msgid ""。訳には使わない)。

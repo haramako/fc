@@ -138,7 +138,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.PlacementBlock:
 		h.compilePlacementBlock(s)
 	case *syntax.Block:
-		// ブロックごとにスコープを作る (language_reference §1.3。素の `{ }` の宣言が外へ漏れ、同じ名前を宣言できなかった)
+		// ブロックごとにスコープを作る (docs/reference/language.md の「変数と定数」。素の `{ }` の宣言が外へ漏れ、同じ名前を宣言できなかった)
 		h.inScope(func() { h.compileStmts(s.Stmts) })
 
 	case *syntax.EmptyStmt:
@@ -508,7 +508,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			}
 		}
 		h.warnEnumSwitch(ir.ValType(cond), seen, s.Default != nil)
-		// ジャンプテーブル (switchTableMin 個以上の整数の case が密に並ぶとき。language_reference.md §5):
+		// ジャンプテーブル (switchTableMin 個以上の整数の case が密に並ぶとき。docs/reference/language.md の「switch」):
 		//   switch tag, min, [label...]; jump default; case...: ...; jump end; default: ...; end:
 		// 1 バイトのタグだけ (飛び先 - 1 を pha; pha; rts で飛ぶ。比較の連鎖は平均 3 + 5N/2 サイクル、表は約 33 で一定)
 		if allInt && n >= switchTableMin && ir.ValType(cond).Size == 1 && maxV-minV+1 <= 2*n && maxV-minV+1 <= 255 && !h.prog.Config.Disabled("switch") {

@@ -69,7 +69,7 @@ type Value struct {
 	Public    bool
 	LocalType LocalType
 	// Volatile はグローバル変数で、読むたび / 書くたびに意味がある (レジスタに置いたままにできない):
-	// options(address:) の I/O レジスタ、asm から参照される変数、options(volatile: true) (docs/language_reference.md §2)
+	// options(address:) の I/O レジスタ、asm から参照される変数、options(volatile: true) (docs/reference/language.md の「変数の属性」)
 	Volatile bool
 	Build    bool // fc 3 の @(build) の const (@if の条件に使える。値はビルドの設定で上書きできる)
 	ReadOnly bool // 書き換えられないデータ (const の配列・文字列リテラル)。そこから作るポインタは *const になる

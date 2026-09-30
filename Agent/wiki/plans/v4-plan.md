@@ -47,7 +47,7 @@ fc 3 までの検討は [Agent/discussions/2026-09-20-v3-plan.md](../../discussi
 | 除算・剰余 | 床除算（Python と同じ）。符号付きかは結果の型 | `a / b`（a:u8 = 200、b:i8 = 2）は i8 の -28 |
 | 比較 | 必ず真・偽になる比較は警告（2026-09-27）。bool 同士の `==` は真理値（2026-09-27）。16 ビットを超える定数との比較は畳む | `x + dx > 100`（x:u8 = 200、dx:i8 = -1）は i8 の -57 で偽 |
 
-例は 2026-09-28 に `fcc run` で確かめた。language_reference §2 の「サイズが合わない代入はエラー」は実装と食い違ったまま。
+例は 2026-09-28 に `fcc run` で確かめた。現在の変換規則は docs/reference/language.md の「変換」を参照。
 比較・除算・右シフトの幅と符号は IR の命令が持つ（`Op.Width` / `Op.Sign`。2026-09-28。ir/sign.go）ので、型から意味を決めるのは
 sema と `ir.InferWidthSign` だけ。規則を変えても最適化・codegen は変えなくてよい。
 
@@ -183,8 +183,7 @@ castle の 307 か所・miku / darius の 10 か所は書き換えなし。A1 �
 
 #### D. 暗黙の縮小
 
-**決定（2026-09-28）: エラーにする**（✅ 実装 2026-09-28: `sema/convert.go` の `convert`。migrate は `c as T`）（縮小は明示の `as` で書く。Go・Rust と同じ。language_reference §2 の「サイズが合わない代入は
-エラー」が本当になる）。castle で 4 か所だけで、作者は `hi = addr >> 8` のような縮小にすでに `as` を書いていた（§1.5）。migrate は
+**決定（2026-09-28）: エラーにする**（✅ 実装 2026-09-28: `sema/convert.go` の `convert`。migrate は `c as T`）（縮小は明示の `as` で書く。Go・Rust と同じ。仕様は docs/reference/language.md の「変換」）。castle で 4 か所だけで、作者は `hi = addr >> 8` のような縮小にすでに `as` を書いていた（§1.5）。migrate は
 その 4 か所に `as` を足す。
 
 - 対象は大きさが減る変換だけ（u16 / i16 → u8 / i8）。**同じ大きさで符号だけ違う変換（i8 → u8、u16 → i16）は今までどおり暗黙に
@@ -333,7 +332,7 @@ sema に一時的な検査を入れて（暗黙の変換 `cast`、二項演算�
     関数の fastcall を消す、fastcall の extern はエラー（asm を直す必要がある）
   - `FC_FASTCALL_REG` は fc 3 の fastcall と cc65 の規約の受け渡しのために残す（fc 3 をやめるときに外せる）
 
-  ✅ 実装 2026-09-29（仕様は language_reference.md §4.2・§4.5）:
+  ✅ 実装 2026-09-29（仕様は docs/reference/assembly.md と docs/reference/memory.md）:
   - sema（`sema/abi.go` の `checkABI`）: abi の値、`scratch` は abi "frame" の extern だけ、"frame" と fastcall の併用はエラー。fc 4 では
     fastcall と、abi を書かない extern がエラー
   - frames: `ir.Lambda.FrameABI` / `Scratch`。abi "frame" の extern は呼び出しグラフの葉としてフレームを配置する（大きさは戻り値 + 引数 +

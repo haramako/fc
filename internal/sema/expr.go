@@ -372,7 +372,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					typ = ir.ValType(left)
 					right = h.signedOffset(right) // p + i (i:i8 が負) は後ろへ
 					if typ.Kind == types.Pointer && typ.Base.Size > 1 {
-						// p + n / p++ は要素 n 個分進める (C と同じ。language_reference §6)。バイト単位で進めていて、u16 の配列を
+						// p + n / p++ は要素 n 個分進める (C と同じ。docs/reference/language.md の「ポインタ」)。バイト単位で進めていて、u16 の配列を
 						// p++ でたどると 1 バイトずれ、p[1] と *(p + 1) が違っていた
 						right = h.scaleOffset(right, typ.Base.Size)
 					}
@@ -468,7 +468,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					break
 				}
 			}
-			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。language_reference.md §2)
+			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。docs/reference/language.md の「型」)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
 
