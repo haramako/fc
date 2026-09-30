@@ -162,3 +162,24 @@ function main():void
 		t.Errorf("fc 3: %q, fc 4: %q", before, after)
 	}
 }
+
+// TestUntypedConstCast: 組み込みの結果の型のない定数への同じ型の `as` は型付きの定数にする (`(@min(0, -6) as i8) + x` (x:u8) は
+// i8 の -6 と u8 の和で i8。値そのものを返していて、型のない -6 として u8 に合わせられ 253 になっていた。sema/typing.go の
+// 型の照合で発覚)。
+func TestUntypedConstCast(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+var x:u8;
+function main():void
+{
+	x = 3;
+	var y:i16 = (@min(0, -6) as i8) + x;
+	printf(y, "\n");
+	exit(0);
+}
+`})
+	if err != nil || out != "-3\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}

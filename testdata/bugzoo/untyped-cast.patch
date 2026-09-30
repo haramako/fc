@@ -1,0 +1,18 @@
+# 型のない定数への同じ型の `as` が型のない定数のまま (`(@min(0, -6) as i8) + x` が u8 になる。TestUntypedConstCast)
+diff --git b/internal/sema/expr.go a/internal/sema/expr.go
+index a958c73..47af969 100644
+--- b/internal/sema/expr.go
++++ a/internal/sema/expr.go
+@@ -905,12 +904,6 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
+ 		if from.Kind == types.Array {
+ 			return ir.NewPointeredArray(v, to)
+ 		}
+-		if tv, ok := v.(*ir.Value); ok && from == to && to.Kind == types.Int && tv.Kind == ir.KindLiteral && tv.IsInt && tv.Untyped {
+-			// 型のない定数 (`@min(0, -6)` の結果など) への同じ型の `as` は、型付きの定数にする (値そのものを返していて、
+-			// `(@min(0, -6) as i8) + x` (x:u8) が型のない -6 として u8 に合わせられ 253 になっていた。定数の経路 (constEval) は
+-			// 型付きになる。sema/typing.go の検査で発覚)
+-			return ir.NewIntLiteral("", to, tv.Int)
+-		}
+ 		if tv, ok := v.(*ir.Value); ok && from == to && to.Kind == types.Int {
+ 			// 同じ型への `as` は値そのもの (包まない。fc 3 → 4 の migrate が足す `(式) as T` で IR が変わらないように、どの版も)。
+ 			// `as` は A1 の区切りなので、式の中の算術の結果なら広げない印にする (widen.go)
