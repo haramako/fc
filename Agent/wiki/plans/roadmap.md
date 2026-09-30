@@ -227,10 +227,11 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       意味は `else if` と同じ: 構文木の `IfStmt.IsElsif` を見るのは整形だけ）。✅ 2026-09-30: `fcc fmt` が `} else if (...) {` を
       `elsif` と同じく字下げせずに続けるようにした。残り: fc 4 で `elsif` をエラーにし、fc 3 → 4 の migrate が `else if` に書き換える
       （examples の jump・miku4、test/math.fc の `elsif` も移す）。VS Code の文法の `elsif` も外す
-- [ ] 文字列のエスケープを文字のリテラルと同じにする（2026-09-30 ユーザー決定。docs を書いていて発覚: 今の文字列は `\n` と `\xNN`
+- [x] 文字列のエスケープを文字のリテラルと同じにする（2026-09-30 ユーザー決定。docs を書いていて発覚: 今の文字列は `\n` と `\xNN`
       だけで、ほかの `\` はそのまま残る（`"\t"` は `\` と `t`）のに、文字のリテラルは `\n \t \0 \\ \' \xNN` が使える。
       `internal/syntax/lexer.go` の `unescape` と `lexer_char.go`）。文字列では `\"` も。fc 4 だけにし、fc 3 → 4 の migrate は
-      今そのまま残っている `\` を `\\` に書き換える（ROM を変えない）。docs/reference/language.md の字句の表も直す
+      今そのまま残っている `\` を `\\` に書き換える（ROM を変えない）。docs/reference/language.md の字句の表も直す ✅ 2026-09-30
+      （`syntax.unescape` / `simpleEscape`、migrate の `quoteRule`。`TestStringEscapes`）
 - [ ] 文字列を 0 終端にしない（2026-09-30 ユーザー決定。castle なども直す前提）。今は `var s = "abc"`（関数の中）が終端の 0 を含む
       4 バイトの配列で `@len(s)` が 4、`const S = "abc"` は `@len` が 3・`@sizeof` が 4 と食い違う（Agent/wiki/fc4-facts.md）。
       fc 4 では文字列は長さぶんの `[N]const u8` だけにする。0 終端に頼っている所（fclib の asm・`*const u8` で受ける関数・
@@ -241,8 +242,8 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       要素が全部文字列なら長さを問わず slice の表に（長さがたまたまそろうかで型が変わらない。上の 0 終端をやめると
       `*const u8` の表は長さが分からないので slice が自然。1 要素 3 バイト（番地 2 + 長さ 1）の表が増える。詰めて持つなら `[?][3]u8` と型を書く）。
       数の配列の入れ子（`[[1, 2], [3, 4, 5]]`）は今のままエラー
-- [ ] `@copy` を `use mem;` なしで使えるようにする（2026-09-30 ユーザー決定。`printf` / `@format` は組み込みが fmt を読み込むので
-      `use` が要らないのと合わせる。Agent/wiki/plans/v4-stdlib.md の `@copy` の行と §8）
+- [x] `@copy` を `use mem;` なしで使えるようにする（2026-09-30 ユーザー決定。`printf` / `@format` は組み込みが fmt を読み込むので
+      `use` が要らないのと合わせる。Agent/wiki/plans/v4-stdlib.md の `@copy` の行と §8） ✅ 2026-09-30（どの版でも。`TestCopyWithoutUse`）
 
 ## v3: 一般的な用途で不便な仕様（2026-09-26 調査）
 

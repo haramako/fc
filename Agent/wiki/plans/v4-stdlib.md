@@ -292,7 +292,7 @@ public function poll():void;
 |---|---|---|
 | `printf` | `stdio.print` / `print_slice` / `print_int16` / `print_sint16` を型で呼び分け | 書式をコンパイル時に分解し、`fmt.*` と `console.write` を呼ぶ |
 | `@format` | 無い | 新規（上） |
-| `@copy` | `mem.copy`（`use mem;` が要る） | `mem.copy`（slice の版）。`use` を要らなくするか（§8） |
+| `@copy` | `mem.copy`（`use mem;` が要る） | `mem.copy`（slice の版）。`use` は要らない（2026-09-30） |
 | `cos` | `math.sin(x + 64)` のマクロ | 新しい `math.sin` に |
 | `@run_tests` | `stdio.init` / `print` / `exit` | `test` / `console` に |
 | `@log` | エミュレータ側の表示 | そのまま（書式の解析 `sema/log.go` の `parseLogFormat` / `parseLogSpec` を `@format` と共有する） |

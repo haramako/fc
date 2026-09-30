@@ -136,12 +136,29 @@ func TestSliceErrors(t *testing.T) {
 		{`function f():void { var a:[2]u8; const S:[]u8 = a; }`, "a constant slice needs an array constant"},
 		{`const S:[]u8 @(symbol: "_s");`, "a slice is a run-time value"},
 		{`use mem; const A = [1, 2]; function main():void { var s:[]const u8 = A; @copy(s, A); }`, "destination is read-only"},
-		{`function main():void { var a:[2]u8; var s:[]u8 = a; @copy(s, a); }`, "requires the mem module"},
 	} {
 		_, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\n" + c.src + "\n"})
 		if err == nil || !strings.Contains(err.Error(), c.msg) {
 			t.Errorf("%s: got %v, want %q", c.src, err, c.msg)
 		}
+	}
+}
+
+// TestCopyWithoutUse: @copy は `use mem;` が無くても使える (printf / @format の fmt と同じく組み込みが読み込む)。
+func TestCopyWithoutUse(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+var a:[4]u8;
+function main():void
+{
+	var n = @copy(a[1..], "xyz");
+	printf("{} {} {} {}\n", n, a[0], a[1], a[3]);
+	console.exit(0);
+}
+`})
+	if err != nil || out != "3 0 120 122\n" {
+		t.Errorf("got %q, %v", out, err)
 	}
 }
 

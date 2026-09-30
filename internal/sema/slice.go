@@ -296,10 +296,6 @@ func registerSliceBuiltins(h *Hlc) {
 		if len(args) != 2 {
 			panic(&diag.Error{Msg: "@copy takes 2 arguments (@copy(dst, src))"})
 		}
-		mem, ok := h.prog.Modules.Get("mem")
-		if !ok {
-			panic(&diag.Error{Msg: "@copy requires the mem module (add `use mem;`)"})
-		}
 		d := h.sliceParts(args[0], "@copy")
 		s := h.sliceParts(args[1], "@copy")
 		if d.ro {
@@ -332,7 +328,7 @@ func registerSliceBuiltins(h *Hlc) {
 		bp := h.prog.Types.PointerTo(u8)
 		dp := h.operandValue(retypePtr(d.ptr, bp))
 		sp := h.operandValue(retypePtr(s.ptr, bp))
-		copyFn := h.moduleFunc(mem.Interface(), "mem", "copy")
+		copyFn := h.moduleFunc(h.builtinModule("mem"), "mem", "copy") // use しなくても読み込む (printf の fmt と同じ)
 		if ft := ir.ValType(copyFn); ft.Kind == types.Func && len(ft.Params) == 2 {
 			// fc 4 の mem.copy(dst:[:u16]u8, src:[:u16]const u8) (Agent/wiki/plans/v4-stdlib.md §3.1)。旧 fclib の mem (プロジェクトの横に
 			// コピーしたもの) なら下の copy(to, from, size)

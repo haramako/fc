@@ -11,10 +11,11 @@ fc 4 の言語の仕様の正は `docs/reference/language.md`（例は `internal
   なくす候補（`plans/roadmap.md` の v4）なので新しいコードでは使わない
 - 組み込みは `@` で始まる（`@sizeof`・`@bitcast(T, x)`・`@incbin`・`@include`・`@asm`・`@min`…）。属性は `@(…)`（fc 2 の `options(…)` ではない）
 - グローバル変数は初期値を書けない（`can't init global variable`。0 で始まる）
-- 文字列のエスケープは `\n` と `\xNN` だけ（`"\t"` は `\` と `t` のまま）。文字のリテラル `'\t'` は使える
+- 文字列と文字のリテラルのエスケープは同じ `\n \t \0 \\ \" \' \xNN`。ほかの `\` はエラー（2026-09-30。fc 3 の文字列は `\n` と `\xNN`
+  だけで、ほかの `\` はそのまま残る。migrate が `\\` に書き換える）
 - 関数の中の `var s = "abc";` は終端の 0 を含む 4 バイトの配列の変数（`@len(s)` は 4）。`const S = "abc";` は `@len` が 3、`@sizeof` が 4
 - 長さの違う文字列の配列は型が要る: `const NAMES:[?][]const u8 = ["ab", "cde"];`（書かないと「長さが違う」エラー）
-- `@copy` は `use mem;` が要る。`printf` / `@format` は fmt / console を `use` しなくても組み込みが読み込むが、
+- `@copy`・`printf` / `@format` は mem / fmt / console を `use` しなくても組み込みが読み込む（`@copy` は 2026-09-30 から）。
   `console.init()` を書くなら `use console;`
 - asm から見える名前は `_モジュール名_名前`（`score.best` は `_score_best`）。固定するなら `@(symbol: "名前")`
 - 添字は `u16` も書ける（256 要素を超える配列）

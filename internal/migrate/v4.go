@@ -152,31 +152,60 @@ func runTestsRule(c *Ctx) {
 	})
 }
 
-// quoteRule は fc 3 のシングルクォートの文字列 `'...'` をダブルクォートにする (fc 4 の `'A'` は文字のリテラル)。シングルクォートの
-// 文字列はエスケープを解釈しないので、中の `\` と `"` は `\x5C` / `\x22` にして中身を変えない。
+// quoteRule は fc 3 の文字列の綴りを fc 4 の綴りに書き換える (値は変えない):
+//   - `'...'` (エスケープを解釈しない文字列) は fc 4 では文字のリテラルなので `"..."` に
+//   - `"..."` の中の `\n` / `\xNN` 以外の `\` は fc 3 ではそのままの `\` だったが、fc 4 ではエスケープ (`\t` は tab、ほかはエラー)
+//     なので `\\` に
 func quoteRule(c *Ctx) {
 	syntax.Inspect(c.File, func(n syntax.Node) bool {
-		if s, ok := n.(*syntax.StringLit); ok && strings.HasPrefix(s.Text, "'") {
-			for _, e := range c.Edits {
-				if e.Start < s.EndPos.Offset && s.ValuePos.Offset < e.End {
-					return true // 意味の書き換え (printf の書式に取り込むなど) が既にこの文字列を置き換えている
-				}
-			}
-			var b strings.Builder
-			b.WriteByte('"')
-			for i := 0; i < len(s.Value); i++ {
-				switch ch := s.Value[i]; ch {
-				case '\\':
-					b.WriteString(`\x5C`)
-				case '"':
-					b.WriteString(`\x22`)
-				default:
-					b.WriteByte(ch)
-				}
-			}
-			b.WriteByte('"')
-			c.Replace(s.ValuePos.Offset, s.EndPos.Offset, b.String())
+		s, ok := n.(*syntax.StringLit)
+		if !ok || !strings.HasPrefix(s.Text, "'") && !hasV3OnlyBackslash(s.Text) {
+			return true
 		}
+		for _, e := range c.Edits {
+			if e.Start < s.EndPos.Offset && s.ValuePos.Offset < e.End {
+				return true // 意味の書き換え (printf の書式に取り込むなど) が既にこの文字列を置き換えている
+			}
+		}
+		c.Replace(s.ValuePos.Offset, s.EndPos.Offset, quoteV4(s.Value))
 		return true
 	})
+}
+
+// hasV3OnlyBackslash は fc 3 の `"..."` / `"""..."""` の綴りに、fc 4 では意味の変わる `\` (`\n` と `\xNN` 以外) があるか。
+func hasV3OnlyBackslash(text string) bool {
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\\' {
+			continue
+		}
+		if i+1 < len(text) && (text[i+1] == 'n' || text[i+1] == 'x') {
+			i++ // \xNN の NN は普通の文字
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// quoteV4 は値 v の fc 4 の文字列リテラル (`"..."`)。
+func quoteV4(v string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for i := 0; i < len(v); i++ {
+		switch ch := v[i]; {
+		case ch == '\\' || ch == '"':
+			b.WriteByte('\\')
+			b.WriteByte(ch)
+		case ch == '\n':
+			b.WriteString(`\n`)
+		case ch == '\t':
+			b.WriteString(`\t`)
+		case ch < 0x20 || ch == 0x7f:
+			fmt.Fprintf(&b, `\x%02X`, ch)
+		default:
+			b.WriteByte(ch)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }

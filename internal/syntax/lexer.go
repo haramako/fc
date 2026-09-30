@@ -304,7 +304,7 @@ func (l *Lexer) Next() (Token, error) {
 	}
 
 	// 文字列
-	if n, s, msg := scanString(rest); n > 0 {
+	if n, s, msg := scanString(rest, l.version); n > 0 {
 		if msg != "" {
 			return Token{}, &Error{Filename: l.filename, Pos: start, Msg: msg}
 		}
@@ -377,11 +377,11 @@ func digitVal(c byte, base int) int {
 
 // scanString は文字列リテラルを読む。返り値は消費バイト数と解釈後の値。
 // 形式は旧レキサと同一: `"""..."""` (複数行・エスケープ解釈)、`"..."` (エスケープ解釈)、
-// `'...'` (エスケープ解釈なし)。
-func scanString(s []byte) (n int, val string, msg string) {
+// `'...'` (エスケープ解釈なし。fc 4 では文字のリテラルなのでここに来ない)。エスケープの規則は版で違う (unescape)。
+func scanString(s []byte, version int) (n int, val string, msg string) {
 	if bytes.HasPrefix(s, []byte(`"""`)) {
 		if idx := bytes.Index(s[3:], []byte(`"""`)); idx >= 0 {
-			val, msg = unescape(s[3 : 3+idx])
+			val, msg = unescape(s[3:3+idx], version)
 			return 3 + idx + 3, val, msg
 		}
 		// 閉じがなければ "" としての解釈にフォールバック
@@ -394,7 +394,7 @@ func scanString(s []byte) (n int, val string, msg string) {
 			c := s[i]
 			if c == q {
 				if q == '"' {
-					val, msg = unescape(s[1:i])
+					val, msg = unescape(s[1:i], version)
 					return i + 1, val, msg
 				}
 				return i + 1, string(s[1:i]), ""
@@ -412,18 +412,14 @@ func scanString(s []byte) (n int, val string, msg string) {
 	return 0, "", ""
 }
 
-// unescape はエスケープを解釈する。\n → 改行、\xNN → バイト (NN は 16 進 2 桁。それ以外はエラー)。
-// 他の `\` はそのまま残す。
-func unescape(s []byte) (string, string) {
+// unescape はエスケープを解釈する。\xNN → バイト (NN は 16 進 2 桁。それ以外はエラー)。
+//   - fc 4: 文字のリテラルと同じ \n \t \0 \\ \' と、文字列の \" (scanChar)。ほかの `\` はエラー
+//   - fc 3 まで: \n と \xNN だけ。ほかの `\` はそのまま残す (fc 3 → 4 の migrate が `\\` に書き換える: quoteRule)
+func unescape(s []byte, version int) (string, string) {
 	var out []byte
 	i := 0
 	for i < len(s) {
 		if s[i] == '\\' && i+1 < len(s) {
-			if s[i+1] == 'n' {
-				out = append(out, '\n')
-				i += 2
-				continue
-			}
 			if s[i+1] == 'x' {
 				if i+3 >= len(s) || digitVal(s[i+2], 16) < 0 || digitVal(s[i+3], 16) < 0 {
 					return "", "invalid \\x escape (needs 2 hex digits)"
@@ -432,9 +428,32 @@ func unescape(s []byte) (string, string) {
 				i += 4
 				continue
 			}
+			if c, ok := simpleEscape(s[i+1]); ok && (version >= Version4 || s[i+1] == 'n') {
+				out = append(out, c)
+				i += 2
+				continue
+			}
+			if version >= Version4 {
+				return "", fmt.Sprintf(`invalid escape \%c in string (\n \t \0 \\ \" \' \xNN)`, s[i+1])
+			}
 		}
 		out = append(out, s[i])
 		i++
 	}
 	return string(out), ""
+}
+
+// simpleEscape は `\c` の 1 文字のエスケープの値 (文字列と文字のリテラルで共通)。
+func simpleEscape(c byte) (byte, bool) {
+	switch c {
+	case 'n':
+		return '\n', true
+	case 't':
+		return '\t', true
+	case '0':
+		return 0, true
+	case '\\', '\'', '"':
+		return c, true
+	}
+	return 0, false
 }
