@@ -15,6 +15,8 @@
 
 ## Log
 
+- 2026-10-01 [MMC3 の走査線 IRQ と 8×16 のスプライト](2026-10-01-mmc3-irq-8x16-sprites.md) — スプライトの有無で IRQ が横に数ドットずれる原因（A12 の立ち上がりの位置）と、スプライトを $1000 側に寄せる対策。castle は既にそうなっていたので、原因の候補を IRQ を受け付けるまでの遅れなど CPU の側に移した
+- 2026-10-01 [pal.fade を細かくする方法と強調ビット](2026-10-01-pal-fade-emphasis.md) — 強調ビット・色ごとに時刻をずらす・表の候補。強調ビットの使用例と注意点。テスト ROM（scripts/emphasis-fade-test）で、明るい側の半段が逆転することを確かめた
 - 2026-09-30 [VS Code 拡張を 1 つにする](2026-09-30-vscode-extension.md) — tools/vscode-fc に整形を移し、古い editors/vscode を消した
 - 2026-09-30 [開発を main に移す](2026-09-30-move-to-main.md) — 旧 main に v0.0.3 のタグ、feature/v4 を main にマージ。go install …@main が使える
 - 2026-09-30 [else if と elsif](2026-09-30-else-if-and-elsif.md) — `fcc fmt` が `else if` を続けて整形するようにした。elsif は fc 4 でなくす候補

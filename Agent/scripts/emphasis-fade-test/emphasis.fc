@@ -1,0 +1,175 @@
+#fc 4
+// 強調ビット (PPUMASK の上位 3 ビット) でフェードの半段を作れるかを目で確かめる ROM。README.md を参照。
+//   fcc build -t nes -o emphasis.nes emphasis.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+@include("font.chr"); // タイル 0x00〜0x7F: 内蔵のフォント (色 1)
+@include("swatch.chr"); // タイル 0x80〜0x82: 色 1〜3 の塗りつぶし
+
+const PALETTE = [
+	0x0f, 0x30, 0x10, 0x00, 0x0f, 0x31, 0x21, 0x11, 0x0f, 0x36, 0x26, 0x16, 0x0f, 0x01, 0x06, 0x20, // 背景
+	0x0f, 0x30, 0x10, 0x00, 0x0f, 0x30, 0x10, 0x00, 0x0f, 0x30, 0x10, 0x00, 0x0f, 0x30, 0x10, 0x00, // スプライト
+];
+// 色見本: 行 (青・赤・灰) ごとに $3x / $2x / $1x / $0x の {パレット, 色の番号}
+const LADDER = [
+	1, 1, 1, 2, 1, 3, 3, 1, // 青 $31 $21 $11 $01
+	2, 1, 2, 2, 2, 3, 3, 2, // 赤 $36 $26 $16 $06
+	0, 1, 3, 3, 0, 2, 0, 3, // 灰 $30 $20 $10 $00
+];
+const EMPH = nes.MASK_EMPH_RED | nes.MASK_EMPH_GREEN | nes.MASK_EMPH_BLUE;
+const MASK = nes.MASK_BG | nes.MASK_SPR | nes.MASK_BG_LEFT | nes.MASK_SPR_LEFT;
+const TOP_Y = 6; // 上の色見本 (強調は段のとおり) の最初の行
+const BOTTOM_Y = 18; // 下の色見本 (分割が on なら常に強調) の最初の行
+const SPLIT_Y = 15; // スプライト 0 の当たりを取るタイルの行 (この行で PPUMASK を書き換える)
+const SWATCH = 0x80; // 色 1 の塗りつぶし (+1 / +2 で色 2 / 3)
+
+var attrs:[64]u8;
+var step:u8; // 0 (黒) 〜 8 (元の色)。奇数は 1 つ上の明るさ + 強調
+var split:bool;
+var line:[32]u8;
+
+// 色見本を 3 行 (青・赤・灰) 描く。1 つが 4×2 タイル
+function draw_ladder(y0:u8):void
+{
+	for (var r:u8 = 0; r < 3; r += 1) {
+		var y = y0 + r * 2;
+		for (var c:u8 = 0; c < 4; c += 1) {
+			var k = (r * 4 + c) * 2;
+			var p = LADDER[k];
+			var tile = SWATCH + LADDER[k + 1] - 1;
+			var x = 8 + c * 4;
+			vram.fill_now(vram.addr(0, x, y), tile, 4);
+			vram.fill_now(vram.addr(0, x, y + 1), tile, 4);
+			for (var dx:u8 = 0; dx < 4; dx += 2) {
+				var i = ((y >> 2) << 3) + ((x + dx) >> 2);
+				var sh = vram.attr_shift(x + dx, y);
+				attrs[i] = (attrs[i] & ~(3 << sh)) | (p << sh);
+			}
+		}
+	}
+	vram.write_now(vram.addr(0, 2, y0), "BLUE");
+	vram.write_now(vram.addr(0, 2, y0 + 2), "RED");
+	vram.write_now(vram.addr(0, 2, y0 + 4), "GRAY");
+}
+
+function draw_screen():void
+{
+	vram.write_now(vram.addr(0, 7, 1), "EMPHASIS FADE TEST");
+	vram.write_now(vram.addr(0, 9, 5), "3X  2X  1X  0X");
+	draw_ladder(TOP_Y);
+	draw_ladder(BOTTOM_Y);
+	vram.write_now(vram.addr(0, 9, 17), "3X  2X  1X  0X");
+	vram.write_now(vram.addr(0, 2, 25), "LEFT/RIGHT  STEP");
+	vram.write_now(vram.addr(0, 2, 26), "A  FADE LUMA ONLY (4 STEPS)");
+	vram.write_now(vram.addr(0, 2, 27), "B  FADE WITH EMPH (8 STEPS)");
+	vram.write_now(vram.addr(0, 2, 28), "SELECT  SPLIT ON/OFF");
+	vram.fill_now(vram.addr(0, 0, SPLIT_Y), SWATCH, 1); // スプライト 0 の当たりの相手 (左端の小さな白)
+	vram.write_now(0x23c0, attrs);
+}
+
+function show_status():void
+{
+	var level = (step + 1) >> 1;
+	vram.put(vram.addr(0, 2, 13), @format(line, "STEP {}/8  LEVEL {}", step, level));
+	if ((step & 1) != 0) {
+		vram.put(vram.addr(0, 21, 13), " +EMPH");
+	} else {
+		vram.put(vram.addr(0, 21, 13), "      ");
+	}
+	if (split) {
+		vram.put(vram.addr(0, 2, SPLIT_Y), "BELOW: ALWAYS +EMPH");
+	} else {
+		vram.put(vram.addr(0, 2, SPLIT_Y), "SPLIT OFF          ");
+	}
+}
+
+// step の明るさと強調にする (パレットと PPUMASK は同じ NMI で変わる)
+function apply():void
+{
+	pal.bright((step + 1) >> 1);
+	if ((step & 1) != 0) {
+		frame.mask = MASK | EMPH;
+	} else {
+		frame.mask = MASK;
+	}
+	show_status();
+}
+
+// 1 フレーム進める。分割が on なら、スプライト 0 の当たり (SPLIT_Y の行) を待って、そこから下を強調にする
+function tick():void
+{
+	frame.wait();
+	if (split) {
+		while ((nes.PPUSTATUS & nes.STATUS_SPR0) != 0) {}
+		while ((nes.PPUSTATUS & nes.STATUS_SPR0) == 0) {}
+		nes.PPUMASK = frame.mask | EMPH;
+	}
+}
+
+function ticks(n:u8):void
+{
+	while (n != 0) {
+		tick();
+		n -= 1;
+	}
+}
+
+// 8 → 0 → 8 とフェードする。d は 1 段の幅 (2 なら強調を使わない)、n は 1 段のフレーム数
+function fade(d:u8, n:u8):void
+{
+	step = 8;
+	apply();
+	ticks(30);
+	while (step != 0) {
+		step -= d;
+		apply();
+		ticks(n);
+	}
+	ticks(30);
+	while (step != 8) {
+		step += d;
+		apply();
+		ticks(n);
+	}
+}
+
+function main():void
+{
+	frame.init();
+	step = 8;
+	split = true;
+	draw_screen();
+	pal.set_all(PALETTE);
+	oam.reserve(1);
+	oam.set(0, 0, SPLIT_Y * 8 - 1, 0x7f, nes.ATTR_BEHIND); // スプライト 0 (背景の後ろなので見えない)
+	frame.render_on();
+	apply();
+
+	while (true) {
+		tick();
+		pad.poll();
+		var p = pad.p1.pressed;
+		if ((pad.p1.repeat & pad.LEFT) != 0 && step > 0) {
+			step -= 1;
+			apply();
+		}
+		if ((pad.p1.repeat & pad.RIGHT) != 0 && step < 8) {
+			step += 1;
+			apply();
+		}
+		if ((p & pad.A) != 0) {
+			fade(2, 8);
+		}
+		if ((p & pad.B) != 0) {
+			fade(1, 4);
+		}
+		if ((p & pad.SELECT) != 0) {
+			split = !split;
+			show_status();
+		}
+	}
+}
