@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/haramako/fc/internal/diag"
@@ -74,7 +75,10 @@ func (g *rfGen) widen(e rfExpr) rfExpr {
 // rfN は TestRandomConstFold のプログラム数 (1 本で 3 回ビルドするので既定は少なめ。`-foldn 500 -randseed N` で増やす)。
 var rfN = flag.Int("foldn", 10, "TestRandomConstFold のプログラム数")
 
-type rfGen struct{ r *rand.Rand }
+type rfGen struct {
+	r  *rand.Rand
+	v4 bool // fc 4 の書き方も使う (+% -% *%)。fc 3 では乱数を余分に使わない (TestRandomConstFold の式は今までと同じ)
+}
 
 func (g *rfGen) pick(n int) int        { return g.r.Intn(n) }
 func (g *rfGen) typ() rfType           { return rfTypes[g.pick(len(rfTypes))] }
@@ -129,6 +133,9 @@ func (g *rfGen) expr(depth int) rfExpr {
 	switch g.pick(10) {
 	case 0, 1, 2:
 		b := g.expr(depth - 1)
+		if g.v4 && g.chance(0.3) {
+			return g.wrapOp(a, b)
+		}
 		op := []string{"+", "-", "*", "&", "|", "^"}[g.pick(6)]
 		return rfExpr{fmt.Sprintf("(%s %s %s)", a.c, op, b.c), fmt.Sprintf("(%s %s %s)", a.v, op, b.v)}
 	case 3:
@@ -160,6 +167,23 @@ func (g *rfGen) expr(depth int) rfExpr {
 	return rfExpr{fmt.Sprintf("(%s%s)", op, a.c), fmt.Sprintf("(%s%s)", op, a.v)}
 }
 
+// wrapOp は fc 4 の左の項の型で折り返す演算 (sema/wrap.go)。左の項は `as` で型を決め (型のない定数は書けない)、右の項は
+// 左と同じ大きさ以下の型にするか、そのまま (型のない定数・広い型ならエラーで、作り直しの対象になる)。定数の形は sema の畳み込み
+// (consteval の opAddWrap)、変数の形は実行時の計算 (lval) を通る。
+func (g *rfGen) wrapOp(a, b rfExpr) rfExpr {
+	op := []string{"+%", "-%", "*%"}[g.pick(3)]
+	t := g.typ()
+	a = rfExpr{fmt.Sprintf("((%s) as %s)", a.c, t.name), fmt.Sprintf("((%s) as %s)", a.v, t.name)}
+	if g.chance(0.6) {
+		u := g.typ()
+		if u.size > t.size {
+			u = rfTypes[indexOfType(u)-2] // 同じ符号の狭い型
+		}
+		b = rfExpr{fmt.Sprintf("((%s) as %s)", b.c, u.name), fmt.Sprintf("((%s) as %s)", b.v, u.name)}
+	}
+	return rfExpr{fmt.Sprintf("(%s %s %s)", a.c, op, b.c), fmt.Sprintf("(%s %s %s)", a.v, op, b.v)}
+}
+
 func indexOfType(t rfType) int {
 	for i, u := range rfTypes {
 		if u == t {
@@ -175,7 +199,7 @@ func rfSource(exprs []string) string { return rfSourceV(exprs, 3) }
 // rfSourceV は版 ver の rfSource。fc 4 では各式を 16 ビットの値と足す形 (`w = w + (式)`、w:u16) にも置いて、A1 (式を式の中の
 // 一番広い型で計算する) で広がる所の定数の畳み込みも比べる (Agent/wiki/plans/v4-plan.md §1.3 A)。
 // rfPrintBegin / rfPrintEnd は式の中に埋め込む 1 つの値の printf の印 (版で書き方が違う: fc 3 は `printf(値, "\n")`、fc 4 は
-// `printf("{}\n", 値)`。rfSourceV が置き換える)。
+// `@printf("{}\n", 値)`。rfSourceV が置き換える)。
 const (
 	rfPrintBegin = "PRINT_BEGIN("
 	rfPrintEnd   = ")PRINT_END"
@@ -192,7 +216,7 @@ func rfSourceV(exprs []string, ver int) string {
 		if strings.HasPrefix(e, "{") {
 			// 文 (暗黙の拡張の初期化を通す形。1 行)。埋め込んだ printf の印を版の書き方に
 			if ver >= 4 {
-				e = strings.NewReplacer(rfPrintBegin, "printf(\"{}\\n\", ", rfPrintEnd, ")").Replace(e)
+				e = strings.NewReplacer(rfPrintBegin, "@printf(\"{}\\n\", ", rfPrintEnd, ")").Replace(e)
 			} else {
 				e = strings.NewReplacer(rfPrintBegin, "printf(", rfPrintEnd, ", \"\\n\")").Replace(e)
 			}
@@ -200,7 +224,7 @@ func rfSourceV(exprs []string, ver int) string {
 			continue
 		}
 		if ver >= 4 {
-			fmt.Fprintf(&b, "\t{ var w:u16 = 1; w = w + (%s); printf(\"{} {}\\n\", (w as i16), ((%s) as i16)); }\n", e, e)
+			fmt.Fprintf(&b, "\t{ var w:u16 = 1; w = w + (%s); @printf(\"{} {}\\n\", (w as i16), ((%s) as i16)); }\n", e, e)
 			continue
 		}
 		fmt.Fprintf(&b, "\tprintf(((%s) as i16), \"\\n\");\n", e)
@@ -225,11 +249,19 @@ func runConstFold(t *testing.T, ver int) {
 	if base == 0 {
 		base = 1
 	}
+	// 残った式の数の見張り: 変数の形で型のエラーになる式は捨てるので、生成するソースの書き方が版に合わなくなると (fc 4 の
+	// printf を @printf にしたとき) 全部の式が捨てられ、何も比べないまま通っていた。平均で半分を下回ったら失敗にする
+	var kept, made atomic.Int64
+	t.Cleanup(func() {
+		if n := made.Load(); n > 0 && kept.Load()*2 < n {
+			t.Errorf("変数の形で捨てた式が多すぎる: %d 式のうち %d 式しか比べていない (生成するソースの書き方が fc %d の規則に合っていないかもしれない)", n, kept.Load(), ver)
+		}
+	})
 	for k := 0; k < *rfN; k++ {
 		seed := base + int64(k)
 		t.Run(fmt.Sprintf("seed%d", seed), func(t *testing.T) {
 			t.Parallel()
-			g := &rfGen{r: rand.New(rand.NewSource(seed))}
+			g := &rfGen{r: rand.New(rand.NewSource(seed)), v4: ver >= 4}
 			var es []rfExpr
 			for i := 0; i < 24; i++ {
 				es = append(es, g.widen(g.expr(1+g.pick(4))))
@@ -268,6 +300,8 @@ func runConstFold(t *testing.T, ver int) {
 				}
 				es = keep
 			}
+			made.Add(24)
+			kept.Add(int64(len(es)))
 			vs := make([]string, len(es))
 			cs := make([]string, len(es))
 			for i, e := range es {
