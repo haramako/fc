@@ -11,6 +11,7 @@ package sema
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,6 +33,9 @@ type Program struct {
 	// Overlay はソースの中身の差し替え (OverlayKey(実パス) → 内容)。fcc migrate が fc 2 → 3 の書き換えをメモリの上で済ませてから
 	// fc 3 → 4 の書き換えを集めるときに使う
 	Overlay map[string][]byte
+	// FS はソースと include / incbin のファイルを読む先 (nil なら OS のファイル)。テストはメモリの上の fstest.MapFS を渡せる
+	// (パスは fs.FS の書き方: "/" 区切りで先頭に / を付けない。Compile の baseDir は "" にする)
+	FS fs.FS
 	// CollectRewrites なら fc 3 のモジュールで fc 4 の意味と違う所を Rewrites に集める (rewrite.go。fcc migrate)。作れなかった所は
 	// RewriteErrors
 	CollectRewrites bool
@@ -141,6 +145,8 @@ type Resolver interface {
 	// ref は生成物 (アセンブラの .incbin やエラー位置) に埋め込む参照形 (検索パスからの相対)、
 	// abs は読み込みに使う実パス。
 	File(name string) (ref, abs string, err error)
+	// ReadFile は File が返した実パスのファイルを読む (Program.FS があればそこから)。
+	ReadFile(abs string) ([]byte, error)
 }
 
 // CompileModule は 1 モジュールのトップレベルを解析し、Program に登録して返す (相 1)。
@@ -339,7 +345,7 @@ func (l *Loader) File(name string) (ref, abs string, err error) {
 	for _, p := range l.libPath {
 		ref = joinPath(p, name)
 		abs = l.abs(ref)
-		if _, err := os.Stat(abs); err == nil {
+		if l.exists(abs) {
 			return ref, abs, nil
 		}
 	}
@@ -352,6 +358,25 @@ func joinPath(p, f string) string {
 		return f
 	}
 	return p + "/" + f
+}
+
+// ReadFile は実パス abs のファイルを読む (Program.FS があればそこから、無ければ OS のファイル)。
+func (l *Loader) ReadFile(abs string) ([]byte, error) {
+	if l.prog.FS != nil {
+		return fs.ReadFile(l.prog.FS, filepath.ToSlash(abs))
+	}
+	return os.ReadFile(abs)
+}
+
+// exists は実パス abs のファイルがあるか。
+func (l *Loader) exists(abs string) bool {
+	var err error
+	if l.prog.FS != nil {
+		_, err = fs.Stat(l.prog.FS, filepath.ToSlash(abs))
+	} else {
+		_, err = os.Stat(abs)
+	}
+	return err == nil
 }
 
 // Module は name (拡張子なし) のモジュールを読み込んで相 1 まで進める。
@@ -370,9 +395,11 @@ func (l *Loader) Load(filename string) (*ir.Module, error) {
 	}
 	src, ok := l.prog.Overlay[OverlayKey(abs)]
 	if !ok {
-		if src, err = ReadSource(abs); err != nil {
+		b, err := l.ReadFile(abs)
+		if err != nil {
 			return nil, &diag.Error{Msg: err.Error()}
 		}
+		src = normalizeSource(b)
 	}
 	file, perr := syntax.Parse(src, ref)
 	if perr != nil {

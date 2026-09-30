@@ -4,7 +4,6 @@ package sema
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -215,7 +214,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			h.module.IncludeAsms = append(h.module.IncludeAsms, filename)
 			// asm が参照するシンボルを控える (fc の関数なら呼び出し規約を Entry に、変数なら volatile に)
 			if _, abs, err := h.deps.File(filename); err == nil {
-				if data, err := os.ReadFile(abs); err == nil {
+				if data, err := h.deps.ReadFile(abs); err == nil {
 					h.module.AsmSymbols = append(h.module.AsmSymbols, ir.AsmSymbols(string(data))...)
 				}
 			}

@@ -526,8 +526,10 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 - [ ] **driver の `Compiler`** はビルド単位の状態（ctx / target / dir / buildDir / prog / layout）をフィールドに持つので同じ
       Compiler で並行ビルドできない。ビルドごとの struct に分け、ld65 のメモリ配置（ZP / SRAM の番地が 3 か所に直書き）を
       `MemoryMap` から ld65.cfg と base.s の両方に出す
-- [ ] sema の `Loader` が直接ディスクを読む（`fs.FS` にすればテストがメモリ上で済む）。`fc3Seeds` が syntax と driver の
-      fuzz に同じ内容で 2 つ（`r6502.Memory` の配列化は ✅ 2026-09-28）
+- [x] sema の `Loader` が直接ディスクを読む（`fs.FS` にすればテストがメモリ上で済む）。`fc3Seeds` が syntax と driver の
+      fuzz に同じ内容で 2 つ（`r6502.Memory` の配列化は ✅ 2026-09-28） ✅ 2026-09-30: `Program.FS`（nil なら OS のファイル）と
+      `Resolver.ReadFile` で sema の読み込みを Loader に寄せた（`TestLoaderFS` は fstest.MapFS だけで通す）。fuzz の種は
+      `testdata/fuzzseeds/` のファイルにして両方の Fuzz* が読む（fc 4 の新しい文法の種も足した）
 
 ## 整理・判断待ち
 

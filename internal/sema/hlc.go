@@ -233,7 +233,7 @@ func (h *Hlc) resolveFile(name string) (ref, abs string) {
 // readFile は検索パス上のファイルを読む (incbin、マクロの外部表など)。
 func (h *Hlc) readFile(name string) []byte {
 	_, abs := h.resolveFile(name)
-	data, err := os.ReadFile(abs)
+	data, err := h.deps.ReadFile(abs)
 	if err != nil {
 		panic(&diag.Error{Msg: err.Error()})
 	}
@@ -402,5 +402,8 @@ func ReadSource(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")), nil
+	return normalizeSource(b), nil
 }
+
+// normalizeSource はソースの改行を CRLF → LF に正規化する。
+func normalizeSource(b []byte) []byte { return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")) }
