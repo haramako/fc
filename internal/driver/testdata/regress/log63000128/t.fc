@@ -1,0 +1,258 @@
+#fc 2
+options(farcall: true);
+use * from stdio;
+use far1;
+var g0:int16;
+var g1:sint;
+var g2:int;
+var g3:int16;
+var a0:[16]int;
+var a1:[16]sint;
+var a2:[16]int16;
+var a3:[16]sint16;
+function f0(p0:int, p1:*sint):int16 options(fastcall: true)
+{
+var l0:int16 = 3;
+var la0:[16]int;
+var q0:*int = &la0[0];
+var l3:int = 0;
+la0[0] = 134;
+la0[1] = 82;
+la0[2] = 4;
+la0[3] = 181;
+la0[4] = 137;
+la0[5] = 7;
+la0[6] = 4;
+la0[7] = 4;
+la0[8] = 1;
+la0[9] = 38;
+la0[10] = 1;
+la0[11] = 6;
+la0[12] = 7;
+la0[13] = 198;
+la0[14] = 4;
+la0[15] = 252;
+a3[((far1.ff0((p1[6] as int)) as int) & 7)] = ((g2 as sint16) / ((((-128) / (a1[(((*p1) as int) & 7)] | 1)) as sint16) | 1));
+var l1:int;
+if (((102 < ((~p0) as int)) as int16)) {
+l1 = g2;
+if (((g1 as int16) as int16) < (((-l0) % ((-g3) | 1)) as int16)) {
+a2[5] = ((*p1) as int16);
+g0 |= 2;
+}
+var l2:sint = 42;
+} else {
+l1 = ((!g2) as int);
+L5: while (((((88 | (-80)) >> 2) as sint) <= g1) && l3 < 6) {
+l3++;
+var l4:sint = (far1.ff1(min((((*q0) as sint) as sint), g1)) as sint);
+}
+for (var l5:int = 0; l5 < 4; l5++) {
+p1[5] <<= 1; p1[5] ^= (-92);
+p1[(max(2, (la0[((g2 - 199) & 7)] as int)) & 7)] = g1;
+p0 <<= 1; p0 ^= 0;
+}
+}
+l0 = (((((l0 as sint16) >> 4) && (a3[(((*q0) + l1) & 7)] as int)) as int16) & (p0 as int16));
+return g0;
+}
+function r0(n:int, a:int16):sint16
+{
+var l0:sint = (-45);
+if (n == 0) { return ((7 || (l0 << 6)) as sint16); }
+g2 *= (-(n * n));
+if (((g1 / (g1 | 1)) * (l0 / 2))) {
+g3 = 6129;
+a1[(n & 7)] -= (((4 as sint16) || (-29)) as sint);
+}
+return (r0((n - 1), f0((g3 as int), &a1[((g2 >> 3) & 7)])) - (a2[((f0(n, &a1[(((a2[((-n) & 7)] as int) << ((g2 & 7) as int)) & 7)]) as int) & 7)] as sint16));
+}
+function t0(p0:sint16, p1:sint16):int
+{
+var l0:sint16 = 4;
+var q0:*int16 = &a2[5];
+var q1:*sint16 = &a3[5];
+var l1:int = 0;
+(*q1) &= (-((!q0[(a0[((6 ^ 2) & 7)] & 7)]) as sint16));
+L6: while (((g1 == (((g2 <= (((!g1) as int) as int)) as sint) as sint)) || (((g0 || (~117)) as int))) && l1 < 4) {
+l1++;
+var l2:sint = g1;
+g3 -= (~(g0 - (*q0)));
+}
+return (((l0 as sint16) >> ((200 & 15) as int)) as int);
+}
+function t1(p0:sint16, p1:sint16):int
+{
+var l0:sint = 55;
+var l1:int16 = 3;
+var q0:*sint16 = &a3[4];
+a0[((163 + (q0[1] as int)) & 7)] = (r0((((*q0) as int) & 3), (((a1[(fp0[((q0[(((!g0) as int) & 7)] as int) & 0)](p1, p1) & 7)] as int) || max(g2, ((q0[(((l1 && g1) as int) & 7)] as int) as int))) as int16)) as int);
+if ((((((((((*q0) as int16) as int16) >= g3) as int) as int) != (((*q0) as int) as int)) as sint16) as sint16) != p0) {
+var l2:int = (g2 - (g2 + ((*q0) as int)));
+}
+return (~(((((*q0) as int) as int) >= g2) as int));
+}
+function t2(p0:sint16, p1:sint16):int
+{
+var l0:int16 = 1;
+var q0:*int = &a0[1];
+var q1:*sint16 = &a3[4];
+var l1:int = 0;
+var l2:int = 1;
+var l7:int = 0;
+a1[(((g3 as int) >> 2) & 7)] += (far1.ff0(1) as sint);
+l2 = (((6 + ((*q1) as int)) & 3) | 1);
+l1 = 1;
+q1 = &a3[1];
+while (l1 < 10) {
+q1 += l2;
+l1 += l2;
+var l3:sint16 = ((!((!p1) as int)) as int);
+}
+q1 = &a3[0];
+l0 &= (far1.ff0(170) as int16);
+var l4:int16;
+for (var l5:int = 0; l5 < 2; l5++) {
+l4 = (g0 * ((p1 > ((a1[((g2 + g2) & 7)] as sint16) as sint16)) as int16));
+{
+var g3:int16 = (p1 as int16);
+a2[3] = (q1[((g2 & l5) & 7)] as int16);
+}
+var l6:sint = max(((-(g3 as sint)) as sint), (((q0[(((*q0) ^ (l0 as int)) & 7)] as sint) & g1) as sint));
+l7 = 0;
+q1 = &a3[0];
+while (l7 < 4) {
+q1 += 3;
+l7 += 3;
+a2[(5 & 7)] = ((!((-24) | (a0[((l5 ^ 26) & 7)] as sint))) as int16);
+p0 = p1;
+}
+q1 = &a3[0];
+}
+return g2;
+}
+function t3(p0:sint16, p1:sint16):int
+{
+var l0:sint16 = (-14133);
+var l1:int = 5;
+var q0:*sint = &a1[7];
+var l2:int = 0;
+p1 -= max(((f0(((*q0) as int), &a1[((a1[((l1 % (l1 | 1)) & 7)] as int) & 7)]) as sint16) as sint16), ((l0 - (a1[((((-121) && p1) as int) & 7)] as sint16)) as sint16));
+if (((((((q0[0] as int) as int) == ((-((*q0) as int)) as int)) as int) as int) <= l1) || (((19695 == (max((-4917), l0) as sint16)) as int))) {
+while ((g2) && l2 < 2) {
+l2++;
+p0++;
+a0[5] = t0((((-g3) && (fp0[(fp0[(((a2[((a0[(l1 & 7)] % 75) & 7)] as int) % (57 | 1)) & 2)](p0, l0) & 2)](a3[(((g3 as int) & ((*q0) as int)) & 7)], l0) as sint16)) as sint16), (fp0[((l1 >> ((g2 & 7) as int)) & 2)]((((*q0) as sint16) << 4), (p0 + 0)) as sint16));
+}
+} else {
+L7: for (var l3:sint = 0; l3 < 5; l3++) {
+a2[5] = (far1.ff0(fp0[(0 & 2)](p0, (fp0[((g2 * g2) & 2)]((l1 as sint16), 3275) as sint16))) as int16);
+}
+}
+return (g2 | (l1 & l1));
+}
+const fp0:[20]fn(sint16, sint16):int = [t0, t1, t2, t3, t0, t1, t2, t3, t0, t1, t2, t3, t0, t1, t2, t3, t0, t1, t2, t3];
+function main():void
+{
+var lf:fn(int):int = ->fn(a:int):int { return ((((a / 231) as int) != a) as int); };
+var fv:fn(sint16, sint16):int = t0;
+var l0:sint16 = 6;
+var l1:sint = 92;
+var q0:*sint16 = &a3[0];
+var l2:int = 0;
+var l6:int16 = 0;
+g0 = 7;
+g1 = 5;
+g2 = 123;
+g3 = 2;
+a0[0] = 131;
+a0[1] = 2;
+a0[2] = 225;
+a0[3] = 15;
+a0[4] = 131;
+a0[5] = 62;
+a0[6] = 194;
+a0[7] = 3;
+a0[8] = 55;
+a0[9] = 0;
+a0[10] = 5;
+a0[11] = 213;
+a0[12] = 250;
+a0[13] = 137;
+a0[14] = 231;
+a0[15] = 31;
+a1[0] = 3;
+a1[1] = 4;
+a1[2] = 0;
+a1[3] = 43;
+a1[4] = 3;
+a1[5] = (-56);
+a1[6] = 44;
+a1[7] = (-103);
+a1[8] = (-45);
+a1[9] = (-71);
+a1[10] = 3;
+a1[11] = (-27);
+a1[12] = 84;
+a1[13] = 6;
+a1[14] = 2;
+a1[15] = 2;
+a2[0] = 37486;
+a2[1] = 1;
+a2[2] = 5;
+a2[3] = 2;
+a2[4] = 25713;
+a2[5] = 6;
+a2[6] = 15258;
+a2[7] = 0;
+a2[8] = 3;
+a2[9] = 61774;
+a2[10] = 5;
+a2[11] = 1;
+a2[12] = 7;
+a2[13] = 2;
+a2[14] = 1622;
+a2[15] = 1;
+a3[0] = 6583;
+a3[1] = 3;
+a3[2] = 4;
+a3[3] = (-14978);
+a3[4] = (-16076);
+a3[5] = 0;
+a3[6] = 1;
+a3[7] = (-17624);
+a3[8] = 3;
+a3[9] = 7;
+a3[10] = 4;
+a3[11] = (-18252);
+a3[12] = 2;
+a3[13] = 11235;
+a3[14] = (-893);
+a3[15] = (-17738);
+L8: while ((((t0(3, q0[(fv(l0, (g3 as sint16)) & 7)]) as sint) + g1)) && l2 < 1) {
+l2++;
+q0[6]++;
+}
+a3[5] <<= 0; a3[5] ^= 1;
+L9: for (var l3:int16 = 0; l3 < 1; l3++) {
+g0 = (-((-g0) | max(g0, g0)));
+a2[((((*q0) as int) | g2) & 7)] |= (a3[(t3(l0, (*q0)) & 7)] as int16);
+var l4:int16;
+L10: for (var l5:int = 0; l5 < 3; l5++) {
+l4 = g0;
+l0 <<= 0; l0 ^= 4;
+l0 = ((!(t3((fp0[((l5 | (a3[((((*q0) as int) + l5) & 7)] as int)) & 3)]((*q0), (a1[5] as sint16)) as sint16), (lf((l1 as int)) as sint16)) as sint)) as sint16);
+}
+}
+l6 = 3;
+q0 = &a3[3];
+while (l6 < 11) {
+q0 += 2;
+l6 += 2;
+a2[((g2 ^ 84) & 7)] -= ((g3 % (g3 | 1)) ^ g0);
+}
+q0 = &a3[0];
+g2 &= (((((g2 && l0) as int) as int) <= ((a3[((((*q0) as int) << 5) & 7)] as int) as int)) as int);
+printf(g0, " ", g1, " ", g2, " ", g3, " ", a0[0], " ", a0[1], " ", a0[2], " ", a0[3], " ", a0[4], " ", a0[5], " ", a0[6], " ", a0[7], " ", a0[8], " ", a0[9], " ", a0[10], " ", a0[11], " ", a0[12], " ", a0[13], " ", a0[14], " ", a0[15], " ", a1[0], " ", a1[1], " ", a1[2], " ", a1[3], " ", a1[4], " ", a1[5], " ", a1[6], " ", a1[7], " ", a1[8], " ", a1[9], " ", a1[10], " ", a1[11], " ", a1[12], " ", a1[13], " ", a1[14], " ", a1[15], " ", a2[0], " ", a2[1], " ", a2[2], " ", a2[3], " ", a2[4], " ", a2[5], " ", a2[6], " ", a2[7], " ", a2[8], " ", a2[9], " ", a2[10], " ", a2[11], " ", a2[12], " ", a2[13], " ", a2[14], " ", a2[15], " ", a3[0], " ", a3[1], " ", a3[2], " ", a3[3], " ", a3[4], " ", a3[5], " ", a3[6], " ", a3[7], " ", a3[8], " ", a3[9], " ", a3[10], " ", a3[11], " ", a3[12], " ", a3[13], " ", a3[14], " ", a3[15], " ", "\n");
+exit(0);
+}

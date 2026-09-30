@@ -1,0 +1,31 @@
+#fc 2
+options(bank: 1);
+public function ff0(p0:sint):sint
+{
+var l0:int = 254;
+var l1:int = 5;
+var l2:sint = 50;
+if ((max((((92 < l1) as sint) as sint), ((p0 * l2) as sint)) as sint) <= (min(((p0 * l2) as sint), p0) as sint)) {
+l2 = (p0 | (~l2));
+l1 = l0;
+l1 = l1;
+} else {
+l2 = ((((p0 << (((l0 / (l0 | 1)) & 7) as int)) as sint) == l2) as sint);
+}
+l2 = ((!(((l0 as sint) >> 3) as int)) as sint);
+return ((!((!(l2 as int16)) as int)) as sint);
+}
+public function ff1(p0:int, p1:sint):int16 options(fastcall: true)
+{
+var l0:int16 = 55418;
+var l1:int = 182;
+var l2:sint16 = 1;
+l1 = (((min(p1, p1) && l0) as int) | p0);
+L0: for (var l3:int = 0; l3 < 3; l3++) {
+if (((((l0 && p1) as sint16) << 1) as sint16) < l2) { continue L0; }
+for (var l4:int16 = 0; l4 < 1; l4++) {
+p0++;
+}
+}
+return (l0 % 1);
+}

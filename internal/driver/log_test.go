@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -311,11 +313,10 @@ func compareLogValues(o0, o2 string) (bad string, countDiffs int) {
 
 // TestLogResidentHomeAtEntry: 常駐 (l1@A) のメモリ側 (Home) は書き戻しが IR の定義に見えず、関数の入口から生きて見える。
 // その間 (丸ごと展開したループの初めの周) の @log が Home の古い値を出していた (fuzz の種 50042125。codegen の liveHere)。
+// プログラムは testdata/regress/log50042125 (生成器を変えると同じ種でも別のプログラムになるので、そのときの生成物を固定した)。
 func TestLogResidentHomeAtEntry(t *testing.T) {
 	t.Parallel()
-	g := &rpGen{r: rand.New(rand.NewSource(50042125))}
-	g.genProgram()
-	files := g.sources()
+	files := regressFiles(t, "log50042125")
 	var logs []string
 	for _, level := range []int{-1, 0} {
 		_, _, l, _, err := logBuild(t, files, level, true, true)
@@ -331,11 +332,10 @@ func TestLogResidentHomeAtEntry(t *testing.T) {
 
 // TestLogLitpropHome: 常駐の割付の後の litprop がループの変数の初期値の書き込み (`load i = 0`) を消すと、常駐のメモリ側 (Home) には
 // 初期値が入らないのに、常駐がレジスタにない地点の @log がメモリ側を読んでいた (fuzz の種 63000128。codegen の logLoc)。
+// プログラムは testdata/regress/log63000128 (TestLogResidentHomeAtEntry と同じく固定した)。
 func TestLogLitpropHome(t *testing.T) {
 	t.Parallel()
-	g := &rpGen{r: rand.New(rand.NewSource(63000128))}
-	g.genProgram()
-	files := g.sources()
+	files := regressFiles(t, "log63000128")
 	var logs []string
 	for _, level := range []int{-1, 0} {
 		_, _, l, _, err := logBuild(t, files, level, true, true)
@@ -347,4 +347,23 @@ func TestLogLitpropHome(t *testing.T) {
 	if bad, _ := compareLogValues(logs[0], logs[1]); bad != "" {
 		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
 	}
+}
+
+// regressFiles は testdata/regress/<name> の .fc を読む (ファイル名 → 中身)。fuzz で見つけたプログラムを、生成器が変わっても
+// 同じ形で試すために固定したもの。
+func regressFiles(t *testing.T, name string) map[string]string {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join("testdata", "regress", name, "*.fc"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("testdata/regress/%s: %v", name, err)
+	}
+	files := map[string]string{}
+	for _, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[filepath.Base(p)] = string(b)
+	}
+	return files
 }

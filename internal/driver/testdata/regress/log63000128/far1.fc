@@ -1,0 +1,132 @@
+#fc 2
+options(bank: 1);
+public function ff0(p0:int):sint16 options(fastcall: true)
+{
+var l0:int = 227;
+var l1:sint = 83;
+var la0:[16]int16;
+la0[0] = 3;
+la0[1] = 62481;
+la0[2] = 3;
+la0[3] = 6;
+la0[4] = 0;
+la0[5] = 3;
+la0[6] = 766;
+la0[7] = 46033;
+la0[8] = 4;
+la0[9] = 1;
+la0[10] = 3697;
+la0[11] = 2;
+la0[12] = 25654;
+la0[13] = 36145;
+la0[14] = 45443;
+la0[15] = 2;
+la0[6] = ((1 | ((l1 as int16) | (l0 as int16))) & (min(((l1 as int16) as int16), ((l0 as int16) as int16)) / 29838));
+var l2:int16;
+L0: for (var l3:int = 0; l3 < 1; l3++) {
+l2 = (((!(p0 as sint16)) as sint16) as int16);
+var l4:sint16 = (((((!l1) as int) as int) < 169) as sint16);
+p0 = 4;
+var l5:int16 = (l4 as int16);
+}
+l2 = (6733 ^ (-(((l0 as sint) || l2) as int16)));
+return (l1 as sint16);
+}
+public function ff1(p0:sint):sint16
+{
+var l0:sint16 = 1607;
+var l1:sint = 99;
+var la0:[16]sint;
+la0[0] = 1;
+la0[1] = 6;
+la0[2] = (-21);
+la0[3] = 6;
+la0[4] = (-120);
+la0[5] = 3;
+la0[6] = 81;
+la0[7] = 5;
+la0[8] = (-59);
+la0[9] = 1;
+la0[10] = 2;
+la0[11] = 4;
+la0[12] = 112;
+la0[13] = (-70);
+la0[14] = 7;
+la0[15] = 4;
+l1 = (((((ff0(4) as int) as int) == (((l1 as int) | 234) as int)) as sint) % ((-max(l1, 3)) | 1));
+if (((((((l0 as int16) as int16) << (((p0 as int) & 15) as int)) % (((!(l1 as int)) as int16) | 1)) as int16) <= (min(((ff0((la0[((l1 as int) & 7)] as int)) as int16) as int16), ((7513 & 5) as int16)) as int16)) && ((la0[2] as int))) {
+la0[((l0 as int) & 7)] = (ff0(((max(((p0 as int16) as int16), ((l0 as int16) as int16)) && (l0 as int)) as int)) as sint);
+var l2:int = (7 % ((p0 as int) | 1));
+} else {
+var l3:sint16;
+if (la0[3] <= p0) {
+l3 = (((l0 & l0) && (p0 as int16)) as sint16);
+l1 |= ((l1 | l1) * 0);
+} else {
+l3 = (l0 % (l0 | 1));
+p0 *= (-100);
+p0++;
+l1 = (ff0((l1 as int)) as sint);
+}
+l3 = ((!((-(l3 as int)) + (l3 as int))) as int);
+var al4:[4]sint16 = [((la0[0] as sint16) as sint16), 6, ((l0 << 0) as sint16), ((((!(l1 as int16)) as sint16) & (la0[1] as sint16)) as sint16)];
+al4[(((l3 as int) & (l1 as int)) & 3)] ^= l0;
+l0 = al4[(max(((l3 as int) as int), ((la0[((ff0((l0 as int)) as int) & 7)] as int) as int)) & 3)];
+}
+var l5:sint16;
+for (var l6:int = 0; l6 < 4; l6++) {
+l5 = 0;
+l0 ^= (~(la0[(l6 & 7)] as sint16));
+{
+var p0:sint = 2;
+var l7:int16 = (l6 << 0);
+}
+}
+switch (((p0 as int) & 15)) {
+case 0:
+L1: for (var l8:sint = 0; l8 < 3; l8++) {
+l5 = ff0((l8 as int));
+}
+case 1:
+l0 ^= (((((((p0 as int) as int) != ((p0 as int) as int)) as sint16) as sint16) == (((p0 as sint16) % (-12294)) as sint16)) as sint16);
+case 2:
+L2: for (var l10:int = 0; l10 < 5; l10++) {
+var l11:sint = (p0 | p0);
+l1 = la0[(189 & 7)];
+l11 = (((((l11 % (5 | 1)) || l10) as int16) && l11) as sint);
+}
+case 3:
+var l12:int;
+L3: for (var l13:int = 0; l13 < 3; l13++) {
+l12 = 163;
+l1 &= ((((!(la0[(l13 & 7)] as sint16)) as sint16) && (ff0((la0[(((!(la0[((l13 & l13) & 7)] as int)) as int) & 7)] as int)) as int)) as sint);
+l5 = (((!((l13 as sint) ^ p0)) as sint16) << 5);
+}
+case 4:
+if ((((p0 as sint16) as int16) as int16) == ((l5 as int16) as int16)) {
+var l16:int = (l5 as int);
+l0 = (((((l16 && l16) as sint16) / 6) && ((((((la0[((p0 as int) & 7)] as int) && l5) as int) as int) == (((la0[(l16 & 7)] as int) / ((p0 as int) | 1)) as int)) as sint)) as int);
+}
+case 5:
+la0[((l0 as int) & 7)] &= la0[2];
+case 6:
+p0 = 37;
+case 7:
+la0[0] = (ff0((l0 as int)) as sint);
+case 8:
+l5 *= l0;
+case 9:
+la0[((l1 as int) & 7)] = min(((la0[((-(l1 as int)) & 7)] << 4) as sint), ((p0 << ((108 & 7) as int)) as sint));
+case 10:
+{
+var l0:sint16 = 29051;
+var l20:int16 = max(((l0 as int16) as int16), ((l0 as int16) as int16));
+l0 = 6;
+}
+default:
+l1 = (p0 << ((((!((l5 < l0) as sint16)) as int) & 7) as int));
+p0 = la0[7];
+l0 |= (((la0[(((l1 as int) & (l0 as int)) & 7)] as sint16) / (4 | 1)) & (l5 ^ l0));
+}
+return l5;
+}
