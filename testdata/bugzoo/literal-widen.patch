@@ -1,9 +1,9 @@
 # 符号付きのリテラルを広げても i8 のまま (8ecfbad。SSA が符号付きで比べる)
-diff --git a/internal/sema/hlc.go b/internal/sema/hlc.go
-index d2ee7b8..f1650a9 100644
---- a/internal/sema/hlc.go
-+++ b/internal/sema/hlc.go
-@@ -2657,7 +2657,7 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
+diff --git a/internal/sema/expr.go b/internal/sema/expr.go
+index 7723e55..1b67446 100644
+--- a/internal/sema/expr.go
++++ b/internal/sema/expr.go
+@@ -809,7 +809,7 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
  		if !ir.ValType(v).Signed {
  			return v
  		}

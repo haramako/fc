@@ -1,9 +1,9 @@
 # case の値が switch の値の型に収まるか検査しない (cf63a3c / 0351fc4)
-diff --git a/internal/sema/hlc.go b/internal/sema/hlc.go
-index d2ee7b8..5bc18f0 100644
---- a/internal/sema/hlc.go
-+++ b/internal/sema/hlc.go
-@@ -912,7 +912,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
+diff --git a/internal/sema/stmt.go b/internal/sema/stmt.go
+index 02e1e9d..0a7ac39 100644
+--- a/internal/sema/stmt.go
++++ b/internal/sema/stmt.go
+@@ -490,7 +490,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
  					if ct := ir.ValType(cond); ct.Kind == types.Int && ct.Enum == nil && ct.Size <= 2 {
  						// case の値も比較と同じく、タグの型に収まらなければエラー (u8 の `case 300:` が黙って一度も一致せず、
  						// `case -1:` が 255 に一致していた。survey 2026-09-27、`case -1:` のエラーは 2026-09-27 決定)

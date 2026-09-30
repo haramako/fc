@@ -1,9 +1,22 @@
 # sema: soa の名前を値の型に使うのをエラーにする (42f5734 の逆)
-diff --git b/internal/sema/hlc.go a/internal/sema/hlc.go
-index d2ee7b8..bd49ecf 100644
---- b/internal/sema/hlc.go
-+++ a/internal/sema/hlc.go
-@@ -1660,23 +1660,11 @@ func foldIntOp(op cop, v1, v2 int) int {
+diff --git a/internal/sema/struct.go b/internal/sema/struct.go
+index 6f116af..efa6831 100644
+--- a/internal/sema/struct.go
++++ b/internal/sema/struct.go
+@@ -235,7 +235,7 @@ func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
+ 		}
+ 	}
+ 	if ty == nil {
+-		ty = h.typeOfRaw(t) // soa の名前 (`@sizeof(E)`) も通す (値の型にはならないが、大きさは従来どおり返す)
++		ty = h.typeEval(t)
+ 	}
+ 	h.completeType(ty)
+ 	if ty.Size < 0 {
+diff --git a/internal/sema/typeexpr.go b/internal/sema/typeexpr.go
+index e80c27b..2617f34 100644
+--- a/internal/sema/typeexpr.go
++++ b/internal/sema/typeexpr.go
+@@ -14,23 +14,11 @@ import (
  // typeOf resolves type identities and array lengths at every nesting depth.
  // A named struct does not require its layout until it is used by value.
  func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
@@ -28,16 +41,3 @@ index d2ee7b8..bd49ecf 100644
  		if elem.IsSoa {
  			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
  		}
-diff --git b/internal/sema/struct.go a/internal/sema/struct.go
-index f29ce59..2d6c9e8 100644
---- b/internal/sema/struct.go
-+++ a/internal/sema/struct.go
-@@ -235,7 +235,7 @@ func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
- 		}
- 	}
- 	if ty == nil {
--		ty = h.typeOfRaw(t) // soa の名前 (`@sizeof(E)`) も通す (値の型にはならないが、大きさは従来どおり返す)
-+		ty = h.typeEval(t)
- 	}
- 	h.completeType(ty)
- 	if ty.Size < 0 {

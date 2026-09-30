@@ -1,104 +1,13 @@
 # `f() == .A` の f() を 2 回評価する (4f47fc4。enum の短い名前の型を知るために出した IR を捨てていた。TestV3EnumShortCallOnce)
-commit 4f47fc4e7c868f9c4eab9bc112395fa3e62e8a97
-Author: HARADA Makoto <haramako@gmail.com>
-Date:   Mon Sep 28 09:40:18 2026 +0900
-
-    sema: `f() == .A` の f() が 2 回評価されるのを修正 (enum の短い名前の型を知るために出した IR を捨てていた)
-    
-    resolveEnumShortPair がもう片方の型を知るために rval で IR を出し、その結果を捨てて lval がもう一度出していた。
-    評価済みの式を cOperand として持ち、lval はそれをそのまま返す。
-    
-    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-
-diff --git b/internal/sema/cexpr.go a/internal/sema/cexpr.go
-index a9f58c4..4b7d6d1 100644
---- b/internal/sema/cexpr.go
-+++ a/internal/sema/cexpr.go
-@@ -39,7 +39,6 @@ const (
- 	cNull                   // null (型は文脈から。ty が決まれば 0 のリテラルになる)
- 	cEnumShort              // fc 3 の `.Name` (enum のメンバー。型は文脈から (withExpected)。name)
- 	cNullFn                 // fc 3 の @null_fn (何もしない関数。型は文脈の fn(...):void。無ければ fn():void)
--	cOperand                // 実行時に評価済みの式 (opnd)。lval はそのまま返す (二度出力しない。resolveEnumShortPair が作る)
- )
- 
- // cop は演算の種類。文字列値は IR の opcode 名と同じ綴り。
-@@ -130,7 +129,6 @@ type lambdaLit struct {
- type cexpr struct {
- 	kind  ckind
- 	val   *ir.Value
--	opnd  ir.Operand // cOperand: 評価済みのオペランド
- 	n     int
- 	s     string
- 	name  string
-diff --git b/internal/sema/enum.go a/internal/sema/enum.go
-index 6b0603f..a2de205 100644
---- b/internal/sema/enum.go
-+++ a/internal/sema/enum.go
-@@ -85,35 +85,24 @@ func (h *Hlc) enumShort(c *cexpr, t *types.Type) *cexpr {
+diff --git a/internal/sema/enum.go b/internal/sema/enum.go
+index 9b63960..3e44a36 100644
+--- a/internal/sema/enum.go
++++ b/internal/sema/enum.go
+@@ -105,6 +105,7 @@ func (h *Hlc) evalOnce(c *cexpr) *cexpr {
+ 	if e.kind == cValue || e.kind == cOperand {
+ 		return e
+ 	}
++	h.rval(e) // 型を知るために IR を出して捨てる
+ 	return &cexpr{kind: cOperand, opnd: h.rval(e), pos: c.pos}
  }
  
- // resolveEnumShortPair は二項の比較で片方が `.Name` なら、もう片方の型で解決する (もう片方を先に評価する)。
--// もう片方が実行時の式なら、ここで 1 回だけ IR を出して cOperand にする (以前は型を知るために評価した結果を捨て、
--// lval がもう一度出していたので `f() == .A` の f() が 2 回呼ばれていた)。
- func (h *Hlc) resolveEnumShortPair(a, b *cexpr) (*cexpr, *cexpr) {
- 	if a.kind == cEnumShort && b.kind != cEnumShort {
--		bb := h.evalOnce(b)
--		return h.enumShort(a, cexprType(bb)), bb
-+		bb := h.constEval(b)
-+		return h.enumShort(a, h.cexprType(bb)), bb
- 	}
- 	if b.kind == cEnumShort && a.kind != cEnumShort {
--		aa := h.evalOnce(a)
--		return aa, h.enumShort(b, cexprType(aa))
-+		aa := h.constEval(a)
-+		return aa, h.enumShort(b, h.cexprType(aa))
- 	}
- 	return a, b
- }
- 
--// evalOnce は式を評価し、定数ならその cValue、実行時の式なら IR を出して cOperand にする (以後 lval は再評価しない)。
--func (h *Hlc) evalOnce(c *cexpr) *cexpr {
--	e := h.constEval(c)
--	if e.kind == cValue || e.kind == cOperand {
--		return e
-+// cexprType は評価済みの式の型 (定数ならその型。実行時の式なら評価して型を得る)。
-+func (h *Hlc) cexprType(c *cexpr) *types.Type {
-+	if c.kind == cValue {
-+		return c.val.Type
- 	}
--	return &cexpr{kind: cOperand, opnd: h.rval(e), pos: c.pos}
--}
--
--// cexprType は評価済みの式 (cValue / cOperand) の型。
--func cexprType(c *cexpr) *types.Type {
--	if c.kind == cOperand {
--		return ir.ValType(c.opnd)
--	}
--	return c.val.Type
-+	return ir.ValType(h.rval(c))
- }
- 
- // checkEnumOp は enum の演算の規則: 比較は同じ enum 同士だけ、それ以外 (算術・ビット・論理) は不可。
-diff --git b/internal/sema/hlc.go a/internal/sema/hlc.go
-index f434622..eb52260 100644
---- b/internal/sema/hlc.go
-+++ a/internal/sema/hlc.go
-@@ -1211,7 +1211,7 @@ func (h *Hlc) compileConstSpec(name string, typ syntax.TypeExpr, val *cexpr, opt
- // (値が確定すれば cValue、そうでなければ子が評価済みの演算ノード)。入力は変異しない。
- // 評価済みの木に再適用しても結果は変わらない。
- func (h *Hlc) constEval(c *cexpr) *cexpr {
--	if c.kind == cValue || c.kind == cOperand {
-+	if c.kind == cValue {
- 		return c
- 	}
- 	if h.cmemo == nil {
-@@ -2015,9 +2015,6 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
- 			r = e.val
- 		}
- 
--	case cOperand:
--		r = e.opnd // 既に評価して IR を出した式 (resolveEnumShortPair)
--
- 	case cCast:
- 		v := h.rval(e.args[0])
- 		h.recordCast(e, ir.ValType(v), e.ty)

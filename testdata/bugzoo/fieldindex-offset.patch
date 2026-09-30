@@ -1,14 +1,17 @@
 # struct の配列のフィールドの添字で、フィールドのずれを足さない (わざと入れたバグ。5b89873 の最適化の検査用)
 diff --git a/internal/opt/fieldindex.go b/internal/opt/fieldindex.go
-index 2934fae..6b6f0a2 100644
+index a1c6bd1..7a2579b 100644
 --- a/internal/opt/fieldindex.go
 +++ b/internal/opt/fieldindex.go
-@@ -149,7 +149,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
- 		}
- 		for _, us := range uses {
+@@ -141,9 +141,9 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
  			use0 := ops[us.at]
--			fa := ir.NewCastedValue(arr, u.ArrayOf(us.field, (at.Size-us.off)/us.field.Size), us.off)
-+			fa := ir.NewCastedValue(arr, u.ArrayOf(us.field, (at.Size-us.off)/us.field.Size), 0)
  			var nop *ir.Op
- 			switch use0.Code {
- 			case ir.OpFieldPget, ir.OpPget:
+ 			if use0.Code == ir.OpLoadMem {
+-				nop = ir.NewLoadMem(use0.Dst, arr, j, 1, us.off)
++				nop = ir.NewLoadMem(use0.Dst, arr, j, 1, 0)
+ 			} else {
+-				nop = ir.NewStoreMem(arr, j, 1, us.off, us.width, use0.MemValue())
++				nop = ir.NewStoreMem(arr, j, 1, 0, us.width, use0.MemValue())
+ 			}
+ 			nop.Pos = use0.Pos
+ 			ir.ReplaceOp(ops, us.at, nop)

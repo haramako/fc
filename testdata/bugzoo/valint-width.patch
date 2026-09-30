@@ -1,9 +1,9 @@
-# ir: ValIntLiteral はリテラルの一部を読む cast をそのバイトの値にする (d643a74 の逆)
-diff --git b/internal/ir/value.go a/internal/ir/value.go
-index 7d72605..a30c301 100644
---- b/internal/ir/value.go
-+++ a/internal/ir/value.go
-@@ -340,21 +340,11 @@ func ValLiteral(v Operand) *Value {
+# ir: ValIntLiteral はリテラルの一部を読む cast をそのバイトの値にする (d643a74 と、それを広げた 46f335d の逆)
+diff --git a/internal/ir/value.go b/internal/ir/value.go
+index 37e84ef..eeb8704 100644
+--- a/internal/ir/value.go
++++ b/internal/ir/value.go
+@@ -347,23 +347,11 @@ func ValLiteral(v Operand) *Value {
  }
  
  // ValIntLiteral は v が整数リテラルならその値を返す。
@@ -17,7 +17,9 @@ index 7d72605..a30c301 100644
 +		return lv.Int, true
  	}
 -	n := lv.Int
--	if cv, ok := v.(*CastedValue); ok && cv.Type.Kind == types.Int && (cv.Offset != 0 || cv.Width < cv.Type.Size) {
+-	// 元のリテラルの型より狭い cast (`cast<u8, 0>(65534 as u16)`)、符号の違う型への cast (`cast<u8>(-47)` は 209) も同じ
+-	// (split が上位を 255 にしていた。fuzz で発覚)
+-	if cv, ok := v.(*CastedValue); ok && cv.Type.Kind == types.Int {
 -		n = (n >> (8 * cv.Offset)) & (1<<(8*cv.Width) - 1)
 -		if cv.Width == cv.Type.Size && cv.Type.Signed && n >= 1<<(8*cv.Width-1) {
 -			n -= 1 << (8 * cv.Width)

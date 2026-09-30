@@ -1,11 +1,11 @@
 # return 忘れの検査がループの中から外のラベルへの break と case の中の break を見ない (cf63a3c の terminate.go の逆)
-diff --git b/internal/sema/terminate.go a/internal/sema/terminate.go
-index 6d173a3..e3be9d5 100644
---- b/internal/sema/terminate.go
-+++ a/internal/sema/terminate.go
+diff --git a/internal/sema/terminate.go b/internal/sema/terminate.go
+index 626fd2c..c7c5c5b 100644
+--- a/internal/sema/terminate.go
++++ b/internal/sema/terminate.go
 @@ -42,7 +42,26 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
  	case *syntax.ForStmt:
- 		return !s.IsV1() && (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
+ 		return (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
  	case *syntax.SwitchStmt:
 -		return h.switchTerminates(s, nil)
 +		if s.Default == nil {
@@ -34,7 +34,7 @@ index 6d173a3..e3be9d5 100644
 @@ -51,48 +70,12 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
  			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label)
  		case *syntax.ForStmt:
- 			return !inner.IsV1() && (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
+ 			return (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
 -		case *syntax.SwitchStmt:
 -			return h.switchTerminates(inner, s.Label)
  		}
