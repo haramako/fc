@@ -3,7 +3,7 @@ package sema
 // 文字列の 0 終端と、名前付きの文字列定数の長さ (Agent/wiki/plans/v4-plan.md §2)。
 //
 // fc 4 の文字列リテラルは 0 終端にしない (`"abc"` は 3 バイトの配列。2026-09-30)。fc 3 までは終端の 0 を足し、長さには含めない
-// (ir.Value.StrTerm)。0 終端の文字列が要るところ (`*const u8` で受ける関数) には `"abc\0"` と書く。fc 4 の 0 の無い文字列を
+// (ir.Value.StrTerm)。0 終端の文字列が要るところ (`*const u8` で受ける関数) には `"abc\0"` と書く。fc 4 の 0 を含まない文字列を
 // ポインタにするのはエラー (長さの分からないポインタで 0 を探して読み過ぎる。長さを別に渡すなら @ptr(s))。fc 3 → 4 の migrate は、
 // ポインタにする文字列リテラルと、型を書かない配列の変数の初期値の文字列 (`var s = "abc"`: 0 を含めた 4 バイトの配列) に `\0` を
 // 足して、データも長さも変えない。
@@ -126,8 +126,8 @@ func (h *Hlc) rewriteStrTerm(lit *ir.Value) {
 	h.addRewrite("string-terminator", sp.start, sp.end, syntax.QuoteString(lit.Str+"\x00"))
 }
 
-// strPtr は配列の値 v (文字列リテラル・名前付きの文字列定数かもしれない) をポインタにするときの検査: fc 4 の 0 の無い文字列は
-// エラー。fc 3 の文字列 (0 がある) は、書き換えを集めているなら fc 4 で 0 を書くように書き換える。
+// strPtr は配列の値 v (文字列リテラル・名前付きの文字列定数かもしれない) をポインタにするときの検査: fc 4 の 0 を含まない文字列は
+// エラー (途中の 0 でもよい: 0 終端の文字列を読む側は最初の 0 で止まる。`"ab\0cd"` を write_z に渡すと "ab")。fc 3 の文字列 (0 がある) は、書き換えを集めているなら fc 4 で 0 を書くように書き換える。
 func (h *Hlc) strPtr(v ir.Operand) {
 	g := ir.UnderlyingValue(v)
 	if g == nil {
@@ -146,7 +146,7 @@ func (h *Hlc) strPtr(v ir.Operand) {
 			return
 		}
 		str = fmt.Sprintf("%q", g.Str)
-		if strings.HasSuffix(g.Str, "\x00") {
+		if strings.IndexByte(g.Str, 0) >= 0 {
 			return
 		}
 	case g.StrConst:
@@ -158,7 +158,7 @@ func (h *Hlc) strPtr(v ir.Operand) {
 			return
 		}
 		str = "`" + g.Name + "`"
-		if strings.HasSuffix(init.Str, "\x00") {
+		if strings.IndexByte(init.Str, 0) >= 0 {
 			return
 		}
 	default:

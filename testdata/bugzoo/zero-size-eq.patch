@@ -1,0 +1,18 @@
+# 大きさ 0 どうしの == を畳まず幅の無い比較を出し、IR の検査で落ちる (fc 4 の空の文字列 "" == ""。TestV4StringEdgeCases)
+diff --git b/internal/sema/expr.go a/internal/sema/expr.go
+index 47af969..e4ba4e4 100644
+--- b/internal/sema/expr.go
++++ a/internal/sema/expr.go
+@@ -409,12 +409,6 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
+ 					r = bv
+ 					break
+ 				}
+-				if lt := ir.ValType(left); (lt.Kind == types.Array || lt.Kind == types.Struct) && lt.Size == 0 {
+-					// 大きさ 0 どうし (fc 4 の空の文字列 `"" == ""` は [0]u8): 比べるバイトが無いので等しい (幅の無い比較の命令を
+-					// 出して IR の検査で落ちていた: TestRandomStringsV4)
+-					r = ir.NewIntLiteral("", h.prog.Types.Bool(), 1)
+-					break
+-				}
+ 			}
+ 			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。language_reference.md §2)
+ 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})

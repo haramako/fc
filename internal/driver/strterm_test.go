@@ -197,3 +197,32 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 }
+
+// TestV4StringEdgeCases: TestRandomStringsV4 で見つかった 3 件。途中に 0 がある文字列はポインタにできる (読む側は最初の 0 で
+// 止まる)、大きさ 0 どうしの `==` (空の文字列 `""` は [0]u8。幅の無い比較の命令で IR の検査が落ちていた)、インタプリタの配列
+// どうしの `==` は中身の比較 (番地を比べていた)。
+func TestV4StringEdgeCases(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{"t.fc": `#fc 4
+use console;
+const E = "";
+const S = "\0Vu\\\t{h}P";
+const A = "\0b";
+function main():void
+{
+	console.write_z("ab\0cd");
+	console.newline();
+	@printf("{} {} {} {}\n", E == "", E != "", S == "\0\x56u\x5C\t{h}P", A == "\x00b");
+	console.exit(0);
+}
+`}
+	want := "ab\ntrue false true true\n"
+	for _, level := range []int{-1, 0} {
+		if out, err := rpRun(t, files, level, rpMaxCycles); err != nil || out != want {
+			t.Errorf("level %d: got %q, %v", level, out, err)
+		}
+	}
+	if out, ok, err := rpInterp(t, files); !ok || err != nil || out != want {
+		t.Errorf("interp: got %q, %v, %v", out, ok, err)
+	}
+}

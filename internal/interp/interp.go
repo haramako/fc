@@ -368,6 +368,20 @@ func (m *machine) byteOf(f *frame, o ir.Operand, k int) byte {
 	return 0
 }
 
+// isArray は o が配列の値 (読むと番地になる) か。
+func isArray(o ir.Operand) bool {
+	x, ok := o.(*ir.Value)
+	return ok && (x.Kind == ir.KindLocal || x.Kind == ir.KindGlobal) && x.Type.Kind == types.Array
+}
+
+// contentBytes は o の中身の n バイト (配列は番地でなく、その番地から並ぶバイト)。
+func (m *machine) contentBytes(f *frame, o ir.Operand, n int) []byte {
+	if isArray(o) {
+		return m.loadBytes(m.addrOf(f, o.(*ir.Value)), n)
+	}
+	return m.bytesOf(f, o, n)
+}
+
 // bytesOf は o の下位 n バイト (struct のコピーのように 8 バイトを超えることがある)。
 func (m *machine) bytesOf(f *frame, o ir.Operand, n int) []byte {
 	b := make([]byte, n)
@@ -665,6 +679,11 @@ func (m *machine) run(f *frame) {
 			m.write(f, op.Dst, ^m.read(f, op.Src[0], n), n)
 		case ir.OpEq, ir.OpLt:
 			n := max(size(op.Src[0]), size(op.Src[1]))
+			if op.Code == ir.OpEq && (isArray(op.Src[0]) || isArray(op.Src[1])) {
+				// 配列どうしの == は中身のバイトの比較 (配列の値を読むと番地になるので、番地を比べていた: TestRandomStringsV4)
+				m.writeBool(f, op.Dst, string(m.contentBytes(f, op.Src[0], n)) == string(m.contentBytes(f, op.Src[1], n)))
+				break
+			}
 			if n > 8 {
 				// 9 バイト以上の struct の `==` (read は 8 バイトまでで、上の方のフィールドの違いを見落としていた。fuzz で発覚)
 				m.writeBool(f, op.Dst, string(m.bytesOf(f, op.Src[0], n)) == string(m.bytesOf(f, op.Src[1], n)))

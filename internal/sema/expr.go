@@ -409,6 +409,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					r = bv
 					break
 				}
+				if lt := ir.ValType(left); (lt.Kind == types.Array || lt.Kind == types.Struct) && lt.Size == 0 {
+					// 大きさ 0 どうし (fc 4 の空の文字列 `"" == ""` は [0]u8): 比べるバイトが無いので等しい (幅の無い比較の命令を
+					// 出して IR の検査で落ちていた: TestRandomStringsV4)
+					r = ir.NewIntLiteral("", h.prog.Types.Bool(), 1)
+					break
+				}
 			}
 			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。language_reference.md §2)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
