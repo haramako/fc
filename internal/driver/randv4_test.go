@@ -48,7 +48,15 @@ func migrateRules(t *testing.T, files map[string]string, rules []string) (map[st
 	return out, nil
 }
 
-func TestRandomProgramsV4(t *testing.T) {
+func TestRandomProgramsV4(t *testing.T) { runRandomV4(t, false) }
+
+// TestRandomV3ProgramsV4 は TestRandomV3Programs の生成器 (fc 3 のモジュール v3m: for-each・slice・範囲・負の添字・enum・
+// struct の配列など、fc 3 以降の機能) のプログラムを fc 4 にして比べる。TestRandomProgramsV4 は fc 2 の生成器なのでこれらの
+// 機能を含まない (fc 3 のまま回す TestRandomV3Programs は減らした。2026-09-30)。
+func TestRandomV3ProgramsV4(t *testing.T) { runRandomV4(t, true) }
+
+// runRandomV4 は生成したプログラム (v3 なら v3m のモジュールも) を fc 4 にして -O 0 / -O 2 / インタプリタで比べる。
+func runRandomV4(t *testing.T, v3 bool) {
 	t.Parallel()
 	n := *randN / 2
 	base := *randSeed
@@ -57,8 +65,13 @@ func TestRandomProgramsV4(t *testing.T) {
 	}
 	var skipped atomic.Int32
 	t.Cleanup(func() {
-		if s := skipped.Load(); s > 0 {
+		s := skipped.Load()
+		if s > 0 {
 			t.Logf("fc 4 にできなかった種 (fc 3 の非互換・fc 4 の規則のエラー): %d", s)
+		}
+		// 見張り: 生成器や migrate の変更で fc 4 にできない種ばかりになると、何も比べずに通ってしまう
+		if n >= 10 && int(s)*2 > n {
+			t.Errorf("fc 4 にできなかった種が多すぎる: %d / %d", s, n)
 		}
 	})
 	for k := 0; k < n; k++ {
@@ -66,6 +79,9 @@ func TestRandomProgramsV4(t *testing.T) {
 		t.Run(fmt.Sprintf("seed%d", seed), func(t *testing.T) {
 			t.Parallel()
 			g := &rpGen{r: rand.New(rand.NewSource(seed))}
+			if v3 {
+				g.v3 = &rpV3{}
+			}
 			g.genProgram()
 			files, err := migrateRules(t, g.sources(), v4Rules)
 			if err != nil {
@@ -76,7 +92,7 @@ func TestRandomProgramsV4(t *testing.T) {
 			switch res.kind {
 			case "ok":
 			case "error":
-				for _, s := range []string{"frame size over", "memory area overflow", "zero page index wrapped"} {
+				for _, s := range []string{"frame size over", "memory area overflow", "zero page index wrapped", "does not fit in the zero page", "static frames do not fit"} {
 					if strings.Contains(res.detail, s) {
 						t.Skipf("プログラムが大きすぎる (seed %d): %s", seed, s)
 					}
