@@ -17,7 +17,7 @@ public function sin(a:u8):i8
 	var v:i8 = 127;   // q == 64
 	if (q < 64) {
 		v = SIN[q];
-	} elsif (q > 64) {
+	} else if (q > 64) {
 		v = SIN[128 - q];   // sin(128 - q) = sin(q)
 	}
 	if (a >= 128) {
@@ -83,7 +83,7 @@ public function sign_i8(x:i8):i8
 {
 	if (x < 0) {
 		return -1;
-	} elsif (x > 0) {
+	} else if (x > 0) {
 		return 1;
 	}
 	return 0;
@@ -94,7 +94,7 @@ public function sign_i16(x:i16):i8
 {
 	if (x < 0) {
 		return -1;
-	} elsif (x > 0) {
+	} else if (x > 0) {
 		return 1;
 	}
 	return 0;

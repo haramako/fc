@@ -63,6 +63,7 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 		return nil, fmt.Errorf("%s: %v", filename, err)
 	}
 	runTestsRule(c)
+	elsifRule(c)
 	quoteRule(c)
 	c.Replace(0, len(f.Pragma), fmt.Sprintf("#fc %d", syntax.Version4))
 	out, err := apply(src, c.Edits)
@@ -202,4 +203,14 @@ func overlaps(edits []Edit, start, end int) bool {
 		}
 	}
 	return false
+}
+
+// elsifRule は `elsif` を `else if` にする (fc 4 で elsif をなくした。意味は同じで、構文木の違いは整形の印 IsElsif だけ)。
+func elsifRule(c *Ctx) {
+	syntax.Inspect(c.File, func(n syntax.Node) bool {
+		if s, ok := n.(*syntax.IfStmt); ok && s.IsElsif {
+			c.Replace(s.If.Offset, s.If.Offset+len("elsif"), "else if")
+		}
+		return true
+	})
 }

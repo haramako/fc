@@ -68,6 +68,10 @@ func checkVersion(f *File) error {
 				if !n.At {
 					fail(n.Keyword, "`options(...)` is written `@(...)` in fc 3 (`fcc migrate` rewrites fc 2 sources)")
 				}
+			case *IfStmt:
+				if n.IsElsif && f.Version >= Version4 {
+					fail(n.If, "`elsif` is written `else if` in fc 4 (`fcc migrate` rewrites fc 3 sources)")
+				}
 			}
 			return true
 		})

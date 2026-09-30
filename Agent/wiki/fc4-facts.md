@@ -7,8 +7,8 @@ fc 4 の言語の仕様の正は `docs/reference/language.md`（例は `internal
 ## 書き方
 
 - ファイルの 1 行目に `#fc 4`。無ければ fc 2 として読む（`syntax.DefaultVersion`）
-- else-if は `} else if (...) {` と書く（`fcc fmt` が 1 行に続ける。2026-09-30）。`elsif` も同じ意味で残っているが、fc 4 で
-  なくす候補（`plans/roadmap.md` の v4）なので新しいコードでは使わない
+- else-if は `} else if (...) {` と書く（`fcc fmt` が 1 行に続ける）。fc 4 の `elsif` はエラー（2026-09-30。migrate が `else if` に
+  書き換える。fc 3 のソースでは今も使える）
 - 組み込みは `@` で始まる（`@sizeof`・`@bitcast(T, x)`・`@incbin`・`@include`・`@asm`・`@min`…）。属性は `@(…)`（fc 2 の `options(…)` ではない）
 - グローバル変数は初期値を書けない（`can't init global variable`。0 で始まる）
 - 文字列と文字のリテラルのエスケープは同じ `\n \t \0 \\ \" \' \xNN`。ほかの `\` はエラー（2026-09-30。fc 3 の文字列は `\n` と `\xNN`

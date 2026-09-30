@@ -282,7 +282,7 @@ function billy_process(i:u8):void
 			}
 		}
 		p4_[i] += 1;
-	} elsif (p1 == 255) {
+	} else if (p1 == 255) {
 		// 死亡時
 		if (p4 % 4 == 0) {
 			p4 = p4 / 4;

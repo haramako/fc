@@ -223,10 +223,12 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
 - [x] fc 4 の使われない private な変数は領域を取らない（@(test) の関数だけが使うバッファなど） ✅ 2026-09-29
 - [x] シンプルなパッケージマネージャ（fc.toml の `[lib.NAME]`: path / git + rev + dir、`fc.lock`、`fcc lib`） ✅ 2026-09-29
       （Agent/wiki/plans/v4-stdlib.md §9。✅ 2026-09-29: `fcc lib add`、`-d` の要約に置き換えを出す。✅ 2026-09-29: ライブラリの依存。残り: `use ライブラリ/モジュール`、tarball）
-- [ ] `elsif` をなくす（2026-09-30 ユーザー「`else if` が正しく動くなら、そのうち消してよい」。`elsif` は昔の整形の都合で入れたもので、
+- [x] `elsif` をなくす（2026-09-30 ユーザー「`else if` が正しく動くなら、そのうち消してよい」。`elsif` は昔の整形の都合で入れたもので、
       意味は `else if` と同じ: 構文木の `IfStmt.IsElsif` を見るのは整形だけ）。✅ 2026-09-30: `fcc fmt` が `} else if (...) {` を
       `elsif` と同じく字下げせずに続けるようにした。残り: fc 4 で `elsif` をエラーにし、fc 3 → 4 の migrate が `else if` に書き換える
-      （examples の jump・miku4、test/math.fc の `elsif` も移す）。VS Code の文法の `elsif` も外す
+      （examples の jump・miku4、test/math.fc の `elsif` も移す）。VS Code の文法の `elsif` も外す ✅ 2026-09-30: fc 4 の `elsif` はエラー
+      （`syntax.checkVersion`）、migrate の `elsifRule`、fc 4 のソース（fclib/math・miku4/en・castle と miku と test の math）を
+      `else if` に（`TestToV4Elsif`）。VS Code の文法は fc 3 のソースのために `elsif` を残す（ユーザー「両対応で OK」）
 - [x] 文字列のエスケープを文字のリテラルと同じにする（2026-09-30 ユーザー決定。docs を書いていて発覚: 今の文字列は `\n` と `\xNN`
       だけで、ほかの `\` はそのまま残る（`"\t"` は `\` と `t`）のに、文字のリテラルは `\n \t \0 \\ \' \xNN` が使える。
       `internal/syntax/lexer.go` の `unescape` と `lexer_char.go`）。文字列では `\"` も。fc 4 だけにし、fc 3 → 4 の migrate は

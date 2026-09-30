@@ -367,7 +367,7 @@ function main():void
 		if (phase < 5) {
 			// 1 項目 = 3 + 125 バイトでキュー (128) を満たす
 			vram.put(vram.addr(0, 0, 0), big[..125]);
-		} elsif (phase == 5) {
+		} else if (phase == 5) {
 			// キューより大きい put (分けて積む)
 			vram.put(vram.addr(1, 0, 0), big);
 		} else {
@@ -530,11 +530,11 @@ function main():void
 			oam.spr(v, n, 1, 0);
 			oam.end();
 			frame.wait();
-		} elsif (k == 0) {
+		} else if (k == 0) {
 			vram.put(a, @slice(&data[v], n));
-		} elsif (k == 1) {
+		} else if (k == 1) {
 			vram.put_v(a, @slice(&data[v], n));
-		} elsif (k == 2) {
+		} else if (k == 2) {
 			vram.fill(a, v, n);
 		} else {
 			var s = vram.reserve(a, n);
