@@ -1968,6 +1968,10 @@ func TestRandomPrograms(t *testing.T) {
 				if strings.Contains(res.detail, "memory area overflow") {
 					t.Skipf("プログラムが大きすぎて ROM に入らない (seed %d)", seed)
 				}
+				if strings.Contains(res.detail, "static frames do not fit") || strings.Contains(res.detail, "does not fit in the zero page") {
+					// 静的フレームの合計が ZP / RAM の領域に入らない (大きな配列・展開で main のフレームが大きい。種 55751146)
+					t.Skipf("静的フレームが領域に入らない (seed %d)", seed)
+				}
 				if strings.Contains(res.detail, "zero page index wrapped") {
 					// 呼び出しの入れ子でフレームの合計が FC_STACK (128 バイト) を超えた (emu が S+k,x のページ越えで検出)。
 					// プログラムの問題 (生成器が表の関数にローカル配列を持たせないようにして減らした)
