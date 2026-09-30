@@ -680,7 +680,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	default:
 		panic(fmt.Sprintf("unknown expression kind %d", e.kind))
 	}
-	h.checkExprType(c, r)
+	h.checkExprType(c, r, leftValue)
 	return r, leftValue
 }
 
