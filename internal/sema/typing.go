@@ -193,7 +193,7 @@ func (h *Hlc) binaryType(op cop, a, b exprInfo) (exprInfo, bool) {
 	if (op == opShiftLeft || op == opShiftRight) && h.v4() && isInt(a.t) && (b.t.Kind == types.Int || b.t.Kind == types.Bool) {
 		return exprInfo{t: a.t}, true // F1: シフトの結果は左辺の型 (shiftByLeft)
 	}
-	at, bt := literalAdapted(a, b), literalAdapted(b, a)
+	at, bt := h.literalAdapted(a, b), h.literalAdapted(b, a)
 	if op == opSub && at.Kind == types.Pointer && bt.Kind == types.Pointer && at.Base == bt.Base {
 		return exprInfo{t: h.prog.Types.IntType(2, false)}, true // p - q は要素数 (pointerDiff)
 	}
@@ -206,21 +206,23 @@ func (h *Hlc) binaryType(op cop, a, b exprInfo) (exprInfo, bool) {
 	return exprInfo{}, false
 }
 
-// literalAdapted は二項演算の片方 x の、相手 other に合わせた後の型 (adaptLiteral)。型のない定数は、相手の型より大きい
-// 型の値か 16 ビットに収まらなければ自分の型、そうでなければ相手の型 (収まらない値は相手の型に切り詰めるか、相手が符号付き
-// なら互換型が相手の型になるので、どちらも相手の型と同じ結果)。
-func literalAdapted(x, other exprInfo) *types.Type {
-	if !x.untyped || other.untyped {
+// literalAdapted は二項演算の片方 x の、相手 other に合わせた後の型 (adaptLiteral と同じ判断 literalRule)。
+func (h *Hlc) literalAdapted(x, other exprInfo) *types.Type {
+	return h.literalType(x, other, false)
+}
+
+// literalType は literalRule の判断から、型のない定数 x の合わせた後の型 (型付きならそのまま)。cmp は比較。
+func (h *Hlc) literalType(x, other exprInfo, cmp bool) *types.Type {
+	if !x.untyped {
 		return x.t
 	}
-	t := other.t
-	if t.Kind != types.Int || t.Enum != nil || t.Size < 1 || t.Size > 2 {
-		return x.t
+	switch literalRule(x.t, x.n, other.untyped, other.t, cmp) {
+	case litFits, litTruncate, litCmpError:
+		return other.t
+	case litSigned16:
+		return h.prog.Types.IntType(2, true)
 	}
-	if x.t.Size > t.Size || x.n < -32768 || x.n > 65535 {
-		return x.t
-	}
-	return t
+	return x.t
 }
 
 // checkExprType は lval が式 c を評価した値 v の型が exprType と同じかを確かめる (FC_VERIFY_IR のときだけ)。lv は v が左辺値
@@ -296,14 +298,9 @@ func (h *Hlc) minMaxType(op cop, args []*cexpr) (exprInfo, bool) {
 	return exprInfo{t: t}, true
 }
 
-// literalAdaptedCmp は比較の規則の literalAdapted (adaptLiteral の cmp: 相手が符号付きで定数が大きい型なら符号付きの 16 ビット)。
+// literalAdaptedCmp は比較の規則の literalAdapted (adaptLiteral の cmp)。
 func (h *Hlc) literalAdaptedCmp(x, other exprInfo) *types.Type {
-	t := literalAdapted(x, other)
-	if x.untyped && !other.untyped && other.t.Kind == types.Int && other.t.Enum == nil && other.t.Signed &&
-		t == x.t && !x.t.Signed && x.t.Size > other.t.Size && x.n <= 32767 {
-		return h.prog.Types.IntType(2, true)
-	}
-	return t
+	return h.literalType(x, other, true)
 }
 
 // preConvert は式 c を代入のような変換で to にするときの E・D の判定を、評価する前に型を決める段の情報でする (診断は IR を

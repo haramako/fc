@@ -7,8 +7,8 @@ package sema
 // つきの意味で読む所では、座標のつもりの 128 以上が負になる: 大小の比較、`/`・`%`、`>>`、`as` で 16 ビットに広げる所、型を
 // 省いた変数、@printf / @format の引数。これらに届いたらエラーにして、`a +% b` (左の項の型で計算する: wrap.go) か `as` で型を
 // 選んでもらう。印はその結果に `+ - * & | ^ <<` と単項の `- ~` をかけた同じ大きさの結果にも引き継ぎ、`as` で消える。型の
-// ない定数は相手の型になるので数えない。A1 が部分木ごと 16 ビットに広げる所 (代入先・相手が 16 ビット) は、葉をそれぞれの符号で
-// 広げて計算し直すので値が正しく、数えない (文の終わりに見る)。
+// ない定数は相手の型になるので数えない。A1 が部分木ごと 16 ビットで計算する所 (代入先・相手が 16 ビット) は、葉をそれぞれの符号で
+// 広げるので値が正しく、印が付かない。
 //
 // fc 3 → 4 の migrate (規則 mixed-sign-arith): 起点の演算の符号付きの項が左にあれば演算子を `+%` などに (結果は左の型で
 // 同じ)、右にあれば `(a + b) as i8` にする。どちらも fc 3 と同じ IR。
@@ -59,44 +59,23 @@ func (h *Hlc) mixedOf(tmp *ir.Value, op *ir.Op, n *arithNode, lits []ir.Operand)
 
 func isPlainInt(t *types.Type) bool { return t != nil && t.Kind == types.Int && t.Enum == nil }
 
-// mixedUse は符号の混ざった演算の結果 v を解釈する所 (what はエラーの文言)。
-type mixedUse struct {
-	v    *ir.Value
-	what string
-}
-
-// checkMixedUse は v が符号の混ざった演算の結果なら、解釈する所として文の終わりの検査 (checkMixedUses) に控える。文の中で A1 が
-// 部分木ごと広げたもの (`var t:u16 = (y + dy) / 16`: 葉を自分の符号で広げて 16 ビットで計算し直すので値は正しい) は、文の終わりに
-// 型が広がっているので数えない。
+// checkMixedUse は v が符号の混ざった演算の結果なら、解釈する所 what として、fc 4 ではエラー、fc 3 → 4 の書き換えでは起点の
+// 演算の書き換えにする。A1 で広い幅で計算する式 (`var t:u16 = (y + dy) / 16`: 葉を自分の符号で広げるので値は正しい) は、
+// 評価の前に幅が決まって最初から広い命令になり、印が付かない (以前は後から広げたので文の終わりまで待って見ていた)。
 func (h *Hlc) checkMixedUse(v ir.Operand, what string) {
 	tv, ok := v.(*ir.Value)
 	if !ok || h.arith == nil {
 		return
 	}
-	if n := h.arith[tv]; n != nil && n.mixed != nil {
-		h.mixedUses = append(h.mixedUses, mixedUse{v: tv, what: what})
-	}
-}
-
-// checkMixedUses は文の中で控えた解釈する所 (mark 以降) のうち、広がらずに使われたものを、fc 4 ではエラー、fc 3 → 4 の書き換えでは
-// 起点の演算の書き換えにする。
-func (h *Hlc) checkMixedUses(mark int) {
-	if len(h.mixedUses) <= mark {
+	n := h.arith[tv]
+	if n == nil || n.mixed == nil {
 		return
 	}
-	list := append([]mixedUse(nil), h.mixedUses[mark:]...)
-	h.mixedUses = h.mixedUses[:mark]
-	for _, u := range list {
-		m := h.arith[u.v].mixed
-		if u.v.Type.Size > m.lt.Size {
-			continue // A1 が部分木ごと広げた
-		}
-		switch {
-		case h.v4():
-			panic(h.mixedArithError(m, u.what))
-		case h.rewriting():
-			h.rewriteMixedArith(m)
-		}
+	switch {
+	case h.v4():
+		panic(h.mixedArithError(n.mixed, what))
+	case h.rewriting():
+		h.rewriteMixedArith(n.mixed)
 	}
 }
 

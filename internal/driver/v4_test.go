@@ -35,7 +35,7 @@ func TestV4Errors(t *testing.T) {
 		{"F2: u16 << 16", "function f(w:u16):void { w = w << 16; g = w as u8; }", "shifting u16 left by 16 always gives 0"},
 		{"F4: 16 ビットに入らない", "const Z = [40000, -1];", "do not fit in one integer type"},
 		{"F6: u8 と i8", "function f(x:u8, v:i8):void { if (x < v) { g = 1; } }", "ordered comparison of signed i8 and unsigned u8 would compare as i8"},
-		{"F6: 座標 + 移動量と u8", "function f(x:u8, v:i8, lim:u8):void { if (x + v > lim) { g = 1; } }", "signed i8 and unsigned u8"},
+		{"F6: 座標 + 移動量と u8 (符号の混ざった演算を比べる: mixedarith.go が先)", "function f(x:u8, v:i8, lim:u8):void { if (x + v > lim) { g = 1; } }", "mixes u8 and i8"},
 		{"F6: u16 と i8", "function f(w:u16, v:i8):void { if (w >= v) { g = 1; } }", "would compare as u16"},
 		{"F6: u16 と i16", "function f(w:u16, v:i16):void { if (w <= v) { g = 1; } }", "signed i16 and unsigned u16"},
 		{"F6: 型付きの定数", "const A:u8 = 200;\nconst B:i8 = -1;\nfunction f():void { if (A > B) { g = 1; } }", "signed i8 and unsigned u8"},

@@ -27,48 +27,69 @@ func (h *Hlc) adaptLiteral(a, b ir.Operand, cmp bool) (ir.Operand, ir.Operand) {
 		if !ok || v.Kind != ir.KindLiteral || !v.IsInt || !v.Untyped {
 			continue
 		}
-		if ov, ok := other.(*ir.Value); ok && ov.Kind == ir.KindLiteral && ov.Untyped {
-			continue // 定数同士 (普通は畳み込まれている)
-		}
+		ov, _ := other.(*ir.Value)
 		t := ir.ValType(other)
-		if t.Kind != types.Int || t.Enum != nil || t.Size < 1 || t.Size > 2 {
-			continue
-		}
-		if v.Type.Size > t.Size || v.Int < -32768 || v.Int > 65535 {
-			// 定数のほうが大きい型: 今までどおり広げる (16 ビットに収まらない定数の比較は foldBeyond16 が畳む)。
-			// 比較で相手が符号付きなら、符号付きの広い型にする (`s < 300` (s:i8) が u16 で比べて -10 < 300 が偽だった)
-			if cmp && t.Signed && !v.Type.Signed && v.Int <= 32767 {
-				r := ir.NewIntLiteral("", h.prog.Types.IntType(2, true), v.Int)
-				if k == 0 {
-					a = r
-				} else {
-					b = r
-				}
-			}
-			continue
-		}
-		lo, hi := intRange(t)
-		if v.Int >= lo && v.Int <= hi {
-			continue
-		}
-		if cmp {
+		var r *ir.Value
+		switch literalRule(v.Type, v.Int, ov != nil && ov.Kind == ir.KindLiteral && ov.Untyped, t, cmp) {
+		case litCmpError:
 			panic(&diag.Error{Msg: fmt.Sprintf("%s does not fit in %s, the type of the other operand (a constant in a comparison takes that type; convert the other operand with `as` to compare in another type)", describe(v), t)})
+		case litSigned16:
+			r = ir.NewIntLiteral("", h.prog.Types.IntType(2, true), v.Int)
+		case litTruncate:
+			_, hi := intRange(t)
+			n := ir.FloorMod(v.Int, 1<<(8*t.Size))
+			if n > hi {
+				n -= 1 << (8 * t.Size)
+			}
+			r = ir.NewIntLiteral("", t, n)
 		}
-		if t.Signed {
-			continue // 互換型が既に相手の型 (同じ大きさなら符号付きが勝つ)。値もそのままでよい (IR を以前と同じに保つ)
-		}
-		n := ir.FloorMod(v.Int, 1<<(8*t.Size))
-		if n > hi {
-			n -= 1 << (8 * t.Size)
-		}
-		r := ir.NewIntLiteral("", t, n)
-		if k == 0 {
-			a = r
-		} else {
-			b = r
+		if r != nil {
+			if k == 0 {
+				a = r
+			} else {
+				b = r
+			}
 		}
 	}
 	return a, b
+}
+
+// litDecision は二項演算・比較の片方の型のない整数定数を、相手に合わせるときの判断 (literalRule)。
+type litDecision int
+
+const (
+	litKeep     litDecision = iota // そのまま (定数同士・相手が整数でない・定数のほうが大きい型: 互換型は広いほう)
+	litFits                        // 相手の型に収まる (値はそのままで、互換型が相手の型になる)
+	litTruncate                    // 演算で相手 (符号なし) の型に切り詰める (`x + -1` (x:u8) は x + 255)
+	litSigned16                    // 比較で相手が符号付き、定数が大きい型: 符号付きの 16 ビットにする (`s < 300` (s:i8))
+	litCmpError                    // 比較で相手の型に収まらない: エラー
+)
+
+// literalRule は型のない整数定数 (型 lt、値 n) を相手の型 other に合わせる規則 (Agent/discussions/2026-09-20-v3-plan.md §10.2)。
+// otherUntyped は相手も型のない定数か。cmp は比較か。値を作り直すのは adaptLiteral、型だけを決めるのは型を決める段
+// (typing.go の literalAdapted) で、どちらもこの判断を使う。
+func literalRule(lt *types.Type, n int, otherUntyped bool, other *types.Type, cmp bool) litDecision {
+	if otherUntyped || other.Kind != types.Int || other.Enum != nil || other.Size < 1 || other.Size > 2 {
+		return litKeep // 定数同士 (普通は畳み込まれている) か、相手が整数でない
+	}
+	if lt.Size > other.Size || n < -32768 || n > 65535 {
+		// 定数のほうが大きい型: 今までどおり広げる (16 ビットに収まらない定数の比較は foldBeyond16 が畳む)。
+		// 比較で相手が符号付きなら、符号付きの広い型にする (`s < 300` (s:i8) が u16 で比べて -10 < 300 が偽だった)
+		if cmp && other.Signed && !lt.Signed && n <= 32767 {
+			return litSigned16
+		}
+		return litKeep
+	}
+	if lo, hi := intRange(other); n >= lo && n <= hi {
+		return litFits
+	}
+	if cmp {
+		return litCmpError
+	}
+	if other.Signed {
+		return litFits // 互換型が既に相手の型 (同じ大きさなら符号付きが勝つ)。値もそのままでよい (IR を以前と同じに保つ)
+	}
+	return litTruncate
 }
 
 // intRange は整数型 t (1〜2 バイト) の値の範囲。

@@ -255,8 +255,8 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       入れるだけ（`x += dx`）と `& | ^` は今のまま通す。migrate は castle の約 77 か所（miku 6・darius 6）を、足し算・掛け算は
       符号付きの項を左にした `+%` / `*%`、引き算は `as` に書き換えて ROM を変えない。A1 の算術の部分木の追跡（`sema/widen.go`）と
       F6 の検査を使う。v4-plan.md の「C. 符号の混在」の残る罠への答え） ✅ 2026-09-30: `sema/mixedarith.go`。印は結果に `+ - * & | ^ <<`
-      と単項の `- ~` をかけた同じ大きさの結果にも引き継ぎ、`as` で消える。解釈する所は文の終わりに見て、A1 が部分木ごと 16 ビットに
-      広げた所（葉をそれぞれの符号で広げるので値は正しい）は数えない。16 ビットへの広げでエラーにするのは `as` だけ。migrate の規則
+      と単項の `- ~` をかけた同じ大きさの結果にも引き継ぎ、`as` で消える。A1 が部分木ごと 16 ビットで計算する所（葉をそれぞれの
+      符号で広げるので値は正しい）は数えない（当初は文の終わりに見ていたが、A1 を上から決める形にしてその場で判定する）。16 ビットへの広げでエラーにするのは `as` だけ。migrate の規則
       `mixed-sign-arith`: 符号付きの項が左なら演算子を `+%` などに、右なら `(…) as i8`（castle で 56 + 17 か所、ROM は同じ）。
       `TestMixedSignArith`・`TestV4MigrateMixedSignArith`
 - [x] 文字列のエスケープを文字のリテラルと同じにする（2026-09-30 ユーザー決定。docs を書いていて発覚: 今の文字列は `\n` と `\xNN`
@@ -523,8 +523,10 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       miku4 の ROM と fclib の vram・math・rand の生成コードは前と同じ）。✅ 2026-09-30: 暗黙の変換の E・D（範囲外の定数・縮小）の判定を
       `convRule` 1 つにまとめ（実行時の値の convert と const の宣言の checkConstRange で別々だった）、代入・初期化・引数・return・
       struct / soa のフィールドでは評価の前に型を決める段の情報で判定する（`preConvert`。driver のテストで約 92 % が評価の前、
-      残りは評価のあとの convert）。残り: 二項演算の型と定数の合わせ方（adaptLiteral）・互換の検査（compatibleAssign）・ほかの
-      診断を型を決める段へ移すこと、`Hlc` の状態の整理
+      残りは評価のあとの convert）。✅ 2026-09-30: 型のない定数を相手に合わせる規則を `literalRule`
+      1 つにし、値を作る adaptLiteral と型を決める段の両方が使う。符号の混ざった演算の検査は、文の終わりまで待たずに解釈する所で
+      判定する（後から広げることが無くなったので）。残り: 互換の検査（compatibleAssign）とほかの診断を型を決める段へ移すこと、
+      `Hlc` の状態の整理
 - [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
