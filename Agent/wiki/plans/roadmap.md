@@ -520,8 +520,11 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       テストと fuzz では lval が出した値の型と照合する（最初の照合で `(@min(0, -6) as i8)` の `as` が効かない誤りを見つけた）。
       これで置き換えたもの: enum の短い名前の比較（相手を先に評価して IR を出していた）、`+%` の 2 つの経路、**A1 を上から決める
       形**（代入先・比較・親の算術の幅を評価の前に子へ渡し、最初から広い命令を出す。出した命令を後から書き換える widen を消した。
-      miku4 の ROM と fclib の vram・math・rand の生成コードは前と同じ）。残り: 型の検査・暗黙の変換・診断を lval から型を決める段
-      へ移すこと、`Hlc` の状態の整理
+      miku4 の ROM と fclib の vram・math・rand の生成コードは前と同じ）。✅ 2026-09-30: 暗黙の変換の E・D（範囲外の定数・縮小）の判定を
+      `convRule` 1 つにまとめ（実行時の値の convert と const の宣言の checkConstRange で別々だった）、代入・初期化・引数・return・
+      struct / soa のフィールドでは評価の前に型を決める段の情報で判定する（`preConvert`。driver のテストで約 92 % が評価の前、
+      残りは評価のあとの convert）。残り: 二項演算の型と定数の合わせ方（adaptLiteral）・互換の検査（compatibleAssign）・ほかの
+      診断を型を決める段へ移すこと、`Hlc` の状態の整理
 - [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない

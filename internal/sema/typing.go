@@ -103,6 +103,17 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 				// lval と同じく opMin などの節点にしてから (引数が全部定数なら constEval が畳む)
 				return h.exprType(&cexpr{kind: cOp, op: op, args: e.args[1:]})
 			}
+			if fn.val.Name == "@ptr" && len(e.args) == 2 {
+				// @ptr(s): 配列・slice の先頭へのポインタ
+				if a, ok := h.exprType(e.args[1]); ok {
+					switch {
+					case a.t.IsSlice():
+						return exprInfo{t: u.PointerTo(a.t.SliceOf)}, true
+					case a.t.Kind == types.Array && !a.t.IsSoa:
+						return exprInfo{t: u.PointerTo(a.t.Base)}, true
+					}
+				}
+			}
 			return exprInfo{}, false
 		}
 		f, ok := h.exprType(e.args[0])
@@ -220,7 +231,8 @@ func (h *Hlc) checkExprType(c *cexpr, v ir.Operand, lv bool) {
 	}
 	switch c.op {
 	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight,
-		opAddWrap, opSubWrap, opMulWrap, opUminus, opBitNot, opIndex, opDeref, opRef, opField:
+		opAddWrap, opSubWrap, opMulWrap, opUminus, opBitNot, opIndex, opDeref, opRef, opField,
+		opMin, opMax, opClamp, opLen:
 	default:
 		return
 	}
@@ -292,4 +304,41 @@ func (h *Hlc) literalAdaptedCmp(x, other exprInfo) *types.Type {
 		return h.prog.Types.IntType(2, true)
 	}
 	return t
+}
+
+// preConvert は式 c を代入のような変換で to にするときの E・D の判定を、評価する前に型を決める段の情報でする (診断は IR を
+// 出す前に出る)。判定できたら true (評価のあとの convertValue は判定しない)。式の型は A1 の広げる前の型: 代入先が広ければ代入先の
+// 幅で計算するので縮小にならず、狭ければ式の型から縮小になる。定数は値で (折り返した型付きの定数は代入先の幅で畳み込み直した値)。
+func (h *Hlc) preConvert(c *cexpr, to *types.Type) bool {
+	if c == nil || to == nil {
+		return false
+	}
+	info, ok := h.exprType(c)
+	if !ok {
+		return false
+	}
+	from, k, isConst := info.t, info.n, info.untyped
+	if e := h.constEval(c); !isConst && e.isLiteralInt() {
+		k, isConst = e.val.Int, true
+		if tc := h.taint[e.val]; tc != nil && h.v4() && to.Kind == types.Int && to.Size > e.val.Type.Size {
+			if r := h.foldAtWidth(tc, to.Size); r != nil {
+				k = wrapInt(r.val.Int, to) // widenArith と同じ値
+			}
+		}
+	} else if isConst && !(e.kind == cValue && e.val.Kind == ir.KindLiteral) {
+		return false // 畳まれない型のない定数の式 (マクロ): 評価してから判定する
+	}
+	h.convReport(convRule(from, k, isConst, to), from, k, to, c)
+	return true
+}
+
+// rvalConv は代入のような変換の値 (to の幅で計算し、E・D を評価の前に判定して、to に変換する)。compatibleAssign などの値の
+// 検査は呼び出し側が check で (評価した値を渡す)。
+func (h *Hlc) rvalConv(c *cexpr, to *types.Type, check func(v ir.Operand)) ir.Operand {
+	checked := h.preConvert(c, to)
+	v := h.rvalWide(c, to)
+	if check != nil {
+		check(v)
+	}
+	return h.convertValue(v, to, c, checked)
 }

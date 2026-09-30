@@ -81,6 +81,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	typ := h.typeEval(sp.Type)
 	var init ir.Operand
 	var initC *cexpr
+	var initChecked bool // E・D の判定を評価の前に済ませた (preConvert)
 	if sp.Init != nil {
 		c := h.withExpected(toC(sp.Init), typ)
 		initC = c
@@ -98,6 +99,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				h.rewriteStrTerm(e.val)
 			}
 		}
+		initChecked = typ != nil && h.preConvert(c, typ)
 		init = h.rvalWide(c, typ)
 		// `var a:[?]u8 = [1, 2, 3];`: 長さを初期値から決める (長さ未定のままフレームに領域が取られず、ほかのローカルを壊していた)
 		if it := ir.ValType(init); typ != nil && typ.Kind == types.Array && typ.Length < 0 && it.Kind == types.Array && it.Length >= 0 {
@@ -182,7 +184,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if init != nil {
 		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
 		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convert(init, vv.Type, initC)}})
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convertValue(init, vv.Type, initC, initChecked)}})
 	}
 }
 

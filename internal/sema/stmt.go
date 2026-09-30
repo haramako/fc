@@ -430,11 +430,12 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			}
 			rt := h.lmd.Type.Base
 			rc := h.withExpected(toC(s.Value), rt)
-			v := h.rvalWide(rc, rt)
-			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
-			h.warnDropConst("return from "+h.lmd.Name, rt, v)
-			h.warnReturnLocalAddr(s.Value, rt)
-			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{h.convert(v, rt, rc)}})
+			v := h.rvalConv(rc, rt, func(v ir.Operand) {
+				h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
+				h.warnDropConst("return from "+h.lmd.Name, rt, v)
+				h.warnReturnLocalAddr(s.Value, rt)
+			})
+			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{v}})
 		} else {
 			// void関数
 			if s.Value != nil {

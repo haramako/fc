@@ -202,9 +202,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			dst := ir.NewCastedValue(tmp, f.Type, f.Offset)
 			var v ir.Operand
 			if fv := structLitField(e, f.Name); fv != nil {
-				v = h.rvalWide(fv, f.Type)
-				h.compatible(f.Type, ir.ValType(v))
-				v = h.convert(v, f.Type, fv)
+				v = h.rvalConv(fv, f.Type, func(v ir.Operand) { h.compatible(f.Type, ir.ValType(v)) })
 			} else {
 				v = h.zeroValue(f.Type)
 			}
@@ -248,9 +246,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					panic(&diag.Error{Msg: "cannot assign to element of soa const"})
 				}
 				if fr.split != nil {
-					right := h.rvalWide(h.withExpected(e.args[1], fr.split.typ), fr.split.typ)
-					h.compatible(fr.split.typ, ir.ValType(right))
-					right = h.convert(right, fr.split.typ, e.args[1])
+					right := h.rvalConv(h.withExpected(e.args[1], fr.split.typ), fr.split.typ, func(v ir.Operand) { h.compatible(fr.split.typ, ir.ValType(v)) })
 					h.soaStoreSplit(fr.split, right)
 					r = right
 					break
@@ -550,10 +546,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				// 呼び出しを含まなければ評価しながら積む (`sub t; push_arg t` が隣り合い、t が A に割り付く)
 				pre := containsCallAny(args)
 				evalArg := func(i int) ir.Operand {
-					v := h.rvalWide(h.withExpected(args[i], lmdType.Params[i]), lmdType.Params[i])
-					h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
-					h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], v)
-					return h.convert(v, lmdType.Params[i], args[i])
+					pt := lmdType.Params[i]
+					return h.rvalConv(h.withExpected(args[i], pt), pt, func(v ir.Operand) {
+						h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), pt, ir.ValType(v))
+						h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), pt, v)
+					})
 				}
 				argVals := make([]ir.Operand, len(args))
 				if pre {
@@ -751,10 +748,11 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		rhs = h.withExpected(rhs, lt)
 	}
 	h.checkLoopVarAssign(left)
-	dt := ir.ValType(left) // 代入先の型 (A1 の幅)
+	dt := ir.ValType(left) // 代入先の型 (A1 の幅、E・D の判定)
 	if lv {
 		dt = dt.Base
 	}
+	checked := dt.Kind != types.SoaRef && h.preConvert(rhs, dt)
 	right := h.rvalWide(rhs, dt)
 	if lv {
 		if ir.ValType(left).Kind == types.SoaRef {
@@ -766,7 +764,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		}
 		h.compatibleAssign("assignment", ir.ValType(left).Base, ir.ValType(right))
 		h.warnDropConst("assignment", ir.ValType(left).Base, right)
-		right = h.convert(right, ir.ValType(left).Base, rhs)
+		right = h.convertValue(right, ir.ValType(left).Base, rhs, checked)
 		h.emit(ir.NewStoreMem(left, nil, 0, 0, ir.ValType(left).Base.Size, right))
 		return left
 	}
@@ -777,7 +775,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 	if !ir.ValAssignable(left) {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
-	right = h.convert(right, ir.ValType(left), rhs)
+	right = h.convertValue(right, ir.ValType(left), rhs, checked)
 	// A typed storage alias can expose overlapping struct subobjects. Preserve
 	// the complete RHS before writing when a forward byte copy would overlap.
 	if root := ir.UnderlyingValue(left); root != nil && root == ir.UnderlyingValue(right) {

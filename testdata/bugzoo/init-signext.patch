@@ -3,12 +3,12 @@ diff --git a/internal/sema/decl.go b/internal/sema/decl.go
 index f070ea9..1109953 100644
 --- a/internal/sema/decl.go
 +++ b/internal/sema/decl.go
-@@ -182,7 +182,11 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
+@@ -185,7 +185,11 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
  	if init != nil {
  		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
  		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
--		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convert(init, vv.Type, initC)}})
-+		src := h.convert(init, vv.Type, initC)
+-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convertValue(init, vv.Type, initC, initChecked)}})
++		src := h.convertValue(init, vv.Type, initC, initChecked)
 +		if it := ir.ValType(init); it.Kind == types.Int && it.Signed && it.Size < vv.Type.Size {
 +			src = init
 +		}
