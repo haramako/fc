@@ -42,7 +42,7 @@ use console;
 function main():void
 {
 	console.init();
-	printf("hi\n");
+	@printf("hi\n");
 }
 `}, Run: true, MaxCycles: 1_000_000})
 	if r.Err != nil {
@@ -180,7 +180,7 @@ function main():void
 			bad += 1;
 		}
 	}
-	printf("{} {} {}\n", n, bad, @len(PACKED));
+	@printf("{} {} {}\n", n, bad, @len(PACKED));
 	console.exit(0);
 }
 `
@@ -234,7 +234,7 @@ function main():void
 		sa = (sa << 1 | sa >> 15) ^ a[i];
 		sb = (sb << 1 | sb >> 15) ^ b[i];
 	}
-	printf("{} {}\n", sa, sb);
+	@printf("{} {}\n", sa, sb);
 	console.exit(0);
 }
 `

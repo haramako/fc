@@ -21,7 +21,7 @@ func TestLibAdd(t *testing.T) {
 		}
 	}
 	os.WriteFile(filepath.Join(util, "greet.fc"), []byte("#fc 4\npublic function n():u8 { return 42; }\n"), 0o666)
-	os.WriteFile(filepath.Join(proj, "t.fc"), []byte("#fc 4\nuse console;\nuse greet;\nfunction main():void\n{\n\tprintf(\"{}\\n\", greet.n());\n\tconsole.exit(0);\n}\n"), 0o666)
+	os.WriteFile(filepath.Join(proj, "t.fc"), []byte("#fc 4\nuse console;\nuse greet;\nfunction main():void\n{\n\t@printf(\"{}\\n\", greet.n());\n\tconsole.exit(0);\n}\n"), 0o666)
 
 	infos, err := LibAdd(proj, "util", util, "", "")
 	if err != nil || len(infos) != 1 || infos[0].Name != "util" {

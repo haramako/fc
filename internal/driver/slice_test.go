@@ -153,7 +153,7 @@ var a:[4]u8;
 function main():void
 {
 	var n = @copy(a[1..], "xyz");
-	printf("{} {} {} {}\n", n, a[0], a[1], a[3]);
+	@printf("{} {} {} {}\n", n, a[0], a[1], a[3]);
 	console.exit(0);
 }
 `})
@@ -377,16 +377,16 @@ const PACKED = @lz4("xxxxxxxxxxyyyyyyyyyy");
 function main():void
 {
 	g = 3;
-	printf("{}\n", sum(T));
-	printf("{}\n", sum(T[2..g]));
-	printf("{}\n", sum(T[bump()..bump() + 3]));
-	printf("{}\n", mix(1, T[..g], 500, T, 7));
-	printf("{}\n", mix(bump(), T[g..], sum(T[..2]), T[1..bump()], g));
-	printf("{}\n", rec(T, 4));
-	printf("{}\n", via(sum, T[3..6]));
-	printf("{}\n", lz4.unpack(buf, PACKED));
-	printf("{} {}\n", edge(T[2..5], T[..g]), edge2(T[4..]));
-	printf("{}\n", sum(buf[..20]));
+	@printf("{}\n", sum(T));
+	@printf("{}\n", sum(T[2..g]));
+	@printf("{}\n", sum(T[bump()..bump() + 3]));
+	@printf("{}\n", mix(1, T[..g], 500, T, 7));
+	@printf("{}\n", mix(bump(), T[g..], sum(T[..2]), T[1..bump()], g));
+	@printf("{}\n", rec(T, 4));
+	@printf("{}\n", via(sum, T[3..6]));
+	@printf("{}\n", lz4.unpack(buf, PACKED));
+	@printf("{} {}\n", edge(T[2..5], T[..g]), edge2(T[4..]));
+	@printf("{}\n", sum(buf[..20]));
 	console.exit(0);
 }
 `})

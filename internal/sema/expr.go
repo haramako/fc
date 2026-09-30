@@ -428,7 +428,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			if ir.ValType(lmdV).Kind == types.Macro {
 				// マクロの実行
 				fn := h.prog.macros[ir.ValLiteral(lmdV)]
+				outerCallee := h.macroCallee
+				h.macroCallee = e.args[0]
 				x := fn(h, args, e.block)
+				h.macroCallee = outerCallee
 				if x.stmts != nil {
 					for _, st := range x.stmts {
 						h.lval(st)

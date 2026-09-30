@@ -350,9 +350,9 @@ func (h *Hlc) format(args []*cexpr, what string) *ir.Value {
 
 // printf4 は fc 4 の printf の展開 (console に出す)。
 func (h *Hlc) printf4(args []*cexpr) {
-	const what = "printf"
+	const what = "@printf"
 	if len(args) < 1 {
-		panic(&diag.Error{Msg: "printf takes a format string and the arguments (fc 4: printf(\"HP {}\\n\", hp))"})
+		panic(&diag.Error{Msg: "@printf takes a format string and the arguments (@printf(\"HP {}\\n\", hp))"})
 	}
 	ci := h.builtinModule("console")
 	a := h.fmtPrepare(what, args[0], args[1:])
@@ -443,9 +443,10 @@ func formatConst(k int, t *types.Type, sp ir.LogSpec) string {
 	return strings.Repeat(" ", pad) + digits
 }
 
-// rewritePrintf は fc 3 のモジュールの printf (引数を並べる形) を、fc 4 の書式文字列の形 (`printf("HP {}\n", hp)`) に書き換える
-// (migrate の規則 printf-format)。文字列リテラルの引数は書式に取り込み (`{` `}` は二重に)、ほかの引数は `{}` (bool は今の 0 / 1
-// のまま `{:d}`) にして後ろに並べる。typs は引数の型 (fc 3 の printf が評価したもの)。
+// rewritePrintf は fc 3 のモジュールの printf (引数を並べる形) を、fc 4 の書式文字列の形 (`@printf("HP {}\n", hp)`) に書き換える
+// (migrate の規則 printf-format)。文字列リテラルの引数は書式に取り込み (`{` `}` は二重に。綴りは値から fc 4 のエスケープで作り直す:
+// fc 3 の "\t" は `\` と `t`)、ほかの引数は `{}` (bool は今の 0 / 1 のまま `{:d}`) にして後ろに並べる。typs は引数の型 (fc 3 の
+// printf が評価したもの)。名前も @printf にする (h.macroCallee)。
 func (h *Hlc) rewritePrintf(args []*cexpr, typs []*types.Type) {
 	const rule = "printf-format"
 	if len(args) == 0 {
@@ -462,18 +463,23 @@ func (h *Hlc) rewritePrintf(args []*cexpr, typs []*types.Type) {
 			return
 		}
 	}
-	var f strings.Builder
+	// 名前 (`printf` / `stdio.printf` と書いた所。評価済みなら printf のマクロの値)
+	if c := h.macroCallee; c != nil && c.pos.IsValid() && c.end.IsValid() && c.pos.Offset < c.end.Offset && c.end.Offset <= len(src.Src) {
+		if name := string(src.Src[c.pos.Offset:c.end.Offset]); name == "printf" || strings.HasSuffix(name, ".printf") {
+			h.addRewrite(rule, c.pos.Offset, c.end.Offset, "@printf")
+		}
+	}
+	var f strings.Builder          // 書式の値 (綴りは最後に syntax.QuoteString で作る)
 	lit := make([]bool, len(args)) // 書式に取り込む文字列リテラルの引数
+	braces := strings.NewReplacer("{", "{{", "}", "}}")
 	for i, a := range args {
 		text := string(src.Src[a.pos.Offset:a.end.Offset])
 		if (a.kind == cStr || a.kind == cValue && a.val.IsString) && len(text) >= 2 && (text[0] == '"' || text[0] == '\'') && text[len(text)-1] == text[0] {
-			inner := strings.NewReplacer("{", "{{", "}", "}}").Replace(text[1 : len(text)-1])
-			if text[0] == '\'' {
-				// 書式は "..." で書くので (fc の文字列に \" は無い)。'...' はエスケープを解釈しないので \ も (\n が改行に化けないように)
-				inner = strings.ReplaceAll(inner, `\`, `\x5C`)
-				inner = strings.ReplaceAll(inner, `"`, `\x22`)
+			v := a.s
+			if a.kind == cValue {
+				v = a.val.Str
 			}
-			f.WriteString(inner)
+			f.WriteString(braces.Replace(v))
 			lit[i] = true
 			continue
 		}
@@ -485,7 +491,7 @@ func (h *Hlc) rewritePrintf(args []*cexpr, typs []*types.Type) {
 	}
 	// 置き換えるのは文字列リテラルの引数と区切りだけ (残す引数の中の書き換え (`x as i8 < vx` など) と重ならないように):
 	// 先頭のリテラルの並びは書式に (先頭がリテラルでなければ書式を挿入)、途中の並びは区切り `, ` に、末尾の並びは消す
-	format := `"` + f.String() + `"`
+	format := syntax.QuoteString(f.String())
 	first := -1 // 最初の残す引数
 	for i := range args {
 		if !lit[i] {

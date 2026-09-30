@@ -60,16 +60,16 @@ function main():void
 	var hp:u16 = 1234;
 	var s = @try_format(buf, "HP {}", hp);
 	console.write(s);
-	printf(" {}", @len(s));
-	printf(" {}", @len(@try_format(buf, "HP {:5}/{}", hp, 99)));   // 数で足りない
-	printf(" {}", @len(@try_format(buf, "abcdefgh{}", "x")));      // 文字列で足りない
-	printf(" {}", @len(@try_format(buf, "abcdefgh{:c}", 65 as u8)));   // 1 文字で足りない
-	printf(" {}", @len(@try_format(buf[..3], "{}{}{}{}", 1, 2, 3, 4)));
+	@printf(" {}", @len(s));
+	@printf(" {}", @len(@try_format(buf, "HP {:5}/{}", hp, 99)));   // 数で足りない
+	@printf(" {}", @len(@try_format(buf, "abcdefgh{}", "x")));      // 文字列で足りない
+	@printf(" {}", @len(@try_format(buf, "abcdefgh{:c}", 65 as u8)));   // 1 文字で足りない
+	@printf(" {}", @len(@try_format(buf[..3], "{}{}{}{}", 1, 2, 3, 4)));
 	for (var i:u16 = 0; i < 300; i += 1) {
 		big[i] = 65;
 	}
-	printf(" {}", @len(@try_format(buf, "{}", big))); // 256 バイトを超える文字列 (u8 の配列は中の最初の 0 まで)
-	printf(" [{}]\n", @format(buf, "ok {}", 7));
+	@printf(" {}", @len(@try_format(buf, "{}", big))); // 256 バイトを超える文字列 (u8 の配列は中の最初の 0 まで)
+	@printf(" [{}]\n", @format(buf, "ok {}", 7));
 	console.exit(0);
 }
 `})
@@ -184,7 +184,7 @@ func TestFormatErrors(t *testing.T) {
 		})
 	}
 	// fmt は use しなくても組み込みが読み込む
-	out, err := buildBothLevels(t, map[string]string{"t.fc": "#fc 4\nuse console;\nvar buf:[8]u8;\nfunction main():void { var s = @format(buf, \"x{}\", 1 as u8); printf(\"{}\\n\", s); console.exit(0); }\n"})
+	out, err := buildBothLevels(t, map[string]string{"t.fc": "#fc 4\nuse console;\nvar buf:[8]u8;\nfunction main():void { var s = @format(buf, \"x{}\", 1 as u8); @printf(\"{}\\n\", s); console.exit(0); }\n"})
 	if err != nil || out != "x1\n" {
 		t.Errorf("use なし: out = %q, err = %v", out, err)
 	}
@@ -205,9 +205,9 @@ var buf:[16]u8;
 function dump(s:[]const u8):void
 {
 	for (var c in s) {
-		printf("{} ", c);
+		@printf("{} ", c);
 	}
-	printf("\n");
+	@printf("\n");
 }
 function main():void
 {
@@ -246,9 +246,9 @@ function main():void
 	var hp:u8 = 7;
 	var mx:u8 = 30;
 	for (var c in @format(buf, _T("HP {}/{}"), hp, mx)) {
-		printf("{} ", c);
+		@printf("{} ", c);
 	}
-	printf("\n");
+	@printf("\n");
 	console.exit(0);
 }
 `})
@@ -258,5 +258,19 @@ function main():void
 	// "{1}M{0}" → 30 M 7 → ３ ０ Ｍ ７ = 5 2 27 9
 	if want := "5 2 27 9 \n"; out != want {
 		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+// TestPrintfRenamed: fc 4 の printf は @printf (書式をコンパイル時に分解する組み込みなので @format と同じく @ を付ける。
+// 2026-09-30)。fc 4 の printf と fc 3 の @printf はエラー。
+func TestPrintfRenamed(t *testing.T) {
+	t.Parallel()
+	for src, want := range map[string]string{
+		"#fc 4\nuse console;\nfunction main():void { printf(\"x\\n\"); }\n":                "printf is written @printf in fc 4",
+		"#fc 3\nuse * from stdio;\nfunction main():void { @printf(\"x\\n\"); exit(0); }\n": "@printf is fc 4",
+	} {
+		if _, err := buildFiles(t, map[string]string{"t.fc": src}); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: got %v, want /%s/", src, err, want)
+		}
 	}
 }

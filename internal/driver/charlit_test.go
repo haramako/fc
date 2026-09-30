@@ -16,7 +16,7 @@ import (
 func TestV4MigrateSingleQuote(t *testing.T) {
 	t.Parallel()
 	src := "#fc 3\nuse * from stdio;\nconst S = 'a\\nb\"c';\nvar v:u8 @(symbol: '_t_v');\nfunction main():void\n{\n\tprintf('x\\n', S, \"\\n\");\n\texit(0);\n}\n"
-	want := "#fc 4\nuse * from stdio;\nconst S:[7]u8 = \"a\\\\nb\\\"c\";\nvar v:u8 @(symbol: \"_t_v\");\nfunction main():void\n{\n\tprintf(\"x\\x5Cn{}\\n\", S);\n\texit(0);\n}\n"
+	want := "#fc 4\nuse * from stdio;\nconst S:[7]u8 = \"a\\\\nb\\\"c\";\nvar v:u8 @(symbol: \"_t_v\");\nfunction main():void\n{\n\t@printf(\"x\\\\n{}\\n\", S);\n\texit(0);\n}\n"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.fc")
 	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
@@ -59,7 +59,7 @@ func TestCharLiteralFormat(t *testing.T) {
 // \n と \xNN だけで、ほかの `\` はそのまま残る。fc 3 → 4 の migrate はそれを `\\` にして中身を変えない。
 func TestStringEscapes(t *testing.T) {
 	t.Parallel()
-	out, err := buildFiles(t, map[string]string{"t.fc": "#fc 4\nuse console;\nconst S = \"a\\tb\\0\\\\\\\"\\'\\x41\";\nfunction main():void\n{\n\tfor (var c in S) { printf(\"{} \", c); }\n\tprintf(\"{}\\n\", @len(S));\n\tconsole.exit(0);\n}\n"})
+	out, err := buildFiles(t, map[string]string{"t.fc": "#fc 4\nuse console;\nconst S = \"a\\tb\\0\\\\\\\"\\'\\x41\";\nfunction main():void\n{\n\tfor (var c in S) { @printf(\"{} \", c); }\n\t@printf(\"{}\\n\", @len(S));\n\tconsole.exit(0);\n}\n"})
 	if err != nil || out != "97 9 98 0 92 34 39 65 8\n" {
 		t.Errorf("got %q, %v", out, err)
 	}

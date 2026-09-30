@@ -99,7 +99,7 @@ func TestRunNES(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("#fc 4\nuse console;\nfunction main():void\n{\n\tconsole.init();\n\tprintf(\"hello {}\n\", 42);\n\tconsole.exit(3);\n}\n")
+	write("#fc 4\nuse console;\nfunction main():void\n{\n\tconsole.init();\n\t@printf(\"hello {}\n\", 42);\n\tconsole.exit(3);\n}\n")
 	var out bytes.Buffer
 	res, err := c.Build(context.Background(), "t.fc", Options{Target: TargetNES, Dir: dir, Out: filepath.Join(dir, "t.nes"), Run: true, Stdout: &out})
 	if err != nil {

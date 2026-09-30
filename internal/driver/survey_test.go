@@ -52,20 +52,20 @@ function main():void
 	for (var i:u8 = 0; i < 8; i += 1) { buf[i] = i + 1; }
 	n = 0;
 	mem.zero(buf[2..2 + n]);
-	printf("{}{}{} ", buf[1], buf[2], buf[7]);
+	@printf("{}{}{} ", buf[1], buf[2], buf[7]);
 	n = 3;
 	mem.zero(buf[2..2 + n]);
-	printf("{}{}{}{} ", buf[1], buf[2], buf[4], buf[5]);
+	@printf("{}{}{}{} ", buf[1], buf[2], buf[4], buf[5]);
 	n = 0;
-	printf("{}{}{} ", mem.compare(A[..n], X[..n]), mem.compare(A[..2], B[..2]), mem.compare(A, B));
+	@printf("{}{}{} ", mem.compare(A[..n], X[..n]), mem.compare(A[..2], B[..2]), mem.compare(A, B));
 	mem.fill(big[..300], 7);
-	printf("{}{}{}{} ", big[0], big[255], big[299], big[300]);
+	@printf("{}{}{}{} ", big[0], big[255], big[299], big[300]);
 	mem.copy(big2[..300], big[..300]);
-	printf("{} ", mem.compare(big[..300], big2[..300]));
+	@printf("{} ", mem.compare(big[..300], big2[..300]));
 	big2[299] = 1;
-	printf("{}{} ", mem.compare(big[..300], big2[..300]), mem.compare(big[..299], big2[..299]));
+	@printf("{}{} ", mem.compare(big[..300], big2[..300]), mem.compare(big[..299], big2[..299]));
 	mem.zero(big[1..299]);
-	printf("{}{}{}{}\n", big[0], big[1], big[298], big[299]);
+	@printf("{}{}{}{}\n", big[0], big[1], big[298], big[299]);
 	console.exit(0);
 }
 `})

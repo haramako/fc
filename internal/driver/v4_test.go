@@ -75,7 +75,7 @@ function main():void
 	var s:i8 = -3;
 	var u:u8 = s;
 	var n:u8 = NONE;
-	printf("{} {} {} {} {} {} {}\n", B, none(), x, lo, c, u, n);
+	@printf("{} {} {} {} {} {} {}\n", B, none(), x, lo, c, u, n);
 	exit(0);
 }
 `})
@@ -108,9 +108,9 @@ function main():void
 	var s16:i16 = -5;
 	var h:u16 = hi << 8 | lo;
 	var r = [vx, 200];
-	printf("{} {}\n", h, s >> 8);
-	printf("{} {} {} {} {} {} {} {} {}\n", T[0], T[1], @sizeof(T), U[1], @sizeof(U), @sizeof(S), D[0], r[1], @sizeof(r));
-	printf("{:d} {:d} {:d} {:d}\n", x < s16, x == (-6 as i8), (x + vx) as u8 > lim, x + vx > 100);
+	@printf("{} {}\n", h, s >> 8);
+	@printf("{} {} {} {} {} {} {} {} {}\n", T[0], T[1], @sizeof(T), U[1], @sizeof(U), @sizeof(S), D[0], r[1], @sizeof(r));
+	@printf("{:d} {:d} {:d} {:d}\n", x < s16, x == (-6 as i8), (x + vx) as u8 > lim, x + vx > 100);
 	exit(0);
 }
 `})
@@ -449,7 +449,7 @@ use * from stdio;
 const B:u16 = 300;
 const F:i8 = -1;
 function none():u8 { return -1 as u8; }
-function put(n:u8):void { printf("{}\n", n); }
+function put(n:u8):void { @printf("{}\n", n); }
 function main():void
 {
 	var w:u16 = 0x1234;
@@ -462,7 +462,7 @@ function main():void
 	var x:u8 = 200;
 	var vx:i8 = -1;
 	x = x + vx;
-	printf("{} {} {} {} {} {} {}\n", B, F, none(), c, y, lo, x);
+	@printf("{} {} {} {} {} {} {}\n", B, F, none(), c, y, lo, x);
 	exit(0);
 }
 `
@@ -520,7 +520,7 @@ function f(l0:i8):u8
 }
 function main():void
 {
-	printf("{}\n", f(3));
+	@printf("{}\n", f(3));
 	exit(0);
 }
 `
@@ -572,7 +572,7 @@ function test_x():void @(test) { only_helper[1] = TABLE_TEST[1]; }
 function main():void
 {
 	used_v = TABLE_USED[2];
-	printf("{} {}\n", used_v, old.get());
+	@printf("{} {}\n", used_v, old.get());
 	console.exit(0);
 }
 `
@@ -610,7 +610,7 @@ const X = T[1] + 1;
 const Y = T[2];
 function main():void
 {
-	printf("{} {} {}\n", HASH, X, Y);
+	@printf("{} {} {}\n", HASH, X, Y);
 	console.exit(0);
 }
 `})
@@ -643,13 +643,13 @@ function main():void
 {
 	var c:u8 = 'A';
 	c += 1;
-	printf("{} {} {} {} {} {} {}\n", c, HASH, TAB[2], '\'', '\\', '\x7f', '\0');
-	printf("{} {}\n", _T('あ'), _T('い'));
+	@printf("{} {} {} {} {} {} {}\n", c, HASH, TAB[2], '\'', '\\', '\x7f', '\0');
+	@printf("{} {}\n", _T('あ'), _T('い'));
 	switch (c) {
 	case 'B':
-		printf("B\n");
+		@printf("B\n");
 	default:
-		printf("?\n");
+		@printf("?\n");
 	}
 	console.exit(0);
 }
@@ -699,7 +699,7 @@ function main():void
 {
 	k = 2;
 	a1[((156 as u8 >> ((6 & 7) as u8)) & 7)] = (a1[((156 as u8 >> ((6 & 7) as u8)) & 7)] + (((-66) << 6) + (5 as i8))) as u8;
-	printf("{}\n", a1[7]);
+	@printf("{}\n", a1[7]);
 	exit(0);
 }
 `
@@ -743,7 +743,7 @@ function main():void
 	var b = id_i16(100) >= (id_u8(255) << 3);
 	var c = (3000 as i16) >= ((255 as u8) << 3);
 	var d = id_i16(3000) >= (id_u8(255) << 3);
-	printf("{} {} {} {}\n", a, b, c, d);
+	@printf("{} {} {} {}\n", a, b, c, d);
 	console.exit(0);
 }
 `})

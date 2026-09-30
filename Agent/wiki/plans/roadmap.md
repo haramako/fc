@@ -229,6 +229,10 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       （examples の jump・miku4、test/math.fc の `elsif` も移す）。VS Code の文法の `elsif` も外す ✅ 2026-09-30: fc 4 の `elsif` はエラー
       （`syntax.checkVersion`）、migrate の `elsifRule`、fc 4 のソース（fclib/math・miku4/en・castle と miku と test の math）を
       `else if` に（`TestToV4Elsif`）。VS Code の文法は fc 3 のソースのために `elsif` を残す（ユーザー「両対応で OK」）
+- [x] printf を `@printf` に改名する（2026-09-30 ユーザー決定: 書式をコンパイル時に分解して fmt / console を読み込む組み込みなので、
+      `@format`・`@log` と同じく `@` を付ける。`printf` の名前は利用者に空く） ✅ 2026-09-30: fc 4 の `printf` は「@printf と書く」の
+      エラー、fc 3 の `@printf` もエラー。migrate の printf-format が名前も `@printf` に（`stdio.printf` も。書式の綴りは値から fc 4 の
+      エスケープで作り直す）。docs・examples/life・テストの fc 4 のソースを書き換え（`TestPrintfRenamed`）。VS Code の文法は両方
 - [x] 文字列のエスケープを文字のリテラルと同じにする（2026-09-30 ユーザー決定。docs を書いていて発覚: 今の文字列は `\n` と `\xNN`
       だけで、ほかの `\` はそのまま残る（`"\t"` は `\` と `t`）のに、文字のリテラルは `\n \t \0 \\ \' \xNN` が使える。
       `internal/syntax/lexer.go` の `unescape` と `lexer_char.go`）。文字列では `\"` も。fc 4 だけにし、fc 3 → 4 の migrate は

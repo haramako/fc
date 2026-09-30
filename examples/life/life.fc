@@ -76,7 +76,7 @@ function step():void
 
 function draw(gen:u8):void
 {
-	printf("gen {}\n", gen);
+	@printf("gen {}\n", gen);
 	for (var y:u8 = 0; y < H; y += 1) {
 		for (var x:u8 = 0; x < W; x += 1) {
 			line[x] = DEAD;

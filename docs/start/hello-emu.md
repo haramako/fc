@@ -14,7 +14,7 @@ use console;
 function main():void
 {
 	console.init();
-	printf("Hello, fc!\n");
+	@printf("Hello, fc!\n");
 }
 ```
 
@@ -27,7 +27,7 @@ Hello, fc!
 ```
 
 - `#fc 4` は、このファイルを fc 4 の言語として読むという印です。ファイルの 1 行目に書きます
-- `use console;` は標準ライブラリの `console` モジュールを使うという宣言です。`printf` はここに出力します
+- `use console;` は標準ライブラリの `console` モジュールを使うという宣言です。`@printf` はここに出力します
 - `main` からプログラムが始まります。emu では `main` から戻るとプログラムが終わります
 - `console.init()` は出力の準備です。emu では何もしませんが、同じプログラムを NES で動かすときに画面を用意します
 
@@ -55,11 +55,11 @@ function main():void
 {
 	console.init();
 	for (var n:u8 = 10; n <= 40; n += 10) {
-		printf("1..{:2} = {:4}\n", n, sum_to(n));
+		@printf("1..{:2} = {:4}\n", n, sum_to(n));
 	}
 	var hp:u8 = 7;
 	var s = @format(line, "HP {:3}/{:03}", hp, 50);
-	printf("[{}] {} bytes, {:x} {:b}\n", s, @len(s), 255, 5);
+	@printf("[{}] {} bytes, {:x} {:b}\n", s, @len(s), 255, 5);
 }
 ```
 
@@ -90,7 +90,7 @@ function main():void
 {
 	console.init();
 	var x:u8 = 300;
-	printf("{}\n", x);
+	@printf("{}\n", x);
 }
 ```
 

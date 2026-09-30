@@ -17,7 +17,8 @@ fc 4 の言語の仕様の正は `docs/reference/language.md`（例は `internal
   0 で終わらない文字列をポインタにするのはエラー（表として使うなら `@ptr(s)`）。fc 3 のモジュールの文字列は今までどおり 0 を足す
 - 型を書かない文字列の配列は長さを問わず slice の表 `[?][]const u8`（2026-09-30。1 要素 3 バイト）。2 次元配列にするなら
   `const T:[2][3]u8 = ["ab", "cd"]`（短い行は 0 で詰める）
-- `@copy`・`printf` / `@format` は mem / fmt / console を `use` しなくても組み込みが読み込む（`@copy` は 2026-09-30 から）。
+- 出力は `@printf("HP {}\n", hp)`（2026-09-30 に printf から改名。fc 4 の `printf` はエラーで、migrate が書き換える）
+- `@copy`・`@printf` / `@format` は mem / fmt / console を `use` しなくても組み込みが読み込む（`@copy` は 2026-09-30 から）。
   `console.init()` を書くなら `use console;`
 - asm から見える名前は `_モジュール名_名前`（`score.best` は `_score_best`）。固定するなら `@(symbol: "名前")`
 - 添字は `u16` も書ける（256 要素を超える配列）

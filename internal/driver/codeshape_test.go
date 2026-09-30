@@ -72,7 +72,7 @@ function main():void
 	f();
 	mask = 0x40;
 	f();
-	printf("{}\n", cnt);
+	@printf("{}\n", cnt);
 	console.exit(0);
 }
 `)
@@ -160,11 +160,11 @@ function write(n:u8):u16 @(noinline)
 }
 function main():void
 {
-	printf("{} {} {}\n", adv(T, 1), adv(T, 3), adv(T[1..], 5));
-	printf("{} {}\n", shrink(T[..5]), shrink(T[..0]));
-	printf("{} {}\n", chain(T, 0), chain(T, 4));
-	printf("{} {}\n", wide(T), glob());
-	printf("{}\n", write(3));
+	@printf("{} {} {}\n", adv(T, 1), adv(T, 3), adv(T[1..], 5));
+	@printf("{} {}\n", shrink(T[..5]), shrink(T[..0]));
+	@printf("{} {}\n", chain(T, 0), chain(T, 4));
+	@printf("{} {}\n", wide(T), glob());
+	@printf("{}\n", write(3));
 	console.exit(0);
 }
 `
@@ -236,7 +236,7 @@ func TestShiftZeroExt(t *testing.T) {
 	}
 	src.WriteString("function main():void\n{\n")
 	for k := 1; k <= 7; k++ {
-		fmt.Fprintf(&src, "\tacc = 0;\n\tfor (var i:u16 = 0; i < 256; i += 1) {\n\t\tacc = (acc << 1 | acc >> 15) + sh%d(i as u8);\n\t}\n\tprintf(\"{}\\n\", acc);\n", k)
+		fmt.Fprintf(&src, "\tacc = 0;\n\tfor (var i:u16 = 0; i < 256; i += 1) {\n\t\tacc = (acc << 1 | acc >> 15) + sh%d(i as u8);\n\t}\n\t@printf(\"{}\\n\", acc);\n", k)
 	}
 	src.WriteString("\tconsole.exit(0);\n}\n")
 	out, asm := buildShape(t, src.String())
@@ -275,7 +275,7 @@ function main():void
 {
 	f("abcdef", 4);
 	f("xyz", 2);
-	printf("{} {} {} {}\n", k, out[0], out[3], out[5]);
+	@printf("{} {} {} {}\n", k, out[0], out[3], out[5]);
 	console.exit(0);
 }
 `)
@@ -329,7 +329,7 @@ function main():void
 	wait_n(0);
 	wait_n(3);
 	base = 10;
-	printf("{} {}\n", cnt, f(7));
+	@printf("{} {}\n", cnt, f(7));
 	console.exit(0);
 }
 `)
@@ -376,7 +376,7 @@ function main():void
 	poll(3, 5);
 	poll(6, 1);
 	var s = part(2, 5);
-	printf("{} {} {} {} {} {} {} {}\n", p1.held, p1.pressed, p1.released, p2.held, p2.pressed, p2.released, high(0x1234, 200), @len(s));
+	@printf("{} {} {} {} {} {} {} {}\n", p1.held, p1.pressed, p1.released, p2.held, p2.pressed, p2.released, high(0x1234, 200), @len(s));
 	console.exit(0);
 }
 `)
@@ -425,7 +425,7 @@ function fill():u16 @(noinline)
 function main():void
 {
 	var f = fill();
-	printf("{} {} {} {}\n", f, sum(big), sum(big[..0]), sum(big[10..20]));
+	@printf("{} {} {} {}\n", f, sum(big), sum(big[..0]), sum(big[10..20]));
 	console.exit(0);
 }
 `)
@@ -487,7 +487,7 @@ function main():void
 			e += a;
 		}
 	}
-	printf("{} {}\n", bad, mul(255, 255));
+	@printf("{} {}\n", bad, mul(255, 255));
 	console.exit(0);
 }
 `)
@@ -520,7 +520,7 @@ function main():void
 			}
 		}
 	}
-	printf("{} {} {}\n", bad, avg(255, 255), avg2(200, 101));
+	@printf("{} {} {}\n", bad, avg(255, 255), avg2(200, 101));
 	console.exit(0);
 }
 `)
@@ -570,7 +570,7 @@ function main():void
 	d = 1;
 	throw();
 	copy(5);
-	printf("{} {} {} {} {}\n", a, g, h, k, buf[4]);
+	@printf("{} {} {} {} {}\n", a, g, h, k, buf[4]);
 	console.exit(0);
 }
 `)

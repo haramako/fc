@@ -23,7 +23,7 @@ function main():void
 {
 	var s = "abc";
 	var t:*const u8 = @ptr(DIGITS);
-	printf("{} {} {} {} {} {} {}\n", @len(s), @sizeof(s), @len(DIGITS), @sizeof(DIGITS), @len(Z), @len(EMPTY), t[2]);
+	@printf("{} {} {} {} {} {} {}\n", @len(s), @sizeof(s), @len(DIGITS), @sizeof(DIGITS), @len(Z), @len(EMPTY), t[2]);
 	console.write_z("xy\0");
 	console.write_z(MSGS[0]);
 	console.write_z(MSGS[1]);
@@ -75,7 +75,7 @@ function main():void
 	print("lit\0");
 	print(NM);
 	print(PS[1]);
-	printf(" {} {} {}\n", @len(s), @len(NM), s[3]);
+	@printf(" {} {} {}\n", @len(s), @len(NM), s[3]);
 	exit(0);
 }
 `
@@ -115,9 +115,9 @@ const SAME = ["xy", "zw"];
 function main():void
 {
 	var loc = ["q", "rs", ""];
-	printf("{} {} {} {} {} {}\n", @len(NAMES), NAMES[1], @len(SAME[0]), @sizeof(SAME), @len(loc), @len(loc[2]));
+	@printf("{} {} {} {} {} {}\n", @len(NAMES), NAMES[1], @len(SAME[0]), @sizeof(SAME), @len(loc), @len(loc[2]));
 	for (var s in NAMES) {
-		printf("{}|", s);
+		@printf("{}|", s);
 	}
 	console.newline();
 	console.exit(0);
@@ -146,7 +146,7 @@ function main():void
 	var l:[2][2]u8 = ["x", "y"];
 	print(T[1]);
 	print(l[0]);
-	printf(" {} {}\n", @sizeof(T), @sizeof(l));
+	@printf(" {} {}\n", @sizeof(T), @sizeof(l));
 	exit(0);
 }
 `

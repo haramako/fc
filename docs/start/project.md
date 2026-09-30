@@ -46,9 +46,9 @@ function main():void
 	console.init();
 	var s = score.add(0, 1200);
 	s = score.add(s, 9000);
-	printf("score {}\n", s);
+	@printf("score {}\n", s);
 	if (score.record(s)) {
-		printf("new record!\n");
+		@printf("new record!\n");
 	}
 }
 ```

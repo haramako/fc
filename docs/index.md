@@ -18,7 +18,7 @@ hero:
 
 features:
   - title: C に近い書き方
-    details: 関数・構造体・ポインタに加えて、長さを持つ slice と書式つきの出力（@format / printf）があります。
+    details: 関数・構造体・ポインタに加えて、長さを持つ slice と書式つきの出力（@format / @printf）があります。
   - title: 6502 に合わせたコード
     details: 関数の変数は静的なフレームに置き、ループの変数はレジスタに置きます。使わない関数とデータは ROM に入りません。
   - title: NES の標準ライブラリ
@@ -53,7 +53,7 @@ function max_of(xs:[]const u16):u16
 function main():void
 {
 	console.init();
-	printf("{}\n", @format(line, "HI-SCORE {:05}", max_of(SCORES)));
+	@printf("{}\n", @format(line, "HI-SCORE {:05}", max_of(SCORES)));
 }
 ```
 

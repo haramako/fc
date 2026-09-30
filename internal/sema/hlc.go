@@ -28,6 +28,7 @@ type Hlc struct {
 	scope        *ir.Scope
 	loops        []breakable   // 囲んでいるループ/switch (内側が末尾)
 	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
+	macroCallee  *cexpr        // 実行中のマクロの呼び出しの関数の式 (fc 3 → 4 の書き換えで名前を置き換える: printf → @printf)
 	fastCalling  bool
 	groupBss     string // innermost placement block; module default is applied after declarations
 	inStaticIf   bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)

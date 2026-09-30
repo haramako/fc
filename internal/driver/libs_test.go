@@ -50,7 +50,7 @@ use tgt;
 use rand;
 function main():void
 {
-	printf("{} {} {}\n", greet.n(), tgt.m(), rand.next_u8());
+	@printf("{} {} {}\n", greet.n(), tgt.m(), rand.next_u8());
 	console.exit(0);
 }
 `,
@@ -120,7 +120,7 @@ func TestLibGit(t *testing.T) {
 	gitRun("tag", "v1")
 	writeTree(t, root, map[string]string{
 		"proj/fc.toml": "[lib.ver]\ngit = \"" + filepath.ToSlash(repo) + "\"\ndir = \"src\"\n",
-		"proj/t.fc":    "#fc 4\nuse console;\nuse ver;\nfunction main():void { printf(\"{}\\n\", ver.get()); console.exit(0); }\n",
+		"proj/t.fc":    "#fc 4\nuse console;\nuse ver;\nfunction main():void { @printf(\"{}\\n\", ver.get()); console.exit(0); }\n",
 	})
 	if out, err := runProject(t, root, BuildOptions{}); err != nil || out != "1\n" {
 		t.Fatalf("取ってくる: %q, %v", out, err)
@@ -172,7 +172,7 @@ use console;
 use ua;
 function main():void
 {
-	printf("{}\n", ua.f());
+	@printf("{}\n", ua.f());
 	console.exit(0);
 }
 `,

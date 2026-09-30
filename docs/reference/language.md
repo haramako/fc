@@ -19,7 +19,7 @@ use console;
 function main():void
 {
 	console.init();
-	printf("hello\n");
+	@printf("hello\n");
 }
 ```
 
@@ -81,11 +81,11 @@ function main():void
 	var b:u8 = 100;
 	var w:u16 = a + b; // u16 で計算する
 	var t = a + b; // 代入先の型が無いので u8 で計算する (折り返す)
-	printf("{} {}\n", w, t);
+	@printf("{} {}\n", w, t);
 	var hi:u8 = 0x12;
 	var lo:u8 = 0x34;
 	var addr:u16 = hi << 8 | lo;
-	printf("{:x}\n", addr);
+	@printf("{:x}\n", addr);
 }
 ```
 
@@ -128,7 +128,7 @@ function main():void
 	var v:i8 = -3;
 	var p:u8 = 10;
 	p = p + v; // 同じ大きさの符号違いは暗黙に
-	printf("{} {} {}\n", x, m, p);
+	@printf("{} {} {}\n", x, m, p);
 }
 ```
 
@@ -188,7 +188,7 @@ function main():void
 {
 	console.init();
 	var a:i8 = -7;
-	printf("{} {} {}\n", a / 2, a % 2, 7 / -2);
+	@printf("{} {} {}\n", a / 2, a % 2, 7 / -2);
 }
 ```
 
@@ -246,12 +246,12 @@ function add(a:u8, b:u8 = 10):u8
 function main():void
 {
 	console.init();
-	printf("{} {}\n", add(1), add(1, 2));
+	@printf("{} {}\n", add(1), add(1, 2));
 	// 名前の無い関数
 	var twice = ->fn(x:u8):u8 {
 		return x * 2;
 	};
-	printf("{}\n", twice(21));
+	@printf("{}\n", twice(21));
 }
 ```
 
@@ -285,8 +285,8 @@ function main():void
 	var p:Point = {3, -4}; // 型が分かっていれば名前を省ける
 	var q = Point{x: 5}; // 書かなかったフィールドは 0
 	p.x += 1;
-	printf("{} {} {} {}\n", p.x, p.y, q.y, @sizeof(Point));
-	printf("{}\n", q == ORIGIN);
+	@printf("{} {} {} {}\n", p.x, p.y, q.y, @sizeof(Point));
+	@printf("{}\n", q == ORIGIN);
 }
 ```
 
@@ -328,7 +328,7 @@ function name(d:Dir):[]const u8
 function main():void
 {
 	console.init();
-	printf("{} {} {}\n", Dir.LEFT, @len(Dir), name(.RIGHT));
+	@printf("{} {} {}\n", Dir.LEFT, @len(Dir), name(.RIGHT));
 }
 ```
 
@@ -362,7 +362,7 @@ function main():void
 	e.x = 7;
 	e.hp = 3;
 	Enemies[3].x = 9;
-	printf("{} {}\n", Enemies[2].x, Enemies[3].x);
+	@printf("{} {}\n", Enemies[2].x, Enemies[3].x);
 }
 ```
 
@@ -393,7 +393,7 @@ function main():void
 {
 	console.init();
 	work.x = 5;
-	printf("{} {}\n", memblock[0], @sizeof(work));
+	@printf("{} {}\n", memblock[0], @sizeof(work));
 }
 ```
 
@@ -486,20 +486,20 @@ function main():void
 {
 	console.init();
 	for (var c in S[1..3]) {
-		printf("{:c}", c);
+		@printf("{:c}", c);
 	}
 	for (var i, c in S) {
 		if (i == 0) {
-			printf(" {}={:c}", i, c);
+			@printf(" {}={:c}", i, c);
 		}
 	}
 	for (var i in 0..3) {
-		printf(" {}", i);
+		@printf(" {}", i);
 	}
 	for (var p in &enemies) {
 		p.hp = 3; // ポインタで回すと書き換えられる
 	}
-	printf(" {}\n", enemies[2].hp);
+	@printf(" {}\n", enemies[2].hp);
 }
 ```
 
@@ -523,17 +523,17 @@ function main():void
 	for (var x in [1, 5, 50, 200]) {
 		switch (x) {
 		case 1, 2:
-			printf("small ");
+			@printf("small ");
 		case 3..10:
-			printf("mid ");
+			@printf("mid ");
 		case 100..=250:
-			printf("big ");
+			@printf("big ");
 			fallthrough;
 		default:
-			printf("other ");
+			@printf("other ");
 		}
 	}
-	printf("\n");
+	@printf("\n");
 }
 ```
 
@@ -562,10 +562,10 @@ function main():void
 			if (j == 1) {
 				continue outer;
 			}
-			printf("{}{} ", i, j);
+			@printf("{}{} ", i, j);
 		}
 	}
-	printf("\n");
+	@printf("\n");
 }
 ```
 
@@ -648,7 +648,7 @@ C と同じく、`&` は `==` より弱い（`a & MASK == 0` は `a & (MASK == 0
 | `@copy(dst, src)` | 短いほうの長さだけ写して、写した数を返す |
 | `@format(dst, "書式", …)` | `dst` に書式どおりに書き、書いた部分の slice を返す |
 | `@try_format(dst, "書式", …)` | `@format` と同じだが、足りなければ止まらずに長さ 0 の slice を返す |
-| `printf("書式", …)` | `console` に書式どおりに出す |
+| `@printf("書式", …)` | `console` に書式どおりに出す |
 | `@assert(式 [, "文言"])` | 式が偽なら、ファイル・行・式を出して止まる |
 | `@assert_eq(実際, 期待)` | 違えば、両方の値を出して止まる |
 | `@run_tests()` | すべての `@(test)` の関数を順に呼ぶ（`fcc test` が使う） |
@@ -662,7 +662,7 @@ C と同じく、`&` は `==` より弱い（`a & MASK == 0` は `a & (MASK == 0
 
 ### 書式
 
-`@format` と `printf` の書式は定数の文字列で、コンパイルのときに分解する（実行のときに書式を読まない）。
+`@format` と `@printf` の書式は定数の文字列で、コンパイルのときに分解する（実行のときに書式を読まない）。
 
 ::: v-pre
 
@@ -691,9 +691,9 @@ function main():void
 	console.init();
 	var hp:u8 = 7;
 	var s = @format(line, "HP {:3}/{:03}", hp, 50);
-	printf("[{}] {} {:X} {:b} {:c} {{}}\n", s, @len(s), 255, 5, 'A');
+	@printf("[{}] {} {:X} {:b} {:c} {{}}\n", s, @len(s), 255, 5, 'A');
 	var t = @try_format(line[..4], "{}", 12345);
-	printf("{}\n", @len(t));
+	@printf("{}\n", @len(t));
 }
 ```
 

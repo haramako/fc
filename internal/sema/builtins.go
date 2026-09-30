@@ -38,11 +38,19 @@ func registerBuiltins(p *Program) {
 		return macroResult{}
 	})
 
+	// fc 4 の @printf: 書式文字列で console に出す (@format と同じ書式。format.go)。printf は fc 3 までの綴り (2026-09-30 に改名:
+	// 書式をコンパイル時に分解する組み込みなので @format と同じく @ を付ける)
+	h.defmacro("@printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		if !h.v4() {
+			panic(&diag.Error{Msg: "@printf is fc 4 (write printf in fc 3 and older modules)"})
+		}
+		h.printf4(args)
+		return macroResult{}
+	})
+
 	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if h.v4() {
-			// fc 4: 書式文字列で console に出す (@format と同じ書式。format.go)
-			h.printf4(args)
-			return macroResult{}
+			panic(&diag.Error{Msg: "printf is written @printf in fc 4 (`fcc migrate` rewrites fc 3 sources)"})
 		}
 		stdio := h.stdioModule("printf")
 		uint8p := h.prog.Types.PointerTo(h.prog.Types.IntType(1, false))
