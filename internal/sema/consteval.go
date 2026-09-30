@@ -100,6 +100,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		return cv(rv)
 
 	case cArray:
+		if c.ty == nil && h.v4() && stringRows(c.args) {
+			// fc 4: 型を書かない文字列の配列は slice の表 (`[?][]const u8`)。長さがそろうかどうかで型が変わらない (2026-09-30)
+			st := h.prog.Types.Slice(h.prog.Types.IntType(1, false), true, false)
+			return h.constEval(h.withExpected(&cexpr{kind: cArray, args: c.args, pos: c.pos, end: c.end}, h.prog.Types.ArrayOf(st, -1)))
+		}
 		vals := make([]ir.Operand, len(c.args))
 		var typ *types.Type
 		for i, e := range c.args {
@@ -114,6 +119,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				return &cexpr{kind: cArray, args: c.args, ty: c.ty, rt: true, pos: c.pos}
 			}
 			v := x.val
+			if t := c.ty; t != nil && t.Kind == types.Array && t.Base.Kind == types.Array && t.Base.Length > len(v.Elems) && v.IsString {
+				// `const T:[2][3]u8 = ["ab", "cd"]`: 文字列の行は行の長さまで 0 で詰める (fc 4 の文字列には終端の 0 が無い)
+				v = h.padArrayLiteral(v.Name, v, t.Base)
+			}
 			vals[i] = v
 			if i == 0 {
 				typ = ir.ValType(v)

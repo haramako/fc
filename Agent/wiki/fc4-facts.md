@@ -15,7 +15,8 @@ fc 4 の言語の仕様の正は `docs/reference/language.md`（例は `internal
   だけで、ほかの `\` はそのまま残る。migrate が `\\` に書き換える）
 - 文字列は 0 終端にしない（2026-09-30）: `"abc"`・`var s = "abc"`・`const S = "abc"` はどれも 3 バイト。0 終端が要るなら `"abc\0"`。
   0 で終わらない文字列をポインタにするのはエラー（表として使うなら `@ptr(s)`）。fc 3 のモジュールの文字列は今までどおり 0 を足す
-- 長さの違う文字列の配列は型が要る: `const NAMES:[?][]const u8 = ["ab", "cde"];`（書かないと「長さが違う」エラー）
+- 型を書かない文字列の配列は長さを問わず slice の表 `[?][]const u8`（2026-09-30。1 要素 3 バイト）。2 次元配列にするなら
+  `const T:[2][3]u8 = ["ab", "cd"]`（短い行は 0 で詰める）
 - `@copy`・`printf` / `@format` は mem / fmt / console を `use` しなくても組み込みが読み込む（`@copy` は 2026-09-30 から）。
   `console.init()` を書くなら `use console;`
 - asm から見える名前は `_モジュール名_名前`（`score.best` は `_score_best`）。固定するなら `@(symbol: "名前")`

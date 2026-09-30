@@ -103,3 +103,74 @@ function main():void
 		t.Errorf("fc 3: %q, fc 4: %q", before, after)
 	}
 }
+
+// TestV4StringRows: fc 4 で型を書かない文字列の配列は、長さを問わず slice の表 (`[?][]const u8`)。fc 3 は同じ長さの行の 2 次元配列
+// (終端の 0 を含む) なので、migrate は今の型を書き足して変えない。
+func TestV4StringRows(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+const NAMES = ["ab", "cde"];
+const SAME = ["xy", "zw"];
+function main():void
+{
+	var loc = ["q", "rs", ""];
+	printf("{} {} {} {} {} {}\n", @len(NAMES), NAMES[1], @len(SAME[0]), @sizeof(SAME), @len(loc), @len(loc[2]));
+	for (var s in NAMES) {
+		printf("{}|", s);
+	}
+	console.newline();
+	console.exit(0);
+}
+`})
+	if err != nil || out != "2 cde 2 6 3 0\nab|cde|\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	src := `#fc 3
+use * from stdio;
+const T = ["ab", "cd"];
+function main():void
+{
+	var l = ["x", "y"];
+	print(T[1]);
+	print(l[0]);
+	printf(" ", @sizeof(T), " ", @sizeof(l), "\n");
+	exit(0);
+}
+`
+	want := `#fc 4
+use * from stdio;
+const T:[2][3]u8 = ["ab", "cd"];
+function main():void
+{
+	var l:[2][2]u8 = ["x", "y"];
+	print(T[1]);
+	print(l[0]);
+	printf(" {} {}\n", @sizeof(T), @sizeof(l));
+	exit(0);
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(res[path]); got != want {
+		t.Fatalf("migrate:\n%s\nwant:\n%s", got, want)
+	}
+	before, err := buildBothLevels(t, map[string]string{"t.fc": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := buildBothLevels(t, map[string]string{"t.fc": want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after || before != "cdx 6 4\n" {
+		t.Errorf("fc 3: %q, fc 4: %q", before, after)
+	}
+}

@@ -84,6 +84,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if sp.Init != nil {
 		c := h.withExpected(toC(sp.Init), typ)
 		initC = c
+		if sp.Type == nil {
+			h.rewriteStringRows(c, sp.Name.End())
+		}
 		if typ != nil && typ.Kind == types.Array {
 			if e := h.constEval(c); e.kind == cValue && e.val.Kind == ir.KindArrayLiteral {
 				c = cv(h.fitArrayLiteral(e.val, typ))
@@ -189,6 +192,9 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 	}
 	if val != nil {
 		declType := h.typeEval(typ)
+		if typ == nil {
+			h.rewriteStringRows(val, nameEnd)
+		}
 		h.constIndex = h.v4()
 		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
 		h.constIndex = false

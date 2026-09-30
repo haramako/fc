@@ -174,3 +174,27 @@ func (h *Hlc) cstrZ(s string) *cexpr {
 	}
 	return cstr(s)
 }
+
+// stringRows は配列リテラルの要素が全部文字列リテラルか (fc 4 で型を書かなければ slice の表にする)。
+func stringRows(args []*cexpr) bool {
+	for _, a := range args {
+		if a.kind != cStr {
+			return false
+		}
+	}
+	return len(args) > 0
+}
+
+// rewriteStringRows は fc 3 の型を書かない文字列の配列 (`const T = ["ab", "cd"]` は `[2][3]u8`: 終端の 0 を含む行の 2 次元配列) の
+// 宣言に、今の型を書き足す書き換えを足す (fc 4 では型を書かないと slice の表になる)。val は初期値の式、nameEnd は名前の終わり。
+func (h *Hlc) rewriteStringRows(val *cexpr, nameEnd syntax.Pos) {
+	if !h.rewriting() || val == nil || val.kind != cArray || !stringRows(val.args) {
+		return
+	}
+	e := h.constEval(val)
+	if e.kind != cValue || !nameEnd.IsValid() {
+		h.rewriteError("string-rows", "cannot tell the type of the string array (write its type by hand)")
+		return
+	}
+	h.addRewrite("string-rows", nameEnd.Offset, nameEnd.Offset, ":"+e.val.Type.String())
+}
