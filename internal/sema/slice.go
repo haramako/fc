@@ -371,8 +371,8 @@ func (h *Hlc) constSlice(c *cexpr) *cexpr {
 	case v.Kind == ir.KindArrayLiteral && v.Type.Kind == types.Array:
 		v = h.fitArrayLiteral(v, h.prog.Types.ArrayOf(st.SliceOf, -1))
 		n = len(v.Elems)
-		if v.IsString && n > 0 {
-			n-- // 文字列リテラルは終端の 0 を含めない (データには残す)
+		if v.StrTerm && n > 0 {
+			n-- // 文字列リテラルは終端の 0 を含めない (データには残す。fc 4 の文字列には 0 が無い)
 		}
 	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && !v.Type.IsSoa && v.Symbol != "" && v.Type.Length >= 0:
 		n, sym = v.Type.Length, v.Symbol
@@ -415,10 +415,12 @@ func (h *Hlc) constAddress(c *cexpr, pt *types.Type) *cexpr {
 		if !v.IsString {
 			h.compatibleAssign("field", pt, v.Type)
 		}
+		h.strPtr(v)
 		sym := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: v.Type, Elems: v.Elems})
 		return cv(ir.NewSymbolLiteral("", pt, sym))
 	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && !v.Type.IsSoa && v.Symbol != "":
 		h.compatibleAssign("field", pt, v.Type)
+		h.strPtr(v)
 		return cv(ir.NewSymbolLiteral("", pt, v.Symbol))
 	}
 	return c

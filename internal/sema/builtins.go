@@ -331,9 +331,9 @@ func runTestsV3(h *Hlc) macroResult {
 	for _, id := range h.scope.IdList() {
 		if len(id) >= 5 && id[:5] == "test_" {
 			r.stmts = append(r.stmts,
-				ccall(cv(print), cstr(fmt.Sprintf("%s:", id))),
+				ccall(cv(print), h.cstrZ(fmt.Sprintf("%s:", id))),
 				ccall(cident(id)),
-				ccall(cv(print), cstr("\n")),
+				ccall(cv(print), h.cstrZ("\n")),
 			)
 		}
 	}

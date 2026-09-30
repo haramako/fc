@@ -232,11 +232,16 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       `internal/syntax/lexer.go` の `unescape` と `lexer_char.go`）。文字列では `\"` も。fc 4 だけにし、fc 3 → 4 の migrate は
       今そのまま残っている `\` を `\\` に書き換える（ROM を変えない）。docs/reference/language.md の字句の表も直す ✅ 2026-09-30
       （`syntax.unescape` / `simpleEscape`、migrate の `quoteRule`。`TestStringEscapes`）
-- [ ] 文字列を 0 終端にしない（2026-09-30 ユーザー決定。castle なども直す前提）。今は `var s = "abc"`（関数の中）が終端の 0 を含む
+- [x] 文字列を 0 終端にしない（2026-09-30 ユーザー決定。castle なども直す前提）。今は `var s = "abc"`（関数の中）が終端の 0 を含む
       4 バイトの配列で `@len(s)` が 4、`const S = "abc"` は `@len` が 3・`@sizeof` が 4 と食い違う（Agent/wiki/fc4-facts.md）。
       fc 4 では文字列は長さぶんの `[N]const u8` だけにする。0 終端に頼っている所（fclib の asm・`*const u8` で受ける関数・
       castle / miku の表や文字列の出力）を洗い出して slice か明示の `"…\0"` に移す。migrate で ROM を変えないやり方（0 を足した
-      文字列に書き換える）が取れるかも調べる
+      文字列に書き換える）が取れるかも調べる ✅ 2026-09-30: fc 4 の文字列リテラルは 0 を足さない（`ir.Value.StrTerm` は fc 3 のものだけ）。
+      0 で終わらない文字列をポインタにするのはエラー（`sema.strPtr`。表として使うなら `@ptr(s)`）。printf・@run_tests がコンパイラの中で
+      作る write_z の文字列は 0 を足す（`cstrZ`）。migrate は、ポインタにする文字列リテラルと型を書かない配列の変数の初期値に `\0` を足し、
+      名前付きの文字列定数は長さつきに（データも長さも fc 3 と同じ。ほかの書き換えが文字列ごと置き換えるなら足さない）。
+      fclib は fmt の `codes = @ptr(ASCII)` とテストの 2 か所。`TestV4StringNoTerminator`・`TestV4MigrateStringTerminator`。
+      fc 3 のまま使うモジュール（castle・fclib の stdio）は今までどおり 0 終端
 - [ ] 型を書かない文字列の配列は `[?][]const u8`（slice の表）にする（2026-09-30 ユーザー決定。今は `const NAMES = ["ab", "cde"]` が
       「長さが違う」エラーで `const NAMES:[?][]const u8 = [...]` と型が要り、長さがそろっていると `[2][3]u8` の 2 次元配列になる）。
       要素が全部文字列なら長さを問わず slice の表に（長さがたまたまそろうかで型が変わらない。上の 0 終端をやめると

@@ -21,7 +21,7 @@ function main():void
 	var a = [65, 0, 66];
 	console.write(a);
 	console.newline();
-	console.write_z("z\n");
+	console.write_z("z\n\0");
 	console.exit(0);
 }
 `})

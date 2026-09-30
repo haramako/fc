@@ -13,7 +13,8 @@ fc 4 の言語の仕様の正は `docs/reference/language.md`（例は `internal
 - グローバル変数は初期値を書けない（`can't init global variable`。0 で始まる）
 - 文字列と文字のリテラルのエスケープは同じ `\n \t \0 \\ \" \' \xNN`。ほかの `\` はエラー（2026-09-30。fc 3 の文字列は `\n` と `\xNN`
   だけで、ほかの `\` はそのまま残る。migrate が `\\` に書き換える）
-- 関数の中の `var s = "abc";` は終端の 0 を含む 4 バイトの配列の変数（`@len(s)` は 4）。`const S = "abc";` は `@len` が 3、`@sizeof` が 4
+- 文字列は 0 終端にしない（2026-09-30）: `"abc"`・`var s = "abc"`・`const S = "abc"` はどれも 3 バイト。0 終端が要るなら `"abc\0"`。
+  0 で終わらない文字列をポインタにするのはエラー（表として使うなら `@ptr(s)`）。fc 3 のモジュールの文字列は今までどおり 0 を足す
 - 長さの違う文字列の配列は型が要る: `const NAMES:[?][]const u8 = ["ab", "cde"];`（書かないと「長さが違う」エラー）
 - `@copy`・`printf` / `@format` は mem / fmt / console を `use` しなくても組み込みが読み込む（`@copy` は 2026-09-30 から）。
   `console.init()` を書くなら `use console;`

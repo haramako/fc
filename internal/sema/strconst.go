@@ -1,18 +1,26 @@
 package sema
 
-// 名前付きの文字列定数の長さ (Agent/wiki/plans/v4-plan.md §2)。
+// 文字列の 0 終端と、名前付きの文字列定数の長さ (Agent/wiki/plans/v4-plan.md §2)。
+//
+// fc 4 の文字列リテラルは 0 終端にしない (`"abc"` は 3 バイトの配列。2026-09-30)。fc 3 までは終端の 0 を足し、長さには含めない
+// (ir.Value.StrTerm)。0 終端の文字列が要るところ (`*const u8` で受ける関数) には `"abc\0"` と書く。fc 4 の 0 の無い文字列を
+// ポインタにするのはエラー (長さの分からないポインタで 0 を探して読み過ぎる。長さを別に渡すなら @ptr(s))。fc 3 → 4 の migrate は、
+// ポインタにする文字列リテラルと、型を書かない配列の変数の初期値の文字列 (`var s = "abc"`: 0 を含めた 4 バイトの配列) に `\0` を
+// 足して、データも長さも変えない。
 //
 // 文字列リテラルは長さ (@len・slice への変換・for-each・`a[lo..]` の終わり) に終端の 0 を含めない (データには残る)。fc 3 までの
 // 名前付きの文字列定数 (`const NM = "joe"`) は普通の配列の定数と同じで 0 を含めた長さ 4 になっていた (互換性のため後回しにした
 // 項目)。fc 4 では、長さを初期値の文字列から決めた名前付きの配列定数 (ir.Value.StrConst: 型を書かない、`[?]u8`、ポインタ型
 // `*u8` の宣言) をリテラルと同じ長さにする。規則は使う側のモジュールの版で決まる。
 //
-// fc 3 → 4 の migrate: fc 3 のモジュールで名前付きの文字列定数の長さを見る所があれば、その宣言を長さつき (`const NM:[4]u8 =
-// "joe"`) に書き換える。長さを書いた配列には印を付けないので、fc 4 でも今の長さのままで、使う所の IR も変わらない。
+// fc 3 → 4 の migrate: fc 3 の名前付きの文字列定数の宣言は長さつき (`const NM:[4]u8 = "joe"`: 余りは 0) に書き換える。長さを
+// 書いた配列には印を付けないので、fc 4 でも今の長さ・データのままで、使う所の IR も変わらない。
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/syntax"
 )
@@ -47,15 +55,21 @@ func (h *Hlc) strLen(v *ir.Value) bool {
 	case v == nil:
 		return false
 	case v.IsString:
-		return true
+		return v.StrTerm // fc 4 の文字列リテラルには 0 が無い (長さは配列の長さそのまま)
 	case !v.StrConst:
 		return false
 	case h.v4():
-		return true
+		return h.strConstTerm(v)
 	case h.rewriting():
 		h.rewriteStrConstDecl(v)
 	}
 	return false
+}
+
+// strConstTerm は名前付きの文字列定数 v のデータの最後に終端の 0 があるか (初期値が fc 3 のモジュールの文字列リテラル)。
+func (h *Hlc) strConstTerm(v *ir.Value) bool {
+	init := h.prog.constArrays[v]
+	return init == nil || init.StrTerm // 初期値が分からなければ今までどおり 0 がある扱い
 }
 
 // rewriteStrConstDecl は名前付きの文字列定数 v の宣言を長さつき (`[N]T`) に書き換える報告をする。
@@ -85,4 +99,78 @@ func (h *Hlc) rewriteStrConstDecl(v *ir.Value) {
 	} else {
 		h.rewriteError("string-length", "the declaration has no position")
 	}
+}
+
+// strLitSpan は fc 3 の文字列リテラルのソースの範囲。
+type strLitSpan struct {
+	module     *ir.Module
+	start, end int
+}
+
+// noteStrLit は fc 3 → 4 の書き換えを集めているとき、文字列リテラル v の位置を覚える (c はリテラルの式)。
+func (h *Hlc) noteStrLit(v *ir.Value, c *cexpr) {
+	if h.rewriting() && c.pos.IsValid() && c.end.IsValid() {
+		h.prog.strLitSpans[v] = strLitSpan{module: h.module, start: c.pos.Offset, end: c.end.Offset}
+	}
+}
+
+// rewriteStrTerm は fc 3 の文字列リテラル lit を、終端の 0 を書いたリテラル (`"abc\0"`) にする書き換えを足す。
+func (h *Hlc) rewriteStrTerm(lit *ir.Value) {
+	sp, ok := h.prog.strLitSpans[lit]
+	if !ok {
+		return // ソースに無い文字列 (@run_tests が作る名前など。fc 4 では cstrZ が 0 を足す)
+	}
+	outer := h.module
+	h.module = sp.module
+	defer func() { h.module = outer }()
+	h.addRewrite("string-terminator", sp.start, sp.end, syntax.QuoteString(lit.Str+"\x00"))
+}
+
+// strPtr は配列の値 v (文字列リテラル・名前付きの文字列定数かもしれない) をポインタにするときの検査: fc 4 の 0 の無い文字列は
+// エラー。fc 3 の文字列 (0 がある) は、書き換えを集めているなら fc 4 で 0 を書くように書き換える。
+func (h *Hlc) strPtr(v ir.Operand) {
+	g := ir.UnderlyingValue(v)
+	if g == nil {
+		return
+	}
+	if lit := h.prog.strLitGlobals[g]; lit != nil {
+		g = lit
+	}
+	var str string
+	switch {
+	case g.IsString:
+		if g.StrTerm {
+			if h.rewriting() {
+				h.rewriteStrTerm(g)
+			}
+			return
+		}
+		str = fmt.Sprintf("%q", g.Str)
+		if strings.HasSuffix(g.Str, "\x00") {
+			return
+		}
+	case g.StrConst:
+		init := h.prog.constArrays[g]
+		if init == nil || init.StrTerm {
+			if init != nil && h.rewriting() {
+				h.rewriteStrConstDecl(g)
+			}
+			return
+		}
+		str = "`" + g.Name + "`"
+		if strings.HasSuffix(init.Str, "\x00") {
+			return
+		}
+	default:
+		return
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("string %s has no terminating 0 and cannot be used as a pointer (fc 4 strings are not 0-terminated; write \"...\\0\" for a 0-terminated string, or pass a slice / @ptr(s) with the length)", str)})
+}
+
+// cstrZ はコンパイラが作る 0 終端の文字列 s (write_z に渡す)。fc 4 の文字列リテラルは 0 終端にしないので 0 を書き足す。
+func (h *Hlc) cstrZ(s string) *cexpr {
+	if h.v4() {
+		return cstr(s + "\x00")
+	}
+	return cstr(s)
 }

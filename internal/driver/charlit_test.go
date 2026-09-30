@@ -16,7 +16,7 @@ import (
 func TestV4MigrateSingleQuote(t *testing.T) {
 	t.Parallel()
 	src := "#fc 3\nuse * from stdio;\nconst S = 'a\\nb\"c';\nvar v:u8 @(symbol: '_t_v');\nfunction main():void\n{\n\tprintf('x\\n', S, \"\\n\");\n\texit(0);\n}\n"
-	want := "#fc 4\nuse * from stdio;\nconst S = \"a\\\\nb\\\"c\";\nvar v:u8 @(symbol: \"_t_v\");\nfunction main():void\n{\n\tprintf(\"x\\x5Cn{}\\n\", S);\n\texit(0);\n}\n"
+	want := "#fc 4\nuse * from stdio;\nconst S:[7]u8 = \"a\\\\nb\\\"c\";\nvar v:u8 @(symbol: \"_t_v\");\nfunction main():void\n{\n\tprintf(\"x\\x5Cn{}\\n\", S);\n\texit(0);\n}\n"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.fc")
 	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
@@ -67,7 +67,7 @@ func TestStringEscapes(t *testing.T) {
 		t.Errorf("\\q: got %v", err)
 	}
 	src := "#fc 3\nuse * from stdio;\nconst S = \"a\\tb\\\"c\\n\";\nfunction main():void\n{\n\tprint(S);\n\texit(0);\n}\n"
-	want := "#fc 4\nuse * from stdio;\nconst S = \"a\\\\tb\\\\\\\"c\\n\";\nfunction main():void\n{\n\tprint(S);\n\texit(0);\n}\n"
+	want := "#fc 4\nuse * from stdio;\nconst S:[9]u8 = \"a\\\\tb\\\\\\\"c\\n\";\nfunction main():void\n{\n\tprint(S);\n\texit(0);\n}\n"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.fc")
 	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {

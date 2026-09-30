@@ -331,7 +331,7 @@ func (h *Hlc) padArrayLiteral(name string, v *ir.Value, typ *types.Type) *ir.Val
 		elems = append(elems, zero)
 	}
 	r := ir.NewArrayLiteral(v.Name, h.prog.Types.ArrayOf(base, len(elems)), elems)
-	r.IsString, r.Str = v.IsString, v.Str
+	r.IsString, r.StrTerm, r.Str = v.IsString, v.StrTerm, v.Str
 	return r
 }
 

@@ -89,6 +89,12 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				c = cv(h.fitArrayLiteral(e.val, typ))
 			}
 		}
+		if h.rewriting() && (typ == nil || typ.Kind == types.Array && typ.Length < 0) {
+			// fc 3 の `var s = "abc"` は終端の 0 を含めた 4 バイトの配列 (@len も 4)。fc 4 では同じにするため `"abc\0"` に
+			if e := h.constEval(c); e.kind == cValue && e.val.IsString && e.val.StrTerm {
+				h.rewriteStrTerm(e.val)
+			}
+		}
 		init = h.rval(c)
 		// `var a:[?]u8 = [1, 2, 3];`: 長さを初期値から決める (長さ未定のままフレームに領域が取られず、ほかのローカルを壊していた)
 		if it := ir.ValType(init); typ != nil && typ.Kind == types.Array && typ.Length < 0 && it.Kind == types.Array && it.Length >= 0 {
@@ -236,6 +242,11 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 			h.prog.constArrays[newVal] = v
 			if v.IsString && !explicitLength(typ) {
 				h.markStrConst(newVal, typ, nameEnd)
+				if h.rewriting() && v.StrTerm {
+					// fc 3 の名前付きの文字列定数は終端の 0 を含めた配列 (長さ・添字・ポインタのどれでも 0 が見える)。fc 4 の文字列は
+					// 0 終端にしないので、宣言を長さつき (`const NM:[4]u8 = "joe"`: 余りは 0) にしてデータも長さも変えない
+					h.rewriteStrConstDecl(newVal)
+				}
 			}
 		} else {
 			if opt.Has("symbol") {

@@ -326,20 +326,20 @@ function main():void
 	for (var c in NM) { k++; }
 	var s:[]const u8 = NM;
 	var s2 = NM[1..];
-	printf(k, " ", @len(s), " ", @len(s2), " ", NM[3], "\n");
+	printf(k, " ", @len(s), " ", @len(s2), " ", NM3[3], "\n");
 	exit(0);
 }
 `
 
-// TestV4StringConst: fc 4 は長さを初期値の文字列から決めた名前付きの定数も、リテラルと同じく長さに終端の 0 を含めない (データの
-// 0 は残る。長さを書いた配列は今のまま)。fc 3 から migrate すると、長さを見ている定数の宣言が長さつきになって fc 3 と同じ結果。
+// TestV4StringConst: fc 4 の文字列は 0 終端にしない (名前付きの定数も長さ・@sizeof が文字数。長さを書いた配列は余りが 0)。
+// fc 3 から migrate すると、名前付きの文字列定数の宣言が長さつき (終端の 0 の分を含む) になって fc 3 と同じ結果。
 func TestV4StringConst(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		ver  int
 		want string
 	}{
-		{4, "3 4 3 3 2 2 4\n3 3 2 0\n"},
+		{4, "3 3 3 3 2 2 4\n3 3 2 0\n"},
 		{3, "4 4 4 3 3 3 4\n4 4 3 0\n"},
 	} {
 		out, err := buildBothLevels(t, map[string]string{"t.fc": versionSrc(t, strConstSrc, c.ver)})

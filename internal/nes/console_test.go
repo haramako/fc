@@ -29,7 +29,7 @@ function main():void
 	console.init();
 	console.write("HELLO");
 	console.newline();
-	console.write_z("WORLD");
+	console.write_z("WORLD\0");
 	console.exit(3);
 }
 `

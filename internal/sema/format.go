@@ -366,7 +366,7 @@ func (h *Hlc) printf4(args []*cexpr) {
 	flush := func() {
 		if s := text.String(); s != "" {
 			if strings.IndexByte(s, 0) < 0 {
-				write("write_z", cstr(s)) // 終端 0 の文字列 (引数はポインタ 2 バイト)
+				write("write_z", h.cstrZ(s)) // 終端 0 の文字列 (引数はポインタ 2 バイト)
 			} else {
 				write("write", cstr(s))
 			}

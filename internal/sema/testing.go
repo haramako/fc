@@ -83,13 +83,13 @@ func (h *Hlc) runTests4() macroResult {
 			if fn == nil {
 				continue
 			}
-			console("write_z", cstr(fmt.Sprintf("%s.%s: ", m.Id, lmd.Name)))
+			console("write_z", h.cstrZ(fmt.Sprintf("%s.%s: ", m.Id, lmd.Name)))
 			h.lval(ccall(cv(fn)))
-			console("write_z", cstr("ok\n"))
+			console("write_z", h.cstrZ("ok\n"))
 			n++
 		}
 	}
-	console("write_z", cstr(fmt.Sprintf("%d tests ok\n", n)))
+	console("write_z", h.cstrZ(fmt.Sprintf("%d tests ok\n", n)))
 	console("exit", cint(0))
 	return macroResult{}
 }

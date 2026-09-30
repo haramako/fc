@@ -35,7 +35,7 @@ var pbuf:[32]u8;              // printf の数などの部分 (begin_print / pri
 public function begin(dst:[]u8):void
 {
 	out = dst;
-	codes = ASCII;
+	codes = @ptr(ASCII); // 文字の表 (0 終端の文字列ではない)
 	at = 0;
 	trying = false;
 	failed = false;
@@ -357,7 +357,7 @@ function test_strings():void @(test)
 {
 	var buf:[24]u8;
 	var s:[]const u8 = "ab";
-	var p:*const u8 = "cd";
+	var p:*const u8 = "cd\0";
 	var arr = "ef";
 	@assert(same(@format(buf, "{}{}{}{}", s, p, arr, true), "abcdeftrue"));
 	@assert(same(@format(buf, "{{{}}}", 1 as u8), "{1}"));

@@ -57,8 +57,12 @@ type Value struct {
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
+	// StrTerm は IsString の配列の最後に終端の 0 を足してある (fc 3 までのモジュールの文字列リテラル)。長さ (@len・slice・
+	// for-each) には含めない。fc 4 の文字列は 0 を足さない (sema の strLen)
+	StrTerm bool
 	// StrConst は長さを初期値の文字列から決めた名前付きの配列定数 (`const NM = "joe"`、`const NM:[?]u8 = "joe"`)。fc 4 の
-	// モジュールからはリテラルと同じく長さ (@len・slice・for-each) に終端の 0 を含めない (データには残る。sema の strLen)
+	// モジュールからはリテラルと同じく長さ (@len・slice・for-each) に終端の 0 を含めない (0 は初期値の文字列が fc 3 のモジュールの
+	// ものならデータにある。fc 4 の文字列には無い。sema の strLen)
 	StrConst bool
 	Str      string
 

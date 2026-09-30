@@ -25,7 +25,7 @@ function main():void
 	var s:i8 = -5;
 	var name = "joe";
 	var sl:[]const u8 = "slice";
-	var p:*const u8 = "ptr";
+	var p:*const u8 = "ptr\0";
 	var c = Color.GREEN;
 	var ok = true;
 	console.write(@format(buf, "HP {:3}/{}\n", hp, max_hp));
@@ -170,7 +170,7 @@ func TestFormatErrors(t *testing.T) {
 		{"文字列に幅", `console.write(@format(buf, "{:5}", "ab"));`, "a width is for numbers"},
 		{"書き先が読み取り専用", `console.write(@format(RO, "x"));`, "the destination is read-only"},
 		{"書けない型", `var q:P; console.write(@format(buf, "{}", q));`, "cannot format a value of type"},
-		{"書式が定数でない", `var f:*const u8 = "{}"; console.write(@format(buf, f, 1));`, "the format must be a constant string"},
+		{"書式が定数でない", `var f:*const u8 = "{}\0"; console.write(@format(buf, f, 1));`, "the format must be a constant string"},
 	}
 	for i, c := range cases {
 		c := c

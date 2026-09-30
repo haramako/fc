@@ -115,7 +115,7 @@ function test_find():void @(test)
 
 function test_z():void @(test)
 {
-	var p:*const u8 = "abcd";
+	var p:*const u8 = "abcd\0";
 	@assert_eq(len_z(p), 4);
 	@assert(equal(from_z(p), "abcd"));
 	var buf:[8]u8;

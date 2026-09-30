@@ -54,6 +54,8 @@ type Program struct {
 	storageAliases map[*ir.Value]*ir.Value          // declaration binding -> canonical mutable global
 	storageGlobals map[*ir.Value]bool               // actual global var declarations (not ROM constants)
 	constArrays    map[*ir.Value]*ir.Value          // 名前付きの配列定数 → その配列リテラル (const の中の `TABLE[3]` を畳む)
+	strLitGlobals  map[*ir.Value]*ir.Value          // 文字列リテラルを切り出した ROM の配列 → そのリテラル (ポインタにするときの 0 終端の検査: strPtr)
+	strLitSpans    map[*ir.Value]strLitSpan         // fc 3 の文字列リテラル → ソースの位置 (fc 4 への書き換えで `\0` を足す)
 	defaults       map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
 	FarCalls    []FarCall
@@ -118,6 +120,8 @@ func NewProgram() *Program {
 		storageAliases: map[*ir.Value]*ir.Value{},
 		storageGlobals: map[*ir.Value]bool{},
 		constArrays:    map[*ir.Value]*ir.Value{},
+		strLitGlobals:  map[*ir.Value]*ir.Value{},
+		strLitSpans:    map[*ir.Value]strLitSpan{},
 	}
 	p.global = ir.NewScope(nil)
 	registerBuiltins(p)

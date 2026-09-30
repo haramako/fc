@@ -40,10 +40,12 @@ func (h *Hlc) pointerElems(name string, arr *ir.Value, ptr *types.Type) *ir.Valu
 			if !ev.IsString {
 				h.compatibleAssign(fmt.Sprintf("element %d of `%s`", i, name), ptr, ev.Type)
 			}
+			h.strPtr(ev)
 			sym := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: ev.Type, Elems: ev.Elems})
 			elems[i] = ir.NewSymbolLiteral("", ptr, sym)
 		case ev != nil && ev.Kind == ir.KindGlobal && ev.Type.Kind == types.Array && ev.Symbol != "":
 			h.compatibleAssign(fmt.Sprintf("element %d of `%s`", i, name), ptr, ev.Type)
+			h.strPtr(ev)
 			elems[i] = ir.NewSymbolLiteral("", ptr, ev.Symbol)
 		case ev != nil && ev.Kind == ir.KindLiteral:
 			elems[i] = e // 関数のシンボル、整数 (null)
@@ -87,7 +89,7 @@ func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
 		elems[i] = ir.NewIntLiteral("", typ.Base, n)
 	}
 	r := ir.NewArrayLiteral(v.Name, h.prog.Types.ArrayOf(typ.Base, len(elems)), elems)
-	r.IsString, r.Str = v.IsString, v.Str
+	r.IsString, r.StrTerm, r.Str = v.IsString, v.StrTerm, v.Str
 	return r
 }
 
@@ -167,6 +169,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			symbol := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: e.val.Type, Elems: e.val.Elems})
 			g := ir.NewGlobal(h.tmpName("$"), e.val.Type, symbol)
 			g.ReadOnly = true // 文字列・配列リテラルは ROM (fc 3 の *const)
+			if e.val.IsString {
+				h.prog.strLitGlobals[g] = e.val
+			}
 			r = g
 		} else {
 			r = e.val
@@ -797,6 +802,7 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
 		h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: newV, Src: []ir.Operand{v}})
 		return newV
 	} else if typ.Kind == types.Pointer && ir.ValType(v).Kind == types.Array && (ir.ValType(v).Base == typ.Base || typ.Base.Kind == types.Void) {
+		h.strPtr(v)
 		return ir.NewPointeredArray(v, h.prog.Types.PointerTo(ir.ValType(v).Base))
 	}
 	return v
@@ -852,6 +858,9 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) ir.Operand {
 	from := ir.ValType(v)
 	h.checkCast(kind, from, to)
+	if from.Kind == types.Array && to.Kind == types.Pointer {
+		h.strPtr(v)
+	}
 	if kind == syntax.CastAs && from.Kind == types.Pointer && from.ReadOnly && to.Kind == types.Pointer && !to.ReadOnly {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot drop const with `as` (%s to %s); use @bitcast(%s, x)", from, to, to)})
 	}

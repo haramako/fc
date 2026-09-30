@@ -27,13 +27,22 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 		return nil, fmt.Errorf("%s: fc %d source cannot be rewritten as fc 4 directly (migrate it to fc 3 first)", filename, f.Version)
 	}
 	c := &Ctx{Src: src, File: f}
-	var copies []sema.Rewrite
+	var copies, terms []sema.Rewrite
 	for _, r := range rewrites {
-		if r.CopyEnd > r.CopyStart {
+		switch {
+		case r.CopyEnd > r.CopyStart:
 			copies = append(copies, r)
-			continue
+		case r.Rule == "string-terminator":
+			terms = append(terms, r)
+		default:
+			c.Replace(r.Start, r.End, r.Text)
 		}
-		c.Replace(r.Start, r.End, r.Text)
+	}
+	// 文字列に `\0` を足す書き換えは、ほかの書き換えがその文字列ごと置き換えていれば (printf の引数を書式に取り込む) 当てない
+	for _, r := range terms {
+		if !overlaps(c.Edits, r.Start, r.End) {
+			c.Replace(r.Start, r.End, r.Text)
+		}
 	}
 	// 範囲の写しを含む書き換え (複合代入の 2 つめの左辺): 写す範囲の中の書き換えを当ててから写す
 	base := append([]Edit{}, c.Edits...)
@@ -162,12 +171,10 @@ func quoteRule(c *Ctx) {
 		if !ok || !strings.HasPrefix(s.Text, "'") && !hasV3OnlyBackslash(s.Text) {
 			return true
 		}
-		for _, e := range c.Edits {
-			if e.Start < s.EndPos.Offset && s.ValuePos.Offset < e.End {
-				return true // 意味の書き換え (printf の書式に取り込むなど) が既にこの文字列を置き換えている
-			}
+		if overlaps(c.Edits, s.ValuePos.Offset, s.EndPos.Offset) {
+			return true // 意味の書き換え (printf の書式に取り込む、終端の \0 を足すなど) が既にこの文字列を置き換えている
 		}
-		c.Replace(s.ValuePos.Offset, s.EndPos.Offset, quoteV4(s.Value))
+		c.Replace(s.ValuePos.Offset, s.EndPos.Offset, syntax.QuoteString(s.Value))
 		return true
 	})
 }
@@ -187,25 +194,12 @@ func hasV3OnlyBackslash(text string) bool {
 	return false
 }
 
-// quoteV4 は値 v の fc 4 の文字列リテラル (`"..."`)。
-func quoteV4(v string) string {
-	var b strings.Builder
-	b.WriteByte('"')
-	for i := 0; i < len(v); i++ {
-		switch ch := v[i]; {
-		case ch == '\\' || ch == '"':
-			b.WriteByte('\\')
-			b.WriteByte(ch)
-		case ch == '\n':
-			b.WriteString(`\n`)
-		case ch == '\t':
-			b.WriteString(`\t`)
-		case ch < 0x20 || ch == 0x7f:
-			fmt.Fprintf(&b, `\x%02X`, ch)
-		default:
-			b.WriteByte(ch)
+// overlaps は [start:end] が edits のどれかと重なるか。
+func overlaps(edits []Edit, start, end int) bool {
+	for _, e := range edits {
+		if e.Start < end && start < e.End {
+			return true
 		}
 	}
-	b.WriteByte('"')
-	return b.String()
+	return false
 }

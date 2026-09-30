@@ -84,10 +84,19 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		for i := 0; i < len(c.s); i++ {
 			elems = append(elems, cint(int(int8(c.s[i]))))
 		}
-		elems = append(elems, cint(0))
-		rv := h.constEval(carray(elems)).val
-		rv.IsString = true
+		term := !h.v4() // fc 3 までは終端の 0 を足す (長さには含めない)。fc 4 の文字列は 0 終端にしない
+		if term {
+			elems = append(elems, cint(0))
+		}
+		var rv *ir.Value
+		if len(elems) == 0 {
+			rv = ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(h.prog.Types.IntType(1, false), 0), nil) // fc 4 の ""
+		} else {
+			rv = h.constEval(carray(elems)).val
+		}
+		rv.IsString, rv.StrTerm = true, term
 		rv.Str = c.s
+		h.noteStrLit(rv, c)
 		return cv(rv)
 
 	case cArray:
