@@ -53,9 +53,9 @@ type BuildOptions struct {
 	Target string // emu / nes (デフォルト emu)
 	// LibPath は追加のライブラリの探索先 (Dir 相対か絶対)。use / @include と asm の include で、ソースのディレクトリの後、fclib
 	// より前に探す (fcc test がテストするモジュールのディレクトリを足す。fc.toml の [lib.*] もここに入る: Agent/wiki/plans/v4-stdlib.md §9)
-	LibPath       []string
+	LibPath []string
 	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー。Agent/wiki/plans/v4-stdlib.md §9)
-	Offline bool
+	Offline       bool
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
 	Run           bool   // -e
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
@@ -111,11 +111,11 @@ type Result struct {
 type Compiler struct {
 	FCHome   string // fclib/ share/ を含むディレクトリ
 	ctx      context.Context
-	jobs     int      // ca65 の並列数
-	libDirs  []string // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
+	jobs     int                   // ca65 の並列数
+	libDirs  []string              // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
 	libs     []project.ResolvedLib // fc.toml の [lib.*] (fcc build -d の要約)
-	optLibs  []string // BuildOptions.LibPath を絶対パスにしたもの
-	offline  bool     // BuildOptions.Offline
+	optLibs  []string              // BuildOptions.LibPath を絶対パスにしたもの
+	offline  bool                  // BuildOptions.Offline
 	target   string
 	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)

@@ -377,7 +377,9 @@ func joinLines(lines []string) string {
 }
 
 // isPunct は隣に空白を入れない日本語の約物か。
-func isPunct(r rune) bool { return strings.ContainsRune("、。，．・「」『』（）【】：；！？〜", r) }
+func isPunct(r rune) bool {
+	return strings.ContainsRune("、。，．・「」『』（）【】：；！？〜", r)
+}
 
 // escape は `…` の外の < > を文字参照にする (VitePress が HTML のタグとして読まないように)。
 func escape(s string) string {

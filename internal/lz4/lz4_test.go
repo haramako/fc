@@ -98,11 +98,11 @@ func checkRules(t *testing.T, name string, c []byte, n int) {
 // TestDecompressCorrupt: 壊れたデータはエラー (距離 0、書いた所より前、途中で終わる)。
 func TestDecompressCorrupt(t *testing.T) {
 	for _, c := range [][]byte{
-		{0x10, 'a', 0, 0},    // 距離 0
-		{0x10, 'a', 2, 0},    // 書いた所より前
-		{0xf0},               // 文字の数の続きが無い
-		{0x50, 'a', 'b'},     // 文字が足りない
-		{0x10, 'a', 1},       // 距離が 1 バイトだけ
+		{0x10, 'a', 0, 0}, // 距離 0
+		{0x10, 'a', 2, 0}, // 書いた所より前
+		{0xf0},            // 文字の数の続きが無い
+		{0x50, 'a', 'b'},  // 文字が足りない
+		{0x10, 'a', 1},    // 距離が 1 バイトだけ
 	} {
 		if _, err := Decompress(c); err == nil {
 			t.Errorf("% x: エラーにならない", c)

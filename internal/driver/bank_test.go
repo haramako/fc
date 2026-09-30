@@ -5,7 +5,6 @@ package driver
 // emu ターゲットにはバンクが無いので、そちらの fuzz では「表は元のバンクに残ってコードだけ移る」バグは見えない。
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"fmt"
 	"math/rand"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/nes"
 )
 

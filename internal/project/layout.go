@@ -69,8 +69,8 @@ type BankLayout struct {
 	Profile  *MapperProfile
 	PRGSize  int
 	CHRSize  int
-	Mirror   int  // iNES のヘッダの byte 6 のミラーリングのビット (1 = vertical、0 = horizontal、8 = four screen)
-	Battery  bool // iNES のヘッダの byte 6 の bit 1
+	Mirror   int        // iNES のヘッダの byte 6 のミラーリングのビット (1 = vertical、0 = horizontal、8 = four screen)
+	Battery  bool       // iNES のヘッダの byte 6 の bit 1
 	Banks    []*BankDef // 番号順
 	RAM      []*RAMDef
 	Fragment string // [linker] extra (cfg の断片のパス。fc.toml からの相対は解決済み)

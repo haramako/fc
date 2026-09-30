@@ -1,12 +1,13 @@
 package driver
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/haramako/fc/internal/cc65"
 )
 
 func TestBssPlacementLinkedAndExecuted(t *testing.T) {

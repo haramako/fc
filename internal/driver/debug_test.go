@@ -3,12 +3,13 @@ package driver
 // fcc build -g (Mesen 用のデバッグ情報) と --size-report / fcc size。
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/haramako/fc/internal/cc65"
 )
 
 func TestDebugInfoAndSizeReport(t *testing.T) {

@@ -35,9 +35,9 @@ func collectWarnings(prog *sema.Program) []diag.Warning {
 
 // CheckOptions は fcc check の設定。
 type CheckOptions struct {
-	Target  string   // emu / nes (省けば fc.toml に [target] があれば nes、無ければ emu)
-	Dir     string   // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
-	Defines []string // CLI の -D (fcc build と同じく fc.toml の後に当てる)
+	Target  string     // emu / nes (省けば fc.toml に [target] があれば nes、無ければ emu)
+	Dir     string     // ソースの基準ディレクトリ ("" なら作業ディレクトリ)
+	Defines []string   // CLI の -D (fcc build と同じく fc.toml の後に当てる)
 	Config  *ir.Config // 調査用の設定 (nil なら環境変数から)
 }
 

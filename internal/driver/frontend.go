@@ -7,7 +7,6 @@ package driver
 // fastcall_reg) と far call を反映していなかった (build と check でフレーム超過の判定がずれ得た)。
 
 import (
-	"github.com/haramako/fc/internal/project"
 	"fmt"
 
 	"github.com/haramako/fc/internal/codegen"
@@ -15,6 +14,7 @@ import (
 	"github.com/haramako/fc/internal/frames"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/pipeline"
+	"github.com/haramako/fc/internal/project"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 )
@@ -139,8 +139,12 @@ func optionInt(prog *sema.Program, name string, def, lo, hi int) (int, error) {
 	return n, nil
 }
 
-func staticZpSize(prog *sema.Program) (int, error)  { return optionInt(prog, "static_zp", DefaultStaticZp, 0, 256) }
-func staticRamSize(prog *sema.Program) (int, error) { return optionInt(prog, "static_ram", DefaultStaticRam, 0, 8192) }
+func staticZpSize(prog *sema.Program) (int, error) {
+	return optionInt(prog, "static_zp", DefaultStaticZp, 0, 256)
+}
+func staticRamSize(prog *sema.Program) (int, error) {
+	return optionInt(prog, "static_ram", DefaultStaticRam, 0, 8192)
+}
 
 // fastcallRegSize は FC_FASTCALL_REG の大きさ (options(fastcall_reg: N)。既定は regalloc.DefaultLimits)。
 func fastcallRegSize(prog *sema.Program) (int, error) {

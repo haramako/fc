@@ -10,7 +10,6 @@ package nes
 //   2. C:\Applications\MesenCE\Mesen.exe (既定の導入場所)
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"fmt"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/driver"
 )
 

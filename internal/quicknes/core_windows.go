@@ -34,8 +34,8 @@ var (
 	frame     []byte
 	fw, fh    int
 	fpitch    int
-	romData   []byte                                // retro_load_game に渡した ROM (コアが持っている間は生かす)
-	variables = map[string][]byte{                   // コアの設定 (終端 0 の値。コアが指す間は生かす)
+	romData   []byte               // retro_load_game に渡した ROM (コアが持っている間は生かす)
+	variables = map[string][]byte{ // コアの設定 (終端 0 の値。コアが指す間は生かす)
 		"quicknes_use_overscan_h":  []byte("enabled\x00"),
 		"quicknes_use_overscan_v":  []byte("enabled\x00"),
 		"quicknes_no_sprite_limit": []byte("disabled\x00"),

@@ -11,13 +11,13 @@ package nes
 // 例: FC_PROBE_ROM_A=a.nes FC_PROBE_ROM_B=b.nes FC_PROBE_DBG=a.dbg FC_PROBE_DBG_B=b.dbg go test ./internal/nes -run TestProbeDiff -v
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/haramako/fc/internal/cc65"
 )
 
 func TestProbeDiff(t *testing.T) {

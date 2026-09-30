@@ -197,12 +197,12 @@ var instrTable = map[int]instrMode{
 // Cpu は R6502::Cpu 相当。
 type Cpu struct {
 	TrapZpWrap bool // zp,X / zp,Y がページを越えたら panic (fc のコードは意図して使わない。emu ターゲットでソフトウェアスタックのあふれを検出する)
-	Mem Bus
-	Pc  int
-	S   int
-	X   int
-	Y   int
-	A   int
+	Mem        Bus
+	Pc         int
+	S          int
+	X          int
+	Y          int
+	A          int
 	// フラグ (0/1)
 	C, Z, I, D, B, V, N int
 

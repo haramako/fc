@@ -9,13 +9,14 @@ package driver
 // (詳細は examples/README.md)。
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/haramako/fc/internal/cc65"
 )
 
 // castleCompileLimit はコンパイル時間の退行を捕まえる閾値 (手元で約 1.8 秒。常駐の候補探索が候補数の 3 乗になって

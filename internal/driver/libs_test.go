@@ -73,7 +73,7 @@ function main():void
 		t.Errorf("要約:\n%s", s)
 	}
 	writeTree(t, root, map[string]string{
-		"proj/fc.toml": "[lib.util]\npath = \"../util\"\n\n[lib.other]\npath = \"../other\"\n",
+		"proj/fc.toml":   "[lib.util]\npath = \"../util\"\n\n[lib.other]\npath = \"../other\"\n",
 		"other/greet.fc": "#fc 4\npublic function n():u8 { return 1; }\n",
 	})
 	if _, err := runProject(t, root, BuildOptions{}); err == nil || !strings.Contains(err.Error(), "module greet is in both library util and library other") {

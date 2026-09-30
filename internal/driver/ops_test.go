@@ -627,11 +627,12 @@ function main():void
 //	(2) `a16[i] = 4`: 融合した index_pset が値の幅 (1 バイト) しか書かず上位バイトが残る
 //	(3) `(x8 as int16)` を splitWords がバイトに分けるとき、上位バイトとして隣の番地を読む (part3 の g1 が 46024 になる)
 //	(4) 使われない書き込み (`l0 = ...`) の位置が live range に入らず、ループ変数と番地を共有して無限ループ (part4、-O 0)
+//
 // struct まわりの 2 件 (拡張した fuzz で発覚):
 // (1) fusePointer: struct 配列の要素の先頭フィールドへの書き込み `sa[i].f0 = 4` を index_pset (書く幅 = 要素 2 バイト)
-//     にして隣のフィールド f1 を壊していた
+// にして隣のフィールド f1 を壊していた
 // (2) splitWords: 1 バイトのフィールドを 2 バイトに広げた cast `(s0.f1 as int16)` の下位バイトを、元の struct 変数の
-//     0 バイト目 (別のフィールド) として読んでいた
+// 0 バイト目 (別のフィールド) として読んでいた
 func TestStructFieldWidths(t *testing.T) {
 	t.Parallel()
 	src := `struct S { f0:sint; f1:sint; }
@@ -1125,7 +1126,7 @@ function main():void
 // ポインタの添字参照 (`(p),y`) の codegen 2 件 (拡張した fuzz で発覚):
 // (1) 要素 2 バイトの `iny` の後、添字が Y に常駐していれば Y を戻す (`q0[i] += 1` の index_pset が 1 バイトずれていた)
 // (2) フレームがゼロページでない関数では pointerBase がポインタを reg に写すが、添字が A にあると A を壊すので、
-//     先に添字を Y に置く。main の t2 はフレームを大きくして (印字用の一時変数) ゼロページから追い出した形
+// 先に添字を Y に置く。main の t2 はフレームを大きくして (印字用の一時変数) ゼロページから追い出した形
 func TestPointerIndexY(t *testing.T) {
 	t.Parallel()
 	src := `var a2:[16]int16;

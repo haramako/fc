@@ -18,7 +18,6 @@ package driver
 // いないビルドでも毎回 6,716 回ハッシュしていて、castle の assemble の段に約 0.7 秒かかっていた (2026-09-28)。
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -29,6 +28,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/haramako/fc/internal/cc65"
 )
 
 // assembleCached は src をアセンブルする。前回のアセンブルから入力が変わっていなければ ca65 を起動しない。

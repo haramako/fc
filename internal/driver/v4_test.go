@@ -658,10 +658,10 @@ function main():void
 		t.Errorf("got %q, %v", out, err)
 	}
 	for src, want := range map[string]string{
-		"#fc 4\nvar x:u8 = 'あ';\nfunction main():void { }\n":   "'あ' is not an ASCII character; convert it with a textmap converter (_T('あ'))",
-		"#fc 4\nvar x:u8 = 'ab';\nfunction main():void { }\n":   "'ab' is not one character (in fc 4 '...' is a character literal; write strings with \"...\")",
-		"#fc 4\nvar x:u8 = 'a;\nfunction main():void { }\n":    "unterminated character literal",
-		"#fc 4\nvar x:u8 = '\\q';\nfunction main():void { }\n": "invalid escape in character literal",
+		"#fc 4\nvar x:u8 = 'あ';\nfunction main():void { }\n":                                      "'あ' is not an ASCII character; convert it with a textmap converter (_T('あ'))",
+		"#fc 4\nvar x:u8 = 'ab';\nfunction main():void { }\n":                                     "'ab' is not one character (in fc 4 '...' is a character literal; write strings with \"...\")",
+		"#fc 4\nvar x:u8 = 'a;\nfunction main():void { }\n":                                       "unterminated character literal",
+		"#fc 4\nvar x:u8 = '\\q';\nfunction main():void { }\n":                                    "invalid escape in character literal",
 		"#fc 4\nconst _T = @textmap(\"t.txt\");\nvar x:u8 = _T('が');\nfunction main():void { }\n": "'が' converts to 2 codes",
 	} {
 		if _, err := buildFiles(t, map[string]string{"t.fc": src, "t.txt": "＿あかい゛"}); err == nil || !strings.Contains(err.Error(), want) {

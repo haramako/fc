@@ -105,15 +105,15 @@ type Op struct {
 	Scale, Disp, Width int
 	// Sign は lt / div / mod / shift_right の符号 (符号付きの比較・床除算・算術シフト。sign.go)。作るときに決め (sema は
 	// InferWidthSign で入力の型から)、以後は入力を差し替えても変わらない。ほかの命令は SignNone
-	Sign  Sign
-	ArgY  bool            // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
+	Sign Sign
+	ArgY bool // OpPushArg: 呼び先の Y 渡しの引数 (Lambda.RegArgY。codegen.markArgY が付け、regalloc は Y を壊す命令と見る)
 	// ArgCont は OpPushArg が前の push_arg の続き (slice の引数をポインタと長さに分けて積んだ長さの側: opt.splitSliceArgs)。
 	// 引数を数えるもの (markArgY、interp) は前の引数に続けて数える
 	ArgCont bool
-	HoldY bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
-	HoldX bool            // stack 系の呼び出しの push_result と call の間の命令: X = FC_SP を保持中 (常駐は X を使わずメモリ側で。codegen.markHoldX)
-	Pos   syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
-	Logs  []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
+	HoldY   bool            // ArgY の push_arg から call まで (call を含む) の命令: Y に引数を保持中 (Y を使わない命令だけ。常駐は Y を使わずメモリ側で)
+	HoldX   bool            // stack 系の呼び出しの push_result と call の間の命令: X = FC_SP を保持中 (常駐は X を使わずメモリ側で。codegen.markHoldX)
+	Pos     syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
+	Logs    []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
 
 	// ループ内の常駐 (regalloc.AllocateResident が付ける。Agent/wiki/design/regalloc.md): レジスタ (RegA / RegY / RegX) ごとに、
 	// この命令でそのレジスタに置いたままにしている変数と、入口 / 出口で生きているか (regs.go)

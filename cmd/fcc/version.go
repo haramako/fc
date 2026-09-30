@@ -6,11 +6,11 @@ package main
 // 埋め込みが無ければ go のビルド情報 (モジュールのバージョン、VCS リビジョン) から組み立てる。
 
 import (
-	"github.com/haramako/fc/internal/cc65"
 	"fmt"
 	"runtime"
 	"runtime/debug"
 
+	"github.com/haramako/fc/internal/cc65"
 )
 
 var version = "" // -X main.version=v1.2.3

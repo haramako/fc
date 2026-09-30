@@ -71,10 +71,10 @@ type rpFunc struct {
 	ret      rpType
 	fastcall bool
 	inline   bool
-	far      bool      // 別バンクのモジュール far1 にある (main からは far call)
-	inTable  bool      // 関数ポインタ表 fp0 / fq0 の要素 (アドレスを取られる: Entry 関数になる)
-	rec      bool      // 自分を呼ぶ関数 (stack ABI になる。深さは引数 n で 4 まで)
-	mod      string    // 別のモジュールの関数 (fc 3 のモジュール v3m。本体は randv3_test.go が生成して text に持つ)
+	far      bool   // 別バンクのモジュール far1 にある (main からは far call)
+	inTable  bool   // 関数ポインタ表 fp0 / fq0 の要素 (アドレスを取られる: Entry 関数になる)
+	rec      bool   // 自分を呼ぶ関数 (stack ABI になる。深さは引数 n で 4 まで)
+	mod      string // 別のモジュールの関数 (fc 3 のモジュール v3m。本体は randv3_test.go が生成して text に持つ)
 	text     string
 	locals   []string  // 宣言
 	stmts    []*rpStmt // 本体
@@ -1775,7 +1775,6 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	}
 	return rpResult{"ok", ""}
 }
-
 
 // rpMinimize は同じ種類の失敗が残る範囲で文を消す (どの深さの文も。消せなかった文はその中身を試す)。
 // rpUninitReads は files の「代入の前に読むかもしれない」警告の数 (-O 0 でコンパイルだけ)。
