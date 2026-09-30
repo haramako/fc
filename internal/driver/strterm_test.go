@@ -174,3 +174,26 @@ function main():void
 		t.Errorf("fc 3: %q, fc 4: %q", before, after)
 	}
 }
+
+// TestV4StringHighBytes: fc 4 の文字列はいつも u8 の配列。128 以上のバイトがあっても (`"a\xff"`) i8 にならず、[]const u8 に
+// でき、for-each は符号なしの値 (符号付きのバイトで作っていて [N]i8 になっていた)。
+func TestV4StringHighBytes(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+const S = "a\xff\x80";
+function main():void
+{
+	var sum:u16 = 0;
+	for (var c in S) {
+		sum += c;
+	}
+	var sl:[]const u8 = S;
+	@printf("{} {} {} {}\n", sum, S[1], sl[2], @len(sl));
+	console.exit(0);
+}
+`})
+	if err != nil || out != "480 255 128 3\n" {
+		t.Errorf("got %q, %v", out, err)
+	}
+}

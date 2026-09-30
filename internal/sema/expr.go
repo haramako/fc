@@ -83,6 +83,11 @@ func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
 	elems := make([]ir.Operand, len(v.Elems))
 	for i, e := range v.Elems {
 		n, ok := ir.ValIntLiteral(e)
+		if ok && v.IsString && typ.Base.Size == 1 {
+			// 文字列はバイトの並びなので、型を書いた 1 バイトの配列 (`const S:[3]i8 = "\n\xff"`) ではその型で読む (255 は -1)。
+			// fc 4 の文字列は u8 で、fc 3 → 4 の migrate が fc 3 の i8 の文字列定数を長さつきの [N]i8 にする
+			n = wrapInt(n, typ.Base)
+		}
 		if !ok || n < lo || n > hi {
 			return v
 		}

@@ -79,10 +79,15 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		return cv(v)
 
 	case cStr:
-		// String#unpack('c*') は符号付きバイト
+		// fc 3 までは String#unpack('c*') と同じ符号付きバイト (128 以上のバイトがあると [N]i8 になる)。fc 4 は符号なしのバイトで、
+		// 文字列はいつも [N]u8 (`"a\xff"` が [2]i8 になって []const u8 にできず、for-each で負の値になっていた)
 		elems := make([]*cexpr, 0, len(c.s)+1)
 		for i := 0; i < len(c.s); i++ {
-			elems = append(elems, cint(int(int8(c.s[i]))))
+			if h.v4() {
+				elems = append(elems, cint(int(c.s[i])))
+			} else {
+				elems = append(elems, cint(int(int8(c.s[i]))))
+			}
 		}
 		term := !h.v4() // fc 3 までは終端の 0 を足す (長さには含めない)。fc 4 の文字列は 0 終端にしない
 		if term {
