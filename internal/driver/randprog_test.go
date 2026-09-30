@@ -332,8 +332,47 @@ func (g *rpGen) expr(t rpType, depth int) string {
 			return e
 		}
 		return g.leaf(t)
+	case 13:
+		if g.want("mixedsign", 0.5) {
+			return g.mixedSign(t, depth)
+		}
+		return g.leaf(t)
 	default:
 		return g.leaf(t)
+	}
+}
+
+// mixedSign は同じ大きさで符号の違う値の `+ - *` の結果を解釈する式 (`/ %`・`>>`・比較) を型 t にしたもの。fc 2 / fc 3 では
+// 同じ大きさなら符号付きが勝つ規則で計算し、fc 4 へは migrate が `+%` などか `as` に書き換える (sema/mixedarith.go。
+// TestRandomMigrate が出力を比べ、TestRandomProgramsV4 が書き換えた IR を -O 0 / -O 2 / インタプリタで比べる)。両辺は `as` で
+// 型を決める (型のない定数は相手の型になるので混ざらない)。
+func (g *rpGen) mixedSign(t rpType, depth int) string {
+	size := 1 + g.pick(2)
+	u, s := rpTypes[2*(size-1)], rpTypes[2*(size-1)+1]
+	a, b := u, s
+	if g.chance(0.5) {
+		a, b = s, u
+	}
+	op := []string{"+", "-", "*"}[g.pick(3)]
+	m := fmt.Sprintf("((%s as %s) %s (%s as %s))", g.expr(a, depth-1), a.name, op, g.expr(b, depth-1), b.name)
+	if g.chance(0.3) {
+		// 印は & | ^ を通っても残る
+		m = fmt.Sprintf("(%s %s %d)", m, []string{"&", "|", "^"}[g.pick(3)], g.pick(100))
+	}
+	limit := 100
+	if size == 2 {
+		limit = 1000
+	}
+	switch g.pick(4) {
+	case 0:
+		return cast(fmt.Sprintf("(%s / %d)", m, 1+g.pick(limit)), s, t)
+	case 1:
+		return cast(fmt.Sprintf("(%s %% %d)", m, 1+g.pick(limit)), s, t)
+	case 2:
+		return cast(fmt.Sprintf("(%s >> %d)", m, g.pick(8*size)), s, t)
+	default:
+		op := []string{"<", "<=", ">", ">="}[g.pick(4)]
+		return fmt.Sprintf("((%s %s %d) as %s)", m, op, g.pick(limit), t.name)
 	}
 }
 
