@@ -51,16 +51,13 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 	switch e.kind {
 	case cValue:
 		v := e.val
-		if v.Type == nil || v.Type.Kind == types.Bad || v.Type.Kind == types.TypeName || v.Type.Kind == types.Macro || v.Type.IsSoa {
+		if v.Type == nil || v.Type.Kind == types.Bad || v.Type.Kind == types.TypeName || v.Type.Kind == types.Macro {
 			return exprInfo{}, false
 		}
 		if v.Kind == ir.KindLiteral && v.IsInt && v.Untyped {
 			return exprInfo{t: v.Type, untyped: true, n: v.Int}, true
 		}
-		if root := h.prog.storageAliases[v]; root != nil {
-			return exprInfo{}, false
-		}
-		return exprInfo{t: v.Type}, true
+		return exprInfo{t: v.Type}, true // ストレージの別名も宣言の型 (lval は元の場所をその型で読む)、soa は入れ物の型
 	case cCast:
 		ty := e.ty
 		if ty == nil {
@@ -86,8 +83,10 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 	case opEq, opNe, opLt, opGt, opLe, opGe, opLand, opLor, opNot:
 		return exprInfo{t: u.Bool()}, true
 	case opUminus, opBitNot:
+		// 項が型のない定数でもここに来るのは畳まれない形 (`~@max(-124, 57)`: constEval はマクロを展開しない) で、lval は定数の
+		// 型の実行時の命令を出す
 		a, ok := h.exprType(e.args[0])
-		if !ok || a.untyped || a.t.Kind != types.Int {
+		if !ok || a.t.Kind != types.Int {
 			return exprInfo{}, false
 		}
 		return exprInfo{t: a.t}, true
@@ -98,11 +97,21 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		}
 		return exprInfo{t: a.t}, true
 	case opCall:
+		if fn := h.constEval(e.args[0]); fn.kind == cValue && fn.val.Type.Kind == types.Macro {
+			// 組み込みの min / max / clamp (マクロが opMin などの節点にする)
+			if op, ok := minMaxOps[fn.val.Name]; ok {
+				// lval と同じく opMin などの節点にしてから (引数が全部定数なら constEval が畳む)
+				return h.exprType(&cexpr{kind: cOp, op: op, args: e.args[1:]})
+			}
+			return exprInfo{}, false
+		}
 		f, ok := h.exprType(e.args[0])
 		if !ok || f.t.Kind != types.Func || f.t.Base == nil || f.t.Base.Kind == types.Void {
 			return exprInfo{}, false
 		}
 		return exprInfo{t: f.t.Base}, true
+	case opMin, opMax, opClamp:
+		return h.minMaxType(e.op, e.args)
 	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight:
 		a, ok := h.exprType(e.args[0])
 		if !ok {
@@ -113,11 +122,18 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 			return exprInfo{}, false
 		}
 		return h.binaryType(e.op, a, b)
+	case opLen:
+		// 実行時の @len は slice の長さの型 (配列の @len は定数に畳まれる)
+		if a, ok := h.exprType(e.args[0]); ok && a.t.IsSlice() {
+			return exprInfo{t: a.t.SliceLen()}, true
+		}
 	case opIndex:
-		// a[i]: 配列・ポインタは要素、slice は SliceOf (soa の添字はハンドルなので扱わない)
+		// a[i]: 配列・ポインタは要素、slice は SliceOf、soa は要素のハンドル (soaIndex)
 		a, ok := h.exprType(e.args[0])
 		switch {
-		case !ok || a.untyped || a.t.IsSoa:
+		case ok && a.t.IsSoa:
+			return exprInfo{t: u.SoaRef(a.t, h.soaElement(a.t), "")}, true
+		case !ok || a.untyped:
 		case a.t.IsSlice():
 			return exprInfo{t: a.t.SliceOf}, true
 		case (a.t.Kind == types.Array || a.t.Kind == types.Pointer) && a.t.Base != nil && a.t.Base.Kind != types.Void:
@@ -138,6 +154,16 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 			break
 		}
 		t := a.t
+		if t.Kind == types.SoaRef {
+			// soa の要素のフィールド: 入れ子の struct はハンドル、ほかはフィールドの型 (soaField)
+			if f, ok := t.Base.Field(e.name); ok {
+				if f.Type.Kind == types.Struct {
+					return exprInfo{t: u.SoaRef(t.Soa, f.Type, t.Path+e.name+"_")}, true
+				}
+				return exprInfo{t: f.Type}, true
+			}
+			break
+		}
 		if t.Kind == types.Pointer {
 			t = t.Base
 		}
@@ -214,7 +240,56 @@ func (h *Hlc) checkExprType(c *cexpr, v ir.Operand, lv bool) {
 			return
 		}
 	}
+	if got.Kind == types.Int && info.t.Kind == types.Int && got.Signed == info.t.Signed && got.Size > info.t.Size {
+		return // A1 で広い幅で計算した (上から決めた幅。widen.go)
+	}
 	if got != info.t {
 		panic(&diag.Error{Msg: fmt.Sprintf("internal: exprType of %s is %s but lval made %s (sema/typing.go)", h.exprText(c), info.t, got)})
 	}
+}
+
+var minMaxOps = map[string]cop{"min": opMin, "max": opMax, "clamp": opClamp}
+
+// minMaxType は min / max / clamp の型 (lval と同じ順: 最初の引数を各引数と比較の規則で合わせ、全部の互換型)。
+func (h *Hlc) minMaxType(op cop, args []*cexpr) (exprInfo, bool) {
+	if len(args) < 2 {
+		return exprInfo{}, false
+	}
+	infos := make([]exprInfo, len(args))
+	for i, a := range args {
+		info, ok := h.exprType(a)
+		if !ok {
+			return exprInfo{}, false
+		}
+		infos[i] = info
+	}
+	v0 := infos[0]
+	adapted := make([]*types.Type, len(infos))
+	for i := 1; i < len(infos); i++ {
+		a0, ai := h.literalAdaptedCmp(v0, infos[i]), h.literalAdaptedCmp(infos[i], v0)
+		if v0.untyped && a0 != v0.t {
+			v0 = exprInfo{t: a0} // 相手の型に合わせた定数 (以後は型付き)
+		}
+		adapted[i] = ai
+	}
+	t := v0.t
+	for _, it := range adapted[1:] {
+		if t = h.prog.Types.Compatible(t, it); t == nil {
+			return exprInfo{}, false
+		}
+	}
+	if t.Kind != types.Int && t.Kind != types.Bool {
+		return exprInfo{}, false
+	}
+	return exprInfo{t: t}, true
+}
+
+// literalAdaptedCmp は比較の規則の literalAdapted (adaptLiteral の cmp: 相手が符号付きで定数が大きい型なら符号付きの 16 ビット)。
+func (h *Hlc) literalAdaptedCmp(x, other exprInfo) *types.Type {
+	t := literalAdapted(x, other)
+	if x.untyped && !other.untyped && other.t.Kind == types.Int && other.t.Enum == nil && other.t.Signed &&
+		t == x.t && !x.t.Signed && x.t.Size > other.t.Size && x.n <= 32767 {
+		return h.prog.Types.IntType(2, true)
+	}
+	return t
 }

@@ -515,6 +515,13 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       まで分からない（`f() == .A` の二重評価はこの構造の結果）。「検査して型・定数値・左辺値性を持つ木を作る段」と「IR を
       出す段」に分ける。あわせて sema が自分の Symbol / Scope を持ち、`ir.Scope` と `ir.Lambda.Body`（AST）を ir から出す。
       `ir.Value` は置き場所とリテラルだけに。`Hlc` の寿命の違う状態（モジュール / 関数 / 式）も分ける
+      ✅ 2026-09-30 の一部: IR を出さずに式の型を決める段 `sema/typing.go` の `exprType`（二項演算・シフト・比較・論理演算・
+      `+%`・単項・添字・参照はがし・アドレス・struct と soa のフィールド・@len・@min / @max / @clamp・変数・キャスト・呼び出し）。
+      テストと fuzz では lval が出した値の型と照合する（最初の照合で `(@min(0, -6) as i8)` の `as` が効かない誤りを見つけた）。
+      これで置き換えたもの: enum の短い名前の比較（相手を先に評価して IR を出していた）、`+%` の 2 つの経路、**A1 を上から決める
+      形**（代入先・比較・親の算術の幅を評価の前に子へ渡し、最初から広い命令を出す。出した命令を後から書き換える widen を消した。
+      miku4 の ROM と fclib の vram・math・rand の生成コードは前と同じ）。残り: 型の検査・暗黙の変換・診断を lval から型を決める段
+      へ移すこと、`Hlc` の状態の整理
 - [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない

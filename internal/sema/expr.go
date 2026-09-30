@@ -148,6 +148,9 @@ func (h *Hlc) rvalOf(v ir.Operand, left bool) ir.Operand {
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
 func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	defer h.enterExpr(c.pos)()
+	hint := h.wide // A1: この式を計算する幅 (算術の節点だけが使う。子には既定で渡さない)
+	h.wide = 0
+	defer func() { h.wide = 0 }() // 受け取った幅は使い切り (戻すと次の式に漏れて、型を書かない変数まで広い幅で計算していた)
 	leftValue := false
 	e := h.constEval(c)
 	var r ir.Operand
@@ -199,7 +202,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			dst := ir.NewCastedValue(tmp, f.Type, f.Offset)
 			var v ir.Operand
 			if fv := structLitField(e, f.Name); fv != nil {
-				v = h.rval(fv)
+				v = h.rvalWide(fv, f.Type)
 				h.compatible(f.Type, ir.ValType(v))
 				v = h.convert(v, f.Type, fv)
 			} else {
@@ -245,7 +248,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					panic(&diag.Error{Msg: "cannot assign to element of soa const"})
 				}
 				if fr.split != nil {
-					right := h.rval(h.withExpected(e.args[1], fr.split.typ))
+					right := h.rvalWide(h.withExpected(e.args[1], fr.split.typ), fr.split.typ)
 					h.compatible(fr.split.typ, ir.ValType(right))
 					right = h.convert(right, fr.split.typ, e.args[1])
 					h.soaStoreSplit(fr.split, right)
@@ -261,7 +264,24 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			leftValue = lv
 
 		case opNot, opUminus, opBitNot:
+			var w int
+			var nt0 *types.Type
+			if e.op != opNot {
+				w, nt0 = h.wideWidth(e, hint)
+				h.wide = w
+			}
 			left := h.rval(e.args[0])
+			h.wide = 0
+			if w > 0 && (w > nt0.Size || h.widened(e.args[0], left)) {
+				// A1: 広い幅で計算する (項は広げる前の型の符号のまま広げる: widenOperand)
+				t := h.prog.Types.IntType(w, nt0.Signed)
+				tmp := h.newTmp(t)
+				op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{h.widenOperand(left, t)}}
+				h.emit(op)
+				h.recordArith(tmp, op, e)
+				r = tmp
+				break
+			}
 			typ := ir.ValType(left)
 			checkEnumOp(e.op, typ, nil)
 			checkOperandKinds(e.op, typ, nil)
@@ -292,8 +312,14 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 
 		case opAdd, opSub, opMul, opDiv, opMod,
 			opAnd, opOr, opXor, opShiftLeft, opShiftRight:
+			w, nt0 := h.wideWidth(e, hint)
+			h.wide = w
 			left := h.rval(e.args[0])
+			if e.op != opShiftLeft && e.op != opShiftRight {
+				h.wide = w // シフト量は区切り (広げない)
+			}
 			right := h.rval(e.args[1])
+			h.wide = 0
 			if ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc() {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
@@ -308,6 +334,24 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 			if lt, rt := ir.ValType(left), ir.ValType(right); e.op == opSub && lt.Kind == types.Pointer && rt.Kind == types.Pointer && lt.Base == rt.Base {
 				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
+				break
+			}
+			if w > 0 && (w > nt0.Size || h.widened(e.args[0], left) || e.op != opShiftLeft && e.op != opShiftRight && h.widened(e.args[1], right)) {
+				// A1: 広い幅で計算する (項は広げる前の型の符号のまま広げる: widenOperand。シフト量は元のまま)。子を広い幅で
+				// 計算したときも、この節点の型は広げる前の型の符号 (子の広い型どうしで揃えると符号が変わる: `y + dy + w`)
+				if k, lit := ir.ValIntLiteral(right); lit && k == 0 && (e.op == opDiv || e.op == opMod) {
+					panic(&diag.Error{Msg: "div by 0"})
+				}
+				t := h.prog.Types.IntType(w, nt0.Signed)
+				srcs := []ir.Operand{h.widenOperand(left, t), right}
+				if e.op != opShiftLeft && e.op != opShiftRight {
+					srcs[1] = h.widenOperand(right, t)
+				}
+				tmp := h.newTmp(t)
+				op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: srcs}
+				h.emit(op)
+				h.recordArith(tmp, op, e, left, right)
+				r = tmp
 				break
 			}
 			if (e.op == opShiftLeft || e.op == opShiftRight) && h.shiftByLeft(e, left, right) {
@@ -367,22 +411,28 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				right = h.rval(a1)
 				left = h.rval(h.withExpected(a0, ir.ValType(right)))
 			} else {
+				w := h.compareWidth(a0, a1) // A1: 両辺を広いほうの幅で計算する
+				h.wide = w
 				left = h.rval(a0)
 				if a1.kind == cNull {
 					right = h.nullOf(ir.ValType(left))
 				} else {
+					h.wide = w
 					right = h.rval(h.withExpected(a1, ir.ValType(left)))
 				}
+				h.wide = 0
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			if e.op == opLt {
 				h.checkMixedUse(left, "comparing it")
 				h.checkMixedUse(right, "comparing it")
 			}
-			// F6 (fc 4): 符号の違う整数の大小の比較で、互換型が片方の値を読み替えるものはエラー (intrules.go)
-			mixed := e.op == opLt && mixedSign(left, right)
+			// F6 (fc 4): 符号の違う整数の大小の比較で、互換型が片方の値を読み替えるものはエラー (intrules.go)。A1 で広い幅で
+			// 計算した辺は、広げる前の型で見る (`id_i16(100) >= (id_u8(255) << 3)` は i16 と u8 で、読み替えは起きない)
+			nl, nr := h.narrowView(a0, left), h.narrowView(a1, right)
+			mixed := e.op == opLt && mixedSign(nl, nr)
 			if mixed && h.v4() {
-				panic(h.mixedSignError(ir.ValType(left), ir.ValType(right)))
+				panic(h.mixedSignError(ir.ValType(nl), ir.ValType(nr)))
 			}
 			left, right = h.adaptLiteral(left, right, true)
 			h.warnConstCompare(e.op, left, right)
@@ -500,7 +550,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				// 呼び出しを含まなければ評価しながら積む (`sub t; push_arg t` が隣り合い、t が A に割り付く)
 				pre := containsCallAny(args)
 				evalArg := func(i int) ir.Operand {
-					v := h.rval(h.withExpected(args[i], lmdType.Params[i]))
+					v := h.rvalWide(h.withExpected(args[i], lmdType.Params[i]), lmdType.Params[i])
 					h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], ir.ValType(v))
 					h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), lmdType.Params[i], v)
 					return h.convert(v, lmdType.Params[i], args[i])
@@ -701,7 +751,11 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		rhs = h.withExpected(rhs, lt)
 	}
 	h.checkLoopVarAssign(left)
-	right := h.rval(rhs)
+	dt := ir.ValType(left) // 代入先の型 (A1 の幅)
+	if lv {
+		dt = dt.Base
+	}
+	right := h.rvalWide(rhs, dt)
 	if lv {
 		if ir.ValType(left).Kind == types.SoaRef {
 			h.soaScatter(left, right)

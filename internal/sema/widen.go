@@ -2,16 +2,21 @@ package sema
 
 // A1 (fc 4): 式全体を「代入先の型」と「式の中で一番広い型」の広いほうで計算する (Agent/wiki/plans/v4-plan.md §1.3 A)。
 //
-// sema は式を下から IR にするので、8 ビットの算術の結果が 16 ビットの値と出会う所 (型を揃える makeCompatible と、代入のような
-// 変換 convert) で初めて広げるべきと分かる。そこで、その結果 (一時変数) を作った部分木の命令を、その場で 16 ビットの計算に
-// 直す (widen): 命令の結果の型を広げ、葉の符号付きの値は符号拡張の命令を前に足し (符号なしは 0 で広がる)、型のない定数は元の
-// 値から広い型で作り直す。部分木の区切りは算術の命令 (+ - * / % & | ^ << >> 単項の - ~) 以外のすべて (変数・呼び出し・読み出し・
-// `as`・比較・シフト量)。計算の符号は今の結果の型のまま (同じ大きさなら符号付きが勝つ: C0)。
+// 幅は式を IR にする前に上から決める (2026-09-30。以前は 8 ビットで出した命令を、16 ビットの値と出会った所で書き換えて広げて
+// いた)。代入先・引数・戻り値・struct / 配列の要素は代入先の型の大きさ (rvalWide)、比較は両辺の広げる前の型の広いほう
+// (compareWidth)、算術の節点は親から来た幅と自分の広げる前の型 (型を決める段 exprType。typing.go) の大きさの広いほう
+// (wideWidth) を算術の子に渡す。幅が広げる前の型より広い節点は、最初からその幅の命令を出す: 符号は広げる前の型の符号 (同じ
+// 大きさなら符号付きが勝つ: C0)、項は型のない定数なら元の値から、符号付きの狭い値は符号拡張 (符号なしは 0 で広がる)、
+// 折り返した型付きの定数は元の式を広い幅で畳み込み直す (widenOperand)。部分木の区切りは算術の命令 (+ - * / % & | ^ << >>
+// 単項の - ~) 以外のすべて (変数・呼び出し・読み出し・`as`・比較・シフト量・組み込み)。
 //
 // fc 3 のモジュールで書き換えを集めているとき (rewriting) は広げず、fc 4 で広がる部分木に `(式) as T` (T は今の型) を足す
-// 書き換えを報告する (`as` は区切りなので、fc 4 でも中は今の幅で計算される)。
+// 書き換えを報告する (`as` は区切りなので、fc 4 でも中は今の幅で計算される。widenArith)。
 
 import (
+	"fmt"
+
+	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/types"
 )
@@ -43,8 +48,8 @@ func (h *Hlc) recordArith(tmp *ir.Value, op *ir.Op, c *cexpr, lits ...ir.Operand
 	h.noteShift(tmp, op)
 }
 
-// widenArith は v が式の中の算術の結果で typ より狭ければ、fc 4 では部分木ごと typ の大きさで計算し直し、fc 3 では書き換えを
-// 報告する。v はそのまま (fc 4 では型が広がった同じ一時変数) 返す。
+// widenArith は v が式の中の算術の結果で typ より狭いとき: 折り返した型付きの定数なら fc 4 では typ の幅で畳み込み直し、
+// fc 3 では書き換えを報告する (算術の命令は fc 4 では上から幅を決めて出すので、ここに狭いまま来ない)。
 func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 	tv, ok := v.(*ir.Value)
 	if !ok || typ.Kind != types.Int {
@@ -71,98 +76,13 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 	}
 	switch {
 	case h.v4():
-		if h.widen(tv, typ.Size, 0) && tv.Type != typ {
-			// 広げた計算の型 (演算の符号のまま) と揃える先の型 (大きいほう・同じ大きさなら符号付き) の符号が違えば、揃える先の型として
-			// 読む (大きさは同じなので cast は何もしない。比較・右シフトの符号が揃える先の型で決まるように: fc 3 では符号拡張の結果が
-			// その型で出る。`(x / 139) >= (0 as u16)` (x:i8) は符号なしの比較)
-			return ir.NewCastedValue(tv, typ, 0)
-		}
+		// fc 4 の算術は、評価する前に上から幅を決めて最初から広い命令を出す (wideWidth)。ここに狭いまま来るのは幅を決め
+		// そこねた形 (コンパイラの誤り。以前は出した命令をここで書き換えて広げていた)
+		panic(&diag.Error{Msg: fmt.Sprintf("internal: A1: %s was computed in %s but is used as %s (the width was not decided before evaluating it: sema/widen.go)", h.exprText(n.c), tv.Type, typ)})
 	case h.rewriting():
 		h.rewriteAs("widen", n.c, tv.Type.String())
 	}
 	return v
-}
-
-// widen は算術の結果 tv を作った部分木を size バイトの計算にする。uses は tv を読んでよい回数 (根はまだ誰も読んでいないので 0、
-// 部分木の中は親の命令の 1)。ほかでも使われている一時変数 (普通は無い) は広げない。
-func (h *Hlc) widen(tv *ir.Value, size, uses int) bool {
-	n := h.arith[tv]
-	if n == nil || tv.Type.Size >= size || h.uses(tv, n.op) != uses {
-		return false
-	}
-	op := n.op
-	nt := h.prog.Types.IntType(size, tv.Type.Signed)
-	for i, src := range op.Src {
-		if i == 1 && (op.Code == ir.OpShiftLeft || op.Code == ir.OpShiftRight) {
-			continue // シフト量は区切り
-		}
-		if sv, ok := src.(*ir.Value); ok && h.widen(sv, size, 1) {
-			continue
-		}
-		if sv, ok := src.(*ir.Value); ok && h.taint[sv] != nil {
-			if r := h.foldAtWidth(h.taint[sv], size); r != nil {
-				op.Src[i] = r.val // 折り返した型付きの定数の演算は元の式を広い幅で畳み込み直す
-				continue
-			}
-		}
-		if i < 2 && n.lits[i] != nil {
-			op.Src[i] = ir.NewIntLiteral("", nt, wrapInt(n.lits[i].Int, nt)) // 型のない定数は元の値から (`x + -1` は x + 65535)
-			continue
-		}
-		st := ir.ValType(src)
-		if st.Kind != types.Int && st.Kind != types.Bool || st.Size >= size || !st.Signed {
-			continue // 符号なしの狭い値は 0 で広がる (codegen が上位を 0 で読む)
-		}
-		if k, ok := ir.ValIntLiteral(src); ok {
-			op.Src[i] = ir.NewIntLiteral("", h.prog.Types.IntType(size, true), wrapInt(k, st))
-			continue
-		}
-		ext := h.newTmp(h.prog.Types.IntType(size, true))
-		h.insertBefore(op, &ir.Op{Code: ir.OpSignExtension, Dst: ext, Src: []ir.Operand{src}})
-		op.Src[i] = ext
-	}
-	tv.Type = nt
-	ir.InferWidthSign(op)
-	return true
-}
-
-// uses は def (tv を書く命令) より後で tv を読む回数。
-func (h *Hlc) uses(tv *ir.Value, def *ir.Op) int {
-	ops := h.lmd.Ops
-	i := len(ops) - 1
-	for i >= 0 && ops[i] != def {
-		i--
-	}
-	cnt := 0
-	for _, op := range ops[i+1:] {
-		if op == nil {
-			continue
-		}
-		_, us := ir.DefUse(op)
-		for _, u := range us {
-			if ir.UnderlyingValue(u) == tv {
-				cnt++
-			}
-		}
-	}
-	return cnt
-}
-
-// insertBefore は命令 op の前に nop を入れる (op は関数の命令列の最近のもの)。
-func (h *Hlc) insertBefore(op, nop *ir.Op) {
-	ir.InferWidthSign(nop)
-	nop.Pos = op.Pos
-	ops := h.lmd.Ops
-	for i := len(ops) - 1; i >= 0; i-- {
-		if ops[i] == op {
-			ops = append(ops, nil)
-			copy(ops[i+1:], ops[i:])
-			ops[i] = nop
-			h.lmd.Ops = ops
-			return
-		}
-	}
-	panic("insertBefore: op not found")
 }
 
 // 型付きの定数の演算と A1: sema は型付きの定数の演算を畳み込む (`(200 as u8) + (100 as u8)` は u8 の 44)。fc 4 で代入先や
@@ -293,4 +213,118 @@ func isArithNode(c *cexpr) bool {
 		return true
 	}
 	return false
+}
+
+// 上から決める A1 (fc 4): 式を IR にする前に、算術の部分木を計算する幅を決めて (代入先・比較の相手・親の算術の幅と、
+// 型を決める段 exprType が返す広げる前の型の大きさの広いほう)、最初からその幅の命令を出す。符号は広げる前の型の符号
+// (同じ大きさなら符号付きが勝つ: C0)。項は widen と同じく、型のない定数は元の値から、符号付きの狭い値は符号拡張、
+// 折り返した型付きの定数は広い幅で畳み込み直す。広げる前の型を決められない式は、今までどおり出会った所で広げる (widen)。
+
+// wideWidth は算術の節点 e を計算する幅と、広げる前の型 (hint は親・代入先から来た幅)。決められなければ 0。
+func (h *Hlc) wideWidth(e *cexpr, hint int) (int, *types.Type) {
+	if !h.v4() {
+		return 0, nil
+	}
+	info, ok := h.exprType(e)
+	if !ok || info.untyped || info.t.Kind != types.Int || info.t.Enum != nil || info.t.Size > 2 {
+		return 0, nil
+	}
+	return max(hint, info.t.Size), info.t
+}
+
+// compareWidth は比較の両辺を計算する幅 (両辺の広げる前の型の広いほう。型のない定数は比較の規則で相手に合わせた型:
+// `(x << 5) == 65533` (x:i8) の 65533 は u16 なので、左辺も 16 ビットで計算する)。
+func (h *Hlc) compareWidth(a, b *cexpr) int {
+	if !h.v4() {
+		return 0
+	}
+	ai, aok := h.exprType(a)
+	bi, bok := h.exprType(b)
+	if !aok || !bok {
+		return 0
+	}
+	w := 0
+	for _, t := range []*types.Type{h.literalAdaptedCmp(ai, bi), h.literalAdaptedCmp(bi, ai)} {
+		if t.Kind == types.Int && t.Enum == nil && t.Size <= 2 {
+			w = max(w, t.Size)
+		}
+	}
+	return w
+}
+
+// rvalWide は代入先の型 typ の幅で式 c を計算する rval (A1)。
+func (h *Hlc) rvalWide(c *cexpr, typ *types.Type) ir.Operand {
+	if h.v4() && typ != nil && typ.Kind == types.Int && typ.Enum == nil && typ.Size <= 2 {
+		h.wide = typ.Size
+	}
+	return h.rval(c)
+}
+
+// widenOperand は算術の項 src を t の幅の計算に合わせる (widen の項の扱いと同じ)。
+func (h *Hlc) widenOperand(src ir.Operand, t *types.Type) ir.Operand {
+	if sv, ok := src.(*ir.Value); ok {
+		if tc := h.taint[sv]; tc != nil && sv.Type.Size < t.Size {
+			if r := h.foldAtWidth(tc, t.Size); r != nil {
+				return r.val // 折り返した型付きの定数の演算は元の式を広い幅で畳み込み直す
+			}
+		}
+		if sv.Kind == ir.KindLiteral && sv.IsInt && sv.Untyped {
+			return ir.NewIntLiteral("", t, wrapInt(sv.Int, t)) // 型のない定数は元の値から (`x + -1` は x + 65535)
+		}
+	}
+	st := ir.ValType(src)
+	if st.Kind != types.Int && st.Kind != types.Bool || st.Size >= t.Size || !st.Signed {
+		return src // 符号なしの狭い値は 0 で広がる (codegen が上位を 0 で読む)
+	}
+	if k, ok := ir.ValIntLiteral(src); ok {
+		return ir.NewIntLiteral("", h.prog.Types.IntType(t.Size, true), wrapInt(k, st))
+	}
+	ext := h.newTmp(h.prog.Types.IntType(t.Size, true))
+	h.emit(&ir.Op{Code: ir.OpSignExtension, Dst: ext, Src: []ir.Operand{src}})
+	return ext
+}
+
+// widened は式 c の値 v を、A1 で広げる前の型より広い幅で計算したか。
+func (h *Hlc) widened(c *cexpr, v ir.Operand) bool {
+	info, ok := h.exprType(c)
+	vt := ir.ValType(v)
+	return ok && !info.untyped && info.t.Kind == types.Int && vt.Kind == types.Int && vt.Size > info.t.Size
+}
+
+// narrowView は A1 で広い幅で計算した式 c の値 v を、広げる前の型として見たもの (検査用。広げていなければ v)。
+func (h *Hlc) narrowView(c *cexpr, v ir.Operand) ir.Operand {
+	if !h.widened(c, v) {
+		return v
+	}
+	info, _ := h.exprType(c)
+	return ir.NewCastedValue(v, info.t, 0)
+}
+
+// preArrayBase は型を書かない実行時の配列リテラルの要素の型を、要素を評価する前に決める (runtimeArray と同じ規則: 要素の型の
+// 互換型を、定数の要素が入る型に (F4))。決められなければ nil。
+func (h *Hlc) preArrayBase(args []*cexpr) *types.Type {
+	if !h.v4() || len(args) == 0 {
+		return nil
+	}
+	var base *types.Type
+	vals := make([]ir.Operand, len(args))
+	for i, a := range args {
+		info, ok := h.exprType(a)
+		if !ok {
+			return nil
+		}
+		if info.untyped {
+			v := ir.NewIntLiteral("", info.t, info.n)
+			v.Untyped = true
+			vals[i] = v
+		} else {
+			vals[i] = ir.NewLocal("", info.t, ir.LTTemp) // 型だけの値 (IR には出さない)
+		}
+		if i == 0 {
+			base = info.t
+		} else if base = h.prog.Types.Compatible(base, info.t); base == nil {
+			return nil
+		}
+	}
+	return h.arrayElemType(base, vals, args, false)
 }

@@ -29,9 +29,12 @@ type Hlc struct {
 	loops        []breakable   // 囲んでいるループ/switch (内側が末尾)
 	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
 	macroCallee  *cexpr        // 実行中のマクロの呼び出しの関数の式 (fc 3 → 4 の書き換えで名前を置き換える: printf → @printf)
-	fastCalling  bool
-	groupBss     string // innermost placement block; module default is applied after declarations
-	inStaticIf   bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
+	// wide は A1 (fc 4) で、次に評価する式を計算する幅 (バイト。0 なら決まっていない)。代入先・比較の相手・親の算術が決めて
+	// lval に渡す (lval は受け取ったら 0 に戻し、算術の子にだけ渡し直す。widen.go の「上から決める」)
+	wide        int
+	fastCalling bool
+	groupBss    string // innermost placement block; module default is applied after declarations
+	inStaticIf  bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
 	// constIndex は const の宣言の初期値を評価中 (fc 4): 定数の配列 (文字列) を定数の添字で引く式を畳む (`const C = "#"[0];`)。
 	// 関数の中の式では畳まない (生成コードが変わる。fc 3 → 4 の migrate は ROM を変えない)
 	constIndex bool

@@ -364,8 +364,12 @@ func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
 			panic(&diag.Error{Msg: fmt.Sprintf("%d elements given for %s", len(e.args), e.ty)})
 		}
 	}
+	wideBase := base // A1: 要素を計算する幅 (文脈の型か、要素の型から先に決めた型。widen.go)
+	if wideBase == nil {
+		wideBase = h.preArrayBase(e.args)
+	}
 	for i, a := range e.args {
-		v := h.rval(a)
+		v := h.rvalWide(a, wideBase)
 		vals[i] = v
 		if e.ty == nil {
 			if i == 0 {

@@ -430,7 +430,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			}
 			rt := h.lmd.Type.Base
 			rc := h.withExpected(toC(s.Value), rt)
-			v := h.rval(rc)
+			v := h.rvalWide(rc, rt)
 			h.compatibleAssign("return from "+h.lmd.Name, rt, ir.ValType(v))
 			h.warnDropConst("return from "+h.lmd.Name, rt, v)
 			h.warnReturnLocalAddr(s.Value, rt)
