@@ -49,6 +49,9 @@ function main():void
 		"var a:u8; var w:u16; var x = a +% w;": "the right operand (u16) is wider than the left (u8)",
 		"var a:u8; var x = a +% 300;":          "300 does not fit in u8",
 		"var a:u8; var x = 3 +% a;":            "the left operand decides the type",
+		// 項が式なら実行時の経路 (lval) を通る。型のない定数を見ていなくて黙って通っていた (TestRandomConstFoldV4)
+		"var a:u16; var x = (a + 1) -% 65543;": "65543 does not fit in u16",
+		"var a:u8; var x = 3 +% (a + 1);":      "the left operand decides the type",
 		"var p:*u8; var x = p +% 1;":           "the left operand must be an integer",
 	} {
 		_, err := buildFiles(t, map[string]string{"t.fc": "#fc 4\nfunction main():void\n{\n\t" + src + "\n}\n"})

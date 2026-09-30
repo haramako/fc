@@ -32,14 +32,15 @@ func (h *Hlc) wrapExpr(c *cexpr, a, b *cexpr) *cexpr {
 	rt, rUntyped := wrapOperandType(b)
 	switch {
 	case lUntyped:
-		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand decides the type, so it cannot be an untyped constant (write `(%d as T) %s b`)", w.text, a.val.Int, w.text)})
+		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand decides the type, so it cannot be an untyped constant (write `(n as T) %s b`)", w.text, w.text)})
 	case lt.Kind != types.Int || lt.Enum != nil:
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand must be an integer (got %s)", w.text, lt)})
 	case rt.Kind != types.Int || rt.Enum != nil:
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the right operand must be an integer (got %s)", w.text, rt)})
 	case rUntyped:
 		// 型のない定数は T の大きさに入れば符号を問わない (`x +% -1`)
-		if n, bits := b.val.Int, 8*lt.Size; n < -(1<<(bits-1)) || n >= 1<<bits {
+		n, _ := ir.ValIntLiteral(wrapOperand(b))
+		if bits := 8 * lt.Size; n < -(1<<(bits-1)) || n >= 1<<bits {
 			panic(&diag.Error{Msg: fmt.Sprintf("`%s`: %d does not fit in %s", w.text, n, lt)})
 		}
 	case rt.Size > lt.Size:
@@ -55,10 +56,23 @@ func (h *Hlc) wrapExpr(c *cexpr, a, b *cexpr) *cexpr {
 	return r
 }
 
-// wrapOperandType は評価済みの項 x の型と、型のない整数定数か。
+// wrapOperandType は評価済みの項 x の型と、型のない整数定数か (実行時の経路の cOperand でも、リテラルなら定数として見る。
+// 見ていなくて、`x -% 65543` (x:u16) が変数の形だけ通っていた: TestRandomConstFoldV4)。
 func wrapOperandType(x *cexpr) (*types.Type, bool) {
-	if x.kind == cValue {
-		return x.val.Type, x.val.Kind == ir.KindLiteral && x.val.IsInt && x.val.Untyped
+	v := x.val
+	if x.kind == cOperand {
+		v, _ = x.opnd.(*ir.Value)
+		if v == nil {
+			return ir.ValType(x.opnd), false
+		}
 	}
-	return ir.ValType(x.opnd), false
+	return v.Type, v.Kind == ir.KindLiteral && v.IsInt && v.Untyped
+}
+
+// wrapOperand は評価済みの項 x の値 (cValue か cOperand)。
+func wrapOperand(x *cexpr) ir.Operand {
+	if x.kind == cOperand {
+		return x.opnd
+	}
+	return x.val
 }
