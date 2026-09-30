@@ -1,0 +1,2 @@
+#fc 3
+function main():void { for (var i in 0..10) { } for (var j:u16 in 0..=300) { if (j == 5) { break; } } }

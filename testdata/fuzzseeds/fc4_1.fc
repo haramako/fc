@@ -1,0 +1,17 @@
+#fc 4
+use console;
+var y:u8;
+var dy:i8;
+function main():void
+{
+	var t = (y +% dy) / 16;
+	var u = (dy *% y) -% 3;
+	if (y +% dy > 100) {
+		@printf("{} {}\n", t, u);
+	} else if (t == 0) {
+		@printf("zero\n");
+	} else {
+		y += dy;
+	}
+	console.exit(0);
+}

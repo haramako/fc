@@ -1,0 +1,2 @@
+#fc 3
+function f(x:u8):u8 { switch (x) { case 0..4: return 1; case 4..=9, 20: return 2; default: return 3; } }

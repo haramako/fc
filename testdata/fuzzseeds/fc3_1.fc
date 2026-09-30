@@ -1,0 +1,3 @@
+#fc 3
+var A:[4]u8;
+function main():void { for (var x in A) { } for (var i, x in A) { } for (var p in &A) { *p = 1; } }

@@ -1,0 +1,17 @@
+#fc 4
+use console;
+const S = "a\tb\0\\\"\'\x41";
+const NAMES = ["ab", "cde", ""];
+const P:[2][4]u8 = ["xy", "z"];
+var buf:[8]u8;
+function main():void
+{
+	var c:u8 = 'A';
+	var n = @copy(buf, S);
+	for (var s in NAMES) {
+		@printf("{} {}\n", s, @len(s));
+	}
+	console.write_z("hi\0");
+	@printf("{} {} {} {}\n", c, n, P[1][0], S == "a\x09b\x00\\\x22'A");
+	console.exit(0);
+}

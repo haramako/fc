@@ -1,0 +1,3 @@
+#fc 3
+var b:[8]u8;
+function main():void { var s = b[1..=3]; var n = @min(s[0], 200); L: for (var c in "ab") { continue L; } }

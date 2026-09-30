@@ -1,0 +1,6 @@
+#fc 3
+enum D { N, E }
+struct S { a:u8; b:[2]u16; }
+var ss:[4]S;
+function g():*u8 { var x:u8; return &x; }
+function main():void { for (var p in &ss) { p.b[1] += 1; } switch (D.N) { case .N..=.E: } }
