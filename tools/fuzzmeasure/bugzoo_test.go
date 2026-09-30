@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,17 @@ func TestBugzooPatchesApply(t *testing.T) {
 		t.Fatalf("testdata/bugzoo のパッチが無い: %v", err)
 	}
 	for _, p := range patches {
+		// パッチとパッチが触るソースをここで読む: go test は git が読むファイルの変化を見ないので、ソースを直しても前の結果
+		// (キャッシュ) を使っていた。読んだファイルが変われば作り直す
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if f, ok := strings.CutPrefix(line, "+++ b/"); ok {
+				_, _ = os.ReadFile(filepath.Join(root, f))
+			}
+		}
 		cmd := exec.Command("git", "apply", "--check", p)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {

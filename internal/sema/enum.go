@@ -84,15 +84,23 @@ func (h *Hlc) enumShort(c *cexpr, t *types.Type) *cexpr {
 	return cv(h.enumMember(t, c.name))
 }
 
-// resolveEnumShortPair は二項の比較で片方が `.Name` なら、もう片方の型で解決する (もう片方を先に評価する)。
+// resolveEnumShortPair は二項の比較で片方が `.Name` なら、もう片方の型で解決する。型は IR を出さずに決める (exprType)。
+// 決められない式 (型を決める段がまだ扱わない形) だけ、もう片方を先に評価して IR を出し、評価済みの値にする (evalOnce。
+// 2 度評価しないように: 捨てて評価し直していて `f() == .A` の f を 2 回呼んでいた)。
 // もう片方が実行時の式なら、ここで 1 回だけ IR を出して cOperand にする (以前は型を知るために評価した結果を捨て、
 // lval がもう一度出していたので `f() == .A` の f() が 2 回呼ばれていた)。
 func (h *Hlc) resolveEnumShortPair(a, b *cexpr) (*cexpr, *cexpr) {
 	if a.kind == cEnumShort && b.kind != cEnumShort {
+		if bt, ok := h.exprType(b); ok && !bt.untyped {
+			return h.enumShort(a, bt.t), b // もう片方は評価しない (型を決める段: typing.go)
+		}
 		bb := h.evalOnce(b)
 		return h.enumShort(a, cexprType(bb)), bb
 	}
 	if b.kind == cEnumShort && a.kind != cEnumShort {
+		if at, ok := h.exprType(a); ok && !at.untyped {
+			return a, h.enumShort(b, at.t)
+		}
 		aa := h.evalOnce(a)
 		return aa, h.enumShort(b, cexprType(aa))
 	}

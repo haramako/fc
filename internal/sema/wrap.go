@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/haramako/fc/internal/diag"
-	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
@@ -22,14 +21,21 @@ var wrapOps = map[cop]struct {
 	opAddWrap: {opAdd, "+%"}, opSubWrap: {opSub, "-%"}, opMulWrap: {opMul, "*%"},
 }
 
-// wrapExpr は `a op% b` (c) を `(a op (b as T)) as T` の式にする。a / b は評価済み (cValue か cOperand)。
+// wrapExpr は `a op% b` (c) を `(a op (b as T)) as T` の式にする。項の型は IR を出さずに決める (exprType。typing.go):
+// 定数の経路 (constEval) と実行時の経路 (lval) で同じ検査になる (別々に型を見ていて、実行時の経路だけ型のない定数を見落として
+// いた)。a / b は未評価の式か、型を決められない式を先に評価した cOperand。
 func (h *Hlc) wrapExpr(c *cexpr, a, b *cexpr) *cexpr {
 	w := wrapOps[c.op]
 	if !h.v4() {
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s` is fc 4 (write `(a %s (b as T)) as T` in fc 3 and older modules)", w.text, w.text[:1])})
 	}
-	lt, lUntyped := wrapOperandType(a)
-	rt, rUntyped := wrapOperandType(b)
+	ai, aok := h.exprType(a)
+	bi, bok := h.exprType(b)
+	if !aok || !bok {
+		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: cannot tell the type of the operands", w.text)})
+	}
+	lt, lUntyped := ai.t, ai.untyped
+	rt, rUntyped := bi.t, bi.untyped
 	switch {
 	case lUntyped:
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand decides the type, so it cannot be an untyped constant (write `(n as T) %s b`)", w.text, w.text)})
@@ -39,9 +45,8 @@ func (h *Hlc) wrapExpr(c *cexpr, a, b *cexpr) *cexpr {
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the right operand must be an integer (got %s)", w.text, rt)})
 	case rUntyped:
 		// 型のない定数は T の大きさに入れば符号を問わない (`x +% -1`)
-		n, _ := ir.ValIntLiteral(wrapOperand(b))
-		if bits := 8 * lt.Size; n < -(1<<(bits-1)) || n >= 1<<bits {
-			panic(&diag.Error{Msg: fmt.Sprintf("`%s`: %d does not fit in %s", w.text, n, lt)})
+		if n, bits := bi.n, 8*lt.Size; n < -(1<<(bits-1)) || n >= 1<<bits {
+			panic(&diag.Error{Msg: fmt.Sprintf("`%s`: %d does not fit in %s", w.text, bi.n, lt)})
 		}
 	case rt.Size > lt.Size:
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the right operand (%s) is wider than the left (%s); the result has the type of the left operand", w.text, rt, lt)})
@@ -56,23 +61,4 @@ func (h *Hlc) wrapExpr(c *cexpr, a, b *cexpr) *cexpr {
 	return r
 }
 
-// wrapOperandType は評価済みの項 x の型と、型のない整数定数か (実行時の経路の cOperand でも、リテラルなら定数として見る。
-// 見ていなくて、`x -% 65543` (x:u16) が変数の形だけ通っていた: TestRandomConstFoldV4)。
-func wrapOperandType(x *cexpr) (*types.Type, bool) {
-	v := x.val
-	if x.kind == cOperand {
-		v, _ = x.opnd.(*ir.Value)
-		if v == nil {
-			return ir.ValType(x.opnd), false
-		}
-	}
-	return v.Type, v.Kind == ir.KindLiteral && v.IsInt && v.Untyped
-}
 
-// wrapOperand は評価済みの項 x の値 (cValue か cOperand)。
-func wrapOperand(x *cexpr) ir.Operand {
-	if x.kind == cOperand {
-		return x.opnd
-	}
-	return x.val
-}

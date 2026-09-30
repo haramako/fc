@@ -280,8 +280,14 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			r = tmp
 
 		case opAddWrap, opSubWrap, opMulWrap:
-			left := &cexpr{kind: cOperand, opnd: h.rval(e.args[0]), pos: e.args[0].pos, end: e.args[0].end}
-			right := &cexpr{kind: cOperand, opnd: h.rval(e.args[1]), pos: e.args[1].pos, end: e.args[1].end}
+			left, right := e.args[0], e.args[1]
+			_, lok := h.exprType(left)
+			_, rok := h.exprType(right)
+			if !lok || !rok {
+				// 型を決める段がまだ扱わない項: 左から評価して値の型を使う (評価の順を保つため両方)
+				left = &cexpr{kind: cOperand, opnd: h.rval(left), pos: left.pos, end: left.end}
+				right = &cexpr{kind: cOperand, opnd: h.rval(right), pos: right.pos, end: right.end}
+			}
 			r = h.rval(h.wrapExpr(e, left, right))
 
 		case opAdd, opSub, opMul, opDiv, opMod,

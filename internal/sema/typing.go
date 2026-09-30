@@ -11,6 +11,9 @@ package sema
 // `+%`)、単項の `- ~ !`、添字・参照はがし・アドレス・struct のフィールド、変数・キャスト・呼び出しの葉。それ以外 (slice の範囲・
 // @len・@min などの組み込み・soa) は分からない (ok = false)。
 //
+// 使っている所: enum の短い名前の比較 (resolveEnumShortPair が相手を評価せずに型を知る)、`+%` (wrapExpr が定数の経路と
+// 実行時の経路で同じ型の検査をする)。
+//
 // 正しさの物差し: FC_VERIFY_IR (テストと fuzz では常に有効) のとき、lval が式を評価するたびに exprType と実際に出した値の型を
 // 比べ、違えばコンパイラの内部エラーにする (checkExprType)。規則は今の lval の規則 (adaptLiteral・Compatible・F1 のシフト・
 // wrapExpr) の写しで、A1 の広げ (widen.go) の前の型を返す (広げは親の型に合わせて後から子の型を変える)。
@@ -66,6 +69,12 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 		return exprInfo{t: ty}, ty != nil
 	case cOp:
 		return h.opType(e)
+	case cOperand:
+		// 先に評価した値 (evalOnce・wrapExpr が型を決められない項を評価したもの)
+		if v, ok := e.opnd.(*ir.Value); ok && v.Kind == ir.KindLiteral && v.IsInt && v.Untyped {
+			return exprInfo{t: v.Type, untyped: true, n: v.Int}, true
+		}
+		return exprInfo{t: ir.ValType(e.opnd)}, e.opnd != nil
 	}
 	return exprInfo{}, false
 }
