@@ -124,6 +124,10 @@ const (
 	XorEq  // ^= (v2)
 	ShlEq  // <<= (v2)
 	ShrEq  // >>= (v2)
+	// fc 4 の左の項の型で折り返す演算 (結果は左の項の型。sema の wrapOp)
+	AddWrap // +%
+	SubWrap // -%
+	MulWrap // *%
 
 	// 記号 (1 文字)
 	LParen    // (
@@ -165,7 +169,7 @@ var kindNames = [...]string{
 	KwFn: "fn", KwFarFn: "farfn", KwBitcast: "bitcast", KwStruct: "struct", KwSizeof: "sizeof", KwSoa: "soa", KwTrue: "true", KwFalse: "false", KwNull: "null", KwEnum: "enum", KwFallthrough: "fallthrough", KwIn: "in",
 	Leq: "<=", Geq: ">=", EqEq: "==", AddEq: "+=", SubEq: "-=", Neq: "!=", Arrow: "->",
 	Shl: "<<", Shr: ">>", AndAnd: "&&", OrOr: "||", Inc: "++", Dec: "--",
-	MulEq: "*=", DivEq: "/=", ModEq: "%=", AndEq: "&=", OrEq: "|=", XorEq: "^=", ShlEq: "<<=", ShrEq: ">>=",
+	MulEq: "*=", DivEq: "/=", ModEq: "%=", AndEq: "&=", OrEq: "|=", XorEq: "^=", ShlEq: "<<=", ShrEq: ">>=", AddWrap: "+%", SubWrap: "-%", MulWrap: "*%",
 	LParen: "(", RParen: ")", LBrace: "{", RBrace: "}", Semicolon: ";", Colon: ":",
 	Lt: "<", Gt: ">", LBrack: "[", RBrack: "]", Plus: "+", Minus: "-", Star: "*",
 	Slash: "/", Percent: "%", Amp: "&", Pipe: "|", Caret: "^", Assign: "=",

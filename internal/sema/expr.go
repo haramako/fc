@@ -274,6 +274,11 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 			r = tmp
 
+		case opAddWrap, opSubWrap, opMulWrap:
+			left := &cexpr{kind: cOperand, opnd: h.rval(e.args[0]), pos: e.args[0].pos, end: e.args[0].end}
+			right := &cexpr{kind: cOperand, opnd: h.rval(e.args[1]), pos: e.args[1].pos, end: e.args[1].end}
+			r = h.rval(h.wrapExpr(e, left, right))
+
 		case opAdd, opSub, opMul, opDiv, opMod,
 			opAnd, opOr, opXor, opShiftLeft, opShiftRight:
 			left := h.rval(e.args[0])

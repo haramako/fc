@@ -54,7 +54,7 @@ package syntax
 %type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
 %token <tok> DOTDOT DOTDOTEQ kIN
-%token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR
+%token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR ADDWRAP SUBWRAP MULWRAP
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~' '@' '?'
 
@@ -97,8 +97,8 @@ package syntax
 %left EQEQ NEQ
 %left '<' '>' LEQ GEQ
 %left LSHIFT RSHIFT
-%left '+' '-'
-%left '*' '/' '%'
+%left '+' '-' ADDWRAP SUBWRAP
+%left '*' '/' '%' MULWRAP
 %left kAS
 %nonassoc UMINUS
 %left '.' '(' '['
@@ -275,6 +275,9 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | exp '+'  exp           { $$ = binary($1, $2, $3) }
    | exp '-'  exp           { $$ = binary($1, $2, $3) }
    | exp '*'  exp           { $$ = binary($1, $2, $3) }
+   | exp ADDWRAP exp        { $$ = binary($1, $2, $3) } /* fc 4 */
+   | exp SUBWRAP exp        { $$ = binary($1, $2, $3) }
+   | exp MULWRAP exp        { $$ = binary($1, $2, $3) }
    | exp '/'  exp           { $$ = binary($1, $2, $3) }
    | exp '%'  exp           { $$ = binary($1, $2, $3) }
    | exp '&'  exp           { $$ = binary($1, $2, $3) }

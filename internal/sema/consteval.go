@@ -237,6 +237,12 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 
 	case cOp:
 		switch c.op {
+		case opAddWrap, opSubWrap, opMulWrap:
+			a, b := h.constEval(c.args[0]), h.constEval(c.args[1])
+			if a.kind != cValue || b.kind != cValue {
+				return c // 実行時の値がある: lval が左から評価して wrapExpr にする
+			}
+			return h.constEval(h.wrapExpr(c, a, b))
 		case opAdd, opSub, opMul, opDiv, opMod,
 			opEq, opNe, opLt, opGt, opLe, opGe,
 			opAnd, opOr, opXor, opLand, opLor, opNot, opUminus, opBitNot,

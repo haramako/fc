@@ -67,6 +67,9 @@ const (
 	opGe         cop = "ge"
 	opShiftLeft  cop = "shift_left"
 	opShiftRight cop = "shift_right"
+	opAddWrap    cop = "add_wrap" // fc 4 の `a +% b`: 左の項の型で折り返す (wrap.go)
+	opSubWrap    cop = "sub_wrap" // `a -% b`
+	opMulWrap    cop = "mul_wrap" // `a *% b`
 	opNot        cop = "not"
 	opUminus     cop = "uminus"
 	opCall       cop = "call" // args[0] = 関数、args[1:] = 実引数、block = 後置ブロック
@@ -186,6 +189,7 @@ var binaryOps = map[syntax.Kind]cop{
 	syntax.AndAnd: opLand, syntax.OrOr: opLor, syntax.EqEq: opEq, syntax.Neq: opNe,
 	syntax.Lt: opLt, syntax.Gt: opGt, syntax.Leq: opLe, syntax.Geq: opGe,
 	syntax.Shl: opShiftLeft, syntax.Shr: opShiftRight,
+	syntax.AddWrap: opAddWrap, syntax.SubWrap: opSubWrap, syntax.MulWrap: opMulWrap,
 }
 
 var unaryOps = map[syntax.Kind]cop{

@@ -105,6 +105,7 @@ var symbolTokens = []struct {
 }{
 	{"<<=", ShlEq}, {">>=", ShrEq}, {"..=", DotDotEq}, {"*=", MulEq}, {"/=", DivEq}, {"%=", ModEq}, {"&=", AndEq}, {"|=", OrEq}, {"^=", XorEq}, // v2 (長いものを先に)
 	{"<=", Leq}, {">=", Geq}, {"==", EqEq}, {"+=", AddEq}, {"-=", SubEq},
+	{"+%", AddWrap}, {"-%", SubWrap}, {"*%", MulWrap}, // fc 4 (`a +% b` は左の項の型で折り返す。ほかの読み方になる並びは無い)
 	{"!=", Neq}, {"->", Arrow}, {"<<", Shl}, {">>", Shr},
 	{"&&", AndAnd}, {"||", OrOr}, {"++", Inc}, {"--", Dec}, {"..", DotDot},
 	{"(", LParen}, {")", RParen}, {"{", LBrace}, {"}", RBrace}, {";", Semicolon}, {":", Colon},
