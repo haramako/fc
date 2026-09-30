@@ -270,6 +270,9 @@ func (g *rpGen) expr(t rpType, depth int) string {
 		// min / max (その場に比較と代入を出す組み込み)
 		return fmt.Sprintf("%s(%s, %s)", []string{"min", "max"}[g.pick(2)], g.cmpSide(t, depth-1), g.cmpSide(t, depth-1)) // 比較なので定数の規則も同じ
 	case 0, 1, 2:
+		if g.want("reuse", 0.3) {
+			return g.reuseExpr(t, depth)
+		}
 		op := []string{"+", "-", "*", "&", "|", "^"}[g.pick(6)]
 		return fmt.Sprintf("(%s %s %s)", g.expr(t, depth-1), op, g.expr(t, depth-1))
 	case 3:
@@ -340,6 +343,81 @@ func (g *rpGen) expr(t rpType, depth int) string {
 	default:
 		return g.leaf(t)
 	}
+}
+
+// reuseExpr は最適化の規則 (opt の ssa の simplify・定数の連鎖の畳み込み・恒等式) が効く形の式。規則は同じ項の繰り返しや定数の
+// 連鎖で初めて動くが、項を毎回ランダムに選ぶ式ではほとんど出ない (`((g3 + g0) - g0) - g0` の畳み込みの誤り ssa-stale-useat は
+// 250 万本に 1 回)。y は副作用の無い葉 (変数か配列の要素) で、同じ綴りを繰り返す。
+func (g *rpGen) reuseExpr(t rpType, depth int) string {
+	y := g.plainLeaf(t)
+	e := g.expr(t, depth-1)
+	arith := func() string {
+		if g.chance(0.7) {
+			return []string{"+", "-"}[g.pick(2)]
+		}
+		return []string{"^", "&", "|"}[g.pick(3)]
+	}
+	small := func() int { return 1 + g.pick(5) }
+	switch g.pick(6) {
+	case 0:
+		// 同じ項の連鎖 `((e + y) - y) - y`。打ち消し合う並び (畳み込みの規則が効く) を多めに
+		ops := [][]string{{"+", "-"}, {"-", "+"}, {"+", "-", "-"}, {"-", "+", "+"}, {"+", "+", "-", "-"}, {"^", "^"}, {"&", "&"}, {"|", "|"}}[g.pick(8)]
+		if g.chance(0.25) {
+			ops = []string{arith(), arith(), arith()}[:1+g.pick(3)]
+		}
+		s := e
+		for _, op := range ops {
+			s = fmt.Sprintf("(%s %s %s)", s, op, y)
+		}
+		return s
+	case 1:
+		// 相手が左 `(y + e) - y`
+		return fmt.Sprintf("((%s %s %s) %s %s)", y, arith(), e, arith(), y)
+	case 2:
+		// 定数の連鎖 `(e + 3) - 5`、`(e & 12) & 7`、同じ向きのシフト
+		switch g.pick(3) {
+		case 0:
+			return fmt.Sprintf("((%s %s %d) %s %d)", e, arith(), small(), arith(), small())
+		case 1:
+			op := []string{"&", "|"}[g.pick(2)]
+			return fmt.Sprintf("((%s %s %d) %s %d)", e, op, g.pick(128), op, g.pick(128))
+		default:
+			op := []string{"<<", ">>"}[g.pick(2)]
+			return fmt.Sprintf("((%s %s %d) %s %d)", e, op, g.pick(4), op, g.pick(4))
+		}
+	case 3:
+		// 2 のべきの掛け算と割り算 `(e * 4) / 4`、`(e / 8) * 8`
+		k := 1 << (1 + g.pick(3))
+		if g.chance(0.5) {
+			return fmt.Sprintf("((%s * %d) / %d)", e, k, k)
+		}
+		return fmt.Sprintf("((%s / %d) * %d)", e, k, k)
+	case 4:
+		// 自分自身との演算 `e + (y - y)`、`e ^ (y ^ y)`
+		op := []string{"-", "^"}[g.pick(2)]
+		return fmt.Sprintf("(%s %s (%s %s %s))", e, arith(), y, op, y)
+	default:
+		// `(a + b) - a` / `(a + b) - b`
+		a := g.plainLeaf(t)
+		if g.chance(0.5) {
+			return fmt.Sprintf("((%s + %s) - %s)", a, y, a)
+		}
+		return fmt.Sprintf("((%s + %s) - %s)", a, y, y)
+	}
+}
+
+// plainLeaf は副作用の無い、型 t の変数 (無ければ leaf)。同じ綴りを 2 回書いても同じ値になる。
+func (g *rpGen) plainLeaf(t rpType) string {
+	var vs []rpVar
+	for _, v := range g.scalars() {
+		if v.typ == t {
+			vs = append(vs, v)
+		}
+	}
+	if len(vs) > 0 && g.chance(0.8) {
+		return vs[g.pick(len(vs))].name
+	}
+	return g.leaf(t)
 }
 
 // mixedSign は同じ大きさで符号の違う値の `+ - *` の結果を解釈する式 (`/ %`・`>>`・比較) を型 t にしたもの。fc 2 / fc 3 では
