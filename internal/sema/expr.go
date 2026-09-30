@@ -288,6 +288,13 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right))
+			switch e.op {
+			case opDiv, opMod:
+				h.checkMixedUse(left, "`"+opSymbol(e.op)+"`")
+				h.checkMixedUse(right, "`"+opSymbol(e.op)+"`")
+			case opShiftRight:
+				h.checkMixedUse(left, "`>>`")
+			}
 			if lt, rt := ir.ValType(left), ir.ValType(right); e.op == opSub && lt.Kind == types.Pointer && rt.Kind == types.Pointer && lt.Base == rt.Base {
 				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
 				break
@@ -357,6 +364,10 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				}
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
+			if e.op == opLt {
+				h.checkMixedUse(left, "comparing it")
+				h.checkMixedUse(right, "comparing it")
+			}
 			// F6 (fc 4): 符号の違う整数の大小の比較で、互換型が片方の値を読み替えるものはエラー (intrules.go)
 			mixed := e.op == opLt && mixedSign(left, right)
 			if mixed && h.v4() {
@@ -868,6 +879,9 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 	h.checkCast(kind, from, to)
 	if from.Kind == types.Array && to.Kind == types.Pointer {
 		h.strPtr(v)
+	}
+	if from.Kind == types.Int && to.Kind == types.Int && to.Size > from.Size {
+		h.checkMixedUse(v, "widening it to "+to.String())
 	}
 	if kind == syntax.CastAs && from.Kind == types.Pointer && from.ReadOnly && to.Kind == types.Pointer && !to.ReadOnly {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot drop const with `as` (%s to %s); use @bitcast(%s, x)", from, to, to)})

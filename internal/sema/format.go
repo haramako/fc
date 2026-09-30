@@ -102,6 +102,7 @@ func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
 			a.texts[i] = &s
 		}
 		v := h.rval(c)
+		h.checkMixedUse(v, "printing it")
 		if t := ir.ValType(v); t.Kind != types.Array {
 			v = h.freeze(v)
 		}

@@ -18,8 +18,8 @@ import (
 )
 
 // v4Rules は fc 4 でエラーになる所だけの書き換え (sema/convert.go の E・D、sema/intrules.go の F6、fc 4 の printf の書式文字列:
-// sema/format.go、0 終端でない文字列をポインタにする所・文字列の定数と配列: sema/strconst.go)。
-var v4Rules = []string{"constant-range", "narrowing", "sign-compare", "printf-format", "string-terminator", "string-length", "string-rows"}
+// sema/format.go、0 終端でない文字列をポインタにする所・文字列の定数と配列: sema/strconst.go、符号の混ざった演算の結果を解釈する所: sema/mixedarith.go)。
+var v4Rules = []string{"constant-range", "narrowing", "sign-compare", "printf-format", "string-terminator", "string-length", "string-rows", "mixed-sign-arith"}
 
 // migrateRules は files を一時ディレクトリに書き、Compiler.Migrate で rules の書き換えだけを当てて最新の版にした内容を返す。
 func migrateRules(t *testing.T, files map[string]string, rules []string) (map[string]string, error) {

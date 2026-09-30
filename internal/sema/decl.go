@@ -113,6 +113,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	// 型を省いた変数は、読み取り専用のポインタ・slice で初期化すると読み取り専用 (`var p = &TAB[i]` は *const T)
 	inferRO := false
 	if typ == nil {
+		if init != nil {
+			h.checkMixedUse(init, "a variable without a type ("+name+")")
+		}
 		typ = h.guessType(name, nil, init)
 		inferRO = typ != nil && (typ.Kind == types.Pointer || typ.IsSlice()) && h.readOnly(init)
 	}

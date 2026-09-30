@@ -99,7 +99,27 @@ function main():void
 ### 左の項の型で計算する演算
 
 `a +% b`・`a -% b`・`a *% b` は、**左の項の型**で計算してその幅で折り返す（結果も左の項の型）。符号なしの座標に符号付きの移動量を
-足して、そのまま比べる・割る・シフトするときに使う（`+` は同じ大きさなら符号付きになるので、`y + dy` は `i8`）。
+足して、そのまま比べる・割る・シフトするときに使う。
+
+`+` `-` `*` は同じ大きさなら符号付きになるので、`y + dy`（`y:u8`、`dy:i8`）は `i8`。結果のビットはどちらの符号でも同じなので、
+同じ大きさの変数に入れるだけ（`y += dy`）や `&` `|` `^` はそのまま書ける。結果を**符号つきの意味で読む所**（大小の比較、`/` `%`、`>>`、
+`as` で 16 ビットに広げる所、型を書かない変数、`@printf` / `@format` の引数）に符号の混ざった結果を使うとエラーになるので、`+%` などか
+`as` で型を選ぶ（`y +% dy` は `u8`、`dy +% y` は `i8`）。16 ビットの代入先や相手があれば、式ごと 16 ビットで正しく計算されるので
+そのまま書ける（`var t:u16 = (y + dy) / 16` は 12）。
+
+```fc error
+#fc 4
+function main():void
+{
+	var y:u8 = 200;
+	var dy:i8 = 1;
+	var tile:u8 = (y + dy) / 16;
+}
+```
+
+```text
+mixed.fc:6:16: error: `(y + dy)` mixes u8 and i8, so it is i8 (the signed type wins at the same size); `/` reads a value of 128 or more as negative. Choose the type: `a +% b` / `a -% b` / `a *% b` compute in the type of the left operand, or write `(y + dy) as T`
+```
 
 - 右の項は左の項と同じ大きさか、より狭い整数（狭ければ右の項の符号で広げる）。型のない定数は左の項の大きさに入ればよい（`x +% -1`）
 - 左の項に型が要る（型のない定数は書けない）
@@ -114,16 +134,16 @@ function main():void
 	console.init();
 	var y:u8 = 200; // 座標
 	var dy:i8 = 1; // 移動量
-	@printf("{} {}\n", (y + dy) / 16, (y +% dy) / 16);
-	@printf("{} {}\n", y + dy > 100, y +% dy > 100);
+	@printf("{} {}\n", (y +% dy) / 16, (dy +% y) / 16); // u8 と i8 で割る
+	@printf("{}\n", y +% dy > 100);
 	var d:u16 = y +% 100; // u8 で折り返す
 	@printf("{}\n", d);
 }
 ```
 
 ```text
--4 12
-false true
+12 -4
+true
 44
 ```
 

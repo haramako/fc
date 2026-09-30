@@ -44,6 +44,8 @@ type Hlc struct {
 	taint map[*ir.Value]*cexpr
 	// 文の終わりに F2 (値が必ず 0 になるシフト) を見る、量が定数のシフトの結果 (intrules.go)
 	shifts []*ir.Value
+	// 文の終わりに見る、符号の混ざった演算の結果を解釈する所 (mixedarith.go)
+	mixedUses []mixedUse
 
 	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする

@@ -110,14 +110,14 @@ function main():void
 	var r = [vx, 200];
 	@printf("{} {}\n", h, s >> 8);
 	@printf("{} {} {} {} {} {} {} {} {}\n", T[0], T[1], @sizeof(T), U[1], @sizeof(U), @sizeof(S), D[0], r[1], @sizeof(r));
-	@printf("{:d} {:d} {:d} {:d}\n", x < s16, x == (-6 as i8), (x + vx) as u8 > lim, x + vx > 100);
+	@printf("{:d} {:d} {:d} {:d}\n", x < s16, x == (-6 as i8), (x + vx) as u8 > lim, x +% vx > 100);
 	exit(0);
 }
 `})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "4660 -1\n128 -1 4 -1 4 2 128 200 4\n0 1 1 0\n"; out != want {
+	if want := "4660 -1\n128 -1 4 -1 4 2 128 200 4\n0 1 1 1\n"; out != want {
 		t.Errorf("got %q, want %q", out, want)
 	}
 }
@@ -155,7 +155,7 @@ function main():void
 	got := string(res[path])
 	for _, want := range []string{
 		"const T = [128 as i8, -1];", "const U = [1000, -1 as u16];", "var r = [vx, 200 as i8];",
-		"x as i8 < vx", "w > vx as u16", "x + vx > lim as i8", "A as i8 > B",
+		"x as i8 < vx", "w > vx as u16", "(x + vx) as i8 > lim as i8", "A as i8 > B",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("migrate の結果に %q が無い:\n%s", want, got)
