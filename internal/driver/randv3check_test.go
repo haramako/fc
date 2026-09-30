@@ -13,7 +13,21 @@ import (
 func (g *rpGen) v3SelfCheck(f *rpFunc) string {
 	b := func() string { return g.v3Byte(f) }
 	var src string
-	switch g.pick(5) {
+	switch g.pick(6) {
+	case 5:
+		// enum の短い名前との比較の中の呼び出しは 1 回だけ (`vcall() == .A` の vcall を、型を知るために出した IR を捨てて
+		// もう 1 度呼んでいた: enum-short-twice。-O 0 / -O 2 / インタプリタは同じように 2 回呼ぶので差分では見えない)
+		v := g.v3
+		src = fmt.Sprintf(`{
+	var $k = vcnt;
+	vc = .%s;
+	if (vcall() == .%s) {
+		acc += 1;
+	}
+	if (vcnt != $k + 1) {
+		stdio.exit(77);
+	}
+}`, v.enum[g.pick(len(v.enum))], v.enum[g.pick(len(v.enum))])
 	case 4:
 		// for-each の回す値の中の変数は最初に 1 回だけ評価する (`&vm[k]` の k を途中で変えても最初の行を回る。毎周読み直していた)
 		src = `{

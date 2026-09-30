@@ -252,6 +252,7 @@ func (g *rpGen) v3Source() string {
 	b.WriteString("function vfill(s:[]u8, x:u8):void\n{\n\tfor (var i = 0; i < @len(s); i += 1) {\n\t\ts[i] = x + i;\n\t}\n}\n")
 	b.WriteString("function vrd(p:*const u8, n:u8):u8\n{\n\tvar r:u8 = 0;\n\tfor (var i = 0; i < n; i += 1) {\n\t\tr ^= p[i];\n\t}\n\treturn r;\n}\n")
 	b.WriteString("function vset(x:u8):void\n{\n\tvcnt += x;\n}\n")
+	b.WriteString("function vcall():Color\n{\n\tvcnt += 1;\n\treturn vc;\n}\n") // 自己検査の呼び出しの回数 (v3SelfCheck)
 	for _, f := range v.funcs {
 		b.WriteString(f.text)
 	}

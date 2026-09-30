@@ -109,6 +109,7 @@ type rpGen struct {
 	used    map[string]bool // 使った機能の名前 (randfeat_test.go)
 	r       *rand.Rand
 	wb      bool // 300 バイトのバッファ wb (walkLoop) を使う
+	bigArr  bool // 要素 2 バイトの 200 要素の配列 bg0 (配列全体が 256 バイトを超える: 添字 i * 2 の桁上がり)
 	globals []rpVar
 	arrays  []rpVar // グローバル配列 (16 要素。要素型)
 	larrays []rpVar // 今の関数のローカル配列 (16 要素)
@@ -549,6 +550,9 @@ func (g *rpGen) fpCall(depth int, t rpType) (string, bool) {
 
 // leaf は変数・配列の要素・ポインタ経由・struct のフィールド・リテラル。
 func (g *rpGen) leaf(t rpType) string {
+	if e, ok := g.bigElem(); ok {
+		return cast(e, rpTypes[2], t)
+	}
 	vs := g.scalars()
 	switch g.pick(7) {
 	case 0:
@@ -601,6 +605,15 @@ func (g *rpGen) leaf(t rpType) string {
 }
 
 // index は配列の添字 (1 バイト、0〜7)。
+// bigElem は要素 2 バイトの 200 要素の配列 bg0 の要素 (添字は 0〜199 の変数の式。配列全体が 256 バイトを超えるので、添字 i * 2
+// が 1 バイトに収まらない: index2-carry)。far1 のモジュールからは main のグローバルが見えないので使わない。
+func (g *rpGen) bigElem() (string, bool) {
+	if !g.bigArr || (g.cur != nil && g.cur.far) || !g.chance(0.12) {
+		return "", false
+	}
+	return fmt.Sprintf("bg0[((%s as int) %% 200)]", g.expr(rpTypes[0], 1)), true
+}
+
 func (g *rpGen) index() string {
 	if g.chance(0.3) {
 		return fmt.Sprintf("%d", g.pick(8))
@@ -610,6 +623,9 @@ func (g *rpGen) index() string {
 
 // lvalue は代入先 (変数、配列の要素、ポインタ経由、struct のフィールド) とその型。
 func (g *rpGen) lvalue() (string, rpType) {
+	if e, ok := g.bigElem(); ok {
+		return e, rpTypes[2]
+	}
 	switch g.pick(10) {
 	case 0, 1, 2:
 		if as := g.arraysAll(); len(as) > 0 {
@@ -1307,6 +1323,7 @@ func (g *rpGen) genProgram() {
 	for i, t := range rpTypes { // 全ての型の配列を 1 つずつ (ポインタの引数の相手)
 		g.arrays = append(g.arrays, rpVar{name: fmt.Sprintf("a%d", i), typ: t})
 	}
+	g.bigArr = g.want("bigarr", 0.4)
 	if g.want("struct", 0.7) {
 		for i := 0; i < g.pick(2)+2; i++ {
 			g.fields = append(g.fields, rpField{name: fmt.Sprintf("f%d", i), typ: g.typ()})
@@ -1384,6 +1401,10 @@ func (g *rpGen) genProgram() {
 		for i := 0; g.soa && i < 8; i++ {
 			m.stmts = append(m.stmts, rpInit(fmt.Sprintf("E[%d].%s = %s;", i, f.name, g.lit(f.typ))))
 		}
+	}
+	if g.bigArr {
+		// 要素ごとに違う値で埋める (0 のままだと、別の要素を読んでも同じ値で違いが出ない)
+		m.stmts = append(m.stmts, rpInit(fmt.Sprintf("for (var bi:int16 = 0; bi < 200; bi++) { bg0[bi] = bi * 257 + %d; }", g.pick(1000))))
 	}
 	if g.hasT {
 		for _, b := range []string{"u0", "ua[0]", "ua[1]"} {
@@ -1505,6 +1526,9 @@ func (g *rpGen) source() string {
 	}
 	if g.wb {
 		b.WriteString("var wb:[300]int options(segment: \"BSS_EX\");\n")
+	}
+	if g.bigArr {
+		b.WriteString("var bg0:[200]int16 options(segment: \"BSS_EX\");\n")
 	}
 	for _, a := range g.arrays {
 		fmt.Fprintf(&b, "var %s:[16]%s;\n", a.name, a.typ.name)
@@ -1977,11 +2001,19 @@ func (g *rpGen) regPress(depth int) *rpStmt {
 	g.loops++
 	var body []*rpStmt
 	for k := 0; k < 2+g.pick(3); k++ {
-		switch g.pick(5) {
+		switch g.pick(6) {
 		case 0:
 			if len(wide) > 0 {
 				a := wide[g.pick(len(wide))]
 				body = append(body, rpSimple(fmt.Sprintf("%s[%s] = %s;", a.name, g.index(), c.name)))
+			}
+		case 5:
+			// 16 ビットの変数の内側のループで、定数の添字の 2 バイトの要素にカウンタを書く (上位を書く lda #0 が A に常駐した
+			// カウンタを壊す: resident-store-widen。添字が式だと添字の計算で A を使うので、A に常駐しない)
+			if len(wide) > 0 {
+				a := wide[g.pick(len(wide))]
+				iv := fmt.Sprintf("li%d", g.loops)
+				body = append(body, rpSimple(fmt.Sprintf("for (var %s:int16 = 0; %s < %d; %s++) {\n%s[%d] = %s;\n}", iv, iv, 2+g.pick(4), iv, a.name, g.pick(8), c.name)))
 			}
 		case 1:
 			var v16 []rpVar

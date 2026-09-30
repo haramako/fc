@@ -148,6 +148,18 @@ func (g *rfGen) expr(depth int) rfExpr {
 		return rfExpr{fmt.Sprintf("(%s %s %d)", a.c, op, n), fmt.Sprintf("(%s %s %d)", a.v, op, n)}
 	case 5:
 		b := g.expr(depth - 1)
+		if g.chance(0.4) {
+			// 片方を型のない定数に (型付きの値と型のない定数の比較の畳み込み: 相手の型に入らない大きな数・負の数。cmp-fold-mixed)
+			n := []int{-1, -129, -32769, 255, 256, 32768, 65533, 65535, 65536, 70000}[g.pick(10)]
+			lit := fmt.Sprint(n)
+			if n < 0 {
+				lit = "(" + lit + ")"
+			}
+			b = rfExpr{lit, lit}
+			if g.chance(0.5) {
+				a, b = b, a
+			}
+		}
 		op := []string{"<", "<=", "==", "!=", ">", ">="}[g.pick(6)]
 		return rfExpr{fmt.Sprintf("((%s %s %s) as u8)", a.c, op, b.c), fmt.Sprintf("((%s %s %s) as u8)", a.v, op, b.v)}
 	case 6:
