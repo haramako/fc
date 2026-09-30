@@ -292,3 +292,18 @@ func TestSSADirectMem(t *testing.T) {
 		"push_arg nil = d",
 	)
 }
+
+// (a + b) - b → a で置き換えた命令を、後ろの命令が写しとして辿ったとき古い入力 (a + b) に着いてもう一度畳まない
+// (`g3 = ((g3 + g0) - g0) - g0` が g3 = g3 になっていた。TestRandomV3Programs の種 55005222)
+func TestSSASimplifyAfterRewrite(t *testing.T) {
+	g0, g3 := ir.NewGlobal("g0", u16(), "_g0"), ir.NewGlobal("g3", u16(), "_g3")
+	t1, t2, t3 := tmp("$1", u16()), tmp("$2", u16()), tmp("$3", u16())
+	lmd := lambda(
+		op(ir.OpAdd, t1, g3, g0),
+		op(ir.OpSub, t2, t1, g0),
+		op(ir.OpSub, t3, t2, g0),
+		op(ir.OpLoad, g3, t3),
+	)
+	propagateSSA(lmd)
+	check(t, lmd, "load $2 = g3", "sub $3 = $2, g0", "load g3 = $3")
+}

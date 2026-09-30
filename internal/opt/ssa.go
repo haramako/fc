@@ -605,6 +605,7 @@ func (s *ssaForm) rewrite() bool {
 		if op.IsMem() && op.Src[1] == ir.Operand(ir.NoIndex) && len(s.useAt[i]) > 0 && s.useAt[i][0] != nil {
 			if nop := s.directMem(op, resolve(s.useAt[i][0])); nop != nil {
 				ir.ReplaceOp(ops, i, nop)
+				s.useAt[i] = nil // 入力の版は古い命令のもの (simplify の replace と同じ)
 				changed = true
 				op = nop
 			}
@@ -613,6 +614,7 @@ func (s *ssaForm) rewrite() bool {
 		if d := s.defAt[i]; d != nil && s.konst(d) && isIntLike(ir.ValType(op.Dst)) {
 			if _, lit := ir.ValIntLiteral(op.In(0)); op.Code != ir.OpLoad || !lit {
 				ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{ir.NewIntLiteral("", ir.ValType(op.Dst), normInt(d.bits, ir.ValType(op.Dst)))}, Pos: op.Pos})
+				s.useAt[i] = nil
 				changed = true
 			}
 		}
@@ -893,6 +895,14 @@ func rebase(o ir.Operand, y *ir.Value) ir.Operand {
 // 中間の版 x の定義から y を取るので、使用位置でも y が同じ版でなければならない (valueAt)。x は他で使われていれば残る。
 func (s *ssaForm) simplify() bool {
 	changed := false
+	// 置き換えた命令の入力の版 (useAt) は古い命令のものなので捨てる。残すと後ろの命令がこの命令を写しとして辿って
+	// 古い入力の定義に着き、もう一度畳む (`((g3 + g0) - g0) - g0` の 2 つ目の sub も (a + b) - b として g3 にしていた。
+	// TestSSASimplifyAfterRewrite)。版の分からない入力は sameOperandAt が nil を返し、次の周で作り直す
+	replace := func(i int, nop *ir.Op) {
+		ir.ReplaceOp(s.lmd.Ops, i, nop)
+		s.useAt[i] = nil
+		changed = true
+	}
 	for i, op := range s.lmd.Ops {
 		// 結果の置き場所は問わない (グローバル・戻り値の slice の長さの部分も。置き換えた命令も同じ所に書く)
 		if op == nil || s.blockOf[i] == nil || op.Dst == nil || len(op.Src) != 2 {
@@ -961,8 +971,7 @@ func (s *ssaForm) simplify() bool {
 				other := s.sameOperandAt(x.def, 1-k, i)
 				if exactOperand(op.Src[1], def.Src[k]) && s.sameOperandAt(x.def, k, i) != nil && other != nil &&
 					ir.ValType(other).Size == dt.Size {
-					ir.ReplaceOp(s.lmd.Ops, i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{other}, Pos: op.Pos})
-					changed = true
+					replace(i, &ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{other}, Pos: op.Pos})
 					break
 				}
 			}
@@ -978,8 +987,7 @@ func (s *ssaForm) simplify() bool {
 			if op.Code == ir.OpSub {
 				k = k1 - m
 			}
-			ir.ReplaceOp(s.lmd.Ops, i, &ir.Op{Code: ir.OpSub, Dst: op.Dst, Src: []ir.Operand{ir.NewIntLiteral("", ir.ValType(def.Src[0]), bitsOf(k, dt.Size)), y}, Pos: op.Pos})
-			changed = true
+			replace(i, &ir.Op{Code: ir.OpSub, Dst: op.Dst, Src: []ir.Operand{ir.NewIntLiteral("", ir.ValType(def.Src[0]), bitsOf(k, dt.Size)), y}, Pos: op.Pos})
 			continue
 		}
 		m2, ok := ir.ValIntLiteral(def.Src[1])
@@ -1018,8 +1026,7 @@ func (s *ssaForm) simplify() bool {
 		if code.HasSign() {
 			nop.Sign = ir.Unsigned // 符号なしの連鎖だけを畳む
 		}
-		ir.ReplaceOp(s.lmd.Ops, i, nop)
-		changed = true
+		replace(i, nop)
 	}
 	return changed
 }

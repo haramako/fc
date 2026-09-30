@@ -98,3 +98,8 @@
 - 3 かたまり目（種 434000〜、6 万本）で 1 件（2 本）: `x++` の直後の `if (x)` で x が A に常駐していると
   `flagsFromIncDec` が `byte()` で綴りを比べようとして codegen が panic（`invalid location a`）。A にある値は if の
   codegen が `cmp #0` で検査するので、A にある値では false に（`TestIfAfterIncResident`）
+- 2026-09-30、main（77bc152〜d7fe34f）の連続 fuzz（種 54722000〜55238000）で 1 件: SSA の simplify で
+  `(a + b) - b → a` と置き換えた命令の入力の版（`useAt`）が古い命令のまま残り、後ろの命令がその命令を写し（`load $2 = g3`）
+  として辿ると古い入力 `$1 = g3 + g0` に着いて、もう一度 `(g3 + g0) - g0` として畳んでいた（`g3 = ((g3 + g0) - g0) - g0`
+  が `g3 = g3` に）。置き換えたら `useAt` を捨てる（rewrite の命令ごとの置き換えも同じ。`TestSSASimplifyAfterRewrite`、
+  bugzoo の ssa-stale-useat）。ほかは TestLogZeroCost の上限超え（既知）だけ
