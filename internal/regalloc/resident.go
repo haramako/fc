@@ -81,7 +81,9 @@ func isMemShift(op *ir.Op) bool {
 		return false
 	}
 	d, s := ir.UnderlyingValue(op.Dst), ir.UnderlyingValue(op.Src[0])
-	if d == nil || d != s || ir.ValOffset(op.Dst) != ir.ValOffset(op.Src[0]) || !ir.PlainOperand(op.Dst) || !ir.PlainOperand(op.Src[0]) {
+	// 大きさの違う cast (`x = (x as u8) >> 6`、x:i16) は x のその場のシフトではない (上位を 0 にしてから回す。fuzz で発覚)
+	if d == nil || d != s || ir.ValOffset(op.Dst) != ir.ValOffset(op.Src[0]) || ir.ValType(op.Src[0]).Size != size ||
+		!ir.PlainOperand(op.Dst) || !ir.PlainOperand(op.Src[0]) {
 		return false
 	}
 	if op.Code == ir.OpShiftRight && op.IsSigned() {

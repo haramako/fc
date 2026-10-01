@@ -1183,6 +1183,31 @@ function main():void
 	}
 }
 
+// `x = (x as u8) >> n` (x は 2 バイト) はその場のシフトではない (上位を 0 にしてから回す)。regalloc.isMemShift が大きさを
+// 見ず、x の 2 バイトをそのまま回していた (fuzz の TestRandomProgramsV4 seed 55864406 / 55942508)
+func TestMemShiftNarrowCast(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use * from stdio;
+var g:i16;
+var u:u16;
+function main():void
+{
+	g = -28347;
+	g = ((g as u8) >> 6) as i16;
+	u = 10582;
+	u = (u as u8) >> 1;
+	var l:u16 = 0x1234;
+	l = (l as u8) << 3;
+	@printf("{} {} {}\n", g, u, l);
+	exit(0);
+}
+`})
+	if want := "1 43 416\n"; err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
+	}
+}
+
 // 小さなループの完全展開 (opt.unrollLoops): crc8 の形、continue / break のある形、カウンタを本体で使う形、
 // 入れ子。-O 0 と結果を比べる
 func TestUnrollRun(t *testing.T) {
