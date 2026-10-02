@@ -233,7 +233,10 @@ static / entry: 戻り値・引数の後ろに、全ローカル（`L` に置い
   順に「衝突する配置済みの関数と重ならない最小のオフセット」に置き、ZP に入らなければ RAM。`options(zeropage: false)` で RAM を強制。
   ZP からあふれた関数があれば、フレームを参照するオペランドの数（ZP に置いたときに縮むバイト数の目安。`frameRefs`）の少ない
   衝突する関数を RAM へ出して置き直し、ZP の関数の参照の数の和が増えるなら採る（2026-09-29。深い順だと呼び出しの根
-  （main のループ）が最後になってあふれる: miku4 の main が +24 バイトだった）
+  （main のループ）が最後になってあふれる: miku4 の main が +24 バイトだった）。ループの展開の写し（`Op.UnrollCopy`）は数えない
+  （2026-10-02。写しで参照の数が増えた関数がゼロページを取り、ループの中で呼ばれる関数を RAM に追い出して -O 2 が -O 0 より遅かった:
+  `internal/driver/testdata/perf/unroll-slower`。ループの深さと呼び出しの頻度で重み付けする案も試したが、miku4 で `vram_put`（静的には
+  ループの奥、実際はめったに呼ばれない）が main を追い出し、1 フレーム +58 サイクル・+22 バイトになったので採らなかった）
 - 出力は `.fc-build/_frames.inc`: `.importzp FC_SZP` / `.import FC_SRAM` と `F_<sym> = FC_SZP+off` の並び。
   全モジュールの asm が include する。使用量は `.assert FC_SZP_SIZE >= n` で base.asm の `.res` と突き合わせる
 - codegen は ZP の関数では `<F_f+n`（`(F_f+n),y` の直接参照も可）、RAM の関数では `F_f+n`（ポインタは reg 経由）

@@ -858,7 +858,9 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 }
 
 // frameRefs はフレーム (静的なローカル・引数・戻り値) を参照するオペランドの数 (ゼロページに置いたときに縮むバイト数の目安)。
-// asm の関数は数えられないので大きな値 (needZp で先に置く)。
+// ループの展開の写し (Op.UnrollCopy) は数えない: 写しの数だけ参照が増えた関数が、展開していないループの中で呼ばれる関数を
+// ゼロページから追い出し、-O 2 が -O 0 より遅くなっていた (testdata/perf/unroll-slower: 展開した far1.ff1 がゼロページを取り、
+// ff1 のループで呼ばれる far1.ff0 が RAM に出た)。asm の関数は数えられないので大きな値 (needZp で先に置く)。
 func frameRefs(lmd *ir.Lambda) int {
 	if lmd.Extern {
 		return 1 << 20
@@ -878,7 +880,7 @@ func frameRefs(lmd *ir.Lambda) int {
 		}
 	}
 	for _, op := range lmd.Ops {
-		if op == nil {
+		if op == nil || op.UnrollCopy {
 			continue
 		}
 		if op.Dst != nil {

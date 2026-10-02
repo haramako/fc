@@ -1849,7 +1849,8 @@ func rpCheck(t *testing.T, files map[string]string) rpResult {
 	}
 	if hang(err2) && err0 == nil {
 		// -O 2 だけ上限に掛かった: -O 2 のほうが遅いこともある (種 55473670 は -O 0 が 1892 万、-O 2 が 2029 万サイクルで、
-		// 出力は同じだった。ループの展開で遅くなる: testdata/perf/unroll-slower、roadmap.md の最適化) ので、上限を上げて走らせ直す。
+		// 出力は同じだった。展開した関数が静的フレームのゼロページを取っていた: testdata/perf/unroll-slower。直した後も、最適化が
+		// 遅くする形はほかにもありうる) ので、上限を上げて走らせ直す。
 		// それでも終わらなければ -O 2 だけ止まらない (下の食い違い)
 		o2, err2 = rpRun(t, files, 0, rpMaxCycles*50)
 	}

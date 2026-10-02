@@ -235,6 +235,10 @@ go test ./...                                    # 全部 (golden + examples + N
   ベンチを書いたときに 16 ビットの除算・剰余のバグが 3 つ見つかった（`__mod_16` が stub、符号付き 16 ビットが符号無し除算、
   2 のべき乗の符号付き除算の `cmp $80`）。**新しい種類のコードを書くときは Python などで同じ計算を再現して照合する**と
   コンパイラのバグがすぐ見つかる
+- **-O 2 が -O 0 より遅い形**（2026-10-02）: fuzz で見つけた、-O 2 のほうが遅かったプログラムを `internal/driver/testdata/perf/<名前>/`
+  に置き、`TestPerfNotSlowerThanO0` が両レベルの出力が同じで -O 2 のサイクル数が -O 0 以下であることを見る。unroll-slower は
+  展開した関数が静的フレームのゼロページを取ったのが原因だった（`frames.frameRefs` が展開の写しを数えないようにして直した。
+  2015 万 → 1625 万サイクル、-O 0 は 1890 万。Agent/wiki/design/frame-alloc.md）
 - **castle のマクロベンチ**（2026-09-19）: `go test ./internal/nes -run CastleFrameCycles -v`。内蔵 NES ランナーが
   `_ppu_vsync_flag` を読む `lda; bne` の待ちループを idle と数え、局面ごとの 1 フレームの busy サイクルを
   `bench/castle_frames.json` と比べる（`-update` で更新。[bench/README.md](../../bench/README.md)）。bench/ の 12 本と

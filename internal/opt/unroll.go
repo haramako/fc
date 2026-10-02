@@ -266,6 +266,7 @@ func (s *ssaForm) unrollOne() bool {
 					no.Dst = mapOperand(op.Dst)
 				}
 				if n > 0 {
+					no.UnrollCopy = true
 					// 最初の写しは元の注釈のまま (ir.KeepLogs が付け替えない)。ヘッダの先頭のラベルの注釈はループに入る前の
 					// 地点 (`@log(...); while (...)`) なので最初の写しだけ (2 つめからは前の周から来る)
 					if head {
