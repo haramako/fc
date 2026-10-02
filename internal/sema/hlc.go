@@ -25,41 +25,53 @@ type Hlc struct {
 	prog *Program
 	deps Resolver
 
-	scope        *ir.Scope
-	loops        []breakable   // 囲んでいるループ/switch (内側が末尾)
-	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
-	macroCallee  *cexpr        // 実行中のマクロの呼び出しの関数の式 (fc 3 → 4 の書き換えで名前を置き換える: printf → @printf)
-	// wide は A1 (fc 4) で、次に評価する式を計算する幅 (バイト。0 なら決まっていない)。代入先・比較の相手・親の算術が決めて
-	// lval に渡す (lval は受け取ったら 0 に戻し、算術の子にだけ渡し直す。widen.go の「上から決める」)
-	wide        int
-	fastCalling bool
-	groupBss    string // innermost placement block; module default is applied after declarations
-	inStaticIf  bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
+	// モジュール (と宣言) の間の状態
+	module     *ir.Module
+	scope      *ir.Scope // 今のスコープ (ブロックに入るたびに子を作る: inScope)
+	groupBss   string    // innermost placement block; module default is applied after declarations
+	inStaticIf bool      // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
 	// constIndex は const の宣言の初期値を評価中 (fc 4): 定数の配列 (文字列) を定数の添字で引く式を畳む (`const C = "#"[0];`)。
 	// 関数の中の式では畳まない (生成コードが変わる。fc 3 → 4 の migrate は ROM を変えない)
 	constIndex bool
+	// 型付きの定数の畳み込みと A1 (widen.go): 折り返した畳み込みの結果の定数 → 元の式。const の値として文・関数をまたいで
+	// 使われるのでモジュールの間持つ
+	taint  map[*ir.Value]*cexpr
+	curPos syntax.Position // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
 
-	module *ir.Module
-	lmd    *ir.Lambda
-	curPos syntax.Position          // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
-	arith  map[*ir.Value]*arithNode // 式の中の算術の命令の結果 (A1 で広げる・fc 4 への書き換え: widen.go)
-	// 型付きの定数の畳み込みと A1 (widen.go): 折り返した畳み込みの結果の定数 → 元の式
-	taint map[*ir.Value]*cexpr
-	// 文の終わりに F2 (値が必ず 0 になるシフト) を見る、量が定数のシフトの結果 (intrules.go)
-	shifts []*ir.Value
-
-	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
-	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)。文ごとにリセットする
-	cmemo map[*cexpr]*cexpr
-	// constSlice のメモ (同じ配列リテラルから無名の配列定数を 2 度作らない)。cmemo と一緒にリセットする
-	sliceMemo map[sliceKey]*cexpr
-
-	pendingLogs []*ir.LogPoint       // 次に出す命令に付ける @log (log.go)
-	caseDecls   map[string]bool      // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
-	loopVars    map[*ir.Value]bool   // fc 3: for-each の変数 (読み取り専用。forin.go)
-	exprAliases map[*ir.Value]*cexpr // fc 3: 式の別名になった名前 (for-each の要素のポインタ `&A[i]`。forin.go)
-	aliasNodes  map[*cexpr]string    // 別名の評価済みの式 → 名前 (代入の検査。forin.go)
+	fnState   // 関数をコンパイルしている間の状態 (compileLambda が入口で作り、出口で前のものに戻す)
+	stmtState // 1 つの文の式を評価している間の状態 (文ごとに作り直す: resetStmt)
 }
+
+// fnState は 1 つの関数をコンパイルしている間の状態。関数の外 (宣言・const の評価) ではゼロ値。
+type fnState struct {
+	lmd          *ir.Lambda
+	loops        []breakable   // 囲んでいるループ/switch (内側が末尾)
+	pendingLabel *syntax.Ident // 直前の `L:` ラベル。次に始まるループ/switch が引き取る
+	fastCalling  bool
+	pendingLogs  []*ir.LogPoint           // 次に出す命令に付ける @log (log.go)
+	arith        map[*ir.Value]*arithNode // 式の中の算術の命令の結果 (fc 4 への書き換え・符号の混ざった演算: widen.go)
+	shifts       []*ir.Value              // 文の終わりに F2 (値が必ず 0 になるシフト) を見る、量が定数のシフトの結果 (intrules.go)
+	caseDecls    map[string]bool          // fc 3: switch の case の中で宣言した名前 (case の外で使ったときの案内。compileCaseBody)
+	loopVars     map[*ir.Value]bool       // fc 3: for-each の変数 (読み取り専用。forin.go)
+	exprAliases  map[*ir.Value]*cexpr     // fc 3: 式の別名になった名前 (for-each の要素のポインタ `&A[i]`。forin.go)
+	aliasNodes   map[*cexpr]string        // 別名の評価済みの式 → 名前 (代入の検査。forin.go)
+}
+
+// stmtState は 1 つの文の式を評価している間の状態。文の始まりと、エラーで抜けた文の後始末で捨てる (resetStmt)。
+type stmtState struct {
+	// constEval のメモ。同一の未評価ノードが複数箇所から共有されるとき (`+=` の脱糖)、
+	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)
+	cmemo map[*cexpr]*cexpr
+	// constSlice のメモ (同じ配列リテラルから無名の配列定数を 2 度作らない)
+	sliceMemo map[sliceKey]*cexpr
+	// wide は A1 (fc 4) で、次に評価する式を計算する幅 (バイト。0 なら決まっていない)。代入先・比較の相手・親の算術が決めて
+	// lval に渡す (lval は受け取ったら 0 に戻し、算術の子にだけ渡し直す。widen.go の「上から決める」)
+	wide        int
+	macroCallee *cexpr // 実行中のマクロの呼び出しの関数の式 (fc 3 → 4 の書き換えで名前を置き換える: printf → @printf)
+}
+
+// resetStmt は文の状態を捨てる (文の始まりと、エラーで抜けた文の後始末)。
+func (h *Hlc) resetStmt() { h.stmtState = stmtState{} }
 
 // MacroFn は組み込みマクロ (printf / unittest_run_tests / textmap など。builtins.go)。
 // args は評価済みの実引数、block は呼び出しの後置ブロック。
@@ -249,12 +261,10 @@ func (h *Hlc) readFile(name string) []byte {
 const switchTableMin = 10
 
 func (h *Hlc) compileLambda(lmd *ir.Lambda) {
-	oldLmd, oldLogs := h.lmd, h.pendingLogs
-	h.lmd, h.pendingLogs = lmd, nil
+	oldFn, oldStmt := h.fnState, h.stmtState
+	h.fnState, h.stmtState = fnState{lmd: lmd}, stmtState{}
+	defer func() { h.fnState, h.stmtState = oldFn, oldStmt }()
 	errs := len(h.prog.Errors)
-	if len(h.loops) != 0 {
-		panic("loops not empty")
-	}
 	h.inScope(func() {
 		// 帰り値の追加
 		if lmd.Type.Base.Kind != types.Void {
@@ -302,7 +312,6 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 			h.warnUninitialized(lmd) // エラーのあった関数は命令列が途中なので見ない
 		}
 	})
-	h.lmd, h.pendingLogs = oldLmd, oldLogs
 }
 
 // ---------------------------------------------------------------

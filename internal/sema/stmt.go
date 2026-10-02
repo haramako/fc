@@ -118,7 +118,7 @@ func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 		}
 		h.scope, h.pendingLabel, h.fastCalling = scope, pending, fast
 		h.loops = h.loops[:loops]
-		h.cmemo, h.sliceMemo = nil, nil
+		h.resetStmt()
 		h.prog.report(ce) // 上限なら Fatal を投げる
 		h.declareBad(s)
 	}()
@@ -128,7 +128,7 @@ func (h *Hlc) compileStatementRecover(s syntax.Stmt) {
 
 func (h *Hlc) compileStatement(s syntax.Stmt) {
 	h.updatePos(s)
-	h.cmemo, h.sliceMemo = nil, nil
+	h.resetStmt()
 	if h.prog.LogEveryStatement && h.prog.LogEnabled && h.lmd != nil {
 		h.logEveryStatement()
 	}
