@@ -20,6 +20,7 @@ import (
 	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/emu"
+	"github.com/haramako/fc/internal/extmacro"
 	"github.com/haramako/fc/internal/fclog"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/project"
@@ -124,6 +125,8 @@ type Compiler struct {
 	asmRuns  atomic.Int64        // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 	hashes   *hashMemo           // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
 	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
+	// macroServers は fc.toml の [macro_server.*] (外部コマンドの定数マクロ。意味解析の間だけ起動する: macroPool)
+	macroServers []*extmacro.Server
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -639,6 +642,9 @@ func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, err
 	if c.layout, err = cfg.Layout(); err != nil {
 		return nil, err
 	}
+	if c.macroServers, err = cfg.MacroServers(); err != nil {
+		return nil, err
+	}
 	if c.layout != nil && c.layout.Fragment != "" && !filepath.IsAbs(c.layout.Fragment) {
 		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
 	}
@@ -996,4 +1002,17 @@ func (c *Compiler) checkAddressVars(loadDbg func() (*cc65.DbgFile, error)) error
 		return errs
 	}
 	return nil
+}
+
+// macroPool は fc.toml の [macro_server.*] のマクロの集まり (無ければ nil)。プロセスはマクロを最初に使ったときに起動し、
+// 呼ぶ側が Close で止める。ディスクのキャッシュは中間生成物ディレクトリに置く (internal/extmacro)。
+func (c *Compiler) macroPool() (*extmacro.Pool, error) {
+	if len(c.macroServers) == 0 {
+		return nil, nil
+	}
+	cache := ""
+	if c.buildDir != "" {
+		cache = filepath.Join(c.buildDir, "macros")
+	}
+	return extmacro.NewPool(c.macroServers, cache)
 }

@@ -2,8 +2,8 @@ package project
 
 // プロジェクトの設定ファイル fc.toml (Agent/discussions/2026-09-20-v3-plan.md §1 / §3)。ソースの基準ディレクトリから親へ向かって最初に見つかった
 // ものを使う。TOML の必要な分だけを読む: `[section]` / `[a.b]` の見出し、`key = value` (値は true / false / 整数 /
-// "文字列")、`#` から行末のコメント。今使う見出しは [define.<module>] (@(build) の const の上書き)、[lib.<name>] (ライブラリ:
-// libs.go)、バンクの表 (layout.go)。
+// "文字列" / 1 行の文字列の配列 ["a", "b"])、`#` から行末のコメント。今使う見出しは [define.<module>] (@(build) の const の
+// 上書き)、[lib.<name>] (ライブラリ: libs.go)、バンクの表 (layout.go)、[macro_server.<name>] (外部コマンドの定数マクロ: macros.go)。
 
 import (
 	"bufio"
@@ -108,9 +108,10 @@ func parseConfig(path string, data []byte) (*ProjectConfig, error) {
 // [bank.*] / [lib.*] のキーは layout.go / libs.go が、[define.*] のキーはモジュールの @(build) の const が決める。
 func (cfg *ProjectConfig) validate() error {
 	keys := map[string][]string{
-		"target": {"mapper", "prg", "chr", "mirroring", "battery"},
-		"linker": {"extra"},
-		"ram.":   {"start", "size"},
+		"target":        {"mapper", "prg", "chr", "mirroring", "battery"},
+		"linker":        {"extra"},
+		"ram.":          {"start", "size"},
+		"macro_server.": {"command", "macros", "inputs"},
 	}
 	for _, sec := range cfg.Order {
 		fail := func(msg string) error {
@@ -121,10 +122,12 @@ func (cfg *ProjectConfig) validate() error {
 		case sec == "target" || sec == "linker":
 		case strings.HasPrefix(sec, "ram."):
 			name = "ram."
+		case strings.HasPrefix(sec, "macro_server."):
+			name = "macro_server."
 		case strings.HasPrefix(sec, "bank."), strings.HasPrefix(sec, "lib."), strings.HasPrefix(sec, "define."):
 			continue
 		default:
-			return fail("unknown section (known: target, bank.<name>, ram.<name>, linker, define.<module>, lib.<name>)")
+			return fail("unknown section (known: target, bank.<name>, ram.<name>, linker, define.<module>, lib.<name>, macro_server.<name>)")
 		}
 		for k := range cfg.Sections[sec] {
 			known := false

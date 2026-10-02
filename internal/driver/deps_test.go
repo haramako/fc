@@ -39,19 +39,20 @@ func TestImportDirection(t *testing.T) {
 		"cc65":     {},
 		"emu":      {"r6502"},
 		"fchome":   {},
-		"project":  {"sema", "diag"},
+		"project":  {"sema", "diag", "extmacro"},
 		"fclog":    {"codegen", "cc65", "ir", "diag", "types"},
 		"interp":   {"ir", "types"},
-		"sema":     {"syntax", "types", "ir", "diag", "lz4", "rle"},
+		"sema":     {"syntax", "types", "ir", "diag", "lz4", "rle", "extmacro"},
 		"lz4":      {}, // コンパイル時の圧縮 (@lz4 / @rle): 何にも依存しない葉
 		"rle":      {},
+		"extmacro": {}, // 外部コマンドの定数マクロのプロセスとプロトコル: 何にも依存しない葉
 		"migrate":  {"syntax", "types", "ir", "sema"},
 		"r6502":    {},
 		"nes":      {"r6502"},
 		"quicknes": {}, // libretro の QuickNES のコア (画面を確かめるテスト用)
 		"doccheck": {},
 		"fcdoc":    {"syntax"}, // fcc doc (モジュールのドキュメント) // 文書を確かめるテストだけ (テストは driver と syntax を使う)
-		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu", "migrate"},
+		"driver":   {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu", "migrate", "extmacro"},
 	}
 	for pkg, ok := range allowed {
 		okSet := map[string]bool{}

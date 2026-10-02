@@ -467,9 +467,11 @@ do-while は「やること候補（すぐではない）」。
 - [x] watch モード（`fcc watch`: ソースの更新時刻を 0.5 秒ごとに見て再ビルド）、エディタ連携（`fcc check --json` +
       `tools/vscode-fc/` の VS Code 拡張: ハイライトと保存時の診断。言語サーバは無し） ✅ 2026-09-19
 - [x] コードサイズレポート（`fcc build --size-report`、`fcc size game.dbg`。dbgfile のラベルから関数ごとの大きさ） ✅ 2026-09-19
-- [ ] 外部コマンドの定数マクロ（2026-09-30 決定: プロジェクトの Go などのコードで、表の生成・アセットの変換などの定数を作る
+- [x] 外部コマンドの定数マクロ（2026-09-30 決定: プロジェクトの Go などのコードで、表の生成・アセットの変換などの定数を作る
       マクロを fcc を作り直さずに足す。fc.toml で宣言したコマンドを fcc の生存中は常駐させ、改行区切りの JSON でやり取り、結果は
-      ディスクにもキャッシュ。textmap を乗せるかは後で検討）。[plans/external-macros.md](external-macros.md)
+      ディスクにもキャッシュ。textmap を乗せるかは後で検討）。[plans/external-macros.md](external-macros.md) ✅ 2026-10-02:
+      段 1（`internal/extmacro`、fc.toml の `[macro_server.*]`、整数・整数の配列・バイト列・文字列の結果、`inputs` を書いたときの
+      ディスクのキャッシュ）。残り: 段 2（変換表の結果と textmap）
 - [ ] モジュール単位のキャッシュとインクリメンタルビルド（`ir.ModuleInterface` のシリアライズ、内容ハッシュ、
       依存グラフ。ca65 の並列アセンブルは済み）
 - [ ] TTY での診断の色付け

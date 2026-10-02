@@ -101,5 +101,8 @@
 - **テストの共通の手順**は `internal/driver/harness_test.go` の `testBuild(t, buildSpec)`。新しいテストは既存の包み関数
   （`runEmu` / `buildFiles` / `buildBothLevels` …）か `testBuild` を使い、`NewCompiler(...).Build(...)` を直接書かない。
   例外は `internal/doccheck`（テストだけのパッケージ。docs/ の例のビルドと文書への参照の検査。driver の外なので `testBuild` を使えない）
+- **`internal/extmacro`**（2026-10-02）: 外部コマンドの定数マクロ（fc.toml の `[macro_server.*]`）のプロセスと改行区切りの JSON の
+  プロトコル・キャッシュ。何にも依存しない葉。fc.toml を読むのは `project/macros.go`、`@名前` の登録と定数への変換は
+  `sema/extmacro.go`、意味解析の間だけ起動して止めるのは driver（`Compiler.macroPool`）。計画は `wiki/plans/external-macros.md`
 - **`internal/fcdoc`**（2026-09-30）: `fcc doc`。構文木から public の宣言と直前のコメントを集め、端末の文字とサイトの Markdown にする
   （`syntax` だけに依存。`pkg/fc` の `StdDocs` / `DocFile` / `DocIndex` が包む）

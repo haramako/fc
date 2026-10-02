@@ -133,6 +133,16 @@ func (c *Compiler) collectRewrites(path, target string, cli []string, overlay ma
 		return nil, err
 	}
 	prog = sema.NewProgram()
+	macros, err := c.macroPool()
+	if err != nil {
+		return nil, err
+	}
+	if macros != nil {
+		defer macros.Close()
+		if err := prog.UseExternalMacros(macros); err != nil {
+			return nil, err
+		}
+	}
 	prog.Defines = project.CopyDefines(defs)
 	prog.Banks = c.banks()
 	prog.CollectRewrites = true
