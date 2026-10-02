@@ -35,7 +35,7 @@ fcc build [オプション] main.fc
 | `-o FILE` | 出力のファイル（既定は `a.nes` か `a.bin`） |
 | `-O LEVEL` | 最適化の段階（0〜2。既定は 2） |
 | `-g` | Mesen 用のデバッグ情報（ROM の隣に `.dbg` と `.mlb`）を書く |
-| `--size-report` | セグメントと関数ごとのコードの大きさを出す |
+| `--size-report` | セグメントと関数ごとのコードの大きさ、ROM の領域（バンク）ごとの使用量と空き、モジュールの間の呼び出しの数を出す |
 | `-D MOD.NAME=VAL` | モジュール MOD の `@(build)` の定数 NAME の値を変える（何度でも。fc.toml の `[define.MOD]` の後に当てる） |
 | `-d` | 静的フレームの配置と far call を出す |
 | `--offline` | fc.toml の git のライブラリを取ってこない（キャッシュに無ければエラー） |
@@ -103,11 +103,14 @@ fcc watch [-t TARGET] [-o FILE] [-O LEVEL] [-g] [-c] main.fc
 ## size
 
 ```bash
-fcc size [-n N] game.dbg
+fcc size [-n N] [-cfg ld65.cfg] game.dbg
 ```
 
 ld65 の `--dbgfile` が書いたデバッグ情報から、セグメントごとの合計と、大きい順に N 個（既定 40、0 なら全部）の関数の大きさを出す。
-`fcc` がリンクするなら `fcc build --size-report` でよい。
+`-cfg` にリンクに使ったリンカ設定を渡すと、ROM の領域（`MEMORY` のうち出力ファイルに置くもの。バンクごと）の使用量・空きと、
+そこに置いたセグメント（モジュール）の大きさの表も出す。
+`fcc` がリンクするなら `fcc build --size-report` でよい（バンクの表に加えて、モジュールの間の呼び出しの数（インライン展開の後の
+呼び出し。バンクをまたいで far call になった数も）を出す。モジュールをどのバンクに置くかを考えるときに使う）。
 
 ## 環境変数
 

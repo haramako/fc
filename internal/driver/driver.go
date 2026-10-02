@@ -128,6 +128,7 @@ type Compiler struct {
 	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
 	// macroServers / macroScripts は fc.toml の [macro_server.*] / [macro_script.*] (外部コマンドと Starlark の定数マクロ:
 	// projectMacros)
+	linkCfg      string // リンクに使ったリンカ設定のパス (--size-report のバンクの表)
 	macroServers []*extmacro.Server
 	macroScripts []*starmacro.Script
 }
@@ -352,7 +353,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 			}
 		}
 		if opt.SizeReport {
-			result.SizeReport = dbg.SizeReport(40)
+			result.SizeReport = c.sizeReport(dbg)
 		}
 	}
 
@@ -455,6 +456,7 @@ type bankInfo struct {
 func (c *Compiler) link(baseObj string, objs []string, opt *BuildOptions) (mapFile, dbgFile string) {
 	opts := c.prog.Options
 	cfgPath := filepath.Join(c.buildDir, "ld65.cfg")
+	defer func() { c.linkCfg = cfgPath }()
 	if custom, ok := opts.Get("linker_config"); ok && custom.Kind == ir.OptStr {
 		// options(linker_config: "../ld65.cfg"): 自前のリンカ設定 (Dir 相対)。bank / org は配置に使われない (far call の判定だけ)
 		cfgPath = filepath.Join(c.dir, custom.Str)

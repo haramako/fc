@@ -195,10 +195,19 @@ func Format(src []byte, filename string) ([]byte, error) {
 
 // SizeReport は ld65 の --dbgfile (fcc build が ROM の隣に書く <out>.dbg、または自前のリンクで --dbgfile を指定したもの) から
 // セグメントと関数ごとのコードサイズの表示を作る (fcc size)。top は表示する関数の数 (0 なら全部)。
-func SizeReport(dbgFile string, top int) ([]string, error) {
+// linkConfig はリンカ設定 (ld65 の -C のファイル) で、"" でなければ ROM の領域 (バンク) ごとの使用量と空きの表も足す。
+func SizeReport(dbgFile, linkConfig string, top int) ([]string, error) {
 	d, err := cc65.ParseDbgFile(dbgFile)
 	if err != nil {
 		return nil, err
 	}
-	return d.SizeReport(top), nil
+	r := d.SizeReport(top)
+	if linkConfig != "" {
+		lc, err := cc65.ReadLinkConfig(linkConfig)
+		if err != nil {
+			return nil, err
+		}
+		r = append(r, d.BankReport(lc)...)
+	}
+	return r, nil
 }

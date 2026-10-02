@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -84,5 +85,36 @@ func TestDebugInfoAndSizeReport(t *testing.T) {
 	}
 	if res2.DbgFile == "" {
 		t.Errorf("dbgfile はいつも書く (size report / 外部ツール用)")
+	}
+}
+
+// TestSizeReportBanks: --size-report のバンクの表 (リンカ設定の ROM の領域ごとの使用量・空きと置いたモジュール) と、モジュールの
+// 間の呼び出しの数 (バンクをまたぐ far call の数も)。fc.toml のバンクの表のプログラム (layoutFiles) で。
+func TestSizeReportBanks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for name, src := range layoutFiles() {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "main.fc", &BuildOptions{
+		Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "t.nes"), SizeReport: true,
+	})
+	if err != nil {
+		t.Fatalf("ビルド失敗: %v", err)
+	}
+	joined := strings.Join(res.SizeReport, "\n")
+	for _, re := range []string{
+		`(?m)^banks \(ROM areas`,
+		`(?m)^  ROM0 +\$8000 +8192 +\d+ +\d+ +\d+%  ma \d+`, // [bank.a] は 0 番、8K のバンク
+		`(?m)^  FIXED +\$C000 .*main \d+`,
+		`(?m)^calls between modules`,
+		`(?m)^  main \(FIXED\) +-> mb \(ROM1\) +1  far 1$`,
+		`(?m)^  ROM2 +\$8000 +8192 +0 +8192 +0%$`, // 空きのバンク
+	} {
+		if !regexp.MustCompile(re).MatchString(joined) {
+			t.Errorf("size report に /%s/ が無い:\n%s", re, joined)
+		}
 	}
 }

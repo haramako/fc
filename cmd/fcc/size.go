@@ -11,8 +11,9 @@ import (
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const sizeUsage = `Usage: fcc size [-n N] <file.dbg>
+const sizeUsage = `Usage: fcc size [-n N] [-cfg ld65.cfg] <file.dbg>
     -n N             show the N largest functions (default 40, 0 for all)
+    -cfg FILE        the linker config used for the link: also show the used / free bytes of each ROM area (bank)
 Reads the debug file written by ld65 --dbgfile and prints the size of each segment and function.
 `
 
@@ -20,6 +21,7 @@ func runSize(args []string) int {
 	fs := flag.NewFlagSet("fcc size", flag.ExitOnError)
 	fs.Usage = func() { fmt.Print(sizeUsage) }
 	n := fs.Int("n", 40, "number of functions")
+	cfg := fs.String("cfg", "", "linker config")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -27,7 +29,7 @@ func runSize(args []string) int {
 		fmt.Print(sizeUsage)
 		return 0
 	}
-	lines, err := fc.SizeReport(fs.Arg(0), *n)
+	lines, err := fc.SizeReport(fs.Arg(0), *cfg, *n)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
