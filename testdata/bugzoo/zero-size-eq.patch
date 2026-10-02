@@ -1,9 +1,9 @@
 # 大きさ 0 どうしの == を畳まず幅の無い比較を出し、IR の検査で落ちる (fc 4 の空の文字列 "" == ""。TestV4StringEdgeCases)
-diff --git b/internal/sema/expr.go a/internal/sema/expr.go
-index 47af969..e4ba4e4 100644
---- b/internal/sema/expr.go
-+++ a/internal/sema/expr.go
-@@ -409,12 +409,6 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
+diff --git a/internal/sema/expr.go b/internal/sema/expr.go
+index 4dd1375..54ab7cf 100644
+--- a/internal/sema/expr.go
++++ b/internal/sema/expr.go
+@@ -461,12 +461,6 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
  					r = bv
  					break
  				}
@@ -14,5 +14,5 @@ index 47af969..e4ba4e4 100644
 -					break
 -				}
  			}
- 			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。language_reference.md §2)
+ 			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。docs/reference/language.md の「型」)
  			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})

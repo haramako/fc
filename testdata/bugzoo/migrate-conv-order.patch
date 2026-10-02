@@ -1,0 +1,19 @@
+# migrate で、代入先への変換の `as u16` を 8 ビットの計算を保つ `as i8` より先に足し、`x as u16 as i8` にする (TestV4MigrateWidenThenConvert)
+diff --git a/internal/sema/typing.go b/internal/sema/typing.go
+--- a/internal/sema/typing.go
++++ b/internal/sema/typing.go
+@@ -344,14 +344,7 @@
+ // 当たるので、外側の変換が先だと `x as u16 as i8` (fc 3 の 8 ビットの計算を保つ `as i8` が外になる) になっていた
+ // (fuzz の TestRandomMigrate)。
+ func (h *Hlc) rvalPreConv(c *cexpr, to *types.Type, pre bool) (ir.Operand, bool) {
+-	n := len(h.prog.Rewrites)
+ 	checked := pre && h.preConvert(c, to)
+-	held := append([]Rewrite(nil), h.prog.Rewrites[n:]...)
+-	h.prog.Rewrites = h.prog.Rewrites[:n]
+ 	v := h.rvalWide(c, to)
+-	if h.rewriting() && to != nil {
+-		h.widenArith(v, to) // 8 ビットの計算を保つ `as i8` (convertValue でも呼ぶが、同じ書き換えは 1 つにまとまる) を外側の変換より先に
+-	}
+-	h.prog.Rewrites = append(h.prog.Rewrites, held...)
+ 	return v, checked
+ }

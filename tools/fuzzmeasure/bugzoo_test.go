@@ -29,7 +29,13 @@ func TestBugzooPatchesApply(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, line := range strings.Split(string(b), "\n") {
-			if f, ok := strings.CutPrefix(line, "+++ b/"); ok {
+			// `git show -R` で作ったパッチは `+++ a/` (a と b が入れ替わる)。読まないとソースの変化でキャッシュが捨てられず、
+			// 当たらなくなったパッチを見逃していた (zero-size-eq.patch)
+			f, ok := strings.CutPrefix(line, "+++ b/")
+			if !ok {
+				f, ok = strings.CutPrefix(line, "+++ a/")
+			}
+			if ok {
 				_, _ = os.ReadFile(filepath.Join(root, f))
 			}
 		}

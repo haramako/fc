@@ -332,10 +332,26 @@ func (h *Hlc) preConvert(c *cexpr, to *types.Type) bool {
 // rvalConv は代入のような変換の値 (to の幅で計算し、E・D を評価の前に判定して、to に変換する)。compatibleAssign などの値の
 // 検査は呼び出し側が check で (評価した値を渡す)。
 func (h *Hlc) rvalConv(c *cexpr, to *types.Type, check func(v ir.Operand)) ir.Operand {
-	checked := h.preConvert(c, to)
-	v := h.rvalWide(c, to)
+	v, checked := h.rvalPreConv(c, to, true)
 	if check != nil {
 		check(v)
 	}
 	return h.convertValue(v, to, c, checked)
+}
+
+// rvalPreConv は c を to の幅で評価し (rvalWide)、pre なら E・D をその前に判定する (preConvert。判定したか)。判定で足した
+// migrate の書き換え (`c as T`) は、評価の中と A1 (widenArith) で足した書き換えの後に並べる: 同じ位置に入れる `as` は足した順に
+// 当たるので、外側の変換が先だと `x as u16 as i8` (fc 3 の 8 ビットの計算を保つ `as i8` が外になる) になっていた
+// (fuzz の TestRandomMigrate)。
+func (h *Hlc) rvalPreConv(c *cexpr, to *types.Type, pre bool) (ir.Operand, bool) {
+	n := len(h.prog.Rewrites)
+	checked := pre && h.preConvert(c, to)
+	held := append([]Rewrite(nil), h.prog.Rewrites[n:]...)
+	h.prog.Rewrites = h.prog.Rewrites[:n]
+	v := h.rvalWide(c, to)
+	if h.rewriting() && to != nil {
+		h.widenArith(v, to) // 8 ビットの計算を保つ `as i8` (convertValue でも呼ぶが、同じ書き換えは 1 つにまとまる) を外側の変換より先に
+	}
+	h.prog.Rewrites = append(h.prog.Rewrites, held...)
+	return v, checked
 }

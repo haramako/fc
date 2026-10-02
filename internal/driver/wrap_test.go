@@ -163,6 +163,50 @@ function main():void
 	}
 }
 
+// TestV4MigrateWidenThenConvert: 8 ビットで折り返す fc 3 の計算を保つ `as i8` (widen) と、代入先への変換の `as u16`
+// (constant-range) が同じ式に付くとき、`as i8` が内側 (`... as i8 as u16`)。E・D を評価の前に判定するようにしてから、外側の
+// 変換を先に足して `... as u16 as i8` になり fc 4 でエラーになっていた (fuzz の TestRandomMigrate)。
+func TestV4MigrateWidenThenConvert(t *testing.T) {
+	t.Parallel()
+	src := `#fc 3
+use * from stdio;
+var g:u16;
+function main():void
+{
+	var l:u16 = ((15932 as i8) << 2);
+	g = ((100 as i8) << 2);
+	printf(l, " ", g, "\n");
+	exit(0);
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.fc")
+	if err := os.WriteFile(path, []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewCompiler(absRepoRoot).Migrate([]string{path}, &MigrateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(res[path])
+	for _, want := range []string{"((15932 as i8) << 2) as i8 as u16;", "((100 as i8) << 2) as i8 as u16;"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("migrate の結果に %q が無い:\n%s", want, got)
+		}
+	}
+	before, err := buildBothLevels(t, map[string]string{"t.fc": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := buildBothLevels(t, map[string]string{"t.fc": got})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after || before != "65520 65424\n" {
+		t.Errorf("fc 3: %q, fc 4: %q", before, after)
+	}
+}
+
 // TestUntypedConstCast: 組み込みの結果の型のない定数への同じ型の `as` は型付きの定数にする (`(@min(0, -6) as i8) + x` (x:u8) は
 // i8 の -6 と u8 の和で i8。値そのものを返していて、型のない -6 として u8 に合わせられ 253 になっていた。sema/typing.go の
 // 型の照合で発覚)。

@@ -752,8 +752,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 	if lv {
 		dt = dt.Base
 	}
-	checked := dt.Kind != types.SoaRef && h.preConvert(rhs, dt)
-	right := h.rvalWide(rhs, dt)
+	right, checked := h.rvalPreConv(rhs, dt, dt.Kind != types.SoaRef)
 	if lv {
 		if ir.ValType(left).Kind == types.SoaRef {
 			h.soaScatter(left, right)
