@@ -15,6 +15,8 @@
 
 ## Log
 
+- 2026-10-03 [GitHub Actions の失敗調査](2026-10-03-actions-failures.md) — Windows のパス・CRLF 依存テスト3件を再現。docs の HTML 欠落は修正済みだが paths フィルタで再実行されていない
+
 - 2026-10-02 [Starlark のマクロ](2026-10-02-starlark-macros.md) — fcc 以外の依存 0 で書けるマクロとして Starlark だけ入れる（go 1.24 で使える版に固定）。read / glob でプロジェクトの中のファイルを入力に
 - 2026-10-02 [コード生成](2026-10-02-code-generation.md) — しばらくはツールで .fc を書き出す普通のコード生成でよい。やるなら fc の型・宣言をサーバーに渡して新しいモジュールを生成する形
 - 2026-10-02 [外部コマンドの定数マクロの実装で決めたこと](2026-10-02-external-macros-impl.md) — マクロの名前は fc.toml の `macros` に書く、ディスクのキャッシュは `inputs` を書いたときだけ、起動するのはプロジェクトの fc.toml のものだけ

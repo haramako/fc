@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -67,7 +68,7 @@ function main():void
 		{"def f():\n    return fc.array(\"i8\", [200])\n", "const X = @f();", "does not fit in i8"},
 		{"def f():\n    return None\n", "const X = @f();", "the result must be"},
 		{"def lz4():\n    return 1\n", "", "same name as a built-in"},
-		{"def f(\n", "", "tools/tables.star"},
+		{"def f(\n", "", filepath.Join("tools", "tables.star")},
 		{"def _f():\n    return 1\n", "const X = @_f();", "@_f not found"},
 	} {
 		fs := map[string]string{"fc.toml": files["fc.toml"], "tools/tables.star": c.star, "t.fc": "#fc 4\n" + c.src + "\nfunction main():void {}\n"}

@@ -1,5 +1,10 @@
 # テストと fuzz（層・回し方・失敗の調べ方）
 
+Windows でパスを検査するときは `filepath.Join` / `filepath.FromSlash` などで期待値を合わせる。
+埋め込み HTML は checkout の CRLF を保持するため、生成結果の検査で LF 固定の正規表現を使わない。
+2026-10-03 に `TestMacroServers`・`TestStarlarkMacros`・`TestSizeHTML` の失敗を Windows で再現して確認した。
+実行ログと再現コマンドは [Actions の失敗調査](../discussions/2026-10-03-actions-failures.md)。
+
 `go test ./...` の中身、差分 fuzz / Go native fuzz / バンク切替 fuzz の回し方、失敗した種と実プロジェクトの退行の調べ方、ベンチ。fuzz で見つかったバグの時系列は [../discussions/2026-09-19-fuzz-findings-log.md](../discussions/2026-09-19-fuzz-findings-log.md)。
 
 ```bash

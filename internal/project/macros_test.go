@@ -1,6 +1,7 @@
 package project
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -21,7 +22,7 @@ inputs = ["tools/x/*.go"]
 	}
 	s := ss[0]
 	if s.Name != "tools" || strings.Join(s.Command, "|") != "go|run|./tools/x" || strings.Join(s.Macros, "|") != "sin_table|map_2" ||
-		strings.Join(s.Inputs, "|") != "tools/x/*.go" || s.Dir != "/p" {
+		strings.Join(s.Inputs, "|") != "tools/x/*.go" || s.Dir != filepath.FromSlash("/p") {
 		t.Errorf("got %+v", s)
 	}
 	for _, c := range []struct{ body, msg string }{

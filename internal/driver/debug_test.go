@@ -141,7 +141,7 @@ func TestSizeHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := regexp.MustCompile(`const R = (\{.*\});\n`).FindSubmatch(b)
+	m := regexp.MustCompile(`const R = (\{.*\});\r?\n`).FindSubmatch(b)
 	if m == nil {
 		t.Fatalf("データが無い:\n%s", b)
 	}
