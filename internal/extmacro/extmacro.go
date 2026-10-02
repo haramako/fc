@@ -361,34 +361,46 @@ func decodeResult(raw json.RawMessage) (*Result, error) {
 	if n != 1 {
 		return nil, fmt.Errorf("the result must have exactly one of int / data / bytes / string (got %s)", clip(string(raw)))
 	}
-	rg, typed := intRange[x.Type]
-	if x.Type != "" && !typed {
-		return nil, fmt.Errorf("unknown result type %q (u8 / i8 / u16 / i16)", x.Type)
-	}
+	var r *Result
 	switch {
 	case x.Int != nil:
-		if typed && (*x.Int < rg[0] || *x.Int > rg[1]) {
-			return nil, fmt.Errorf("the result %d does not fit in %s", *x.Int, x.Type)
-		}
-		return &Result{Kind: "int", Type: x.Type, Int: *x.Int}, nil
+		r = &Result{Kind: "int", Type: x.Type, Int: *x.Int}
 	case x.Data != nil:
-		if !typed {
-			return nil, fmt.Errorf("an integer array result needs \"type\" (u8 / i8 / u16 / i16)")
-		}
-		for i, v := range x.Data {
-			if v < rg[0] || v > rg[1] {
-				return nil, fmt.Errorf("element %d of the result (%d) does not fit in %s", i, v, x.Type)
-			}
-		}
-		return &Result{Kind: "data", Type: x.Type, Data: x.Data}, nil
+		r = &Result{Kind: "data", Type: x.Type, Data: x.Data}
 	case x.Bytes != nil:
 		b, err := base64.StdEncoding.DecodeString(*x.Bytes)
 		if err != nil {
 			return nil, fmt.Errorf("bad base64 in the result: %v", err)
 		}
-		return &Result{Kind: "bytes", Bytes: b}, nil
+		r = &Result{Kind: "bytes", Bytes: b}
+	default:
+		r = &Result{Kind: "string", Str: *x.String}
 	}
-	return &Result{Kind: "string", Str: *x.String}, nil
+	return r, r.Validate()
+}
+
+// Validate は結果の型の名前と値の範囲を確かめる (外部コマンドと Starlark のマクロの共通: internal/starmacro)。
+func (r *Result) Validate() error {
+	rg, typed := intRange[r.Type]
+	if r.Type != "" && !typed {
+		return fmt.Errorf("unknown result type %q (u8 / i8 / u16 / i16)", r.Type)
+	}
+	switch r.Kind {
+	case "int":
+		if typed && (r.Int < rg[0] || r.Int > rg[1]) {
+			return fmt.Errorf("the result %d does not fit in %s", r.Int, r.Type)
+		}
+	case "data":
+		if !typed {
+			return fmt.Errorf("an integer array result needs a type (u8 / i8 / u16 / i16)")
+		}
+		for i, v := range r.Data {
+			if v < rg[0] || v > rg[1] {
+				return fmt.Errorf("element %d of the result (%d) does not fit in %s", i, v, r.Type)
+			}
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------

@@ -67,5 +67,11 @@ textmap は「変換器を作る」マクロで、後から `_T("あいう")` �
    docs/reference/fc-toml.md の `[macro_server.名前]`）
 2. 変換表の結果の型と textmap（上の検討の後）
 
+3. Starlark のスクリプトのマクロ（fc.toml の `[macro_script.*]`。2026-10-02 ユーザー「fcc 以外の依存を 0 にしたい用途として
+   starlark だけ入れる」）✅ 2026-10-02（`internal/starmacro`。go.starlark.net は go 1.24 で使える最後のコミット ffb3f39 に固定:
+   次のコミットから go 1.25 が要る。間接の依存に golang.org/x/sys。fcc は 9.6 → 11.2 MB）。外界に触れないので同じ入力から同じ
+   結果になり、キャッシュはビルドの間のメモリだけ。残り: ライブラリの fc.toml の `[macro_script.*]` も使う（外界に触れないので
+   「ビルドはライブラリのコードを実行しない」を緩めてよい候補。読めるのはライブラリのフォルダの中に）
+
 コードを生成する形（C# の Source Generator 風）は 2026-10-02 に検討して見送った: しばらくは普通のコード生成（ツールで .fc を
 書き出す）。やるなら fc の型・宣言をサーバーに渡して新しいモジュールを生成する形（discussions/2026-10-02-code-generation.md）

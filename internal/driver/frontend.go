@@ -45,17 +45,15 @@ type frontResult struct {
 // 止めて (Lambda.NoGrow) 意味解析からやり直す (最適化は IR をその場で書き換えるので、やり直しは sema から。
 // 失敗したときだけ走るので、通るプログラムのコンパイル時間は変わらない)。
 func (c *Compiler) compileFront(o *frontOptions) (*frontResult, error) {
-	macros, err := c.macroPool()
+	macros, done, err := c.projectMacros()
 	if err != nil {
 		return nil, err
 	}
-	if macros != nil {
-		defer macros.Close() // 外部コマンドのマクロは意味解析の間だけ (やり直しでも同じプロセスと結果を使う)
-	}
+	defer done() // 外部コマンドのマクロは意味解析の間だけ (やり直しでも同じプロセスと結果を使う)
 	for noGrow := map[string]bool{}; ; {
 		prog := sema.NewProgram()
-		if macros != nil {
-			if err := prog.UseExternalMacros(macros); err != nil {
+		for _, m := range macros {
+			if err := prog.UseMacros(m); err != nil {
 				return nil, err
 			}
 		}

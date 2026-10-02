@@ -1,8 +1,9 @@
 package sema
 
-// 外部コマンドの定数マクロ (fc.toml の [macro_server.<name>]。internal/extmacro、Agent/wiki/plans/external-macros.md)。
-// driver が UseExternalMacros で渡したマクロを、組み込みの定数マクロ (@lz4 など) と同じく `@名前` で登録する。引数は定数
-// (整数・文字列・整数の配列) で、結果は定数 (整数・型付きの整数の配列・u8 の配列・文字列)。
+// プロジェクトの定数マクロ: 外部コマンド (fc.toml の [macro_server.<name>]。internal/extmacro) と Starlark のスクリプト
+// ([macro_script.<name>]。internal/starmacro)。Agent/wiki/plans/external-macros.md。driver が UseMacros で渡したマクロを、
+// 組み込みの定数マクロ (@lz4 など) と同じく `@名前` で登録する。引数は定数 (整数・文字列・整数の配列) で、結果は定数
+// (整数・型付きの整数の配列・u8 の配列・文字列)。
 
 import (
 	"fmt"
@@ -13,13 +14,19 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// UseExternalMacros は pool のマクロを `@名前` で使えるようにする (組み込みと同じ名前はエラー)。
-func (p *Program) UseExternalMacros(pool *extmacro.Pool) error {
+// MacroSource はプロジェクトの定数マクロの集まり (extmacro.Pool / starmacro.Set)。
+type MacroSource interface {
+	Macros() []string                                       // マクロの名前 (`@` を除く)
+	Call(name string, args []any) (*extmacro.Result, error) // args は int / string / []byte / []int
+}
+
+// UseMacros は pool のマクロを `@名前` で使えるようにする (組み込み・先に登録したマクロと同じ名前はエラー)。
+func (p *Program) UseMacros(pool MacroSource) error {
 	h := &Hlc{prog: p, scope: p.global}
 	for _, name := range pool.Macros() {
 		at := "@" + name
 		if p.global.Find(at, true) != nil {
-			return fmt.Errorf("external macro %s has the same name as a built-in", at)
+			return fmt.Errorf("macro %s has the same name as a built-in or another macro", at)
 		}
 		h.defconstmacro(at, func(h *Hlc, args []*cexpr) *cexpr {
 			return h.callExternalMacro(pool, name, args)
@@ -29,7 +36,7 @@ func (p *Program) UseExternalMacros(pool *extmacro.Pool) error {
 }
 
 // callExternalMacro はマクロ name を定数の引数で呼び、結果を定数にする。
-func (h *Hlc) callExternalMacro(pool *extmacro.Pool, name string, args []*cexpr) *cexpr {
+func (h *Hlc) callExternalMacro(pool MacroSource, name string, args []*cexpr) *cexpr {
 	vals := make([]any, len(args))
 	for i, a := range args {
 		v, err := h.externalArg(a)

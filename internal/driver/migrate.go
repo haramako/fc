@@ -133,13 +133,13 @@ func (c *Compiler) collectRewrites(path, target string, cli []string, overlay ma
 		return nil, err
 	}
 	prog = sema.NewProgram()
-	macros, err := c.macroPool()
+	macros, done, err := c.projectMacros()
 	if err != nil {
 		return nil, err
 	}
-	if macros != nil {
-		defer macros.Close()
-		if err := prog.UseExternalMacros(macros); err != nil {
+	defer done()
+	for _, m := range macros {
+		if err := prog.UseMacros(m); err != nil {
 			return nil, err
 		}
 	}

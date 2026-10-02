@@ -104,9 +104,53 @@ QUEUE_SIZE = 96
 - ライブラリの一番上に fc.toml があれば、その `[lib.*]` も使う（同じ名前ならプロジェクトの fc.toml に書いたものが勝つ）
 - ビルドはライブラリのコードを実行しない（読むのはソース・アセンブリ・データのファイルだけ）
 
+## [macro_script.名前]
+
+定数を作るマクロを、Starlark（Python に似た小さな言語）のスクリプトで足す（表の生成・アセットの変換など）。`fcc` の中で動くので、
+ほかに何も入れなくてよい。ソースでは組み込みと同じく `@名前(引数)` と書き、結果は定数になる。
+
+```toml
+[macro_script.tables]
+file = "tools/tables.star"
+```
+
+```python
+# tools/tables.star
+def sin_table(n, amp):
+    return fc.array("i8", [int(math.round(amp * math.sin(2 * math.pi * i / n))) for i in range(n)])
+
+def font_widths(pattern):
+    return [len(read(f)) // 8 for f in glob(pattern)]   # 0..255 の整数のリストは [N]u8
+```
+
+<!-- ignore: tools/tables.star が無いと動かない -->
+```fc ignore
+const SIN = @sin_table(256, 64);
+const W = @font_widths("res/font/*.chr");
+```
+
+- スクリプトの一番上の関数（`_` で始まらないもの）がマクロになる。組み込みと同じ名前はエラー
+- スクリプトはファイル・時刻・乱数・OS に触れられない。使えるのは次のものだけ:
+
+| 名前 | 中身 |
+|---|---|
+| `read(path)` | ファイルの中身（bytes）。fc.toml のあるディレクトリの中だけ読める |
+| `glob(pattern)` | ファイルの一覧（名前の順。同じく fc.toml のあるディレクトリの中） |
+| `math` | `math.sin`・`math.floor`・`math.pi` など |
+| `fc.array(type, list)` | 型付きの整数の配列（`type` は `"u8"` / `"i8"` / `"u16"` / `"i16"`） |
+| `fc.int(type, n)` | 型付きの整数 |
+| `print(...)` | 標準エラーに出す（デバッグ用） |
+| `load("x.star", "f")` | 同じディレクトリ（の下）の別のスクリプトの関数を使う |
+
+- 引数は定数の整数・文字列・整数の配列（`u8` の配列は bytes になる）
+- 戻り値は整数（型のない定数）・文字列・bytes（`[N]u8`）・整数のリスト（全部 0..255 なら `[N]u8`。それ以外は `fc.array` で型を書く）・
+  `fc.array`・`fc.int`
+- bytes の添字は 1 バイトの bytes で、`+` でつなげない。整数で扱うときは `list(b.elems())` にし、`bytes(list)` で戻す
+- 止まらないマクロは一定の手数で打ち切ってエラーにする
+
 ## [macro_server.名前]
 
-定数を作るマクロを、外部のコマンドで足す（表の生成・アセットの変換など）。ソースでは組み込みと同じく `@名前(引数)` と書き、
+定数を作るマクロを、外部のコマンドで足す（Go など好きな言語で書ける。`[macro_script.*]` で足りないとき）。ソースでは組み込みと同じく `@名前(引数)` と書き、
 結果は定数になる。
 
 ```toml

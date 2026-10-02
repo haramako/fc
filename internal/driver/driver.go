@@ -27,6 +27,7 @@ import (
 	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
+	"github.com/haramako/fc/internal/starmacro"
 	"github.com/haramako/fc/internal/syntax"
 )
 
@@ -125,8 +126,10 @@ type Compiler struct {
 	asmRuns  atomic.Int64        // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 	hashes   *hashMemo           // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
 	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
-	// macroServers は fc.toml の [macro_server.*] (外部コマンドの定数マクロ。意味解析の間だけ起動する: macroPool)
+	// macroServers / macroScripts は fc.toml の [macro_server.*] / [macro_script.*] (外部コマンドと Starlark の定数マクロ:
+	// projectMacros)
 	macroServers []*extmacro.Server
+	macroScripts []*starmacro.Script
 }
 
 func NewCompiler(fcHome string) *Compiler {
@@ -645,6 +648,9 @@ func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, err
 	if c.macroServers, err = cfg.MacroServers(); err != nil {
 		return nil, err
 	}
+	if c.macroScripts, err = cfg.MacroScripts(); err != nil {
+		return nil, err
+	}
 	if c.layout != nil && c.layout.Fragment != "" && !filepath.IsAbs(c.layout.Fragment) {
 		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
 	}
@@ -1004,15 +1010,28 @@ func (c *Compiler) checkAddressVars(loadDbg func() (*cc65.DbgFile, error)) error
 	return nil
 }
 
-// macroPool は fc.toml の [macro_server.*] のマクロの集まり (無ければ nil)。プロセスはマクロを最初に使ったときに起動し、
-// 呼ぶ側が Close で止める。ディスクのキャッシュは中間生成物ディレクトリに置く (internal/extmacro)。
-func (c *Compiler) macroPool() (*extmacro.Pool, error) {
-	if len(c.macroServers) == 0 {
-		return nil, nil
+// projectMacros は fc.toml の [macro_server.*] と [macro_script.*] のマクロ。外部コマンドはマクロを最初に使ったときに起動し、
+// 呼ぶ側が done で止める (ディスクのキャッシュは中間生成物ディレクトリ: internal/extmacro)。Starlark のスクリプトはここで実行して
+// 一番上の関数を集める (internal/starmacro)。
+func (c *Compiler) projectMacros() (srcs []sema.MacroSource, done func(), err error) {
+	done = func() {}
+	if len(c.macroScripts) > 0 {
+		set, err := starmacro.Load(c.macroScripts)
+		if err != nil {
+			return nil, done, err
+		}
+		srcs = append(srcs, set)
 	}
-	cache := ""
-	if c.buildDir != "" {
-		cache = filepath.Join(c.buildDir, "macros")
+	if len(c.macroServers) > 0 {
+		cache := ""
+		if c.buildDir != "" {
+			cache = filepath.Join(c.buildDir, "macros")
+		}
+		pool, err := extmacro.NewPool(c.macroServers, cache)
+		if err != nil {
+			return nil, done, err
+		}
+		srcs, done = append(srcs, pool), pool.Close
 	}
-	return extmacro.NewPool(c.macroServers, cache)
+	return srcs, done, nil
 }

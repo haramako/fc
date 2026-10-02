@@ -6,6 +6,9 @@ package project
 //	command = ["go", "run", "./tools/fcmacros"]   # 作業ディレクトリは fc.toml のあるディレクトリ
 //	macros = ["sin_table", "font_map"]            # 提供するマクロ (ソースでは @sin_table(...) と呼ぶ)
 //	inputs = ["tools/fcmacros/*.go"]              # 省略可: コマンド自身のソース (書くとディスクにキャッシュする)
+//
+//	[macro_script.tables]
+//	file = "tools/tables.star"                    # Starlark のスクリプト (一番上の関数がマクロ。internal/starmacro)
 
 import (
 	"fmt"
@@ -15,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/haramako/fc/internal/extmacro"
+	"github.com/haramako/fc/internal/starmacro"
 )
 
 // MacroServers は fc.toml の [macro_server.*] (名前の順)。
@@ -49,6 +53,27 @@ func (cfg *ProjectConfig) MacroServers() ([]*extmacro.Server, error) {
 			}
 		}
 		r = append(r, s)
+	}
+	return r, nil
+}
+
+// MacroScripts は fc.toml の [macro_script.*] (名前の順)。
+func (cfg *ProjectConfig) MacroScripts() ([]*starmacro.Script, error) {
+	var names []string
+	for _, sec := range cfg.Order {
+		if strings.HasPrefix(sec, "macro_script.") {
+			names = append(names, sec)
+		}
+	}
+	sort.Strings(names)
+	var r []*starmacro.Script
+	for _, sec := range names {
+		file := cfg.Sections[sec]["file"]
+		if file == "" {
+			return nil, fmt.Errorf("%s: [%s]: file must be the path of a Starlark script (file = \"tools/tables.star\")", cfg.Path, sec)
+		}
+		root := filepath.Dir(cfg.Path)
+		r = append(r, &starmacro.Script{Name: strings.TrimPrefix(sec, "macro_script."), File: filepath.Join(root, filepath.FromSlash(file)), Root: root})
 	}
 	return r, nil
 }
