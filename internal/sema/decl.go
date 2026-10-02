@@ -82,6 +82,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	var init ir.Operand
 	var initC *cexpr
 	var initChecked bool // E・D の判定を評価の前に済ませた (preConvert)
+	var initPre bool     // 型の照合を評価の前に済ませた (assignPre)
 	if sp.Init != nil {
 		c := h.withExpected(toC(sp.Init), typ)
 		initC = c
@@ -99,6 +100,8 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 				h.rewriteStrTerm(e.val)
 			}
 		}
+		// 型の照合を評価の前に (rvalAssign と同じ。長さを初期値から決める `[?]T` は長さが決まってから下で)
+		initPre = typ != nil && !(typ.Kind == types.Array && typ.Length < 0) && h.assignPre("`"+name+"`", c, typ)
 		init, initChecked = h.rvalPreConv(c, typ, typ != nil)
 		// `var a:[?]u8 = [1, 2, 3];`: 長さを初期値から決める (長さ未定のままフレームに領域が取られず、ほかのローカルを壊していた)
 		if it := ir.ValType(init); typ != nil && typ.Kind == types.Array && typ.Length < 0 && it.Kind == types.Array && it.Length >= 0 {
@@ -121,7 +124,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		inferRO = typ != nil && (typ.Kind == types.Pointer || typ.IsSlice()) && h.readOnly(init)
 	}
 	if typ != nil && init != nil {
-		h.compatibleAssign("`"+name+"`", typ, ir.ValType(init))
+		h.assignPost("`"+name+"`", typ, init, initPre)
 		if !inferRO {
 			h.warnDropConst("`"+name+"`", typ, init)
 		}

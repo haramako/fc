@@ -402,6 +402,46 @@ public enum State { Stand, Jump, Die = 2 }
 	}
 }
 
+// TestAssignLikeChecks: 代入のような変換 (代入・初期化・引数・return・struct のフィールド) の検査は 1 か所 (sema の rvalAssign)。
+// struct リテラルのフィールドも、ほかと同じ文言の型の誤りと const を外す警告になる (以前は文言の違う compatible だけで、
+// 警告が無かった)。
+func TestAssignLikeChecks(t *testing.T) {
+	t.Parallel()
+	src := `#fc 4
+use console;
+const TABLE:[4]u8 = [1, 2, 3, 4];
+struct H { p:*u8; n:u8; }
+var g:u8;
+function main():void
+{
+	var h = H{p: TABLE, n: g};
+	console.exit(h.p[1] + h.n);
+}
+`
+	_, res, err := buildFilesDefs(t, map[string]string{"t.fc": src}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		found = found || strings.Contains(w.Msg, "field p of t.H: passes read-only data as *u8")
+	}
+	if !found {
+		t.Errorf("struct リテラルのフィールドに const を外す警告が無い: %v", res.Warnings)
+	}
+	for _, c := range []struct{ body, msg string }{
+		{"var h = H{p: 3 as u16};", "field p of t.H: cannot assign u16 to *u8 (not compatible types)"},
+		{"var x:u16; var h = H{p: x};", "field p of t.H: cannot assign u16 to *u8 (not compatible types)"},
+		{"var x:u8; var h:H; h = x;", "assignment to `h`: cannot assign u8 to t.H (not compatible types)"},
+		{"var x:u8; var h:H = x;", "`h`: cannot assign u8 to t.H (not compatible types)"},
+	} {
+		prog := "#fc 4\nstruct H { p:*u8; }\nfunction main():void { " + c.body + " }\n"
+		if _, err := buildFiles(t, map[string]string{"t.fc": prog}); err == nil || !strings.Contains(err.Error(), c.msg) {
+			t.Errorf("%s: got %v, want /%s/", c.body, err, c.msg)
+		}
+	}
+}
+
 // TestV3ConstPointer: `*const T`。const の配列・文字列リテラル (とそこから作ったポインタ) は読み取り専用。書き込みと
 // `as` で const を外すことはエラー、*T として渡すのは警告 (fc 3 の最初の版)。@bitcast で外せる。生成コードは *T と同じ。
 // 型を省いた変数は、読み取り専用のポインタで初期化すると *const (警告しない。書き込みはエラー)。

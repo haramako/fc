@@ -202,7 +202,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			dst := ir.NewCastedValue(tmp, f.Type, f.Offset)
 			var v ir.Operand
 			if fv := structLitField(e, f.Name); fv != nil {
-				v = h.rvalConv(fv, f.Type, func(v ir.Operand) { h.compatible(f.Type, ir.ValType(v)) })
+				v = h.rvalAssign(fv, f.Type, fmt.Sprintf("field %s of %s", f.Name, e.ty), nil)
 			} else {
 				v = h.zeroValue(f.Type)
 			}
@@ -246,7 +246,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					panic(&diag.Error{Msg: "cannot assign to element of soa const"})
 				}
 				if fr.split != nil {
-					right := h.rvalConv(h.withExpected(e.args[1], fr.split.typ), fr.split.typ, func(v ir.Operand) { h.compatible(fr.split.typ, ir.ValType(v)) })
+					right := h.rvalAssign(h.withExpected(e.args[1], fr.split.typ), fr.split.typ, "assignment to field "+lhs.name, nil)
 					h.soaStoreSplit(fr.split, right)
 					r = right
 					break
@@ -547,10 +547,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				pre := containsCallAny(args)
 				evalArg := func(i int) ir.Operand {
 					pt := lmdType.Params[i]
-					return h.rvalConv(h.withExpected(args[i], pt), pt, func(v ir.Operand) {
-						h.compatibleAssign(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), pt, ir.ValType(v))
-						h.warnDropConst(fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), pt, v)
-					})
+					return h.rvalAssign(h.withExpected(args[i], pt), pt, fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), nil)
 				}
 				argVals := make([]ir.Operand, len(args))
 				if pre {
@@ -752,29 +749,35 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 	if lv {
 		dt = dt.Base
 	}
-	right, checked := h.rvalPreConv(rhs, dt, dt.Kind != types.SoaRef)
-	if lv {
-		if ir.ValType(left).Kind == types.SoaRef {
-			h.soaScatter(left, right)
-			return left
-		}
-		if h.readOnly(left) {
-			panic(&diag.Error{Msg: "cannot assign through a read-only pointer (*const) or to const data"})
-		}
-		h.compatibleAssign("assignment", ir.ValType(left).Base, ir.ValType(right))
-		h.warnDropConst("assignment", ir.ValType(left).Base, right)
-		right = h.convertValue(right, ir.ValType(left).Base, rhs, checked)
-		h.emit(ir.NewStoreMem(left, nil, 0, 0, ir.ValType(left).Base.Size, right))
+	// 左辺だけで決まる検査を先に、型の照合 (assignPre) と E・D を評価の前に (rvalAssign と同じ)
+	what := "assignment"
+	if !lv {
+		what = "assignment to " + describe(left)
+	}
+	soa := lv && ir.ValType(left).Kind == types.SoaRef
+	if lv && !soa && h.readOnly(left) {
+		panic(&diag.Error{Msg: "cannot assign through a read-only pointer (*const) or to const data"})
+	}
+	pre := !soa && h.assignPre(what, rhs, dt)
+	right, checked := h.rvalPreConv(rhs, dt, !soa)
+	if soa {
+		h.soaScatter(left, right)
 		return left
 	}
-	h.compatibleAssign("assignment to "+describe(left), ir.ValType(left), ir.ValType(right))
+	h.assignPost(what, dt, right, pre)
+	if lv {
+		h.warnDropConst(what, dt, right)
+		right = h.convertValue(right, dt, rhs, checked)
+		h.emit(ir.NewStoreMem(left, nil, 0, 0, dt.Size, right))
+		return left
+	}
 	if !h.readOnly(left) { // 代入先が *const の変数 (IR の型は *T) なら読み取り専用のデータを入れてよい
-		h.warnDropConst("assignment to "+describe(left), ir.ValType(left), right)
+		h.warnDropConst(what, dt, right)
 	}
 	if !ir.ValAssignable(left) {
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot assign to %s (not a variable)", describe(left))})
 	}
-	right = h.convertValue(right, ir.ValType(left), rhs, checked)
+	right = h.convertValue(right, dt, rhs, checked)
 	// A typed storage alias can expose overlapping struct subobjects. Preserve
 	// the complete RHS before writing when a forward byte copy would overlap.
 	if root := ir.UnderlyingValue(left); root != nil && root == ir.UnderlyingValue(right) {

@@ -7,16 +7,17 @@ package sema
 // 食い違う (`+%` の型のない定数の検査: wrap.go) が起きた。ここでは IR を出さずに式の型を決める exprType を作り、対象を
 // 広げながら lval の経路を置き換えていく。
 //
-// 今の対象: 定数になる式 (constEval をそのまま使う) と、実行時の二項演算 (算術・ビット演算・シフト・比較・論理演算・
-// `+%`)、単項の `- ~ !`、添字・参照はがし・アドレス・struct のフィールド、変数・キャスト・呼び出しの葉。それ以外 (slice の範囲・
-// @len・@min などの組み込み・soa) は分からない (ok = false)。
+// 対象: 定数になる式 (constEval をそのまま使う) と、実行時の二項演算 (算術・ビット演算・シフト・比較・論理演算・`+%`)、
+// 単項の `- ~ !`、添字・参照はがし・アドレス・struct と soa のフィールド、@len・@min / @max / @clamp、変数・キャスト・
+// 呼び出しの葉。それ以外 (slice の範囲など) は分からない (ok = false。使う側は評価してから判定する)。
 //
-// 使っている所: enum の短い名前の比較 (resolveEnumShortPair が相手を評価せずに型を知る)、`+%` (wrapExpr が定数の経路と
-// 実行時の経路で同じ型の検査をする)。
+// 使っている所: A1 の幅を上から決める (widen.go の wideWidth / compareWidth)、代入のような変換 (代入・初期化・引数・return・
+// struct のフィールド) の型の照合と E・D (rvalAssign / assignPre / preConvert)、enum の短い名前の比較 (resolveEnumShortPair)、
+// `+%` (wrapExpr)。
 //
 // 正しさの物差し: FC_VERIFY_IR (テストと fuzz では常に有効) のとき、lval が式を評価するたびに exprType と実際に出した値の型を
-// 比べ、違えばコンパイラの内部エラーにする (checkExprType)。規則は今の lval の規則 (adaptLiteral・Compatible・F1 のシフト・
-// wrapExpr) の写しで、A1 の広げ (widen.go) の前の型を返す (広げは親の型に合わせて後から子の型を変える)。
+// 比べ (checkExprType。A1 で広い幅で計算した値は広げる前の型と比べる)、代入の照合は評価した値の型でも同じ結論かを確かめる
+// (assignPost)。違えばコンパイラの内部エラー。
 
 import (
 	"fmt"
@@ -329,14 +330,46 @@ func (h *Hlc) preConvert(c *cexpr, to *types.Type) bool {
 	return true
 }
 
-// rvalConv は代入のような変換の値 (to の幅で計算し、E・D を評価の前に判定して、to に変換する)。compatibleAssign などの値の
-// 検査は呼び出し側が check で (評価した値を渡す)。
-func (h *Hlc) rvalConv(c *cexpr, to *types.Type, check func(v ir.Operand)) ir.Operand {
+// rvalAssign は c を to への代入のように評価する (引数・return・struct と soa のフィールド。what は診断の主語)。型の照合
+// (assignPre) と E・D (preConvert) を評価の前に型を決める段の情報で判定し、to の幅で評価して (A1)、const を外す警告をし
+// (warnDropConst)、to に変換した値を返す。check は評価した値を見るほかの検査 (return の局所変数のアドレス)。代入のような変換の
+// 検査をここに集める (以前は呼び出し元ごとに compatibleAssign・warnDropConst を並べていて、struct のフィールドは文言の違う
+// compatible だけで const を外す警告が無かった)。代入と変数の初期化は左辺・宣言の事情があるので assignPre / assignPost を直接使う。
+func (h *Hlc) rvalAssign(c *cexpr, to *types.Type, what string, check func(v ir.Operand)) ir.Operand {
+	pre := h.assignPre(what, c, to)
 	v, checked := h.rvalPreConv(c, to, true)
+	h.assignPost(what, to, v, pre)
 	if check != nil {
 		check(v)
 	}
+	h.warnDropConst(what, to, v)
 	return h.convertValue(v, to, c, checked)
+}
+
+// assignPre は c を to に代入できるか (compatibleAssign) を、評価の前に型を決める段の型で判定する。判定できたら true
+// (assignPost は判定し直さない)。診断は IR を出す前に出る。
+func (h *Hlc) assignPre(what string, c *cexpr, to *types.Type) bool {
+	if c == nil || to == nil {
+		return false
+	}
+	info, ok := h.exprType(c)
+	if !ok || info.t.Kind == types.SoaRef {
+		return false // soa の要素は型を決める段ではハンドル (値として読むと struct): 評価してから
+	}
+	h.compatibleAssign(what, to, info.t)
+	return true
+}
+
+// assignPost は評価した値 v で代入の型の照合をする (評価の前に判定できなかったとき)。判定済み (pre) なら、FC_VERIFY_IR の
+// ときに評価した値の型でも同じ結論か (代入できるか) を確かめる。
+func (h *Hlc) assignPost(what string, to *types.Type, v ir.Operand, pre bool) {
+	if !pre {
+		h.compatibleAssign(what, to, ir.ValType(v))
+		return
+	}
+	if h.prog.Config.VerifyIR() && h.prog.Types.Compatible(to, ir.ValType(v)) == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("internal: %s: the typing stage accepted the value but %s is not assignable to %s (sema/typing.go)", what, ir.ValType(v), to)})
+	}
 }
 
 // rvalPreConv は c を to の幅で評価し (rvalWide)、pre なら E・D をその前に判定する (preConvert。判定したか)。判定で足した

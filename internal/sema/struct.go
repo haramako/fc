@@ -159,6 +159,10 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 		}
 		fv := h.constEval(h.constSlice(h.withExpected(f.val, et)))
 		if fd.Type.Kind == types.Pointer {
+			if fv.kind == cValue {
+				// アドレスの定数にすると読み取り専用か分からなくなるので、その前に (rvalAssign と同じ警告)
+				h.warnDropConst(fmt.Sprintf("field %s of %s", fd.Name, ty), fd.Type, fv.val)
+			}
 			fv = h.constAddress(fv, fd.Type)
 		}
 		flds = append(flds, cfield{key: fd.Name, val: fv})
@@ -173,7 +177,7 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 	elems := make([]ir.Operand, len(ty.Fields))
 	for i, fd := range ty.Fields {
 		if fv := structLitField(r, fd.Name); fv != nil {
-			h.compatible(fd.Type, fv.val.Type)
+			h.compatibleAssign(fmt.Sprintf("field %s of %s", fd.Name, ty), fd.Type, fv.val.Type) // 実行時の struct リテラル (rvalAssign) と同じ文言
 			elems[i] = fv.val
 		} else {
 			elems[i] = h.zeroLiteral(fd.Type)
@@ -386,7 +390,7 @@ func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
 	for i := 0; i < n; i++ {
 		var v ir.Operand
 		if i < len(vals) {
-			h.compatible(base, ir.ValType(vals[i]))
+			h.compatibleAssign(fmt.Sprintf("element %d", i), base, ir.ValType(vals[i]))
 			v = h.convert(vals[i], base, e.args[i])
 		} else {
 			v = h.zeroValue(base)
