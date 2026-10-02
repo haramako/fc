@@ -535,8 +535,11 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       struct / soa のフィールドでは評価の前に型を決める段の情報で判定する（`preConvert`。driver のテストで約 92 % が評価の前、
       残りは評価のあとの convert）。✅ 2026-09-30: 型のない定数を相手に合わせる規則を `literalRule`
       1 つにし、値を作る adaptLiteral と型を決める段の両方が使う。符号の混ざった演算の検査は、文の終わりまで待たずに解釈する所で
-      判定する（後から広げることが無くなったので）。残り: 互換の検査（compatibleAssign）とほかの診断を型を決める段へ移すこと、
-      `Hlc` の状態の整理
+      判定する（後から広げることが無くなったので）。✅ 2026-10-02: 代入のような変換（代入・初期化・引数・return・struct と soa の
+      フィールド）の検査（型の照合・E・D・const を外す警告）を `rvalAssign`（と `assignPre` / `assignPost`）1 つに集め、型の照合を
+      評価の前に型を決める段の型で（FC_VERIFY_IR では評価した値の型でも同じ結論かを確かめる。soa の要素はハンドルなので評価の後）。
+      `Hlc` の状態をモジュール・関数（`fnState`）・文（`stmtState`）の寿命に分けた。残り: IR を出す段と型を決める段を本当に
+      分ける（lval が型付きの木を受け取る）こと、sema が自分の Symbol / Scope を持つこと
 - [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
