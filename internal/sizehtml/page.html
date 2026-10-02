@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--TITLE--> — size</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1d2330; --muted: #6a7282; --line: #e3e6ec; --panel: #f6f7f9;
+  --free: repeating-linear-gradient(45deg, #eef0f3 0 6px, #e2e5ea 6px 12px);
+  --accent: #2f6fde; --far: #c0392b; --sat: 62%; --lum: 62%;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181e; --fg: #e4e7ec; --muted: #9098a6; --line: #2a2f39; --panel: #1c2028;
+    --free: repeating-linear-gradient(45deg, #232833 0 6px, #1d212a 6px 12px);
+    --accent: #6c9cf0; --far: #e2695a; --sat: 48%; --lum: 46%;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+header { padding: 16px 20px 8px; border-bottom: 1px solid var(--line); }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 24px 0 8px; }
+.sub { color: var(--muted); font-size: 13px; }
+main { padding: 0 20px 40px; max-width: 1400px; }
+.mono, td.num, .areaname { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.filter { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+.filter input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--fg); min-width: 220px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; }
+.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0; font-size: 14px; }
+.area { display: grid; grid-template-columns: 220px 1fr; gap: 10px; align-items: center; margin: 6px 0; }
+.areaname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.areaname .pct { display: block; color: var(--muted); font-size: 11.5px; }
+.bar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; background: var(--free); border: 1px solid var(--line); }
+.seg { height: 100%; min-width: 1px; border-right: 1px solid var(--bg); cursor: pointer; color: #111; font-size: 11px; line-height: 26px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seg.dim { opacity: .25; }
+.seg.sel { outline: 2px solid var(--fg); outline-offset: -2px; }
+.tables { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 900px) { .tables { grid-template-columns: 1fr; } .area { grid-template-columns: 1fr; gap: 2px; } }
+.scroll { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--panel); cursor: pointer; user-select: none; font-weight: 600; font-size: 12.5px; }
+th.sorted::after { content: " ▾"; color: var(--muted); }
+th.sorted.asc::after { content: " ▴"; }
+td.num { text-align: right; }
+td.barcell { width: 30%; }
+.mini { height: 8px; border-radius: 2px; background: var(--accent); opacity: .7; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.far { color: var(--far); font-weight: 600; }
+.link { cursor: pointer; }
+.link:hover { text-decoration: underline; }
+#tip { position: fixed; pointer-events: none; background: var(--fg); color: var(--bg); padding: 4px 8px; border-radius: 4px; font-size: 12px; display: none; z-index: 10; }
+.empty { color: var(--muted); padding: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><!--TITLE--></h1>
+  <div class="sub" id="summary"></div>
+</header>
+<main>
+  <div class="filter">
+    <input id="q" type="search" placeholder="モジュール・関数の名前で絞り込む">
+    <span id="selchip"></span>
+  </div>
+
+  <h2>バンク（リンカ設定の ROM の領域）</h2>
+  <div class="sub">帯の長さは領域の大きさに対する割合。斜線は空き。モジュールを押すと、下の表がそのモジュールに絞られる。</div>
+  <div id="areas"></div>
+
+  <div class="tables">
+    <section id="callsSection">
+      <h2>モジュールの間の呼び出し</h2>
+      <div class="sub">インライン展開の後に残った呼び出しの数。<span class="far">far</span> はバンクをまたいでトランポリンを通る呼び出し。</div>
+      <div class="scroll"><table id="calls"></table></div>
+    </section>
+    <section>
+      <h2>関数</h2>
+      <div class="sub">ラベルから次のラベルまでの大きさ（関数の後ろの定数の表を含む）。</div>
+      <div class="scroll"><table id="funcs"></table></div>
+    </section>
+  </div>
+</main>
+<div id="tip"></div>
+<script>
+const R = /*DATA*/null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const hex = (n) => "$" + n.toString(16).toUpperCase().padStart(4, "0");
+const num = (n) => n.toLocaleString("en-US");
+
+// モジュールごとの色 (名前のハッシュから色相を決める。同じ名前はいつも同じ色)
+function hue(name) {
+  let h = 2166136261;
+  for (const c of name) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 360);
+}
+const color = (name) => `hsl(${hue(name)} var(--sat) var(--lum))`;
+
+let sel = null; // 選んだモジュール (セグメント) の名前
+const state = { q: "", calls: { key: "count", asc: false }, funcs: { key: "size", asc: false } };
+
+function match(...names) {
+  const q = state.q.toLowerCase();
+  if (sel && !names.includes(sel)) return false;
+  return !q || names.some((n) => n.toLowerCase().includes(q));
+}
+
+function renderSummary() {
+  const used = R.areas.reduce((a, x) => a + x.used, 0), size = R.areas.reduce((a, x) => a + x.size, 0);
+  $("summary").textContent = `ROM ${num(R.total)} バイト ・ 領域 ${R.areas.length} 個（使用 ${num(used)} / ${num(size)} バイト、空き ${num(size - used)}）・ 関数 ${R.functions.length} 個`;
+}
+
+function renderAreas() {
+  const tip = $("tip");
+  $("areas").innerHTML = R.areas.map((a, i) => {
+    const pct = a.size ? Math.round((a.used * 100) / a.size) : 0;
+    const segs = a.segments.map((s) => {
+      const w = a.size ? (s.size * 100) / a.size : 0;
+      const cls = "seg" + (sel && sel !== s.name ? " dim" : "") + (sel === s.name ? " sel" : "");
+      return `<div class="${cls}" data-seg="${esc(s.name)}" data-tip="${esc(s.name)} ${num(s.size)} バイト (${a.size ? ((s.size * 100) / a.size).toFixed(1) : 0}%)" style="width:${w}%;background:${color(s.name)}">${esc(s.name)}</div>`;
+    }).join("");
+    const free = a.size - a.used;
+    return `<div class="area"><div class="areaname" title="${esc(a.name)}"><b>${esc(a.name)}</b> ${hex(a.start)}<span class="pct">${num(a.used)} / ${num(a.size)} (${pct}%) 空き ${num(free)}</span></div>` +
+      `<div class="bar" data-tip="${esc(a.name)}: 空き ${num(free)} バイト">${segs}</div></div>`;
+  }).join("");
+  for (const el of document.querySelectorAll("[data-tip]")) {
+    el.addEventListener("mousemove", (e) => { e.stopPropagation(); tip.textContent = el.dataset.tip; tip.style.display = "block"; tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY + 12 + "px"; });
+    el.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  }
+  for (const el of document.querySelectorAll(".seg")) el.addEventListener("click", () => select(el.dataset.seg));
+}
+
+function sortRows(rows, st) {
+  const k = st.key, d = st.asc ? 1 : -1;
+  return rows.slice().sort((a, b) => (a[k] < b[k] ? -d : a[k] > b[k] ? d : 0));
+}
+
+function header(cols, st, id) {
+  return "<tr>" + cols.map(([k, label]) => `<th data-k="${k}" data-t="${id}" class="${st.key === k ? "sorted" + (st.asc ? " asc" : "") : ""}">${label}</th>`).join("") + "</tr>";
+}
+
+const areaOf = {};
+for (const a of R.areas) for (const s of a.segments) areaOf[s.name] = a.name;
+const modCell = (m) => `<span class="link" data-mod="${esc(m)}"><span class="dot" style="background:${color(m)}"></span>${esc(m)}</span>` + (areaOf[m] ? ` <span class="sub">${esc(areaOf[m])}</span>` : "");
+
+function renderCalls() {
+  if (!R.hasCalls) { $("callsSection").style.display = "none"; return; }
+  const rows = sortRows(R.calls.filter((c) => match(c.from, c.to)), state.calls);
+  const max = Math.max(1, ...R.calls.map((c) => c.count));
+  $("calls").innerHTML = header([["from", "呼ぶ側"], ["to", "呼ばれる側"], ["count", "回数"], ["far", "far"]], state.calls, "calls") +
+    (rows.length ? rows.map((c) => `<tr><td>${modCell(c.from)}</td><td>${modCell(c.to)}</td><td class="num">${c.count}<div class="mini" style="width:${(c.count * 100) / max}%"></div></td><td class="num ${c.far ? "far" : ""}">${c.far || ""}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="empty">該当なし</td></tr>`);
+}
+
+function renderFuncs() {
+  const rows = sortRows(R.functions.filter((f) => match(f.segment, f.name) && (!sel || f.segment === sel)), state.funcs);
+  const max = Math.max(1, ...R.functions.map((f) => f.size));
+  const shown = rows.slice(0, 2000);
+  $("funcs").innerHTML = header([["name", "名前"], ["segment", "モジュール"], ["size", "バイト"]], state.funcs, "funcs") +
+    (shown.length ? shown.map((f) => `<tr><td class="mono">${esc(f.name)}</td><td>${modCell(f.segment)}</td><td class="num">${num(f.size)}<div class="mini" style="width:${(f.size * 100) / max}%"></div></td></tr>`).join("")
+      : `<tr><td colspan="3" class="empty">該当なし</td></tr>`) +
+    (rows.length > shown.length ? `<tr><td colspan="3" class="empty">ほか ${rows.length - shown.length} 個（絞り込むと出る）</td></tr>` : "");
+}
+
+function select(name) {
+  sel = sel === name ? null : name;
+  $("selchip").innerHTML = sel ? `<span class="chip"><span class="dot" style="background:${color(sel)}"></span>${esc(sel)}<button title="解除" id="unsel">×</button></span>` : "";
+  if (sel) $("unsel").addEventListener("click", () => select(sel));
+  render();
+}
+
+function render() {
+  renderAreas();
+  renderCalls();
+  renderFuncs();
+}
+
+document.addEventListener("click", (e) => {
+  const th = e.target.closest("th[data-k]");
+  if (th) {
+    const st = state[th.dataset.t];
+    if (st.key === th.dataset.k) st.asc = !st.asc; else { st.key = th.dataset.k; st.asc = th.dataset.k === "name" || th.dataset.k === "from" || th.dataset.k === "to" || th.dataset.k === "segment"; }
+    th.dataset.t === "calls" ? renderCalls() : renderFuncs();
+    return;
+  }
+  const m = e.target.closest("[data-mod]");
+  if (m) select(m.dataset.mod);
+});
+$("q").addEventListener("input", (e) => { state.q = e.target.value; renderCalls(); renderFuncs(); });
+
+renderSummary();
+render();
+</script>
+</body>
+</html>
