@@ -107,5 +107,7 @@
 - **`internal/starmacro`**（2026-10-02）: Starlark のスクリプトの定数マクロ（fc.toml の `[macro_script.*]`）。外の依存は go.starlark.net
   だけ（リポジトリで唯一の外部の Go モジュール。go 1.24 で使える版に固定）。結果の型は extmacro の `Result` を共有し、sema の
   `MacroSource` として外部コマンドと同じ口で登録する
+- **`internal/sizehtml`**（2026-10-02）: `--size-html` / `fcc size -html` のページ（`page.html` を埋め込み、データの JSON を差し込む）。
+  データは `cc65.DbgFile`・`cc65.LinkConfig`（リンカ設定を読む: `cc65/linkcfg.go`）と、driver の `moduleCalls`（モジュールの間の呼び出し）
 - **`internal/fcdoc`**（2026-09-30）: `fcc doc`。構文木から public の宣言と直前のコメントを集め、端末の文字とサイトの Markdown にする
   （`syntax` だけに依存。`pkg/fc` の `StdDocs` / `DocFile` / `DocIndex` が包む）

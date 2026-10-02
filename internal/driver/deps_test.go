@@ -47,13 +47,14 @@ func TestImportDirection(t *testing.T) {
 		"rle":       {},
 		"extmacro":  {},           // 外部コマンドの定数マクロのプロセスとプロトコル: 何にも依存しない葉
 		"starmacro": {"extmacro"}, // Starlark の定数マクロ (外の依存は go.starlark.net だけ)
+		"sizehtml":  {"cc65"},     // --size-html のページ
 		"migrate":   {"syntax", "types", "ir", "sema"},
 		"r6502":     {},
 		"nes":       {"r6502"},
 		"quicknes":  {}, // libretro の QuickNES のコア (画面を確かめるテスト用)
 		"doccheck":  {},
 		"fcdoc":     {"syntax"}, // fcc doc (モジュールのドキュメント) // 文書を確かめるテストだけ (テストは driver と syntax を使う)
-		"driver":    {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu", "migrate", "extmacro", "starmacro"},
+		"driver":    {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu", "migrate", "extmacro", "starmacro", "sizehtml"},
 	}
 	for pkg, ok := range allowed {
 		okSet := map[string]bool{}

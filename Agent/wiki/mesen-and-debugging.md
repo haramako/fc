@@ -62,4 +62,6 @@ Mesen は ROM を開くとき同じ名前の `.dbg` / `.mlb` を自動で読む�
 置いたセグメントの表（`cc65.DbgFile.BankReport`。`.dbg` の seg の大きさを、リンカ設定の `SEGMENTS` の `load` で領域に足し上げる。
 自前の設定も読める: `fcc size -cfg`）と、`--size-report` ではモジュールの組ごとの呼び出しの数（`driver/sizereport.go`。最適化の後の
 `OpCall` を数え、`Op.Far` を far として数える。ROM に出さない `Lambda.Unused` の関数は除く）も出す。バンクとモジュールの組み合わせを
-考えるための表（ユーザーの依頼）。
+考えるための表（ユーザーの依頼）。同じ情報の HTML のページ（`--size-html FILE` / `fcc size -html`。`internal/sizehtml`: データを JSON で
+埋め込んだ 1 ファイル、外のファイル・ライブラリは読まない。バンクの帯・モジュールの間の呼び出しと関数の表・押したモジュールでの絞り込み。
+テストはデータ（JSON）だけを見る。見た目は 2026-10-02 に jsdom と Playwright の Chromium で、miku4 と castle の規模で確かめた）。

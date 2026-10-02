@@ -4,6 +4,7 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/haramako/fc/internal/cc65"
+	"github.com/haramako/fc/internal/sizehtml"
 )
 
 func TestDebugInfoAndSizeReport(t *testing.T) {
@@ -116,5 +118,52 @@ func TestSizeReportBanks(t *testing.T) {
 		if !regexp.MustCompile(re).MatchString(joined) {
 			t.Errorf("size report に /%s/ が無い:\n%s", re, joined)
 		}
+	}
+}
+
+// TestSizeHTML: --size-html のページ (internal/sizehtml) に、--size-report と同じデータ (ROM の領域とモジュール、モジュールの間の
+// 呼び出し、関数) が JSON で入る。見た目 (JS) は確かめない。
+func TestSizeHTML(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for name, src := range layoutFiles() {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page := filepath.Join(dir, "size.html")
+	if _, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "main.fc", &BuildOptions{
+		Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "t.nes"), SizeHTML: page,
+	}); err != nil {
+		t.Fatalf("ビルド失敗: %v", err)
+	}
+	b, err := os.ReadFile(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`const R = (\{.*\});\n`).FindSubmatch(b)
+	if m == nil {
+		t.Fatalf("データが無い:\n%s", b)
+	}
+	var rep sizehtml.Report
+	if err := json.Unmarshal(m[1], &rep); err != nil {
+		t.Fatal(err)
+	}
+	areas := map[string]sizehtml.Area{}
+	for _, a := range rep.Areas {
+		areas[a.Name] = a
+	}
+	if a := areas["ROM0"]; a.Size != 8192 || len(a.Segments) != 1 || a.Segments[0].Name != "ma" || a.Used != a.Segments[0].Size {
+		t.Errorf("ROM0: %+v", a)
+	}
+	if a, ok := areas["ROM2"]; !ok || a.Segments == nil || a.Used != 0 {
+		t.Errorf("空きのバンク ROM2: %+v (segments は null でなく空の配列)", a)
+	}
+	found := false
+	for _, c := range rep.Calls {
+		found = found || c.From == "main" && c.To == "mb" && c.Count == 1 && c.Far == 1
+	}
+	if !found || !rep.HasCalls || len(rep.Functions) == 0 || rep.Title != "main.fc" || !strings.Contains(string(b), "<h1>main.fc</h1>") {
+		t.Errorf("calls %+v, functions %d, title %q", rep.Calls, len(rep.Functions), rep.Title)
 	}
 }

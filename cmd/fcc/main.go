@@ -35,7 +35,8 @@ Options:
     -e               run by interpreter
     -d, --debug      show debug info (frames, far calls)
     -g               emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)
-    --size-report    show code size per segment / function (needs linking)
+    --size-report    show code size per segment / function, bank usage and calls between modules (needs linking)
+    --size-html FILE write the same information as an HTML page (banks, calls between modules, functions)
     -t, --target     target platform ( nes, emu; default: nes if fc.toml has [target], otherwise emu )
     -O LEVEL         optimize level (0-2)
     -D MOD.NAME=VAL  override a @(build) const (repeatable; applied after fc.toml [define.MOD])
@@ -83,6 +84,7 @@ func run() int {
 	fs.BoolVar(debugFlag, "debug", false, "show debug info")
 	gFlag := fs.Bool("g", false, "emit debug info for Mesen")
 	sizeFlag := fs.Bool("size-report", false, "show code size per segment / function")
+	sizeHTML := fs.String("size-html", "", "write the size report as an HTML page")
 	target := fs.String("t", "", "target platform ( nes, emu )")
 	fs.StringVar(target, "target", "", "target platform ( nes, emu )")
 	optLevel := fs.Int("O", 2, "optimize level (0-2)")
@@ -101,6 +103,7 @@ func run() int {
 		OptimizeLevel: optimizeLevel(*optLevel),
 		Debug:         *gFlag,
 		SizeReport:    *sizeFlag,
+		SizeHTML:      *sizeHTML,
 		Defines:       defines,
 		Offline:       *offline,
 	}

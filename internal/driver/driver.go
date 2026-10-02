@@ -71,7 +71,8 @@ type BuildOptions struct {
 	LogEveryStatement bool
 	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
 	MisclassifyResident bool
-	SizeReport          bool // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
+	SizeReport          bool   // --size-report: 関数ごとのコードサイズ (Result.SizeReport)
+	SizeHTML            string // --size-html: 同じ情報を HTML のファイルに (internal/sizehtml)
 	// Config は調査用の設定 (パスの入れ切り・トレース・検証。ir/config.go)。nil なら環境変数 (FC_DISABLE など) から作る
 	Config *ir.Config
 
@@ -328,7 +329,7 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		return nil, err
 	}
 	var logFile *fclog.LogFile
-	if opt.Debug || opt.SizeReport {
+	if opt.Debug || opt.SizeReport || opt.SizeHTML != "" {
 		dbg, err := loadDbg()
 		if err != nil {
 			return nil, err
@@ -354,6 +355,11 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		}
 		if opt.SizeReport {
 			result.SizeReport = c.sizeReport(dbg)
+		}
+		if opt.SizeHTML != "" {
+			if err := c.writeSizeHTML(dbg, opt.SizeHTML, filepath.Base(filename)); err != nil {
+				return nil, err
+			}
 		}
 	}
 

@@ -15,12 +15,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
 	"github.com/haramako/fc/internal/fchome"
 	"github.com/haramako/fc/internal/nes"
+	"github.com/haramako/fc/internal/sizehtml"
 	"github.com/haramako/fc/internal/syntax"
 )
 
@@ -39,6 +41,7 @@ type Options struct {
 	CompileOnly   bool   // アセンブル (.o) まで。リンクしない
 	Debug         bool   // Mesen 用のデバッグ情報 (.dbg に fc のソース行、.mlb のラベル) を ROM の隣に書く
 	SizeReport    bool   // 関数ごとのコードサイズ (Result.SizeReport)
+	SizeHTML      string // 同じ情報 (バンク・モジュールの間の呼び出し・関数) を HTML のファイルに
 
 	// Dir はソースの基準ディレクトリ (use / include の相対パスの起点)。"" なら作業ディレクトリ。
 	// BuildDir は中間生成物 (.s / .inc / .o / ld65.cfg) の置き場所。"" なら <Dir>/.fc-build。
@@ -148,6 +151,7 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		CompileOnly:   opt.CompileOnly,
 		Debug:         opt.Debug,
 		SizeReport:    opt.SizeReport,
+		SizeHTML:      opt.SizeHTML,
 		Dir:           opt.Dir,
 		BuildDir:      opt.BuildDir,
 		Jobs:          opt.Jobs,
@@ -210,4 +214,27 @@ func SizeReport(dbgFile, linkConfig string, top int) ([]string, error) {
 		r = append(r, d.BankReport(lc)...)
 	}
 	return r, nil
+}
+
+// SizeHTML は SizeReport と同じ情報 (モジュールの間の呼び出しは除く: ビルドの中でしか分からない) を HTML のページにして out に書く。
+func SizeHTML(dbgFile, linkConfig, out string) error {
+	d, err := cc65.ParseDbgFile(dbgFile)
+	if err != nil {
+		return err
+	}
+	var lc *cc65.LinkConfig
+	if linkConfig != "" {
+		if lc, err = cc65.ReadLinkConfig(linkConfig); err != nil {
+			return err
+		}
+	}
+	f, err := os.Create(out)
+	if err != nil {
+		return err
+	}
+	if err := sizehtml.Write(f, sizehtml.FromDbg(filepath.Base(dbgFile), d, lc)); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
