@@ -66,3 +66,6 @@ textmap は「変換器を作る」マクロで、後から `_T("あいう")` �
    `TestExternalMacroCache`: テストのバイナリ自身を引数 `--fc-test-macro-server` でサーバーとして起動する。利用者向けは
    docs/reference/fc-toml.md の `[macro_server.名前]`）
 2. 変換表の結果の型と textmap（上の検討の後）
+
+コードを生成する形（C# の Source Generator 風）は 2026-10-02 に検討して見送った: しばらくは普通のコード生成（ツールで .fc を
+書き出す）。やるなら fc の型・宣言をサーバーに渡して新しいモジュールを生成する形（discussions/2026-10-02-code-generation.md）
