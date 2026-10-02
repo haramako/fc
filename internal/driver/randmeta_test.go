@@ -73,8 +73,11 @@ func TestRandomMetamorphic(t *testing.T) {
 					// 決める前に上限を上げて走らせ直す (rpCheck の -O 0 と同じ)
 					got, err = metaRun(t, files, v, rpMaxCycles*50)
 				}
-				if err != nil && (strings.Contains(err.Error()+got, "frame size over") || strings.Contains(err.Error()+got, "memory area overflow")) {
-					continue // 段を切ると大きくなって入らない (プログラムの問題)
+				if err != nil && (strings.Contains(err.Error()+got, "frame size over") || strings.Contains(err.Error()+got, "memory area overflow") ||
+					strings.Contains(err.Error()+got, "zero page index wrapped")) {
+					// 段を切ると大きくなって入らない (プログラムの問題)。ソフトウェアスタックも同じ: unroll を切ると再帰の
+					// 呼び出しの連なりにある関数のフレームが 2 バイト増え、128 バイトの FC_STACK からあふれた (seed 60204809)
+					continue
 				}
 				if err != nil || got != want {
 					t.Errorf("%s を切ると出力が変わる (seed %d):\n%s\n普通: %q\n切った: %q %v\n使った機能: %s", v, seed, g.allSource(), want, got, err, strings.Join(g.usedFeatures(), ","))
