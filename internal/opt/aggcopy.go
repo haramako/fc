@@ -134,12 +134,20 @@ func opReads(op *ir.Op, v *ir.Value) bool {
 //	load  s ← $14
 //
 // sema は `s = s[n..]` / `t = s[..n]` / struct の値をこの形に作る (3 バイト以上の値は SSA の外)。写し先 D はアドレスを取られない
-// ローカルで、組み立ての間 (最初の部分の load から丸ごとの写しまで) は副作用の無い命令だけ。部分を D に書く所から写しまでに
-// D のそのバイトを読み書きする命令が無いこと。さらに部分の値が 1 度だけ使う一時の値なら、それを計算する命令の結果を直に書く
-// (間に D のそのバイトに触れる命令が無く、副作用の無い命令だけのとき)。
+// ローカルか volatile でないグローバル (`w = @format(buf, …)` の w)。組み立ての間 (最初の部分の load から丸ごとの写しまで) は
+// 副作用の無い命令だけ (D がグローバルなら、ポインタの先を読む load_mem も無いこと: D を指しているかもしれない)。部分を D に書く
+// 所から写しまでに D のそのバイトを読み書きする命令が無いこと。さらに部分の値が 1 度だけ使う一時の値なら、それを計算する命令の
+// 結果を直に書く (間に D のそのバイトに触れる命令が無く、副作用の無い命令だけのとき)。
 func assembleInPlace(lmd *ir.Lambda) bool {
 	ops := lmd.Ops
 	pinned := map[*ir.Value]bool{} // アドレスを取られた・asm と @log が触る変数
+	pinnedSym := map[string]bool{} // その中のグローバル (インライン展開した関数の命令は同じグローバルを別の Value で持つ)
+	pin := func(v *ir.Value) {
+		pinned[v] = true
+		if v.Kind == ir.KindGlobal {
+			pinnedSym[v.Symbol] = true
+		}
+	}
 	defs := map[*ir.Value][]int{}
 	uses := map[*ir.Value][]int{}
 	for i, op := range ops {
@@ -149,25 +157,25 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 		if op.Code == ir.OpRef || op.Code == ir.OpAsm {
 			for _, s := range op.Src {
 				if v := ir.UnderlyingValue(s); v != nil {
-					pinned[v] = true
+					pin(v)
 				}
 			}
 		}
 		for _, s := range append([]ir.Operand{op.Dst}, op.Src...) {
 			if pa, ok := s.(*ir.PointeredArray); ok {
 				if v := ir.UnderlyingValue(pa.From); v != nil {
-					pinned[v] = true
+					pin(v)
 				}
 			}
 		}
 		for _, lp := range op.Logs {
 			for _, a := range lp.Args {
 				if v := ir.UnderlyingValue(a.Val); v != nil {
-					pinned[v] = true
+					pin(v)
 				}
 				for _, b := range a.Bytes {
 					if v := ir.UnderlyingValue(b); v != nil {
-						pinned[v] = true
+						pin(v)
 					}
 				}
 			}
@@ -181,10 +189,10 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 			}
 		}
 	}
-	// pure は (a, b) の命令がすべて副作用も分岐も無いか
-	pure := func(a, b int) bool {
+	// pure は (a, b) の命令がすべて副作用も分岐も無いか (d がグローバルなら、ポインタの先を読む命令も無いか)
+	pure := func(a, b int, d *ir.Value) bool {
 		for _, o := range ops[a+1 : b] {
-			if o != nil && !o.Code.IsPure() {
+			if o != nil && (!o.Code.IsPure() || d.Kind == ir.KindGlobal && (o.Code == ir.OpLoadMem || o.Code.MayTouchGlobals())) {
 				return false
 			}
 		}
@@ -214,8 +222,10 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 		if op.Code == ir.OpReturn {
 			d, ok2 = lmd.Result, true // `return s[..n]`: 戻り値の領域に直に組み立てる
 		}
-		if !ok || !ok2 || t == d || t.LocalType != ir.LTTemp || t.Kind != ir.KindLocal || d.Kind != ir.KindLocal ||
-			t.Type.Size < 3 || t.Type.Size != d.Type.Size || pinned[t] || pinned[d] || t.Home != nil || d.Home != nil ||
+		dOK := d != nil && (d.Kind == ir.KindLocal && !pinned[d] ||
+			d.Kind == ir.KindGlobal && d.Symbol != "" && !d.Volatile && !d.ReadOnly && !pinnedSym[d.Symbol])
+		if !ok || !ok2 || t == d || t.LocalType != ir.LTTemp || t.Kind != ir.KindLocal || !dOK ||
+			t.Type.Size < 3 || t.Type.Size != d.Type.Size || pinned[t] || t.Home != nil || d.Home != nil ||
 			len(uses[t]) != 1 || uses[t][0] != i {
 			continue
 		}
@@ -241,7 +251,7 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 			first = min(first, k)
 			parts = append(parts, p)
 		}
-		if !good || len(parts) == 0 || !pure(first-1, i) {
+		if !good || len(parts) == 0 || !pure(first-1, i, d) {
 			continue
 		}
 		for _, c := range covered {
@@ -274,7 +284,7 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 			j := defs[x][0]
 			q := ops[j]
 			if j > k || q.Dst != ir.Operand(x) || !q.Code.ReadsBeforeWrite() || !sameBits(q.Code, cv.Type, x.Type) ||
-				!pure(j, k) || !clear(j, k, d, cv.Offset, cv.Offset+cv.Type.Size) {
+				!pure(j, k, d) || !clear(j, k, d, cv.Offset, cv.Offset+cv.Type.Size) {
 				continue
 			}
 			q.Dst = dst
@@ -294,9 +304,9 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 func overlaps(o ir.Operand, v *ir.Value, lo, hi int) bool {
 	switch x := o.(type) {
 	case *ir.Value:
-		return x == v
+		return sameVar(x, v)
 	case *ir.CastedValue:
-		if ir.UnderlyingValue(x) != v {
+		if !sameVar(ir.UnderlyingValue(x), v) {
 			return overlaps(x.From, v, lo, hi)
 		}
 		if _, ok := x.From.(*ir.Value); !ok {
@@ -307,4 +317,9 @@ func overlaps(o ir.Operand, v *ir.Value, lo, hi int) bool {
 		return overlaps(x.From, v, lo, hi)
 	}
 	return false
+}
+
+// sameVar は a と b が同じ変数か (グローバルはシンボルで比べる: インライン展開した関数の命令は同じグローバルを別の Value で持つ)。
+func sameVar(a, b *ir.Value) bool {
+	return a == b || a != nil && b != nil && a.Kind == ir.KindGlobal && b.Kind == ir.KindGlobal && a.Symbol != "" && a.Symbol == b.Symbol
 }

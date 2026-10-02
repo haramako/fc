@@ -221,7 +221,7 @@ func needsY(op *ir.Op, vY, vX *ir.Value) bool {
 		}
 		return !directIndex(op) || !isV(op.In(1), vY)
 	case ir.OpPushArg, ir.OpPushFastcallArg:
-		return op.ArgY || op.HoldY // 呼び先の Y 渡しの引数を Y に読む / 保持中 (codegen.markArgY)
+		return op.ArgY || op.HoldY || op.ResultArg // 呼び先の Y 渡しの引数を Y に読む / 保持中 (codegen.markArgY)、戻り値を写す (markResultArg)
 	case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpRolC, ir.OpRorC,
 		ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot:
 		return op.HoldY

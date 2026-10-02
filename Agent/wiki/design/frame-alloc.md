@@ -299,3 +299,16 @@ castle は呼び出しだらけ（`en8_slime_process` → `bg_cell_type` ×3 な
 トランポリンが A / Y を壊すので `__frame` から入る（far call にもレジスタで渡すなら、トランポリンの速い経路を X だけで
 書き（`ldx` / `cpx`）、切替の経路で A / Y をスタックに退避する形にでき、FC_FARCALL の設定を引数の読み出しの前に出す必要が
 ある。castle 側の `farcall` も書き換えるので別の機会に）。
+
+### 7.2 戻り値をそのまま次の呼び出しの引数に（2026-10-02）
+
+- `sum(get())` の 3 バイト以上の戻り値（slice）は、呼び出し側の一時変数に受けてから呼び先のフレームへ写し直していた。
+  `codegen.markResultArg`（markArgY と同じ段）が `call T ← get; push_result; push_arg T`（間は push_result だけ、T はこの
+  push_arg でしか読まない）の push_arg に `ResultArg` を付け、genCall は T に受けず、genPushArg が get のフレームの戻り値を
+  引数の場所へ写す
+- **兄弟の関数のフレームは重なる**（`F_get` と `F_sum` がどちらも `FC_SZP+0` に置かれる。戻り値 `F_get+0〜2` を引数
+  `F_sum+2〜4` へ前から写すと、読む前の `F_get+2` を書き潰す）。番地は codegen の後で決まる（`_frames.inc`）ので向きでは
+  避けられず、全部のバイトを読んでから書く: 0 バイト目は A、1 バイト目は Y、2 バイト目は X（stack の関数の中・stack 系の
+  呼び出しでは X を使わない）、残りはスタック（`copyResultArg`）。regalloc は印の付いた push_arg を Y を壊す命令と見る
+  （X は push_arg が元から壊す扱い）
+- 前に別の引数がある形（`f(x, get())`: x を f のフレームに書くので get の戻り値を壊しうる）は対象外

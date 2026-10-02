@@ -770,11 +770,12 @@ type opState struct {
 	pushFastcallArgSize int
 	dbgLast             string
 	logSites            int
+	resultFrom          *pendingResult
 }
 
 func (l *funcGen) saveOp() opState {
 	s := opState{lines: len(l.r.lines), labelCount: l.labelCount, fused: l.fused, fusedAt: l.fusedAt, holdA: l.holdA, holdX: l.holdX,
-		pushArgSize: l.pushArgSize, pushFastcallArgSize: l.pushFastcallArgSize, dbgLast: l.dbgLast, logSites: len(l.LogSites)}
+		pushArgSize: l.pushArgSize, pushFastcallArgSize: l.pushFastcallArgSize, dbgLast: l.dbgLast, logSites: len(l.LogSites), resultFrom: l.resultFrom}
 	for _, pc := range l.calls {
 		s.calls = append(s.calls, *pc)
 	}
@@ -784,7 +785,7 @@ func (l *funcGen) saveOp() opState {
 func (l *funcGen) restoreOp(s opState) {
 	l.r.lines = l.r.lines[:s.lines]
 	l.labelCount, l.fused, l.fusedAt, l.holdA, l.holdX = s.labelCount, s.fused, s.fusedAt, s.holdA, s.holdX
-	l.pushArgSize, l.pushFastcallArgSize, l.dbgLast = s.pushArgSize, s.pushFastcallArgSize, s.dbgLast
+	l.pushArgSize, l.pushFastcallArgSize, l.dbgLast, l.resultFrom = s.pushArgSize, s.pushFastcallArgSize, s.dbgLast, s.resultFrom
 	l.LogSites = l.LogSites[:s.logSites]
 	l.calls = l.calls[:0]
 	for i := range s.calls {

@@ -225,6 +225,116 @@ function main():void
 	}
 }
 
+// TestResultArg: 関数の戻り値の slice をそのまま引数にする形 (`sum(get())`) は、戻り値を一時変数に受けずに呼び先のフレームから
+// 引数の場所へ写す (codegen.markResultArg)。兄弟の関数のフレームは重なるので全部読んでから書く。stack の関数 (再帰) の中、
+// ループの中 (常駐)、4 バイトの [:u16]、最後の引数がレジスタ渡しの関数、前に引数がある形 (写さない) も -O 0 と同じ結果。
+// あわせて、グローバルの slice への `@format` の結果は一時変数を通さずに直に書く (opt.assembleInPlace)。
+func TestResultArg(t *testing.T) {
+	t.Parallel()
+	src := `#fc 4
+use console;
+const T = "abcdefghijklmnop";
+var k:u8;
+var buf:[8]u8;
+var gw:[]u8;
+function get(n:u8):[]const u8 @(noinline)
+{
+	return T[n..];
+}
+function wget(n:u8):[:u16]const u8 @(noinline)
+{
+	return T[n..];
+}
+function sum(s:[]const u8):u16 @(noinline)
+{
+	var r:u16 = 0;
+	for (var c in s) {
+		r += c;
+	}
+	return r;
+}
+function wsum(s:[:u16]const u8):u16 @(noinline)
+{
+	var r:u16 = 0;
+	for (var c in s) {
+		r += c;
+	}
+	return r;
+}
+function sum2(s:[]const u8, m:u8):u16 @(noinline)
+{
+	return sum(s) * m;
+}
+function msum(m:u8, s:[]const u8):u16 @(noinline)
+{
+	return sum(s) * m;
+}
+function rec(n:u8):u16
+{
+	if (n == 0) {
+		return 0;
+	}
+	return sum(get(n)) + rec(n - 1);
+}
+function lp():u16 @(noinline)
+{
+	var r:u16 = 0;
+	for (var i:u8 = 0; i < 5; i++) {
+		r += sum(get(i)) + i;
+	}
+	return r;
+}
+function fmtg(v:u8):u8 @(noinline)
+{
+	gw = @format(buf, "v{}", v);
+	return @len(gw);
+}
+function main():void
+{
+	k = 3;
+	@printf("{} {} {}\n", sum(get(k)), wsum(wget(2)), sum2(get(1), 2));
+	@printf("{} {} {}\n", msum(3, get(4)), rec(4), lp());
+	@printf("{} ", fmtg(k * 40));
+	console.write(gw);
+	console.newline();
+	console.exit(0);
+}
+`
+	out, asm := buildShape(t, src)
+	tab := "abcdefghijklmnop"
+	sum := func(s string) int {
+		r := 0
+		for _, c := range []byte(s) {
+			r += int(c)
+		}
+		return r
+	}
+	rec, loop := 0, 0
+	for n := 1; n <= 4; n++ {
+		rec += sum(tab[n:])
+	}
+	for i := 0; i < 5; i++ {
+		loop += sum(tab[i:]) + i
+	}
+	want := fmt.Sprintf("%d %d %d\n%d %d %d\n4 v120\n", sum(tab[3:]), sum(tab[2:]), sum(tab[1:])*2, sum(tab[4:])*3, rec&0xffff, loop)
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+	// main の sum(get(k)) は get のフレームから sum のフレームへ直に写す (main のフレームに受けない)
+	body := strings.Join(procBody(t, asm, "_main"), "\n")
+	if !strings.Contains(body, "jsr _t_get\nldy <F_t_get+1\nldx <F_t_get+2\nlda <F_t_get+0\nsta <F_t_sum+2\nsty <F_t_sum+3\nstx <F_t_sum+4\njsr _t_sum") {
+		t.Errorf("sum(get(k)) を直に写していない:\n%s", body)
+	}
+	// fmtg の gw は組み立ての一時の値を通さない (gw のバイトに直に書く: 写しの 3 組の lda / sta が無い)
+	r := testBuild(t, buildSpec{Files: map[string]string{"t.fc": src}, CompileOnly: true, Config: ir.NewConfig("aggbuild")})
+	if r.Err != nil {
+		t.Fatal(r.Err)
+	}
+	if on, off := procBody(t, asm, "_t_fmtg"), procBody(t, r.Built(t, "_t.s"), "_t_fmtg"); len(off)-len(on) < 6 {
+		t.Errorf("fmtg が縮んでいない (%d 行、aggbuild を切ると %d 行):\n%s", len(on), len(off), strings.Join(on, "\n"))
+	}
+}
+
 // TestShiftZeroExt: 1 バイトをゼロ拡張した値の 1〜7 の左シフト (`(n as u16) << k`) を上位と下位に分けて作る
 // (codegen.shiftZeroExt)。すべての入力で値を確かめる。
 func TestShiftZeroExt(t *testing.T) {

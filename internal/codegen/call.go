@@ -57,10 +57,116 @@ func aSym(sym string) string { return sym + "__a" }
 // SetLambdas は全関数の表 (frames.Analyze の結果) を受け取る。
 func (l *Llc) SetLambdas(lambdas map[string]*ir.Lambda) { l.Lambdas = lambdas }
 
-// MarkArgY は markArgY と markHoldX (全関数の表は SetLambdas で受け取ったもの)。
+// MarkArgY は markArgY と markHoldX、markResultArg (全関数の表は SetLambdas で受け取ったもの)。
 func (l *Llc) MarkArgY(lmd *ir.Lambda) {
 	markArgY(lmd, l.Lambdas)
 	l.markHoldX(lmd)
+	l.markResultArg(lmd)
+}
+
+// markResultArg は、static な関数の 3 バイト以上の戻り値を受けた一時変数 T をすぐ次の呼び出しの最初の引数にするだけの
+// push_arg (`sum(get())`: `call T ← get; push_result; push_arg T`) に ResultArg を付ける。codegen は T に受けずに、get の
+// フレームの戻り値を引数の場所へ写す (genCall / genPushArg)。兄弟の関数のフレームは重なりうるので、全部のバイトを読んでから
+// 書く (A・Y・X とスタック。regalloc は印の付いた push_arg を Y を壊す命令と見る)。call と push_arg の間が push_result だけで
+// ない (前の引数の push_arg がある: 呼び先のフレームに書くので戻り値を壊しうる) なら付けない。
+func (l *Llc) markResultArg(lmd *ir.Lambda) {
+	ops := lmd.Ops
+	reads := map[*ir.Value]int{}
+	for _, op := range ops {
+		if op == nil {
+			continue
+		}
+		op.ResultArg = false
+		for _, s := range op.Src {
+			if v := ir.UnderlyingValue(s); v != nil {
+				reads[v]++
+			}
+		}
+		for _, lp := range op.Logs {
+			for _, a := range lp.Args {
+				if v := ir.UnderlyingValue(a.Val); v != nil {
+					reads[v] += 2 // @log が読む
+				}
+				for _, b := range a.Bytes {
+					if v := ir.UnderlyingValue(b); v != nil {
+						reads[v] += 2
+					}
+				}
+			}
+		}
+	}
+	for k, op := range ops {
+		if op == nil || op.Code != ir.OpPushResult {
+			continue
+		}
+		pc := l.resolveCall(ops, k)
+		call := pc.callOp
+		t, ok := call.Dst.(*ir.Value)
+		if pc.kind != ckStatic || pc.far || call.Code != ir.OpCall || !ok || t.Kind != ir.KindLocal || t.LocalType != ir.LTTemp ||
+			t.Type.Size < 3 || reads[t] != 1 {
+			continue
+		}
+		i := k + 1
+		for i < len(ops) && ops[i] != call {
+			i++
+		}
+		j := i + 1
+		for j < len(ops) && (ops[j] == nil || ops[j].Code == ir.OpPushResult) {
+			j++
+		}
+		if j == i+1 || j >= len(ops) {
+			continue // 次の呼び出しの引数でない
+		}
+		if a := ops[j]; a.Code == ir.OpPushArg && a.In(0) == ir.Operand(t) && a.Type.Size == t.Type.Size && !a.ArgY && !a.HoldY && !a.ArgCont {
+			a.ResultArg = true
+		}
+	}
+}
+
+// resultArgAt は call の命令 opNo の戻り値を、一時変数に受けずに次の push_arg (ResultArg) が写すならその位置 (無ければ -1)。
+// 間は push_result だけ (割付が命令を挟んだら写さない: 印は Y を壊すという見積もりとしてだけ残る)。
+func resultArgAt(ops []*ir.Op, opNo int) int {
+	op := ops[opNo]
+	j := opNo + 1
+	for j < len(ops) && (ops[j] == nil || ops[j].Code == ir.OpPushResult) {
+		j++
+	}
+	if j == opNo+1 || j >= len(ops) || !ops[j].ResultArg || op.Dst == nil || ops[j].In(0) != op.Dst {
+		return -1
+	}
+	return j
+}
+
+// copyResultArg は呼び先 src のフレームの戻り値 n バイトを dst(i) へ写す。src と dst は重なりうる (兄弟の関数のフレーム)
+// ので、全部を読んでから書く: 0 バイト目は A、1 バイト目は Y、2 バイト目は X (useX のとき)、残りはスタック。
+func copyResultArg(src *ir.Lambda, n int, dst func(i int) string, useX bool) []any {
+	regs := map[int]string{1: "y"}
+	if useX {
+		regs[2] = "x"
+	}
+	var r []any
+	var stacked []int
+	for i := n - 1; i >= 1; i-- {
+		if _, ok := regs[i]; !ok {
+			r = append(r, "lda "+staticAddr(src, i), "pha")
+			stacked = append(stacked, i)
+		}
+	}
+	for i := 1; i < n; i++ {
+		if reg, ok := regs[i]; ok {
+			r = append(r, "ld"+reg+" "+staticAddr(src, i))
+		}
+	}
+	r = append(r, "lda "+staticAddr(src, 0), "sta "+dst(0))
+	for i := 1; i < n; i++ {
+		if reg, ok := regs[i]; ok {
+			r = append(r, "st"+reg+" "+dst(i))
+		}
+	}
+	for k := len(stacked) - 1; k >= 0; k-- {
+		r = append(r, "pla", "sta "+dst(stacked[k]))
+	}
+	return r
 }
 
 // markArgY は lmd の呼び出しのうち、最後から 2 つ目の引数を Y で渡せるもの (push_arg の ArgY) に印を付ける

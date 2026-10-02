@@ -33,6 +33,14 @@ type funcGen struct {
 	calls               []*pendingCall
 	pushArgSize         int // stack 系: S+k,x に積んだ引数のバイト数
 	pushFastcallArgSize int // fastcall: FC_FASTCALL_REG に積んだバイト数
+	// resultFrom は戻り値を一時変数に受けなかった呼び出し (resultArgAt) の一時変数と呼び先。次の push_arg が呼び先のフレームから写す
+	resultFrom *pendingResult
+}
+
+// pendingResult は戻り値を呼び先のフレームに置いたままの呼び出し (genCall → genPushArg)。
+type pendingResult struct {
+	v      ir.Operand
+	callee *ir.Lambda
 }
 
 // genLabel は Label のコード生成。
@@ -191,6 +199,31 @@ func (l *funcGen) genPushArg() {
 	r, op, opNo, ops, lmd := l.r, l.op, l.opNo, l.ops, l.lmd
 	restore := &l.restore
 	pc := l.calls[len(l.calls)-1]
+	if f := l.resultFrom; f != nil && op.In(0) == f.v {
+		// 前の呼び出しの戻り値を呼び先のフレームから写す (markResultArg)
+		l.resultFrom = nil
+		n := op.Type.Size
+		var dst func(i int) string
+		switch pc.kind {
+		case ckStatic:
+			off := pc.argOff
+			dst = func(i int) string { return staticAddr(pc.callee, off+i) }
+			pc.argOff += n
+		case ckStack:
+			base := l.stackBase(lmd) + l.pushArgSize
+			dst = func(i int) string { return fmt.Sprintf("<S+%d,x", base+i) }
+			l.pushArgSize += n
+		case ckFastcallReg:
+			base := l.pushFastcallArgSize
+			dst = func(i int) string { return fmt.Sprintf("<FC_FASTCALL_REG+%d", base+i) }
+			l.pushFastcallArgSize += n
+		default:
+			panic(fmt.Sprintf("result argument for call kind %d", pc.kind))
+		}
+		// X はフレームの底 (stack の関数) / FC_SP (stack 系の呼び出しの引数) のときは使わない
+		r.push(copyResultArg(f.callee, n, dst, lmd.ABI != ir.ABIStack && pc.kind != ckStack && l.holdX == 0)...)
+		return
+	}
 	if op.ArgY && pc.kind == ckStatic && !pc.far && pc.callee.RegArgY && pc.argOff == regArgYOffset(pc.callee) {
 		// 最後から 2 つ目の引数は Y に置いて呼ぶ (markArgY: 直後が最後の引数の push_arg、その直後が call)
 		r.push(l.loadY(op.In(0))...)
@@ -264,7 +297,9 @@ func (l *funcGen) genCall() {
 		} else {
 			r.push(l.callStatic(lmd, target))
 		}
-		if op.Dst != nil {
+		if op.Dst != nil && !op.Far && resultArgAt(ops, opNo) >= 0 {
+			l.resultFrom = &pendingResult{v: op.Dst, callee: pc.callee} // 次の push_arg が呼び先のフレームから写す
+		} else if op.Dst != nil {
 			if pc.callee.RegResult && !op.Far && lmd.ABI != ir.ABIStack {
 				r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる (stack 関数は X を戻すのに A を使うので不可)
 			} else {
