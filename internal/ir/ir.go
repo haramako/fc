@@ -132,6 +132,10 @@ type Op struct {
 	// ループ内の常駐 (regalloc.AllocateResident が付ける。Agent/wiki/design/regalloc.md): レジスタ (RegA / RegY / RegX) ごとに、
 	// この命令でそのレジスタに置いたままにしている変数と、入口 / 出口で生きているか (regs.go)
 	Res [NumRegs]Residency
+
+	// pos は lmd.Ops の中の位置の手がかり、posEpoch は見つからなかったときの数え直しの番号 (order.go の Lambda.IndexOf)
+	pos      int
+	posEpoch int64
 }
 
 // In は i 番目の入力 (無ければ nil)。

@@ -110,7 +110,7 @@ func PropagateLiteralLoads(lmd *ir.Lambda) {
 			continue
 		}
 		v, ok := op.Dst.(*ir.Value)
-		if !ok || !target(v) || len(ud.Uses[v]) != 0 {
+		if !ok || !target(v) || ud.NumUses(v) != 0 {
 			continue
 		}
 		if _, lit := ir.ValIntLiteral(op.Src[0]); !lit {
@@ -131,10 +131,14 @@ func foldConstBranches(lmd *ir.Lambda) {
 	ops := lmd.Ops
 	var ud *ir.UseDef
 	for i, op := range ops {
-		if op == nil || (op.Code != ir.OpLt && op.Code != ir.OpEq) || i+1 >= len(ops) || ops[i+1] == nil || op.IsSigned() {
+		if op == nil || (op.Code != ir.OpLt && op.Code != ir.OpEq) || op.IsSigned() {
 			continue
 		}
-		br := ops[i+1]
+		bi := ir.NextOp(ops, i)
+		if bi < 0 {
+			continue
+		}
+		br := ops[bi]
 		if (br.Code != ir.OpIf && br.Code != ir.OpIfTrue) || br.Src[0] != op.Dst {
 			continue
 		}
@@ -151,7 +155,7 @@ func foldConstBranches(lmd *ir.Lambda) {
 		if ud == nil {
 			ud = ir.BuildUseDef(lmd)
 		}
-		if u, single := ud.SingleUse(t); !single || u != i+1 || len(ud.Defs[t]) != 1 {
+		if u, single := ud.SingleUse(t); !single || u != br || ud.NumDefs(t) != 1 {
 			continue
 		}
 		cond := a < b
@@ -161,9 +165,9 @@ func foldConstBranches(lmd *ir.Lambda) {
 		taken := cond == (br.Code == ir.OpIfTrue) // if は偽で、if_true は真で飛ぶ
 		ir.DropOp(ops, i)
 		if taken {
-			ir.ReplaceOp(ops, i+1, &ir.Op{Code: ir.OpJump, Label: br.Label, Pos: br.Pos, Res: br.Res})
+			ir.ReplaceOp(ops, bi, &ir.Op{Code: ir.OpJump, Label: br.Label, Pos: br.Pos, Res: br.Res})
 		} else {
-			ir.DropOp(ops, i+1)
+			ir.DropOp(ops, bi)
 		}
 	}
 }

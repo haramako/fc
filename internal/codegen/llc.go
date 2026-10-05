@@ -308,17 +308,18 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 // 直後の命令の第 1 入力が A に常駐している / 添字が A にある組み合わせは、tay が A を壊すので除く。
 func (l *Llc) fusableIndex(ops []*ir.Op, i int) (string, bool) {
 	op := ops[i]
-	if i+1 >= len(ops) || ops[i+1] == nil || op.Code != ir.OpLoadMem {
+	ni := ir.NextOp(ops, i)
+	if ni < 0 || op.Code != ir.OpLoadMem {
 		return "", false
 	}
 	if m := op.Mem(); !m.BaseIsArray() || m.Index == nil || m.Scale != 1 {
 		return "", false
 	}
 	t, ok := op.Dst.(*ir.Value)
-	if !ok || t.LocalType != ir.LTTemp || t.Type.Size != 1 || t.LiveRange == nil || t.LiveRange.Max != i+1 || ir.ValLocation(t) == ir.LocA {
+	if !ok || t.LocalType != ir.LTTemp || t.Type.Size != 1 || t.LiveRange == nil || t.LiveRange.Max != ni || ir.ValLocation(t) == ir.LocA {
 		return "", false
 	}
-	next := ops[i+1]
+	next := ops[ni]
 	if next.Code != ir.OpSub && next.Code != ir.OpLt || len(next.Src) != 2 || next.Src[1] != ir.Operand(t) || next.Src[0] == ir.Operand(t) {
 		return "", false
 	}

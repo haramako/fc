@@ -258,6 +258,11 @@ type Lambda struct {
 	// asm から参照されても Entry にしない。extern ならフレームの大きさは frames.Analyze が決める
 	FrameABI bool
 	Scratch  int
+
+	// 命令の位置の手がかりを最後に数え直したときの番号と命令列 (order.go)
+	posEpoch int64
+	posLen   int
+	posHead  **Op
 }
 
 // ABI は関数の呼び出し規約 (Agent/wiki/design/frame-alloc.md §6-1)。

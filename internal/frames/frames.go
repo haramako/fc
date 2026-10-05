@@ -482,11 +482,10 @@ func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned 
 	if !ok || t.Kind != ir.KindLocal {
 		return nil, false
 	}
-	defs := ud.Defs[t]
-	if len(defs) != 1 {
+	def, ok := ud.SingleDef(t)
+	if !ok {
 		return nil, false
 	}
-	def := lmd.Ops[defs[0]]
 	switch def.Code {
 	case ir.OpLoad:
 		if syms, ok := fromGlobal(def.Src[0]); ok {
@@ -500,8 +499,8 @@ func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned 
 			return fromTable(m.Base)
 		}
 		if p, ok := def.Src[0].(*ir.Value); ok && p.Kind == ir.KindLocal {
-			if pd := ud.Defs[p]; len(pd) == 1 && lmd.Ops[pd[0]].Code == ir.OpIndex {
-				return fromTable(lmd.Ops[pd[0]].Src[0])
+			if pd, ok := ud.SingleDef(p); ok && pd.Code == ir.OpIndex {
+				return fromTable(pd.Src[0])
 			}
 		}
 	}

@@ -20,23 +20,27 @@ import (
 // 条件: マスクが左シフトなら最上位ビット (1 バイトなら 0x80、2 バイト値の上位バイトの 0x80)、右シフトなら
 // 最下位ビット (1 バイトなら 1、2 バイト値の下位バイトの 1)。両方の枝の先頭の命令が同じ変数の同じ 1 ビットシフト。
 // 分岐先のブロックはこの分岐からしか入らない (先頭の命令を消すため)。
-func carryBranch(lmd *ir.Lambda) {
+//
+// 書き換えは命令の置き換え (同じ位置) と削除 (nil) だけで、分岐の形は変わらないので、CFG と UseDef を保ったまま
+// 関数全体を 1 回で見る (UseDef は *Op を鍵にして書き換えた命令だけ登録し直す)。
+func carryBranch(lmd *ir.Lambda) bool {
 	ud := ir.BuildUseDef(lmd)
 	cfg := ir.BuildCFG(lmd)
 	ops := lmd.Ops
+	changed := false
 	for i, op := range ops {
-		if op == nil || op.Code != ir.OpAnd || i+1 >= len(ops) || ops[i+1] == nil {
+		if op == nil || op.Code != ir.OpAnd {
 			continue
 		}
-		cond := ops[i+1]
-		if cond.Code != ir.OpIf && cond.Code != ir.OpIfTrue {
+		cond := ir.NextOpOf(ops, i)
+		if cond == nil || cond.Code != ir.OpIf && cond.Code != ir.OpIfTrue {
 			continue
 		}
 		t, ok := op.Dst.(*ir.Value)
-		if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 {
+		if !ok || t.LocalType != ir.LTTemp || ud.NumDefs(t) != 1 {
 			continue
 		}
-		if u, single := ud.SingleUse(t); !single || u != i+1 || cond.Src[0] != ir.Operand(t) {
+		if u, single := ud.SingleUse(t); !single || u != cond || cond.Src[0] != ir.Operand(t) {
 			continue
 		}
 		mask, isLit := ir.ValIntLiteral(op.Src[1])
@@ -98,28 +102,33 @@ func carryBranch(lmd *ir.Lambda) {
 		}
 		// 書き換え: and → シフト (x 自身に)、if → C の分岐、両方の枝の先頭のシフトを消す。
 		// 枝のシフトが一時変数 t に入れる形 (`shl t = x; xor x = t, k`) なら、t の使用を x に置き換える
-		ir.ReplaceOp(ops, i, &ir.Op{Code: shiftCode, Dst: x, Src: []ir.Operand{x, si.Src[1]}, Sign: si.Sign, Pos: si.Pos})
+		shift := &ir.Op{Code: shiftCode, Dst: x, Src: []ir.Operand{x, si.Src[1]}, Sign: si.Sign, Pos: si.Pos}
+		ir.ReplaceOp(ops, i, shift)
+		ud.Add(shift)
 		if cond.Code == ir.OpIf {
 			cond.Code = ir.OpIfNotCarry // ビットが 0 (C クリア) なら L へ
 		} else {
 			cond.Code = ir.OpIfCarry
 		}
 		cond.Src = nil
+		ud.Update(cond)
 		for _, tv := range []*ir.Value{ti, tf} {
 			if tv == nil {
 				continue
 			}
 			u, _ := ud.SingleUse(tv)
-			for k, src := range ops[u].Src {
+			for k, src := range u.Src {
 				if src == ir.Operand(tv) {
-					ops[u].Src[k] = x
+					u.Src[k] = x
 				}
 			}
+			ud.Update(u)
 		}
 		ir.DropOp(ops, ki)
 		ir.DropOp(ops, kf)
-		return // CFG と use/def が変わったので 1 回 1 箇所 (呼び出し側が繰り返す)
+		changed = true
 	}
+	return changed
 }
 
 // isShiftOne は ops[k] が `shift x = x, #1`、または `shift t = x, #1` (t は一時変数で、この直後の命令でだけ使い、
@@ -143,15 +152,14 @@ func isShiftOne(lmd *ir.Lambda, ud *ir.UseDef, k int, x *ir.Value, code ir.OpCod
 	if d == x {
 		return nil, true
 	}
-	if d.LocalType != ir.LTTemp || d.Type != x.Type || len(ud.Defs[d]) != 1 {
+	if d.LocalType != ir.LTTemp || d.Type != x.Type || ud.NumDefs(d) != 1 {
 		return nil, false
 	}
-	u, single := ud.SingleUse(d)
-	if !single || u != k+1 || !lmd.Ops[u].Code.ReadsBeforeWrite() {
+	next, single := ud.SingleUse(d)
+	if !single || next != ir.NextOpOf(lmd.Ops, k) || !next.Code.ReadsBeforeWrite() {
 		return nil, false
 	}
 	// 置き換え後 `op x = x, b` になる。b が x を読むなら値が変わるので不可 (chainInPlace と同じ条件)
-	next := lmd.Ops[u]
 	for _, b := range next.Src {
 		if b != ir.Operand(d) && ir.UnderlyingValue(b) == x {
 			return nil, false
@@ -190,13 +198,18 @@ func averageBytes(lmd *ir.Lambda, u *types.Universe) bool {
 		return ok && cv.From == ir.Operand(x) && cv.Offset == 0 && cv.Type.Size == 1 && cv.Width == 1
 	}
 	changed := false
-	for i := 0; i+1 < len(ops); i++ {
-		add, sh := ops[i], ops[i+1]
-		if add == nil || sh == nil || add.Code != ir.OpAdd {
+	for i := 0; i < len(ops); i++ {
+		add := ops[i]
+		if add == nil || add.Code != ir.OpAdd {
 			continue
 		}
+		si := ir.NextOp(ops, i)
+		if si < 0 {
+			continue
+		}
+		sh := ops[si]
 		y, ok := add.Dst.(*ir.Value)
-		if !ok || y.LocalType != ir.LTTemp || y.Type.Size != 2 || y.Type.Signed || len(ud.Defs[y]) != 1 {
+		if !ok || y.LocalType != ir.LTTemp || y.Type.Size != 2 || y.Type.Signed || ud.NumDefs(y) != 1 {
 			continue
 		}
 		a, okA := byteOf(add.Src[0])
@@ -211,25 +224,26 @@ func averageBytes(lmd *ir.Lambda, u *types.Universe) bool {
 		if !lit || sh.IsSigned() || !(sh.Code == ir.OpShiftRight && k == 1 || sh.Code == ir.OpDiv && k == 2) || sh.Src[0] != ir.Operand(y) {
 			continue
 		}
-		if u, single := ud.SingleUse(y); !single || u != i+1 {
+		if u, single := ud.SingleUse(y); !single || u != sh {
 			continue
 		}
 		x, ok := sh.Dst.(*ir.Value)
-		if !ok || x.LocalType != ir.LTTemp || x.Type.Size != 2 || len(ud.Defs[x]) != 1 {
+		if !ok || x.LocalType != ir.LTTemp || x.Type.Size != 2 || ud.NumDefs(x) != 1 {
 			continue
 		}
-		good := len(ud.Uses[x]) > 0
-		for _, j := range ud.Uses[x] {
-			if j <= i+1 || ops[j] == nil {
+		xuses := ud.Uses(x)
+		good := len(xuses) > 0
+		for _, use := range xuses {
+			if lmd.IndexOf(use) <= si {
 				good = false
 				break
 			}
-			for _, s := range ops[j].Src {
+			for _, s := range use.Src {
 				if ir.UnderlyingValue(s) == x && !lowByte(s, x) {
 					good = false
 				}
 			}
-			if ops[j].Dst != nil && ir.UnderlyingValue(ops[j].Dst) == x {
+			if use.Dst != nil && ir.UnderlyingValue(use.Dst) == x {
 				good = false
 			}
 		}
@@ -239,14 +253,19 @@ func averageBytes(lmd *ir.Lambda, u *types.Universe) bool {
 		t := ir.NewLocal("$avg", u8, ir.LTTemp)
 		s := ir.NewLocal("$avg", u8, ir.LTTemp)
 		lmd.Vars = append(lmd.Vars, t, s)
-		ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpAdd, Dst: t, Src: []ir.Operand{a, b}, Pos: add.Pos})
-		ir.ReplaceOp(ops, i+1, &ir.Op{Code: ir.OpRorC, Dst: s, Src: []ir.Operand{t}, Pos: sh.Pos})
-		for _, j := range ud.Uses[x] {
-			for k, o := range ops[j].Src {
+		nadd := &ir.Op{Code: ir.OpAdd, Dst: t, Src: []ir.Operand{a, b}, Pos: add.Pos}
+		nror := &ir.Op{Code: ir.OpRorC, Dst: s, Src: []ir.Operand{t}, Pos: sh.Pos}
+		ir.ReplaceOp(ops, i, nadd)
+		ir.ReplaceOp(ops, si, nror)
+		ud.Add(nadd)
+		ud.Add(nror)
+		for _, use := range xuses {
+			for k, o := range use.Src {
 				if lowByte(o, x) {
-					ops[j].Src[k] = s
+					use.Src[k] = s
 				}
 			}
+			ud.Update(use)
 		}
 		changed = true
 	}

@@ -82,19 +82,18 @@ func DevirtualizeProgram(mods []*ir.Module, farEnabled bool) {
 	}
 }
 
+// devirtualize は書き換えられる呼び出しが無くなるまで 1 つずつ書き換える (書き換えた呼び出しの表引き (index) は消えるので
+// 終わる)。UseDef は作り直さず、足した命令だけ登録する。
 func devirtualize(lmd *ir.Lambda, tables map[string][]string, lambdas map[string]*ir.Lambda, isFar func(caller, callee *ir.Lambda) bool) {
-	for n := 0; n < 32; n++ {
-		if !devirtualizeOne(lmd, tables, lambdas, isFar) {
-			return
-		}
+	ud := ir.BuildUseDef(lmd)
+	for devirtualizeOne(lmd, ud, tables, lambdas, isFar) {
 	}
 }
 
-func devirtualizeOne(lmd *ir.Lambda, tables map[string][]string, lambdas map[string]*ir.Lambda, isFar func(caller, callee *ir.Lambda) bool) bool {
+func devirtualizeOne(lmd *ir.Lambda, ud *ir.UseDef, tables map[string][]string, lambdas map[string]*ir.Lambda, isFar func(caller, callee *ir.Lambda) bool) bool {
 	ops := lmd.Ops
-	ud := ir.BuildUseDef(lmd)
 	for i, op := range ops {
-		if op == nil || op.Code != ir.OpIndex || i+2 >= len(ops) {
+		if op == nil || op.Code != ir.OpIndex {
 			continue
 		}
 		tbl, ok := op.Src[0].(*ir.Value)
@@ -109,17 +108,21 @@ func devirtualizeOne(lmd *ir.Lambda, tables map[string][]string, lambdas map[str
 		if !ok || p.LocalType != ir.LTTemp {
 			continue
 		}
-		ld := ops[i+1]
-		if ld == nil || ld.Code != ir.OpLoadMem || !plainDeref(ld, p) || len(ud.Uses[p]) != 1 {
+		li := ir.NextOp(ops, i)
+		if li < 0 {
+			continue
+		}
+		ld := ops[li]
+		if ld.Code != ir.OpLoadMem || !plainDeref(ld, p) || ud.NumUses(p) != 1 {
 			continue
 		}
 		f, ok := ld.Dst.(*ir.Value)
-		if !ok || f.LocalType != ir.LTTemp || len(ud.Uses[f]) != 1 || len(ud.Defs[f]) != 1 {
+		if !ok || f.LocalType != ir.LTTemp || ud.NumUses(f) != 1 || ud.NumDefs(f) != 1 {
 			continue
 		}
 		// load_mem の直後から call まで: push_result と push_arg だけ
-		c := i + 2
-		if ops[c] == nil || (ops[c].Code != ir.OpPushResult && ops[c].Code != ir.OpPushFastcallResult) {
+		c := ir.NextOp(ops, li)
+		if c < 0 || (ops[c].Code != ir.OpPushResult && ops[c].Code != ir.OpPushFastcallResult) {
 			continue
 		}
 		e := -1
@@ -162,7 +165,9 @@ func devirtualizeOne(lmd *ir.Lambda, tables map[string][]string, lambdas map[str
 			for k := range syms {
 				labels[k] = label(k)
 			}
-			out = append(out, &ir.Op{Code: ir.OpSwitch, Src: []ir.Operand{op.Src[1], ir.NewIntLiteral("", ir.ValType(op.Src[1]), 0)}, Labels: labels, Pos: call.Pos})
+			sw := &ir.Op{Code: ir.OpSwitch, Src: []ir.Operand{op.Src[1], ir.NewIntLiteral("", ir.ValType(op.Src[1]), 0)}, Labels: labels, Pos: call.Pos}
+			out = append(out, sw)
+			ud.Add(sw)
 			out = append(out, &ir.Op{Code: ir.OpJump, Label: end, Pos: call.Pos})
 		}
 		for k, s := range syms {
@@ -181,6 +186,7 @@ func devirtualizeOne(lmd *ir.Lambda, tables map[string][]string, lambdas map[str
 					no.Far = isFar(lmd, callees[k])
 				}
 				out = append(out, &no)
+				ud.Add(&no)
 			}
 			if len(syms) > 1 {
 				out = append(out, &ir.Op{Code: ir.OpJump, Label: end, Pos: call.Pos})

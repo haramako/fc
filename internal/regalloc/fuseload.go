@@ -21,7 +21,7 @@ func MarkFusedLoads(lmd *ir.Lambda) {
 	}
 	var ud *ir.UseDef
 	for i, op := range lmd.Ops {
-		if op == nil || op.Code != ir.OpLoadMem || i+1 >= len(lmd.Ops) {
+		if op == nil || op.Code != ir.OpLoadMem {
 			continue
 		}
 		m := op.Mem()
@@ -32,7 +32,7 @@ func MarkFusedLoads(lmd *ir.Lambda) {
 		if !ok || t.LocalType != ir.LTTemp || t.Type.Size != 1 {
 			continue
 		}
-		next := lmd.Ops[i+1]
+		next := ir.NextOpOf(lmd.Ops, i)
 		if next == nil || !fuseNextOps[next.Code] || len(next.Src) != 2 || ir.ValType(next.Dst).Size != 1 {
 			continue
 		}
@@ -50,7 +50,7 @@ func MarkFusedLoads(lmd *ir.Lambda) {
 		if ud == nil {
 			ud = ir.BuildUseDef(lmd)
 		}
-		if j, ok := ud.SingleUse(t); !ok || j != i+1 {
+		if u, ok := ud.SingleUse(t); !ok || u != next {
 			continue
 		}
 		op.FuseNext = true
@@ -64,10 +64,10 @@ func MarkFusedLoads(lmd *ir.Lambda) {
 // 呼び出しの引数を Y に保持している間はしない。
 func FusedLoad(lmd *ir.Lambda, i int, vA, vY *ir.Value) bool {
 	op := lmd.Ops[i]
-	if op == nil || !op.FuseNext || i+1 >= len(lmd.Ops) {
+	if op == nil || !op.FuseNext {
 		return false
 	}
-	next := lmd.Ops[i+1]
+	next := ir.NextOpOf(lmd.Ops, i)
 	if next == nil || !fuseNextOps[next.Code] || len(next.Src) != 2 || op.HoldY || op.ArgY || next.HoldY {
 		return false
 	}

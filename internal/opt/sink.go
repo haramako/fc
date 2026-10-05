@@ -23,40 +23,38 @@ func sinkAddress(lmd *ir.Lambda) {
 			refered[ir.UnderlyingValue(op.Src[0])] = true
 		}
 	}
+	// 動かしても定義と使用は変わらないので UseDef は 1 回だけ作る (*Op を鍵にしているので位置が変わってもよい)。
+	// 動かすと前の命令の間が空くことがあるので、先頭から見直す
+	ud := ir.BuildUseDef(lmd)
 	for changed := true; changed; {
 		changed = false
-		ud := ir.BuildUseDef(lmd)
 		ops := lmd.Ops
 		for i, op := range ops {
 			if op == nil || (op.Code != ir.OpIndex && op.Code != ir.OpAdd) {
 				continue
 			}
 			t, ok := op.Dst.(*ir.Value)
-			if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 {
+			if !ok || t.LocalType != ir.LTTemp || ud.NumDefs(t) != 1 {
 				continue
 			}
-			j, single := ud.SingleUse(t)
-			if !single || j <= i+1 {
+			use, single := ud.SingleUse(t)
+			if !single {
 				continue
 			}
-			use := ops[j]
-			if !plainDeref(use, t) {
+			j := lmd.IndexOf(use)
+			if j <= ir.NextOp(ops, i) || !plainDeref(use, t) {
 				continue
 			}
 			if !canSink(op, ops[i+1:j], refered) {
 				continue
 			}
 			// op を j の直前へ
-			if len(op.Logs) > 0 && i+1 < j {
+			if len(op.Logs) > 0 {
 				// @log の注釈は元の位置に残す (次の命令へ。ir/log.go)
-				ir.PrependLogs(ops[i+1], op.Logs)
+				ir.PrependLogs(ir.NextOpOf(ops, i), op.Logs)
 				op.Logs = nil
 			}
-			moved := append([]*ir.Op{}, ops[:i]...)
-			moved = append(moved, ops[i+1:j]...)
-			moved = append(moved, op)
-			moved = append(moved, ops[j:]...)
-			lmd.Ops = moved
+			ir.MoveOpBefore(ops, i, j)
 			changed = true
 			break
 		}

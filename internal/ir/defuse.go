@@ -192,51 +192,160 @@ func (c *CFG) Reachable() map[*Block]bool {
 	return seen
 }
 
-// UseDef は関数内の各ローカル変数の定義位置と使用位置 (lmd.Ops の添字、昇順)。
-// 変数の一部への書き込み (IsPartialDef) は定義と使用の両方に数える。
+// UseDef は関数内の各ローカル変数を定義する命令と使う命令 (*Op を鍵にする。位置は Lambda.IndexOf で引く)。
+// 変数の一部への書き込み (IsPartialDef) は定義と使用の両方に数える。1 つの命令が同じ変数を 2 回使えば使用も 2 つ。
+//
+// 差分で保つ: 命令を消す (DropOp などで nil にする・詰める)・動かす・並べ替えるのは知らせなくてよい (引くときに lmd.Ops に
+// 無い命令を外す)。命令を足したら Add、命令の Dst / Src を書き換えたら Update を呼ぶ。
 type UseDef struct {
-	Defs map[*Value][]int
-	Uses map[*Value][]int
+	lmd  *Lambda
+	defs map[*Value][]*Op
+	uses map[*Value][]*Op
+	reg  map[*Op]udReg // Add で登録した変数 (Update / Remove で外す)
+}
+
+type udReg struct{ defs, uses []*Value }
+
+// udLocal は UseDef の対象 (ローカル変数) の元の変数 (対象外なら nil)。
+func udLocal(o Operand) *Value {
+	if ValKind(o) != KindLocal {
+		return nil
+	}
+	if pa, ok := o.(*PointeredArray); ok {
+		o = pa.From
+	}
+	return UnderlyingValue(o)
 }
 
 // BuildUseDef は命令列を 1 回走査して UseDef を作る。ローカル変数 (KindLocal) だけを対象にする。
 func BuildUseDef(lmd *Lambda) *UseDef {
-	ud := &UseDef{Defs: map[*Value][]int{}, Uses: map[*Value][]int{}}
-	local := func(o Operand) *Value {
-		if ValKind(o) != KindLocal {
-			return nil
-		}
-		if pa, ok := o.(*PointeredArray); ok {
-			o = pa.From
-		}
-		return UnderlyingValue(o)
-	}
-	for i, op := range lmd.Ops {
-		if op == nil {
-			continue
-		}
-		defs, uses := DefUse(op)
-		for _, d := range defs {
-			if v := local(d); v != nil {
-				ud.Defs[v] = append(ud.Defs[v], i)
-				if IsPartialDef(d) {
-					ud.Uses[v] = append(ud.Uses[v], i)
-				}
-			}
-		}
-		for _, u := range uses {
-			if v := local(u); v != nil {
-				ud.Uses[v] = append(ud.Uses[v], i)
-			}
+	ud := &UseDef{lmd: lmd, defs: map[*Value][]*Op{}, uses: map[*Value][]*Op{}, reg: map[*Op]udReg{}}
+	for _, op := range lmd.Ops {
+		if op != nil {
+			ud.Add(op)
 		}
 	}
 	return ud
 }
 
-// SingleUse は v の使用が 1 箇所だけならその添字を返す。
-func (ud *UseDef) SingleUse(v *Value) (int, bool) {
-	if u := ud.Uses[v]; len(u) == 1 {
+// Add は命令 op (lmd.Ops に足したもの) の定義と使用を登録する。
+func (ud *UseDef) Add(op *Op) {
+	if _, ok := ud.reg[op]; ok {
+		return
+	}
+	var r udReg
+	defs, uses := DefUse(op)
+	for _, d := range defs {
+		if v := udLocal(d); v != nil {
+			ud.defs[v] = append(ud.defs[v], op)
+			r.defs = append(r.defs, v)
+			if IsPartialDef(d) {
+				ud.uses[v] = append(ud.uses[v], op)
+				r.uses = append(r.uses, v)
+			}
+		}
+	}
+	for _, u := range uses {
+		if v := udLocal(u); v != nil {
+			ud.uses[v] = append(ud.uses[v], op)
+			r.uses = append(r.uses, v)
+		}
+	}
+	ud.reg[op] = r
+}
+
+// Remove は命令 op の登録を外す (lmd.Ops から消した命令は外さなくても引くときに除かれる)。
+func (ud *UseDef) Remove(op *Op) {
+	r, ok := ud.reg[op]
+	if !ok {
+		return
+	}
+	delete(ud.reg, op)
+	for _, v := range r.defs {
+		ud.defs[v] = removeOp(ud.defs[v], op)
+	}
+	for _, v := range r.uses {
+		ud.uses[v] = removeOp(ud.uses[v], op)
+	}
+}
+
+// Update は命令 op の Dst / Src を書き換えた後に登録をやり直す。
+func (ud *UseDef) Update(op *Op) {
+	ud.Remove(op)
+	ud.Add(op)
+}
+
+// removeOp は list から op を 1 つ除く (同じ命令が 2 回使う変数は 2 つ並ぶので、1 回の登録につき 1 つ)。
+func removeOp(list []*Op, op *Op) []*Op {
+	for i, o := range list {
+		if o == op {
+			return append(list[:i:i], list[i+1:]...)
+		}
+	}
+	return list
+}
+
+// live は list のうち lmd.Ops にある命令を位置の順に返し、消えた命令の登録を外す。
+func (ud *UseDef) live(list []*Op) []*Op {
+	var gone []*Op
+	out := make([]*Op, 0, len(list))
+	for _, op := range list {
+		if ud.lmd.IndexOf(op) >= 0 {
+			out = append(out, op)
+		} else {
+			gone = append(gone, op)
+		}
+	}
+	for _, op := range gone {
+		ud.Remove(op)
+	}
+	sortByIndex(ud.lmd, out)
+	return out
+}
+
+// sortByIndex は ops を lmd.Ops の中の位置の順に並べる (挿入ソート: 短い)。
+func sortByIndex(lmd *Lambda, ops []*Op) {
+	for i := 1; i < len(ops); i++ {
+		for j := i; j > 0 && lmd.IndexOf(ops[j-1]) > lmd.IndexOf(ops[j]); j-- {
+			ops[j-1], ops[j] = ops[j], ops[j-1]
+		}
+	}
+}
+
+// Defs は v を定義する命令 (位置の順)。
+func (ud *UseDef) Defs(v *Value) []*Op { return ud.live(ud.defs[v]) }
+
+// Uses は v を使う命令 (位置の順。同じ命令が 2 回使えば 2 つ)。
+func (ud *UseDef) Uses(v *Value) []*Op { return ud.live(ud.uses[v]) }
+
+// NumDefs / NumUses は v の定義 / 使用の数。
+func (ud *UseDef) NumDefs(v *Value) int { return len(ud.Defs(v)) }
+func (ud *UseDef) NumUses(v *Value) int { return len(ud.Uses(v)) }
+
+// SingleUse は v の使用が 1 箇所だけならその命令を返す。
+func (ud *UseDef) SingleUse(v *Value) (*Op, bool) {
+	if u := ud.Uses(v); len(u) == 1 {
 		return u[0], true
 	}
-	return 0, false
+	return nil, false
+}
+
+// SingleDef は v の定義が 1 箇所だけならその命令を返す。
+func (ud *UseDef) SingleDef(v *Value) (*Op, bool) {
+	if d := ud.Defs(v); len(d) == 1 {
+		return d[0], true
+	}
+	return nil, false
+}
+
+// UseIndexes / DefIndexes は v を使う / 定義する命令の lmd.Ops の中の添字 (昇順)。
+func (ud *UseDef) UseIndexes(v *Value) []int { return ud.indexes(ud.Uses(v)) }
+func (ud *UseDef) DefIndexes(v *Value) []int { return ud.indexes(ud.Defs(v)) }
+
+func (ud *UseDef) indexes(ops []*Op) []int {
+	r := make([]int, len(ops))
+	for i, op := range ops {
+		r[i] = ud.lmd.IndexOf(op)
+	}
+	return r
 }

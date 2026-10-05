@@ -17,25 +17,29 @@ func fusePointer(lmd *ir.Lambda, u *types.Universe) {
 	ud := ir.BuildUseDef(lmd)
 	ops := lmd.Ops
 	// t が「この命令で定義され、直後の命令でだけ使われる」一時変数か
-	onlyNext := func(dst ir.Operand, i int) bool {
+	onlyNext := func(dst ir.Operand, next *ir.Op) bool {
 		t := ir.UnderlyingValue(dst)
-		if t == nil || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 {
+		if t == nil || t.LocalType != ir.LTTemp || ud.NumDefs(t) != 1 {
 			return false
 		}
 		u, ok := ud.SingleUse(t)
-		return ok && u == i+1
+		return ok && u == next
 	}
 	for i, op := range ops {
-		if op == nil || i+1 >= len(ops) || ops[i+1] == nil {
+		if op == nil {
 			continue
 		}
-		next := ops[i+1]
+		ni := ir.NextOp(ops, i)
+		if ni < 0 {
+			continue
+		}
+		next := ops[ni]
 		switch op.Code {
 		case ir.OpAdd:
 			// struct のフィールドをポインタ経由で触る
 			ptr, off := op.Src[0], op.Src[1]
 			k, isLit := ir.ValIntLiteral(off)
-			if !isLit || k < 0 || k > 255 || ir.ValType(ptr).Kind != types.Pointer || ir.ValType(ptr).Size != 2 || !onlyNext(op.Dst, i) {
+			if !isLit || k < 0 || k > 255 || ir.ValType(ptr).Kind != types.Pointer || ir.ValType(ptr).Size != 2 || !onlyNext(op.Dst, next) {
 				continue
 			}
 			if !fusableDeref(next, op.Dst) {
@@ -53,7 +57,8 @@ func fusePointer(lmd *ir.Lambda, u *types.Universe) {
 			}
 			nop.Pos = next.Pos
 			ir.ReplaceOp(ops, i, nop)
-			ir.MergeDrop(ops, i, i+1)
+			ir.MergeDrop(ops, i, ni)
+			ud.Add(nop)
 		case ir.OpIndex:
 			arr, idx := op.Src[0], op.Src[1]
 			es := ir.ValType(arr).Base.Size
@@ -86,7 +91,8 @@ func fusePointer(lmd *ir.Lambda, u *types.Universe) {
 			}
 			nop.Pos = next.Pos
 			ir.ReplaceOp(ops, i, nop)
-			ir.MergeDrop(ops, i, i+1)
+			ir.MergeDrop(ops, i, ni)
+			ud.Add(nop)
 		}
 	}
 	fuseArrayField(lmd, u)
@@ -113,12 +119,11 @@ func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
 	if lmd.Cfg().Disabled("fieldptr") {
 		return
 	}
-	compact(lmd)
 	ud := ir.BuildUseDef(lmd)
 	ops := lmd.Ops
 	refered := map[*ir.Value]bool{}
 	for _, op := range ops {
-		if op.Code == ir.OpRef {
+		if op != nil && op.Code == ir.OpRef {
 			refered[ir.UnderlyingValue(op.Src[0])] = true
 		}
 	}
@@ -140,12 +145,12 @@ func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
 	// 書き換わらないなら p, k とその add の位置
 	changed := false
 	foldAdd := func(t1 *ir.Value, at, read, size int) (ir.Operand, int, int, bool) {
-		if u1, single := ud.SingleUse(t1); !single || u1 != at || t1.LocalType != ir.LTTemp || len(ud.Defs[t1]) != 1 {
+		if u1, single := ud.SingleUse(t1); !single || u1 != ops[at] || t1.LocalType != ir.LTTemp || ud.NumDefs(t1) != 1 {
 			return nil, 0, 0, false
 		}
-		a := ud.Defs[t1][0]
-		add := ops[a]
-		if add == nil || add.Code != ir.OpAdd || a >= at || ir.UnderlyingValue(add.Dst) != t1 {
+		add, _ := ud.SingleDef(t1)
+		a := lmd.IndexOf(add)
+		if add.Code != ir.OpAdd || a >= at || ir.UnderlyingValue(add.Dst) != t1 {
 			return nil, 0, 0, false
 		}
 		k, lit := ir.ValIntLiteral(add.Src[1])
@@ -170,6 +175,7 @@ func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
 			if p, k, a, ok := foldAdd(t1, i, i, size); ok {
 				op.Src[0] = p
 				op.Disp += k
+				ud.Update(op)
 				ir.DropOp(ops, a)
 				changed = true
 			}
@@ -181,15 +187,15 @@ func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
 		t1, es, size, ok := arrayField(op.Src[0])
 		idx := op.Src[1]
 		t2, isV := op.Dst.(*ir.Value)
-		if !ok || size > 256 || ir.ValType(idx).Size != 1 || !isV || t2.LocalType != ir.LTTemp || len(ud.Defs[t2]) != 1 {
+		if !ok || size > 256 || ir.ValType(idx).Size != 1 || !isV || t2.LocalType != ir.LTTemp || ud.NumDefs(t2) != 1 {
 			continue
 		}
-		j, single := ud.SingleUse(t2)
-		if !single || j <= i {
+		use, single := ud.SingleUse(t2)
+		if !single {
 			continue
 		}
-		use := ops[j]
-		if use == nil || !use.IsMem() || ir.UnderlyingValue(use.Src[0]) != t2 || ir.ValOffset(use.Src[0]) != 0 ||
+		j := lmd.IndexOf(use)
+		if j <= i || !use.IsMem() || ir.UnderlyingValue(use.Src[0]) != t2 || ir.ValOffset(use.Src[0]) != 0 ||
 			use.Src[1] != ir.Operand(ir.NoIndex) {
 			continue
 		}
@@ -213,7 +219,9 @@ func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
 			u8 := u.IntType(1, false)
 			jv := ir.NewLocal(t2.Name+"*", u8, ir.LTTemp)
 			lmd.Vars = append(lmd.Vars, jv)
-			ir.ReplaceOp(ops, i, &ir.Op{Code: ir.OpMul, Dst: jv, Src: []ir.Operand{asU8(idx, u8), ir.NewIntLiteral("", u8, es)}, Pos: op.Pos})
+			mul := &ir.Op{Code: ir.OpMul, Dst: jv, Src: []ir.Operand{asU8(idx, u8), ir.NewIntLiteral("", u8, es)}, Pos: op.Pos}
+			ir.ReplaceOp(ops, i, mul)
+			ud.Add(mul)
 			j0, scale = jv, 1
 		} else {
 			ir.DropOp(ops, i) // 注釈は元の位置に残す (sinkAddress と同じ)
@@ -226,6 +234,7 @@ func fuseArrayField(lmd *ir.Lambda, u *types.Universe) {
 		}
 		nop.Pos = use.Pos
 		ir.ReplaceOp(ops, j, nop)
+		ud.Add(nop)
 		changed = true
 	}
 	if changed {

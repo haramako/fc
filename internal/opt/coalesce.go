@@ -22,13 +22,13 @@ func coalesceCopies(lmd *ir.Lambda) {
 	var jumped map[string]bool // 飛び先のラベル (between が要るときに作る)
 	ops := lmd.Ops
 	for i, op := range ops {
-		if op == nil || i+1 >= len(ops) || ops[i+1] == nil || op.Dst == nil {
+		if op == nil || op.Dst == nil || ir.NextOp(ops, i) < 0 {
 			continue
 		}
 		if !op.Code.ReadsBeforeWrite() && !op.Code.IsCall() {
 			continue
 		}
-		j := copyUse(ops, ud, op, i)
+		j := copyUse(lmd, ud, op, i)
 		next := ops[j]
 		var x ir.Operand
 		switch next.Code {
@@ -44,13 +44,13 @@ func coalesceCopies(lmd *ir.Lambda) {
 			continue
 		}
 		t, ok := op.Dst.(*ir.Value)
-		if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 {
+		if !ok || t.LocalType != ir.LTTemp || ud.NumDefs(t) != 1 {
 			continue
 		}
-		if u, single := ud.SingleUse(t); !single || u != j || next.Src[0] != ir.Operand(t) {
+		if u, single := ud.SingleUse(t); !single || u != next || next.Src[0] != ir.Operand(t) {
 			continue
 		}
-		if j > i+1 {
+		if j > ir.NextOp(ops, i) {
 			if jumped == nil {
 				jumped = jumpTargets(ops)
 			}
@@ -66,8 +66,10 @@ func coalesceCopies(lmd *ir.Lambda) {
 			continue
 		}
 		op.Dst = x // 位置は演算の方を残す (0 除算などのエラー位置)
+		ud.Update(op)
 		if next.Code == ir.OpReturn {
 			next.Src[0] = x
+			ud.Update(next)
 		} else {
 			ir.DropOp(ops, j)
 		}
@@ -75,16 +77,19 @@ func coalesceCopies(lmd *ir.Lambda) {
 }
 
 // copyUse は op (命令 i、結果は一時変数) の結果を写す load の位置: 直後の命令か、同じブロックで少し先の命令
-// (`@min(room() - 3, budget() - 10)` は 2 つの引数を計算してから 1 つ目を写す)。見つからなければ i + 1。
-func copyUse(ops []*ir.Op, ud *ir.UseDef, op *ir.Op, i int) int {
+// (`@min(room() - 3, budget() - 10)` は 2 つの引数を計算してから 1 つ目を写す)。見つからなければ直後の命令。
+func copyUse(lmd *ir.Lambda, ud *ir.UseDef, op *ir.Op, i int) int {
+	next := ir.NextOp(lmd.Ops, i)
 	t, ok := op.Dst.(*ir.Value)
 	if !ok {
-		return i + 1
+		return next
 	}
-	if u, single := ud.SingleUse(t); single && u > i+1 && u <= i+8 && ops[u] != nil && ops[u].Code == ir.OpLoad {
-		return u
+	if u, single := ud.SingleUse(t); single && u.Code == ir.OpLoad {
+		if j := lmd.IndexOf(u); j > next && j <= i+8 {
+			return j
+		}
 	}
-	return i + 1
+	return next
 }
 
 // between は ops (書いた位置と写す load の間の命令) の間に x を早く書いても変わらないか: x を読み書きせず、メモリ (ポインタ
@@ -146,21 +151,21 @@ func chainInPlace(lmd *ir.Lambda) {
 	ud := ir.BuildUseDef(lmd)
 	ops := lmd.Ops
 	for i, op := range ops {
-		if op == nil || i+1 >= len(ops) || ops[i+1] == nil || op.Dst == nil || len(op.Src) == 0 {
+		if op == nil || op.Dst == nil || len(op.Src) == 0 {
 			continue
 		}
 		if !op.Code.ReadsBeforeWrite() {
 			continue
 		}
-		next := ops[i+1]
-		if next.Dst == nil || len(next.Src) == 0 || !next.Code.ReadsBeforeWrite() {
+		next := ir.NextOpOf(ops, i)
+		if next == nil || next.Dst == nil || len(next.Src) == 0 || !next.Code.ReadsBeforeWrite() {
 			continue
 		}
 		t, ok := op.Dst.(*ir.Value)
-		if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 || t.Type.Size < 2 {
+		if !ok || t.LocalType != ir.LTTemp || ud.NumDefs(t) != 1 || t.Type.Size < 2 {
 			continue // 1 バイトは t が A に置かれる (lda; op; op; sta) 方が速いので対象外
 		}
-		if u, single := ud.SingleUse(t); !single || u != i+1 || next.Src[0] != ir.Operand(t) {
+		if u, single := ud.SingleUse(t); !single || u != next || next.Src[0] != ir.Operand(t) {
 			continue
 		}
 		x := next.Dst
@@ -172,6 +177,8 @@ func chainInPlace(lmd *ir.Lambda) {
 		}
 		op.Dst = x
 		next.Src[0] = x
+		ud.Update(op)
+		ud.Update(next)
 	}
 }
 

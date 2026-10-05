@@ -156,12 +156,7 @@ func Passes() []Pass {
 		{Name: "scale", Run: alwaysU(scaleIndex)},
 		{Name: "commute", Run: always(commuteTemp)},
 		{Name: "avg", Run: averageBytes}, // 1 バイトどうしの平均を adc + ror a に (split の前に)
-		{Name: "carry", Repeat: 19, Run: func(lmd *ir.Lambda, _ *types.Universe) bool {
-			before := len(lmd.Ops)
-			carryBranch(lmd)
-			compact(lmd)
-			return len(lmd.Ops) != before
-		}},
+		{Name: "carry", Run: changes(carryBranch)},
 		{Name: "split", Run: alwaysU(splitWords)},
 		{Name: "jumps", Run: always(simplifyJumps)},
 		{Name: "ywalk", Run: func(lmd *ir.Lambda, u *types.Universe) bool { return walkPointerY(lmd, u) }},

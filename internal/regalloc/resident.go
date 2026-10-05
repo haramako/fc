@@ -144,10 +144,10 @@ func cmpOperand(o ir.Operand) bool {
 // condPredicted は eq / lt の結果が直後の if でだけ使われる (コンディションフラグに割り付く) か。
 func condPredicted(lmd *ir.Lambda, i int) bool {
 	op := lmd.Ops[i]
-	if i+1 >= len(lmd.Ops) || lmd.Ops[i+1] == nil {
+	next := ir.NextOpOf(lmd.Ops, i)
+	if next == nil {
 		return false
 	}
-	next := lmd.Ops[i+1]
 	if next.Code != ir.OpIf && next.Code != ir.OpIfTrue {
 		return false
 	}

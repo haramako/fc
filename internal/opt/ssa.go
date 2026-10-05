@@ -1057,20 +1057,19 @@ func (s *ssaForm) volatileOnce(def, k, i int) ir.Operand {
 		s.ud = ir.BuildUseDef(s.lmd)
 	}
 	// i の入力から写しを遡って t に着き、どの変数も 1 回だけ定義されて 1 回だけ使われる
-	v, user := ir.UnderlyingValue(s.lmd.Ops[i].Src[0]), i
+	v, user := ir.UnderlyingValue(s.lmd.Ops[i].Src[0]), s.lmd.Ops[i]
 	for n := 0; n < 8 && v != nil; n++ {
-		if u, single := s.ud.SingleUse(v); !single || u != user || len(s.ud.Defs[v]) != 1 {
+		if u, single := s.ud.SingleUse(v); !single || u != user || s.ud.NumDefs(v) != 1 {
 			return nil
 		}
 		if v == t {
 			return o
 		}
-		j := s.ud.Defs[v][0]
-		c := s.lmd.Ops[j]
-		if c == nil || c.Code != ir.OpLoad || !ir.PlainOperand(c.Src[0]) {
+		c, _ := s.ud.SingleDef(v)
+		if c.Code != ir.OpLoad || !ir.PlainOperand(c.Src[0]) {
 			return nil
 		}
-		v, user = ir.UnderlyingValue(c.Src[0]), j
+		v, user = ir.UnderlyingValue(c.Src[0]), c
 	}
 	return nil
 }

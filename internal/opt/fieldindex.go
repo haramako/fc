@@ -64,7 +64,11 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 		}
 		es := at.Base.Size
 		t, ok := op.Dst.(*ir.Value)
-		if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 || len(ud.Uses[t]) == 0 {
+		if !ok || t.LocalType != ir.LTTemp || ud.NumDefs(t) != 1 {
+			continue
+		}
+		tuses := ud.Uses(t)
+		if len(tuses) == 0 {
 			continue
 		}
 		// t の使用が全部「t (か先頭への cast) を通した、添字の無い読み書き」なら置き換える
@@ -74,9 +78,9 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			width int
 		}
 		var uses []use
-		for _, k := range ud.Uses[t] {
-			use0 := ops[k]
-			if use0 == nil || !use0.IsMem() {
+		for _, use0 := range tuses {
+			k := lmd.IndexOf(use0)
+			if !use0.IsMem() {
 				uses = nil
 				break
 			}
@@ -97,7 +101,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			}
 			uses = append(uses, use{at: k, off: m.Disp, width: m.Width})
 		}
-		if len(uses) != len(ud.Uses[t]) {
+		if len(uses) != len(tuses) {
 			continue
 		}
 		if k, lit := ir.ValIntLiteral(idx); lit && k >= 0 && k*es+es <= at.Size && !lmd.Cfg().Disabled("constidx") {
@@ -114,6 +118,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 				}
 				nop.Pos = use0.Pos
 				ir.ReplaceOp(ops, us.at, nop)
+				ud.Add(nop)
 			}
 			changed = true
 			continue
@@ -132,7 +137,9 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			jv := ir.NewLocal(t.Name+"*", u8, ir.LTNone) // 使い回すので定義 1 つ・使用 1 つの一時変数にしない
 			lmd.Vars = append(lmd.Vars, jv)
 			j = jv
-			ir.ReplaceOp(ops, n, &ir.Op{Code: ir.OpMul, Dst: jv, Src: []ir.Operand{asU8(idx, u8), ir.NewIntLiteral("", u8, es)}, Pos: op.Pos})
+			mul := &ir.Op{Code: ir.OpMul, Dst: jv, Src: []ir.Operand{asU8(idx, u8), ir.NewIntLiteral("", u8, es)}, Pos: op.Pos}
+			ir.ReplaceOp(ops, n, mul)
+			ud.Add(mul)
 			if plain && iv.Kind == ir.KindLocal && !refered[iv] {
 				shared[key] = jv
 			}
@@ -147,6 +154,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			}
 			nop.Pos = use0.Pos
 			ir.ReplaceOp(ops, us.at, nop)
+			ud.Add(nop)
 		}
 		changed = true
 	}

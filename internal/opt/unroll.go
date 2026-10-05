@@ -192,12 +192,12 @@ func (s *ssaForm) unrollOne() bool {
 				}
 				seen[v] = true
 				ok := true
-				for _, j := range ud.Uses[v] {
+				for _, j := range ud.UseIndexes(v) {
 					if !inLoop(j) {
 						ok = false
 					}
 				}
-				for _, j := range ud.Defs[v] {
+				for _, j := range ud.DefIndexes(v) {
 					if !inLoop(j) {
 						ok = false
 					}

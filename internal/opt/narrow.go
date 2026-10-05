@@ -19,18 +19,18 @@ func narrowBitTest(lmd *ir.Lambda, u *types.Universe) {
 	ud := ir.BuildUseDef(lmd)
 	ops := lmd.Ops
 	for i, op := range ops {
-		if op == nil || op.Code != ir.OpAnd || i+1 >= len(ops) || ops[i+1] == nil {
+		if op == nil || op.Code != ir.OpAnd {
 			continue
 		}
-		next := ops[i+1]
-		if next.Code != ir.OpIf && next.Code != ir.OpIfTrue {
+		next := ir.NextOpOf(ops, i)
+		if next == nil || next.Code != ir.OpIf && next.Code != ir.OpIfTrue {
 			continue
 		}
 		t, ok := op.Dst.(*ir.Value)
-		if !ok || t.LocalType != ir.LTTemp || t.Type.Size != 2 || len(ud.Defs[t]) != 1 {
+		if !ok || t.LocalType != ir.LTTemp || t.Type.Size != 2 || ud.NumDefs(t) != 1 {
 			continue
 		}
-		if use, single := ud.SingleUse(t); !single || use != i+1 || next.Src[0] != ir.Operand(t) {
+		if use, single := ud.SingleUse(t); !single || use != next || next.Src[0] != ir.Operand(t) {
 			continue
 		}
 		x := op.Src[0]

@@ -314,4 +314,5 @@ func ReplaceOp(ops []*Op, i int, op *Op) {
 		}
 	}
 	ops[i] = op
+	op.pos = i // 位置の手がかり (消した命令を戻すときも見つかるように。order.go)
 }
