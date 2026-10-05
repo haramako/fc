@@ -510,10 +510,18 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       残り: 表の外の予測（汎用の出力が A の値をそのまま扱う形の規則 friendlyA の残り、添字を Y / X のまま使う形、
       needsX / needsY、allocateA / allocateCond の「この命令は A / フラグを受けられるか」）は予測のまま（codegen の出力から
       導くには、置き場所が決まる前に命令を選ぶ構造 = 割付の前の命令選択が要る）
-- [ ] **ABI / 呼び出しの計画の一本化**: Stack / Fastcall / Static / Cc65 に Entry・RegArg・RegArgY・RegResult・FrameZp が重なり、
+- [x] **ABI / 呼び出しの計画の一本化**: Stack / Fastcall / Static / Cc65 に Entry・RegArg・RegArgY・RegResult・FrameZp が重なり、
       入口のシンボルが最大 4 つ（`sym` / `__direct` / `__frame` / `__a`）。判定が 20 ファイル 150 か所に散る。frames が関数ごとに
       `CallConv{Params []Loc, Result Loc, Entries}` を作り、呼び出しごとの計画を codegen の前に 1 回計算する
       （`markArgY` / `resolveCall` / `pendingCall` / holdA / holdX / HoldY の状態機械をまとめる）
+      ✅ 2026-10-05: 呼ばれる側は `ir.CallConv`（`Lambda.Conv`。ABI・引数ごとの置き場所と受け取るレジスタ・戻り値を A で返すか・
+      入口の一覧。frames.Analyze が作り、export・プロローグ・return・入口の選び方 `DirectEntry`・戻り値を A から受け取れるか
+      `ResultFromA` がここを読む）、呼ぶ側は `codegen/callplan.go`（planCalls が呼び出しの組・呼び先・渡し方を 1 回で、
+      layoutCalls が引数ごとの置き場所・A / Y に置く引数・戻り値を直に写す引数・X の保持の深さを先に決める。markArgY /
+      markHoldX / markResultArg / CheckStackPush / コード生成が同じ計画を見る。resolveCall・pendingCall・pushArgSize・holdA・
+      holdX・resultFrom の状態と、命令の出し直しでのその保存・復元をやめた）。生成コードは変わらない（examples の ROM・bench と
+      test/ の -O 0 / -O 2・fclib の @(test) がバイト単位で同じ）。Op の印 ArgY / HoldY / HoldX / ResultArg は regalloc との
+      約束として残す。Agent/wiki/design/frame-alloc.md の「呼び出し規約と呼び出しの計画の置き場所」
 - [ ] **IR の命令の同一性を `*Op` に**: DefUse / SSA / Liveness が `lmd.Ops` の添字で引き、消した命令を nil で残すので、
       命令を 1 つ挿すと解析を全部作り直す。「1 か所直したら return して再構築」のループが 7 パス（上限は 8 / 16 / 20 / 32 と
       場当たりで、達すると黙って止まる）、`compact()` が Passes に 11 か所、`ops[i+1] == nil` の穴で黙って効かない隣接判定が

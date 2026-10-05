@@ -267,13 +267,13 @@ castle は呼び出しだらけ（`en8_slime_process` → `bg_cell_type` ×3 な
 - **RegResult**: 1 バイトの戻り値はフレームに書いたうえで `return` の直前に `lda F_g+0` して A にも置く（直前が同じ
   `sta` / `lda` ならピープホールが消す）。呼び出し側はフレームを読まず A を `storeA`（call の結果が A 割付なら何も出ない。
   `allocateA` の producer に call / fastcall を足した）。stack 関数（再帰）から呼ぶときは X を戻すのに A を使うので読む
-- 判定は `frames.Analyze`（`Lambda.RegArg` / `RegResult`。interrupt 関数は除く）。extern / fastcall / cc65 は変えない
+- 判定は `frames.Analyze`（`ir.CallConv`: 引数の `Reg = RegA`、`Result.InA`。interrupt 関数は除く）。extern / fastcall / cc65 は変えない
 
 効果: calls −6.5%、plasma −3.2%、entities −2.6%、castle フレーム −0.8〜1.1%。
 
 ### 7.1 最後から 2 つ目の引数を Y で（2026-09-20）
 
-- **RegArgY**: 最後から 2 つ目の引数が 1 バイトなら Y で受け取る（`Lambda.RegArgY`。RegArg とは独立: 最後の引数が
+- **RegArgY**: 最後から 2 つ目の引数が 1 バイトなら Y で受け取る（`CallConv` の引数の `Reg = RegY`。RegArg とは独立: 最後の引数が
   2 バイトなら Y だけ）。入口は `sty F_g+ky; sta F_g+ka` で始まり、本体はその直後に続く。**本体の先頭では常に A / Y に引数が
   ある**ようにして、ピープホールが本体の先頭の `lda F_g+ka` / `ldy F_g+ky` を消す（castle の `bg.cell(x, y)` 系はこれで
   添字の `ldy` が消える）。そのため、レジスタに置けなかった呼び出し側のための入口は「フレームから読んで同じ `sty` / `sta`
@@ -312,3 +312,22 @@ castle は呼び出しだらけ（`en8_slime_process` → `bg_cell_type` ×3 な
   呼び出しでは X を使わない）、残りはスタック（`copyResultArg`）。regalloc は印の付いた push_arg を Y を壊す命令と見る
   （X は push_arg が元から壊す扱い）
 - 前に別の引数がある形（`f(x, get())`: x を f のフレームに書くので get の戻り値を壊しうる）は対象外
+
+### 7.3 呼び出し規約と呼び出しの計画の置き場所（2026-10-05）
+
+§6・§7 の規約は、以前は `Lambda` の ABI・Entry・RegArg・RegArgY・RegResult・ResultInA に分かれ、入口のシンボルの名前・
+プロローグ・入口の選び方・引数のオフセットを codegen の各所が自分で導いていた。今は 2 つにまとまっている:
+
+- **呼ばれる側: `ir.CallConv`**（`internal/ir/callconv.go`。`Lambda.Conv`）。`frames.Analyze` が関数ごとに作る（`SetStatic` /
+  `SetOther`）。`Params`（引数ごとのフレーム / スタックの中の位置と、レジスタの入口で受け取るレジスタ RegA / RegY）、
+  `Result`（`InA`: A にも置いて返す、`OnlyA`: A だけで返す）、`Entries`（入口の一覧: `sym`（アドレスを取られた関数は
+  スタックの入口）・`__direct`・`__frame`・`__a` と、そこで A / Y に引数があるか）。codegen の export・入口のプロローグ・
+  return と、呼び出しの入口の選び方（`DirectEntry(inA, inY)`）、戻り値を A から受け取れるか（`ResultFromA`。frames の
+  `OnlyA` の判定と genCall が同じ規則）はここを読む
+- **呼ぶ側: 呼び出しの計画**（`internal/codegen/callplan.go`）。`planCalls` が push_result と call の組・呼び先・渡し方
+  （static / stack / fastcall / cc65、far）・引数の push_arg を 1 回で組にし、割付の前の印（markArgY / markHoldX /
+  markResultArg。`Backend.MarkCalls`）と `CheckStackPush` とコード生成が同じ計画を見る。コード生成の段では
+  `layoutCalls` が、引数ごとの置き場所（フレームのオフセット・`S+k,x` の通しの k・FC_FASTCALL_REG の位置）、A / Y に
+  置く引数、前の呼び出しの戻り値を直に写す引数（§7.2）、命令ごとの X = FC_SP の保持の深さを先に決める。以前の
+  push_result ごとの call の探索（resolveCall）と、コード生成の途中の状態（積んだバイト数・A / X の保持・戻り値の受け渡し）と、
+  命令の出し直しでのその保存・復元は無くなった

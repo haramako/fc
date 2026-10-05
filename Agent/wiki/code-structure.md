@@ -10,8 +10,10 @@
   名前の表 `Scope` と importer の窓口 `ModuleInterface`（`scope.go`。項目は `Symbol`: 値 (ir.Value)・モジュール・型名・マクロ。
   `symbol.go`。値でない名前は式では `cName` の節点）、関数の本体の AST（`Program.bodies`）は sema が持つ。ir は名前の表・AST・
   束縛を持たない。2026-10-05 に ir から移した）→ `ir` → `pipeline.Prepare`
-  （インライン展開・直接化 → volatile → `frames.Analyze` → 関数ごとに `opt.Optimize` → 引数の Y 渡しの印 → `regalloc` →
-  `frames.Place`。順序はここだけが持つ。codegen は `pipeline.Backend` として呼び出しの計画 (`MarkArgY` / `CheckStackPush`)
+  （インライン展開・直接化 → volatile → `frames.Analyze`（関数ごとの呼び出し規約 `ir.CallConv`: ABI・引数と戻り値の置き場所・
+  入口）→ 関数ごとに `opt.Optimize` → 呼び出しの印 → `regalloc` → `frames.Place`。順序はここだけが持つ。codegen は
+  `pipeline.Backend` として呼び出しの計画 (`MarkCalls` / `CheckStackPush`。`codegen/callplan.go` の planCalls / layoutCalls
+  が呼び出しごとの組・渡し方・引数の置き場所を 1 回で決める。Agent/wiki/design/frame-alloc.md の「呼び出し規約と呼び出しの計画の置き場所」)
   を提供する）→ `codegen`（`Llc` はモジュール単位、`funcGen`（genops.go）は関数単位で命令ごとのメソッド `genXxx`。
   生成した asm の後処理（ピープホール・レジスタの検査・分岐の延長・@log の地点）は `asm.go` の解析した行 `asmLine` の上で
   書く。ニーモニックの性質（書くレジスタ・フラグ・サイクル数）は `internal/m6502` の表 1 つ（regalloc の見積もりと共有）、
