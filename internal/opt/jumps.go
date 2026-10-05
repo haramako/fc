@@ -15,19 +15,14 @@ import "github.com/haramako/fc/internal/ir"
 //
 // 変化がなくなるまで繰り返す。
 func simplifyJumps(lmd *ir.Lambda) {
-	for iter := 0; iter < 20; iter++ {
+	untilFixed(lmd, "jumps", func() bool {
 		changed := threadJumps(lmd)
 		changed = removeUnreachable(lmd) || changed
 		changed = invertBranches(lmd) || changed
-		changed = rotateLoops(lmd) || changed
-		compact(lmd)
-		if !changed {
-			break
-		}
-	}
+		return rotateLoops(lmd) || changed
+	})
 	if jumpsToReturn(lmd) {
 		removeUnreachable(lmd)
-		compact(lmd)
 	}
 }
 

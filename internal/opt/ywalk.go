@@ -29,14 +29,7 @@ import (
 // 毎周必ず通る (ywalkBody)。ループから出る分岐 (break)・return・switch・asm が無い。lim はリテラルかループの中で
 // 定義されないローカル変数。
 func walkPointerY(lmd *ir.Lambda, u *types.Universe) bool {
-	changed := false
-	for n := 0; n < 8; n++ {
-		if !walkPointerYOne(lmd, u) {
-			break
-		}
-		changed = true
-	}
-	return changed
+	return untilFixed(lmd, "ywalk", func() bool { return walkPointerYOne(lmd, u) })
 }
 
 func walkPointerYOne(lmd *ir.Lambda, u *types.Universe) bool {

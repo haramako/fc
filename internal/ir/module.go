@@ -263,6 +263,7 @@ type Lambda struct {
 	posEpoch int64
 	posLen   int
 	posHead  **Op
+	cfg      *CFG // BuildCFG のキャッシュ (命令列の制御の形が同じなら使い回す)
 }
 
 // ABI は関数の呼び出し規約 (Agent/wiki/design/frame-alloc.md §6-1)。

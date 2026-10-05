@@ -64,28 +64,24 @@ type ssaForm struct {
 
 // propagateSSA は定数 / コピー伝播と死んだ定義の除去を、変化が無くなるまで繰り返す。
 func propagateSSA(lmd *ir.Lambda) {
-	for n := 0; n < 16; n++ {
+	untilFixed(lmd, "ssa", func() bool {
 		s := buildSSA(lmd)
 		if s == nil {
-			return
+			return false
 		}
 		changed := s.rewrite()
 		if s.simplify() {
 			changed = true
 		}
-		compact(lmd)
 		s = buildSSA(lmd)
 		if s == nil {
-			return
+			return false
 		}
 		if s.eliminateDead() {
 			changed = true
 		}
-		compact(lmd)
-		if !changed {
-			return
-		}
-	}
+		return changed
+	})
 }
 
 // ssaCandidate は対象になりうる変数か (スカラのローカル変数。戻り値は return が暗黙に読むので除く)。

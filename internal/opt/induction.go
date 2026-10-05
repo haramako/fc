@@ -35,19 +35,10 @@ import (
 
 // eliminateInduction は関数の全てのループについて誘導変数の統合を試みる (変換したら true)。
 func eliminateInduction(lmd *ir.Lambda) bool {
-	changed := false
-	for n := 0; n < 8; n++ {
+	return untilFixed(lmd, "induction", func() bool {
 		s := buildSSA(lmd)
-		if s == nil {
-			return changed
-		}
-		if !s.eliminateOneInduction() {
-			return changed
-		}
-		compact(lmd)
-		changed = true
-	}
-	return changed
+		return s != nil && s.eliminateOneInduction()
+	})
 }
 
 // ivDef はループ内の誘導変数の情報。

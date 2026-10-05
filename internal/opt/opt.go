@@ -1,6 +1,8 @@
 // Package opt は IR → IR の最適化 (レジスタ割付の前に走る)。
 //
-// パスは ir.CFG / ir.UseDef の上に書く。命令の削除は lmd.Ops の要素を nil にし、最後に Compact で詰める。
+// パスは ir.CFG / ir.UseDef の上に書く。命令の同一性は *ir.Op (解析は *Op を鍵にし、位置は Lambda.IndexOf で引く)。
+// 命令の削除は lmd.Ops の要素を nil にし (ir.DropOp など)、段の終わりに Pass.Apply が詰める (compact)。段の中では
+// nil の穴が残るので、直後 / 直前の命令は ir.NextOp / ir.PrevOp で見る。
 // 効果は bench/ (go test ./bench) で測る。
 package opt
 
@@ -67,12 +69,11 @@ type Pass struct {
 	Name     string
 	Requires []string // この名前の段が切られていれば走らない (induction / unroll は ssa の上に書かれている)
 	Grows    bool     // フレームを大きくする展開: NoGrow の関数では走らない
-	// Run は 1 回の適用。変えたら true (Then を呼び、Repeat なら繰り返す)。消した命令 (nil) は Apply が詰める (compact)
+	// Run は 1 回の適用。変えたら true (Then を呼ぶ)。消した命令 (nil) は Apply が詰める (compact)。変化が無くなるまで
+	// 繰り返す段は自分で untilFixed を使う
 	Run func(lmd *ir.Lambda, u *types.Universe) bool
 	// Then は Run が変えたときの後処理 (畳み込みのやり直しなど)
 	Then func(lmd *ir.Lambda, u *types.Universe)
-	// Repeat は変わる限り繰り返す回数の上限 (0 なら 1 回)
-	Repeat int
 }
 
 // Apply は段を 1 つ当てる (切られていれば何もしない)。@log の注釈の付け替え、compact、トレース、IR の検証 (FC_VERIFY_IR)
@@ -88,18 +89,11 @@ func (p Pass) Apply(lmd *ir.Lambda, u *types.Universe) bool {
 		}
 	}
 	prev := ir.SnapshotLogs(lmd) // @log の注釈を、消えた・動いた命令から付け替える (ir.KeepLogs)
-	changed := false
-	for k := 0; k <= p.Repeat; k++ {
-		c := p.Run(lmd, u)
+	changed := p.Run(lmd, u)
+	compact(lmd)
+	if changed && p.Then != nil {
+		p.Then(lmd, u)
 		compact(lmd)
-		if !c {
-			break
-		}
-		changed = true
-		if p.Then != nil {
-			p.Then(lmd, u)
-			compact(lmd)
-		}
 	}
 	ir.KeepLogs(lmd, prev)
 	if tr := cfg.Trace("logs"); tr != "" {
@@ -147,7 +141,6 @@ func Passes() []Pass {
 		{Name: "unroll", Requires: []string{"ssa"}, Grows: true, Run: changes(unrollLoops),
 			Then: func(lmd *ir.Lambda, u *types.Universe) {
 				propagateSSA(lmd) // 写しごとのカウンタとヘッダの検査を畳む
-				compact(lmd)
 				if !lmd.Cfg().Disabled("fuse") {
 					fusePointer(lmd, u) // 添字が定数になった index + load_mem / store_mem (要素 2 バイトのポインタは定数の添字だけ融合できる)
 				}
@@ -182,6 +175,24 @@ func maxLabelNumber(lmd *ir.Lambda) int {
 		}
 	}
 	return n
+}
+
+// untilFixed は step を変化が無くなるまで繰り返す (変えたら true)。1 回ごとに解析を作り直す段 (SSA の上の書き換え、ループの
+// 展開など) が使う。止まらない書き換え (互いに戻し合う規則など) は不具合なので、命令の数に比例する回数を超えたら、IR の検証が
+// 有効なとき (テストと fuzz) は内部エラーにし、そうでなければそこで止める (以前は段ごとに 8 / 16 / 20 / 32 回で黙って止めていた)。
+func untilFixed(lmd *ir.Lambda, name string, step func() bool) bool {
+	changed := false
+	limit := 64 + 4*len(lmd.Ops)
+	for n := 0; step(); n++ {
+		changed = true
+		if n >= limit {
+			if lmd.Cfg().VerifyIR() {
+				panic(&diag.Error{Msg: fmt.Sprintf("internal: opt %s in %s did not converge in %d rounds", name, lmd.Id, n)})
+			}
+			break
+		}
+	}
+	return changed
 }
 
 // compact は削除済み (nil) の命令を取り除く。

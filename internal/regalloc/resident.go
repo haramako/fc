@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/types"
 )
@@ -240,7 +241,15 @@ func AllocateResident(lmd *ir.Lambda) {
 		return
 	}
 	funcTried := false
-	for iter := 0; iter < 32; iter++ {
+	// 1 回に 1 つの領域 (ループか関数の直線部分) を常駐にして IR を作り直す。常駐にした領域は hasResident で除くので、
+	// ループの数 + 1 回で終わる (以前は 32 回で黙って止めていた)
+	for iter := 0; ; iter++ {
+		if iter > 64+4*len(lmd.Ops) {
+			if lmd.Cfg().VerifyIR() {
+				panic(&diag.Error{Msg: fmt.Sprintf("internal: resident in %s did not converge", lmd.Id)})
+			}
+			return
+		}
 		cfg := ir.BuildCFG(lmd)
 		loops := cfg.Loops()
 		// 内側から (小さいループから) 順に。外側のループの領域は、その中のループを除いたブロック

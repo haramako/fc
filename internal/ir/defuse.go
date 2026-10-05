@@ -70,11 +70,82 @@ type CFG struct {
 	byLabel map[string]*Block
 	dom     *DomTree // DomTree のキャッシュ
 	loops   []*Loop  // Loops のキャッシュ
+
+	// 作ったときの命令列の長さと制御の命令 (ラベル・分岐・終端) の並び: 同じなら作り直さずに使える (BuildCFG)
+	n     int
+	marks []cfgMark
 }
 
-// BuildCFG は命令列からブロックと辺を作る。OpIf は「条件が 0 なら Label へ」なので飛び先と直後の両方が後続。
-// OpAsm は分岐しないものとみなす。Ops の nil 要素は飛ばす。
+// cfgMark は CFG を作ったときの制御の命令 1 つ (位置・命令・中身)。
+type cfgMark struct {
+	i      int
+	op     *Op
+	code   OpCode
+	label  string
+	labels []string
+	gap    int // 終端の直後の消した命令の穴の終わり (次のブロックの先頭。穴に命令が戻ると形が変わる)
+}
+
+// isControl は CFG の形を決める命令 (ブロックの先頭・末尾になる) か。
+func isControl(c OpCode) bool {
+	return c == OpLabel || c.IsTerminator() || c.IsCondBranch() || c == OpJump || c == OpSwitch || c == OpReturn
+}
+
+// BuildCFG は lmd の制御フローグラフ。前に作った CFG が今の命令列でも同じ形 (長さと、ラベル・分岐・終端の命令の位置・
+// 中身が同じ) なら、それを返す (支配木・ループのキャッシュも使い回す)。ブロックの範囲は添字なので、ほかの命令を置き換える・
+// 消す (nil) のはよく、挿す・詰めると作り直す。CFG は読むだけにする (書き換えない)。
 func BuildCFG(lmd *Lambda) *CFG {
+	if c := lmd.cfg; c != nil && c.current() {
+		return c
+	}
+	c := buildCFG(lmd)
+	lmd.cfg = c
+	return c
+}
+
+// current は c が今の lmd.Ops でも同じ形か。
+func (c *CFG) current() bool {
+	ops := c.Lambda.Ops
+	if len(ops) != c.n {
+		return false
+	}
+	k := 0
+	for i, op := range ops {
+		if op == nil || !isControl(op.Code) {
+			continue
+		}
+		if k >= len(c.marks) {
+			return false
+		}
+		m := c.marks[k]
+		if m.i != i || m.op != op || m.code != op.Code || m.label != op.Label || !slicesEqual(m.labels, op.Labels) {
+			return false
+		}
+		for j := i + 1; j < m.gap; j++ {
+			if ops[j] != nil {
+				return false
+			}
+		}
+		k++
+	}
+	return k == len(c.marks)
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// buildCFG は命令列からブロックと辺を作る。OpIf は「条件が 0 なら Label へ」なので飛び先と直後の両方が後続。
+// OpAsm は分岐しないものとみなす。Ops の nil 要素は飛ばす。
+func buildCFG(lmd *Lambda) *CFG {
 	ops := lmd.Ops
 	leader := make([]bool, len(ops)+1)
 	leader[0] = true
@@ -85,10 +156,27 @@ func BuildCFG(lmd *Lambda) *CFG {
 		if op.Code == OpLabel {
 			leader[i] = true
 		} else if op.Code.IsTerminator() {
-			leader[i+1] = true
+			// 次の (消されていない) 命令から新しいブロック。消した命令の穴だけの空のブロックを作らない (ブロックの並びで
+			// 「次のブロック」を見る判定が、穴をはさむと黙って効かなかった)
+			if j := NextOp(ops, i); j >= 0 {
+				leader[j] = true
+			} else {
+				leader[i+1] = true
+			}
 		}
 	}
-	c := &CFG{Lambda: lmd, byLabel: map[string]*Block{}}
+	c := &CFG{Lambda: lmd, byLabel: map[string]*Block{}, n: len(ops)}
+	for i, op := range ops {
+		if op != nil && isControl(op.Code) {
+			gap := i + 1
+			if op.Code.IsTerminator() {
+				if j := NextOp(ops, i); j >= 0 {
+					gap = j
+				}
+			}
+			c.marks = append(c.marks, cfgMark{i, op, op.Code, op.Label, append([]string(nil), op.Labels...), gap})
+		}
+	}
 	var cur *Block
 	for i, op := range ops {
 		if leader[i] || cur == nil {

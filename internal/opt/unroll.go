@@ -35,16 +35,10 @@ const (
 
 // unrollLoops は展開できるループを 1 つずつ展開する (変換したら true)。
 func unrollLoops(lmd *ir.Lambda) bool {
-	changed := false
-	for n := 0; n < 8; n++ {
+	return untilFixed(lmd, "unroll", func() bool {
 		s := buildSSA(lmd)
-		if s == nil || !s.unrollOne() {
-			return changed
-		}
-		compact(lmd)
-		changed = true
-	}
-	return changed
+		return s != nil && s.unrollOne()
+	})
 }
 
 func (s *ssaForm) unrollOne() bool {
