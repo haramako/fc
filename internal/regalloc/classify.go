@@ -88,7 +88,8 @@ func formOf(lmd *ir.Lambda, i int, p Placement) (Form, bool) {
 func zp(mnem string) Ins { return Ins{Mnem: mnem, Arg: Arg{Mode: m6502.ZP}} }
 
 // friendlyA は v が A に常駐しているとき、op を A のまま実行できるか (できれば節約できるサイクル数の目安)。
-func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
+// fused は op が直後の命令に融合する load_mem (FusedLoad): 読んだ値を A に置かないので、添字が v なら tay で済む。
+func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut, fused bool) (bool, int) {
 	op := lmd.Ops[i]
 	var p resPlace
 	p.in[ir.RegA] = v
@@ -145,6 +146,9 @@ func friendlyA(lmd *ir.Lambda, i int, v *ir.Value, liveOut bool) (bool, int) {
 	case ir.OpLoadMem:
 		// 添字付きの読み出しだけ (添字の無いポインタ経由の読み出しは ldy #k を使い、結果を A に残す形ではない)
 		if m := op.Mem(); m.Index != nil {
+			if fused && isV(m.Index, v) {
+				return true, Cycles([]Ins{zp("ldy")}) - Cycles([]Ins{imp("tay")}) // ldy v → tay (A はそのまま)
+			}
 			if isV(op.Dst, v) && !isV(m.Index, v) {
 				return true, Cycles([]Ins{zp("sta")})
 			}
@@ -211,14 +215,23 @@ func friendlyX(lmd *ir.Lambda, i int, v *ir.Value) (bool, int) {
 	}
 	// 汎用の出力がグローバル配列の添字を X のまま使う形 (lda a,x: ldy v が消える)
 	globalArray := func() bool { return byteIndex(op) && op.Mem().BaseIsArray() }
+	// ポインタの添字は Y にしか置けないので、X のまま home に書いて Y に読む (stx v; ldy v。X は壊さないので復帰の ldx が要らない)
+	pointer := func() bool { return directIndex(op) && !op.Mem().BaseIsArray() && !op.HoldX }
+	viaHome := Cycles([]Ins{zp("ldy")}) - Cycles([]Ins{zp("stx"), zp("ldy")})
 	switch op.Code {
 	case ir.OpLoadMem:
 		if globalArray() && isV(op.In(1), v) && !isV(op.Dst, v) {
 			return true, Cycles([]Ins{zp("ldy")})
 		}
+		if pointer() && isV(op.In(1), v) && !isV(op.Dst, v) {
+			return true, viaHome
+		}
 	case ir.OpStoreMem:
 		if globalArray() && isV(op.In(1), v) && !isV(op.MemValue(), v) {
 			return true, Cycles([]Ins{zp("ldy")})
+		}
+		if pointer() && isV(op.In(1), v) && !isV(op.MemValue(), v) {
+			return true, viaHome
 		}
 	}
 	return false, 0
@@ -264,6 +277,8 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	involved := func(v *ir.Value) bool { return involves(op, v) || v != nil && v.Home != nil && involves(op, v.Home) }
 	// A を触らないかを見る置き場所: Y / X のまま実行する常駐はそのレジスタに、退避する常駐はメモリに
 	var pa resPlace
+	// 直後の演算に融合する読み出し (fuseload.go) は A を触らない
+	fused := op.Code == ir.OpLoadMem && FusedLoad(lmd, i, vA, vY)
 	// X (inx / cpx / ldx / stx は A も Y も使わない。lda a,x は A を使う)
 	if vX != nil {
 		if involved(vX) {
@@ -276,7 +291,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 				d.X = ResClobber
 				pa.spilled[ir.RegX] = vX
 			}
-		} else if needsX(op) || touches(vX) {
+		} else if needsX(op) || touches(vX) || fused && fusedXSetup(op, vY) {
 			d.X = ResClobber
 		}
 	}
@@ -299,7 +314,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	// A
 	if vA != nil {
 		if involved(vA) {
-			if ok, save := friendlyA(lmd, i, vA, aOut); ok {
+			if ok, save := friendlyA(lmd, i, vA, aOut, fused); ok {
 				d.A = ResFriendly
 				gain += save
 			} else {
@@ -307,7 +322,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 			}
 		} else if touches(vA) {
 			d.A = ResClobber
-		} else if !freeA(lmd, i, pa) {
+		} else if !fused && !freeA(lmd, i, pa) {
 			if aLive && (vY == nil || !yLive) && !holdY && yVariant(lmd, i) {
 				d.UseY = true // Y が空いているので Y で代用
 			} else {

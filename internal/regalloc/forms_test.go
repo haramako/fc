@@ -56,7 +56,7 @@ func TestFormGains(t *testing.T) {
 		var gain int
 		switch c.reg {
 		case ir.RegA:
-			ok, gain = friendlyA(lmd, 0, v, false)
+			ok, gain = friendlyA(lmd, 0, v, false, false)
 		case ir.RegY:
 			ok, gain = friendlyY(lmd, 0, v)
 		case ir.RegX:

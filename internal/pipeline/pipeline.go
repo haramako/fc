@@ -231,6 +231,7 @@ func prepareLambda(lmd *ir.Lambda, o *Options) (err *diag.Error) {
 	prev := ir.SnapshotLogs(lmd)
 	o.Backend.MarkArgY(lmd) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
 	if o.OptimizeLevel > 0 {
+		regalloc.MarkFusedLoads(lmd) // 添字付きの読み出しを直後の演算に融合する候補 (常駐の見積もりが A を触らない命令と見る)
 		regalloc.AllocateResident(lmd)
 		verify(lmd, "resident")
 		if !lmd.Cfg().Disabled("litprop") {

@@ -33,6 +33,13 @@ func (l *Llc) loadYIdx(idx ir.Operand, scale int) []any {
 			// 添字が Y に常駐している
 		} else if l.inA(idx) {
 			r = append(r, "tay") // 添字が A にある
+		} else if l.inX(idx) {
+			// 添字が X に常駐 (ポインタの添字: regalloc.friendlyX)。X → Y は A を通さず home を経由する
+			home := ir.UnderlyingValue(idx).Home
+			if !ir.UnderlyingValue(idx).Clean {
+				r = append(r, fmt.Sprintf("stx %s", l.toAsm(home)))
+			}
+			r = append(r, fmt.Sprintf("ldy %s", l.toAsm(home)))
 		} else {
 			r = append(r, fmt.Sprintf("ldy %s", l.byte(idx, 0)))
 		}

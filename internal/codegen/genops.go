@@ -438,23 +438,34 @@ func (l *funcGen) genAddSub() {
 	if op.Code == ir.OpSub {
 		carry, alu = "sec", "sbc"
 	}
+	a, b := l.binOperands(op)
 	for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 		if i == 0 {
 			r.push(carry)
 		}
-		r.push(l.loadA(op.In(0), i))
-		r.push(fmt.Sprintf("%s %s", alu, l.byte(op.In(1), i)))
+		r.push(l.loadA(a, i))
+		r.push(fmt.Sprintf("%s %s", alu, l.byte(b, i)))
 		r.push(l.storeA(op.Dst, i))
 	}
+}
+
+// binOperands は 2 入力の演算の、A に読む入力と第 2 オペランド。直前の読み出しを融合した結果 (l.fused) が第 1 入力なら
+// 入れ替える (regalloc.FusedLoad が交換できる演算で、第 2 入力が A に常駐しているときだけ認める)。
+func (l *funcGen) binOperands(op *ir.Op) (ir.Operand, ir.Operand) {
+	if t, ok := op.In(0).(*ir.Value); ok && l.fused != nil && l.fused[t] != "" {
+		return regalloc.FusedOperands(op, t)
+	}
+	return op.In(0), op.In(1)
 }
 
 // genBitwise は And / Or / Xor のコード生成。
 func (l *funcGen) genBitwise() {
 	r, op := l.r, l.op
+	a, b := l.binOperands(op)
 	for i := 0; i < ir.ValType(op.Dst).Size; i++ {
-		r.push(l.loadA(op.In(0), i))
+		r.push(l.loadA(a, i))
 		as := map[ir.OpCode]string{ir.OpAnd: "and", ir.OpOr: "ora", ir.OpXor: "eor"}[op.Code]
-		r.push(fmt.Sprintf("%s %s", as, l.byte(op.In(1), i)))
+		r.push(fmt.Sprintf("%s %s", as, l.byte(b, i)))
 		r.push(l.storeA(op.Dst, i))
 	}
 }
@@ -944,6 +955,10 @@ func (l *funcGen) genLoadMem() {
 	if !isByteInt(ir.ValType(m.Index)) {
 		panic(&diag.Error{Msg: "16-bit index is not supported here (use a 1-byte index)"})
 	}
+	if regalloc.FusedLoad(lmd, opNo, op.Res[ir.RegA].V, op.Res[ir.RegY].V) {
+		l.genFusedLoad(m)
+		return
+	}
 	if !m.BaseIsArray() {
 		// ポインタ + 添字 (+ ずれ): ldy idx; lda (p),y (ずれがあれば Y = idx * scale + disp を A で計算)
 		base, setup := l.pointerBase(m.Base)
@@ -994,6 +1009,37 @@ func (l *funcGen) genLoadMem() {
 		r.push(fmt.Sprintf("lda %s+%d,y", l.toAsm(m.Base), m.Disp+i))
 		r.push(store(i))
 	}
+}
+
+// genFusedLoad は直後の演算に融合する添字付きの読み出し (regalloc.FusedLoad): A を触らずに添字を Y (グローバル配列で
+// 添字が X に常駐していれば X) に用意し、結果の一時変数を `(p),y` / `tab+d,y` として直後の命令に読ませる。ポインタが
+// ゼロページに無ければ reg に写す: Y が空いていれば Y で、添字が Y に常駐していれば X で (regalloc は X を壊すと見る)。
+func (l *funcGen) genFusedLoad(m ir.MemRef) {
+	r, op := l.r, l.op
+	var operand string
+	switch {
+	case m.BaseIsArray() && l.inX(m.Index):
+		operand = fmt.Sprintf("%s+%d,x", l.toAsm(m.Base), m.Disp)
+	case m.BaseIsArray():
+		r.push(l.loadYIdx(m.Index, 1))
+		operand = fmt.Sprintf("%s+%d,y", l.toAsm(m.Base), m.Disp)
+	default:
+		base, setup := l.pointerBase(m.Base)
+		if setup != nil {
+			reg := "y"
+			if l.inY(m.Index) {
+				reg = "x"
+			}
+			base = "reg"
+			for i := 0; i < 2; i++ {
+				r.push(fmt.Sprintf("ld%s %s", reg, l.byte(m.Base, i)), fmt.Sprintf("st%s <reg+%d", reg, i))
+			}
+		}
+		r.push(l.loadYIdx(m.Index, 1))
+		operand = fmt.Sprintf("(%s),y", base)
+	}
+	l.fused = map[*ir.Value]string{op.Dst.(*ir.Value): operand}
+	l.fusedAt = l.opNo
 }
 
 // genStoreMem は StoreMem のコード生成 (Agent/wiki/design/ir-memops.md の表)。書く幅は m.Width (値が小さいリテラルでも上位まで書く)。

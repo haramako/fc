@@ -24,7 +24,7 @@ import (
 var metaN = flag.Int("metan", 4, "TestRandomMetamorphic のプログラム数")
 
 // rmPasses は切って比べる段 (ir.Disabled の名前。どれを切っても意味は変わらないはず)。
-var rmPasses = []string{"ssa", "mul", "sink", "fuse", "fuse-index", "indexoff", "fieldindex", "coalesce", "chain", "induction", "unroll",
+var rmPasses = []string{"ssa", "mul", "sink", "fuse", "fuse-index", "fuse-load", "indexoff", "fieldindex", "coalesce", "chain", "induction", "unroll",
 	"narrow", "scale", "commute", "carry", "split", "ywalk", "resident", "func-resident", "peephole", "shift8", "switch", "devirt", "step", "rotate", "dup"}
 
 // metaRun は files を -O 2 で動かした出力。disable は切る段 (FC_DISABLE と同じ綴り。"" なら普通のビルド)。

@@ -115,8 +115,15 @@ type Op struct {
 	// ResultArg は OpPushArg が直前の呼び出しの戻り値 (3 バイト以上) を、一時変数に受けずに呼び先のフレームから写すもの
 	// (`sum(get())`。codegen.markResultArg が付け、regalloc は Y を壊す命令と見る)
 	ResultArg bool
-	Pos       syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
-	Logs      []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
+	// FuseNext は OpLoadMem の結果 (1 バイトの一時変数) を直後の演算の第 2 入力に融合する候補 (`eor (p),y`。
+	// regalloc.MarkFusedLoads が付け、融合するかは regalloc.FusedLoad が常駐の割付を見て決める)
+	FuseNext bool
+	Pos      syntax.Position // 生成元の文/式の位置 (コード生成時のエラー報告に使う。ダンプには出ない)
+	Logs     []*LogPoint     // fc 3 の @log: この命令の直前の地点のログ (注釈。最適化の判断には使わない。ir/log.go)
+
+	// Cold はめったに実行しない命令 (opt.walkPointerY の上位バイトの繰り上がりと比較: 256 周に 1 回)。regalloc の常駐の
+	// 見積もりはこの命令での退避と復帰の損を数えない
+	Cold bool
 
 	// UnrollCopy はループの展開 (opt.unrollLoops) で足した 2 つめ以降の写し。静的フレームのゼロページの優先度 (frames.frameRefs) は
 	// 数えない: 展開で参照の数が増えた関数が、ループの中で呼ばれる関数をゼロページから追い出していた (testdata/perf/unroll-slower)

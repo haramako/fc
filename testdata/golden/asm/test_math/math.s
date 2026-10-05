@@ -133,11 +133,9 @@ _math_sin_table:
 	sec
 	sbc 0+<F_math_atan+2
 	tay
-	lda _math_atan_table+0,y
-	sta 0+<F_math_atan+3
 	sec
 	lda #128
-	sbc 0+<F_math_atan+3
+	sbc _math_atan_table+0,y
 	sta 0+<F_math_atan+0
 	rts
 @else_30:

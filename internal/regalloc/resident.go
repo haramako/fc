@@ -488,6 +488,9 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 			}
 			d, g := Classify(lmd, i, vA, vY, vX, aIn || aOut, aOut, yIn || yOut)
 			gain += g
+			if op.Cold {
+				continue // めったに通らない (ywalk の上位バイト): 退避と復帰の損は数えない
+			}
 			restored := false
 			if d.X == ResClobber {
 				if xIn && !cleanX {

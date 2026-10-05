@@ -128,7 +128,8 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
       同じブロックの同じ添字の積は使い回す。今までは先頭のフィールドの読み出し以外、`&a[i]` を 16 ビットで組み立てて `(p),y` で、
       `es[i].hp -= 1` が 1 要素約 20 命令 → 5 命令（SoA と同じ）。定数の添字の `lda #k; asl; tay` も `ldy #2k` に。oam のサイズ −11%、
       entities −1.4%。castle は en が soa なので 1 フレームは変わらない） ✅ 2026-09-27
-- [ ] crc8 のように A に常駐する変数とポインタの読み出しを `eor (p),y` に融合する（今は k が X に乗って `stx; ldy; …; ldx`）
+- [x] crc8 のように A に常駐する変数とポインタの読み出しを `eor (p),y` に融合する（今は k が X に乗って `stx; ldy; …; ldx`） ✅ 2026-10-05
+      （`regalloc/fuseload.go`、めったに通らない命令 `Op.Cold`。crc8 −25.8%。Agent/wiki/design/regalloc.md §8）
 - [x] マクロベンチ: `examples/castle` を `internal/nes` で自動プレイし、局面ごとの 1 フレームの busy サイクル
       （フレーム長 − vsync 待ち）を `bench/castle_frames.json` と比べる（`TestCastleFrameCycles`） ✅ 2026-09-19
 

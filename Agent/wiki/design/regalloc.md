@@ -125,3 +125,26 @@ A / Y / X は 1 バイトなので、16 ビットの値はそのままでは常�
   `sta` / `lda` は C を変えない）。regalloc では `rol mem` は A を使わない（free）、A の変数なら `rol a`（friendly）
 - bench: crc16 -13%（2.25M → 1.96M。内側ループが `asl a; rol hi; bcc; …; dey; bne`）。他は変化なし（castle は 8 ビットの
   座標なので対象が無い）
+
+## 8. 添字付きの読み出しの融合と、めったに通らない命令（2026-10-05）
+
+A に常駐する変数があると、`t = p[k]; crc = crc ^ t` の読み出し（`lda (p),y; sta t`）が A を壊すので、常駐の退避と復帰で
+crc8 の内側は `stx k; sta crc; ldy k; lda (p),y; sta t; lda crc; ldx k; eor t` だった。
+
+- **融合**（`regalloc/fuseload.go`）: `MarkFusedLoads`（opt の後、AllocateResident の前）が、添字付きの 1 バイトの読み出しで、結果の
+  一時変数が直後の 1 バイトの `add / sub / and / or / xor` の入力でだけ使われるもの（UseDef の SingleUse）に `Op.FuseNext` を
+  付ける（添字はバイト単位、ポインタ経由ならずれ 0）。融合するかは `FusedLoad(lmd, i, vA, vY)` が常駐を見て決め、Classify
+  （A を触らない・添字が vA なら tay で friendly）と codegen（`genFusedLoad`: 添字を Y に用意して結果を `(p),y` / `tab+d,y` /
+  `tab+d,x` として直後の命令に読ませる）が同じ関数を引く。条件: Y が空いているか添字そのものが Y に常駐（ポインタがゼロページに
+  無ければ reg に写すのに Y、Y が添字なら X を使う。stack 関数は X がフレームの底なので除く）、引数を Y に保持中でない。
+  読んだ値が交換できる演算の第 1 入力なら、第 2 入力が A に常駐する変数のときだけ融合して codegen が入れ替える（それ以外の
+  第 1 入力は A に読む割付のほうが同じかよい。常に入れ替えると `lda #1; adc t` の写しが増えて miku4 の en が 8 バイト増えた）。
+  比較（eq / lt）は A が塞がっているときの Y での代用（`ldy a; cpy b`）と組めないので入れない（グローバル配列の sub / lt は
+  前からある `fusableIndex`）。`FC_DISABLE=fuse-load` で切れる
+- **ポインタの添字が X に常駐**: Y にしか置けないので、X のまま home に書いて Y に読む（`stx k; ldy k`。X は壊さないので復帰の
+  `ldx` が要らない。friendlyX、`codegen.loadYIdx`）。以前は退避と復帰（clobber）だった
+- **めったに通らない命令（`Op.Cold`）**: `opt.walkPointerY` の上位バイトの繰り上がり（`inc p+1`）と上位の比較は 256 周に 1 回なので、
+  gainOf はそこでの退避と復帰の損を数えない。数えていたときは、そこで Y を使う比較（A が塞がっているときの `ldy p+1; cpy`）の
+  損で、添字 k を Y に置く組（A = crc、Y = k）が X に負けていた
+- 結果（2026-10-05、`go test ./bench`）: crc8 −25.8%（内側が `eor (p),y; asl a; bcc; eor #29 …; iny; bne; cpy; bne`）、crc16 −1.6%、
+  textprint −0.9%。castle・miku は内蔵 NES ランナーで 3000 フレーム同じ入力の画面が前と同じ（`castle_frames.json` は平均が同じ）

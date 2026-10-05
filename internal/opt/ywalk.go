@@ -249,7 +249,7 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 			out = append(out,
 				&ir.Op{Code: ir.OpAdd, Dst: k, Src: []ir.Operand{k, ir.NewIntLiteral("", u8, 1)}, Pos: op.Pos, Logs: op.Logs},
 				&ir.Op{Code: ir.OpIfTrue, Src: []ir.Operand{k}, Label: sLabel, Pos: op.Pos},
-				&ir.Op{Code: ir.OpAdd, Dst: hi, Src: []ir.Operand{hi, ir.NewIntLiteral("", u8, 1)}, Pos: op.Pos},
+				&ir.Op{Code: ir.OpAdd, Dst: hi, Src: []ir.Operand{hi, ir.NewIntLiteral("", u8, 1)}, Pos: op.Pos, Cold: true},
 				&ir.Op{Code: ir.OpLabel, Label: sLabel, Pos: op.Pos},
 			)
 		default:
@@ -261,8 +261,8 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 		ops[b], // B
 		ir.InferWidthSign(&ir.Op{Code: ir.OpEq, Dst: t1, Src: []ir.Operand{k, limByte(0)}, Pos: pos, Logs: condLogs}),
 		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t1}, Label: L, Pos: pos},
-		ir.InferWidthSign(&ir.Op{Code: ir.OpEq, Dst: t2, Src: []ir.Operand{hi, limByte(1)}, Pos: pos}),
-		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t2}, Label: L, Pos: pos},
+		ir.InferWidthSign(&ir.Op{Code: ir.OpEq, Dst: t2, Src: []ir.Operand{hi, limByte(1)}, Pos: pos, Cold: true}),
+		&ir.Op{Code: ir.OpIf, Src: []ir.Operand{t2}, Label: L, Pos: pos, Cold: true},
 		&ir.Op{Code: ir.OpLabel, Label: xLabel, Pos: pos},
 		&ir.Op{Code: ir.OpLoad, Dst: lo, Src: []ir.Operand{k}, Pos: pos},
 	)
