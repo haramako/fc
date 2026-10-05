@@ -59,6 +59,7 @@ type ssaForm struct {
 	useAt map[int][]*ssaVal // 命令の各入力 (Src の添字順) の版。対象外の入力は nil
 	defAt map[int]*ssaVal   // 命令が定義する版
 	undef *ssaVal
+	ud    *ir.UseDef // volatileOnce が作る (simplify の間だけ。命令を置き換えても入力の変数は変わらない)
 }
 
 // propagateSSA は定数 / コピー伝播と死んだ定義の除去を、変化が無くなるまで繰り返す。
@@ -980,6 +981,9 @@ func (s *ssaForm) simplify() bool {
 		if k1, ok := ir.ValIntLiteral(def.Src[0]); ok && def.Code == ir.OpSub && (op.Code == ir.OpAdd || op.Code == ir.OpSub) {
 			// (k1 - y) ± m → (k1 ± m) - y
 			y := s.sameOperandAt(x.def, 1, i)
+			if y == nil {
+				y = s.volatileOnce(x.def, 1, i)
+			}
 			if y == nil || ir.ValType(y) != ir.ValType(def.Src[1]) || ir.ValType(y).Size != dt.Size || ir.ValType(y).Signed {
 				continue
 			}
@@ -995,6 +999,9 @@ func (s *ssaForm) simplify() bool {
 			continue
 		}
 		y := s.sameOperandAt(x.def, 0, i)
+		if y == nil {
+			y = s.volatileOnce(x.def, 0, i)
+		}
 		if y == nil || ir.ValType(y) != ir.ValType(def.Src[0]) || ir.ValType(y).Size != dt.Size || ir.ValType(y).Signed {
 			continue
 		}
@@ -1029,6 +1036,43 @@ func (s *ssaForm) simplify() bool {
 		replace(i, nop)
 	}
 	return changed
+}
+
+// volatileOnce は命令 def の入力 k が volatile なグローバル (asm・NMI も触る frame.queue_len など) で、def の結果が (コンパイラの
+// 写しを経て) 命令 i でだけ使われるなら、その入力を返す (畳んだ i が読み、def と写しは死んで消えるので、読む回数は 1 回の
+// まま。読む時が def から i に動くが、間に副作用のある命令は無い: untouched。inline した vram の `room() - 3` =
+// `(128 - frame.queue_len) - 3`)。
+func (s *ssaForm) volatileOnce(def, k, i int) ir.Operand {
+	d := s.lmd.Ops[def]
+	o := d.Src[k]
+	g := ir.UnderlyingValue(o)
+	if g == nil || g.Kind != ir.KindGlobal || !g.Volatile || !ir.PlainOperand(o) || !s.untouched(g, def, i) {
+		return nil
+	}
+	t, ok := d.Dst.(*ir.Value)
+	if !ok || t.Kind != ir.KindLocal {
+		return nil
+	}
+	if s.ud == nil {
+		s.ud = ir.BuildUseDef(s.lmd)
+	}
+	// i の入力から写しを遡って t に着き、どの変数も 1 回だけ定義されて 1 回だけ使われる
+	v, user := ir.UnderlyingValue(s.lmd.Ops[i].Src[0]), i
+	for n := 0; n < 8 && v != nil; n++ {
+		if u, single := s.ud.SingleUse(v); !single || u != user || len(s.ud.Defs[v]) != 1 {
+			return nil
+		}
+		if v == t {
+			return o
+		}
+		j := s.ud.Defs[v][0]
+		c := s.lmd.Ops[j]
+		if c == nil || c.Code != ir.OpLoad || !ir.PlainOperand(c.Src[0]) {
+			return nil
+		}
+		v, user = ir.UnderlyingValue(c.Src[0]), j
+	}
+	return nil
 }
 
 // sameOperandAt は命令 def の入力 k が、命令 i の位置でも同じ値として読めるならその入力を返す

@@ -157,6 +157,11 @@ func (l *funcGen) genSwitch() {
 // genReturn は Return のコード生成。
 func (l *funcGen) genReturn() {
 	r, op, lmd := l.r, l.op, l.lmd
+	if lmd.ResultInA && op.In(0) != nil && ir.UnderlyingValue(op.In(0)) != lmd.Result {
+		// 戻り値は A だけで返す (どの呼び出し側もフレームを読まない: frames.Analyze)
+		r.push(l.loadA(op.In(0), 0), "rts")
+		return
+	}
 	if op.In(0) != nil {
 		r.push(l.load(lmd.Result, op.In(0)))
 	}
@@ -395,12 +400,29 @@ func (l *funcGen) genCall() {
 // genLoad は Load のコード生成。
 func (l *funcGen) genLoad() {
 	r, op := l.r, l.op
+	if sameSlot(op.Dst, op.In(0)) {
+		return // 写しの両方を同じ番地に置いた (regalloc の copyHints)
+	}
 	if f, ok := regalloc.LoadForm(op, l.place(), l.aHeld); ok {
 		// Y / X に常駐する変数との写し (ldy / sty / ldx / stx)、A が塞がっていれば Y で写す
 		r.push(l.emitForm(f))
 		return
 	}
 	r.push(l.load(op.Dst, op.In(0)))
+}
+
+// sameSlot は a と b が同じ番地に置いたローカル変数そのもの (大きさも同じ) か。
+func sameSlot(a, b ir.Operand) bool {
+	va, ok1 := a.(*ir.Value)
+	vb, ok2 := b.(*ir.Value)
+	if !ok1 || !ok2 || va.Kind != ir.KindLocal || vb.Kind != ir.KindLocal || va.Type.Size != vb.Type.Size {
+		return false
+	}
+	switch va.Location {
+	case ir.LocReg, ir.LocStatic, ir.LocFrame, ir.LocFastcallReg:
+		return va.Location == vb.Location && va.Address == vb.Address
+	}
+	return false
 }
 
 // genSignExtension は SignExtension のコード生成。

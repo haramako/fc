@@ -464,7 +464,6 @@ _111:
 .segment "CODE"
 .proc _test_var_segmented_function
 	lda #1
-	sta 0+<F_test_var_segmented_function+0
 	rts
 .endproc
 	.export _test_var_test_segment_option

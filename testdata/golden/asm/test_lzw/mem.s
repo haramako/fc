@@ -23,6 +23,5 @@ __MODULE_MEM__ = 1
 	bne @body_3
 	sty 0+<F_mem_strlen+3
 	lda 0+<F_mem_strlen+3
-	sta 0+<F_mem_strlen+0
 	rts
 .endproc

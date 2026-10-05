@@ -311,6 +311,9 @@ type Lambda struct {
 	RegArg    bool
 	RegArgY   bool
 	RegResult bool
+	// ResultInA は RegResult の戻り値をフレームに書かず A だけで返す: どの呼び出しもフレームから読まない (far call・stack 関数
+	// からの呼び出し・アドレスを取られた (Entry)・asm から参照される・別名・options(symbol:) の関数でない。frames.Analyze)
+	ResultInA bool
 	// FrameABI は options(abi: "frame") の関数 (asm の関数と、asm から呼ぶ fc の関数の固定の規約。Agent/wiki/plans/v4-plan.md §2):
 	// static のフレームに戻り値 (0) → 引数 (宣言の順) → 作業領域 (Scratch バイト)。レジスタ渡し (RegArg など) はしない。
 	// asm から参照されても Entry にしない。extern ならフレームの大きさは frames.Analyze が決める

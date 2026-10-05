@@ -365,6 +365,23 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 	}
 
+	// 戻り値を A だけで返す関数 (RegResult のうち、フレームの戻り値を読む呼び出しが無いもの)
+	for i, lmd := range g.Lambdas {
+		lmd.ResultInA = lmd.RegResult && !lmd.Entry && !hidden[i] && !aliased[lmd.Id] && !lmd.Options.Has("symbol")
+	}
+	for _, caller := range g.Lambdas {
+		for _, op := range caller.Ops {
+			if op == nil || !op.Code.IsCall() || !(op.Far || caller.ABI == ir.ABIStack) {
+				continue
+			}
+			if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
+				if l, ok := g.ByID[v.Symbol]; ok {
+					l.ResultInA = false // far call と stack 関数は戻り値を呼び先のフレームから読む (codegen.genCall)
+				}
+			}
+		}
+	}
+
 	// 割り込みから届く関数は全部 static でなければならない (X が何を指すか分からない)
 	for i, lmd := range g.Lambdas {
 		if !lmd.Interrupt {

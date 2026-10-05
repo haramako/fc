@@ -221,11 +221,12 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 		capacity = 0
 	}
 	packer := newBytePacker(capacity)
+	hints := copyHints(lmd, registerVars)
 	var spilled []*ir.Value
 	regUsed := 0
 	for _, e := range registerVars {
 		v := e.key
-		addr, ok := packer.place(v.Type.Size, e.liveRange)
+		addr, ok := packer.placeHinted(v, e.liveRange, hints)
 		if !ok {
 			spilled = append(spilled, v)
 			continue
@@ -310,10 +311,11 @@ func allocateStatic(lmd *ir.Lambda) {
 	packVars = allocateCond(lmd, packVars)
 	packVars = allocateA(lmd, packVars)
 	packer := newBytePacker(max(0, 256-frameSize))
+	hints := copyHints(lmd, packVars)
 	used := 0
 	for _, e := range packVars {
 		v := e.key
-		addr, ok := packer.place(v.Type.Size, e.liveRange)
+		addr, ok := packer.placeHinted(v, e.liveRange, hints)
 		if !ok {
 			panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s: static frame exceeds 256 bytes (split the function or reduce locals)", lmd)})
 		}
@@ -343,7 +345,8 @@ func isResident(v *ir.Value) bool {
 
 // bytePacker はレジスタ領域へのバイト単位の詰め込み。バイトごとに、そこを使っている変数の live range を持つ。
 type bytePacker struct {
-	bytes [][]*ir.LiveRange
+	bytes  [][]*ir.LiveRange
+	addrOf map[*ir.Value]int // 置いた変数の位置 (placeHinted)
 }
 
 func newBytePacker(capacity int) *bytePacker {
@@ -353,23 +356,90 @@ func newBytePacker(capacity int) *bytePacker {
 // place は size バイトの変数を、live range が重ならない最初の位置に置く。入らなければ ok=false。
 func (p *bytePacker) place(size int, lr *ir.LiveRange) (addr int, ok bool) {
 	for start := 0; start+size <= len(p.bytes); start++ {
-		free := true
-		for i := start; i < start+size && free; i++ {
-			for _, r := range p.bytes[i] {
-				if overlapRange(r, lr) {
-					free = false
-					break
-				}
-			}
-		}
-		if free {
-			for i := start; i < start+size; i++ {
-				p.bytes[i] = append(p.bytes[i], lr)
-			}
+		if p.fits(start, size, lr, nil) {
+			p.take(start, size, lr)
 			return start, true
 		}
 	}
 	return 0, false
+}
+
+// fits は [start, start+size) に lr の変数を置けるか (partner の live range とは、写しの命令で接するだけなので重ならないとみなす)。
+func (p *bytePacker) fits(start, size int, lr, partner *ir.LiveRange) bool {
+	for i := start; i < start+size; i++ {
+		for _, r := range p.bytes[i] {
+			if r != partner && overlapRange(r, lr) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (p *bytePacker) take(start, size int, lr *ir.LiveRange) {
+	for i := start; i < start+size; i++ {
+		p.bytes[i] = append(p.bytes[i], lr)
+	}
+}
+
+// copyHint は `load d = s` で、s の live range がこの命令で終わり d の live range がこの命令で始まる組 (同じ番地に置けば写しが
+// 要らない: codegen.genLoad は同じ番地の写しを出さない)。
+type copyHint struct {
+	partner *ir.Value
+}
+
+// copyHints は詰める変数どうしの写しの組 (両方向)。
+func copyHints(lmd *ir.Lambda, vars []*allocEntry) map[*ir.Value][]copyHint {
+	in := map[*ir.Value]bool{}
+	for _, e := range vars {
+		in[e.key] = true
+	}
+	hints := map[*ir.Value][]copyHint{}
+	for i, op := range lmd.Ops {
+		if op == nil || op.Code != ir.OpLoad {
+			continue
+		}
+		d, ok1 := op.Dst.(*ir.Value)
+		s, ok2 := op.Src[0].(*ir.Value)
+		if !ok1 || !ok2 || d == s || !in[d] || !in[s] || d.Type.Size != s.Type.Size || d.LiveRange == nil || s.LiveRange == nil {
+			continue
+		}
+		if s.LiveRange.Max != i || d.LiveRange.Min != i || writesIn(s.LiveRange, d.LiveRange) || writesIn(d.LiveRange, s.LiveRange) {
+			continue
+		}
+		hints[d] = append(hints[d], copyHint{s})
+		hints[s] = append(hints[s], copyHint{d})
+	}
+	return hints
+}
+
+// writesIn は a の使われない書き込みが b の live range の中にあるか。
+func writesIn(a, b *ir.LiveRange) bool {
+	for _, w := range a.Writes {
+		if w >= b.Min && w <= b.Max {
+			return true
+		}
+	}
+	return false
+}
+
+// placeHinted は v を、写しの相手 (hints) がもう置かれていればその番地に (置ければ)、そうでなければ place と同じに置く。
+func (p *bytePacker) placeHinted(v *ir.Value, lr *ir.LiveRange, hints map[*ir.Value][]copyHint) (int, bool) {
+	if p.addrOf == nil {
+		p.addrOf = map[*ir.Value]int{}
+	}
+	for _, h := range hints[v] {
+		if a, ok := p.addrOf[h.partner]; ok && p.fits(a, v.Type.Size, lr, h.partner.LiveRange) {
+			p.take(a, v.Type.Size, lr)
+			p.addrOf[v] = a
+			return a, true
+		}
+	}
+	a, ok := p.place(v.Type.Size, lr)
+	if ok {
+		p.addrOf[v] = a
+	}
+	return a, ok
 }
 
 // allocateA は Aレジスタを割り当てられるなら割り当てる。

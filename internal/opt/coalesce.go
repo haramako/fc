@@ -19,6 +19,7 @@ import (
 // x が a / b に現れてもよい (codegen はバイトごとに読んでから書き、上位バイトを読む前に下位バイトしか書かない)。
 func coalesceCopies(lmd *ir.Lambda) {
 	ud := ir.BuildUseDef(lmd)
+	var jumped map[string]bool // 飛び先のラベル (between が要るときに作る)
 	ops := lmd.Ops
 	for i, op := range ops {
 		if op == nil || i+1 >= len(ops) || ops[i+1] == nil || op.Dst == nil {
@@ -27,7 +28,8 @@ func coalesceCopies(lmd *ir.Lambda) {
 		if !op.Code.ReadsBeforeWrite() && !op.Code.IsCall() {
 			continue
 		}
-		next := ops[i+1]
+		j := copyUse(ops, ud, op, i)
+		next := ops[j]
 		var x ir.Operand
 		switch next.Code {
 		case ir.OpLoad:
@@ -45,8 +47,16 @@ func coalesceCopies(lmd *ir.Lambda) {
 		if !ok || t.LocalType != ir.LTTemp || len(ud.Defs[t]) != 1 {
 			continue
 		}
-		if u, single := ud.SingleUse(t); !single || u != i+1 || next.Src[0] != ir.Operand(t) {
+		if u, single := ud.SingleUse(t); !single || u != j || next.Src[0] != ir.Operand(t) {
 			continue
+		}
+		if j > i+1 {
+			if jumped == nil {
+				jumped = jumpTargets(ops)
+			}
+			if next.Code != ir.OpLoad || !between(ops[i+1:j], next.Dst, jumped) {
+				continue
+			}
 		}
 		if !sameBits(op.Code, ir.ValType(x), t.Type) || !ir.ValAssignable(x) {
 			continue
@@ -59,9 +69,59 @@ func coalesceCopies(lmd *ir.Lambda) {
 		if next.Code == ir.OpReturn {
 			next.Src[0] = x
 		} else {
-			ir.DropOp(ops, i+1)
+			ir.DropOp(ops, j)
 		}
 	}
+}
+
+// copyUse は op (命令 i、結果は一時変数) の結果を写す load の位置: 直後の命令か、同じブロックで少し先の命令
+// (`@min(room() - 3, budget() - 10)` は 2 つの引数を計算してから 1 つ目を写す)。見つからなければ i + 1。
+func copyUse(ops []*ir.Op, ud *ir.UseDef, op *ir.Op, i int) int {
+	t, ok := op.Dst.(*ir.Value)
+	if !ok {
+		return i + 1
+	}
+	if u, single := ud.SingleUse(t); single && u > i+1 && u <= i+8 && ops[u] != nil && ops[u].Code == ir.OpLoad {
+		return u
+	}
+	return i + 1
+}
+
+// between は ops (書いた位置と写す load の間の命令) の間に x を早く書いても変わらないか: x を読み書きせず、メモリ (ポインタ
+// 経由の読み出し・番地) や分岐・飛び先のラベル・呼び出しを含まない、副作用の無い演算だけ (inline の跡の飛び先でないラベルはよい)。
+func between(ops []*ir.Op, x ir.Operand, jumped map[string]bool) bool {
+	ux := ir.UnderlyingValue(x)
+	for _, o := range ops {
+		if o == nil || o.Code == ir.OpLabel && !jumped[o.Label] {
+			continue
+		}
+		switch o.Code {
+		case ir.OpLoad, ir.OpSignExtension, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor, ir.OpShiftLeft, ir.OpShiftRight,
+			ir.OpUminus, ir.OpEq, ir.OpLt, ir.OpNot, ir.OpBitNot:
+		default:
+			return false
+		}
+		defs, uses := ir.DefUse(o)
+		for _, v := range append(defs, uses...) {
+			if ir.UnderlyingValue(v) == ux {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// jumpTargets は飛び先になるラベル。
+func jumpTargets(ops []*ir.Op) map[string]bool {
+	m := map[string]bool{}
+	for _, o := range ops {
+		if o != nil && o.Code != ir.OpLabel {
+			for _, l := range append([]string{o.Label}, o.Labels...) {
+				m[l] = true
+			}
+		}
+	}
+	return m
 }
 
 // sameBits は op の結果を型 want の変数に直接書いてよいか: 同じ型か、同じサイズの整数で op の結果が Dst の符号に

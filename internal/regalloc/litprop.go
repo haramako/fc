@@ -85,6 +85,7 @@ func PropagateLiteralLoads(lmd *ir.Lambda) {
 		}
 		out[b] = known
 	}
+	foldConstBranches(lmd)
 	ud := ir.BuildUseDef(lmd)
 	logged := map[*ir.Value]bool{}
 	for _, op := range ops {
@@ -121,6 +122,50 @@ func PropagateLiteralLoads(lmd *ir.Lambda) {
 		ir.DropOp(ops, i)
 	}
 	compactOps(lmd)
+}
+
+// foldConstBranches は、リテラルを入れたことで両方の入力が定数になった比較とその直後の分岐を畳む (ループの回転が前に出した
+// 最初の検査 `for (var i = 0; i < 8; …)` の `0 < 8`: 必ず本体に入るので消える)。比較の結果は直後の分岐だけが読む一時変数。
+// 符号なしの lt と eq で、どちらの定数も比較の幅に収まる負でない値のときだけ。
+func foldConstBranches(lmd *ir.Lambda) {
+	ops := lmd.Ops
+	var ud *ir.UseDef
+	for i, op := range ops {
+		if op == nil || (op.Code != ir.OpLt && op.Code != ir.OpEq) || i+1 >= len(ops) || ops[i+1] == nil || op.IsSigned() {
+			continue
+		}
+		br := ops[i+1]
+		if (br.Code != ir.OpIf && br.Code != ir.OpIfTrue) || br.Src[0] != op.Dst {
+			continue
+		}
+		a, ok1 := ir.ValIntLiteral(op.Src[0])
+		b, ok2 := ir.ValIntLiteral(op.Src[1])
+		lim := 1 << (8 * op.Width)
+		if op.Width <= 0 || op.Width > 2 || !ok1 || !ok2 || a < 0 || b < 0 || a >= lim || b >= lim {
+			continue
+		}
+		t, ok := op.Dst.(*ir.Value)
+		if !ok || t.LocalType != ir.LTTemp {
+			continue
+		}
+		if ud == nil {
+			ud = ir.BuildUseDef(lmd)
+		}
+		if u, single := ud.SingleUse(t); !single || u != i+1 || len(ud.Defs[t]) != 1 {
+			continue
+		}
+		cond := a < b
+		if op.Code == ir.OpEq {
+			cond = a == b
+		}
+		taken := cond == (br.Code == ir.OpIfTrue) // if は偽で、if_true は真で飛ぶ
+		ir.DropOp(ops, i)
+		if taken {
+			ir.ReplaceOp(ops, i+1, &ir.Op{Code: ir.OpJump, Label: br.Label, Pos: br.Pos, Res: br.Res})
+		} else {
+			ir.DropOp(ops, i+1)
+		}
+	}
 }
 
 // compactOps は消した命令 (nil) を詰める。

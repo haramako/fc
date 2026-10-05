@@ -23,7 +23,6 @@ __MODULE_MEM__ = 1
 	bne @end_19
 	sty 0+<F_mem_strcpy+5
 	lda 0+<F_mem_strcpy+5
-	sta 0+<F_mem_strcpy+0
 	rts
 @end_19:
 	iny
