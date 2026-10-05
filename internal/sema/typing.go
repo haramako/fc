@@ -30,11 +30,12 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// exprInfo は IR を出す前に分かった式の型。untyped は型のない整数定数 (n はその値)。
+// exprInfo は IR を出す前に分かった式の型。untyped は型のない整数定数 (n はその値、name は名前付きの定数の名前: 診断に出す)。
 type exprInfo struct {
 	t       *types.Type
 	untyped bool
 	n       int
+	name    string
 }
 
 // typedMemo は型を決める段の、1 つの節点の結果 (stmtState.typed)。
@@ -82,7 +83,7 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 			return exprInfo{}, false
 		}
 		if v.Kind == ir.KindLiteral && v.IsInt && v.Untyped {
-			return exprInfo{t: v.Type, untyped: true, n: v.Int}, true
+			return exprInfo{t: v.Type, untyped: true, n: v.Int, name: v.Name}, true
 		}
 		return exprInfo{t: v.Type}, true // ストレージの別名も宣言の型 (lval は元の場所をその型で読む)、soa は入れ物の型
 	case cCast:
@@ -102,7 +103,7 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 	case cOperand:
 		// 先に評価した値 (evalOnce・wrapExpr が型を決められない項を評価したもの)
 		if v, ok := e.opnd.(*ir.Value); ok && v.Kind == ir.KindLiteral && v.IsInt && v.Untyped {
-			return exprInfo{t: v.Type, untyped: true, n: v.Int}, true
+			return exprInfo{t: v.Type, untyped: true, n: v.Int, name: v.Name}, true
 		}
 		return exprInfo{t: ir.ValType(e.opnd)}, e.opnd != nil
 	}
@@ -231,28 +232,9 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 	return exprInfo{}, false
 }
 
-// binaryType は実行時の二項演算の型 (lval の算術の経路: F1 のシフト、adaptLiteral、Compatible、ポインタの加減算)。
+// binaryType は実行時の二項の算術の型 (計画 planArith の結果の型。型の誤りは診断の panic で、typeOfExpr が ok = false にする)。
 func (h *Hlc) binaryType(op cop, a, b exprInfo) (exprInfo, bool) {
-	isInt := func(t *types.Type) bool { return t.Kind == types.Int && t.Enum == nil }
-	if (op == opShiftLeft || op == opShiftRight) && h.v4() && isInt(a.t) && (b.t.Kind == types.Int || b.t.Kind == types.Bool) {
-		return exprInfo{t: a.t}, true // F1: シフトの結果は左辺の型 (shiftByLeft)
-	}
-	at, bt := h.literalAdapted(a, b), h.literalAdapted(b, a)
-	if op == opSub && at.Kind == types.Pointer && bt.Kind == types.Pointer && at.Base == bt.Base {
-		return exprInfo{t: h.prog.Types.IntType(2, false)}, true // p - q は要素数 (pointerDiff)
-	}
-	if t := h.prog.Types.Compatible(at, bt); t != nil {
-		return exprInfo{t: t}, true
-	}
-	if (op == opAdd || op == opSub) && (at.Kind == types.Pointer || at.Kind == types.SoaRef) && bt.Kind == types.Int {
-		return exprInfo{t: at}, true // p + i
-	}
-	return exprInfo{}, false
-}
-
-// literalAdapted は二項演算の片方 x の、相手 other に合わせた後の型 (adaptLiteral と同じ判断 literalRule)。
-func (h *Hlc) literalAdapted(x, other exprInfo) *types.Type {
-	return h.literalType(x, other, false)
+	return exprInfo{t: h.planArith(op, a, b).t}, true
 }
 
 // literalType は literalRule の判断から、型のない定数 x の合わせた後の型 (型付きならそのまま)。cmp は比較。
@@ -305,7 +287,7 @@ func (h *Hlc) checkExprType(c *cexpr, v ir.Operand, lv bool) {
 	}
 }
 
-// minMaxType は min / max / clamp の型 (lval と同じ順: 最初の引数を各引数と比較の規則で合わせ、全部の互換型)。
+// minMaxType は min / max / clamp の型 (計画 planMinMax の揃える型)。
 func (h *Hlc) minMaxType(op cop, args []*cexpr) (exprInfo, bool) {
 	if len(args) < 2 {
 		return exprInfo{}, false
@@ -318,30 +300,8 @@ func (h *Hlc) minMaxType(op cop, args []*cexpr) (exprInfo, bool) {
 		}
 		infos[i] = info
 	}
-	v0 := infos[0]
-	adapted := make([]*types.Type, len(infos))
-	for i := 1; i < len(infos); i++ {
-		a0, ai := h.literalAdaptedCmp(v0, infos[i]), h.literalAdaptedCmp(infos[i], v0)
-		if v0.untyped && a0 != v0.t {
-			v0 = exprInfo{t: a0} // 相手の型に合わせた定数 (以後は型付き)
-		}
-		adapted[i] = ai
-	}
-	t := v0.t
-	for _, it := range adapted[1:] {
-		if t = h.prog.Types.Compatible(t, it); t == nil {
-			return exprInfo{}, false
-		}
-	}
-	if t.Kind != types.Int && t.Kind != types.Bool {
-		return exprInfo{}, false
-	}
+	t, _ := h.planMinMax(op, infos)
 	return exprInfo{t: t}, true
-}
-
-// literalAdaptedCmp は比較の規則の literalAdapted (adaptLiteral の cmp)。
-func (h *Hlc) literalAdaptedCmp(x, other exprInfo) *types.Type {
-	return h.literalType(x, other, true)
 }
 
 // macroTyping は型を決める段がマクロの呼び出しの型を知る方法 (Program.macroTypes。登録の無いマクロは分からない)。

@@ -245,7 +245,7 @@ func (h *Hlc) compareWidth(a, b *cexpr) int {
 		return 0
 	}
 	w := 0
-	for _, t := range []*types.Type{h.literalAdaptedCmp(ai, bi), h.literalAdaptedCmp(bi, ai)} {
+	for _, t := range []*types.Type{h.literalType(ai, bi, true), h.literalType(bi, ai, true)} {
 		if t.Kind == types.Int && t.Enum == nil && t.Size <= 2 {
 			w = max(w, t.Size)
 		}

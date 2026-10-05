@@ -1,8 +1,6 @@
 package sema
 
 import (
-	"fmt"
-
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/types"
@@ -17,41 +15,11 @@ import (
 //   - 演算 (cmp == false): 相手の型に切り詰める。`x + -1` (x:u8) は u8 の x + 255 (以前は i8 になっていた)。
 //     `x - 128` (x:i8) のように相手が符号付きなら、以前から相手の型なので結果は同じ
 //   - 比較 (cmp == true): エラー。`s < 200` (s:i8) は 200 が -56 に、`x == -1` (x:u8) は x == 255 になっていた
+//
+// 判断は型を決める段の計画の adaptLit (typeplan.go) で、ここは評価した値に当てる形 (for-each の範囲・定数の畳み込みが使う)。
 func (h *Hlc) adaptLiteral(a, b ir.Operand, cmp bool) (ir.Operand, ir.Operand) {
-	for k := 0; k < 2; k++ {
-		lit, other := a, b
-		if k == 1 {
-			lit, other = b, a
-		}
-		v, ok := lit.(*ir.Value)
-		if !ok || v.Kind != ir.KindLiteral || !v.IsInt || !v.Untyped {
-			continue
-		}
-		ov, _ := other.(*ir.Value)
-		t := ir.ValType(other)
-		var r *ir.Value
-		switch literalRule(v.Type, v.Int, ov != nil && ov.Kind == ir.KindLiteral && ov.Untyped, t, cmp) {
-		case litCmpError:
-			panic(&diag.Error{Msg: fmt.Sprintf("%s does not fit in %s, the type of the other operand (a constant in a comparison takes that type; convert the other operand with `as` to compare in another type)", describe(v), t)})
-		case litSigned16:
-			r = ir.NewIntLiteral("", h.prog.Types.IntType(2, true), v.Int)
-		case litTruncate:
-			_, hi := intRange(t)
-			n := ir.FloorMod(v.Int, 1<<(8*t.Size))
-			if n > hi {
-				n -= 1 << (8 * t.Size)
-			}
-			r = ir.NewIntLiteral("", t, n)
-		}
-		if r != nil {
-			if k == 0 {
-				a = r
-			} else {
-				b = r
-			}
-		}
-	}
-	return a, b
+	ai, bi := valueInfo(a), valueInfo(b)
+	return h.adaptLit(ai, bi, cmp).apply(a), h.adaptLit(bi, ai, cmp).apply(b)
 }
 
 // litDecision は二項演算・比較の片方の型のない整数定数を、相手に合わせるときの判断 (literalRule)。

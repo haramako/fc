@@ -307,15 +307,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				r = tmp
 				break
 			}
-			typ := ir.ValType(left)
-			checkEnumOp(e.op, typ, nil)
-			checkOperandKinds(e.op, typ, nil)
-			if typ.IsFarFunc() && e.op != opNot {
-				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
-			}
-			if e.op == opNot {
-				typ = h.prog.Types.Bool() // `!x` は 0 / 1
-			}
+			typ := h.planUnary(e.op, h.planInfo(e.args[0], left)) // 型を決める段の計画 (typeplan.go)
 			tmp := h.newTmp(typ)
 			op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}}
 			h.emit(op)
@@ -344,11 +336,8 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				rw = 0 // シフト量は区切り (広げない)
 			}
 			right := h.rvalIn(e.args[1], rw)
-			if ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc() {
-				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
-			}
-			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
-			checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right))
+			// 型・項の変換・型の誤りは型を決める段の計画 (typeplan.go)。A1 で広い幅で計算した項も計画は広げる前の型で決める
+			p := h.planArith(e.op, h.planInfo(e.args[0], left), h.planInfo(e.args[1], right))
 			switch e.op {
 			case opDiv, opMod:
 				h.checkMixedUse(left, "`"+opSymbol(e.op)+"`")
@@ -356,8 +345,8 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			case opShiftRight:
 				h.checkMixedUse(left, "`>>`")
 			}
-			if lt, rt := ir.ValType(left), ir.ValType(right); e.op == opSub && lt.Kind == types.Pointer && rt.Kind == types.Pointer && lt.Base == rt.Base {
-				r = h.pointerDiff(left, right, lt.Base) // p - q は要素数 (C と同じ)
+			if p.kind == arithPtrDiff {
+				r = h.pointerDiff(left, right, ir.ValType(left).Base) // p - q は要素数 (C と同じ)
 				break
 			}
 			if w > 0 && (w > nt0.Size || h.widened(e.args[0], left) || e.op != opShiftLeft && e.op != opShiftRight && h.widened(e.args[1], right)) {
@@ -378,37 +367,31 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				r = tmp
 				break
 			}
-			if (e.op == opShiftLeft || e.op == opShiftRight) && h.shiftByLeft(e, left, right) {
+			if p.kind == arithShift {
 				// F1 (fc 4): シフトの結果は左辺の型。シフト量は型を揃えない
-				typ := ir.ValType(left)
-				tmp := h.newTmp(typ)
+				tmp := h.newTmp(p.t)
 				op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}}
 				h.emit(op)
 				h.recordArith(tmp, op, e, left)
 				r = tmp
 				break
 			}
+			if e.op == opShiftLeft || e.op == opShiftRight {
+				h.shiftByLeft(e, left, right) // fc 3 で書き換えを集めるとき: fc 4 のシフトの型の書き換え
+			}
 			origL, origR := left, right // 型のない定数の元の値 (A1 で広げるとき: widen.go)
-			left, right = h.adaptLiteral(left, right, false)
-			typ, l2, r2, cerr := h.tryMakeCompatible(left, right)
-			if cerr != nil {
-				if (e.op == opAdd || e.op == opSub) &&
-					(ir.ValType(left).Kind == types.Pointer || ir.ValType(left).Kind == types.SoaRef) && ir.ValType(right).Kind == types.Int {
-					if ir.ValType(left).Kind == types.Pointer && ir.ValType(left).Base.Kind == types.Void {
-						panic(&diag.Error{Msg: "no arithmetic on *void"})
-					}
-					typ = ir.ValType(left)
-					right = h.signedOffset(right) // p + i (i:i8 が負) は後ろへ
-					if typ.Kind == types.Pointer && typ.Base.Size > 1 {
-						// p + n / p++ は要素 n 個分進める (C と同じ。docs/reference/language.md の「ポインタ」)。バイト単位で進めていて、u16 の配列を
-						// p++ でたどると 1 バイトずれ、p[1] と *(p + 1) が違っていた
-						right = h.scaleOffset(right, typ.Base.Size)
-					}
-				} else {
-					panic(&diag.Error{Msg: fmt.Sprintf("cannot apply %s to %s and %s (not compatible types)", opSymbol(e.op), ir.ValType(left), ir.ValType(right))})
+			left, right = p.args[0].apply(left), p.args[1].apply(right)
+			typ := p.t
+			if p.kind == arithPtrAdd {
+				right = h.signedOffset(right) // p + i (i:i8 が負) は後ろへ
+				if typ.Kind == types.Pointer && typ.Base.Size > 1 {
+					// p + n / p++ は要素 n 個分進める (C と同じ。docs/reference/language.md の「ポインタ」)。バイト単位で進めていて、u16 の配列を
+					// p++ でたどると 1 バイトずれ、p[1] と *(p + 1) が違っていた
+					right = h.scaleOffset(right, typ.Base.Size)
 				}
 			} else {
-				left, right = l2, r2
+				left, right = h.widenArith(left, typ), h.widenArith(right, typ) // A1: fc 3 の書き換え・折り返した定数 (widen.go)
+				left, right = h.cast(left, typ), h.cast(right, typ)
 			}
 			if k, lit := ir.ValIntLiteral(right); lit && k == 0 && (e.op == opDiv || e.op == opMod) {
 				panic(&diag.Error{Msg: "div by 0"})
@@ -430,56 +413,53 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				a0, a1 = a1, a0 // `null == p` も `p == null` と同じ
 			}
 			var left, right ir.Operand
+			c0, c1 := a0, a1 // 評価した節点
 			if a0.kind == cEnumShort && a1.kind != cEnumShort {
 				// `.A == x` / `.A < x`: 相手の型で .A を決める (.A は定数なので評価の順は変わらない)
 				right = h.rval(a1)
-				left = h.rval(h.withExpected(a0, ir.ValType(right)))
+				c0 = h.withExpected(a0, ir.ValType(right))
+				left = h.rval(c0)
 			} else {
 				w := h.compareWidth(a0, a1) // A1: 両辺を広いほうの幅で計算する
 				left = h.rvalIn(a0, w)
 				if a1.kind == cNull {
 					right = h.nullOf(ir.ValType(left))
+					c1 = nil
 				} else {
-					right = h.rvalIn(h.withExpected(a1, ir.ValType(left)), w)
+					c1 = h.withExpected(a1, ir.ValType(left))
+					right = h.rvalIn(c1, w)
 				}
 			}
-			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			if e.op == opLt {
 				h.checkMixedUse(left, "comparing it")
 				h.checkMixedUse(right, "comparing it")
 			}
-			// F6 (fc 4): 符号の違う整数の大小の比較で、互換型が片方の値を読み替えるものはエラー (intrules.go)。A1 で広い幅で
-			// 計算した辺は、広げる前の型で見る (`id_i16(100) >= (id_u8(255) << 3)` は i16 と u8 で、読み替えは起きない)
-			nl, nr := h.narrowView(a0, left), h.narrowView(a1, right)
-			mixed := e.op == opLt && mixedSign(nl, nr)
-			if mixed && h.v4() {
-				panic(h.mixedSignError(ir.ValType(nl), ir.ValType(nr)))
+			// 型・項の変換・型の誤りは型を決める段の計画 (typeplan.go)
+			ni, wi := h.planInfo(c0, left), h.wideInfo(c0, left)
+			nr, wr := valueInfo(right), valueInfo(right)
+			if c1 != nil {
+				nr, wr = h.planInfo(c1, right), h.wideInfo(c1, right)
 			}
-			left, right = h.adaptLiteral(left, right, true)
+			p := h.planCompare(e.op, ni, nr, wi, wr)
+			left, right = p.args[0].apply(left), p.args[1].apply(right)
 			h.warnConstCompare(e.op, left, right)
 			if k, ok := h.foldBeyond16(e.op, left, right); ok {
 				r = ir.NewIntLiteral("", h.prog.Types.Bool(), k)
 				break
 			}
-			if e.op == opLt {
-				checkOperandKinds(e.op, ir.ValType(left), ir.ValType(right)) // == / != は struct・配列でもよい (バイトの比較)
-			}
 			if v, ok := left.(*ir.Value); ok && ir.ValType(right).IsFarFunc() {
 				left = h.rval(h.withExpected(cv(v), ir.ValType(right)))
 			}
-			if e.op == opLt && (ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc()) {
-				panic(&diag.Error{Msg: "ordered comparison is not supported on farfn"})
+			typ, swap := h.compareType(e.op, ir.ValType(left), ir.ValType(right))
+			if swap {
+				left, right = right, left
 			}
-			if e.op == opEq && isVoidPtr(ir.ValType(right)) && !isVoidPtr(ir.ValType(left)) {
-				left, right = right, left // *void との == は向きを問わない (Compatible は *void を左に置く)
-			}
-			if mixed && h.rewriting() {
+			l0, r0 := left, right
+			left, right = h.widenArith(left, typ), h.widenArith(right, typ) // A1: fc 3 の書き換え・折り返した定数 (widen.go)
+			left, right = h.cast(left, typ), h.cast(right, typ)
+			if p.mixed && h.rewriting() {
 				// 互換型に揃える (A1 の書き換え) の後に報告する: 同じ式に両方が付くとき `((x + vx) as i8) as u16` の順に当たる
-				l0, r0 := left, right
-				_, left, right = h.makeCompatible(left, right)
 				h.rewriteMixedSign(l0, r0, [2]*cexpr{a0, a1})
-			} else {
-				_, left, right = h.makeCompatible(left, right)
 			}
 			if e.op == opEq {
 				if bv, ok := h.boolEq(e, left, right); ok {
@@ -652,22 +632,14 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			//   min: t = a; if (b < a) t = b     max: t = a; if (a < b) t = b
 			//   clamp: t = x; if (t < lo) t = lo; if (hi < t) t = hi
 			vals := make([]ir.Operand, len(e.args))
+			infos := make([]exprInfo, len(e.args))
 			for i, a := range e.args {
 				vals[i] = h.rval(a)
+				infos[i] = h.planInfo(a, vals[i])
 			}
-			for i := 1; i < len(vals); i++ {
-				// 比較なので、型のない定数は比較と同じ規則 (`@min(s, 200)` (s:i8) は 200 が収まらずエラー。-56 と比べていた)
-				vals[0], vals[i] = h.adaptLiteral(vals[0], vals[i], true)
-			}
-			typ := ir.ValType(vals[0])
-			for _, v := range vals[1:] {
-				typ = h.compatible(typ, ir.ValType(v))
-			}
-			if typ.Kind != types.Int && typ.Kind != types.Bool {
-				panic(&diag.Error{Msg: fmt.Sprintf("%s: arguments must be integers (got %s)", e.op, typ)})
-			}
+			typ, adapted := h.planMinMax(e.op, infos) // 型を決める段の計画 (typeplan.go)
 			for i := range vals {
-				vals[i] = h.cast(vals[i], typ)
+				vals[i] = h.cast(adapted[i].apply(vals[i]), typ)
 			}
 			tmp := h.newTmp(typ)
 			h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{vals[0]}})
@@ -1022,30 +994,6 @@ func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) i
 		h.prog.unconst[c] = true // @bitcast は const を外す (読み取り専用にしない)
 	}
 	return c
-}
-
-// makeCompatible は互換型に変換する (キャストコード生成込み)。
-func (h *Hlc) makeCompatible(a, b ir.Operand) (*types.Type, ir.Operand, ir.Operand) {
-	typ := h.compatible(ir.ValType(a), ir.ValType(b))
-	a, b = h.widenArith(a, typ), h.widenArith(b, typ) // A1: 16 ビットの値と出会う 8 ビットの算術は部分木ごと広げる (widen.go)
-	a = h.cast(a, typ)
-	b = h.cast(b, typ)
-	return typ, a, b
-}
-
-// tryMakeCompatible は makeCompatible の CompileError を捕捉するバージョン。
-func (h *Hlc) tryMakeCompatible(a, b ir.Operand) (typ *types.Type, ra, rb ir.Operand, err *diag.Error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if ce, ok := r.(*diag.Error); ok {
-				err = ce
-				return
-			}
-			panic(r)
-		}
-	}()
-	typ, ra, rb = h.makeCompatible(a, b)
-	return
 }
 
 // signedOffset は、ポインタに足す符号付きの 1 バイトの値 (添字・ずれ) を 2 バイトに符号拡張する。1 バイトのまま
