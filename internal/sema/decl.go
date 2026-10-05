@@ -130,6 +130,12 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		}
 		typ = h.guessType(name, nil, init)
 		inferRO = typ != nil && (typ.Kind == types.Pointer || typ.IsSlice()) && h.readOnly(init)
+		if init != nil && typ != nil {
+			// 型は初期値の型 (型のない定数は収まる型) なので、変換の E・D は起きない: 評価のあとに判定し直さない
+			// (FC_VERIFY_IR では確かめる)
+			h.verifyNoConv(name, init, typ)
+			initChecked = true
+		}
 	}
 	if typ != nil && init != nil {
 		h.assignPost("`"+name+"`", typ, init, initPre)
@@ -448,4 +454,19 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 		fields = append(fields, types.Field{Name: fname, Type: ft})
 	}
 	h.prog.Types.SetFields(st, fields)
+}
+
+// verifyNoConv は FC_VERIFY_IR のとき、型を省いた変数 name の初期値 init をその型 typ にする変換が E・D にならないことを確かめる。
+func (h *Hlc) verifyNoConv(name string, init ir.Operand, typ *types.Type) {
+	if !h.prog.Config.VerifyIR() {
+		return
+	}
+	vt := ir.ValType(init)
+	k, isConst := ir.ValIntLiteral(init)
+	if vt.Kind == types.Int && typ.Kind == types.Int && typ.Size > vt.Size {
+		return // A1: 広げる (convertValue の widenArith)
+	}
+	if convRule(vt, k, isConst, typ) != convOK {
+		panic(&diag.Error{Msg: fmt.Sprintf("internal: `%s`: the inferred type %s does not hold the initial value of %s (sema/decl.go)", name, typ, vt)})
+	}
 }
