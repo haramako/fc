@@ -237,7 +237,7 @@ func registerSliceBuiltins(h *Hlc) {
 		}
 		a := args[0]
 		if a.kind == cValue {
-			if t := a.val.TypeRef; a.val.Type.Kind == types.TypeName && t != nil {
+			if t := h.prog.typeRef(a.val); a.val.Type.Kind == types.TypeName && t != nil {
 				if t.Enum == nil {
 					panic(&diag.Error{Msg: fmt.Sprintf("@len(%s): a type has no length (only enum types)", t)})
 				}
@@ -456,7 +456,7 @@ func (h *Hlc) constLvalAddr(c *cexpr) (base *ir.Value, off int, t *types.Type, o
 	switch {
 	case c.kind == cValue:
 		v := c.val
-		if v.Kind != ir.KindGlobal || v.Symbol == "" || v.Module != "" || v.Type.IsSoa || h.prog.storageAliases[v] != nil ||
+		if v.Kind != ir.KindGlobal || v.Symbol == "" || h.prog.moduleID(v) != "" || v.Type.IsSoa || h.prog.storageAliases[v] != nil ||
 			v.Type.Kind == types.Macro || v.Type.Kind == types.TypeName {
 			return nil, 0, nil, false
 		}

@@ -54,7 +54,7 @@ func (h *Hlc) compileEnumDecl(s *syntax.EnumDecl) {
 		next = v + 1
 	}
 	t.Enum.Members = members
-	v := ir.NewTypeValue(name, h.prog.Types.TypeName(), t)
+	v := h.prog.newTypeBinding(name, h.prog.Types.TypeName(), t)
 	v.Public = s.PublicPos.IsValid()
 	h.scope.Declare(v)
 }

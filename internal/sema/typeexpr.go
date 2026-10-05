@@ -106,8 +106,8 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s is not a type in fc 3 (write %s; `fcc migrate` rewrites fc 2 sources)", name, n)})
 		}
 		if v := h.scope.Find(name, true); v != nil {
-			if v.TypeRef != nil {
-				return v.TypeRef
+			if h.prog.typeRef(v) != nil {
+				return h.prog.typeRef(v)
 			}
 			if v.Type.Kind == types.Bad {
 				return v.Type // エラーになった struct / soa 宣言
@@ -121,10 +121,10 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module (in type %s.%s)", t.Module.Name, t.Module.Name, name)})
 	}
 	v := mi.LookupMust(name)
-	if v.TypeRef == nil {
+	if h.prog.typeRef(v) == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is not a type", t.Module.Name, name)})
 	}
-	return v.TypeRef
+	return h.prog.typeRef(v)
 }
 
 // checkComplete は変数・フィールド・配列要素に置ける型か検査する (void と未完成の struct は不可)。

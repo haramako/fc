@@ -11,10 +11,9 @@
   (def _test_cycle_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 cycle_use global #"module" val=mod:cycle_use)
-  (var 1 cycle_var global #"u8" val=:_test_cycle_cycle_var pub)
-  (var 2 test_cycle_use literal #"fn():void" val=:_test_cycle_test_cycle_use)
-  (var 3 main literal #"fn():void" val=:_main)
+  (var 0 cycle_var global #"u8" val=:_test_cycle_cycle_var pub)
+  (var 1 test_cycle_use literal #"fn():void" val=:_test_cycle_test_cycle_use)
+  (var 2 main literal #"fn():void" val=:_main)
  )
  (lambda _test_cycle_test_cycle_use #"fn():void" opt={id :test_cycle_use}
   (args ())
@@ -74,9 +73,8 @@
   (def _unittest_assert_equal code #"fn(u16,u16,*const u8):void" {lambda _unittest_assert_equal})
  )
  (vars
-  (var 0 stdio global #"module" val=mod:stdio pub)
-  (var 1 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
-  (var 2 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
+  (var 0 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
+  (var 1 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
  )
  (lambda _unittest_assert_true #"fn(u8,*const u8):void" opt={id :assert_true}
   (args ({l0 a} {l1 message}))
@@ -412,9 +410,8 @@
   (def _cycle_use_hoge code #"fn():u8" {lambda _cycle_use_hoge})
  )
  (vars
-  (var 0 tc global #"module" val=mod:test_cycle)
-  (var 1 CYCLE_CONST literal #"u8" val=99 pub)
-  (var 2 hoge literal #"fn():u8" val=:_cycle_use_hoge pub)
+  (var 0 CYCLE_CONST literal #"u8" val=99 pub)
+  (var 1 hoge literal #"fn():u8" val=:_cycle_use_hoge pub)
  )
  (lambda _cycle_use_hoge #"fn():u8" opt={id :hoge}
   (args ())

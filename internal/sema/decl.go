@@ -417,11 +417,11 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 		panic(&diag.Error{Msg: fmt.Sprintf("struct %s already defined", name)})
 	}
 	if h.prog.typeDecls[st] != nil {
-		// The identity was registered during collection, but retain Vars order.
-		h.module.Vars = append(h.module.Vars, h.prog.typeDecls[st].identity)
+		// The identity was registered (declared) during collection.
 	} else {
-		tv := h.addVar(ir.NewTypeValue(name, h.prog.Types.TypeName(), st))
+		tv := h.prog.newTypeBinding(name, h.prog.Types.TypeName(), st)
 		tv.Public = h.scopeIsPublic(s.PublicPos)
+		h.scope.Declare(tv)
 	}
 	fields := make([]types.Field, 0, len(s.Fields))
 	for _, f := range s.Fields {

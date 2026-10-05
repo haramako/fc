@@ -11,11 +11,10 @@
   (def _test_option_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 mem global #"module" val=mod:mem)
-  (var 1 base_data global #"[3]u8" val=:_test_option_base_data)
-  (var 2 asm_symbol global #"[]u8" val=:_test_option_base_data)
-  (var 3 test_address literal #"fn():void" val=:_test_option_test_address)
-  (var 4 main literal #"fn():void" val=:_main)
+  (var 0 base_data global #"[3]u8" val=:_test_option_base_data)
+  (var 1 asm_symbol global #"[]u8" val=:_test_option_base_data)
+  (var 2 test_address literal #"fn():void" val=:_test_option_test_address)
+  (var 3 main literal #"fn():void" val=:_main)
  )
  (lambda _test_option_test_address #"fn():void" opt={id :test_address}
   (args ())
@@ -85,9 +84,8 @@
   (def _unittest_assert_equal code #"fn(u16,u16,*const u8):void" {lambda _unittest_assert_equal})
  )
  (vars
-  (var 0 stdio global #"module" val=mod:stdio pub)
-  (var 1 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
-  (var 2 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
+  (var 0 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
+  (var 1 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
  )
  (lambda _unittest_assert_true #"fn(u8,*const u8):void" opt={id :assert_true}
   (args ({l0 a} {l1 message}))

@@ -58,6 +58,7 @@ type Program struct {
 	soas           map[*types.Type]*soaInfo         // SoA コンテナ型 → フィールドごとの配列 (soa.go)
 	lambdas        map[string]*ir.Lambda            // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
 	storageAliases map[*ir.Value]*ir.Value          // declaration binding -> canonical mutable global
+	bindings       map[*ir.Value]binding            // 名前の表の、値でない束縛 (モジュール・型名) の中身 (binding.go)
 	storageGlobals map[*ir.Value]bool               // actual global var declarations (not ROM constants)
 	constArrays    map[*ir.Value]*ir.Value          // 名前付きの配列定数 → その配列リテラル (const の中の `TABLE[3]` を畳む)
 	strLitGlobals  map[*ir.Value]*ir.Value          // 文字列リテラルを切り出した ROM の配列 → そのリテラル (ポインタにするときの 0 終端の検査: strPtr)
@@ -107,10 +108,10 @@ func (p *Program) iface(m *ir.Module) *ModuleInterface {
 
 // boundModule はモジュールの束縛の値 (`use mod;` の名前。ir.Value.Module がモジュールの id) の外面 (束縛でなければ nil)。
 func (p *Program) boundModule(v *ir.Value) *ModuleInterface {
-	if v.Module == "" {
+	if p.moduleID(v) == "" {
 		return nil
 	}
-	m, _ := p.Modules.Get(v.Module)
+	m, _ := p.Modules.Get(p.moduleID(v))
 	return p.iface(m)
 }
 
@@ -136,6 +137,7 @@ func NewProgram() *Program {
 		lambdas:        map[string]*ir.Lambda{},
 		defaults:       map[*ir.Lambda]*functionDefaults{},
 		storageAliases: map[*ir.Value]*ir.Value{},
+		bindings:       map[*ir.Value]binding{},
 		storageGlobals: map[*ir.Value]bool{},
 		constArrays:    map[*ir.Value]*ir.Value{},
 		strLitGlobals:  map[*ir.Value]*ir.Value{},

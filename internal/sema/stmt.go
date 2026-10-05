@@ -249,8 +249,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if s.As != nil {
 				id = s.As.Name
 			}
-			v := h.addVar(ir.NewModuleValue(id, h.prog.Types.Module(), m.Id))
+			v := h.prog.newModuleBinding(id, m.Id)
 			v.Public = reexport
+			h.scope.Declare(v)
 		}
 
 	case *syntax.FuncDecl:

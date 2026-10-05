@@ -22,7 +22,7 @@ const (
 	Array
 	Func
 	Struct   // 構造体 (Fields)
-	TypeName // 型名を束縛した値の型 (Value.TypeRef が実際の型)
+	TypeName // 型名を束縛した値の型 (実際の型は sema が持つ: sema/binding.go)
 	SoaRef   // SoA コンテナの要素ハンドル (実体は uint8 のインデックス。Base = 要素の struct 型、Soa = コンテナ)
 	Bad      // エラーになった宣言の型 (これに触れるエラーは報告しない: 巻き添えの抑制)
 )

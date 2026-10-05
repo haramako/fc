@@ -14,9 +14,9 @@ package sema
 // 展開が IR を出さないマクロは展開して、ほかは登録した型の規則で)。値の無い式 (void の関数・値を返さないマクロ) は Void の型。
 // 分からない式は ok = false (使う側は評価してから判定する)。結果は節点ごとに文の間覚える (typeOfExpr)。
 //
-// 使っている所: A1 の幅を上から決める (widen.go の wideWidth / compareWidth)、代入のような変換 (代入・初期化・引数・return・
-// struct のフィールド) の型の照合と E・D (rvalAssign / assignPre / preConvert)、enum の短い名前の比較 (resolveEnumShortPair)、
-// `+%` (wrapExpr)。
+// 使っている所: 演算の型・項の変換・型の誤り (typeplan.go の計画。lval は項の型をここから受け取る)、A1 の幅を上から決める
+// (widen.go の wideWidth / compareWidth)、代入のような変換 (代入・初期化・引数・return・struct のフィールド) の型の照合と E・D
+// (rvalAssign / assignPre / preConvert)、enum の短い名前の比較 (resolveEnumShortPair)、`+%` (wrapExpr)。
 //
 // 正しさの物差し: FC_VERIFY_IR (テストと fuzz では常に有効) のとき、lval が式を評価するたびに (全部の節点で) 型を決める段の型と
 // 実際に出した値の型を比べ (checkExprType。A1 で広い幅で計算した値は広げる前の型と比べる。Void なら値が無いこと)、代入の

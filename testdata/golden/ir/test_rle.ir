@@ -13,13 +13,11 @@
   (def _test_rle_main equ #"fn():void" :_main)
  )
  (vars
-  (var 0 rle global #"module" val=mod:rle)
-  (var 1 mem global #"module" val=mod:mem)
-  (var 2 src global #"[9]u8" val=:_test_rle_src)
-  (var 3 src2 global #"[12]u8" val=:_test_rle_src2)
-  (var 4 dest global #"[128]u8" val=:_test_rle_dest)
-  (var 5 test_rle literal #"fn():void" val=:_test_rle_test_rle)
-  (var 6 main literal #"fn():void" val=:_main)
+  (var 0 src global #"[9]u8" val=:_test_rle_src)
+  (var 1 src2 global #"[12]u8" val=:_test_rle_src2)
+  (var 2 dest global #"[128]u8" val=:_test_rle_dest)
+  (var 3 test_rle literal #"fn():void" val=:_test_rle_test_rle)
+  (var 4 main literal #"fn():void" val=:_main)
  )
  (lambda _test_rle_test_rle #"fn():void" opt={id :test_rle}
   (args ())
@@ -122,9 +120,8 @@
   (def _unittest_assert_equal code #"fn(u16,u16,*const u8):void" {lambda _unittest_assert_equal})
  )
  (vars
-  (var 0 stdio global #"module" val=mod:stdio pub)
-  (var 1 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
-  (var 2 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
+  (var 0 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
+  (var 1 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
  )
  (lambda _unittest_assert_true #"fn(u8,*const u8):void" opt={id :assert_true}
   (args ({l0 a} {l1 message}))

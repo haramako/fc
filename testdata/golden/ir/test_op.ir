@@ -1481,9 +1481,8 @@
   (def _unittest_assert_equal code #"fn(u16,u16,*const u8):void" {lambda _unittest_assert_equal})
  )
  (vars
-  (var 0 stdio global #"module" val=mod:stdio pub)
-  (var 1 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
-  (var 2 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
+  (var 0 assert_true literal #"fn(u8,*const u8):void" val=:_unittest_assert_true pub)
+  (var 1 assert_equal literal #"fn(u16,u16,*const u8):void" val=:_unittest_assert_equal pub)
  )
  (lambda _unittest_assert_true #"fn(u8,*const u8):void" opt={id :assert_true}
   (args ({l0 a} {l1 message}))

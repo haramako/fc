@@ -197,10 +197,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if left.kind == cValue && left.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true})
 		}
-		if left.kind == cValue && left.val.TypeRef != nil && left.val.TypeRef.Enum != nil {
-			return cv(h.enumMember(left.val.TypeRef, c.name)) // enum のメンバー (Type.Name)
+		if ref := h.prog.typeRef(left.val); left.kind == cValue && ref != nil && ref.Enum != nil {
+			return cv(h.enumMember(ref, c.name)) // enum のメンバー (Type.Name)
 		}
-		if left.kind == cValue && left.val.Module != "" {
+		if left.kind == cValue && h.prog.moduleID(left.val) != "" {
 			v := h.prog.boundModule(left.val).LookupMust(c.name)
 			if str, ok := h.prog.buildStrings[v]; ok {
 				return h.constEval(cstr(str))

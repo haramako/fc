@@ -55,8 +55,6 @@ type Value struct {
 	// アドレス (`[&g[1], &s.f]`。sema.constRefAddress) だけが使う (データの .word に `sym+N` と出る)
 	SymOffset int
 	Elems     []Operand
-	Module    string      // モジュール束縛 (`use mod;`) ならそのモジュールの id (名前の表は sema が持つ)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
-	TypeRef   *types.Type // 型名の束縛 (struct / soa 宣言)。Type.Kind == types.TypeName
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
@@ -119,20 +117,6 @@ func NewLocal(name string, typ *types.Type, lt LocalType) *Value {
 func NewGlobal(name string, typ *types.Type, symbol string) *Value {
 	v := newValue(KindGlobal, name, typ)
 	v.Symbol = symbol
-	return v
-}
-
-// NewModuleValue はモジュール束縛 (`use mod;`)。
-func NewModuleValue(name string, typ *types.Type, id string) *Value {
-	v := newValue(KindGlobal, name, typ)
-	v.Module = id
-	return v
-}
-
-// NewTypeValue は型名の束縛 (`struct Name` / `soa Name`)。typ は Kind == types.TypeName、ref が実際の型。
-func NewTypeValue(name string, typ *types.Type, ref *types.Type) *Value {
-	v := newValue(KindGlobal, name, typ)
-	v.TypeRef = ref
 	return v
 }
 
@@ -252,8 +236,6 @@ func (v *Value) Inspect() string {
 		return "{" + strconv.Itoa(v.Int) + "}"
 	case v.Symbol != "":
 		return "{" + SymExpr(v) + "}"
-	case v.Module != "":
-		return "{" + v.Module + "}"
 	}
 	return "{}"
 }

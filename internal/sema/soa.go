@@ -135,9 +135,9 @@ func (h *Hlc) compileSoaDecl(s *syntax.SoaDecl) {
 	var v *ir.Value
 	if h.prog.typeDecls[soa] != nil {
 		v = h.prog.typeDecls[soa].identity
-		h.module.Vars = append(h.module.Vars, v)
 	} else {
-		v = h.addVar(ir.NewTypeValue(name, soa, soa))
+		v = h.prog.newTypeBinding(name, soa, soa)
+		h.scope.Declare(v)
 	}
 	if h.scopeIsPublic(s.PublicPos) {
 		v.Public = true

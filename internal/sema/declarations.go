@@ -207,7 +207,7 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 	}
 	if identity != nil {
 		// Pointer/handle identity is available before the storage layout.
-		v := ir.NewTypeValue(d.name, valueType, identity)
+		v := md.h.prog.newTypeBinding(d.name, valueType, identity)
 		v.Public = d.public
 		d.identity = v
 		md.h.scope.Declare(v)
