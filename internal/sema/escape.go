@@ -41,6 +41,11 @@ func (h *Hlc) localAddr(e syntax.Expr, decay bool) (string, bool) {
 		return name, t != nil && t.Kind == types.Array
 	case *syntax.CastExpr:
 		return h.localAddr(x.X, true) // `a as *u8`、`(&x) as *u8`
+	case *syntax.CondExpr:
+		if name, ok := h.localAddr(x.X, decay); ok {
+			return name, true // `c ? &x : p`
+		}
+		return h.localAddr(x.Y, decay)
 	case *syntax.BinaryExpr:
 		if x.Op == syntax.Plus || x.Op == syntax.Minus {
 			return h.localAddr(x.X, decay) // `&x + 1`、`a + 2`

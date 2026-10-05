@@ -88,6 +88,7 @@ func runRandomV4(t *testing.T, v3 bool) {
 				skipped.Add(1)
 				t.Skipf("fc 4 にできない (seed %d): %v", seed, err)
 			}
+			files = rpCondRewrite(files, seed) // 条件式と do-while を混ぜる (randcond_test.go)
 			res := rpCheck(t, files)
 			switch res.kind {
 			case "ok":

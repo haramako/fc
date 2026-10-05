@@ -30,6 +30,16 @@ func (h *Hlc) needsExpected(c *cexpr) bool {
 				return true
 			}
 		}
+	case cOp:
+		if c.op == opCond {
+			// 枝が文脈の型を要るか、枝に型のない定数がある (文脈の整数型に収まるかを見る: condJoin)
+			if h.needsExpected(c.args[1]) || h.needsExpected(c.args[2]) {
+				return true
+			}
+			a, aok := h.exprType(c.args[1])
+			b, bok := h.exprType(c.args[2])
+			return aok && a.untyped || bok && b.untyped
+		}
 	}
 	return false
 }
@@ -38,6 +48,13 @@ func (h *Hlc) needsExpected(c *cexpr) bool {
 // farfn values from function symbols. A runtime near pointer cannot supply a bank.
 // 元の式は変更しない (constEval のメモは cexpr のポインタで引くため、新しいノードを作る)。t が nil ならそのまま。
 func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
+	if t != nil && c.kind == cOp && c.op == opCond {
+		// 条件式: 文脈の型を両方の枝に渡す (枝ごとに slice にする・`.A` を決める…)
+		r := *c
+		r.args = []*cexpr{c.args[0], h.withExpected(c.args[1], t), h.withExpected(c.args[2], t)}
+		r.ty = t
+		return &r
+	}
 	if t != nil && t.IsFarFunc() && c.kind != cNull {
 		x := h.constEval(c)
 		if x.kind == cValue && x.val.Kind == ir.KindLiteral && !x.val.IsInt && x.val.Symbol != "" && types.SameFuncSignature(t, x.val.Type) {

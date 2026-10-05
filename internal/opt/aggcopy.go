@@ -236,6 +236,12 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 		good := true
 		for _, k := range defs[t] {
 			p := ops[k]
+			if p == nil {
+				// この回で消した命令 (defs は回の初めに数えたもの)。t へ集めた部分を、さらに d へ集める形 (条件式の枝ごとに
+				// slice を組み立てて合流で写す: `s = c ? "ab" : "cde"`) は次の回で見る
+				good = false
+				break
+			}
 			cv, ok := p.Dst.(*ir.CastedValue)
 			if k > i || p.Code != ir.OpLoad || !ok || !cv.Plain() || cv.From != ir.Operand(t) {
 				good = false

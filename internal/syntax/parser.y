@@ -53,7 +53,7 @@ package syntax
 %type <typ> opt_enum_base
 %type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
-%token <tok> DOTDOT DOTDOTEQ kIN
+%token <tok> DOTDOT DOTDOTEQ kIN kDO
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR ADDWRAP SUBWRAP MULWRAP
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~' '@' '?'
@@ -89,6 +89,7 @@ package syntax
 %type <param>   arg_decl
 
 %right '=' ADDEQ SUBEQ MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
+%right '?'
 %left OROR
 %left ANDAND
 %left '|'
@@ -131,6 +132,7 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | kLOOP block                          { $$ = &LoopStmt{Loop: $1.Pos, Body: $2} } /* v2: 括弧なし */
          | IDENT ':' statement                  { $$ = &LabeledStmt{Label: ident($1), Colon: $2.Pos, Stmt: $3} } /* v2: 文ラベル */
          | kWHILE '(' exp ')' statement         { $$ = &WhileStmt{While: $1.Pos, Cond: $3, Rparen: $4.Pos, Body: $5} }
+         | kDO statement kWHILE '(' exp ')' ';' { $$ = &DoWhileStmt{Do: $1.Pos, Body: $2, While: $3.Pos, Cond: $5, Rparen: $6.Pos, Semi: $7.Pos} } /* fc 4 */
          | kFOR '(' IDENT ',' exp ',' exp ')' block { $$ = &ForStmt{For: $1.Pos, Var: ident($3), From: $5, To: $7, Rparen: $8.Pos, Body: $9} } /* v1 */
          | kFOR '(' opt_for_init ';' opt_exp ';' opt_for_step ')' block
                                                 { $$ = &ForStmt{For: $1.Pos, Init: $3, Cond: $5, Step: $7, Rparen: $8.Pos, Body: $9} } /* v2: C 型 */
@@ -283,6 +285,7 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | exp '&'  exp           { $$ = binary($1, $2, $3) }
    | exp '|'  exp           { $$ = binary($1, $2, $3) }
    | exp '^'  exp           { $$ = binary($1, $2, $3) }
+   | exp '?' exp ':' exp %prec '?' { $$ = &CondExpr{Cond: $1, Question: $2.Pos, X: $3, Colon: $4.Pos, Y: $5} } /* fc 4 */
    | exp ANDAND exp         { $$ = binary($1, $2, $3) }
    | exp OROR exp           { $$ = binary($1, $2, $3) }
    | exp ADDEQ exp          { $$ = &AssignExpr{Lhs: $1, OpPos: $2.Pos, Op: AddEq, Rhs: $3} }

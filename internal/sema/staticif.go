@@ -73,6 +73,10 @@ func (h *Hlc) checkStaticExpr(e syntax.Expr) {
 		h.checkStaticExpr(x.X)
 	case *syntax.UnaryExpr:
 		h.checkStaticExpr(x.X)
+	case *syntax.CondExpr:
+		h.checkStaticExpr(x.Cond)
+		h.checkStaticExpr(x.X)
+		h.checkStaticExpr(x.Y)
 	case *syntax.BinaryExpr:
 		if x.Op == syntax.Dot {
 			h.checkBuildRef(e)

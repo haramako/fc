@@ -71,6 +71,9 @@ func Children(node Node) []Node {
 	case *WhileStmt:
 		add(n.Cond)
 		add(n.Body)
+	case *DoWhileStmt:
+		add(n.Body)
+		add(n.Cond)
 	case *ForStmt:
 		add(n.Var)
 		add(n.From)
@@ -164,6 +167,10 @@ func Children(node Node) []Node {
 	case *ParenExpr:
 		add(n.X)
 	case *BinaryExpr:
+		add(n.X)
+		add(n.Y)
+	case *CondExpr:
+		add(n.Cond)
 		add(n.X)
 		add(n.Y)
 	case *AssignExpr:

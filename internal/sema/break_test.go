@@ -48,7 +48,7 @@ func TestBreakV2(t *testing.T) {
 			{"switch (x) { case 1: continue; }", "cannot continue without loop"},
 			{"break;", "cannot break without loop"},
 			{"a: loop { a: loop { break; } }", "label a is already in use"},
-			{"a: x = 1;", "a label must be placed on loop / while / for / switch"},
+			{"a: x = 1;", "a label must be placed on loop / while / do / for / switch"},
 			{"loop() { break; }", "`loop()` is written `loop` in fc 2"},
 		}
 		for _, c := range cases {

@@ -1,11 +1,9 @@
 # return 忘れの検査がループの中から外のラベルへの break と case の中の break を見ない (cf63a3c の terminate.go の逆)
-diff --git a/internal/sema/terminate.go b/internal/sema/terminate.go
-index 626fd2c..c7c5c5b 100644
 --- a/internal/sema/terminate.go
 +++ b/internal/sema/terminate.go
-@@ -42,7 +42,26 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
- 	case *syntax.ForStmt:
- 		return (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
+@@ -45,7 +45,26 @@
+ 	case *syntax.DoWhileStmt:
+ 		return h.doWhileTerminates(s, nil)
  	case *syntax.SwitchStmt:
 -		return h.switchTerminates(s, nil)
 +		if s.Default == nil {
@@ -31,16 +29,17 @@ index 626fd2c..c7c5c5b 100644
  	case *syntax.LabeledStmt:
  		switch inner := s.Stmt.(type) {
  		case *syntax.LoopStmt:
-@@ -51,48 +70,12 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
- 			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label)
- 		case *syntax.ForStmt:
+@@ -56,8 +75,6 @@
  			return (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
+ 		case *syntax.DoWhileStmt:
+ 			return h.doWhileTerminates(inner, s.Label)
 -		case *syntax.SwitchStmt:
 -			return h.switchTerminates(inner, s.Label)
  		}
  		return h.terminates(s.Stmt)
  	}
- 	return false
+@@ -73,40 +90,6 @@
+ 	return isTrueLiteral(s.Cond) || h.terminates(s.Body) && !forHasContinue(s.Body, label)
  }
  
 -// switchTerminates は switch が終端文か: default があり、全 case と default の最後の文が終端文 (fallthrough で終わる case は
@@ -80,7 +79,7 @@ index 626fd2c..c7c5c5b 100644
  // switchWithoutDefault は、s が default の無い switch で、全 case が終端文か (`missing return` で default を案内する。
  // enum の全メンバーを並べても、範囲外の値 (`5 as Dir`、初期化していない値) で落ちうるので終端文にしない: 2026-09-27 決定)。
  func (h *Hlc) switchWithoutDefault(s syntax.Stmt) bool {
-@@ -124,70 +107,32 @@ func isTrueLiteral(e syntax.Expr) bool {
+@@ -138,70 +121,32 @@
  	}
  }
  
@@ -142,7 +141,7 @@ index 626fd2c..c7c5c5b 100644
  				found = true
  			}
  			return
- 		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
+ 		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.DoWhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
 -			inLoop, inBreakable = true, true
 +			nested = true
  		case *syntax.SwitchStmt:

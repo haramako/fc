@@ -178,7 +178,7 @@
     },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.flow.fc", "match": "\\b(if|else|loop|while|for|return|break|continue|switch|case|default)\\b" },
+        { "name": "keyword.control.flow.fc", "match": "\\b(if|else|loop|while|do|for|return|break|continue|switch|case|default)\\b" },
         { "name": "storage.modifier.fc", "match": "\\b(public|private)\\b" },
         { "name": "storage.type.fc", "match": "\\b(var|const|function|fn|farfn|struct|soa)\\b" },
         { "name": "keyword.operator.cast.fc", "match": "\\b(as|bitcast|sizeof)\\b" },
@@ -202,8 +202,8 @@
       ]
     },
     "labels": {
-      "comment": "文ラベル (v2): `name:` の後に loop / while / for / switch",
-      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*(?=(loop|while|for|switch)\\b)",
+      "comment": "文ラベル (v2): `name:` の後に loop / while / do / for / switch",
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*(?=(loop|while|do|for|switch)\\b)",
       "captures": {
         "1": { "name": "entity.name.label.fc" },
         "2": { "name": "punctuation.separator.label.fc" }
@@ -248,6 +248,7 @@
         { "name": "keyword.operator.logical.fc", "match": "(&&|\\|\\||!)" },
         { "name": "keyword.operator.increment.fc", "match": "(\\+\\+|--)" },
         { "name": "keyword.operator.arrow.fc", "match": "->" },
+        { "comment": "条件式 `c ? a : b` (fc 4)", "name": "keyword.operator.ternary.fc", "match": "\\?" },
         { "name": "keyword.operator.assignment.fc", "match": "=" },
         { "name": "keyword.operator.arithmetic.fc", "match": "(<<|>>|[-+*/%&|^~])" }
       ]

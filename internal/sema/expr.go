@@ -510,6 +510,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				r = h.rval(cop2(opNot, cop2(opLt, left, right)))
 			}
 
+		case opCond:
+			r = h.condValue(e, hint)
+
 		case opLand, opLor:
 			// 値として使う `a && b` / `a || b` は 0 / 1 (条件文脈では compileCond が分岐に展開する)
 			endLabel := h.newLabel("end")
@@ -782,6 +785,9 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		panic(&diag.Error{Msg: "cannot assign through a read-only pointer (*const) or to const data"})
 	}
 	pre := !soa && h.assignPre(what, rhs, dt)
+	if !soa && (lv || ir.ValAssignable(left)) && h.condAssign(left, lv, dt, rhs, what, pre) {
+		return left // `x = c ? a : b` は枝ごとの代入 (cond.go)
+	}
 	var right ir.Operand
 	checked := false
 	if dt.Kind == types.Array && !dt.IsSoa {

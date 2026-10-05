@@ -124,6 +124,8 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		return exprInfo{t: f.t.Base}, true
 	case opMin, opMax, opClamp:
 		return h.minMaxType(e.op, e.args)
+	case opCond:
+		return h.condType(e)
 	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight:
 		a, ok := h.exprType(e.args[0])
 		if !ok {
@@ -235,7 +237,7 @@ func (h *Hlc) checkExprType(c *cexpr, v ir.Operand, lv bool) {
 	switch c.op {
 	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight,
 		opAddWrap, opSubWrap, opMulWrap, opUminus, opBitNot, opIndex, opDeref, opRef, opField,
-		opMin, opMax, opClamp, opLen:
+		opMin, opMax, opClamp, opLen, opCond:
 	default:
 		return
 	}

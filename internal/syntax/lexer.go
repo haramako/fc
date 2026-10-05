@@ -123,10 +123,20 @@ var keywords = map[string]Kind{
 	"use": KwUse, "as": KwAs, "from": KwFrom, "public": KwPublic, "private": KwPrivate,
 	"fn": KwFn, "farfn": KwFarFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
 	"true": KwTrue, "false": KwFalse, "null": KwNull, "enum": KwEnum, "fallthrough": KwFallthrough, "in": KwIn,
+	"do": KwDo,
 }
 
 // v3Keywords は fc 3 で足した予約語 (fc 2 のソースでは識別子のまま)。
 var v3Keywords = map[Kind]bool{KwEnum: true, KwFallthrough: true, KwIn: true}
+
+// v4Keywords は fc 4 で足した予約語 (fc 2 / fc 3 のソースでは識別子のまま)。
+var v4Keywords = map[Kind]bool{KwDo: true}
+
+// IsV4Keyword は name が fc 4 で足した予約語 (fc 3 では名前に使える: do) か (fcc migrate が fc 3 → 4 で名前を書き換える)。
+func IsV4Keyword(name string) bool {
+	k, ok := keywords[name]
+	return ok && v4Keywords[k]
+}
 
 // IsV3Keyword は name が fc 3 で足した予約語 (fc 2 では名前に使える: enum / fallthrough / in) か (fcc migrate が名前を書き換える)。
 func IsV3Keyword(name string) bool {
@@ -278,7 +288,7 @@ func (l *Lexer) Next() (Token, error) {
 			n++
 		}
 		if kind, ok := keywords[string(rest[:n])]; ok {
-			if l.version < Version3 && v3Keywords[kind] {
+			if l.version < Version3 && v3Keywords[kind] || l.version < Version4 && v4Keywords[kind] {
 				return tok(Identifier, n), nil
 			}
 			if l.version >= Version3 && v3Unreserved[kind] {

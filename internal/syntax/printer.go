@@ -351,6 +351,22 @@ func (p *printer) stmt(s Stmt) {
 		p.tokAt(s.Rparen, ")")
 		p.body(s.Body)
 
+	case *DoWhileStmt:
+		// `} while (c);` は同じ行。本体が単文なら次の行
+		p.tokAt(s.Do, "do")
+		p.body(s.Body)
+		if _, ok := s.Body.(*Block); ok {
+			p.space()
+		} else {
+			p.newline()
+		}
+		p.tokAt(s.While, "while")
+		p.space()
+		p.tok("(")
+		p.expr(s.Cond)
+		p.tokAt(s.Rparen, ")")
+		p.tokAt(s.Semi, ";")
+
 	case *ForStmt:
 		p.tokAt(s.For, "for")
 		p.space()
@@ -839,6 +855,16 @@ func (p *printer) expr(e Expr) {
 			p.tokAt(e.OpPos, e.Op.String())
 			p.space()
 		}
+		p.expr(e.Y)
+	case *CondExpr:
+		p.expr(e.Cond)
+		p.space()
+		p.tokAt(e.Question, "?")
+		p.space()
+		p.expr(e.X)
+		p.space()
+		p.tokAt(e.Colon, ":")
+		p.space()
 		p.expr(e.Y)
 	case *AssignExpr:
 		p.expr(e.Lhs)

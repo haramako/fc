@@ -416,6 +416,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		case opField:
 			return h.constField(h.constEval(c.args[0]), c.name)
 
+		case opCond:
+			return h.constEvalCond(c)
+
 		case opMin, opMax, opClamp:
 			args := make([]*cexpr, len(c.args))
 			allLit := true

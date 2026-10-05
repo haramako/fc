@@ -41,7 +41,7 @@ func (h *Hlc) popBreakable() {
 
 // forHasContinue は for の本体に、この for を対象にする continue があるか
 // (ラベルなしで、間にループを挟まないもの。または `continue label` でこの for のラベルを指すもの)。
-func forHasContinue(body *syntax.Block, label *syntax.Ident) bool {
+func forHasContinue(body syntax.Stmt, label *syntax.Ident) bool {
 	found := false
 	var walk func(n syntax.Node, nested bool)
 	walk = func(n syntax.Node, nested bool) {
@@ -54,7 +54,7 @@ func forHasContinue(body *syntax.Block, label *syntax.Ident) bool {
 				found = true
 			}
 			return
-		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
+		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.DoWhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
 			nested = true
 		case *syntax.LambdaExpr:
 			return
@@ -348,12 +348,32 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.compileStatement(s.Stmt)
 		if h.pendingLabel != nil {
 			h.pendingLabel = nil
-			panic(&diag.Error{Msg: fmt.Sprintf("label %s must be placed on loop / while / for / switch", s.Label.Name)})
+			panic(&diag.Error{Msg: fmt.Sprintf("label %s must be placed on loop / while / do / for / switch", s.Label.Name)})
 		}
 
 	case *syntax.WhileStmt:
 		// loop() { if (cond) body else break; }
 		h.compileStatement(&syntax.LoopStmt{Body: &syntax.IfStmt{Cond: s.Cond, Then: s.Body, Else: &syntax.BreakStmt{}}})
+
+	case *syntax.DoWhileStmt:
+		// fc 4: begin: body; cont: if (cond) goto begin; end:。continue は条件の判定に飛ぶ (ラベルは continue があるときだけ)。
+		// 本体はスコープを作る (本体の宣言は条件から見えない: C と同じ)
+		label := h.pendingLabel
+		contLabel := ""
+		if forHasContinue(s.Body, label) {
+			contLabel = h.newLabel("cont")
+		}
+		labels := h.newLabels("begin", "end")
+		h.pushBreakable(breakable{continueLabel: contLabel, breakLabel: labels[1]})
+		h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[0]})
+		h.inScope(func() { h.compileStatement(s.Body) })
+		if contLabel != "" {
+			h.emit(&ir.Op{Code: ir.OpLabel, Label: contLabel})
+		}
+		h.updatePos(s.Cond)
+		h.compileCond(toC(s.Cond), labels[0], true)
+		h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[1]})
+		h.popBreakable()
 
 	case *syntax.ForStmt:
 		// { init; loop { if (cond) { body; step: step; } else break; } } (while への脱糖と同じ IR の形)。
@@ -426,6 +446,10 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			}
 			rt := h.lmd.Type.Base
 			rc := h.withExpected(toC(s.Value), rt)
+			if h.condReturn(rc, rt, "return from "+h.lmd.Name) {
+				h.warnReturnLocalAddr(s.Value, rt)
+				break // `return c ? x : y` は枝ごとの return (cond.go)
+			}
 			v := h.rvalAssign(rc, rt, "return from "+h.lmd.Name, func(ir.Operand) { h.warnReturnLocalAddr(s.Value, rt) })
 			h.emit(&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{v}})
 		} else {
@@ -627,6 +651,9 @@ func (h *Hlc) compileCond(c *cexpr, label string, jumpIfTrue bool) {
 			return
 		case opNe:
 			h.compileCond(cop2(opEq, e.args[0], e.args[1]), label, !jumpIfTrue)
+			return
+		case opCond:
+			h.compileCondCond(e, label, jumpIfTrue)
 			return
 		case opLe:
 			h.compileCond(cop2(opLt, e.args[1], e.args[0]), label, !jumpIfTrue)

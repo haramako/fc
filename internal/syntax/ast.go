@@ -148,6 +148,16 @@ type WhileStmt struct {
 	Body   Stmt
 }
 
+// DoWhileStmt は fc 4 の `do stmt while (cond);` (本体を先に 1 回実行し、cond が真の間くり返す)。
+type DoWhileStmt struct {
+	Do     Pos
+	Body   Stmt
+	While  Pos
+	Cond   Expr
+	Rparen Pos
+	Semi   Pos
+}
+
 // ForStmt は for 文。2 つの形がある:
 //   - v1: `for (var, from, to) { ... }` (Var / From / To)
 //   - v2: `for (init; cond; step) { ... }` (Init / Cond / Step。それぞれ省略可で nil)
@@ -469,6 +479,15 @@ type BinaryExpr struct {
 	Y     Expr
 }
 
+// CondExpr は fc 4 の条件式 `cond ? x : y` (cond が真なら x、偽なら y。選ばれたほうだけを評価する)。
+type CondExpr struct {
+	Cond     Expr
+	Question Pos
+	X        Expr
+	Colon    Pos
+	Y        Expr
+}
+
 // AssignExpr は代入 `lhs = rhs` / `lhs op= rhs`。Op は Assign か複合代入 (AddEq, SubEq、v2 では MulEq … ShrEq)。
 type AssignExpr struct {
 	Lhs   Expr
@@ -713,6 +732,9 @@ func (s *LabeledStmt) End() Pos { return s.Stmt.End() }
 func (s *WhileStmt) Pos() Pos { return s.While }
 func (s *WhileStmt) End() Pos { return s.Body.End() }
 
+func (s *DoWhileStmt) Pos() Pos { return s.Do }
+func (s *DoWhileStmt) End() Pos { return after(s.Semi, 1) }
+
 func (s *ForStmt) Pos() Pos { return s.For }
 func (s *ForStmt) End() Pos { return s.Body.End() }
 
@@ -840,6 +862,9 @@ func (e *ParenExpr) End() Pos { return after(e.Rparen, 1) }
 
 func (e *BinaryExpr) Pos() Pos { return e.X.Pos() }
 func (e *BinaryExpr) End() Pos { return e.Y.End() }
+
+func (e *CondExpr) Pos() Pos { return e.Cond.Pos() }
+func (e *CondExpr) End() Pos { return e.Y.End() }
 
 func (e *AssignExpr) Pos() Pos { return e.Lhs.Pos() }
 func (e *AssignExpr) End() Pos { return e.Rhs.End() }
@@ -978,6 +1003,7 @@ func (*IfStmt) stmtNode()          {}
 func (*LoopStmt) stmtNode()        {}
 func (*LabeledStmt) stmtNode()     {}
 func (*WhileStmt) stmtNode()       {}
+func (*DoWhileStmt) stmtNode()     {}
 func (*ForStmt) stmtNode()         {}
 func (*IncDecStmt) stmtNode()      {}
 func (*BreakStmt) stmtNode()       {}
@@ -1002,6 +1028,7 @@ func (*NullLit) exprNode()    {}
 func (*StringLit) exprNode()  {}
 func (*ParenExpr) exprNode()  {}
 func (*BinaryExpr) exprNode() {}
+func (*CondExpr) exprNode()   {}
 func (*AssignExpr) exprNode() {}
 func (*UnaryExpr) exprNode()  {}
 func (*CastExpr) exprNode()   {}

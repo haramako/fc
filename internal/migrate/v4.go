@@ -27,6 +27,9 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 		return nil, fmt.Errorf("%s: fc %d source cannot be rewritten as fc 4 directly (migrate it to fc 3 first)", filename, f.Version)
 	}
 	c := &Ctx{Src: src, File: f}
+	if err := renameV4Keywords(c, rewrites); err != nil {
+		return nil, err
+	}
 	var copies, terms []sema.Rewrite
 	for _, r := range rewrites {
 		switch {
@@ -78,6 +81,31 @@ func ToV4(src []byte, filename string, rewrites []sema.Rewrite) ([]byte, error) 
 		return nil, fmt.Errorf("%s: migrated source is not fc 4", filename)
 	}
 	return out, nil
+}
+
+// renameV4Keywords は fc 4 の予約語 (do) と同じ綴りの名前 (fc 3 では識別子) の後ろに `_` を付ける (fc 2 → 3 の reserved-names と
+// 同じ。ファイルごとに同じ規則なので、ほかのモジュールからの参照 `mod.do` も揃う。asm からの参照 `_mod_do` は直さない)。
+// sema の書き換えより先に足す (同じ位置に入れる `) as T` より前に `_` が入るように)。書き換えが置き換える範囲の中の名前は触らない。
+func renameV4Keywords(c *Ctx, rewrites []sema.Rewrite) error {
+	toks, _, err := syntax.Tokenize(c.Src, c.File.Filename)
+	if err != nil {
+		return err
+	}
+	for _, t := range toks {
+		if t.Kind != syntax.Identifier || !syntax.IsV4Keyword(t.Text) {
+			continue
+		}
+		inside := false
+		for _, r := range rewrites {
+			if r.End > r.Start && r.Start < t.End.Offset && t.Pos.Offset < r.End {
+				inside = true
+			}
+		}
+		if !inside {
+			c.Replace(t.End.Offset, t.End.Offset, "_")
+		}
+	}
+	return nil
 }
 
 // abiRules は関数の呼び出し規約の書き換え (構文だけで決まる。Agent/wiki/plans/v4-plan.md §2): fc 4 は fastcall を廃止し、extern (本体の

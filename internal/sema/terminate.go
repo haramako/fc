@@ -15,6 +15,7 @@ import (
 //   - ブロック: 最後の文が終端文
 //   - if: else があり、then / else とも終端文
 //   - loop / while (1) / 条件なし for: 中にそのループを抜ける break が無い
+//   - do-while (fc 4): 抜ける break が無く、条件が true か、本体が終端文 (continue で条件へ飛ばない)
 //   - switch: default があり、全 case と default の最後の文が終端文 (fc 3 の fallthrough で終わる case は次の case が終端文なら)
 //   - ラベル付き文: 中の文
 //   - fc 3 の @if: 選ばれた側 (else が無く条件が偽なら終端文でない)。選ばれなかった側は見ない
@@ -41,6 +42,8 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
 		return isTrueLiteral(s.Cond) && !hasBreakFor(s.Body, nil)
 	case *syntax.ForStmt:
 		return (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
+	case *syntax.DoWhileStmt:
+		return h.doWhileTerminates(s, nil)
 	case *syntax.SwitchStmt:
 		return h.switchTerminates(s, nil)
 	case *syntax.LabeledStmt:
@@ -51,12 +54,23 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
 			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label)
 		case *syntax.ForStmt:
 			return (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
+		case *syntax.DoWhileStmt:
+			return h.doWhileTerminates(inner, s.Label)
 		case *syntax.SwitchStmt:
 			return h.switchTerminates(inner, s.Label)
 		}
 		return h.terminates(s.Stmt)
 	}
 	return false
+}
+
+// doWhileTerminates は fc 4 の do-while が終端文か: 抜ける break が無く、条件が `true` か、本体が終端文 (本体は必ず 1 回
+// 実行する) で本体の最後まで行かずに条件へ飛ぶ continue も無い。
+func (h *Hlc) doWhileTerminates(s *syntax.DoWhileStmt, label *syntax.Ident) bool {
+	if hasBreakFor(s.Body, label) {
+		return false
+	}
+	return isTrueLiteral(s.Cond) || h.terminates(s.Body) && !forHasContinue(s.Body, label)
 }
 
 // switchTerminates は switch が終端文か: default があり、全 case と default の最後の文が終端文 (fallthrough で終わる case は
@@ -177,7 +191,7 @@ func escapes(body syntax.Stmt, label *syntax.Ident, isSwitch bool) bool {
 				found = true
 			}
 			return
-		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
+		case *syntax.LoopStmt, *syntax.WhileStmt, *syntax.DoWhileStmt, *syntax.ForStmt, *syntax.ForInStmt:
 			inLoop, inBreakable = true, true
 		case *syntax.SwitchStmt:
 			inBreakable = true

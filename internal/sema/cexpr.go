@@ -84,6 +84,7 @@ const (
 	opSlice      cop = "slice"    // fc 3 の範囲 args[0][args[1]..args[2]] (lo / hi は省けば nil)
 	opToSlice    cop = "to_slice" // 配列 / slice args[0] を slice の型 ty にする (withExpected が挟む)
 	opLen        cop = "len"      // @len(args[0]) の実行時の値 (slice の長さ)
+	opCond       cop = "cond"     // fc 4 の条件式 args[0] ? args[1] : args[2] (ty は文脈の型。cond.go)
 )
 
 // compoundOps は複合代入 `x op= y` の op。
@@ -238,6 +239,8 @@ func toC0(e syntax.Expr) *cexpr {
 			return &cexpr{kind: cDot, args: []*cexpr{toC(e.X)}, name: id.Name}
 		}
 		return cop2(binaryOps[e.Op], toC(e.X), toC(e.Y))
+	case *syntax.CondExpr:
+		return cop2(opCond, toC(e.Cond), toC(e.X), toC(e.Y))
 	case *syntax.AssignExpr:
 		lhs := toC(e.Lhs)
 		if op, ok := compoundOps[e.Op]; ok {
