@@ -1,0 +1,37 @@
+# opt/fwdmem: 置き換えた後の op.Disp (0) で読んだ値を覚え、別のフィールドの読み出しをその値にする (seed 60443000)
+commit adf75da028bd0dc68814f8b922b3e29c42013f3b
+Author: HARADA Makoto <harada@linen.games>
+Date:   Mon Oct 5 06:16:37 2026 +0000
+
+    opt: fwdmem で置き換えた読み出しの値を、置き換える前の disp で覚える
+    
+    load_mem を load に置き換えると op.Disp が 0 になり、`ps.f1` の値を disp=0 の `ps.f0` として覚えて
+    次の `ps.f0` の読み出しを `ps.f1` の値にしていた (2 つのフィールドを 2 回ずつ読む形。seed 60443000)。
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_01TVDjD2ESNwa65AJX8GsZZL
+
+diff --git b/internal/opt/fwdmem.go a/internal/opt/fwdmem.go
+index 89f2eb8..eeb20a9 100644
+--- b/internal/opt/fwdmem.go
++++ a/internal/opt/fwdmem.go
+@@ -90,9 +90,8 @@ func forwardFields(lmd *ir.Lambda) bool {
+ 		case op.Code == ir.OpLoadMem:
+ 			b := base(op)
+ 			w := ir.ValType(op.Dst).Size
+-			disp := op.Disp // 置き換えると op.Disp は 0 になるので先に取る (ps.f1 の値を disp=0 の ps.f0 として覚えていた。seed 60443000)
+ 			if _, plain := op.Dst.(*ir.Value); b != nil && plain {
+-				if kn, ok := mem[key{b, disp}]; ok && kn.width == w && ir.ValType(kn.val).Size == w {
++				if kn, ok := mem[key{b, op.Disp}]; ok && kn.width == w && ir.ValType(kn.val).Size == w {
+ 					*op = ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{kn.val}, Pos: op.Pos, Logs: op.Logs}
+ 					if v := ir.UnderlyingValue(kn.val); v != nil {
+ 						uses[v]++
+@@ -104,7 +103,7 @@ func forwardFields(lmd *ir.Lambda) bool {
+ 			forget(d)
+ 			if b != nil && d != nil && d != b && d.Kind == ir.KindLocal && !refered[d] {
+ 				if _, ok := op.Dst.(*ir.Value); ok {
+-					mem[key{b, disp}] = known{op.Dst, w}
++					mem[key{b, op.Disp}] = known{op.Dst, w}
+ 				}
+ 			}
+ 			continue

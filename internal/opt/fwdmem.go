@@ -90,8 +90,9 @@ func forwardFields(lmd *ir.Lambda) bool {
 		case op.Code == ir.OpLoadMem:
 			b := base(op)
 			w := ir.ValType(op.Dst).Size
+			disp := op.Disp // 置き換えると op.Disp は 0 になるので先に取る (ps.f1 の値を disp=0 の ps.f0 として覚えていた。seed 60443000)
 			if _, plain := op.Dst.(*ir.Value); b != nil && plain {
-				if kn, ok := mem[key{b, op.Disp}]; ok && kn.width == w && ir.ValType(kn.val).Size == w {
+				if kn, ok := mem[key{b, disp}]; ok && kn.width == w && ir.ValType(kn.val).Size == w {
 					*op = ir.Op{Code: ir.OpLoad, Dst: op.Dst, Src: []ir.Operand{kn.val}, Pos: op.Pos, Logs: op.Logs}
 					if v := ir.UnderlyingValue(kn.val); v != nil {
 						uses[v]++
@@ -103,7 +104,7 @@ func forwardFields(lmd *ir.Lambda) bool {
 			forget(d)
 			if b != nil && d != nil && d != b && d.Kind == ir.KindLocal && !refered[d] {
 				if _, ok := op.Dst.(*ir.Value); ok {
-					mem[key{b, op.Disp}] = known{op.Dst, w}
+					mem[key{b, disp}] = known{op.Dst, w}
 				}
 			}
 			continue
