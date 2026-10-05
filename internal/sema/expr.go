@@ -277,12 +277,12 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 					r = right
 					break
 				}
-				r = h.assign(fr.v, fr.lv, e.args[1])
+				r = h.assign(lhs, fr.v, fr.lv, e.args[1])
 				leftValue = fr.lv
 				break
 			}
 			left, lv := h.lvalValue(e.args[0])
-			r = h.assign(left, lv, e.args[1])
+			r = h.assign(e.args[0], left, lv, e.args[1])
 			leftValue = lv
 
 		case opNot, opUminus, opBitNot:
@@ -519,8 +519,9 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			} else {
 				// 普通の関数コール
 				lmdV := h.rval(e.args[0])
-				lmdType := ir.ValType(lmdV)
-				h.planCall(h.planInfo(e.args[0], lmdV), func() string { return describe(lmdV) }) // 型を決める段の計画 (typeplan.go)
+				fi := h.planInfo(e.args[0], lmdV)
+				h.planCall(fi, func() string { return describe(lmdV) }) // 型を決める段の計画 (typeplan.go)
+				lmdType := fi.t                                         // 呼ぶ関数の型 (引数・戻り値の型) も型を決める段の型
 				args = h.fillDefaultArgs(lmdV, args)
 				if lmdType.IsFarFunc() {
 					if !h.prog.FarCallEnabled() {
@@ -710,21 +711,15 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 	return r, leftValue
 }
 
-// assign は代入 `left = rhs` (left は評価済みの左辺、lv は左辺値 (ポインタ) かどうか)。代入した値 (左辺) を返す。
-func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
-	if h.needsExpected(rhs) || ir.ValType(left).IsFarFunc() || (lv && ir.ValType(left).Base.IsFarFunc()) || ir.ValType(left).IsSlice() || (lv && ir.ValType(left).Base.IsSlice()) {
+// assign は代入 `left = rhs` (lc は左辺の式、left は評価済みの左辺、lv は左辺値 (ポインタ) かどうか)。代入した値 (左辺) を返す。
+// 代入先の型は型を決める段の左辺の型 (assignTarget)。
+func (h *Hlc) assign(lc *cexpr, left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
+	dt := h.assignTarget(lc, left, lv) // 代入先の型 (A1 の幅、E・D の判定)
+	if h.needsExpected(rhs) || dt.IsFarFunc() || dt.IsSlice() {
 		// `p = {1, 2}`: 左辺の型で struct リテラルの型を決める
-		lt := ir.ValType(left)
-		if lv {
-			lt = lt.Base
-		}
-		rhs = h.withExpected(rhs, lt)
+		rhs = h.withExpected(rhs, dt)
 	}
 	h.checkLoopVarAssign(left)
-	dt := ir.ValType(left) // 代入先の型 (A1 の幅、E・D の判定)
-	if lv {
-		dt = dt.Base
-	}
 	// 左辺だけで決まる検査を先に、型の照合 (assignPre) と E・D を評価の前に (rvalAssign と同じ)
 	what := "assignment"
 	if !lv {
@@ -776,6 +771,16 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 	}
 	h.emit(&ir.Op{Code: ir.OpLoad, Dst: left, Src: []ir.Operand{right}})
 	return left
+}
+
+// assignTarget は代入の左辺 lc (評価した値 left、lv なら左辺値) の値の型: 型を決める段の型。決められなければ評価した値から。
+// soa の要素 (型を決める段ではハンドル) は要素の struct (ハンドルの型のフィールド `n.next` (next:*Nodes) はハンドルのまま)。
+func (h *Hlc) assignTarget(lc *cexpr, left ir.Operand, lv bool) *types.Type {
+	t := h.lvInfo(lc, left, lv).t
+	if lv && t.Kind == types.SoaRef && ir.ValType(left).Kind == types.SoaRef {
+		t = t.Base
+	}
+	return t
 }
 
 // containsCall は式 (評価済みでもよい) に関数呼び出し (マクロ呼び出しも含む) が含まれるか。

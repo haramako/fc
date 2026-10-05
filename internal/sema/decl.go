@@ -129,6 +129,12 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			h.checkMixedUse(init, "a variable without a type ("+name+")")
 		}
 		typ = h.guessType(name, nil, init)
+		if init != nil {
+			// 型を決める段の初期値の型 (決められなければ評価した値の型)。soa の要素 (型を決める段ではハンドル) は値として読んだ struct
+			if info := h.planInfo(initC, init); !(info.t.Kind == types.SoaRef && ir.ValType(init).Kind != types.SoaRef) {
+				typ = info.t
+			}
+		}
 		inferRO = typ != nil && (typ.Kind == types.Pointer || typ.IsSlice()) && h.readOnly(init)
 		if init != nil && typ != nil {
 			// 型は初期値の型 (型のない定数は収まる型) なので、変換の E・D は起きない: 評価のあとに判定し直さない
