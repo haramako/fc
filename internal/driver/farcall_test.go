@@ -67,17 +67,19 @@ func TestFarCall(t *testing.T) {
 	mainAsm, _ := os.ReadFile(filepath.Join(dir, "b", "_main.s"))
 	far1Asm, _ := os.ReadFile(filepath.Join(dir, "b", "_far1.s"))
 	m, f := string(mainAsm), string(far1Asm)
-	// main → far1.add / far1.nested / far1.fadd: jsr farcall (main は静的フレームなので X を進める call マクロは使わない)、
+	// main → far1.add / far1.nested / far1.fadd: jsr farcall_ay (main は静的フレームなので X を進める call マクロは使わない)、
 	// far1.nearf: 直接、fixed1.twice: 直接
-	if strings.Count(m, "call farcall") != 0 || strings.Count(m, "jsr farcall") != 5 {
-		t.Errorf("main.s: call farcall=%d jsr farcall=%d\n%s", strings.Count(m, "call farcall"), strings.Count(m, "jsr farcall"), m)
+	if strings.Count(m, "call farcall_ay") != 0 || strings.Count(m, "jsr farcall_ay") != 5 {
+		t.Errorf("main.s: call farcall_ay=%d jsr farcall_ay=%d\n%s", strings.Count(m, "call farcall_ay"), strings.Count(m, "jsr farcall_ay"), m)
 	}
 	if !strings.Contains(m, "jsr _far1_nearf") || !strings.Contains(m, "jsr _fixed1_twice") {
 		t.Errorf("main.s: nearf / twice は直接呼ぶべき")
 	}
-	// far call の飛び先は入口の sta を飛ばす `_far1_add__frame` (レジスタ渡し。Agent/wiki/design/frame-alloc.md §7)
-	if !strings.Contains(m, "lda #<.bank(_far1_add__frame)") || !strings.Contains(m, "sta FC_FARCALL+2") || !strings.Contains(m, ".global farcall") {
-		t.Errorf("main.s: FC_FARCALL の設定が無い")
+	// far call もレジスタ渡し (A / Y の引数はトランポリンがそのまま通す。Agent/wiki/design/farcall.md §3.7): 飛び先は
+	// 引数を A / Y で受け取る入口 `_far1_add`、FC_FARCALL は X で置く (A / Y を壊さない)、戻り値は A から
+	if !strings.Contains(m, "ldx #<.bank(_far1_add)\n\tstx FC_FARCALL+2\n\tjsr farcall_ay\n\tsta ") || !strings.Contains(m, ".global farcall_ay") ||
+		strings.Contains(m, "_far1_add__frame") {
+		t.Errorf("main.s: far call のレジスタ渡しになっていない\n%s", m)
 	}
 	// far1 の中: 同じモジュール・固定バンクへの呼び出しは near
 	if strings.Contains(f, "farcall") && strings.Count(f, "farcall") > 1 { // .import farcall の 1 行だけ
@@ -139,8 +141,8 @@ func TestFarcallMMC3Assembles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
-		"stub.s": "\t.export FC_FARCALL, _mmc3_pbank_bak\n.segment \"BSS\"\nFC_FARCALL: .res 3\n_mmc3_pbank_bak: .res 2\n.segment \"CODE\"\n\t.import farcall\n\tjsr farcall\n",
-		"l.cfg":  "MEMORY { RAM: start = $0200, size = $100, type = rw; ROM: start = $8000, size = $2000, file = %O, fill = yes; }\nSEGMENTS { BSS: load = RAM, type = bss; CODE: load = ROM, type = ro; }\n",
+		"stub.s": "\t.export FC_FARCALL, _mmc3_pbank_bak\n\t.exportzp FC_SP\n.segment \"ZEROPAGE\"\nFC_SP: .res 1\n.segment \"BSS\"\nFC_FARCALL: .res 3\n_mmc3_pbank_bak: .res 2\n.segment \"CODE\"\n\t.import farcall_ay\n\tjsr farcall_ay\n",
+		"l.cfg":  "MEMORY { ZP: start = $00, size = $100, type = rw; RAM: start = $0200, size = $100, type = rw; ROM: start = $8000, size = $2000, file = %O, fill = yes; }\nSEGMENTS { ZEROPAGE: load = ZP, type = zp; BSS: load = RAM, type = bss; CODE: load = ROM, type = ro; }\n",
 	})
 	runTool(t, dir, "ca65", filepath.Join(absRepoRoot, "fclib", "nes", "farcall_mmc3.asm"), "-o", "farcall.o")
 	runTool(t, dir, "ca65", "stub.s", "-o", "stub.o")

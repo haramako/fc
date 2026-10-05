@@ -192,29 +192,30 @@ func TestRandomBankPrograms(t *testing.T) {
 
 // bankFunc は生成した表の関数 (1 バイト引数 1 つ、1 バイト戻り値) と、その Go での評価。
 type bankFunc struct {
-	name string
-	decl string
-	eval func(tab []int, i int) int
+	name  string
+	decl  string
+	eval  func(tab []int, i int) int
+	eval2 func(tab []int, i, j int) int // 引数 2 つの関数 (far call では Y と A で渡る)
 }
 
 // genBankProgram は main + bank0 + bank4 を生成し、main の out[] に入るはずの値を返す。
 func genBankProgram(r *rand.Rand) (map[string]string, []int) {
 	kinds := []func(name string, k int) bankFunc{
 		func(name string, k int) bankFunc { // 表の 1 要素
-			return bankFunc{name, fmt.Sprintf("public function %s(i:int):int options(inline: true) { return T[(i & 7)] + %d; }", name, k),
-				func(tab []int, i int) int { return (tab[i&7] + k) & 255 }}
+			return bankFunc{name: name, decl: fmt.Sprintf("public function %s(i:int):int options(inline: true) { return T[(i & 7)] + %d; }", name, k),
+				eval: func(tab []int, i int) int { return (tab[i&7] + k) & 255 }}
 		},
 		func(name string, k int) bankFunc { // 自動インラインの候補 (印なし、小さい)
-			return bankFunc{name, fmt.Sprintf("public function %s(i:int):int { return T[(i & 7)] ^ T[%d]; }", name, k&7),
-				func(tab []int, i int) int { return tab[i&7] ^ tab[k&7] }}
+			return bankFunc{name: name, decl: fmt.Sprintf("public function %s(i:int):int { return T[(i & 7)] ^ T[%d]; }", name, k&7),
+				eval: func(tab []int, i int) int { return tab[i&7] ^ tab[k&7] }}
 		},
 		func(name string, k int) bankFunc { // 2 要素の和
-			return bankFunc{name, fmt.Sprintf("public function %s(i:int):int options(inline: true) { return T[(i & 7)] + T[((i + 1) & 7)]; }", name),
-				func(tab []int, i int) int { return (tab[i&7] + tab[(i+1)&7]) & 255 }}
+			return bankFunc{name: name, decl: fmt.Sprintf("public function %s(i:int):int options(inline: true) { return T[(i & 7)] + T[((i + 1) & 7)]; }", name),
+				eval: func(tab []int, i int) int { return (tab[i&7] + tab[(i+1)&7]) & 255 }}
 		},
 		func(name string, k int) bankFunc { // ループで合計 (展開される)
-			return bankFunc{name, fmt.Sprintf("public function %s(i:int):int { var s:int = i; for (var j:int = 0; j < %d; j++) { s += T[j]; } return s; }", name, 2+k%4),
-				func(tab []int, i int) int {
+			return bankFunc{name: name, decl: fmt.Sprintf("public function %s(i:int):int { var s:int = i; for (var j:int = 0; j < %d; j++) { s += T[j]; } return s; }", name, 2+k%4),
+				eval: func(tab []int, i int) int {
 					s := i
 					for j := 0; j < 2+k%4; j++ {
 						s += tab[j]
@@ -223,8 +224,15 @@ func genBankProgram(r *rand.Rand) (map[string]string, []int) {
 				}}
 		},
 		func(name string, k int) bankFunc { // BSS だけ (写される)
-			return bankFunc{name, fmt.Sprintf("public function %s(i:int):int options(inline: true) { cnt += i; return cnt; }", name),
-				nil}
+			return bankFunc{name: name, decl: fmt.Sprintf("public function %s(i:int):int options(inline: true) { cnt += i; return cnt; }", name)}
+		},
+		func(name string, k int) bankFunc { // 引数 2 つ (far call のレジスタ渡し: Y と A)
+			return bankFunc{name: name, decl: fmt.Sprintf("public function %s(i:int, j:int):int options(noinline: true) { return T[(i & 7)] + j + %d; }", name, k),
+				eval2: func(tab []int, i, j int) int { return (tab[i&7] + j + k) & 255 }}
+		},
+		func(name string, k int) bankFunc { // 再帰 (stack の関数: トランポリンは X = FC_SP で入る)
+			return bankFunc{name: name, decl: fmt.Sprintf("public function %s(i:int):int { if (i == 0) { return T[%d]; } return %s(i - 1) + 1; }", name, k, name),
+				eval: func(tab []int, i int) int { return (tab[k] + i) & 255 }}
 		},
 	}
 	type mod struct {
@@ -266,10 +274,18 @@ func genBankProgram(r *rand.Rand) (map[string]string, []int) {
 		m := mods[r.Intn(len(mods))]
 		f := m.funcs[r.Intn(len(m.funcs))]
 		arg := r.Intn(16)
-		fmt.Fprintf(&main, "\tout[%d] = %s.%s(%d);\n", slot, m.name, f.name, arg)
-		if f.eval != nil {
-			want = append(want, f.eval(m.tab, arg))
+		if f.eval2 != nil {
+			arg2 := r.Intn(256)
+			fmt.Fprintf(&main, "\tout[%d] = %s.%s(%d, %d);\n", slot, m.name, f.name, arg, arg2)
+			want = append(want, f.eval2(m.tab, arg, arg2))
 		} else {
+			fmt.Fprintf(&main, "\tout[%d] = %s.%s(%d);\n", slot, m.name, f.name, arg)
+		}
+		switch {
+		case f.eval2 != nil:
+		case f.eval != nil:
+			want = append(want, f.eval(m.tab, arg))
+		default:
 			m.cnt = (m.cnt + arg) & 255
 			want = append(want, m.cnt)
 		}

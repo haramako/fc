@@ -32,7 +32,7 @@ type ResultLoc struct {
 	Size int
 	// InA は 1 バイトの戻り値をフレームに書いたうえで A にも置いて返す (static の関数。呼び出し側はフレームを読まなくてよい)
 	InA bool
-	// OnlyA は InA のうち、フレームに書かずに A だけで返す: どの呼び出しもフレームから読まない (far call・stack の関数からの
+	// OnlyA は InA のうち、フレームに書かずに A だけで返す: どの呼び出しもフレームから読まない (stack の関数からの
 	// 呼び出し・アドレスを取られた・asm から参照される・別名・options(symbol:) の関数でない。frames.Analyze)
 	OnlyA bool
 }
@@ -83,10 +83,10 @@ func (c *CallConv) DirectEntry(inA, inY bool) string {
 	panic(fmt.Sprintf("no entry with A=%v Y=%v", inA, inY))
 }
 
-// ResultFromA は caller が call で呼んだこの関数の戻り値を A から受け取れるか (受け取れなければフレームから読む)。far call は
-// トランポリンが A を壊し、stack の関数は呼び出しの後で X (フレームの底) を戻すのに A を使う。
+// ResultFromA は caller が call で呼んだこの関数の戻り値を A から受け取れるか (受け取れなければフレームから読む)。stack の
+// 関数は呼び出しの後で X (フレームの底) を戻すのに A を使う。far call はトランポリンが A の戻り値をそのまま返す。
 func (c *CallConv) ResultFromA(caller *Lambda, call *Op) bool {
-	return c.Result.InA && !call.Far && caller.Conv.ABI != ABIStack
+	return c.Result.InA && caller.Conv.ABI != ABIStack
 }
 
 // SetStatic は static の関数の規約を作る (frames.Analyze)。entry はアドレスを取られた (スタックの入口が要る)、regs はレジスタ

@@ -248,13 +248,14 @@ func (l *funcGen) genCall() {
 		// レジスタに置いて A の引数をフレームに書く形は無い (markArgY: 直後が最後の引数、その直後が call) ので DirectEntry が落ちる
 		target := sym + pc.callee.Conv.DirectEntry(pc.inA, pc.inY)
 		if op.Far {
-			r.push(l.farCallSetup(target))
-			r.push(l.callStatic(lmd, "farcall"))
+			// A / Y の引数は置いたまま (トランポリンが通す)。呼び先とバンクは X で置く
+			r.push(l.farCallSetup(target, "x"))
+			r.push(l.callStatic(lmd, farcallSym))
 		} else {
 			r.push(l.callStatic(lmd, target))
 		}
 		// 次の push_arg が呼び先のフレームから写す戻り値 (layoutCalls の argPlan.from) は受けない
-		if op.Dst != nil && (op.Far || resultArgAt(ops, opNo) < 0) {
+		if op.Dst != nil && resultArgAt(ops, opNo) < 0 {
 			if pc.callee.Conv.ResultFromA(lmd, op) {
 				r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる
 			} else {
@@ -271,11 +272,11 @@ func (l *funcGen) genCall() {
 				r.push(l.loadA(op.In(0), i))
 				r.push(fmt.Sprintf("sta FC_FARCALL+%d", i))
 			}
-			r.push(l.callStackish(lmd, "farcall"))
+			r.push(l.callStackish(lmd, farcallSym))
 		} else if op.Far {
-			// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いて farcall (ターゲット側のトランポリン) を呼ぶ
-			r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
-			r.push(l.callStackish(lmd, "farcall"))
+			// 別バンクの関数: 呼び先とバンクを FC_FARCALL に置いてトランポリン (ターゲット側) を呼ぶ
+			r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol, "a"))
+			r.push(l.callStackish(lmd, farcallSym))
 		} else if sym != "" {
 			r.push(l.callStackish(lmd, sym))
 		} else {
@@ -320,8 +321,10 @@ func (l *funcGen) genCall() {
 		}
 	case ckFastcallReg:
 		if op.Far {
-			r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
-			r.push("jsr farcall")
+			// トランポリンは X を FC_SP にして呼び先へ入るので、stack 関数は X (フレームの底) を戻す
+			r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol, "a"))
+			r.push("jsr " + farcallSym)
+			r.push(l.restoreX(lmd)...)
 		} else if sym != "" {
 			r.push(fmt.Sprintf("jsr %s", sym))
 		} else {

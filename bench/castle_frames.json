@@ -1,31 +1,31 @@
 {
   "area8b_idle": {
     "frames": 300,
-    "avg": 12104,
-    "max": 15760,
+    "avg": 12027,
+    "max": 15690,
     "over": 0
   },
   "area8b_jump": {
     "frames": 540,
-    "avg": 12561,
-    "max": 15995,
+    "avg": 12483,
+    "max": 15918,
     "over": 0
   },
   "field": {
     "frames": 1080,
-    "avg": 8627,
+    "avg": 8559,
     "max": 29871,
     "over": 2
   },
   "start": {
     "frames": 300,
-    "avg": 6943,
-    "max": 29873,
+    "avg": 6897,
+    "max": 29870,
     "over": 8
   },
   "title": {
     "frames": 180,
-    "avg": 5716,
+    "avg": 5715,
     "max": 29870,
     "over": 5
   }

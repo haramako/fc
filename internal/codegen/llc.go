@@ -178,7 +178,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 		asm.push(fmt.Sprintf("\t.include \"_%s.inc\"", m))
 	}
 	if l.FarCall {
-		asm.push("\t.global farcall") // トランポリンを include したモジュールでは export、それ以外では import になる
+		asm.push("\t.global " + farcallSym) // トランポリンを include したモジュールでは export、それ以外では import になる
 		asm.push("\t.import FC_FARCALL")
 	}
 

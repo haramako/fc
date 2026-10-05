@@ -10,13 +10,19 @@ import (
 
 // 関数呼び出し (call マクロ / fastcall / far call)。
 
+// farcallSym はトランポリンのシンボル。A / Y の引数をそのまま呼び先へ渡し、A の戻り値をそのまま返す規約
+// (Agent/wiki/design/farcall.md §3.7)。前の規約 (A / Y を壊す `farcall`) のトランポリンを黙って使わないよう、名前を変えた。
+const farcallSym = "farcall_ay"
+
 // farCallSetup は far call の呼び先アドレスとバンク番号 (ld65.cfg の bank = N を .bank で引く) を FC_FARCALL に置く。
-func (l *Llc) farCallSetup(sym string) []any {
+// reg は使うレジスタ ("a" / "x")。static の呼び先は A / Y に引数を置いたまま呼ぶので X で置く (X は呼び出しが壊すので、
+// call の命令の中で使ってよい)。
+func (l *Llc) farCallSetup(sym, reg string) []any {
 	s := mangle(sym)
 	return []any{
-		fmt.Sprintf("lda #<%s", s), "sta FC_FARCALL+0",
-		fmt.Sprintf("lda #>%s", s), "sta FC_FARCALL+1",
-		fmt.Sprintf("lda #<.bank(%s)", s), "sta FC_FARCALL+2",
+		fmt.Sprintf("ld%s #<%s", reg, s), fmt.Sprintf("st%s FC_FARCALL+0", reg),
+		fmt.Sprintf("ld%s #>%s", reg, s), fmt.Sprintf("st%s FC_FARCALL+1", reg),
+		fmt.Sprintf("ld%s #<.bank(%s)", reg, s), fmt.Sprintf("st%s FC_FARCALL+2", reg),
 	}
 }
 
@@ -158,8 +164,8 @@ func markHoldX(ops []*ir.Op, p *callPlans) {
 func markArgY(ops []*ir.Op, p *callPlans) {
 	for _, c := range p.list {
 		op := c.call
-		if c.far || c.callee == nil || c.callee.Conv.ABI != ir.ABIStatic || c.callee.Conv.RegParam(ir.RegY) == nil {
-			continue // far call はトランポリンが A / Y を壊す
+		if c.callee == nil || c.callee.Conv.ABI != ir.ABIStatic || c.callee.Conv.RegParam(ir.RegY) == nil {
+			continue
 		}
 		var at []int // 引数ごとの push_arg の位置 (slice を分けた続きは数えない)
 		for k, a := range c.args {

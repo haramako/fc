@@ -365,7 +365,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			}
 			if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
 				if l, ok := g.ByID[v.Symbol]; ok && !l.Conv.ResultFromA(caller, op) {
-					l.Conv.Result.OnlyA = false // far call と stack 関数は戻り値を呼び先のフレームから読む (codegen.genCall)
+					l.Conv.Result.OnlyA = false // stack 関数は戻り値を呼び先のフレームから読む (codegen.genCall)
 				}
 			}
 		}
@@ -678,6 +678,22 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 		}
 		warnings = append(warnings, diag.Warning{Pos: lmd.Pos, Msg: fmt.Sprintf("%s is called both from the interrupt handler %s and from %s; its static frame is shared, so an interrupt while %s runs corrupts it",
 			lmd.Id, strings.Join(irqs, ", "), from, lmd.Id)})
+	}
+
+	// 割り込みから届く関数の far call: トランポリンの状態 (FC_FARCALL と、スロットの今のバンクの写し) は主の処理と共有なので、
+	// 主の far call の途中 (FC_FARCALL を置いてから飛ぶまで、バンクの写しとマッパーを書き換えている間) に割り込みの中で far call
+	// すると、主の呼び出しが別の関数へ飛ぶかバンクがずれる (Agent/wiki/design/farcall.md §3.5)
+	for i, lmd := range g.Lambdas {
+		if !irqTree[i] || lmd.Unused {
+			continue
+		}
+		for _, op := range lmd.Ops {
+			if op != nil && op.Code.IsCall() && (op.Far || ir.ValType(op.Src[0]).IsFarFunc()) {
+				warnings = append(warnings, diag.Warning{Pos: op.Pos, Msg: fmt.Sprintf("%s makes a far call in an interrupt handler; FC_FARCALL and the current banks are shared with the main code, so an interrupt during a far call of the main code breaks it (call only fixed-bank functions from interrupts)",
+					lmd.Id)})
+				break
+			}
+		}
 	}
 
 	var order []int

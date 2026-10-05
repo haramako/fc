@@ -28,7 +28,7 @@ type callPlan struct {
 	pushAt, callAt int        // 命令列の中の位置 (計画を作ったとき)
 	callee         *ir.Lambda // 呼び先が分かっているとき (関数のシンボルを直接呼ぶ)
 	kind           callKind
-	far            bool     // far call・far な関数ポインタ (トランポリンが A / Y を壊すのでレジスタ渡しは使えない)
+	far            bool     // far call・far な関数ポインタ (トランポリンを通す。A / Y の引数と A の戻り値はそのまま通る)
 	args           []*ir.Op // push_arg (並びの順。slice を分けた続き ArgCont も含む)
 	argAt          []int    // args の位置
 
@@ -122,9 +122,9 @@ func (l *Llc) resolveCall(c *callPlan) {
 	}
 }
 
-// regParam は static の呼び先がレジスタ r で受け取る引数 (far call はトランポリンが A / Y を壊すので無し)。
+// regParam は static の呼び先がレジスタ r で受け取る引数 (far call もトランポリンが A / Y をそのまま通す)。
 func (c *callPlan) regParam(r ir.Reg) *ir.ArgLoc {
-	if c.kind != ckStatic || c.far {
+	if c.kind != ckStatic {
 		return nil
 	}
 	return c.callee.Conv.RegParam(r)
