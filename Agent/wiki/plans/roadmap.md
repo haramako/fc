@@ -554,10 +554,14 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       ほぼ全部の式に広げ（値の式の約 81 % → 99.9 % 以上。代入の式・リテラル・slice・void の呼び出し、マクロは `macroTyping`
       で型を宣言し、IR を出さないマクロは展開を共有）、結果を節点ごとに覚え（文の間）、FC_VERIFY_IR の照合を全部の節点に。
       A1 の幅を `Hlc.wide` でなく `lvalIn` の引数で渡す。名前の表（`Scope`・`ModuleInterface`）と関数の本体の AST を ir から
-      sema に移した（`ir.Value.Module` はモジュールの id）。残り: lval が型を決める段の結果（型と暗黙の変換）を受け取って IR を
-      出すだけにすること（今は lval も tryMakeCompatible などで型を出し直し、照合で一致を確かめている。次は暗黙の変換を型を
-      決める段が節点に付ける形）、型の誤りの診断を型を決める段に寄せること、sema の名前を `ir.Value` から分けた Symbol に
-      すること（`ir.Value` を置き場所とリテラルだけに）
+      sema に移した（`ir.Value.Module` はモジュールの id）。✅ 2026-10-05（続き）: 演算の節点の型・項の変換・型の誤りの診断を
+      「計画」の関数（`sema/typeplan.go`: 二項の算術・比較・単項・@min / @max・添字・参照はがし・フィールド・明示の変換・呼び出し）
+      にし、型を決める段は計画の結果の型を節点の型に、lval は項を評価したあと同じ計画（項の型は型を決める段の型）を受け取って
+      その変換のとおりに IR を出す（adaptLiteral / tryMakeCompatible で型を出し直すのをやめた。adaptLiteral は計画の adaptLit を
+      値に当てる薄い包み）。モジュールと型名の束縛を `ir.Value.Module` / `TypeRef` から sema の表（`sema/binding.go`）に移し、
+      IR の変数の一覧にも入れない。残り: 代入のような変換の評価の後の convert（約 8 % の、評価の前に判定できない形）、計画の外の
+      節点（代入・slice・リテラル・soa）の診断、マクロ・名前を値でない束縛として cexpr で表すこと（今は ir.Value の入れ物）、
+      sema の名前を `ir.Value` から分けた Symbol にすること（`ir.Value` を置き場所とリテラルだけに）
 - [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
