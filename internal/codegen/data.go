@@ -44,7 +44,7 @@ func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 			case lv != nil && lv.Kind == ir.KindLiteral && lv.IsInt:
 				parts = append(parts, fmt.Sprintf("%d", ir.FloorMod(lv.Int, limit)))
 			case lv != nil && lv.Kind == ir.KindLiteral:
-				parts = append(parts, mangle(lv.Symbol)) // 無名関数のシンボル `_m_$1` を ca65 の名前に (toAsm と同じ)
+				parts = append(parts, mangle(ir.SymExpr(lv))) // 無名関数のシンボル `_m_$1` を ca65 の名前に (toAsm と同じ)
 			default:
 				parts = append(parts, l.toAsm(elem))
 			}
@@ -77,7 +77,7 @@ func (l *Llc) emitData(typ *types.Type, val []ir.Operand) []any {
 		case lv != nil && lv.Kind == ir.KindLiteral && lv.IsInt:
 			r = append(r, fmt.Sprintf("\t%s %d", op, ir.FloorMod(lv.Int, limit)))
 		case lv != nil && lv.Kind == ir.KindLiteral:
-			r = append(r, fmt.Sprintf("\t%s %s", op, mangle(lv.Symbol)))
+			r = append(r, fmt.Sprintf("\t%s %s", op, mangle(ir.SymExpr(lv))))
 		default:
 			r = append(r, fmt.Sprintf("\t%s %s", op, l.toAsm(v)))
 		}

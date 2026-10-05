@@ -118,6 +118,17 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				return &cexpr{kind: cArray, args: c.args, ty: c.ty}
 			}
 			x := h.constEval(h.constSlice(e)) // slice の要素 (`[?][]const u8 = ["ab", "cde"]`) は定数の slice に
+			// `[ORIGIN, {1, 2}]`: 名前付きの const の struct・配列は中身の値 (型が無ければ要素そのものの型で)
+			if c.ty != nil && c.ty.Kind == types.Array {
+				x = h.namedConstValue(x, c.ty.Base)
+				if c.ty.Base.Kind == types.Pointer {
+					x = h.constRefAddress(x, c.ty.Base) // `[&gp, &g[1]]`: グローバル変数のアドレス
+				}
+			} else if c.ty == nil && x.kind == cValue {
+				x = h.namedConstValue(x, x.val.Type)
+			} else if c.ty == nil {
+				x = h.constRefAddress(x, nil)
+			}
 			if !isConstElem(x) || h.prog.storageAliases[x.val] != nil {
 				// 実行時の値 (変数・式) を要素に持つ: 実行時に一時変数へ組み立てる (lval)。変数の名前がそのアドレスの定数に
 				// なっていた (`var a:[2]u8 = [n, m]` が n と m のアドレスの表。const のポインタの表の規則が効いていた)
@@ -197,7 +208,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			return cv(v)
 		}
 		// モジュールでなければ struct のフィールド参照 (実行時に評価する)
-		return &cexpr{kind: cOp, op: opField, args: []*cexpr{left}, name: c.name}
+		return h.constField(left, c.name)
 
 	case cStructLit:
 		return h.constEvalStructLit(c)
@@ -403,7 +414,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			return &cexpr{kind: cOp, op: opCall, args: args, block: c.block}
 
 		case opField:
-			return &cexpr{kind: cOp, op: opField, args: []*cexpr{h.constEval(c.args[0])}, name: c.name}
+			return h.constField(h.constEval(c.args[0]), c.name)
 
 		case opMin, opMax, opClamp:
 			args := make([]*cexpr, len(c.args))
@@ -438,6 +449,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			return &cexpr{kind: cOp, op: c.op, args: args}
 
 		case opLoad, opIndex, opRef, opDeref, opSlice, opToSlice, opLen:
+			if c.op == opRef && h.constIndex {
+				// `&C[1]` は要素の値ではなく場所 (constRefAddress)
+				h.constIndex = false
+				defer func() { h.constIndex = true }()
+			}
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
 				if a != nil { // opSlice の省いた lo / hi
@@ -457,14 +473,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 
 // constElem は定数の配列 (配列リテラル・文字列・名前付きの配列定数) a の定数の添字 i の要素 (整数の要素でなければ nil)。
 func (h *Hlc) constElem(a, i *cexpr) *cexpr {
-	if a == nil || i == nil || a.kind != cValue || !i.isLiteralInt() {
+	if a == nil || i == nil || !i.isLiteralInt() {
 		return nil
 	}
-	arr := a.val
-	if lit, ok := h.prog.constArrays[arr]; ok {
-		arr = lit
-	}
-	if arr.Kind != ir.KindArrayLiteral {
+	arr := h.constAggregate(a)
+	if arr == nil || arr.Type.Kind != types.Array || arr.Type.IsSoa {
 		return nil
 	}
 	n := i.val.Int
@@ -473,6 +486,62 @@ func (h *Hlc) constElem(a, i *cexpr) *cexpr {
 	}
 	if e := ir.ValLiteral(arr.Elems[n]); e != nil && e.Kind == ir.KindLiteral && e.IsInt {
 		return cv(e)
+	}
+	return nil
+}
+
+// constField は評価済みの left のフィールド name の参照。const の宣言の中 (constIndex) で、定数の表の整数のフィールド
+// (`MONS[1].hp`、`ORIGIN.x`) なら定数にする。
+func (h *Hlc) constField(left *cexpr, name string) *cexpr {
+	if h.constIndex {
+		if v := h.constAggregate(left); v != nil && v.Type.Kind == types.Struct && !v.Type.IsSlice() {
+			for i, f := range v.Type.Fields {
+				if f.Name == name && i < len(v.Elems) {
+					if e := ir.ValLiteral(v.Elems[i]); e != nil && e.Kind == ir.KindLiteral && e.IsInt {
+						return cv(e)
+					}
+				}
+			}
+		}
+	}
+	return &cexpr{kind: cOp, op: opField, args: []*cexpr{left}, name: name}
+}
+
+// constAggregate は評価済みの式 c が定数の配列・struct (リテラル、名前付きの配列・struct の定数、その定数の添字の
+// 要素・フィールド: `TBL[1]`、`MONS[1].pos`) ならその中身 (ir.KindArrayLiteral)。そうでなければ nil。
+func (h *Hlc) constAggregate(c *cexpr) *ir.Value {
+	switch {
+	case c == nil:
+	case c.kind == cValue:
+		v := c.val
+		if lit, ok := h.prog.constArrays[v]; ok {
+			v = lit
+		}
+		if v.Kind == ir.KindArrayLiteral {
+			return v
+		}
+	case c.kind == cOp && c.op == opIndex && len(c.args) == 2 && c.args[1] != nil && c.args[1].isLiteralInt():
+		arr := h.constAggregate(c.args[0])
+		if arr == nil || arr.Type.Kind != types.Array || arr.Type.IsSoa {
+			return nil
+		}
+		if n := c.args[1].val.Int; n >= 0 && n < len(arr.Elems) {
+			if e := ir.ValLiteral(arr.Elems[n]); e != nil && e.Kind == ir.KindArrayLiteral {
+				return e
+			}
+		}
+	case c.kind == cOp && c.op == opField:
+		st := h.constAggregate(c.args[0])
+		if st == nil || st.Type.Kind != types.Struct || st.Type.IsSlice() {
+			return nil
+		}
+		for i, f := range st.Type.Fields {
+			if f.Name == c.name && i < len(st.Elems) {
+				if e := ir.ValLiteral(st.Elems[i]); e != nil && e.Kind == ir.KindArrayLiteral {
+					return e
+				}
+			}
+		}
 	}
 	return nil
 }

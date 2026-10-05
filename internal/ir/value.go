@@ -51,9 +51,12 @@ type Value struct {
 	Int     int
 	Untyped bool // 型を書いていない整数定数 (リテラル・型を書かない const・sizeof)。演算・比較で相手の型に合わせる (sema.adaptLiteral)
 	Symbol  string
-	Elems   []Operand
-	Module  *ModuleInterface // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
-	TypeRef *types.Type      // 型名の束縛 (struct / soa 宣言)。Type.Kind == types.TypeName
+	// SymOffset は KindLiteral のシンボル (アドレス) に足すバイト数。const の表に置くグローバル変数の要素・フィールドの
+	// アドレス (`[&g[1], &s.f]`。sema.constRefAddress) だけが使う (データの .word に `sym+N` と出る)
+	SymOffset int
+	Elems     []Operand
+	Module    *ModuleInterface // モジュール束縛 (`use mod;`)。マクロは Type.Kind == types.Macro で表し、本体は sema が持つ
+	TypeRef   *types.Type      // 型名の束縛 (struct / soa 宣言)。Type.Kind == types.TypeName
 
 	// 元が文字列リテラルだった配列 (IsString のとき Str が元の文字列)
 	IsString bool
@@ -248,11 +251,19 @@ func (v *Value) Inspect() string {
 	case v.Kind == KindLiteral && v.IsInt:
 		return "{" + strconv.Itoa(v.Int) + "}"
 	case v.Symbol != "":
-		return "{" + v.Symbol + "}"
+		return "{" + SymExpr(v) + "}"
 	case v.Module != nil:
 		return "{" + v.Module.Id + "}"
 	}
 	return "{}"
+}
+
+// SymExpr はシンボルのリテラル v のアセンブラの式 (`sym`、SymOffset があれば `sym+N`。Mangle の前)。
+func SymExpr(v *Value) string {
+	if v.SymOffset != 0 {
+		return fmt.Sprintf("%s+%d", v.Symbol, v.SymOffset)
+	}
+	return v.Symbol
 }
 
 // String は CastedValue#to_s 相当。

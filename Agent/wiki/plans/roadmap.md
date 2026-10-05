@@ -369,7 +369,7 @@ do-while は「やること候補（すぐではない）」。
       `(x as bool) == (y as bool)` も `(x as bool) == true` も偽）。`f == true` / `f == false` は `lda f / bne`（今より短い）、
       変数同士だけ分岐が数命令増える、0 / 1 と分かる値（比較の結果・`true` / `false`）同士は今のまま `cmp`。`if (f)` と代入は変わらない ✅ 2026-09-27（feat/v3-checks）
 - [x] 中: 定数添字の範囲外をエラーに（値が飛び飛びの enum の表も） ✅ 2026-09-29（配列の定数の添字。slice・ポインタは長さが分からないので見ない。飛び飛びの enum の表は残り）
-- [ ] 低: `if (x = 0)` の警告、enum の `++` / `--`、const 表の定数添字を定数に（`MONS[1].hp`）
+- [ ] 低: `if (x = 0)` の警告、enum の `++` / `--`。（✅ 2026-10-05: const 表の定数添字を定数に（`MONS[1].hp`。const の宣言の中だけ: `sema.constField` / `constAggregate`））
 - [x] 中: 最適化: u8 × u8 → u16（`m as u16 * n`）を 8×8→16 のルーチンに（今は 16×16 の `__mul_16`。`__mul_8t16` は「ほぼ未実装」）、
       `((a as u16 + b) / 2) as u8` を `clc / lda / adc / ror a` に（Agent/discussions/2026-09-20-v3-plan.md §10.2）。✅ 2026-09-29: 前半（`__mul_8t16` を x²/4 の
       16 ビットの表引きで作り直し、0〜255 どうしの 16 ビットの掛け算で呼ぶ。約 400 → 約 60 サイクル。ランタイムの並びが変わるので
@@ -380,10 +380,10 @@ do-while は「やること候補（すぐではない）」。
 
 - [x] 高: **する（2026-09-26 決定）** 未知・無効な属性を警告に（`@(adress:)` が黙って RAM 変数になる。エラーにするかは後で決める） ✅ 2026-09-27（feat/v3-checks）
 - [ ] 中: グローバル変数の初期値（既存の項目「グローバル変数の初期化」）。**まだやらない（2026-09-26）**
-- [ ] 中: 型名を省いた struct リテラルを引数に（`add({1, 2}, p)`）、`mod.Point{…}`、`var s = {1, 2}` のエラーの文言
-- [ ] 中: 名前付きの const（struct・配列）を別の const 表の要素に（`[ORIGIN, {1, 2}]`）、診断に位置を
-- [ ] 中: グローバル変数のアドレスを const の表に（`[&gp, &g[0]]`）
-- [ ] 中: 2 次元配列の行を値の文脈で配列のままに（`var b = a[1]` がポインタになる）
+- [x] 中: 型名を省いた struct リテラルを引数に（`add({1, 2}, p)`）、`mod.Point{…}`、`var s = {1, 2}` のエラーの文言 ✅ 2026-10-05（`arg_list` が `lit_elem`、`mod.Point{…}` は `syntax.binary` が struct リテラルにする。`TestAnonStructLitArg`）
+- [x] 中: 名前付きの const（struct・配列）を別の const 表の要素に（`[ORIGIN, {1, 2}]`）、診断に位置を ✅ 2026-10-05（`sema.namedConstValue`、定数でない要素はその位置で `reportNonConst`。`TestNamedConstInTable`）
+- [x] 中: グローバル変数のアドレスを const の表に（`[&gp, &g[0]]`） ✅ 2026-10-05（`const P:*T = &g` も。`sema.constRefAddress`、`ir.Value.SymOffset` で `sym+N`。`TestConstGlobalAddress`）
+- [x] 中: 2 次元配列の行を値の文脈で配列のままに（`var b = a[1]` がポインタになる） ✅ 2026-10-05（`sema.arrayValue`: 型の無い var・配列への代入・初期化・引数で行の写し。`var c:[2]u8 = a[1]` がポインタの 2 バイトを写していた誤りも直った。`TestArrayRowValue`）
 - [ ] 低: var の `@(zeropage)` と `.importzp`、`@(address:)` の定数式、文字列の連結（エスケープは上の v4 へ）、soa の `@len`、
       型の表示（`[?]T`、`*const`、配列のエラーの要素）
 

@@ -157,7 +157,7 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 		if et.Kind == types.Pointer && f.val.kind == cArray {
 			et = h.prog.Types.ArrayOf(et.Base, -1) // `{p: [{1, 2}]}`: 型名を省いた要素はポインタの先の型
 		}
-		fv := h.constEval(h.constSlice(h.withExpected(f.val, et)))
+		fv := h.namedConstValue(h.constEval(h.constSlice(h.withExpected(f.val, et))), fd.Type)
 		if fd.Type.Kind == types.Pointer {
 			if fv.kind == cValue {
 				// アドレスの定数にすると読み取り専用か分からなくなるので、その前に (rvalAssign と同じ警告)
@@ -184,6 +184,19 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 		}
 	}
 	return cv(ir.NewArrayLiteral(h.tmpName("$"), ty, elems))
+}
+
+// namedConstValue は、値として struct・配列を置く所 (型 t の const の表の要素・struct のフィールド) に書いた名前付きの
+// const (`const ORIGIN = P{…}`、`const ROW:[3]u8 = […]`) を、そのシンボルではなく中身の定数にする (ROM に写しを置く)。
+// ほかはそのまま (ポインタの表の要素は名前のアドレス: pointerElems)。
+func (h *Hlc) namedConstValue(x *cexpr, t *types.Type) *cexpr {
+	if x.kind != cValue || x.val.Kind != ir.KindGlobal || t == nil || t.IsSlice() || t.Kind != types.Struct && t.Kind != types.Array {
+		return x
+	}
+	if lit := h.prog.constArrays[x.val]; lit != nil {
+		return cv(lit)
+	}
+	return x
 }
 
 // isConstLiteral は評価済みの式がデータとして置ける定数 (整数 / シンボル / 配列・struct リテラル) か。

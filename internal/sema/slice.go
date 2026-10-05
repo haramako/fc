@@ -406,6 +406,9 @@ func (h *Hlc) constSlice(c *cexpr) *cexpr {
 // リテラル) なら、そのアドレスの定数にする (リテラルは無名の配列定数に切り出す。const PS:[N]*T の要素と同じ)。
 // それ以外はそのまま。
 func (h *Hlc) constAddress(c *cexpr, pt *types.Type) *cexpr {
+	if c.kind == cOp && c.op == opRef {
+		return h.constRefAddress(c, pt)
+	}
 	if c.kind != cValue {
 		return c
 	}
@@ -424,4 +427,60 @@ func (h *Hlc) constAddress(c *cexpr, pt *types.Type) *cexpr {
 		return cv(ir.NewSymbolLiteral("", pt, v.Symbol))
 	}
 	return c
+}
+
+// constRefAddress は const の表の要素・struct のフィールドに書いたグローバル変数・配列定数の (要素・フィールドの) アドレス
+// (`&gp`、`&g[1]`、`&s.f`、`&a[2].f`) を、シンボル + バイト数の定数にする (データに `.word sym+N` と並ぶ)。添字は定数だけ。
+// pt は置く所のポインタの型 (nil なら指す先の型のポインタ)。ローカル変数・実行時の添字・ポインタの先などは c のまま。
+func (h *Hlc) constRefAddress(c *cexpr, pt *types.Type) *cexpr {
+	if c.kind != cOp || c.op != opRef {
+		return c
+	}
+	base, off, t, ok := h.constLvalAddr(c.args[0])
+	if !ok {
+		return c
+	}
+	ptr := h.prog.Types.PointerToRO(t, base.ReadOnly)
+	if pt != nil {
+		h.compatibleAssign("address", pt, ptr)
+		ptr = pt
+	}
+	v := ir.NewSymbolLiteral("", ptr, base.Symbol)
+	v.SymOffset = off
+	return cv(v)
+}
+
+// constLvalAddr は評価済みの左辺値 c がグローバル変数・配列定数 (の定数の添字の要素・フィールド) なら、その変数と
+// 先頭からのバイト数と型を返す。
+func (h *Hlc) constLvalAddr(c *cexpr) (base *ir.Value, off int, t *types.Type, ok bool) {
+	switch {
+	case c.kind == cValue:
+		v := c.val
+		if v.Kind != ir.KindGlobal || v.Symbol == "" || v.Module != nil || v.Type.IsSoa || h.prog.storageAliases[v] != nil ||
+			v.Type.Kind == types.Macro || v.Type.Kind == types.TypeName {
+			return nil, 0, nil, false
+		}
+		return v, 0, v.Type, true
+	case c.kind == cOp && c.op == opIndex:
+		base, off, t, ok = h.constLvalAddr(c.args[0])
+		if !ok || t.Kind != types.Array || t.IsSoa || !c.args[1].isLiteralInt() {
+			return nil, 0, nil, false
+		}
+		i := c.args[1].val.Int
+		if i < 0 || t.Length >= 0 && i >= t.Length {
+			panic(&diag.Error{Msg: fmt.Sprintf("index %d is out of the array (length %d)", i, t.Length)})
+		}
+		return base, off + i*t.Base.Size, t.Base, true
+	case c.kind == cOp && c.op == opField:
+		base, off, t, ok = h.constLvalAddr(c.args[0])
+		if !ok || t.Kind != types.Struct || t.IsSlice() {
+			return nil, 0, nil, false
+		}
+		fd, found := t.Field(c.name)
+		if !found {
+			return nil, 0, nil, false
+		}
+		return base, off + fd.Offset, fd.Type, true
+	}
+	return nil, 0, nil, false
 }

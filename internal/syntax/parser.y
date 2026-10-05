@@ -77,7 +77,7 @@ package syntax
 %type <block>   block opt_block
 %type <fbody>   function_block
 %type <expr>    opt_exp exp for_in_value range_exp
-%type <exprs>   exp_list case_value_list
+%type <exprs>   case_value_list
 %type <alist>   arg_list
 %type <opts>    opt_options options attrs
 %type <optents> option_list option_list_sub option attr_list attr
@@ -335,13 +335,10 @@ exp: '(' exp ')'            { $$ = &ParenExpr{Lparen: $1.Pos, X: $2, Rparen: $3.
    | IDENT                  { $$ = ident($1) }
    | STRING                 { $$ = strLit($1) }
 
-exp_list: exp_list ',' exp { $$ = append($1, $3) }
-        | exp { $$ = []Expr{$1} }
-
-/* 呼び出しの引数と配列リテラルの要素。空でもよく、末尾のカンマ (v2) を許す */
+/* 呼び出しの引数 (式か、引数の型で決まる型名を省いた struct リテラル)。空でもよく、末尾のカンマ (v2) を許す */
 arg_list: /* empty */ { $$ = argList{exprs: []Expr{}} }
-        | exp_list { $$ = argList{exprs: $1} }
-        | exp_list ',' { $$ = argList{exprs: $1, comma: $2.Pos} }
+        | lit_elem_list { $$ = argList{exprs: $1} }
+        | lit_elem_list ',' { $$ = argList{exprs: $1, comma: $2.Pos} }
 
 /****************************************************/
 /* option */
@@ -371,6 +368,7 @@ var_decl_list: var_decl_list ',' var_decl { $$ = append($1, $3) }
 
 var_decl: IDENT ':' type_decl opt_var_init opt_options { $$ = &VarSpec{Name: ident($1), Type: $3, Init: $4, Options: $5} }
         | IDENT '=' exp opt_options { $$ = &VarSpec{Name: ident($1), Init: $3, Options: $4} }
+        | IDENT '=' anon_struct_lit opt_options { $$ = &VarSpec{Name: ident($1), Init: $3, Options: $4} } /* 型が無いのでエラー (sema が案内する) */
 
 opt_var_init: /* empty */ { $$ = nil }
             | '=' exp { $$ = $2 }

@@ -83,6 +83,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	var initC *cexpr
 	var initChecked bool // E・D の判定を評価の前に済ませた (preConvert)
 	var initPre bool     // 型の照合を評価の前に済ませた (assignPre)
+	if sl, ok := sp.Init.(*syntax.StructLit); ok && sl.Type == nil && typ == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: a struct literal without a type name needs the variable's type (write `var %s:T = {…}` or `var %s = T{…}`)", name, name, name)})
+	}
 	if sp.Init != nil {
 		c := h.withExpected(toC(sp.Init), typ)
 		initC = c
@@ -102,7 +105,12 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		}
 		// 型の照合を評価の前に (rvalAssign と同じ。長さを初期値から決める `[?]T` は長さが決まってから下で)
 		initPre = typ != nil && !(typ.Kind == types.Array && typ.Length < 0) && h.assignPre("`"+name+"`", c, typ)
-		init, initChecked = h.rvalPreConv(c, typ, typ != nil)
+		if typ == nil || typ.Kind == types.Array && !typ.IsSoa {
+			init = h.arrayValue(c) // `var b = a[1]` (2 次元配列の行) は行の写し (要素へのポインタにしない)
+		}
+		if init == nil {
+			init, initChecked = h.rvalPreConv(c, typ, typ != nil)
+		}
 		// `var a:[?]u8 = [1, 2, 3];`: 長さを初期値から決める (長さ未定のままフレームに領域が取られず、ほかのローカルを壊していた)
 		if it := ir.ValType(init); typ != nil && typ.Kind == types.Array && typ.Length < 0 && it.Kind == types.Array && it.Length >= 0 {
 			typ = h.prog.Types.ArrayOf(typ.Base, it.Length)
@@ -190,6 +198,38 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	}
 }
 
+// reportNonConst は const の初期値の配列・struct リテラル c のうち、定数でない最初の要素の理由 (constant value required /
+// storage alias) をその要素の位置で出す (無ければ何もしない。呼んだ側が "must be constant" を出す)。
+func (h *Hlc) reportNonConst(c *cexpr) {
+	var items []*cexpr
+	switch {
+	case c.kind == cArray && c.rt:
+		items = c.args
+	case c.kind == cStructLit:
+		for _, f := range c.flds {
+			items = append(items, f.val)
+		}
+	default:
+		return
+	}
+	for _, e := range items {
+		func() {
+			defer h.enterExpr(e.pos)()
+			x := h.constEval(h.constSlice(e))
+			if x.kind == cArray || x.kind == cStructLit {
+				h.reportNonConst(x)
+			}
+			h.constEvalOperand(x)
+			if !isConstElem(x) {
+				if x.val.Kind == ir.KindGlobal && x.val.Name != "" {
+					panic(&diag.Error{Msg: fmt.Sprintf("`%s` is a variable; a const needs values known at compile time (its address `&%s` can be used for a pointer)", x.val.Name, x.val.Name)})
+				}
+				panic(&diag.Error{Msg: "constant value required (got an expression that is evaluated at runtime)"})
+			}
+		}()
+	}
+}
+
 // compileConstSpec は const 宣言の 1 定数分 (関数宣言の脱糖にも使う)。
 // typ / val / opt はそれぞれ省略可 (nil)。
 func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeExpr, val *cexpr, opt ir.Options, publicPos syntax.Pos) {
@@ -205,11 +245,10 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 		h.constIndex = h.v4()
 		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
 		h.constIndex = false
-		if cv.kind == cArray && cv.rt {
-			for _, e := range cv.args {
-				h.constEvalOperand(h.constSlice(e)) // 定数でない要素の理由 (constant value required / storage alias) を出す
-			}
+		if declType == nil || declType.Kind == types.Pointer {
+			cv = h.constRefAddress(cv, declType) // `const PP:*P = &gp;`: グローバル変数のアドレス
 		}
+		h.reportNonConst(cv)
 		if cv.kind != cValue {
 			if declType.IsSlice() {
 				panic(&diag.Error{Msg: fmt.Sprintf("const %s: a constant slice needs an array constant, an array literal or a string (use [?]T for a constant array)", name)})
@@ -271,6 +310,7 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 				lit.Untyped = v.Untyped && declType == nil // `const N = 200` は型のない定数、`const N:u8 = 200` は型付き
 			} else {
 				lit = ir.NewSymbolLiteral(name, t, v.Symbol)
+				lit.SymOffset = v.SymOffset
 			}
 			newVal = h.addVar(lit)
 			if h.lmd == nil {

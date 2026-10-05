@@ -145,6 +145,29 @@ func (h *Hlc) rvalOf(v ir.Operand, left bool) ir.Operand {
 	return v
 }
 
+// arrayValue は配列の値を置く所 (配列への代入・初期化・引数・return・フィールド、型を書かない var の初期値) で、型を決める段で
+// 配列と分かる添字・フィールド・参照はがしの式 c を配列の値として評価する。ポインタの先の配列 (2 次元配列の行 `a[i]`、
+// `p.arr`) は rvalOf が要素へのポインタに読み替えるので、ここで一時変数に写す (`var b = a[1]` が *u8 になり、
+// `var c:[2]u8 = a[1]` がポインタの 2 バイトを写していた)。当てはまらなければ nil (c は評価しない)。
+func (h *Hlc) arrayValue(c *cexpr) ir.Operand {
+	if h.lmd == nil {
+		return nil
+	}
+	if e := h.constEval(c); e.kind != cOp || e.op != opIndex && e.op != opField && e.op != opDeref {
+		return nil
+	}
+	if info, ok := h.exprType(c); !ok || info.t.Kind != types.Array || info.t.IsSoa || info.t.Length < 0 {
+		return nil
+	}
+	v, left := h.lvalValue(c)
+	if b := ir.ValType(v).Base; left && b != nil && b.Kind == types.Array {
+		tmp := h.newTmp(b)
+		h.emit(ir.NewLoadMem(tmp, v, nil, 0, 0))
+		return tmp
+	}
+	return h.rvalOf(v, left)
+}
+
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
 func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 	defer h.enterExpr(c.pos)()
@@ -759,7 +782,14 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 		panic(&diag.Error{Msg: "cannot assign through a read-only pointer (*const) or to const data"})
 	}
 	pre := !soa && h.assignPre(what, rhs, dt)
-	right, checked := h.rvalPreConv(rhs, dt, !soa)
+	var right ir.Operand
+	checked := false
+	if dt.Kind == types.Array && !dt.IsSoa {
+		right = h.arrayValue(rhs) // `d = a[1]` (2 次元配列の行): 行の写し
+	}
+	if right == nil {
+		right, checked = h.rvalPreConv(rhs, dt, !soa)
+	}
 	if soa {
 		h.soaScatter(left, right)
 		return left

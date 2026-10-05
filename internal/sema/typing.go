@@ -337,7 +337,14 @@ func (h *Hlc) preConvert(c *cexpr, to *types.Type) bool {
 // compatible だけで const を外す警告が無かった)。代入と変数の初期化は左辺・宣言の事情があるので assignPre / assignPost を直接使う。
 func (h *Hlc) rvalAssign(c *cexpr, to *types.Type, what string, check func(v ir.Operand)) ir.Operand {
 	pre := h.assignPre(what, c, to)
-	v, checked := h.rvalPreConv(c, to, true)
+	var v ir.Operand
+	checked := false
+	if to != nil && to.Kind == types.Array && !to.IsSoa {
+		v = h.arrayValue(c) // `x = a[1]` (2 次元配列の行): 行の写し
+	}
+	if v == nil {
+		v, checked = h.rvalPreConv(c, to, true)
+	}
 	h.assignPost(what, to, v, pre)
 	if check != nil {
 		check(v)

@@ -196,7 +196,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 			if d.Equ.IsInt {
 				val = strconv.Itoa(d.Equ.Int)
 			} else {
-				val = mangle(d.Equ.Symbol)
+				val = mangle(ir.SymExpr(d.Equ))
 				if d.Equ.Type.IsFarFunc() {
 					l.farPointerSymbols[d.Equ.Symbol] = true
 				}

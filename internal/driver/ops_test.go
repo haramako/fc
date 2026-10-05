@@ -1533,7 +1533,8 @@ function main():void
 			t.Errorf("%q が無い:\n%s", want, asm)
 		}
 	}
-	got := compileErr(t, "var v:int;\nconst P:[1]*int = [&v];\n")
+	// グローバル変数のアドレスは定数 (TestConstGlobalAddress)。ローカル変数のアドレスは定数でない
+	got := compileErr(t, "function main():void { var v:int; const P:[1]*int = [&v]; }\n")
 	if !strings.Contains(got, "constant address required") && !strings.Contains(got, "constant value required") {
 		t.Errorf("非定数の要素: %q", got)
 	}

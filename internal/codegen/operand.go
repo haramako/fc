@@ -383,9 +383,9 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 		}
 		switch n {
 		case 0:
-			return fmt.Sprintf("#.LOBYTE(%s)", mangle(lv.Symbol))
+			return fmt.Sprintf("#.LOBYTE(%s)", mangle(ir.SymExpr(lv)))
 		case 1:
-			return fmt.Sprintf("#.HIBYTE(%s)", mangle(lv.Symbol))
+			return fmt.Sprintf("#.HIBYTE(%s)", mangle(ir.SymExpr(lv)))
 		case 2:
 			if lv.Type.IsFarFunc() {
 				if l.farPointerSymbols == nil {

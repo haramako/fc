@@ -308,6 +308,15 @@ func strLit(t Token) *StringLit {
 }
 
 func binary(x Expr, op Token, y Expr) Expr {
+	// `mod.Point{…}`: `mod . (Point{…})` と読まれるので、他モジュールの型の struct リテラルにする
+	if m, ok := x.(*Ident); ok && op.Kind == Dot {
+		if sl, ok := y.(*StructLit); ok {
+			if sl.Type != nil && sl.Type.Module == nil {
+				sl.Type = &NamedType{Module: m, Name: sl.Type.Name}
+				return sl
+			}
+		}
+	}
 	return &BinaryExpr{X: x, OpPos: op.Pos, Op: op.Kind, Y: y}
 }
 
