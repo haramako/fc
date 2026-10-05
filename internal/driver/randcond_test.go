@@ -62,6 +62,9 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 					if _, anon := as.Rhs.(*syntax.StructLit); anon {
 						continue
 					}
+					if as.Op.IsCompoundAssign() && isIntLiteral(as.Rhs) {
+						continue // `x ^= -41262` は演算でリテラルを相手の型に切り詰めるが、`?:` の枝の定数は切り詰めない (型に入らなければエラー)
+					}
 					rhs := text(as.Rhs)
 					edits = append(edits, edit{es.Pos().Offset, es.Pos().Offset, "rmc_ += 1; "},
 						edit{as.Rhs.Pos().Offset, as.Rhs.End().Offset, "(rmc_ & 1) != 0 ? " + rhs + " : " + rhs})
@@ -105,4 +108,17 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 		out[name] = s
 	}
 	return out
+}
+
+// isIntLiteral は e が整数のリテラル (括弧・単項の符号を含む) か。
+func isIntLiteral(e syntax.Expr) bool {
+	switch e := e.(type) {
+	case *syntax.IntLit:
+		return true
+	case *syntax.ParenExpr:
+		return isIntLiteral(e.X)
+	case *syntax.UnaryExpr:
+		return (e.Op == syntax.Minus || e.Op == syntax.Plus) && isIntLiteral(e.X)
+	}
+	return false
 }
