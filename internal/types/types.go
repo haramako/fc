@@ -217,7 +217,8 @@ var IntTypeNames = map[string]intSpec{
 	"u8": {1, false}, "i8": {1, true}, "u16": {2, false}, "i16": {2, true},
 }
 
-// V2IntTypeNames は fc 2 だけの整数型の名前 → fc 3 の名前 (`fcc migrate` の書き換えと fc 3 での案内に使う)。
+// V2IntTypeNames は fc 2 だけの整数型の名前 → fc 3 の名前 (sema が fc 2 のモジュールの型名を読み替える。`fcc migrate` の
+// 書き換えと fc 3 での案内にも使う)。
 // `int` / `uint` / `int8` / `uint8` は u8、`sint` / `sint8` は i8、`int16` / `uint16` は u16、`sint16` は i16。
 var V2IntTypeNames = map[string]string{
 	"int": "u8", "uint": "u8", "int8": "u8", "uint8": "u8",
@@ -226,13 +227,10 @@ var V2IntTypeNames = map[string]string{
 	"sint16": "i16",
 }
 
-// Named は型名から型を返す (fc 2 の規則: 古い名前も fc 3 の名前も引ける)。未知の名前なら ok=false。
+// Named は基本型の名前 (void・bool・u8 / i8 / u16 / i16) から型を返す。未知の名前なら ok=false。fc 2 だけの名前 (int など)
+// は引かない (文法の版は types の外: sema が V2IntTypeNames で fc 3 の名前に読み替えてから引く。2026-10-05 までは NamedIn が
+// 版番号を受け取っていた)。
 func (u *Universe) Named(name string) (t *Type, ok bool) {
-	return u.NamedIn(name, 2)
-}
-
-// NamedIn は文法バージョン version のモジュールでの型名の解決。fc 3 では fc 2 だけの整数型の名前 (int など) を引かない。
-func (u *Universe) NamedIn(name string, version int) (t *Type, ok bool) {
 	switch name {
 	case "void":
 		return u.Void(), true
@@ -240,10 +238,6 @@ func (u *Universe) NamedIn(name string, version int) (t *Type, ok bool) {
 		return u.Bool(), true
 	}
 	if bt, ok := IntTypeNames[name]; ok {
-		return u.IntType(bt.size, bt.signed), true
-	}
-	if n, ok := V2IntTypeNames[name]; ok && version < 3 {
-		bt := IntTypeNames[n]
 		return u.IntType(bt.size, bt.signed), true
 	}
 	return nil, false

@@ -95,11 +95,19 @@ func (h *Hlc) version() int {
 	return h.module.Version
 }
 
+// basicType は基本型の名前 name の型。fc 2 のモジュールでは fc 2 だけの整数型の名前 (int など) を fc 3 の名前に読み替える。
+func (h *Hlc) basicType(name string) (*types.Type, bool) {
+	if n, old := types.V2IntTypeNames[name]; old && h.version() < syntax.Version3 {
+		name = n
+	}
+	return h.prog.Types.Named(name)
+}
+
 // namedType は型名 (基本型、または struct / soa 宣言の名前。`mod.Name` は他モジュールの公開型) を型にする。
 func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 	name := t.Name.Name
 	if t.Module == nil {
-		if ty, ok := h.prog.Types.NamedIn(name, h.version()); ok {
+		if ty, ok := h.basicType(name); ok {
 			return ty
 		}
 		if n, old := types.V2IntTypeNames[name]; old && h.version() >= syntax.Version3 {

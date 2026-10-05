@@ -8,13 +8,11 @@ func TestUniverse(t *testing.T) {
 	if i8.String() != "u8" || i8.Kind != Int || i8.Size != 1 || i8.Signed {
 		t.Errorf("u8: %+v", i8)
 	}
-	if n, ok := u.Named("int"); !ok || n != i8 {
-		t.Error("int は u8 と同一の型であるべき")
+	if n, ok := u.Named("u8"); !ok || n != i8 {
+		t.Error("u8")
 	}
-	for _, name := range []string{"uint", "int8", "u8"} {
-		if n, _ := u.Named(name); n != i8 {
-			t.Errorf("%s は u8 と同一であるべき", name)
-		}
+	if _, ok := u.Named("int"); ok {
+		t.Error("fc 2 だけの名前 (int) は引かない (sema が fc 3 の名前に読み替える)")
 	}
 	if s16, _ := u.Named("i16"); s16.String() != "i16" || !s16.Signed || s16.Size != 2 {
 		t.Errorf("i16: %+v", s16)
