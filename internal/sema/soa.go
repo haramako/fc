@@ -250,16 +250,12 @@ func soaRetype(v ir.Operand, t *types.Type) ir.Operand {
 	return ir.NewCastedValue(v, t, 0)
 }
 
-// soaIndex は `Points[i]`: 添字からハンドルを作る (コードは出ない。1 バイトの添字のみ)。
-func (h *Hlc) soaIndex(soa *types.Type, idx ir.Operand) ir.Operand {
-	if ir.ValType(idx).Kind != types.Int {
-		panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(idx))})
-	}
-	if _, isLit := ir.ValIntLiteral(idx); !isLit && ir.ValType(idx).Size != 1 {
-		panic(&diag.Error{Msg: fmt.Sprintf("soa %s: index must be 1 byte", shortName(soa.Name))})
-	}
-	// 宣言がエラーだと soa.Base は nil のまま (fuzz で発覚)。soaElement ならエラーにできる
-	return soaRetype(idx, h.prog.Types.SoaRef(soa, h.soaElement(soa), ""))
+// soaIndex は `Points[i]`: 添字 (式 ic) からハンドルを作る (コードは出ない。1 バイトの添字のみ。型と検査は型を決める段の
+// 計画 planSoaIndex)。
+func (h *Hlc) soaIndex(soa *types.Type, ic *cexpr) ir.Operand {
+	idx := h.rval(ic)
+	_, isLit := ir.ValIntLiteral(idx)
+	return soaRetype(idx, h.planSoaIndex(soa, h.planInfo(ic, idx), isLit))
 }
 
 // soaLeafPtr はハンドル ref のリーフ lf へのポインタ (index)。

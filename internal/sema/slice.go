@@ -41,49 +41,51 @@ type sliceParts struct {
 	wide bool       // 長さが u16 (広い slice、または 256 要素以上の配列)
 }
 
-// sliceParts は c (配列・slice の式) を評価して、先頭と長さを取り出す。what はエラーの表示用。
+// sliceParts は c (配列・slice の式) を評価して、先頭と長さを取り出す。what はエラーの表示用。要素の型・長さ・幅は型を決める段の
+// 計画 (planSliceOf) で決め、ここは値を作るだけ。
 func (h *Hlc) sliceParts(c *cexpr, what string) sliceParts {
 	v, lv := h.lvalValue(c)
-	p, rv, ok := h.partsOf(v, lv, h.isStringLit(c), what)
-	if !ok {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s: %s is not an array or a slice (type %s)", what, describe(rv), ir.ValType(rv))})
-	}
-	return p
+	str := h.isStringLit(c)
+	plan := h.planSliceOf(h.lvInfo(c, v, lv), str, what, func() string { return describe(h.rvalOf(v, lv)) })
+	return h.partsOf(v, lv, plan)
 }
 
-// partsOf は評価済みの (v, lv) の sliceParts。配列・slice でなければ ok = false で、rv はその右辺値。
-// slice なら rv は slice の値そのもの。
-// str は式が文字列リテラルか (長さは終端の 0 を含めない)。
-func (h *Hlc) partsOf(v ir.Operand, lv, str bool, what string) (p sliceParts, rv ir.Operand, ok bool) {
+// lvInfo は lval が評価した c (値 v、lv なら左辺値) の値の型: 型を決める段が決めた型 (planInfo)。決められなければ評価した
+// 値から (左辺値はポインタの先。soa の要素はハンドル)。
+func (h *Hlc) lvInfo(c *cexpr, v ir.Operand, lv bool) exprInfo {
+	if !lv {
+		return h.planInfo(c, v)
+	}
+	if info, ok := h.exprType(c); ok {
+		return info
+	}
+	if t := ir.ValType(v); t.Kind != types.SoaRef {
+		return exprInfo{t: t.Base}
+	}
+	return exprInfo{t: ir.ValType(v)}
+}
+
+// partsOf は評価済みの (v, lv) (計画 plan の配列・slice) の先頭と長さ。
+func (h *Hlc) partsOf(v ir.Operand, lv bool, plan slicePlan) sliceParts {
+	p := sliceParts{elem: plan.elem, n: plan.n, wide: plan.wide}
+	pt := h.prog.Types.PointerTo(plan.elem)
 	if lv {
 		if b := ir.ValType(v).Base; b != nil && b.Kind == types.Array {
 			// ポインタ経由の配列 (`p.arr`): v は配列へのポインタ
-			ptr := ir.NewCastedValue(v, h.prog.Types.PointerTo(b.Base), 0)
-			return h.arrayParts(b, ptr, ptr, h.readOnly(v), false, what), ptr, true
+			p.ptr = ir.NewCastedValue(v, pt, 0)
+			p.base, p.len, p.ro = p.ptr, h.IntValue(plan.n), h.readOnly(v)
+			return p
 		}
 		v = h.rvalOf(v, lv)
 	}
-	t := ir.ValType(v)
-	switch {
-	case t.IsSlice():
-		ptr := ir.NewCastedValue(v, h.prog.Types.PointerTo(t.SliceOf), 0)
-		return sliceParts{elem: t.SliceOf, ptr: ptr, base: ptr, len: ir.NewCastedValue(v, t.SliceLen(), 2), n: -1, ro: h.readOnly(v), wide: t.IsWideSlice()}, v, true
-	case t.Kind == types.Array:
-		return h.arrayParts(t, ir.NewPointeredArray(v, h.prog.Types.PointerTo(t.Base)), v, h.readOnly(v), str, what), v, true
+	p.ro = h.readOnly(v)
+	if plan.n < 0 { // slice
+		p.ptr = ir.NewCastedValue(v, pt, 0)
+		p.base, p.len = p.ptr, ir.NewCastedValue(v, h.sliceType(plan).SliceLen(), 2)
+		return p
 	}
-	return sliceParts{}, v, false
-}
-
-// arrayParts は配列型 t の値の sliceParts (str なら文字列リテラルで、長さは終端の 0 を含めない)。
-func (h *Hlc) arrayParts(t *types.Type, ptr, base ir.Operand, ro, str bool, what string) sliceParts {
-	n := t.Length
-	if n < 0 {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s: the length of %s is not known (make the slice with @slice(p, n))", what, t)})
-	}
-	if str && n > 0 {
-		n--
-	}
-	return sliceParts{elem: t.Base, ptr: ptr, base: base, len: h.IntValue(n), n: n, ro: ro, wide: n > maxSliceLen(false)}
+	p.ptr, p.base, p.len = ir.NewPointeredArray(v, pt), v, h.IntValue(plan.n)
+	return p
 }
 
 // newSlice は要素 elem の slice (wide なら長さ u16) の一時変数に ptr と len を入れる。
@@ -121,37 +123,23 @@ func retypePtr(p ir.Operand, pt *types.Type) ir.Operand {
 	return ir.NewCastedValue(p, pt, 0)
 }
 
-// toSlice は c (配列 / slice) を slice の型 st にする。配列・slice でなければそのまま (型の検査は代入側がする)。
+// toSlice は c (配列 / slice) を slice の型 st にする。配列・slice でなければそのまま (型の検査は代入側がする)。変換の仕方は
+// 型を決める段の計画 (planToSlice)。
 func (h *Hlc) toSlice(c *cexpr, st *types.Type) ir.Operand {
 	if c.kind == cNull {
 		panic(&diag.Error{Msg: fmt.Sprintf("null cannot be used as %s (use an empty slice: a[0..0])", st)})
 	}
 	c = h.withExpected(c, h.prog.Types.ArrayOf(st.SliceOf, -1))
 	v, lv := h.lvalValue(c)
-	p, rv, ok := h.partsOf(v, lv, h.isStringLit(c), "slice")
-	if !ok {
-		return rv // 型の検査は代入側がする
+	str := h.isStringLit(c)
+	info := h.lvInfo(c, v, lv)
+	desc := func() string { return describe(h.rvalOf(v, lv)) }
+	t, kind := h.planToSlice(info, st, str, desc)
+	if kind == toSliceAsIs {
+		return h.rvalOf(v, lv)
 	}
-	if rt := ir.ValType(rv); rt.IsSlice() {
-		switch {
-		case rt.SliceOf != st.SliceOf || rt.IsWideSlice() == st.IsWideSlice():
-			return rv // 同じ幅 (と要素の違い) は代入側が検査する
-		case st.IsWideSlice():
-			return h.newSlice(p.elem, p.ptr, p.len, p.ro, true) // 普通 → 広い: 長さを広げて作り直す
-		}
-		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s implicitly (the length may not fit; use @slice(@ptr(s), n))", rt, st)})
-	}
-	if p.elem != st.SliceOf {
-		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s (element types differ)", ir.ValType(rv), st)})
-	}
-	if max := maxSliceLen(st.IsWideSlice()); p.n > max {
-		hint := ""
-		if !st.IsWideSlice() {
-			hint = "; use [:u16]" + st.SliceOf.String() + " for longer ones"
-		}
-		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s: the slice has at most %d elements%s", ir.ValType(rv), st, max, hint)})
-	}
-	return h.newSlice(p.elem, p.ptr, p.len, p.ro, st.IsWideSlice())
+	p := h.partsOf(v, lv, h.planSliceOf(info, str, "slice", desc))
+	return h.newSlice(p.elem, p.ptr, p.len, p.ro, t.IsWideSlice()) // 普通 → 広いは長さを広げて作り直す
 }
 
 // sliceRange は a[lo..hi] (lo / hi は省けば nil)。
@@ -160,9 +148,7 @@ func (h *Hlc) sliceRange(a, lo, hi *cexpr, incl bool) ir.Operand {
 	u8 := h.prog.Types.IntType(1, false)
 	intOf := func(c *cexpr, what string) ir.Operand {
 		v := h.rval(c)
-		if t := ir.ValType(v); t.Kind != types.Int && t.Kind != types.Bool || t.Enum != nil {
-			panic(&diag.Error{Msg: fmt.Sprintf("a[lo..hi]: %s must be an integer (got %s)", what, t)})
-		}
+		planSliceBound(h.planInfo(c, v), what) // 型を決める段の計画 (typeplan.go)
 		return v
 	}
 	var loV, hiV ir.Operand = ir.NewIntLiteral("", u8, 0), p.len

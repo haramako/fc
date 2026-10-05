@@ -221,14 +221,12 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 
 	case cCast:
 		v := h.rval(e.args[0])
+		h.planCast(e.ck, h.planInfo(e.args[0], v).t, e.ty) // 型を決める段の計画 (typeplan.go)
 		r = h.explicitCast(e.ck, v, e.ty)
 
 	case cStructLit:
 		// 実行時に組み立てる struct リテラル: 一時変数 (フレーム上) にフィールドごとに代入する
-		if e.ty == nil {
-			panic(&diag.Error{Msg: "struct literal without a type name needs a context that gives the type (declared type or assignment)"})
-		}
-		tmp := h.newTmp(e.ty)
+		tmp := h.newTmp(planStructLit(e.ty)) // 型を決める段の計画 (typeplan.go)
 		for _, f := range e.ty.Fields {
 			dst := ir.NewCastedValue(tmp, f.Type, f.Offset)
 			var v ir.Operand
@@ -258,10 +256,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 
 		case opLoad:
 			h.checkAliasAssign(e.args[0])
-			if lhs := e.args[0]; lhs.kind == cOp && lhs.op == opCall {
-				// 呼び出しの結果は一時変数なので、そのまま進むと `g() = 0` が黙って通り、void なら nil 参照で落ちる (fuzz で発覚)
-				panic(&diag.Error{Msg: "cannot assign to the result of a function call"})
-			}
+			planAssignTarget(e.args[0]) // 型を決める段の計画 (typeplan.go)
 			if rhs := e.args[1]; rhs.kind == cOp && len(rhs.args) == 2 && rhs.args[0] == e.args[0] && containsCall(e.args[0]) {
 				// 複合代入 `X op= v` は (load X (op X v)) に脱糖されていて X を 2 回評価する。X に関数呼び出しが
 				// あるとき (`a[f()] += 1`) は呼び出しを先に 1 回だけ評価して値に置き換えてから続ける
@@ -665,7 +660,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 		case opIndex: // []演算子
 			if a := e.args[0]; a.kind == cValue && a.val.Type.Kind == types.Soa {
 				// `Points[i]`: SoA コンテナの添字はハンドルを作るだけ
-				r = h.soaIndex(a.val.Type, h.rval(e.args[1]))
+				r = h.soaIndex(a.val.Type, e.args[1])
 				leftValue = true
 				break
 			}
@@ -938,8 +933,7 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 //   - v1 `<T>x` と `bitcast<T>(x)`: 型ラベルの貼り替え (CastedValue)
 //   - `x as T`: 数値変換。拡張は元が符号付きなら符号拡張、縮小は下位バイト、同サイズはビットそのまま
 func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) ir.Operand {
-	from := ir.ValType(v)
-	h.planCast(kind, from, to) // 型を決める段の計画 (typeplan.go)
+	from := ir.ValType(v) // 型の検査は呼ぶ側 (lval) が型を決める段の計画 (planCast) でする
 	if from.Kind == types.Array && to.Kind == types.Pointer {
 		h.strPtr(v)
 	}

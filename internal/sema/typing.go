@@ -99,7 +99,7 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 		}
 		return exprInfo{t: ty}, true
 	case cStructLit:
-		return exprInfo{t: e.ty}, e.ty != nil // 型名の無いものは文脈の型 (withExpected) が入れる
+		return exprInfo{t: planStructLit(e.ty)}, true // 型名の無いものは文脈の型 (withExpected) が入れる
 	case cArray:
 		if e.rt {
 			return h.runtimeArrayType(e)
@@ -148,7 +148,9 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 	case opLoad:
 		// 代入の式の値は左辺 (lval が代入した左辺を返す)。soa の 2 バイト以上のフィールドは左辺の場所が無く、変換した右辺を
 		// 返す (その型は変換の仕方による) ので扱わない
-		if l := h.constEval(e.args[0]); l.kind == cOp && l.op == opField {
+		l := h.constEval(e.args[0])
+		planAssignTarget(l)
+		if l.kind == cOp && l.op == opField {
 			if a, ok := h.exprType(l.args[0]); ok && !a.untyped && a.t.Kind == types.SoaRef {
 				if f, ok := a.t.Base.Field(l.name); !ok || f.Type.Kind != types.Struct && f.Type.Size > 1 {
 					return exprInfo{}, false
@@ -159,7 +161,7 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 	case opToSlice:
 		return h.toSliceType(e)
 	case opSlice:
-		return h.sliceRangeType(e.args[0])
+		return h.sliceRangeType(e)
 	case opMin, opMax, opClamp:
 		return h.minMaxType(e.op, e.args)
 	case opCond:
@@ -184,6 +186,9 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		a, ok := h.exprType(e.args[0])
 		switch {
 		case ok && a.t.Kind == types.Soa:
+			if i, ok := h.exprType(e.args[1]); ok {
+				return exprInfo{t: h.planSoaIndex(a.t, i, h.constEval(e.args[1]).isLiteralInt())}, true
+			}
 			return exprInfo{t: u.SoaRef(a.t, h.soaElement(a.t), "")}, true
 		case ok:
 			var idx *exprInfo
@@ -214,13 +219,7 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		t := a.t
 		if t.Kind == types.SoaRef {
 			// soa の要素のフィールド: 入れ子の struct はハンドル、ほかはフィールドの型 (soaField)
-			if f, ok := t.Base.Field(e.name); ok {
-				if f.Type.Kind == types.Struct {
-					return exprInfo{t: u.SoaRef(t.Soa, f.Type, t.Path+e.name+"_")}, true
-				}
-				return exprInfo{t: f.Type}, true
-			}
-			break
+			return exprInfo{t: h.planSoaField(t, e.name)}, true
 		}
 		if t.Kind == types.Pointer && t.Base.IsSlice() || t.IsSlice() {
 			break // slice のフィールドは扱わない
@@ -391,68 +390,40 @@ func (h *Hlc) expandMacro(e *cexpr, m *macroDef) macroResult {
 	return x
 }
 
-// runtimeArrayType は実行時に組み立てる配列リテラルの型 (runtimeArray と同じ: 文脈の型があればその要素、無ければ要素の型から)。
+// runtimeArrayType は実行時に組み立てる配列リテラルの型 (計画 planRuntimeArray)。
 func (h *Hlc) runtimeArrayType(e *cexpr) (exprInfo, bool) {
-	n := len(e.args)
-	if e.ty != nil && e.ty.Kind == types.Array {
-		if e.ty.Length > n {
-			n = e.ty.Length
-		} else if e.ty.Length >= 0 && e.ty.Length < n {
-			return exprInfo{}, false
-		}
-		return exprInfo{t: h.prog.Types.ArrayOf(e.ty.Base, n)}, true
-	}
-	base := h.preArrayBase(e.args)
-	if base == nil {
-		return exprInfo{}, false
-	}
-	return exprInfo{t: h.prog.Types.ArrayOf(base, n)}, true
+	t := h.planRuntimeArray(e)
+	return exprInfo{t: t}, t != nil
 }
 
-// toSliceType は配列・slice を slice の型 e.ty にする式 (toSlice) の型。配列・slice でなければ元の型 (代入側が検査する)。
+// toSliceType は配列・slice を slice の型 e.ty にする式 (toSlice) の型 (計画 planToSlice。配列・slice でなければ元の型: 代入側が
+// 検査する)。
 func (h *Hlc) toSliceType(e *cexpr) (exprInfo, bool) {
-	st := e.ty
-	a, ok := h.exprType(h.withExpected(e.args[0], h.prog.Types.ArrayOf(st.SliceOf, -1)))
-	if !ok || a.untyped {
+	c := h.withExpected(e.args[0], h.prog.Types.ArrayOf(e.ty.SliceOf, -1))
+	a, ok := h.exprType(c)
+	if !ok || a.untyped || a.t.Kind == types.SoaRef {
 		return exprInfo{}, false
 	}
-	switch t := a.t; {
-	case t.Kind == types.SoaRef:
-		return exprInfo{}, false
-	case t.IsSlice():
-		switch {
-		case t.SliceOf != st.SliceOf || t.IsWideSlice() == st.IsWideSlice():
-			return exprInfo{t: t}, true // 同じ幅 (と要素の違い) は代入側が検査する
-		case st.IsWideSlice():
-			return exprInfo{t: h.prog.Types.Slice(t.SliceOf, false, true)}, true
-		}
-		return exprInfo{}, false // 広い → 普通はエラー
-	case t.Kind == types.Array:
-		if t.Base != st.SliceOf {
-			return exprInfo{}, false // エラー
-		}
-		return exprInfo{t: h.prog.Types.Slice(st.SliceOf, false, st.IsWideSlice())}, true
-	}
-	return a, true
+	t, _ := h.planToSlice(a, e.ty, h.isStringLit(c), noDesc)
+	return exprInfo{t: t}, true
 }
 
-// sliceRangeType は a[lo..hi] の型 (sliceRange: 要素は a の要素、256 要素以上の配列と広い slice は広い slice)。
-func (h *Hlc) sliceRangeType(a *cexpr) (exprInfo, bool) {
+// sliceRangeType は a[lo..hi] (e) の型 (計画 planSliceOf: 要素は a の要素、256 要素以上の配列と広い slice は広い slice)。
+func (h *Hlc) sliceRangeType(e *cexpr) (exprInfo, bool) {
+	a := e.args[0]
 	info, ok := h.exprType(a)
-	if !ok || info.untyped {
+	if !ok {
 		return exprInfo{}, false
 	}
-	switch t := info.t; {
-	case t.IsSlice():
-		return exprInfo{t: h.prog.Types.Slice(t.SliceOf, false, t.IsWideSlice())}, true
-	case t.Kind == types.Array && t.Length >= 0:
-		n := t.Length
-		if h.isStringLit(a) && n > 0 {
-			n--
+	p := h.planSliceOf(info, h.isStringLit(a), "a[lo..hi]", noDesc)
+	for i, which := range []string{"lo", "hi"} {
+		if x := e.args[i+1]; x != nil {
+			if xi, ok := h.exprType(x); ok {
+				planSliceBound(xi, which)
+			}
 		}
-		return exprInfo{t: h.prog.Types.Slice(t.Base, false, n > maxSliceLen(false))}, true
 	}
-	return exprInfo{}, false
+	return exprInfo{t: h.sliceType(p)}, true
 }
 
 // preConvert は式 c を代入のような変換で to にするときの E・D の判定を、評価する前に型を決める段の情報でする (診断は IR を

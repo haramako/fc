@@ -298,3 +298,142 @@ func (h *Hlc) planCall(f exprInfo, desc func() string) *types.Type {
 	}
 	return f.t.Base
 }
+
+// slicePlan は配列・slice の値から slice を作るとき (a[lo..hi]・slice への変換・@len・for-each など) の計画: 要素の型・長さの幅・
+// 定数の長さ (slice は -1)。
+type slicePlan struct {
+	elem *types.Type
+	n    int
+	wide bool
+}
+
+// planSliceOf は配列・slice (型 a) の slicePlan。str は文字列リテラル (長さに終端の 0 を含めない)。配列・slice でなければ、
+// または配列の長さが分からなければ診断の panic (what は診断の主語、desc は値の書き方)。
+func (h *Hlc) planSliceOf(a exprInfo, str bool, what string, desc func() string) slicePlan {
+	t := a.t
+	switch {
+	case a.untyped:
+	case t.IsSlice():
+		return slicePlan{elem: t.SliceOf, n: -1, wide: t.IsWideSlice()}
+	case t.Kind == types.Array:
+		n := t.Length
+		if n < 0 {
+			panic(&diag.Error{Msg: fmt.Sprintf("%s: the length of %s is not known (make the slice with @slice(p, n))", what, t)})
+		}
+		if str && n > 0 {
+			n--
+		}
+		return slicePlan{elem: t.Base, n: n, wide: n > maxSliceLen(false)}
+	case t.Kind == types.SoaRef:
+		t = t.Base // soa の要素は値として読むと struct
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("%s: %s is not an array or a slice (type %s)", what, desc(), t)})
+}
+
+// planSliceBound は a[lo..hi] の lo / hi (型 x。which は "lo" / "hi") の検査 (整数でなければ診断の panic)。
+func planSliceBound(x exprInfo, which string) {
+	if t := x.t; t.Kind != types.Int && t.Kind != types.Bool || t.Enum != nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("a[lo..hi]: %s must be an integer (got %s)", which, t)})
+	}
+}
+
+// sliceType は slicePlan の slice の型 (読み取り専用かは型でなく値の印: markReadOnly)。
+func (h *Hlc) sliceType(p slicePlan) *types.Type {
+	return h.prog.Types.Slice(p.elem, false, p.wide)
+}
+
+// toSliceKind は slice への変換 (toSlice) の仕方。
+type toSliceKind int
+
+const (
+	toSliceAsIs  toSliceKind = iota // 変換しない (配列・slice でない、同じ幅の slice、要素の違う slice: 代入側が検査する)
+	toSliceBuild                    // 配列から slice を作る
+	toSliceWiden                    // 普通の slice から広い slice を作り直す (長さを広げる)
+)
+
+// planToSlice は配列・slice (型 a) を slice の型 st にする変換の計画 (変換した型と仕方)。変換できない形 (広い → 普通、要素の
+// 違う配列、長すぎる配列) は診断の panic。str は文字列リテラル、desc は値の書き方。
+func (h *Hlc) planToSlice(a exprInfo, st *types.Type, str bool, desc func() string) (*types.Type, toSliceKind) {
+	t := a.t
+	switch {
+	case a.untyped || t.Kind != types.Array && !t.IsSlice():
+		return t, toSliceAsIs // 型の検査は代入側がする
+	case t.IsSlice():
+		switch {
+		case t.SliceOf != st.SliceOf || t.IsWideSlice() == st.IsWideSlice():
+			return t, toSliceAsIs // 同じ幅 (と要素の違い) は代入側が検査する
+		case st.IsWideSlice():
+			return h.prog.Types.Slice(t.SliceOf, false, true), toSliceWiden
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s implicitly (the length may not fit; use @slice(@ptr(s), n))", t, st)})
+	}
+	p := h.planSliceOf(a, str, "slice", desc)
+	if p.elem != st.SliceOf {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s (element types differ)", t, st)})
+	}
+	if max := maxSliceLen(st.IsWideSlice()); p.n > max {
+		hint := ""
+		if !st.IsWideSlice() {
+			hint = "; use [:u16]" + st.SliceOf.String() + " for longer ones"
+		}
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot use %s as %s: the slice has at most %d elements%s", t, st, max, hint)})
+	}
+	return h.prog.Types.Slice(st.SliceOf, false, st.IsWideSlice()), toSliceBuild
+}
+
+// planStructLit は実行時に組み立てる struct リテラルの型 (型名が無く文脈の型も無ければ診断の panic)。
+func planStructLit(ty *types.Type) *types.Type {
+	if ty == nil {
+		panic(&diag.Error{Msg: "struct literal without a type name needs a context that gives the type (declared type or assignment)"})
+	}
+	return ty
+}
+
+// planRuntimeArray は実行時に組み立てる配列リテラル e の型 (文脈の配列型があればその要素と長さ、無ければ要素の型から先に決めた
+// 要素の型: preArrayBase)。要素の型を評価の前に決められなければ nil (lval は評価した値から決める: fc 3)。文脈の型より要素が
+// 多ければ診断の panic。
+func (h *Hlc) planRuntimeArray(e *cexpr) *types.Type {
+	n := len(e.args)
+	if e.ty != nil && e.ty.Kind == types.Array {
+		if e.ty.Length > n {
+			n = e.ty.Length
+		} else if e.ty.Length >= 0 && e.ty.Length < n {
+			panic(&diag.Error{Msg: fmt.Sprintf("%d elements given for %s", len(e.args), e.ty)})
+		}
+		return h.prog.Types.ArrayOf(e.ty.Base, n)
+	}
+	base := h.preArrayBase(e.args)
+	if base == nil {
+		return nil
+	}
+	return h.prog.Types.ArrayOf(base, n)
+}
+
+// planSoaIndex は soa のコンテナ soa の添字 (型 idx。lit は定数) の検査と、要素のハンドルの型。
+func (h *Hlc) planSoaIndex(soa *types.Type, idx exprInfo, lit bool) *types.Type {
+	if idx.t.Kind != types.Int {
+		panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", idx.t)})
+	}
+	if !lit && idx.t.Size != 1 {
+		panic(&diag.Error{Msg: fmt.Sprintf("soa %s: index must be 1 byte", shortName(soa.Name))})
+	}
+	// 宣言がエラーだと soa.Base は nil のまま (fuzz で発覚)。soaElement ならエラーにできる
+	return h.prog.Types.SoaRef(soa, h.soaElement(soa), "")
+}
+
+// planSoaField は soa の要素のハンドル (型 t) のフィールド name の型 (入れ子の struct はハンドル)。
+func (h *Hlc) planSoaField(t *types.Type, name string) *types.Type {
+	f := h.fieldOf(t.Base, name)
+	if f.Type.Kind == types.Struct {
+		return h.prog.Types.SoaRef(t.Soa, f.Type, t.Path+name+"_")
+	}
+	return f.Type
+}
+
+// planAssignTarget は代入の左辺 lhs (評価済みの節点) の形の検査 (関数の呼び出しの結果には代入できない)。
+func planAssignTarget(lhs *cexpr) {
+	if lhs.kind == cOp && lhs.op == opCall {
+		// 呼び出しの結果は一時変数なので、そのまま進むと `g() = 0` が黙って通り、void なら nil 参照で落ちる (fuzz で発覚)
+		panic(&diag.Error{Msg: "cannot assign to the result of a function call"})
+	}
+}

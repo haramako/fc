@@ -385,39 +385,32 @@ func isConstElem(c *cexpr) bool {
 // 文脈の配列型 (宣言・代入先・引数)、無ければ要素の型をまとめたもの。文脈の長さに足りなければ 0 で埋める。
 func (h *Hlc) runtimeArray(e *cexpr) ir.Operand {
 	vals := make([]ir.Operand, len(e.args))
-	var base *types.Type
-	n := len(e.args)
-	if e.ty != nil && e.ty.Kind == types.Array {
-		base = e.ty.Base
-		if e.ty.Length > n {
-			n = e.ty.Length
-		} else if e.ty.Length >= 0 && e.ty.Length < n {
-			panic(&diag.Error{Msg: fmt.Sprintf("%d elements given for %s", len(e.args), e.ty)})
-		}
-	}
-	wideBase := base // A1: 要素を計算する幅 (文脈の型か、要素の型から先に決めた型。widen.go)
-	if wideBase == nil {
-		wideBase = h.preArrayBase(e.args)
+	at := h.planRuntimeArray(e) // 型を決める段の計画 (typeplan.go)。決められなければ (fc 3) 評価した値から
+	var wideBase *types.Type    // A1: 要素を計算する幅 (文脈の型か、要素の型から先に決めた型。widen.go)
+	if at != nil {
+		wideBase = at.Base
 	}
 	for i, a := range e.args {
-		v := h.rvalWide(a, wideBase)
-		vals[i] = v
-		if e.ty == nil {
+		vals[i] = h.rvalWide(a, wideBase)
+	}
+	if at == nil {
+		var base *types.Type
+		for i, v := range vals {
 			if i == 0 {
 				base = ir.ValType(v)
 			} else {
 				base = h.compatible(base, ir.ValType(v))
 			}
 		}
-	}
-	if e.ty == nil {
 		base = h.arrayElemType(base, vals, e.args, false) // F4 (fc 4): 定数の要素が入る型に
+		at = h.prog.Types.ArrayOf(base, len(e.args))
 	}
-	tmp := h.newTmp(h.prog.Types.ArrayOf(base, n))
+	base, n := at.Base, at.Length
+	tmp := h.newTmp(at)
 	for i := 0; i < n; i++ {
 		var v ir.Operand
 		if i < len(vals) {
-			h.compatibleAssign(fmt.Sprintf("element %d", i), base, ir.ValType(vals[i]))
+			h.compatibleAssign(fmt.Sprintf("element %d", i), base, h.planInfo(e.args[i], vals[i]).t)
 			v = h.convert(vals[i], base, e.args[i])
 		} else {
 			v = h.zeroValue(base)
