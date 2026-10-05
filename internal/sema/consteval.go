@@ -32,6 +32,9 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 		r.compound = c.compound
 	}
 	h.cmemo[c] = r
+	// 評価した結果をもう一度評価しても同じ (compileCond は結果の項を渡し直す)。覚えないと `!!!…!x` の深さ n で n² になった
+	// (FuzzCheck の worker が止まったと見なされた)
+	h.cmemo[r] = r
 	return r
 }
 
