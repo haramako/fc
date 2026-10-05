@@ -20,11 +20,11 @@ func (h *Hlc) declareBad(s syntax.Stmt) {
 		v := h.addVar(ir.NewGlobal(id.Name, h.prog.Types.Bad(), "$bad"))
 		switch s := s.(type) {
 		case *syntax.VarDecl:
-			v.Public = s.PublicPos.IsValid()
+			h.setPublic(v, s.PublicPos.IsValid())
 		case *syntax.FuncDecl:
-			v.Public = s.PublicPos.IsValid()
+			h.setPublic(v, s.PublicPos.IsValid())
 		case *syntax.UseDecl:
-			v.Public = s.PublicPos.IsValid()
+			h.setPublic(v, s.PublicPos.IsValid())
 		}
 	}
 	switch s := s.(type) {
@@ -195,7 +195,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		vv.ReadOnly = ro || inferRO
 	}
 	if h.scopeIsPublic(publicPos) {
-		vv.Public = true
+		h.setPublic(vv, true)
 	}
 	if init != nil {
 		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
@@ -402,7 +402,7 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 		}
 	}
 	if h.scopeIsPublic(publicPos) {
-		newVal.Public = true
+		h.setPublic(newVal, true)
 	}
 }
 

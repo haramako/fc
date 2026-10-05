@@ -20,24 +20,14 @@ type Symbol struct {
 	Module string      // モジュールの束縛 (`use mod;`): モジュールの id
 	Type   *types.Type // 型名の束縛 (struct・enum・soa): 実際の型 (エラーになった宣言は Bad)
 	Macro  *macroDef   // マクロ (組み込み・外部のマクロ、textmap の変換器)
-	public bool        // 値でない束縛の public (値は Val.Public)
+	public bool        // 外 (`mod.name`・`use * from mod`) から見えるか (2026-10-05 に ir.Value.Public から移した)
 }
 
 // Public は外 (`mod.name`・`use * from mod`) から見えるか。
-func (s *Symbol) Public() bool {
-	if s.Val != nil {
-		return s.Val.Public
-	}
-	return s.public
-}
+func (s *Symbol) Public() bool { return s.public }
 
 // SetPublic は public にする / しない。
-func (s *Symbol) SetPublic(b bool) {
-	if s.Val != nil {
-		s.Val.Public = b
-	}
-	s.public = b
-}
+func (s *Symbol) SetPublic(b bool) { s.public = b }
 
 // valueSym は値の Symbol。
 func valueSym(v *ir.Value) *Symbol { return &Symbol{Name: v.Name, Val: v} }

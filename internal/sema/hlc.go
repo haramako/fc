@@ -156,6 +156,15 @@ func (h *Hlc) addVar(v *ir.Value) *ir.Value {
 	return v
 }
 
+// setPublic は今のスコープで宣言した値 v の名前を public にする / しない (public は名前の表の Symbol が持つ)。
+func (h *Hlc) setPublic(v *ir.Value, b bool) {
+	sym := h.scope.declares[v.Name]
+	if sym == nil || sym.Val != v {
+		panic(fmt.Sprintf("internal: setPublic: %s is not declared in this scope", v.Name))
+	}
+	sym.SetPublic(b)
+}
+
 func defsFind(defs []*ir.Def, symbol string) bool {
 	for _, d := range defs {
 		if d.Sym == symbol {

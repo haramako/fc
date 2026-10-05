@@ -10,7 +10,7 @@ package sema
 //
 // 文字列リテラルは長さ (@len・slice への変換・for-each・`a[lo..]` の終わり) に終端の 0 を含めない (データには残る)。fc 3 までの
 // 名前付きの文字列定数 (`const NM = "joe"`) は普通の配列の定数と同じで 0 を含めた長さ 4 になっていた (互換性のため後回しにした
-// 項目)。fc 4 では、長さを初期値の文字列から決めた名前付きの配列定数 (ir.Value.StrConst: 型を書かない、`[?]u8`、ポインタ型
+// 項目)。fc 4 では、長さを初期値の文字列から決めた名前付きの配列定数 (Program.strConsts: 型を書かない、`[?]u8`、ポインタ型
 // `*u8` の宣言) をリテラルと同じ長さにする。規則は使う側のモジュールの版で決まる。
 //
 // fc 3 → 4 の migrate: fc 3 の名前付きの文字列定数の宣言は長さつき (`const NM:[4]u8 = "joe"`: 余りは 0) に書き換える。長さを
@@ -40,7 +40,6 @@ func explicitLength(typ syntax.TypeExpr) bool {
 
 // markStrConst は v を名前付きの文字列定数にする。
 func (h *Hlc) markStrConst(v *ir.Value, typ syntax.TypeExpr, nameEnd syntax.Pos) {
-	v.StrConst = true
 	if h.prog.strConsts == nil {
 		h.prog.strConsts = map[*ir.Value]*strConstDecl{}
 	}
@@ -56,7 +55,7 @@ func (h *Hlc) strLen(v *ir.Value) bool {
 		return false
 	case v.IsString:
 		return v.StrTerm // fc 4 の文字列リテラルには 0 が無い (長さは配列の長さそのまま)
-	case !v.StrConst:
+	case h.prog.strConsts[v] == nil:
 		return false
 	case h.v4():
 		return h.strConstTerm(v)
@@ -149,7 +148,7 @@ func (h *Hlc) strPtr(v ir.Operand) {
 		if strings.IndexByte(g.Str, 0) >= 0 {
 			return
 		}
-	case g.StrConst:
+	case h.prog.strConsts[g] != nil:
 		init := h.prog.constArrays[g]
 		if init == nil || init.StrTerm {
 			if init != nil && h.rewriting() {

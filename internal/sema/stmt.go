@@ -277,7 +277,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				if build {
 					e := h.buildConstInit(sp.Name.Name, sp)
 					if str, ok := e.(*syntax.StringLit); ok {
-						h.declareBuildString(sp.Name.Name, str.Value, s.PublicPos).Build = true
+						h.prog.buildConsts[h.declareBuildString(sp.Name.Name, str.Value, s.PublicPos)] = true
 						continue
 					}
 					init = toC(e)
@@ -287,7 +287,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				h.compileConstSpec(sp.Name.Name, sp.Name.End(), sp.Type, init, opts, s.PublicPos)
 				if build {
 					if v := h.scope.Local(sp.Name.Name); v != nil {
-						v.Build = true
+						h.prog.buildConsts[v] = true
 					}
 				}
 			}

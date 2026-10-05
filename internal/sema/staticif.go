@@ -96,7 +96,7 @@ func (h *Hlc) checkStaticExpr(e syntax.Expr) {
 func (h *Hlc) checkBuildRef(e syntax.Expr) {
 	h.updatePos(e)
 	cv := h.constEval(toC(e))
-	if cv.kind != cValue || !cv.val.Build {
+	if cv.kind != cValue || !h.prog.buildConsts[cv.val] {
 		panic(&diag.Error{Msg: fmt.Sprintf("@if condition can use only literals and @(build) constants (%s is not @(build))", exprText(e))})
 	}
 }
@@ -184,7 +184,7 @@ func (h *Hlc) declareBuildString(name, s string, publicPos syntax.Pos) *ir.Value
 	h.addVar(v)
 	h.prog.buildStrings[v] = s
 	if h.scopeIsPublic(publicPos) {
-		v.Public = true
+		h.setPublic(v, true)
 	}
 	return v
 }

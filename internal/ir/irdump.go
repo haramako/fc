@@ -168,9 +168,6 @@ func dumpVar(v *Value, i int, ctx *irCtx, alloc bool) string {
 	if v.LocalType != LTNone {
 		fmt.Fprintf(&b, " lt=%s", v.LocalType)
 	}
-	if v.Public {
-		b.WriteString(" pub")
-	}
 	if alloc {
 		if v.Location != LocNone {
 			fmt.Fprintf(&b, " loc=%s", v.Location)

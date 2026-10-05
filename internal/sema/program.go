@@ -69,8 +69,10 @@ type Program struct {
 	fmtCodes map[string]string // @format の textmap の数字などの表 (モジュールと表 → シンボル)
 	// buildStrings は文字列の @(build) の const → 値 (データを作らず、使った場所で文字列リテラルにする。staticif.go)
 	buildStrings map[*ir.Value]string
-	poCatalogs   map[string]*poCatalog // 読んだ .po (実パス → 訳の表。textmap の翻訳。po.go)
-	curModule    string                // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
+	// buildConsts は @(build) の const (@if の条件に使える。値はビルドの設定で上書きできる。以前は ir.Value.Build)
+	buildConsts map[*ir.Value]bool
+	poCatalogs  map[string]*poCatalog // 読んだ .po (実パス → 訳の表。textmap の翻訳。po.go)
+	curModule   string                // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
 	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
 	Defines map[string]*DefineUse
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
@@ -123,6 +125,7 @@ func NewProgram() *Program {
 		Sources:        map[string]*Source{},
 		fmtCodes:       map[string]string{},
 		buildStrings:   map[*ir.Value]string{},
+		buildConsts:    map[*ir.Value]bool{},
 		poCatalogs:     map[string]*poCatalog{},
 		soas:           map[*types.Type]*soaInfo{},
 		lambdas:        map[string]*ir.Lambda{},

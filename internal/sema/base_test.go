@@ -33,9 +33,8 @@ func TestScope(t *testing.T) {
 	s := NewScope(g)
 	v1 := ir.NewGlobal("a", u8, "_a")
 	v2 := ir.NewGlobal("b", u8, "_b")
-	v2.Public = true
 	g.Declare(v1)
-	s.Declare(v2)
+	s.Declare(v2).SetPublic(true)
 
 	if s.Find("a", true).Val != v1 {
 		t.Error("親スコープの検索に失敗")
@@ -50,9 +49,8 @@ func TestScope(t *testing.T) {
 	// use 経由は public のみ見える
 	other := NewScope(nil)
 	pub := ir.NewGlobal("p", u8, "_p")
-	pub.Public = true
 	priv := ir.NewGlobal("q", u8, "_q")
-	other.Declare(pub)
+	other.Declare(pub).SetPublic(true)
 	other.Declare(priv)
 	s.Use(&ModuleInterface{Id: "other", scope: other}, true)
 	if s.Find("p", true).Val != pub {

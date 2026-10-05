@@ -52,8 +52,7 @@ func (h *Hlc) compileStorageAlias(s *syntax.VarDecl) {
 		panic(&diag.Error{Msg: fmt.Sprintf("alias %s needs %d bytes but target %s has %d bytes", sp.Name.Name, typ.Size, target.Name, target.Type.Size)})
 	}
 	binding := ir.NewGlobal(sp.Name.Name, typ, "")
-	binding.Public = s.PublicPos.IsValid()
-	h.scope.Declare(binding)
+	h.scope.Declare(binding).SetPublic(s.PublicPos.IsValid())
 	h.prog.storageAliases[binding] = root
 }
 
