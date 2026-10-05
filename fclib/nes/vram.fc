@@ -10,6 +10,11 @@
 use nes;
 use frame;
 
+// 描画を止めている間に PPU へ直に書く所は vram.asm (1 KB のネームテーブルも書くので速さを優先)
+function write_raw(a:u16, p:*const u8, n:u16, flags:u8):void @(abi: "frame");
+function fill_raw(a:u16, v:u8, n:u16):void @(abi: "frame");
+@include("vram.asm");
+
 const VERTICAL = 0x80;
 const FILL = 0x40;
 // NMI で送る手間 (frame.BUDGET と同じ単位: 1 バイトを写す手間が 1)。写す項目は頭が約 7 と端数の 1 バイトずつの分で 10 + n、
@@ -88,7 +93,7 @@ function put_dir(a:u16, data:[]const u8, flags:u8):void
 {
 	if (!frame.rendering()) {
 		drain();
-		write_dir(a, data, flags);
+		write_raw(a, @ptr(data), @len(data), flags);
 		return;
 	}
 	var s = data;
@@ -147,7 +152,7 @@ public function fill(a:u16, v:u8, n:u8):void
 {
 	if (!frame.rendering()) {
 		drain();
-		fill_now(a, v, n);
+		fill_raw(a, v, n);
 		return;
 	}
 	while (n != 0) {
@@ -264,48 +269,22 @@ public function put_rle(a:u16, src:[:u16]const u8):void
 
 // ---- 描画を止めている間に直に書く ----
 
-function write_dir(a:u16, data:[:u16]const u8, flags:u8):void
-{
-	var c = frame.ctrl & ~nes.CTRL_INC32;
-	if (flags != 0) {
-		c |= nes.CTRL_INC32;
-	}
-	nes.PPUCTRL = c;
-	nes.PPUADDR = (a >> 8) as u8;
-	nes.PPUADDR = a as u8;
-	var p = @ptr(data);
-	var end = p + @len(data);
-	while (p != end) {
-		nes.PPUDATA = *p;
-		p += 1;
-	}
-	if (flags != 0) {
-		nes.PPUCTRL = c & ~nes.CTRL_INC32;
-	}
-}
-
 // data を a から横に書く (描画を止めている間だけ。1 KB のネームテーブルも)
 public function write_now(a:u16, data:[:u16]const u8):void
 {
-	write_dir(a, data, 0);
+	write_raw(a, @ptr(data), @len(data), 0);
 }
 
 // 縦に書く
 public function write_v_now(a:u16, data:[:u16]const u8):void
 {
-	write_dir(a, data, VERTICAL);
+	write_raw(a, @ptr(data), @len(data), VERTICAL);
 }
 
 // v を n 個書く (描画を止めている間だけ)
 public function fill_now(a:u16, v:u8, n:u16):void
 {
-	nes.PPUCTRL = frame.ctrl & ~nes.CTRL_INC32;
-	nes.PPUADDR = (a >> 8) as u8;
-	nes.PPUADDR = a as u8;
-	while (n != 0) {
-		nes.PPUDATA = v;
-		n -= 1;
-	}
+	fill_raw(a, v, n);
 }
 
 // RLE (NES Screen Tool の形式) を展開しながら a から横に書く (描画を止めている間だけ。RAM のバッファが要らない: neslib の

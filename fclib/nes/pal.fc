@@ -73,33 +73,8 @@ public function fade(to:u8, frames:u8):void
 
 // 明るさ 4 + d の色 (d は -4〜4)。暗くするときは 1 段ごとに $10 を引き、無くなれば黒。明るくするときは $10 を足し、$3x を超えれば白。
 // 黒 ($xE / $xF) は明るくすると $00 → $10 → $20 → $30 の灰色に
-public function shade(c:u8, d:i8):u8
-{
-	if (d == 0) {
-		return c;
-	}
-	var lo = c & 0x0f;
-	var hi = c >> 4;
-	if (d < 0) {
-		var k = @bitcast(u8, -d);
-		if (lo >= 0x0e || hi < k) {
-			return BLACK;
-		}
-		c -= k << 4;
-		if (c == 0x0d) {
-			return BLACK;   // $0D は「黒より黒い」色 (テレビによっては同期が乱れる)
-		}
-		return c;
-	}
-	var k = @bitcast(u8, d);
-	if (lo >= 0x0e) {
-		return (k - 1) << 4;
-	}
-	if (hi + k > 3) {
-		return WHITE;
-	}
-	return c + (k << 4);
-}
+public function shade(c:u8, d:i8):u8 @(abi: "frame");
+@include("pal.asm");
 
 function upload():void
 {
@@ -117,6 +92,44 @@ function upload():void
 }
 
 // ---- テスト ----
+
+// shade の fc の版 (pal.asm と全部の入力で比べる)
+function shade_ref(c:u8, d:i8):u8
+{
+	if (d == 0) {
+		return c;
+	}
+	var lo = c & 0x0f;
+	var hi = c >> 4;
+	if (d < 0) {
+		var k = @bitcast(u8, -d);
+		if (lo >= 0x0e || hi < k) {
+			return BLACK;
+		}
+		c -= k << 4;
+		if (c == 0x0d) {
+			return BLACK;
+		}
+		return c;
+	}
+	var k = @bitcast(u8, d);
+	if (lo >= 0x0e) {
+		return (k - 1) << 4;
+	}
+	if (hi + k > 3) {
+		return WHITE;
+	}
+	return c + (k << 4);
+}
+
+function test_shade_all():void @(test)
+{
+	for (var d:i8 = -8; d <= 8; d += 1) {
+		for (var c in 0..64) {
+			@assert_eq(shade(c, d), shade_ref(c, d));
+		}
+	}
+}
 
 function test_shade():void @(test)
 {
