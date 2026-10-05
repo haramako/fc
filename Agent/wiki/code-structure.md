@@ -91,9 +91,19 @@
   「常駐させないときの命令列」（`base`）のサイクル差（m6502。ゼロページで数える）。形を足すときは forms.go に 1 つ
   足せば両方に効く。表の外（汎用の出力が A の値をそのまま扱う形・添字を Y / X のまま使う形・needsX / needsY）は
   classify.go の規則で、外れたら codegen が命令単位で出し直す（テストと fuzz ではコンパイルエラー）。
-- **opt の段**は `opt.Pass{Name, Requires, Grows, Run, Then, Repeat}` で宣言し、`Pass.Apply` が FC_DISABLE の判定・compact・
-  @log の付け替え・トレース・IR の検証を一括で行う。段を足すときは変換だけを書き、`Passes()` に並べる（順序の依存は
-  そこのコメントに）。fuzz の切り分け `rpLocate` も `Apply` で 1 段ずつ当てる。
+- **opt の段**は `opt.Pass{Name, Requires, Grows, Run, Then}` で宣言し、`Pass.Apply` が FC_DISABLE の判定・compact（段の中では
+  しない。ここだけ）・@log の付け替え・トレース・IR の検証を一括で行う。段を足すときは変換だけを書き、`Passes()` に並べる
+  （順序の依存はそこのコメントに）。fuzz の切り分け `rpLocate` も `Apply` で 1 段ずつ当てる。解析を作り直して変化が無くなる
+  まで繰り返す段は `opt.untilFixed`（命令の数に比例する回数を超えたら FC_VERIFY_IR では内部エラー。回数の上限で黙って
+  止めない）。
+- **命令の同一性は `*ir.Op`**（2026-10-05）: `ir.UseDef` は変数 → 定義 / 使用の命令（`*Op`）を持ち、位置は `Lambda.IndexOf`
+  （命令に持たせた添字の手がかりを確かめ、合わなければ数え直す）で引く。命令を消す（nil）・動かす・詰めるのは知らせなくて
+  よく（引くときに lmd.Ops に無い命令を除く）、足した命令は `ud.Add`、Dst / Src を書き換えた命令は `ud.Update`。段の中には
+  消した命令の穴（nil）が残るので、「直後の命令」は `ir.NextOp` / `ir.PrevOp`（`ops[i+1]` は穴で黙って効かなかった）。
+  `ir.Liveness` も `*Op` が鍵（`LiveInOp`）。`ir.BuildCFG` は前に作った CFG を、命令列の長さと制御の命令（ラベル・分岐・
+  終端）の並びが同じなら使い回し（支配木・ループのキャッシュも）、終端の後の穴だけの空のブロックを作らない。SSA
+  （`opt/ssa.go`）は 1 回の書き換えの間だけ使い、その間は命令を挿さない（置き換えと削除だけ。挿す変換は 1 つごとに作り直す）
+  ので添字のまま。
 - **常駐の割付の後の IR を変えるとき**（2026-09-30）: 常駐の一時変数（`i@Y` など。`Value.Home` が退避先）への書き込みは、
   IR の上で読まれていなくても消してはいけない。ループ・関数の出口の書き戻し（`sty home`）、退避と復帰は codegen が `Op.Res`
   の印から出すので、`ir.BuildUseDef` には使用として現れない（`regalloc.PropagateLiteralLoads` が castle の

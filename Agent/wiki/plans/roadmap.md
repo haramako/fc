@@ -519,6 +519,14 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       場当たりで、達すると黙って止まる）、`compact()` が Passes に 11 か所、`ops[i+1] == nil` の穴で黙って効かない隣接判定が
       6 か所。`*Op` を鍵にして def-use を差分で更新し、CFG / 支配木 / ループを無効化つきのキャッシュにする
       （`ir.Verify` は 2026-09-28 に入れた。CFG の中の支配木・ループのキャッシュも。命令列を変えたら CFG を作り直す前提はそのまま）
+      ✅ 2026-10-05 の大部分（Agent/discussions/2026-10-05-op-identity.md）: `ir.UseDef` と `ir.Liveness` を `*Op` を鍵に（位置は
+      `Lambda.IndexOf`、消した・動かした命令は知らせなくてよく、足した・書き換えた命令は `Add` / `Update`）、隣接判定は
+      `ir.NextOp` / `PrevOp` で穴を越える（opt・regalloc・codegen の 11 か所）、`BuildCFG` は終端の後の穴だけの空のブロックを
+      作らず、制御の形が同じなら使い回す。carry・devirt・sink は解析を作り直さずに関数を 1 回（carry の Repeat 19・devirt の
+      32 回をやめる）、ssa・induction・unroll・ywalk・jumps・常駐の割付は `untilFixed`（回数の上限で黙って止めない）、compact は
+      `Pass.Apply` だけ。生成コードは fclib/nes/frame の空の待ちループ 2 つが短くなっただけ。残り: SSA（`opt/ssa.go`）の
+      添字の鍵（1 回の書き換えの間は命令を挿さないので今は困らない）、挿す変換（induction・unroll・ywalk）を作り直さずに続ける
+      こと（SSA と CFG の差分の更新が要る）
 - [x] **メモリアクセスの集約** ([Agent/wiki/design/ir-memops.md](../design/ir-memops.md)) ✅ 2026-09-28: 7 つのオペコード + `Scaled` + 配列への cast を
       `load_mem` / `store_mem` と `Base + Index * Scale + Disp`（store は `Width`）に。生成コードは変えていない（ROM はバイト一致）。
       定数の添字を Disp に畳んで絶対番地 (`lda a+3`) で読む最適化 (`constidx`) と、struct の配列フィールドをポインタ経由で

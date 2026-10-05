@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-05 [IR の命令の同一性を `*Op` に](2026-10-05-op-identity.md) — UseDef / Liveness を *Op を鍵に（位置は Lambda.IndexOf）、隣接は NextOp、CFG の空のブロックをやめて使い回し、繰り返しの上限で黙って止めない（untilFixed）、compact は Pass.Apply だけ。SSA は添字のまま
 - 2026-10-05 [構造の整理の残り 4 項目を進める](2026-10-05-structure-cleanup.md) — `*Op`・ABI の一本化・types の Kind・driver の Compiler はどれも効果のある整理（大きい順に後回しにしていただけ）。型を決める段の後に進める
 - 2026-10-05 [型を決める段の計画](2026-10-05-typing-stage-plans.md) — 演算の型・項の変換・診断を typeplan.go の計画にし、型を決める段と lval が同じ関数を使う（lval は型を出し直さない）。モジュール・型名の束縛を ir.Value から sema へ
 - 2026-10-05 [型を決める段の続き](2026-10-05-typing-stage-continued.md) — 型を決める段を値の式の 99.9 % 以上に広げ全部の節点で照合、A1 の幅を引数に、Scope・ModuleInterface・関数の本体を ir から sema へ。次は暗黙の変換を型を決める段が節点に付ける形
