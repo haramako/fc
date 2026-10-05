@@ -26,8 +26,8 @@ import (
 type Backend interface {
 	// SetLambdas は全関数の表 (Id → 関数。frames.Analyze の結果) を渡す (呼び先の呼び出し規約を引く)。
 	SetLambdas(map[string]*ir.Lambda)
-	// MarkArgY は最後から 2 つ目の引数を Y で渡せる呼び出しに印を付ける (最適化の後、割付の前)。
-	MarkArgY(lmd *ir.Lambda)
+	// MarkCalls は呼び出しの印 (Y で渡す引数・X = FC_SP の保持・戻り値を直に写す引数) を付ける (最適化の後、割付の前)。
+	MarkCalls(lmd *ir.Lambda)
 	// CheckStackPush はスタックに積む引数が FC_STACK に収まるかを検査する (超えれば frame size over の diag.Error を panic)。
 	CheckStackPush(lmd *ir.Lambda)
 }
@@ -229,7 +229,7 @@ func prepareLambda(lmd *ir.Lambda, o *Options) (err *diag.Error) {
 	opt.Optimize(lmd, o.OptimizeLevel, o.Types)
 	opt.ZeroEmptyCasts(lmd)
 	prev := ir.SnapshotLogs(lmd)
-	o.Backend.MarkArgY(lmd) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
+	o.Backend.MarkCalls(lmd) // 最適化で命令の並びが決まってから (割付は印を Y の clobber と見る)
 	if o.OptimizeLevel > 0 {
 		regalloc.MarkFusedLoads(lmd) // 添字付きの読み出しを直後の演算に融合する候補 (常駐の見積もりが A を触らない命令と見る)
 		regalloc.AllocateResident(lmd)

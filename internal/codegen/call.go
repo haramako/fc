@@ -20,45 +20,17 @@ func (l *Llc) farCallSetup(sym string) []any {
 	}
 }
 
-// callKind は呼び出し 1 つの引数の渡し方 (呼び先の種類で決まる。Agent/wiki/design/frame-alloc.md §6-1)。
-type callKind uint8
-
-const (
-	ckStack  callKind = iota // S+k,x に積む (stack / entry / 関数ポインタ経由)
-	ckStatic                 // 呼び先の静的フレーム F_g+k に直接書く
-	ckFastcallReg
-	ckCc65 // cc65 の __fastcall__: 引数は FC_FASTCALL_REG に置いてから A / X に、戻り値は A / X (docs/reference/assembly.md の「cc65」)                 // FC_FASTCALL_REG に積む (extern の fastcall)
-)
-
-// pendingCall は push_result から call までの 1 つの呼び出し。
-type pendingCall struct {
-	callee *ir.Lambda // 分かっているとき
-	kind   callKind
-	argOff int    // ckStatic: 次の引数バイトのフレーム内オフセット
-	callOp *ir.Op // 対応する call
-	far    bool   // far call (トランポリンが A を壊すのでレジスタ渡しは使えない)
-	inA    bool   // ckStatic: 最後の引数を A に置いた (フレームには書いていない)
-	inY    bool   // ckStatic: 最後から 2 つ目の引数を Y に置いた (push_arg の ArgY)
-}
-
-// regParam は static の呼び先がレジスタ r で受け取る引数 (far call はトランポリンが A / Y を壊すので無し)。
-func regParam(pc *pendingCall, r ir.Reg) *ir.ArgLoc {
-	if pc.kind != ckStatic || pc.far {
-		return nil
-	}
-	return pc.callee.Conv.RegParam(r)
-}
-
 // pipeline.Backend の実装 (pipeline.Prepare が最適化と割付の間で呼ぶ)。
 
 // SetLambdas は全関数の表 (frames.Analyze の結果) を受け取る。
 func (l *Llc) SetLambdas(lambdas map[string]*ir.Lambda) { l.Lambdas = lambdas }
 
-// MarkArgY は markArgY と markHoldX、markResultArg (全関数の表は SetLambdas で受け取ったもの)。
-func (l *Llc) MarkArgY(lmd *ir.Lambda) {
-	markArgY(lmd, l.Lambdas)
-	l.markHoldX(lmd)
-	l.markResultArg(lmd)
+// MarkCalls は割付の前の呼び出しの印 (markArgY と markHoldX、markResultArg。全関数の表は SetLambdas で受け取ったもの)。
+func (l *Llc) MarkCalls(lmd *ir.Lambda) {
+	p := l.planCalls(lmd.Ops)
+	markArgY(lmd.Ops, p)
+	markHoldX(lmd.Ops, p)
+	markResultArg(lmd.Ops, p)
 }
 
 // markResultArg は、static な関数の 3 バイト以上の戻り値を受けた一時変数 T をすぐ次の呼び出しの最初の引数にするだけの
@@ -66,8 +38,7 @@ func (l *Llc) MarkArgY(lmd *ir.Lambda) {
 // フレームの戻り値を引数の場所へ写す (genCall / genPushArg)。兄弟の関数のフレームは重なりうるので、全部のバイトを読んでから
 // 書く (A・Y・X とスタック。regalloc は印の付いた push_arg を Y を壊す命令と見る)。call と push_arg の間が push_result だけで
 // ない (前の引数の push_arg がある: 呼び先のフレームに書くので戻り値を壊しうる) なら付けない。
-func (l *Llc) markResultArg(lmd *ir.Lambda) {
-	ops := lmd.Ops
+func markResultArg(ops []*ir.Op, p *callPlans) {
 	reads := map[*ir.Value]int{}
 	for _, op := range ops {
 		if op == nil {
@@ -92,21 +63,14 @@ func (l *Llc) markResultArg(lmd *ir.Lambda) {
 			}
 		}
 	}
-	for k, op := range ops {
-		if op == nil || op.Code != ir.OpPushResult {
-			continue
-		}
-		pc := l.resolveCall(ops, k)
-		call := pc.callOp
+	for _, c := range p.list {
+		call := c.call
 		t, ok := call.Dst.(*ir.Value)
-		if pc.kind != ckStatic || pc.far || call.Code != ir.OpCall || !ok || t.Kind != ir.KindLocal || t.LocalType != ir.LTTemp ||
-			t.Type.Size < 3 || reads[t] != 1 {
+		if c.push.Code != ir.OpPushResult || c.kind != ckStatic || c.far || call.Code != ir.OpCall || !ok || t.Kind != ir.KindLocal ||
+			t.LocalType != ir.LTTemp || t.Type.Size < 3 || reads[t] != 1 {
 			continue
 		}
-		i := k + 1
-		for i < len(ops) && ops[i] != call {
-			i++
-		}
+		i := c.callAt
 		j := i + 1
 		for j < len(ops) && (ops[j] == nil || ops[j].Code == ir.OpPushResult) {
 			j++
@@ -171,24 +135,19 @@ func copyResultArg(src *ir.Lambda, n int, dst func(i int) string, useX bool) []a
 // 条件: 呼び先が分かっていて static で Y で受け取る引数があり (CallConv.RegParam)、far でなく、最後の引数の push_arg の直後が call で、その 2 つの push_arg の
 // 間の命令 (最後の引数の式) が Y を使わない (最後の引数の読み出しは変数か cast か定数)。
 // markHoldX は stack 系の呼び出し (push_result で X = FC_SP にし、call までそのまま) の間の命令に HoldX を付ける。codegen は
-// その間 X の常駐を退避してメモリ側で扱う (genPushResult の holdX) ので、regalloc の見積もりも同じに見る
+// その間 X の常駐を退避してメモリ側で扱う (callPlans.holdX) ので、regalloc の見積もりも同じに見る
 // (`load l0 = l0.lo@X` を stx と見積もって A を触らないとしたのに、codegen はメモリから A で写していた。fuzz で発覚)。
-func (l *Llc) markHoldX(lmd *ir.Lambda) {
-	ops := lmd.Ops
+func markHoldX(ops []*ir.Op, p *callPlans) {
 	for _, op := range ops {
 		if op != nil {
 			op.HoldX = false
 		}
 	}
-	for i, op := range ops {
-		if op == nil || op.Code != ir.OpPushResult {
+	for _, c := range p.list {
+		if c.kind != ckStack {
 			continue
 		}
-		pc := l.resolveCall(ops, i)
-		if pc.kind != ckStack {
-			continue
-		}
-		for k := i + 1; k < len(ops) && ops[k] != pc.callOp; k++ {
+		for k := c.pushAt + 1; k < c.callAt; k++ {
 			if ops[k] != nil {
 				ops[k].HoldX = true
 			}
@@ -196,70 +155,45 @@ func (l *Llc) markHoldX(lmd *ir.Lambda) {
 	}
 }
 
-func markArgY(lmd *ir.Lambda, lambdas map[string]*ir.Lambda) {
-	type pending struct {
-		callOp *ir.Op
-		args   []int
-	}
-	var stack []*pending
-	ops := lmd.Ops
-	for i, op := range ops {
-		if op == nil {
+func markArgY(ops []*ir.Op, p *callPlans) {
+	for _, c := range p.list {
+		op := c.call
+		if c.far || c.callee == nil || c.callee.Conv.ABI != ir.ABIStatic || c.callee.Conv.RegParam(ir.RegY) == nil {
+			continue // far call はトランポリンが A / Y を壊す
+		}
+		var at []int // 引数ごとの push_arg の位置 (slice を分けた続きは数えない)
+		for k, a := range c.args {
+			if !a.ArgCont {
+				at = append(at, c.argAt[k])
+			}
+		}
+		np := len(c.callee.Type.Params)
+		if len(at) != np {
 			continue
 		}
-		switch op.Code {
-		case ir.OpPushResult, ir.OpPushFastcallResult:
-			stack = append(stack, &pending{})
-		case ir.OpPushArg, ir.OpPushFastcallArg:
-			if len(stack) > 0 && !op.ArgCont {
-				p := stack[len(stack)-1]
-				p.args = append(p.args, i)
+		ky, kl := at[np-2], at[np-1]
+		py, pl := ops[ky], ops[kl]
+		if !ir.IsPushArg(py) || !ir.IsPushArg(pl) || nextOp(ops, kl) != op {
+			continue
+		}
+		if !isValueOrCasted(py.In(0)) || !isValueOrCasted(pl.In(0)) || py.Type.Size != 1 {
+			continue
+		}
+		// 間の命令 (最後の引数の式の計算) は Y を使わないものだけ (push_arg をその下に沈めると、間の演算の結果が A に
+		// 残らなくなって (sta t; ldy; lda t) 損: oam で +0.7%)
+		ok := true
+		for j := ky + 1; j < kl && ok; j++ {
+			if ops[j] != nil && !keepsY(ops[j]) {
+				ok = false
 			}
-		case ir.OpCall, ir.OpFastcall:
-			if len(stack) == 0 {
-				continue
-			}
-			p := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			if op.Far {
-				continue // far call はトランポリンが A / Y を壊す
-			}
-			v := ir.ValLiteral(op.Src[0])
-			if v == nil || v.Kind != ir.KindLiteral || v.Symbol == "" {
-				continue
-			}
-			callee, ok := lambdas[v.Symbol]
-			if !ok || callee.Conv.ABI != ir.ABIStatic || callee.Conv.RegParam(ir.RegY) == nil {
-				continue
-			}
-			np := len(callee.Type.Params)
-			if len(p.args) != np {
-				continue
-			}
-			iy, il := p.args[np-2], p.args[np-1]
-			py, pl := ops[iy], ops[il]
-			if !ir.IsPushArg(py) || !ir.IsPushArg(pl) || nextOp(ops, il) != op {
-				continue
-			}
-			if !isValueOrCasted(py.In(0)) || !isValueOrCasted(pl.In(0)) || py.Type.Size != 1 {
-				continue
-			}
-			// 間の命令 (最後の引数の式の計算) は Y を使わないものだけ (push_arg をその下に沈めると、間の演算の結果が A に
-			// 残らなくなって (sta t; ldy; lda t) 損: oam で +0.7%)
-			ok = true
-			for j := iy + 1; j < il && ok; j++ {
-				if ops[j] != nil && !keepsY(ops[j]) {
-					ok = false
-				}
-			}
-			if !ok {
-				continue
-			}
-			py.ArgY = true
-			for j := iy + 1; j <= i; j++ {
-				if ops[j] != nil {
-					ops[j].HoldY = true
-				}
+		}
+		if !ok {
+			continue
+		}
+		py.ArgY = true
+		for j := ky + 1; j <= c.callAt; j++ {
+			if ops[j] != nil {
+				ops[j].HoldY = true
 			}
 		}
 	}
@@ -303,57 +237,6 @@ func (l *Llc) loadY(v ir.Operand) []any {
 	return []any{fmt.Sprintf("ldy %s", l.byte(v, 0))}
 }
 
-// resolveCall は push_result (添字 i) に対応する call を探して、呼び出しの種類を決める。
-func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
-	depth := 0
-	var callOp *ir.Op
-	for j := i; j < len(ops) && callOp == nil; j++ {
-		op := ops[j]
-		if op == nil {
-			continue
-		}
-		switch op.Code {
-		case ir.OpPushResult, ir.OpPushFastcallResult:
-			depth++
-		case ir.OpCall, ir.OpFastcall:
-			depth--
-			if depth == 0 {
-				callOp = op
-			}
-		}
-	}
-	if callOp == nil {
-		panic(&diag.Error{Msg: "push_result without call"})
-	}
-	pc := &pendingCall{kind: ckStack, callOp: callOp, far: callOp.Far}
-	// Even a known farfn target uses its ordinary stack/Entry entry point.
-	if ir.ValType(callOp.Src[0]).IsFarFunc() {
-		pc.far = true
-		return pc
-	}
-	if ops[i].Code == ir.OpPushFastcallResult {
-		pc.kind = ckFastcallReg
-	}
-	if v := ir.ValLiteral(callOp.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
-		if callee, ok := l.Lambdas[v.Symbol]; ok {
-			pc.callee = callee
-			switch {
-			case callee.Conv.ABI == ir.ABIStatic:
-				// Entry でも呼び先が分かっていればフレームに直接書き、プロローグの後ろ (__direct) から入る
-				pc.kind = ckStatic
-				pc.argOff = callee.Type.Base.Size
-			case callee.Conv.ABI == ir.ABIFastcall:
-				pc.kind = ckFastcallReg
-			case callee.Conv.ABI == ir.ABICc65:
-				pc.kind = ckCc65
-			default:
-				pc.kind = ckStack
-			}
-		}
-	}
-	return pc
-}
-
 // staticAddr は静的フレーム上のオフセット off のアドレス表記 (ゼロページなら `<F_g+off`)。
 func staticAddr(lmd *ir.Lambda, off int) string {
 	if lmd.FrameZp {
@@ -367,35 +250,9 @@ func staticAddr(lmd *ir.Lambda, off int) string {
 // (regalloc の FC_STACK) では、stack 系の関数が大きいフレームの後ろに引数を積むときに漏れていた (inline 関数を
 // 展開した再帰関数で `<S+128,x`。fuzz で発覚)。frame size over なので、-O 2 なら driver が展開を止めてやり直す。
 func (l *Llc) CheckStackPush(lmd *ir.Lambda) {
-	ops := lmd.Ops
-	var pending []*pendingCall
-	var marks []int
-	cur, peak := 0, 0
-	for i, op := range ops {
-		if op == nil {
-			continue
-		}
-		switch op.Code {
-		case ir.OpPushResult, ir.OpPushFastcallResult:
-			pc := l.resolveCall(ops, i)
-			pending = append(pending, pc)
-			marks = append(marks, cur)
-			if pc.kind == ckStack {
-				cur += op.Type.Size
-			}
-		case ir.OpPushArg, ir.OpPushFastcallArg:
-			if len(pending) > 0 && pending[len(pending)-1].kind == ckStack {
-				cur += op.Type.Size
-			}
-		case ir.OpCall, ir.OpFastcall:
-			if len(pending) > 0 {
-				cur = marks[len(marks)-1]
-				pending, marks = pending[:len(pending)-1], marks[:len(marks)-1]
-			}
-		}
-		peak = max(peak, cur)
-	}
-	if need := l.stackBase(lmd) + peak; peak > 0 && need > regalloc.StackSize {
+	p := l.planCalls(lmd.Ops)
+	p.layoutCalls(lmd.Ops, 0)
+	if need := l.stackBase(lmd) + p.stackPeak; p.stackPeak > 0 && need > regalloc.StackSize {
 		panic(&diag.Error{Msg: fmt.Sprintf("frame size over on %s: stack frame and call arguments need %d bytes but FC_STACK has %d (split the function or reduce locals)", lmd, need, regalloc.StackSize)})
 	}
 }

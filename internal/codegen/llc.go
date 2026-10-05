@@ -47,8 +47,6 @@ type Llc struct {
 	// ループ内の常駐 (Agent/wiki/design/regalloc.md): 処理中の命令でレジスタ (ir.Reg) を占有している変数と、その扱い
 	res    [ir.NumRegs]*ir.Value // op.Res[reg].V
 	resMem [ir.NumRegs]bool      // 退避中: res[reg] をメモリ (Home) として参照する
-	holdA  bool                  // 呼び出しの最後の引数を A に置いてから call まで (A の常駐は退避済みで、call では退避しない)
-	holdX  int                   // stack 系の呼び出しの push_result (ldx FC_SP) から call まで (入れ子の深さ): X = FC_SP のまま。X の常駐はメモリ側で扱い、復帰しない
 	aHeld  bool                  // A は res[A] で塞がっていて、この命令は res[A] を触らない (Y で代用する)
 
 	// 添字付きオペランドの融合: `sub d = x, t` / `lt d = x, t` の t が直前の 添字付きの load_mem (グローバルの 1 バイト配列) の結果なら、
@@ -507,6 +505,8 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda) []string {
 	}
 
 	verify := lmd.Cfg().VerifyRegs() // テストと fuzz で有効 (verifyRegs)
+	l.calls = l.planCalls(ops)
+	l.calls.layoutCalls(ops, l.stackBase(lmd))
 
 	for opNo, op := range ops {
 		if op == nil {
@@ -601,7 +601,9 @@ func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) r
 	l.beginOp(op)
 	l.restore = [ir.NumRegs]bool{} // 命令の後でレジスタに戻す常駐
 	restore := &l.restore
-	opStart, holdAIn, holdXIn := len(r.lines), l.holdA, l.holdX
+	// 呼び出しの引数の保持 (callplan.go): A の最後の引数を置いてから call まで (A の常駐は退避済みで、call では退避しない)、
+	// stack 系の呼び出しの push_result (ldx FC_SP) から call まで X = FC_SP のまま (入れ子の深さ。X の常駐はメモリ側で扱い、復帰しない)
+	opStart, holdA, holdX := len(r.lines), l.holdA(op), l.calls.holdX[op]
 	var d regalloc.Decision
 	if op.HasResident() {
 		d, _ = regalloc.Classify(lmd, opNo, op.Res[ir.RegA].V, op.Res[ir.RegY].V, op.Res[ir.RegX].V, op.Res[ir.RegA].In || op.Res[ir.RegA].Out, op.Res[ir.RegA].Out, op.Res[ir.RegY].In || op.Res[ir.RegY].Out)
@@ -634,12 +636,12 @@ func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) r
 		// stack 系の呼び出しの引数を積んでいる間 (push_result の ldx FC_SP から call まで) は X = FC_SP のまま:
 		// X の常駐はメモリ側で扱い、退避も復帰もしない (push_result の直後の復帰 `ldx g1` で X が常駐の値に戻り、
 		// `sta <S+1,x` が別の場所に引数を書いていた。fuzz で発覚)。call の後で復帰する
-		if op.Res[ir.RegX].V != nil && (d.X == regalloc.ResClobber || l.holdX > 0) {
-			if op.Res[ir.RegX].In && !op.Res[ir.RegX].V.Clean && l.holdX == 0 {
+		if op.Res[ir.RegX].V != nil && (d.X == regalloc.ResClobber || holdX > 0) {
+			if op.Res[ir.RegX].In && !op.Res[ir.RegX].V.Clean && holdX == 0 {
 				r.push(l.spillResident(op, ir.RegX))
 			}
 			l.resMem[ir.RegX] = true
-			restore[ir.RegX] = op.Res[ir.RegX].Out && (l.holdX == 0 || (ir.IsCall(op) && l.holdX == 1))
+			restore[ir.RegX] = op.Res[ir.RegX].Out && (holdX == 0 || (ir.IsCall(op) && holdX == 1))
 		}
 		// 呼び出しの引数を Y に保持中 (markArgY: ArgY の push_arg から call まで) は Y を代用にも常駐にも使わない。
 		// 常駐変数は ArgY の push_arg で退避してメモリ側で扱い、call の後で復帰する (間の命令と call では退避も復帰もしない)。
@@ -648,8 +650,8 @@ func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) r
 		if holdY && d.UseY {
 			d.UseY, d.A = false, regalloc.ResClobber
 		}
-		if op.Res[ir.RegA].V != nil && (d.A == regalloc.ResClobber || l.holdA) {
-			if op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.holdA {
+		if op.Res[ir.RegA].V != nil && (d.A == regalloc.ResClobber || holdA) {
+			if op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !holdA {
 				r.push(l.spillResident(op, ir.RegA))
 			}
 			l.resMem[ir.RegA] = true
@@ -745,12 +747,11 @@ func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) r
 	}
 	written := keep.and(regsWritten(r.lines[bodyStart:bodyEnd])) // 常駐を触らないはずの本体が書いたレジスタ
 	if verify {
-		// 呼び出しの引数の保持中 (A の最後の引数、Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない
-		// (codegen の中の約束事なので、破っていたらコンパイルエラー)
+		// 呼び出しの引数の保持中 (Y の引数、stack 系の X = FC_SP) は、退避・復帰も含めて命令全体で触らない (codegen の中の
+		// 約束事なので、破っていたらコンパイルエラー)。A の最後の引数は直後が call なので、間の命令は無い
 		hold := regsKept{
-			a: holdAIn && !ir.IsCall(op),
 			y: op.HoldY && !ir.IsCall(op),
-			x: holdXIn > 0 && !ir.IsCall(op) && op.Code != ir.OpPushResult,
+			x: holdX > 0 && !ir.IsCall(op) && op.Code != ir.OpPushResult,
 		}
 		l.verifyRegs(op, "引数の保持", hold, r.lines[opStart:])
 	}
@@ -758,41 +759,24 @@ func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) r
 	return written
 }
 
-// opState は命令 1 つを出し直すときに戻す状態 (出力の行、ラベルの番号、融合、呼び出しの引数の保持、.dbg)。
+// opState は命令 1 つを出し直すときに戻す状態 (出力の行、ラベルの番号、融合、.dbg)。
 type opState struct {
-	lines               int
-	labelCount          int
-	fused               map[*ir.Value]string
-	fusedAt             int
-	holdA               bool
-	holdX               int
-	calls               []pendingCall
-	pushArgSize         int
-	pushFastcallArgSize int
-	dbgLast             string
-	logSites            int
-	resultFrom          *pendingResult
+	lines      int
+	labelCount int
+	fused      map[*ir.Value]string
+	fusedAt    int
+	dbgLast    string
+	logSites   int
 }
 
 func (l *funcGen) saveOp() opState {
-	s := opState{lines: len(l.r.lines), labelCount: l.labelCount, fused: l.fused, fusedAt: l.fusedAt, holdA: l.holdA, holdX: l.holdX,
-		pushArgSize: l.pushArgSize, pushFastcallArgSize: l.pushFastcallArgSize, dbgLast: l.dbgLast, logSites: len(l.LogSites), resultFrom: l.resultFrom}
-	for _, pc := range l.calls {
-		s.calls = append(s.calls, *pc)
-	}
-	return s
+	return opState{lines: len(l.r.lines), labelCount: l.labelCount, fused: l.fused, fusedAt: l.fusedAt, dbgLast: l.dbgLast, logSites: len(l.LogSites)}
 }
 
 func (l *funcGen) restoreOp(s opState) {
 	l.r.lines = l.r.lines[:s.lines]
-	l.labelCount, l.fused, l.fusedAt, l.holdA, l.holdX = s.labelCount, s.fused, s.fusedAt, s.holdA, s.holdX
-	l.pushArgSize, l.pushFastcallArgSize, l.dbgLast, l.resultFrom = s.pushArgSize, s.pushFastcallArgSize, s.dbgLast, s.resultFrom
+	l.labelCount, l.fused, l.fusedAt, l.dbgLast = s.labelCount, s.fused, s.fusedAt, s.dbgLast
 	l.LogSites = l.LogSites[:s.logSites]
-	l.calls = l.calls[:0]
-	for i := range s.calls {
-		pc := s.calls[i]
-		l.calls = append(l.calls, &pc)
-	}
 }
 
 var reIndentExempt = regexp.MustCompile(`^([.@_a-zA-Z0-9][_a-zA-Z0-9]+:|\.segment|\.proc)`)

@@ -29,18 +29,15 @@ type funcGen struct {
 	opNo    int
 	restore [ir.NumRegs]bool // 命令の後でメモリ側から戻す常駐 (退避したもの。genSwitch は飛ぶ側の経路でも戻す)
 
-	// 呼び出しの引数の積み方 (push_result から call まで。入れ子は calls の末尾が内側)
-	calls               []*pendingCall
-	pushArgSize         int // stack 系: S+k,x に積んだ引数のバイト数
-	pushFastcallArgSize int // fastcall: FC_FASTCALL_REG に積んだバイト数
-	// resultFrom は戻り値を一時変数に受けなかった呼び出し (resultArgAt) の一時変数と呼び先。次の push_arg が呼び先のフレームから写す
-	resultFrom *pendingResult
+	// 呼び出しの計画 (引数の置き場所・レジスタ渡し・入口・X の保持。callplan.go)
+	calls *callPlans
 }
 
-// pendingResult は戻り値を呼び先のフレームに置いたままの呼び出し (genCall → genPushArg)。
-type pendingResult struct {
-	v      ir.Operand
-	callee *ir.Lambda
+// holdA は op の入口で、呼び出しの最後の引数を A に置いたまま call を待っているか (A の常駐は push_arg で退避済みで、
+// call では退避しない)。
+func (l *funcGen) holdA(op *ir.Op) bool {
+	c := l.calls.byOp[op]
+	return c != nil && op == c.call && c.inA
 }
 
 // genLabel は Label のコード生成。
@@ -183,98 +180,62 @@ func (l *funcGen) genReturn() {
 
 // genPushResult は PushResult / PushFastcallResult のコード生成。
 func (l *funcGen) genPushResult() {
-	r, op, opNo, ops, lmd := l.r, l.op, l.opNo, l.ops, l.lmd
-	restore := &l.restore
+	r, op, lmd := l.r, l.op, l.lmd
 	// 呼び出しの開始。呼び先の種類 (static / stack / fastcall) で引数の置き場所が決まる (IR の flavor は見ない)
-	pc := l.resolveCall(ops, opNo)
-	l.calls = append(l.calls, pc)
-	switch pc.kind {
-	case ckStack:
-		l.pushArgSize += op.Type.Size
-		r.push(l.loadSP(lmd)) // 引数 (S+k,x) の前に X をスタックの空き先頭に
-		l.holdX++             // call まで X = FC_SP のまま (X の常駐はここで退避済み。復帰は call の後)
-		restore[ir.RegX] = false
-	case ckFastcallReg:
-		l.pushFastcallArgSize += op.Type.Size
+	if l.calls.byOp[op].kind == ckStack {
+		r.push(l.loadSP(lmd)) // 引数 (S+k,x) の前に X をスタックの空き先頭に。call まで X = FC_SP のまま (X の常駐はここで退避済み。復帰は call の後)
+		l.restore[ir.RegX] = false
 	}
 }
 
 // genPushArg は PushArg / PushFastcallArg のコード生成。
 func (l *funcGen) genPushArg() {
-	r, op, opNo, ops, lmd := l.r, l.op, l.opNo, l.ops, l.lmd
+	r, op, lmd := l.r, l.op, l.lmd
 	restore := &l.restore
-	pc := l.calls[len(l.calls)-1]
-	if f := l.resultFrom; f != nil && op.In(0) == f.v {
-		// 前の呼び出しの戻り値を呼び先のフレームから写す (markResultArg)
-		l.resultFrom = nil
-		n := op.Type.Size
-		var dst func(i int) string
-		switch pc.kind {
-		case ckStatic:
-			off := pc.argOff
-			dst = func(i int) string { return staticAddr(pc.callee, off+i) }
-			pc.argOff += n
-		case ckStack:
-			base := l.stackBase(lmd) + l.pushArgSize
-			dst = func(i int) string { return fmt.Sprintf("<S+%d,x", base+i) }
-			l.pushArgSize += n
-		case ckFastcallReg:
-			base := l.pushFastcallArgSize
-			dst = func(i int) string { return fmt.Sprintf("<FC_FASTCALL_REG+%d", base+i) }
-			l.pushFastcallArgSize += n
-		default:
-			panic(fmt.Sprintf("result argument for call kind %d", pc.kind))
-		}
-		// X はフレームの底 (stack の関数) / FC_SP (stack 系の呼び出しの引数) のときは使わない
-		r.push(copyResultArg(f.callee, n, dst, lmd.Conv.ABI != ir.ABIStack && pc.kind != ckStack && l.holdX == 0)...)
+	a := l.calls.args[op]
+	pc := a.call
+	n := op.Type.Size
+	var dst func(i int) string // 引数の i バイト目の置き場所
+	switch pc.kind {
+	case ckStatic:
+		dst = func(i int) string { return staticAddr(pc.callee, a.off+i) }
+	case ckStack:
+		dst = func(i int) string { return fmt.Sprintf("<S+%d,x", a.off+i) }
+	case ckFastcallReg:
+		dst = func(i int) string { return fmt.Sprintf("<FC_FASTCALL_REG+%d", a.off+i) }
+	case ckCc65:
+		dst = func(i int) string { return fmt.Sprintf("<FC_FASTCALL_REG+%d", i) } // 呼ぶ直前に A / X へ (引数は 1 つだけ)
+	}
+	if a.from != nil {
+		// 前の呼び出しの戻り値を呼び先のフレームから写す (markResultArg)。X はフレームの底 (stack の関数) / FC_SP (stack 系の
+		// 呼び出しの引数) のときは使わない
+		r.push(copyResultArg(a.from.callee, n, dst, lmd.Conv.ABI != ir.ABIStack && pc.kind != ckStack && l.calls.holdX[op] == 0)...)
 		return
 	}
-	if y := regParam(pc, ir.RegY); op.ArgY && y != nil && pc.argOff == y.Off {
+	if a.reg == ir.RegY {
 		// 最後から 2 つ目の引数は Y に置いて呼ぶ (markArgY: 直後が最後の引数の push_arg、その直後が call)
 		r.push(l.loadY(op.In(0))...)
-		pc.inY = true
-		pc.argOff++
 		return
 	}
-	for i := 0; i < op.Type.Size; i++ {
+	for i := 0; i < n; i++ {
 		r.push(l.loadA(op.In(0), i))
-		switch pc.kind {
-		case ckStatic:
-			if a := regParam(pc, ir.RegA); a != nil && pc.argOff == a.Off && nextOp(ops, opNo) == pc.callOp {
-				pc.inA = true // 最後の引数は A のまま呼ぶ (直後が call のときだけ)
-				pc.argOff++
-				// A の常駐変数は call まで A に戻さない (復帰の lda で引数が消える)。この引数が常駐変数そのもの
-				// (friendly: 退避していない) なら、call で退避しない代わりにここで書き戻す
-				if op.Res[ir.RegA].V != nil && op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.resMem[ir.RegA] {
-					r.push(l.spillResident(op, ir.RegA))
-				}
-				restore[ir.RegA] = false
-				l.holdA = true
-				break
+		if a.reg == ir.RegA && i == n-1 {
+			// 最後の引数は A のまま呼ぶ (直後が call のときだけ)。A の常駐変数は call まで A に戻さない (復帰の lda で引数が
+			// 消える)。この引数が常駐変数そのもの (friendly: 退避していない) なら、call で退避しない代わりにここで書き戻す
+			if op.Res[ir.RegA].V != nil && op.Res[ir.RegA].In && !op.Res[ir.RegA].V.Clean && !l.resMem[ir.RegA] {
+				r.push(l.spillResident(op, ir.RegA))
 			}
-			r.push(fmt.Sprintf("sta %s", staticAddr(pc.callee, pc.argOff)))
-			pc.argOff++
-		case ckStack:
-			r.push(fmt.Sprintf("sta <S+%d,x", l.stackBase(lmd)+l.pushArgSize))
-			l.pushArgSize++
-		case ckFastcallReg:
-			r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", l.pushFastcallArgSize))
-			l.pushFastcallArgSize++
-		case ckCc65:
-			r.push(fmt.Sprintf("sta <FC_FASTCALL_REG+%d", i)) // 呼ぶ直前に A / X へ (引数は 1 つだけ)
+			restore[ir.RegA] = false
+			break
 		}
+		r.push("sta " + dst(i))
 	}
 }
 
 // genCall は Call / Fastcall のコード生成。
 func (l *funcGen) genCall() {
 	r, op, opNo, ops, lmd := l.r, l.op, l.opNo, l.ops, l.lmd
-	pc := l.calls[len(l.calls)-1]
-	l.calls = l.calls[:len(l.calls)-1]
-	l.holdA = false // A / Y の引数の保持はここまで (常駐の退避の抑制はこの命令の前で見た)
-	if pc.kind == ckStack && l.holdX > 0 {
-		l.holdX-- // X = FC_SP の保持はここまで (復帰の可否はこの命令の前で見た)
-	}
+	pc := l.calls.byOp[op]
 	fnType := ir.ValType(op.In(0))
 	var sym string
 	if ir.ValKind(op.In(0)) == ir.KindLiteral {
@@ -282,7 +243,7 @@ func (l *funcGen) genCall() {
 	}
 	switch pc.kind {
 	case ckStatic:
-		// 引数は呼び先のフレームに書いてある。static / entry の関数からは jsr、stack の関数からは X を進めて呼ぶ
+		// 引数は呼び先のフレームに書いてある。static / entry の関数からは jsr、stack の関数からは X を進めて呼ぶ。
 		// 入口はレジスタに置けた引数で選ぶ (スタックからの写し・レジスタの引数をフレームに写す sty / sta を飛ばす)。Y の引数を
 		// レジスタに置いて A の引数をフレームに書く形は無い (markArgY: 直後が最後の引数、その直後が call) ので DirectEntry が落ちる
 		target := sym + pc.callee.Conv.DirectEntry(pc.inA, pc.inY)
@@ -292,9 +253,8 @@ func (l *funcGen) genCall() {
 		} else {
 			r.push(l.callStatic(lmd, target))
 		}
-		if op.Dst != nil && !op.Far && resultArgAt(ops, opNo) >= 0 {
-			l.resultFrom = &pendingResult{v: op.Dst, callee: pc.callee} // 次の push_arg が呼び先のフレームから写す
-		} else if op.Dst != nil {
+		// 次の push_arg が呼び先のフレームから写す戻り値 (layoutCalls の argPlan.from) は受けない
+		if op.Dst != nil && (op.Far || resultArgAt(ops, opNo) < 0) {
 			if pc.callee.Conv.Result.InA && !op.Far && lmd.Conv.ABI != ir.ABIStack {
 				r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる (stack 関数は X を戻すのに A を使うので不可)
 			} else {
@@ -305,11 +265,7 @@ func (l *funcGen) genCall() {
 			}
 		}
 	case ckStack:
-		for _, a := range fnType.Params {
-			l.pushArgSize -= a.Size
-		}
-		l.pushArgSize -= fnType.Base.Size
-		base := l.stackBase(lmd) + l.pushArgSize
+		base := pc.resultOff
 		if fnType.IsFarFunc() {
 			for i := 0; i < 3; i++ {
 				r.push(l.loadA(op.In(0), i))
@@ -363,7 +319,6 @@ func (l *funcGen) genCall() {
 			r.push(l.restoreX(lmd)...)
 		}
 	case ckFastcallReg:
-		l.pushFastcallArgSize = 0
 		if op.Far {
 			r.push(l.farCallSetup(ir.ValLiteral(op.In(0)).Symbol))
 			r.push("jsr farcall")
