@@ -49,6 +49,8 @@ type Program struct {
 	Errors diag.ErrorList
 
 	declarations map[*ir.Module]*moduleDecls
+	scopes       map[*ir.Module]*Scope        // モジュールの名前の表 (scope.go)
+	bodies       map[*ir.Lambda]*syntax.Block // 関数の本体 (無ければ extern)
 	typeDecls    map[*types.Type]*declaration
 	collectDepth int
 	resolving    []*declaration
@@ -63,7 +65,7 @@ type Program struct {
 	defaults       map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
 	FarCalls    []FarCall
-	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
+	global      *Scope                     // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
 	macroTypes  map[*ir.Value]macroTyping  // マクロ値 → 型を決める段が呼び出しの型を知る方法 (typing.go。無ければ分からない)
@@ -98,16 +100,26 @@ type Source struct {
 	Src  []byte // CRLF 正規化後の内容
 }
 
-// SetTrace は名前解決の観測を有効にする (fcc migrate の参照解析)。
-// fn には (参照元モジュール id, 観測) が渡る。
-func (p *Program) SetTrace(fn func(origin string, ev ir.TraceEvent)) {
-	p.global.SetTrace(func(ev ir.TraceEvent) { fn(p.curModule, ev) })
+// iface はモジュール m の外面 (importer が触れるのはこれだけ: C4)。
+func (p *Program) iface(m *ir.Module) *ModuleInterface {
+	return &ModuleInterface{Id: m.Id, scope: p.scopes[m]}
+}
+
+// boundModule はモジュールの束縛の値 (`use mod;` の名前。ir.Value.Module がモジュールの id) の外面 (束縛でなければ nil)。
+func (p *Program) boundModule(v *ir.Value) *ModuleInterface {
+	if v.Module == "" {
+		return nil
+	}
+	m, _ := p.Modules.Get(v.Module)
+	return p.iface(m)
 }
 
 // NewProgram は空のプログラム状態を作り、組み込みマクロを登録する。
 func NewProgram() *Program {
 	p := &Program{
 		declarations:   map[*ir.Module]*moduleDecls{},
+		scopes:         map[*ir.Module]*Scope{},
+		bodies:         map[*ir.Lambda]*syntax.Block{},
 		unconst:        map[*ir.CastedValue]bool{},
 		typeDecls:      map[*types.Type]*declaration{},
 		Types:          types.NewUniverse(),
@@ -129,7 +141,7 @@ func NewProgram() *Program {
 		strLitGlobals:  map[*ir.Value]*ir.Value{},
 		strLitSpans:    map[*ir.Value]strLitSpan{},
 	}
-	p.global = ir.NewScope(nil)
+	p.global = NewScope(nil)
 	registerBuiltins(p)
 	for old, at := range V3Builtins {
 		// fc 3 の綴り (@asm など) でも同じ組み込みを引けるように (値は同じ。マクロの表は値で引く)
@@ -168,13 +180,15 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 			return '_'
 		}, id)), Pos: syntax.Position{Filename: file.Filename, Line: 1, Col: 1}}
 	}
-	mod = ir.NewModule(id, file.Filename, p.global)
+	mod = ir.NewModule(id, file.Filename)
 	mod.Version = file.Version
 	mod.Config = p.Config
+	scope := NewScope(p.global)
 	if file.Version >= syntax.Version3 {
-		mod.Scope.Reserved = v3Reserved
-		mod.Scope.Hidden = v3Hidden
+		scope.Reserved = v3Reserved
+		scope.Hidden = v3Hidden
 	}
+	p.scopes[mod] = scope
 	p.Modules.Add(mod)
 
 	// use で別モジュールの相 1 にネストして入るので、参照元モジュールを保存・復帰する
@@ -182,7 +196,7 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	p.curModule = id
 	defer func() { p.curModule = outer }()
 
-	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}
+	h := &Hlc{prog: p, deps: deps, module: mod, scope: p.scopes[mod]}
 	defer h.recoverTo(&err)
 	p.collectDepth++
 	defer func() { p.collectDepth-- }()
@@ -207,7 +221,7 @@ func (p *Program) CompileBodies(mod *ir.Module, deps Resolver) (err error) {
 	outer := p.curModule
 	p.curModule = mod.Id
 	defer func() { p.curModule = outer }()
-	h := &Hlc{prog: p, deps: deps, module: mod, scope: mod.Scope}
+	h := &Hlc{prog: p, deps: deps, module: mod, scope: p.scopes[mod]}
 	defer h.recoverTo(&err)
 	// コンパイル中にネストしたlambdaが追加されることがあるため index ループ
 	for i := 0; i < len(mod.Lambdas); i++ {
@@ -452,7 +466,7 @@ func Compile(baseDir string, libPath []string, mainFile string) (*Program, error
 	return prog, nil
 }
 
-// CompileProgram は Compile と同じだが、呼び出し側が用意した Program (SetTrace 済みなど) に対して行う。
+// CompileProgram は Compile と同じだが、呼び出し側が用意した Program に対して行う。
 func CompileProgram(prog *Program, baseDir string, libPath []string, mainFile string) error {
 	loader := NewLoader(prog, baseDir, libPath)
 	if _, err := loader.Load(mainFile); err != nil {

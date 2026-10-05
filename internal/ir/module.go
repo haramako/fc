@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
@@ -156,85 +155,26 @@ type Module struct {
 	IncludeAsms    []string
 	AsmSymbols     []string // include したアセンブラファイルが参照するシンボル (volatile と Entry の判定用)
 	IncludeHeaders []string
-	Uses           []*ModuleInterface // use したモジュール (出現順、重複なし)
-	Scope          *Scope
-	Seq            int // コンパイラ生成名 (一時変数 $N、ラベル @x_N、無名関数) の連番。モジュール内で閉じる (C5)
+	Uses           []string // use したモジュールの id (出現順、重複なし)
+	Seq            int      // コンパイラ生成名 (一時変数 $N、ラベル @x_N、無名関数) の連番。モジュール内で閉じる (C5)
 	FromFcm        bool
 	Depends        []string
 	Defs           []*Def
 	Config         *Config // 調査用の設定 (config.go。sema.Program.Config を写す。nil なら何も切らない)
 }
 
-func NewModule(id, path string, globalScope *Scope) *Module {
-	scope := NewScope(globalScope)
-	scope.Owner = id
-	return &Module{
-		Id:    id,
-		Path:  path,
-		Scope: scope,
-	}
+func NewModule(id, path string) *Module {
+	return &Module{Id: id, Path: path}
 }
 
 // AddUse は use したモジュールを記録する (同じモジュールは 1 回だけ)。
-func (m *Module) AddUse(mi *ModuleInterface) {
+func (m *Module) AddUse(id string) {
 	for _, u := range m.Uses {
-		if u.Id == mi.Id {
+		if u == id {
 			return
 		}
 	}
-	m.Uses = append(m.Uses, mi)
-}
-
-// ModuleInterface は importer から見えるモジュールの外面 (Agent/discussions/2026-09-12-v2-plan.md C4)。
-// 宣言の検索と識別だけを提供し、Lambda 本体や IR には触れさせない。
-// F-mod (分割コンパイル) ではこれをシリアライズしたものが `use` の入力になる。
-//
-// 可視性は宣言側モジュールの文法バージョンで決まる (Agent/discussions/2026-09-13-v2-grammar.md §3.2, §4.2):
-//   - `use * from mod;` と `mod.name` のドット参照 (Lookup) は public だけを見る (規則 S7。v1 のドット参照だけ
-//     private にも届いたが、v1 は削除した)
-type ModuleInterface struct {
-	Id    string
-	scope *Scope
-}
-
-// Interface はこのモジュールの外面を返す。
-func (m *Module) Interface() *ModuleInterface {
-	return &ModuleInterface{Id: m.Id, scope: m.Scope}
-}
-
-// Lookup はドット参照 `mod.name` 用に公開宣言を探す (無ければ nil)。
-func (mi *ModuleInterface) Lookup(name string) *Value {
-	return mi.scope.Find(name, false)
-}
-
-// LookupInternal はバージョンに関係なく private も含めて探す (コンパイラ組み込み機能の内部参照用。
-// 利用者コードの名前解決には使わない)。
-func (mi *ModuleInterface) LookupInternal(name string) *Value {
-	// 利用者コードの参照ではないので名前解決の観測 (migrate の参照解析) には乗せない
-	return mi.scope.withoutTrace(func() *Value { return mi.scope.Find(name, true) })
-}
-
-// LookupMust は Lookup と同じだが、見つからなければ diag.Error。
-// v2 モジュールの private を指していたら、その旨を伝える。
-func (mi *ModuleInterface) LookupMust(name string) *Value {
-	if v := mi.Lookup(name); v != nil {
-		return v
-	}
-	if mi.LookupInternal(name) != nil {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is private (declare it with `public` in module %s)", mi.Id, name, mi.Id)})
-	}
-	panic(&diag.Error{Msg: fmt.Sprintf("%s not found", name)})
-}
-
-// Exports は公開宣言の名前を宣言順に列挙する。
-func (mi *ModuleInterface) Exports() []string {
-	var r []string
-	for _, id := range mi.scope.order {
-		if v := mi.scope.declares[id]; v != nil && v.Public {
-			r = append(r, id)
-		}
-	}
-	return r
+	m.Uses = append(m.Uses, id)
 }
 
 // ModuleList は登録順を保つモジュールの集合 (id で検索できる)。
@@ -279,11 +219,10 @@ type Lambda struct {
 	Params    []Param         // 仮引数の宣言
 	Args      []*Value        // 仮引数の変数 (compileLambda で Params から作られる)
 	Type      *types.Type
-	Options   Options       // options(...) の生の値 (segment, fastcall, symbol, ...)
-	Module    *Module       // 宣言したモジュール (far call の判定に使う)
-	Extern    bool          // 本体を持たない (宣言のみ)
-	Body      *syntax.Block // 関数本体。nil なら extern
-	Ops       []*Op         // nil 要素は最適化で削除された命令
+	Options   Options // options(...) の生の値 (segment, fastcall, symbol, ...)
+	Module    *Module // 宣言したモジュール (far call の判定に使う)
+	Extern    bool    // 本体を持たない (宣言のみ)
+	Ops       []*Op   // nil 要素は最適化で削除された命令
 	Vars      []*Value
 	Bank      int
 	Result    *Value

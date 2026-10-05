@@ -12,7 +12,7 @@ var tu = types.NewUniverse()
 func fnType() *types.Type { return tu.Func(nil, tu.Void(), false) }
 
 func lambda(id string, ops ...*ir.Op) *ir.Lambda {
-	return &ir.Lambda{Id: id, Type: fnType(), Ops: ops, Body: nil}
+	return &ir.Lambda{Id: id, Type: fnType(), Ops: ops}
 }
 
 func callOp(target string) *ir.Op {

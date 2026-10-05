@@ -118,8 +118,8 @@ func dumpGval(v *Value, ctx *irCtx) string {
 		return strconv.Itoa(v.Int)
 	case v.Kind == KindArrayLiteral:
 		return dumpElems(v.Elems, ctx)
-	case v.Module != nil:
-		return "mod:" + v.Module.Id
+	case v.Module != "":
+		return "mod:" + v.Module
 	case v.Type.Kind == types.Macro:
 		return "macro"
 	case v.Symbol != "":
@@ -254,11 +254,7 @@ func DumpProgram(opts Options, mods []*Module) string {
 		r = append(r, fmt.Sprintf(" (options %s)", dumpOptions(mod.Options)))
 		r = append(r, fmt.Sprintf(" (include_asms (%s))", joinEsc(mod.IncludeAsms)))
 		r = append(r, fmt.Sprintf(" (include_chrs (%s))", joinEsc(mod.IncludeChrs)))
-		keys := make([]string, 0, len(mod.Uses))
-		for _, m := range mod.Uses {
-			keys = append(keys, m.Id)
-		}
-		r = append(r, fmt.Sprintf(" (modules (%s))", strings.Join(keys, " ")))
+		r = append(r, fmt.Sprintf(" (modules (%s))", strings.Join(mod.Uses, " ")))
 		r = append(r, " (defs")
 		for _, d := range mod.Defs {
 			r = append(r, "  "+dumpDef(d, nil))

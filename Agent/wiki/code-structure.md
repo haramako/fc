@@ -5,7 +5,10 @@
 パッケージの依存の向きは `internal/driver/deps_test.go` の `TestImportDirection` が固定している（足したら表に書く）。
 
 - **パイプライン**: `syntax`（goyacc の文法 `parser.y` と `checkVersion`）→ `sema`（`hlc.go` は文脈の型と共通の補助だけ。文は
-  `stmt.go`、宣言は `decl.go`、式は `expr.go`、定数の評価は `consteval.go`、型式は `typeexpr.go`）→ `ir` → `pipeline.Prepare`
+  `stmt.go`、宣言は `decl.go`、式は `expr.go`、定数の評価は `consteval.go`、型式は `typeexpr.go`、式の型を IR を出す前に
+  決める段は `typing.go`。名前の表 `Scope` と importer の窓口 `ModuleInterface`（`scope.go`）、関数の本体の AST
+  （`Program.bodies`）は sema が持つ。ir は名前の表と AST を持たず、モジュールの束縛の値は `ir.Value.Module` にモジュールの
+  id。2026-10-05 に ir から移した）→ `ir` → `pipeline.Prepare`
   （インライン展開・直接化 → volatile → `frames.Analyze` → 関数ごとに `opt.Optimize` → 引数の Y 渡しの印 → `regalloc` →
   `frames.Place`。順序はここだけが持つ。codegen は `pipeline.Backend` として呼び出しの計画 (`MarkArgY` / `CheckStackPush`)
   を提供する）→ `codegen`（`Llc` はモジュール単位、`funcGen`（genops.go）は関数単位で命令ごとのメソッド `genXxx`。

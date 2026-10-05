@@ -27,9 +27,9 @@ type Hlc struct {
 
 	// モジュール (と宣言) の間の状態
 	module     *ir.Module
-	scope      *ir.Scope // 今のスコープ (ブロックに入るたびに子を作る: inScope)
-	groupBss   string    // innermost placement block; module default is applied after declarations
-	inStaticIf bool      // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
+	scope      *Scope // 今のスコープ (ブロックに入るたびに子を作る: inScope)
+	groupBss   string // innermost placement block; module default is applied after declarations
+	inStaticIf bool   // トップレベルの @if の選ばれた側の宣言をコンパイル中 (@(build) の const は置けない)
 	// constIndex は const の宣言の初期値を評価中 (fc 4): 定数の配列 (文字列) を定数の添字で引く式を畳む (`const C = "#"[0];`)。
 	// 関数の中の式では畳まない (生成コードが変わる。fc 3 → 4 の migrate は ROM を変えない)
 	constIndex bool
@@ -195,7 +195,7 @@ func (h *Hlc) addDefModule(d *ir.Def) {
 
 func (h *Hlc) inScope(f func()) {
 	old := h.scope
-	h.scope = ir.NewScope(old)
+	h.scope = NewScope(old)
 	f()
 	h.scope = old
 }
@@ -234,12 +234,12 @@ func describe(v ir.Operand) string {
 
 // useModule obtains the interface; top-level names may still resolve on demand.
 // importer が触れるのは ModuleInterface だけ (C4)。
-func (h *Hlc) useModule(name string) *ir.ModuleInterface {
+func (h *Hlc) useModule(name string) *ModuleInterface {
 	m, err := h.deps.Module(name)
 	if err != nil {
 		panic(err)
 	}
-	return m.Interface()
+	return h.prog.iface(m)
 }
 
 // resolveFile は include / incbin のファイル名を解決する (ref: 生成物に埋め込む参照形、abs: 読み込み用)。
@@ -290,16 +290,16 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 			lmd.Args[i].ReadOnly = ro
 		}
 
-		if lmd.Body != nil {
-			h.compileStmts(lmd.Body.Stmts)
-			if lmd.Type.Base.Kind != types.Void && !h.terminates(lmd.Body) {
+		if body := h.prog.bodies[lmd]; body != nil {
+			h.compileStmts(body.Stmts)
+			if lmd.Type.Base.Kind != types.Void && !h.terminates(body) {
 				// 終端に落ちると rts が無く次の関数へ流れて暴走する (fc 1 は黙って通していた)
 				hint := ""
-				if n := len(lmd.Body.Stmts); n > 0 && h.switchWithoutDefault(lmd.Body.Stmts[n-1]) {
+				if n := len(body.Stmts); n > 0 && h.switchWithoutDefault(body.Stmts[n-1]) {
 					hint = "; the switch has no default, so a value matching no case (even for an enum: `5 as E`) falls through: add `default:`"
 				}
 				panic(&diag.Error{Msg: fmt.Sprintf("missing return at end of function %s (returns %s)%s", lmd.Name, lmd.Type.Base, hint),
-					Pos: syntax.Position{Filename: lmd.Pos.Filename, Line: lmd.Body.Rbrace.Line, Col: lmd.Body.Rbrace.Col}})
+					Pos: syntax.Position{Filename: lmd.Pos.Filename, Line: body.Rbrace.Line, Col: body.Rbrace.Col}})
 			}
 		}
 
@@ -316,7 +316,7 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 		for _, p := range h.pendingLogs {
 			h.prog.Warnings = append(h.prog.Warnings, diag.Warning{Msg: "@log after the last statement is never reached", Pos: p.Pos})
 		}
-		if lmd.Body != nil && len(h.prog.Errors) == errs {
+		if !lmd.Extern && len(h.prog.Errors) == errs {
 			h.warnUninitialized(lmd) // エラーのあった関数は命令列が途中なので見ない
 		}
 	})

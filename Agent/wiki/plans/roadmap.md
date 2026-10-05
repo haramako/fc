@@ -482,7 +482,7 @@ do-while は「やること候補（すぐではない）」。
       段 1（`internal/extmacro`、fc.toml の `[macro_server.*]`、整数・整数の配列・バイト列・文字列の結果、`inputs` を書いたときの
       ディスクのキャッシュ）。✅ 2026-10-02: Starlark のスクリプトのマクロ（`[macro_script.*]`、`internal/starmacro`）。
       残り: 段 2（変換表の結果と textmap）、ライブラリの `[macro_script.*]`
-- [ ] モジュール単位のキャッシュとインクリメンタルビルド（`ir.ModuleInterface` のシリアライズ、内容ハッシュ、
+- [ ] モジュール単位のキャッシュとインクリメンタルビルド（`sema.ModuleInterface` のシリアライズ、内容ハッシュ、
       依存グラフ。ca65 の並列アセンブルは済み）
 - [ ] TTY での診断の色付け
 

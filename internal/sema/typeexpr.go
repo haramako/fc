@@ -116,10 +116,11 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 		panic(&diag.Error{Msg: fmt.Sprintf("unknown type %s", name)})
 	}
 	mv := h.scope.FindMust(t.Module.Name, true)
-	if mv.Module == nil {
+	mi := h.prog.boundModule(mv)
+	if mi == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module (in type %s.%s)", t.Module.Name, t.Module.Name, name)})
 	}
-	v := mv.Module.LookupMust(name)
+	v := mi.LookupMust(name)
 	if v.TypeRef == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is not a type", t.Module.Name, name)})
 	}

@@ -137,7 +137,7 @@ func registerBuiltins(p *Program) {
 			// 値のバイトは同じ (書き換えを集めるときに、展開で作った位置の無い式を報告しないため)
 			arg = &cexpr{kind: cCast, args: []*cexpr{arg}, ty: h.prog.Types.IntType(1, true), ck: syntax.CastAs}
 		}
-		return macroResult{expr: ccall(cv(h.moduleFunc(m.Interface(), "math", "sin")), arg)}
+		return macroResult{expr: ccall(cv(h.moduleFunc(h.prog.iface(m), "math", "sin")), arg)}
 	})
 
 	registerSliceBuiltins(h)
@@ -297,12 +297,12 @@ func (h *Hlc) defconstmacro(name string, fn ConstMacroFn) *ir.Value {
 }
 
 // stdioModule は組み込みが参照する stdio モジュールを返す (読み込まれていなければエラー)。
-func (h *Hlc) stdioModule(builtin string) *ir.ModuleInterface {
+func (h *Hlc) stdioModule(builtin string) *ModuleInterface {
 	m, ok := h.prog.Modules.Get("stdio")
 	if !ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s requires the stdio module (add `use stdio;` or `use * from stdio;`)", builtin)})
 	}
-	return m.Interface()
+	return h.prog.iface(m)
 }
 
 // nullFnSymbol は @null_fn のシンボル (share/runtime.asm の rts だけの関数)。
@@ -322,7 +322,7 @@ func (h *Hlc) nullFn(t *types.Type) *ir.Value {
 
 // moduleFunc は組み込みが呼ぶモジュールの関数 name を引く。無ければエラー (ソースのディレクトリに同じ名前のモジュール
 // (stdio.fc など) があると fclib のものが隠れ、nil のまま呼んで panic していた。survey 2026-09-27)。
-func (h *Hlc) moduleFunc(m *ir.ModuleInterface, mod, name string) *ir.Value {
+func (h *Hlc) moduleFunc(m *ModuleInterface, mod, name string) *ir.Value {
 	v := m.LookupInternal(name)
 	if v == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("module %s has no %s (needed by a builtin); is a %s.fc in your source directory hiding fclib's %s?", mod, name, mod, mod)})

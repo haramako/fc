@@ -36,13 +36,13 @@ const EXTRA=3, COUNT=BASE+1, ROWS=2, BASE=3;
 		t.Fatal(err)
 	}
 	m, _ := p.Modules.Get("t")
-	if v := m.Scope.FindMust("TOTAL", true); v.Int != 11 {
+	if v := p.scopes[m].FindMust("TOTAL", true); v.Int != 11 {
 		t.Fatalf("TOTAL=%v", v)
 	}
-	if v := m.Scope.FindMust("grid", true); v.Type.Size != 16 {
+	if v := p.scopes[m].FindMust("grid", true); v.Type.Size != 16 {
 		t.Fatalf("grid size=%d", v.Type.Size)
 	}
-	if v := m.Scope.FindMust("accept", true); v.Type.Params[0].Base.Size != 8 {
+	if v := p.scopes[m].FindMust("accept", true); v.Type.Params[0].Base.Size != 8 {
 		t.Fatalf("signature=%s", v.Type)
 	}
 	var table *ir.Def
@@ -67,7 +67,7 @@ function main():void {}
 		t.Fatal(err)
 	}
 	m, _ := p.Modules.Get("t")
-	if m.Scope.FindMust("SIZE", true).Int != 3 {
+	if p.scopes[m].FindMust("SIZE", true).Int != 3 {
 		t.Fatal("recursive layout was not completed")
 	}
 }
@@ -86,7 +86,7 @@ func TestDeclarationOrderImports(t *testing.T) {
 				t.Fatal(err)
 			}
 			m, _ := p.Modules.Get("t")
-			if m.Scope.FindMust("N", true).Int != 5 {
+			if p.scopes[m].FindMust("N", true).Int != 5 {
 				t.Fatal("wrong imported constant")
 			}
 		})
@@ -102,7 +102,7 @@ func TestDeclarationOrderImports(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ := p.Modules.Get("t")
-	if m.Scope.FindMust("N", true).Int != 5 {
+	if p.scopes[m].FindMust("N", true).Int != 5 {
 		t.Fatal("wrong reexport")
 	}
 }
@@ -115,7 +115,7 @@ func TestDeclarationOrderCrossModuleTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ := p.Modules.Get("t")
-	if m.Scope.FindMust("SIZE", true).Int != 3 {
+	if p.scopes[m].FindMust("SIZE", true).Int != 3 {
 		t.Fatal("wrong cross-module layout")
 	}
 }
@@ -182,7 +182,7 @@ func TestDeclarationOrderRecursiveArraysAndSoa(t *testing.T) {
 			t.Fatal(err)
 		}
 		m, _ := p.Modules.Get("t")
-		if m.Scope.FindMust("SIZE", true).Int != 6 {
+		if p.scopes[m].FindMust("SIZE", true).Int != 6 {
 			t.Fatal("stale array size")
 		}
 	}
@@ -195,7 +195,7 @@ func TestDeclarationOrderRecursiveArraysAndSoa(t *testing.T) {
 			t.Fatal(err)
 		}
 		m, _ := p.Modules.Get("t")
-		if m.Scope.FindMust("SIZE", true).Int != 2 {
+		if p.scopes[m].FindMust("SIZE", true).Int != 2 {
 			t.Fatal("wrong SoA handle size")
 		}
 	}
@@ -212,7 +212,7 @@ public function last():void {}
 		t.Fatal(err)
 	}
 	m, _ := p.Modules.Get("t")
-	if got := strings.Join(m.Interface().Exports(), ","); got != "TABLE,first,Item,last" {
+	if got := strings.Join(p.iface(m).Exports(), ","); got != "TABLE,first,Item,last" {
 		t.Fatalf("exports: %s", got)
 	}
 }

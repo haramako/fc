@@ -64,15 +64,15 @@ const fmtDigits = "0123456789ABCDEFabcdef- "
 
 // builtinModule は組み込みが使うモジュール (読み込んでいなければここで読み込む)。今のモジュールが use したことにする (asm が
 // そのモジュールの .inc を取り込み、シンボルを import するように)。
-func (h *Hlc) builtinModule(name string) *ir.ModuleInterface {
-	var mi *ir.ModuleInterface
+func (h *Hlc) builtinModule(name string) *ModuleInterface {
+	var mi *ModuleInterface
 	if m, ok := h.prog.Modules.Get(name); ok {
-		mi = m.Interface()
+		mi = h.prog.iface(m)
 	} else {
 		mi = h.useModule(name)
 	}
 	if h.module != nil && h.module.Id != name {
-		h.module.AddUse(mi)
+		h.module.AddUse(mi.Id)
 	}
 	return mi
 }

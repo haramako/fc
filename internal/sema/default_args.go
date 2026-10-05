@@ -52,7 +52,7 @@ func (d *functionDefaults) resolve() {
 	d.state = resolutionActive
 	h := *d.owner
 	h.curPos = d.lambda.Pos
-	h.scope = ir.NewScope(h.scope)
+	h.scope = NewScope(h.scope)
 	outer := h.prog.curModule
 	h.prog.curModule = h.module.Id
 	defer func() {

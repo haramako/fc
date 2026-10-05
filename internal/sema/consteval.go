@@ -200,8 +200,8 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if left.kind == cValue && left.val.TypeRef != nil && left.val.TypeRef.Enum != nil {
 			return cv(h.enumMember(left.val.TypeRef, c.name)) // enum のメンバー (Type.Name)
 		}
-		if left.kind == cValue && left.val.Module != nil {
-			v := left.val.Module.LookupMust(c.name)
+		if left.kind == cValue && left.val.Module != "" {
+			v := h.prog.boundModule(left.val).LookupMust(c.name)
 			if str, ok := h.prog.buildStrings[v]; ok {
 				return h.constEval(cstr(str))
 			}
@@ -575,7 +575,11 @@ func (h *Hlc) newLambda(id, name string, params []ir.Param, baseType *types.Type
 	}
 	h.checkABI(name, opts, body == nil)
 	typ := h.prog.Types.Func(argTypes, baseType, opts.Flag("fastcall"))
-	return &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil, Body: body}
+	lmd := &ir.Lambda{Id: id, Name: name, Params: params, Type: typ, Options: opts, Module: h.module, Extern: body == nil}
+	if body != nil {
+		h.prog.bodies[lmd] = body
+	}
+	return lmd
 }
 
 // foldIntOp は整数リテラル同士の演算を畳み込む (除算・剰余は床除算、比較・論理演算の結果は 0/1。実行時の演算と同じ規則)。

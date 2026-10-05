@@ -29,8 +29,8 @@ func TestIntValue(t *testing.T) {
 
 func TestScope(t *testing.T) {
 	u8 := types.NewUniverse().IntType(1, false)
-	g := ir.NewScope(nil)
-	s := ir.NewScope(g)
+	g := NewScope(nil)
+	s := NewScope(g)
 	v1 := ir.NewGlobal("a", u8, "_a")
 	v2 := ir.NewGlobal("b", u8, "_b")
 	v2.Public = true
@@ -48,14 +48,13 @@ func TestScope(t *testing.T) {
 	}
 
 	// use 経由は public のみ見える
-	otherMod := ir.NewModule("other", "other.fc", nil)
-	other := otherMod.Scope
+	other := NewScope(nil)
 	pub := ir.NewGlobal("p", u8, "_p")
 	pub.Public = true
 	priv := ir.NewGlobal("q", u8, "_q")
 	other.Declare(pub)
 	other.Declare(priv)
-	s.Use(otherMod.Interface(), true)
+	s.Use(&ModuleInterface{Id: "other", scope: other}, true)
 	if s.Find("p", true) != pub {
 		t.Error("use経由のpublicが見えない")
 	}
@@ -64,9 +63,7 @@ func TestScope(t *testing.T) {
 	}
 
 	// 相互use しても無限再帰しない
-	selfMod := ir.NewModule("self", "self.fc", nil)
-	selfMod.Scope = s
-	other.Use(selfMod.Interface(), true)
+	other.Use(&ModuleInterface{Id: "self", scope: s}, true)
 	if s.Find("nothing", true) != nil {
 		t.Error("相互useで誤検出")
 	}

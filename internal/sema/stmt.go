@@ -226,7 +226,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		h.mustInModule()
 		id := s.Module.Name
 		m := h.useModule(id)
-		h.module.AddUse(m)
+		h.module.AddUse(m.Id)
 		// 再輸出は `public use` のときだけ (Agent/discussions/2026-09-13-v2-grammar.md §3.2)
 		reexport := s.PublicPos.IsValid()
 		switch {
@@ -249,7 +249,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if s.As != nil {
 				id = s.As.Name
 			}
-			v := h.addVar(ir.NewModuleValue(id, h.prog.Types.Module(), m))
+			v := h.addVar(ir.NewModuleValue(id, h.prog.Types.Module(), m.Id))
 			v.Public = reexport
 		}
 

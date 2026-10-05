@@ -71,7 +71,7 @@ func (h *Hlc) runTests4() macroResult {
 	console("init")
 	n := 0
 	for _, m := range h.prog.Modules.List() {
-		mi := m.Interface()
+		mi := h.prog.iface(m)
 		for _, lmd := range m.Lambdas {
 			if lmd.Name == "" || !lmd.Options.Flag("test") {
 				continue

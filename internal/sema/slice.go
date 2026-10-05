@@ -456,7 +456,7 @@ func (h *Hlc) constLvalAddr(c *cexpr) (base *ir.Value, off int, t *types.Type, o
 	switch {
 	case c.kind == cValue:
 		v := c.val
-		if v.Kind != ir.KindGlobal || v.Symbol == "" || v.Module != nil || v.Type.IsSoa || h.prog.storageAliases[v] != nil ||
+		if v.Kind != ir.KindGlobal || v.Symbol == "" || v.Module != "" || v.Type.IsSoa || h.prog.storageAliases[v] != nil ||
 			v.Type.Kind == types.Macro || v.Type.Kind == types.TypeName {
 			return nil, 0, nil, false
 		}

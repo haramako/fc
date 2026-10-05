@@ -491,7 +491,7 @@ func signed(v uint64, n int) int64 {
 
 // invoke は l を args (引数ごとのバイト列) で呼び、戻り値のバイト列を返す。
 func (m *machine) invoke(l *ir.Lambda, args [][]byte) []byte {
-	if l.Extern || l.Ops == nil && l.Body == nil {
+	if l.Extern {
 		if fn, ok := natives[l.Id]; ok {
 			return fn(m, args)
 		}

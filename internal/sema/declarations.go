@@ -231,9 +231,9 @@ func (md *moduleDecls) loadImports() {
 				panic(err)
 			}
 			d.imported = m
-			md.h.module.AddUse(m.Interface())
+			md.h.module.AddUse(m.Id)
 			if d.use.FromAll {
-				md.h.scope.Use(m.Interface(), d.public)
+				md.h.scope.Use(md.h.prog.iface(m), d.public)
 				d.action = func(*Hlc) {}
 			}
 		})
