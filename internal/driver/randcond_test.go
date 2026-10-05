@@ -4,6 +4,8 @@ package driver
 // 変えない形で書き換える:
 //   - 文の代入 `X op= E;` → `rmc_ += 1; X op= (rmc_ & 1) != 0 ? E : E;` (E は 1 回だけ評価される。枝の型は同じなので条件式の型は
 //     E の型。rmc_ はモジュールに足す変数で、両方の枝を交互に通す)
+//   - 関数の中の変数の初期値 `var x:T = E;` → `rmc_ += 1; var x:T = (rmc_ & 1) != 0 ? E : E;` (初期化の枝ごとの書き込み:
+//     sema の retargetCond。定数・リテラルの初期値は型が変わりうるので包まない)
 //   - if の条件 C → `(rmc_ & 2) != 0 ? (C) : (C)` (条件の文脈の条件式)
 //   - ラベルの無い `while (C) S` → `if (C) do S while (C);` (C を評価する回数と順は同じ。continue はどちらも条件の判定へ)
 // 書き換える所は種から決める乱数で選ぶ (生成器の乱数の並びは変えない)。
@@ -43,6 +45,7 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 		text := func(n syntax.Node) string { return src[n.Pos().Offset:n.End().Offset] }
 		used := false
 		labeled := map[*syntax.WhileStmt]bool{}
+		rv := rand.New(rand.NewSource(seed*7919 + 3)) // 変数の初期値の書き換え (ほかの書き換えの乱数の並びを変えない)
 		syntax.Inspect(f, func(n syntax.Node) bool {
 			switch n := n.(type) {
 			case *syntax.LabeledStmt:
@@ -51,6 +54,22 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 				}
 			case *syntax.Block:
 				for _, st := range n.Stmts {
+					if vd, ok := st.(*syntax.VarDecl); ok && !vd.Const && !vd.Alias {
+						for _, sp := range vd.Specs {
+							if sp.Init == nil || rv.Intn(3) != 0 || isConstExpr(sp.Init) {
+								continue
+							}
+							switch sp.Init.(type) {
+							case *syntax.StructLit, *syntax.ArrayLit, *syntax.StringLit:
+								continue
+							}
+							init := text(sp.Init)
+							edits = append(edits, edit{vd.Pos().Offset, vd.Pos().Offset, "rmc_ += 1; "},
+								edit{sp.Init.Pos().Offset, sp.Init.End().Offset, "(rmc_ & 1) != 0 ? " + init + " : " + init})
+							used = true
+						}
+						continue
+					}
 					es, ok := st.(*syntax.ExprStmt)
 					if !ok || r.Intn(6) != 0 {
 						continue

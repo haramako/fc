@@ -69,6 +69,9 @@ type stmtState struct {
 	// (型を決める段と lval が同じ展開を使う)
 	typed      map[*cexpr]typedMemo
 	expansions map[*cexpr]macroResult
+	// condStores は条件式の値を集めた一時変数 → 枝ごとの書き込み (condValue)。変数の初期化 `var x = c ? a : b` は書き先を
+	// 変数に替えて、一時変数からの写しを出さない (retargetCond)
+	condStores map[*ir.Value][]*ir.Op
 }
 
 // resetStmt は文の状態を捨てる (文の始まりと、エラーで抜けた文の後始末)。

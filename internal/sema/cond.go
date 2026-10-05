@@ -119,10 +119,39 @@ func (h *Hlc) condValue(e *cexpr, hint int) ir.Operand {
 	}
 	t, _ := h.condWidth(info, hint)
 	tmp := h.newTmp(t)
+	var stores []*ir.Op
 	h.condEmit(e, info, hint, func(v ir.Operand, _ *cexpr) {
-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{v}})
+		op := &ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{v}}
+		h.emit(op)
+		stores = append(stores, op)
 	}, false)
+	if h.condStores == nil {
+		h.condStores = map[*ir.Value][]*ir.Op{}
+	}
+	h.condStores[tmp] = stores
 	return tmp
+}
+
+// retargetCond は、v が条件式の値を集めた一時変数 (condValue) で dst と同じ型なら、枝ごとの書き込みの書き先を dst に替える
+// (`var x = c ? a : b` の初期化で、合流した後の一時変数からの写しを出さない)。替えたら true。
+func (h *Hlc) retargetCond(v ir.Operand, dst *ir.Value) bool {
+	tv, ok := v.(*ir.Value)
+	if !ok || h.condStores[tv] == nil || tv.Type != dst.Type {
+		return false
+	}
+	for _, op := range h.condStores[tv] {
+		op.Dst = dst
+	}
+	delete(h.condStores, tv)
+	if h.lmd != nil {
+		for i, x := range h.lmd.Vars {
+			if x == tv {
+				h.lmd.Vars = append(h.lmd.Vars[:i], h.lmd.Vars[i+1:]...) // 使わなくなった一時変数
+				break
+			}
+		}
+	}
+	return true
 }
 
 // condWidth は条件式 (型は info) を計算する型と A1 の幅 (広げないなら 0)。条件式は A1 の区切りにならない: 上から来た幅 hint と

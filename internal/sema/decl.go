@@ -200,7 +200,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if init != nil {
 		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
 		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convertValue(init, vv.Type, initC, initChecked)}})
+		if v := h.convertValue(init, vv.Type, initC, initChecked); !h.retargetCond(v, vv) {
+			h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{v}})
+		}
 	}
 }
 

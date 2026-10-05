@@ -1,18 +1,18 @@
 # 宣言の初期値の符号付きの値を宣言の型に広げない (cf63a3c。i8 で i16 / u16 を初期化すると符号拡張しない)
 diff --git a/internal/sema/decl.go b/internal/sema/decl.go
-index f070ea9..1109953 100644
+index 092437b..1e74f99 100644
 --- a/internal/sema/decl.go
 +++ b/internal/sema/decl.go
-@@ -185,7 +185,11 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
+@@ -200,7 +200,11 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
  	if init != nil {
  		// 代入 (assign) と同じく宣言の型へ変換する (i8 の値で i16 / u16 を初期化するときの符号拡張。していなくて
  		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
--		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convertValue(init, vv.Type, initC, initChecked)}})
-+		src := h.convertValue(init, vv.Type, initC, initChecked)
+-		if v := h.convertValue(init, vv.Type, initC, initChecked); !h.retargetCond(v, vv) {
++		v := h.convertValue(init, vv.Type, initC, initChecked)
 +		if it := ir.ValType(init); it.Kind == types.Int && it.Signed && it.Size < vv.Type.Size {
-+			src = init
++			v = init
 +		}
-+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{src}})
++		if !h.retargetCond(v, vv) {
+ 			h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{v}})
+ 		}
  	}
- }
- 
