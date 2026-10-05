@@ -50,7 +50,6 @@ _test_basic_ARRAY:
 	lda #1
 	cmp 0+<S+1,x
 	bcc @else_10
-	lda #1
 	sta 0+<S+0,x
 	lda FC_SP
 	sec

@@ -440,7 +440,6 @@ _79:
 	lda #1
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -455,7 +454,6 @@ _79:
 	lda #1
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -472,7 +470,6 @@ _79:
 	lda #0
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -489,7 +486,6 @@ _79:
 	lda #255
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -506,7 +502,6 @@ _79:
 	lda #255
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -523,7 +518,6 @@ _79:
 	lda #255
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -540,7 +534,6 @@ _79:
 	lda #0
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -557,7 +550,6 @@ _79:
 	lda #1
 	jsr _math_atan
 	sta 0+<F_test_math_test_atan+0
-	lda 0+<F_test_math_test_atan+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1

@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-05 [fclib の NES のモジュールの asm 化](2026-10-05-nes-asm.md) — pal.shade と vram の描画を止めて書く所を asm に。キューに積む put / fill は asm にすると大きくなるので fc のまま。ピープホールの lda と struct のポインタのフィールドの読み直し (fwdmem)
 - 2026-10-05 [型を決める段の残りと types の Kind の整理](2026-10-05-sema-types-cleanup.md) — 名前の表の項目を Symbol に（モジュール・型名・マクロは値でない。`var v = math;` がエラーに）、Compatible を AssignableTo / CommonType に、soa を Kind に。slice・enum・far は Kind に分けない
 - 2026-10-05 [IR の命令の同一性を `*Op` に](2026-10-05-op-identity.md) — UseDef / Liveness を *Op を鍵に（位置は Lambda.IndexOf）、隣接は NextOp、CFG の空のブロックをやめて使い回し、繰り返しの上限で黙って止めない（untilFixed）、compact は Pass.Apply だけ。SSA は添字のまま
 - 2026-10-05 [構造の整理の残り 4 項目を進める](2026-10-05-structure-cleanup.md) — `*Op`・ABI の一本化・types の Kind・driver の Compiler はどれも効果のある整理（大きい順に後回しにしていただけ）。型を決める段の後に進める

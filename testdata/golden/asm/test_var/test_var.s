@@ -273,8 +273,8 @@ _test_var_add1:
 	adc #1
 	sta 0+<F_test_var_add1+0
 	ldx FC_SP
-	lda <F_test_var_add1+0
 	sta <S+0,x
+	lda <F_test_var_add1+0
 	rts
 .endproc
 	.export _test_var_mul2
@@ -295,8 +295,8 @@ _test_var_mul2:
 	asl a
 	sta 0+<F_test_var_mul2+0
 	ldx FC_SP
-	lda <F_test_var_mul2+0
 	sta <S+0,x
+	lda <F_test_var_mul2+0
 	rts
 .endproc
 	.export _test_var_FUNC_TABLE
@@ -340,7 +340,6 @@ _test_var_FUNC_TABLE:
 	lda #10
 	jsr _test_var_add1__direct
 	sta 0+<F_test_var_test_func_pointer+0
-	lda 0+<F_test_var_test_func_pointer+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -356,7 +355,6 @@ _test_var_FUNC_TABLE:
 	lda #10
 	jsr _test_var_mul2__direct
 	sta 0+<F_test_var_test_func_pointer+0
-	lda 0+<F_test_var_test_func_pointer+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -474,7 +472,6 @@ _111:
 .proc _test_var_test_segment_option
 	jsr _test_var_segmented_function
 	sta 0+<F_test_var_test_segment_option+0
-	lda 0+<F_test_var_test_segment_option+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1

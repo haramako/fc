@@ -241,6 +241,12 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       （regalloc の copyHints）、ループの回転の最初の検査 `0 < 8` を畳む（regalloc の foldConstBranches）、どの呼び出しも
       フレームから読まない関数の 1 バイトの戻り値は A だけで返す（ResultInA）、添字付きの読み出しの融合（regalloc.md §8）。
       テストは internal/driver/shrink_test.go。miku4 は処理落ちが 1 フレーム減って 2639 フレーム目から画面が変わる（バグではない）
+      ✅ 2026-10-05 の続き（miku4 15569 → 15490、castle 244474 → 244407）: pal.shade と vram の描画を止めて書く所を asm に
+      （pal 239 → 193。write_now は 1 バイト約 31 → 14〜16 サイクル）、ピープホールが A の値の同じ lda を「後で N/Z を読む前に立て直す
+      なら」消す（`@min` / 上限で切る形の写しの後の lda。bench の fib −2.1%）、struct を指すポインタのフィールドの読み直しを前の
+      値に（opt の fwdmem。pad 240 → 234。Agent/wiki/design/ssa.md §11）。キューに積む put_dir / fill を asm にする案は小さく
+      ならず取りやめた（Agent/discussions/2026-10-05-nes-asm.md）。frame の NMI（304）は vblank の手間のために 8 バイトずつ展開
+      しているので縮めない。残り: put_dir（254）・fill（133）・reserve（92）の生成コード（slice の受け渡し・16 ビットの番地の進め方）
 - [x] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ） ✅ 2026-09-29（警告は構文の lint
       `bitwiseWithComparison` として既にあった。見落としたのは `fcc test` が警告を出していなかったから: `fcc test` で出し、
       pkg/fc の TestFclibModuleTests と TestFclibNoWarnings が fclib のモジュールの警告を見張る）

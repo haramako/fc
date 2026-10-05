@@ -81,3 +81,40 @@ func TestPeepholeFlagTests(t *testing.T) {
 		}
 	}
 }
+
+// TestPeepholeDeadFlags は、A が既にその値の lda を、後で N/Z が読まれる前に立て直されるときだけ消すことを確かめる (上限で切る
+// `if (k > 128) { k = 128; }` の形)。
+func TestPeepholeDeadFlags(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{
+			name: "合流の後で lda が N/Z を立て直す",
+			in:   []string{"lda #128", "cmp <L+3", "bcs @e", "lda #128", "sta <L+4", "@e:", "lda <L+4", "lsr a"},
+			want: []string{"lda #128", "cmp <L+3", "bcs @e", "sta <L+4", "@e:", "lda <L+4", "lsr a"},
+		},
+		{
+			name: "合流の後で N/Z の分岐が読む",
+			in:   []string{"lda #0", "cmp <L+3", "bcs @e", "lda #0", "sta <L+4", "@e:", "beq M"},
+			want: []string{"lda #0", "cmp <L+3", "bcs @e", "lda #0", "sta <L+4", "@e:", "beq M"},
+		},
+		{
+			name: "C の分岐の先は分からない",
+			in:   []string{"lda #5", "cmp <L+3", "lda #5", "bcs M", "lda <L+2"},
+			want: []string{"lda #5", "cmp <L+3", "lda #5", "bcs M", "lda <L+2"},
+		},
+		{
+			name: "rts の先は分からない",
+			in:   []string{"lda #5", "cmp <L+3", "lda #5", "rts"},
+			want: []string{"lda #5", "cmp <L+3", "lda #5", "rts"},
+		},
+	}
+	for _, c := range cases {
+		got := stripTestMarks(peepholeA(c.in))
+		if strings.Join(got, "\n") != strings.Join(c.want, "\n") {
+			t.Errorf("%s:\n got %q\nwant %q", c.name, got, c.want)
+		}
+	}
+}

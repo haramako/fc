@@ -93,7 +93,6 @@ _38:
 	lda 0+<F_test_stat_test_loop+0
 	cmp #3
 	bcc @begin_50
-	lda 0+<F_test_stat_test_loop+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
@@ -160,7 +159,6 @@ _63:
 	lda 0+<F_test_stat_test_for+0
 	cmp #10
 	bcc @body_67
-	lda 0+<F_test_stat_test_for+0
 @end_66:
 	sta <F_unittest_assert_equal+0
 	lda #0

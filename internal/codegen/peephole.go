@@ -4,8 +4,8 @@ package codegen
 //
 // 命令列を上から順に見て「A の値 = このメモリ位置 / この即値」の集合と「Y の値 = この場所 / 即値」を持ち、
 //
-//   - `lda X` で X が集合にあり、かつ N/Z フラグが今の A の値を反映していれば削除
-//     (lda は N/Z を立てるので、間に ldy / cmp などフラグを別の値で上書きする命令があったら消せない)
+//   - `lda X` で X が集合にあり、かつ N/Z フラグが今の A の値を反映しているか、その後で N/Z が読まれる前に立て直されるなら削除
+//     (lda は N/Z を立てるので、間に ldy / cmp などフラグを別の値で上書きする命令があって、後で N/Z を見るなら消せない)
 //   - `ldy X` で Y が既に X なら削除 (fc の codegen は ldy のフラグで分岐しない)
 //   - `cmp #0` の直後が beq / bne / bmi / bpl で、フラグが既に A を反映していれば cmp を削除
 //     (bcc / bcs は cmp の C を見るので消せない)
@@ -137,6 +137,25 @@ func peepholeA(lines []string) []string {
 		}
 		return asmLine{}
 	}
+	// nzDead は i の命令の後の N/Z が読まれないか: 先の命令を (ラベルの合流も越えて) 順に見て、N/Z を読む前に立て直す命令が
+	// 来れば読まれない。N/Z の分岐・php と、どこへ行くか分からない命令 (分岐・jmp・jsr・rts・知らない命令・ディレクティブ) は読む
+	// ものとみなす
+	nzDead := func(i int) bool {
+		for j := i + 1; j < len(parsed); j++ {
+			b := parsed[j]
+			switch {
+			case skip(b) || b.Kind == lkLabel:
+				continue
+			case b.Kind != lkInstr || b.isBranch() || b.Mnem == "php":
+				return false
+			case b.setsNZ():
+				return true
+			case !b.keepsNZ():
+				return false
+			}
+		}
+		return false
+	}
 	s := &peepState{}
 	s.reset()
 	for i, a := range parsed {
@@ -189,9 +208,9 @@ func peepholeA(lines []string) []string {
 		}
 		switch mnem {
 		case "lda":
-			if (trackable || kind == opImmediate) && s.a[key] && (s.flagsFromA || next(i).setsNZ()) {
-				// A は既にこの値で、フラグもそれを反映している (または次の命令がフラグを別の値で立て直すので要らない。
-				// ラベルの直後の `sta x; sec; lda x; sbc #32` など)
+			if (trackable || kind == opImmediate) && s.a[key] && (s.flagsFromA || nzDead(i)) {
+				// A は既にこの値で、フラグもそれを反映している (またはフラグが読まれる前に別の値で立て直すので要らない。
+				// ラベルの直後の `sta x; sec; lda x; sbc #32`、上限で切る `lda #k; cmp x; bcs @l; lda #k; sta x; @l: lda y` など)
 				continue
 			}
 			s.a = aState{}

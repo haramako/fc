@@ -133,6 +133,12 @@ func Passes() []Pass {
 		{Name: "fuse", Run: alwaysU(fusePointer)},
 		{Name: "fieldindex", Run: foldFieldIndex},
 		{Name: "indexoff", Run: changes(foldIndexOffset)}, // fuse が index + load_mem / store_mem を添字付きの load_mem / store_mem にした後
+		// struct を指すポインタのフィールドの読み直し (fuse / indexoff の後の disp の形で)。置き換えた写しは ssa で畳む
+		{Name: "fwdmem", Run: changes(forwardFields), Then: func(lmd *ir.Lambda, _ *types.Universe) {
+			if !lmd.Cfg().Disabled("ssa") {
+				propagateSSA(lmd)
+			}
+		}},
 		{Name: "coalesce", Run: always(coalesceCopies)},
 		{Name: "chain", Run: always(chainInPlace)},
 		{Name: "induction", Requires: []string{"ssa"}, Run: changes(eliminateInduction),

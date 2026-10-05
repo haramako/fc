@@ -212,7 +212,24 @@ break / return / asm が無い。lim はリテラルかループの中で定義�
 さらに縮む。実行テストは `TestPointerWalkY`（ページをまたぐ長さ、1 回も回らない入口、ループの後の p、continue のある
 対象外の形）。
 
-## 11. 次にできること（この基盤の上で）
+## 11. struct を指すポインタのフィールドの読み直し（`internal/opt/fwdmem.go`、2026-10-05）
+
+`forwardFields`（段の名前 `fwdmem`。indexoff の後、coalesce の前。置き換えた写しは Then の propagateSSA が畳む）。同じ基本ブロックの
+中で、struct を指すポインタの添字の無いフィールドの `load_mem d = p, disp=k` を、直前に同じ所から読んだ値か書いた値で置き換える
+（`ldy #k; lda (p),y` の 4 バイト 7 サイクルが一時変数の読み出しか定数に）。pad.update の `p.held` の 2 回目の読み出し、
+`p.timer = 16` の後の `p.timer == 0`（畳まれる）。覚えた値を捨てる所: ラベル、呼び出し、asm、グローバル変数・アドレスを取った
+局所変数への書き込み、ほかのポインタ・配列への store_mem、同じポインタの重なるフィールドへの store_mem、ポインタ自身・値の変数への
+書き込み。
+
+- 対象を struct を指すポインタに限るのは、`*u8` で I/O のレジスタを読む書き方（読むたびに値が変わる）を残すため
+  （docs/reference/language.md の「ポインタ」に、struct のフィールドは普通のメモリとして扱うと書いた）
+- 書いた値が、書く所だけで使う一時変数なら置き換えない: `sbc #1; sta (p),y; lda (p),y` の読み直しは 2 バイトだが、置き換えると
+  一時変数が A に置けなくなって `sta t; …; lda t` の 4 バイトになった（`p.timer -= 1; if (p.timer == 0)`。測って確かめた）
+- 結果: miku4 の pad 240 → 234、bench の fib −2.1%・oam −0.6%（ピープホールの変更と合わせて）、castle は ROM −67 バイトで
+  ゲームの状態は 4000 フレーム同じ（TestProbeDiff）。テストは `TestForwardFields`（同じ所を指す別のポインタ・グローバル変数・
+  呼び出し・ポインタの付け替え・アドレスを取った局所変数で値が正しいことと、pad.update の形）
+
+## 12. 次にできること（この基盤の上で）
 
 - グローバル変数（volatile でない）と配列要素の読み出しの前送り: 呼び出し・ポインタ経由の書き込み・asm を障壁にして、
   `index_pset a[i] = t; … ; index_pget u = a[i]` の 2 つ目を t に（entities.update に 3 か所）。6502 では `lda a,y` と

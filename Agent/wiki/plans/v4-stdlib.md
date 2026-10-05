@@ -386,7 +386,10 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    （+1.3 KB: vram 976・frame 355・pal 251 が元の手書きの asm の ppu 594 より大きい）。移して見つけたこと: rand.next_u16 を asm に
    （fc の 16 ビットのずらしで 144 バイト → 約 40）、vram の panic が sys と console（約 360 バイト）を引き込んでいた（reserve は
    切り詰めるようにした）、public の配列定数（math の ATAN 256 バイトなど）が使わなくても出ていた（fc 4 は出さないようにした）、
-   math.DITHER を public に（1/16 ピクセルの散らしの表）
+   math.DITHER を public に（1/16 ピクセルの散らしの表）。✅ 2026-10-05: pal.shade（fade のたびに 32 回）と、描画を止めて書く
+   vram.write_now / write_v_now / fill_now の本体を asm に（`fclib/nes/pal.asm`・`vram.asm`。shade は 123 → 78 バイトで全部の入力を
+   fc の版と比べる @(test)、write_now は 1 バイト約 31 → 14〜16 サイクル）。キューに積む put / fill は asm にしても小さくならなかったので
+   fc のまま（Agent/discussions/2026-10-05-nes-asm.md）
 
 ### 7.1 テスト（案）
 

@@ -288,7 +288,6 @@ _38:
 	sta <F_mem_strcpy+4
 	jsr _mem_strcpy
 	sta 0+<F_test_memory_test_strcpy+0
-	lda 0+<F_test_memory_test_strcpy+0
 	sta <F_unittest_assert_equal+0
 	lda #0
 	sta <F_unittest_assert_equal+1
