@@ -20,7 +20,7 @@ import (
 
 // registerLogBuiltin は @log を登録する。
 func registerLogBuiltin(h *Hlc) {
-	h.defmacro("@log", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@log", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if h.lmd == nil {
 			panic(&diag.Error{Msg: "@log can only be used inside a function"})
 		}

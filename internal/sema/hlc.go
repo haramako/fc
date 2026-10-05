@@ -68,6 +68,10 @@ type stmtState struct {
 	// lval に渡す (lval は受け取ったら 0 に戻し、算術の子にだけ渡し直す。widen.go の「上から決める」)
 	wide        int
 	macroCallee *cexpr // 実行中のマクロの呼び出しの関数の式 (fc 3 → 4 の書き換えで名前を置き換える: printf → @printf)
+	// 型を決める段 (typing.go) のメモ: 式の節点 → 型。expansions は IR を出さないマクロの呼び出し (評価済みの節点) → 展開
+	// (型を決める段と lval が同じ展開を使う)
+	typed      map[*cexpr]typedMemo
+	expansions map[*cexpr]macroResult
 }
 
 // resetStmt は文の状態を捨てる (文の始まりと、エラーで抜けた文の後始末)。
@@ -133,6 +137,13 @@ func (h *Hlc) defmacro(name string, fn MacroFn) *ir.Value {
 	v := h.addVar(ir.NewGlobal(name, h.prog.Types.Macro(), ""))
 	v.Public = true
 	h.prog.macros[v] = fn
+	return v
+}
+
+// defmacroTyped は型を決める段が呼び出しの型を知る方法 (typing.go の macroTyping) を添えて defmacro する。
+func (h *Hlc) defmacroTyped(name string, mt macroTyping, fn MacroFn) *ir.Value {
+	v := h.defmacro(name, fn)
+	h.prog.macroTypes[v] = mt
 	return v
 }
 

@@ -272,6 +272,9 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					right := h.rvalAssign(h.withExpected(e.args[1], fr.split.typ), fr.split.typ, "assignment to field "+lhs.name, nil)
 					h.soaStoreSplit(fr.split, right)
 					r = right
+					if k, lit := ir.ValIntLiteral(right); lit && ir.ValType(right) != fr.split.typ {
+						r = ir.NewIntLiteral("", fr.split.typ, wrapInt(k, fr.split.typ)) // 代入の式の値は左辺の型 (型のない定数のまま残っていた)
+					}
 					break
 				}
 				r = h.assign(fr.v, fr.lv, e.args[1])
@@ -532,11 +535,7 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			args := e.args[1:]
 			if ir.ValType(lmdV).Kind == types.Macro {
 				// マクロの実行
-				fn := h.prog.macros[ir.ValLiteral(lmdV)]
-				outerCallee := h.macroCallee
-				h.macroCallee = e.args[0]
-				x := fn(h, args, e.block)
-				h.macroCallee = outerCallee
+				x := h.expandMacro(e, ir.ValLiteral(lmdV))
 				if x.stmts != nil {
 					for _, st := range x.stmts {
 						h.lval(st)

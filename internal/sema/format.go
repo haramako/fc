@@ -32,12 +32,12 @@ import (
 )
 
 func registerFormatBuiltins(h *Hlc) {
-	h.defmacro("@format", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@format", formatMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		return macroResult{expr: cv(h.format(args, "@format"))}
 	})
 	// @try_format(dst, "書式", 引数...): @format と同じだが、dst が足りなければ止まらず長さ 0 の slice を返す (書式を空にしない
 	// 限り失敗と区別できる。`vram.put(a, @try_format(buf, ...))` は失敗なら何も書かない)
-	h.defmacro("@try_format", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@try_format", formatMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		return macroResult{expr: cv(h.format(args, "@try_format"))}
 	})
 }

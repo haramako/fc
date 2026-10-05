@@ -255,7 +255,7 @@ func registerSliceBuiltins(h *Hlc) {
 	})
 
 	// @slice(p, n): ポインタ (または配列) p の先頭から n 要素の slice (n が u16 なら広い slice)
-	h.defmacro("@slice", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@slice", sliceMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if len(args) != 2 {
 			panic(&diag.Error{Msg: "@slice takes 2 arguments (@slice(p, n))"})
 		}
@@ -280,7 +280,7 @@ func registerSliceBuiltins(h *Hlc) {
 	})
 
 	// @ptr(s): slice (または配列) の先頭へのポインタ
-	h.defmacro("@ptr", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@ptr", ptrMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if len(args) != 1 {
 			panic(&diag.Error{Msg: "@ptr takes 1 argument (a slice)"})
 		}

@@ -66,6 +66,7 @@ type Program struct {
 	global      *ir.Scope                  // 組み込みマクロ (asm) を持つ最上位スコープ
 	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
 	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
+	macroTypes  map[*ir.Value]macroTyping  // マクロ値 → 型を決める段が呼び出しの型を知る方法 (typing.go。無ければ分からない)
 	textmaps    map[*ir.Value]*textmapConv // textmap(...) の変換器 (@format が書式の変換に使う)
 	fmtCodes    map[string]string          // @format の textmap の数字などの表 (モジュールと表 → シンボル)
 	// buildStrings は文字列の @(build) の const → 値 (データを作らず、使った場所で文字列リテラルにする。staticif.go)
@@ -114,6 +115,7 @@ func NewProgram() *Program {
 		Sources:        map[string]*Source{},
 		macros:         map[*ir.Value]MacroFn{},
 		constMacros:    map[*ir.Value]ConstMacroFn{},
+		macroTypes:     map[*ir.Value]macroTyping{},
 		textmaps:       map[*ir.Value]*textmapConv{},
 		fmtCodes:       map[string]string{},
 		buildStrings:   map[*ir.Value]string{},

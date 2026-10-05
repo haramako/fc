@@ -21,7 +21,7 @@ import (
 )
 
 func registerTestingBuiltins(h *Hlc) {
-	h.defmacro("@assert", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@assert", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if len(args) < 1 || len(args) > 2 {
 			panic(&diag.Error{Msg: "@assert takes a condition and an optional message (@assert(x > 0, \"x must be positive\"))"})
 		}
@@ -41,7 +41,7 @@ func registerTestingBuiltins(h *Hlc) {
 		return macroResult{}
 	})
 
-	h.defmacro("@assert_eq", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@assert_eq", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if len(args) != 2 {
 			panic(&diag.Error{Msg: "@assert_eq takes the actual and the expected value (@assert_eq(f(3), 9))"})
 		}

@@ -31,7 +31,7 @@ type ConstMacroFn func(h *Hlc, args []*cexpr) *cexpr
 func registerBuiltins(p *Program) {
 	h := &Hlc{prog: p, scope: p.global}
 
-	h.defmacro("asm", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("asm", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		for _, line := range args {
 			h.emit(&ir.Op{Code: ir.OpAsm, Text: mustString(line)})
 		}
@@ -40,7 +40,7 @@ func registerBuiltins(p *Program) {
 
 	// fc 4 の @printf: 書式文字列で console に出す (@format と同じ書式。format.go)。printf は fc 3 までの綴り (2026-09-30 に改名:
 	// 書式をコンパイル時に分解する組み込みなので @format と同じく @ を付ける)
-	h.defmacro("@printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("@printf", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if !h.v4() {
 			panic(&diag.Error{Msg: "@printf is fc 4 (write printf in fc 3 and older modules)"})
 		}
@@ -48,7 +48,7 @@ func registerBuiltins(p *Program) {
 		return macroResult{}
 	})
 
-	h.defmacro("printf", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("printf", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if h.v4() {
 			panic(&diag.Error{Msg: "printf is written @printf in fc 4 (`fcc migrate` rewrites fc 3 sources)"})
 		}
@@ -95,7 +95,7 @@ func registerBuiltins(p *Program) {
 		return r
 	})
 
-	h.defmacro("unittest_run_tests", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("unittest_run_tests", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		if h.v4() {
 			return h.runTests4() // fc 4: @(test) の関数を集める (testing.go)
 		}
@@ -103,7 +103,7 @@ func registerBuiltins(p *Program) {
 	})
 	// @run_tests_v3(): fc 3 までの @run_tests (スコープの test_* を呼んで stdio に出す)。fc 3 → 4 の migrate が @run_tests を
 	// これに書き換える (出力が変わらないように)
-	h.defmacro("@run_tests_v3", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult { return runTestsV3(h) })
+	h.defmacroTyped("@run_tests_v3", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult { return runTestsV3(h) })
 
 	// min(a, b) / max(a, b) / clamp(x, lo, hi): 型は引数の互換型で決まる (符号付きなら符号付き比較)。
 	// 定数なら畳み込み、そうでなければ比較して入れ替えるコードをその場に出す (関数呼び出しは無い)
@@ -112,7 +112,7 @@ func registerBuiltins(p *Program) {
 		op   cop
 		n    int
 	}{{"min", opMin, 2}, {"max", opMax, 2}, {"clamp", opClamp, 3}} {
-		h.defmacro(bi.name, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		h.defmacroTyped(bi.name, pureMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 			if len(args) != bi.n {
 				panic(&diag.Error{Msg: fmt.Sprintf("%s takes %d arguments", bi.name, bi.n)})
 			}
@@ -123,7 +123,7 @@ func registerBuiltins(p *Program) {
 	// cos(x) = sin(x + 64) のマクロ展開 (v1 の math.rb)。math モジュールの sin を参照する。
 	// 関数にすると呼び出し側の asm が変わるので、インライン関数 (F2) が入るまでは組み込みマクロのまま。
 	// `math.cos(x)` はドット参照が math のスコープから親 (グローバル) に辿り着くので従来どおり書ける
-	h.defmacro("cos", func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+	h.defmacroTyped("cos", pureMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		m, ok := h.prog.Modules.Get("math")
 		if !ok {
 			panic(&diag.Error{Msg: "cos requires the math module (add `use math;`)"})
@@ -177,6 +177,7 @@ func registerBuiltins(p *Program) {
 		m := ir.NewGlobal("", h.prog.Types.Macro(), "")
 		tm := &textmapConv{m: m, table: table, conv: conv, cat: cat, warned: map[string]bool{}}
 		h.prog.textmaps[m] = tm
+		h.prog.macroTypes[m] = pureMacro // 展開は定数 (型を決める段が展開して型を見る)
 		h.prog.macros[m] = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 			if len(args) == 1 && args[0].kind == cInt && args[0].s == "char" {
 				// _T('あ'): 1 文字を表で引いた 1 つのコード (整数の定数。濁点などで 2 つ以上のコードになる文字はエラー)
