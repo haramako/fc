@@ -550,8 +550,14 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       判定する（後から広げることが無くなったので）。✅ 2026-10-02: 代入のような変換（代入・初期化・引数・return・struct と soa の
       フィールド）の検査（型の照合・E・D・const を外す警告）を `rvalAssign`（と `assignPre` / `assignPost`）1 つに集め、型の照合を
       評価の前に型を決める段の型で（FC_VERIFY_IR では評価した値の型でも同じ結論かを確かめる。soa の要素はハンドルなので評価の後）。
-      `Hlc` の状態をモジュール・関数（`fnState`）・文（`stmtState`）の寿命に分けた。残り: IR を出す段と型を決める段を本当に
-      分ける（lval が型付きの木を受け取る）こと、sema が自分の Symbol / Scope を持つこと
+      `Hlc` の状態をモジュール・関数（`fnState`）・文（`stmtState`）の寿命に分けた。✅ 2026-10-05: 型を決める段を lval が評価する
+      ほぼ全部の式に広げ（値の式の約 81 % → 99.9 % 以上。代入の式・リテラル・slice・void の呼び出し、マクロは `macroTyping`
+      で型を宣言し、IR を出さないマクロは展開を共有）、結果を節点ごとに覚え（文の間）、FC_VERIFY_IR の照合を全部の節点に。
+      A1 の幅を `Hlc.wide` でなく `lvalIn` の引数で渡す。名前の表（`Scope`・`ModuleInterface`）と関数の本体の AST を ir から
+      sema に移した（`ir.Value.Module` はモジュールの id）。残り: lval が型を決める段の結果（型と暗黙の変換）を受け取って IR を
+      出すだけにすること（今は lval も tryMakeCompatible などで型を出し直し、照合で一致を確かめている。次は暗黙の変換を型を
+      決める段が節点に付ける形）、型の誤りの診断を型を決める段に寄せること、sema の名前を `ir.Value` から分けた Symbol に
+      すること（`ir.Value` を置き場所とリテラルだけに）
 - [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
