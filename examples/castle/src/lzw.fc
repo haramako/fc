@@ -1,0 +1,20 @@
+#fc 4
+// 旧 fclib の lzw のコピー (2026-10-05。fclib の lzw を slice で受け取る形に入れ替えた後も、このプロジェクトのビルドを保つため。Agent/wiki/plans/v4-stdlib.md §7)
+// 独自の LZW 形式のデータの展開 (前からあるデータのために残しているもの。新しいデータには lz4 を使う)。
+// 作業域にゼロページの $7C〜$7E を使う。
+
+public var addr:*u8 @(address: 0x7e);
+public var bpos:u8 @(address: 0x7d);
+public var cur:u8 @(address: 0x7c);
+var rbits:u16; // lzw.asm の lzw_bits の結果
+
+// unpack の下請け: n ビット読む
+public function read_bit(n:u8):u16 @(abi: "frame");
+// unpack の下請け: 可変長の数 (8 ビットまで) を読む
+public function read_vln():u8 @(abi: "frame");
+// unpack の下請け: 可変長の数 (16 ビットまで) を読む
+public function read_vln16():u16 @(abi: "frame");
+// src の LZW のデータを dest に展開し、展開した長さを返す (dest の大きさは確かめない)
+public function unpack(dest:*u8, src:*const u8):u16 @(abi: "frame", scratch: 6);
+
+@include("lzw.asm");

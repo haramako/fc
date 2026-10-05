@@ -364,7 +364,10 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    test/ の横にコピー）、inflate を外した。メタスプライト（`oam.meta`）・フェード（`pal.fade`）・音の呼び出し口（`frame.hook`）は段 3 で。
    `rle.to_vram` は NES の関数なので `vram.write_rle_now` にした（rle はどのターゲットでも使うモジュール）。✅ 2026-09-29: uxrom / mmc1 /
    mmc3（`fclib/nes/*.fc`。uxrom と mmc1 は今の farcall_uxrom.asm / farcall_mmc1.asm を include、mmc3 は BANK_SELECT の写しも書く
-   トランポリンと IRQ の入口（`irq_hook`）の `mapper_mmc3.asm`。テストは `internal/driver/mapper_test.go`）
+   トランポリンと IRQ の入口（`irq_hook`）の `mapper_mmc3.asm`。テストは `internal/driver/mapper_test.go`）。✅ 2026-10-05: lzw の slice の版（`lzw.unpack(dst, src)` / `try_unpack`。
+   作業域をフレームに移し固定のゼロページ $7C〜$7E を使わない、書き先の長さ・距離・入力の終わりを確かめる。read_bit などの下請けは
+   公開しない。旧版は castle の src と test/ の横にコピー。テストは `internal/driver` の TestLzwRandom（Go で圧縮した乱数のデータ））。
+   **段 4 はこれで全部**
    **同じ名前のモジュールの入れ替え（2026-09-29 決定）**: mem・math など今の fclib と同じ名前のモジュールを新しい API にするときは、
    今の版を使っている所の横にコピーして残す（castle の src、miku、test/、bench/ など。`use` はソースのディレクトリを先に探すので
    コピーが見つかる）。fclib の名前に結びついた組み込み（`@copy` → `mem.copy`、`cos` → `math.sin`）は、読み込んだモジュールの関数の
@@ -375,7 +378,9 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    なかった）ので `frame.init` が $2000〜$2FFF を 0 で埋める、MMC3 の走査線を数えるにはスプライトのパターンを $1000 にする
    （`frame.ctrl |= nes.CTRL_SPR_1000`）、latch を N にすると N ライン目から新しいスクロール（statusbar は 32 で 4 行ちょうど）
 5. **移す**: miku を新しい API で書き直して確かめる（fc の中のコピーで。小さいので最初の実例に）。castle は API が落ち着いてから
-   （§8 の 12。それまでは今の fclib のコピーでビルドを保つ）。古い fclib を消す。✅ 2026-09-29: **examples/miku4**（examples/miku は
+   （§8 の 12。それまでは今の fclib のコピーでビルドを保つ）。古い fclib を消す（✅ 2026-10-05: 同じ名前で入れ替えたものは
+   みな新しい API になった。fc 2 / 3 の `stdio`（emu / nes）と `unittest` は残す: fc 3 以前のソース（test/、bench/、fuzz の種、
+   migrate の前のコード）と fc 3 の `printf` などの組み込みが使う。fc 3 の読み込みをやめるときに一緒に消す）。✅ 2026-09-29: **examples/miku4**（examples/miku は
    ROM の golden のためそのまま残し、別のコピーを fc 4 の frame / vram / pal / oam / pad / math / rand / hit で書き直した。ppu.asm・
    en.asm は要らなくなった。`internal/nes` の TestExampleMiku4 が動きを確かめる）。ROM は元の 14729 バイトに対して 16010 バイト
    （+1.3 KB: vram 976・frame 355・pal 251 が元の手書きの asm の ppu 594 より大きい）。移して見つけたこと: rand.next_u16 を asm に
@@ -434,7 +439,7 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
    なる。その場で作るデータ（文字・数・埋め）は `vram.reserve` でキューの中へ直接書けば写しも無い（`@format(vram.reserve(a, 8), ...)`）。
    写す形が損なのは固定のバンクの大きな表を毎フレーム送るときだけで、要ればポインタを積む種類の項目を後で足す
 5. **OAM のページの位置** → **既定は今と同じ $0700（fc の配置は変えない）、fc.toml で指定できるようにする（2026-09-29 決定）**。
-   残り: fc.toml のキーの名前
+   キーは `[define.oam] ADDR`（✅ 2026-09-29）
 6. **NMI の持ち主** → **ライブラリが持って呼び出し口を出す（2026-09-29）**。検討: ライブラリが持って呼び出し口を出す（推し）か、NESFab のように利用者が NMI を書いてライブラリの送る関数を呼ぶか
 7. **slice の幅** → **mem と展開は `[:u16]`、文字・VRAM・数は `[]`（2026-09-29）**
 8. **失敗の扱いの名前** → **`put`（止まる）/ `try_put`（`bool`）でそろえる（2026-09-29）**。止まるときの動き（emu は表示して終了、NES は console に
@@ -449,7 +454,7 @@ castle の raster IRQ（irqcmd）のような凝ったものは、利用者の a
     **圧縮を fc に入れる**（`@incbin` の選択肢か `@compress("map.bin", "lz4")` のような組み込みで、コンパイル時に圧縮する。NESFab の
     `file(...)` と同じ考え。LZ4 の圧縮は Go で 200 行ほど）。LZ は展開した出力を読み返すので書き先は RAM（VRAM へ直には書けない）。
     描画を止めて VRAM へ流すネームテーブルには rle を残し、形式を今の codebase64 のものから事実上の標準の NES Screen Tool の形式に
-    変える（案）。lzw は castle の移行を決めるまで今のまま置く
+    変える（案）。lzw は castle の移行を決めるまで今のまま置く（2026-10-05: fclib の lzw は slice の版にし、今の形は castle の src にコピー）
 11. **固定小数** → **最初は `math.subpixel` だけ（2026-09-29）**。検討: 1/16 ピクセルの速度を散らして丸める `math.subpixel`（castle・miku の書き方）だけにするか、8.8 の補助（上位 / 下位、
     掛け算）も入れるか
 12. **castle・miku をいつ・どう移すか** → **決定（2026-09-29）: miku だけ、fc の中のコピー（examples/miku）で新しい API に移して確かめる。

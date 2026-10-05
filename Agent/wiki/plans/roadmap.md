@@ -240,8 +240,8 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       pkg/fc の TestFclibModuleTests と TestFclibNoWarnings が fclib のモジュールの警告を見張る）
 - [ ] 標準ライブラリの大幅な拡充（slice を使う）と、その API の移行（Agent/wiki/plans/v4-plan.md §3）。2026-09-29: 互換は考えず作り直す、printf は
       `@format`（snprintf 相当）のラッパーに。計画と決めることは [Agent/wiki/plans/v4-stdlib.md](v4-stdlib.md)。✅ 2026-09-29: 段 2（どのターゲットでも
-      使うもの）と段 3（NES の土台: nes / frame / vram / pal / oam / pad、内蔵のフォント、examples/hello、`fcc test -t nes`）。残りは
-      Agent/wiki/plans/v4-stdlib.md §7 の段 4・5
+      使うもの）と段 3（NES の土台: nes / frame / vram / pal / oam / pad、内蔵のフォント、examples/hello、`fcc test -t nes`）。✅ 2026-10-05:
+      段 4・5 の残り（lzw の slice の版。fc 3 の stdio / unittest は fc 3 のソースのために残す）。残りは castle を新しい API に移すこと（§8 の 12）
 - [x] fc 4 の使われない private な変数は領域を取らない（@(test) の関数だけが使うバッファなど） ✅ 2026-09-29
 - [x] シンプルなパッケージマネージャ（fc.toml の `[lib.NAME]`: path / git + rev + dir、`fc.lock`、`fcc lib`） ✅ 2026-09-29
       （Agent/wiki/plans/v4-stdlib.md §9。✅ 2026-09-29: `fcc lib add`、`-d` の要約に置き換えを出す。✅ 2026-09-29: ライブラリの依存。残り: `use ライブラリ/モジュール`、tarball）
@@ -452,7 +452,8 @@ do-while は「やること候補（すぐではない）」。
 - [x] 中: fc.toml の `[target]` に mirroring / battery / CHR-RAM、未知のキー・セクションをエラーに ✅ 2026-09-29
 - [x] 中: fc.toml の `[target]` があれば nes を既定に、`fcc run -t nes` の扱い、VS Code 拡張の既定のそろえ ✅ 2026-09-29（`fcc run` の nes は
       内蔵の NES のランナーで console.exit まで走らせて console の出力を出す。拡張の fc.target の既定は auto（-t を渡さない。0.1.3））
-- [ ] 低〜中: fclib の API の slice 版（`print`、mem）、lzw の ZP の固定番地と §4.5 の ZP の配置の文書、inflate の `unpack`
+- [x] 低〜中: fclib の API の slice 版（`print`、mem）、lzw の ZP の固定番地と §4.5 の ZP の配置の文書、inflate の `unpack`
+      ✅ 2026-10-05（print は console.write、mem・lzw は slice、lzw の作業域はフレーム、ZP の配置は docs/reference/memory.md、inflate は外した）
 - [x] 低: math（`sign` の戻り値、`atan` の範囲、i16 の abs、rand のシード、10 進・BCD の表示）、nes.fc の APU レジスタ・ビット定数、pad の 2P
       ✅ 2026-09-29（fc 4 の math・rand・fmt・nes・pad）
 - [ ] 低: 文書が実装より古い所（struct の `==`（正式な仕様にする: 2026-09-26）、u16 の添字、代入の大きさ、ポインタ演算、ZP の配置。Agent/discussions/2026-09-20-v3-plan.md §10.6）。

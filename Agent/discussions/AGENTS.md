@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-05 [標準ライブラリの段 4・5 の残り](2026-10-05-stdlib-stage4-5.md) — lzw を slice の形に（作業域はフレーム、旧版は castle・test/ にコピー）。fc 3 の stdio / unittest は fc 3 のソースのために残す
 - 2026-10-03 [GitHub Actions の失敗調査](2026-10-03-actions-failures.md) — Windows のパス・CRLF 依存テスト3件を再現。docs の HTML 欠落は修正済みだが paths フィルタで再実行されていない
 
 - 2026-10-02 [Starlark のマクロ](2026-10-02-starlark-macros.md) — fcc 以外の依存 0 で書けるマクロとして Starlark だけ入れる（go 1.24 で使える版に固定）。read / glob でプロジェクトの中のファイルを入力に

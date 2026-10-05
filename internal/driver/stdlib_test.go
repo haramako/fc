@@ -201,6 +201,112 @@ function main():void
 	}
 }
 
+// lzwPack は fclib/lzw.asm の形式に圧縮する (テスト用。fc に LZW の圧縮は無い): 3 バイト以上の一致は距離・長さ (255 まで) に。
+func lzwPack(data []byte) []byte {
+	var out []byte
+	nbits := 0
+	put := func(v, n int) {
+		for i := n - 1; i >= 0; i-- {
+			if nbits%8 == 0 {
+				out = append(out, 0)
+			}
+			if v>>i&1 != 0 {
+				out[len(out)-1] |= 0x80 >> (nbits % 8)
+			}
+			nbits++
+		}
+	}
+	vln := func(v, short, long int) {
+		if v < 1<<short {
+			put(0, 1)
+			put(v, short)
+		} else {
+			put(1, 1)
+			put(v, long)
+		}
+	}
+	vln(len(data), 8, 16)
+	for i := 0; i < len(data); {
+		best, dist := 0, 0
+		for d := 1; d <= 255 && d <= i; d++ {
+			n := 0
+			for n < 255 && i+n < len(data) && data[i+n] == data[i+n-d] {
+				n++
+			}
+			if n > best {
+				best, dist = n, d
+			}
+		}
+		if best >= 3 {
+			put(0, 1)
+			vln(dist, 4, 8)
+			vln(best, 4, 8)
+			i += best
+		} else {
+			put(1, 1)
+			put(int(data[i]), 8)
+			i++
+		}
+	}
+	return out
+}
+
+// TestLzwRandom: lzw.unpack を乱数のデータ (lzwPack で圧縮) で確かめる。書き先がちょうどの長さでも、1 バイト足りなければ
+// try_unpack が失敗を返すことも。
+func TestLzwRandom(t *testing.T) {
+	t.Parallel()
+	r := rand.New(rand.NewSource(1))
+	for k, n := range []int{1, 13, 200, 1000, 3000} {
+		data := make([]byte, n)
+		switch k % 3 {
+		case 0:
+			r.Read(data)
+		case 1:
+			for i := range data {
+				data[i] = byte(r.Intn(3))
+			}
+		default:
+			for i := range data {
+				data[i] = "fc lzw fc lzw "[i%14] ^ byte(r.Intn(8)/7)
+			}
+		}
+		src := fmt.Sprintf(`#fc 4
+use console;
+use lzw;
+const RAW = @incbin("d.bin");
+const PACKED = @incbin("p.bin");
+var buf:[%d]u8 @(segment: "BSS_EX");
+function main():void
+{
+	console.bench_start();
+	var n = lzw.unpack(buf, PACKED);
+	console.bench_end();
+	var bad:u16 = 0;
+	for (var i:u16 = 0; i < @len(RAW); i += 1) {
+		if (buf[i] != RAW[i]) {
+			bad += 1;
+		}
+	}
+	@printf("{} {} {}\n", n, bad, lzw.try_unpack(buf[..@len(RAW) - 1], PACKED));
+	console.exit(0);
+}
+`, n)
+		packed := lzwPack(data)
+		for _, level := range []int{-1, 0} {
+			res := testBuild(t, buildSpec{Files: map[string]string{"t.fc": src, "d.bin": string(data), "p.bin": string(packed)}, Run: true, Level: level})
+			if res.Err != nil {
+				t.Fatalf("n=%d: %v", n, res.Err)
+			}
+			if want := fmt.Sprintf("%d 0 65535\n", n); res.Stdout != want {
+				t.Errorf("n=%d (-O %d): got %q, want %q", n, level, res.Stdout, want)
+			}
+			if level == 0 {
+				t.Logf("%d バイト → %d バイト、展開 %d サイクル (1 バイト %.1f)", n, len(packed), res.Res.Cycles, float64(res.Res.Cycles)/float64(n))
+			}
+		}
+	}
+}
+
 // TestMemSpeed: mem.fill / copy / move (重なりを後ろから) / zero の 1000 バイトのサイクル数を出し、中身を確かめる (-O 0 / -O 2)。
 // asm の版の速さの退行を見張る (上限は 1 バイトあたり)。
 func TestMemSpeed(t *testing.T) {

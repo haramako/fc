@@ -1,19 +1,51 @@
 #fc 4
-// 独自の LZW 形式のデータの展開 (前からあるデータのために残しているもの。新しいデータには lz4 を使う)。
-// 作業域にゼロページの $7C〜$7E を使う。
+// 独自の LZW 形式 (castle のデータの形式) の展開。前からあるデータのために残しているもの: 新しいデータには lz4 を使う
+// (fc には LZW の圧縮が無い)。
+//   var n = lzw.unpack(buf, DATA);           // buf に展開して長さを返す (足りなければ止まる)
+// 形式は lzw.asm の頭に書いた。作業域はフレーム (固定の番地を使わない)。
+@(bank: -1);
+use sys;
 
-public var addr:*u8 @(address: 0x7e);
-public var bpos:u8 @(address: 0x7d);
-public var cur:u8 @(address: 0x7c);
-var rbits:u16; // lzw.asm の lzw_bits の結果
-
-// unpack の下請け: n ビット読む
-public function read_bit(n:u8):u16 @(abi: "frame");
-// unpack の下請け: 可変長の数 (8 ビットまで) を読む
-public function read_vln():u8 @(abi: "frame");
-// unpack の下請け: 可変長の数 (16 ビットまで) を読む
-public function read_vln16():u16 @(abi: "frame");
-// src の LZW のデータを dest に展開し、展開した長さを返す (dest の大きさは確かめない)
-public function unpack(dest:*u8, src:*const u8):u16 @(abi: "frame", scratch: 6);
-
+function unpack_raw(dst:*u8, dst_len:u16, src:*const u8, src_len:u16):u16 @(abi: "frame", scratch: 11);
 @include("lzw.asm");
+
+// src を dst に展開して書いた長さを返す。dst が足りないかデータが壊れていれば止まる
+public function unpack(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	var n = unpack_raw(@ptr(dst), @len(dst), @ptr(src), @len(src));   // (try_unpack を呼ぶと slice の写しが増える)
+	if (n == 0xffff) {
+		sys.panic("lzw: dst too small or broken data");
+	}
+	return n;
+}
+
+// unpack と同じだが、失敗なら 0xffff を返す (dst は途中まで書かれていることがある)
+public function try_unpack(dst:[:u16]u8, src:[:u16]const u8):u16
+{
+	return unpack_raw(@ptr(dst), @len(dst), @ptr(src), @len(src));
+}
+
+// ---- テスト ----
+
+const TEXT = "Hello Hello Hello Fello.";
+const PACKED = [12, 82, 44, 182, 203, 101, 190, 64, 51, 40, 200, 145, 37, 192];
+var test_buf:[64]u8;
+
+function test_unpack():void @(test)
+{
+	@assert_eq(unpack(test_buf, PACKED), @len(TEXT));
+	for (var i:u8 = 0; i < @len(TEXT); i += 1) {
+		@assert(test_buf[i] == TEXT[i]);
+	}
+	@assert_eq(unpack(test_buf[..@len(TEXT)], PACKED), @len(TEXT));   // ちょうどの長さ
+}
+
+function test_errors():void @(test)
+{
+	@assert_eq(try_unpack(test_buf[..10], PACKED), 0xffff);       // 書き先が足りない
+	@assert_eq(try_unpack(test_buf, PACKED[..5]), 0xffff);        // 入力が途中で終わる
+	const FAR = [0x00, 0x82, 0x10];                               // 長さ 1、最初の項目が距離 1 の一致 (書き先の頭より前)
+	@assert_eq(try_unpack(test_buf, FAR), 0xffff);
+	const EMPTY = [0, 0];                                         // 長さ 0
+	@assert_eq(try_unpack(test_buf, EMPTY), 0);
+}
