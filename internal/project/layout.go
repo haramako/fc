@@ -258,16 +258,9 @@ func (cfg *ProjectConfig) Layout() (*BankLayout, error) {
 		if r.Size, err = parseInt(sec["size"]); err != nil {
 			return nil, fail("[ram.%s] size: %v", n, err)
 		}
-		// fc 自身の領域 (writeLayoutConfig の ZP / ZP_STACK / SRAM と CPU スタック) と重ならないこと。OAM を $0200 に置くと
+		// fc 自身の領域 (MemoryMap の ZP / ZP_STACK / SRAM と CPU スタック) と重ならないこと。OAM を $0200 に置くと
 		// FC_FARCALL・BSS と同じ場所になり、黙って壊れていた
-		for _, own := range []struct {
-			what       string
-			start, end int
-		}{
-			{"the zero page ($00-$FF: fc's registers, static frames and stack)", 0x0000, 0x0100},
-			{"the CPU stack ($0100-$01FF)", 0x0100, 0x0200},
-			{"fc's RAM ($0200-$06FF: BSS and static frames)", 0x0200, 0x0700},
-		} {
+		for _, own := range DefaultMemoryMap("nes").ownRegions() {
 			if r.Start < own.end && own.start < r.Start+r.Size {
 				return nil, fail("[ram.%s] $%04X-$%04X overlaps %s; use $0700-$07FF or cartridge RAM ($6000-$7FFF)", n, r.Start, r.Start+r.Size-1, own.what)
 			}

@@ -44,7 +44,7 @@ type frontResult struct {
 // compileFront は意味解析から静的フレームの配置までを行う。-O 2 でフレームが上限を超えた関数があれば、その関数の展開を
 // 止めて (Lambda.NoGrow) 意味解析からやり直す (最適化は IR をその場で書き換えるので、やり直しは sema から。
 // 失敗したときだけ走るので、通るプログラムのコンパイル時間は変わらない)。
-func (c *Compiler) compileFront(o *frontOptions) (*frontResult, error) {
+func (c *compilation) compileFront(o *frontOptions) (*frontResult, error) {
 	macros, done, err := c.projectMacros()
 	if err != nil {
 		return nil, err

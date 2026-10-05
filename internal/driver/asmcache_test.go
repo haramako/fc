@@ -65,8 +65,7 @@ func TestAsmStampDedup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	c := NewCompiler(absRepoRoot)
-	c.hashes = newHashMemo()
+	c := NewCompiler(absRepoRoot).newCompilation(nil, dir, "emu")
 	s, err := c.makeStamp([]string{"-o", "x.o"}, []string{a, b, a, a, b})
 	if err != nil {
 		t.Fatal(err)

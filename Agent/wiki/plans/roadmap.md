@@ -570,9 +570,12 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 - [ ] **テストの共通部品**: 「TempDir に書いて Build」は `harness_test.go` の `testBuild` に寄せた（✅ 2026-09-28。包み関数は
       名前を残して中身だけ共通に）。残り: ランダム生成器（約 3,000 行）を `internal/fuzzgen` に出せば `tools/fuzzmeasure` が
       `go test -json` を経由せずに直接呼べる
-- [ ] **driver の `Compiler`** はビルド単位の状態（ctx / target / dir / buildDir / prog / layout）をフィールドに持つので同じ
+- [x] **driver の `Compiler`** はビルド単位の状態（ctx / target / dir / buildDir / prog / layout）をフィールドに持つので同じ
       Compiler で並行ビルドできない。ビルドごとの struct に分け、ld65 のメモリ配置（ZP / SRAM の番地が 3 か所に直書き）を
-      `MemoryMap` から ld65.cfg と base.s の両方に出す
+      `MemoryMap` から ld65.cfg と base.s の両方に出す ✅ 2026-10-05: `Compiler` は FC_HOME と ca65 の起動の数だけ、ビルドの状態は
+      `compilation`（BuildContext・Check・Migrate のファイルごとに作る。`TestConcurrentBuilds` を -race で）。`project.MemoryMap` が
+      ld65.cfg の 3 つの形の ZP / ZP_STACK / SRAM の行、base.s の FC_STACK の大きさ、`[ram.*]` の重なりの検査の番地を出す。
+      examples の ROM・bench の -O 0 / -O 2・test/ の出力・ld65.cfg・base.s は前とバイト単位で同じ。公開 API は変えていない
 - [x] sema の `Loader` が直接ディスクを読む（`fs.FS` にすればテストがメモリ上で済む）。`fc3Seeds` が syntax と driver の
       fuzz に同じ内容で 2 つ（`r6502.Memory` の配列化は ✅ 2026-09-28） ✅ 2026-09-30: `Program.FS`（nil なら OS のファイル）と
       `Resolver.ReadFile` で sema の読み込みを Loader に寄せた（`TestLoaderFS` は fstest.MapFS だけで通す）。fuzz の種は

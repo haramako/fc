@@ -1746,7 +1746,7 @@ func rpInterp(t *testing.T, files map[string]string) (out string, ok bool, err e
 			return "", false, err
 		}
 	}
-	prog, cerr := sema.Compile(dir, NewCompiler(absRepoRoot).libPath("emu"), "t.fc")
+	prog, cerr := sema.Compile(dir, NewCompiler(absRepoRoot).newCompilation(nil, "", "emu").libPath("emu"), "t.fc")
 	if cerr != nil {
 		return "", false, cerr
 	}
@@ -1779,7 +1779,7 @@ func rpLocate(t *testing.T, files map[string]string) (res string) {
 			return err.Error()
 		}
 	}
-	prog, cerr := sema.Compile(dir, NewCompiler(absRepoRoot).libPath("emu"), "t.fc")
+	prog, cerr := sema.Compile(dir, NewCompiler(absRepoRoot).newCompilation(nil, "", "emu").libPath("emu"), "t.fc")
 	if cerr != nil {
 		return cerr.Error()
 	}

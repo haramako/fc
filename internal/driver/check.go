@@ -52,7 +52,7 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 	if cfg == nil {
 		cfg = ir.ConfigFromEnv()
 	}
-	prog, err := c.compileNoWrite(opt.Dir, target, filename, opt.Defines, cfg)
+	prog, err := c.newCompilation(nil, opt.Dir, target).compileNoWrite(filename, opt.Defines, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 }
 
 // compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。前段は fcc build と同じ compileFront。
-func (c *Compiler) compileNoWrite(dir, target, main string, cli []string, cfg *ir.Config) (prog *sema.Program, err error) {
+func (c *compilation) compileNoWrite(main string, cli []string, cfg *ir.Config) (prog *sema.Program, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*diag.Error); ok {
@@ -70,16 +70,11 @@ func (c *Compiler) compileNoWrite(dir, target, main string, cli []string, cfg *i
 			panic(r)
 		}
 	}()
-	c.dir = dir
-	if c.dir == "" {
-		c.dir = "."
-	}
-	c.target = target // (fc.toml のライブラリの <lib>/<target>)
 	defs, err := c.projectDefines(cli)
 	if err != nil {
 		return nil, err
 	}
-	front, err := c.compileFront(&frontOptions{Dir: dir, Target: target, Main: main, Defines: defs, OptimizeLevel: 2, Config: cfg})
+	front, err := c.compileFront(&frontOptions{Dir: c.dir, Target: c.target, Main: main, Defines: defs, OptimizeLevel: 2, Config: cfg})
 	if err != nil {
 		return nil, err
 	}

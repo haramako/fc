@@ -66,7 +66,7 @@ func (c *Compiler) Migrate(files []string, opt *MigrateOptions) (map[string][]by
 		if compiled[key] {
 			continue
 		}
-		prog, err := c.collectRewrites(path, target, opt.Defines, overlay)
+		prog, err := c.newCompilation(nil, filepath.Dir(path), target).collectRewrites(path, opt.Defines, overlay)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +116,7 @@ func ruleWanted(rules []string, rule string) bool {
 }
 
 // collectRewrites は path を入口にしたプログラムを意味解析まで通し、fc 3 → 4 の書き換えを集める。
-func (c *Compiler) collectRewrites(path, target string, cli []string, overlay map[string][]byte) (prog *sema.Program, err error) {
+func (c *compilation) collectRewrites(path string, cli []string, overlay map[string][]byte) (prog *sema.Program, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*diag.Error); ok {
@@ -126,8 +126,6 @@ func (c *Compiler) collectRewrites(path, target string, cli []string, overlay ma
 			panic(r)
 		}
 	}()
-	c.dir = filepath.Dir(path)
-	c.target = target // (fc.toml のライブラリの <lib>/<target>)
 	defs, err := c.projectDefines(cli)
 	if err != nil {
 		return nil, err
@@ -147,7 +145,7 @@ func (c *Compiler) collectRewrites(path, target string, cli []string, overlay ma
 	prog.Banks = c.banks()
 	prog.CollectRewrites = true
 	prog.Overlay = overlay
-	if err := sema.CompileProgram(prog, c.dir, c.libPath(target), filepath.Base(path)); err != nil {
+	if err := sema.CompileProgram(prog, c.dir, c.libPath(c.target), filepath.Base(path)); err != nil {
 		return nil, err
 	}
 	return prog, nil

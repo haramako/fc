@@ -16,11 +16,15 @@
   書く。ニーモニックの性質（書くレジスタ・フラグ・サイクル数）は `internal/m6502` の表 1 つ（regalloc の見積もりと共有）、
   番地の同一性は `operand.key()`（記号 + ずれ + 添字。綴りは見ない））。
 - **driver とその周り**: `driver` はビルドの手順（`compileFront` = sema → Prepare → フレーム超過のやり直し。build / check /
-  golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。設定ファイルと
+  golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。`Compiler` が持つのは
+  FC_HOME と ca65 の起動の数だけで、1 回のビルド（build / check / migrate の 1 ファイル）の状態は `compilation`（`newCompilation`。
+  ビルドの手順のメソッドはこちらに付く）。同じ `Compiler` で並行にビルドしてよい（`TestConcurrentBuilds` を -race で。2026-10-05）。
+  fc が生成する ld65.cfg の 3 つの形と base.s の FC_STACK、`[ram.*]` の重なりの検査は、RAM の番地を `project.MemoryMap` 1 つから
+  取る（`DefaultMemoryMap(target)`・`LinkerMemory`）。設定ファイルと
   バンクの配置は `project`、ca65 / ld65 の探索と dbgfile は `cc65`、@log の生成物は `fclog`、FC_HOME の解決は `fchome`、
   emu ターゲットの実行とホストとのやり取りの取り決め ($fff0〜$ffff) は `emu`。
 - **版と migrate**（2026-09-28。[Agent/wiki/plans/v4-plan.md](plans/v4-plan.md) §0）: 版は `syntax.Version2〜4`（`LatestVersion` = 4）で、モジュール
-  ごと（`ir.Module.Version`。sema は `h.version()` で規則を選ぶ）。`fcc migrate` は `driver.Compiler.Migrate`: fc 2 → 3 は
+  ごと（`ir.Module.Version`。sema は `h.version()` で規則を選ぶ）。`fcc migrate` は `driver.Compiler.Migrate`（ファイルごとに `compilation`）: fc 2 → 3 は
   構文の書き換え（`internal/migrate` の `Rules`。ファイルごと）、fc 3 → 4 は意味の書き換えで、各ファイルを入口に sema で
   コンパイルし（`sema.Program.CollectRewrites`。fc 2 → 3 の結果はメモリの上の `Program.Overlay` で渡す）、sema が fc 3 の
   モジュールで fc 4 の意味と違う所を `Rewrite`（ソースの位置への挿入・置き換え。`sema/rewrite.go` の `rewriteAs` など）として
@@ -32,7 +36,7 @@
   A1 で広げた後の型を見る検査（F2 の値が必ず 0 になるシフト）は、広げるのが文の中で終わるので文の終わりに見る
   （`compileStatementRecover` の `checkShifts`）
 - **追加のライブラリの探索先**（2026-09-29）: `BuildOptions.LibPath`（pkg/fc の `Options.LibPath`）は use / `@include` と ca65 の `-I` の
-  探索先に、ソースのディレクトリの後・fclib の前で足す（`Compiler.libPath`・`ca65Args`）。`fcc test` がテストするモジュールの
+  探索先に、ソースのディレクトリの後・fclib の前で足す（`compilation.libPath`・`ca65Args`）。`fcc test` がテストするモジュールの
   ディレクトリを足すのに使い、fc.toml の `[lib.*]`（Agent/wiki/plans/v4-stdlib.md §9）もここに入れる
 - **組み込みが読み込むモジュール**（2026-09-29）: `@format` / fc 4 の printf は fmt / console を `use` 無しで使う（`sema/format.go` の
   `builtinModule`: 読み込んでいなければ `useModule` で読み込み、今のモジュールの `AddUse` に足す。足さないと asm がそのモジュールの
@@ -106,7 +110,7 @@
   例外は `internal/doccheck`（テストだけのパッケージ。docs/ の例のビルドと文書への参照の検査。driver の外なので `testBuild` を使えない）
 - **`internal/extmacro`**（2026-10-02）: 外部コマンドの定数マクロ（fc.toml の `[macro_server.*]`）のプロセスと改行区切りの JSON の
   プロトコル・キャッシュ。何にも依存しない葉。fc.toml を読むのは `project/macros.go`、`@名前` の登録と定数への変換は
-  `sema/extmacro.go`、意味解析の間だけ起動して止めるのは driver（`Compiler.projectMacros`）。計画は `wiki/plans/external-macros.md`
+  `sema/extmacro.go`、意味解析の間だけ起動して止めるのは driver（`compilation.projectMacros`）。計画は `wiki/plans/external-macros.md`
 - **`internal/starmacro`**（2026-10-02）: Starlark のスクリプトの定数マクロ（fc.toml の `[macro_script.*]`）。外の依存は go.starlark.net
   だけ（リポジトリで唯一の外部の Go モジュール。go 1.24 で使える版に固定）。結果の型は extmacro の `Result` を共有し、sema の
   `MacroSource` として外部コマンドと同じ口で登録する

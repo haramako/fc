@@ -25,7 +25,6 @@ import (
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/project"
 	"github.com/haramako/fc/internal/r6502"
-	"github.com/haramako/fc/internal/regalloc"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/starmacro"
 	"github.com/haramako/fc/internal/syntax"
@@ -111,8 +110,21 @@ type Result struct {
 	ResidentFixes int
 }
 
+// Compiler はコンパイラ。持つのは FC_HOME とビルドをまたぐ数だけで、ビルドごとの状態は compilation に置く (同じ Compiler で
+// 並行にビルドしてよい。中間生成物ディレクトリは別々にすること)。
 type Compiler struct {
-	FCHome   string // fclib/ share/ を含むディレクトリ
+	FCHome  string       // fclib/ share/ を含むディレクトリ
+	asmRuns atomic.Int64 // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
+}
+
+func NewCompiler(fcHome string) *Compiler {
+	return &Compiler{FCHome: fcHome}
+}
+
+// compilation は 1 回のビルド (fcc build / check / migrate の 1 ファイル) の状態。BuildContext・Check・Migrate が
+// 呼ぶたびに作る。
+type compilation struct {
+	*Compiler
 	ctx      context.Context
 	jobs     int                   // ca65 の並列数
 	libDirs  []string              // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
@@ -124,24 +136,30 @@ type Compiler struct {
 	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
 	prog     *sema.Program
 	layout   *project.BankLayout // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
-	asmRuns  atomic.Int64        // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
-	hashes   *hashMemo           // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
+	hashes   *hashMemo           // このビルドの中のファイルのハッシュ (asmcache.go)
 	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
 	// globalInit は初期値のある変数があるビルド (runtime.asm を FC_GLOBAL_INIT つきでアセンブルする。globalInitTable)
 	globalInit bool
+	linkCfg    string // リンクに使ったリンカ設定のパス (--size-report のバンクの表)
 	// macroServers / macroScripts は fc.toml の [macro_server.*] / [macro_script.*] (外部コマンドと Starlark の定数マクロ:
 	// projectMacros)
-	linkCfg      string // リンクに使ったリンカ設定のパス (--size-report のバンクの表)
 	macroServers []*extmacro.Server
 	macroScripts []*starmacro.Script
 }
 
-func NewCompiler(fcHome string) *Compiler {
-	return &Compiler{FCHome: fcHome}
+// newCompilation はビルドの状態を作る。dir は "" なら作業ディレクトリ。
+func (c *Compiler) newCompilation(ctx context.Context, dir, target string) *compilation {
+	if dir == "" {
+		dir = "."
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &compilation{Compiler: c, ctx: ctx, dir: dir, target: target, hashes: newHashMemo()}
 }
 
 // findShare は share以下のファイルを検索する (target優先)。
-func (c *Compiler) findShare(filename string) string {
+func (c *compilation) findShare(filename string) string {
 	dir := filepath.Join(c.FCHome, "share")
 	if p := filepath.Join(dir, c.target, filename); fileExists(p) {
 		return p
@@ -168,7 +186,15 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (int, error) {
 
 // BuildContext はソースをビルドし、生成物の情報を返す。ctx のキャンセルは外部コマンド (ca65 / ld65) に伝わる。
 // エラーは *diag.Error (コンパイルエラー) または *CommandError (外部コマンドの失敗)。
-func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *BuildOptions) (result *Result, err error) {
+func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *BuildOptions) (*Result, error) {
+	if opt.Target == "" {
+		opt.Target = defaultTarget(opt.Dir)
+	}
+	return c.newCompilation(ctx, opt.Dir, opt.Target).build(filename, opt)
+}
+
+// build は BuildContext の本体。
+func (c *compilation) build(filename string, opt *BuildOptions) (result *Result, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ce, ok := r.(*CommandError); ok {
@@ -182,11 +208,6 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 			panic(r)
 		}
 	}()
-	c.ctx = ctx
-
-	if opt.Target == "" {
-		opt.Target = defaultTarget(opt.Dir)
-	}
 	if opt.Target == "x6502" {
 		return nil, &diag.Error{Msg: "target x6502 is not supported by go port"}
 	}
@@ -210,11 +231,6 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		opt.Config = ir.ConfigFromEnv()
 	}
 	c.cfg = opt.Config
-	c.target = opt.Target
-	c.dir = opt.Dir
-	if c.dir == "" {
-		c.dir = "."
-	}
 	c.buildDir = opt.BuildDir
 	if c.buildDir == "" {
 		c.buildDir = filepath.Join(c.dir, DefaultBuildDirName)
@@ -240,7 +256,6 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 		return nil, err
 	}
 	result = &Result{BuildDir: c.buildDir, Target: c.target}
-	c.hashes = newHashMemo() // fcc watch は同じ Compiler でビルドし直すので、ビルドごとに作り直す
 
 	// 前段: 意味解析 → 全関数の最適化と割付 → 静的フレームの配置 (frontend.go)
 	defs, derr := c.projectDefines(opt.Defines)
@@ -398,7 +413,7 @@ func defaultTarget(dir string) string {
 }
 
 // libPath は use / include の検索パス (カレント → 追加のライブラリ (BuildOptions.LibPath) → fclib → fclib/<target>)。
-func (c *Compiler) libPath(target string) []string {
+func (c *compilation) libPath(target string) []string {
 	p := []string{"."}
 	p = append(p, c.libDirs...)
 	return append(p, filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target)))
@@ -408,7 +423,7 @@ func (c *Compiler) libPath(target string) []string {
 // options(base: "data.asm") があれば生成せず、そのファイル (Dir 相対) をアセンブルする (castle のように ZP 配置や
 // iNES ヘッダを自前で持つプロジェクト。fc の領域 (L / reg / FC_FASTCALL_REG / FC_SZP / FC_SRAM / FC_SP / FC_FARCALL) を
 // 同じ名前で定義すること。docs/reference/assembly.md の「リンクと土台の指定」)。戻り値はリンクに渡すオブジェクト。
-func (c *Compiler) makeBase() string {
+func (c *compilation) makeBase() string {
 	opts := c.prog.Options
 	if base, ok := opts.Get("base"); ok && base.Kind == ir.OptStr {
 		path := filepath.Join(c.dir, base.Str)
@@ -467,7 +482,7 @@ type bankInfo struct {
 }
 
 // link はオブジェクトファイルをリンクし、マップファイルのパスを返す。
-func (c *Compiler) link(baseObj string, objs []string, opt *BuildOptions) (mapFile, dbgFile string) {
+func (c *compilation) link(baseObj string, objs []string, opt *BuildOptions) (mapFile, dbgFile string) {
 	opts := c.prog.Options
 	cfgPath := filepath.Join(c.buildDir, "ld65.cfg")
 	defer func() { c.linkCfg = cfgPath }()
@@ -498,7 +513,7 @@ func (c *Compiler) link(baseObj string, objs []string, opt *BuildOptions) (mapFi
 }
 
 // writeLinkerConfig は fc の ld65.cfg (バンク構成は main の options(bank_count / char_banks) とモジュールの options(bank / org)) を書く。
-func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
+func (c *compilation) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 
 	ineschr := 1
 	if cb, ok := opts.Int("char_banks"); ok {
@@ -547,9 +562,7 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 	if c.target == "nes" {
 		var b strings.Builder
 		b.WriteString("# memory config for ld65\n\nMEMORY {\n")
-		b.WriteString("  ZP: start = $00, size = $80, type = rw, define = yes;\n")
-		b.WriteString("  ZP_STACK: start = $80, size = $80, type = rw, define = yes;\n")
-		b.WriteString("  SRAM: start = $0200, size = $0500, type = rw, define = yes;\n")
+		b.WriteString(c.memoryMap().LinkerMemory())
 		b.WriteString("  HEADER: start = $0000, size = $10, file = %O, fill = yes;\n")
 		for i, bank := range banks {
 			fmt.Fprintf(&b, "  ROM%d: start = $%x, size = $%x, file = %%O, fill = yes, define = yes, bank = %d;\n", i, bank.org, bank.size, i)
@@ -574,9 +587,7 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 	} else {
 		var b strings.Builder
 		b.WriteString("# memory config for ld65\n\nMEMORY {\n")
-		b.WriteString("  ZP: start = $00, size = $80, type = rw, define = yes;\n")
-		b.WriteString("  ZP_STACK: start = $80, size = $80, type = rw, define = yes;\n")
-		b.WriteString("  SRAM: start = $0200, size = $0E00, type = rw, define = yes;\n")
+		b.WriteString(c.memoryMap().LinkerMemory())
 		b.WriteString("  ROMV: start = $1000, size = 3, type = rw, define = yes;\n")
 		b.WriteString("  ROM: start = $1003, size = $6FFD, file = %O, fill = no, define = yes, bank = 0;\n")
 		b.WriteString("  SRAM_EX: start = $8000, size = $7F00, type = rw, define = yes;\n") // 大きな配列用 (options(segment: "BSS_EX"))
@@ -606,7 +617,7 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 // globalInitTable は、初期値のある変数を持つモジュール (ir.Module.HasGlobalInit) の初期値の記録を並べた表
 // __fc_init_table の asm (_fc_init.s) を書いてそのパスを返し、runtime.asm を FC_GLOBAL_INIT つきでアセンブルさせる
 // (起動のときに fc_global_init が写す)。初期値のある変数が無ければ "" (runtime も今までと同じ)。
-func (c *Compiler) globalInitTable(mods []*ir.Module) (string, error) {
+func (c *compilation) globalInitTable(mods []*ir.Module) (string, error) {
 	var b strings.Builder
 	var syms []string
 	for _, m := range mods {
@@ -636,7 +647,7 @@ func (c *Compiler) globalInitTable(mods []*ir.Module) (string, error) {
 // 無ければ、何もしない入口の asm (_interrupts.s) を書いてそのパスを返す (全部あれば "")。fc の関数 (Id がその名前。
 // options(symbol:) の extern も) か、include した asm がその名前を参照していれば (castle の ppu.asm の `.export _interrupt`)
 // 定義があるとみなす。stdio を使わないプログラム (console だけ) が、入口が無いというリンクのエラーになっていた。
-func (c *Compiler) defaultInterrupts(mods []*ir.Module) (string, error) {
+func (c *compilation) defaultInterrupts(mods []*ir.Module) (string, error) {
 	defined := map[string]bool{}
 	for _, m := range mods {
 		for _, d := range m.Defs {
@@ -664,7 +675,7 @@ func (c *Compiler) defaultInterrupts(mods []*ir.Module) (string, error) {
 
 // farcallAsm は fc が用意する farcall トランポリン (Agent/wiki/design/farcall.md §3.4)。emu と、バンク切替の無い nes (MMC0) では
 // 「そのまま飛ぶ」だけの fclib/<target>/farcall.asm を使う。バンク切替のあるマッパーはプロジェクトが farcall を用意する。
-func (c *Compiler) farcallAsm() string {
+func (c *compilation) farcallAsm() string {
 	if c.target == "nes" {
 		if c.layout != nil && len(c.layout.Profile.Slots) > 0 {
 			return "" // fc.toml のバンクの表でバンク切替のあるマッパー: トランポリンはプロジェクトが用意する
@@ -682,7 +693,7 @@ func (c *Compiler) farcallAsm() string {
 
 // projectDefines は fc.toml (ソースの基準ディレクトリから親へ探す) と CLI の -D から @(build) の const の上書きを作る。
 // fc.toml のバンクの表も読んで c.layout に入れる。
-func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, error) {
+func (c *compilation) projectDefines(cli []string) (map[string]*sema.DefineUse, error) {
 	cfg, err := project.FindConfig(c.dir)
 	if err != nil {
 		return nil, err
@@ -718,7 +729,7 @@ func (c *Compiler) projectDefines(cli []string) (map[string]*sema.DefineUse, err
 
 // libSummary は fc.toml の [lib.*] の要約の行: ライブラリごとに場所と、使ったモジュール (fclib の同じ名前のモジュールを
 // 置き換えたものには印)。
-func (c *Compiler) libSummary(prog *sema.Program) []string {
+func (c *compilation) libSummary(prog *sema.Program) []string {
 	var lines []string
 	for _, l := range c.libs {
 		src := l.Root
@@ -756,8 +767,13 @@ func shortCommit(c string) string {
 	return c
 }
 
+// memoryMap は fc が生成する ld65.cfg と base.s の RAM の配置。
+func (c *compilation) memoryMap() project.MemoryMap {
+	return project.DefaultMemoryMap(c.target)
+}
+
 // banks は意味解析に渡すバンクの表 (fc.toml に無ければ nil)。
-func (c *Compiler) banks() map[string]sema.BankRef {
+func (c *compilation) banks() map[string]sema.BankRef {
 	if c.layout == nil {
 		return nil
 	}
@@ -765,7 +781,7 @@ func (c *Compiler) banks() map[string]sema.BankRef {
 }
 
 // checkDefines は上書きが宣言された @(build) の const に当たったかを検査する (ビルドに含まれないモジュールは警告)。
-func (c *Compiler) checkDefines(prog *sema.Program, target string) error {
+func (c *compilation) checkDefines(prog *sema.Program, target string) error {
 	return prog.CheckDefines(func(m string) bool { return project.ModuleExists(c.dir, c.libPath(target), m) })
 }
 
@@ -780,7 +796,7 @@ func sortedDefines(m map[string]*sema.DefineUse) []sema.DefineUse {
 }
 
 // debugFileFunc は -g のときの .dbg に書くファイル名 (sema のファイル参照 (Dir 相対) を ROM の隣から辿れる相対パスに)。
-func (c *Compiler) debugFileFunc(opt *BuildOptions) func(ref string) string {
+func (c *compilation) debugFileFunc(opt *BuildOptions) func(ref string) string {
 	if !opt.Debug {
 		return nil
 	}
@@ -798,7 +814,7 @@ func (c *Compiler) debugFileFunc(opt *BuildOptions) func(ref string) string {
 }
 
 // baseAsmTemplate は base.s の雛形。
-func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) string {
+func (c *compilation) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) string {
 	header := "\t.exportzp FC_LOCAL\n" +
 		"\t.exportzp FC_REG\n" +
 		"\t.exportzp FC_STACK\n" +
@@ -834,7 +850,7 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 		"\n" +
 		".segment \"FC_STACK\": zeropage\n" +
 		"\t\n" +
-		fmt.Sprintf("FC_STACK: .res $%02X\n", regalloc.StackSize) +
+		fmt.Sprintf("FC_STACK: .res $%02X\n", c.memoryMap().Stack.Size) +
 		"\n" +
 		"\tL = FC_LOCAL\n" +
 		"\treg = FC_REG\n" +
@@ -863,8 +879,8 @@ func (c *Compiler) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) strin
 
 // assembleAll は複数の .s を c.jobs 並列でアセンブルする。
 // 失敗したら最初 (sources 順) のエラーを返し、残りは ctx のキャンセルで止める。
-func (c *Compiler) assembleAll(sources []string) error {
-	ctx, cancel := context.WithCancel(c.ctxOrBackground())
+func (c *compilation) assembleAll(sources []string) error {
+	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
 	errs := make([]error, len(sources))
 	sem := make(chan struct{}, c.jobs)
@@ -902,14 +918,14 @@ func (c *Compiler) assembleAll(sources []string) error {
 }
 
 // ca65 はアセンブルを実行する (逐次。入力が前回と同じなら再利用する。失敗は CommandError を panic)。
-func (c *Compiler) ca65(path string) {
-	if err := c.assembleCached(c.ctxOrBackground(), path); err != nil {
+func (c *compilation) ca65(path string) {
+	if err := c.assembleCached(c.ctx, path); err != nil {
 		panic(err)
 	}
 }
 
 // ca65Args はアセンブルのコマンド引数を作る。
-func (c *Compiler) ca65Args(path string) []string {
+func (c *compilation) ca65Args(path string) []string {
 	base := filepath.Base(path)
 	obj := filepath.Join(c.buildDir, strings.TrimSuffix(base, filepath.Ext(base))+".o")
 	args := []string{
@@ -934,22 +950,15 @@ func (c *Compiler) ca65Args(path string) []string {
 	return append(args, path)
 }
 
-func (c *Compiler) ctxOrBackground() context.Context {
-	if c.ctx == nil {
-		return context.Background()
-	}
-	return c.ctx
-}
-
 // sh は外部コマンドを実行する (失敗時は CommandError を panic)。
-func (c *Compiler) sh(name string, args ...string) {
-	if err := c.run(c.ctxOrBackground(), name, args...); err != nil {
+func (c *compilation) sh(name string, args ...string) {
+	if err := c.run(c.ctx, name, args...); err != nil {
 		panic(err)
 	}
 }
 
 // run は外部コマンドを実行し、失敗なら *CommandError を返す。
-func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
+func (c *compilation) run(ctx context.Context, name string, args ...string) error {
 	select {
 	case toolSlots <- struct{}{}:
 	case <-ctx.Done():
@@ -980,7 +989,7 @@ func (c *Compiler) run(ctx context.Context, name string, args ...string) error {
 // 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
 // logs は @log の地点 (PC → 表示。-g のとき)。命令の実行前に PC が地点なら 1 行出す。
 // execute は ROM を emu で実行し、終了コードとサイクル数を返す (internal/emu)。logs は @log の地点 (PC → 地点。fclog.Hooks)。
-func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]fclog.Hook, logOut io.Writer) (int, int64, error) {
+func (c *compilation) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]fclog.Hook, logOut io.Writer) (int, int64, error) {
 	if c.target != "emu" {
 		return 0, 0, nil // x6502 はスコープ外。nes は pkg/fc が内蔵の NES のランナーで走らせる (internal/nes は driver を使うテストを持つ)
 	}
@@ -1013,7 +1022,7 @@ func (c *Compiler) execute(filename string, out io.Writer, maxCycles int64, logs
 // checkAddressVars は @(address: N) の変数が、リンクした RAM のセグメント (fc の ZP・BSS・静的フレーム・スタック、[ram.*]、
 // ほかの変数) と重ならないかを確かめる (fc の ZP の中に置くと、reg などと黙って重なっていた)。ROM・I/O の番地は RAM の
 // セグメントでないので対象外。重なりを意図するなら storage alias を使う。
-func (c *Compiler) checkAddressVars(loadDbg func() (*cc65.DbgFile, error)) error {
+func (c *compilation) checkAddressVars(loadDbg func() (*cc65.DbgFile, error)) error {
 	var vars []*ir.Def
 	for _, m := range c.prog.Modules.List() {
 		for _, d := range m.Defs {
@@ -1061,7 +1070,7 @@ func (c *Compiler) checkAddressVars(loadDbg func() (*cc65.DbgFile, error)) error
 // projectMacros は fc.toml の [macro_server.*] と [macro_script.*] のマクロ。外部コマンドはマクロを最初に使ったときに起動し、
 // 呼ぶ側が done で止める (ディスクのキャッシュは中間生成物ディレクトリ: internal/extmacro)。Starlark のスクリプトはここで実行して
 // 一番上の関数を集める (internal/starmacro)。
-func (c *Compiler) projectMacros() (srcs []sema.MacroSource, done func(), err error) {
+func (c *compilation) projectMacros() (srcs []sema.MacroSource, done func(), err error) {
 	done = func() {}
 	if len(c.macroScripts) > 0 {
 		set, err := starmacro.Load(c.macroScripts)

@@ -15,7 +15,7 @@ import (
 // writeLayoutConfig は fc.toml のバンクの表から ld65.cfg を書く。切り替えのバンクは番号順に 1 つずつ (名前の無い番号は
 // 最初のスロットに置いた空きのバンク)、常に見えている領域は 1 つにまとめて最後の 6 バイトをベクタにする (iNES の
 // ファイルの並び: ヘッダ、バンク 0 から順、固定、CHR)。[ram.<name>] は同じ名前のセグメントと一緒に作る。
-func (c *Compiler) writeLayoutConfig() {
+func (c *compilation) writeLayoutConfig() {
 	l := c.layout
 	prof := l.Profile
 	named := map[int]*project.BankDef{}
@@ -24,9 +24,7 @@ func (c *Compiler) writeLayoutConfig() {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "# memory config for ld65 (generated from %s)\n\nMEMORY {\n", filepath.Base(l.Source))
-	b.WriteString("  ZP: start = $00, size = $80, type = rw, define = yes;\n")
-	b.WriteString("  ZP_STACK: start = $80, size = $80, type = rw, define = yes;\n")
-	b.WriteString("  SRAM: start = $0200, size = $0500, type = rw, define = yes;\n")
+	b.WriteString(c.memoryMap().LinkerMemory())
 	for _, r := range l.RAM {
 		fmt.Fprintf(&b, "  RAM_%s: start = $%04X, size = $%04X, type = rw, define = yes;\n", r.Name, r.Start, r.Size)
 	}
@@ -86,7 +84,7 @@ func (c *Compiler) writeLayoutConfig() {
 }
 
 // appendFragment は [linker] extra の cfg の断片から、block (MEMORY / SEGMENTS) の中身を足す。
-func (c *Compiler) appendFragment(b *strings.Builder, block string) {
+func (c *compilation) appendFragment(b *strings.Builder, block string) {
 	data, err := os.ReadFile(c.layout.Fragment)
 	if err != nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("[linker] extra: %v", err)})

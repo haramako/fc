@@ -33,7 +33,7 @@ import (
 )
 
 // assembleCached は src をアセンブルする。前回のアセンブルから入力が変わっていなければ ca65 を起動しない。
-func (c *Compiler) assembleCached(ctx context.Context, src string) error {
+func (c *compilation) assembleCached(ctx context.Context, src string) error {
 	args := c.ca65Args(src)
 	obj := c.objPath(src)
 	stamp := obj + ".stamp"
@@ -61,7 +61,7 @@ func (c *Compiler) assembleCached(ctx context.Context, src string) error {
 }
 
 // objPath は src のオブジェクトファイルのパス (ca65Args の -o と同じ)。
-func (c *Compiler) objPath(src string) string {
+func (c *compilation) objPath(src string) string {
 	base := filepath.Base(src)
 	return filepath.Join(c.buildDir, strings.TrimSuffix(base, filepath.Ext(base))+".o")
 }
@@ -70,14 +70,14 @@ func (c *Compiler) objPath(src string) string {
 const homeMark = "$FCHOME"
 
 // portable は s の中の FC_HOME の場所を homeMark に置き換える (restore が逆)。
-func (c *Compiler) portable(s string) string {
+func (c *compilation) portable(s string) string {
 	if c.FCHome == "" {
 		return s
 	}
 	return strings.ReplaceAll(s, c.FCHome, homeMark)
 }
 
-func (c *Compiler) restore(s string) string {
+func (c *compilation) restore(s string) string {
 	if c.FCHome == "" {
 		return s
 	}
@@ -85,7 +85,7 @@ func (c *Compiler) restore(s string) string {
 }
 
 // makeStamp は ca65 と引数、読んだファイルの内容のハッシュの記録を作る。
-func (c *Compiler) makeStamp(args, deps []string) (string, error) {
+func (c *compilation) makeStamp(args, deps []string) (string, error) {
 	var b strings.Builder
 	tool, err := toolID()
 	if err != nil {
@@ -113,7 +113,7 @@ func (c *Compiler) makeStamp(args, deps []string) (string, error) {
 }
 
 // stampValid は stamp の記録が今の ca65・引数・ファイルの内容と一致し、obj が残っているか。
-func (c *Compiler) stampValid(stamp, obj string, args []string) bool {
+func (c *compilation) stampValid(stamp, obj string, args []string) bool {
 	if _, err := os.Stat(obj); err != nil {
 		return false
 	}

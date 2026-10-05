@@ -15,7 +15,7 @@ import (
 )
 
 // sizeReport は --size-report の行。
-func (c *Compiler) sizeReport(dbg *cc65.DbgFile) []string {
+func (c *compilation) sizeReport(dbg *cc65.DbgFile) []string {
 	r := dbg.SizeReport(40)
 	lc, err := cc65.ReadLinkConfig(c.linkCfg)
 	if err != nil {
@@ -26,7 +26,7 @@ func (c *Compiler) sizeReport(dbg *cc65.DbgFile) []string {
 }
 
 // writeSizeHTML は --size-html のページを path に書く。
-func (c *Compiler) writeSizeHTML(dbg *cc65.DbgFile, path, title string) error {
+func (c *compilation) writeSizeHTML(dbg *cc65.DbgFile, path, title string) error {
 	lc, err := cc65.ReadLinkConfig(c.linkCfg)
 	if err != nil {
 		lc = nil // リンカ設定が読めなければ領域に分けない
