@@ -5,12 +5,14 @@ import "github.com/haramako/fc/internal/types"
 // 命令ごとの生存解析 (ローカル変数)。regalloc の LiveRangeCalculator は結果を区間に潰すが、こちらは集合のまま持つ
 // (ループ内の A 常駐の判定に使う。Agent/wiki/design/regalloc.md)。
 
-// Liveness は各命令の入口 / 出口で生きているローカル変数。
+// Liveness は各命令の入口 / 出口で生きているローカル変数 (命令は *Op で引く。作った後に命令を挿しても、元の命令の答えは
+// 変わらない。足した命令は何も生きていない扱い)。
 type Liveness struct {
 	Vars  []*Value
+	lmd   *Lambda
 	index map[*Value]int
-	in    [][]bool // [op][var]
-	out   [][]bool
+	in    map[*Op][]bool // [op][var]
+	out   map[*Op][]bool
 }
 
 // BuildLiveness は標準の後ろ向きデータフロー (ブロック単位で反復してから命令単位に展開)。
@@ -23,7 +25,7 @@ func BuildLiveness(lmd *Lambda) *Liveness { return buildLiveness(lmd, false) }
 func BuildLivenessWithGlobals(lmd *Lambda) *Liveness { return buildLiveness(lmd, true) }
 
 func buildLiveness(lmd *Lambda, globals bool) *Liveness {
-	lv := &Liveness{index: map[*Value]int{}}
+	lv := &Liveness{lmd: lmd, index: map[*Value]int{}}
 	local := func(o Operand) *Value {
 		if o == nil {
 			return nil
@@ -142,33 +144,48 @@ func buildLiveness(lmd *Lambda, globals bool) *Liveness {
 		}
 	}
 	// 命令単位に展開
-	lv.in = make([][]bool, n)
-	lv.out = make([][]bool, n)
+	lv.in = make(map[*Op][]bool, n)
+	lv.out = make(map[*Op][]bool, n)
 	for _, b := range cfg.Blocks {
 		cur := append([]bool{}, bout[b]...)
 		ops := cfg.Ops(b)
 		for j := len(ops) - 1; j >= 0; j-- {
 			i := ops[j]
-			lv.out[i] = append([]bool{}, cur...)
+			op := lmd.Ops[i]
+			lv.out[op] = append([]bool{}, cur...)
 			for _, d := range opDU[i].defs {
 				cur[d] = false
 			}
 			for _, u := range opDU[i].uses {
 				cur[u] = true
 			}
-			lv.in[i] = append([]bool{}, cur...)
+			lv.in[op] = append([]bool{}, cur...)
 		}
 	}
 	return lv
 }
 
-// LiveIn / LiveOut は命令 i の入口 / 出口で v が生きているか。
-func (lv *Liveness) LiveIn(i int, v *Value) bool {
-	k, ok := lv.index[v]
-	return ok && lv.in[i] != nil && lv.in[i][k]
+// LiveIn / LiveOut は lmd.Ops[i] (今の命令列の i 番目の命令) の入口 / 出口で v が生きているか (範囲外・消した命令は false)。
+func (lv *Liveness) LiveIn(i int, v *Value) bool { return lv.LiveInOp(lv.opAt(i), v) }
+
+func (lv *Liveness) LiveOut(i int, v *Value) bool { return lv.LiveOutOp(lv.opAt(i), v) }
+
+func (lv *Liveness) opAt(i int) *Op {
+	if i < 0 || i >= len(lv.lmd.Ops) {
+		return nil
+	}
+	return lv.lmd.Ops[i]
 }
 
-func (lv *Liveness) LiveOut(i int, v *Value) bool {
+// LiveInOp / LiveOutOp は命令 op の入口 / 出口で v が生きているか。
+func (lv *Liveness) LiveInOp(op *Op, v *Value) bool {
 	k, ok := lv.index[v]
-	return ok && lv.out[i] != nil && lv.out[i][k]
+	in := lv.in[op]
+	return ok && in != nil && in[k]
+}
+
+func (lv *Liveness) LiveOutOp(op *Op, v *Value) bool {
+	k, ok := lv.index[v]
+	out := lv.out[op]
+	return ok && out != nil && out[k]
 }
