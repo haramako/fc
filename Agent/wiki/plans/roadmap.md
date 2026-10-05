@@ -567,12 +567,20 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       にし、型を決める段は計画の結果の型を節点の型に、lval は項を評価したあと同じ計画（項の型は型を決める段の型）を受け取って
       その変換のとおりに IR を出す（adaptLiteral / tryMakeCompatible で型を出し直すのをやめた。adaptLiteral は計画の adaptLit を
       値に当てる薄い包み）。モジュールと型名の束縛を `ir.Value.Module` / `TypeRef` から sema の表（`sema/binding.go`）に移し、
-      IR の変数の一覧にも入れない。残り: 代入のような変換の評価の後の convert（約 8 % の、評価の前に判定できない形）、計画の外の
-      節点（代入・slice・リテラル・soa）の診断、マクロ・名前を値でない束縛として cexpr で表すこと（今は ir.Value の入れ物）、
-      sema の名前を `ir.Value` から分けた Symbol にすること（`ir.Value` を置き場所とリテラルだけに）
-- [ ] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
+      IR の変数の一覧にも入れない。✅ 2026-10-05: 名前の表の項目を `sema.Symbol`（値・モジュール・型名・マクロ。`sema/symbol.go`）に
+      し、値でない名前は ir.Value にせず式では `cName` の節点（`var v = math;`・`var v = @lz4;` が黙って通っていたのがエラーに）。
+      マクロの 4 つの表は `macroDef` 1 つ。評価の後の変換の判定（以前の「約 8 %」）は全部が型を省いた変数の初期値で、型は初期値の
+      型なので判定し直さない（FC_VERIFY_IR で確かめる）。残り: 計画の外の節点（代入・slice・リテラル・soa）の診断を型を決める段へ、
+      lval が型を出し直す残り（cast・slice の組み立て）、`ir.Value` の sema だけが使うフィールド（`Public`・`Build`・`StrConst` など）を
+      Symbol へ
+- [x] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
+      ✅ 2026-10-05（Agent/discussions/2026-10-05-sema-types-cleanup.md）: soa を Kind `Soa` に（sema の `Kind == Array && !IsSoa`
+      約 30 か所が Array だけに）。`Compatible` を `AssignableTo`（向きあり）と `CommonType`（対称）に（同じ型かは interned なので
+      `==`）。`NamedIn` の版は sema の `basicType` に移した。module / macro / typename の Kind は消した（sema の Symbol）。
+      **slice・enum・far は Kind に分けない**: バックエンド（codegen・regalloc・interp・inline）は slice を struct、enum を整数、far を
+      関数として扱うのが正しく、分けると新しい Kind を足す所のほうが消えるフラグの検査（slice 約 4・far 約 6 か所）より多い
 - [x] **ループ解析**: `ir.DomTree`、`Loop.Parent / Depth`、`CFG.Preheader`、`Loop.EveryIteration` と、induction / unroll が
       共有する `loopHeader` / `loopDefs` / `singleStep`（opt/loopmatch.go）✅ 2026-09-28。ywalk は回転後の線形の形を見るので別のまま
 - [ ] **テストの共通部品**: 「TempDir に書いて Build」は `harness_test.go` の `testBuild` に寄せた（✅ 2026-09-28。包み関数は
