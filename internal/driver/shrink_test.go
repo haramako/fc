@@ -11,7 +11,7 @@ import (
 //   - @min の 2 つの引数を計算してから 1 つ目を写す `t = a - 3; u = b - 10; v = t` の写しを消す (opt の coalesce が数命令先の
 //     写しまで見る)
 //   - `load n = t` で t がそこで終わり n がそこで始まるなら同じ番地に置いて写しを出さない (regalloc の copyHints)
-//   - 1 バイトの戻り値はフレームに書かず A だけで返す (どの呼び出しもフレームから読まない関数: frames の ResultInA)
+//   - 1 バイトの戻り値はフレームに書かず A だけで返す (どの呼び出しもフレームから読まない関数: CallConv.Result.OnlyA)
 //   - ループの回転が前に出した最初の検査 `0 < 40` を畳む (regalloc の foldConstBranches)
 func TestShrinkNesShapes(t *testing.T) {
 	t.Parallel()

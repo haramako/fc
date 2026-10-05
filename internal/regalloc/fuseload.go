@@ -81,7 +81,7 @@ func FusedLoad(lmd *ir.Lambda, i int, vA, vY *ir.Value) bool {
 	if !isV(m.Index, vY) {
 		return false
 	}
-	return m.BaseIsArray() || (lmd.ABI != ir.ABIStack && !op.HoldX)
+	return m.BaseIsArray() || (lmd.Conv.ABI != ir.ABIStack && !op.HoldX)
 }
 
 // FusedOperands は融合した読み出しの結果 t を使う命令 op の入力を、A に読むもの・第 2 オペランドの順で返す

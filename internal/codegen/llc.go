@@ -240,19 +240,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 				asm.push(fmt.Sprintf("\t.global %s", mangle(d.Sym)))
 				continue
 			}
-			inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)))
-			asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)))
-			if lmd.Entry {
-				inc.push(fmt.Sprintf("\t.import %s", directSym(mangle(d.Sym))))
-				asm.push(fmt.Sprintf("\t.export %s", directSym(mangle(d.Sym))))
-			}
-			if lmd.RegArg || lmd.RegArgY {
-				inc.push(fmt.Sprintf("\t.import %s", frameSym(mangle(d.Sym))))
-				asm.push(fmt.Sprintf("\t.export %s", frameSym(mangle(d.Sym))))
-			}
-			if lmd.RegArg && lmd.RegArgY {
-				inc.push(fmt.Sprintf("\t.import %s", aSym(mangle(d.Sym))))
-				asm.push(fmt.Sprintf("\t.export %s", aSym(mangle(d.Sym))))
+			for _, e := range lmd.Conv.Entries { // 関数のシンボルと、ほかの入口 (ir.CallConv)
+				inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)+e.Suffix))
+				asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)+e.Suffix))
 			}
 			asm.push(anyList(l.CompileLambda(d.Sym, lmd)))
 		default:
@@ -263,7 +253,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	// fastcall 関数が使う FC_FASTCALL_REG の大きさを、base.asm (プロジェクトが自前で持つこともある) の .res とリンク時に突き合わせる
 	fastcallNeed := 0
 	for _, d := range mod.Defs {
-		if d.Kind == ir.DefCode && ((!d.Lambda.Extern && d.Lambda.ABI == ir.ABIFastcall) || d.Lambda.ABI == ir.ABICc65) {
+		if d.Kind == ir.DefCode && ((!d.Lambda.Extern && d.Lambda.Conv.ABI == ir.ABIFastcall) || d.Lambda.Conv.ABI == ir.ABICc65) {
 			fastcallNeed = max(fastcallNeed, d.Lambda.ZpUsed)
 		}
 	}
@@ -461,53 +451,57 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda) []string {
 	} else {
 		r.push(fmt.Sprintf(".segment \"%s\"", l.codeSegment))
 	}
-	if lmd.RegArg || lmd.RegArgY {
+	conv := &lmd.Conv
+	regA, regY, stackEntry := conv.RegParam(ir.RegA), conv.RegParam(ir.RegY), conv.HasStackEntry()
+	msym := mangle(sym)
+	if regA != nil || regY != nil {
 		// レジスタ渡しの入口 (Agent/wiki/design/frame-alloc.md §7): 呼び出し側は最後の引数を A、その前を Y に置いて `sym` / `sym__direct`
 		// から入り、`sty` / `sta` でフレームに写す。レジスタに置けなかった引数はフレームに書いてあるので、その前の入口
 		// (`sym__frame`: 両方フレーム、`sym__a`: Y だけフレーム) がレジスタに読んでから同じ `sty` / `sta` に落ちる
 		// (本体の先頭では常に A / Y に引数があり、ピープホールが先頭の lda / ldy を消す)。.proc の中のラベルは同じファイルの
 		// 別の .proc から見えない (castle の text モジュールで未定義になった) ので、入口ごとに .proc を閉じる (.endproc は
 		// コードを出さないのでそのまま落ちる)
-		if lmd.RegArg {
-			r.push(fmt.Sprintf(".proc %s", frameSym(mangle(sym))), fmt.Sprintf("lda %s", staticAddr(lmd, regArgOffset(lmd))), ".endproc")
+		if regA != nil {
+			r.push(fmt.Sprintf(".proc %s", msym+ir.EntryFrame), fmt.Sprintf("lda %s", staticAddr(lmd, regA.Off)), ".endproc")
 		}
-		if lmd.RegArgY {
-			name := frameSym(mangle(sym))
-			if lmd.RegArg {
-				name = aSym(mangle(sym))
+		if regY != nil {
+			name := msym + ir.EntryFrame
+			if regA != nil {
+				name = msym + ir.EntryA
 			}
-			r.push(fmt.Sprintf(".proc %s", name), fmt.Sprintf("ldy %s", staticAddr(lmd, regArgYOffset(lmd))), ".endproc")
+			r.push(fmt.Sprintf(".proc %s", name), fmt.Sprintf("ldy %s", staticAddr(lmd, regY.Off)), ".endproc")
 		}
-		if lmd.Entry {
-			r.push(fmt.Sprintf("jmp %s", directSym(mangle(sym)))) // 間にスタックからのコピーが入る
+		if stackEntry {
+			r.push(fmt.Sprintf("jmp %s", msym+ir.EntryDirect)) // 間にスタックからのコピーが入る
 		}
 	}
-	if lmd.Entry {
+	if stackEntry {
 		// アドレスを取られた関数: 関数ポインタ経由の呼び出し側はスタック (X の指す位置) に引数を積むので、
 		// 自分のフレームに写してから本体 (__direct。呼び先が分かっている呼び出しはここから入る) へ
-		r.push(mangle(sym) + ":")
-		for k := lmd.Type.Base.Size; k < lmd.Type.Base.Size+argBytes(lmd); k++ {
-			if lmd.RegArg && k == regArgOffset(lmd) {
-				r.push(fmt.Sprintf("lda <S+%d,x", k)) // 最後の引数は A のまま __direct の sta へ
-				continue
+		r.push(msym + ":")
+		for _, p := range conv.Params {
+			for k := p.Off; k < p.Off+p.Size; k++ {
+				switch p.Reg {
+				case ir.RegA:
+					r.push(fmt.Sprintf("lda <S+%d,x", k)) // 最後の引数は A のまま __direct の sta へ
+				case ir.RegY:
+					r.push(fmt.Sprintf("ldy <S+%d,x", k)) // その前の引数は Y のまま __direct の sty へ
+				default:
+					r.push(fmt.Sprintf("lda <S+%d,x", k), fmt.Sprintf("sta %s", staticAddr(lmd, k)))
+				}
 			}
-			if lmd.RegArgY && k == regArgYOffset(lmd) {
-				r.push(fmt.Sprintf("ldy <S+%d,x", k)) // その前の引数は Y のまま __direct の sty へ
-				continue
-			}
-			r.push(fmt.Sprintf("lda <S+%d,x", k), fmt.Sprintf("sta %s", staticAddr(lmd, k)))
 		}
-		r.push(fmt.Sprintf(".proc %s", directSym(mangle(sym))))
+		r.push(fmt.Sprintf(".proc %s", msym+ir.EntryDirect))
 	} else {
-		r.push(fmt.Sprintf(".proc %s", mangle(sym)))
+		r.push(fmt.Sprintf(".proc %s", msym))
 	}
-	if lmd.RegArgY {
-		r.push(fmt.Sprintf("sty %s", staticAddr(lmd, regArgYOffset(lmd)))) // Y の最後から 2 つ目の引数をフレームに
+	if regY != nil {
+		r.push(fmt.Sprintf("sty %s", staticAddr(lmd, regY.Off))) // Y の最後から 2 つ目の引数をフレームに
 	}
-	if lmd.RegArg {
-		r.push(fmt.Sprintf("sta %s", staticAddr(lmd, regArgOffset(lmd)))) // A の最後の引数をフレームに
+	if regA != nil {
+		r.push(fmt.Sprintf("sta %s", staticAddr(lmd, regA.Off))) // A の最後の引数をフレームに
 	}
-	if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
+	if lmd.Conv.ABI == ir.ABIStack && lmd.FrameSize > 0 {
 		// stack 関数: X = フレームの底 (呼び出し側が FC_SP にした)。空き先頭をフレームの後ろへ
 		r.push("txa", "clc", fmt.Sprintf("adc #%d", lmd.FrameSize), "sta FC_SP")
 	}

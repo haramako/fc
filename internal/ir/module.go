@@ -232,30 +232,17 @@ type Lambda struct {
 	ZpUsed    int // レジスタ割付後: 普通の関数は L の使用バイト数、fastcall は FC_FASTCALL_REG の使用バイト数 (引数・戻り値込み)
 
 	// 呼び出し規約とフレームの配置 (internal/frames が決める。Agent/wiki/design/frame-alloc.md §6)
-	ABI       ABI
-	Entry     bool // static のうち、アドレスを取られた関数 (呼び出し側はスタック経由で渡し、プロローグで自分のフレームに写す)
-	Interrupt bool // options(interrupt: true): 割り込みから呼ばれる (フレームは全関数と重ねない)
-	Unused    bool // main / 割り込み / asm / 関数ポインタからどう辿っても届かない (出力しない。frames.Analyze が決める)
+	Conv      CallConv // 呼び出し規約 (ABI・引数と戻り値の置き場所・入口。callconv.go)
+	Interrupt bool     // options(interrupt: true): 割り込みから呼ばれる (フレームは全関数と重ねない)
+	Unused    bool     // main / 割り込み / asm / 関数ポインタからどう辿っても届かない (出力しない。frames.Analyze が決める)
 	// NoGrow はフレームを大きくする展開 (インライン展開・ループ展開) をこの関数にしない。-O 2 でフレームが上限を
 	// 超えた関数に付けてコンパイルし直す (driver.prepareProgram。-O 0 では通るプログラムを -O 2 で落とさないため)
 	NoGrow    bool
 	FrameZp   bool // static: フレームがゼロページ (FC_SZP) にある
 	FrameBase int  // static: 領域内のオフセット (配置後)
-	// レジスタ渡し (static だけ。Agent/wiki/design/frame-alloc.md §7): RegArg は最後の引数 (1 バイト) を A で受け取る (呼び出し側が
-	// A に置いて `sym` / `sym__direct` から入り、入口の `sta` でフレームに写す。フレームに書いた呼び出し (far call、
-	// 引数と call の間に他の命令がある) は `sta` の後ろの `sym__frame` から入る)。RegResult は 1 バイトの戻り値を
-	// フレームに書いたうえで A にも置いて返す (呼び出し側はフレームを読まない)。RegArgY は最後から 2 つ目の引数 (1 バイト) を
-	// Y で受け取る (入口の `sty`。A と両方あるときの入口は `sty; sym__a: sta; sym__frame:` の順で、呼び出し側は
-	// レジスタに置けた引数に応じて入る場所を選ぶ)
-	RegArg    bool
-	RegArgY   bool
-	RegResult bool
-	// ResultInA は RegResult の戻り値をフレームに書かず A だけで返す: どの呼び出しもフレームから読まない (far call・stack 関数
-	// からの呼び出し・アドレスを取られた (Entry)・asm から参照される・別名・options(symbol:) の関数でない。frames.Analyze)
-	ResultInA bool
 	// FrameABI は options(abi: "frame") の関数 (asm の関数と、asm から呼ぶ fc の関数の固定の規約。Agent/wiki/plans/v4-plan.md §2):
-	// static のフレームに戻り値 (0) → 引数 (宣言の順) → 作業領域 (Scratch バイト)。レジスタ渡し (RegArg など) はしない。
-	// asm から参照されても Entry にしない。extern ならフレームの大きさは frames.Analyze が決める
+	// static のフレームに戻り値 (0) → 引数 (宣言の順) → 作業領域 (Scratch バイト)。レジスタ渡しはしない。
+	// asm から参照されてもスタックの入口を作らない。extern ならフレームの大きさは frames.Analyze が決める
 	FrameABI bool
 	Scratch  int
 

@@ -67,7 +67,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	for _, lmd := range externs {
 		switch {
 		case lmd.FrameABI:
-			lmd.ABI = ir.ABIStatic
+			lmd.Conv.SetStatic(lmd, false, false)
 			lmd.Scratch, _ = lmd.Options.Int("scratch")
 			lmd.FrameSize = lmd.Type.Base.Size + lmd.Scratch
 			for _, p := range lmd.Type.Params {
@@ -77,15 +77,15 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			if err := checkCc65(lmd); err != nil {
 				return nil, err
 			}
-			lmd.ABI = ir.ABICc65
+			lmd.Conv.SetOther(lmd, ir.ABICc65)
 			lmd.ZpUsed = max(lmd.Type.Base.Size, 1)
 			for _, p := range lmd.Type.Params {
 				lmd.ZpUsed = max(lmd.ZpUsed, p.Size)
 			}
 		case lmd.Type.Fastcall():
-			lmd.ABI = ir.ABIFastcall
+			lmd.Conv.SetOther(lmd, ir.ABIFastcall)
 		default:
-			lmd.ABI = ir.ABIStack
+			lmd.Conv.SetOther(lmd, ir.ABIStack)
 		}
 	}
 	for _, lmd := range g.Lambdas {
@@ -96,7 +96,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	var addrErr error
 	n := len(g.Lambdas)
 
-	// アドレスを取られた関数 (Entry) と辺
+	// アドレスを取られた関数 (スタックの入口が要る) と辺
 	entry := make([]bool, n)
 	hidden := make([]bool, n)
 	indirect := make([][]*ir.Op, n) // 関数ごとの間接呼び出し (飛び先は後で絞る)
@@ -113,7 +113,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 		return ""
 	}
-	// markSym は fc のコードで関数のアドレスを取ったことを記録する (Entry)。abi: "frame" の関数はエラー (関数ポインタで
+	// markSym は fc のコードで関数のアドレスを取ったことを記録する (スタックの入口が要る)。abi: "frame" の関数はエラー (関数ポインタで
 	// 呼ぶにはスタックから写すプロローグが要る)
 	markSym := func(sym string) {
 		if l, ok := g.ByID[sym]; ok {
@@ -165,7 +165,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		if v != nil && v.Kind == ir.KindLiteral && !v.IsInt && v.Symbol != "" {
 			markSym(v.Symbol)
 			// fc のコードでアドレスを取った cc65 規約の関数 (asm からの参照は定義そのものなので構わない)
-			if l, ok := g.ByID[v.Symbol]; ok && l.Extern && l.ABI == ir.ABICc65 && addrErr == nil {
+			if l, ok := g.ByID[v.Symbol]; ok && l.Extern && l.Conv.ABI == ir.ABICc65 && addrErr == nil {
 				addrErr = &diag.Error{Msg: fmt.Sprintf("%s: cannot take the address of a cc65 abi function (its arguments are passed in A/X, not on the stack)", l.Name), Pos: l.Pos}
 			}
 		}
@@ -343,40 +343,29 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			if inCycle[i] {
 				return nil, &diag.Error{Msg: fmt.Sprintf("%s: an abi \"frame\" function must not be recursive (its frame is static)", lmd.Name), Pos: lmd.Pos}
 			}
-			lmd.ABI = ir.ABIStatic // Entry・レジスタ渡しはしない (asm と同じ固定の規約)
+			lmd.Conv.SetStatic(lmd, false, false) // スタックの入口・レジスタ渡しはしない (asm と同じ固定の規約)
 		case lmd.Options.Has("abi") && optText(lmd.Options, "abi") == "stack":
-			lmd.ABI = ir.ABIStack
+			lmd.Conv.SetOther(lmd, ir.ABIStack)
 		case inCycle[i]:
-			lmd.ABI = ir.ABIStack
+			lmd.Conv.SetOther(lmd, ir.ABIStack)
 		default:
-			lmd.ABI = ir.ABIStatic
-			lmd.Entry = entry[i]
-			if !lmd.Interrupt && !lmd.Extern {
-				if np := len(lmd.Type.Params); np > 0 && lmd.Type.Params[np-1].Size == 1 {
-					lmd.RegArg = true
-				}
-				if np := len(lmd.Type.Params); np > 1 && lmd.Type.Params[np-2].Size == 1 {
-					lmd.RegArgY = true
-				}
-				if lmd.Type.Base.Size == 1 {
-					lmd.RegResult = true
-				}
-			}
+			lmd.Conv.SetStatic(lmd, entry[i], !lmd.Interrupt && !lmd.Extern)
 		}
 	}
 
-	// 戻り値を A だけで返す関数 (RegResult のうち、フレームの戻り値を読む呼び出しが無いもの)
+	// 戻り値を A だけで返す関数 (A にも置いて返す関数のうち、フレームの戻り値を読む呼び出しが無いもの)
 	for i, lmd := range g.Lambdas {
-		lmd.ResultInA = lmd.RegResult && !lmd.Entry && !hidden[i] && !aliased[lmd.Id] && !lmd.Options.Has("symbol")
+		c := &lmd.Conv
+		c.Result.OnlyA = c.Result.InA && !c.HasStackEntry() && !hidden[i] && !aliased[lmd.Id] && !lmd.Options.Has("symbol")
 	}
 	for _, caller := range g.Lambdas {
 		for _, op := range caller.Ops {
-			if op == nil || !op.Code.IsCall() || !(op.Far || caller.ABI == ir.ABIStack) {
+			if op == nil || !op.Code.IsCall() || !(op.Far || caller.Conv.ABI == ir.ABIStack) {
 				continue
 			}
 			if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
 				if l, ok := g.ByID[v.Symbol]; ok {
-					l.ResultInA = false // far call と stack 関数は戻り値を呼び先のフレームから読む (codegen.genCall)
+					l.Conv.Result.OnlyA = false // far call と stack 関数は戻り値を呼び先のフレームから読む (codegen.genCall)
 				}
 			}
 		}
@@ -387,11 +376,11 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		if !lmd.Interrupt {
 			continue
 		}
-		if lmd.ABI != ir.ABIStatic {
+		if lmd.Conv.ABI != ir.ABIStatic {
 			return nil, &diag.Error{Msg: fmt.Sprintf("%s: interrupt function must not be recursive", lmd.Id), Pos: lmd.Pos}
 		}
 		for _, j := range g.reachable(i) {
-			if g.Lambdas[j].ABI != ir.ABIStatic {
+			if g.Lambdas[j].Conv.ABI != ir.ABIStatic {
 				return nil, &diag.Error{Msg: fmt.Sprintf("%s: interrupt function reaches %s which uses the stack (recursive or options(abi: \"stack\"))",
 					lmd.Id, g.Lambdas[j].Id), Pos: lmd.Pos}
 			}
@@ -693,7 +682,7 @@ func Place(g *Graph, zpBudget, ramBudget int) (*Plan, error) {
 
 	var order []int
 	for i, lmd := range g.Lambdas {
-		if lmd.ABI == ir.ABIStatic && !lmd.Unused {
+		if lmd.Conv.ABI == ir.ABIStatic && !lmd.Unused {
 			order = append(order, i)
 		}
 	}
@@ -961,11 +950,11 @@ func (g *Graph) report(plan *Plan, nZp, nRam int) []string {
 			continue
 		}
 		switch {
-		case lmd.ABI == ir.ABIStatic && lmd.FrameSize == 0:
+		case lmd.Conv.ABI == ir.ABIStatic && lmd.FrameSize == 0:
 			empty++
-		case lmd.ABI == ir.ABIStatic && lmd.Entry:
+		case lmd.Conv.ABI == ir.ABIStatic && lmd.Conv.HasStackEntry():
 			entry++
-		case lmd.ABI == ir.ABIStatic:
+		case lmd.Conv.ABI == ir.ABIStatic:
 			static++
 		default:
 			stack++

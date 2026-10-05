@@ -138,7 +138,7 @@ func (l *funcGen) genSwitch() {
 	// 表の添字は X。stack 関数 (再帰) では X がフレームポインタなので Y を使う (regalloc は switch を Y の clobber
 	// と見る)。devirtualization で再帰する関数に switch が入って発覚
 	ix := "x"
-	if lmd.ABI == ir.ABIStack {
+	if lmd.Conv.ABI == ir.ABIStack {
 		ix = "y"
 	}
 	r.push(fmt.Sprintf("cmp #%d", len(op.Labels)), fmt.Sprintf("bcs %s", fall), "ta"+ix,
@@ -157,7 +157,7 @@ func (l *funcGen) genSwitch() {
 // genReturn は Return のコード生成。
 func (l *funcGen) genReturn() {
 	r, op, lmd := l.r, l.op, l.lmd
-	if lmd.ResultInA && op.In(0) != nil && ir.UnderlyingValue(op.In(0)) != lmd.Result {
+	if lmd.Conv.Result.OnlyA && op.In(0) != nil && ir.UnderlyingValue(op.In(0)) != lmd.Result {
 		// 戻り値は A だけで返す (どの呼び出し側もフレームを読まない: frames.Analyze)
 		r.push(l.loadA(op.In(0), 0), "rts")
 		return
@@ -165,17 +165,17 @@ func (l *funcGen) genReturn() {
 	if op.In(0) != nil {
 		r.push(l.load(lmd.Result, op.In(0)))
 	}
-	if lmd.Entry && lmd.Type.Base.Size > 0 {
+	if lmd.Conv.HasStackEntry() && lmd.Type.Base.Size > 0 {
 		// 呼び出し側はスタック (FC_SP の指す位置) から戻り値を読む。本体が X を使ったかもしれないので戻す
 		r.push("ldx FC_SP")
 		for i := 0; i < lmd.Type.Base.Size; i++ {
 			r.push(fmt.Sprintf("lda %s", staticAddr(lmd, i)), fmt.Sprintf("sta <S+%d,x", i))
 		}
 	}
-	if lmd.ABI == ir.ABIStack && lmd.FrameSize > 0 {
+	if lmd.Conv.ABI == ir.ABIStack && lmd.FrameSize > 0 {
 		r.push("lda FC_SP", "sec", fmt.Sprintf("sbc #%d", lmd.FrameSize), "sta FC_SP") // 空き先頭を戻す
 	}
-	if lmd.RegResult {
+	if lmd.Conv.Result.InA {
 		r.push(fmt.Sprintf("lda %s", staticAddr(lmd, 0))) // 戻り値を A にも (直前が同じ lda / sta ならピープホールが消す)
 	}
 	r.push("rts")
@@ -226,10 +226,10 @@ func (l *funcGen) genPushArg() {
 			panic(fmt.Sprintf("result argument for call kind %d", pc.kind))
 		}
 		// X はフレームの底 (stack の関数) / FC_SP (stack 系の呼び出しの引数) のときは使わない
-		r.push(copyResultArg(f.callee, n, dst, lmd.ABI != ir.ABIStack && pc.kind != ckStack && l.holdX == 0)...)
+		r.push(copyResultArg(f.callee, n, dst, lmd.Conv.ABI != ir.ABIStack && pc.kind != ckStack && l.holdX == 0)...)
 		return
 	}
-	if op.ArgY && pc.kind == ckStatic && !pc.far && pc.callee.RegArgY && pc.argOff == regArgYOffset(pc.callee) {
+	if y := regParam(pc, ir.RegY); op.ArgY && y != nil && pc.argOff == y.Off {
 		// 最後から 2 つ目の引数は Y に置いて呼ぶ (markArgY: 直後が最後の引数の push_arg、その直後が call)
 		r.push(l.loadY(op.In(0))...)
 		pc.inY = true
@@ -240,7 +240,7 @@ func (l *funcGen) genPushArg() {
 		r.push(l.loadA(op.In(0), i))
 		switch pc.kind {
 		case ckStatic:
-			if pc.callee.RegArg && !pc.far && pc.argOff == regArgOffset(pc.callee) && nextOp(ops, opNo) == pc.callOp {
+			if a := regParam(pc, ir.RegA); a != nil && pc.argOff == a.Off && nextOp(ops, opNo) == pc.callOp {
 				pc.inA = true // 最後の引数は A のまま呼ぶ (直後が call のときだけ)
 				pc.argOff++
 				// A の常駐変数は call まで A に戻さない (復帰の lda で引数が消える)。この引数が常駐変数そのもの
@@ -283,19 +283,9 @@ func (l *funcGen) genCall() {
 	switch pc.kind {
 	case ckStatic:
 		// 引数は呼び先のフレームに書いてある。static / entry の関数からは jsr、stack の関数からは X を進めて呼ぶ
-		target := sym
-		if pc.callee.Entry {
-			target = directSym(sym) // プロローグ (スタックからのコピー) を飛ばす
-		}
-		if pc.inY && pc.callee.RegArg && !pc.inA {
-			panic("Y argument in register but A argument in frame") // markArgY が保証する (直後が最後の引数、その直後が call)
-		}
-		switch {
-		case (pc.callee.RegArg && !pc.inA) || (pc.callee.RegArgY && !pc.inY && !pc.callee.RegArg):
-			target = frameSym(sym) // レジスタ渡しの引数もフレームに書いた: 入口の sty / sta を飛ばす
-		case pc.callee.RegArgY && !pc.inY:
-			target = aSym(sym) // Y の引数だけフレームに書いた (A の引数は A): sty だけ飛ばす
-		}
+		// 入口はレジスタに置けた引数で選ぶ (スタックからの写し・レジスタの引数をフレームに写す sty / sta を飛ばす)。Y の引数を
+		// レジスタに置いて A の引数をフレームに書く形は無い (markArgY: 直後が最後の引数、その直後が call) ので DirectEntry が落ちる
+		target := sym + pc.callee.Conv.DirectEntry(pc.inA, pc.inY)
 		if op.Far {
 			r.push(l.farCallSetup(target))
 			r.push(l.callStatic(lmd, "farcall"))
@@ -305,7 +295,7 @@ func (l *funcGen) genCall() {
 		if op.Dst != nil && !op.Far && resultArgAt(ops, opNo) >= 0 {
 			l.resultFrom = &pendingResult{v: op.Dst, callee: pc.callee} // 次の push_arg が呼び先のフレームから写す
 		} else if op.Dst != nil {
-			if pc.callee.RegResult && !op.Far && lmd.ABI != ir.ABIStack {
+			if pc.callee.Conv.Result.InA && !op.Far && lmd.Conv.ABI != ir.ABIStack {
 				r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる (stack 関数は X を戻すのに A を使うので不可)
 			} else {
 				for i := 0; i < ir.ValType(op.Dst).Size; i++ {

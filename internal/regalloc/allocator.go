@@ -145,7 +145,7 @@ var DefaultLimits = Limits{Reg: 16, FastcallReg: 16}
 //   - レジスタ領域に入りきらない変数 → 普通の関数はフレームへあふれさせる (1 サイクル遅いだけ)。
 //     fastcall はスタックを使えないので frame size over
 func AllocateRegister(lmd *ir.Lambda, lim Limits) {
-	if lmd.ABI == ir.ABIStatic {
+	if lmd.Conv.ABI == ir.ABIStatic {
 		allocateStatic(lmd)
 		return
 	}
@@ -463,7 +463,7 @@ func allocateA(lmd *ir.Lambda, registerVars []*allocEntry) []*allocEntry {
 			if !codeIn(op.Code, ir.OpLoad, ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor,
 				ir.OpMul, ir.OpDiv, ir.OpMod, ir.OpUminus, ir.OpBitNot, ir.OpEq, ir.OpLt, ir.OpLoadMem,
 				ir.OpShiftLeft, ir.OpShiftRight, ir.OpRolC, ir.OpRorC,
-				ir.OpCall, ir.OpFastcall) { // 呼び出しの 1 バイトの戻り値も最後に A にある (RegResult なら lda 無しで)
+				ir.OpCall, ir.OpFastcall) { // 呼び出しの 1 バイトの戻り値も最後に A にある (A にも置いて返す関数 (CallConv.Result.InA) なら lda 無しで)
 				continue
 			}
 			if codeIn(op.Code, ir.OpShiftLeft, ir.OpShiftRight) {

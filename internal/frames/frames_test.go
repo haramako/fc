@@ -39,8 +39,8 @@ func TestAnalyzeRecursion(t *testing.T) {
 	}
 	want := map[string]ir.ABI{"_a": ir.ABIStack, "_b": ir.ABIStack, "_c": ir.ABIStack, "_d": ir.ABIStatic}
 	for id, abi := range want {
-		if g.ByID[id].ABI != abi {
-			t.Errorf("%s: abi = %s, want %s", id, g.ByID[id].ABI, abi)
+		if g.ByID[id].Conv.ABI != abi {
+			t.Errorf("%s: abi = %s, want %s", id, g.ByID[id].Conv.ABI, abi)
 		}
 	}
 	if len(g.cycles) != 2 {
@@ -71,12 +71,12 @@ func TestAnalyzeIndirect(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"_leaf", "_wait", "_ev", "_main"} {
-		if g.ByID[id].ABI != ir.ABIStatic {
-			t.Errorf("%s: abi = %s, want static", id, g.ByID[id].ABI)
+		if g.ByID[id].Conv.ABI != ir.ABIStatic {
+			t.Errorf("%s: abi = %s, want static", id, g.ByID[id].Conv.ABI)
 		}
 	}
-	if !g.ByID["_ev"].Entry || !g.ByID["_leaf"].Entry || g.ByID["_wait"].Entry {
-		t.Errorf("entry: ev=%v leaf=%v wait=%v", g.ByID["_ev"].Entry, g.ByID["_leaf"].Entry, g.ByID["_wait"].Entry)
+	if !g.ByID["_ev"].Conv.HasStackEntry() || !g.ByID["_leaf"].Conv.HasStackEntry() || g.ByID["_wait"].Conv.HasStackEntry() {
+		t.Errorf("entry: ev=%v leaf=%v wait=%v", g.ByID["_ev"].Conv.HasStackEntry(), g.ByID["_leaf"].Conv.HasStackEntry(), g.ByID["_wait"].Conv.HasStackEntry())
 	}
 	// wait → leaf の辺だけ
 	wi := g.index[g.ByID["_wait"]]
@@ -91,8 +91,8 @@ func TestAnalyzeIndirect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g.ByID["_wait"].ABI != ir.ABIStack || g.ByID["_ev"].ABI != ir.ABIStack || g.ByID["_main"].ABI != ir.ABIStatic {
-		t.Errorf("after &cb: wait=%s ev=%s main=%s", g.ByID["_wait"].ABI, g.ByID["_ev"].ABI, g.ByID["_main"].ABI)
+	if g.ByID["_wait"].Conv.ABI != ir.ABIStack || g.ByID["_ev"].Conv.ABI != ir.ABIStack || g.ByID["_main"].Conv.ABI != ir.ABIStatic {
+		t.Errorf("after &cb: wait=%s ev=%s main=%s", g.ByID["_wait"].Conv.ABI, g.ByID["_ev"].Conv.ABI, g.ByID["_main"].Conv.ABI)
 	}
 }
 
@@ -141,8 +141,8 @@ func TestPlaceHiddenCaller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if main.Entry || !cb.Entry || !leaf.Entry || ext.Entry {
-		t.Errorf("entry: main=%v cb=%v leaf=%v ext=%v", main.Entry, cb.Entry, leaf.Entry, ext.Entry)
+	if main.Conv.HasStackEntry() || !cb.Conv.HasStackEntry() || !leaf.Conv.HasStackEntry() || ext.Conv.HasStackEntry() {
+		t.Errorf("entry: main=%v cb=%v leaf=%v ext=%v", main.Conv.HasStackEntry(), cb.Conv.HasStackEntry(), leaf.Conv.HasStackEntry(), ext.Conv.HasStackEntry())
 	}
 	if ext.Unused || !own.Unused || ext.FrameSize != 2 {
 		t.Errorf("ext unused=%v size=%d, own unused=%v", ext.Unused, ext.FrameSize, own.Unused)

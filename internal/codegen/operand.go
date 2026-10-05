@@ -330,24 +330,6 @@ func (l *Llc) toAsm(v ir.Operand) string {
 // mangle は名前をアセンブラ用の表現に変更する。
 func mangle(str string) string { return ir.Mangle(str) }
 
-// argBytes は引数の合計バイト数。
-func argBytes(lmd *ir.Lambda) int {
-	n := 0
-	for _, p := range lmd.Type.Params {
-		n += p.Size
-	}
-	return n
-}
-
-// regArgOffset は A で受け取る最後の引数 (1 バイト) のフレーム内オフセット (RegArg のとき)。
-func regArgOffset(lmd *ir.Lambda) int { return lmd.Type.Base.Size + argBytes(lmd) - 1 }
-
-// regArgYOffset は Y で受け取る最後から 2 つ目の引数 (1 バイト) のフレーム内オフセット (RegArgY のとき)。
-func regArgYOffset(lmd *ir.Lambda) int {
-	np := len(lmd.Type.Params)
-	return lmd.Type.Base.Size + argBytes(lmd) - lmd.Type.Params[np-1].Size - 1
-}
-
 // byte は値からn番目のbyteを取得する。
 func (l *Llc) byte(v ir.Operand, n int) string {
 	if l.fused != nil && n == 0 {

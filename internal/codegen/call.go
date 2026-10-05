@@ -41,16 +41,13 @@ type pendingCall struct {
 	inY    bool   // ckStatic: 最後から 2 つ目の引数を Y に置いた (push_arg の ArgY)
 }
 
-// directSym は Entry 関数をプロローグ (スタックからの引数コピー) を飛ばして直接呼ぶときの入口シンボル
-// (RegArg / RegArgY なら最後の引数を A / その前を Y に置いて入る)。
-func directSym(sym string) string { return sym + "__direct" }
-
-// frameSym は RegArg / RegArgY の関数を、レジスタ渡しの引数もフレームに書いてから呼ぶときの入口 (入口の `sty` / `sta` の後ろ)。
-func frameSym(sym string) string { return sym + "__frame" }
-
-// aSym は RegArg と RegArgY の両方ある関数を、Y の引数はフレームに書き、A の引数だけ A に置いて呼ぶときの入口
-// (`sty` の後ろ、`sta` の前)。
-func aSym(sym string) string { return sym + "__a" }
+// regParam は static の呼び先がレジスタ r で受け取る引数 (far call はトランポリンが A / Y を壊すので無し)。
+func regParam(pc *pendingCall, r ir.Reg) *ir.ArgLoc {
+	if pc.kind != ckStatic || pc.far {
+		return nil
+	}
+	return pc.callee.Conv.RegParam(r)
+}
 
 // pipeline.Backend の実装 (pipeline.Prepare が最適化と割付の間で呼ぶ)。
 
@@ -171,7 +168,7 @@ func copyResultArg(src *ir.Lambda, n int, dst func(i int) string, useX bool) []a
 
 // markArgY は lmd の呼び出しのうち、最後から 2 つ目の引数を Y で渡せるもの (push_arg の ArgY) に印を付ける
 // (最適化の後、割付の前。regalloc は印の付いた push_arg を Y を壊す命令と見て、Y の常駐をその前で書き戻す)。
-// 条件: 呼び先が分かっていて static で RegArgY、far でなく、最後の引数の push_arg の直後が call で、その 2 つの push_arg の
+// 条件: 呼び先が分かっていて static で Y で受け取る引数があり (CallConv.RegParam)、far でなく、最後の引数の push_arg の直後が call で、その 2 つの push_arg の
 // 間の命令 (最後の引数の式) が Y を使わない (最後の引数の読み出しは変数か cast か定数)。
 // markHoldX は stack 系の呼び出し (push_result で X = FC_SP にし、call までそのまま) の間の命令に HoldX を付ける。codegen は
 // その間 X の常駐を退避してメモリ側で扱う (genPushResult の holdX) ので、regalloc の見積もりも同じに見る
@@ -232,7 +229,7 @@ func markArgY(lmd *ir.Lambda, lambdas map[string]*ir.Lambda) {
 				continue
 			}
 			callee, ok := lambdas[v.Symbol]
-			if !ok || callee.ABI != ir.ABIStatic || !callee.RegArgY {
+			if !ok || callee.Conv.ABI != ir.ABIStatic || callee.Conv.RegParam(ir.RegY) == nil {
 				continue
 			}
 			np := len(callee.Type.Params)
@@ -341,13 +338,13 @@ func (l *Llc) resolveCall(ops []*ir.Op, i int) *pendingCall {
 		if callee, ok := l.Lambdas[v.Symbol]; ok {
 			pc.callee = callee
 			switch {
-			case callee.ABI == ir.ABIStatic:
+			case callee.Conv.ABI == ir.ABIStatic:
 				// Entry でも呼び先が分かっていればフレームに直接書き、プロローグの後ろ (__direct) から入る
 				pc.kind = ckStatic
 				pc.argOff = callee.Type.Base.Size
-			case callee.ABI == ir.ABIFastcall:
+			case callee.Conv.ABI == ir.ABIFastcall:
 				pc.kind = ckFastcallReg
-			case callee.ABI == ir.ABICc65:
+			case callee.Conv.ABI == ir.ABICc65:
 				pc.kind = ckCc65
 			default:
 				pc.kind = ckStack
@@ -405,7 +402,7 @@ func (l *Llc) CheckStackPush(lmd *ir.Lambda) {
 
 // stackBase は現在の関数がスタックに引数を積むときの基点 (stack 関数は自分のフレームの後ろ、static / entry は X の指す位置)。
 func (l *Llc) stackBase(lmd *ir.Lambda) int {
-	if lmd.ABI == ir.ABIStack {
+	if lmd.Conv.ABI == ir.ABIStack {
 		return lmd.FrameSize
 	}
 	return 0
@@ -430,8 +427,8 @@ func (l *Llc) callStatic(lmd *ir.Lambda, addr string) []any {
 
 // restoreX は stack 関数が呼び出しの後で X (フレームの底) を FC_SP から戻す。static 関数は何もしない。
 func (l *Llc) restoreX(lmd *ir.Lambda) []any {
-	if lmd.ABI != ir.ABIStack || lmd.FrameSize == 0 {
-		if lmd.ABI == ir.ABIStack {
+	if lmd.Conv.ABI != ir.ABIStack || lmd.FrameSize == 0 {
+		if lmd.Conv.ABI == ir.ABIStack {
 			return []any{"ldx FC_SP"}
 		}
 		return nil
@@ -441,7 +438,7 @@ func (l *Llc) restoreX(lmd *ir.Lambda) []any {
 
 // loadSP は static 関数が stack 系の呼び先の引数 / 戻り値を S+k,x で触る前に X をスタックの空き先頭にする。
 func (l *Llc) loadSP(lmd *ir.Lambda) any {
-	if lmd.ABI == ir.ABIStack {
+	if lmd.Conv.ABI == ir.ABIStack {
 		return nil // 自分の X (フレームの底) からの相対で書く
 	}
 	return "ldx FC_SP"

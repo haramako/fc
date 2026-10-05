@@ -268,7 +268,7 @@ func AllocateResident(lmd *ir.Lambda) {
 					inner[b] = true
 				}
 			}
-			vA, vY, vX, gain := bestPair(lmd, cfg, r, inner, lv, lmd.ABI != ir.ABIStack)
+			vA, vY, vX, gain := bestPair(lmd, cfg, r, inner, lv, lmd.Conv.ABI != ir.ABIStack)
 			if vA == nil && vY == nil && vX == nil {
 				continue
 			}
@@ -293,7 +293,7 @@ func AllocateResident(lmd *ir.Lambda) {
 					inner[b] = true
 				}
 			}
-			vA, vY, vX, gain := bestPair(lmd, cfg, r, inner, lv, lmd.ABI != ir.ABIStack)
+			vA, vY, vX, gain := bestPair(lmd, cfg, r, inner, lv, lmd.Conv.ABI != ir.ABIStack)
 			if vA != nil || vY != nil || vX != nil {
 				if lmd.Cfg().Trace("resident") != "" {
 					fmt.Fprintf(os.Stderr, "resident: %s func: A=%s Y=%s X=%s (gain %d)\n", lmd.Id, name(vA), name(vY), name(vX), gain)
