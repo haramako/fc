@@ -256,7 +256,7 @@ func (h *Hlc) compareWidth(a, b *cexpr) int {
 // rvalWide は代入先の型 typ の幅で式 c を計算する rval (A1)。
 func (h *Hlc) rvalWide(c *cexpr, typ *types.Type) ir.Operand {
 	if h.v4() && typ != nil && typ.Kind == types.Int && typ.Enum == nil && typ.Size <= 2 {
-		h.wide = typ.Size
+		return h.rvalIn(c, typ.Size)
 	}
 	return h.rval(c)
 }

@@ -141,9 +141,7 @@ func (h *Hlc) condWidth(info exprInfo, hint int) (*types.Type, int) {
 func (h *Hlc) condEmit(e *cexpr, info exprInfo, hint int, sink func(v ir.Operand, branch *cexpr), terminal bool) {
 	t, w := h.condWidth(info, hint)
 	branch := func(c *cexpr) {
-		h.wide = w
-		v := h.rval(c)
-		h.wide = 0
+		v := h.rvalIn(c, w)
 		if lv, ok := v.(*ir.Value); ok && lv.Kind == ir.KindLiteral && lv.IsInt && lv.Untyped {
 			v = ir.NewIntLiteral("", t, wrapInt(lv.Int, t)) // condJoin が収まることを確かめている
 		} else if vt := ir.ValType(v); vt != t && vt.Kind == types.Int && t.Kind == types.Int && vt.Size == t.Size {

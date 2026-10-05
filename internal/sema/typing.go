@@ -139,7 +139,15 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		}
 		return exprInfo{t: f.t.Base}, true // void の関数は Void (値が無い)
 	case opLoad:
-		// 代入の式の値は左辺 (lval が代入した左辺を返す)
+		// 代入の式の値は左辺 (lval が代入した左辺を返す)。soa の 2 バイト以上のフィールドは左辺の場所が無く、変換した右辺を
+		// 返す (その型は変換の仕方による) ので扱わない
+		if l := h.constEval(e.args[0]); l.kind == cOp && l.op == opField {
+			if a, ok := h.exprType(l.args[0]); ok && !a.untyped && a.t.Kind == types.SoaRef {
+				if f, ok := a.t.Base.Field(l.name); !ok || f.Type.Kind != types.Struct && f.Type.Size > 1 {
+					return exprInfo{}, false
+				}
+			}
+		}
 		return h.exprType(e.args[0])
 	case opToSlice:
 		return h.toSliceType(e)

@@ -63,10 +63,7 @@ type stmtState struct {
 	// 2 回目以降は 1 回目の評価結果を返す (旧実装の破壊的評価と同じ挙動)
 	cmemo map[*cexpr]*cexpr
 	// constSlice のメモ (同じ配列リテラルから無名の配列定数を 2 度作らない)
-	sliceMemo map[sliceKey]*cexpr
-	// wide は A1 (fc 4) で、次に評価する式を計算する幅 (バイト。0 なら決まっていない)。代入先・比較の相手・親の算術が決めて
-	// lval に渡す (lval は受け取ったら 0 に戻し、算術の子にだけ渡し直す。widen.go の「上から決める」)
-	wide        int
+	sliceMemo   map[sliceKey]*cexpr
 	macroCallee *cexpr // 実行中のマクロの呼び出しの関数の式 (fc 3 → 4 の書き換えで名前を置き換える: printf → @printf)
 	// 型を決める段 (typing.go) のメモ: 式の節点 → 型。expansions は IR を出さないマクロの呼び出し (評価済みの節点) → 展開
 	// (型を決める段と lval が同じ展開を使う)

@@ -104,7 +104,12 @@ func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
 
 // rval は右辺値として評価し、値を返す。
 func (h *Hlc) rval(c *cexpr) ir.Operand {
-	v, left := h.lval(c)
+	return h.rvalIn(c, 0)
+}
+
+// rvalIn は幅 wide (バイト。0 なら決まっていない) で計算する rval (A1: lvalIn)。
+func (h *Hlc) rvalIn(c *cexpr, wide int) ir.Operand {
+	v, left := h.lvalIn(c, wide)
 	return h.rvalOf(v, left)
 }
 
@@ -170,10 +175,13 @@ func (h *Hlc) arrayValue(c *cexpr) ir.Operand {
 
 // lval は左辺値として評価し、(値, 左辺値かどうか) を返す。
 func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
+	return h.lvalIn(c, 0)
+}
+
+// lvalIn は lval と同じだが、hint は A1 (fc 4) でこの式を計算する幅 (バイト。0 なら決まっていない)。代入先・比較の相手・親の
+// 算術が決めて渡す。算術の節点だけが使い、子の算術に渡し直す (ほかの節点は捨てる。widen.go の「上から決める」)。
+func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 	defer h.enterExpr(c.pos)()
-	hint := h.wide // A1: この式を計算する幅 (算術の節点だけが使う。子には既定で渡さない)
-	h.wide = 0
-	defer func() { h.wide = 0 }() // 受け取った幅は使い切り (戻すと次の式に漏れて、型を書かない変数まで広い幅で計算していた)
 	leftValue := false
 	e := h.constEval(c)
 	var r ir.Operand
@@ -272,9 +280,6 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 					right := h.rvalAssign(h.withExpected(e.args[1], fr.split.typ), fr.split.typ, "assignment to field "+lhs.name, nil)
 					h.soaStoreSplit(fr.split, right)
 					r = right
-					if k, lit := ir.ValIntLiteral(right); lit && ir.ValType(right) != fr.split.typ {
-						r = ir.NewIntLiteral("", fr.split.typ, wrapInt(k, fr.split.typ)) // 代入の式の値は左辺の型 (型のない定数のまま残っていた)
-					}
 					break
 				}
 				r = h.assign(fr.v, fr.lv, e.args[1])
@@ -290,10 +295,8 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 			var nt0 *types.Type
 			if e.op != opNot {
 				w, nt0 = h.wideWidth(e, hint)
-				h.wide = w
 			}
-			left := h.rval(e.args[0])
-			h.wide = 0
+			left := h.rvalIn(e.args[0], w)
 			if w > 0 && (w > nt0.Size || h.widened(e.args[0], left)) {
 				// A1: 広い幅で計算する (項は広げる前の型の符号のまま広げる: widenOperand)
 				t := h.prog.Types.IntType(w, nt0.Signed)
@@ -335,13 +338,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 		case opAdd, opSub, opMul, opDiv, opMod,
 			opAnd, opOr, opXor, opShiftLeft, opShiftRight:
 			w, nt0 := h.wideWidth(e, hint)
-			h.wide = w
-			left := h.rval(e.args[0])
-			if e.op != opShiftLeft && e.op != opShiftRight {
-				h.wide = w // シフト量は区切り (広げない)
+			left := h.rvalIn(e.args[0], w)
+			rw := w
+			if e.op == opShiftLeft || e.op == opShiftRight {
+				rw = 0 // シフト量は区切り (広げない)
 			}
-			right := h.rval(e.args[1])
-			h.wide = 0
+			right := h.rvalIn(e.args[1], rw)
 			if ir.ValType(left).IsFarFunc() || ir.ValType(right).IsFarFunc() {
 				panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 			}
@@ -434,15 +436,12 @@ func (h *Hlc) lval(c *cexpr) (ir.Operand, bool) {
 				left = h.rval(h.withExpected(a0, ir.ValType(right)))
 			} else {
 				w := h.compareWidth(a0, a1) // A1: 両辺を広いほうの幅で計算する
-				h.wide = w
-				left = h.rval(a0)
+				left = h.rvalIn(a0, w)
 				if a1.kind == cNull {
 					right = h.nullOf(ir.ValType(left))
 				} else {
-					h.wide = w
-					right = h.rval(h.withExpected(a1, ir.ValType(left)))
+					right = h.rvalIn(h.withExpected(a1, ir.ValType(left)), w)
 				}
-				h.wide = 0
 			}
 			checkEnumOp(e.op, ir.ValType(left), ir.ValType(right))
 			if e.op == opLt {

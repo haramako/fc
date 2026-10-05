@@ -519,3 +519,44 @@ function main():void
 		t.Errorf("got %q, %v (want b3)", out, err)
 	}
 }
+
+// TestTypingStageShapes: 型を決める段 (sema/typing.go) が 2026-10-05 に広げた形 (代入の式・soa の 2 バイトのフィールドへの代入・
+// struct と配列のリテラル・slice の範囲と変換・マクロの呼び出し・void の呼び出し)。テストでは FC_VERIFY_IR が有効なので、型を
+// 決める段と lval の値の型の食い違いはコンパイラの内部エラーになる (soa の 2 バイトのフィールドへの代入の式は fuzz の
+// 種 7134 / 7147 で食い違った)。
+func TestTypingStageShapes(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+use math;
+struct E { a:u8; hp:i16; }
+soa Es:[4]E;
+struct P { x:u8; y:u8; }
+var g:u8;
+var buf:[16]u8;
+function nop():void {}
+function sum(s:[]u8):u8 { var t:u8 = 0; for (var x in s) { t += x; } return t; }
+function main():void
+{
+	var x:u8;
+	var y:u8 = (x = 3) + 1;
+	g = 200;
+	Es[1].hp = g;
+	Es[2].hp = -5;
+	var p = P{x: y, y: 2};
+	var arr = [p.x, p.y, g];
+	var a:[5]u8 = [1, 2, 3, 4, 5];
+	var s:[]u8 = a;
+	var s2 = a[1..3];
+	var s3 = @slice(&a[0], 2);
+	var q = @ptr(s);
+	var f = @format(buf, "{}", @min(y, 9));
+	nop();
+	@printf("{} {} {} {} {} {} {} {} {} {}\n", y, Es[1].hp, Es[2].hp, arr[2], sum(s), sum(s2), sum(s3), q[4], @len(f), math.sin(0));
+	console.exit(0);
+}
+`})
+	if want := "4 200 -5 200 15 5 3 5 1 0\n"; err != nil || out != want {
+		t.Errorf("got %q, %v, want %q", out, err, want)
+	}
+}
