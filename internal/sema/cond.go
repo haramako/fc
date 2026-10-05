@@ -2,7 +2,7 @@ package sema
 
 // fc 4 の条件式 `c ? x : y` (Agent/discussions/2026-10-05-cond-expr-do-while.md)。
 //
-// 型: 2 つの枝の型から決める (condJoin)。型付きどうしは互換型 (二項演算と同じ Compatible: 大きいほう、同じ大きさなら符号付き)、
+// 型: 2 つの枝の型から決める (condJoin)。型付きどうしは互換型 (二項演算と同じ CommonType: 大きいほう、同じ大きさなら符号付き)、
 // 片方が型のない定数なら比較と同じ規則で相手に合わせる (収まらなければ、文脈の整数型に両方が入ればその型、入らなければエラー:
 // `c ? x : 200` (x:i8))、両方とも型のない定数なら
 // 文脈の整数型 (代入先・引数・比較の相手。withExpected が渡す) に収まるか見て、文脈が無ければ両方が入る一番小さい整数型。
@@ -65,12 +65,12 @@ func (h *Hlc) condJoin(a, b exprInfo, expected *types.Type) exprInfo {
 			}
 			panic(&diag.Error{Msg: fmt.Sprintf("%d does not fit in %s, the type of the other branch of `?:` (convert a branch with `as`)", lit.n, other.t)})
 		}
-		if t := u.Compatible(lit.t, other.t); t != nil {
+		if t := u.CommonType(lit.t, other.t); t != nil {
 			return exprInfo{t: t}
 		}
 		panic(&diag.Error{Msg: fmt.Sprintf("the branches of `?:` have incompatible types %s and %s", a.t, b.t)})
 	}
-	t := u.Compatible(a.t, b.t)
+	t := u.CommonType(a.t, b.t)
 	if t == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("the branches of `?:` have incompatible types %s and %s", a.t, b.t)})
 	}

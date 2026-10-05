@@ -339,12 +339,32 @@ func (u *Universe) FarFunc(params []*Type, result *Type) *Type {
 	return u.intern(&t)
 }
 
-// Compatible は a と b の互換型を返す (TypeUtil.compatible_type? 相当)。互換性がなければ nil。
-// 代入では a が代入先 (*void の規則だけ向きがある)。
+// 型の関係 (2026-10-05 に Compatible 1 つを分けた。以前は代入にも二項演算にも同じ関数を使い、*void の規則だけ引数の順に
+// 意味があった):
+//   - 同じ型か: 型はインターンしてあるので a == b
+//   - AssignableTo(to, from): from の値を to に代入できるか (代入・初期化・引数・戻り値・const の表の要素)
+//   - CommonType(a, b): 二項演算・比較・条件式・@min などの両辺の共通の型 (対称)
+
+// AssignableTo は from の値を to に代入できるか。CommonType の規則のうち、向きのあるもの: *void からほかのポインタ・関数・
+// 配列へは代入できない (bitcast が要る。逆の *T → *void は暗黙)、ポインタは配列に代入できない (逆の配列 → ポインタは暗黙)。
+func (u *Universe) AssignableTo(to, from *Type) bool {
+	if to.Kind != Bad && from.Kind != Bad {
+		if isVoidPtr(from) && !isVoidPtr(to) && voidPtrPeer(to) {
+			return false
+		}
+		if to.Kind == Array && from.Kind == Pointer {
+			return false
+		}
+	}
+	return u.CommonType(to, from) != nil
+}
+
+// CommonType は a と b の共通の型を返す (TypeUtil.compatible_type? 相当)。無ければ nil。
 //   - 整数同士: サイズが大きい方。同サイズなら符号付きの方
+//   - *void とデータポインタ / near 関数ポインタ / 配列: *void
 //   - ポインタと同じ要素型の配列: ポインタ
 //   - 要素型が同じ配列同士: a が長さ省略なら b、長さが違えば要素型へのポインタ
-func (u *Universe) Compatible(a, b *Type) *Type {
+func (u *Universe) CommonType(a, b *Type) *Type {
 	if a == b {
 		return a
 	}
@@ -377,11 +397,14 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 	if a == b {
 		return a
 	}
-	// *void (a 側 = 代入先) にはデータポインタ / near 関数ポインタ / 配列が入る。逆 (*void → *T) は bitcast が要る
-	if a.Kind == Pointer && a.Base.Kind == Void && (b.Kind == Pointer || (b.Kind == Func && !b.IsFarFunc()) || b.Kind == Array) {
+	if isVoidPtr(a) && voidPtrPeer(b) {
 		return a
 	}
-	if a.Kind == Int && b.Kind == Int {
+	if isVoidPtr(b) && voidPtrPeer(a) {
+		return b
+	}
+	switch {
+	case a.Kind == Int && b.Kind == Int:
 		if a.Size == b.Size {
 			if a.Signed {
 				return a
@@ -392,15 +415,23 @@ func (u *Universe) Compatible(a, b *Type) *Type {
 			return a
 		}
 		return b
-	} else if a.Kind == Pointer && b.Kind == Array && a.Base == b.Base {
+	case a.Kind == Pointer && b.Kind == Array && a.Base == b.Base:
 		return a
-	} else if a.Kind == Array && b.Kind == Array && a.Base == b.Base && a.Length < 0 {
-		// 配列の長さを省略した場合
+	case a.Kind == Array && b.Kind == Pointer && a.Base == b.Base:
 		return b
-	} else if a.Kind == Array && b.Kind == Array && a.Base == b.Base && a.Length != b.Length {
+	case a.Kind == Array && b.Kind == Array && a.Base == b.Base && a.Length < 0:
+		return b // 配列の長さを省略した場合
+	case a.Kind == Array && b.Kind == Array && a.Base == b.Base && a.Length != b.Length:
 		return u.PointerTo(a.Base)
 	}
 	return nil
+}
+
+func isVoidPtr(t *Type) bool { return t.Kind == Pointer && t.Base.Kind == Void }
+
+// voidPtrPeer は *void と共通の型 (*void) になる型 (データポインタ / near 関数ポインタ / 配列)。
+func voidPtrPeer(t *Type) bool {
+	return t.Kind == Pointer || (t.Kind == Func && !t.IsFarFunc()) || t.Kind == Array
 }
 
 // Arrays may be interned through pointers before a struct's layout is known.

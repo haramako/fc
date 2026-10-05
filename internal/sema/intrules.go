@@ -128,7 +128,7 @@ func mixedSign(l, r ir.Operand) bool {
 
 // mixedSignError は F6 のエラー (fc 4)。
 func (h *Hlc) mixedSignError(lt, rt *types.Type) *diag.Error {
-	ct := h.prog.Types.Compatible(lt, rt)
+	ct := h.prog.Types.CommonType(lt, rt)
 	why := "an unsigned value of 128 or more reads as negative"
 	if !ct.Signed {
 		why = "a negative value reads as a large unsigned one"
@@ -144,7 +144,7 @@ func (h *Hlc) mixedSignError(lt, rt *types.Type) *diag.Error {
 // rewriteMixedSign は fc 3 のモジュールの F6 の比較 (l, r は両辺の値、cs はその式) に、互換型でない側を互換型にする `as` を
 // 報告する (fc 3 の比較の型のまま)。
 func (h *Hlc) rewriteMixedSign(l, r ir.Operand, cs [2]*cexpr) {
-	ct := h.prog.Types.Compatible(ir.ValType(l), ir.ValType(r))
+	ct := h.prog.Types.CommonType(ir.ValType(l), ir.ValType(r))
 	for i, v := range []ir.Operand{l, r} {
 		if ir.ValType(v) != ct {
 			h.rewriteAs("sign-compare", cs[i], ct.String())

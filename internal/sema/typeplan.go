@@ -117,7 +117,7 @@ func (h *Hlc) planArith(op cop, a, b exprInfo) arithPlan {
 	}
 	p := arithPlan{kind: arithCompat, args: [2]adaptedLit{h.adaptLit(a, b, false), h.adaptLit(b, a, false)}}
 	at, bt := p.args[0].t, p.args[1].t
-	if p.t = h.prog.Types.Compatible(at, bt); p.t != nil {
+	if p.t = h.prog.Types.CommonType(at, bt); p.t != nil {
 		return p
 	}
 	if (op == opAdd || op == opSub) && (at.Kind == types.Pointer || at.Kind == types.SoaRef) && bt.Kind == types.Int {
@@ -168,7 +168,7 @@ func (h *Hlc) compareType(op cop, lt, rt *types.Type) (t *types.Type, swap bool)
 		}
 	}
 	if op == opEq && isVoidPtr(rt) && !isVoidPtr(lt) {
-		lt, rt, swap = rt, lt, true // *void との == は向きを問わない (Compatible は *void を左に置く)
+		lt, rt, swap = rt, lt, true // *void を左に (CommonType は対称だが、項の順を 2026-10-05 より前と同じに保つ)
 	}
 	return h.compatible(lt, rt), swap
 }

@@ -69,7 +69,7 @@ func registerBuiltins(p *Program) {
 			typ := arg.val.Type
 			typs[i] = typ
 			switch {
-			case h.prog.Types.Compatible(uint8p, typ) != nil:
+			case h.prog.Types.AssignableTo(uint8p, typ):
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
 			case typ.IsSlice() && typ.SliceOf.Kind == types.Int && typ.SliceOf.Size == 1 && !typ.IsWideSlice():
 				// slice は長さの分だけ (文字列の slice。黙って捨てていた)

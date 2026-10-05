@@ -323,7 +323,7 @@ func (h *Hlc) preArrayBase(args []*cexpr) *types.Type {
 		}
 		if i == 0 {
 			base = info.t
-		} else if base = h.prog.Types.Compatible(base, info.t); base == nil {
+		} else if base = h.prog.Types.CommonType(base, info.t); base == nil {
 			return nil
 		}
 	}

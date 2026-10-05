@@ -51,22 +51,45 @@ func TestUniverse(t *testing.T) {
 	}
 }
 
-func TestCompatible(t *testing.T) {
+func TestCommonType(t *testing.T) {
 	u := NewUniverse()
 	u8, s8, u16, s16 := u.IntType(1, false), u.IntType(1, true), u.IntType(2, false), u.IntType(2, true)
+	vp := u.PointerTo(u.Void())
 	cases := []struct{ a, b, want *Type }{
 		{u8, u8, u8}, {u8, s8, s8}, {s8, u8, s8}, {u8, u16, u16}, {s16, u8, s16},
 		{u.PointerTo(u8), u.ArrayOf(u8, 4), u.PointerTo(u8)},
+		{u.ArrayOf(u8, 4), u.PointerTo(u8), u.PointerTo(u8)}, // 対称 (2026-10-05 まで順序依存で nil)
 		{u.ArrayOf(u8, -1), u.ArrayOf(u8, 4), u.ArrayOf(u8, 4)},
 		{u.ArrayOf(u8, 3), u.ArrayOf(u8, 4), u.PointerTo(u8)},
 		{u.ArrayOf(u8, 4), u.ArrayOf(u8, 4), u.ArrayOf(u8, 4)},
+		{vp, u.PointerTo(u8), vp}, {u.PointerTo(u8), vp, vp},
 		{u8, u.PointerTo(u8), nil},
-		{u.ArrayOf(u8, 4), u.PointerTo(u8), nil}, // 順序依存 (旧実装どおり)
 		{u.Void(), u8, nil},
 	}
 	for i, c := range cases {
-		if got := u.Compatible(c.a, c.b); got != c.want {
-			t.Errorf("case %d: Compatible(%s, %s) = %v, want %v", i, c.a, c.b, got, c.want)
+		if got := u.CommonType(c.a, c.b); got != c.want {
+			t.Errorf("case %d: CommonType(%s, %s) = %v, want %v", i, c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestAssignableTo(t *testing.T) {
+	u := NewUniverse()
+	u8, u16 := u.IntType(1, false), u.IntType(2, false)
+	vp, p8 := u.PointerTo(u.Void()), u.PointerTo(u8)
+	cases := []struct {
+		to, from *Type
+		want     bool
+	}{
+		{u8, u16, true}, // 縮小は型の照合では通す (E・D は sema の convRule)
+		{p8, u.ArrayOf(u8, 4), true}, {u.ArrayOf(u8, 4), p8, false},
+		{vp, p8, true}, {p8, vp, false}, {u.ArrayOf(u8, 4), vp, false}, {vp, vp, true},
+		{u.ArrayOf(u8, -1), u.ArrayOf(u8, 3), true},
+		{u8, p8, false},
+	}
+	for i, c := range cases {
+		if got := u.AssignableTo(c.to, c.from); got != c.want {
+			t.Errorf("case %d: AssignableTo(%s, %s) = %v, want %v", i, c.to, c.from, got, c.want)
 		}
 	}
 }
@@ -82,7 +105,7 @@ func TestFarFunc(t *testing.T) {
 	if !SameFuncSignature(near, far) || SameFuncSignature(far, u.FarFunc(nil, u.Void())) {
 		t.Fatal("signature mismatch")
 	}
-	if u.Compatible(far, near) != nil || u.Compatible(near, far) != nil || u.Compatible(u.PointerTo(u.Void()), far) != nil {
+	if u.CommonType(far, near) != nil || u.CommonType(near, far) != nil || u.CommonType(u.PointerTo(u.Void()), far) != nil || u.AssignableTo(u.PointerTo(u.Void()), far) {
 		t.Fatal("farfn must retain its representation")
 	}
 }

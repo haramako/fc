@@ -125,7 +125,7 @@ func (h *Hlc) shiftByLeft(e *cexpr, left, right ir.Operand) bool {
 	}
 	if h.rewriting() {
 		l, r := h.adaptLiteralNoErr(left, right, false)
-		if ct := h.prog.Types.Compatible(ir.ValType(l), ir.ValType(r)); ct != nil && ct != lt && len(e.args) == 2 {
+		if ct := h.prog.Types.CommonType(ir.ValType(l), ir.ValType(r)); ct != nil && ct != lt && len(e.args) == 2 {
 			h.rewriteAs("shift-type", e.args[0], ct.String())
 		}
 	}

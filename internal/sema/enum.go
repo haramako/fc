@@ -2,7 +2,7 @@ package sema
 
 // fc 3 の enum (Agent/wiki/plans/language-feature-candidates.md §1)。型は整数型 (Kind Int) に EnumInfo を付けた別の型で、コード生成は
 // 基底型の整数と同じ。同じ enum 同士の比較 (== != < …) はできるが、算術は `as` で整数にしてから。整数・別の enum とは
-// 互換でない (types.Compatible)。`.Name` は型が文脈 (代入先・比較の相手・case・引数・戻り値) から分かるときのメンバー。
+// 互換でない (types.CommonType)。`.Name` は型が文脈 (代入先・比較の相手・case・引数・戻り値) から分かるときのメンバー。
 
 import (
 	"fmt"

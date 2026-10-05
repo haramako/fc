@@ -525,7 +525,7 @@ func (h *Hlc) assignPost(what string, to *types.Type, v ir.Operand, pre bool) {
 		h.compatibleAssign(what, to, ir.ValType(v))
 		return
 	}
-	if h.prog.Config.VerifyIR() && h.prog.Types.Compatible(to, ir.ValType(v)) == nil {
+	if h.prog.Config.VerifyIR() && !h.prog.Types.AssignableTo(to, ir.ValType(v)) {
 		panic(&diag.Error{Msg: fmt.Sprintf("internal: %s: the typing stage accepted the value but %s is not assignable to %s (sema/typing.go)", what, ir.ValType(v), to)})
 	}
 }

@@ -11,9 +11,9 @@ import (
 	"github.com/haramako/fc/internal/types"
 )
 
-// compatible は互換型を返す (なければ CompileError)。
+// compatible は a と b の共通の型を返す (なければ CompileError)。
 func (h *Hlc) compatible(a, b *types.Type) *types.Type {
-	r := h.prog.Types.Compatible(a, b)
+	r := h.prog.Types.CommonType(a, b)
 	if r == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("types %s and %s are not compatible", a, b)})
 	}
@@ -21,12 +21,10 @@ func (h *Hlc) compatible(a, b *types.Type) *types.Type {
 }
 
 // compatibleAssign は代入 (初期化・引数・戻り値も) の型検査。to が代入先。
-func (h *Hlc) compatibleAssign(what string, to, from *types.Type) *types.Type {
-	r := h.prog.Types.Compatible(to, from)
-	if r == nil {
+func (h *Hlc) compatibleAssign(what string, to, from *types.Type) {
+	if !h.prog.Types.AssignableTo(to, from) {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s: cannot assign %s to %s (not compatible types)", what, from, to)})
 	}
-	return r
 }
 
 // pointerElems はポインタ配列の const (`[N]*T`) の要素をアドレス (シンボルのリテラル) にする。
@@ -59,7 +57,9 @@ func (h *Hlc) pointerElems(name string, arr *ir.Value, ptr *types.Type) *ir.Valu
 // guessType は宣言型 typ (省略可) と初期値 val から変数の型を決める。
 func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Type {
 	if typ != nil {
-		return h.compatibleAssign("`"+name+"`", typ, ir.ValType(val))
+		// 宣言の型と初期値の型の共通の型 (`[?]T` は初期値の長さ。整数は広いほう: 縮小・範囲外は checkConstRange が見る)
+		h.compatibleAssign("`"+name+"`", typ, ir.ValType(val))
+		return h.prog.Types.CommonType(typ, ir.ValType(val))
 	}
 	return ir.ValType(val)
 }

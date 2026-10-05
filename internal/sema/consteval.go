@@ -666,13 +666,13 @@ func (h *Hlc) foldType(args []*cexpr, cmp bool) *types.Type {
 	var t *types.Type
 	for _, o := range ops[1:] {
 		a, b := h.adaptLiteralNoErr(ops[0], o, cmp)
-		ct := h.prog.Types.Compatible(ir.ValType(a), ir.ValType(b))
+		ct := h.prog.Types.CommonType(ir.ValType(a), ir.ValType(b))
 		if ct == nil {
 			return nil
 		}
 		if t == nil {
 			t = ct
-		} else if t = h.prog.Types.Compatible(t, ct); t == nil {
+		} else if t = h.prog.Types.CommonType(t, ct); t == nil {
 			return nil
 		}
 	}

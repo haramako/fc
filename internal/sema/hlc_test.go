@@ -236,3 +236,27 @@ func TestVisibilityV2(t *testing.T) {
 		})
 	}
 }
+
+// TestCommonTypeSymmetric: 二項演算・比較・条件式の両辺の共通の型 (types.CommonType) は項の順によらない (2026-10-05 まで
+// `a == p` (配列とポインタ)・`c ? p : vp` (*void が右) が、逆の順なら通るのにエラーだった)。代入は向きを見る (AssignableTo)。
+func TestCommonTypeSymmetric(t *testing.T) {
+	pre := "#fc 4\nvar a:[4]u8;\nvar p:*u8;\nvar vp:*void;\nvar g:u8;\n"
+	for _, src := range []string{
+		"function f():bool { return a == p; }",
+		"function f():bool { return p == a; }",
+		"function f():bool { return p == vp; }",
+		"function f():bool { return vp == p; }",
+		"function f():*void { return g != 0 ? p : vp; }",
+		"function f():*void { return g != 0 ? vp : p; }",
+	} {
+		mustCompileSrc(t, pre+src+"\n")
+	}
+	for _, c := range []struct{ src, want string }{
+		{"function f():void { a = p; }", "cannot assign *u8 to [4]u8"},
+		{"function f():void { p = vp; }", "cannot assign *void to *u8"},
+	} {
+		if _, err := compileSrc(t, pre+c.src+"\n"); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: got %v, want /%s/", c.src, err, c.want)
+		}
+	}
+}
