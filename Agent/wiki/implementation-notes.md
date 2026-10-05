@@ -50,9 +50,10 @@
   `share/runtime.asm` の `__mul_16`（16 ビット乗算）は長らく `rts` だけの未実装で、このとき実装した（`j * 100` が 0 になっていた）
 - **far call**（2026-09-15〜）: `options(farcall: true)` で有効。判定は `sema.Hlc.isFarCall`（呼び先モジュールの
   `ir.Module.Switchable()` = `bank` ≥ 0 かつ `near` 無し）、`ir.Op.Far`、codegen の `farCallSetup`（`.bank()` を使うので
-  ld65.cfg の MEMORY に `bank = N` が要る。fc 生成の cfg は自動）。トランポリンは `fclib/<target>/farcall.asm`
-  （emu / MMC0 は fc が用意）、MMC3 は `fclib/nes/farcall_mmc3.asm` を参考にプロジェクトが用意。テストは
-  `internal/driver/farcall_test.go`。設計は [Agent/wiki/design/farcall.md](design/farcall.md)
+  ld65.cfg の MEMORY に `bank = N` が要る。fc 生成の cfg は自動）。トランポリンは `farcall_ay`（A / Y の引数と A の戻り値を
+  そのまま通す。2026-10-05）: emu / MMC0 は `fclib/<target>/farcall.asm` を fc が用意、fclib の uxrom / mmc1 / mmc3 のモジュールも
+  持つ。自前の mmc3 は `fclib/nes/farcall_mmc3.asm` を参考に。テストは `internal/driver/farcall_test.go`・`farreg_test.go`。
+  設計は [Agent/wiki/design/farcall.md](design/farcall.md)
 - **エラー報告**（2026-09-15〜）: 意味解析のエラーは `panic(&diag.Error{})` のままだが、`compileStatementRecover` が文ごとに
   回復して `Program.Errors` に集める（スコープ・ループのスタックは文の前に戻す）。失敗した宣言の名前は `types.Bad` 型で束縛し、
   それに触れる式は `Suppressed` なエラーで黙って打ち切る（報告しない）。上限 `sema.MaxErrors` で `Fatal` を投げて打ち切り。

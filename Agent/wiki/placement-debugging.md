@@ -118,7 +118,7 @@ castle では `ld65.cfg` に IRQ 用のページ単位 MEMORY 領域と `irqcmd_
 
 ## 3. Mesen のコールスタックが farcall になる件
 
-現行 FC / castle は `jsr farcall` の後、トランポリンから `jmp (FC_FARCALL)` で本当の関数へ飛ぶ。
+現行 FC / castle は `jsr farcall_ay`（2026-10-05 までは `farcall`）の後、トランポリンから `jmp (FC_FARCALL)` で本当の関数へ飛ぶ。
 バンク切替がある経路では、さらに `jsr @indirect` → 間接 JMP → 復帰処理という構成。
 参照: [MMC3 参考実装](../../fclib/nes/farcall_mmc3.asm)、`C:/Work/castle/src/mmc3.asm`。
 

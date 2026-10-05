@@ -213,7 +213,7 @@ stack 系の呼び先を呼ぶ直前に `ldx FC_SP` する。以下は変更前�
 呼び出し側の種類で X の操作が決まる（stack 関数は今までどおり `call g, #FrameSize` で X を進めて戻す。
 static / entry 関数は X を触らず `jsr`）。呼び先の種類で引数の置き場所が決まる（static なら `F_g+k`、
 stack / entry なら `S+k,x`（呼び出し側が static のとき）/ `S+FrameSize+k,x`（stack のとき））。
-far call も同じ（`FC_FARCALL` を用意して `jsr farcall` / `call farcall, #FrameSize`）。
+far call も同じ（`FC_FARCALL` を用意して `jsr farcall_ay`。[farcall.md](farcall.md) §3.3）。
 
 割り込み（`options(interrupt: true)`）: X が何を指しているか分からないので、そこから届く関数は全部 static で
 なければならない（stack / entry が届いたらエラー）。フレームは他の全関数と重ねない（castle は割り込みから
@@ -263,7 +263,7 @@ castle は呼び出しだらけ（`en8_slime_process` → `bg_cell_type` ×3 な
 - **RegArg**: 最後の引数が 1 バイトなら A で受け取る。呼び出し側は最後の `push_arg` が `call` の直前にあるときだけ A に
   置いたまま `jsr`（間に他の命令があるとフレームに書く）。呼び先の入口は `sta F_g+k` で始まり（Entry 関数はスタックからの
   コピーの最後の引数を `lda` のまま `__direct` へ落とす）、その直後に `sym__frame` ラベルを置く（`.proc` の中で `.export`）。
-  フレームに書いた呼び出し（間に命令がある、far call = トランポリンが A を壊す）は `__frame` から入る
+  フレームに書いた呼び出し（間に命令がある）は `__frame` から入る（far call も 2026-10-05 からレジスタで渡す: farcall.md §3.7）
 - **RegResult**: 1 バイトの戻り値はフレームに書いたうえで `return` の直前に `lda F_g+0` して A にも置く（直前が同じ
   `sta` / `lda` ならピープホールが消す）。呼び出し側はフレームを読まず A を `storeA`（call の結果が A 割付なら何も出ない。
   `allocateA` の producer に call / fastcall を足した）。stack 関数（再帰）から呼ぶときは X を戻すのに A を使うので読む
@@ -296,9 +296,8 @@ castle は呼び出しだらけ（`en8_slime_process` → `bg_cell_type` ×3 な
   なので、markArgY はその形も見る（castle の hot な関数はほぼこれ。最初 `push_arg` だけ見ていて castle が +0.8% 退行した）
 
 効果: calls −2.4%、castle フレーム −0.5%（field 8615→8574、area33_jump 14186→14123）、ROM +18 バイト。far call は
-トランポリンが A / Y を壊すので `__frame` から入る（far call にもレジスタで渡すなら、トランポリンの速い経路を X だけで
-書き（`ldx` / `cpx`）、切替の経路で A / Y をスタックに退避する形にでき、FC_FARCALL の設定を引数の読み出しの前に出す必要が
-ある。castle 側の `farcall` も書き換えるので別の機会に）。
+2026-10-05 から同じレジスタ渡しを使う（トランポリン `farcall_ay` が A / Y を通し、速い経路は X だけで比べる。FC_FARCALL は
+引数を A / Y に置いた後で X で置くので、設定を引数の前に出す必要は無かった。[farcall.md](farcall.md) §3.7）。
 
 ### 7.2 戻り値をそのまま次の呼び出しの引数に（2026-10-02）
 

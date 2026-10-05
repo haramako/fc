@@ -102,8 +102,11 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 - [x] 展開・自動インラインでフレームが 256 バイトを超えるときは引く（-O 2 で frame size over になった関数に
       `Lambda.NoGrow` を付け、インライン展開とループ展開をせずに sema からやり直す。`driver.retryFrameOver`。
       fuzz で 5000 本中 -O 2 だけ落ちていた 3 本が通るように。`TestFrameOverNoGrow`） ✅ 2026-09-24
-- [ ] far call にもレジスタで渡す（トランポリンの速い経路を X だけで書き、切替の経路で A / Y をスタックに退避。
+- [x] far call にもレジスタで渡す（トランポリンの速い経路を X だけで書き、切替の経路で A / Y をスタックに退避。
       FC_FARCALL の設定を引数の読み出しの前に。castle の `farcall` も書き換え。Agent/wiki/design/frame-alloc.md §7.1）
+      ✅ 2026-10-05: トランポリンを A / Y の引数と A の戻り値を通す `farcall_ay` に（名前を変えて前の規約のものはリンクで
+      落とす）。FC_FARCALL は X で置くので引数の前に出さずに済んだ。MMC3 は切替の経路をスロットごとに。castle field −0.8%、
+      ROM −20 バイト。割り込みから届く関数の far call を警告に。Agent/wiki/design/farcall.md §3.7
 - [ ] （検討メモ・やる見込みは薄い）far call のバンク復帰を関数の出口まで遅らせる: 関数 F の入口で呼び先のスロットの
       バンクを覚え、F の中の far call は「違えば切り替えて飛ぶだけ」の戻さない版のトランポリンで呼び、F の出口で
       1 回だけ戻す（castle の `en.process` の手動 `set_pbank` と同じ形。farfn の表でも同じバンクが続けば切り替えない）。
@@ -625,6 +628,7 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
 - [ ] castle 側（**SSA が終わってからまとめて反映**。2026-09-19 決定）: examples/castle に入れた変更（`data.asm` の
       `FC_SZP` / `FC_SRAM` / `FC_SP`、`mmc3.fc` の `options(static_zp:, static_ram:)`、`ppu.fc` のスプライト消去）、
       `en.process` のバンク切り替えを「変わるときだけ」に、`bg.cell_type` / `bg.cell` の `options(inline: true)`、
-      NSD の `options(abi: "cc65")` 化、far call のラッパ撤去（Agent/wiki/design/farcall.md §6）、en.fc の soa 化の実験。
+      NSD の `options(abi: "cc65")` 化、far call のラッパ撤去（Agent/wiki/design/farcall.md §6）、en.fc の soa 化の実験、
+      `src/mmc3.asm` のトランポリンを `farcall_ay` に（2026-10-05。今の fcc では古い `farcall` のままだとリンクで落ちる）。
       その後 feature/static-frame → feature/v2 のマージ
 - [ ] ca65 / ld65 は当面維持（内製アセンブラはやらない。2026-09-14 決定）
