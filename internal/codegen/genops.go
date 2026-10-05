@@ -255,8 +255,8 @@ func (l *funcGen) genCall() {
 		}
 		// 次の push_arg が呼び先のフレームから写す戻り値 (layoutCalls の argPlan.from) は受けない
 		if op.Dst != nil && (op.Far || resultArgAt(ops, opNo) < 0) {
-			if pc.callee.Conv.Result.InA && !op.Far && lmd.Conv.ABI != ir.ABIStack {
-				r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる (stack 関数は X を戻すのに A を使うので不可)
+			if pc.callee.Conv.ResultFromA(lmd, op) {
+				r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる
 			} else {
 				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
 					r.push(fmt.Sprintf("lda %s", staticAddr(pc.callee, i)))

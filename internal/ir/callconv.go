@@ -83,6 +83,12 @@ func (c *CallConv) DirectEntry(inA, inY bool) string {
 	panic(fmt.Sprintf("no entry with A=%v Y=%v", inA, inY))
 }
 
+// ResultFromA は caller が call で呼んだこの関数の戻り値を A から受け取れるか (受け取れなければフレームから読む)。far call は
+// トランポリンが A を壊し、stack の関数は呼び出しの後で X (フレームの底) を戻すのに A を使う。
+func (c *CallConv) ResultFromA(caller *Lambda, call *Op) bool {
+	return c.Result.InA && !call.Far && caller.Conv.ABI != ABIStack
+}
+
 // SetStatic は static の関数の規約を作る (frames.Analyze)。entry はアドレスを取られた (スタックの入口が要る)、regs はレジスタ
 // 渡し (最後の 1 バイトの引数を A、その前の 1 バイトの引数を Y、1 バイトの戻り値を A にも) をするか。
 func (c *CallConv) SetStatic(fn *Lambda, entry, regs bool) {

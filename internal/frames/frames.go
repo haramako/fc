@@ -360,11 +360,11 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	}
 	for _, caller := range g.Lambdas {
 		for _, op := range caller.Ops {
-			if op == nil || !op.Code.IsCall() || !(op.Far || caller.Conv.ABI == ir.ABIStack) {
+			if op == nil || !op.Code.IsCall() {
 				continue
 			}
 			if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
-				if l, ok := g.ByID[v.Symbol]; ok {
+				if l, ok := g.ByID[v.Symbol]; ok && !l.Conv.ResultFromA(caller, op) {
 					l.Conv.Result.OnlyA = false // far call と stack 関数は戻り値を呼び先のフレームから読む (codegen.genCall)
 				}
 			}
