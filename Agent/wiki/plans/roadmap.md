@@ -236,6 +236,11 @@ PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記
       ✅ 2026-09-29: `frames.Place` の ZP の選び方（深い順だと main のループの変数が RAM に落ちていた: 参照の少ない関数を
       代わりに RAM へ）、要素 1 バイトで添字が 16 ビットの for-each（`[:u16]` の slice、256 要素を超える配列）は要素を指す
       ポインタを進めるループ（sema の forInElems。write_dir と同じことをコンパイラで）
+      ✅ 2026-10-05（miku4 15657 → 15579、castle 244765 → 244474）: volatile なグローバルの定数の連鎖（`room() - 3` →
+      `125 - frame.queue_len`。opt の ssa の volatileOnce）、数命令先の写しも消す coalesce、写しの両方を同じ番地に置く
+      （regalloc の copyHints）、ループの回転の最初の検査 `0 < 8` を畳む（regalloc の foldConstBranches）、どの呼び出しも
+      フレームから読まない関数の 1 バイトの戻り値は A だけで返す（ResultInA）、添字付きの読み出しの融合（regalloc.md §8）。
+      テストは internal/driver/shrink_test.go。miku4 は処理落ちが 1 フレーム減って 2639 フレーム目から画面が変わる（バグではない）
 - [x] `a & b == c`（C と同じ優先順位で `a & (b == c)`）を警告にする（fclib の fmt で踏んだ） ✅ 2026-09-29（警告は構文の lint
       `bitwiseWithComparison` として既にあった。見落としたのは `fcc test` が警告を出していなかったから: `fcc test` で出し、
       pkg/fc の TestFclibModuleTests と TestFclibNoWarnings が fclib のモジュールの警告を見張る）
