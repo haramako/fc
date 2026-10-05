@@ -525,11 +525,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			} else {
 				// 普通の関数コール
 				lmdType := ir.ValType(lmdV)
-				if lmdType.Kind != types.Func {
-					// 関数でない値の呼び出し (名前が同じ変数に取られて関数の宣言がエラーになったときなど)。以前は
-					// lmdType.Base (nil) を見てコンパイラが panic していた (fuzz の生成器の名前の衝突で発覚)
-					panic(&diag.Error{Msg: fmt.Sprintf("cannot call %s: type %s is not a function", describe(lmdV), lmdType)})
-				}
+				h.planCall(h.planInfo(e.args[0], lmdV), func() string { return describe(lmdV) }) // 型を決める段の計画 (typeplan.go)
 				args = h.fillDefaultArgs(lmdV, args)
 				if lmdType.IsFarFunc() {
 					if !h.prog.FarCallEnabled() {
@@ -619,12 +615,8 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			} else {
 				r = v
 			}
-			if ir.ValType(r).Kind == types.Pointer && ir.ValType(r).Base.Kind == types.Void {
-				panic(&diag.Error{Msg: "cannot dereference *void (bitcast to a typed pointer first)"})
-			}
-			if ir.ValType(r).Kind != types.Pointer && ir.ValType(r).Kind != types.SoaRef {
-				panic(&diag.Error{Msg: fmt.Sprintf("cannot dereference %s (type %s is not a pointer)", describe(r), ir.ValType(r))})
-			}
+			rv := r
+			h.planDeref(h.planInfo(e.args[0], rv), func() string { return describe(rv) }) // 型を決める段の計画 (typeplan.go)
 			leftValue = true
 
 		case opMin, opMax, opClamp:
@@ -679,18 +671,11 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			}
 			left := h.rval(e.args[0])
 			right := h.rval(e.args[1])
+			ri := h.planInfo(e.args[1], right)
+			h.planIndex(h.planInfo(e.args[0], left), &ri, func() string { return describe(left) }) // 型を決める段の計画 (typeplan.go)
 			if st := ir.ValType(left); st.IsSlice() {
 				// s[i] は s.ptr[i] (範囲の検査はしない)
 				left = ir.NewCastedValue(left, h.prog.Types.PointerTo(st.SliceOf), 0)
-			}
-			if ir.ValType(left).Kind != types.Pointer && ir.ValType(left).Kind != types.Array {
-				panic(&diag.Error{Msg: fmt.Sprintf("cannot index %s (type %s is not a pointer or array)", describe(left), ir.ValType(left))})
-			}
-			if ir.ValType(left).Base.Kind == types.Void {
-				panic(&diag.Error{Msg: "cannot index *void (bitcast to a typed pointer first)"})
-			}
-			if ir.ValType(right).Kind != types.Int && ir.ValType(right).Kind != types.Bool {
-				panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", ir.ValType(right))})
 			}
 			if ir.ValType(left).Kind == types.Pointer {
 				right = h.signedOffset(right) // p[-1]、p[i] (i:i8) は負のずれ
@@ -954,15 +939,12 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 //   - `x as T`: 数値変換。拡張は元が符号付きなら符号拡張、縮小は下位バイト、同サイズはビットそのまま
 func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) ir.Operand {
 	from := ir.ValType(v)
-	h.checkCast(kind, from, to)
+	h.planCast(kind, from, to) // 型を決める段の計画 (typeplan.go)
 	if from.Kind == types.Array && to.Kind == types.Pointer {
 		h.strPtr(v)
 	}
 	if from.Kind == types.Int && to.Kind == types.Int && to.Size > from.Size {
 		h.checkMixedUse(v, "widening it to "+to.String())
-	}
-	if kind == syntax.CastAs && from.Kind == types.Pointer && from.ReadOnly && to.Kind == types.Pointer && !to.ReadOnly {
-		panic(&diag.Error{Msg: fmt.Sprintf("cannot drop const with `as` (%s to %s); use @bitcast(%s, x)", from, to, to)})
 	}
 	if kind == syntax.CastAs && to.Kind == types.Pointer && !to.ReadOnly {
 		h.warnDropConst("`as`", to, v)

@@ -294,27 +294,25 @@ func (h *Hlc) fieldRef(arg *cexpr, name string) fieldRef {
 	if lv && t.Kind != types.SoaRef {
 		t = t.Base
 	}
+	if t.Kind == types.SoaRef {
+		// ハンドルは左辺値 (要素) でも右辺値 (ハンドルの値) でも同じインデックス
+		v, flv, split := h.soaField(left, t, name)
+		return fieldRef{v: v, lv: flv, split: split, soaConst: t.Soa.IsConst}
+	}
+	f, viaPtr := h.planField(t, name, func() string { return describe(left) }) // 型を決める段の計画 (typeplan.go)
 	switch {
-	case t.Kind == types.Pointer && t.Base.Kind == types.Struct:
+	case viaPtr:
 		// ポインタ経由 (自動で参照はがし)
 		ptr := left
 		if lv {
 			ptr = h.newTmp(t)
 			h.emit(ir.NewLoadMem(ptr, left, nil, 0, 0))
 		}
-		return fieldRef{v: h.fieldViaPointer(ptr, t.Base, name), lv: true}
-	case t.Kind == types.Struct:
-		if lv {
-			return fieldRef{v: h.fieldViaPointer(left, t, name), lv: true}
-		}
-		f := h.fieldOf(t, name)
-		return fieldRef{v: ir.NewCastedValue(left, f.Type, f.Offset)}
-	case t.Kind == types.SoaRef:
-		// ハンドルは左辺値 (要素) でも右辺値 (ハンドルの値) でも同じインデックス
-		v, flv, split := h.soaField(left, t, name)
-		return fieldRef{v: v, lv: flv, split: split, soaConst: t.Soa.IsConst}
+		return fieldRef{v: h.fieldViaPointer(ptr, f), lv: true}
+	case lv:
+		return fieldRef{v: h.fieldViaPointer(left, f), lv: true}
 	}
-	panic(&diag.Error{Msg: fmt.Sprintf("cannot access field %s: %s is not a struct (type %s)", name, describe(left), t)})
+	return fieldRef{v: ir.NewCastedValue(left, f.Type, f.Offset)}
 }
 
 func (h *Hlc) fieldOf(st *types.Type, name string) types.Field {
@@ -325,9 +323,8 @@ func (h *Hlc) fieldOf(st *types.Type, name string) types.Field {
 	return f
 }
 
-// fieldViaPointer は struct へのポインタ ptr からフィールドへのポインタ (左辺値) を作る。
-func (h *Hlc) fieldViaPointer(ptr ir.Operand, st *types.Type, name string) ir.Operand {
-	f := h.fieldOf(st, name)
+// fieldViaPointer は struct へのポインタ ptr からフィールド f へのポインタ (左辺値) を作る。
+func (h *Hlc) fieldViaPointer(ptr ir.Operand, f types.Field) ir.Operand {
 	pt := h.prog.Types.PointerTo(f.Type)
 	if f.Offset == 0 {
 		c := ir.NewCastedValue(ptr, pt, 0)

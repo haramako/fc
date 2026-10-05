@@ -91,7 +91,13 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 		if ty == nil {
 			ty = h.typeEval(e.typ)
 		}
-		return exprInfo{t: ty}, ty != nil
+		if ty == nil {
+			return exprInfo{}, false
+		}
+		if a, ok := h.exprType(e.args[0]); ok {
+			h.planCast(e.ck, a.t, ty) // 変換できない形は型を決めない (lval が診断する)
+		}
+		return exprInfo{t: ty}, true
 	case cStructLit:
 		return exprInfo{t: e.ty}, e.ty != nil // 型名の無いものは文脈の型 (withExpected) が入れる
 	case cArray:
@@ -135,10 +141,10 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 			return h.macroCallType(e, fn.val)
 		}
 		f, ok := h.exprType(e.args[0])
-		if !ok || f.t.Kind != types.Func || f.t.Base == nil {
+		if !ok {
 			return exprInfo{}, false
 		}
-		return exprInfo{t: f.t.Base}, true // void の関数は Void (値が無い)
+		return exprInfo{t: h.planCall(f, noDesc)}, true // void の関数は Void (値が無い)
 	case opLoad:
 		// 代入の式の値は左辺 (lval が代入した左辺を返す)。soa の 2 バイト以上のフィールドは左辺の場所が無く、変換した右辺を
 		// 返す (その型は変換の仕方による) ので扱わない
@@ -179,20 +185,16 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		switch {
 		case ok && a.t.IsSoa:
 			return exprInfo{t: u.SoaRef(a.t, h.soaElement(a.t), "")}, true
-		case !ok || a.untyped:
-		case a.t.IsSlice():
-			return exprInfo{t: a.t.SliceOf}, true
-		case (a.t.Kind == types.Array || a.t.Kind == types.Pointer) && a.t.Base != nil && a.t.Base.Kind != types.Void:
-			return exprInfo{t: a.t.Base}, true
+		case ok:
+			var idx *exprInfo
+			if i, ok := h.exprType(e.args[1]); ok {
+				idx = &i
+			}
+			return exprInfo{t: h.planIndex(a, idx, noDesc)}, true
 		}
 	case opDeref:
-		a, ok := h.exprType(e.args[0])
-		switch {
-		case !ok || a.untyped:
-		case a.t.Kind == types.Pointer && a.t.Base.Kind != types.Void:
-			return exprInfo{t: a.t.Base}, true
-		case a.t.Kind == types.SoaRef:
-			return a, true // `*Points[i]` は要素そのもの
+		if a, ok := h.exprType(e.args[0]); ok {
+			return exprInfo{t: h.planDeref(a, noDesc)}, true
 		}
 	case opRef:
 		a, ok := h.exprType(e.args[0])
@@ -220,14 +222,11 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 			}
 			break
 		}
-		if t.Kind == types.Pointer {
-			t = t.Base
+		if t.Kind == types.Pointer && t.Base.IsSlice() || t.IsSlice() {
+			break // slice のフィールドは扱わない
 		}
-		if t.Kind == types.Struct && !t.IsSlice() {
-			if f, ok := t.Field(e.name); ok {
-				return exprInfo{t: f.Type}, true
-			}
-		}
+		f, _ := h.planField(t, e.name, noDesc)
+		return exprInfo{t: f.Type}, true
 	}
 	return exprInfo{}, false
 }

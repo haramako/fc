@@ -13,6 +13,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/syntax"
 	"github.com/haramako/fc/internal/types"
 )
 
@@ -228,4 +229,72 @@ func (h *Hlc) planMinMax(op cop, infos []exprInfo) (*types.Type, []adaptedLit) {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s: arguments must be integers (got %s)", op, typ)})
 	}
 	return typ, args
+}
+
+// planIndex は a[i] の要素の型 (配列・ポインタの要素、slice は要素。soa は soaIndex)。idx は添字の型 (分からなければ nil)。
+// desc は診断で a を指す書き方 (lval が評価した値から作る。型を決める段では診断は外に出ないので使われない)。
+func (h *Hlc) planIndex(a exprInfo, idx *exprInfo, desc func() string) *types.Type {
+	t := a.t
+	if t.IsSlice() {
+		t = h.prog.Types.PointerTo(t.SliceOf) // s[i] は s.ptr[i] (範囲の検査はしない)
+	}
+	if t.Kind != types.Pointer && t.Kind != types.Array {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot index %s (type %s is not a pointer or array)", desc(), t)})
+	}
+	if t.Base.Kind == types.Void {
+		panic(&diag.Error{Msg: "cannot index *void (bitcast to a typed pointer first)"})
+	}
+	if idx != nil && idx.t.Kind != types.Int && idx.t.Kind != types.Bool {
+		panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", idx.t)})
+	}
+	return t.Base
+}
+
+// planDeref は `*p` の値の型 (ポインタの先。soa の要素のハンドルはそのまま)。
+func (h *Hlc) planDeref(a exprInfo, desc func() string) *types.Type {
+	t := a.t
+	if t.Kind == types.Pointer && t.Base.Kind == types.Void {
+		panic(&diag.Error{Msg: "cannot dereference *void (bitcast to a typed pointer first)"})
+	}
+	switch t.Kind {
+	case types.Pointer:
+		return t.Base
+	case types.SoaRef:
+		return t // `*Points[i]` は要素そのもの
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("cannot dereference %s (type %s is not a pointer)", desc(), t)})
+}
+
+// planField は struct の値かポインタ (型 t) のフィールド name (viaPtr はポインタ経由で、自動で参照はがし)。soa の要素のフィールドは
+// soaField。
+func (h *Hlc) planField(t *types.Type, name string, desc func() string) (f types.Field, viaPtr bool) {
+	switch {
+	case t.Kind == types.Pointer && t.Base.Kind == types.Struct:
+		return h.fieldOf(t.Base, name), true
+	case t.Kind == types.Struct:
+		return h.fieldOf(t, name), false
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("cannot access field %s: %s is not a struct (type %s)", name, desc(), t)})
+}
+
+// noDesc は型を決める段が計画を呼ぶときの desc (診断は外に出ない)。
+func noDesc() string { return "" }
+
+// planCast は明示の変換 (`x as T`・`@bitcast(T, x)`・v1 の `<T>x`) の型の検査 (checkCast の種類ごとの規則と、`as` で const を
+// 外さない)。
+func (h *Hlc) planCast(kind syntax.CastKind, from, to *types.Type) {
+	h.checkCast(kind, from, to)
+	if kind == syntax.CastAs && from.Kind == types.Pointer && from.ReadOnly && to.Kind == types.Pointer && !to.ReadOnly {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot drop const with `as` (%s to %s); use @bitcast(%s, x)", from, to, to)})
+	}
+}
+
+// planCall は関数の呼び出しの結果の型 (void の関数は Void)。f は呼ぶ値の型 (マクロは expandMacro)。
+func (h *Hlc) planCall(f exprInfo, desc func() string) *types.Type {
+	if f.t.Kind != types.Func || f.t.Base == nil {
+		// 関数でない値の呼び出し (名前が同じ変数に取られて関数の宣言がエラーになったときなど)。以前は lmdType.Base (nil) を
+		// 見てコンパイラが panic していた (fuzz の生成器の名前の衝突で発覚)
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot call %s: type %s is not a function", desc(), f.t)})
+	}
+	return f.t.Base
 }
