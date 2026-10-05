@@ -152,6 +152,10 @@ func markUnusedGlobals(mods []*ir.Module) {
 				}
 			case ir.DefEqu:
 				visit(d.Equ)
+			case ir.DefBss:
+				if d.Init != nil {
+					visit(d.Init) // 初期値のアドレス (`var p:*u8 = &g;`)
+				}
 			}
 		}
 	}

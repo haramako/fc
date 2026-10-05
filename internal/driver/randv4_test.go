@@ -11,7 +11,9 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -88,6 +90,9 @@ func runRandomV4(t *testing.T, v3 bool) {
 				skipped.Add(1)
 				t.Skipf("fc 4 にできない (seed %d): %v", seed, err)
 			}
+			if seed%2 == 0 {
+				files["t.fc"] = v4GlobalInits(files["t.fc"]) // 半分の種はグローバル変数の初期値の経路で
+			}
 			files = rpCondRewrite(files, seed) // 条件式と do-while を混ぜる (randcond_test.go)
 			res := rpCheck(t, files)
 			switch res.kind {
@@ -111,4 +116,78 @@ func runRandomV4(t *testing.T, v3 bool) {
 			}
 		})
 	}
+}
+
+var (
+	rpInitScalar = regexp.MustCompile(`^\s*(\w+) = (\(?-?\d+\)?);$`)
+	rpInitElem   = regexp.MustCompile(`^\s*(\w+)\[(\d+)\] = (\(?-?\d+\)?);$`)
+	rpInitOther  = regexp.MustCompile(`^\s*[\w.\[\]]+ = \(?-?\d+\)?;$`)
+)
+
+// v4GlobalInits は fc 4 にした t.fc の main の先頭の、グローバル変数・配列への定数の代入 (`g0 = 5;`、`a0[3] = 7;`) を宣言の
+// 初期値 (`var g0:u8 = 5;`、`var a0:[16]u8 = [...];`) に移す。起動のときに写す初期値 (codegen の initRecords・runtime の
+// fc_global_init) を、-O 0 / -O 2 / インタプリタで比べる。宣言の見つからないものはそのまま。
+func v4GlobalInits(src string) string {
+	lines := strings.Split(src, "\n")
+	decl := map[string]int{} // 名前 → 宣言の行 (`var g0:u8;`)
+	for i, l := range lines {
+		if strings.HasPrefix(l, "var ") && strings.HasSuffix(l, ";") && !strings.Contains(l, "=") && !strings.Contains(l, "@(") {
+			if name, _, ok := strings.Cut(strings.TrimSuffix(strings.TrimPrefix(l, "var "), ";"), ":"); ok {
+				decl[name] = i
+			}
+		}
+	}
+	main := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, "function main()") {
+			main = i
+			break
+		}
+	}
+	if main < 0 {
+		return src
+	}
+	scalars := map[string]string{}
+	elems := map[string]map[int]string{}
+	drop := map[int]bool{}
+	for i := main + 1; i < len(lines); i++ {
+		l := lines[i]
+		if t := strings.TrimSpace(l); t == "{" || strings.HasPrefix(t, "var ") {
+			continue // main のローカル変数の宣言 (初期化の代入はその後)
+		}
+		if m := rpInitScalar.FindStringSubmatch(l); m != nil && decl[m[1]] > 0 {
+			scalars[m[1]] = m[2]
+			drop[i] = true
+		} else if m := rpInitElem.FindStringSubmatch(l); m != nil && decl[m[1]] > 0 && strings.Contains(lines[decl[m[1]]], ":[16]") {
+			if elems[m[1]] == nil {
+				elems[m[1]] = map[int]string{}
+			}
+			k, _ := strconv.Atoi(m[2])
+			elems[m[1]][k] = m[3]
+			drop[i] = true
+		} else if !rpInitOther.MatchString(l) {
+			break
+		}
+	}
+	for name, v := range scalars {
+		lines[decl[name]] = strings.TrimSuffix(lines[decl[name]], ";") + " = " + v + ";"
+	}
+	for name, es := range elems {
+		vals := make([]string, 16)
+		for k := range vals {
+			if v, ok := es[k]; ok {
+				vals[k] = v
+			} else {
+				vals[k] = "0"
+			}
+		}
+		lines[decl[name]] = strings.TrimSuffix(lines[decl[name]], ";") + " = [" + strings.Join(vals, ", ") + "];"
+	}
+	var out []string
+	for i, l := range lines {
+		if !drop[i] {
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, "\n")
 }

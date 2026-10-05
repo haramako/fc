@@ -127,6 +127,8 @@ type Compiler struct {
 	asmRuns  atomic.Int64        // 実際に ca65 を起動した回数 (オブジェクトの再利用のテスト用。asmcache.go)
 	hashes   *hashMemo           // 1 回のビルドの中のファイルのハッシュ (asmcache.go。BuildContext が作り直す)
 	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
+	// globalInit は初期値のある変数があるビルド (runtime.asm を FC_GLOBAL_INIT つきでアセンブルする。globalInitTable)
+	globalInit bool
 	// macroServers / macroScripts は fc.toml の [macro_server.*] / [macro_script.*] (外部コマンドと Starlark の定数マクロ:
 	// projectMacros)
 	linkCfg      string // リンクに使ったリンカ設定のパス (--size-report のバンクの表)
@@ -300,6 +302,12 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	}
 	if fc := c.farcallAsm(); fc != "" {
 		sources = append(sources, fc)
+	}
+	if src, err := c.globalInitTable(prog.Modules.List()); err != nil {
+		return nil, err
+	} else if src != "" {
+		sources = append(sources, src)
+		objs = append(objs, strings.TrimSuffix(src, ".s")+".o")
 	}
 	if err := c.assembleAll(sources); err != nil {
 		return nil, err
@@ -595,6 +603,35 @@ func (c *Compiler) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
 	}
 }
 
+// globalInitTable は、初期値のある変数を持つモジュール (ir.Module.HasGlobalInit) の初期値の記録を並べた表
+// __fc_init_table の asm (_fc_init.s) を書いてそのパスを返し、runtime.asm を FC_GLOBAL_INIT つきでアセンブルさせる
+// (起動のときに fc_global_init が写す)。初期値のある変数が無ければ "" (runtime も今までと同じ)。
+func (c *Compiler) globalInitTable(mods []*ir.Module) (string, error) {
+	var b strings.Builder
+	var syms []string
+	for _, m := range mods {
+		if m.HasGlobalInit() {
+			syms = append(syms, m.InitSymbol())
+		}
+	}
+	c.globalInit = len(syms) > 0
+	if !c.globalInit {
+		return "", nil
+	}
+	b.WriteString("; グローバル変数の初期値の記録の表 (fcc が生成。share/runtime.asm の fc_global_init が読む)\n")
+	b.WriteString("\t.export __fc_init_table\n")
+	for _, s := range syms {
+		fmt.Fprintf(&b, "\t.import %s\n", s)
+	}
+	b.WriteString(".segment \"FC_RUNTIME\"\n__fc_init_table:\n")
+	for _, s := range syms {
+		fmt.Fprintf(&b, "\t.word %s\n", s)
+	}
+	b.WriteString("\t.word 0\n")
+	path := filepath.Join(c.buildDir, "_fc_init.s")
+	return path, writeIfChanged(path, []byte(b.String()))
+}
+
 // defaultInterrupts は割り込みの入口 (_interrupt / _interrupt_irq。share/runtime.asm の NMI / IRQ が呼ぶ) を定義するものが
 // 無ければ、何もしない入口の asm (_interrupts.s) を書いてそのパスを返す (全部あれば "")。fc の関数 (Id がその名前。
 // options(symbol:) の extern も) か、include した asm がその名前を参照していれば (castle の ppu.asm の `.export _interrupt`)
@@ -887,6 +924,9 @@ func (c *Compiler) ca65Args(path string) []string {
 		args = append(args, "-I", filepath.FromSlash(d))
 	}
 	args = append(args, "-I", filepath.Join(c.FCHome, "fclib"), "-I", filepath.Join(c.FCHome, "fclib", c.target))
+	if c.globalInit && base == "runtime.asm" {
+		args = append(args, "-D", "FC_GLOBAL_INIT=1") // 起動のときにグローバル変数の初期値を写す (globalInitTable)
+	}
 	if c.dir != "." {
 		// .incbin は -I でなく --bin-include-dir で探す (既定は作業ディレクトリ)
 		args = append(args, "--bin-include-dir", c.dir)

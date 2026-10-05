@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-05 [グローバル変数の初期値と、宣言・データの制限](2026-10-05-global-init.md) — 起動のときに写す (リンカ設定を変えず FC_RUNTIME の記録)、struct リテラル・const の表・2 次元配列の行
 - 2026-10-05 [条件式と do-while](2026-10-05-cond-expr-do-while.md) — fc 4 だけの構文。枝の型の決め方（互換型・型のない定数は比較の規則で相手に・文脈の型）、A1 では区切りにならない、return・代入は枝ごとに書く
 - 2026-10-05 [標準ライブラリの段 4・5 の残り](2026-10-05-stdlib-stage4-5.md) — lzw を slice の形に（作業域はフレーム、旧版は castle・test/ にコピー）。fc 3 の stdio / unittest は fc 3 のソースのために残す
 - 2026-10-03 [GitHub Actions の失敗調査](2026-10-03-actions-failures.md) — Windows のパス・CRLF 依存テスト3件を再現。docs の HTML 欠落は修正済みだが paths フィルタで再実行されていない

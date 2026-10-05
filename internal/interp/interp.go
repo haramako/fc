@@ -203,8 +203,16 @@ func (m *machine) layout(modules []*ir.Module) *ir.Lambda {
 		}
 	}
 	for _, sd := range defs {
-		if sd.def.Kind == ir.DefBlock {
-			m.writeBlock(sd.scope, m.local[sd.scope][sd.def.Sym], sd.def.Type, sd.def.Elems)
+		switch d := sd.def; {
+		case d.Kind == ir.DefBlock:
+			m.writeBlock(sd.scope, m.local[sd.scope][d.Sym], d.Type, d.Elems)
+		case d.Kind == ir.DefBss && d.Init != nil:
+			// 変数の初期値 (fc 4。実機では起動のときに runtime の fc_global_init が写す)
+			if d.Type.Kind == types.Struct || d.Type.Kind == types.Array {
+				m.writeBlock(sd.scope, m.local[sd.scope][d.Sym], d.Type, d.Init.Elems)
+			} else {
+				m.writeBlock(sd.scope, m.local[sd.scope][d.Sym], &types.Type{Kind: types.Array, Base: d.Type, Length: 1, Size: d.Type.Size}, []ir.Operand{d.Init})
+			}
 		}
 	}
 	return main
@@ -329,7 +337,7 @@ func (m *machine) byteOf(f *frame, o ir.Operand, k int) byte {
 			if x.IsInt {
 				return byte(x.Int >> (8 * k))
 			}
-			a := m.symAddr(f, x.Symbol)
+			a := m.symAddr(f, x.Symbol) + x.SymOffset
 			switch k {
 			case 0:
 				return byte(a)

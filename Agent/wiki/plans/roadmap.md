@@ -157,7 +157,7 @@ static if、CHR パディング、バンクの名前指定、差分コンパイ�
 PC ログポイント（NES 側の追加命令なし・Lua 等で整形）も記録する。
 
 - [x] bool を比較・論理演算の結果型に（`uint8` と互換なので既存コードの変更は不要。添字にも使える。定数畳み込みも bool） ✅ 2026-09-19
-- [ ] グローバル変数の初期化（今は "can't init global variable"。DATA セグメント + 起動時コピー）
+- [x] グローバル変数の初期化 ✅ 2026-10-05（fc 4。リンカ設定は変えず、モジュールごとの記録を FC_RUNTIME に置いて起動のときに写す。[Agent/discussions/2026-10-05-global-init.md](../../discussions/2026-10-05-global-init.md)）
 - [x] const の二重配列（すでに動いていた）・ポインタ配列（`[N]*T`。要素の文字列 / 配列リテラルは無名の配列定数に切り出す） ✅ 2026-09-19
 - [x] switch のジャンプテーブル（IR の `switch` 命令。整数の case が 10 個以上で密なとき。`pha; pha; rts`） ✅ 2026-09-19
 - [x] cc65 の呼び出し規約（`__fastcall__`）の extern 関数: `options(abi: "cc65")`（引数 0〜1 個を A / A,X、戻り値 A / A,X。
@@ -380,7 +380,7 @@ do-while は「やること候補（すぐではない）」。
 ### 言語: 宣言・データ
 
 - [x] 高: **する（2026-09-26 決定）** 未知・無効な属性を警告に（`@(adress:)` が黙って RAM 変数になる。エラーにするかは後で決める） ✅ 2026-09-27（feat/v3-checks）
-- [ ] 中: グローバル変数の初期値（既存の項目「グローバル変数の初期化」）。**まだやらない（2026-09-26）**
+- [x] 中: グローバル変数の初期値（既存の項目「グローバル変数の初期化」）。**まだやらない（2026-09-26）** → ✅ 2026-10-05 にユーザーの指示で実装
 - [x] 中: 型名を省いた struct リテラルを引数に（`add({1, 2}, p)`）、`mod.Point{…}`、`var s = {1, 2}` のエラーの文言 ✅ 2026-10-05（`arg_list` が `lit_elem`、`mod.Point{…}` は `syntax.binary` が struct リテラルにする。`TestAnonStructLitArg`）
 - [x] 中: 名前付きの const（struct・配列）を別の const 表の要素に（`[ORIGIN, {1, 2}]`）、診断に位置を ✅ 2026-10-05（`sema.namedConstValue`、定数でない要素はその位置で `reportNonConst`。`TestNamedConstInTable`）
 - [x] 中: グローバル変数のアドレスを const の表に（`[&gp, &g[0]]`） ✅ 2026-10-05（`const P:*T = &g` も。`sema.constRefAddress`、`ir.Value.SymOffset` で `sym+N`。`TestConstGlobalAddress`）

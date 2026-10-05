@@ -178,6 +178,9 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 					tables[d.Sym] = append(tables[d.Sym], funcSym(e))
 				}
 			}
+			if d.Kind == ir.DefBss && d.Init != nil {
+				markOperand(d.Init) // 変数の初期値の関数のアドレス (`var f:fn():u8 = get;`)
+			}
 			if d.Kind == ir.DefEqu && d.Equ != nil && d.Equ.IsInt {
 				unknownAssign[d.Sym] = true // options(address:) の変数は asm 側が書きうる
 			}

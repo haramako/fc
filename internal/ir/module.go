@@ -18,10 +18,13 @@ type Def struct {
 	Kind DefKind
 	Type *types.Type
 
-	Equ     *Value    // DefEqu: 整数または関数シンボルのリテラル
-	Segment string    // DefBss: 配置セグメント ("" なら既定の BSS)
-	Elems   []Operand // DefBlock: 配列の要素
-	Lambda  *Lambda   // DefCode
+	Equ     *Value // DefEqu: 整数または関数シンボルのリテラル
+	Segment string // DefBss: 配置セグメント ("" なら既定の BSS)
+	// Init は DefBss の初期値 (fc 4 のモジュールの `var g:T = 定数;`。整数・シンボル・配列 / struct のリテラル)。起動のときに
+	// runtime の fc_global_init が ROM の記録 (codegen の initRecords) から写す。nil なら 0 で始まる (今までどおり)
+	Init   *Value
+	Elems  []Operand // DefBlock: 配列の要素
+	Lambda *Lambda   // DefCode
 
 	// AddressVar は @(address: N) の変数の名前 (mod.name) と宣言の位置。リンクの後に RAM のセグメント (fc の ZP・BSS など) と
 	// 重なっていないかを確かめる (driver.checkAddressVars)
@@ -35,6 +38,20 @@ type Def struct {
 	Droppable bool
 	Unused    bool
 }
+
+// HasGlobalInit は、出力する変数に初期値 (Def.Init) のあるモジュールか。codegen はそのときだけ初期値の記録
+// `__fc_init_<Id>` を出し、driver はそれを並べた表と、起動のときに写す runtime の処理 (FC_GLOBAL_INIT) をリンクする。
+func (m *Module) HasGlobalInit() bool {
+	for _, d := range m.Defs {
+		if d.Kind == DefBss && d.Init != nil && !d.Unused {
+			return true
+		}
+	}
+	return false
+}
+
+// InitSymbol はモジュールの変数の初期値の記録のシンボル (HasGlobalInit のときに codegen が出し、driver の表が並べる)。
+func (m *Module) InitSymbol() string { return Mangle("__fc_init_" + m.Id) }
 
 // OptionKind は OptionValue の種類。
 type OptionKind uint8

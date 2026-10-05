@@ -86,7 +86,10 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if sl, ok := sp.Init.(*syntax.StructLit); ok && sl.Type == nil && typ == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: a struct literal without a type name needs the variable's type (write `var %s:T = {…}` or `var %s = T{…}`)", name, name, name)})
 	}
-	if sp.Init != nil {
+	var ginit *ir.Value // モジュールの変数の初期値 (fc 4。起動のときに写す)
+	if sp.Init != nil && h.lmd == nil {
+		typ, ginit = h.globalInit(name, sp, typ, opt)
+	} else if sp.Init != nil {
 		c := h.withExpected(toC(sp.Init), typ)
 		initC = c
 		if sp.Type == nil {
@@ -115,9 +118,6 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		if it := ir.ValType(init); typ != nil && typ.Kind == types.Array && typ.Length < 0 && it.Kind == types.Array && it.Length >= 0 {
 			typ = h.prog.Types.ArrayOf(typ.Base, it.Length)
 		}
-	}
-	if init != nil && h.lmd == nil {
-		panic(&diag.Error{Msg: fmt.Sprintf("can't init global variable %s (globals start as 0; assign it in a function, or use const)", name)})
 	}
 	if typ != nil {
 		h.checkComplete(typ, "variable "+name)
@@ -162,7 +162,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 					seg = "BSS"
 				} // explicit legacy default overrides inherited bss
 			}
-			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg}
+			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg, Init: ginit}
 			bss = d
 			if sym, ok := symbolOption(opt); ok {
 				// options(symbol: "name"): fc が確保する領域のシンボル名を固定する (asm から参照するとき)
@@ -196,6 +196,59 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		// `var c:i16 = gv;` (gv:i8 = -4) が 252 になっていた。survey 2026-09-27)
 		h.emit(&ir.Op{Code: ir.OpLoad, Dst: vv, Src: []ir.Operand{h.convertValue(init, vv.Type, initC, initChecked)}})
 	}
+}
+
+// globalInit はモジュールの変数の初期値 (fc 4) を定数にする (const の表と同じ規則: 整数・配列・struct・文字列、名前付きの
+// const、関数・配列定数・グローバル変数のアドレス)。起動のときに RAM へ写す (codegen の initRecords、runtime の
+// fc_global_init)。型を書かなければ初期値の型。fc 3 まではエラー (0 で始まる)。
+func (h *Hlc) globalInit(name string, sp *syntax.VarSpec, typ *types.Type, opt ir.Options) (*types.Type, *ir.Value) {
+	if !h.v4() {
+		panic(&diag.Error{Msg: fmt.Sprintf("can't init global variable %s (globals start as 0; assign it in a function, or use const)", name)})
+	}
+	if opt.Has("address") {
+		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: a variable at a fixed address (@(address:)) cannot have an initial value (it is I/O or memory that fc does not set up; write it in a function)", name)})
+	}
+	val := toC(sp.Init)
+	if sp.Type == nil {
+		h.rewriteStringRows(val, sp.Name.End())
+	}
+	if val.kind == cOp && val.op == opCall {
+		// 文字表の変換器 `_T("…")` / `_T('あ')` は定数を作るマクロ (関数の中では lval が展開する)
+		if fn := h.constEval(val.args[0]); fn.kind == cValue && h.prog.textmaps[fn.val] != nil {
+			val = h.prog.macros[fn.val](h, val.args[1:], nil).expr
+		}
+	}
+	h.constIndex = true
+	cv := h.constEval(h.constSlice(h.withExpected(val, typ)))
+	h.constIndex = false
+	if typ != nil && typ.Kind == types.Pointer {
+		cv = h.constAddress(cv, typ) // `var p:*u8 = &g;`、`var p:*const u8 = TABLE;`
+	} else if typ == nil {
+		cv = h.constRefAddress(cv, nil)
+	}
+	h.reportNonConst(cv)
+	if cv.kind != cValue || cv.val.Kind == ir.KindGlobal && h.prog.constArrays[cv.val] == nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("the initial value of global variable %s must be a constant (globals are set when the program starts; assign it in a function)", name)})
+	}
+	if h.prog.storageAliases[cv.val] != nil || cv.val.Type.Kind == types.Macro {
+		panic(&diag.Error{Msg: fmt.Sprintf("the initial value of global variable %s must be a constant", name)})
+	}
+	if t := typ; t == nil {
+		cv = h.namedConstValue(cv, cv.val.Type)
+	} else {
+		cv = h.namedConstValue(cv, t)
+	}
+	v := h.fitArrayLiteral(h.padArrayLiteral(name, cv.val, typ), typ)
+	if v.Kind == ir.KindArrayLiteral && typ != nil && typ.Kind == types.Array && typ.Base.Kind == types.Pointer {
+		v = h.pointerElems(name, v, typ.Base) // `var ps:[2]*u8 = ["ab", &g];` (const の表と同じ)
+	}
+	checkRaggedLiteral(v)
+	t := h.guessType(name, typ, v)
+	h.checkConstRange(name, sp.Type, typ, v, t, val)
+	if typ != nil && v.Kind != ir.KindArrayLiteral {
+		h.warnDropConst("`"+name+"`", typ, v)
+	}
+	return t, v
 }
 
 // reportNonConst は const の初期値の配列・struct リテラル c のうち、定数でない最初の要素の理由 (constant value required /

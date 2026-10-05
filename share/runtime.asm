@@ -4,6 +4,9 @@
 	.import _main
 	.importzp FC_SP
 	.import runtime_init
+.ifdef FC_GLOBAL_INIT
+	.import __fc_init_table			; モジュールの変数の初期値の記録の表 (driver が書く _fc_init.s)
+.endif
 
 	.importzp L
 	.importzp reg
@@ -55,9 +58,68 @@
 	ldx #0
 	stx FC_SP						; スタックの空き先頭 (S+0)
 
+.ifdef FC_GLOBAL_INIT
+	jsr fc_global_init				; グローバル変数の初期値を写す (fc 4。初期値のある変数があるときだけ)
+.endif
 	jsr _main
 	.include "runtime_main_return.inc"	; main から戻った後 (fclib/<target>/。nes は止まる、emu は終了コード 0 で終える)
 .endproc
+
+.ifdef FC_GLOBAL_INIT
+;;; fc_global_init はモジュールの変数の初期値を RAM へ写す。__fc_init_table はモジュールごとの記録 (codegen の initRecords) の
+;;; 番地の並び (0 で終わる)。記録は `.byte 長さ (1〜255)`、`.word 書き先`、中身の並びで、長さ 0 で終わる。reg+0〜3 を使う。
+.proc fc_global_init
+	ldx #0
+@table:
+	lda __fc_init_table,x
+	sta reg
+	lda __fc_init_table+1,x
+	sta reg+1
+	ora reg
+	beq @done
+	txa
+	pha
+@record:
+	ldy #0
+	lda (reg),y					; 長さ (0 なら記録の終わり)
+	beq @next
+	tax
+	iny
+	lda (reg),y
+	sta reg+2
+	iny
+	lda (reg),y
+	sta reg+3
+	lda reg						; 中身の先頭へ (+3)
+	clc
+	adc #3
+	sta reg
+	bcc :+
+	inc reg+1
+:	ldy #0
+@copy:
+	lda (reg),y
+	sta (reg+2),y
+	iny
+	dex
+	bne @copy
+	tya							; 次の記録へ (+長さ)
+	clc
+	adc reg
+	sta reg
+	bcc @record
+	inc reg+1
+	jmp @record
+@next:
+	pla
+	tax
+	inx
+	inx
+	bne @table
+@done:
+	rts
+.endproc
+.endif
 
 .proc interrupt
     pha

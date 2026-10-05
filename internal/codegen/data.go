@@ -173,3 +173,86 @@ func referencedDefs(defs []*ir.Def, blocks [][]any, code []string) []int {
 	}
 	return r
 }
+
+// initRecords はモジュールの変数の初期値 (ir.Def.Init) を、起動のときに runtime の fc_global_init が RAM へ写す記録にする。
+// 固定のバンクに置く (FC_RUNTIME。モジュールが切り替えのバンクにあっても読める)。記録は `.byte 長さ (1〜255)`、
+// `.word 書き先`、中身の並びで、長さ 0 で終わる。既定の BSS (起動のときに 0 で埋める) の変数は 0 のバイトを写さない
+// (3 バイト以下の 0 の並びは記録を分けるより写すほうが短いので含める)。ほかのセグメントは全部写す。
+func (l *Llc) initRecords(mod *ir.Module) []any {
+	r := []any{".segment \"FC_RUNTIME\"", mod.InitSymbol() + ":"}
+	for _, d := range mod.Defs {
+		if d.Kind != ir.DefBss || d.Init == nil || d.Unused {
+			continue
+		}
+		var bs []string
+		l.dataBytes(d.Type, d.Init, &bs)
+		for len(bs) < d.Type.Size {
+			bs = append(bs, "0") // 足りない要素は 0
+		}
+		cleared := d.Segment == ""
+		keep := make([]bool, len(bs))
+		for i, b := range bs {
+			keep[i] = !cleared || b != "0"
+		}
+		for i := 0; i < len(bs); {
+			if keep[i] {
+				i++
+				continue
+			}
+			j := i
+			for j < len(bs) && !keep[j] {
+				j++
+			}
+			if i > 0 && j < len(bs) && j-i <= 3 {
+				for k := i; k < j; k++ {
+					keep[k] = true
+				}
+			}
+			i = j
+		}
+		sym := mangle(d.Sym)
+		for i := 0; i < len(bs); {
+			if !keep[i] {
+				i++
+				continue
+			}
+			j := i
+			for j < len(bs) && keep[j] && j-i < 255 {
+				j++
+			}
+			r = append(r, fmt.Sprintf("\t.byte %d", j-i), fmt.Sprintf("\t.word %s+%d", sym, i))
+			for k := i; k < j; k += 16 {
+				r = append(r, "\t.byte "+strings.Join(bs[k:min(k+16, j)], ","))
+			}
+			i = j
+		}
+	}
+	return append(r, "\t.byte 0", fmt.Sprintf(".segment \"%s\"", l.codeSegment))
+}
+
+// dataBytes は定数 v を型 t のデータのバイトの並び (アセンブラの式) にする (emitData と同じく struct はフィールドごと、
+// 配列は要素ごと)。
+func (l *Llc) dataBytes(t *types.Type, v ir.Operand, out *[]string) {
+	switch t.Kind {
+	case types.Struct, types.Array:
+		lv := ir.ValLiteral(v)
+		if lv == nil || lv.Kind != ir.KindArrayLiteral {
+			panic(&diag.Error{Msg: fmt.Sprintf("invalid initial value for %s", t)})
+		}
+		for i, e := range lv.Elems {
+			if t.Kind == types.Struct {
+				l.dataBytes(t.Fields[i].Type, e, out)
+			} else {
+				l.dataBytes(t.Base, e, out)
+			}
+		}
+	default:
+		n := t.Size
+		if t.IsFarFunc() {
+			n = 3
+		}
+		for i := 0; i < n; i++ {
+			*out = append(*out, strings.TrimPrefix(l.byte(v, i), "#"))
+		}
+	}
+}

@@ -283,6 +283,12 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 		asm.push(fmt.Sprintf("\t.incbin \"%s\"", file))
 	}
 
+	// グローバル変数の初期値 (fc 4): 起動のときに runtime の fc_global_init が写す記録
+	if mod.HasGlobalInit() {
+		asm.push(fmt.Sprintf("\t.export %s", mod.InitSymbol()))
+		asm.push(l.initRecords(mod))
+	}
+
 	var farSymbols []string
 	for sym := range l.farPointerSymbols {
 		farSymbols = append(farSymbols, sym)
