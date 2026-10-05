@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-05 [型を決める段の残り（3 回目）](2026-10-05-typing-stage-rest.md) — ir.Value の Public / Build / StrConst を sema へ、slice・リテラル・soa・代入の左辺の型と診断を typeplan の計画に、代入先・型を省いた変数・呼ぶ関数の型も型を決める段で、`var x = c ? …` は枝ごとに変数へ書く
 - 2026-10-05 [fclib の NES のモジュールの asm 化](2026-10-05-nes-asm.md) — pal.shade と vram の描画を止めて書く所を asm に。キューに積む put / fill は asm にすると大きくなるので fc のまま。ピープホールの lda と struct のポインタのフィールドの読み直し (fwdmem)
 - 2026-10-05 [far call のレジスタ渡し](2026-10-05-farcall-registers.md) — トランポリンを A / Y の引数と A の戻り値を通す `farcall_ay` に（名前を変えて前の規約のものはリンクで落とす）、FC_FARCALL は X で置く、MMC3 の切替の経路はスロットごと、割り込みから届く関数の far call を警告に
 - 2026-10-05 [型を決める段の残りと types の Kind の整理](2026-10-05-sema-types-cleanup.md) — 名前の表の項目を Symbol に（モジュール・型名・マクロは値でない。`var v = math;` がエラーに）、Compatible を AssignableTo / CommonType に、soa を Kind に。slice・enum・far は Kind に分けない

@@ -6,7 +6,9 @@
 
 - **パイプライン**: `syntax`（goyacc の文法 `parser.y` と `checkVersion`）→ `sema`（`hlc.go` は文脈の型と共通の補助だけ。文は
   `stmt.go`、宣言は `decl.go`、式は `expr.go`、定数の評価は `consteval.go`、型式は `typeexpr.go`、式の型を IR を出す前に
-  決める段は `typing.go`、演算の型・項の変換・型の誤りの規則は `typeplan.go` の計画（型を決める段と lval が同じ関数を使う）。
+  決める段は `typing.go`、演算の型・項の変換・型の誤りの規則は `typeplan.go` の計画（演算・添字・フィールド・変換・呼び出し・
+  slice・リテラル・soa・代入の左辺。型を決める段と lval が同じ関数を使い、lval は計画を受け取って値を作る）。public は Symbol、
+  @(build) の const・名前付きの文字列定数は Program の表（ir.Value には sema だけの印を置かない）。
   名前の表 `Scope` と importer の窓口 `ModuleInterface`（`scope.go`。項目は `Symbol`: 値 (ir.Value)・モジュール・型名・マクロ。
   `symbol.go`。値でない名前は式では `cName` の節点）、関数の本体の AST（`Program.bodies`）は sema が持つ。ir は名前の表・AST・
   束縛を持たない。2026-10-05 に ir から移した）→ `ir` → `pipeline.Prepare`

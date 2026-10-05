@@ -378,7 +378,8 @@ do-while は「やること候補（すぐではない）」。
       符号の混在・リテラルの型の方針（保留）を決めた後に、警告かエラーにして castle 側も書き換える（`NONE = 255` の定数など）
 - [x] 高: **やること候補（すぐではない。2026-09-26）** 文字リテラル `'A'`（u8 の定数。migrate で fc 2 の `'…'` を `"…"` に） ✅ fc 4 で実装済み（`syntax/lexer_char.go`、migrate の quoteRule。`TestCharLiteral`）
 - [x] 中: **やること候補（すぐではない。2026-09-26）** 条件式（`c ? a : b`） ✅ 2026-10-05（fc 4 だけ。sema/cond.go。型の決め方と
-      生成コードは Agent/discussions/2026-10-05-cond-expr-do-while.md。残り: `var x = c ? …` の初期化は一時変数を経て写す）
+      生成コードは Agent/discussions/2026-10-05-cond-expr-do-while.md。`var x = c ? …` の初期化も枝ごとに変数へ書く: 2026-10-05
+      Agent/discussions/2026-10-05-typing-stage-rest.md）
 - [ ] 中: `as bool` / bool への代入を `!= 0` に → **正規化はしない（処理が増えるため。2026-09-26）**。`5 as bool` が 5 のままで
       あることと、struct・配列の `==` への影響をリファレンスに書く
 - [x] 中: **する（2026-09-26 決定）** bool 同士の `==` / `!=` は真理値で比べる（今はバイトの比較で、`x = 5, y = 3` の
@@ -587,9 +588,11 @@ fclog / fchome / emu）、fc 1 の残骸の削除、`f() == .A` の二重評価�
       IR の変数の一覧にも入れない。✅ 2026-10-05: 名前の表の項目を `sema.Symbol`（値・モジュール・型名・マクロ。`sema/symbol.go`）に
       し、値でない名前は ir.Value にせず式では `cName` の節点（`var v = math;`・`var v = @lz4;` が黙って通っていたのがエラーに）。
       マクロの 4 つの表は `macroDef` 1 つ。評価の後の変換の判定（以前の「約 8 %」）は全部が型を省いた変数の初期値で、型は初期値の
-      型なので判定し直さない（FC_VERIFY_IR で確かめる）。残り: 計画の外の節点（代入・slice・リテラル・soa）の診断を型を決める段へ、
-      lval が型を出し直す残り（cast・slice の組み立て）、`ir.Value` の sema だけが使うフィールド（`Public`・`Build`・`StrConst` など）を
-      Symbol へ
+      型なので判定し直さない（FC_VERIFY_IR で確かめる）。✅ 2026-10-05（3 回目。Agent/discussions/2026-10-05-typing-stage-rest.md）:
+      slice・実行時の struct と配列のリテラル・soa の添字とフィールド・代入の左辺の形・明示の変換の型と診断も計画に、代入先・
+      型を省いた変数・呼ぶ関数の型も型を決める段の型で（lval は値の型から出し直さない）、`ir.Value` の `Public`（Symbol へ）・
+      `Build`・`StrConst`（Program の表へ）。残り: 左辺値性と読み取り専用は lval が値の印で判定している（型を決める段は左辺値性を
+      持たない）、lval を型付きの木から IR を出す形に作り直すこと、`ir.Value.Untyped`（リテラルの表現なので残した）
 - [x] **types の Kind**: slice（Struct + SliceOf）、enum（Int + Enum）、soa（Array + IsSoa）、far な関数（Func + far）を
       独立した Kind に（Kind で分岐する所は全部フラグの検査も並べている）。`Compatible` を `Identical` / `AssignableTo` /
       `CommonType` に分ける。`NamedIn(name, version)` の版番号は Parse 直後に fc 2 → fc 3 の正規形へ書き換える段を置けば要らない
