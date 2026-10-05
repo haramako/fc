@@ -90,7 +90,9 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 					used = true
 				}
 			case *syntax.IfStmt:
-				if r.Intn(4) == 0 {
+				// 定数の条件は包まない: `if (-60416)` は真偽で読むが、`?:` の枝の型の無い定数は 1 つの整数型に入らなければ
+				// エラー (seed 60444842)
+				if r.Intn(4) == 0 && !isConstExpr(n.Cond) {
 					cond := text(n.Cond)
 					edits = append(edits, edit{n.Cond.Pos().Offset, n.Cond.End().Offset, "(rmc_ & 2) != 0 ? (" + cond + ") : (" + cond + ")"})
 					used = true
