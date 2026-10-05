@@ -26,7 +26,7 @@ type declaration struct {
 	stmt     syntax.Stmt
 	name     string
 	public   bool
-	identity *ir.Value // predeclared struct/SoA value, without triggering lookup tracing
+	identity *Symbol // predeclared struct/SoA name, without triggering lookup tracing
 	state    resolutionState
 	group    *declaration
 	bss      string
@@ -197,20 +197,20 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 		md.h.scope.Reserve(d.name, d.public, d.use != nil && len(d.use.Names) > 0, d.resolve)
 	}
 	var identity *types.Type
-	valueType := md.h.prog.Types.TypeName()
+	var container *ir.Value
 	switch s := s.(type) {
 	case *syntax.StructDecl:
 		identity = md.h.prog.Types.NewStruct(md.h.module.Id + "." + d.name)
 	case *syntax.SoaDecl:
 		identity = md.h.prog.Types.SoaArray(md.h.module.Id+"."+d.name, nil, -1, s.Const)
-		valueType = identity
+		container = ir.NewGlobal(d.name, identity, "") // soa のコンテナの値 (型名も兼ねる)
 	}
 	if identity != nil {
 		// Pointer/handle identity is available before the storage layout.
-		v := md.h.prog.newTypeBinding(d.name, valueType, identity)
-		v.Public = d.public
-		d.identity = v
-		md.h.scope.Declare(v)
+		sym := &Symbol{Name: d.name, Val: container, Type: identity}
+		sym.SetPublic(d.public)
+		d.identity = sym
+		md.h.scope.DeclareSym(sym)
 		md.h.scope.Complete(d.name)
 		md.h.prog.typeDecls[identity] = d
 	}

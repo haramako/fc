@@ -52,8 +52,8 @@ func (h *Hlc) localAddr(e syntax.Expr, decay bool) (string, bool) {
 		} // `s.buf` (Dot) は下の配列の名前として見る
 	case *syntax.Ident:
 		// for-each の要素のポインタ (`&base[i]` の別名): ローカルの配列を回しているなら同じ
-		if v := h.scope.Find(x.Name, true); v != nil {
-			if ev := h.exprAliases[v]; ev != nil {
+		if sym := h.scope.Find(x.Name, true); sym != nil && sym.Val != nil {
+			if ev := h.exprAliases[sym.Val]; ev != nil {
 				return aliasLocal(ev)
 			}
 		}
@@ -70,11 +70,11 @@ func (h *Hlc) localAddr(e syntax.Expr, decay bool) (string, bool) {
 func (h *Hlc) localPath(e syntax.Expr) (string, *types.Type) {
 	switch x := unparenExpr(e).(type) {
 	case *syntax.Ident:
-		v := h.scope.Find(x.Name, true)
-		if v == nil || !localStorage(v) {
+		sym := h.scope.Find(x.Name, true)
+		if sym == nil || sym.Val == nil || !localStorage(sym.Val) {
 			return "", nil
 		}
-		return x.Name, v.Type
+		return x.Name, sym.Val.Type
 	case *syntax.IndexExpr:
 		name, t := h.localPath(x.X)
 		if t == nil || t.Kind != types.Array {

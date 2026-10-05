@@ -59,7 +59,7 @@ func TestBuiltins(t *testing.T) {
 			{"#fc 2\nconst T = textmap(\"tbl.txt\", \"nosuch.po\");\n", "nosuch.po"},
 			{"#fc 2\nconst T = textmap(\"tbl.txt\");\nfunction main():void { var a = T(\"a\", \"b\", \"c\"); }\n", "text conversion takes a string and an optional msgctxt"},
 			{"#fc 2\nconst T = textmap(\"tbl.txt\");\nfunction main():void { var a = T(\"a\", 1); }\n", "string literal required"},
-			{"#fc 2\nconst T:int = textmap(\"tbl.txt\");\n", "not compatible type"},
+			{"#fc 2\nconst T:int = textmap(\"tbl.txt\");\n", "a macro has no type"},
 			{"#fc 2\nconst T = textmap(\"tbl.txt\");\nfunction main():void { var a = T(1); }\n", "string literal required"},
 		}
 		for _, c := range cases {

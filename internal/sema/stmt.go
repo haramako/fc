@@ -249,9 +249,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 			if s.As != nil {
 				id = s.As.Name
 			}
-			v := h.prog.newModuleBinding(id, m.Id)
-			v.Public = reexport
-			h.scope.Declare(v)
+			h.scope.DeclareSym(&Symbol{Name: id, Module: m.Id, public: reexport})
 		}
 
 	case *syntax.FuncDecl:

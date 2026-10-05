@@ -3,8 +3,8 @@ diff --git b/internal/sema/consteval.go a/internal/sema/consteval.go
 index 4ea5b2e..477579b 100644
 --- b/internal/sema/consteval.go
 +++ a/internal/sema/consteval.go
-@@ -79,15 +79,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
- 		return cv(v)
+@@ -78,15 +78,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
+ 		return h.symExpr(h.scope.FindMust(c.name, true))
  
  	case cStr:
 -		// fc 3 までは String#unpack('c*') と同じ符号付きバイト (128 以上のバイトがあると [N]i8 になる)。fc 4 は符号なしのバイトで、

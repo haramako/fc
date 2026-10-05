@@ -130,18 +130,19 @@ func (h *Hlc) tmpName(prefix string) string {
 	return fmt.Sprintf("%s%d", prefix, h.tmpCount())
 }
 
-func (h *Hlc) defmacro(name string, fn MacroFn) *ir.Value {
-	v := h.addVar(ir.NewGlobal(name, h.prog.Types.Macro(), ""))
-	v.Public = true
-	h.prog.macros[v] = fn
-	return v
+func (h *Hlc) defmacro(name string, fn MacroFn) *macroDef {
+	return h.declareMacro(&macroDef{name: name, fn: fn})
 }
 
 // defmacroTyped は型を決める段が呼び出しの型を知る方法 (typing.go の macroTyping) を添えて defmacro する。
-func (h *Hlc) defmacroTyped(name string, mt macroTyping, fn MacroFn) *ir.Value {
-	v := h.defmacro(name, fn)
-	h.prog.macroTypes[v] = mt
-	return v
+func (h *Hlc) defmacroTyped(name string, mt macroTyping, fn MacroFn) *macroDef {
+	return h.declareMacro(&macroDef{name: name, fn: fn, typing: &mt})
+}
+
+// declareMacro はマクロ m を今のスコープに public で宣言する (IR の変数ではない)。
+func (h *Hlc) declareMacro(m *macroDef) *macroDef {
+	h.scope.DeclareSym(&Symbol{Name: m.name, Macro: m, public: true})
+	return m
 }
 
 // addVar は変数/定数を追加する。

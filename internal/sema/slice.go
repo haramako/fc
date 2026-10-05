@@ -236,13 +236,13 @@ func registerSliceBuiltins(h *Hlc) {
 			panic(&diag.Error{Msg: "@len takes 1 argument (an array, a slice or an enum type)"})
 		}
 		a := args[0]
-		if a.kind == cValue {
-			if t := h.prog.typeRef(a.val); a.val.Type.Kind == types.TypeName && t != nil {
-				if t.Enum == nil {
-					panic(&diag.Error{Msg: fmt.Sprintf("@len(%s): a type has no length (only enum types)", t)})
-				}
-				return cv(h.IntValue(len(t.Enum.Members)))
+		if t := a.typeOf(); t != nil && !t.IsSoa {
+			if t.Enum == nil {
+				panic(&diag.Error{Msg: fmt.Sprintf("@len(%s): a type has no length (only enum types)", t)})
 			}
+			return cv(h.IntValue(len(t.Enum.Members)))
+		}
+		if a.kind == cValue {
 			if t := a.val.Type; t.Kind == types.Array && !t.IsSoa && t.Length >= 0 {
 				n := t.Length
 				if h.strLen(a.val) && n > 0 {
@@ -456,8 +456,7 @@ func (h *Hlc) constLvalAddr(c *cexpr) (base *ir.Value, off int, t *types.Type, o
 	switch {
 	case c.kind == cValue:
 		v := c.val
-		if v.Kind != ir.KindGlobal || v.Symbol == "" || h.prog.moduleID(v) != "" || v.Type.IsSoa || h.prog.storageAliases[v] != nil ||
-			v.Type.Kind == types.Macro || v.Type.Kind == types.TypeName {
+		if v.Kind != ir.KindGlobal || v.Symbol == "" || v.Type.IsSoa || h.prog.storageAliases[v] != nil {
 			return nil, 0, nil, false
 		}
 		return v, 0, v.Type, true

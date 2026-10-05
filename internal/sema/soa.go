@@ -132,15 +132,15 @@ func (h *Hlc) compileSoaDecl(s *syntax.SoaDecl) {
 	h.prog.soas[soa] = &soaInfo{leaves: leaves}
 
 	// コンテナの値 (型名も兼ねる)。シンボルは持たない (リーフの配列だけがメモリ上にある)
-	var v *ir.Value
+	var sym *Symbol
 	if h.prog.typeDecls[soa] != nil {
-		v = h.prog.typeDecls[soa].identity
+		sym = h.prog.typeDecls[soa].identity
 	} else {
-		v = h.prog.newTypeBinding(name, soa, soa)
-		h.scope.Declare(v)
+		sym = &Symbol{Name: name, Val: ir.NewGlobal(name, soa, ""), Type: soa}
+		h.scope.DeclareSym(sym)
 	}
 	if h.scopeIsPublic(s.PublicPos) {
-		v.Public = true
+		sym.SetPublic(true)
 	}
 }
 

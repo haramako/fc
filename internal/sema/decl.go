@@ -214,8 +214,8 @@ func (h *Hlc) globalInit(name string, sp *syntax.VarSpec, typ *types.Type, opt i
 	}
 	if val.kind == cOp && val.op == opCall {
 		// 文字表の変換器 `_T("…")` / `_T('あ')` は定数を作るマクロ (関数の中では lval が展開する)
-		if fn := h.constEval(val.args[0]); fn.kind == cValue && h.prog.textmaps[fn.val] != nil {
-			val = h.prog.macros[fn.val](h, val.args[1:], nil).expr
+		if m := h.constEval(val.args[0]).macroOf(); m != nil && m.textmap != nil {
+			val = m.fn(h, val.args[1:], nil).expr
 		}
 	}
 	h.constIndex = true
@@ -230,7 +230,7 @@ func (h *Hlc) globalInit(name string, sp *syntax.VarSpec, typ *types.Type, opt i
 	if cv.kind != cValue || cv.val.Kind == ir.KindGlobal && h.prog.constArrays[cv.val] == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("the initial value of global variable %s must be a constant (globals are set when the program starts; assign it in a function)", name)})
 	}
-	if h.prog.storageAliases[cv.val] != nil || cv.val.Type.Kind == types.Macro {
+	if h.prog.storageAliases[cv.val] != nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("the initial value of global variable %s must be a constant", name)})
 	}
 	if t := typ; t == nil {
@@ -298,6 +298,21 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 		h.constIndex = h.v4()
 		cv := h.constEval(h.constSlice(h.withExpected(val, declType)))
 		h.constIndex = false
+		if cv.kind == cName {
+			m := cv.macroOf()
+			if m == nil {
+				panic(cv.sym.notValue()) // `const X = math;`
+			}
+			if typ != nil {
+				panic(&diag.Error{Msg: fmt.Sprintf("const %s: a macro has no type (write `const %s = ...` without the type)", name, name)})
+			}
+			// const T = textmap("..."): マクロそのものを名前に束縛する (シンボルは作らない)
+			if m.textmap != nil && m.name == "" {
+				m.name = name // 警告に出す変換器の名前
+			}
+			h.scope.DeclareSym(&Symbol{Name: name, Macro: m, public: h.scopeIsPublic(publicPos)})
+			return
+		}
 		if declType == nil || declType.Kind == types.Pointer {
 			cv = h.constRefAddress(cv, declType) // `const PP:*P = &gp;`: グローバル変数のアドレス
 		}
@@ -321,11 +336,7 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 		checkRaggedLiteral(v)
 		t := h.guessType(name, declType, v)
 		h.checkConstRange(name, typ, declType, v, t, val)
-		if v.Type.Kind == types.Macro {
-			// const T = textmap("..."): マクロ値そのものを名前に束縛する (シンボルは作らない。型指定は guessType で弾かれる)
-			v.Name = name
-			newVal = h.addVar(v)
-		} else if v.Kind == ir.KindArrayLiteral {
+		if v.Kind == ir.KindArrayLiteral {
 			if t.Kind == types.Pointer {
 				// const P:*T = [...] / "..." は配列定数の宣言 (ポインタ変数ではない)。データ自体を名前に束縛する
 				t = ir.ValType(v)
@@ -419,9 +430,7 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 	if h.prog.typeDecls[st] != nil {
 		// The identity was registered (declared) during collection.
 	} else {
-		tv := h.prog.newTypeBinding(name, h.prog.Types.TypeName(), st)
-		tv.Public = h.scopeIsPublic(s.PublicPos)
-		h.scope.Declare(tv)
+		h.scope.DeclareSym(&Symbol{Name: name, Type: st, public: h.scopeIsPublic(s.PublicPos)})
 	}
 	fields := make([]types.Field, 0, len(s.Fields))
 	for _, f := range s.Fields {

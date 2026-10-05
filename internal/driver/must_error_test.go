@@ -61,6 +61,12 @@ func TestMustError(t *testing.T) {
 		// soa (42f5734)
 		{"soa の名前を変数の型に", "var v:Es;", "is not a value type"},
 		{"soa の名前を引数の型に", "function f(a:Es):void { }", "is not a value type"},
+		// 値でない名前 (モジュール・マクロ・型名) を値に (2026-10-05 まで `var v = math;`・`var v = @lz4;` が黙って通っていた)
+		{"モジュールを値に", "use math; function f():void { var v = math; }", "math is a module, not a value"},
+		{"マクロを値に", "function f():void { var v = @lz4; }", "@lz4 is a macro, not a value"},
+		{"モジュールを呼ぶ", "use math; function f():void { math(1); }", "math is a module, not a value"},
+		{"型名を値に", "function f():void { var v = S; }", "S is a type, not a value"},
+		{"モジュールを const に", "use math; const X = math;", "math is a module, not a value"},
 	}
 	for i, c := range cases {
 		c := c

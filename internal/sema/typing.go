@@ -79,7 +79,7 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 	switch e.kind {
 	case cValue:
 		v := e.val
-		if v.Type == nil || v.Type.Kind == types.Bad || v.Type.Kind == types.TypeName || v.Type.Kind == types.Macro || v.Type.Kind == types.Void {
+		if v.Type == nil || v.Type.Kind == types.Bad || v.Type.Kind == types.Void {
 			return exprInfo{}, false
 		}
 		if v.Kind == ir.KindLiteral && v.IsInt && v.Untyped {
@@ -137,8 +137,8 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		}
 		return exprInfo{t: a.t}, true
 	case opCall:
-		if fn := h.constEval(e.args[0]); fn.kind == cValue && fn.val.Type.Kind == types.Macro {
-			return h.macroCallType(e, fn.val)
+		if m := h.constEval(e.args[0]).macroOf(); m != nil {
+			return h.macroCallType(e, m)
 		}
 		f, ok := h.exprType(e.args[0])
 		if !ok {
@@ -358,10 +358,10 @@ var ptrMacro = macroTyping{typ: func(h *Hlc, args []*cexpr) (exprInfo, bool) {
 }}
 
 // macroCallType はマクロ m の呼び出し e (評価済みの節点) の型。
-func (h *Hlc) macroCallType(e *cexpr, m *ir.Value) (exprInfo, bool) {
-	mt, ok := h.prog.macroTypes[m]
+func (h *Hlc) macroCallType(e *cexpr, m *macroDef) (exprInfo, bool) {
+	mt := m.typing
 	switch {
-	case !ok:
+	case mt == nil:
 		return exprInfo{}, false
 	case mt.pure:
 		x := h.expandMacro(e, m)
@@ -374,15 +374,15 @@ func (h *Hlc) macroCallType(e *cexpr, m *ir.Value) (exprInfo, bool) {
 }
 
 // expandMacro はマクロ m の呼び出し e を展開する。IR を出さないマクロ (pure) の展開は覚えて、型を決める段と lval で同じものを使う。
-func (h *Hlc) expandMacro(e *cexpr, m *ir.Value) macroResult {
+func (h *Hlc) expandMacro(e *cexpr, m *macroDef) macroResult {
 	if x, ok := h.expansions[e]; ok {
 		return x
 	}
 	outer := h.macroCallee
 	h.macroCallee = e.args[0]
-	x := h.prog.macros[m](h, e.args[1:], e.block)
+	x := m.fn(h, e.args[1:], e.block)
 	h.macroCallee = outer
-	if h.prog.macroTypes[m].pure {
+	if m.typing != nil && m.typing.pure {
 		if h.expansions == nil {
 			h.expansions = map[*cexpr]macroResult{}
 		}

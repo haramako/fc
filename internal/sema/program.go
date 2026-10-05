@@ -58,20 +58,15 @@ type Program struct {
 	soas           map[*types.Type]*soaInfo         // SoA コンテナ型 → フィールドごとの配列 (soa.go)
 	lambdas        map[string]*ir.Lambda            // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
 	storageAliases map[*ir.Value]*ir.Value          // declaration binding -> canonical mutable global
-	bindings       map[*ir.Value]binding            // 名前の表の、値でない束縛 (モジュール・型名) の中身 (binding.go)
 	storageGlobals map[*ir.Value]bool               // actual global var declarations (not ROM constants)
 	constArrays    map[*ir.Value]*ir.Value          // 名前付きの配列定数 → その配列リテラル (const の中の `TABLE[3]` を畳む)
 	strLitGlobals  map[*ir.Value]*ir.Value          // 文字列リテラルを切り出した ROM の配列 → そのリテラル (ポインタにするときの 0 終端の検査: strPtr)
 	strLitSpans    map[*ir.Value]strLitSpan         // fc 3 の文字列リテラル → ソースの位置 (fc 4 への書き換えで `\0` を足す)
 	defaults       map[*ir.Lambda]*functionDefaults // declaration metadata, not part of the function type
 	// FarCalls は far call になった呼び出しの一覧 ("caller -> callee" と位置)。fcc build -d で表示する
-	FarCalls    []FarCall
-	global      *Scope                     // 組み込みマクロ (asm) を持つ最上位スコープ
-	macros      map[*ir.Value]MacroFn      // マクロ値 → 本体
-	constMacros map[*ir.Value]ConstMacroFn // 定数式で評価する組み込み (textmap) → 本体
-	macroTypes  map[*ir.Value]macroTyping  // マクロ値 → 型を決める段が呼び出しの型を知る方法 (typing.go。無ければ分からない)
-	textmaps    map[*ir.Value]*textmapConv // textmap(...) の変換器 (@format が書式の変換に使う)
-	fmtCodes    map[string]string          // @format の textmap の数字などの表 (モジュールと表 → シンボル)
+	FarCalls []FarCall
+	global   *Scope            // 組み込みマクロ (asm) を持つ最上位スコープ
+	fmtCodes map[string]string // @format の textmap の数字などの表 (モジュールと表 → シンボル)
 	// buildStrings は文字列の @(build) の const → 値 (データを作らず、使った場所で文字列リテラルにする。staticif.go)
 	buildStrings map[*ir.Value]string
 	poCatalogs   map[string]*poCatalog // 読んだ .po (実パス → 訳の表。textmap の翻訳。po.go)
@@ -106,12 +101,12 @@ func (p *Program) iface(m *ir.Module) *ModuleInterface {
 	return &ModuleInterface{Id: m.Id, scope: p.scopes[m]}
 }
 
-// boundModule はモジュールの束縛の値 (`use mod;` の名前。ir.Value.Module がモジュールの id) の外面 (束縛でなければ nil)。
-func (p *Program) boundModule(v *ir.Value) *ModuleInterface {
-	if p.moduleID(v) == "" {
+// boundModule はモジュールの束縛 (`use mod;` の名前) の外面 (束縛でなければ nil)。
+func (p *Program) boundModule(sym *Symbol) *ModuleInterface {
+	if sym == nil || sym.Module == "" {
 		return nil
 	}
-	m, _ := p.Modules.Get(p.moduleID(v))
+	m, _ := p.Modules.Get(sym.Module)
 	return p.iface(m)
 }
 
@@ -126,10 +121,6 @@ func NewProgram() *Program {
 		Types:          types.NewUniverse(),
 		Modules:        ir.NewModuleList(),
 		Sources:        map[string]*Source{},
-		macros:         map[*ir.Value]MacroFn{},
-		constMacros:    map[*ir.Value]ConstMacroFn{},
-		macroTypes:     map[*ir.Value]macroTyping{},
-		textmaps:       map[*ir.Value]*textmapConv{},
 		fmtCodes:       map[string]string{},
 		buildStrings:   map[*ir.Value]string{},
 		poCatalogs:     map[string]*poCatalog{},
@@ -137,7 +128,6 @@ func NewProgram() *Program {
 		lambdas:        map[string]*ir.Lambda{},
 		defaults:       map[*ir.Lambda]*functionDefaults{},
 		storageAliases: map[*ir.Value]*ir.Value{},
-		bindings:       map[*ir.Value]binding{},
 		storageGlobals: map[*ir.Value]bool{},
 		constArrays:    map[*ir.Value]*ir.Value{},
 		strLitGlobals:  map[*ir.Value]*ir.Value{},

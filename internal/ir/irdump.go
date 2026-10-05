@@ -118,8 +118,6 @@ func dumpGval(v *Value, ctx *irCtx) string {
 		return strconv.Itoa(v.Int)
 	case v.Kind == KindArrayLiteral:
 		return dumpElems(v.Elems, ctx)
-	case v.Type.Kind == types.Macro:
-		return "macro"
 	case v.Symbol != "":
 		return symS(v.Symbol)
 	}

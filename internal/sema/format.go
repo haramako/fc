@@ -82,9 +82,7 @@ func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
 	a := &fmtArgs{what: what, vals: make([]ir.Operand, len(args)), texts: make([]*string, len(args))}
 	var formatText string
 	if format.kind == cOp && format.op == opCall && len(format.args) >= 2 {
-		if f := h.constEval(format.args[0]); f.kind == cValue {
-			a.tm = h.prog.textmaps[f.val]
-		}
+		a.tm = h.constEval(format.args[0]).textmapOf()
 	}
 	if a.tm != nil {
 		formatText = a.tm.text(h, format.args[1:]) // 翻訳は `{…}` を含んだ書式の全体で

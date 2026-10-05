@@ -35,11 +35,11 @@ func (l LocalType) String() string {
 	return fmt.Sprintf("LocalType(%d)", int(l))
 }
 
-// Value は変数・定数・リテラル・モジュール束縛を表す。レジスタ割付の結果も持つ。
+// Value は変数・定数・リテラルを表す (モジュール・型名・マクロの名前は sema の Symbol)。レジスタ割付の結果も持つ。
 //
 // Kind ごとに有効なフィールド:
 //   - KindLocal:        Name, LocalType
-//   - KindGlobal:       Name と、Symbol (アセンブラシンボル) / Module (モジュール束縛) のいずれか (マクロは型で表す)
+//   - KindGlobal:       Name と Symbol (アセンブラシンボル。soa のコンテナは無し)
 //   - KindLiteral:      IsInt なら Int、そうでなければ Symbol (関数シンボル)。Name は定数名 ("" なら無名)
 //   - KindArrayLiteral: Elems
 type Value struct {

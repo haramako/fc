@@ -1,6 +1,6 @@
 package sema
 
-// スコープ (名前 → ir.Value) とモジュールの外面 (ModuleInterface)。lib/fc/base.rb の Scope 由来。名前の解決は sema の
+// スコープ (名前 → Symbol) とモジュールの外面 (ModuleInterface)。lib/fc/base.rb の Scope 由来。名前の解決は sema の
 // 仕事なので sema が持つ (2026-10-05 に ir から移した。ir.Module は名前の表を持たない)。
 
 import (
@@ -18,7 +18,7 @@ type Scope struct {
 	// Hidden はモジュールスコープから親 (グローバル) へ辿らない名前 → 代わりの名前 (fc 3 のモジュールで、`@` の付かない
 	// 組み込みの名前 asm / min など。fc 3 では @asm と書く)。モジュール自身の宣言・取り込みは見える
 	Hidden   map[string]string
-	declares map[string]*ir.Value
+	declares map[string]*Symbol
 	order    []string              // 宣言順 (IdList の列挙順が出力に影響するため保つ)
 	aliases  map[string]scopeAlias // `use a, b from mod;` (v2) で束縛した名前
 	aliasOrd []string
@@ -31,7 +31,7 @@ type Scope struct {
 // scopeAlias は選択的インポート 1 件。他モジュールの宣言 (Value) をこのスコープの名前に束縛する。
 // reexport なら外 (Lookup) からも見える (`public use a from mod;`)。
 type scopeAlias struct {
-	val      *ir.Value
+	sym      *Symbol
 	reexport bool
 }
 
@@ -43,7 +43,7 @@ type scopeUse struct {
 }
 
 func NewScope(parent *Scope) *Scope {
-	s := &Scope{Parent: parent, declares: map[string]*ir.Value{}}
+	s := &Scope{Parent: parent, declares: map[string]*Symbol{}}
 	if parent != nil {
 		s.Reserved = parent.Reserved
 	}
@@ -59,7 +59,7 @@ func (s *Scope) checkReserved(name string) {
 
 // Find は id を探す。withPrivate が偽なら外から見える宣言 (public な宣言と再輸出された glob 取り込み) だけを見る。
 // 自スコープ → use したスコープ (public のみ) → 親スコープ の順。
-func (s *Scope) Find(id string, withPrivate bool) *ir.Value {
+func (s *Scope) Find(id string, withPrivate bool) *Symbol {
 	if d, ok := s.deferred[id]; ok && (withPrivate || d.public) {
 		d.resolve()
 	}
@@ -71,14 +71,14 @@ func (s *Scope) Find(id string, withPrivate bool) *ir.Value {
 	}
 	s.finding[id] = true
 	defer delete(s.finding, id)
-	if val, ok := s.declares[id]; ok {
-		if withPrivate || val.Public {
-			return val
+	if sym, ok := s.declares[id]; ok {
+		if withPrivate || sym.Public() {
+			return sym
 		}
 	}
 	if a, ok := s.aliases[id]; ok {
 		if withPrivate || a.reexport {
-			return a.val
+			return a.sym
 		}
 	}
 	for _, u := range s.uses {
@@ -109,7 +109,7 @@ func (s *Scope) hiddenHint(id string) string {
 }
 
 // FindMust は Find と同じだが、見つからなければ CompileError。
-func (s *Scope) FindMust(id string, withPrivate bool) *ir.Value {
+func (s *Scope) FindMust(id string, withPrivate bool) *Symbol {
 	if v := s.Find(id, withPrivate); v != nil {
 		return v
 	}
@@ -163,8 +163,13 @@ func editDistance(a, b string) int {
 	return prev[len(rb)]
 }
 
-// Local はこのスコープ自身で宣言した id の値 (遅延の解決を起こさない。無ければ nil)。
-func (s *Scope) Local(id string) *ir.Value { return s.declares[id] }
+// Local はこのスコープ自身で宣言した id の値 (遅延の解決を起こさない。無ければ、または値でなければ nil)。
+func (s *Scope) Local(id string) *ir.Value {
+	if sym := s.declares[id]; sym != nil {
+		return sym.Val
+	}
+	return nil
+}
 
 // DeclaredHere はこのスコープ自身に id の宣言 (または束縛) があるか。
 func (s *Scope) DeclaredHere(id string) bool {
@@ -179,23 +184,30 @@ func (s *Scope) DeclaredHere(id string) bool {
 }
 
 // Declare は値を宣言する。同名が既にあれば CompileError (選択的インポートとの衝突も含む: 規則 S2)。
-func (s *Scope) Declare(val *ir.Value) {
-	s.checkReserved(val.Name)
-	if _, ok := s.declares[val.Name]; ok {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", val.Name)})
+func (s *Scope) Declare(val *ir.Value) *Symbol {
+	sym := valueSym(val)
+	s.DeclareSym(sym)
+	return sym
+}
+
+// DeclareSym は名前 sym.Name を宣言する (値でない束縛も)。
+func (s *Scope) DeclareSym(sym *Symbol) {
+	s.checkReserved(sym.Name)
+	if _, ok := s.declares[sym.Name]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", sym.Name)})
 	}
-	if _, ok := s.aliases[val.Name]; ok {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s already imported", val.Name)})
+	if _, ok := s.aliases[sym.Name]; ok {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s already imported", sym.Name)})
 	}
-	s.declares[val.Name] = val
-	if _, reserved := s.deferred[val.Name]; !reserved {
-		s.order = append(s.order, val.Name)
+	s.declares[sym.Name] = sym
+	if _, reserved := s.deferred[sym.Name]; !reserved {
+		s.order = append(s.order, sym.Name)
 	}
 }
 
-// Alias は他モジュールの宣言 val を name でこのスコープに束縛する (`use a, b from mod;`)。
+// Alias は他モジュールの宣言 sym を name でこのスコープに束縛する (`use a, b from mod;`)。
 // 自宣言・既存の束縛と同名なら CompileError (規則 S2)。
-func (s *Scope) Alias(name string, val *ir.Value, reexport bool) {
+func (s *Scope) Alias(name string, sym *Symbol, reexport bool) {
 	s.checkReserved(name)
 	if _, ok := s.declares[name]; ok {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s already defined", name)})
@@ -206,7 +218,7 @@ func (s *Scope) Alias(name string, val *ir.Value, reexport bool) {
 	if s.aliases == nil {
 		s.aliases = map[string]scopeAlias{}
 	}
-	s.aliases[name] = scopeAlias{val: val, reexport: reexport}
+	s.aliases[name] = scopeAlias{sym: sym, reexport: reexport}
 	if _, reserved := s.deferred[name]; !reserved {
 		s.aliasOrd = append(s.aliasOrd, name)
 	}
@@ -286,17 +298,17 @@ type ModuleInterface struct {
 }
 
 // Lookup はドット参照 `mod.name` 用に公開宣言を探す (無ければ nil)。
-func (mi *ModuleInterface) Lookup(name string) *ir.Value {
+func (mi *ModuleInterface) Lookup(name string) *Symbol {
 	return mi.scope.Find(name, false)
 }
 
 // LookupInternal は private も含めて探す (コンパイラ組み込み機能の内部参照用。利用者コードの名前解決には使わない)。
-func (mi *ModuleInterface) LookupInternal(name string) *ir.Value {
+func (mi *ModuleInterface) LookupInternal(name string) *Symbol {
 	return mi.scope.Find(name, true)
 }
 
 // LookupMust は Lookup と同じだが、見つからなければ diag.Error。private を指していたら、その旨を伝える。
-func (mi *ModuleInterface) LookupMust(name string) *ir.Value {
+func (mi *ModuleInterface) LookupMust(name string) *Symbol {
 	if v := mi.Lookup(name); v != nil {
 		return v
 	}
@@ -310,7 +322,7 @@ func (mi *ModuleInterface) LookupMust(name string) *ir.Value {
 func (mi *ModuleInterface) Exports() []string {
 	var r []string
 	for _, id := range mi.scope.order {
-		if v := mi.scope.declares[id]; v != nil && v.Public {
+		if sym := mi.scope.declares[id]; sym != nil && sym.Public() {
 			r = append(r, id)
 		}
 	}

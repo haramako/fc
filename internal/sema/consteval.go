@@ -38,6 +38,9 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 // constEvalOperand は評価結果を IR のオペランド (*ir.Value) として取り出す。定数でなければ CompileError。
 func (h *Hlc) constEvalOperand(c *cexpr) ir.Operand {
 	r := h.constEval(c)
+	if r.kind == cName {
+		panic(r.sym.notValue())
+	}
 	if r.kind != cValue {
 		panic(&diag.Error{Msg: "constant value required (got an expression that is evaluated at runtime)"})
 	}
@@ -65,18 +68,14 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	case cNullFn:
 		return c // @null_fn (型が決まるまで保留)
 
+	case cName:
+		return c // 値でない名前 (評価済み)
+
 	case cIdent:
 		if h.caseDecls[c.name] && h.scope.Find(c.name, true) == nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s not found (in fc 3 a variable declared in a switch case is visible only in that case; declare it before the switch)", c.name)})
 		}
-		v := h.scope.FindMust(c.name, true)
-		if str, ok := h.prog.buildStrings[v]; ok {
-			return h.constEval(cstr(str)) // 文字列の @(build) の const は使った場所で文字列リテラルに
-		}
-		if a := h.exprAliases[v]; a != nil {
-			return a // 評価済みの式そのもの (代入の検査は同じ node かで見る)
-		}
-		return cv(v)
+		return h.symExpr(h.scope.FindMust(c.name, true))
 
 	case cStr:
 		// fc 3 までは String#unpack('c*') と同じ符号付きバイト (128 以上のバイトがあると [N]i8 になる)。fc 4 は符号なしのバイトで、
@@ -197,15 +196,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if left.kind == cValue && left.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true})
 		}
-		if ref := h.prog.typeRef(left.val); left.kind == cValue && ref != nil && ref.Enum != nil {
+		if ref := left.typeOf(); ref != nil && ref.Enum != nil {
 			return cv(h.enumMember(ref, c.name)) // enum のメンバー (Type.Name)
 		}
-		if left.kind == cValue && h.prog.moduleID(left.val) != "" {
-			v := h.prog.boundModule(left.val).LookupMust(c.name)
-			if str, ok := h.prog.buildStrings[v]; ok {
-				return h.constEval(cstr(str))
-			}
-			return cv(v)
+		if left.moduleOf() != "" {
+			return h.symExpr(h.prog.boundModule(left.sym).LookupMust(c.name))
 		}
 		// モジュールでなければ struct のフィールド参照 (実行時に評価する)
 		return h.constField(left, c.name)
@@ -399,17 +394,15 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		case opCall:
 			args := make([]*cexpr, len(c.args))
 			for i, a := range c.args {
-				if i > 0 && a.kind == cInt && a.s == "char" && args[0].kind == cValue && h.prog.textmaps[args[0].val] != nil {
+				if i > 0 && a.kind == cInt && a.s == "char" && args[0].textmapOf() != nil {
 					args[i] = a // _T('あ'): 文字のリテラルのまま変換器に渡す (ASCII 以外の文字は評価するとエラー)
 					continue
 				}
 				args[i] = h.constEval(a)
 			}
 			// 定数式で評価する組み込み (textmap など) はここで展開する
-			if args[0].kind == cValue && args[0].val.Type.Kind == types.Macro {
-				if fn, ok := h.prog.constMacros[args[0].val]; ok {
-					return fn(h, args[1:])
-				}
+			if m := args[0].macroOf(); m != nil && m.constFn != nil {
+				return m.constFn(h, args[1:])
 			}
 			return &cexpr{kind: cOp, op: opCall, args: args, block: c.block}
 
@@ -711,4 +704,19 @@ func checkRaggedLiteral(v *ir.Value) {
 			panic(&diag.Error{Msg: "elements of an array literal have different lengths; declare the type, e.g. `const M:[?][]const u8 = [...]` (rows as slices) or `const M:[?]*const u8 = [...]`"})
 		}
 	}
+}
+
+// symExpr は名前 sym の参照の節点 (値なら評価済みの値、値でなければ cName)。
+func (h *Hlc) symExpr(sym *Symbol) *cexpr {
+	v := sym.Val
+	if v == nil {
+		return symName(sym) // soa のコンテナは値 (型名も兼ねる)
+	}
+	if str, ok := h.prog.buildStrings[v]; ok {
+		return h.constEval(cstr(str)) // 文字列の @(build) の const は使った場所で文字列リテラルに
+	}
+	if a := h.exprAliases[v]; a != nil {
+		return a // 評価済みの式そのもの (代入の検査は同じ node かで見る)
+	}
+	return cv(v)
 }

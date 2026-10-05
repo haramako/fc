@@ -54,9 +54,7 @@ func (h *Hlc) compileEnumDecl(s *syntax.EnumDecl) {
 		next = v + 1
 	}
 	t.Enum.Members = members
-	v := h.prog.newTypeBinding(name, h.prog.Types.TypeName(), t)
-	v.Public = s.PublicPos.IsValid()
-	h.scope.Declare(v)
+	h.scope.DeclareSym(&Symbol{Name: name, Type: t, public: s.PublicPos.IsValid()})
 }
 
 // enumMember は enum 型 t のメンバー name の値 (無ければエラー)。

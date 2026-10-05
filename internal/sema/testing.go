@@ -80,11 +80,11 @@ func (h *Hlc) runTests4() macroResult {
 				panic(&diag.Error{Msg: fmt.Sprintf("%s.%s: a @(test) function takes no arguments and returns nothing", m.Id, lmd.Name), Pos: lmd.Pos})
 			}
 			fn := mi.LookupInternal(lmd.Name)
-			if fn == nil {
+			if fn == nil || fn.Val == nil {
 				continue
 			}
 			console("write_z", h.cstrZ(fmt.Sprintf("%s.%s: ", m.Id, lmd.Name)))
-			h.lval(ccall(cv(fn)))
+			h.lval(ccall(cv(fn.Val)))
 			console("write_z", h.cstrZ("ok\n"))
 			n++
 		}

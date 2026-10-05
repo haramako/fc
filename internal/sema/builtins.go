@@ -174,11 +174,10 @@ func registerBuiltins(p *Program) {
 				cat = h.readPO(po)
 			}
 		}
-		m := ir.NewGlobal("", h.prog.Types.Macro(), "")
+		m := &macroDef{typing: &pureMacro} // 展開は定数 (型を決める段が展開して型を見る)
 		tm := &textmapConv{m: m, table: table, conv: conv, cat: cat, warned: map[string]bool{}}
-		h.prog.textmaps[m] = tm
-		h.prog.macroTypes[m] = pureMacro // 展開は定数 (型を決める段が展開して型を見る)
-		h.prog.macros[m] = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
+		m.textmap = tm
+		m.fn = func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 			if len(args) == 1 && args[0].kind == cInt && args[0].s == "char" {
 				// _T('あ'): 1 文字を表で引いた 1 つのコード (整数の定数。濁点などで 2 つ以上のコードになる文字はエラー)
 				c := tm.codes(h, string(rune(args[0].n)))
@@ -195,13 +194,13 @@ func registerBuiltins(p *Program) {
 			}
 			return macroResult{expr: carray(elems)}
 		}
-		return cv(m)
+		return symName(&Symbol{Macro: m})
 	})
 }
 
 // textmapConv は textmap(...) が作った変換器 (`const _T = @textmap(...)` の _T)。@format(buf, _T("…"), ...) も使う (format.go)。
 type textmapConv struct {
-	m      *ir.Value // 変換器のマクロ値 (警告の名前)
+	m      *macroDef // 変換器のマクロ (警告の名前)
 	table  string
 	conv   *TextConverter
 	cat    *poCatalog // .po (nil なら翻訳しない)
@@ -273,11 +272,11 @@ func (h *Hlc) textWarn(warned map[string]bool, format string, args ...any) {
 }
 
 // textmapName は警告に出す変換器の名前 (`const _T = @textmap(...)` の _T)。
-func textmapName(m *ir.Value) string {
-	if m.Name == "" {
+func textmapName(m *macroDef) string {
+	if m.name == "" {
 		return "text conversion"
 	}
-	return m.Name
+	return m.name
 }
 
 // ctxtNote は警告に添える msgctxt。
@@ -289,11 +288,8 @@ func ctxtNote(k poKey) string {
 }
 
 // defconstmacro は定数式で評価される組み込みをグローバルに登録する。
-func (h *Hlc) defconstmacro(name string, fn ConstMacroFn) *ir.Value {
-	v := h.addVar(ir.NewGlobal(name, h.prog.Types.Macro(), ""))
-	v.Public = true
-	h.prog.constMacros[v] = fn
-	return v
+func (h *Hlc) defconstmacro(name string, fn ConstMacroFn) *macroDef {
+	return h.declareMacro(&macroDef{name: name, constFn: fn})
 }
 
 // stdioModule は組み込みが参照する stdio モジュールを返す (読み込まれていなければエラー)。
@@ -323,7 +319,10 @@ func (h *Hlc) nullFn(t *types.Type) *ir.Value {
 // moduleFunc は組み込みが呼ぶモジュールの関数 name を引く。無ければエラー (ソースのディレクトリに同じ名前のモジュール
 // (stdio.fc など) があると fclib のものが隠れ、nil のまま呼んで panic していた。survey 2026-09-27)。
 func (h *Hlc) moduleFunc(m *ModuleInterface, mod, name string) *ir.Value {
-	v := m.LookupInternal(name)
+	var v *ir.Value
+	if sym := m.LookupInternal(name); sym != nil {
+		v = sym.Val
+	}
 	if v == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("module %s has no %s (needed by a builtin); is a %s.fc in your source directory hiding fclib's %s?", mod, name, mod, mod)})
 	}

@@ -191,12 +191,12 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 	case cEnumShort:
 		panic(&diag.Error{Msg: fmt.Sprintf("cannot tell the enum type of .%s here (write Type.%s)", e.name, e.name)})
 
+	case cName:
+		panic(e.sym.notValue())
+
 	case cValue:
 		if e.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true}) // エラーになった宣言の参照: 報告済みなので黙って打ち切る
-		}
-		if e.val.Type.Kind == types.TypeName {
-			panic(&diag.Error{Msg: fmt.Sprintf("%s is a type, not a value", e.val.Name)})
 		}
 		if e.val.Type.IsSoa {
 			panic(&diag.Error{Msg: fmt.Sprintf("soa %s can only be indexed (%s[i]) or used as a type (*%s)", e.val.Name, e.val.Name, e.val.Name)})
@@ -510,11 +510,10 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			if e.args[0].kind == cNullFn {
 				panic(&diag.Error{Msg: "@null_fn does nothing; remove the call (it is a value for function pointers)"})
 			}
-			lmdV := h.rval(e.args[0])
 			args := e.args[1:]
-			if ir.ValType(lmdV).Kind == types.Macro {
+			if m := h.constEval(e.args[0]).macroOf(); m != nil {
 				// マクロの実行
-				x := h.expandMacro(e, ir.ValLiteral(lmdV))
+				x := h.expandMacro(e, m)
 				if x.stmts != nil {
 					for _, st := range x.stmts {
 						h.lval(st)
@@ -524,6 +523,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				}
 			} else {
 				// 普通の関数コール
+				lmdV := h.rval(e.args[0])
 				lmdType := ir.ValType(lmdV)
 				h.planCall(h.planInfo(e.args[0], lmdV), func() string { return describe(lmdV) }) // 型を決める段の計画 (typeplan.go)
 				args = h.fillDefaultArgs(lmdV, args)

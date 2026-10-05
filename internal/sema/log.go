@@ -59,7 +59,7 @@ func (h *Hlc) logEveryStatement() {
 		if v.Kind != ir.KindLocal || (v.LocalType != ir.LTNone && v.LocalType != ir.LTArg) || checkLogType(v.Type) != "" {
 			continue
 		}
-		if h.scope.Find(v.Name, true) != v {
+		if sym := h.scope.Find(v.Name, true); sym == nil || sym.Val != v {
 			continue // スコープの外 (終わったループの変数など)
 		}
 		parts = append(parts, ir.LogPart{Text: " " + v.Name + "=", Arg: -1}, ir.LogPart{Arg: len(p.Args)})
@@ -102,7 +102,7 @@ func (h *Hlc) logOperand(c *cexpr) (ir.Operand, string) {
 		case v.Kind == ir.KindLiteral && v.Symbol != "" && !v.IsString:
 			return v, v.Symbol // 関数のアドレスなど
 		case v.Kind == ir.KindLocal || v.Kind == ir.KindGlobal:
-			if v.Type.Kind == types.TypeName || v.Type.Kind == types.Macro || v.Type.Kind == types.Module || v.Type.IsSoa {
+			if v.Type.IsSoa {
 				break
 			}
 			if root := h.prog.storageAliases[v]; root != nil {

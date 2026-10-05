@@ -105,12 +105,12 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 		if n, old := types.V2IntTypeNames[name]; old && h.version() >= syntax.Version3 {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s is not a type in fc 3 (write %s; `fcc migrate` rewrites fc 2 sources)", name, n)})
 		}
-		if v := h.scope.Find(name, true); v != nil {
-			if h.prog.typeRef(v) != nil {
-				return h.prog.typeRef(v)
+		if sym := h.scope.Find(name, true); sym != nil {
+			if sym.Type != nil {
+				return sym.Type
 			}
-			if v.Type.Kind == types.Bad {
-				return v.Type // エラーになった struct / soa 宣言
+			if sym.Val != nil && sym.Val.Type.Kind == types.Bad {
+				return sym.Val.Type // エラーになった struct / soa 宣言
 			}
 		}
 		panic(&diag.Error{Msg: fmt.Sprintf("unknown type %s", name)})
@@ -120,11 +120,11 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 	if mi == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module (in type %s.%s)", t.Module.Name, t.Module.Name, name)})
 	}
-	v := mi.LookupMust(name)
-	if h.prog.typeRef(v) == nil {
+	sym := mi.LookupMust(name)
+	if sym.Type == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s.%s is not a type", t.Module.Name, name)})
 	}
-	return h.prog.typeRef(v)
+	return sym.Type
 }
 
 // checkComplete は変数・フィールド・配列要素に置ける型か検査する (void と未完成の struct は不可)。

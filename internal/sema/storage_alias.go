@@ -26,12 +26,12 @@ func (h *Hlc) compileStorageAlias(s *syntax.VarDecl) {
 	var target *ir.Value
 	switch c.kind {
 	case cIdent:
-		target = h.scope.FindMust(c.name, true)
+		target = h.scope.FindMust(c.name, true).Val
 	case cDot:
 		if c.args[0].kind == cIdent {
 			m := h.scope.FindMust(c.args[0].name, true)
 			if mi := h.prog.boundModule(m); mi != nil {
-				target = mi.LookupMust(c.name)
+				target = mi.LookupMust(c.name).Val
 			}
 		}
 	}

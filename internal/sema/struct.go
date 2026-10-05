@@ -263,8 +263,8 @@ func (h *Hlc) sizeofType(t syntax.TypeExpr) int {
 	var ty *types.Type
 	if nt, ok := t.(*syntax.NamedType); ok && nt.Module == nil {
 		if _, isBasic := h.prog.Types.NamedIn(nt.Name.Name, h.version()); !isBasic {
-			if v := h.scope.Find(nt.Name.Name, true); v != nil && h.prog.typeRef(v) == nil {
-				ty = v.Type
+			if sym := h.scope.Find(nt.Name.Name, true); sym != nil && sym.Type == nil && sym.Val != nil {
+				ty = sym.Val.Type
 			}
 		}
 	}
@@ -350,7 +350,7 @@ func (h *Hlc) padArrayLiteral(name string, v *ir.Value, typ *types.Type) *ir.Val
 		return v
 	}
 	base := ir.ValType(v).Base
-	if n == 0 || base.Kind == types.Macro {
+	if n == 0 {
 		base = typ.Base
 	}
 	zero := h.zeroLiteral(base)

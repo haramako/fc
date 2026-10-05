@@ -37,10 +37,10 @@ func TestScope(t *testing.T) {
 	g.Declare(v1)
 	s.Declare(v2)
 
-	if s.Find("a", true) != v1 {
+	if s.Find("a", true).Val != v1 {
 		t.Error("親スコープの検索に失敗")
 	}
-	if s.Find("b", true) != v2 {
+	if s.Find("b", true).Val != v2 {
 		t.Error("自スコープの検索に失敗")
 	}
 	if s.Find("c", true) != nil {
@@ -55,7 +55,7 @@ func TestScope(t *testing.T) {
 	other.Declare(pub)
 	other.Declare(priv)
 	s.Use(&ModuleInterface{Id: "other", scope: other}, true)
-	if s.Find("p", true) != pub {
+	if s.Find("p", true).Val != pub {
 		t.Error("use経由のpublicが見えない")
 	}
 	if s.Find("q", true) != nil {

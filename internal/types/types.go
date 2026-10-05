@@ -16,20 +16,17 @@ const (
 	Void Kind = iota + 1
 	Bool
 	Int
-	Module
-	Macro
 	Pointer
 	Array
 	Func
-	Struct   // 構造体 (Fields)
-	TypeName // 型名を束縛した値の型 (実際の型は sema が持つ: sema/binding.go)
-	SoaRef   // SoA コンテナの要素ハンドル (実体は uint8 のインデックス。Base = 要素の struct 型、Soa = コンテナ)
-	Bad      // エラーになった宣言の型 (これに触れるエラーは報告しない: 巻き添えの抑制)
+	Struct // 構造体 (Fields)
+	SoaRef // SoA コンテナの要素ハンドル (実体は uint8 のインデックス。Base = 要素の struct 型、Soa = コンテナ)
+	Bad    // エラーになった宣言の型 (これに触れるエラーは報告しない: 巻き添えの抑制)
 )
 
 var kindNames = [...]string{
-	Void: "void", Bool: "bool", Int: "int", Module: "module", Macro: "macro",
-	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", TypeName: "typename", SoaRef: "soaref", Bad: "bad",
+	Void: "void", Bool: "bool", Int: "int",
+	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", SoaRef: "soaref", Bad: "bad",
 }
 
 func (k Kind) String() string {
@@ -147,26 +144,15 @@ func (u *Universe) intern(t *Type) *Type {
 	return t
 }
 
-// Void / Bool / Module / Macro は単位型。
+// Void / Bool は単位型 (モジュール・マクロ・型名は型を持たない: 名前の表の値でない束縛。sema/symbol.go)。
 func (u *Universe) Void() *Type { return u.intern(&Type{Kind: Void, Size: 0, Length: -1, str: "void"}) }
 func (u *Universe) Bool() *Type {
 	return u.intern(&Type{Kind: Bool, Size: 1, Length: -1, str: "ubool8"})
-}
-func (u *Universe) Module() *Type {
-	return u.intern(&Type{Kind: Module, Size: 0, Length: -1, str: "module"})
-}
-func (u *Universe) Macro() *Type {
-	return u.intern(&Type{Kind: Macro, Size: 0, Length: -1, str: "macro"})
 }
 
 // Bad はエラーになった宣言に付ける型。どの型とも互換で、これを使う式のエラーは抑制される。
 func (u *Universe) Bad() *Type {
 	return u.intern(&Type{Kind: Bad, Size: 1, Length: -1, str: "<error>"})
-}
-
-// TypeName は型名を束縛した値 (struct 宣言) の型。
-func (u *Universe) TypeName() *Type {
-	return u.intern(&Type{Kind: TypeName, Size: 0, Length: -1, str: "typename"})
 }
 
 // NewStruct は名前付き struct 型を作る (フィールドは SetFields で後から入れる。自己参照のため)。
@@ -252,10 +238,6 @@ func (u *Universe) NamedIn(name string, version int) (t *Type, ok bool) {
 		return u.Void(), true
 	case "bool":
 		return u.Bool(), true
-	case "module":
-		return u.Module(), true
-	case "macro":
-		return u.Macro(), true
 	}
 	if bt, ok := IntTypeNames[name]; ok {
 		return u.IntType(bt.size, bt.signed), true
