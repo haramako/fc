@@ -276,7 +276,7 @@ func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 		case t.IsSlice() && t.SliceOf == u8:
 			a.noWidth(p, "a string")
 			call("str", cv(h.operandValue(v)))
-		case t.Kind == types.Array && !t.IsSoa && t.Base == u8:
+		case t.Kind == types.Array && t.Base == u8:
 			a.noWidth(p, "a string")
 			call("str_z_in", cv(h.operandValue(v))) // 配列は中の最初の 0 まで (文字列で初期化した配列は終端の 0 を含む)
 		case t.Kind == types.Pointer && t.Base == u8:
@@ -389,7 +389,7 @@ func (h *Hlc) printf4(args []*cexpr) {
 		case t.Kind == types.Pointer && t.Base == u8:
 			a.noWidth(p, "a string")
 			write("write_z", cv(h.operandValue(v)))
-		case t.Kind == types.Array && !t.IsSoa && t.Base == u8:
+		case t.Kind == types.Array && t.Base == u8:
 			a.noWidth(p, "a string")
 			write("write_z_in", cv(h.operandValue(v)))
 		default:

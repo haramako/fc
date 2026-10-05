@@ -473,7 +473,7 @@ func (h *Hlc) constElem(a, i *cexpr) *cexpr {
 		return nil
 	}
 	arr := h.constAggregate(a)
-	if arr == nil || arr.Type.Kind != types.Array || arr.Type.IsSoa {
+	if arr == nil || arr.Type.Kind != types.Array {
 		return nil
 	}
 	n := i.val.Int
@@ -518,7 +518,7 @@ func (h *Hlc) constAggregate(c *cexpr) *ir.Value {
 		}
 	case c.kind == cOp && c.op == opIndex && len(c.args) == 2 && c.args[1] != nil && c.args[1].isLiteralInt():
 		arr := h.constAggregate(c.args[0])
-		if arr == nil || arr.Type.Kind != types.Array || arr.Type.IsSoa {
+		if arr == nil || arr.Type.Kind != types.Array {
 			return nil
 		}
 		if n := c.args[1].val.Int; n >= 0 && n < len(arr.Elems) {

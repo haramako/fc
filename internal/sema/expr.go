@@ -69,7 +69,7 @@ func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Typ
 // T の配列に作り直す。収まらない・整数の配列でないときはそのまま (compatibleAssign が報告する)。
 func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
 	// soa の型も Kind は Array だが配列ではなく、宣言がエラーだと Base が nil (fuzz で発覚)
-	if typ == nil || typ.Kind != types.Array || typ.IsSoa || typ.Base.Kind != types.Int || v.Kind != ir.KindArrayLiteral {
+	if typ == nil || typ.Kind != types.Array || typ.Base.Kind != types.Int || v.Kind != ir.KindArrayLiteral {
 		return v
 	}
 	vt := ir.ValType(v)
@@ -161,7 +161,7 @@ func (h *Hlc) arrayValue(c *cexpr) ir.Operand {
 	if e := h.constEval(c); e.kind != cOp || e.op != opIndex && e.op != opField && e.op != opDeref {
 		return nil
 	}
-	if info, ok := h.exprType(c); !ok || info.t.Kind != types.Array || info.t.IsSoa || info.t.Length < 0 {
+	if info, ok := h.exprType(c); !ok || info.t.Kind != types.Array || info.t.Length < 0 {
 		return nil
 	}
 	v, left := h.lvalValue(c)
@@ -198,7 +198,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 		if e.val.Type.Kind == types.Bad {
 			panic(&diag.Error{Suppressed: true}) // エラーになった宣言の参照: 報告済みなので黙って打ち切る
 		}
-		if e.val.Type.IsSoa {
+		if e.val.Type.Kind == types.Soa {
 			panic(&diag.Error{Msg: fmt.Sprintf("soa %s can only be indexed (%s[i]) or used as a type (*%s)", e.val.Name, e.val.Name, e.val.Name)})
 		}
 		if root := h.prog.storageAliases[e.val]; root != nil {
@@ -663,7 +663,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			}
 
 		case opIndex: // []演算子
-			if a := e.args[0]; a.kind == cValue && a.val.Type.IsSoa {
+			if a := e.args[0]; a.kind == cValue && a.val.Type.Kind == types.Soa {
 				// `Points[i]`: SoA コンテナの添字はハンドルを作るだけ
 				r = h.soaIndex(a.val.Type, h.rval(e.args[1]))
 				leftValue = true
@@ -745,7 +745,7 @@ func (h *Hlc) assign(left ir.Operand, lv bool, rhs *cexpr) ir.Operand {
 	}
 	var right ir.Operand
 	checked := false
-	if dt.Kind == types.Array && !dt.IsSoa {
+	if dt.Kind == types.Array {
 		right = h.arrayValue(rhs) // `d = a[1]` (2 次元配列の行): 行の写し
 	}
 	if right == nil {

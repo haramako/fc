@@ -20,13 +20,14 @@ const (
 	Array
 	Func
 	Struct // 構造体 (Fields)
+	Soa    // SoA コンテナ (soa 宣言。Base = 要素の struct、Length。要素はフィールドごとの配列に分かれる)
 	SoaRef // SoA コンテナの要素ハンドル (実体は uint8 のインデックス。Base = 要素の struct 型、Soa = コンテナ)
 	Bad    // エラーになった宣言の型 (これに触れるエラーは報告しない: 巻き添えの抑制)
 )
 
 var kindNames = [...]string{
 	Void: "void", Bool: "bool", Int: "int",
-	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", SoaRef: "soaref", Bad: "bad",
+	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", Soa: "soa", SoaRef: "soaref", Bad: "bad",
 }
 
 func (k Kind) String() string {
@@ -47,8 +48,7 @@ type Type struct {
 	Params   []*Type
 	Fields   []Field   // Struct のフィールド (宣言順)
 	Name     string    // Struct / SoaRef のモジュール修飾名 (mod.Name)
-	Soa      *Type     // SoaRef のコンテナ (`soa` 配列型)、Kind == Array で IsSoa
-	IsSoa    bool      // Array が SoA コンテナ (soa 宣言) か
+	Soa      *Type     // SoaRef のコンテナ (Kind == Soa)
 	IsConst  bool      // SoA コンテナが `soa const` (読み出しのみ) か
 	Path     string    // SoaRef: 入れ子 struct フィールドのハンドルなら、そのフィールドまでの名前 ("pos_")。最上位は ""
 	Enum     *EnumInfo // fc 3 の enum (Kind は Int のまま。基底型の幅と符号。別の enum・整数とは互換でない)
@@ -173,7 +173,7 @@ func (u *Universe) SetFields(t *Type, fields []Field) {
 	u.refreshArraySizes()
 }
 
-// SoaArray は SoA コンテナの型 (`soa Name:[N]Elem`)。配列型だが IsSoa で区別し、要素はメモリ上で分散する
+// SoaArray は SoA コンテナの型 (`soa Name:[N]Elem`。Kind == Soa: 配列 (Array) とは別の種類。2026-10-05 までは Array + IsSoa)。要素はメモリ上で分散する
 // (フィールドごとの配列)。値としては添字で要素ハンドル (SoaRef) を得る以外の使い方はない。
 // elem == nil reserves the identity; a later call with elem/length completes its layout.
 func (u *Universe) SoaArray(qualName string, elem *Type, length int, isConst bool) *Type {
@@ -181,7 +181,7 @@ func (u *Universe) SoaArray(qualName string, elem *Type, length int, isConst boo
 	if isConst {
 		str = "soa const " + qualName
 	}
-	t := u.intern(&Type{Kind: Array, Base: elem, Length: -1, Size: -1, IsSoa: true, IsConst: isConst, Name: qualName, str: str})
+	t := u.intern(&Type{Kind: Soa, Base: elem, Length: -1, Size: -1, IsConst: isConst, Name: qualName, str: str})
 	if elem != nil && length >= 0 {
 		t.Base, t.Length, t.Size = elem, length, elem.Size*length
 	}
@@ -441,7 +441,7 @@ func (u *Universe) refreshArraySizes() {
 	for {
 		changed := false
 		for _, t := range u.cache {
-			if t.Kind == Array && !t.IsSoa && t.Size < 0 && t.Length >= 0 && t.Base.Size >= 0 {
+			if t.Kind == Array && t.Size < 0 && t.Length >= 0 && t.Base.Size >= 0 {
 				size := t.Length * t.Base.Size
 				if t.Size != size {
 					t.Size = size

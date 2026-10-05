@@ -58,7 +58,7 @@ func (h *Hlc) compileStorageAlias(s *syntax.VarDecl) {
 }
 
 func storageAliasType(t *types.Type) bool {
-	if t == nil || t.Size <= 0 || t.IsSoa {
+	if t == nil || t.Size <= 0 || t.Kind == types.Soa {
 		return false
 	}
 	switch t.Kind {

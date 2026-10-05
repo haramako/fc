@@ -56,7 +56,7 @@ func (h *Hlc) sliceParts(c *cexpr, what string) sliceParts {
 // str は式が文字列リテラルか (長さは終端の 0 を含めない)。
 func (h *Hlc) partsOf(v ir.Operand, lv, str bool, what string) (p sliceParts, rv ir.Operand, ok bool) {
 	if lv {
-		if b := ir.ValType(v).Base; b != nil && b.Kind == types.Array && !b.IsSoa {
+		if b := ir.ValType(v).Base; b != nil && b.Kind == types.Array {
 			// ポインタ経由の配列 (`p.arr`): v は配列へのポインタ
 			ptr := ir.NewCastedValue(v, h.prog.Types.PointerTo(b.Base), 0)
 			return h.arrayParts(b, ptr, ptr, h.readOnly(v), false, what), ptr, true
@@ -68,7 +68,7 @@ func (h *Hlc) partsOf(v ir.Operand, lv, str bool, what string) (p sliceParts, rv
 	case t.IsSlice():
 		ptr := ir.NewCastedValue(v, h.prog.Types.PointerTo(t.SliceOf), 0)
 		return sliceParts{elem: t.SliceOf, ptr: ptr, base: ptr, len: ir.NewCastedValue(v, t.SliceLen(), 2), n: -1, ro: h.readOnly(v), wide: t.IsWideSlice()}, v, true
-	case t.Kind == types.Array && !t.IsSoa:
+	case t.Kind == types.Array:
 		return h.arrayParts(t, ir.NewPointeredArray(v, h.prog.Types.PointerTo(t.Base)), v, h.readOnly(v), str, what), v, true
 	}
 	return sliceParts{}, v, false
@@ -236,14 +236,14 @@ func registerSliceBuiltins(h *Hlc) {
 			panic(&diag.Error{Msg: "@len takes 1 argument (an array, a slice or an enum type)"})
 		}
 		a := args[0]
-		if t := a.typeOf(); t != nil && !t.IsSoa {
+		if t := a.typeOf(); t != nil && t.Kind != types.Soa {
 			if t.Enum == nil {
 				panic(&diag.Error{Msg: fmt.Sprintf("@len(%s): a type has no length (only enum types)", t)})
 			}
 			return cv(h.IntValue(len(t.Enum.Members)))
 		}
 		if a.kind == cValue {
-			if t := a.val.Type; t.Kind == types.Array && !t.IsSoa && t.Length >= 0 {
+			if t := a.val.Type; t.Kind == types.Array && t.Length >= 0 {
 				n := t.Length
 				if h.strLen(a.val) && n > 0 {
 					n--
@@ -261,7 +261,7 @@ func registerSliceBuiltins(h *Hlc) {
 		}
 		p := h.rval(args[0])
 		t := ir.ValType(p)
-		if t.Kind == types.Array && !t.IsSoa {
+		if t.Kind == types.Array {
 			p, t = ir.NewPointeredArray(p, h.prog.Types.PointerTo(t.Base)), h.prog.Types.PointerTo(t.Base)
 		}
 		if t.Kind != types.Pointer || t.Base.Kind == types.Void {
@@ -374,7 +374,7 @@ func (h *Hlc) constSlice(c *cexpr) *cexpr {
 		if v.StrTerm && n > 0 {
 			n-- // 文字列リテラルは終端の 0 を含めない (データには残す。fc 4 の文字列には 0 が無い)
 		}
-	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && !v.Type.IsSoa && v.Symbol != "" && v.Type.Length >= 0:
+	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && v.Symbol != "" && v.Type.Length >= 0:
 		n, sym = v.Type.Length, v.Symbol
 		if h.strLen(v) && n > 0 {
 			n-- // 名前付きの文字列定数 (fc 4): リテラルと同じく終端の 0 を含めない
@@ -421,7 +421,7 @@ func (h *Hlc) constAddress(c *cexpr, pt *types.Type) *cexpr {
 		h.strPtr(v)
 		sym := h.addDef(h.tmpName("_"), &ir.Def{Kind: ir.DefBlock, Type: v.Type, Elems: v.Elems})
 		return cv(ir.NewSymbolLiteral("", pt, sym))
-	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && !v.Type.IsSoa && v.Symbol != "":
+	case v.Kind == ir.KindGlobal && v.Type.Kind == types.Array && v.Symbol != "":
 		h.compatibleAssign("field", pt, v.Type)
 		h.strPtr(v)
 		return cv(ir.NewSymbolLiteral("", pt, v.Symbol))
@@ -456,13 +456,13 @@ func (h *Hlc) constLvalAddr(c *cexpr) (base *ir.Value, off int, t *types.Type, o
 	switch {
 	case c.kind == cValue:
 		v := c.val
-		if v.Kind != ir.KindGlobal || v.Symbol == "" || v.Type.IsSoa || h.prog.storageAliases[v] != nil {
+		if v.Kind != ir.KindGlobal || v.Symbol == "" || v.Type.Kind == types.Soa || h.prog.storageAliases[v] != nil {
 			return nil, 0, nil, false
 		}
 		return v, 0, v.Type, true
 	case c.kind == cOp && c.op == opIndex:
 		base, off, t, ok = h.constLvalAddr(c.args[0])
-		if !ok || t.Kind != types.Array || t.IsSoa || !c.args[1].isLiteralInt() {
+		if !ok || t.Kind != types.Array || !c.args[1].isLiteralInt() {
 			return nil, 0, nil, false
 		}
 		i := c.args[1].val.Int

@@ -102,7 +102,7 @@ func (h *Hlc) logOperand(c *cexpr) (ir.Operand, string) {
 		case v.Kind == ir.KindLiteral && v.Symbol != "" && !v.IsString:
 			return v, v.Symbol // 関数のアドレスなど
 		case v.Kind == ir.KindLocal || v.Kind == ir.KindGlobal:
-			if v.Type.IsSoa {
+			if v.Type.Kind == types.Soa {
 				break
 			}
 			if root := h.prog.storageAliases[v]; root != nil {
@@ -123,7 +123,7 @@ func (h *Hlc) logOperand(c *cexpr) (ir.Operand, string) {
 		base, text := h.logOperand(e.args[0])
 		bt := ir.ValType(base)
 		idx := h.constEval(e.args[1])
-		if bt.Kind == types.Array && !bt.IsSoa && !isLogLiteral(base) && idx.isLiteralInt() {
+		if bt.Kind == types.Array && !isLogLiteral(base) && idx.isLiteralInt() {
 			n := idx.val.Int
 			if n < 0 || (bt.Length >= 0 && n >= bt.Length) {
 				panic(&diag.Error{Msg: fmt.Sprintf("@log: %s[%d] is out of range (length %d)", text, n, bt.Length)})

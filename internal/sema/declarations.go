@@ -289,7 +289,7 @@ func (h *Hlc) completeType(t *types.Type) {
 	if d := h.prog.typeDecls[t]; d != nil {
 		d.resolve()
 	}
-	if t.Kind == types.Array && !t.IsSoa {
+	if t.Kind == types.Array {
 		h.completeType(t.Base)
 	}
 	if t.Kind == types.Bad {

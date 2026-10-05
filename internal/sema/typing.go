@@ -183,7 +183,7 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		// a[i]: 配列・ポインタは要素、slice は SliceOf、soa は要素のハンドル (soaIndex)
 		a, ok := h.exprType(e.args[0])
 		switch {
-		case ok && a.t.IsSoa:
+		case ok && a.t.Kind == types.Soa:
 			return exprInfo{t: u.SoaRef(a.t, h.soaElement(a.t), "")}, true
 		case ok:
 			var idx *exprInfo
@@ -336,7 +336,7 @@ var sliceMacro = macroTyping{typ: func(h *Hlc, args []*cexpr) (exprInfo, bool) {
 		return exprInfo{}, false
 	}
 	t := p.t
-	if !(t.Kind == types.Array && !t.IsSoa || t.Kind == types.Pointer && t.Base.Kind != types.Void) {
+	if !(t.Kind == types.Array || t.Kind == types.Pointer && t.Base.Kind != types.Void) {
 		return exprInfo{}, false
 	}
 	return exprInfo{t: h.prog.Types.Slice(t.Base, false, n.t.Size == 2)}, true
@@ -349,7 +349,7 @@ var ptrMacro = macroTyping{typ: func(h *Hlc, args []*cexpr) (exprInfo, bool) {
 			switch {
 			case a.t.IsSlice():
 				return exprInfo{t: h.prog.Types.PointerTo(a.t.SliceOf)}, true
-			case a.t.Kind == types.Array && !a.t.IsSoa:
+			case a.t.Kind == types.Array:
 				return exprInfo{t: h.prog.Types.PointerTo(a.t.Base)}, true
 			}
 		}
@@ -427,7 +427,7 @@ func (h *Hlc) toSliceType(e *cexpr) (exprInfo, bool) {
 			return exprInfo{t: h.prog.Types.Slice(t.SliceOf, false, true)}, true
 		}
 		return exprInfo{}, false // 広い → 普通はエラー
-	case t.Kind == types.Array && !t.IsSoa:
+	case t.Kind == types.Array:
 		if t.Base != st.SliceOf {
 			return exprInfo{}, false // エラー
 		}
@@ -445,7 +445,7 @@ func (h *Hlc) sliceRangeType(a *cexpr) (exprInfo, bool) {
 	switch t := info.t; {
 	case t.IsSlice():
 		return exprInfo{t: h.prog.Types.Slice(t.SliceOf, false, t.IsWideSlice())}, true
-	case t.Kind == types.Array && !t.IsSoa && t.Length >= 0:
+	case t.Kind == types.Array && t.Length >= 0:
 		n := t.Length
 		if h.isStringLit(a) && n > 0 {
 			n--
@@ -490,7 +490,7 @@ func (h *Hlc) rvalAssign(c *cexpr, to *types.Type, what string, check func(v ir.
 	pre := h.assignPre(what, c, to)
 	var v ir.Operand
 	checked := false
-	if to != nil && to.Kind == types.Array && !to.IsSoa {
+	if to != nil && to.Kind == types.Array {
 		v = h.arrayValue(c) // `x = a[1]` (2 次元配列の行): 行の写し
 	}
 	if v == nil {

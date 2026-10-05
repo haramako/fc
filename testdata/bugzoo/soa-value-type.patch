@@ -21,7 +21,7 @@ index e80c27b..2617f34 100644
  // A named struct does not require its layout until it is used by value.
  func (h *Hlc) typeOf(t syntax.TypeExpr) *types.Type {
 -	ty := h.typeOfRaw(t)
--	if ty.IsSoa {
+-	if ty.Kind == types.Soa {
 -		// soa は型と実体が 1 対 1 で、値の型にはならない (`var v:E;` は E と同じ形の 2 つ目の実体ではなく、確保した領域を
 -		// 使わずに E を読み書きしていた)。型として書けるのはハンドル `*E` だけ
 -		n := shortName(ty.Name)
@@ -38,6 +38,6 @@ index e80c27b..2617f34 100644
  	case *syntax.PointerType:
 -		elem := h.typeOfRaw(t.Elem)
 +		elem := h.typeOf(t.Elem)
- 		if elem.IsSoa {
+ 		if elem.Kind == types.Soa {
  			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
  		}

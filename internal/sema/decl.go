@@ -108,7 +108,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		}
 		// 型の照合を評価の前に (rvalAssign と同じ。長さを初期値から決める `[?]T` は長さが決まってから下で)
 		initPre = typ != nil && !(typ.Kind == types.Array && typ.Length < 0) && h.assignPre("`"+name+"`", c, typ)
-		if typ == nil || typ.Kind == types.Array && !typ.IsSoa {
+		if typ == nil || typ.Kind == types.Array {
 			init = h.arrayValue(c) // `var b = a[1]` (2 次元配列の行) は行の写し (要素へのポインタにしない)
 		}
 		if init == nil {
