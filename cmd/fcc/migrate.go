@@ -14,7 +14,6 @@ package main
 // 同じ)。入力が CRLF なら出力も CRLF にする。
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 
@@ -41,40 +40,14 @@ func (c *migrateCmd) run() int {
 	}
 	rc := 0
 	for _, path := range c.Files {
-		if err := emitMigrated(path, out[path], c.List, c.Write, c.Diff); err != nil {
+		src, err := os.ReadFile(path)
+		if err == nil {
+			err = c.emit(path, src, out[path], "migrated")
+		}
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			rc = 1
 		}
 	}
 	return rc
-}
-
-// emitMigrated は path の書き換えの結果 res (LF) を、フラグに従って出す。
-func emitMigrated(path string, res []byte, list, write, diff bool) error {
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if bytes.Contains(src, []byte("\r\n")) {
-		res = bytes.ReplaceAll(res, []byte("\n"), []byte("\r\n"))
-	}
-	changed := !bytes.Equal(src, res)
-	switch {
-	case list:
-		if changed {
-			fmt.Println(path)
-		}
-	case diff:
-		if changed {
-			fmt.Printf("--- %s\n+++ %s (migrated)\n", path, path)
-			fmt.Print(lineDiff(string(src), string(res)))
-		}
-	case write:
-		if changed {
-			return os.WriteFile(path, res, 0o666)
-		}
-	default:
-		os.Stdout.Write(res)
-	}
-	return nil
 }

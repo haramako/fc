@@ -57,20 +57,15 @@ func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, er
 
 // compileNoWrite は意味解析からコード生成まで通す (ファイルは書かない)。前段は fcc build と同じ compileFront。
 func (c *compilation) compileNoWrite(main string, cli []string, cfg *ir.Config) (prog *sema.Program, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if ce, ok := r.(*diag.Error); ok {
-				err = ce
-				return
-			}
-			panic(r)
-		}
-	}()
+	defer recoverError(&err)
+	if err := c.checkTarget(); err != nil {
+		return nil, err
+	}
 	defs, err := c.projectDefines(cli)
 	if err != nil {
 		return nil, err
 	}
-	front, err := c.compileFront(&frontOptions{Dir: c.dir, Target: c.target, Main: main, Defines: defs, OptimizeLevel: 2, Config: cfg})
+	front, err := c.compileFront(&frontOptions{Main: main, Defines: defs, OptimizeLevel: 2, Config: cfg})
 	if err != nil {
 		return nil, err
 	}

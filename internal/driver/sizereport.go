@@ -6,7 +6,6 @@ package driver
 
 import (
 	"fmt"
-	"os"
 	"sort"
 
 	"github.com/haramako/fc/internal/cc65"
@@ -33,15 +32,7 @@ func (c *compilation) writeSizeHTML(dbg *cc65.DbgFile, path, title string) error
 	}
 	rep := sizehtml.FromDbg(title, dbg, lc)
 	rep.Calls, rep.HasCalls = moduleCalls(c.prog.Modules.List()), true
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	if err := sizehtml.Write(f, rep); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return sizehtml.WriteFile(path, rep)
 }
 
 // moduleCalls はモジュールの組ごとの呼び出しの数 (呼ぶ側 → 呼ばれる側。同じモジュールの中は数えない)。インライン展開した

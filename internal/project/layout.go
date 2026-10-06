@@ -77,10 +77,10 @@ type BankLayout struct {
 	Source   string // fc.toml のパス
 }
 
-// numBanks は PRG のバンクの数。
+// NumBanks は PRG のバンクの数。
 func (l *BankLayout) NumBanks() int { return l.PRGSize / l.Profile.BankSize }
 
-// firstFixed は常に見えている領域の最初のバンクの番号。
+// FirstFixed は常に見えている領域の最初のバンクの番号。
 func (l *BankLayout) FirstFixed() int {
 	n := l.NumBanks() - l.Profile.FixedBanks
 	if n < 0 {
@@ -89,7 +89,7 @@ func (l *BankLayout) FirstFixed() int {
 	return n
 }
 
-// semaBanks は意味解析に渡す名前 → 番号 / スロットの表。
+// SemaBanks は意味解析に渡す名前 → 番号 / スロットの表。
 func (l *BankLayout) SemaBanks() map[string]sema.BankRef {
 	m := map[string]sema.BankRef{"fixed": {Index: -1, Fixed: true}}
 	for _, b := range l.Banks {
@@ -98,7 +98,7 @@ func (l *BankLayout) SemaBanks() map[string]sema.BankRef {
 	return m
 }
 
-// layout は fc.toml から配置を作る ([target] も [bank.*] も無ければ nil: 今までどおり options(bank_count / bank) で配置する)。
+// Layout は fc.toml から配置を作る ([target] も [bank.*] も無ければ nil: 今までどおり options(bank_count / bank) で配置する)。
 func (cfg *ProjectConfig) Layout() (*BankLayout, error) {
 	target, hasTarget := cfg.Sections["target"]
 	hasBanks := false
@@ -217,7 +217,7 @@ func (cfg *ProjectConfig) Layout() (*BankLayout, error) {
 			pending = append(pending, b)
 		}
 		if v, ok := sec["segments"]; ok {
-			if b.Segments, err = parseStringList(v); err != nil {
+			if b.Segments, err = StringList(v); err != nil {
 				return nil, fail("[bank.%s] segments: %v", n, err)
 			}
 		}
@@ -308,26 +308,6 @@ func parseInt(s string) (int, error) {
 		return 0, fmt.Errorf("%q is not an integer", s)
 	}
 	return int(n), nil
-}
-
-// parseStringList は `["a", "b"]` を読む (fc.toml の値の綴り)。
-func parseStringList(s string) ([]string, error) {
-	s = strings.TrimSpace(s)
-	if !strings.HasPrefix(s, "[") || !strings.HasSuffix(s, "]") {
-		return nil, fmt.Errorf("expected [\"name\", ...]")
-	}
-	var r []string
-	for _, e := range strings.Split(s[1:len(s)-1], ",") {
-		e = strings.TrimSpace(e)
-		if e == "" {
-			continue
-		}
-		if len(e) < 2 || e[0] != '"' || e[len(e)-1] != '"' {
-			return nil, fmt.Errorf("expected [\"name\", ...]")
-		}
-		r = append(r, e[1:len(e)-1])
-	}
-	return r, nil
 }
 
 func hexList(xs []int) string {

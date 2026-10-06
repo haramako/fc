@@ -144,7 +144,7 @@ func buildRun(t *testing.T, c *Compiler, main string, opt *BuildOptions, out io.
 	return res, run, err
 }
 
-// tracePC は FC_TRACE=pc (emu の panic のときに直近の PC を出す) か。
+// tracePC は FC_TRACE_PC (emu の panic のときに直近の PC を出す) か。
 func tracePC(cfg *ir.Config) bool {
 	if cfg == nil {
 		cfg = ir.ConfigFromEnv()

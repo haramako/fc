@@ -35,7 +35,7 @@ type fmtCmd struct {
 func (c *fmtCmd) run() int {
 	rc := 0
 	for _, path := range c.Files {
-		if err := fmtFile(path, c.List, c.Write, c.Diff); err != nil {
+		if err := fmtFile(path, c.rewriteFlags); err != nil {
 			var ce *fc.Error
 			if errors.As(err, &ce) {
 				fmt.Fprintf(os.Stderr, "%s: error: %s\n", ce.Pos, ce.Msg)
@@ -48,7 +48,7 @@ func (c *fmtCmd) run() int {
 	return rc
 }
 
-func fmtFile(path string, list, write, diff bool) error {
+func fmtFile(path string, f rewriteFlags) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -57,21 +57,27 @@ func fmtFile(path string, list, write, diff bool) error {
 	if err != nil {
 		return err
 	}
+	return f.emit(path, src, out, "formatted")
+}
+
+// emit は path の元の内容 src と書き換えた内容 out (LF) を、フラグに従って出す (fmt と migrate で共通)。入力が CRLF なら出力も
+// CRLF にする。label は差分の見出し (`+++ path (label)`)。
+func (f rewriteFlags) emit(path string, src, out []byte, label string) error {
 	if bytes.Contains(src, []byte("\r\n")) {
 		out = bytes.ReplaceAll(out, []byte("\n"), []byte("\r\n"))
 	}
 	changed := !bytes.Equal(src, out)
 	switch {
-	case list:
+	case f.List:
 		if changed {
 			fmt.Println(path)
 		}
-	case diff:
+	case f.Diff:
 		if changed {
-			fmt.Printf("--- %s (original)\n+++ %s (formatted)\n", path, path)
+			fmt.Printf("--- %s (original)\n+++ %s (%s)\n", path, path, label)
 			fmt.Print(lineDiff(string(src), string(out)))
 		}
-	case write:
+	case f.Write:
 		if changed {
 			return os.WriteFile(path, out, 0o666)
 		}

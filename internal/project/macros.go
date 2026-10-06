@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/extmacro"
 	"github.com/haramako/fc/internal/starmacro"
 )
@@ -32,7 +33,7 @@ func (cfg *ProjectConfig) MacroServers() ([]*extmacro.Server, error) {
 	sort.Strings(names)
 	var r []*extmacro.Server
 	for _, sec := range names {
-		fail := func(msg string) error { return fmt.Errorf("%s: [%s]: %s", cfg.Path, sec, msg) }
+		fail := func(msg string) error { return &diag.Error{Msg: fmt.Sprintf("%s: [%s]: %s", cfg.Path, sec, msg)} }
 		kv := cfg.Sections[sec]
 		s := &extmacro.Server{Name: strings.TrimPrefix(sec, "macro_server."), Dir: filepath.Dir(cfg.Path)}
 		var err error
@@ -70,7 +71,7 @@ func (cfg *ProjectConfig) MacroScripts() ([]*starmacro.Script, error) {
 	for _, sec := range names {
 		file := cfg.Sections[sec]["file"]
 		if file == "" {
-			return nil, fmt.Errorf("%s: [%s]: file must be the path of a Starlark script (file = \"tools/tables.star\")", cfg.Path, sec)
+			return nil, &diag.Error{Msg: fmt.Sprintf("%s: [%s]: file must be the path of a Starlark script (file = \"tools/tables.star\")", cfg.Path, sec)}
 		}
 		root := filepath.Dir(cfg.Path)
 		r = append(r, &starmacro.Script{Name: strings.TrimPrefix(sec, "macro_script."), File: filepath.Join(root, filepath.FromSlash(file)), Root: root})

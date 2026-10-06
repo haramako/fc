@@ -3,10 +3,8 @@ package fc
 // fcc lib: fc.toml の [lib.*] のライブラリ (Agent/wiki/plans/v4-stdlib.md §9)。
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/haramako/fc/internal/project"
 )
@@ -38,7 +36,7 @@ func resolveLibs(dir string, update []string) ([]LibInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &project.Resolver{Update: update, Log: func(f string, a ...any) { logf(f, a...) }}
+	r := &project.Resolver{Update: update, Log: project.StderrLog}
 	libs, err := r.Resolve(cfg)
 	if err != nil {
 		return nil, err
@@ -107,8 +105,4 @@ func source(l project.Lib) string {
 		return l.Git
 	}
 	return l.Path
-}
-
-var logf = func(f string, a ...any) {
-	os.Stderr.WriteString("fcc: " + strings.TrimSuffix(fmt.Sprintf(f, a...), "\n") + "\n")
 }

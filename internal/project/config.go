@@ -162,7 +162,7 @@ func stripComment(line string) string {
 	return line
 }
 
-// defines は fc.toml の [define.<module>] と CLI の -D (`module.NAME=value`、後勝ち) から @(build) の const の上書きを作る。
+// Defines は fc.toml の [define.<module>] と CLI の -D (`module.NAME=value`、後勝ち) から @(build) の const の上書きを作る。
 func (cfg *ProjectConfig) Defines(cli []string) (map[string]*sema.DefineUse, error) {
 	m := map[string]*sema.DefineUse{}
 	var sections []string

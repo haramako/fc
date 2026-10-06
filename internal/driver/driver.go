@@ -175,23 +175,34 @@ func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *Build
 	return c.newCompilation(ctx, opt.Dir, opt.Target).build(filename, opt)
 }
 
-// build は BuildContext の本体。
-func (c *compilation) build(filename string, opt *BuildOptions) (result *Result, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if ce, ok := r.(*CommandError); ok {
-				err = ce
-				return
-			}
-			if ce, ok := r.(*diag.Error); ok {
-				err = ce
-				return
-			}
+// recoverError は深い所から panic で投げたコンパイルエラー (*diag.Error) と外部コマンドの失敗 (*CommandError) を err にする
+// (build・check・migrate の入口で defer する。それ以外の panic はそのまま)。
+func recoverError(err *error) {
+	if r := recover(); r != nil {
+		switch e := r.(type) {
+		case *diag.Error:
+			*err = e
+		case *CommandError:
+			*err = e
+		default:
 			panic(r)
 		}
-	}()
-	if c.target == "x6502" {
-		return nil, &diag.Error{Msg: "target x6502 is not supported by go port"}
+	}
+}
+
+// checkTarget はターゲットが emu / nes か (ほかは fclib/<target> が無く、後で ca65 の分かりにくい失敗になっていた)。
+func (c *compilation) checkTarget() error {
+	if c.target != "emu" && c.target != "nes" {
+		return &diag.Error{Msg: fmt.Sprintf("unknown target %q (emu / nes)", c.target)}
+	}
+	return nil
+}
+
+// build は BuildContext の本体。
+func (c *compilation) build(filename string, opt *BuildOptions) (result *Result, err error) {
+	defer recoverError(&err)
+	if err := c.checkTarget(); err != nil {
+		return nil, err
 	}
 	if opt.Out == "" {
 		if c.target == "nes" {
@@ -214,7 +225,6 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 	if c.buildDir == "" {
 		c.buildDir = filepath.Join(c.dir, DefaultBuildDirName)
 	}
-	c.optLibs = nil
 	for _, d := range opt.LibPath {
 		if !filepath.IsAbs(d) {
 			d = filepath.Join(c.dir, d)
@@ -222,9 +232,8 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		if a, err := filepath.Abs(d); err == nil {
 			d = a
 		}
-		c.optLibs = append(c.optLibs, filepath.ToSlash(d))
+		c.optLibs = append(c.optLibs, filepath.ToSlash(d)) // 探索先 libDirs は projectDefines が fc.toml の [lib.*] と合わせて作る
 	}
-	c.libDirs = c.optLibs
 	c.offline = opt.Offline
 	c.jobs = opt.Jobs
 	if c.jobs <= 0 {
@@ -242,7 +251,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		return nil, derr
 	}
 	front, ferr := c.compileFront(&frontOptions{
-		Dir: c.dir, Target: c.target, Main: filename, Defines: defs, OptimizeLevel: opt.OptimizeLevel,
+		Main: filename, Defines: defs, OptimizeLevel: opt.OptimizeLevel,
 		Debug: opt.Debug, LogEveryStatement: opt.LogEveryStatement, Config: opt.Config,
 		MisclassifyResident: opt.MisclassifyResident, DebugFile: c.debugFileFunc(opt),
 	})
@@ -293,7 +302,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		return nil, err
 	} else if src != "" {
 		sources = append(sources, src)
-		objs = append(objs, strings.TrimSuffix(src, ".s")+".o")
+		objs = append(objs, c.objPath(src))
 	}
 	if fc := c.farcallAsm(); fc != "" {
 		sources = append(sources, fc)
@@ -302,7 +311,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		return nil, err
 	} else if src != "" {
 		sources = append(sources, src)
-		objs = append(objs, strings.TrimSuffix(src, ".s")+".o")
+		objs = append(objs, c.objPath(src))
 	}
 	if err := c.assembleAll(sources); err != nil {
 		return nil, err
@@ -332,6 +341,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		return nil, err
 	}
 	var logFile *fclog.LogFile
+	stem := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) // ROM の隣のファイル (.fclog.json / .mlb)
 	if opt.Debug || opt.SizeReport || opt.SizeHTML != "" {
 		dbg, err := loadDbg()
 		if err != nil {
@@ -342,7 +352,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 			if logFile, err = fclog.Build(llc.LogSites, dbg, c.target, llc.DebugFile); err != nil {
 				return nil, err
 			}
-			if err := fclog.WriteFiles(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)), logFile); err != nil {
+			if err := fclog.WriteFiles(stem, logFile); err != nil {
 				return nil, err
 			}
 			result.Warnings = append(result.Warnings, fclog.Warnings(llc.LogSites)...)
@@ -352,7 +362,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 			if b, err := os.ReadFile(opt.Out); err == nil && len(b) > 6 {
 				battery = b[6]&2 != 0
 			}
-			if err := dbg.WriteMlb(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out))+".mlb", battery); err != nil {
+			if err := dbg.WriteMlb(stem+".mlb", battery); err != nil {
 				return nil, err
 			}
 		}
@@ -379,10 +389,10 @@ func defaultTarget(dir string) string {
 }
 
 // libPath は use / include の検索パス (カレント → 追加のライブラリ (BuildOptions.LibPath) → fclib → fclib/<target>)。
-func (c *compilation) libPath(target string) []string {
+func (c *compilation) libPath() []string {
 	p := []string{"."}
 	p = append(p, c.libDirs...)
-	return append(p, filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", target)))
+	return append(p, filepath.ToSlash(filepath.Join(c.FCHome, "fclib")), filepath.ToSlash(filepath.Join(c.FCHome, "fclib", c.target)))
 }
 
 // makeBase は base.s (ランタイムの土台: ZP のレジスタ・スタック・FC_FARCALL などの定義) を生成してアセンブルする。
@@ -394,7 +404,15 @@ func (c *compilation) makeBase() string {
 	if base, ok := opts.Get("base"); ok && base.Kind == ir.OptStr {
 		path := filepath.Join(c.dir, base.Str)
 		c.ca65(path)
-		return filepath.Join(c.buildDir, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".o")
+		return c.objPath(path)
+	}
+	assemble := func(str string) string {
+		path := filepath.Join(c.buildDir, "base.s")
+		if err := writeIfChanged(path, []byte(str)); err != nil {
+			panic(err)
+		}
+		c.ca65(path)
+		return c.objPath(path)
 	}
 	if c.layout != nil && c.target == "nes" {
 		// fc.toml の [target] から (layout.go)
@@ -403,12 +421,7 @@ func (c *compilation) makeBase() string {
 		if l.Battery {
 			flags |= 2
 		}
-		str := c.baseAsmTemplate(l.PRGSize/0x4000, l.CHRSize/0x2000, flags, l.Profile.INES) // CHR 0 は CHR-RAM
-		if err := writeIfChanged(filepath.Join(c.buildDir, "base.s"), []byte(str)); err != nil {
-			panic(err)
-		}
-		c.ca65(filepath.Join(c.buildDir, "base.s"))
-		return filepath.Join(c.buildDir, "base.o")
+		return assemble(c.baseAsmTemplate(l.PRGSize/0x4000, l.CHRSize/0x2000, flags, l.Profile.INES)) // CHR 0 は CHR-RAM
 	}
 	inesmap := 0
 	if m, ok := opts.Get("mapper"); ok {
@@ -435,12 +448,7 @@ func (c *compilation) makeBase() string {
 		ineschr = cb
 	}
 
-	str := c.baseAsmTemplate(inesprg, ineschr, 1, inesmap)
-	if err := writeIfChanged(filepath.Join(c.buildDir, "base.s"), []byte(str)); err != nil {
-		panic(err)
-	}
-	c.ca65(filepath.Join(c.buildDir, "base.s"))
-	return filepath.Join(c.buildDir, "base.o")
+	return assemble(c.baseAsmTemplate(inesprg, ineschr, 1, inesmap))
 }
 
 type bankInfo struct {
@@ -451,17 +459,17 @@ type bankInfo struct {
 func (c *compilation) link(baseObj string, objs []string, opt *BuildOptions) (mapFile, dbgFile string) {
 	opts := c.prog.Options
 	cfgPath := filepath.Join(c.buildDir, "ld65.cfg")
-	defer func() { c.linkCfg = cfgPath }()
 	if custom, ok := opts.Get("linker_config"); ok && custom.Kind == ir.OptStr {
 		// options(linker_config: "../ld65.cfg"): 自前のリンカ設定 (Dir 相対)。bank / org は配置に使われない (far call の判定だけ)
 		cfgPath = filepath.Join(c.dir, custom.Str)
 	} else if c.layout != nil && c.target == "nes" {
 		c.writeLayoutConfig() // fc.toml のバンクの表から (layout.go)
 	} else {
-		c.writeLinkerConfig(opts, opt)
+		c.writeLinkerConfig()
 	}
-	mapFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".map"
-	dbgFile = strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) + ".dbg"
+	c.linkCfg = cfgPath
+	stem := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out))
+	mapFile, dbgFile = stem+".map", stem+".dbg"
 	args := []string{"-m", mapFile, "--dbgfile", dbgFile, "-o", opt.Out, "-C", cfgPath,
 		baseObj, filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
 	if c.farcallAsm() != "" {
@@ -479,7 +487,8 @@ func (c *compilation) link(baseObj string, objs []string, opt *BuildOptions) (ma
 }
 
 // writeLinkerConfig は fc の ld65.cfg (バンク構成は main の options(bank_count / char_banks) とモジュールの options(bank / org)) を書く。
-func (c *compilation) writeLinkerConfig(opts ir.Options, opt *BuildOptions) {
+func (c *compilation) writeLinkerConfig() {
+	opts := c.prog.Options
 
 	ineschr := 1
 	if cb, ok := opts.Int("char_banks"); ok {
@@ -677,7 +686,7 @@ func (c *compilation) projectDefines(cli []string) (map[string]*sema.DefineUse, 
 		c.layout.Fragment = filepath.Join(filepath.Dir(cfg.Path), c.layout.Fragment)
 	}
 	// fc.toml の [lib.*] (git のものは取ってくる) を、BuildOptions.LibPath の後・fclib の前の探索先に
-	libs, err := (&project.Resolver{Offline: c.offline, Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, "fcc: "+f+"\n", a...) }}).Resolve(cfg)
+	libs, err := (&project.Resolver{Offline: c.offline, Log: project.StderrLog}).Resolve(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -747,8 +756,8 @@ func (c *compilation) banks() map[string]sema.BankRef {
 }
 
 // checkDefines は上書きが宣言された @(build) の const に当たったかを検査する (ビルドに含まれないモジュールは警告)。
-func (c *compilation) checkDefines(prog *sema.Program, target string) error {
-	return prog.CheckDefines(func(m string) bool { return project.ModuleExists(c.dir, c.libPath(target), m) })
+func (c *compilation) checkDefines(prog *sema.Program) error {
+	return prog.CheckDefines(func(m string) bool { return project.ModuleExists(c.dir, c.libPath(), m) })
 }
 
 // sortedDefines は上書きの一覧 (キー順)。
@@ -892,11 +901,9 @@ func (c *compilation) ca65(path string) {
 
 // ca65Args はアセンブルのコマンド引数を作る。
 func (c *compilation) ca65Args(path string) []string {
-	base := filepath.Base(path)
-	obj := filepath.Join(c.buildDir, strings.TrimSuffix(base, filepath.Ext(base))+".o")
 	args := []string{
 		"-g",
-		"-o", obj,
+		"-o", c.objPath(path),
 		"-I", filepath.Join(c.FCHome, "share"),
 		"-I", c.buildDir,
 		"-I", c.dir,
@@ -906,7 +913,7 @@ func (c *compilation) ca65Args(path string) []string {
 		args = append(args, "-I", filepath.FromSlash(d))
 	}
 	args = append(args, "-I", filepath.Join(c.FCHome, "fclib"), "-I", filepath.Join(c.FCHome, "fclib", c.target))
-	if c.globalInit && base == "runtime.asm" {
+	if c.globalInit && filepath.Base(path) == "runtime.asm" {
 		args = append(args, "-D", "FC_GLOBAL_INIT=1") // 起動のときにグローバル変数の初期値を写す (globalInitTable)
 	}
 	if c.dir != "." {
@@ -948,12 +955,6 @@ func (c *compilation) run(ctx context.Context, name string, args ...string) erro
 	}
 	return nil
 }
-
-// execute はビルド済みバイナリをエミュレータで実行する (Compiler#execute 相当)。
-// ホスト呼び出し規約 ($fff0〜$ffff): 1=print / 2=print_int / 3=print_int_sp、
-// $ffff が 255 以外になったら終了 (その値が終了コード)。
-// 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
-// logs は @log の地点 (PC → 表示。-g のとき)。命令の実行前に PC が地点なら 1 行出す。
 
 // checkAddressVars は @(address: N) の変数が、リンクした RAM のセグメント (fc の ZP・BSS・静的フレーム・スタック、[ram.*]、
 // ほかの変数) と重ならないかを確かめる (fc の ZP の中に置くと、reg などと黙って重なっていた)。ROM・I/O の番地は RAM の

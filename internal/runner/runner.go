@@ -26,7 +26,7 @@ type Options struct {
 	Log       *fclog.LogFile // @log の地点 (driver.Result.Log。nil なら出さない。emu だけ)
 	MaxCycles int64          // emu: サイクル数の上限 (0 なら無制限)。超えたらエラー
 	MaxFrames int            // nes: フレーム数の上限 (0 なら DefaultFrames)。console.exit まで走らせる
-	TracePC   bool           // emu: invalid opcode などの panic のとき、直近の PC を stderr に出す (FC_TRACE=pc)
+	TracePC   bool           // emu: invalid opcode などの panic のとき、直近の PC を stderr に出す (FC_TRACE_PC)
 }
 
 // Result は走らせた結果。

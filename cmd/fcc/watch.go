@@ -1,7 +1,7 @@
 package main
 
 // fcc watch: ソースが変わるたびにビルドし直す (エディタの隣で回しておく用)。ファイルの監視は外部ライブラリを使わず、
-// ソースディレクトリ (と fclib) の .fc / .asm / .inc / .chr / .txt の更新時刻を 0.5 秒ごとに見る。
+// ソースディレクトリ (と fclib) の .fc / .asm / .inc / .chr / .txt / .cfg の更新時刻を 0.5 秒ごとに見る。
 
 import (
 	"context"

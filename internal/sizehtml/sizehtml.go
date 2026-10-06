@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"io"
+	"os"
 	"sort"
 	"strings"
 
@@ -125,4 +126,17 @@ func Write(w io.Writer, r *Report) error {
 
 func htmlEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
+}
+
+// WriteFile は r を埋め込んだ HTML をファイル path に書く。
+func WriteFile(path string, r *Report) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if err := Write(f, r); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }

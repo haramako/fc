@@ -8,16 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/migrate"
-	"github.com/haramako/fc/internal/project"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/syntax"
 )
 
 // MigrateOptions は fcc migrate の設定。
 type MigrateOptions struct {
-	Target  string   // 入口としてコンパイルするときのターゲット (fclib の探し方。既定 emu)
+	Target  string   // 入口としてコンパイルするときのターゲット (fclib の探し方。既定は fcc build と同じく fc.toml の [target] の有無)
 	Defines []string // CLI の -D (fcc build と同じく fc.toml の後に当てる)
 	// Rules が空でなければ、fc 3 → 4 の書き換えのうちその規則 (sema.Rewrite.Rule) のものだけを当てる (テスト用: 範囲外の定数と
 	// 縮小だけを直して、A1・F1 の fc 4 の意味がそのまま効く fc 4 のプログラムを作る)
@@ -30,10 +28,6 @@ type MigrateOptions struct {
 //     飛ばす)、fc 4 で意味が変わる所の書き換えを集めて当てる (migrate.ToV4)。1 の結果はファイルに書く前なので、sema には
 //     メモリの上の内容を渡す (sema.Program.Overlay)。fclib などの files に無いモジュールは書き換えない (fc 3 のまま使える)
 func (c *Compiler) Migrate(files []string, opt *MigrateOptions) (map[string][]byte, error) {
-	target := opt.Target
-	if target == "" {
-		target = "emu"
-	}
 	overlay := map[string][]byte{}
 	out := map[string][]byte{}
 	var v3 []string
@@ -66,7 +60,7 @@ func (c *Compiler) Migrate(files []string, opt *MigrateOptions) (map[string][]by
 		if compiled[key] {
 			continue
 		}
-		prog, err := c.newCompilation(nil, filepath.Dir(path), target).collectRewrites(path, opt.Defines, overlay)
+		prog, err := c.newCompilation(nil, filepath.Dir(path), opt.Target).collectRewrites(path, opt.Defines, overlay)
 		if err != nil {
 			return nil, err
 		}
@@ -117,35 +111,25 @@ func ruleWanted(rules []string, rule string) bool {
 
 // collectRewrites は path を入口にしたプログラムを意味解析まで通し、fc 3 → 4 の書き換えを集める。
 func (c *compilation) collectRewrites(path string, cli []string, overlay map[string][]byte) (prog *sema.Program, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if ce, ok := r.(*diag.Error); ok {
-				err = ce
-				return
-			}
-			panic(r)
-		}
-	}()
+	defer recoverError(&err)
+	if err := c.checkTarget(); err != nil {
+		return nil, err
+	}
 	defs, err := c.projectDefines(cli)
 	if err != nil {
 		return nil, err
 	}
-	prog = sema.NewProgram()
 	macros, done, err := c.projectMacros()
 	if err != nil {
 		return nil, err
 	}
 	defer done()
-	for _, m := range macros {
-		if err := prog.UseMacros(m); err != nil {
-			return nil, err
-		}
+	if prog, err = c.newProgram(macros, defs); err != nil {
+		return nil, err
 	}
-	prog.Defines = project.CopyDefines(defs)
-	prog.Banks = c.banks()
 	prog.CollectRewrites = true
 	prog.Overlay = overlay
-	if err := sema.CompileProgram(prog, c.dir, c.libPath(c.target), filepath.Base(path)); err != nil {
+	if err := sema.CompileProgram(prog, c.dir, c.libPath(), filepath.Base(path)); err != nil {
 		return nil, err
 	}
 	return prog, nil

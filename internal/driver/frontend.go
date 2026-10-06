@@ -21,9 +21,7 @@ import (
 
 // frontOptions は前段の設定 (BuildOptions / CheckOptions から作る)。
 type frontOptions struct {
-	Dir               string // ソースの基準ディレクトリ
-	Target            string
-	Main              string // 入口のファイル
+	Main              string // 入口のファイル (基準ディレクトリとターゲットは compilation の c.dir / c.target)
 	Defines           map[string]*sema.DefineUse
 	OptimizeLevel     int  // 0 (-O 0) または 2
 	Debug             bool // -g: @log の注釈を付ける
@@ -51,21 +49,17 @@ func (c *compilation) compileFront(o *frontOptions) (*frontResult, error) {
 	}
 	defer done() // 外部コマンドのマクロは意味解析の間だけ (やり直しでも同じプロセスと結果を使う)
 	for noGrow := map[string]bool{}; ; {
-		prog := sema.NewProgram()
-		for _, m := range macros {
-			if err := prog.UseMacros(m); err != nil {
-				return nil, err
-			}
+		prog, err := c.newProgram(macros, o.Defines)
+		if err != nil {
+			return nil, err
 		}
-		prog.Defines = project.CopyDefines(o.Defines)
-		prog.Banks = c.banks()
 		prog.LogEnabled = o.Debug // @log の注釈は -g のときだけ (Agent/discussions/2026-09-20-v3-plan.md §9)
 		prog.LogEveryStatement = o.LogEveryStatement
 		prog.Config = o.Config
-		if err := sema.CompileProgram(prog, o.Dir, c.libPath(o.Target), o.Main); err != nil {
+		if err := sema.CompileProgram(prog, c.dir, c.libPath(), o.Main); err != nil {
 			return nil, err
 		}
-		if err := c.checkDefines(prog, o.Target); err != nil {
+		if err := c.checkDefines(prog); err != nil {
 			return nil, err
 		}
 		llc, err := newLlc(prog, o)
@@ -167,4 +161,17 @@ func validated(n int, err error) int {
 		panic(err)
 	}
 	return n
+}
+
+// newProgram は意味解析の状態を作る (プロジェクトのマクロ・@(build) の上書き・バンクの表。build・check・migrate で共通)。
+func (c *compilation) newProgram(macros []sema.MacroSource, defs map[string]*sema.DefineUse) (*sema.Program, error) {
+	prog := sema.NewProgram()
+	for _, m := range macros {
+		if err := prog.UseMacros(m); err != nil {
+			return nil, err
+		}
+	}
+	prog.Defines = project.CopyDefines(defs)
+	prog.Banks = c.banks()
+	return prog, nil
 }

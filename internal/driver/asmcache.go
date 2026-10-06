@@ -14,7 +14,7 @@ package driver
 // 変わっていなければ再利用する)。FC_NO_ASM_CACHE=1 で使わない。
 //
 // ca65 の依存の出力は .include のたびに同じファイルを並べる (castle では 48 個の記録に合わせて 6,716 行、実際のファイルは
-// 124 個)。記録には 1 回ずつ書き、1 回のビルドの中ではファイルのハッシュを使い回す (Compiler.hashes)。以前は変わって
+// 124 個)。記録には 1 回ずつ書き、1 回のビルドの中ではファイルのハッシュを使い回す (compilation.hashes)。以前は変わって
 // いないビルドでも毎回 6,716 回ハッシュしていて、castle の assemble の段に約 0.7 秒かかっていた (2026-09-28)。
 
 import (
@@ -157,8 +157,8 @@ func toolID() (string, error) {
 	return fmt.Sprintf("%q %d %d", p, st.Size(), st.ModTime().UnixNano()), nil
 }
 
-// hashMemo は 1 回のビルドの中のファイルのハッシュ (BuildContext が作り直す。ビルドの途中で .s / .inc / .incbin の
-// ファイルは書き換えない: .s / .inc は assemble の前に全部書き終えている)。nil なら使い回さない。
+// hashMemo は 1 回のビルドの中のファイルのハッシュ (newCompilation がビルドごとに作る。ビルドの途中で .s / .inc / .incbin の
+// ファイルは書き換えない: .s / .inc は assemble の前に全部書き終えている)。
 type hashMemo struct {
 	mu sync.Mutex
 	m  map[string]string
@@ -167,9 +167,6 @@ type hashMemo struct {
 func newHashMemo() *hashMemo { return &hashMemo{m: map[string]string{}} }
 
 func (hm *hashMemo) hash(path string) (string, error) {
-	if hm == nil {
-		return fileHash(path)
-	}
 	hm.mu.Lock()
 	h, ok := hm.m[path]
 	hm.mu.Unlock()

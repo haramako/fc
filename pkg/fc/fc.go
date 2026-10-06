@@ -104,7 +104,7 @@ func (c *Compiler) Check(src string, opt CheckOptions) ([]Warning, error) {
 
 // MigrateOptions は Migrate の設定。
 type MigrateOptions struct {
-	Target  string   // 入口としてコンパイルするときのターゲット (TargetEmu (既定) / TargetNES。fclib の探し方)
+	Target  string   // 入口としてコンパイルするときのターゲット (TargetEmu / TargetNES。fclib の探し方。既定は Build と同じ)
 	Defines []string // @(build) の const の上書き (Options.Defines と同じ)
 }
 
@@ -180,11 +180,7 @@ func (c *Compiler) Run(ctx context.Context, res *Result, opt RunOptions) (*RunRe
 	if stdout == nil {
 		stdout = os.Stdout
 	}
-	frames := opt.MaxFrames
-	if frames == 0 {
-		frames = NESRunFrames
-	}
-	r, err := runner.Run(res.Target, res.Out, runner.Options{Stdout: stdout, Log: res.Log, MaxCycles: opt.MaxCycles, MaxFrames: frames,
+	r, err := runner.Run(res.Target, res.Out, runner.Options{Stdout: stdout, Log: res.Log, MaxCycles: opt.MaxCycles, MaxFrames: opt.MaxFrames,
 		TracePC: ir.ConfigFromEnv().Trace("pc") != ""})
 	if err != nil && res.Target == TargetNES {
 		return nil, fmt.Errorf("%v: the built-in NES runner shows only console output (console.exit ends it); open the ROM in an emulator to see the screen", err)
@@ -193,7 +189,7 @@ func (c *Compiler) Run(ctx context.Context, res *Result, opt RunOptions) (*RunRe
 }
 
 // NESRunFrames は Run の NES の ROM を内蔵のランナーで走らせるフレーム数の上限 (1 分)。
-const NESRunFrames = 3600
+const NESRunFrames = runner.DefaultFrames
 
 // Format は fc ソースを正規形に整形する (fcc fmt)。構文エラーは *Error で返す。
 // CRLF は LF に正規化される。
@@ -240,13 +236,5 @@ func SizeHTML(dbgFile, linkConfig, out string) error {
 			return err
 		}
 	}
-	f, err := os.Create(out)
-	if err != nil {
-		return err
-	}
-	if err := sizehtml.Write(f, sizehtml.FromDbg(filepath.Base(dbgFile), d, lc)); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return sizehtml.WriteFile(out, sizehtml.FromDbg(filepath.Base(dbgFile), d, lc))
 }

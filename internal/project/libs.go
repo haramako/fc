@@ -250,10 +250,9 @@ func (r *Resolver) Resolve(cfg *ProjectConfig) ([]ResolvedLib, error) {
 			}
 			res = append(res, ResolvedLib{Lib: l, Root: l.Path})
 		} else {
-			e, ok := lock[l.Name]
-			commit := e.Commit
-			if !ok || e.Git != l.Git || e.Rev != l.Rev || r.updating(l.Name) || commit == "" {
-				commit = ""
+			commit := "" // fc.lock のコミット (git・rev が同じで、更新しないときだけ使う)
+			if e, ok := lock[l.Name]; ok && e.Git == l.Git && e.Rev == l.Rev && !r.updating(l.Name) {
+				commit = e.Commit
 			}
 			dir, commit, err := r.fetch(l, commit)
 			if err != nil {
@@ -304,6 +303,11 @@ func (r *Resolver) updating(name string) bool {
 		}
 	}
 	return false
+}
+
+// StderrLog は Resolver.Log の既定の出し方 (標準エラーに `fcc: ...` の 1 行。fcc build と fcc lib)。
+func StderrLog(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "fcc: %s\n", strings.TrimSuffix(fmt.Sprintf(format, args...), "\n"))
 }
 
 func (r *Resolver) logf(format string, args ...any) {

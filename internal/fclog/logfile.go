@@ -81,7 +81,7 @@ type LogFileValue struct {
 	Bytes []LogFileValue `json:"bytes,omitempty"`
 }
 
-// Build は地点のラベルと番地を dbgfile で解決する。dir は ROM のある場所 (ソースのパスをそこからの相対にする)。
+// Build は地点のラベルと番地を dbgfile で解決する。rel はソースのパスを ROM のある場所からの相対にする (driver の debugFileFunc)。
 func Build(sites []*codegen.LogSite, dbg *cc65.DbgFile, target string, rel func(string) string) (*LogFile, error) {
 	syms := map[string]cc65.DbgSymbol{}
 	for _, s := range dbg.Symbols {
@@ -346,22 +346,23 @@ func formatLogValue(a LogFileArg, part LogFilePart, v int) string {
 	return s
 }
 
-// Hooks は emu の実行用に、PC → (地点, @log) の表を作る。
-type Hook struct {
+// hook は PC の地点の @log 1 つ。
+type hook struct {
 	Point *LogFilePoint
 	Site  *LogFileSite
 }
 
-func Hooks(lf *LogFile) map[int][]Hook {
+// hooks は emu の実行用に、PC → (地点, @log) の表を作る (Stepper)。
+func hooks(lf *LogFile) map[int][]hook {
 	if lf == nil {
 		return nil
 	}
-	h := map[int][]Hook{}
+	h := map[int][]hook{}
 	for i := range lf.Points {
 		p := &lf.Points[i]
 		for j := range p.Sites {
 			s := &p.Sites[j]
-			h[s.PC] = append(h[s.PC], Hook{Point: p, Site: s})
+			h[s.PC] = append(h[s.PC], hook{Point: p, Site: s})
 		}
 	}
 	// 同じ PC の地点は注釈の順 (ソースの順)
@@ -374,12 +375,12 @@ func Hooks(lf *LogFile) map[int][]Hook {
 // Stepper は @log の地点の表 lf から、命令ごとに呼ぶ関数を作る (地点に来たら 1 行を out に出す。lf が nil なら nil)。emu の OnStep
 // から呼ぶ (internal/runner。r6502 に依存しないように、値は地点に来たときだけ read で受け取る)。
 func Stepper(lf *LogFile, out io.Writer) func(pc, prevPC int, read func() Reader) {
-	hooks := Hooks(lf)
-	if hooks == nil {
+	hs0 := hooks(lf)
+	if hs0 == nil {
 		return nil
 	}
 	return func(pc, prevPC int, read func() Reader) {
-		hs := hooks[pc]
+		hs := hs0[pc]
 		if hs == nil {
 			return
 		}
