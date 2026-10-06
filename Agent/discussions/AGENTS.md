@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-06 [struct のメソッドと interface の相談](2026-10-06-methods-interface.md) — メソッドが先（struct の外に書く、受け取り手の型を書く）、interface はタグ付きの共用体 + メソッドの表（`soa interface` と共存）、一般の埋め込みはやらない、ID は手動・自動と `@set_id`、near / far は interface の宣言で（far は呼ぶたびに戻す）。far call でバンクを戻さない記法は候補
 - 2026-10-06 [fcc のコマンドラインを kong に](2026-10-06-cli-kong.md) — 依存の無い kong で GNU の getopt の形に（オプションはソースの後ろにも）。今の書き方との互換は取らない（`-md` → `--md` など）。`-offline` のような `-` 1 つの長い名前はエラーに。zsh / bash / fish の補完 `fcc completion` は自前（候補は fcc __complete が返す）
 - 2026-10-05 [型を決める段の残り（3 回目）](2026-10-05-typing-stage-rest.md) — ir.Value の Public / Build / StrConst を sema へ、slice・リテラル・soa・代入の左辺の型と診断を typeplan の計画に、代入先・型を省いた変数・呼ぶ関数の型も型を決める段で、`var x = c ? …` は枝ごとに変数へ書く
 - 2026-10-05 [fclib の NES のモジュールの asm 化](2026-10-05-nes-asm.md) — pal.shade と vram の描画を止めて書く所を asm に。キューに積む put / fill は asm にすると大きくなるので fc のまま。ピープホールの lda と struct のポインタのフィールドの読み直し (fwdmem)
