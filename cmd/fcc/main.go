@@ -157,7 +157,7 @@ func (f *buildFlags) options() fc.Options {
 // buildArgs は build / compile / run のオプションとソース。
 type buildArgs struct {
 	buildFlags
-	Debug      bool   `short:"d" help:"Show debug info (frames, far calls, libraries, defines)."`
+	Debug      bool   `short:"d" help:"Show debug info (frames, far calls, libraries, interfaces, defines)."`
 	SizeReport bool   `help:"Show code size per segment / function, bank usage and calls between modules (needs linking)."`
 	SizeHTML   string `name:"size-html" placeholder:"FILE" help:"Write the same information as --size-report as an HTML page."`
 	Src        string `arg:"" help:"The main source file."`
@@ -207,6 +207,13 @@ func (c *buildArgs) build(opt fc.Options) int {
 			// fc.toml の [lib.*] と、そこから使ったモジュール (fclib を置き換えたもの)
 			fmt.Fprintln(os.Stderr, "libs:")
 			for _, line := range res.Libs {
+				fmt.Fprintln(os.Stderr, line)
+			}
+		}
+		if len(res.Interfaces) > 0 {
+			// interface ごとの実装と ID (データに書く番号の確かめ)
+			fmt.Fprintln(os.Stderr, "interfaces:")
+			for _, line := range res.Interfaces {
 				fmt.Fprintln(os.Stderr, line)
 			}
 		}

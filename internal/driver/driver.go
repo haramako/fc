@@ -105,6 +105,7 @@ type Result struct {
 	Frames     []string         // 静的フレームの配置の要約 (fcc build -d で表示)
 	Defines    []sema.DefineUse // @(build) の const の上書き (fc.toml / -D。fcc build -d で表示)
 	Libs       []string         // fc.toml の [lib.*] の要約: ライブラリと、そこから使ったモジュール (fclib を置き換えたもの) (fcc build -d で表示)
+	Interfaces []string         // interface ごとの実装と ID (fcc build -d で表示)
 	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
 	// ResidentFixes は常駐レジスタの見積もりが外れて、退避 / 復帰に直した命令の数 (codegen.Llc.ResidentFixes)
 	ResidentFixes int
@@ -276,6 +277,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 	result.FarCalls = prog.FarCalls
 	result.Defines = sortedDefines(prog.Defines)
 	result.Libs = c.libSummary(prog)
+	result.Interfaces = prog.InterfaceSummary()
 	if err := writeIfChanged(filepath.Join(c.buildDir, "_frames.inc"), []byte(strings.Join(plan.Inc, "\n"))); err != nil {
 		return nil, err
 	}

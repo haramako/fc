@@ -138,8 +138,11 @@ castle は 440 関数中 **438 が static**（ゼロページ 54 バイト、RAM
 
 ## 言語機能
 
-- [ ] struct のメソッドと interface（ID で引くメソッド、soa の interface、far の interface）。計画は
-      [Agent/wiki/plans/methods-interface.md](methods-interface.md)（2026-10-06 相談、未着手）
+- [x] struct のメソッドと interface（ID で引くメソッド、soa の interface、far の interface） ✅ 2026-10-06
+      （[Agent/wiki/design/methods-interface.md](../design/methods-interface.md)）
+- [ ] interface の残り: 確かめる下向きの変換 `as? Slime`、soa の interface の要素を値として写すこと、far call でバンクを戻さない
+      呼び出しの記法（far の interface にも普通の `farfn` にも。その後のバンクは自己責任。2026-10-06 ユーザーのメモ）、続けて far call
+      するときに戻すのを後に回す最適化、敵の群れのサンプルで手書きの表と比べる bench
 - [x] **トップレベルの宣言順への依存を減らす**: 宣言名と `use` を先に収集し、関数・定数・型・配列長を依存関係に従って解決。
       後ろの関数を使う定数テーブル、後ろの定数を使う計算、相互 `use`、struct / SoA の前方参照に対応。
       値・サイズの循環は依存経路付きで診断し、ポインタ / SoA ハンドルを介する再帰は許可する。

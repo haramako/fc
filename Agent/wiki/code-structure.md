@@ -11,7 +11,9 @@
   @(build) の const・名前付きの文字列定数は Program の表（ir.Value には sema だけの印を置かない）。
   名前の表 `Scope` と importer の窓口 `ModuleInterface`（`scope.go`。項目は `Symbol`: 値 (ir.Value)・モジュール・型名・マクロ。
   `symbol.go`。値でない名前は式では `cName` の節点）、関数の本体の AST（`Program.bodies`）は sema が持つ。ir は名前の表・AST・
-  束縛を持たない。2026-10-05 に ir から移した）→ `ir` → `pipeline.Prepare`
+  束縛を持たない。2026-10-05 に ir から移した）。fc 4 のメソッドは `method.go`（`x.m(...)` を constEval が `T.m(受け取り手, ...)` に
+  書き換える）、interface は `iface.go`（実装の一覧と ID は宣言の解決の前、振り分けの関数と表は本体のコンパイルの前に作る。
+  Agent/wiki/design/methods-interface.md）→ `ir` → `pipeline.Prepare`
   （インライン展開・直接化 → volatile → `frames.Analyze`（関数ごとの呼び出し規約 `ir.CallConv`: ABI・引数と戻り値の置き場所・
   入口）→ 関数ごとに `opt.Optimize` → 呼び出しの印 → `regalloc` → `frames.Place`。順序はここだけが持つ。codegen は
   `pipeline.Backend` として呼び出しの計画 (`MarkCalls` / `CheckStackPush`。`codegen/callplan.go` の planCalls / layoutCalls

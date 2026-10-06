@@ -123,16 +123,16 @@ var keywords = map[string]Kind{
 	"use": KwUse, "as": KwAs, "from": KwFrom, "public": KwPublic, "private": KwPrivate,
 	"fn": KwFn, "farfn": KwFarFn, "bitcast": KwBitcast, "struct": KwStruct, "sizeof": KwSizeof, "soa": KwSoa,
 	"true": KwTrue, "false": KwFalse, "null": KwNull, "enum": KwEnum, "fallthrough": KwFallthrough, "in": KwIn,
-	"do": KwDo,
+	"do": KwDo, "interface": KwInterface,
 }
 
 // v3Keywords は fc 3 で足した予約語 (fc 2 のソースでは識別子のまま)。
 var v3Keywords = map[Kind]bool{KwEnum: true, KwFallthrough: true, KwIn: true}
 
 // v4Keywords は fc 4 で足した予約語 (fc 2 / fc 3 のソースでは識別子のまま)。
-var v4Keywords = map[Kind]bool{KwDo: true}
+var v4Keywords = map[Kind]bool{KwDo: true, KwInterface: true}
 
-// IsV4Keyword は name が fc 4 で足した予約語 (fc 3 では名前に使える: do) か (fcc migrate が fc 3 → 4 で名前を書き換える)。
+// IsV4Keyword は name が fc 4 で足した予約語 (fc 3 では名前に使える: do / interface) か (fcc migrate が fc 3 → 4 で名前を書き換える)。
 func IsV4Keyword(name string) bool {
 	k, ok := keywords[name]
 	return ok && v4Keywords[k]

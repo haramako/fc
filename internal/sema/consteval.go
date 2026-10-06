@@ -207,6 +207,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if left.moduleOf() != "" {
 			return h.symExpr(h.prog.boundModule(left.sym).LookupMust(c.name))
 		}
+		if left.kind == cName && left.sym.Type != nil && c.name == "Id" {
+			if info := h.prog.ifaces[left.sym.Type]; info != nil {
+				return symName(&Symbol{Name: left.sym.Name + ".Id", Type: h.ifaceIdType(info)}) // `Task.Id` (iface.go)
+			}
+		}
 		if m := h.methodValue(left, c.name); m != nil {
 			return m // `T.m`: メソッドの関数の値 (method.go)
 		}
@@ -471,6 +476,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			if c.op == opIndex && h.constIndex {
 				if e := h.constElem(args[0], args[1]); e != nil {
 					return e
+				}
+			}
+			if c.op == opLoad {
+				if r := h.implAssign(args, c.pos); r != nil {
+					return r // `Tasks[i] = Slime{...}`: 要素を実装として書く (iface.go)
 				}
 			}
 			return &cexpr{kind: cOp, op: c.op, args: args, ty: c.ty, incl: c.incl}

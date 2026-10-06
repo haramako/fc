@@ -34,6 +34,12 @@ func (h *Hlc) typeOfRaw(t syntax.TypeExpr) *types.Type {
 		if elem.Kind == types.Soa {
 			return h.prog.Types.SoaRef(elem, h.soaElement(elem), "") // `*Points`: SoA の要素ハンドル
 		}
+		if ht := h.ifaceHandle(elem); ht != nil {
+			if t.Const.IsValid() {
+				panic(&diag.Error{Msg: fmt.Sprintf("*const %s: an element of soa interface is a handle (write *%s)", elem, shortName(elem.Name))})
+			}
+			return ht // `*Task` / `*Slime` (soa の interface): 置き場所の soa のハンドル (iface.go)
+		}
 		return h.prog.Types.PointerToRO(elem, t.Const.IsValid())
 	case *syntax.ArrayType:
 		if t.IsSlice(h.version()) {
@@ -124,6 +130,9 @@ func (h *Hlc) namedType(t *syntax.NamedType) *types.Type {
 		panic(&diag.Error{Msg: fmt.Sprintf("unknown type %s", name)})
 	}
 	mv := h.scope.FindMust(t.Module.Name, true)
+	if mv.Type != nil && h.prog.ifaces[mv.Type] != nil && name == "Id" {
+		return h.ifaceIdType(h.prog.ifaces[mv.Type]) // `Task.Id`: interface の ID の enum (iface.go)
+	}
 	mi := h.prog.boundModule(mv)
 	if mi == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("%s is not a module (in type %s.%s)", t.Module.Name, t.Module.Name, name)})

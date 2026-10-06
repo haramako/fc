@@ -45,6 +45,7 @@
 - [design/bss.md](design/bss.md) — モジュール・ブロックの BSS 配置
 - [design/storage-alias.md](design/storage-alias.md) — 型付きストレージ alias
 - [design/types-struct.md](design/types-struct.md) — 型構文（Go/Zig 順）と struct / soa
+- [design/methods-interface.md](design/methods-interface.md) — struct のメソッドと interface（ID で振り分ける表、soa の見方と共有の列、実装の一覧と ID を決める時期、far）
 
 ### plans/（進行中の計画）
 
@@ -53,5 +54,4 @@
 - [plans/roadmap.md](plans/roadmap.md) — 未着手・未決の項目（最適化・言語機能・ツール）
 - [plans/language-feature-candidates.md](plans/language-feature-candidates.md) — 言語機能の追加候補
 - [plans/user-docs.md](plans/user-docs.md) — 利用者向けドキュメント（`docs/`、VitePress、GitHub Pages）の構成・仕組み・進め方と決めたこと
-- [plans/methods-interface.md](plans/methods-interface.md) — struct のメソッドと interface（ID で引くメソッド、共通のフィールドと実装ごとのフィールドを重ねて置く、soa）の計画（2026-10-06、未着手）
 - [plans/external-macros.md](plans/external-macros.md) — 外部コマンドの定数マクロ（fc.toml で宣言、常駐のプロセスと改行区切りの JSON、キャッシュ。textmap は後で検討）

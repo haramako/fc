@@ -32,7 +32,7 @@ type Module struct {
 // Item は public の宣言 (か、並んだ const / var のまとまり) 1 つ。
 type Item struct {
 	Names []string // 宣言した名前
-	Kind  string   // "function" / "const" / "var" / "struct" / "enum" / "soa"
+	Kind  string   // "function" / "const" / "var" / "struct" / "enum" / "interface" / "soa"
 	Code  string   // 宣言の原文 (関数は本体の前まで、同じ行の後ろのコメントを含む)
 	Doc   string   // 直前のコメント (// を除いた行を \n でつないだもの)
 	Line  int      // 宣言の行
@@ -182,6 +182,13 @@ func item(st syntax.Stmt, src string) *Item {
 			return nil
 		}
 		it = &Item{Names: []string{d.Name.Name}, Kind: "enum"}
+		start, end = d.Pos().Offset, d.End().Offset
+		it.Line, it.end = d.Pos().Line, d.End().Line
+	case *syntax.InterfaceDecl:
+		if !d.PublicPos.IsValid() {
+			return nil
+		}
+		it = &Item{Names: []string{d.Name.Name}, Kind: "interface"}
 		start, end = d.Pos().Offset, d.End().Offset
 		it.Line, it.end = d.Pos().Line, d.End().Line
 	case *syntax.SoaDecl:

@@ -44,6 +44,9 @@ package syntax
 	init    *FieldInit
 	slit    *StructLit
 	optTok  *Token
+	nodes   []Node
+	node    Node
+	ntype   *NamedType
 }
 
 %token <tok> NUMBER IDENT STRING kPLACEMENT kALIAS
@@ -53,7 +56,7 @@ package syntax
 %type <typ> opt_enum_base
 %type <selse> static_else
 %token <tok> kINCLUDE kFUNCTION kCONST kVAR kOPTIONS kIF kELSE kELSIF kLOOP kWHILE kFOR kRETURN kBREAK kCONTINUE kINCBIN kSWITCH kCASE kDEFAULT kUSE kAS kFROM kPUBLIC kPRIVATE kFN kFARFN kBITCAST kSTRUCT kSIZEOF kSOA kTRUE kFALSE kNULL
-%token <tok> DOTDOT DOTDOTEQ kIN kDO
+%token <tok> DOTDOT DOTDOTEQ kIN kDO kINTERFACE
 %token <tok> LEQ GEQ EQEQ ADDEQ SUBEQ NEQ ARROW LSHIFT RSHIFT ANDAND OROR INCR DECR ADDWRAP SUBWRAP MULWRAP
 %token <tok> MULEQ DIVEQ MODEQ ANDEQ OREQ XOREQ SHLEQ SHREQ
 %token <tok> '(' ')' '{' '}' ';' ':' '<' '>' '[' ']' '+' '-' '*' '/' '%' '&' '|' '^' '=' ',' '.' '!' '~' '@' '?'
@@ -85,6 +88,10 @@ package syntax
 %type <spec>    var_decl
 %type <expr>    opt_var_init
 %type <typ>     type_decl type_post type_v2 type_v2_prefix
+%type <nodes>   iface_members
+%type <node>    iface_member
+%type <ntype>   iface_ref
+%type <expr>    opt_impl_id
 %type <params>  arg_decl_list
 %type <param>   arg_decl
 
@@ -157,6 +164,9 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | opt_scope kUSE use_target ';'        { u := $3; u.PublicPos = optPos($1); u.Use = $2.Pos; u.Semi = $4.Pos; $$ = u }
          | opt_scope kENUM IDENT opt_enum_base '{' enum_members '}' { $$ = &EnumDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Base: $4, Lbrace: $5.Pos, Members: $6, Rbrace: $7.Pos} } /* v3 */
          | opt_scope kSTRUCT IDENT '{' field_decl_list '}' { $$ = &StructDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Lbrace: $4.Pos, Fields: $5, Rbrace: $6.Pos} } /* v2 */
+         | opt_scope kSTRUCT IDENT ':' iface_ref opt_impl_id '{' field_decl_list '}' { $$ = &StructDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Iface: $5, ID: $6, Lbrace: $7.Pos, Fields: $8, Rbrace: $9.Pos} } /* fc 4: interface の実装 */
+         | opt_scope kINTERFACE IDENT opt_enum_base opt_options '{' iface_members '}' { $$ = &InterfaceDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Base: $4, Options: $5, Lbrace: $6.Pos, Members: $7, Rbrace: $8.Pos} } /* fc 4 */
+         | opt_scope kSOA kINTERFACE IDENT opt_enum_base opt_options '{' iface_members '}' { $$ = &InterfaceDecl{PublicPos: optPos($1), Soa: $2.Pos, Keyword: $3.Pos, Name: ident($4), Base: $5, Options: $6, Lbrace: $7.Pos, Members: $8, Rbrace: $9.Pos} } /* fc 4 */
          | opt_scope kSOA IDENT ':' type_decl opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Name: ident($3), Type: $5, Options: $6, Semi: $7.Pos} } /* v2 */
          | opt_scope kSOA kCONST IDENT ':' type_decl '=' exp opt_options ';' { $$ = &SoaDecl{PublicPos: optPos($1), Keyword: $2.Pos, Const: true, Name: ident($4), Type: $6, Init: $8, Options: $9, Semi: $10.Pos} } /* v2 */
          | kINCLUDE opt_ident '(' STRING ')' opt_options ';' { $$ = &IncludeDecl{Include: $1.Pos, Kind: $2, Path: strLit($4), Rparen: $5.Pos, Options: $6, Semi: $7.Pos} }
@@ -167,6 +177,20 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | kPLACEMENT block options ';'         { $$ = &PlacementBlock{Keyword: ident($1), Body: $2, Options: $3, Semi: $4.Pos} }
          | block                                { $$ = $1 }
          | ';'                                  { $$ = &EmptyStmt{Semi: $1.Pos} }
+
+/* fc 4 の interface: 共通のフィールドとメソッド (本体は既定の実装。`;` なら既定なし) */
+iface_members: /* empty */ { $$ = []Node{} }
+             | iface_members iface_member { $$ = append($1, $2) }
+iface_member: field_decl { $$ = $1 }
+            | kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block { $$ = funcDecl(nil, $1, $2, $4, $7, $8, $9) }
+iface_ref: IDENT { $$ = &NamedType{Name: ident($1)} }
+         | IDENT '.' IDENT { $$ = &NamedType{Module: ident($1), Name: ident($3)} }
+/* 実装の ID: 数・定数の名前・`mod.名前`・括弧の式 (式をそのまま書くと `= N {` が struct のリテラルと紛れる) */
+opt_impl_id: /* empty */ { $$ = nil }
+           | '=' NUMBER { $$ = &IntLit{ValuePos: $2.Pos, Value: $2.Int, Text: $2.Text} }
+           | '=' IDENT { $$ = ident($2) }
+           | '=' IDENT '.' IDENT { $$ = binary(ident($2), $3, ident($4)) }
+           | '=' '(' exp ')' { $$ = &ParenExpr{Lparen: $2.Pos, X: $3, Rparen: $4.Pos} }
 
 /* struct のフィールド宣言 (v2) */
 field_decl_list: /* empty */ { $$ = []*FieldDecl{} }

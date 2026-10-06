@@ -2,7 +2,7 @@
   "name": "fc-lang",
   "displayName": "fc (NES compiler)",
   "description": "Syntax highlighting, formatting (fcc fmt) and diagnostics (fcc check on save) for fc sources",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "haramako",
   "license": "MIT",
   "engines": {

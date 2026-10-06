@@ -38,6 +38,8 @@ func (h *Hlc) declareBad(s syntax.Stmt) {
 		}
 	case *syntax.StructDecl:
 		bad(s.Name)
+	case *syntax.InterfaceDecl:
+		bad(s.Name)
 	case *syntax.SoaDecl:
 		bad(s.Name)
 	case *syntax.UseDecl:
@@ -447,6 +449,10 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 		// The identity was registered (declared) during collection.
 	} else {
 		h.scope.DeclareSym(&Symbol{Name: name, Type: st, public: h.scopeIsPublic(s.PublicPos)})
+	}
+	if s.Iface != nil {
+		h.compileImplDecl(s, st) // interface の実装 (iface.go)
+		return
 	}
 	fields := make([]types.Field, 0, len(s.Fields))
 	for _, f := range s.Fields {

@@ -114,8 +114,19 @@ func Children(node Node) []Node {
 		add(n.Options)
 	case *StructDecl:
 		add(n.Name)
+		if n.Iface != nil {
+			add(n.Iface)
+		}
+		add(n.ID)
 		for _, f := range n.Fields {
 			add(f)
+		}
+	case *InterfaceDecl:
+		add(n.Name)
+		add(n.Base)
+		add(n.Options)
+		for _, m := range n.Members {
+			add(m)
 		}
 	case *EnumDecl:
 		add(n.Name)

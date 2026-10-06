@@ -183,6 +183,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 	case *syntax.StructDecl:
 		h.compileStructDecl(s)
 
+	case *syntax.InterfaceDecl:
+		panic(&diag.Error{Msg: "interface must be at module level (not inside a function)"})
+
 	case *syntax.SoaDecl:
 		h.compileSoaDecl(s)
 

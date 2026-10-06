@@ -140,6 +140,7 @@ func (md *moduleDecls) collect(stmts []syntax.Stmt, group *declaration) {
 }
 func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 	d := &declaration{owner: md, stmt: s, group: group, inStatic: md.staticDepth > 0}
+	var iface *ifaceInfo
 	switch s := s.(type) {
 	case *syntax.Block:
 		md.collect(s.Stmts, group)
@@ -175,6 +176,9 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.StructDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
+	case *syntax.InterfaceDecl:
+		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
+		iface = md.collectInterface(d, s)
 	case *syntax.EnumDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.SoaDecl:
@@ -207,6 +211,10 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 	switch s := s.(type) {
 	case *syntax.StructDecl:
 		identity = md.h.prog.Types.NewStruct(md.h.module.Id + "." + d.name)
+	case *syntax.InterfaceDecl:
+		identity = md.h.prog.Types.NewStruct(md.h.module.Id + "." + d.name)
+		iface.t = identity
+		md.h.prog.ifaces[identity] = iface
 	case *syntax.SoaDecl:
 		identity = md.h.prog.Types.SoaArray(md.h.module.Id+"."+d.name, nil, -1, s.Const)
 		container = ir.NewGlobal(d.name, identity, "") // soa のコンテナの値 (型名も兼ねる)
@@ -292,7 +300,8 @@ func (h *Hlc) completeType(t *types.Type) {
 	if t == nil {
 		return
 	}
-	if d := h.prog.typeDecls[t]; d != nil {
+	if d := h.prog.typeDecls[t]; d != nil && !(h.prog.ifaces[t] != nil && t.Size >= 0) {
+		// interface は見出しを決めたら (soa) 使える: 置き場所の soa の宣言が interface の宣言の解決の中から届く
 		d.resolve()
 	}
 	if t.Kind == types.Array {

@@ -123,8 +123,8 @@
           }
         },
         {
-          "comment": "struct Name / soa Name / soa const Name",
-          "match": "\\b(struct|soa)\\s+(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)",
+          "comment": "struct Name / soa Name / soa const Name / [soa] interface Name (fc 4)",
+          "match": "\\b(struct|soa|interface)\\s+(?:(const|interface)\\s+)?([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "storage.type.struct.fc" },
             "2": { "name": "storage.modifier.fc" },
@@ -182,7 +182,7 @@
       "patterns": [
         { "name": "keyword.control.flow.fc", "match": "\\b(if|else|loop|while|do|for|return|break|continue|switch|case|default)\\b" },
         { "name": "storage.modifier.fc", "match": "\\b(public|private)\\b" },
-        { "name": "storage.type.fc", "match": "\\b(var|const|function|fn|farfn|struct|soa)\\b" },
+        { "name": "storage.type.fc", "match": "\\b(var|const|function|fn|farfn|struct|soa|interface)\\b" },
         { "name": "keyword.operator.cast.fc", "match": "\\b(as|bitcast|sizeof)\\b" },
         { "name": "constant.language.fc", "match": "\\b(true|false|null)\\b" },
         { "name": "keyword.other.fc", "match": "\\b(include|incbin|options|use|from)\\b" }

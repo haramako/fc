@@ -55,7 +55,7 @@ hello
 | `[:u16]T` / `[:u16]const T` | 4 | 長さが `u16` の slice（256 個以上。`[]T` から暗黙に変換できる） |
 | `fn(T1, T2):R` | 2 | 関数ポインタ |
 | `farfn(T1, T2):R` | 3 | バンクの番号つきの関数ポインタ（[far call](./banks)） |
-| `struct` / `enum` / `soa` の名前 | | [struct](#struct)・[enum](#enum)・[soa](#soa) |
+| `struct` / `enum` / `soa` / `interface` の名前 | | [struct](#struct)・[enum](#enum)・[soa](#soa)・[interface](#interface) |
 
 型は前に付けて、左から右へ読む。`[16]*u8` は「`u8` へのポインタの 16 個の配列」、`*[4]u8` は「`u8` の 4 個の配列へのポインタ」。
 
@@ -495,6 +495,99 @@ function main():void
 - メソッドを足せるのは、型を宣言したモジュールだけ。ほかのモジュールから呼べるのは `public` のメソッドだけ
 - フィールドと同じ名前のメソッドは宣言できない
 
+### interface
+
+`interface` は、型ごとに処理の違う要素（敵・弾・エフェクトなど）を 1 つの入れ物に入れて、ID で振り分けて呼ぶ。
+`soa interface` は soa に置く（要素は 1 バイトのハンドル）。
+
+```fc run
+#fc 4
+use console;
+
+soa interface Task {
+	x:u8; // 共通のフィールド
+	function init(self:*Task, p:u8):void;
+	function process(self:*Task):void;
+	// 本体を書いたメソッドは既定の本体 (実装が書かなければこれ)
+	function score(self:*Task):u8
+	{
+		return 0;
+	}
+}
+
+soa Tasks:[8]Task; // Task の置き場所
+
+struct Slime: Task = 1 { // ID は 1
+	dir:u8;
+}
+
+function Slime.init(self:*Slime, p:u8):void
+{
+	self.dir = p;
+}
+function Slime.process(self:*Slime):void
+{
+	self.x += self.dir;
+}
+function Slime.score(self:*Slime):u8
+{
+	return self.x * 10;
+}
+
+struct Bubble: Task { // ID は自動
+	life:u16;
+}
+
+function Bubble.init(self:*Bubble, p:u8):void
+{
+	self.life = 300 + p;
+}
+function Bubble.process(self:*Bubble):void
+{
+	self.life -= 1;
+}
+
+const MAP:[?]u8 = [1, 2, 0]; // ゲームのデータの ID
+
+function main():void
+{
+	console.init();
+	for (var i, id in MAP) {
+		@set_id(&Tasks[i], id as Task.Id); // ID を書く
+		Tasks[i].init(i);
+	}
+	Tasks[3] = Slime{x: 5, dir: 2}; // ID と全部のフィールドを書く
+	for (var n = 0; n < 2; n++) {
+		for (var i = 0; i < 4; i++) {
+			Tasks[i].process(); // 要素の ID の実装の process を呼ぶ
+		}
+	}
+	@printf("{} {} {} {}\n", Tasks[0].score(), Tasks[3].score(), @id_of(&Tasks[1]) == .Bubble, @len(Task.Id));
+}
+```
+
+```text
+0 90 true 3
+```
+
+- `interface 名前[:u8] [@(far)] { フィールド; メソッド }`。共通のフィールドはどの実装も持つ。メソッドの `self` は `*名前`。
+  本体を書いたメソッドは既定の本体で、`;` で終わるメソッドは既定の本体が無い
+- 実装は `struct 名前: interface [= ID] { … }`。実装のフィールドは共通のフィールドの後ろに続く。メソッドは `function 実装.名前(self:*実装, …)` で、
+  `self` の型のほかは interface のメソッドと同じ引数と戻り値にする。実装のメソッドの中では、共通のフィールドも `self.x` と書ける
+- ID は `interface 名前.Id` の enum（メンバーは `none`（0）と実装の名前）。`= ID` は 1〜255 の数・定数の名前・括弧の式で書き、省けば
+  空いている番号を 1 から振る（モジュールのパスと宣言の順）。実装を足すと自動の番号はずれるので、ゲームのデータやセーブに書く番号は手で決める
+- `@set_id(e, id)` は要素 `e`（`&Tasks[i]` やハンドル）の ID だけを書き、`@id_of(e)` は読む。空にするのは `@set_id(e, .none)`。
+  `Tasks[i] = Slime{…}` は ID と全部のフィールドを書く
+- `e.メソッド(…)` は `e` の ID の実装を呼ぶ。実装が無い ID（`.none` と使っていない番号）と、実装が書いていないメソッドは既定の本体を呼び、
+  既定の本体も無ければ何もしない（値を返すメソッドは 0・`null`・すべて 0 の struct を返す）。表より大きい ID は調べない
+- 実装のハンドル（`*Slime`）では、実装のメソッドを直接呼ぶ。interface のハンドルを実装のハンドルとして読むのは `@bitcast(*Slime, e)`（ID は調べない）
+- `soa interface` の置き場所の soa は、interface と同じモジュールに 1 つだけ宣言する。実装のフィールドは共有の列に重ねて置く（列の数は
+  一番大きい実装に合わせる）。要素を値として写すことはできない（フィールドを読み書きする）
+- `soa` の無い `interface` の要素は、ID・共通のフィールド・一番大きい実装の分の塊で、変数・配列・struct のフィールドに置ける（`*名前` はポインタ）
+- 実装のモジュールは、プログラムのどこかで `use` する（読み込まれた実装だけが振り分けの表に入る）
+- `@(far)` を付けると、実装が別々のバンクにあっても呼べる（呼ぶたびに実装のバンクに切り替えて戻す。[バンクの切り替え](./banks)）。
+  付けなければバンクは呼ぶ側が切り替える。`@bank_of_id(id)` はその ID の実装を置いたバンクの番号
+
 ### ストレージの別名 {#storage-alias}
 
 `alias 名前:型 = 変数;` は、グローバル変数の領域を別の型の変数として読み書きする（領域を足さない）。同時に使わない作業域を使い回す。
@@ -829,6 +922,8 @@ function main():void
 | `@asm("命令", …)` | インラインアセンブラ（引数ごとに 1 行） |
 | `@log("書式", …)` | エミュレータ側で値を出すログ（ROM は変わらない。`fcc build -g`） |
 | `@bank("名前")` | fc.toml の `[bank.名前]` のバンクの番号 |
+| `@id_of(e)` / `@set_id(e, id)` | [interface](#interface) の要素の ID を読む / 書く |
+| `@bank_of_id(id)` | interface の ID の実装を置いたバンクの番号 |
 
 ### 独自の文字表と翻訳
 

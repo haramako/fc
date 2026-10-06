@@ -57,6 +57,10 @@ type Program struct {
 
 	soas           map[*types.Type]*soaInfo          // SoA コンテナ型 → フィールドごとの配列 (soa.go)
 	methods        map[string]map[string]*methodDecl // 受け取り手の型の修飾名 (mod.T) → メソッド (method.go)
+	ifaces         map[*types.Type]*ifaceInfo        // interface の struct 型 → interface (iface.go)
+	impls          map[*types.Type]*implInfo         // 実装の struct 型 → 実装
+	soaViews       map[*types.Type]*implInfo         // soa の interface の実装の見方の soa → 実装
+	collected      bool                              // 全モジュールを読み込んだ (interface の実装の一覧を決めた)
 	lambdas        map[string]*ir.Lambda             // シンボル → 関数 (far call の判定で呼び先のモジュールを引く)
 	storageAliases map[*ir.Value]*ir.Value           // declaration binding -> canonical mutable global
 	storageGlobals map[*ir.Value]bool                // actual global var declarations (not ROM constants)
@@ -202,6 +206,10 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	md.loadImports()
 	md.expandStaticIfs()
 	if p.collectDepth == 1 {
+		if !p.collected {
+			p.collected = true
+			p.finalizeInterfaces() // 実装の一覧と ID (iface.go)
+		}
 		md.resolve()
 		for _, m := range p.Modules.List() {
 			if ds := p.declarations[m]; ds != nil {
@@ -289,6 +297,7 @@ func (p *Program) ErrorList() error {
 
 // CompileAllBodies は登録済み全モジュールの関数本体をコンパイルする。
 func (p *Program) CompileAllBodies(deps Resolver) error {
+	p.finishInterfaces() // interface の振り分けの関数と表 (iface.go)
 	// 本体のコンパイル中に組み込み (printf / @format) がモジュールを読み込むことがある (builtinModule) ので、伸びた一覧も最後まで回す
 	for i := 0; i < len(p.Modules.List()); i++ {
 		mod := p.Modules.List()[i]

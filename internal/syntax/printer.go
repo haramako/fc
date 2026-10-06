@@ -540,16 +540,61 @@ func (p *printer) stmt(s Stmt) {
 		p.tokAt(s.Keyword, "struct")
 		p.space()
 		p.ident(s.Name)
+		if s.Iface != nil {
+			p.tok(":")
+			p.space()
+			p.typeExpr(s.Iface)
+			if s.ID != nil {
+				p.space()
+				p.tok("=")
+				p.space()
+				p.expr(s.ID)
+			}
+		}
 		p.space()
 		p.tokAt(s.Lbrace, "{")
 		p.indent++
 		for _, f := range s.Fields {
-			p.newline()
-			p.blankOK = true
-			p.ident(f.Name)
+			p.fieldDecl(f)
+		}
+		p.flushComments(s.Rbrace)
+		p.indent--
+		p.newline()
+		p.blankOK = false
+		p.tokAt(s.Rbrace, "}")
+
+	case *InterfaceDecl:
+		if s.PublicPos.IsValid() {
+			p.tokAt(s.PublicPos, "public")
+			p.space()
+		}
+		if s.Soa.IsValid() {
+			p.tokAt(s.Soa, "soa")
+			p.space()
+		}
+		p.tokAt(s.Keyword, "interface")
+		p.space()
+		p.ident(s.Name)
+		if s.Base != nil {
 			p.tok(":")
-			p.typeExpr(f.Type)
-			p.tokAt(f.Semi, ";")
+			p.typeExpr(s.Base)
+		}
+		if s.Options != nil {
+			p.space()
+			p.options(s.Options)
+		}
+		p.space()
+		p.tokAt(s.Lbrace, "{")
+		p.indent++
+		for _, m := range s.Members {
+			switch m := m.(type) {
+			case *FieldDecl:
+				p.fieldDecl(m)
+			case *FuncDecl:
+				p.newline()
+				p.blankOK = true
+				p.stmt(m)
+			}
 		}
 		p.flushComments(s.Rbrace)
 		p.indent--
@@ -1122,4 +1167,14 @@ func rangeOp(inclusive bool) string {
 		return "..="
 	}
 	return ".."
+}
+
+// fieldDecl は struct・interface のフィールド 1 行 (`name:type;`)。
+func (p *printer) fieldDecl(f *FieldDecl) {
+	p.newline()
+	p.blankOK = true
+	p.ident(f.Name)
+	p.tok(":")
+	p.typeExpr(f.Type)
+	p.tokAt(f.Semi, ";")
 }

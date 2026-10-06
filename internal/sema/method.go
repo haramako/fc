@@ -1,6 +1,6 @@
 package sema
 
-// struct・soa のメソッド (fc 4 の `function T.m(self:…, …)`。Agent/wiki/plans/methods-interface.md の段 1)。
+// struct・soa のメソッド (fc 4 の `function T.m(self:…, …)`。Agent/wiki/design/methods-interface.md)。
 //
 // メソッドはモジュールの名前の表に入れず、受け取り手の型の修飾名 (mod.T。struct も soa も types.Type.Name) → メソッドの名前の
 // 表 (Program.methods) に置く。メソッドを足せるのは型を宣言したモジュールだけ。中身は普通の関数 (シンボルは _mod_T__m)。
@@ -59,7 +59,7 @@ func (h *Hlc) compileMethod(m *methodDecl) {
 	if sym != nil && sym.Type != nil && sym.Type.Kind == types.Bad {
 		panic(&diag.Error{Suppressed: true})
 	}
-	if sym == nil || sym.Type == nil || !(sym.Type.Kind == types.Struct && !sym.Type.IsSlice() || sym.Type.Kind == types.Soa) {
+	if sym == nil || sym.Type == nil || !(sym.Type.Kind == types.Struct && !sym.Type.IsSlice() || sym.Type.Kind == types.Soa) || h.prog.ifaces[sym.Type] != nil {
 		h.updatePos(s.Recv)
 		panic(&diag.Error{Msg: fmt.Sprintf("method %s: %s is not a struct or soa declared in this module (a method can only be added to a type of its own module)", m.name(), recv)})
 	}
@@ -96,7 +96,7 @@ func (h *Hlc) compileMethod(m *methodDecl) {
 	ok := false
 	switch t.Kind {
 	case types.Struct:
-		ok = pt == t || pt.Kind == types.Pointer && pt.Base == t
+		ok = pt == t || pt.Kind == types.Pointer && pt.Base == t || pt.Kind == types.SoaRef && pt.Base == t && pt.Path == "" // soa の interface・実装はハンドル
 	case types.Soa:
 		ok = pt.Kind == types.SoaRef && pt.Soa == t && pt.Path == ""
 	}

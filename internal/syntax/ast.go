@@ -284,15 +284,35 @@ type UseDecl struct {
 	Semi      Pos
 }
 
-// StructDecl は `struct Name { fields }` (v2)。
+// StructDecl は `struct Name { fields }` (v2)。Iface があれば fc 4 の interface の実装 `struct Name: Iface [= ID] { ... }`。
 type StructDecl struct {
 	PublicPos Pos
 	Keyword   Pos
 	Name      *Ident
+	Iface     *NamedType // 実装する interface (nil なら普通の struct)
+	ID        Expr       // 実装の ID (`= 1`。nil なら自動)
 	Lbrace    Pos
 	Fields    []*FieldDecl
 	Rbrace    Pos
 }
+
+// InterfaceDecl は fc 4 の `[soa] interface Name[:IdType] [@(...)] { fields; methods }`。メンバーは共通のフィールド (*FieldDecl) と
+// メソッド (*FuncDecl。Body が nil なら既定の本体なし) を書いた順に持つ。
+type InterfaceDecl struct {
+	PublicPos Pos
+	Soa       Pos // `soa` (無ければ普通の interface)
+	Keyword   Pos // `interface`
+	Name      *Ident
+	Base      TypeExpr // ID の型 (nil なら u8)
+	Options   *Options // nil なら省略
+	Lbrace    Pos
+	Members   []Node // *FieldDecl / *FuncDecl
+	Rbrace    Pos
+}
+
+func (s *InterfaceDecl) Pos() Pos { return firstValid(s.PublicPos, firstValid(s.Soa, s.Keyword)) }
+func (s *InterfaceDecl) End() Pos { return after(s.Rbrace, 1) }
+func (*InterfaceDecl) stmtNode()  {}
 
 // EnumDecl は fc 3 の `enum Name:u8 { A = 0, B, ... }` (基底型を省けば u8。値を省けば前の値 + 1、最初は 0)。
 type EnumDecl struct {

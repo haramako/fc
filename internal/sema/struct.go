@@ -10,6 +10,7 @@ package sema
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -112,10 +113,27 @@ func (h *Hlc) litFieldType(st *types.Type, f cfield, i int) *types.Type {
 		}
 		return fd.Type
 	}
-	if i >= len(st.Fields) {
-		panic(&diag.Error{Msg: fmt.Sprintf("too many values for struct %s (%d fields)", st.Name, len(st.Fields))})
+	fs := litFields(st)
+	if i >= len(fs) {
+		panic(&diag.Error{Msg: fmt.Sprintf("too many values for struct %s (%d fields)", st.Name, len(fs))})
 	}
-	return st.Fields[i].Type
+	return fs[i].Type
+}
+
+// litFields はリテラルに書けるフィールド (interface の ID `$id` などソースから書けないものを除く。位置指定の対応)。
+func litFields(st *types.Type) []types.Field {
+	for _, f := range st.Fields {
+		if strings.HasPrefix(f.Name, "$") {
+			var r []types.Field
+			for _, f := range st.Fields {
+				if !strings.HasPrefix(f.Name, "$") {
+					r = append(r, f)
+				}
+			}
+			return r
+		}
+	}
+	return st.Fields
 }
 
 // constEvalStructLit は struct リテラルを評価する。
@@ -147,8 +165,9 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 	if keyed != 0 && keyed != len(c.flds) {
 		panic(&diag.Error{Msg: fmt.Sprintf("struct %s literal mixes named and positional values", ty.Name)})
 	}
-	if keyed == 0 && len(c.flds) != 0 && len(c.flds) != len(ty.Fields) {
-		panic(&diag.Error{Msg: fmt.Sprintf("struct %s has %d fields but %d values given", ty.Name, len(ty.Fields), len(c.flds))})
+	vis := litFields(ty)
+	if keyed == 0 && len(c.flds) != 0 && len(c.flds) != len(vis) {
+		panic(&diag.Error{Msg: fmt.Sprintf("struct %s has %d fields but %d values given", ty.Name, len(vis), len(c.flds))})
 	}
 	// フィールド順に並べ直して評価する
 	flds := make([]cfield, 0, len(c.flds))
@@ -166,7 +185,7 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 			}
 			seen[f.key] = true
 		} else {
-			fd = ty.Fields[i]
+			fd = vis[i]
 		}
 		// slice のフィールドは定数の配列から定数の slice に、ポインタのフィールドは配列の定数・リテラルのアドレスに
 		// (const の表: `{items: [{1, 4}, {2, 3}], id: 50}`)
@@ -197,7 +216,7 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 			h.compatibleAssign(fmt.Sprintf("field %s of %s", fd.Name, ty), fd.Type, fv.val.Type) // 実行時の struct リテラル (rvalAssign) と同じ文言
 			elems[i] = fv.val
 		} else {
-			elems[i] = h.zeroLiteral(fd.Type)
+			elems[i] = h.litDefault(ty, fd)
 		}
 	}
 	return cv(ir.NewArrayLiteral(h.tmpName("$"), ty, elems))

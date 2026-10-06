@@ -94,6 +94,7 @@ func (h *Hlc) compileSoaDecl(s *syntax.SoaDecl) {
 	if _, dup := h.prog.soas[soa]; dup {
 		panic(&diag.Error{Msg: fmt.Sprintf("soa %s already defined", name)})
 	}
+	h.soaInterfaceDecl(s, soa, elem, seg) // soa の interface の置き場所 (iface.go)
 	leaves := h.soaLeaves(elem, name+"_", 0, nil)
 
 	// const なら初期値 (struct の配列) を転置する
@@ -210,6 +211,9 @@ func (h *Hlc) soaOf(t *types.Type) *soaInfo {
 	}
 	info, ok := h.prog.soas[t]
 	if !ok {
+		if impl := h.prog.soaViews[t]; impl != nil {
+			return h.buildView(t, impl) // soa の interface の実装の見方 (iface.go)
+		}
 		panic(fmt.Sprintf("soa %s is not registered", t))
 	}
 	return info
@@ -328,6 +332,7 @@ func (h *Hlc) soaStoreSplit(sp *soaSplit, v ir.Operand) {
 // soaGather は `*p` の読み出し: 要素全体を struct の一時変数に集める。
 func (h *Hlc) soaGather(ref ir.Operand) ir.Operand {
 	t := ir.ValType(ref)
+	h.ifaceElemCopy(t, false)
 	tmp := h.newTmp(t.Base)
 	leaves, base := h.soaLeavesUnder(t)
 	uint8T := h.prog.Types.IntType(1, false)
@@ -342,6 +347,7 @@ func (h *Hlc) soaGather(ref ir.Operand) ir.Operand {
 func (h *Hlc) soaScatter(ref ir.Operand, src ir.Operand) {
 	h.soaCheckWritable(ref)
 	t := ir.ValType(ref)
+	h.ifaceElemCopy(t, true)
 	h.compatible(t.Base, ir.ValType(src))
 	if _, plain := src.(*ir.Value); !plain {
 		src = h.operandValue(src)

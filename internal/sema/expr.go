@@ -232,6 +232,8 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			var v ir.Operand
 			if fv := structLitField(e, f.Name); fv != nil {
 				v = h.rvalAssign(fv, f.Type, fmt.Sprintf("field %s of %s", f.Name, e.ty), nil)
+			} else if f.Name == idField {
+				v = h.litDefault(e.ty, f) // interface の実装のリテラルの ID はその実装の ID (iface.go)
 			} else {
 				v = h.zeroValue(f.Type)
 			}

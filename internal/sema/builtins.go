@@ -30,6 +30,7 @@ type ConstMacroFn func(h *Hlc, args []*cexpr) *cexpr
 
 func registerBuiltins(p *Program) {
 	h := &Hlc{prog: p, scope: p.global}
+	registerIfaceBuiltins(h)
 
 	h.defmacroTyped("asm", voidMacro, func(h *Hlc, args []*cexpr, block *syntax.Block) macroResult {
 		for _, line := range args {

@@ -109,6 +109,10 @@ func checkVersion(f *File) error {
 			if f.Version < Version3 {
 				fail(n.Op, "ranges `a..b` are fc 3 syntax (write `#fc 3`)")
 			}
+		case *StructDecl:
+			if n.Iface != nil && f.Version < Version4 {
+				fail(n.Iface.Pos(), "interface implementations `struct T: I` are fc 4 syntax (write `#fc 4`)")
+			}
 		case *FuncDecl:
 			if n.Recv != nil && f.Version < Version4 {
 				fail(n.Recv.NamePos, "methods `function T.m(...)` are fc 4 syntax (write `#fc 4`)")
@@ -165,7 +169,7 @@ var kindToYacc = map[Kind]int{
 	KwBreak: kBREAK, KwContinue: kCONTINUE, KwIncbin: kINCBIN,
 	KwSwitch: kSWITCH, KwCase: kCASE, KwDefault: kDEFAULT,
 	AtSizeof: kAT_SIZEOF, AtBitcast: kAT_BITCAST, AtIncbin: kAT_INCBIN, AtInclude: kAT_INCLUDE, AtIdent: kATIDENT, AtIf: kAT_IF, AtSign: '@',
-	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwFarFn: kFARFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA, KwTrue: kTRUE, KwFalse: kFALSE, KwNull: kNULL, KwEnum: kENUM, KwFallthrough: kFALLTHROUGH, KwIn: kIN, KwDo: kDO,
+	KwUse: kUSE, KwAs: kAS, KwFrom: kFROM, KwPublic: kPUBLIC, KwPrivate: kPRIVATE, KwFn: kFN, KwFarFn: kFARFN, KwBitcast: kBITCAST, KwStruct: kSTRUCT, KwSizeof: kSIZEOF, KwSoa: kSOA, KwTrue: kTRUE, KwFalse: kFALSE, KwNull: kNULL, KwEnum: kENUM, KwFallthrough: kFALLTHROUGH, KwIn: kIN, KwDo: kDO, KwInterface: kINTERFACE,
 	Leq: LEQ, Geq: GEQ, EqEq: EQEQ, AddEq: ADDEQ, SubEq: SUBEQ, Neq: NEQ, Arrow: ARROW,
 	Shl: LSHIFT, Shr: RSHIFT, AndAnd: ANDAND, OrOr: OROR, Inc: INCR, Dec: DECR,
 	MulEq: MULEQ, DivEq: DIVEQ, ModEq: MODEQ, AndEq: ANDEQ, OrEq: OREQ, XorEq: XOREQ, ShlEq: SHLEQ, ShrEq: SHREQ, AddWrap: ADDWRAP, SubWrap: SUBWRAP, MulWrap: MULWRAP,

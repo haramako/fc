@@ -39,4 +39,13 @@ u8 の ID で interface を管理し、メソッドは ID で引き、soa に対
 - **候補のメモ**（ユーザー、実装しない）: far call でバンクを戻さない呼び出しの記法。far の interface にも普通の `farfn` にも。
   その後のバンクは自己責任
 
-計画: [Agent/wiki/plans/methods-interface.md](../wiki/plans/methods-interface.md)
+## 実装（同じ日）
+
+3 段とも実装した。設計は [Agent/wiki/design/methods-interface.md](../wiki/design/methods-interface.md)（計画の文書はここへ移した）。
+計画から変えた所:
+
+- 表の空き（`.none` など）は「止める関数」でなく、既定の本体、無ければ何もしない関数（値を返すメソッドは 0）。止めるには console が要り、
+  NES のプログラムまで引き込むため。値を返すメソッドに既定の本体を必須にする案は、`.none` が常にあるので全部に要ることになりやめた
+- `= ID` に書けるのは数・定数の名前・`mod.名前`・括弧の式（文法の衝突を避ける）
+- soa の interface の置き場所の soa は interface と同じモジュールに 1 つ。実装のモジュールはプログラムのどこかで use する
+- interface のハンドルを実装のハンドルとして読むのは、今は `@bitcast(*Slime, e)`（確かめない）
