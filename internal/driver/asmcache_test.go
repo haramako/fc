@@ -31,7 +31,7 @@ function main():void
 		t.Helper()
 		var out strings.Builder
 		c := NewCompiler(absRepoRoot)
-		code, err := c.Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+		code, err := buildCode(t, c, "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, true, &out, 0)
 		if err != nil || code != 0 {
 			t.Fatalf("ビルド失敗: %v (code %d)", err, code)
 		}

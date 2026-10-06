@@ -86,7 +86,7 @@ public function change():void options(noinline:true) {bytes[1]=7;exported=9;}
 				"facade.fc": `public use exported from a;`,
 			})
 			var out strings.Builder
-			_, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, OptimizeLevel: level, MaxCycles: 1000000})
+			_, _, err := buildRun(t, NewCompiler(absRepoRoot), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), OptimizeLevel: level}, &out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -145,7 +145,7 @@ function writes():void options(noinline:true) { value=1; value=2; }
 function main():void { writes(); printf(value); exit(0); }
 `})
 	var out strings.Builder
-	_, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out, MaxCycles: 1000000})
+	_, _, err := buildRun(t, NewCompiler(absRepoRoot), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}

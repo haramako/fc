@@ -12,6 +12,7 @@ import (
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
+	"github.com/haramako/fc/internal/runner"
 	"github.com/haramako/fc/internal/syntax"
 )
 
@@ -219,8 +220,8 @@ func checkBlock(t *testing.T, root string, b, next *codeBlock, mode, file string
 			t.Fatalf("%s: %v", b.name(), r.err)
 		}
 		noWarnings(t, b, r)
-		if r.res.ExitCode != 0 {
-			t.Errorf("%s: 終了コード %d", b.name(), r.res.ExitCode)
+		if r.exit != 0 {
+			t.Errorf("%s: 終了コード %d", b.name(), r.exit)
 		}
 		if r.stdout != next.code {
 			t.Errorf("%s: 出力が %s の ```text と違う\ngot:\n%s\nwant:\n%s", b.name(), next.name(), r.stdout, next.code)
@@ -234,8 +235,8 @@ func checkBlock(t *testing.T, root string, b, next *codeBlock, mode, file string
 			t.Fatalf("%s: %v", b.name(), r.err)
 		}
 		noWarnings(t, b, r)
-		if r.res.ExitCode != 0 {
-			t.Errorf("%s: テストが通らない (終了コード %d)\n%s", b.name(), r.res.ExitCode, r.stdout)
+		if r.exit != 0 {
+			t.Errorf("%s: テストが通らない (終了コード %d)\n%s", b.name(), r.exit, r.stdout)
 		}
 		if next != nil && r.stdout != next.code {
 			t.Errorf("%s: 出力が %s の ```text と違う\ngot:\n%s\nwant:\n%s", b.name(), next.name(), r.stdout, next.code)
@@ -302,6 +303,7 @@ func noWarnings(t *testing.T, b *codeBlock, r buildResult) {
 type buildResult struct {
 	res    *driver.Result
 	stdout string
+	exit   int // run したときの終了コード
 	err    error
 }
 
@@ -324,15 +326,23 @@ func build(t *testing.T, root string, files map[string]string, target string, ru
 	}
 	for retry := 0; ; retry++ {
 		var stdout strings.Builder
-		opt := &driver.BuildOptions{Target: target, Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, out),
-			Run: run, Stdout: &stdout, MaxCycles: 50_000_000}
+		opt := &driver.BuildOptions{Target: target, Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, out)}
 		res, err := driver.NewCompiler(root).BuildContext(t.Context(), entry, opt)
 		// ca65 がまれに何も出さずに失敗する (Windows)。internal/driver の testBuild と同じくやり直す
 		var ce *driver.CommandError
 		if retry < 2 && errors.As(err, &ce) && strings.TrimSpace(ce.Result) == "" {
 			continue
 		}
-		return buildResult{res: res, stdout: stdout.String(), err: err}
+		r := buildResult{res: res, err: err}
+		if err == nil && run {
+			var rr *runner.Result
+			rr, r.err = runner.Run(res.Target, res.Out, runner.Options{Stdout: &stdout, MaxCycles: 50_000_000})
+			if rr != nil {
+				r.exit = rr.ExitCode
+			}
+			r.stdout = stdout.String()
+		}
+		return r
 	}
 }
 

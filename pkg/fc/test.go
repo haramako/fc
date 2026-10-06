@@ -9,24 +9,25 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/haramako/fc/internal/nes"
 )
 
-// TestFrames は Target が TargetNES のテストを内蔵の NES のランナーで走らせるフレーム数の上限 (60 フレームで 1 秒)。
+// TestFrames は Target が TargetNES のテストを内蔵の NES のランナーで走らせるフレーム数の上限 (60 フレームで 1 秒。2 分)。
 const TestFrames = 60 * 120
 
+// TestCycles は Target が TargetEmu のテストを走らせるサイクル数の上限 (NES の CPU の 2 分ほど。無限ループで止まらなかった)。
+const TestCycles = 1_789_773 * 120
+
 // Test は files (モジュールの .fc) の @(test) の関数を走らせる。files を use して @run_tests() を呼ぶ main を一時ディレクトリに
-// 作り、files のディレクトリを探索先 (Options.LibPath) に足してビルドし、emu なら内蔵の 6502 のエミュレータで、nes なら内蔵の
-// NES のランナー (internal/nes。console の出力を $4018、終了コードを $4019 で受け取る) で実行する (結果の ExitCode が 0 なら
-// 全部通った。出力は Options.Stdout)。
-func (c *Compiler) Test(ctx context.Context, files []string, opt Options) (*Result, error) {
+// 作り、files のディレクトリを探索先 (Options.LibPath) に足してビルドし、Run で走らせる (emu は内蔵の 6502、nes は内蔵の NES の
+// ランナー。結果の ExitCode が 0 なら全部通った。出力は run.Stdout (nil なら捨てる)。上限は run で決めなければ TestCycles /
+// TestFrames)。ビルドの結果 (警告) も返す。
+func (c *Compiler) Test(ctx context.Context, files []string, opt Options, run RunOptions) (*Result, *RunResult, error) {
 	if len(files) == 0 {
-		return nil, fmt.Errorf("fcc test: no module is given")
+		return nil, nil, fmt.Errorf("fcc test: no module is given")
 	}
 	dir, err := os.MkdirTemp("", "fctest")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer os.RemoveAll(dir)
 	var b strings.Builder
@@ -36,10 +37,10 @@ func (c *Compiler) Test(ctx context.Context, files []string, opt Options) (*Resu
 	for _, f := range files {
 		abs, err := filepath.Abs(f)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, err := os.Stat(abs); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		fmt.Fprintf(&b, "use %s;\n", strings.TrimSuffix(filepath.Base(abs), ".fc"))
 		if d := filepath.Dir(abs); !seen[d] {
@@ -50,7 +51,7 @@ func (c *Compiler) Test(ctx context.Context, files []string, opt Options) (*Resu
 	b.WriteString("function main():void { @run_tests(); }\n")
 	const main = "fctest_main.fc"
 	if err := os.WriteFile(filepath.Join(dir, main), []byte(b.String()), 0o666); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	opt.Dir = dir
 	opt.BuildDir = filepath.Join(dir, "build")
@@ -58,25 +59,25 @@ func (c *Compiler) Test(ctx context.Context, files []string, opt Options) (*Resu
 	if opt.Target == "" {
 		opt.Target = TargetEmu
 	}
-	opt.Run = opt.Target == TargetEmu
 	if opt.Out == "" {
 		opt.Out = filepath.Join(dir, "test.bin")
 	}
 	res, err := c.Build(ctx, main, opt)
-	if err != nil || opt.Target != TargetNES {
-		return res, err
-	}
-	m, err := nes.LoadFile(opt.Out)
 	if err != nil {
-		return res, err
+		return res, nil, err
 	}
-	m.Output = opt.Stdout
-	if m.Output == nil {
-		m.Output = io.Discard
+	if run.Stdout == nil {
+		run.Stdout = io.Discard
 	}
-	if err := m.RunUntilExit(TestFrames); err != nil {
-		return res, fmt.Errorf("fcc test: %w", err)
+	if run.MaxCycles == 0 {
+		run.MaxCycles = TestCycles
 	}
-	res.ExitCode = m.ExitCode
-	return res, nil
+	if run.MaxFrames == 0 {
+		run.MaxFrames = TestFrames
+	}
+	r, err := c.Run(ctx, res, run)
+	if err != nil {
+		return res, nil, fmt.Errorf("fcc test: %w", err)
+	}
+	return res, r, nil
 }

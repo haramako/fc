@@ -21,14 +21,15 @@ import (
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/driver"
 	"github.com/haramako/fc/internal/fchome"
-	"github.com/haramako/fc/internal/nes"
+	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/runner"
 	"github.com/haramako/fc/internal/sizehtml"
 	"github.com/haramako/fc/internal/syntax"
 )
 
 // ターゲットプラットフォーム。
 const (
-	TargetEmu = "emu" // 内蔵 6502 エミュレータ (テスト用。Run で実行できる)
+	TargetEmu = "emu" // 内蔵 6502 エミュレータ (テスト用。Compiler.Run で走らせる)
 	TargetNES = "nes" // iNES ROM
 )
 
@@ -36,7 +37,6 @@ const (
 type Options struct {
 	Target        string // TargetEmu (既定) / TargetNES
 	Out           string // 出力ファイル (既定: a.bin / a.nes。作業ディレクトリ相対)
-	Run           bool   // ビルド後に emu で実行する (Target == TargetEmu のみ)
 	OptimizeLevel int    // 1〜2 (0 は既定の 2、-1 は最適化なし)
 	CompileOnly   bool   // アセンブル (.o) まで。リンクしない
 	Debug         bool   // Mesen 用のデバッグ情報 (.dbg に fc のソース行、.mlb のラベル) を ROM の隣に書く
@@ -51,9 +51,6 @@ type Options struct {
 	// Jobs はアセンブラ (ca65) の並列数。0 なら CPU 数。
 	Jobs int
 
-	// Stdout は Run 時のプログラム出力先 (既定 os.Stdout)。
-	Stdout io.Writer
-
 	// Defines は @(build) の const の上書き (`module.NAME=value`。fc.toml の [define.<module>] の後に当てる)。
 	Defines []string
 
@@ -64,8 +61,18 @@ type Options struct {
 	Offline bool
 }
 
-// Result はビルドの結果 (生成物のパスと、Run 時の終了コード)。
+// Result はビルドの結果 (生成物のパス・警告など)。走らせるのは Compiler.Run。
 type Result = driver.Result
+
+// RunOptions は Run の設定。
+type RunOptions struct {
+	Stdout    io.Writer // プログラムの出力 (console・printf。既定 os.Stdout)
+	MaxCycles int64     // emu: サイクル数の上限 (0 なら無制限)。超えたらエラー
+	MaxFrames int       // nes: フレーム数の上限 (0 なら NESRunFrames)。console.exit まで走らせる
+}
+
+// RunResult は Run の結果 (終了コードと、emu のサイクル数)。
+type RunResult = runner.Result
 
 // Error はコンパイルエラー (位置付き)。外部コマンド (ca65 / ld65) の失敗は *CommandError。
 type Error = diag.Error
@@ -143,10 +150,9 @@ func (c *Compiler) Close() {
 
 // Build は src をビルドする。
 func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result, error) {
-	res, err := c.c.BuildContext(ctx, src, &driver.BuildOptions{
+	return c.c.BuildContext(ctx, src, &driver.BuildOptions{
 		Target:        opt.Target,
 		Out:           opt.Out,
-		Run:           opt.Run,
 		OptimizeLevel: opt.OptimizeLevel,
 		CompileOnly:   opt.CompileOnly,
 		Debug:         opt.Debug,
@@ -155,29 +161,35 @@ func (c *Compiler) Build(ctx context.Context, src string, opt Options) (*Result,
 		Dir:           opt.Dir,
 		BuildDir:      opt.BuildDir,
 		Jobs:          opt.Jobs,
-		Stdout:        opt.Stdout,
 		Defines:       opt.Defines,
 		LibPath:       opt.LibPath,
 		Offline:       opt.Offline,
 	})
-	if err != nil || !opt.Run || opt.CompileOnly || res.Target != TargetNES {
-		return res, err
+}
+
+// Run はビルドした res (Build の結果) を内蔵のエミュレータで走らせる: emu は内蔵の 6502、nes は内蔵の NES のランナー (画面は
+// 描かない: console の出力と終了コードだけ。console.exit で終わる)。-g でビルドしたなら emu は @log も出す。
+func (c *Compiler) Run(ctx context.Context, res *Result, opt RunOptions) (*RunResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	// NES の ROM は内蔵の NES のランナーで console.exit まで走らせる (画面は描かない: console の出力と終了コードだけ)
+	if res == nil || res.Out == "" {
+		return nil, fmt.Errorf("nothing to run (build with linking first)")
+	}
 	stdout := opt.Stdout
 	if stdout == nil {
 		stdout = os.Stdout
 	}
-	m, err := nes.LoadFile(res.Out)
-	if err != nil {
-		return res, err
+	frames := opt.MaxFrames
+	if frames == 0 {
+		frames = NESRunFrames
 	}
-	m.Output = stdout
-	if err := m.RunUntilExit(NESRunFrames); err != nil {
-		return res, fmt.Errorf("%v: the built-in NES runner shows only console output (console.exit ends it); open the ROM in an emulator to see the screen", err)
+	r, err := runner.Run(res.Target, res.Out, runner.Options{Stdout: stdout, Log: res.Log, MaxCycles: opt.MaxCycles, MaxFrames: frames,
+		TracePC: ir.ConfigFromEnv().Trace("pc") != ""})
+	if err != nil && res.Target == TargetNES {
+		return nil, fmt.Errorf("%v: the built-in NES runner shows only console output (console.exit ends it); open the ROM in an emulator to see the screen", err)
 	}
-	res.ExitCode = m.ExitCode
-	return res, nil
+	return r, err
 }
 
 // NESRunFrames は Run の NES の ROM を内蔵のランナーで走らせるフレーム数の上限 (1 分)。

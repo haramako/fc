@@ -28,8 +28,8 @@ func (c *testCmd) run() int {
 		return 1
 	}
 	defer compiler.Close()
-	opt := fc.Options{Target: c.Target, Stdout: os.Stdout, OptimizeLevel: optimizeLevel(c.Opt)}
-	res, err := compiler.Test(context.Background(), c.Modules, opt)
+	opt := fc.Options{Target: c.Target, OptimizeLevel: optimizeLevel(c.Opt)}
+	res, r, err := compiler.Test(context.Background(), c.Modules, opt, fc.RunOptions{Stdout: os.Stdout})
 	if res != nil {
 		printWarnings(res.Warnings)
 	}
@@ -37,5 +37,5 @@ func (c *testCmd) run() int {
 		printErrors(err)
 		return 1
 	}
-	return res.ExitCode
+	return r.ExitCode
 }

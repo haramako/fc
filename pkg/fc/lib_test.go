@@ -37,7 +37,11 @@ func TestLibAdd(t *testing.T) {
 	}
 	t.Cleanup(func() { c.Close() })
 	var out strings.Builder
-	if _, err := c.Build(context.Background(), "t.fc", Options{Dir: proj, Out: filepath.Join(proj, "t.bin"), Run: true, Stdout: &out}); err != nil || out.String() != "42\n" {
+	res, err := c.Build(context.Background(), "t.fc", Options{Dir: proj, Out: filepath.Join(proj, "t.bin")})
+	if err == nil {
+		_, err = c.Run(context.Background(), res, RunOptions{Stdout: &out})
+	}
+	if err != nil || out.String() != "42\n" {
 		t.Fatalf("build: %q %v", out.String(), err)
 	}
 	for _, bad := range []struct{ name, src, msg string }{

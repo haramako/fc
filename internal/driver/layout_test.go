@@ -161,7 +161,7 @@ func TestLayoutErrors(t *testing.T) {
 			os.WriteFile(filepath.Join(dir, "fc.toml"), []byte(c.toml), 0o666)
 		}
 		os.WriteFile(filepath.Join(dir, "t.fc"), []byte("#fc 3\n"+c.src+"function main():void { }\n"), 0o666)
-		_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.nes"), CompileOnly: true})
+		_, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.nes"), CompileOnly: true}, false, nil, 0)
 		if err == nil || !strings.Contains(err.Error(), c.msg) {
 			t.Errorf("%q / %q: got %v, want /%s/", c.toml, c.src, err, c.msg)
 		}
@@ -226,7 +226,7 @@ function main():void
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "fc.toml"), []byte("[target]\nmapper = \"NROM\"\n[bank.a]\nslot = 0x8000\n"), 0o666)
 	os.WriteFile(filepath.Join(dir, "t.fc"), []byte("#fc 3\nfunction main():void { }\n"), 0o666)
-	_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.nes"), CompileOnly: true})
+	_, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.nes"), CompileOnly: true}, false, nil, 0)
 	if err == nil || !strings.Contains(err.Error(), "mapper NROM has no switchable banks") {
 		t.Errorf("NROM のバンク: %v", err)
 	}

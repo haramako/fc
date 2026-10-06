@@ -42,8 +42,8 @@ func TestConcurrentBuilds(t *testing.T) {
 			if i%2 == 0 {
 				level = 2
 			}
-			code, err := c.Build("t.fc", &BuildOptions{Dir: dirs[i], Target: "emu", Run: true, Stdout: &out, OptimizeLevel: level,
-				Out: filepath.Join(dirs[i], "a.bin")})
+			code, err := buildCode(t, c, "t.fc", &BuildOptions{Dir: dirs[i], Target: "emu", OptimizeLevel: level,
+				Out: filepath.Join(dirs[i], "a.bin")}, true, &out, 0)
 			if want := fmt.Sprintf("%d\n", i*10); err != nil || code != i || out.String() != want {
 				errs[i] = fmt.Sprintf("build %d: exit %d, out %q, err %v (want exit %d, out %q)", i, code, out.String(), err, i, want)
 			}

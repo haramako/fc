@@ -139,8 +139,7 @@ func TestMigrateGoldenPrograms(t *testing.T) {
 			// fc 4 の printf は書式文字列で console に出す (migrate が書き換える) ので生成コードは変わる: emu は出力と終了コードを
 			// golden と比べ、nes はビルドできることを見る (Agent/wiki/plans/v4-stdlib.md §4。以前は ROM を比べていた)
 			var stdout bytes.Buffer
-			code, err := NewCompiler(home).Build(srcName+".fc", &BuildOptions{Target: target, Out: out, Dir: dir, BuildDir: filepath.Join(tmp, "build"),
-				Run: target == "emu", Stdout: &stdout, MaxCycles: testMaxCycles})
+			code, err := buildCode(t, NewCompiler(home), srcName+".fc", &BuildOptions{Target: target, Out: out, Dir: dir, BuildDir: filepath.Join(tmp, "build")}, target == "emu", &stdout, testMaxCycles)
 			if err != nil {
 				t.Fatalf("ビルド失敗: %v", err)
 			}
@@ -176,8 +175,7 @@ func TestMigrateBench(t *testing.T) {
 			run := func(fcHome, dir, tag string) string {
 				var stdout bytes.Buffer
 				out := filepath.Join(tmp, tag+".bin")
-				code, err := NewCompiler(fcHome).Build(name+".fc", &BuildOptions{Target: "emu", Out: out, Dir: dir, BuildDir: filepath.Join(tmp, tag),
-					Run: true, Stdout: &stdout, MaxCycles: testMaxCycles})
+				code, err := buildCode(t, NewCompiler(fcHome), name+".fc", &BuildOptions{Target: "emu", Out: out, Dir: dir, BuildDir: filepath.Join(tmp, tag)}, true, &stdout, testMaxCycles)
 				if err != nil || code != 0 {
 					t.Fatalf("%s: ビルド・実行の失敗: %v (code %d)", tag, err, code)
 				}
@@ -208,8 +206,8 @@ func TestMigrateExamples(t *testing.T) {
 				t.Fatal(".fc が無い")
 			}
 			rom := filepath.Join(root, ex.name+".nes")
-			code, err := NewCompiler(absRepoRoot).Build(ex.main, &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(root, "build"),
-				Config: ir.NewConfig("unused-globals")})
+			code, err := buildCode(t, NewCompiler(absRepoRoot), ex.main, &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(root, "build"),
+				Config: ir.NewConfig("unused-globals")}, false, nil, 0)
 			if err != nil || code != 0 {
 				t.Fatalf("ビルド失敗: %v (code %d)", err, code)
 			}

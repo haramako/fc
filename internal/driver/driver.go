@@ -6,12 +6,10 @@ package driver
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -19,12 +17,10 @@ import (
 
 	"github.com/haramako/fc/internal/cc65"
 	"github.com/haramako/fc/internal/diag"
-	"github.com/haramako/fc/internal/emu"
 	"github.com/haramako/fc/internal/extmacro"
 	"github.com/haramako/fc/internal/fclog"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/project"
-	"github.com/haramako/fc/internal/r6502"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/starmacro"
 	"github.com/haramako/fc/internal/syntax"
@@ -58,14 +54,9 @@ type BuildOptions struct {
 	// Offline は fc.toml の [lib.*] の git のライブラリを取ってこない (キャッシュに無ければエラー。Agent/wiki/plans/v4-stdlib.md §9)
 	Offline       bool
 	Out           string // 出力ファイル (デフォルト a.bin / a.nes。作業ディレクトリ相対)
-	Run           bool   // -e
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
-	MaxCycles     int64  // Run 指定時 (emu) のサイクル数の上限 (0 は無制限)。超えたらエラー (差分テストの無限ループ対策)
 	CompileOnly   bool
-	Stdout        io.Writer
-	Debug         bool // -g: fc のソース位置を .dbg line で埋め、ROM の隣に Mesen 用の .dbg / .mlb を書く
-	// LogOut は emu の実行での @log の出力先 (nil なら Stdout。printf と同じ順に混ざる)
-	LogOut io.Writer
+	Debug         bool // -g: fc のソース位置を .dbg line で埋め、ROM の隣に Mesen 用の .dbg / .mlb を書く (@log の地点: Result.Log)
 	// LogEveryStatement はテスト用: 文ごとに変数を全部出す @log を置く (sema.Program.LogEveryStatement)
 	LogEveryStatement bool
 	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
@@ -88,10 +79,9 @@ type BuildOptions struct {
 	Defines []string
 }
 
-// Result はビルドの結果。
+// Result はビルドの結果。走らせるのは internal/runner (ビルドと分けてある)。
 type Result struct {
 	Target     string         // ビルドしたターゲット (-t を省けば fc.toml の [target] の有無で決まる)
-	ExitCode   int            // Run 指定時のプログラムの終了コード (それ以外は 0)
 	Out        string         // 出力ファイル (CompileOnly なら "")
 	MapFile    string         // ld65 のマップファイル (CompileOnly なら "")
 	DbgFile    string         // ld65 の --dbgfile (CompileOnly なら "")。Debug なら Mesen 用の .mlb も隣に書く
@@ -99,13 +89,13 @@ type Result struct {
 	BuildDir   string         // 中間生成物ディレクトリ
 	Warnings   []diag.Warning // 警告 (構文検査 + 意味解析。ファイル・位置順)
 	FarCalls   []sema.FarCall // far call になった呼び出し (options(farcall: true) のとき。fcc build -d で表示)
-	Cycles     int64          // Run 指定時 (emu) の消費サイクル数。stdio.bench_start / bench_end で区間を囲めばその区間の合計、無ければ全体
 	StaticZp   int            // 静的フレームの使用量 (ゼロページ側 FC_SZP / RAM 側 FC_SRAM)
 	StaticRam  int
 	Frames     []string         // 静的フレームの配置の要約 (fcc build -d で表示)
 	Defines    []sema.DefineUse // @(build) の const の上書き (fc.toml / -D。fcc build -d で表示)
 	Libs       []string         // fc.toml の [lib.*] の要約: ライブラリと、そこから使ったモジュール (fclib を置き換えたもの) (fcc build -d で表示)
 	Interfaces []string         // interface ごとの実装と ID (fcc build -d で表示)
+	Log        *fclog.LogFile   // @log の地点 (Debug のとき。emu で走らせるときに出す: runner.Options.Log)
 	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
 	// ResidentFixes は常駐レジスタの見積もりが外れて、退避 / 復帰に直した命令の数 (codegen.Llc.ResidentFixes)
 	ResidentFixes int
@@ -179,15 +169,6 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// Build はソースをビルドする。Run 指定時は実行結果 (終了コード) を返す。
-func (c *Compiler) Build(filename string, opt *BuildOptions) (int, error) {
-	r, err := c.BuildContext(context.Background(), filename, opt)
-	if err != nil {
-		return 0, err
-	}
-	return r.ExitCode, nil
-}
-
 // BuildContext はソースをビルドし、生成物の情報を返す。ctx のキャンセルは外部コマンド (ca65 / ld65) に伝わる。
 // エラーは *diag.Error (コンパイルエラー) または *CommandError (外部コマンドの失敗)。
 func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *BuildOptions) (*Result, error) {
@@ -224,9 +205,6 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		opt.OptimizeLevel = 2 // 未指定
 	case opt.OptimizeLevel < 0:
 		opt.OptimizeLevel = 0 // -O 0
-	}
-	if opt.Stdout == nil {
-		opt.Stdout = os.Stdout
 	}
 	if opt.Config == nil {
 		opt.Config = ir.ConfigFromEnv()
@@ -388,18 +366,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		}
 	}
 
-	if opt.Run {
-		logOut := opt.LogOut
-		if logOut == nil {
-			logOut = opt.Stdout
-		}
-		code, cycles, err := c.execute(opt.Out, opt.Stdout, opt.MaxCycles, fclog.Hooks(logFile), logOut)
-		if err != nil {
-			return nil, err
-		}
-		result.ExitCode = code
-		result.Cycles = cycles
-	}
+	result.Log = logFile
 	return result, nil
 }
 
@@ -987,36 +954,6 @@ func (c *compilation) run(ctx context.Context, name string, args ...string) erro
 // $ffff が 255 以外になったら終了 (その値が終了コード)。
 // 戻り値のサイクル数は $fffe に 4 (bench_start) / 5 (bench_end) を書いた区間の合計。一度も書かなければ全体。
 // logs は @log の地点 (PC → 表示。-g のとき)。命令の実行前に PC が地点なら 1 行出す。
-// execute は ROM を emu で実行し、終了コードとサイクル数を返す (internal/emu)。logs は @log の地点 (PC → 地点。fclog.Hooks)。
-func (c *compilation) execute(filename string, out io.Writer, maxCycles int64, logs map[int][]fclog.Hook, logOut io.Writer) (int, int64, error) {
-	if c.target != "emu" {
-		return 0, 0, nil // x6502 はスコープ外。nes は pkg/fc が内蔵の NES のランナーで走らせる (internal/nes は driver を使うテストを持つ)
-	}
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return 0, 0, err
-	}
-	o := emu.Options{Out: out, MaxCycles: maxCycles, TracePC: c.cfg.Trace("pc") != ""}
-	if logs != nil {
-		o.OnStep = func(pc, prevPC int, cpu *r6502.Cpu, mem *r6502.Memory) {
-			hs := logs[pc]
-			if hs == nil {
-				return
-			}
-			r := fclog.Reader{Mem: mem.Get, A: cpu.A, X: cpu.X, Y: cpu.Y}
-			for _, h := range hs {
-				if h.Site.Prevs == nil || slices.Contains(h.Site.Prevs, prevPC) {
-					fmt.Fprintln(logOut, fclog.Format(h.Point, h.Site, r))
-				}
-			}
-		}
-	}
-	res, err := emu.Run(data, o)
-	if err != nil {
-		return 0, 0, err
-	}
-	return res.Exit, res.Cycles, nil
-}
 
 // checkAddressVars は @(address: N) の変数が、リンクした RAM のセグメント (fc の ZP・BSS・静的フレーム・スタック、[ram.*]、
 // ほかの変数) と重ならないかを確かめる (fc の ZP の中に置くと、reg などと黙って重なっていた)。ROM・I/O の番地は RAM の

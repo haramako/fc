@@ -42,7 +42,7 @@ func TestFclibModuleTests(t *testing.T) {
 		n++
 		for _, level := range []int{-1, 2} {
 			var out bytes.Buffer
-			res, err := c.Test(context.Background(), []string{r.file}, Options{Target: r.target, Stdout: &out, OptimizeLevel: level})
+			res, run, err := c.Test(context.Background(), []string{r.file}, Options{Target: r.target, OptimizeLevel: level}, RunOptions{Stdout: &out})
 			if err != nil {
 				t.Fatalf("%s (%s): %v", r.file, r.target, err)
 			}
@@ -51,8 +51,8 @@ func TestFclibModuleTests(t *testing.T) {
 			for _, w := range res.Warnings {
 				t.Errorf("%s (%s, -O %d): warning: %s: %s", r.file, r.target, level, w.Pos, w.Msg)
 			}
-			if res.ExitCode != 0 || !strings.HasSuffix(out.String(), " tests ok\n") {
-				t.Errorf("%s (%s, -O %d): exit %d\n%s", r.file, r.target, level, res.ExitCode, out.String())
+			if run.ExitCode != 0 || !strings.HasSuffix(out.String(), " tests ok\n") {
+				t.Errorf("%s (%s, -O %d): exit %d\n%s", r.file, r.target, level, run.ExitCode, out.String())
 			}
 		}
 	}
@@ -80,7 +80,7 @@ func TestTestCommand(t *testing.T) {
 	}
 	run := func(p string) (string, int) {
 		var out bytes.Buffer
-		res, err := c.Test(context.Background(), []string{p}, Options{Stdout: &out})
+		_, res, err := c.Test(context.Background(), []string{p}, Options{}, RunOptions{Stdout: &out})
 		if err != nil {
 			t.Fatal(err)
 		}

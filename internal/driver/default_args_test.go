@@ -84,10 +84,7 @@ const LATER=6;
 		"external.asm": "_main_external:\n clc\n adc #1\n rts\n",
 	})
 	var out strings.Builder
-	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "main.fc", &BuildOptions{
-		Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"),
-		Run: true, Stdout: &out, MaxCycles: 1_000_000,
-	})
+	_, res, err := buildRun(t, NewCompiler(absRepoRoot), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -300,7 +300,7 @@ public const _T = @textmap("tbl.txt", TEXT_PO);
 			}
 		}
 		out := filepath.Join(dir, "a.nes")
-		if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: out}); err != nil {
+		if _, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: out}, false, nil, 0); err != nil {
 			t.Fatal(err)
 		}
 		b, err := os.ReadFile(out)

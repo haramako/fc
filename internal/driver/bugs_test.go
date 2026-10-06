@@ -24,8 +24,8 @@ func runEmuLevel(t *testing.T, body string, level int) string {
 	if r.Err != nil {
 		t.Fatalf("ビルド失敗: %v", r.Err)
 	}
-	if r.Res.ExitCode != 0 {
-		t.Fatalf("終了コード %d:\n%s", r.Res.ExitCode, r.Stdout)
+	if r.Run.ExitCode != 0 {
+		t.Fatalf("終了コード %d:\n%s", r.Run.ExitCode, r.Stdout)
 	}
 	return r.Stdout
 }
@@ -76,7 +76,7 @@ func TestBugVoidValue(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	_, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
+	_, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}, false, nil, 0)
 	if err == nil || !strings.Contains(err.Error(), "expression has no value") {
 		t.Errorf("got %v", err)
 	}

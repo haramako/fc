@@ -82,7 +82,7 @@ function main():void { fc(1, 2, 3); }
 	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}); err != nil {
+	if _, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}, false, nil, 0); err != nil {
 		t.Fatalf("got %v", err)
 	}
 	mod, _ := os.ReadFile(filepath.Join(dir, "b", "_t.s"))
@@ -216,7 +216,7 @@ function main():void
 		t.Fatal(err)
 	}
 	var out strings.Builder
-	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+	code, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, true, &out, 0)
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}

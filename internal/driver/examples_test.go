@@ -51,7 +51,7 @@ func TestExampleMiku(t *testing.T) {
 	tmp := t.TempDir()
 	rom := filepath.Join(tmp, "miku.nes")
 	compiler := NewCompiler(absRepoRoot)
-	code, err := compiler.Build("miku.fc", &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(tmp, "build")})
+	code, err := buildCode(t, compiler, "miku.fc", &BuildOptions{Target: "nes", Out: rom, Dir: dir, BuildDir: filepath.Join(tmp, "build")}, false, nil, 0)
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}

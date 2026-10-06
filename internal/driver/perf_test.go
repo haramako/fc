@@ -34,7 +34,7 @@ func TestPerfNotSlowerThanO0(t *testing.T) {
 				if r.Err != nil {
 					t.Fatalf("level %d: %v", level, r.Err)
 				}
-				cycles[i], outs[i] = r.Res.Cycles, r.Stdout
+				cycles[i], outs[i] = r.Run.Cycles, r.Stdout
 			}
 			if outs[0] != outs[1] {
 				t.Fatalf("-O 0 と -O 2 で出力が違う:\n%q\n%q", outs[0], outs[1])

@@ -31,8 +31,8 @@ func runProject(t *testing.T, root string, opt BuildOptions) (string, error) {
 	t.Helper()
 	var out strings.Builder
 	dir := filepath.Join(root, "proj")
-	opt.Target, opt.Dir, opt.BuildDir, opt.Out, opt.Run, opt.Stdout = "emu", dir, filepath.Join(dir, "b"), filepath.Join(dir, "t.bin"), true, &out
-	_, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "t.fc", &opt)
+	opt.Target, opt.Dir, opt.BuildDir, opt.Out = "emu", dir, filepath.Join(dir, "b"), filepath.Join(dir, "t.bin")
+	_, _, err := buildRun(t, NewCompiler(absRepoRoot), "t.fc", &opt, &out)
 	return out.String(), err
 }
 

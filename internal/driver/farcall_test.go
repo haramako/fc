@@ -55,7 +55,7 @@ func TestFarCall(t *testing.T) {
 	writeFiles(t, dir, map[string]string{"main.fc": farMain, "far1.fc": far1, "fixed1.fc": fixed1})
 	var out strings.Builder
 	c := NewCompiler(absRepoRoot)
-	res, err := c.BuildContext(t.Context(), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+	res, _, err := buildRun(t, c, "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, &out)
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestFarCallDisabled(t *testing.T) {
 		"fixed1.fc": fixed1,
 	})
 	var out strings.Builder
-	if _, err := NewCompiler(absRepoRoot).Build("main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out}); err != nil {
+	if _, err := buildCode(t, NewCompiler(absRepoRoot), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, true, &out, 0); err != nil {
 		t.Fatal(err)
 	}
 	mainAsm, _ := os.ReadFile(filepath.Join(dir, "b", "_main.s"))
@@ -125,7 +125,7 @@ func TestFarCallNesConfig(t *testing.T) {
 		"main.fc": "#fc 2\noptions(bank_count: 4, farcall: true);\nuse * from stdio;\nuse far1;\nfunction main():void { far1.add(1, 2); }\n",
 		"far1.fc": "#fc 2\noptions(bank: 1);\npublic function add(a:int, b:int):int { return a + b; }\n",
 	})
-	if _, err := NewCompiler(absRepoRoot).Build("main.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.nes")}); err != nil {
+	if _, err := buildCode(t, NewCompiler(absRepoRoot), "main.fc", &BuildOptions{Target: "nes", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.nes")}, false, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ := os.ReadFile(filepath.Join(dir, "b", "ld65.cfg"))
@@ -162,7 +162,7 @@ func TestFarCallSegmentOption(t *testing.T) {
 		"far2.fc": "#fc 2\noptions(bank: 2);\npublic function g(a:int):int { return a * 10; }\n",
 	})
 	var out strings.Builder
-	res, err := NewCompiler(absRepoRoot).BuildContext(t.Context(), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+	res, _, err := buildRun(t, NewCompiler(absRepoRoot), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}

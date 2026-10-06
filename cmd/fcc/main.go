@@ -167,21 +167,18 @@ type buildCmd struct{ buildArgs }
 type compileCmd struct{ buildArgs }
 type runCmd struct{ buildArgs }
 
-func (c *buildCmd) run() int { return c.build(c.options()) }
+func (c *buildCmd) run() int { return c.build(c.options(), false) }
 
 func (c *compileCmd) run() int {
 	opt := c.options()
 	opt.CompileOnly = true
-	return c.build(opt)
+	return c.build(opt, false)
 }
 
-func (c *runCmd) run() int {
-	opt := c.options()
-	opt.Run = true
-	return c.build(opt)
-}
+func (c *runCmd) run() int { return c.build(c.options(), true) }
 
-func (c *buildArgs) build(opt fc.Options) int {
+// build はビルドし、run なら続けて走らせる (fcc run。ビルドと実行は別: Compiler.Build と Compiler.Run)。
+func (c *buildArgs) build(opt fc.Options, run bool) int {
 	opt.SizeReport = c.SizeReport
 	opt.SizeHTML = c.SizeHTML
 	compiler, err := fc.New()
@@ -239,7 +236,15 @@ func (c *buildArgs) build(opt fc.Options) int {
 			fmt.Fprintf(os.Stderr, "  %s: %s -> %s\n", f.Pos, f.Caller, f.Callee)
 		}
 	}
-	return res.ExitCode
+	if !run {
+		return 0
+	}
+	r, err := compiler.Run(context.Background(), res, fc.RunOptions{Stdout: os.Stdout})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return r.ExitCode
 }
 
 // optimizeLevel は -O の値を driver の表現に (0 は「未指定」の意味なので、-O 0 は -1 で渡す)。

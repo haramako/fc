@@ -130,10 +130,8 @@ func buildForGoldenLevel(t *testing.T, srcName, target string, run bool, stdout 
 		out = filepath.Join(tmp, "a.nes")
 	}
 	compiler := NewCompiler(absRepoRoot)
-	code, err := compiler.Build(srcName+".fc", &BuildOptions{
-		Target: target, Out: out, Run: run, Stdout: stdout, OptimizeLevel: level,
-		Dir: testDir(), BuildDir: filepath.Join(tmp, "build"),
-	})
+	code, err := buildCode(t, compiler, srcName+".fc", &BuildOptions{Target: target, Out: out, OptimizeLevel: level,
+		Dir: testDir(), BuildDir: filepath.Join(tmp, "build")}, run, stdout, 0)
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}

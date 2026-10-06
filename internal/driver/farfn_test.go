@@ -230,7 +230,7 @@ func TestFarFunctionPointerBankRange(t *testing.T) {
 			source := "#fc 2\nuse * from stdio;\n" + storage + "\nfunction f():void{}\nfunction main():void{exit(0);}\n"
 			writeFiles(t, dir, map[string]string{"main.fc": source})
 			opt := &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}
-			if _, err := NewCompiler(absRepoRoot).Build("main.fc", opt); err != nil {
+			if _, err := buildCode(t, NewCompiler(absRepoRoot), "main.fc", opt, false, nil, 0); err != nil {
 				t.Fatal(err)
 			}
 			cfg, err := os.ReadFile(filepath.Join(dir, "b", "ld65.cfg"))
@@ -241,7 +241,7 @@ func TestFarFunctionPointerBankRange(t *testing.T) {
 			writeFiles(t, dir, map[string]string{"main.fc": source})
 			for _, bank := range []int{255, 256} {
 				writeFiles(t, dir, map[string]string{"custom.cfg": strings.Replace(string(cfg), "bank = 0;", fmt.Sprintf("bank = %d;", bank), 1)})
-				_, err = NewCompiler(absRepoRoot).Build("main.fc", opt)
+				_, err = buildCode(t, NewCompiler(absRepoRoot), "main.fc", opt, false, nil, 0)
 				if bank == 255 && err != nil {
 					t.Fatal(err)
 				}

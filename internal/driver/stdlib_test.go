@@ -48,8 +48,8 @@ function main():void
 	if r.Err != nil {
 		t.Fatal(r.Err)
 	}
-	if r.Res.ExitCode != 0 || r.Stdout != "hi\n" {
-		t.Errorf("exit %d, out %q; want 0, %q", r.Res.ExitCode, r.Stdout, "hi\n")
+	if r.Run.ExitCode != 0 || r.Stdout != "hi\n" {
+		t.Errorf("exit %d, out %q; want 0, %q", r.Run.ExitCode, r.Stdout, "hi\n")
 	}
 }
 
@@ -139,7 +139,7 @@ function main():void
 	console.exit(0);
 }
 `}})
-	if r.Res == nil || r.Res.ExitCode != 1 || r.Stdout != "panic: fmt: the buffer is too small\n" {
+	if r.Res == nil || r.Run.ExitCode != 1 || r.Stdout != "panic: fmt: the buffer is too small\n" {
 		t.Errorf("err = %v, stdout = %q", r.Err, r.Stdout)
 	}
 }
@@ -195,7 +195,7 @@ function main():void
 				t.Errorf("n=%d (-O %d): %q", n, level, res.Stdout)
 			}
 			if level == 0 {
-				t.Logf("%d バイト → %d バイト、展開 %d サイクル (1 バイト %.1f)", n, packed, res.Res.Cycles, float64(res.Res.Cycles)/float64(n))
+				t.Logf("%d バイト → %d バイト、展開 %d サイクル (1 バイト %.1f)", n, packed, res.Run.Cycles, float64(res.Run.Cycles)/float64(n))
 			}
 		}
 	}
@@ -301,7 +301,7 @@ function main():void
 				t.Errorf("n=%d (-O %d): got %q, want %q", n, level, res.Stdout, want)
 			}
 			if level == 0 {
-				t.Logf("%d バイト → %d バイト、展開 %d サイクル (1 バイト %.1f)", n, len(packed), res.Res.Cycles, float64(res.Res.Cycles)/float64(n))
+				t.Logf("%d バイト → %d バイト、展開 %d サイクル (1 バイト %.1f)", n, len(packed), res.Run.Cycles, float64(res.Run.Cycles)/float64(n))
 			}
 		}
 	}
@@ -378,8 +378,8 @@ function main():void
 				t.Errorf("%s (-O %d): %q, want %q", c.name, level, res.Stdout, want)
 			}
 			if level == 0 {
-				per := float64(res.Res.Cycles) / 1000
-				t.Logf("%s: 1000 バイトで %d サイクル (1 バイト %.1f)", c.name, res.Res.Cycles, per)
+				per := float64(res.Run.Cycles) / 1000
+				t.Logf("%s: 1000 バイトで %d サイクル (1 バイト %.1f)", c.name, res.Run.Cycles, per)
 				if per > c.limit {
 					t.Errorf("%s: 1 バイト %.1f サイクル (上限 %.0f)", c.name, per, c.limit)
 				}

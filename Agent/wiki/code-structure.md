@@ -35,7 +35,9 @@
   fc が生成する ld65.cfg の 3 つの形と base.s の FC_STACK、`[ram.*]` の重なりの検査は、RAM の番地を `project.MemoryMap` 1 つから
   取る（`DefaultMemoryMap(target)`・`LinkerMemory`）。設定ファイルと
   バンクの配置は `project`、ca65 / ld65 の探索と dbgfile は `cc65`、@log の生成物は `fclog`、FC_HOME の解決は `fchome`、
-  emu ターゲットの実行とホストとのやり取りの取り決め ($fff0〜$ffff) は `emu`。
+  emu ターゲットの実行とホストとのやり取りの取り決め ($fff0〜$ffff) は `emu`。driver はビルドだけをし、走らせるのは `runner`
+  （2026-10-06 に分けた。emu は内蔵の 6502、nes は内蔵の NES のランナー。`@log` の地点は `driver.Result.Log` → `fclog.Stepper`。
+  runner は driver を使わない: `internal/nes` のテストが driver を使うので、輪になる。pkg/fc は `Compiler.Build` と `Compiler.Run`）。
 - **版と migrate**（2026-09-28。[Agent/wiki/plans/v4-plan.md](plans/v4-plan.md) §0）: 版は `syntax.Version2〜4`（`LatestVersion` = 4）で、モジュール
   ごと（`ir.Module.Version`。sema は `h.version()` で規則を選ぶ）。`fcc migrate` は `driver.Compiler.Migrate`（ファイルごとに `compilation`）: fc 2 → 3 は
   構文の書き換え（`internal/migrate` の `Rules`。ファイルごと）、fc 3 → 4 は意味の書き換えで、各ファイルを入口に sema で

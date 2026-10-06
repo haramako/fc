@@ -143,11 +143,13 @@ func TestExampleLife(t *testing.T) {
 		}
 	}
 	var out strings.Builder
-	if _, err := driver.NewCompiler(repoRoot).BuildContext(context.Background(), "t.fc", &driver.BuildOptions{
-		Target: "emu", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "t.bin"), Run: true, Stdout: &out,
-	}); err != nil {
+	res, err := driver.NewCompiler(repoRoot).BuildContext(context.Background(), "t.fc", &driver.BuildOptions{
+		Target: "emu", Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "t.bin"),
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	runEmuBuilt(t, res, &out, &out, 0)
 	if out.String() != want {
 		t.Errorf("emu の出力が Go のライフゲームと違う:\n%s", out.String())
 	}

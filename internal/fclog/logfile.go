@@ -8,7 +8,9 @@ package fclog
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -367,4 +369,25 @@ func Hooks(lf *LogFile) map[int][]Hook {
 		sort.SliceStable(h[pc], func(a, b int) bool { return h[pc][a].Site.Seq < h[pc][b].Site.Seq })
 	}
 	return h
+}
+
+// Stepper は @log の地点の表 lf から、命令ごとに呼ぶ関数を作る (地点に来たら 1 行を out に出す。lf が nil なら nil)。emu の OnStep
+// から呼ぶ (internal/runner。r6502 に依存しないように、値は地点に来たときだけ read で受け取る)。
+func Stepper(lf *LogFile, out io.Writer) func(pc, prevPC int, read func() Reader) {
+	hooks := Hooks(lf)
+	if hooks == nil {
+		return nil
+	}
+	return func(pc, prevPC int, read func() Reader) {
+		hs := hooks[pc]
+		if hs == nil {
+			return
+		}
+		r := read()
+		for _, h := range hs {
+			if h.Site.Prevs == nil || slices.Contains(h.Site.Prevs, prevPC) {
+				fmt.Fprintln(out, Format(h.Point, h.Site, r))
+			}
+		}
+	}
 }

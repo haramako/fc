@@ -7,12 +7,14 @@ package driver
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/haramako/fc/internal/ir"
+	"github.com/haramako/fc/internal/runner"
 )
 
 // testMaxCycles は emu で走らせるときのサイクル数の既定の上限 (無限ループの検出。普通のテストのプログラムは 1M 未満)。
@@ -25,7 +27,7 @@ type buildSpec struct {
 	Target      string            // 既定 emu
 	Out         string            // 出力のファイル名 (既定 a.bin。nes なら a.nes)
 	Level       int               // BuildOptions.OptimizeLevel (0 は既定の -O 2、-1 は -O 0)
-	Run         bool              // emu で走らせる
+	Run         bool              // ビルドの後に runner で走らせる (emu)
 	CompileOnly bool
 	MaxCycles   int64 // Run のサイクル数の上限 (0 なら testMaxCycles)
 	Debug       bool  // -g
@@ -45,6 +47,7 @@ type buildResult struct {
 	Stdout string // emu の printf の出力
 	LogOut string // emu の @log の出力
 	Res    *Result
+	Run    *runner.Result // Run したときの終了コードとサイクル数
 	Err    error
 }
 
@@ -105,18 +108,48 @@ func testBuild(t *testing.T, s buildSpec) (r *buildResult) {
 		maxCycles = testMaxCycles
 	}
 	for retry := 0; ; retry++ {
-		var stdout, logs strings.Builder
 		opt := &BuildOptions{Target: s.Target, Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: r.Out, OptimizeLevel: s.Level,
-			Run: s.Run, CompileOnly: s.CompileOnly, Stdout: &stdout, LogOut: &logs, MaxCycles: maxCycles,
-			Debug: s.Debug, LogEveryStatement: s.LogEvery, MisclassifyResident: s.Misclassify, Defines: s.Defines, Config: s.Config}
+			CompileOnly: s.CompileOnly, Debug: s.Debug, LogEveryStatement: s.LogEvery, MisclassifyResident: s.Misclassify,
+			Defines: s.Defines, Config: s.Config}
 		r.Res, r.Err = NewCompiler(absRepoRoot).BuildContext(t.Context(), main, opt)
-		r.Stdout, r.LogOut = stdout.String(), logs.String()
 		var ce *CommandError
 		if retry < 2 && errors.As(r.Err, &ce) && strings.TrimSpace(ce.Result) == "" {
 			continue
 		}
+		if r.Err == nil && s.Run {
+			var stdout, logs strings.Builder
+			r.Run, r.Err = runBuilt(r.Res, runner.Options{Stdout: &stdout, LogOut: &logs, MaxCycles: maxCycles, TracePC: tracePC(s.Config)})
+			r.Stdout, r.LogOut = stdout.String(), logs.String()
+		}
 		return r
 	}
+}
+
+// runBuilt はビルドした res を runner で走らせる (res.Out・res.Target・@log の地点 res.Log)。
+func runBuilt(res *Result, o runner.Options) (*runner.Result, error) {
+	if o.Log == nil {
+		o.Log = res.Log
+	}
+	return runner.Run(res.Target, res.Out, o)
+}
+
+// buildRun は opt でビルドして走らせる (テスト用。出力は out、サイクル数の上限は testMaxCycles)。
+func buildRun(t *testing.T, c *Compiler, main string, opt *BuildOptions, out io.Writer) (*Result, *runner.Result, error) {
+	t.Helper()
+	res, err := c.BuildContext(t.Context(), main, opt)
+	if err != nil {
+		return res, nil, err
+	}
+	run, err := runBuilt(res, runner.Options{Stdout: out, MaxCycles: testMaxCycles, TracePC: tracePC(opt.Config)})
+	return res, run, err
+}
+
+// tracePC は FC_TRACE=pc (emu の panic のときに直近の PC を出す) か。
+func tracePC(cfg *ir.Config) bool {
+	if cfg == nil {
+		cfg = ir.ConfigFromEnv()
+	}
+	return cfg.Trace("pc") != ""
 }
 
 // exitError は Run の終了コードが 0 でなければそのエラー。
@@ -124,8 +157,26 @@ func (r *buildResult) exitError() error {
 	if r.Err != nil {
 		return r.Err
 	}
-	if r.Res != nil && r.Res.ExitCode != 0 {
-		return fmt.Errorf("exit code %d: %s", r.Res.ExitCode, r.Stdout)
+	if r.Run != nil && r.Run.ExitCode != 0 {
+		return fmt.Errorf("exit code %d: %s", r.Run.ExitCode, r.Stdout)
 	}
 	return nil
+}
+
+// buildCode は opt でビルドし、run なら走らせて終了コードを返す (以前の Compiler.Build。テスト用)。out は出力 (nil なら捨てる)、
+// maxCycles はサイクル数の上限 (0 なら testMaxCycles)。
+func buildCode(t *testing.T, c *Compiler, main string, opt *BuildOptions, run bool, out io.Writer, maxCycles int64) (int, error) {
+	t.Helper()
+	res, err := c.BuildContext(t.Context(), main, opt)
+	if err != nil || !run {
+		return 0, err
+	}
+	if maxCycles == 0 {
+		maxCycles = testMaxCycles
+	}
+	r, err := runBuilt(res, runner.Options{Stdout: out, MaxCycles: maxCycles, TracePC: tracePC(opt.Config)})
+	if err != nil {
+		return 0, err
+	}
+	return r.ExitCode, nil
 }

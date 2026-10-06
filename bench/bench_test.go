@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/haramako/fc/internal/driver"
+	"github.com/haramako/fc/internal/runner"
 )
 
 var update = flag.Bool("update", false, "results.json を現在の値で書き換える")
@@ -132,16 +133,18 @@ func run(t *testing.T, repoRoot, benchDir, name string) Entry {
 		Dir:      benchDir,
 		BuildDir: filepath.Join(tmp, "b"),
 		Out:      filepath.Join(tmp, name+".bin"),
-		Run:      true,
-		Stdout:   &out,
 	})
 	if err != nil {
 		t.Fatalf("%s: ビルド失敗: %v", name, err)
 	}
-	if res.ExitCode != 0 {
-		t.Fatalf("%s: 終了コード %d", name, res.ExitCode)
+	r, err := runner.Run(res.Target, res.Out, runner.Options{Stdout: &out})
+	if err != nil {
+		t.Fatalf("%s: 実行に失敗: %v", name, err)
 	}
-	return Entry{Cycles: res.Cycles, Size: segmentSize(t, res.MapFile, name), Out: strings.TrimSpace(out.String())}
+	if r.ExitCode != 0 {
+		t.Fatalf("%s: 終了コード %d", name, r.ExitCode)
+	}
+	return Entry{Cycles: r.Cycles, Size: segmentSize(t, res.MapFile, name), Out: strings.TrimSpace(out.String())}
 }
 
 // segmentSize は ld65 の map ファイルの "Segment list" から名前 seg のサイズを読む。

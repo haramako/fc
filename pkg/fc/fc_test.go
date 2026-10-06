@@ -66,21 +66,31 @@ func TestBuildError(t *testing.T) {
 	}
 }
 
-// TestRun は emu ターゲットで実行し、出力と終了コードが取れることを確認する。
+// TestRun は emu ターゲットでビルドして走らせ (Build と Run)、出力と終了コードが取れることを確認する。
 func TestRun(t *testing.T) {
 	root := repoRoot(t)
 	tmp := t.TempDir()
 	var out strings.Builder
 	c := NewWithHome(root)
 	res, err := c.Build(context.Background(), "test_basic.fc", Options{
-		Run: true, Stdout: &out, Out: filepath.Join(tmp, "a.bin"),
-		Dir: filepath.Join(root, "test"), BuildDir: filepath.Join(tmp, "build"),
+		Out: filepath.Join(tmp, "a.bin"), Dir: filepath.Join(root, "test"), BuildDir: filepath.Join(tmp, "build"),
 	})
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}
-	if res.ExitCode != 0 || out.Len() == 0 {
-		t.Errorf("exit=%d out=%q", res.ExitCode, out.String())
+	r, err := c.Run(context.Background(), res, RunOptions{Stdout: &out})
+	if err != nil || r.ExitCode != 0 || out.Len() == 0 {
+		t.Errorf("exit=%v out=%q err=%v", r, out.String(), err)
+	}
+	// リンクしていない (CompileOnly) ものは走らせられない
+	res, err = c.Build(context.Background(), "test_basic.fc", Options{
+		CompileOnly: true, Out: filepath.Join(tmp, "b.bin"), Dir: filepath.Join(root, "test"), BuildDir: filepath.Join(tmp, "build2"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Run(context.Background(), res, RunOptions{Stdout: &out}); err == nil {
+		t.Errorf("CompileOnly の結果を走らせられた")
 	}
 }
 
@@ -101,15 +111,22 @@ func TestRunNES(t *testing.T) {
 	}
 	write("#fc 4\nuse console;\nfunction main():void\n{\n\tconsole.init();\n\t@printf(\"hello {}\n\", 42);\n\tconsole.exit(3);\n}\n")
 	var out bytes.Buffer
-	res, err := c.Build(context.Background(), "t.fc", Options{Target: TargetNES, Dir: dir, Out: filepath.Join(dir, "t.nes"), Run: true, Stdout: &out})
+	buildRun := func() (*RunResult, error) {
+		res, err := c.Build(context.Background(), "t.fc", Options{Target: TargetNES, Dir: dir, Out: filepath.Join(dir, "t.nes")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.Run(context.Background(), res, RunOptions{Stdout: &out, MaxFrames: 60})
+	}
+	r, err := buildRun()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.String() != "hello 42\n" || res.ExitCode != 3 {
-		t.Errorf("出力 %q、終了コード %d", out.String(), res.ExitCode)
+	if out.String() != "hello 42\n" || r.ExitCode != 3 {
+		t.Errorf("出力 %q、終了コード %d", out.String(), r.ExitCode)
 	}
 	write("#fc 4\nfunction main():void\n{\n\twhile (true) {\n\t}\n}\n")
-	if _, err := c.Build(context.Background(), "t.fc", Options{Target: TargetNES, Dir: dir, Out: filepath.Join(dir, "t.nes"), Run: true, Stdout: &out}); err == nil || !strings.Contains(err.Error(), "did not exit") {
+	if _, err := buildRun(); err == nil || !strings.Contains(err.Error(), "did not exit") {
 		t.Errorf("終わらないプログラム: %v", err)
 	}
 }

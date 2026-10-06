@@ -54,7 +54,9 @@ func TestImportDirection(t *testing.T) {
 		"quicknes":  {}, // libretro の QuickNES のコア (画面を確かめるテスト用)
 		"doccheck":  {},
 		"fcdoc":     {"syntax"}, // fcc doc (モジュールのドキュメント) // 文書を確かめるテストだけ (テストは driver と syntax を使う)
-		"driver":    {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "r6502", "frames", "cc65", "project", "fclog", "emu", "migrate", "extmacro", "starmacro", "sizehtml"},
+		"driver":    {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "frames", "cc65", "project", "fclog", "migrate", "extmacro", "starmacro", "sizehtml"},
+		// runner は走らせるだけ (driver を使わない: internal/nes のテストが driver を使うので、輪になる)
+		"runner": {"emu", "nes", "fclog", "r6502"},
 	}
 	for pkg, ok := range allowed {
 		okSet := map[string]bool{}

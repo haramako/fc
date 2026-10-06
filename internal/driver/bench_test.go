@@ -83,9 +83,8 @@ func BenchmarkCastleCompile(b *testing.B) {
 			b.Fatal(err)
 		}
 		b.StartTimer()
-		code, err := compiler.Build("main.fc", &BuildOptions{Target: "nes", CompileOnly: true, Dir: src})
-		if err != nil || code != 0 {
-			b.Fatalf("コンパイル失敗: code=%d err=%v", code, err)
+		if _, err := compiler.BuildContext(b.Context(), "main.fc", &BuildOptions{Target: "nes", CompileOnly: true, Dir: src}); err != nil {
+			b.Fatalf("コンパイル失敗: %v", err)
 		}
 	}
 }

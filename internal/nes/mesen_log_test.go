@@ -141,13 +141,14 @@ func TestMesenLog(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "emu")
 			writeFiles(t, dir, map[string]string{"t.fc": mains["emu"], "body.fc": mesenLogBody})
 			var out strings.Builder
-			_, err := driver.NewCompiler(repoRoot).BuildContext(context.Background(), "t.fc", &driver.BuildOptions{
+			res, err := driver.NewCompiler(repoRoot).BuildContext(context.Background(), "t.fc", &driver.BuildOptions{
 				Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"),
-				Run: true, Stdout: &out, LogOut: &want, OptimizeLevel: level, Debug: true, MaxCycles: 10_000_000,
+				OptimizeLevel: level, Debug: true,
 			})
 			if err != nil {
-				t.Fatalf("-O %d: emu のビルド・実行に失敗: %v", level, err)
+				t.Fatalf("-O %d: emu のビルドに失敗: %v", level, err)
 			}
+			runEmuBuilt(t, res, &out, &want, 10_000_000)
 		}
 		if !strings.Contains(want.String(), "k=1 ") || !strings.HasSuffix(want.String(), "DONE\n") {
 			t.Fatalf("-O %d: emu の表示が足りない:\n%s", level, want.String())

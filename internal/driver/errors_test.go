@@ -50,7 +50,7 @@ func TestErrorsFC(t *testing.T) {
 			}
 			compiler := NewCompiler(absRepoRoot)
 			// 断片は一時ディレクトリ、use/include の検索は test/ 基準 (旧 test-all と同じ)
-			_, berr := compiler.Build(path, &BuildOptions{Dir: testDir(), BuildDir: filepath.Join(tmp, "build"), Out: filepath.Join(tmp, "a.bin")})
+			_, berr := buildCode(t, compiler, path, &BuildOptions{Dir: testDir(), BuildDir: filepath.Join(tmp, "build"), Out: filepath.Join(tmp, "a.bin")}, false, nil, 0)
 			if berr == nil {
 				t.Fatalf("断片 %d: エラーになるべきコンパイルが成功した", i)
 			}
@@ -91,7 +91,7 @@ func TestLlcErrorPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 	compiler := NewCompiler(absRepoRoot)
-	_, err := compiler.Build("t.fc", &BuildOptions{Target: "emu", CompileOnly: true, Dir: dir})
+	_, err := buildCode(t, compiler, "t.fc", &BuildOptions{Target: "emu", CompileOnly: true, Dir: dir}, false, nil, 0)
 	var ce *diag.Error
 	if !errors.As(err, &ce) {
 		t.Fatalf("CompileError であるべき: %v", err)

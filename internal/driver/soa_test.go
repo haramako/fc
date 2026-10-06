@@ -14,10 +14,8 @@ func TestV2SoaProgram(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	var out strings.Builder
-	code, err := NewCompiler(absRepoRoot).Build("test_soa.fc", &BuildOptions{
-		Target: "emu", Out: filepath.Join(tmp, "a.bin"), Run: true, Stdout: &out,
-		Dir: testDir(), BuildDir: filepath.Join(tmp, "build"),
-	})
+	code, err := buildCode(t, NewCompiler(absRepoRoot), "test_soa.fc", &BuildOptions{Target: "emu", Out: filepath.Join(tmp, "a.bin"),
+		Dir: testDir(), BuildDir: filepath.Join(tmp, "build")}, true, &out, 0)
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}
@@ -55,7 +53,7 @@ function main():void
 		}
 	}
 	var out strings.Builder
-	code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), Run: true, Stdout: &out})
+	code, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, true, &out, 0)
 	if err != nil {
 		t.Fatalf("ビルド失敗: %v", err)
 	}

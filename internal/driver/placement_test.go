@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,9 +37,7 @@ function main():void options(segment:"CODE") {
 		}
 	}
 	var output strings.Builder
-	result, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "t.fc", &BuildOptions{
-		Target: "emu", Dir: dir, BuildDir: filepath.Join(dir, "build"), Out: filepath.Join(dir, "test.bin"), Run: true, Stdout: &output,
-	})
+	result, _, err := buildRun(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Target: "emu", Dir: dir, BuildDir: filepath.Join(dir, "build"), Out: filepath.Join(dir, "test.bin")}, &output)
 	if err != nil {
 		t.Fatal(err)
 	}

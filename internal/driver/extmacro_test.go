@@ -161,7 +161,7 @@ func TestExternalMacroCache(t *testing.T) {
 	}
 	build := func() int {
 		t.Helper()
-		code, err := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, Target: "emu", Run: true, Out: filepath.Join(dir, "a.bin")})
+		code, err := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Dir: dir, Target: "emu", Out: filepath.Join(dir, "a.bin")}, true, nil, 0)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -22,7 +22,7 @@ func TestCheckMatchesBuildOptions(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(c.src), 0o666); err != nil {
 			t.Fatal(err)
 		}
-		_, berr := NewCompiler(absRepoRoot).Build("t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true})
+		_, berr := buildCode(t, NewCompiler(absRepoRoot), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}, false, nil, 0)
 		_, cerr := NewCompiler(absRepoRoot).Check("t.fc", &CheckOptions{Dir: dir})
 		if berr == nil || cerr == nil {
 			t.Errorf("%s: build=%v check=%v (どちらもエラーのはず)", c.name, berr, cerr)
