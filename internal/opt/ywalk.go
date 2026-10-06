@@ -3,6 +3,7 @@ package opt
 import (
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/types"
+	"strings"
 )
 
 // walkPointerY は 1 ずつ進むポインタの下位バイトを添字 k (regalloc が Y に常駐させる) に移す (ループの回転の後):
@@ -177,7 +178,7 @@ func ywalkBody(ops []*ir.Op, labelAt map[string]int, a, b, c int, p, t *ir.Value
 		case op.Code == ir.OpSwitch:
 			return false // 飛び先の表 (念のため関数ごと対象外)
 		case op.Code == ir.OpAsm:
-			if contains(op.Text, bLabel) || contains(op.Text, ops[a].Label) {
+			if strings.Contains(op.Text, bLabel) || strings.Contains(op.Text, ops[a].Label) {
 				return false
 			}
 		}
@@ -199,7 +200,7 @@ func ywalkRewrite(lmd *ir.Lambda, u8 *types.Type, a, b, c int, p, t *ir.Value, l
 	hi := ir.NewCastedValue(p, u8, 1)
 	limByte := func(n int) ir.Operand {
 		if v, lit := ir.ValIntLiteral(lim); lit {
-			return ir.NewIntLiteral("", u8, (v>>(8*n))&0xff)
+			return ir.NewIntLiteral("", u8, ir.ByteOf(v, n))
 		}
 		return ir.NewCastedValue(lim, u8, n)
 	}

@@ -1,6 +1,10 @@
 package opt
 
-import "github.com/haramako/fc/internal/ir"
+import (
+	"strings"
+
+	"github.com/haramako/fc/internal/ir"
+)
 
 // simplifyJumps は制御フローの整理。hlc は if / while / for を素直に (ラベルとジャンプの連鎖で) 出すので、
 //
@@ -248,16 +252,7 @@ func removeUnreachable(lmd *ir.Lambda) bool {
 // usedByAsm はインラインアセンブラがラベル名を参照していそうか (安全側)。
 func usedByAsm(lmd *ir.Lambda, label string) bool {
 	for _, op := range lmd.Ops {
-		if op != nil && op.Code == ir.OpAsm && contains(op.Text, label) {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
+		if op != nil && op.Code == ir.OpAsm && strings.Contains(op.Text, label) {
 			return true
 		}
 	}

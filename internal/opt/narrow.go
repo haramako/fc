@@ -49,6 +49,6 @@ func narrowBitTest(lmd *ir.Lambda, u *types.Universe) {
 		}
 		u8 := u.IntType(1, false)
 		t.Type = u8
-		op.Src = []ir.Operand{ir.NewCastedValue(x, u8, byteNo), ir.NewIntLiteral("", u8, (k>>(8*byteNo))&0xff)}
+		op.Src = []ir.Operand{ir.NewCastedValue(x, u8, byteNo), ir.NewIntLiteral("", u8, ir.ByteOf(k, byteNo))}
 	}
 }

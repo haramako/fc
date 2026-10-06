@@ -151,13 +151,7 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 	}
 	CalcLiveRange(lmd)
 
-	// ref(&演算子)を受けた変数を集める
-	refered := map[*ir.Value]bool{}
-	for _, op := range lmd.Ops {
-		if op != nil && op.Code == ir.OpRef {
-			refered[ir.UnderlyingValue(op.Src[0])] = true
-		}
-	}
+	refered := referencedVars(lmd)
 
 	// live range を求め、{callをまたぐ|refを受ける|引数}だったら、フレームスタック上に確保する
 	frameSize := lmd.Type.Base.Size // 帰り値分を予約しておく
@@ -269,12 +263,7 @@ func AllocateRegister(lmd *ir.Lambda, lim Limits) {
 // 呼び出しをまたぐかどうかは関係ない。フレームは 256 バイトまで。
 func allocateStatic(lmd *ir.Lambda) {
 	CalcLiveRange(lmd)
-	refered := map[*ir.Value]bool{}
-	for _, op := range lmd.Ops {
-		if op != nil && op.Code == ir.OpRef {
-			refered[ir.UnderlyingValue(op.Src[0])] = true
-		}
-	}
+	refered := referencedVars(lmd)
 	frameSize := lmd.Type.Base.Size
 	place := func(v *ir.Value) {
 		v.Location = ir.LocStatic
@@ -623,20 +612,18 @@ type allocEntry struct {
 }
 
 func overlapRange(r1, r2 *ir.LiveRange) bool {
-	if r1.Max >= r2.Min && r1.Min <= r2.Max {
-		return true
-	}
-	for _, w := range r1.Writes {
-		if w >= r2.Min && w <= r2.Max {
-			return true
+	return r1.Max >= r2.Min && r1.Min <= r2.Max || writesIn(r1, r2) || writesIn(r2, r1)
+}
+
+// referencedVars は & (ref) を受けた変数 (アドレスを取られるのでメモリに置く)。
+func referencedVars(lmd *ir.Lambda) map[*ir.Value]bool {
+	r := map[*ir.Value]bool{}
+	for _, op := range lmd.Ops {
+		if op != nil && op.Code == ir.OpRef {
+			r[ir.UnderlyingValue(op.Src[0])] = true
 		}
 	}
-	for _, w := range r2.Writes {
-		if w >= r1.Min && w <= r1.Max {
-			return true
-		}
-	}
-	return false
+	return r
 }
 
 // ---------------------------------------------------------------

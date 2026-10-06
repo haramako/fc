@@ -29,3 +29,6 @@ func Shl(a, b int) int {
 func Shr(a, b int) int {
 	return a >> uint(b)
 }
+
+// ByteOf は整数 n の下から k バイト目 (0〜255。負の数は 2 の補数のバイト)。
+func ByteOf(n, k int) int { return (n >> (8 * k)) & 0xff }

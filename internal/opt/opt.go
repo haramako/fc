@@ -2,7 +2,7 @@
 //
 // パスは ir.CFG / ir.UseDef の上に書く。命令の同一性は *ir.Op (解析は *Op を鍵にし、位置は Lambda.IndexOf で引く)。
 // 命令の削除は lmd.Ops の要素を nil にし (ir.DropOp など)、段の終わりに Pass.Apply が詰める (compact)。段の中では
-// nil の穴が残るので、直後 / 直前の命令は ir.NextOp / ir.PrevOp で見る。
+// nil の穴が残るので、直後の命令は ir.NextOp で見る。
 // 効果は bench/ (go test ./bench) で測る。
 package opt
 
@@ -90,10 +90,10 @@ func (p Pass) Apply(lmd *ir.Lambda, u *types.Universe) bool {
 	}
 	prev := ir.SnapshotLogs(lmd) // @log の注釈を、消えた・動いた命令から付け替える (ir.KeepLogs)
 	changed := p.Run(lmd, u)
-	compact(lmd)
+	lmd.Compact()
 	if changed && p.Then != nil {
 		p.Then(lmd, u)
-		compact(lmd)
+		lmd.Compact()
 	}
 	ir.KeepLogs(lmd, prev)
 	if tr := cfg.Trace("logs"); tr != "" {
@@ -158,7 +158,7 @@ func Passes() []Pass {
 		{Name: "carry", Run: changes(carryBranch)},
 		{Name: "split", Run: alwaysU(splitWords)},
 		{Name: "jumps", Run: always(simplifyJumps)},
-		{Name: "ywalk", Run: func(lmd *ir.Lambda, u *types.Universe) bool { return walkPointerY(lmd, u) }},
+		{Name: "ywalk", Run: walkPointerY},
 	}
 }
 
@@ -199,17 +199,6 @@ func untilFixed(lmd *ir.Lambda, name string, step func() bool) bool {
 		}
 	}
 	return changed
-}
-
-// compact は削除済み (nil) の命令を取り除く。
-func compact(lmd *ir.Lambda) {
-	ops := lmd.Ops[:0]
-	for _, op := range lmd.Ops {
-		if op != nil {
-			ops = append(ops, op)
-		}
-	}
-	lmd.Ops = ops
 }
 
 // isSameOperand は同じ値を指すか (ir.CastedValue は元の値で比べる)。

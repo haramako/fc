@@ -103,7 +103,7 @@ func (t *Type) Field(name string) (Field, bool) {
 	return Field{}, false
 }
 
-// String は型の表示名 (`uint8`, `sint16`, `*uint8`, `[4]uint8`, `fastcall fn(uint8):void` など。v2 の前置形)。
+// String は型の表示名 (`u8`, `i16`, `*u8`, `[4]u8`, `fastcall fn(u8):void` など。前置形。bool は `ubool8`)。
 func (t *Type) String() string { return t.str }
 
 // Fastcall は Func が fastcall 呼び出し規約かを返す。
@@ -343,7 +343,7 @@ func (u *Universe) FarFunc(params []*Type, result *Type) *Type {
 // 配列へは代入できない (bitcast が要る。逆の *T → *void は暗黙)、ポインタは配列に代入できない (逆の配列 → ポインタは暗黙)。
 func (u *Universe) AssignableTo(to, from *Type) bool {
 	if to.Kind != Bad && from.Kind != Bad {
-		if isVoidPtr(from) && !isVoidPtr(to) && voidPtrPeer(to) {
+		if from.IsVoidPtr() && !to.IsVoidPtr() && voidPtrPeer(to) {
 			return false
 		}
 		if to.Kind == Array && from.Kind == Pointer {
@@ -391,10 +391,10 @@ func (u *Universe) CommonType(a, b *Type) *Type {
 	if a == b {
 		return a
 	}
-	if isVoidPtr(a) && voidPtrPeer(b) {
+	if a.IsVoidPtr() && voidPtrPeer(b) {
 		return a
 	}
-	if isVoidPtr(b) && voidPtrPeer(a) {
+	if b.IsVoidPtr() && voidPtrPeer(a) {
 		return b
 	}
 	switch {
@@ -421,7 +421,8 @@ func (u *Universe) CommonType(a, b *Type) *Type {
 	return nil
 }
 
-func isVoidPtr(t *Type) bool { return t.Kind == Pointer && t.Base.Kind == Void }
+// IsVoidPtr は *void (何を指すか問わないポインタ) か。
+func (t *Type) IsVoidPtr() bool { return t.Kind == Pointer && t.Base.Kind == Void }
 
 // voidPtrPeer は *void と共通の型 (*void) になる型 (データポインタ / near 関数ポインタ / 配列)。
 func voidPtrPeer(t *Type) bool {

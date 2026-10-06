@@ -38,8 +38,8 @@ func isIncDec(op *ir.Op) bool {
 	return isStep(op, 1)
 }
 
-// stepMax は iny × k で回す k の上限 (FC_DISABLE=step で 1 = 切る)。
-func stepMax(lmd *ir.Lambda) int {
+// StepLimit は Y / X に常駐する添字の `i += k` を iny × k で回す k の上限 (FC_DISABLE=step で 1 = 切る)。
+func StepLimit(lmd *ir.Lambda) int {
 	if lmd.Cfg().Disabled("step") {
 		return 1
 	}
@@ -154,25 +154,6 @@ func condPredicted(lmd *ir.Lambda, i int) bool {
 	}
 	t, ok := op.Dst.(*ir.Value)
 	return ok && t.LocalType == ir.LTTemp && next.Src[0] == ir.Operand(t)
-}
-
-// involves は op が v を読むか書くか。
-func involves(op *ir.Op, v *ir.Value) bool {
-	if v == nil {
-		return false
-	}
-	defs, uses := ir.DefUse(op)
-	for _, o := range defs {
-		if ir.UnderlyingValue(o) == v {
-			return true
-		}
-	}
-	for _, o := range uses {
-		if ir.UnderlyingValue(o) == v {
-			return true
-		}
-	}
-	return false
 }
 
 func isV(o ir.Operand, v *ir.Value) bool {
@@ -369,8 +350,7 @@ func (r region) blocks() []*ir.Block {
 	return bs
 }
 
-// entries / exits は領域に入る辺 (from は外、to は中) と出る辺 (from は中、to は外)。
-// entries / exits は領域に入る辺 / 出る辺 (同じ 2 ブロック間に飛ぶ辺と落ちる辺の両方があっても 1 つ。onEdge が両方に置く)。
+// entries / exits は領域に入る辺 (from は外、to は中) / 出る辺 (from は中、to は外) (同じ 2 ブロック間に飛ぶ辺と落ちる辺の両方があっても 1 つ。onEdge が両方に置く)。
 func (r region) entries() [][2]*ir.Block {
 	var e [][2]*ir.Block
 	seen := map[[2]*ir.Block]bool{}
@@ -492,7 +472,7 @@ func gainOf(lmd *ir.Lambda, cfg *ir.CFG, r, inner region, lv *ir.Liveness, vA, v
 			aIn, aOut := vA != nil && lv.LiveIn(i, vA), vA != nil && lv.LiveOut(i, vA)
 			yIn, yOut := vY != nil && lv.LiveIn(i, vY), vY != nil && lv.LiveOut(i, vY)
 			xIn, xOut := vX != nil && lv.LiveIn(i, vX), vX != nil && lv.LiveOut(i, vX)
-			if !aIn && !aOut && !yIn && !yOut && !xIn && !xOut && !involves(op, vA) && !involves(op, vY) && !involves(op, vX) {
+			if !aIn && !aOut && !yIn && !yOut && !xIn && !xOut && !ir.Involves(op, vA) && !ir.Involves(op, vY) && !ir.Involves(op, vX) {
 				continue
 			}
 			d, g := Classify(lmd, i, vA, vY, vX, aIn || aOut, aOut, yIn || yOut)

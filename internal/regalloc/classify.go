@@ -75,7 +75,7 @@ func formOf(lmd *ir.Lambda, i int, p Placement) (Form, bool) {
 	case ir.OpEq, ir.OpLt:
 		return CmpForm(op, p, condPredicted(lmd, i), false)
 	case ir.OpAdd, ir.OpSub:
-		return StepForm(op, p, describe{}, stepMax(lmd))
+		return StepForm(op, p, describe{}, StepLimit(lmd))
 	case ir.OpShiftLeft, ir.OpShiftRight:
 		return ShiftMemForm(op, p)
 	case ir.OpRolC, ir.OpRorC:
@@ -274,7 +274,9 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	touches := func(v *ir.Value) bool { return v != nil && v.Kind == ir.KindGlobal && ir.MayTouchGlobals(op) }
 	// codegen から呼ばれるときの v はレジスタの一時変数 (Home が元の変数)。cast を挟んだ使用 (`~(l1 as int16)`) は
 	// makeResident が置き換えない (元の変数のメモリを読む) ので、Home を触る命令も「この命令に関わる」= 退避が要る
-	involved := func(v *ir.Value) bool { return involves(op, v) || v != nil && v.Home != nil && involves(op, v.Home) }
+	involved := func(v *ir.Value) bool {
+		return ir.Involves(op, v) || v != nil && v.Home != nil && ir.Involves(op, v.Home)
+	}
 	// A を触らないかを見る置き場所: Y / X のまま実行する常駐はそのレジスタに、退避する常駐はメモリに
 	var pa resPlace
 	// 直後の演算に融合する読み出し (fuseload.go) は A を触らない
@@ -334,7 +336,7 @@ func Classify(lmd *ir.Lambda, i int, vA, vY, vX *ir.Value, aLive, aOut, yLive bo
 	if d.X != ResFriendly {
 		xKept = nil
 	}
-	if vY != nil && !involves(op, vY) && (needsY(op, vY, xKept) || d.UseY) {
+	if vY != nil && !ir.Involves(op, vY) && (needsY(op, vY, xKept) || d.UseY) {
 		d.Y = ResClobber
 	}
 	return d, gain

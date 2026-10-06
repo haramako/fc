@@ -9,8 +9,8 @@ package ir
 // lmd.Cfg() で引く。
 //
 // FC_DISABLE=名前,名前,... で切れる名前: aggcopy aggbuild sliceargs ssa mul indexoff induction unroll devirt autoinline sink fuse fieldindex coalesce
-// chain narrow scale commute avg carry split rotate dup ywalk constidx fieldptr inline resident litprop func-resident step shift8 fuse-index fnptr-reg
-// switch peephole unused-globals (Agent/wiki/implementation-notes.md「最適化のパイプライン」(7): 退行やバグは切って比べる)。FC_NO_RESIDENT=1 は resident と同じ。
+// chain narrow scale commute avg carry split rotate dup ywalk constidx fieldptr fwdmem jumps inline resident litprop func-resident step shift8
+// fuse-index fuse-load fnptr-reg switch peephole unused-globals (Agent/wiki/implementation-notes.md「最適化のパイプライン」(7): 退行やバグは切って比べる)。FC_NO_RESIDENT=1 は resident と同じ。
 // FC_VERIFY_IR=1 は opt の各段の後に ir.Verify。FC_TRACE_<NAME>=値 は Trace("<name>") で引く (resident / signed / logs / log_id / induction / unroll / pc)。
 
 import (
@@ -38,7 +38,7 @@ func NewConfig(disabled ...string) *Config {
 	return c
 }
 
-// ConfigFromEnv は環境変数 (FC_DISABLE / FC_NO_RESIDENT / FC_TRACE_* / FC_DUMP_IR / FC_VERIFY_REGS) から作る。
+// ConfigFromEnv は環境変数 (FC_DISABLE / FC_NO_RESIDENT / FC_TRACE_* / FC_DUMP_IR / FC_VERIFY_IR / FC_VERIFY_REGS) から作る。
 func ConfigFromEnv() *Config {
 	c := NewConfig(strings.Split(os.Getenv("FC_DISABLE"), ",")...)
 	if os.Getenv("FC_NO_RESIDENT") != "" {

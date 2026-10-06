@@ -19,18 +19,7 @@ func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 		// struct / 入れ子の配列: 要素ごとに型に従って .byte / .word を出す
 		return append(r, l.emitData(typ, val)...)
 	}
-	var op string
-	var limit int
-	switch typ.Base.Size {
-	case 1:
-		op = ".byte"
-		limit = 256
-	case 2:
-		op = ".word"
-		limit = 65536
-	default:
-		panic("invalid block base size")
-	}
+	op, limit := dataDirective(typ.Base.Size)
 	for s := 0; s < len(val); s += 16 {
 		e := min(s+16, len(val))
 		parts := make([]string, 0, e-s)
@@ -39,15 +28,7 @@ func (l *Llc) emitBlock(sym string, typ *types.Type, val []ir.Operand) []any {
 				parts = append(parts, strings.TrimPrefix(l.byte(elem, 0), "#"))
 				continue
 			}
-			lv := ir.ValLiteral(elem)
-			switch {
-			case lv != nil && lv.Kind == ir.KindLiteral && lv.IsInt:
-				parts = append(parts, fmt.Sprintf("%d", ir.FloorMod(lv.Int, limit)))
-			case lv != nil && lv.Kind == ir.KindLiteral:
-				parts = append(parts, mangle(ir.SymExpr(lv))) // 無名関数のシンボル `_m_$1` を ca65 の名前に (toAsm と同じ)
-			default:
-				parts = append(parts, l.toAsm(elem))
-			}
+			parts = append(parts, l.dataElem(elem, limit))
 		}
 		r = append(r, fmt.Sprintf("\t%s %s", op, strings.Join(parts, ",")))
 	}
@@ -66,21 +47,8 @@ func (l *Llc) emitData(typ *types.Type, val []ir.Operand) []any {
 			r = append(r, "\t.byte "+strings.Join(bytes, ","))
 			return
 		}
-		op, limit := ".byte", 256
-		if t.Size == 2 {
-			op, limit = ".word", 65536
-		} else if t.Size != 1 {
-			panic(fmt.Sprintf("invalid data element size %d", t.Size))
-		}
-		lv := ir.ValLiteral(v)
-		switch {
-		case lv != nil && lv.Kind == ir.KindLiteral && lv.IsInt:
-			r = append(r, fmt.Sprintf("\t%s %d", op, ir.FloorMod(lv.Int, limit)))
-		case lv != nil && lv.Kind == ir.KindLiteral:
-			r = append(r, fmt.Sprintf("\t%s %s", op, mangle(ir.SymExpr(lv))))
-		default:
-			r = append(r, fmt.Sprintf("\t%s %s", op, l.toAsm(v)))
-		}
+		op, limit := dataDirective(t.Size)
+		r = append(r, fmt.Sprintf("\t%s %s", op, l.dataElem(v, limit)))
 	}
 	var elem func(t *types.Type, v ir.Operand)
 	elem = func(t *types.Type, v ir.Operand) {
@@ -255,4 +223,27 @@ func (l *Llc) dataBytes(t *types.Type, v ir.Operand, out *[]string) {
 			*out = append(*out, strings.TrimPrefix(l.byte(v, i), "#"))
 		}
 	}
+}
+
+// dataDirective は大きさ size (1 / 2 バイト) の要素の疑似命令と、整数を折り返す幅。
+func dataDirective(size int) (op string, limit int) {
+	switch size {
+	case 1:
+		return ".byte", 256
+	case 2:
+		return ".word", 65536
+	}
+	panic(fmt.Sprintf("invalid data element size %d", size))
+}
+
+// dataElem は定数データの 1 要素の表記 (整数は limit で折り返す、関数などのシンボルは ca65 の名前、ほかは toAsm)。
+func (l *Llc) dataElem(v ir.Operand, limit int) string {
+	lv := ir.ValLiteral(v)
+	switch {
+	case lv != nil && lv.Kind == ir.KindLiteral && lv.IsInt:
+		return fmt.Sprintf("%d", ir.FloorMod(lv.Int, limit))
+	case lv != nil && lv.Kind == ir.KindLiteral:
+		return mangle(ir.SymExpr(lv)) // 無名関数のシンボル `_m_$1` を ca65 の名前に (toAsm と同じ)
+	}
+	return l.toAsm(v)
 }

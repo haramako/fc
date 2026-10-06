@@ -70,16 +70,6 @@ func NextOp(ops []*Op, i int) int {
 	return -1
 }
 
-// PrevOp は ops[i] の前の (nil でない) 命令の添字 (無ければ -1)。
-func PrevOp(ops []*Op, i int) int {
-	for j := i - 1; j >= 0; j-- {
-		if ops[j] != nil {
-			return j
-		}
-	}
-	return -1
-}
-
 // NextOpOf は ops[i] の次の (nil でない) 命令 (無ければ nil)。
 func NextOpOf(ops []*Op, i int) *Op {
 	if j := NextOp(ops, i); j >= 0 {
@@ -99,4 +89,15 @@ func MoveOpBefore(ops []*Op, i, j int) {
 			ops[k].pos = k
 		}
 	}
+}
+
+// Compact は削除済み (nil) の命令を詰める。
+func (l *Lambda) Compact() {
+	ops := l.Ops[:0]
+	for _, op := range l.Ops {
+		if op != nil {
+			ops = append(ops, op)
+		}
+	}
+	l.Ops = ops
 }

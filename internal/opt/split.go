@@ -113,7 +113,7 @@ func splitWords(lmd *ir.Lambda, u *types.Universe) {
 	}
 	byteOf := func(o ir.Operand, k int) ir.Operand { // o (2 バイト) の k バイト目
 		if n, ok := ir.ValIntLiteral(o); ok {
-			return ir.NewIntLiteral("", u8, (n>>(8*k))&255)
+			return ir.NewIntLiteral("", u8, ir.ByteOf(n, k))
 		}
 		if v := ir.UnderlyingValue(o); v != nil && parts[v] != [2]*ir.Value{} && plainWord(o) {
 			return parts[v][k]

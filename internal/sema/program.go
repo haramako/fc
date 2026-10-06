@@ -292,9 +292,6 @@ func (p *Program) CompileAllBodies(deps Resolver) error {
 	// 本体のコンパイル中に組み込み (printf / @format) がモジュールを読み込むことがある (builtinModule) ので、伸びた一覧も最後まで回す
 	for i := 0; i < len(p.Modules.List()); i++ {
 		mod := p.Modules.List()[i]
-		if mod.FromFcm {
-			continue
-		}
 		if err := p.CompileBodies(mod, deps); err != nil {
 			return err
 		}

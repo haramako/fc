@@ -92,9 +92,8 @@ func Parse(path string, src []byte) (*Module, error) {
 		}
 		return strings.Join(doc, "\n")
 	}
-	src2 := text
 	for _, st := range f.Stmts {
-		it := item(st, src2)
+		it := item(st, text)
 		if it == nil {
 			continue
 		}
@@ -170,34 +169,26 @@ func item(st syntax.Stmt, src string) *Item {
 		it.Code = strings.TrimRight(code, " \t")
 		it.Line, it.end = d.Pos().Line, d.End().Line
 		return it
-	case *syntax.StructDecl:
-		if !d.PublicPos.IsValid() {
+	case *syntax.StructDecl, *syntax.EnumDecl, *syntax.InterfaceDecl, *syntax.SoaDecl:
+		var name *syntax.Ident
+		var pub syntax.Pos
+		var kind string
+		switch d := d.(type) {
+		case *syntax.StructDecl:
+			name, pub, kind = d.Name, d.PublicPos, "struct"
+		case *syntax.EnumDecl:
+			name, pub, kind = d.Name, d.PublicPos, "enum"
+		case *syntax.InterfaceDecl:
+			name, pub, kind = d.Name, d.PublicPos, "interface"
+		case *syntax.SoaDecl:
+			name, pub, kind = d.Name, d.PublicPos, "soa"
+		}
+		if !pub.IsValid() {
 			return nil
 		}
-		it = &Item{Names: []string{d.Name.Name}, Kind: "struct"}
-		start, end = d.Pos().Offset, d.End().Offset
-		it.Line, it.end = d.Pos().Line, d.End().Line
-	case *syntax.EnumDecl:
-		if !d.PublicPos.IsValid() {
-			return nil
-		}
-		it = &Item{Names: []string{d.Name.Name}, Kind: "enum"}
-		start, end = d.Pos().Offset, d.End().Offset
-		it.Line, it.end = d.Pos().Line, d.End().Line
-	case *syntax.InterfaceDecl:
-		if !d.PublicPos.IsValid() {
-			return nil
-		}
-		it = &Item{Names: []string{d.Name.Name}, Kind: "interface"}
-		start, end = d.Pos().Offset, d.End().Offset
-		it.Line, it.end = d.Pos().Line, d.End().Line
-	case *syntax.SoaDecl:
-		if !d.PublicPos.IsValid() {
-			return nil
-		}
-		it = &Item{Names: []string{d.Name.Name}, Kind: "soa"}
-		start, end = d.Pos().Offset, d.End().Offset
-		it.Line, it.end = d.Pos().Line, d.End().Line
+		it = &Item{Names: []string{name.Name}, Kind: kind}
+		start, end = st.Pos().Offset, st.End().Offset
+		it.Line, it.end = st.Pos().Line, st.End().Line
 	default:
 		return nil
 	}

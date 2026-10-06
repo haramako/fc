@@ -889,9 +889,6 @@ func (h *Hlc) cast(v ir.Operand, typ *types.Type) ir.Operand {
 	return v
 }
 
-// isVoidPtr は *void か。
-func isVoidPtr(t *types.Type) bool { return t.Kind == types.Pointer && t.Base.Kind == types.Void }
-
 // nullOf は型 t (ポインタ / 関数ポインタ) の null (0 のリテラル)。SoA のハンドルは 0 が有効な要素なので null を持たない。
 func (h *Hlc) nullOf(t *types.Type) ir.Operand {
 	switch t.Kind {

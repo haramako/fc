@@ -121,6 +121,12 @@ func (o Options) Has(key string) bool {
 	return ok
 }
 
+// Text は属性 key の値の表記 (無ければ "")。
+func (o Options) Text(key string) string {
+	v, _ := o.Get(key)
+	return v.Text()
+}
+
 // Flag は真偽値の属性 (inline / fastcall / volatile など) が真か: キーがあり、値が true か 0 以外の整数
 // (`inline: false` / `inline: 0` は偽。fc 3 の `@(inline)` は true)。Agent/discussions/2026-09-20-v3-plan.md §5 C。
 func (o Options) Flag(key string) bool {
@@ -157,8 +163,6 @@ type Module struct {
 	IncludeHeaders []string
 	Uses           []string // use したモジュールの id (出現順、重複なし)
 	Seq            int      // コンパイラ生成名 (一時変数 $N、ラベル @x_N、無名関数) の連番。モジュール内で閉じる (C5)
-	FromFcm        bool
-	Depends        []string
 	Defs           []*Def
 	Config         *Config // 調査用の設定 (config.go。sema.Program.Config を写す。nil なら何も切らない)
 }
@@ -224,10 +228,8 @@ type Lambda struct {
 	Extern    bool    // 本体を持たない (宣言のみ)
 	Ops       []*Op   // nil 要素は最適化で削除された命令
 	Vars      []*Value
-	Bank      int
 	Result    *Value
 	Defs      []*Def
-	Asm       []string
 	FrameSize int
 	ZpUsed    int // レジスタ割付後: 普通の関数は L の使用バイト数、fastcall は FC_FASTCALL_REG の使用バイト数 (引数・戻り値込み)
 
@@ -289,12 +291,7 @@ func (m *Module) Switchable() bool {
 }
 
 // Segment は配置セグメント (options(segment:...))。"" なら既定。
-func (l *Lambda) Segment() string {
-	if v, ok := l.Options.Get("segment"); ok {
-		return v.Text()
-	}
-	return ""
-}
+func (l *Lambda) Segment() string { return l.Options.Text("segment") }
 
 // String は "<Lambda:id type>" (エラーメッセージで使用)。
 func (l *Lambda) String() string {

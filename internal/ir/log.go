@@ -316,3 +316,19 @@ func ReplaceOp(ops []*Op, i int, op *Op) {
 	ops[i] = op
 	op.pos = i // 位置の手がかり (消した命令を戻すときも見つかるように。order.go)
 }
+
+// EachLoggedValue は op の @log が読む変数 (引数の値と、バイトごとに分けた値) に f を呼ぶ。
+func (op *Op) EachLoggedValue(f func(*Value)) {
+	for _, lp := range op.Logs {
+		for _, a := range lp.Args {
+			if v := UnderlyingValue(a.Val); v != nil {
+				f(v)
+			}
+			for _, b := range a.Bytes {
+				if v := UnderlyingValue(b); v != nil {
+					f(v)
+				}
+			}
+		}
+	}
+}

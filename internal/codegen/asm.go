@@ -84,9 +84,6 @@ func (o operand) key() string {
 	return b.String()
 }
 
-// indexed は添字レジスタ付きか (X / Y が変わると別の場所を指す)。
-func (o operand) indexedX() bool { return o.Mode == amMemX || o.Mode == amIndX }
-
 // asmLine は解析した 1 行。
 type asmLine struct {
 	Kind  lineKind
@@ -315,14 +312,6 @@ func (a asmLine) writes() (wa, wx, wy bool) {
 		}
 	}
 	return m6502.Writes(a.Mnem, a.Arg.mode())
-}
-
-// cycles は命令のサイクル数 (m6502 の表。知らない命令 (マクロ) は 0)。
-func (a asmLine) cycles() int {
-	if a.Kind != lkInstr {
-		return 0
-	}
-	return m6502.Cycles(a.Mnem, a.Arg.mode())
 }
 
 // size は命令のサイズ (バイト)。分岐は 2 (延長すれば 5: extendJump が決める)。call マクロは 11

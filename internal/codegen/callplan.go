@@ -173,7 +173,7 @@ func (p *callPlans) layoutCalls(ops []*ir.Op, stackBase int) {
 				if y := c.regParam(ir.RegY); a.from == nil && op.ArgY && y != nil && a.off == y.Off {
 					// 最後から 2 つ目の引数は Y に置いて呼ぶ (markArgY: 直後が最後の引数の push_arg、その直後が call)
 					a.reg, c.inY = ir.RegY, true
-				} else if r := c.regParam(ir.RegA); a.from == nil && r != nil && a.off+n-1 == r.Off && nextOp(ops, i) == c.call {
+				} else if r := c.regParam(ir.RegA); a.from == nil && r != nil && a.off+n-1 == r.Off && ir.NextOpOf(ops, i) == c.call {
 					a.reg, c.inA = ir.RegA, true // 最後の引数は A のまま呼ぶ (直後が call のときだけ)
 				}
 			case ckStack:

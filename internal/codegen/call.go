@@ -56,18 +56,7 @@ func markResultArg(ops []*ir.Op, p *callPlans) {
 				reads[v]++
 			}
 		}
-		for _, lp := range op.Logs {
-			for _, a := range lp.Args {
-				if v := ir.UnderlyingValue(a.Val); v != nil {
-					reads[v] += 2 // @log が読む
-				}
-				for _, b := range a.Bytes {
-					if v := ir.UnderlyingValue(b); v != nil {
-						reads[v] += 2
-					}
-				}
-			}
-		}
+		op.EachLoggedValue(func(v *ir.Value) { reads[v] += 2 }) // @log が読む
 	}
 	for _, c := range p.list {
 		call := c.call
@@ -179,7 +168,7 @@ func markArgY(ops []*ir.Op, p *callPlans) {
 		}
 		ky, kl := at[np-2], at[np-1]
 		py, pl := ops[ky], ops[kl]
-		if !ir.IsPushArg(py) || !ir.IsPushArg(pl) || nextOp(ops, kl) != op {
+		if !ir.IsPushArg(py) || !ir.IsPushArg(pl) || ir.NextOpOf(ops, kl) != op {
 			continue
 		}
 		if !isValueOrCasted(py.In(0)) || !isValueOrCasted(pl.In(0)) || py.Type.Size != 1 {

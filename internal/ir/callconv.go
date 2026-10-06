@@ -83,9 +83,9 @@ func (c *CallConv) DirectEntry(inA, inY bool) string {
 	panic(fmt.Sprintf("no entry with A=%v Y=%v", inA, inY))
 }
 
-// ResultFromA は caller が call で呼んだこの関数の戻り値を A から受け取れるか (受け取れなければフレームから読む)。stack の
+// ResultFromA は caller から呼んだこの関数の戻り値を A から受け取れるか (受け取れなければフレームから読む)。stack の
 // 関数は呼び出しの後で X (フレームの底) を戻すのに A を使う。far call はトランポリンが A の戻り値をそのまま返す。
-func (c *CallConv) ResultFromA(caller *Lambda, call *Op) bool {
+func (c *CallConv) ResultFromA(caller *Lambda) bool {
 	return c.Result.InA && caller.Conv.ABI != ABIStack
 }
 

@@ -23,8 +23,6 @@ func ifElse(cond bool, a, b string) string {
 	return b
 }
 
-func anyIfy(v []any) []any { return v }
-
 // loadYIdx は添字を Y に入れる。scaled なら添字はすでにバイト単位 (opt.scaleIndex)。
 func (l *Llc) loadYIdx(idx ir.Operand, scale int) []any {
 	r := []any{}
@@ -85,7 +83,7 @@ func (l *Llc) loadYIdxDisp(idx ir.Operand, scale, disp int) []any {
 
 func (l *Llc) load(to, from ir.Operand) []any {
 	r := []any{}
-	voidPtr := ir.ValType(to).Kind == types.Pointer && ir.ValType(to).Base.Kind == types.Void // *void にはどのポインタも入る
+	voidPtr := ir.ValType(to).IsVoidPtr() // *void にはどのポインタも入る
 	if ir.ValType(to).Kind == types.Pointer && ir.ValType(from).Kind == types.Array {
 		if ir.ValType(from).Base != ir.ValType(to).Base && !voidPtr {
 			panic(fmt.Sprintf("can't convert from %s to %s", ir.OperandString(from), ir.OperandString(to)))
@@ -268,10 +266,8 @@ func (l *Llc) sameByte(a, b ir.Operand, i int) bool {
 
 // sameStorage は 2 つのオペランドが同じ変数 (の一部) を指すか。
 func sameStorage(a, b ir.Operand) bool {
-	if ua, ub := ir.UnderlyingValue(a), ir.UnderlyingValue(b); ua != nil && ub != nil {
-		return ua == ub
-	}
-	return false
+	ua := ir.UnderlyingValue(a)
+	return ua != nil && ua == ir.UnderlyingValue(b)
 }
 
 // framePointer はポインタ値 v がフレーム上の変数なら "(S+n,x)" (indexed indirect) で 1 バイト目を直接参照できる。
@@ -368,7 +364,7 @@ func (l *Llc) byte(v ir.Operand, n int) string {
 	if ir.ValKind(v) == ir.KindLiteral {
 		lv := ir.ValLiteral(v)
 		if lv.IsInt {
-			return fmt.Sprintf("#%d", ir.FloorMod(ir.Shr(lv.Int, n*8), 256))
+			return fmt.Sprintf("#%d", ir.ByteOf(lv.Int, n))
 		}
 		switch n {
 		case 0:

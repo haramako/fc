@@ -271,9 +271,6 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 	result.StaticZp, result.StaticRam = plan.ZpUsed, plan.RamUsed
 	result.Frames = plan.Report
 	for _, mod := range prog.Modules.List() {
-		if mod.FromFcm {
-			continue
-		}
 		asm, inc, lerr := llc.Compile(mod)
 		if lerr != nil {
 			return nil, lerr
@@ -292,9 +289,6 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 	var objs, sources []string
 	for _, mod := range prog.Modules.List() {
 		objs = append(objs, filepath.Join(c.buildDir, fmt.Sprintf("_%s.o", mod.Id)))
-		if mod.FromFcm {
-			continue
-		}
 		sources = append(sources, filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
 	sources = append(sources, c.findShare("runtime.asm"), filepath.Join(c.FCHome, "fclib", c.target, "runtime_init.asm"))

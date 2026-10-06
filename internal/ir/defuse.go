@@ -2,7 +2,10 @@ package ir
 
 // 命令のオペランドの役割 (定義 / 使用) と制御フロー。regalloc と opt (最適化) が共通に使う。
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // DefUse は op が定義する値と使う値を返す (OpCode ごとの表)。
 // 戻り値の要素は Op のフィールドそのもの (CastedValue / PointeredArray のまま。元の変数は UnderlyingValue で辿る)。
@@ -118,7 +121,7 @@ func (c *CFG) current() bool {
 			return false
 		}
 		m := c.marks[k]
-		if m.i != i || m.op != op || m.code != op.Code || m.label != op.Label || !slicesEqual(m.labels, op.Labels) {
+		if m.i != i || m.op != op || m.code != op.Code || m.label != op.Label || !slices.Equal(m.labels, op.Labels) {
 			return false
 		}
 		for j := i + 1; j < m.gap; j++ {
@@ -129,18 +132,6 @@ func (c *CFG) current() bool {
 		k++
 	}
 	return k == len(c.marks)
-}
-
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // buildCFG は命令列からブロックと辺を作る。OpIf は「条件が 0 なら Label へ」なので飛び先と直後の両方が後続。
@@ -436,4 +427,23 @@ func (ud *UseDef) indexes(ops []*Op) []int {
 		r[i] = ud.lmd.IndexOf(op)
 	}
 	return r
+}
+
+// Involves は op が v を読むか書くか (オペランドの元の値で比べる。v が nil なら false)。
+func Involves(op *Op, v *Value) bool {
+	if v == nil {
+		return false
+	}
+	defs, uses := DefUse(op)
+	for _, o := range defs {
+		if UnderlyingValue(o) == v {
+			return true
+		}
+	}
+	for _, o := range uses {
+		if UnderlyingValue(o) == v {
+			return true
+		}
+	}
+	return false
 }

@@ -242,7 +242,7 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 				inc.push(fmt.Sprintf("\t.import %s", mangle(d.Sym)+e.Suffix))
 				asm.push(fmt.Sprintf("\t.export %s", mangle(d.Sym)+e.Suffix))
 			}
-			asm.push(anyList(l.CompileLambda(d.Sym, lmd)))
+			asm.push(l.CompileLambda(d.Sym, lmd))
 		default:
 			panic(fmt.Sprintf("invalid def kind %s", d.Kind))
 		}
@@ -344,14 +344,6 @@ func (l *Llc) dbgLine(file string, line int) []any {
 	return append(r, fmt.Sprintf(".dbg line, \"%s\", %d", name, line))
 }
 
-func anyList(ss []string) []any {
-	r := make([]any, len(ss))
-	for i, s := range ss {
-		r[i] = s
-	}
-	return r
-}
-
 // testA は値の i バイト目を A に読んで N / Z を立てる。値がすでに A にある (loadA が何も出さない) ときは `cmp #0`
 // (直前が A を書いた命令ならピープホールが消す)。呼び出しの戻り値 (A) を if で見るとき、call の後の常駐の復帰 (`ldy home`)
 // がフラグを壊していた (`if ((f(x)) as sint16)`。fuzz で発覚)。
@@ -384,16 +376,6 @@ func stripTestMarks(lines []string) []string {
 		lines[i] = strings.TrimSuffix(line, testMark)
 	}
 	return lines
-}
-
-// nextOp は i の次の (nil でない) 命令。
-func nextOp(ops []*ir.Op, i int) *ir.Op {
-	for j := i + 1; j < len(ops); j++ {
-		if ops[j] != nil {
-			return ops[j]
-		}
-	}
-	return nil
 }
 
 // restoreY は要素 size バイトのポインタ参照 (`lda (p),y; iny; lda (p),y`) の後で、添字が Y に常駐しているなら Y を戻す
@@ -589,7 +571,6 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda) []string {
 		lines = l.placeLogLabels(lines, l.LogSites[siteStart:])
 	}
 
-	lmd.Asm = lines
 	return lines
 }
 
@@ -611,13 +592,13 @@ func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) r
 			// テスト用: 見積もりをわざと外す (下の forced が直す)。常駐の変数そのものを読み書きする命令は、退避して
 			// メモリ側で扱うしかない (レジスタのまま出せない形がある) ので対象外。実際に外れるのも「変数を触らない
 			// 命令がレジスタを書いていた」形
-			if d.A == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegA].V) {
+			if d.A == regalloc.ResClobber && !ir.Involves(op, op.Res[ir.RegA].V) {
 				d.A, d.UseY = regalloc.ResFree, false
 			}
-			if d.Y == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegY].V) {
+			if d.Y == regalloc.ResClobber && !ir.Involves(op, op.Res[ir.RegY].V) {
 				d.Y = regalloc.ResFree
 			}
-			if d.X == regalloc.ResClobber && !opInvolves(op, op.Res[ir.RegX].V) {
+			if d.X == regalloc.ResClobber && !ir.Involves(op, op.Res[ir.RegX].V) {
 				d.X = regalloc.ResFree
 			}
 		}
@@ -799,7 +780,7 @@ func (l *Llc) newLabels(n int) []string {
 }
 
 // ---------------------------------------------------------------
-// extend_jump
+// 関数ポインタの表と引数の小さな判定
 // ---------------------------------------------------------------
 
 // fnPtrToReg は ops[i] (グローバルの表の 添字付きの load_mem) が読む関数ポインタを、一時変数でなく reg に直接書いてよいとき、
@@ -890,20 +871,6 @@ func simpleArg(s ir.Operand) bool {
 	case *ir.Value, *ir.CastedValue:
 		tp := ir.ValType(s)
 		return tp.Size <= 2 && tp.Kind != types.Struct && tp.Kind != types.Array
-	}
-	return false
-}
-
-// opInvolves は op が v を読むか書くか (regalloc.involves と同じ。MisclassifyResident 用)。
-func opInvolves(op *ir.Op, v *ir.Value) bool {
-	if v == nil {
-		return false
-	}
-	defs, uses := ir.DefUse(op)
-	for _, o := range append(defs, uses...) {
-		if ir.UnderlyingValue(o) == v {
-			return true
-		}
 	}
 	return false
 }

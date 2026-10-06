@@ -101,7 +101,7 @@ func devirtualizeOne(lmd *ir.Lambda, ud *ir.UseDef, tables map[string][]string, 
 			continue
 		}
 		syms := tables[tbl.Symbol]
-		if syms == nil || len(syms) > devirtMaxTable || ir.ValType(op.Src[1]).Size != 1 {
+		if len(syms) == 0 || len(syms) > devirtMaxTable || ir.ValType(op.Src[1]).Size != 1 {
 			continue
 		}
 		p, ok := op.Dst.(*ir.Value)

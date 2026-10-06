@@ -256,7 +256,7 @@ func (l *funcGen) genCall() {
 		}
 		// 次の push_arg が呼び先のフレームから写す戻り値 (layoutCalls の argPlan.from) は受けない
 		if op.Dst != nil && resultArgAt(ops, opNo) < 0 {
-			if pc.callee.Conv.ResultFromA(lmd, op) {
+			if pc.callee.Conv.ResultFromA(lmd) {
 				r.push(l.storeA(op.Dst, 0)) // 戻り値は A で返ってくる
 			} else {
 				for i := 0; i < ir.ValType(op.Dst).Size; i++ {
@@ -366,11 +366,7 @@ func sameSlot(a, b ir.Operand) bool {
 	if !ok1 || !ok2 || va.Kind != ir.KindLocal || vb.Kind != ir.KindLocal || va.Type.Size != vb.Type.Size {
 		return false
 	}
-	switch va.Location {
-	case ir.LocReg, ir.LocStatic, ir.LocFrame, ir.LocFastcallReg:
-		return va.Location == vb.Location && va.Address == vb.Address
-	}
-	return false
+	return va.HasAddress() && va.Location == vb.Location && va.Address == vb.Address
 }
 
 // genSignExtension は SignExtension のコード生成。
@@ -494,7 +490,7 @@ func (l *funcGen) genShift() {
 			r.push(l.storeA(op.Dst, 0))
 		} else {
 			// サイズが２以上
-			r.push(anyIfy(l.load(op.Dst, op.In(0))))
+			r.push((l.load(op.Dst, op.In(0))))
 			for k := 0; k < n; k++ {
 				if op.Code == ir.OpShiftLeft {
 					// 左シフト
@@ -533,7 +529,7 @@ func (l *funcGen) genShift() {
 			loopLabel, endLabel := labels[0], labels[1]
 			r.push(l.loadA(op.In(1), 0))
 			r.push("tay")
-			r.push(anyIfy(l.load(op.Dst, op.In(0))))
+			r.push((l.load(op.Dst, op.In(0))))
 			r.push(loopLabel + ":")
 			r.push("cpy #0")
 			r.push(fmt.Sprintf("beq %s", endLabel))

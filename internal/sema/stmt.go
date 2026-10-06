@@ -223,7 +223,6 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 		default:
 			panic(&diag.Error{Msg: fmt.Sprintf("unknown include kind %s (asm / chr)", kind)})
 		}
-		h.module.Depends = append(h.module.Depends, filename)
 
 	case *syntax.UseDecl:
 		h.mustInModule()

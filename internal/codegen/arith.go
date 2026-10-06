@@ -81,7 +81,7 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		// 0の場合
 		switch op.Code {
 		case ir.OpMul:
-			r = append(r, anyIfy(l.load(dst, l.zero)))
+			r = append(r, (l.load(dst, l.zero)))
 		case ir.OpDiv, ir.OpMod:
 			panic(&diag.Error{Msg: "div by 0"})
 		}
@@ -124,7 +124,7 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		size := ir.ValType(dst).Size
 		switch op.Code {
 		case ir.OpMul:
-			r = append(r, anyIfy(l.load(dst, s0)))
+			r = append(r, (l.load(dst, s0)))
 			for k := 0; k < n; k++ {
 				for i := 0; i < size; i++ {
 					rot := ifElse(i == 0, "asl", "rol")
@@ -134,7 +134,7 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		case ir.OpDiv:
 			// 2 のべき乗の除算は右シフト。符号付きは算術シフト (床除算: __div_16s と同じ丸め)。
 			// 最上位バイトを lda して cmp #128 で C に符号を立ててから ror する
-			r = append(r, anyIfy(l.load(dst, s0)))
+			r = append(r, (l.load(dst, s0)))
 			for k := 0; k < n; k++ {
 				for i := size - 1; i >= 0; i-- {
 					if i == size-1 {
@@ -151,7 +151,7 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		case ir.OpMod:
 			for i := 0; i < size; i++ {
 				r = append(r, l.loadA(s0, i))
-				r = append(r, fmt.Sprintf("and #%d", ir.FloorMod(ir.Shr(op3int-1, i*8), 256)))
+				r = append(r, fmt.Sprintf("and #%d", ir.ByteOf(op3int-1, i)))
 				r = append(r, l.storeA(dst, i))
 			}
 		}
@@ -208,7 +208,7 @@ func pow2(n int) int {
 }
 
 // ---------------------------------------------------------------
-// レジスター割り当て
+// シフト
 // ---------------------------------------------------------------
 
 // shiftByte は 2 バイト値の 8 以上の定数シフトをバイトの移動にする (以前は 1 ビットずつ n 回回していて `x >> 8` が 120 サイクル):
@@ -308,7 +308,7 @@ func (l *Llc) shiftInMemory(op *ir.Op, n int, signed bool) ([]any, bool) {
 		return nil, false // 1 バイトで別の場所へ: A 経由 (lda; clc; rol a; sta) の方が短い
 	}
 	var r []any
-	r = append(r, anyIfy(l.load(op.Dst, op.In(0))))
+	r = append(r, (l.load(op.Dst, op.In(0))))
 	if size == 1 {
 		x := l.byte(op.Dst, 0)
 		for k := 0; k < n; k++ {

@@ -211,7 +211,7 @@ func NewPointeredArray(from Operand, ptrType *types.Type) *PointeredArray {
 // 表示 (エラーメッセージで使用)
 // ---------------------------------------------------------------
 
-// valueString は Value#to_s 相当の旧表示を返す。
+// String は値の表示 (IR のダンプ用)。
 func (v *Value) String() string {
 	if v.Name != "" {
 		return "{" + v.Name + "}"
@@ -279,7 +279,6 @@ func OperandString(v Operand) string {
 // ---------------------------------------------------------------
 
 // UnderlyingValue は CastedValue の委譲チェーンをたどって *Value を返す (PointeredArray は nil)。
-// (Delegator は hash/eql? も委譲するため、Hashキーとしては From と同一視される)
 func UnderlyingValue(v Operand) *Value {
 	for {
 		switch x := v.(type) {

@@ -150,7 +150,6 @@ var v3Unreserved = map[Kind]bool{KwSizeof: true, KwBitcast: true, KwIncbin: true
 // atKeywords は専用のトークンになる fc 3 の `@` の組み込み (型を取る・宣言になるもの)。
 var atKeywords = map[string]Kind{"sizeof": AtSizeof, "bitcast": AtBitcast, "incbin": AtIncbin, "include": AtInclude, "if": AtIf}
 
-
 // 空白文字 (スペース・タブ・改行など)
 func isSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v'

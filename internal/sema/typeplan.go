@@ -116,7 +116,7 @@ func (h *Hlc) planArith(op cop, a, b exprInfo) arithPlan {
 		return p
 	}
 	if (op == opAdd || op == opSub) && (at.Kind == types.Pointer || at.Kind == types.SoaRef) && bt.Kind == types.Int {
-		if at.Kind == types.Pointer && at.Base.Kind == types.Void {
+		if at.IsVoidPtr() {
 			panic(&diag.Error{Msg: "no arithmetic on *void"})
 		}
 		return arithPlan{kind: arithPtrAdd, t: at, args: p.args}
@@ -162,7 +162,7 @@ func (h *Hlc) compareType(op cop, lt, rt *types.Type) (t *types.Type, swap bool)
 			panic(&diag.Error{Msg: "ordered comparison is not supported on farfn"})
 		}
 	}
-	if op == opEq && isVoidPtr(rt) && !isVoidPtr(lt) {
+	if op == opEq && rt.IsVoidPtr() && !lt.IsVoidPtr() {
 		lt, rt, swap = rt, lt, true // *void を左に (CommonType は対称だが、項の順を 2026-10-05 より前と同じに保つ)
 	}
 	return h.compatible(lt, rt), swap
@@ -248,7 +248,7 @@ func (h *Hlc) planIndex(a exprInfo, idx *exprInfo, desc func() string) *types.Ty
 // planDeref は `*p` の値の型 (ポインタの先。soa の要素のハンドルはそのまま)。
 func (h *Hlc) planDeref(a exprInfo, desc func() string) *types.Type {
 	t := a.t
-	if t.Kind == types.Pointer && t.Base.Kind == types.Void {
+	if t.IsVoidPtr() {
 		panic(&diag.Error{Msg: "cannot dereference *void (bitcast to a typed pointer first)"})
 	}
 	switch t.Kind {

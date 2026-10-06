@@ -397,7 +397,7 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 	if !ok || callee.Options.Flag("near") {
 		return false
 	}
-	if v, ok := callee.Options.Get("abi"); ok && v.Text() == "cc65" {
+	if callee.Options.Text("abi") == "cc65" {
 		// cc65 規約は A/X で引数を渡すが far call のトランポリンは A/Y を壊す。同じバンクに置くか near を付ける
 		if calleeAt, callerAt := h.placementOf(callee), h.placementOf(h.lmd); calleeAt != nil && calleeAt != callerAt && calleeAt.Switchable() {
 			panic(&diag.Error{Msg: fmt.Sprintf("cannot call cc65 abi function %s across banks (declare it options(near: true) if it is always mapped, or call it from its module)", callee.Name)})

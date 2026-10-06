@@ -70,9 +70,6 @@ func (c *compilation) compileNoWrite(main string, cli []string, cfg *ir.Config) 
 		return nil, err
 	}
 	for _, mod := range front.Prog.Modules.List() {
-		if mod.FromFcm {
-			continue
-		}
 		if _, _, err := front.Llc.Compile(mod); err != nil {
 			return nil, err
 		}

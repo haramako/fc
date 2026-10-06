@@ -95,7 +95,7 @@ func TestCoalesceCopies(t *testing.T) {
 		&ir.Op{Code: ir.OpLoad, Dst: x, Src: []ir.Operand{tv}},
 	)
 	coalesceCopies(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add x = a, b")
 
 	// t を 2 回使うなら消せない
@@ -105,7 +105,7 @@ func TestCoalesceCopies(t *testing.T) {
 		&ir.Op{Code: ir.OpReturn, Src: []ir.Operand{tv}},
 	)
 	coalesceCopies(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add t = a, b", "load x = t", "return t")
 
 	// 型が違えば消せない (1 バイトの結果を 2 バイトに入れる)
@@ -115,7 +115,7 @@ func TestCoalesceCopies(t *testing.T) {
 		&ir.Op{Code: ir.OpLoad, Dst: x, Src: []ir.Operand{t8}},
 	)
 	coalesceCopies(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add t8 = #1, #2", "load x = t8")
 }
 
@@ -128,7 +128,7 @@ func TestCoalesceReturn(t *testing.T) {
 	)
 	lmd.Result = res
 	coalesceCopies(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add $result = a, b", "return $result")
 
 	// 型が違えば (return (a + b) as int) そのまま
@@ -139,7 +139,7 @@ func TestCoalesceReturn(t *testing.T) {
 	)
 	lmd.Result = res
 	coalesceCopies(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add t8 = #1, #2", "return t8")
 }
 
@@ -192,7 +192,7 @@ func TestFusePointer(t *testing.T) {
 	)
 	// t は 2 回定義されるので融合しない (定義が 1 つで直後にだけ使う一時変数のみ)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add t = p, #3", "load_mem d = t", "add t = p, #4", "store_mem t, v, w=1")
 
 	t1, t2 := tmp("t1", tu.PointerTo(u8())), tmp("t2", tu.PointerTo(u8()))
@@ -205,7 +205,7 @@ func TestFusePointer(t *testing.T) {
 		ir.NewStoreMem(t2, nil, 0, 0, 1, v),
 	)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "load_mem d = p, disp=3", "store_mem arr, i, v, w=1")
 }
 
@@ -225,7 +225,7 @@ func TestFuseArrayField(t *testing.T) {
 		ir.NewLoadMem(d, ir.NewCastedValue(t2, tu.PointerTo(u8()), 0), nil, 0, 1),
 	)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "load_mem d = p, i, scale=2, disp=2")
 
 	// store: 右辺の計算が間に挟まる (add と index が参照から離れている)
@@ -237,7 +237,7 @@ func TestFuseArrayField(t *testing.T) {
 		ir.NewStoreMem(t2, nil, 0, 0, 2, w),
 	)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add w = v, #3", "store_mem p, i, scale=2, disp=1, w, w=2")
 
 	// 途中で p が変わるなら add は畳まない (t1 を Base に)
@@ -248,7 +248,7 @@ func TestFuseArrayField(t *testing.T) {
 		ir.NewStoreMem(t2, nil, 0, 0, 2, v),
 	)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add t1 = p, #1", "load p = #0", "store_mem t1.0:2, i, scale=2, v, w=2")
 
 	// 要素 1 バイト: fusePointer が先に `load_mem d = <*u8>t1, i` にした形も add を畳む
@@ -260,7 +260,7 @@ func TestFuseArrayField(t *testing.T) {
 		ir.NewLoadMem(d, t2, nil, 0, 0),
 	)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "load_mem d = p, i, disp=15")
 
 	// ずれ + 配列全体が 256 を超える: add は畳まない (Y に収まらない)
@@ -270,7 +270,7 @@ func TestFuseArrayField(t *testing.T) {
 		ir.NewLoadMem(d, t2, nil, 0, 0),
 	)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "add b1 = p, #252", "load_mem d = b1.0:2, i")
 
 	// 要素 3 バイト: 添字をバイト単位に (mul は expandMul がシフトと加算に)
@@ -283,7 +283,7 @@ func TestFuseArrayField(t *testing.T) {
 		ir.NewLoadMem(d, ir.NewCastedValue(t4, tu.PointerTo(u8()), 0), nil, 0, 2),
 	)
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	got := fmtOps(lmd)
 	if last := got[len(got)-1]; last != "load_mem d = p, t4*, disp=22" {
 		t.Errorf("要素 3 バイトの配列フィールド: %q", got)
@@ -307,7 +307,7 @@ func TestSinkAddress(t *testing.T) {
 	sinkAddress(lmd)
 	check(t, lmd, "load_mem v = arr, i", "add w = v, #1", "index t = arr, i", "store_mem t, w, w=1")
 	fusePointer(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "load_mem v = arr, i", "add w = v, #1", "store_mem arr, i, w, w=1")
 
 	// 間で添字が書き換わるなら動かさない
@@ -437,7 +437,7 @@ func TestCarryBranch(t *testing.T) {
 		&ir.Op{Code: ir.OpReturn},
 	)
 	carryBranch(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd,
 		"shift_left crc = crc, #1",
 		"if_not_carry else",
@@ -462,7 +462,7 @@ func TestCarryBranch(t *testing.T) {
 		&ir.Op{Code: ir.OpReturn},
 	)
 	carryBranch(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd,
 		"shift_right x = x, #1",
 		"if_carry odd",
@@ -482,7 +482,7 @@ func TestCarryBranch(t *testing.T) {
 		&ir.Op{Code: ir.OpReturn},
 	)
 	carryBranch(lmd)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "and t = crc, #64", "if t else", "shift_left crc = crc, #1", "label else", "shift_left crc = crc, #1", "return")
 }
 
@@ -593,7 +593,7 @@ func TestSplitWords(t *testing.T) {
 	)
 	lmd.Vars = []*ir.Value{crc, b, t8}
 	splitWords(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd,
 		"load crc.lo = #0", "load crc.hi = #0",
 		"label L",
@@ -617,6 +617,6 @@ func TestSplitWords(t *testing.T) {
 	)
 	lmd.Vars = []*ir.Value{x, b}
 	splitWords(lmd, tu)
-	compact(lmd)
+	lmd.Compact()
 	check(t, lmd, "label L", "add x = x, #3", "xor x = x, #257", "if_true b L")
 }

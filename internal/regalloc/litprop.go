@@ -92,18 +92,7 @@ func PropagateLiteralLoads(lmd *ir.Lambda) {
 		if op == nil {
 			continue
 		}
-		for _, p := range op.Logs {
-			for _, a := range p.Args {
-				if v := ir.UnderlyingValue(a.Val); v != nil {
-					logged[v] = true
-				}
-				for _, bv := range a.Bytes {
-					if v := ir.UnderlyingValue(bv); v != nil {
-						logged[v] = true
-					}
-				}
-			}
-		}
+		op.EachLoggedValue(func(v *ir.Value) { logged[v] = true })
 	}
 	for i, op := range ops {
 		if op == nil || op.Code != ir.OpLoad {
@@ -121,7 +110,7 @@ func PropagateLiteralLoads(lmd *ir.Lambda) {
 		}
 		ir.DropOp(ops, i)
 	}
-	compactOps(lmd)
+	lmd.Compact()
 }
 
 // foldConstBranches は、リテラルを入れたことで両方の入力が定数になった比較とその直後の分岐を畳む (ループの回転が前に出した
@@ -170,15 +159,4 @@ func foldConstBranches(lmd *ir.Lambda) {
 			ir.DropOp(ops, bi)
 		}
 	}
-}
-
-// compactOps は消した命令 (nil) を詰める。
-func compactOps(lmd *ir.Lambda) {
-	out := lmd.Ops[:0]
-	for _, op := range lmd.Ops {
-		if op != nil {
-			out = append(out, op)
-		}
-	}
-	lmd.Ops = out
 }

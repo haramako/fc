@@ -237,9 +237,6 @@ func StepForm(op *ir.Op, p Placement, e Emitter, maxK int) (Form, bool) {
 	return Form{Kind: FormIncMem, Op: op, K: 1}, true
 }
 
-// StepLimit は Y / X に常駐する添字の `i += k` を iny × k にする k の上限 (FC_DISABLE=step で 1)。
-func StepLimit(lmd *ir.Lambda) int { return stepMax(lmd) }
-
 // ShiftMemForm は定数シフトをメモリ上のその場で出す形 (x = x << n。符号付きの右シフトと 2 バイトの 8 以上は除く: isMemShift)。
 func ShiftMemForm(op *ir.Op, p Placement) (Form, bool) {
 	if !isMemShift(op) || !valueOrCast(op.Dst) || p.Where(op.Dst) != PMem {

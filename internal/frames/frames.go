@@ -26,6 +26,16 @@ type Graph struct {
 	hidden  []bool                // include した asm のファイルから呼ばれうる (呼び出し元がグラフに見えない) 関数
 }
 
+// indexOf は関数のシンボル sym の関数と Lambdas の添字 (本体のある関数でなければ ok = false)。
+func (g *Graph) indexOf(sym string) (*ir.Lambda, int, bool) {
+	l, ok := g.ByID[sym]
+	if !ok {
+		return nil, 0, false
+	}
+	i, ok := g.index[l]
+	return l, i, ok
+}
+
 // Analyze は各関数の ABI を決める。
 //
 //   - extern: options(abi: "frame") なら ABIStatic (呼ばれる側の葉としてフレームを配置する)、型が fastcall なら ABIFastcall、
@@ -50,7 +60,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			lmd := d.Lambda
 			g.ByID[lmd.Id] = lmd
 			modOf[lmd] = m
-			lmd.FrameABI = optText(lmd.Options, "abi") == "frame"
+			lmd.FrameABI = lmd.Options.Text("abi") == "frame"
 			if lmd.Extern {
 				externs = append(externs, lmd)
 				if lmd.FrameABI {
@@ -73,7 +83,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			for _, p := range lmd.Type.Params {
 				lmd.FrameSize += p.Size
 			}
-		case optText(lmd.Options, "abi") == "cc65":
+		case lmd.Options.Text("abi") == "cc65":
 			if err := checkCc65(lmd); err != nil {
 				return nil, err
 			}
@@ -89,7 +99,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 	}
 	for _, lmd := range g.Lambdas {
-		if optText(lmd.Options, "abi") == "cc65" {
+		if lmd.Options.Text("abi") == "cc65" {
 			return nil, &diag.Error{Msg: fmt.Sprintf("%s: options(abi: \"cc65\") is for extern functions (declared without a body)", lmd.Name), Pos: lmd.Pos}
 		}
 	}
@@ -116,14 +126,12 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	// markSym は fc のコードで関数のアドレスを取ったことを記録する (スタックの入口が要る)。abi: "frame" の関数はエラー (関数ポインタで
 	// 呼ぶにはスタックから写すプロローグが要る)
 	markSym := func(sym string) {
-		if l, ok := g.ByID[sym]; ok {
-			if i, ok := g.index[l]; ok {
-				switch {
-				case !l.FrameABI:
-					entry[i] = true
-				case addrErr == nil:
-					addrErr = &diag.Error{Msg: fmt.Sprintf("%s: cannot take the address of an abi \"frame\" function (it has no entry that takes the arguments from the stack)", l.Name), Pos: l.Pos}
-				}
+		if l, i, ok := g.indexOf(sym); ok {
+			switch {
+			case !l.FrameABI:
+				entry[i] = true
+			case addrErr == nil:
+				addrErr = &diag.Error{Msg: fmt.Sprintf("%s: cannot take the address of an abi \"frame\" function (it has no entry that takes the arguments from the stack)", l.Name), Pos: l.Pos}
 			}
 		}
 	}
@@ -133,11 +141,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	// ただし extern の関数へのそれ自身のモジュールの asm の参照は、定義のラベルと区別できないので数えない (abi: "frame" の
 	// asm の関数どうしは同じモジュールの中で呼び合えない。docs/reference/assembly.md の「frame」)
 	markAsmSym := func(sym string, caller int, m *ir.Module) {
-		l, ok := g.ByID[sym]
-		if !ok {
-			return
-		}
-		j, ok := g.index[l]
+		l, j, ok := g.indexOf(sym)
 		if !ok {
 			return
 		}
@@ -224,10 +228,8 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 					markOperand(op.Src[0])
 				}
 				if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
-					if l, ok := g.ByID[v.Symbol]; ok {
-						if j, ok := g.index[l]; ok {
-							g.callees[i] = append(g.callees[i], j)
-						}
+					if _, j, ok := g.indexOf(v.Symbol); ok {
+						g.callees[i] = append(g.callees[i], j)
 					}
 				} else {
 					indirect[i] = append(indirect[i], op)
@@ -281,13 +283,11 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		}
 		ud := ir.BuildUseDef(lmd)
 		for _, op := range indirect[i] {
-			syms, ok := indirectTargets(lmd, ud, op.Src[0], assigned, unknownAssign, tables)
+			syms, ok := indirectTargets(ud, op.Src[0], assigned, unknownAssign, tables)
 			if ok {
 				for _, s := range syms {
-					if l, ok := g.ByID[s]; ok {
-						if j, ok := g.index[l]; ok {
-							g.callees[i] = append(g.callees[i], j)
-						}
+					if _, j, ok := g.indexOf(s); ok {
+						g.callees[i] = append(g.callees[i], j)
 					}
 				}
 				continue
@@ -344,7 +344,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 				return nil, &diag.Error{Msg: fmt.Sprintf("%s: an abi \"frame\" function must not be recursive (its frame is static)", lmd.Name), Pos: lmd.Pos}
 			}
 			lmd.Conv.SetStatic(lmd, false, false) // スタックの入口・レジスタ渡しはしない (asm と同じ固定の規約)
-		case lmd.Options.Has("abi") && optText(lmd.Options, "abi") == "stack":
+		case lmd.Options.Text("abi") == "stack":
 			lmd.Conv.SetOther(lmd, ir.ABIStack)
 		case inCycle[i]:
 			lmd.Conv.SetOther(lmd, ir.ABIStack)
@@ -364,7 +364,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 				continue
 			}
 			if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
-				if l, ok := g.ByID[v.Symbol]; ok && !l.Conv.ResultFromA(caller, op) {
+				if l, ok := g.ByID[v.Symbol]; ok && !l.Conv.ResultFromA(caller) {
 					l.Conv.Result.OnlyA = false // stack 関数は戻り値を呼び先のフレームから読む (codegen.genCall)
 				}
 			}
@@ -437,7 +437,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 // indirectTargets は間接呼び出しの飛び先の関数 (シンボル) を絞れるなら返す。
 //   - グローバルの関数ポインタ変数 (直接、または `load t = g` の t): その変数に代入された関数 (リテラル以外の代入があれば不可)
 //   - const 表の要素 (`load_mem t = TABLE, i` / `index p = TABLE, i; load_mem t = p`): 表の要素 (関数以外の要素があれば不可)
-func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned map[string][]string, unknown map[string]bool, tables map[string][]string) ([]string, bool) {
+func indirectTargets(ud *ir.UseDef, callee ir.Operand, assigned map[string][]string, unknown map[string]bool, tables map[string][]string) ([]string, bool) {
 	fromGlobal := func(o ir.Operand) ([]string, bool) {
 		v, ok := o.(*ir.Value)
 		if !ok || v.Kind != ir.KindGlobal || v.Symbol == "" || v.Type.Kind != types.Func {
@@ -494,11 +494,6 @@ func indirectTargets(lmd *ir.Lambda, ud *ir.UseDef, callee ir.Operand, assigned 
 		}
 	}
 	return nil, false
-}
-
-func optText(o ir.Options, key string) string {
-	v, _ := o.Get(key)
-	return v.Text()
 }
 
 // checkCc65 は options(abi: "cc65") の extern 関数の制約: 引数は 0 か 1 個で 1〜2 バイト (A / A,X で渡す)、
@@ -918,10 +913,7 @@ func frameRefs(lmd *ir.Lambda) int {
 }
 
 // zpOff は options(zeropage: false) (静的フレームを RAM 側に置く) か。
-func zpOff(lmd *ir.Lambda) bool {
-	v, ok := lmd.Options.Get("zeropage")
-	return ok && v.Text() == "false"
-}
+func zpOff(lmd *ir.Lambda) bool { return lmd.Options.Text("zeropage") == "false" }
 
 // needZp はフレームをゼロページに置かなければならないか (abi "frame" の asm の関数。フレームを `(F_sym+k),y` のように間接の
 // 番地にも使う)。

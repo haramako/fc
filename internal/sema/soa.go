@@ -179,7 +179,7 @@ func (h *Hlc) soaByteOf(st *types.Type, v ir.Operand, off int) ir.Operand {
 		}
 		switch {
 		case el != nil && el.Kind == ir.KindLiteral && el.IsInt:
-			return ir.NewIntLiteral("", uint8T, ir.FloorMod(ir.Shr(el.Int, byteNo*8), 256))
+			return ir.NewIntLiteral("", uint8T, ir.ByteOf(el.Int, byteNo))
 		case el != nil && el.Kind == ir.KindLiteral && byteNo <= 1:
 			// 関数などのシンボル: .LOBYTE / .HIBYTE で 1 バイトずつ
 			if byteNo == 0 {
@@ -308,7 +308,7 @@ func (h *Hlc) soaStoreSplit(sp *soaSplit, v ir.Operand) {
 	uint8T := h.prog.Types.IntType(1, false)
 	byteOf := func(i int) ir.Operand {
 		if n, ok := ir.ValIntLiteral(v); ok {
-			return ir.NewIntLiteral("", uint8T, ir.FloorMod(ir.Shr(n, i*8), 256))
+			return ir.NewIntLiteral("", uint8T, ir.ByteOf(n, i))
 		}
 		return ir.NewCastedValue(v, uint8T, i)
 	}

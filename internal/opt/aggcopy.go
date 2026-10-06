@@ -40,18 +40,7 @@ func propagateAggregateCopies(lmd *ir.Lambda) bool {
 				}
 			}
 		}
-		for _, lp := range op.Logs {
-			for _, a := range lp.Args {
-				if v := ir.UnderlyingValue(a.Val); v != nil {
-					addr[v] = true
-				}
-				for _, b := range a.Bytes {
-					if v := ir.UnderlyingValue(b); v != nil {
-						addr[v] = true
-					}
-				}
-			}
-		}
+		op.EachLoggedValue(func(v *ir.Value) { addr[v] = true })
 	}
 	local := func(v *ir.Value) bool {
 		return v != nil && v.Kind == ir.KindLocal && !addr[v] && v.Type.Size >= 3 && v.Home == nil
@@ -168,18 +157,7 @@ func assembleInPlace(lmd *ir.Lambda) bool {
 				}
 			}
 		}
-		for _, lp := range op.Logs {
-			for _, a := range lp.Args {
-				if v := ir.UnderlyingValue(a.Val); v != nil {
-					pin(v)
-				}
-				for _, b := range a.Bytes {
-					if v := ir.UnderlyingValue(b); v != nil {
-						pin(v)
-					}
-				}
-			}
-		}
+		op.EachLoggedValue(pin)
 		if v := ir.UnderlyingValue(op.Dst); v != nil && op.Dst != nil {
 			defs[v] = append(defs[v], i)
 		}

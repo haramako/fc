@@ -6,6 +6,7 @@ package sizehtml
 import (
 	_ "embed"
 	"encoding/json"
+	"html"
 	"io"
 	"os"
 	"sort"
@@ -118,14 +119,10 @@ func Write(w io.Writer, r *Report) error {
 	if err != nil {
 		return err
 	}
-	html := strings.Replace(page, "/*DATA*/null", string(data), 1)
-	html = strings.ReplaceAll(html, "<!--TITLE-->", htmlEscape(r.Title))
-	_, err = io.WriteString(w, html)
+	out := strings.Replace(page, "/*DATA*/null", string(data), 1)
+	out = strings.ReplaceAll(out, "<!--TITLE-->", html.EscapeString(r.Title))
+	_, err = io.WriteString(w, out)
 	return err
-}
-
-func htmlEscape(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }
 
 // WriteFile は r を埋め込んだ HTML をファイル path に書く。

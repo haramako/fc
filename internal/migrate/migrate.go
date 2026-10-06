@@ -58,8 +58,8 @@ func Migrate(src []byte, filename string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if f.Version == syntax.Version3 {
-		return src, nil
+	if f.Version >= syntax.Version3 {
+		return src, nil // fc 2 のソースだけを書き換える
 	}
 	toks, _, err := syntax.Tokenize(src, filename)
 	if err != nil {
