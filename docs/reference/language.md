@@ -434,6 +434,67 @@ function main():void
 - `*Enemies` はハンドルの型（1 バイト）。関数に渡せる
 - 要素は 256 個まで。配列のフィールドを持つ struct は `soa` にできない
 
+### メソッド
+
+`function 型.名前(self:…, …)` は struct・soa のメソッドを宣言する。`x.名前(…)` と呼ぶと、`x` が最初の引数 `self` になる。
+
+```fc run
+#fc 4
+use console;
+
+struct Point {
+	x:u8;
+	y:u8;
+}
+
+function Point.add(self:Point, o:Point):Point // 値を受け取る
+{
+	return {self.x + o.x, self.y + o.y};
+}
+
+function Point.move(self:*Point, dx:u8):void // 書き換える
+{
+	self.x += dx;
+}
+
+struct Enemy {
+	x:u8;
+	hp:u8;
+}
+
+soa Enemies:[8]Enemy;
+
+function Enemies.hit(self:*Enemies, d:u8):void // soa の要素 (1 バイトのハンドル)
+{
+	self.hp -= d;
+}
+
+function main():void
+{
+	console.init();
+	var p:Point = {3, 4};
+	p.move(2); // &p を渡す
+	var q = p.add({10, 20});
+	Enemies[1].hp = 10;
+	Enemies[1].hit(3); // &Enemies[1] を渡す
+	@printf("{} {} {} {}\n", p.x, q.x, q.y, Enemies[1].hp);
+}
+```
+
+```text
+5 15 24 7
+```
+
+- `self` の型は、値（`self:T`）・書き換えるポインタ（`self:*T`）・読むだけのポインタ（`self:*const T`）・soa のハンドル（`self:*S`）の
+  どれか。名前は `self` でなくてもよい
+- 呼ぶ側は `self` の形に合わせる: 変数は `&` を付けて、ポインタは中身を写して渡す。soa の要素はハンドルを渡す。値で受け取るメソッドは
+  soa の要素にも呼べる（要素を値として読む）
+- 書き換えるメソッド（`self:*T`）は、変数でない値（関数の戻り値など）には呼べない
+- 小さい struct は値で受け取るほうが速い（フィールドを決まった番地で読める）。書き換えるとき・大きいときはポインタで
+- `T.名前` は関数の値で、`Point.add(p, q)` とも呼べる。ほかのモジュールの型なら `geom.Point.add`
+- メソッドを足せるのは、型を宣言したモジュールだけ。ほかのモジュールから呼べるのは `public` のメソッドだけ
+- フィールドと同じ名前のメソッドは宣言できない
+
 ### ストレージの別名 {#storage-alias}
 
 `alias 名前:型 = 変数;` は、グローバル変数の領域を別の型の変数として読み書きする（領域を足さない）。同時に使わない作業域を使い回す。

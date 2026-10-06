@@ -127,7 +127,8 @@ type lambdaParam struct {
 
 // lambdaLit は関数リテラル (関数宣言の脱糖結果、または `-> type { ... }`)。
 type lambdaLit struct {
-	name    string // 宣言名 (関数リテラルでは "")
+	name    string // 宣言名 (関数リテラルでは ""。メソッドは T.m)
+	sym     string // シンボル (メソッドの _mod_T__m。"" なら名前から作る)
 	params  []lambdaParam
 	result  syntax.TypeExpr
 	body    *syntax.Block // nil なら extern

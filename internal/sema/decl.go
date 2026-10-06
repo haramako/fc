@@ -33,7 +33,9 @@ func (h *Hlc) declareBad(s syntax.Stmt) {
 			bad(sp.Name)
 		}
 	case *syntax.FuncDecl:
-		bad(s.Name)
+		if s.Recv == nil {
+			bad(s.Name)
+		}
 	case *syntax.StructDecl:
 		bad(s.Name)
 	case *syntax.SoaDecl:

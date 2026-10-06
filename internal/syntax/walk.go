@@ -46,6 +46,7 @@ func Children(node Node) []Node {
 		add(n.Init)
 		add(n.Options)
 	case *FuncDecl:
+		add(n.Recv)
 		add(n.Name)
 		addSpecs(n.Params)
 		add(n.Result)

@@ -149,6 +149,8 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | exp ';'                              { $$ = &ExprStmt{X: $1, Semi: $2.Pos} }
          | opt_scope kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
                                                 { $$ = funcDecl($1, $2, $3, $5, $8, $9, $10) }
+         | opt_scope kFUNCTION IDENT '.' IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
+                                                { f := funcDecl($1, $2, $5, $7, $10, $11, $12).(*FuncDecl); f.Recv = ident($3); $$ = f } /* fc 4: メソッド */
          | options ';'                          { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} }
          | attrs ';'                            { $$ = &OptionsStmt{Options: $1, Semi: $2.Pos} } /* v3: モジュールへの指定 */
          | attrs block                          { $$ = &PlacementBlock{Options: $1, Body: $2} } /* v3: 中の宣言の既定値 */

@@ -113,11 +113,13 @@
           "name": "keyword.other.placement.fc"
         },
         {
-          "comment": "function name(...)",
-          "match": "\\b(function)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "comment": "function name(...) / function Type.name(...) (fc 4 のメソッド)",
+          "match": "\\b(function)\\s+(?:([A-Za-z_][A-Za-z0-9_]*)\\s*(\\.)\\s*)?([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "storage.type.function.fc" },
-            "2": { "name": "entity.name.function.fc" }
+            "2": { "name": "entity.name.type.fc" },
+            "3": { "name": "punctuation.accessor.fc" },
+            "4": { "name": "entity.name.function.fc" }
           }
         },
         {

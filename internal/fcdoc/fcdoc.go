@@ -128,7 +128,11 @@ func item(st syntax.Stmt, src string) *Item {
 		if !d.PublicPos.IsValid() {
 			return nil
 		}
-		it = &Item{Names: []string{d.Name.Name}, Kind: "function"}
+		name := d.Name.Name
+		if d.Recv != nil {
+			name = d.Recv.Name + "." + name // メソッド
+		}
+		it = &Item{Names: []string{name}, Kind: "function"}
 		start = d.Pos().Offset
 		if d.Body != nil {
 			end = d.Body.Lbrace.Offset

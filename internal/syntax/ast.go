@@ -76,10 +76,11 @@ type VarSpec struct {
 	Options *Options // nil なら省略
 }
 
-// FuncDecl は関数宣言。Body が nil なら `;` による宣言のみ (extern)。
+// FuncDecl は関数宣言。Body が nil なら `;` による宣言のみ (extern)。Recv があればメソッド (fc 4 の `function T.m(...)`)。
 type FuncDecl struct {
 	PublicPos Pos
-	Keyword   Pos // `function`
+	Keyword   Pos    // `function`
+	Recv      *Ident // メソッドの受け取り手の型 (struct・soa) の名前。nil なら普通の関数
 	Name      *Ident
 	Params    []*VarSpec
 	Result    TypeExpr

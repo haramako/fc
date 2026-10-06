@@ -109,6 +109,10 @@ func checkVersion(f *File) error {
 			if f.Version < Version3 {
 				fail(n.Op, "ranges `a..b` are fc 3 syntax (write `#fc 3`)")
 			}
+		case *FuncDecl:
+			if n.Recv != nil && f.Version < Version4 {
+				fail(n.Recv.NamePos, "methods `function T.m(...)` are fc 4 syntax (write `#fc 4`)")
+			}
 		case *CondExpr:
 			if f.Version < Version4 {
 				fail(n.Question, "the conditional expression `c ? a : b` is fc 4 syntax (write `#fc 4`)")

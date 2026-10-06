@@ -175,6 +175,8 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		var id string
 		if sym, ok := symbolOption(lam.options); ok {
 			id = sym
+		} else if lam.sym != "" {
+			id = lam.sym
 		} else if lam.name == "main" {
 			id = "_main"
 		} else if lam.name != "" {
@@ -204,6 +206,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		}
 		if left.moduleOf() != "" {
 			return h.symExpr(h.prog.boundModule(left.sym).LookupMust(c.name))
+		}
+		if m := h.methodValue(left, c.name); m != nil {
+			return m // `T.m`: メソッドの関数の値 (method.go)
 		}
 		// モジュールでなければ struct のフィールド参照 (実行時に評価する)
 		return h.constField(left, c.name)
@@ -406,6 +411,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			// 定数式で評価する組み込み (textmap など) はここで展開する
 			if m := args[0].macroOf(); m != nil && m.constFn != nil {
 				return m.constFn(h, args[1:])
+			}
+			call := &cexpr{kind: cOp, op: opCall, args: args, block: c.block, pos: c.pos}
+			if mc := h.methodCall(call); mc != nil {
+				return mc // `x.m(args)` → `T.m(受け取り手, args)` (method.go)
 			}
 			return &cexpr{kind: cOp, op: opCall, args: args, block: c.block}
 

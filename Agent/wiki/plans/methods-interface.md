@@ -29,7 +29,10 @@
 - **メソッドを足せるのは型を宣言したモジュールだけ**。**要素を値として写すのは後の段まで禁止**
 - **near / far は interface の宣言で決める**（`fn` / `farfn` と同じ関係）。far は呼ぶたびに切り替えて戻す（下の「段 3」）
 
-## 段 1: struct のメソッド
+## 段 1: struct のメソッド ✅ 2026-10-06
+
+実装: `internal/sema/method.go`（`x.m(args)` は constEval が `T.m(受け取り手, args)` に書き換える）、テストは
+`internal/driver/method_test.go`、言語仕様は docs/reference/language.md の「メソッド」。
 
 ```fc
 struct Point { x:u8; y:u8; }

@@ -166,6 +166,12 @@ func (md *moduleDecls) collectOne(s syntax.Stmt, group *declaration) {
 		}
 		d.name, d.public = s.Specs[0].Name.Name, s.PublicPos.IsValid()
 	case *syntax.FuncDecl:
+		if s.Recv != nil {
+			// メソッドはモジュールの名前の表に入れない (method.go)
+			md.collectMethod(d, s)
+			md.entries = append(md.entries, d)
+			return
+		}
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()
 	case *syntax.StructDecl:
 		d.name, d.public = s.Name.Name, s.PublicPos.IsValid()

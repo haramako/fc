@@ -299,6 +299,10 @@ func (p *printer) stmt(s Stmt) {
 		}
 		p.tokAt(s.Keyword, "function")
 		p.space()
+		if s.Recv != nil {
+			p.ident(s.Recv)
+			p.tok(".")
+		}
 		p.ident(s.Name)
 		p.tok("(")
 		for i, sp := range s.Params {
