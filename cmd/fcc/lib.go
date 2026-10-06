@@ -31,15 +31,15 @@ func (c *libCmd) AfterApply() error {
 type libFetchCmd struct{ lib *libCmd }
 type libUpdateCmd struct {
 	lib   *libCmd
-	Names []string `arg:"" optional:"" name:"name" help:"Libraries to update (default: all)."`
+	Names []string `arg:"" optional:"" name:"name" complete:"none" help:"Libraries to update (default: all)."`
 }
 type libListCmd struct{ lib *libCmd }
 type libAddCmd struct {
 	lib  *libCmd
-	Name string `arg:"" help:"The library name."`
-	Src  string `arg:"" help:"A folder, or a git URL."`
+	Name string `arg:"" complete:"none" help:"The library name."`
+	Src  string `arg:"" complete:"dirs" help:"A folder, or a git URL."`
 	Rev  string `placeholder:"REV" help:"git: tag / branch / commit."`
-	Sub  string `name:"dir" placeholder:"DIR" help:"git: the folder of the modules in the repository."`
+	Sub  string `name:"dir" placeholder:"DIR" complete:"none" help:"git: the folder of the modules in the repository."`
 }
 
 func (c *libFetchCmd) run() int {

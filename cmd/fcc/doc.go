@@ -12,7 +12,7 @@ import (
 )
 
 type docCmd struct {
-	Target string `short:"t" placeholder:"nes|emu" help:"Only the modules of the target."`
+	Target string `short:"t" placeholder:"nes|emu" complete:"nes,emu" help:"Only the modules of the target."`
 	MD     string `name:"md" placeholder:"DIR" help:"Write the pages of the standard library for the documentation site (Markdown) into DIR."`
 	Arg    string `arg:"" optional:"" name:"name" help:"module (vram, nes/vram), module.name (vram.put), or file.fc[:name] of your own. None: list the standard library modules."`
 }

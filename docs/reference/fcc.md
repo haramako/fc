@@ -29,6 +29,7 @@ fcc <コマンド> [オプション] <ファイル> ...
 | `watch` | ソースが変わるたびにビルドし直す |
 | `size` | ld65 のデバッグ情報から関数ごとの大きさを出す |
 | `migrate` | 古い版のソースを今の fc に書き換える |
+| `completion` | シェル（zsh / bash）の補完のスクリプトを出す |
 | `version` | 版と、使う `ca65` / `ld65` の場所を出す（`fcc -v` / `fcc --version` も同じ） |
 
 ## build / run / compile
@@ -119,6 +120,16 @@ ld65 の `--dbgfile` が書いたデバッグ情報から、セグメントご�
 そこに置いたセグメント（モジュール）の大きさの表も出す。`--html` なら同じ情報を HTML のページにして書く。
 `fcc` がリンクするなら `fcc build --size-report` でよい（バンクの表に加えて、モジュールの間の呼び出しの数（インライン展開の後の
 呼び出し。バンクをまたいで far call になった数も）を出す。モジュールをどのバンクに置くかを考えるときに使う）。
+
+## completion
+
+```bash
+fcc completion zsh > "${fpath[1]}/_fcc"     # zsh (または ~/.zshrc の compinit の後に source <(fcc completion zsh))
+source <(fcc completion bash)                # bash (~/.bashrc に書く)
+```
+
+コマンド・オプション・オプションの値（`-t` の nes / emu など）・ファイル（ソースは `.fc`、`size` は `.dbg`）を補完する。
+候補は補完のたびに `fcc` 自身が出すので、`fcc` を新しくしてもスクリプトを作り直さなくてよい。
 
 ## 環境変数
 

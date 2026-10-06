@@ -297,3 +297,47 @@ func TestCLIUseFromSourceDir(t *testing.T) {
 		t.Errorf("run bad.fc: code=%d out=%q", code, out)
 	}
 }
+
+// TestCLICompletion: `fcc __complete` の候補 (補完のスクリプトが呼ぶ) と、`fcc completion` のスクリプト。
+func TestCLICompletion(t *testing.T) {
+	setup(t)
+	for _, tc := range []struct {
+		args []string
+		want []string // 出力の行の頭 (この順に含む)
+		not  string
+	}{
+		{[]string{""}, []string{"build\t", "lib\t", "completion\t"}, "__complete"},
+		{[]string{"bu"}, []string{"build\tBuild a ROM / binary"}, "compile"},
+		{[]string{"build", ""}, []string{":files *.fc"}, ""},
+		{[]string{"b", "-t", ""}, []string{"nes\t", "emu\t"}, ""},
+		{[]string{"build", "-gO", ""}, []string{"0\t", "1\t", "2\t"}, ""},
+		{[]string{"build", "-O1", ""}, []string{":files *.fc"}, ""},
+		{[]string{"build", "--o"}, []string{"--out\t", "--opt\t", "--offline\t"}, "-o\t"},
+		{[]string{"build", "-o", ""}, []string{":files"}, "*.fc"},
+		{[]string{"build", "main.fc", ""}, nil, ":files"},
+		{[]string{"lib", ""}, []string{"fetch\t", "update\t", "list\t", "add\t"}, ""},
+		{[]string{"lib", "list", "--"}, []string{"--directory\t"}, ""},
+		{[]string{"lib", "add", "x", ""}, []string{":dirs"}, ""},
+		{[]string{"size", "--cfg", ""}, []string{":files *.cfg"}, ""},
+		{[]string{"completion", ""}, []string{"zsh\t", "bash\t"}, ""},
+	} {
+		code, out, _ := runCLI(t, append([]string{"__complete"}, tc.args...)...)
+		rest := out
+		for _, w := range tc.want {
+			i := strings.Index(rest, w)
+			if i < 0 || (i > 0 && rest[i-1] != '\n') {
+				t.Errorf("%q: %q が無い: %q", tc.args, w, out)
+				break
+			}
+			rest = rest[i+len(w):]
+		}
+		if code != 0 || (tc.want == nil && out != "") || (tc.not != "" && strings.Contains(out, tc.not)) {
+			t.Errorf("%q: code=%d out=%q", tc.args, code, out)
+		}
+	}
+	for _, sh := range []string{"zsh", "bash"} {
+		if code, out, _ := runCLI(t, "completion", sh); code != 0 || !strings.Contains(out, "__complete") {
+			t.Errorf("completion %s: code=%d out=%q", sh, code, out)
+		}
+	}
+}

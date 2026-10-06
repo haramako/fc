@@ -11,10 +11,10 @@ import (
 )
 
 type sizeCmd struct {
-	N    int    `short:"n" default:"40" help:"Show the N largest functions (default ${default}, 0 for all)."`
-	Cfg  string `placeholder:"FILE" help:"The linker config used for the link: also show the used / free bytes of each ROM area (bank)."`
+	N    int    `short:"n" default:"40" complete:"none" help:"Show the N largest functions (default ${default}, 0 for all)."`
+	Cfg  string `placeholder:"FILE" complete:"files=*.cfg" help:"The linker config used for the link: also show the used / free bytes of each ROM area (bank)."`
 	HTML string `name:"html" placeholder:"FILE" help:"Write the same information as an HTML page."`
-	Dbg  string `arg:"" name:"file.dbg" help:"The debug file written by ld65 --dbgfile."`
+	Dbg  string `arg:"" name:"file.dbg" complete:"files=*.dbg" help:"The debug file written by ld65 --dbgfile."`
 }
 
 func (c *sizeCmd) run() int {

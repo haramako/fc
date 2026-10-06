@@ -23,7 +23,9 @@
 - **`cmd/fcc`**（2026-10-06 に kong に）: コマンドラインは github.com/alecthomas/kong（依存なし）で読む。コマンドは `main.go`
   の `cli` の構造体のフィールド、オプションはタグ（共通のものは `targetFlags` / `buildFlags` / `rewriteFlags` の埋め込み）、
   実行は選ばれた構造体の `run() int`。kong の終了 (`--help`) は panic で `run()` に戻す（テストが in-process で呼ぶ）。長い名前に
-  `-` を 1 つ付けたもの（`-offline` が `-o ffline` と読める）は `checkSingleDash` がエラーにする
+  `-` を 1 つ付けたもの（`-offline` が `-o ffline` と読める）は `checkSingleDash` がエラーにする。シェルの補完（`completion.go`）は
+  スクリプトが `fcc __complete 語...` を呼び、同じコマンドの木から候補を返す（値の候補はタグ `complete:"..."`。kong の外付けの
+  補完のライブラリは go 1.25 が要るか止まっているので自前）
 - **driver とその周り**: `driver` はビルドの手順（`compileFront` = sema → Prepare → フレーム超過のやり直し。build / check /
   golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。`Compiler` が持つのは
   FC_HOME と ca65 の起動の数だけで、1 回のビルド（build / check / migrate の 1 ファイル）の状態は `compilation`（`newCompilation`。

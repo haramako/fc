@@ -22,18 +22,19 @@ import (
 type cli struct {
 	Version versionFlag `help:"Show version and exit." short:"v"`
 
-	Build      buildCmd   `cmd:"" aliases:"b" help:"Build a ROM / binary."`
-	Compile    compileCmd `cmd:"" aliases:"c" help:"Compile to object files only (no link)."`
-	Run        runCmd     `cmd:"" help:"Build and run (emu: the built-in emulator; nes: console output on the built-in NES runner)."`
-	Check      checkCmd   `cmd:"" help:"Compile without producing files and report errors / warnings."`
-	Test       testCmd    `cmd:"" help:"Run the @(test) functions of modules."`
-	Fmt        fmtCmd     `cmd:"" help:"Format source files."`
-	Doc        docCmd     `cmd:"" help:"Show the public declarations of a module and their comments."`
-	Lib        libCmd     `cmd:"" help:"Fetch / update / list the libraries of fc.toml [lib.*]."`
-	Watch      watchCmd   `cmd:"" help:"Rebuild whenever a source file under the source directory (or fclib) changes. Ctrl-C to stop."`
-	Size       sizeCmd    `cmd:"" help:"Show code size per segment and function from an ld65 --dbgfile."`
-	Migrate    migrateCmd `cmd:"" help:"Rewrite older sources as the latest fc."`
-	VersionCmd versionCmd `cmd:"" name:"version" help:"Show version and the ca65 / ld65 in use."`
+	Build      buildCmd      `cmd:"" aliases:"b" help:"Build a ROM / binary."`
+	Compile    compileCmd    `cmd:"" aliases:"c" help:"Compile to object files only (no link)."`
+	Run        runCmd        `cmd:"" help:"Build and run (emu: the built-in emulator; nes: console output on the built-in NES runner)."`
+	Check      checkCmd      `cmd:"" help:"Compile without producing files and report errors / warnings."`
+	Test       testCmd       `cmd:"" help:"Run the @(test) functions of modules."`
+	Fmt        fmtCmd        `cmd:"" help:"Format source files."`
+	Doc        docCmd        `cmd:"" help:"Show the public declarations of a module and their comments."`
+	Lib        libCmd        `cmd:"" help:"Fetch / update / list the libraries of fc.toml [lib.*]."`
+	Watch      watchCmd      `cmd:"" help:"Rebuild whenever a source file under the source directory (or fclib) changes. Ctrl-C to stop."`
+	Size       sizeCmd       `cmd:"" help:"Show code size per segment and function from an ld65 --dbgfile."`
+	Migrate    migrateCmd    `cmd:"" help:"Rewrite older sources as the latest fc."`
+	VersionCmd versionCmd    `cmd:"" name:"version" help:"Show version and the ca65 / ld65 in use."`
+	Completion completionCmd `cmd:"" help:"Print a shell completion script (zsh / bash)."`
 }
 
 // runner は選ばれたコマンド。終了コードを返す (run / build のプログラムの終了コードもそのまま)。
@@ -72,6 +73,10 @@ func run() (code int) {
 			code = int(e)
 		}
 	}()
+	if args[0] == "__complete" { // 補完のスクリプトから (completion.go)
+		printCompletions(parser.Model.Node, args[1:])
+		return 0
+	}
 	if err := checkSingleDash(parser, args); err != nil {
 		fmt.Fprintf(os.Stderr, "fcc: error: %v\n", err)
 		return 2
@@ -125,7 +130,7 @@ func checkSingleDash(parser *kong.Kong, args []string) error {
 
 // targetFlags はターゲットと @(build) の定数の上書き (コンパイルするコマンドに共通)。
 type targetFlags struct {
-	Target string   `short:"t" placeholder:"nes|emu" help:"Target platform (default: nes if fc.toml has [target], otherwise emu)."`
+	Target string   `short:"t" placeholder:"nes|emu" complete:"nes,emu" help:"Target platform (default: nes if fc.toml has [target], otherwise emu)."`
 	Define []string `short:"D" sep:"none" placeholder:"MOD.NAME=VAL" help:"Override a @(build) const (repeatable; applied after fc.toml [define.MOD])."`
 }
 
@@ -133,7 +138,7 @@ type targetFlags struct {
 type buildFlags struct {
 	targetFlags
 	Out     string `short:"o" placeholder:"FILE" help:"Output file."`
-	Opt     int    `short:"O" default:"2" placeholder:"LEVEL" help:"Optimize level (0-2, default ${default})."`
+	Opt     int    `short:"O" default:"2" placeholder:"LEVEL" complete:"0,1,2" help:"Optimize level (0-2, default ${default})."`
 	G       bool   `short:"g" name:"debug-info" help:"Emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)."`
 	Offline bool   `help:"Do not fetch git libraries of fc.toml [lib.*] (use the cache only)."`
 }

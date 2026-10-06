@@ -17,7 +17,7 @@ import (
 
 type testCmd struct {
 	Target  string   `short:"t" default:"emu" enum:"emu,nes" placeholder:"emu|nes" help:"Target (emu: the built-in 6502 emulator, nes: the built-in NES runner; default ${default})."`
-	Opt     int      `short:"O" default:"2" placeholder:"LEVEL" help:"Optimize level (0-2, default ${default})."`
+	Opt     int      `short:"O" default:"2" placeholder:"LEVEL" complete:"0,1,2" help:"Optimize level (0-2, default ${default})."`
 	Modules []string `arg:"" name:"module" help:"Module source files (.fc)."`
 }
 
