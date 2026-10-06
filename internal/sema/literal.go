@@ -35,7 +35,7 @@ const (
 
 // literalRule は型のない整数定数 (型 lt、値 n) を相手の型 other に合わせる規則 (Agent/discussions/2026-09-20-v3-plan.md §10.2)。
 // otherUntyped は相手も型のない定数か。cmp は比較か。値を作り直すのは adaptLiteral、型だけを決めるのは型を決める段
-// (typing.go の literalAdapted) で、どちらもこの判断を使う。
+// (typeplan.go の adaptLit) で、どちらもこの判断を使う。
 func literalRule(lt *types.Type, n int, otherUntyped bool, other *types.Type, cmp bool) litDecision {
 	if otherUntyped || other.Kind != types.Int || other.Enum != nil || other.Size < 1 || other.Size > 2 {
 		return litKeep // 定数同士 (普通は畳み込まれている) か、相手が整数でない

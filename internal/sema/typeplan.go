@@ -57,12 +57,7 @@ func (h *Hlc) adaptLit(x, other exprInfo, cmp bool) adaptedLit {
 	case litSigned16:
 		return adaptedLit{t: h.prog.Types.IntType(2, true), changed: true, n: x.n}
 	case litTruncate:
-		_, hi := intRange(t)
-		n := ir.FloorMod(x.n, 1<<(8*t.Size))
-		if n > hi {
-			n -= 1 << (8 * t.Size)
-		}
-		return adaptedLit{t: t, changed: true, n: n}
+		return adaptedLit{t: t, changed: true, n: wrapInt(x.n, t)}
 	case litFits:
 		return adaptedLit{t: t} // 値はそのまま (互換型が相手の型になる)
 	}

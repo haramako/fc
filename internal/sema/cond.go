@@ -279,12 +279,6 @@ func (h *Hlc) constCond(c *cexpr) (int, bool) {
 // condValueUntyped は、枝の型を評価する前に決められない条件式 (slice の範囲など) の IR: 評価した枝の値の型から条件式の型を
 // 決める。1 つめの枝を入れる一時変数は、2 つめの枝を評価してから型が違えば作り直す (1 つめの枝の値を変換に命令が要るときはエラー)。
 func (h *Hlc) condValueUntyped(e *cexpr) ir.Operand {
-	infoOf := func(v ir.Operand) exprInfo {
-		if lv, ok := v.(*ir.Value); ok && lv.Kind == ir.KindLiteral && lv.IsInt && lv.Untyped {
-			return exprInfo{t: lv.Type, untyped: true, n: lv.Int}
-		}
-		return exprInfo{t: ir.ValType(v)}
-	}
 	if k, ok := h.constCond(e.args[0]); ok {
 		// 定数の条件: 選ばれたほうの値 (型の照合のため、選ばれなかったほうの型が分かれば合わせる)
 		pick, other := e.args[1], e.args[2]
@@ -293,7 +287,7 @@ func (h *Hlc) condValueUntyped(e *cexpr) ir.Operand {
 		}
 		v := h.rval(pick)
 		if oi, ok := h.exprType(other); ok {
-			t := h.condJoin(infoOf(v), oi, e.ty).t
+			t := h.condJoin(valueInfo(v), oi, e.ty).t
 			tmp := h.newTmp(t)
 			h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{h.cast(v, t)}})
 			return tmp
@@ -309,12 +303,12 @@ func (h *Hlc) condValueUntyped(e *cexpr) ir.Operand {
 	h.emit(&ir.Op{Code: ir.OpJump, Label: labels[1]})
 	h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[0]})
 	vb := h.rval(e.args[2])
-	t := h.condJoin(infoOf(va), infoOf(vb), e.ty).t
+	t := h.condJoin(valueInfo(va), valueInfo(vb), e.ty).t
 	if t != tmp.Type {
 		var a ir.Operand
 		switch {
-		case infoOf(va).untyped:
-			a = ir.NewIntLiteral("", t, wrapInt(infoOf(va).n, t))
+		case valueInfo(va).untyped:
+			a = ir.NewIntLiteral("", t, wrapInt(valueInfo(va).n, t))
 		case t.Kind == types.Int && ir.ValType(va).Kind == types.Int && (t.Size == ir.ValType(va).Size || !ir.ValType(va).Signed):
 			a = va // 同じ大きさか、符号なしの狭い値 (0 で広がる)
 		default:

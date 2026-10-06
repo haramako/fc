@@ -314,7 +314,7 @@ func registerSliceBuiltins(h *Hlc) {
 		bp := h.prog.Types.PointerTo(u8)
 		dp := h.operandValue(retypePtr(d.ptr, bp))
 		sp := h.operandValue(retypePtr(s.ptr, bp))
-		copyFn := h.moduleFunc(h.builtinModule("mem"), "mem", "copy") // use しなくても読み込む (printf の fmt と同じ)
+		copyFn := h.moduleFunc(h.builtinModule("mem"), "copy") // use しなくても読み込む (printf の fmt と同じ)
 		if ft := ir.ValType(copyFn); ft.Kind == types.Func && len(ft.Params) == 2 {
 			// fc 4 の mem.copy(dst:[:u16]u8, src:[:u16]const u8) (Agent/wiki/plans/v4-stdlib.md §3.1)。旧 fclib の mem (プロジェクトの横に
 			// コピーしたもの) なら下の copy(to, from, size)

@@ -35,33 +35,32 @@ func (h *Hlc) terminates(s syntax.Stmt) bool {
 	case *syntax.StaticIfStmt:
 		body := h.staticBranch(s)
 		return len(body) > 0 && h.terminates(body[len(body)-1])
-	case *syntax.LoopStmt:
-		return !hasBreakFor(s.Body, nil)
-	case *syntax.WhileStmt:
-		// while (1) は無限ループ
-		return isTrueLiteral(s.Cond) && !hasBreakFor(s.Body, nil)
-	case *syntax.ForStmt:
-		return (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, nil)
-	case *syntax.DoWhileStmt:
-		return h.doWhileTerminates(s, nil)
-	case *syntax.SwitchStmt:
-		return h.switchTerminates(s, nil)
 	case *syntax.LabeledStmt:
-		switch inner := s.Stmt.(type) {
-		case *syntax.LoopStmt:
-			return !hasBreakFor(inner.Body, s.Label)
-		case *syntax.WhileStmt:
-			return isTrueLiteral(inner.Cond) && !hasBreakFor(inner.Body, s.Label)
-		case *syntax.ForStmt:
-			return (inner.Cond == nil || isTrueLiteral(inner.Cond)) && !hasBreakFor(inner.Body, s.Label)
-		case *syntax.DoWhileStmt:
-			return h.doWhileTerminates(inner, s.Label)
-		case *syntax.SwitchStmt:
-			return h.switchTerminates(inner, s.Label)
+		if t, ok := h.loopTerminates(s.Stmt, s.Label); ok {
+			return t
 		}
 		return h.terminates(s.Stmt)
 	}
-	return false
+	t, _ := h.loopTerminates(s, nil)
+	return t
+}
+
+// loopTerminates はループと switch の s (ラベル label。無ければ nil) が終端文か (ok はループか switch だったか)。抜ける break が
+// 無い無限ループ (`while (true)`・条件の無い for) は終端文。
+func (h *Hlc) loopTerminates(s syntax.Stmt, label *syntax.Ident) (terminates, ok bool) {
+	switch s := s.(type) {
+	case *syntax.LoopStmt:
+		return !hasBreakFor(s.Body, label), true
+	case *syntax.WhileStmt:
+		return isTrueLiteral(s.Cond) && !hasBreakFor(s.Body, label), true
+	case *syntax.ForStmt:
+		return (s.Cond == nil || isTrueLiteral(s.Cond)) && !hasBreakFor(s.Body, label), true
+	case *syntax.DoWhileStmt:
+		return h.doWhileTerminates(s, label), true
+	case *syntax.SwitchStmt:
+		return h.switchTerminates(s, label), true
+	}
+	return false, false
 }
 
 // doWhileTerminates は fc 4 の do-while が終端文か: 抜ける break が無く、条件が `true` か、本体が終端文 (本体は必ず 1 回

@@ -86,7 +86,6 @@ type printer struct {
 	pending   int  // 次のトークンの前に出す改行数 (0 なら同じ行)
 	needSpace bool // 次のトークンの前に空白を出す
 	lastLine  int  // 最後に出力したトークン/コメントのソース行 (0 なら未出力)
-	lastEnd   Pos  // 最後に出力したトークン/コメントの終端
 	blankOK   bool // 空行を許すか (文と文の間だけ真。ブロック先頭では偽)
 	lastByte  byte
 
@@ -113,7 +112,6 @@ func (p *printer) tokAt(pos Pos, s string) {
 	p.write(s)
 	if pos.IsValid() {
 		p.lastLine = pos.Line + strings.Count(s, "\n")
-		p.lastEnd = after(pos, len(s))
 	}
 	p.blankOK = false
 }
@@ -193,7 +191,6 @@ func (p *printer) flushComments(before Pos) {
 			p.blankOK = true // コメントの後の文の前には空行を置ける
 		}
 		p.lastLine = c.End.Line
-		p.lastEnd = c.End
 		p.afterComment = true
 		if c.IsLine() {
 			p.newline()
@@ -1095,10 +1092,6 @@ func (p *printer) exprList(list []Expr, comma, close Pos) {
 
 // typeExpr は型を印字する (前置形: `[4]*int`, `fn(int):void`)。
 func (p *printer) typeExpr(t TypeExpr) {
-	p.typeExprV2(t)
-}
-
-func (p *printer) typeExprV2(t TypeExpr) {
 	switch t := t.(type) {
 	case *NamedType:
 		if t.Module != nil {
@@ -1116,21 +1109,21 @@ func (p *printer) typeExprV2(t TypeExpr) {
 		}
 		if t.LenType != nil {
 			p.tokAt(t.Colon, ":")
-			p.typeExprV2(t.LenType)
+			p.typeExpr(t.LenType)
 		}
 		p.tokAt(t.Rbrack, "]")
 		if t.Const.IsValid() {
 			p.tokAt(t.Const, "const")
 			p.space()
 		}
-		p.typeExprV2(t.Elem)
+		p.typeExpr(t.Elem)
 	case *PointerType:
 		p.tokAt(t.Star, "*")
 		if t.Const.IsValid() {
 			p.tokAt(t.Const, "const")
 			p.space()
 		}
-		p.typeExprV2(t.Elem)
+		p.typeExpr(t.Elem)
 	case *FuncType:
 		if t.Far {
 			p.tokAt(t.Fn, "farfn")
@@ -1141,7 +1134,7 @@ func (p *printer) typeExprV2(t TypeExpr) {
 		p.params(t.Params)
 		p.tokAt(t.Rparen, ")")
 		p.tok(":")
-		p.typeExprV2(t.Result)
+		p.typeExpr(t.Result)
 	default:
 		panic("unknown type")
 	}

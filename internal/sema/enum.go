@@ -26,10 +26,7 @@ func (h *Hlc) compileEnumDecl(s *syntax.EnumDecl) {
 		}
 	}
 	t := h.prog.Types.NewEnum(h.module.Id+"."+name, base)
-	lo, hi := 0, 1<<(8*base.Size)-1
-	if base.Signed {
-		lo, hi = -(1 << (8*base.Size - 1)), 1<<(8*base.Size-1)-1
-	}
+	lo, hi := intRange(base)
 	next := 0
 	var members []types.EnumMember
 	for _, m := range s.Members {

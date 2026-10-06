@@ -36,7 +36,7 @@ func registerTestingBuiltins(h *Hlc) {
 		sys := h.builtinModule("sys")
 		ok := h.newLabel("assert")
 		h.compileCond(args[0], ok, true)
-		h.lval(ccall(cv(h.moduleFunc(sys, "sys", "panic")), cstr(msg)))
+		h.lval(ccall(cv(h.moduleFunc(sys, "panic")), cstr(msg)))
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: ok})
 		return macroResult{}
 	})
@@ -58,7 +58,7 @@ func registerTestingBuiltins(h *Hlc) {
 		esc := strings.NewReplacer("{", "{{", "}", "}}")
 		format := fmt.Sprintf("%s: assert_eq failed: %s is {} (want {})\n", esc.Replace(h.srcLoc(args[0])), esc.Replace(h.srcText(args[0])))
 		h.printf4([]*cexpr{cstr(format), cv(h.operandValue(got)), cv(h.operandValue(want))})
-		h.lval(ccall(cv(h.moduleFunc(ci, "console", "exit")), cint(1)))
+		h.lval(ccall(cv(h.moduleFunc(ci, "exit")), cint(1)))
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: ok})
 		return macroResult{}
 	})
@@ -67,7 +67,7 @@ func registerTestingBuiltins(h *Hlc) {
 // runTests4 は fc 4 の @run_tests: プログラムの全モジュールの @(test) の関数を呼ぶ。
 func (h *Hlc) runTests4() macroResult {
 	ci := h.builtinModule("console")
-	console := func(name string, args ...*cexpr) { h.lval(ccall(cv(h.moduleFunc(ci, "console", name)), args...)) }
+	console := func(name string, args ...*cexpr) { h.lval(ccall(cv(h.moduleFunc(ci, name)), args...)) }
 	console("init")
 	n := 0
 	for _, m := range h.prog.Modules.List() {

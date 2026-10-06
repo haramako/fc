@@ -83,14 +83,7 @@ func (h *Hlc) forInRange(s *syntax.ForInStmt, r *syntax.RangeExpr) forInLoop {
 	i := h.forInVar(s.Elem.Name, t)
 	h.lval(cop2(opLoad, cv(i), cv(h.operandValue(lo))))
 	h.markLoopVar(i)
-	bits := 8 * t.Size
-	wrapTo := func(n int) *ir.Value { // n を t の値に (256 → 0)
-		n = ir.FloorMod(n, 1<<bits)
-		if t.Signed && n > hi0 {
-			n -= 1 << bits
-		}
-		return ir.NewIntLiteral("", t, n)
-	}
+	wrapTo := func(n int) *ir.Value { return ir.NewIntLiteral("", t, wrapInt(n, t)) } // n を t の値に (256 → 0)
 	if hiConst {
 		last := hk
 		if !r.Inclusive {

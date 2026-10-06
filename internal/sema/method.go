@@ -33,8 +33,14 @@ func (m *methodDecl) name() string { return m.fd.Recv.Name + "." + m.fd.Name.Nam
 
 // collectMethod はメソッドの宣言を表に登録する (受け取り手の型は解決のときに確かめる: 宣言の順によらない)。
 func (md *moduleDecls) collectMethod(d *declaration, s *syntax.FuncDecl) {
+	m := md.addMethod(d, s)
+	d.action = func(h *Hlc) { h.compileMethod(m) }
+}
+
+// addMethod はメソッドの宣言 fd (Recv が受け取り手の型の名前) を表に登録する (同じ名前があればエラー)。
+func (md *moduleDecls) addMethod(d *declaration, fd *syntax.FuncDecl) *methodDecl {
 	p := md.h.prog
-	key := md.h.module.Id + "." + s.Recv.Name
+	key := md.h.module.Id + "." + fd.Recv.Name
 	if p.methods == nil {
 		p.methods = map[string]map[string]*methodDecl{}
 	}
@@ -43,12 +49,12 @@ func (md *moduleDecls) collectMethod(d *declaration, s *syntax.FuncDecl) {
 		ms = map[string]*methodDecl{}
 		p.methods[key] = ms
 	}
-	if _, dup := ms[s.Name.Name]; dup {
-		panic(&diag.Error{Msg: fmt.Sprintf("method %s.%s already defined", s.Recv.Name, s.Name.Name), Pos: syntax.At(md.h.module.Path, s.Name.NamePos)})
+	if _, dup := ms[fd.Name.Name]; dup {
+		panic(&diag.Error{Msg: fmt.Sprintf("method %s.%s already defined", fd.Recv.Name, fd.Name.Name), Pos: syntax.At(md.h.module.Path, fd.Name.NamePos)})
 	}
-	m := &methodDecl{decl: d, fd: s, module: md.h.module, public: s.PublicPos.IsValid()}
-	ms[s.Name.Name] = m
-	d.action = func(h *Hlc) { h.compileMethod(m) }
+	m := &methodDecl{decl: d, fd: fd, module: md.h.module, public: fd.PublicPos.IsValid()}
+	ms[fd.Name.Name] = m
+	return m
 }
 
 // compileMethod はメソッドの本体を関数にする (宣言の解決)。
@@ -80,16 +86,9 @@ func (h *Hlc) compileMethod(m *methodDecl) {
 	if len(s.Params) == 0 {
 		panic(&diag.Error{Msg: fmt.Sprintf("method %s needs the receiver as the first parameter (%s)", m.name(), want)})
 	}
-	params := make([]lambdaParam, len(s.Params))
-	for i, p := range s.Params {
-		if p.Type == nil {
-			panic(&diag.Error{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
-		}
-		params[i] = lambdaParam{name: p.Name.Name, typ: p.Type, init: p.Init}
-	}
 	lam := &cexpr{kind: cLambda, pos: s.Pos(), lam: &lambdaLit{
-		name: m.name(), sym: fmt.Sprintf("_%s_%s__%s", h.module.Id, recv, s.Name.Name),
-		params: params, result: s.Result, body: s.Body, options: parseOptions(s.Options),
+		name: m.name(), sym: methodSym(h.module.Id, recv, s.Name.Name),
+		params: funcParams(s.Params), result: s.Result, body: s.Body, options: parseOptions(s.Options),
 	}}
 	val := h.constEval(lam).val
 	pt := val.Type.Params[0]
@@ -246,3 +245,6 @@ func addressable(x *cexpr) bool {
 	}
 	return false
 }
+
+// methodSym はメソッド T.m の関数のシンボル (_mod_T__m)。
+func methodSym(mod, recv, name string) string { return fmt.Sprintf("_%s_%s__%s", mod, recv, name) }

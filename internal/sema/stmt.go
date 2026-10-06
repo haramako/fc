@@ -257,15 +257,8 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 
 	case *syntax.FuncDecl:
 		// const <name> = <lambda> に脱糖する (旧実装と同じ)
-		params := make([]lambdaParam, len(s.Params))
-		for i, p := range s.Params {
-			if p.Type == nil {
-				panic(&diag.Error{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
-			}
-			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type, init: p.Init}
-		}
 		lam := &cexpr{kind: cLambda, pos: s.Pos(), lam: &lambdaLit{
-			name: s.Name.Name, params: params, result: s.Result, body: s.Body, options: parseOptions(s.Options),
+			name: s.Name.Name, params: funcParams(s.Params), result: s.Result, body: s.Body, options: parseOptions(s.Options),
 		}}
 		h.compileConstSpec(s.Name.Name, s.Name.End(), nil, lam, nil, s.PublicPos)
 
@@ -753,4 +746,16 @@ func (h *Hlc) compileCaseBody(s *syntax.SwitchStmt, ci int, body []syntax.Stmt, 
 	if ci >= 0 || target != end {
 		h.emit(&ir.Op{Code: ir.OpJump, Label: target})
 	}
+}
+
+// funcParams は関数宣言の引数 (型は必須。既定の値はそのまま: registerDefaults)。関数・メソッド・interface のメソッドで共通。
+func funcParams(ps []*syntax.VarSpec) []lambdaParam {
+	params := make([]lambdaParam, len(ps))
+	for i, p := range ps {
+		if p.Type == nil {
+			panic(&diag.Error{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
+		}
+		params[i] = lambdaParam{name: p.Name.Name, typ: p.Type, init: p.Init}
+	}
+	return params
 }

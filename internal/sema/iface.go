@@ -63,11 +63,12 @@ type ifaceInfo struct {
 
 // ifaceMethod は interface のメソッド 1 つ。
 type ifaceMethod struct {
-	fd   *syntax.FuncDecl
-	m    *methodDecl // Task.m (振り分けの関数)
-	lmd  *ir.Lambda
-	def  *ir.Value // 既定の本体 (無ければ nil)
-	none *ir.Value // 何もしない関数 (作ったら)
+	fd     *syntax.FuncDecl
+	params []lambdaParam // 引数 (振り分けの関数・既定の本体・何もしない関数で共通)
+	m      *methodDecl   // Task.m (振り分けの関数)
+	lmd    *ir.Lambda
+	def    *ir.Value // 既定の本体 (無ければ nil)
+	none   *ir.Value // 何もしない関数 (作ったら)
 }
 
 // implInfo は interface の実装 1 つ。
@@ -96,21 +97,10 @@ func (md *moduleDecls) collectInterface(d *declaration, s *syntax.InterfaceDecl)
 		if !ok {
 			continue
 		}
-		one := *fd
+		one := *fd // interface の型 (Recv) のメソッドとして登録する
 		one.Recv = s.Name
 		one.PublicPos = s.PublicPos
-		key := md.h.module.Id + "." + s.Name.Name
-		if p.methods == nil {
-			p.methods = map[string]map[string]*methodDecl{}
-		}
-		if p.methods[key] == nil {
-			p.methods[key] = map[string]*methodDecl{}
-		}
-		if _, dup := p.methods[key][fd.Name.Name]; dup {
-			panic(&diag.Error{Msg: fmt.Sprintf("method %s.%s already defined", s.Name.Name, fd.Name.Name), Pos: syntax.At(md.h.module.Path, fd.Name.NamePos)})
-		}
-		m := &methodDecl{decl: d, fd: &one, module: md.h.module, public: s.PublicPos.IsValid()}
-		p.methods[key][fd.Name.Name] = m
+		m := md.addMethod(d, &one)
 		info.methods = append(info.methods, &ifaceMethod{fd: fd, m: m})
 	}
 	return info
@@ -157,11 +147,7 @@ func (h *Hlc) compileInterfaceDecl(info *ifaceInfo) {
 		if fname == "Id" {
 			panic(&diag.Error{Msg: fmt.Sprintf("interface %s: Id is the name of the id type (%s.Id); use another name for the field", name, name)})
 		}
-		ft := h.typeEval(f.Type)
-		h.checkComplete(ft, "field "+fname)
-		if ft.Size < 0 {
-			panic(&diag.Error{Msg: fmt.Sprintf("field %s: array field must have a length", fname)})
-		}
+		ft := h.fieldType(f.Type, fname)
 		fields = append(fields, types.Field{Name: fname, Type: ft})
 	}
 	off := 0
@@ -188,22 +174,19 @@ func (h *Hlc) compileInterfaceDecl(info *ifaceInfo) {
 		if len(fd.Params) == 0 {
 			panic(&diag.Error{Msg: fmt.Sprintf("method %s.%s needs the receiver as the first parameter (self:*%s)", name, fd.Name.Name, name)})
 		}
-		params := make([]lambdaParam, len(fd.Params))
-		for i, p := range fd.Params {
-			if p.Type == nil {
-				panic(&diag.Error{Msg: fmt.Sprintf("parameter %s requires type", p.Name.Name)})
-			}
+		for _, p := range fd.Params {
 			if p.Init != nil {
 				h.updatePos(p.Init)
 				panic(&diag.Error{Msg: fmt.Sprintf("method %s.%s: an interface method cannot have default arguments", name, fd.Name.Name)})
 			}
-			params[i] = lambdaParam{name: p.Name.Name, typ: p.Type}
 		}
+		params := funcParams(fd.Params)
+		im.params = params
 		if fd.Options != nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("method %s.%s: an interface method cannot have attributes", name, fd.Name.Name)})
 		}
 		mname := name + "." + fd.Name.Name
-		sym := fmt.Sprintf("_%s_%s__%s", h.module.Id, name, fd.Name.Name)
+		sym := methodSym(h.module.Id, name, fd.Name.Name)
 		disp := h.constEval(&cexpr{kind: cLambda, pos: fd.Pos(), lam: &lambdaLit{
 			name: mname, sym: sym, params: params, result: fd.Result, body: &syntax.Block{Lbrace: fd.Name.NamePos, Rbrace: fd.Name.NamePos},
 		}}).val
@@ -299,11 +282,7 @@ func (h *Hlc) compileImplDecl(s *syntax.StructDecl, st *types.Type) {
 				panic(&diag.Error{Msg: fmt.Sprintf("field %s already defined in struct %s", fname, name)})
 			}
 		}
-		ft := h.typeEval(f.Type)
-		h.checkComplete(ft, "field "+fname)
-		if ft.Size < 0 {
-			panic(&diag.Error{Msg: fmt.Sprintf("field %s: array field must have a length", fname)})
-		}
+		ft := h.fieldType(f.Type, fname)
 		if info.soa && ft.Kind == types.Array {
 			panic(&diag.Error{Msg: fmt.Sprintf("field %s: an implementation of soa interface %s cannot have an array field", fname, info.stmt.Name.Name)})
 		}
@@ -592,10 +571,6 @@ func (h *Hlc) buildDispatch(info *ifaceInfo) {
 			}
 			if im.none == nil {
 				// 既定の本体が無ければ、何もしない (値を返すメソッドは 0・null・すべて 0 の struct を返す) 関数
-				params := make([]lambdaParam, len(fd.Params))
-				for i, p := range fd.Params {
-					params[i] = lambdaParam{name: p.Name.Name, typ: p.Type}
-				}
 				body := &syntax.Block{Lbrace: fd.Name.NamePos, Rbrace: fd.Name.NamePos}
 				if z := zeroExpr(dispT.Base, fd.Result, fd.Name.NamePos); z != nil {
 					body.Stmts = []syntax.Stmt{&syntax.ReturnStmt{Return: fd.Name.NamePos, Value: z, Semi: fd.Name.NamePos}}
@@ -603,7 +578,7 @@ func (h *Hlc) buildDispatch(info *ifaceInfo) {
 					panic(&diag.Error{Msg: fmt.Sprintf("method %s returns %s: write its default body in interface %s (it runs for %s)", mname, dispT.Base, name, what), Pos: syntax.At(info.module.Path, fd.Name.NamePos)})
 				}
 				im.none = h.constEval(&cexpr{kind: cLambda, pos: fd.Pos(), lam: &lambdaLit{
-					name: mname, sym: im.lmd.Id + "__none", params: params, result: fd.Result, body: body,
+					name: mname, sym: im.lmd.Id + "__none", params: im.params, result: fd.Result, body: body,
 				}}).val
 			}
 			return ir.NewSymbolLiteral("", elemT, im.none.Symbol)

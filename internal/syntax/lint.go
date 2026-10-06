@@ -31,7 +31,6 @@ func Lint(f *File) []Warning {
 }
 
 type linter struct {
-	version  int
 	warnings []Warning
 }
 

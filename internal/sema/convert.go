@@ -5,7 +5,7 @@ package sema
 //     fc 3 は今までどおり黙って切り詰め、migrate には `c as T` を報告する
 //   - D: 大きさが減る変換 (u16 / i16 → u8 / i8): fc 4 はエラー。fc 3 は下位バイト、migrate には `c as T`。同じ大きさで符号だけ
 //     違う変換 (i8 → u8。`x = x + vx`) は、どの版も通す (ビットがそのまま)
-// 演算の中の型の揃え方 (makeCompatible) と、コンパイラが作る変換 (ポインタのずれなど) は h.cast を直接使う。
+// 演算の中の型の揃え方 (typeplan.go の planArith) と、コンパイラが作る変換 (ポインタのずれなど) は h.cast を直接使う。
 
 import (
 	"fmt"

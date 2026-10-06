@@ -76,10 +76,7 @@ func (h *Hlc) fitArrayLiteral(v *ir.Value, typ *types.Type) *ir.Value {
 	if vt.Kind != types.Array || vt.Base.Kind != types.Int || vt.Base == typ.Base || (typ.Length >= 0 && typ.Length != len(v.Elems)) {
 		return v
 	}
-	lo, hi := 0, 1<<(8*typ.Base.Size)-1
-	if typ.Base.Signed {
-		lo, hi = -(hi+1)/2, (hi+1)/2-1
-	}
+	lo, hi := intRange(typ.Base)
 	elems := make([]ir.Operand, len(v.Elems))
 	for i, e := range v.Elems {
 		n, ok := ir.ValIntLiteral(e)

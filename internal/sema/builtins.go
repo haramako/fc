@@ -15,7 +15,6 @@ package sema
 // (LookupInternal) が、そのモジュールがプログラムに読み込まれていなければエラー。
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
@@ -55,8 +54,8 @@ func registerBuiltins(p *Program) {
 		}
 		stdio := h.stdioModule("printf")
 		uint8p := h.prog.Types.PointerTo(h.prog.Types.IntType(1, false))
-		print := h.moduleFunc(stdio, "stdio", "print")
-		printInt16 := h.moduleFunc(stdio, "stdio", "print_int16")
+		print := h.moduleFunc(stdio, "print")
+		printInt16 := h.moduleFunc(stdio, "print_int16")
 		r := macroResult{stmts: []*cexpr{}}
 		typs := make([]*types.Type, len(args))
 		if h.rewriting() {
@@ -74,19 +73,19 @@ func registerBuiltins(p *Program) {
 				r.stmts = append(r.stmts, ccall(cv(print), arg))
 			case typ.IsSlice() && typ.SliceOf.Kind == types.Int && typ.SliceOf.Size == 1 && !typ.IsWideSlice():
 				// slice は長さの分だけ (文字列の slice。黙って捨てていた)
-				r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "stdio", "print_slice")), arg))
+				r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "print_slice")), arg))
 			case typ.Kind == types.Int && typ.Enum != nil:
 				// enum は値 (print_int16 の引数の型のエラーだった)
 				u16 := h.prog.Types.IntType(2, typ.Signed)
 				n := &cexpr{kind: cCast, args: []*cexpr{arg}, ty: u16, ck: syntax.CastAs}
 				if typ.Signed {
-					r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "stdio", "print_sint16")), n))
+					r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "print_sint16")), n))
 				} else {
 					r.stmts = append(r.stmts, ccall(cv(printInt16), n))
 				}
 			case typ.Kind == types.Int && typ.Signed:
 				// 符号付きは符号付きで (符号なしで 65531 と出ていた)
-				r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "stdio", "print_sint16")), arg))
+				r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "print_sint16")), arg))
 			case typ.Kind == types.Int || typ.Kind == types.Bool:
 				r.stmts = append(r.stmts, ccall(cv(printInt16), arg))
 			default:
@@ -138,7 +137,7 @@ func registerBuiltins(p *Program) {
 			// 値のバイトは同じ (書き換えを集めるときに、展開で作った位置の無い式を報告しないため)
 			arg = &cexpr{kind: cCast, args: []*cexpr{arg}, ty: h.prog.Types.IntType(1, true), ck: syntax.CastAs}
 		}
-		return macroResult{expr: ccall(cv(h.moduleFunc(h.prog.iface(m), "math", "sin")), arg)}
+		return macroResult{expr: ccall(cv(h.moduleFunc(h.prog.iface(m), "sin")), arg)}
 	})
 
 	registerSliceBuiltins(h)
@@ -168,7 +167,7 @@ func registerBuiltins(p *Program) {
 			panic(&diag.Error{Msg: "textmap takes 1 or 2 arguments (path of the character table, and optionally a .po file)"})
 		}
 		table := mustString(args[0])
-		conv := NewTextConverter(string(bytes.ReplaceAll(h.readFile(table), []byte("\r\n"), []byte("\n"))))
+		conv := NewTextConverter(string(normalizeSource(h.readFile(table))))
 		var cat *poCatalog
 		if len(args) == 2 {
 			if po := mustString(args[1]); po != "" {
@@ -319,13 +318,13 @@ func (h *Hlc) nullFn(t *types.Type) *ir.Value {
 
 // moduleFunc は組み込みが呼ぶモジュールの関数 name を引く。無ければエラー (ソースのディレクトリに同じ名前のモジュール
 // (stdio.fc など) があると fclib のものが隠れ、nil のまま呼んで panic していた。survey 2026-09-27)。
-func (h *Hlc) moduleFunc(m *ModuleInterface, mod, name string) *ir.Value {
+func (h *Hlc) moduleFunc(m *ModuleInterface, name string) *ir.Value {
 	var v *ir.Value
 	if sym := m.LookupInternal(name); sym != nil {
 		v = sym.Val
 	}
 	if v == nil {
-		panic(&diag.Error{Msg: fmt.Sprintf("module %s has no %s (needed by a builtin); is a %s.fc in your source directory hiding fclib's %s?", mod, name, mod, mod)})
+		panic(&diag.Error{Msg: fmt.Sprintf("module %s has no %s (needed by a builtin); is a %s.fc in your source directory hiding fclib's %s?", m.Id, name, m.Id, m.Id)})
 	}
 	return v
 }
@@ -333,12 +332,12 @@ func (h *Hlc) moduleFunc(m *ModuleInterface, mod, name string) *ir.Value {
 // runTestsV3 は fc 3 までの @run_tests: stdio.init の後、スコープの test_* の関数を宣言の順に「名前:」を出して呼び、stdio.exit(0)。
 func runTestsV3(h *Hlc) macroResult {
 	stdio := h.stdioModule("unittest_run_tests")
-	print := h.moduleFunc(stdio, "stdio", "print")
-	exit := h.moduleFunc(stdio, "stdio", "exit")
-	init := h.moduleFunc(stdio, "stdio", "init")
+	print := h.moduleFunc(stdio, "print")
+	exit := h.moduleFunc(stdio, "exit")
+	init := h.moduleFunc(stdio, "init")
 	r := macroResult{stmts: []*cexpr{ccall(cv(init))}}
 	for _, id := range h.scope.IdList() {
-		if len(id) >= 5 && id[:5] == "test_" {
+		if strings.HasPrefix(id, "test_") {
 			r.stmts = append(r.stmts,
 				ccall(cv(print), h.cstrZ(fmt.Sprintf("%s:", id))),
 				ccall(cident(id)),

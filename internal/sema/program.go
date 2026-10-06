@@ -77,11 +77,10 @@ type Program struct {
 	// buildConsts は @(build) の const (@if の条件に使える。値はビルドの設定で上書きできる。以前は ir.Value.Build)
 	buildConsts map[*ir.Value]bool
 	poCatalogs  map[string]*poCatalog // 読んだ .po (実パス → 訳の表。textmap の翻訳。po.go)
-	curModule   string                // 名前解決を行っている (= 参照元の) モジュール id (Trace 用)
 	// Defines は @(build) の const の上書き ("module.NAME" → 値と出所。fc.toml の [define.<module>] と CLI の -D。staticif.go)
 	Defines map[string]*DefineUse
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
-	// (driver/layout.go。Agent/discussions/2026-09-20-v3-plan.md §3)
+	// (project/layout.go。Agent/discussions/2026-09-20-v3-plan.md §3)
 	Banks map[string]BankRef
 	// Config は調査用の設定 (パスの入れ切り・トレース。ir/config.go)。driver が BuildOptions から渡し、各モジュールに写す
 	Config *ir.Config
@@ -191,11 +190,6 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 	p.scopes[mod] = scope
 	p.Modules.Add(mod)
 
-	// use で別モジュールの相 1 にネストして入るので、参照元モジュールを保存・復帰する
-	outer := p.curModule
-	p.curModule = id
-	defer func() { p.curModule = outer }()
-
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: p.scopes[mod]}
 	defer h.recoverTo(&err)
 	p.collectDepth++
@@ -222,9 +216,6 @@ func (p *Program) CompileModule(file *syntax.File, deps Resolver) (mod *ir.Modul
 
 // CompileBodies はモジュールの全関数本体をコンパイルする (相 2)。
 func (p *Program) CompileBodies(mod *ir.Module, deps Resolver) (err error) {
-	outer := p.curModule
-	p.curModule = mod.Id
-	defer func() { p.curModule = outer }()
 	h := &Hlc{prog: p, deps: deps, module: mod, scope: p.scopes[mod]}
 	defer h.recoverTo(&err)
 	// コンパイル中にネストしたlambdaが追加されることがあるため index ループ

@@ -53,10 +53,7 @@ func (d *functionDefaults) resolve() {
 	h := *d.owner
 	h.curPos = d.lambda.Pos
 	h.scope = NewScope(h.scope)
-	outer := h.prog.curModule
-	h.prog.curModule = h.module.Id
 	defer func() {
-		h.prog.curModule = outer
 		if r := recover(); r != nil {
 			d.state = resolutionFailed
 			if e, ok := r.(*diag.Error); ok && !e.Pos.IsValid() {

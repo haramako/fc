@@ -196,7 +196,7 @@ func (k Kind) String() string {
 }
 
 // IsKeyword はキーワードかを返す。
-func (k Kind) IsKeyword() bool { return k >= KwInclude && k <= KwNull }
+func (k Kind) IsKeyword() bool { return k >= KwInclude && k <= KwInterface }
 
 // Token は 1 トークン。Pos は先頭、End は末尾の次の位置。
 type Token struct {

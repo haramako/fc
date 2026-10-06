@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -183,7 +184,7 @@ func (h *Hlc) declareBuildString(name, s string, publicPos syntax.Pos) *ir.Value
 	v.Name = name
 	h.addVar(v)
 	h.prog.buildStrings[v] = s
-	if h.scopeIsPublic(publicPos) {
+	if publicPos.IsValid() {
 		h.setPublic(v, true)
 	}
 	return v
@@ -229,8 +230,7 @@ func (p *Program) CheckDefines(exists func(module string) bool) error {
 			continue
 		}
 		mod, name := splitDefine(k)
-		if m, ok := p.Modules.Get(mod); ok {
-			_ = m
+		if _, ok := p.Modules.Get(mod); ok {
 			return &diag.Error{Msg: fmt.Sprintf("%s = %s (%s): %s has no @(build) const %s", k, d.Value, d.Source, mod, name)}
 		}
 		if !exists(mod) {
@@ -242,10 +242,6 @@ func (p *Program) CheckDefines(exists func(module string) bool) error {
 }
 
 func splitDefine(k string) (mod, name string) {
-	for i := len(k) - 1; i >= 0; i-- {
-		if k[i] == '.' {
-			return k[:i], k[i+1:]
-		}
-	}
-	return "", k
+	i := strings.LastIndexByte(k, '.')
+	return k[:max(i, 0)], k[i+1:]
 }

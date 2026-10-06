@@ -248,7 +248,7 @@ func toC0(e syntax.Expr) *cexpr {
 		lhs := toC(e.Lhs)
 		if op, ok := compoundOps[e.Op]; ok {
 			// 複合代入の脱糖 (load X (op X rhs))。X は同一ノードを共有する (定数評価は cmemo で 1 回。
-			// 実行時の評価は 2 回になるので、X に呼び出しがあれば hlc.go の opLoad で先に評価する)
+			// 実行時の評価は 2 回になるので、X に呼び出しがあれば lval の opLoad (expr.go) で先に評価する)
 			inner := cop2(op, lhs, toC(e.Rhs))
 			inner.compound = e
 			return cop2(opLoad, lhs, inner)
@@ -321,8 +321,6 @@ func toC0(e syntax.Expr) *cexpr {
 	panic("toC: unknown expression")
 }
 
-// parseOptions は options(...) を生の値のまま ir.Options にする (重複キーは後勝ち・位置維持)。
-// 値は整数 / 文字列 / 識別子のいずれか。nil なら nil。
 // checkBareOption は値を省いた属性 (`@(inline)`) が真偽値の属性か検査する (bank / address などは値が要る)。
 func checkBareOption(e *syntax.OptionEntry) {
 	if e.Bare && !ir.FlagOptions[e.Key.Name] {
@@ -330,6 +328,8 @@ func checkBareOption(e *syntax.OptionEntry) {
 	}
 }
 
+// parseOptions は options(...) を生の値のまま ir.Options にする (重複キーは後勝ち・位置維持)。
+// 値は整数 / 文字列 / 識別子のいずれか。nil なら nil。
 func parseOptions(o *syntax.Options) ir.Options {
 	if o == nil {
 		return nil

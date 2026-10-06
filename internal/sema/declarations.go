@@ -75,11 +75,8 @@ func (d *declaration) resolve() {
 	d.state = resolutionActive
 	h := &Hlc{prog: p, deps: d.owner.h.deps, module: d.owner.h.module, scope: d.owner.h.scope, inStaticIf: d.inStatic}
 	h.updatePos(d.stmt)
-	outer := p.curModule
-	p.curModule = h.module.Id
 	p.resolving = append(p.resolving, d)
 	defer func() {
-		p.curModule = outer
 		p.resolving = p.resolving[:len(p.resolving)-1]
 		if d.name != "" {
 			defer h.scope.Complete(d.name)
@@ -325,9 +322,6 @@ func (h *Hlc) soaElement(t *types.Type) *types.Type {
 	s := d.stmt.(*syntax.SoaDecl)
 	owner := &Hlc{prog: h.prog, deps: d.owner.h.deps, module: d.owner.h.module, scope: d.owner.h.scope}
 	owner.updatePos(s)
-	outer := h.prog.curModule
-	h.prog.curModule = owner.module.Id
-	defer func() { h.prog.curModule = outer }()
 	at, ok := s.Type.(*syntax.ArrayType)
 	if ok && at.Len != nil {
 		if nt, ok := at.Elem.(*syntax.NamedType); ok {

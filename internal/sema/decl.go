@@ -60,11 +60,6 @@ func (h *Hlc) mustInModule() {
 	}
 }
 
-// scopeIsPublic は宣言の可視性 (`public` が付いていれば公開。既定は private)。
-func (h *Hlc) scopeIsPublic(publicPos syntax.Pos) bool {
-	return publicPos.IsValid()
-}
-
 // optionValueOf は定数評価済みの値を options の値にする (整数 / 文字列 / シンボル)。
 func optionValueOf(v *ir.Value) ir.OptionValue {
 	switch {
@@ -183,13 +178,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			symbol = h.addDef(name, &ir.Def{Kind: ir.DefEqu, Type: typ, Equ: ir.NewIntLiteral("", typ, addr.Int),
 				AddressVar: h.module.Id + "." + name, Pos: h.curPos})
 		} else {
-			seg := h.groupBss
-			if sv, ok := opt.Get("segment"); ok {
-				seg = sv.Text()
-				if seg == "" {
-					seg = "BSS"
-				} // explicit legacy default overrides inherited bss
-			}
+			seg := h.segmentOf(opt)
 			d := &ir.Def{Kind: ir.DefBss, Type: typ, Segment: seg, Init: ginit}
 			bss = d
 			if sym, ok := symbolOption(opt); ok {
@@ -208,7 +197,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		vv.Volatile = opt.Has("address") || opt.Flag("volatile") // I/O レジスタは読むたび / 書くたびに意味がある
 		// fc 4: private で既定の BSS の変数は、出力するコードから参照されなければ領域を取らない (pipeline.markUnusedGlobals)。
 		// 置き場所を指定した変数 (@(segment:) / @(bss:)) は並びを当てにしている (整列の詰め物など) かもしれないので残す
-		if bss != nil && bss.Segment == "" && h.v4() && !opt.Has("symbol") && !h.scopeIsPublic(publicPos) {
+		if bss != nil && bss.Segment == "" && h.v4() && !opt.Has("symbol") && !publicPos.IsValid() {
 			bss.Droppable = true
 		}
 	} else {
@@ -216,7 +205,7 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 		vv = h.addVar(ir.NewLocal(name, st, ir.LTNone))
 		vv.ReadOnly = ro || inferRO
 	}
-	if h.scopeIsPublic(publicPos) {
+	if publicPos.IsValid() {
 		h.setPublic(vv, true)
 	}
 	if init != nil {
@@ -263,11 +252,11 @@ func (h *Hlc) globalInit(name string, sp *syntax.VarSpec, typ *types.Type, opt i
 	if h.prog.storageAliases[cv.val] != nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("the initial value of global variable %s must be a constant", name)})
 	}
-	if t := typ; t == nil {
-		cv = h.namedConstValue(cv, cv.val.Type)
-	} else {
-		cv = h.namedConstValue(cv, t)
+	want := typ
+	if want == nil {
+		want = cv.val.Type
 	}
+	cv = h.namedConstValue(cv, want)
 	v := h.fitArrayLiteral(h.padArrayLiteral(name, cv.val, typ), typ)
 	if v.Kind == ir.KindArrayLiteral && typ != nil && typ.Kind == types.Array && typ.Base.Kind == types.Pointer {
 		v = h.pointerElems(name, v, typ.Base) // `var ps:[2]*u8 = ["ab", &g];` (const の表と同じ)
@@ -340,7 +329,7 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 			if m.textmap != nil && m.name == "" {
 				m.name = name // 警告に出す変換器の名前
 			}
-			h.scope.DeclareSym(&Symbol{Name: name, Macro: m, public: h.scopeIsPublic(publicPos)})
+			h.scope.DeclareSym(&Symbol{Name: name, Macro: m, public: publicPos.IsValid()})
 			return
 		}
 		if declType == nil || declType.Kind == types.Pointer {
@@ -425,7 +414,7 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 			panic(&diag.Error{Msg: fmt.Sprintf("cannot define const without value %s (a const defined in assembler needs options(symbol: \"...\"))", name)})
 		}
 	}
-	if h.scopeIsPublic(publicPos) {
+	if publicPos.IsValid() {
 		h.setPublic(newVal, true)
 	}
 }
@@ -448,7 +437,7 @@ func symbolOption(opt ir.Options) (string, bool) {
 	return sym, true
 }
 
-// compileStructDecl は `struct Name { f:T; ... }`。型名を Value (Kind == TypeName, TypeRef) としてスコープに束縛する。
+// compileStructDecl は `struct Name { f:T; ... }`。型名を Symbol (Type が struct の型) としてスコープに束縛する。
 // 名前は先に束縛するので、フィールドから `*Name` で自己参照できる (値としての自己参照は checkComplete が弾く)。
 func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 	h.mustInModule()
@@ -457,10 +446,8 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 	if st.Size >= 0 {
 		panic(&diag.Error{Msg: fmt.Sprintf("struct %s already defined", name)})
 	}
-	if h.prog.typeDecls[st] != nil {
-		// The identity was registered (declared) during collection.
-	} else {
-		h.scope.DeclareSym(&Symbol{Name: name, Type: st, public: h.scopeIsPublic(s.PublicPos)})
+	if h.prog.typeDecls[st] == nil { // 宣言を集めるときに束縛していなければ (集めた宣言は collectOne が束縛済み)
+		h.scope.DeclareSym(&Symbol{Name: name, Type: st, public: s.PublicPos.IsValid()})
 	}
 	if s.Iface != nil {
 		h.compileImplDecl(s, st) // interface の実装 (iface.go)
@@ -474,11 +461,7 @@ func (h *Hlc) compileStructDecl(s *syntax.StructDecl) {
 				panic(&diag.Error{Msg: fmt.Sprintf("field %s already defined in struct %s", fname, name)})
 			}
 		}
-		ft := h.typeEval(f.Type)
-		h.checkComplete(ft, "field "+fname)
-		if ft.Size < 0 {
-			panic(&diag.Error{Msg: fmt.Sprintf("field %s: array field must have a length", fname)})
-		}
+		ft := h.fieldType(f.Type, fname)
 		fields = append(fields, types.Field{Name: fname, Type: ft})
 	}
 	h.prog.Types.SetFields(st, fields)
@@ -497,4 +480,25 @@ func (h *Hlc) verifyNoConv(name string, init ir.Operand, typ *types.Type) {
 	if convRule(vt, k, isConst, typ) != convOK {
 		panic(&diag.Error{Msg: fmt.Sprintf("internal: `%s`: the inferred type %s does not hold the initial value of %s (sema/decl.go)", name, typ, vt)})
 	}
+}
+
+// fieldType は struct・interface のフィールド name の型 (値として置ける完成した型。長さを省いた配列は不可)。
+func (h *Hlc) fieldType(te syntax.TypeExpr, name string) *types.Type {
+	ft := h.typeEval(te)
+	h.checkComplete(ft, "field "+name)
+	if ft.Size < 0 {
+		panic(&diag.Error{Msg: fmt.Sprintf("field %s: array field must have a length", name)})
+	}
+	return ft
+}
+
+// segmentOf は変数・soa を置くセグメント (@(segment: ...)。無ければ置き場所のブロックの bss。"" と書けば既定の BSS)。
+func (h *Hlc) segmentOf(opt ir.Options) string {
+	if sv, ok := opt.Get("segment"); ok {
+		if seg := sv.Text(); seg != "" {
+			return seg
+		}
+		return "BSS" // explicit legacy default overrides inherited bss
+	}
+	return h.groupBss
 }

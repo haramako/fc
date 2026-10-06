@@ -159,7 +159,7 @@ func (h *Hlc) setCodes(a *fmtArgs) {
 		h.prog.fmtCodes[key] = sym
 	}
 	fi := h.builtinModule("fmt")
-	codes := h.moduleFunc(fi, "fmt", "codes")
+	codes := h.moduleFunc(fi, "codes")
 	h.emit(&ir.Op{Code: ir.OpLoad, Dst: codes, Src: []ir.Operand{ir.NewSymbolLiteral("", ir.ValType(codes), sym)}})
 }
 
@@ -195,39 +195,6 @@ func (a *fmtArgs) constText(p ir.LogPart) (string, bool) {
 	return "", false
 }
 
-// maxLen は p を書いたときの長さの最大 (printf の一時バッファの大きさ)。
-func (a *fmtArgs) maxLen(p ir.LogPart) int {
-	if s, ok := a.constText(p); ok {
-		return len(s)
-	}
-	t := ir.ValType(a.vals[p.Arg])
-	switch {
-	case t.Kind == types.Array:
-		return t.Length
-	case t.Kind == types.Bool && p.Spec.Verb == 0:
-		return 5
-	case p.Spec.Verb == 'c':
-		return 1
-	}
-	size := t.Size
-	if t.Kind == types.Bool {
-		size = 1
-	}
-	var n int
-	switch p.Spec.Verb {
-	case 'x', 'X':
-		n = 2 * size
-	case 'b':
-		n = 8 * size
-	default:
-		n = [2]int{3, 5}[size-1]
-		if t.Signed {
-			n++
-		}
-	}
-	return max(n, p.Spec.Width)
-}
-
 // fmtEmit は parts を書き先 dst (長さが u8 の slice の値) に書く呼び出しを出し、書いた長さ (一時変数) を返す。
 func (h *Hlc) fmtEmit(a *fmtArgs, parts []ir.LogPart, dst *ir.Value, try bool) *ir.Value {
 	fi := h.builtinModule("fmt")
@@ -235,22 +202,22 @@ func (h *Hlc) fmtEmit(a *fmtArgs, parts []ir.LogPart, dst *ir.Value, try bool) *
 	if try {
 		begin = "begin_try" // 足りなくても止まらない
 	}
-	h.lval(ccall(cv(h.moduleFunc(fi, "fmt", begin)), cv(dst)))
+	h.lval(ccall(cv(h.moduleFunc(fi, begin)), cv(dst)))
 	h.setCodes(a)
 	h.fmtEmitParts(a, parts)
 	n := h.newTmp(h.prog.Types.IntType(1, false)) // 書いた長さ (今の fmt.at。後の書き込みが変える前に写す)
 	if try {
-		h.emit(&ir.Op{Code: ir.OpLoad, Dst: n, Src: []ir.Operand{h.rval(ccall(cv(h.moduleFunc(fi, "fmt", "end_try"))))}}) // 足りなければ 0
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: n, Src: []ir.Operand{h.rval(ccall(cv(h.moduleFunc(fi, "end_try"))))}}) // 足りなければ 0
 		return n
 	}
-	h.emit(&ir.Op{Code: ir.OpLoad, Dst: n, Src: []ir.Operand{h.moduleFunc(fi, "fmt", "at")}})
+	h.emit(&ir.Op{Code: ir.OpLoad, Dst: n, Src: []ir.Operand{h.moduleFunc(fi, "at")}})
 	return n
 }
 
 // fmtEmitParts は parts を fmt の今の書き先に書く呼び出しを出す (begin の後)。
 func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 	fi := h.builtinModule("fmt")
-	fn := func(name string) *cexpr { return cv(h.moduleFunc(fi, "fmt", name)) }
+	fn := func(name string) *cexpr { return cv(h.moduleFunc(fi, name)) }
 	call := func(name string, args ...*cexpr) { h.lval(ccall(fn(name), args...)) }
 	var text strings.Builder
 	flush := func() {
@@ -356,7 +323,7 @@ func (h *Hlc) printf4(args []*cexpr) {
 	ci := h.builtinModule("console")
 	a := h.fmtPrepare(what, args[0], args[1:])
 	u8 := h.prog.Types.IntType(1, false)
-	write := func(name string, v *cexpr) { h.lval(ccall(cv(h.moduleFunc(ci, "console", name)), v)) }
+	write := func(name string, v *cexpr) { h.lval(ccall(cv(h.moduleFunc(ci, name)), v)) }
 	// 出力の順に部分ごとに console へ流す (printf ごとに一時バッファを取ると、printf の多い関数の静的フレームが 256 バイトを
 	// 超えた)。文字の部分・定数はまとめて write_z (0 を含めば write)、文字列の引数は write / write_z / write_z_in、数などは
 	// fmt の printf 用のバッファに書いて出す (fmt.begin_print(); fmt.dec_u8(x, spec); fmt.print()。呼び出し側で書き先の slice を
@@ -373,7 +340,7 @@ func (h *Hlc) printf4(args []*cexpr) {
 		}
 	}
 	fi := h.builtinModule("fmt")
-	fmtCall := func(name string) { h.lval(ccall(cv(h.moduleFunc(fi, "fmt", name)))) }
+	fmtCall := func(name string) { h.lval(ccall(cv(h.moduleFunc(fi, name)))) }
 	for _, p := range a.parts {
 		if s, ok := a.constText(p); ok {
 			text.WriteString(s)

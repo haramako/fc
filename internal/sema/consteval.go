@@ -157,13 +157,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(typ, len(vals)), vals))
 
 	case cIncbin:
-		data := h.readFile(c.s)
-		// unpack('C*') は符号なしバイト
-		elems := make([]*cexpr, len(data))
-		for i, b := range data {
-			elems[i] = cint(int(b))
-		}
-		return h.constEval(carray(elems))
+		return h.byteArray(h.readFile(c.s)) // 符号なしバイト
 
 	case cLambda:
 		lam := c.lam
@@ -245,15 +239,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				h.checkCast(c.ck, x.val.Type, ty)
 			}
 			n := x.val.Int
-			if (ty.Kind == types.Int || ty.Kind == types.Bool) && ty.Size > 0 && ty.Size < 8 {
+			if ty.Kind == types.Int || ty.Kind == types.Bool {
 				// 数値変換・ビットの読み替え: 型の幅に切り詰めて、その符号で読む (`(300 as int) as int16` は 44、
 				// `@bitcast(i8, 254 as u8)` は -2。畳まない変数の cast と同じ。
 				// 以前は値をそのまま型だけ貼り替えていて、広げ直すと 300 のままだった)
-				bits := 8 * ty.Size
-				n = ir.FloorMod(n, 1<<bits)
-				if ty.Signed && n >= 1<<(bits-1) {
-					n -= 1 << bits
-				}
+				n = wrapInt(n, ty)
 			}
 			return cv(ir.NewIntLiteral("", ty, n))
 		}

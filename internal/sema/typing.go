@@ -82,10 +82,7 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 		if v.Type == nil || v.Type.Kind == types.Bad || v.Type.Kind == types.Void {
 			return exprInfo{}, false
 		}
-		if v.Kind == ir.KindLiteral && v.IsInt && v.Untyped {
-			return exprInfo{t: v.Type, untyped: true, n: v.Int, name: v.Name}, true
-		}
-		return exprInfo{t: v.Type}, true // ストレージの別名も宣言の型 (lval は元の場所をその型で読む)、soa は入れ物の型
+		return valueInfo(v), true // ストレージの別名も宣言の型 (lval は元の場所をその型で読む)、soa は入れ物の型
 	case cCast:
 		ty := e.ty
 		if ty == nil {
@@ -108,10 +105,7 @@ func (h *Hlc) exprType0(c *cexpr) (exprInfo, bool) {
 		return h.opType(e)
 	case cOperand:
 		// 先に評価した値 (evalOnce・wrapExpr が型を決められない項を評価したもの)
-		if v, ok := e.opnd.(*ir.Value); ok && v.Kind == ir.KindLiteral && v.IsInt && v.Untyped {
-			return exprInfo{t: v.Type, untyped: true, n: v.Int, name: v.Name}, true
-		}
-		return exprInfo{t: ir.ValType(e.opnd)}, e.opnd != nil
+		return valueInfo(e.opnd), e.opnd != nil
 	}
 	return exprInfo{}, false
 }
@@ -302,7 +296,7 @@ func (h *Hlc) minMaxType(op cop, args []*cexpr) (exprInfo, bool) {
 	return exprInfo{t: t}, true
 }
 
-// macroTyping は型を決める段がマクロの呼び出しの型を知る方法 (Program.macroTypes。登録の無いマクロは分からない)。
+// macroTyping は型を決める段がマクロの呼び出しの型を知る方法 (macroDef.typing。登録の無いマクロは分からない)。
 //   - pure: 展開が IR を出さない (min / max / clamp・cos・textmap の変換器)。型を決める段が展開して (expandMacro) その式の
 //     型を使い、lval も同じ展開を使う
 //   - typ: 展開しないで引数の型から結果の型を決める (IR を出すマクロ。値を返さないマクロは Void)

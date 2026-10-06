@@ -292,15 +292,6 @@ func (h *Hlc) widened(c *cexpr, v ir.Operand) bool {
 	return ok && !info.untyped && info.t.Kind == types.Int && vt.Kind == types.Int && vt.Size > info.t.Size
 }
 
-// narrowView は A1 で広い幅で計算した式 c の値 v を、広げる前の型として見たもの (検査用。広げていなければ v)。
-func (h *Hlc) narrowView(c *cexpr, v ir.Operand) ir.Operand {
-	if !h.widened(c, v) {
-		return v
-	}
-	info, _ := h.exprType(c)
-	return ir.NewCastedValue(v, info.t, 0)
-}
-
 // preArrayBase は型を書かない実行時の配列リテラルの要素の型を、要素を評価する前に決める (runtimeArray と同じ規則: 要素の型の
 // 互換型を、定数の要素が入る型に (F4))。決められなければ nil。
 func (h *Hlc) preArrayBase(args []*cexpr) *types.Type {
