@@ -30,7 +30,7 @@ fcc run src.fc              # ビルドして内蔵6502エミュレータで実�
 fcc compile src.fc          # コンパイルのみ
 fcc fmt -w src.fc           # ソースを整形 (-l: 変わるファイルを列挙, -d: 差分表示)
 fcc doc vram                # 標準ライブラリのモジュールの説明 (fcc doc だけなら一覧)
-source <(fcc completion zsh)  # シェルの補完 (zsh / bash)
+source <(fcc completion zsh)  # シェルの補完 (zsh / bash / fish)
 ```
 
 オプション（GNU の getopt の形。長い名前は `--offline` のように `-` を 2 つ。ソースの後ろにも書ける。全部は `fcc build --help`）:

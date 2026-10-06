@@ -1,6 +1,6 @@
 package main
 
-// fcc completion: シェルの補完。`fcc completion zsh|bash` が出すスクリプトは、補完のたびに `fcc __complete 語...` を呼び、
+// fcc completion: シェルの補完。`fcc completion zsh|bash|fish` が出すスクリプトは、補完のたびに `fcc __complete 語...` を呼び、
 // fcc が kong のコマンドの木 (cli の構造体) から候補を返す (コマンドやオプションを足してもスクリプトは書き直さなくてよい)。
 //
 // __complete の出力は 1 行 1 候補の `語<TAB>説明`、または次の指示:
@@ -20,20 +20,24 @@ import (
 )
 
 type completionCmd struct {
-	Shell string `arg:"" enum:"zsh,bash" help:"The shell (zsh / bash)."`
+	Shell string `arg:"" enum:"zsh,bash,fish" help:"The shell (zsh / bash / fish)."`
 }
 
 func (c *completionCmd) Help() string {
 	return `Prints a completion script. To enable it:
   zsh:  fcc completion zsh > "${fpath[1]}/_fcc"   (or add 'source <(fcc completion zsh)' to ~/.zshrc after compinit)
-  bash: add 'source <(fcc completion bash)' to ~/.bashrc`
+  bash: add 'source <(fcc completion bash)' to ~/.bashrc
+  fish: fcc completion fish > ~/.config/fish/completions/fcc.fish`
 }
 
 func (c *completionCmd) run() int {
-	if c.Shell == "zsh" {
+	switch c.Shell {
+	case "zsh":
 		fmt.Print(zshCompletion)
-	} else {
+	case "bash":
 		fmt.Print(bashCompletion)
+	case "fish":
+		fmt.Print(fishCompletion)
 	}
 	return 0
 }
@@ -79,6 +83,34 @@ _fcc() {
   done
 }
 complete -o filenames -F _fcc fcc
+`
+
+// fish の 4 は commandline -o を -x に改めた (3 は -x が無い)。GLOB のファイルは、__fish_complete_path の候補からディレクトリと
+// 合うものだけ残す (__fish_complete_suffix はほかのファイルも並べる)。
+const fishCompletion = `# fcc の補完 (fcc completion fish が出す)。候補は fcc __complete が返す。
+function __fcc_complete
+    set -l words (commandline -xpc 2>/dev/null; or commandline -opc)
+    set -a words (commandline -ct)
+    for line in (command $words[1] __complete $words[2..-1] 2>/dev/null)
+        switch $line
+            case ':files *'
+                set -l glob (string replace ':files ' '' -- $line)
+                for f in (__fish_complete_path (commandline -ct))
+                    set -l name (string split -f1 \t -- $f)
+                    if string match -q -- '*/' $name; or string match -q -- $glob $name
+                        echo $f
+                    end
+                end
+            case ':files'
+                __fish_complete_path (commandline -ct)
+            case ':dirs'
+                __fish_complete_directories (commandline -ct)
+            case '*'
+                echo $line
+        end
+    end
+end
+complete -c fcc -f -a '(__fcc_complete)'
 `
 
 // printCompletions は fcc __complete の出力。

@@ -319,7 +319,7 @@ func TestCLICompletion(t *testing.T) {
 		{[]string{"lib", "list", "--"}, []string{"--directory\t"}, ""},
 		{[]string{"lib", "add", "x", ""}, []string{":dirs"}, ""},
 		{[]string{"size", "--cfg", ""}, []string{":files *.cfg"}, ""},
-		{[]string{"completion", ""}, []string{"zsh\t", "bash\t"}, ""},
+		{[]string{"completion", ""}, []string{"zsh\t", "bash\t", "fish\t"}, ""},
 	} {
 		code, out, _ := runCLI(t, append([]string{"__complete"}, tc.args...)...)
 		rest := out
@@ -335,7 +335,7 @@ func TestCLICompletion(t *testing.T) {
 			t.Errorf("%q: code=%d out=%q", tc.args, code, out)
 		}
 	}
-	for _, sh := range []string{"zsh", "bash"} {
+	for _, sh := range []string{"zsh", "bash", "fish"} {
 		if code, out, _ := runCLI(t, "completion", sh); code != 0 || !strings.Contains(out, "__complete") {
 			t.Errorf("completion %s: code=%d out=%q", sh, code, out)
 		}

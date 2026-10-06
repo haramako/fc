@@ -34,7 +34,7 @@ type cli struct {
 	Size       sizeCmd       `cmd:"" help:"Show code size per segment and function from an ld65 --dbgfile."`
 	Migrate    migrateCmd    `cmd:"" help:"Rewrite older sources as the latest fc."`
 	VersionCmd versionCmd    `cmd:"" name:"version" help:"Show version and the ca65 / ld65 in use."`
-	Completion completionCmd `cmd:"" help:"Print a shell completion script (zsh / bash)."`
+	Completion completionCmd `cmd:"" help:"Print a shell completion script (zsh / bash / fish)."`
 }
 
 // runner は選ばれたコマンド。終了コードを返す (run / build のプログラムの終了コードもそのまま)。

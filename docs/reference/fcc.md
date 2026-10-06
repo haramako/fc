@@ -29,7 +29,7 @@ fcc <コマンド> [オプション] <ファイル> ...
 | `watch` | ソースが変わるたびにビルドし直す |
 | `size` | ld65 のデバッグ情報から関数ごとの大きさを出す |
 | `migrate` | 古い版のソースを今の fc に書き換える |
-| `completion` | シェル（zsh / bash）の補完のスクリプトを出す |
+| `completion` | シェル（zsh / bash / fish）の補完のスクリプトを出す |
 | `version` | 版と、使う `ca65` / `ld65` の場所を出す（`fcc -v` / `fcc --version` も同じ） |
 
 ## build / run / compile
@@ -126,6 +126,7 @@ ld65 の `--dbgfile` が書いたデバッグ情報から、セグメントご�
 ```bash
 fcc completion zsh > "${fpath[1]}/_fcc"     # zsh (または ~/.zshrc の compinit の後に source <(fcc completion zsh))
 source <(fcc completion bash)                # bash (~/.bashrc に書く)
+fcc completion fish > ~/.config/fish/completions/fcc.fish   # fish
 ```
 
 コマンド・オプション・オプションの値（`-t` の nes / emu など）・ファイル（ソースは `.fc`、`size` は `.dbg`）を補完する。
