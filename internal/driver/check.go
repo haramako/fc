@@ -44,15 +44,11 @@ type CheckOptions struct {
 // Check は filename から始まるプログラムを意味解析・コード生成まで通し (ファイルは書かない)、
 // 警告を返す。エラーがあれば error (*diag.Error)。
 func (c *Compiler) Check(filename string, opt *CheckOptions) ([]diag.Warning, error) {
-	target := opt.Target
-	if target == "" {
-		target = defaultTarget(opt.Dir)
-	}
 	cfg := opt.Config
 	if cfg == nil {
 		cfg = ir.ConfigFromEnv()
 	}
-	prog, err := c.newCompilation(nil, opt.Dir, target).compileNoWrite(filename, opt.Defines, cfg)
+	prog, err := c.newCompilation(nil, opt.Dir, opt.Target).compileNoWrite(filename, opt.Defines, cfg)
 	if err != nil {
 		return nil, err
 	}

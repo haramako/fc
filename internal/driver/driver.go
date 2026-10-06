@@ -148,10 +148,13 @@ type compilation struct {
 	macroScripts []*starmacro.Script
 }
 
-// newCompilation はビルドの状態を作る。dir は "" なら作業ディレクトリ。
+// newCompilation はビルドの状態を作る。driver の入口 (BuildContext・Check・Migrate) はみなここを通るので、ソースの基準
+// ディレクトリ dir ("" なら作業ディレクトリ) はここで 1 度だけ正規の形 ("." など。相対のまま: 生成物に埋め込むファイルの参照と
+// エラーの位置は基準からの相対で出す) にし、以降は c.dir だけを使う。target は "" なら既定 (defaultTarget)。
 func (c *Compiler) newCompilation(ctx context.Context, dir, target string) *compilation {
-	if dir == "" {
-		dir = "."
+	dir = filepath.Clean(dir) // "" → "."
+	if target == "" {
+		target = defaultTarget(dir)
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -188,9 +191,6 @@ func (c *Compiler) Build(filename string, opt *BuildOptions) (int, error) {
 // BuildContext はソースをビルドし、生成物の情報を返す。ctx のキャンセルは外部コマンド (ca65 / ld65) に伝わる。
 // エラーは *diag.Error (コンパイルエラー) または *CommandError (外部コマンドの失敗)。
 func (c *Compiler) BuildContext(ctx context.Context, filename string, opt *BuildOptions) (*Result, error) {
-	if opt.Target == "" {
-		opt.Target = defaultTarget(opt.Dir)
-	}
 	return c.newCompilation(ctx, opt.Dir, opt.Target).build(filename, opt)
 }
 
@@ -209,11 +209,11 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 			panic(r)
 		}
 	}()
-	if opt.Target == "x6502" {
+	if c.target == "x6502" {
 		return nil, &diag.Error{Msg: "target x6502 is not supported by go port"}
 	}
 	if opt.Out == "" {
-		if opt.Target == "nes" {
+		if c.target == "nes" {
 			opt.Out = "a.nes"
 		} else {
 			opt.Out = "a.bin"
@@ -264,7 +264,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		return nil, derr
 	}
 	front, ferr := c.compileFront(&frontOptions{
-		Dir: opt.Dir, Target: opt.Target, Main: filename, Defines: defs, OptimizeLevel: opt.OptimizeLevel,
+		Dir: c.dir, Target: c.target, Main: filename, Defines: defs, OptimizeLevel: opt.OptimizeLevel,
 		Debug: opt.Debug, LogEveryStatement: opt.LogEveryStatement, Config: opt.Config,
 		MisclassifyResident: opt.MisclassifyResident, DebugFile: c.debugFileFunc(opt),
 	})
@@ -310,7 +310,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		}
 		sources = append(sources, filepath.Join(c.buildDir, fmt.Sprintf("_%s.s", mod.Id)))
 	}
-	sources = append(sources, c.findShare("runtime.asm"), filepath.Join(c.FCHome, "fclib", opt.Target, "runtime_init.asm"))
+	sources = append(sources, c.findShare("runtime.asm"), filepath.Join(c.FCHome, "fclib", c.target, "runtime_init.asm"))
 	if src, err := c.defaultInterrupts(prog.Modules.List()); err != nil {
 		return nil, err
 	} else if src != "" {
@@ -361,7 +361,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		}
 		if opt.Debug && len(llc.LogSites) > 0 {
 			// @log の地点 (<rom>.fclog.json / .fclog.lua)
-			if logFile, err = fclog.Build(llc.LogSites, dbg, opt.Target, llc.DebugFile); err != nil {
+			if logFile, err = fclog.Build(llc.LogSites, dbg, c.target, llc.DebugFile); err != nil {
 				return nil, err
 			}
 			if err := fclog.WriteFiles(strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)), logFile); err != nil {
@@ -369,7 +369,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 			}
 			result.Warnings = append(result.Warnings, fclog.Warnings(llc.LogSites)...)
 		}
-		if opt.Debug && opt.Target == "nes" {
+		if opt.Debug && c.target == "nes" {
 			battery := false
 			if b, err := os.ReadFile(opt.Out); err == nil && len(b) > 6 {
 				battery = b[6]&2 != 0
@@ -403,11 +403,8 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 	return result, nil
 }
 
-// defaultTarget は -t を省いたときのターゲット: fc.toml に [target] があれば nes、無ければ emu。
+// defaultTarget は -t を省いたときのターゲット: fc.toml に [target] があれば nes、無ければ emu (dir は正規化した基準ディレクトリ)。
 func defaultTarget(dir string) string {
-	if dir == "" {
-		dir = "."
-	}
 	if cfg, err := project.FindConfig(dir); err == nil && cfg.Sections["target"] != nil {
 		return "nes"
 	}
