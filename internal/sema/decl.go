@@ -90,6 +90,18 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 	if sl, ok := sp.Init.(*syntax.StructLit); ok && sl.Type == nil && typ == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: a struct literal without a type name needs the variable's type (write `var %s:T = {…}` or `var %s = T{…}`)", name, name, name)})
 	}
+	if sp.Init != nil && h.lmd != nil && typ != nil && h.prog.ifaces[typ] != nil {
+		// `var s:Shape = Circle{...}`: interface の実装の値で初期化するのは、宣言してから代入する (implAssign が ID も書く)
+		if r, ok := h.exprType(toC(sp.Init)); ok && !r.untyped {
+			if impl := h.implOf(r.t); impl != nil && impl.iface.t == typ {
+				decl := *sp
+				decl.Init = nil
+				h.compileVarSpec(&decl, publicPos)
+				h.lval(cop2(opLoad, cv(h.scope.Local(name)), toC(sp.Init)))
+				return
+			}
+		}
+	}
 	var ginit *ir.Value // モジュールの変数の初期値 (fc 4。起動のときに写す)
 	if sp.Init != nil && h.lmd == nil {
 		typ, ginit = h.globalInit(name, sp, typ, opt)

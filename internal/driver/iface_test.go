@@ -129,12 +129,14 @@ function main():void
 	p.grow(1);
 	var c:Shape = shapes[0];
 	shapes[2] = Rect{x: 1, w: 3, h: 4};
+	var d:Shape = Circle{r: 2};
+	@printf("{} ", d.area());
 	@printf("{} {} {} {} {}\n", shapes[0].area(), p.area(), shapes[2].area(), c.area(), @sizeof(Shape));
 	@printf("{} {}\n", @id_of(p) as u8, @id_of(&shapes[0]) == .Circle);
 	console.exit(0);
 }
 `})
-	want := "48 121 12 48 5\n5 true\n"
+	want := "12 48 121 12 48 5\n5 true\n"
 	if err != nil || out != want {
 		t.Errorf("got %q, %v\nwant %q", out, err, want)
 	}
