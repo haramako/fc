@@ -131,11 +131,13 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 	return out
 }
 
-// isConstExpr は e が名前・呼び出しを含まない式 (リテラルとその演算。`((37435 << 7) >> 2)` など) か。
+// isConstExpr は e が名前・呼び出しを含まない式 (リテラルとその演算と変換。`((37435 << 7) >> 2)`、`(116 << (5 as u8)) << 7` など) か。
 func isConstExpr(e syntax.Expr) bool {
 	c := true
 	syntax.Inspect(e, func(n syntax.Node) bool {
 		switch n.(type) {
+		case syntax.TypeExpr:
+			return false // `as u8` の型名は値の名前でない
 		case *syntax.Ident, *syntax.CallExpr:
 			c = false
 		}
