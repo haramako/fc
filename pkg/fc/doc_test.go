@@ -7,7 +7,7 @@ import (
 )
 
 // TestStdDocs: 標準ライブラリの fc 4 のモジュールは、どれもモジュールの説明と、public の関数ごとの説明を持つ
-// (利用者向けのサイトの docs/reference/std は fcc doc -md がこれから作る)。説明に開発者向けの Agent/ への参照を書かない。
+// (利用者向けのサイトの docs/reference/std は fcc doc --md がこれから作る)。説明に開発者向けの Agent/ への参照を書かない。
 func TestStdDocs(t *testing.T) {
 	home, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

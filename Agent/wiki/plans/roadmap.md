@@ -452,7 +452,7 @@ do-while は「やること候補（すぐではない）」。
       ✅ 2026-09-27（fix/survey2）
 - [x] u8 の `case -1:` も比較と同じくエラーにする（2026-09-27 決定。castle の debug_menu.fc の 4 か所は `case NONE:` に） ✅ 2026-09-27
 - [ ] 未判断: 不便な仕様（for-each で回せないもの、`*[N]T` の添字、`@sizeof(式)`、配列リテラルの要素の型、属性の値の検査、
-      `@log` の `?`）、NES・ツール（`fcc run` の時間の上限、ソースの後ろのオプション、`fcc check` とリンクのエラー、NES の printf の
+      `@log` の `?`）、NES・ツール（`fcc run` の時間の上限、ソースの後ろのオプション（✅ 2026-10-06: コマンドラインを kong に）、`fcc check` とリンクのエラー、NES の printf の
       16 進、textmap の const、ランタイム 1.5KB）、文書（リファレンスの fc 2 の記述、VS Code 拡張、NES の最小サンプルと fclib の API）、
       エラーメッセージ（`#fc 3` の無いファイル、範囲のエラー、`Kind(43)` など）
 

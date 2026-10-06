@@ -127,7 +127,7 @@ func AddLib(dir, name, src, rev, sub string) (path string, old []byte, existed b
 			return "", nil, false, &diag.Error{Msg: fmt.Sprintf("%s is not a folder or a git URL", src)}
 		}
 		if rev != "" || sub != "" {
-			return "", nil, false, &diag.Error{Msg: "-rev and -dir are for git libraries"}
+			return "", nil, false, &diag.Error{Msg: "--rev and --dir are for git libraries"}
 		}
 		rel, err := filepath.Rel(filepath.Dir(path), abs)
 		if err != nil {

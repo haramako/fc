@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "gen": "go run ../cmd/fcc doc -md reference/std",
+    "gen": "go run ../cmd/fcc doc --md reference/std",
     "predev": "npm run gen",
     "dev": "vitepress dev",
     "prebuild": "npm run gen",

@@ -1,5 +1,5 @@
 node_modules/
 .vitepress/cache/
 .vitepress/dist/
-# fcc doc -md が作る (npm run gen)
+# fcc doc --md が作る (npm run gen)
 reference/std/

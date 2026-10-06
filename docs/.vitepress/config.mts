@@ -10,7 +10,7 @@ const fcGrammar = JSON.parse(
   ),
 )
 
-// 標準ライブラリのページ (fcc doc -md が reference/std に作る。npm run gen) のサイドバー
+// 標準ライブラリのページ (fcc doc --md が reference/std に作る。npm run gen) のサイドバー
 function stdSidebar() {
   const dir = fileURLToPath(new URL('../reference/std/', import.meta.url))
   const pages = (sub: string) =>

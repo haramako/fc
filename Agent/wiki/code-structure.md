@@ -20,6 +20,10 @@
   生成した asm の後処理（ピープホール・レジスタの検査・分岐の延長・@log の地点）は `asm.go` の解析した行 `asmLine` の上で
   書く。ニーモニックの性質（書くレジスタ・フラグ・サイクル数）は `internal/m6502` の表 1 つ（regalloc の見積もりと共有）、
   番地の同一性は `operand.key()`（記号 + ずれ + 添字。綴りは見ない））。
+- **`cmd/fcc`**（2026-10-06 に kong に）: コマンドラインは github.com/alecthomas/kong（依存なし）で読む。コマンドは `main.go`
+  の `cli` の構造体のフィールド、オプションはタグ（共通のものは `targetFlags` / `buildFlags` / `rewriteFlags` の埋め込み）、
+  実行は選ばれた構造体の `run() int`。kong の終了 (`--help`) は panic で `run()` に戻す（テストが in-process で呼ぶ）。長い名前に
+  `-` を 1 つ付けたもの（`-offline` が `-o ffline` と読める）は `checkSingleDash` がエラーにする
 - **driver とその周り**: `driver` はビルドの手順（`compileFront` = sema → Prepare → フレーム超過のやり直し。build / check /
   golden が共有）、`.s` / `.inc` の出力、ld65.cfg / base.s の生成、ca65 / ld65 の実行と asm のキャッシュ。`Compiler` が持つのは
   FC_HOME と ca65 の起動の数だけで、1 回のビルド（build / check / migrate の 1 ファイル）の状態は `compilation`（`newCompilation`。
@@ -127,9 +131,9 @@
   プロトコル・キャッシュ。何にも依存しない葉。fc.toml を読むのは `project/macros.go`、`@名前` の登録と定数への変換は
   `sema/extmacro.go`、意味解析の間だけ起動して止めるのは driver（`compilation.projectMacros`）。計画は `wiki/plans/external-macros.md`
 - **`internal/starmacro`**（2026-10-02）: Starlark のスクリプトの定数マクロ（fc.toml の `[macro_script.*]`）。外の依存は go.starlark.net
-  だけ（リポジトリで唯一の外部の Go モジュール。go 1.24 で使える版に固定）。結果の型は extmacro の `Result` を共有し、sema の
+  だけ（go 1.24 で使える版に固定。外部の Go モジュールはほかに `cmd/fcc` の kong だけ）。結果の型は extmacro の `Result` を共有し、sema の
   `MacroSource` として外部コマンドと同じ口で登録する
-- **`internal/sizehtml`**（2026-10-02）: `--size-html` / `fcc size -html` のページ（`page.html` を埋め込み、データの JSON を差し込む）。
+- **`internal/sizehtml`**（2026-10-02）: `--size-html` / `fcc size --html` のページ（`page.html` を埋め込み、データの JSON を差し込む）。
   データは `cc65.DbgFile`・`cc65.LinkConfig`（リンカ設定を読む: `cc65/linkcfg.go`）と、driver の `moduleCalls`（モジュールの間の呼び出し）
 - **`internal/fcdoc`**（2026-09-30）: `fcc doc`。構文木から public の宣言と直前のコメントを集め、端末の文字とサイトの Markdown にする
   （`syntax` だけに依存。`pkg/fc` の `StdDocs` / `DocFile` / `DocIndex` が包む）

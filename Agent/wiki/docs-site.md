@@ -10,9 +10,9 @@ https://haramako.github.io/fc/ （`docs/`）を作って公開する仕組みと
 | サイト | `docs/`（VitePress 1.6.4、vite は `overrides` で 6.4.3 以上） | Markdown のページ。`docs/.vitepress/config.mts` がナビ・サイドバー・色付け・検索 |
 | fc の色付け | `tools/vscode-fc/syntaxes/fc.tmLanguage.json` | VS Code 拡張の TextMate の文法を Shiki にそのまま渡す（` ```fc `） |
 | 例の検査 | `internal/doccheck`（`go test ./...` に入る） | ` ```fc` の印（無し / `run` / `test` / `nes` / `error` / `ignore`、`file=`）ごとにビルドして比べる。文書への参照（リンク・パス・`§`・「言葉」）も |
-| 標準ライブラリのページ | `internal/fcdoc` → `fcc doc -md docs/reference/std`（`npm run gen`） | fclib の public の宣言と直前のコメントから作る。コミットしない |
+| 標準ライブラリのページ | `internal/fcdoc` → `fcc doc --md docs/reference/std`（`npm run gen`） | fclib の public の宣言と直前のコメントから作る。コミットしない |
 | サンプルの画面 | `internal/nes` の `TestExample(Jump\|Statusbar\|Wave)` と `TestSampleScreens` | `FC_SAMPLE_PNG_DIR` を与えると QuickNES の画面を PNG に。`docs/public/samples/` にコミットする |
-| 公開 | `.github/workflows/docs.yml` | `main` への push（docs・examples・fclib・fcc など）で Go と Node を入れて `npm run build`（prebuild で `fcc doc -md`）→ Pages |
+| 公開 | `.github/workflows/docs.yml` | `main` への push（docs・examples・fclib・fcc など）で Go と Node を入れて `npm run build`（prebuild で `fcc doc --md`）→ Pages |
 
 ## 手元での作業
 
@@ -41,7 +41,7 @@ https://haramako.github.io/fc/ （`docs/`）を作って公開する仕組みと
   `var s = "abc"; @sizeof(s)` は 3 で終端 0 を自動付加しない。math.subpixel / fmt.str_z_in のコメントもこの挙動に合わせた。
 
 - **Vue が `{{` を式として読む**: Markdown の本文や表の中の `` `{{` `` でビルドが落ちる（コードのブロックは VitePress が v-pre に
-  するので平気）。`::: v-pre` で囲む。`fcc doc -md` の出力はページ全体を `::: v-pre` で囲んでいる
+  するので平気）。`::: v-pre` で囲む。`fcc doc --md` の出力はページ全体を `::: v-pre` で囲んでいる
 - **本文の `<` がタグになる**: コメントから作るページは `` `…` `` の外の `<` `>` を文字参照にしている（`fcdoc.escape`）
 - **日本語の検索**: MiniSearch の既定の分け方は空白なので、`tokenize` を `Intl.Segmenter` にしている。VitePress はテーマの設定の
   関数を文字列にしてブラウザへ渡す（`_vp-fn_`）ので、関数の中だけで完結させる（外の変数を参照しない）。home のレイアウトの

@@ -4,41 +4,28 @@ package main
 // fcc がリンクするなら `fcc build --size-report`)。
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const sizeUsage = `Usage: fcc size [-n N] [-cfg ld65.cfg] [-html out.html] <file.dbg>
-    -n N             show the N largest functions (default 40, 0 for all)
-    -cfg FILE        the linker config used for the link: also show the used / free bytes of each ROM area (bank)
-    -html FILE       write the same information as an HTML page
-Reads the debug file written by ld65 --dbgfile and prints the size of each segment and function.
-`
+type sizeCmd struct {
+	N    int    `short:"n" default:"40" help:"Show the N largest functions (default ${default}, 0 for all)."`
+	Cfg  string `placeholder:"FILE" help:"The linker config used for the link: also show the used / free bytes of each ROM area (bank)."`
+	HTML string `name:"html" placeholder:"FILE" help:"Write the same information as an HTML page."`
+	Dbg  string `arg:"" name:"file.dbg" help:"The debug file written by ld65 --dbgfile."`
+}
 
-func runSize(args []string) int {
-	fs := flag.NewFlagSet("fcc size", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(sizeUsage) }
-	n := fs.Int("n", 40, "number of functions")
-	cfg := fs.String("cfg", "", "linker config")
-	html := fs.String("html", "", "HTML output")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if fs.NArg() != 1 {
-		fmt.Print(sizeUsage)
-		return 0
-	}
-	if *html != "" {
-		if err := fc.SizeHTML(fs.Arg(0), *cfg, *html); err != nil {
+func (c *sizeCmd) run() int {
+	if c.HTML != "" {
+		if err := fc.SizeHTML(c.Dbg, c.Cfg, c.HTML); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
 		return 0
 	}
-	lines, err := fc.SizeReport(fs.Arg(0), *cfg, *n)
+	lines, err := fc.SizeReport(c.Dbg, c.Cfg, c.N)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

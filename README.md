@@ -32,14 +32,14 @@ fcc fmt -w src.fc           # ソースを整形 (-l: 変わるファイルを�
 fcc doc vram                # 標準ライブラリのモジュールの説明 (fcc doc だけなら一覧)
 ```
 
-オプション:
+オプション（GNU の getopt の形。長い名前は `--offline` のように `-` を 2 つ。ソースの後ろにも書ける。全部は `fcc build --help`）:
 
 | オプション | 説明 |
 |---|---|
 | `-o FILE` | 出力ファイル名 |
 | `-t TARGET` | ターゲット (`nes` / `emu`) |
 | `-O LEVEL` | 最適化レベル (0-2, デフォルト 2) |
-| `-e` | ビルド後にエミュレータで実行 |
+| `-g` | Mesen 用のデバッグ情報 (`.dbg` と `.mlb`) |
 
 詳しい書き方は[言語仕様](https://haramako.github.io/fc/reference/language)を参照してください。
 

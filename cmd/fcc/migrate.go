@@ -15,52 +15,33 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"os"
 
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const migrateUsage = `Usage: fcc migrate [-t target] [-D module.NAME=value] [-l] [-w] [-d] <file.fc> ...
-    -t    target platform used to compile the sources (emu (default) / nes)
-    -D    override a @(build) const: module.NAME=value (repeatable)
-    -l    list files that would be rewritten
-    -w    write result to (source) file instead of stdout
-    -d    display diffs instead of rewriting files
-`
+type migrateCmd struct {
+	targetFlags
+	rewriteFlags
+	Files []string `arg:"" name:"file" help:"Source files (pass the modules used by other files too: they are rewritten together)."`
+}
 
-func runMigrate(args []string) int {
-	fs := flag.NewFlagSet("fcc migrate", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(migrateUsage) }
-	target := fs.String("t", "", "target platform")
-	fs.StringVar(target, "target", "", "target platform")
-	var defines stringList
-	fs.Var(&defines, "D", "override a @(build) const: module.NAME=value (repeatable)")
-	list := fs.Bool("l", false, "list files that would be rewritten")
-	write := fs.Bool("w", false, "write result to (source) file instead of stdout")
-	diff := fs.Bool("d", false, "display diffs instead of rewriting files")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if fs.NArg() == 0 {
-		fmt.Print(migrateUsage)
-		return 0
-	}
+func (c *migrateCmd) run() int {
 	compiler, err := fc.New()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	defer compiler.Close()
-	out, err := compiler.Migrate(fs.Args(), fc.MigrateOptions{Target: *target, Defines: defines})
+	out, err := compiler.Migrate(c.Files, fc.MigrateOptions{Target: c.Target, Defines: c.Define})
 	if err != nil {
 		printErrors(err)
 		return 1
 	}
 	rc := 0
-	for _, path := range fs.Args() {
-		if err := emitMigrated(path, out[path], *list, *write, *diff); err != nil {
+	for _, path := range c.Files {
+		if err := emitMigrated(path, out[path], c.List, c.Write, c.Diff); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			rc = 1
 		}

@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -16,34 +15,16 @@ import (
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const watchUsage = `Usage: fcc watch [-t target] [-o FILE] [-O LEVEL] [-g] [-c] <src.fc>
-    -t, --target     target platform ( nes, emu )
-    -o FILE          output file
-    -O LEVEL         optimize level (0-2)
-    -g               emit debug info for Mesen
-    -c               compile only (no link)
-Rebuilds whenever a source file under the source directory (or fclib) changes. Ctrl-C to stop.
-`
-
 var watchExts = map[string]bool{".fc": true, ".asm": true, ".inc": true, ".chr": true, ".txt": true, ".cfg": true}
 
-func runWatch(args []string) int {
-	fs := flag.NewFlagSet("fcc watch", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(watchUsage) }
-	target := fs.String("t", "", "target platform")
-	fs.StringVar(target, "target", "", "target platform")
-	out := fs.String("o", "", "output file")
-	optLevel := fs.Int("O", 2, "optimize level")
-	gFlag := fs.Bool("g", false, "emit debug info")
-	cFlag := fs.Bool("c", false, "compile only")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if fs.NArg() != 1 {
-		fmt.Print(watchUsage)
-		return 0
-	}
-	src := fs.Arg(0)
+type watchCmd struct {
+	buildFlags
+	Compile bool   `short:"c" help:"Compile only (no link)."`
+	Src     string `arg:"" help:"The main source file."`
+}
+
+func (c *watchCmd) run() int {
+	src := c.Src
 	compiler, err := fc.New()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -55,7 +36,8 @@ func runWatch(args []string) int {
 	if home := compiler.Home(); home != "" {
 		dirs = append(dirs, filepath.Join(home, "fclib"))
 	}
-	opt := fc.Options{Target: *target, Out: *out, OptimizeLevel: optimizeLevel(*optLevel), Debug: *gFlag, CompileOnly: *cFlag}
+	opt := c.options()
+	opt.CompileOnly = c.Compile
 	dir, file := splitSrc(src)
 	opt.Dir, posDir = dir, dir
 	build := func() {

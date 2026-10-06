@@ -13,7 +13,7 @@
 - `.vitepress/config.mts` … サイトの設定（`base: '/fc/'`、ナビとサイドバー、fc の色付け、日本語の検索、`srcExclude`）。
   ページを足したらサイドバーにも足す
 - `.vitepress/theme/` … 既定のテーマに足す CSS だけ（NES の画面を 2 倍にぼかさずに出す）
-- `reference/std/` … 標準ライブラリのページ。`fcc doc -md` が fclib のコメントから作る生成物でコミットしない（`npm run gen`。
+- `reference/std/` … 標準ライブラリのページ。`fcc doc --md` が fclib のコメントから作る生成物でコミットしない（`npm run gen`。
   `npm run dev` / `build` の前にも走る）。直すときは fclib のコメントを直す（約束は `internal/fcdoc` のパッケージのコメント）
 - `public/samples/*.png` … サンプルの画面。QuickNES の画面をテストが書く（Windows で QuickNES のコアがあるとき）。サンプルを変えたら撮り直す:
   `FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)$|TestSampleScreens'`

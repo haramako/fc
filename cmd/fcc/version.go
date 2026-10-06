@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"runtime/debug"
 
+	"github.com/alecthomas/kong"
+
 	"github.com/haramako/fc/internal/cc65"
 )
 
@@ -48,7 +50,23 @@ func versionString() string {
 	return s + " " + runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH
 }
 
-func runVersion() int {
+// versionFlag は --version / -v (fcc version と同じものを出して終わる)。
+type versionFlag bool
+
+func (versionFlag) BeforeReset(app *kong.Kong) error {
+	printVersion()
+	app.Exit(0)
+	return nil
+}
+
+type versionCmd struct{}
+
+func (versionCmd) run() int {
+	printVersion()
+	return 0
+}
+
+func printVersion() {
 	fmt.Println(versionString())
 	// 使う ca65 / ld65 (同梱 / FC_CC65_BIN / PATH の順に探す)
 	for _, tool := range []string{"ca65", "ld65"} {
@@ -58,5 +76,4 @@ func runVersion() int {
 		}
 		fmt.Printf("%s: %s\n", tool, p)
 	}
-	return 0
 }

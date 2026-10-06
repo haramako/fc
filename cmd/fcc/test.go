@@ -9,47 +9,27 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const testUsage = `Usage: fcc test [-t emu|nes] [-O level] <module.fc> ...
-    -t    target (emu: the built-in 6502 emulator, nes: the built-in NES runner)
-    -O    optimize level (0-2)
-`
+type testCmd struct {
+	Target  string   `short:"t" default:"emu" enum:"emu,nes" placeholder:"emu|nes" help:"Target (emu: the built-in 6502 emulator, nes: the built-in NES runner; default ${default})."`
+	Opt     int      `short:"O" default:"2" placeholder:"LEVEL" help:"Optimize level (0-2, default ${default})."`
+	Modules []string `arg:"" name:"module" help:"Module source files (.fc)."`
+}
 
-func runTest(args []string) int {
-	fs := flag.NewFlagSet("fcc test", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(testUsage) }
-	level := fs.Int("O", 2, "optimize level")
-	target := fs.String("t", fc.TargetEmu, "target")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if fs.NArg() == 0 {
-		fmt.Print(testUsage)
-		return 0
-	}
+func (c *testCmd) run() int {
 	compiler, err := fc.New()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	defer compiler.Close()
-	if *target != fc.TargetEmu && *target != fc.TargetNES {
-		fmt.Fprintf(os.Stderr, "fcc test: unknown target %q (emu / nes)\n", *target)
-		return 1
-	}
-	opt := fc.Options{Target: *target, Stdout: os.Stdout}
-	if *level == 0 {
-		opt.OptimizeLevel = -1
-	} else {
-		opt.OptimizeLevel = *level
-	}
-	res, err := compiler.Test(context.Background(), fs.Args(), opt)
+	opt := fc.Options{Target: c.Target, Stdout: os.Stdout, OptimizeLevel: optimizeLevel(c.Opt)}
+	res, err := compiler.Test(context.Background(), c.Modules, opt)
 	if res != nil {
 		printWarnings(res.Warnings)
 	}

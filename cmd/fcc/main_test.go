@@ -79,21 +79,64 @@ func write(t *testing.T, name, src string) {
 
 func TestCLIUsageAndVersion(t *testing.T) {
 	setup(t)
-	if code, out, _ := runCLI(t); code != 0 || !strings.Contains(out, "Usage: fcc") {
+	if code, out, _ := runCLI(t); code != 0 || !strings.Contains(out, "Usage: fcc <command>") {
 		t.Errorf("no args: code=%d out=%q", code, out)
 	}
-	if code, out, _ := runCLI(t, "bogus"); code != 0 || !strings.Contains(out, "Usage: fcc") {
-		t.Errorf("unknown command: code=%d out=%q", code, out)
+	if code, out, _ := runCLI(t, "--help"); code != 0 || !strings.Contains(out, "lib fetch") {
+		t.Errorf("--help: code=%d out=%q", code, out)
 	}
-	if code, out, _ := runCLI(t, "build"); code != 0 || !strings.Contains(out, "Usage: fcc") {
-		t.Errorf("build without file: code=%d out=%q", code, out)
+	if code, _, errOut := runCLI(t, "bogus"); code != 2 || !strings.Contains(errOut, "unexpected argument bogus") {
+		t.Errorf("unknown command: code=%d err=%q", code, errOut)
 	}
 	if code, out, _ := runCLI(t, "version"); code != 0 || !strings.Contains(out, "fcc") {
 		t.Errorf("version: code=%d out=%q", code, out)
 	}
-	for _, sub := range []string{"fmt", "check", "size", "watch"} {
-		if code, out, _ := runCLI(t, sub); code != 0 || !strings.Contains(out, "Usage: fcc "+sub) {
-			t.Errorf("%s without file: code=%d out=%q", sub, code, out)
+	if code, out, _ := runCLI(t, "-v"); code != 0 || !strings.Contains(out, "ca65:") {
+		t.Errorf("-v: code=%d out=%q", code, out)
+	}
+	// ファイルの要るコマンドにファイルが無ければ、使い方の案内と終了コード 2
+	for _, sub := range []string{"build", "fmt", "check", "size", "watch", "test", "migrate"} {
+		if code, _, errOut := runCLI(t, sub); code != 2 || !strings.Contains(errOut, "fcc: error: expected") || !strings.Contains(errOut, "fcc "+sub+" --help") {
+			t.Errorf("%s without file: code=%d err=%q", sub, code, errOut)
+		}
+		if code, out, _ := runCLI(t, sub, "-h"); code != 0 || !strings.Contains(out, "Usage: fcc "+sub) {
+			t.Errorf("%s -h: code=%d out=%q", sub, code, out)
+		}
+	}
+}
+
+// TestCLIFlagSyntax: GNU の getopt の形 (オプションはソースの後ろにも書ける、`-O1`、短いオプションをまとめる、長い名前は `--`)。
+func TestCLIFlagSyntax(t *testing.T) {
+	setup(t)
+	write(t, "t.fc", "#fc 2\nuse * from stdio;\nfunction main():void { printf(\"hi\\n\"); exit(3); }\n")
+	for _, args := range [][]string{
+		{"run", "t.fc", "-O", "1"},
+		{"run", "-O1", "t.fc"},
+		{"run", "--opt=0", "t.fc", "-t", "emu"},
+		{"run", "-temu", "t.fc", "--offline"},
+	} {
+		if code, out, errOut := runCLI(t, args...); code != 3 || out != "hi\n" {
+			t.Errorf("%v: code=%d out=%q err=%q", args, code, out, errOut)
+		}
+	}
+	// `-offline` は `-o ffline` と読めてしまうので、エラーにする
+	if code, _, errOut := runCLI(t, "build", "-offline", "t.fc"); code != 2 || !strings.Contains(errOut, "--offline") {
+		t.Errorf("-offline: code=%d err=%q", code, errOut)
+	}
+	if code, _, errOut := runCLI(t, "build", "--bogus", "t.fc"); code != 2 || !strings.Contains(errOut, "unknown flag --bogus") {
+		t.Errorf("--bogus: code=%d err=%q", code, errOut)
+	}
+	if code, _, errOut := runCLI(t, "test", "-t", "foo", "t.fc"); code != 2 || !strings.Contains(errOut, "--target") {
+		t.Errorf("test -t foo: code=%d err=%q", code, errOut)
+	}
+	// 親のコマンドのオプション (lib の -C) はサブコマンドの後ろにも書ける
+	if err := os.Mkdir("p", 0o777); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join("p", "fc.toml"), "")
+	for _, args := range [][]string{{"lib", "-C", "p", "list"}, {"lib", "list", "-C", "p"}, {"lib", "list", "--directory=p"}} {
+		if code, out, _ := runCLI(t, args...); code != 0 || !strings.Contains(out, "no libraries") {
+			t.Errorf("%v: code=%d out=%q", args, code, out)
 		}
 	}
 }
@@ -115,9 +158,9 @@ func TestCLIBuildRunCheck(t *testing.T) {
 	if code != 3 || !strings.Contains(out, "hi") {
 		t.Errorf("run: code=%d out=%q", code, out)
 	}
-	code, out, _ = runCLI(t, "build", "-e", "-O", "1", "t.fc")
+	code, out, _ = runCLI(t, "run", "-O", "1", "t.fc")
 	if code != 3 || !strings.Contains(out, "hi") {
-		t.Errorf("build -e: code=%d out=%q", code, out)
+		t.Errorf("run -O 1: code=%d out=%q", code, out)
 	}
 
 	// compile は .o だけ作る

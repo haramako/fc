@@ -118,14 +118,14 @@ docs/
 
 ### 標準ライブラリのリファレンスの生成（pkg.go.dev に当たる）
 
-- ✅ **`fcc doc` を作る**（`go doc` と同じ使い方）。`fcc doc vram` / `fcc doc vram.put` は端末に、`fcc doc -md DIR` はサイト用の Markdown
+- ✅ **`fcc doc` を作る**（`go doc` と同じ使い方）。`fcc doc vram` / `fcc doc vram.put` は端末に、`fcc doc --md DIR` はサイト用の Markdown
 - `internal/syntax` で読んで、`public` の宣言（関数・定数・変数・struct・enum）のシグネチャと直前のコメントを集める
 - **ドキュメントコメントの約束（Go と同じ形）**: `public` の宣言の直前に空行なしで続く `//` の塊。モジュールの説明は `#fc 4` の後の
   最初の塊。字下げした行は例として等幅で出す
 - 今の fclib のコメントを整える: 見出しの `Agent/wiki/plans/v4-stdlib.md §…` の参照や測定の記録は、空行で離すか宣言の中へ移す
   （利用者のページに出さない）
 - ターゲット（`fclib/`＝共通、`fclib/nes/`、`fclib/emu/`）をページに出す
-- **生成したページはコミットしない**（2026-09-30 決定）。`docs.yml` のビルドで `go run ./cmd/fcc doc -md docs/reference/std` を
+- **生成したページはコミットしない**（2026-09-30 決定）。`docs.yml` のビルドで `go run ./cmd/fcc doc --md docs/reference/std` を
   VitePress の前に走らせる（Go のセットアップと、`fclib/**` を push の条件に足す）。手元では `npm run dev` の前に同じコマンド
 
 ### サンプルの画面
@@ -155,7 +155,7 @@ docs/
    （`internal/doccheck`）・インストールのページ
 2. **段 1 はじめに**: `start/` の 6 ページとサンプル集。API が変わっても例の検査で気づける。✅ 2026-09-30: install・hello-emu・hello-nes・
    first-game・project・editor・サンプル集（画面は QuickNES）。VS Code 拡張は `tools/vscode-fc` に 1 つにした（古い `editors/vscode` の整形を移して消した）
-3. **段 2 リファレンス（生成と表）**: `fcc doc` と `reference/std/`、`reference/fcc`・`fc-toml`・`targets`。✅ 2026-09-30: `fcc doc`（`internal/fcdoc`。端末と `-md`）、
+3. **段 2 リファレンス（生成と表）**: `fcc doc` と `reference/std/`、`reference/fcc`・`fc-toml`・`targets`。✅ 2026-09-30: `fcc doc`（`internal/fcdoc`。端末と `--md`）、
    `reference/std/`（CI と `npm run dev` / `build` の前に生成）、fclib のコメントを整えて public の関数に全部説明を付けた（`TestStdDocs`）、
    `reference/fcc`・`fc-toml`・`targets`
 4. **段 3 言語仕様**: fc 4 の規則を 1 ページに。✅ 2026-09-30: `reference/language`（整数の規則は v4 で全部決まって実装済みだった）。

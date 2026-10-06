@@ -1,7 +1,7 @@
 package cc65
 
 // ld65 のリンカ設定 (.cfg) の MEMORY と SEGMENTS を、バンクの使用量の表示に要る分だけ読む (fcc build --size-report /
-// fcc size -cfg)。fcc が書く設定も、自前の設定 (castle の ld65.cfg) も同じに読む。値は `$hex` と 10 進だけ (式は 0)。
+// fcc size --cfg)。fcc が書く設定も、自前の設定 (castle の ld65.cfg) も同じに読む。値は `$hex` と 10 進だけ (式は 0)。
 
 import (
 	"fmt"

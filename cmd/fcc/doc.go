@@ -1,9 +1,8 @@
 package main
 
-// fcc doc: モジュールのドキュメント (public の宣言と、その直前のコメント) を出す。-md は利用者向けのサイトのページ (docs/reference/std)。
+// fcc doc: モジュールのドキュメント (public の宣言と、その直前のコメント) を出す。--md は利用者向けのサイトのページ (docs/reference/std)。
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,33 +11,17 @@ import (
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const docUsage = `Usage: fcc doc [-t nes|emu] [module | module.name | file.fc[:name]]
-       fcc doc -md DIR
-Shows the public declarations of a module and their comments.
-    (no argument)    list the standard library modules
-    module           a standard library module (e.g. vram, nes/vram)
-    module.name      one declaration (e.g. vram.put)
-    file.fc          a source file of your own
-    -t TARGET        only the modules of the target (nes / emu)
-    -md DIR          write the pages of the standard library for the documentation site (Markdown) into DIR
-`
+type docCmd struct {
+	Target string `short:"t" placeholder:"nes|emu" help:"Only the modules of the target."`
+	MD     string `name:"md" placeholder:"DIR" help:"Write the pages of the standard library for the documentation site (Markdown) into DIR."`
+	Arg    string `arg:"" optional:"" name:"name" help:"module (vram, nes/vram), module.name (vram.put), or file.fc[:name] of your own. None: list the standard library modules."`
+}
 
 // sourceBase はサイトのページから標準ライブラリのソースへのリンクの頭。
 const sourceBase = "https://github.com/haramako/fc/blob/main/"
 
-func runDoc(args []string) int {
-	fs := flag.NewFlagSet("fcc doc", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(docUsage) }
-	target := fs.String("t", "", "target (nes / emu)")
-	mdDir := fs.String("md", "", "write Markdown pages into DIR")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if fs.NArg() > 1 {
-		fmt.Print(docUsage)
-		return 1
-	}
-	arg := fs.Arg(0)
+func (c *docCmd) run() int {
+	arg := c.Arg
 
 	// 自分のファイル (file.fc か file.fc:name)
 	if file, name, _ := strings.Cut(arg, ":"); strings.HasSuffix(file, ".fc") {
@@ -61,13 +44,13 @@ func runDoc(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if *mdDir != "" {
-		return writeDocSite(mods, *mdDir)
+	if c.MD != "" {
+		return writeDocSite(mods, c.MD)
 	}
-	if *target != "" {
+	if c.Target != "" {
 		var ms []*fc.DocModule
 		for _, m := range mods {
-			if m.Target == "" || m.Target == *target {
+			if m.Target == "" || m.Target == c.Target {
 				ms = append(ms, m)
 			}
 		}

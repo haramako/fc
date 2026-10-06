@@ -1,127 +1,184 @@
 // fcc は FC コンパイラの CLI。
 //
-//	Usage: fcc <command> [options] <src.fc> ...
-//	  command: build(b) / compile(c) / run / fmt / migrate / check / doc
+//	Usage: fcc <command> [flags] <src.fc> ...
+//	  command: build(b) / compile(c) / run / check / test / fmt / doc / lib / watch / size / migrate / version
+//
+// コマンドラインは kong (github.com/alecthomas/kong) で読む: コマンドは cli の構造体のフィールド、オプションはタグ。
+// GNU の getopt の形 (`-O1`、`--offline`。長い名前は `--`) で、オプションはソースの後ろにも書ける。
 package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/alecthomas/kong"
+
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const usage = `NES Compiler
-Usage: fcc <command> [options] <src.fc> ...
-Commands:
-    build, b         build ROM / binary
-    compile, c       compile to object files only
-    run              build and run (emu: the built-in emulator; nes: console output on the built-in NES runner)
-    fmt              format source files (see fcc fmt -h)
-    migrate          rewrite older sources as the latest fc (see fcc migrate -h)
-    test             run the @(test) functions of modules (see fcc test -h)
-    lib              fetch / update / list the libraries of fc.toml [lib.*] (see fcc lib)
-    check            compile without producing files and report errors / warnings
-    doc              show the public declarations of a module and their comments (see fcc doc -h)
-    size             show code size per function from an ld65 --dbgfile (see fcc size -h)
-    watch            rebuild whenever a source file changes (see fcc watch -h)
-    version          show version
-Options:
-    -h, --help       show this message
-    -o FILE          output file
-    -e               run by interpreter
-    -d, --debug      show debug info (frames, far calls)
-    -g               emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)
-    --size-report    show code size per segment / function, bank usage and calls between modules (needs linking)
-    --size-html FILE write the same information as an HTML page (banks, calls between modules, functions)
-    -t, --target     target platform ( nes, emu; default: nes if fc.toml has [target], otherwise emu )
-    -O LEVEL         optimize level (0-2)
-    -D MOD.NAME=VAL  override a @(build) const (repeatable; applied after fc.toml [define.MOD])
-    --offline        do not fetch git libraries of fc.toml [lib.*] (use the cache only)
-`
+// cli はコマンドの木。選ばれたコマンドの構造体の run を呼ぶ。
+type cli struct {
+	Version versionFlag `help:"Show version and exit." short:"v"`
+
+	Build      buildCmd   `cmd:"" aliases:"b" help:"Build a ROM / binary."`
+	Compile    compileCmd `cmd:"" aliases:"c" help:"Compile to object files only (no link)."`
+	Run        runCmd     `cmd:"" help:"Build and run (emu: the built-in emulator; nes: console output on the built-in NES runner)."`
+	Check      checkCmd   `cmd:"" help:"Compile without producing files and report errors / warnings."`
+	Test       testCmd    `cmd:"" help:"Run the @(test) functions of modules."`
+	Fmt        fmtCmd     `cmd:"" help:"Format source files."`
+	Doc        docCmd     `cmd:"" help:"Show the public declarations of a module and their comments."`
+	Lib        libCmd     `cmd:"" help:"Fetch / update / list the libraries of fc.toml [lib.*]."`
+	Watch      watchCmd   `cmd:"" help:"Rebuild whenever a source file under the source directory (or fclib) changes. Ctrl-C to stop."`
+	Size       sizeCmd    `cmd:"" help:"Show code size per segment and function from an ld65 --dbgfile."`
+	Migrate    migrateCmd `cmd:"" help:"Rewrite older sources as the latest fc."`
+	VersionCmd versionCmd `cmd:"" name:"version" help:"Show version and the ca65 / ld65 in use."`
+}
+
+// runner は選ばれたコマンド。終了コードを返す (run / build のプログラムの終了コードもそのまま)。
+type runner interface{ run() int }
+
+// exitPanic は kong が --help などで終わるときの終了コード (run() で recover して返す。os.Exit はテストの邪魔)。
+type exitPanic int
 
 func main() {
 	os.Exit(run())
 }
 
-func run() int {
+func run() (code int) {
 	posDir = ""
-	// <command> が先頭に来る
 	args := os.Args[1:]
 	if len(args) == 0 {
-		fmt.Print(usage)
-		return 0
+		args = []string{"--help"}
 	}
-	com := args[0]
-	switch com {
-	case "fmt":
-		return runFmt(args[1:])
-	case "migrate":
-		return runMigrate(args[1:])
-	case "test":
-		return runTest(args[1:])
-	case "lib":
-		return runLib(args[1:])
-	case "version", "--version", "-v":
-		return runVersion()
-	case "check":
-		return runCheck(args[1:])
-	case "doc":
-		return runDoc(args[1:])
-	case "size":
-		return runSize(args[1:])
-	case "watch":
-		return runWatch(args[1:])
+	var c cli
+	parser, err := kong.New(&c,
+		kong.Name("fcc"),
+		kong.Description("NES Compiler"),
+		kong.Writers(os.Stdout, os.Stderr),
+		kong.Exit(func(code int) { panic(exitPanic(code)) }),
+		kong.ConfigureHelp(kong.HelpOptions{Compact: true}),
+	)
+	if err != nil {
+		panic(err) // タグの書き間違い
 	}
-	fs := flag.NewFlagSet("fcc", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(usage) }
-	out := fs.String("o", "", "output file")
-	runFlag := fs.Bool("e", false, "run by interpreter")
-	debugFlag := fs.Bool("d", false, "show debug info")
-	fs.BoolVar(debugFlag, "debug", false, "show debug info")
-	gFlag := fs.Bool("g", false, "emit debug info for Mesen")
-	sizeFlag := fs.Bool("size-report", false, "show code size per segment / function")
-	sizeHTML := fs.String("size-html", "", "write the size report as an HTML page")
-	target := fs.String("t", "", "target platform ( nes, emu )")
-	fs.StringVar(target, "target", "", "target platform ( nes, emu )")
-	optLevel := fs.Int("O", 2, "optimize level (0-2)")
-	var defines stringList
-	fs.Var(&defines, "D", "override a @(build) const: module.NAME=value (repeatable)")
-	offline := fs.Bool("offline", false, "do not fetch git libraries")
-	if err := fs.Parse(args[1:]); err != nil {
-		return 1
+	defer func() {
+		if r := recover(); r != nil {
+			e, ok := r.(exitPanic)
+			if !ok {
+				panic(r)
+			}
+			code = int(e)
+		}
+	}()
+	if err := checkSingleDash(parser, args); err != nil {
+		fmt.Fprintf(os.Stderr, "fcc: error: %v\n", err)
+		return 2
 	}
-	rest := fs.Args()
+	ctx, err := parser.Parse(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fcc: error: %v (see %s --help)\n", err, commandPath(err))
+		return 2
+	}
+	return ctx.Selected().Target.Addr().Interface().(runner).run()
+}
 
-	opt := fc.Options{
-		Target:        *target,
-		Out:           *out,
-		Run:           *runFlag,
-		OptimizeLevel: optimizeLevel(*optLevel),
-		Debug:         *gFlag,
-		SizeReport:    *sizeFlag,
-		SizeHTML:      *sizeHTML,
-		Defines:       defines,
-		Offline:       *offline,
+// commandPath はエラーの起きたコマンド (`fcc lib add`。コマンドの前なら `fcc`)。
+func commandPath(err error) string {
+	if pe, ok := err.(*kong.ParseError); ok && pe.Context != nil {
+		path := "fcc"
+		for n := pe.Context.Selected(); n != nil && n.Parent != nil; n = n.Parent {
+			path = strings.Replace(path, "fcc", "fcc "+n.Name, 1)
+		}
+		return path
 	}
-	switch com {
-	case "run":
-		opt.Run = true
-	case "build", "b":
-	case "compile", "c":
-		opt.CompileOnly = true
-	default:
-		fmt.Print(usage)
-		return 0
-	}
-	if len(rest) == 0 {
-		fmt.Print(usage)
-		return 0
-	}
+	return "fcc"
+}
 
+// checkSingleDash は `-offline` のように長い名前に `-` を 1 つしか付けないものをエラーにする。getopt の形では短いオプションの
+// 並び (`-o ffline`) と読めてしまい、黙って別の意味になる。
+func checkSingleDash(parser *kong.Kong, args []string) error {
+	long := map[string]bool{}
+	var walk func(n *kong.Node)
+	walk = func(n *kong.Node) {
+		for _, f := range n.Flags {
+			if len(f.Name) > 1 {
+				long[f.Name] = true
+			}
+		}
+		for _, ch := range n.Children {
+			walk(ch)
+		}
+	}
+	walk(parser.Model.Node)
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if name, _, _ := strings.Cut(strings.TrimPrefix(a, "-"), "="); len(a) > 2 && a[0] == '-' && a[1] != '-' && long[name] {
+			return fmt.Errorf("unknown flag %s (long flags take two dashes: -%s)", a, a)
+		}
+	}
+	return nil
+}
+
+// targetFlags はターゲットと @(build) の定数の上書き (コンパイルするコマンドに共通)。
+type targetFlags struct {
+	Target string   `short:"t" placeholder:"nes|emu" help:"Target platform (default: nes if fc.toml has [target], otherwise emu)."`
+	Define []string `short:"D" sep:"none" placeholder:"MOD.NAME=VAL" help:"Override a @(build) const (repeatable; applied after fc.toml [define.MOD])."`
+}
+
+// buildFlags は build / compile / run / watch に共通のオプション。
+type buildFlags struct {
+	targetFlags
+	Out     string `short:"o" placeholder:"FILE" help:"Output file."`
+	Opt     int    `short:"O" default:"2" placeholder:"LEVEL" help:"Optimize level (0-2, default ${default})."`
+	G       bool   `short:"g" name:"debug-info" help:"Emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)."`
+	Offline bool   `help:"Do not fetch git libraries of fc.toml [lib.*] (use the cache only)."`
+}
+
+func (f *buildFlags) options() fc.Options {
+	return fc.Options{
+		Target:        f.Target,
+		Out:           f.Out,
+		OptimizeLevel: optimizeLevel(f.Opt),
+		Debug:         f.G,
+		Defines:       f.Define,
+		Offline:       f.Offline,
+	}
+}
+
+// buildArgs は build / compile / run のオプションとソース。
+type buildArgs struct {
+	buildFlags
+	Debug      bool   `short:"d" help:"Show debug info (frames, far calls, libraries, defines)."`
+	SizeReport bool   `help:"Show code size per segment / function, bank usage and calls between modules (needs linking)."`
+	SizeHTML   string `name:"size-html" placeholder:"FILE" help:"Write the same information as --size-report as an HTML page."`
+	Src        string `arg:"" help:"The main source file."`
+}
+
+type buildCmd struct{ buildArgs }
+type compileCmd struct{ buildArgs }
+type runCmd struct{ buildArgs }
+
+func (c *buildCmd) run() int { return c.build(c.options()) }
+
+func (c *compileCmd) run() int {
+	opt := c.options()
+	opt.CompileOnly = true
+	return c.build(opt)
+}
+
+func (c *runCmd) run() int {
+	opt := c.options()
+	opt.Run = true
+	return c.build(opt)
+}
+
+func (c *buildArgs) build(opt fc.Options) int {
+	opt.SizeReport = c.SizeReport
+	opt.SizeHTML = c.SizeHTML
 	compiler, err := fc.New()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -129,8 +186,7 @@ func run() int {
 	}
 	defer compiler.Close()
 
-	src := rest[0]
-	dir, file := splitSrc(src)
+	dir, file := splitSrc(c.Src)
 	opt.Dir, posDir = dir, dir
 	res, err := compiler.Build(context.Background(), file, opt)
 	if err != nil {
@@ -138,7 +194,7 @@ func run() int {
 		return 1
 	}
 	printWarnings(res.Warnings)
-	if *debugFlag {
+	if c.Debug {
 		for _, line := range res.Frames {
 			fmt.Fprintln(os.Stderr, line)
 		}
@@ -164,7 +220,7 @@ func run() int {
 	for _, line := range res.SizeReport {
 		fmt.Println(line)
 	}
-	if *debugFlag && len(res.FarCalls) > 0 {
+	if c.Debug && len(res.FarCalls) > 0 {
 		// far call (別バンクへの呼び出し) の一覧: 熱い経路が far になっていないかの確認用 (Agent/wiki/design/farcall.md §4)
 		fmt.Fprintf(os.Stderr, "far calls: %d\n", len(res.FarCalls))
 		for _, f := range res.FarCalls {
@@ -173,12 +229,6 @@ func run() int {
 	}
 	return res.ExitCode
 }
-
-// stringList は繰り返せる文字列のフラグ (-D)。
-type stringList []string
-
-func (s *stringList) String() string     { return strings.Join(*s, ",") }
-func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
 
 // optimizeLevel は -O の値を driver の表現に (0 は「未指定」の意味なので、-O 0 は -1 で渡す)。
 func optimizeLevel(o int) int {

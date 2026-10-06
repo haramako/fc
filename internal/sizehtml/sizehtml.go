@@ -1,4 +1,4 @@
-// Package sizehtml はビルドしたプログラムの大きさを 1 つの HTML ファイルにする (fcc build --size-html / fcc size -html)。
+// Package sizehtml はビルドしたプログラムの大きさを 1 つの HTML ファイルにする (fcc build --size-html / fcc size --html)。
 // --size-report と同じ情報 (ROM の領域 (バンク) ごとの使用量と置いたモジュール、モジュールの間の呼び出しの数、関数の大きさ) を、
 // バンクの帯と並べ替え・絞り込みのできる表で見せる。データは JSON で埋め込み、外のファイル・ライブラリを読まない (オフラインで開ける)。
 package sizehtml

@@ -4,34 +4,19 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const checkUsage = `Usage: fcc check [-t target] [--json] <src.fc> ...
-    -t, --target     target platform ( nes, emu; default: nes if fc.toml has [target], otherwise emu )
-    --json           print diagnostics as JSON lines ({"file","line","col","severity","message"}) for editors
-    -D MOD.NAME=VAL  override a @(build) const (same as fcc build)
-`
+type checkCmd struct {
+	targetFlags
+	JSON bool     `name:"json" help:"Print diagnostics as JSON lines ({\"file\",\"line\",\"col\",\"severity\",\"message\"}) for editors."`
+	Srcs []string `arg:"" name:"src" help:"Source files (each one is compiled as a program)."`
+}
 
-func runCheck(args []string) int {
-	fs := flag.NewFlagSet("fcc check", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(checkUsage) }
-	target := fs.String("t", "", "target platform")
-	fs.StringVar(target, "target", "", "target platform")
-	jsonFlag := fs.Bool("json", false, "JSON lines output")
-	var defines stringList
-	fs.Var(&defines, "D", "override a @(build) const: module.NAME=value (repeatable)")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if fs.NArg() == 0 {
-		fmt.Print(checkUsage)
-		return 0
-	}
+func (c *checkCmd) run() int {
 	compiler, err := fc.New()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -40,11 +25,11 @@ func runCheck(args []string) int {
 	defer compiler.Close()
 
 	rc := 0
-	for _, src := range fs.Args() {
+	for _, src := range c.Srcs {
 		dir, file := splitSrc(src)
 		posDir = dir
-		ws, err := compiler.Check(file, fc.CheckOptions{Target: *target, Dir: dir, Defines: defines})
-		if *jsonFlag {
+		ws, err := compiler.Check(file, fc.CheckOptions{Target: c.Target, Dir: dir, Defines: c.Define})
+		if c.JSON {
 			if err != nil {
 				rc = 1
 				es := fc.Errors(err)

@@ -13,7 +13,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -21,28 +20,22 @@ import (
 	"github.com/haramako/fc/pkg/fc"
 )
 
-const fmtUsage = `Usage: fcc fmt [-l] [-w] [-d] <file.fc> ...
-    -l    list files whose formatting differs
-    -w    write result to (source) file instead of stdout
-    -d    display diffs instead of rewriting files
-`
+// rewriteFlags は fmt / migrate の結果の出し方 (無ければ標準出力に書く)。
+type rewriteFlags struct {
+	List  bool `short:"l" help:"List files whose result differs."`
+	Write bool `short:"w" help:"Write the result to the (source) file instead of stdout."`
+	Diff  bool `short:"d" help:"Display diffs instead of rewriting files."`
+}
 
-func runFmt(args []string) int {
-	fs := flag.NewFlagSet("fcc fmt", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(fmtUsage) }
-	list := fs.Bool("l", false, "list files whose formatting differs")
-	write := fs.Bool("w", false, "write result to (source) file instead of stdout")
-	diff := fs.Bool("d", false, "display diffs instead of rewriting files")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if fs.NArg() == 0 {
-		fmt.Print(fmtUsage)
-		return 0
-	}
+type fmtCmd struct {
+	rewriteFlags
+	Files []string `arg:"" name:"file" help:"Source files."`
+}
+
+func (c *fmtCmd) run() int {
 	rc := 0
-	for _, path := range fs.Args() {
-		if err := fmtFile(path, *list, *write, *diff); err != nil {
+	for _, path := range c.Files {
+		if err := fmtFile(path, c.List, c.Write, c.Diff); err != nil {
 			var ce *fc.Error
 			if errors.As(err, &ce) {
 				fmt.Fprintf(os.Stderr, "%s: error: %s\n", ce.Pos, ce.Msg)
