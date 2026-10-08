@@ -124,8 +124,9 @@ When the user requests a durable behavior change, record it here or in the relev
 
 - `Agent/AGENTS.md` — エージェント作業の蓄積領域。配下に `wiki/`（横断知識・設計・進行中の計画）・`discussions/`（会話と決定の歴史）・`issues/`（Issue 記録）・`scripts/`（補助スクリプト）
 - `docs/AGENTS.md` — 利用者向けドキュメントのサイト（VitePress、GitHub Pages）。書き方の約束・ビルドと公開
+- `games/AGENTS.md` — fc のデバッグを兼ねた小さなゲーム（共通の CHR は `games/common/`、生成は `tools/chrgen`）
 
-Owned directly by root (no child doc): `cmd/`・`pkg/`・`internal/`（コンパイラ本体。パッケージの地図は `Agent/wiki/code-structure.md`）、`fclib/`（FC の標準ライブラリ。fc 4 のモジュールは、モジュールの説明と public の関数ごとの説明のコメントを書く: `fcc doc` と docs のサイトに出る。約束は `internal/fcdoc`、`pkg/fc` の `TestStdDocs` が見張る）、`share/`（ランタイムアセンブリ・リンカ設定）、`test/`（FC のテストソース）、`testdata/`（golden）、`examples/`（実プロジェクト由来の回帰サンプル。`examples/README.md`）、`bench/`（生成コードのベンチ。`bench/README.md`）、`tools/`（開発用ツールと VS Code 拡張 `tools/vscode-fc`）、`README.md`。
+Owned directly by root (no child doc): `cmd/`・`pkg/`・`internal/`（コンパイラ本体。パッケージの地図は `Agent/wiki/code-structure.md`）、`fclib/`（FC の標準ライブラリ。fc 4 のモジュールは、モジュールの説明と public の関数ごとの説明のコメントを書く: `fcc doc` と docs のサイトに出る。約束は `internal/fcdoc`、`pkg/fc` の `TestStdDocs` が見張る）、`share/`（ランタイムアセンブリ・リンカ設定）、`test/`（FC のテストソース）、`testdata/`（golden）、`examples/`（実プロジェクト由来の回帰サンプル。`examples/README.md`）、`bench/`（生成コードのベンチ。`bench/README.md`）、`tools/`（開発用ツール（CHR の生成 `tools/chrgen` など）と VS Code 拡張 `tools/vscode-fc`）、`README.md`。
 
 以下で `Agent/AGENTS.md` を毎セッション読み込む（Claude Code の import。他エージェントはこの行を「必読ファイルの指示」として読むこと。DOX の「Read Before Editing」は `Agent/` 配下を触らないセッションでは読まれないため、discussions 自動記録を毎セッション発火させる目的で強制ロードする）：
 
