@@ -103,3 +103,9 @@
   として辿ると古い入力 `$1 = g3 + g0` に着いて、もう一度 `(g3 + g0) - g0` として畳んでいた（`g3 = ((g3 + g0) - g0) - g0`
   が `g3 = g3` に）。置き換えたら `useAt` を捨てる（rewrite の命令ごとの置き換えも同じ。`TestSSASimplifyAfterRewrite`、
   bugzoo の ssa-stale-useat）。ほかは TestLogZeroCost の上限超え（既知）だけ
+- 2026-10-08、メソッド・interface・書式の生成器を足した（TestRandomMethodsV4 / TestRandomFormatV4 / TestRandomFarIfaceNES。
+  Agent/wiki/testing-and-fuzzing.md「fc 4 の機能の生成器」）。TestRandomFarIfaceNES の最初の 50 本で 1 件: near の interface で
+  `uxrom.prg(@bank_of_id(@id_of(e)))` してから呼ぶと、実装が最初のメソッドを書かず既定の本体を使うとき、`@bank_of_id` が既定の本体
+  （固定の所）のバンクを返して違うバンクに切り替わり、実装のメソッドが別のバンクの中身を実行して止まった。`$Task_bank` を最初の
+  メソッドの振り分けの表の要素から作っていた（実装が書いた最初のメソッドのバンクに。`TestInterfaceBankOfIdDefault`、bugzoo の
+  bank-of-id-default）。TestRandomMethodsV4 と TestRandomFormatV4 は 2000 本ずつ通った

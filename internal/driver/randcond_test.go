@@ -8,6 +8,7 @@ package driver
 //     sema の retargetCond。定数・リテラルの初期値は型が変わりうるので包まない)
 //   - if の条件 C → `(rmc_ & 2) != 0 ? (C) : (C)` (条件の文脈の条件式)
 //   - ラベルの無い `while (C) S` → `if (C) do S while (C);` (C を評価する回数と順は同じ。continue はどちらも条件の判定へ)
+//   - それ以外の `while (C) { S }` → `loop { if (!(C)) { break; } S }` (同じ)
 // 書き換える所は種から決める乱数で選ぶ (生成器の乱数の並びは変えない)。
 
 import (
@@ -45,7 +46,8 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 		text := func(n syntax.Node) string { return src[n.Pos().Offset:n.End().Offset] }
 		used := false
 		labeled := map[*syntax.WhileStmt]bool{}
-		rv := rand.New(rand.NewSource(seed*7919 + 3)) // 変数の初期値の書き換え (ほかの書き換えの乱数の並びを変えない)
+		rv := rand.New(rand.NewSource(seed*7919 + 3))  // 変数の初期値の書き換え (ほかの書き換えの乱数の並びを変えない)
+		rl := rand.New(rand.NewSource(seed*6271 + 11)) // while を loop に (同じ)
 		syntax.Inspect(f, func(n syntax.Node) bool {
 			switch n := n.(type) {
 			case *syntax.LabeledStmt:
@@ -102,6 +104,10 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 					cond := text(n.Cond)
 					edits = append(edits, edit{n.While.Offset, n.Rparen.Offset + 1, "if (" + cond + ") do"},
 						edit{n.Body.End().Offset, n.Body.End().Offset, " while (" + cond + ");"})
+				} else if body, ok := n.Body.(*syntax.Block); ok && rl.Intn(2) == 0 {
+					// `loop { if (!(C)) { break; } S }` (continue もループの頭の判定へ。ラベルもそのまま loop に付く)
+					edits = append(edits, edit{n.While.Offset, n.Rparen.Offset + 1, "loop"},
+						edit{body.Lbrace.Offset + 1, body.Lbrace.Offset + 1, " if (!(" + text(n.Cond) + ")) { break; }"})
 				}
 			}
 			return true

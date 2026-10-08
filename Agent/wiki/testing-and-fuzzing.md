@@ -83,6 +83,20 @@ go test ./...                                    # 全部 (golden + examples + N
     頭打ちに（`TestShiftCountBeyondWidth`）。fuzz の実行は差分 fuzz・FuzzCheck ともメモリの上限つき（systemd-run --scope）に
   - 常駐レジスタの自己修正（`ResidentFixes`）を「A のまま使う」(ResFriendly) 命令にも広げる案は、その命令が常駐の値を A に
     読み直すのも「A を書いた」と数えて収束しなかったので入れていない（2026-09-28）
+- **fc 4 の機能の生成器**（2026-10-08）: 期待値を生成器が Go で計算する形（sema の誤りも見える）で、-O 0 / -O 2 / インタプリタと比べる。
+  `TestRandomMethodsV4`（randmethod_test.go。struct の値・`*P`・`*const P`・soa のハンドルのメソッド、P を返すメソッド、受け取り手は
+  変数・配列の要素・ローカル変数・ポインタ・soa の要素・関数の戻り値・`P.m(x, …)`。soa / 普通の interface、2 つのモジュールの実装、
+  手動・自動の ID、既定の本体、`@set_id` と init・.none・実装の無い ID、`@id_of`、`@bitcast` の実装のハンドル、別の要素のメソッドと
+  深さを限った再帰。式は符号なしの環の演算だけにして、計算の幅の規則によらず期待値が決まるようにした。`-randn` の 1/4 本）、
+  `TestRandomFormatV4`（randformat_test.go。@printf / @format / @try_format の書式と、整数・bool・enum・文字列の引数。同じ値を定数
+  （sema の formatConst）と実行時の値（fclib/fmt.fc）の両方で書く。1/4 本）、`TestRandomFarIfaceNES`（randfariface_test.go。
+  nes ターゲットの UxROM で、同じ番地に違う表を持つ 2 つのバンクに実装を置き、`@(far)` の振り分けと、near の `@bank_of_id` での
+  切り替えを -O 0 / -O 2 で。1/2 本）。足した直後に `@bank_of_id` のバグを 1 件（最初のメソッドを書かない実装が固定の所のバンクに
+  なる。bugzoo の bank-of-id-default）。わざと戻したバグで効くことを確かめた: 自動の ID を 2 から振る → TestRandomMethodsV4 が 100 本中
+  24 本、0 埋めの符号の位置（formatConst）→ TestRandomFormatV4 が 14 本、fmt.fc の小文字の 16 進 → 78 本、`@clamp` の畳み込みを
+  `max(min(x, hi), lo)` に → TestRandomConstFold が落ちる。同じ日に、TestRandomConstFold に `@clamp`、rpCondRewrite（fc 4 の差分）に
+  `while (C) { S }` → `loop { if (!(C)) { break; } S }` を足した（100 本で 63 か所）。3 つとも fuzzmeasure zoo の既定の `-run` に入れた
+
 - **差分テストの判定の弱点と、足した検査**（2026-09-27）: TestRandomPrograms / TestRandomV3Programs の判定は -O 0・-O 2・
   最適化前の IR のインタプリタの 3 つで、どれも sema の作った同じ IR を実行するので **sema の誤りは 3 つとも同じように
   間違えて見えない**（型付きの定数の畳み込み、i8 の初期値の符号拡張、ポインタの負のずれの符号拡張、for-each の回数など。

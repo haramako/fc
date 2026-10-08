@@ -172,8 +172,15 @@ func (g *rfGen) expr(depth int) rfExpr {
 		return rfExpr{fmt.Sprintf("@bitcast(%s, ((%s) as %s))", u.name, a.c, t.name), fmt.Sprintf("@bitcast(%s, ((%s) as %s))", u.name, a.v, t.name)}
 	case 8:
 		b := g.expr(depth - 1)
-		f := []string{"@min", "@max"}[g.pick(2)]
-		return rfExpr{fmt.Sprintf("%s(%s, %s)", f, a.c, b.c), fmt.Sprintf("%s(%s, %s)", f, a.v, b.v)}
+		switch g.pick(3) {
+		case 2:
+			// @clamp(x, lo, hi) (lo > hi なら hi: t = x; if (t < lo) t = lo; if (hi < t) t = hi)
+			c := g.expr(depth - 1)
+			return rfExpr{fmt.Sprintf("@clamp(%s, %s, %s)", a.c, b.c, c.c), fmt.Sprintf("@clamp(%s, %s, %s)", a.v, b.v, c.v)}
+		case 1:
+			return rfExpr{fmt.Sprintf("@max(%s, %s)", a.c, b.c), fmt.Sprintf("@max(%s, %s)", a.v, b.v)}
+		}
+		return rfExpr{fmt.Sprintf("@min(%s, %s)", a.c, b.c), fmt.Sprintf("@min(%s, %s)", a.v, b.v)}
 	}
 	op := []string{"-", "~"}[g.pick(2)]
 	return rfExpr{fmt.Sprintf("(%s%s)", op, a.c), fmt.Sprintf("(%s%s)", op, a.v)}

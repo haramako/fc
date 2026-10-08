@@ -124,7 +124,7 @@ func zoo(argv []string) {
 	off := fs.String("off", "", "切る生成器の機能 (-fuzzoff)")
 	metan := fs.Int("metan", 60, "TestRandomMetamorphic の本数")
 	mutn := fs.Int("mutn", 60, "TestRandomMutate の本数")
-	run := fs.String("run", "TestRandomPrograms|TestRandomV3Programs|TestRandomConstFold|TestRandomMetamorphic|TestRandomMutate|TestMustError|TestMustWarn|TestConstFoldCases|TestTypeRuleMatrix", "回すテスト")
+	run := fs.String("run", "TestRandomPrograms|TestRandomV3Programs|TestRandomConstFold|TestRandomMetamorphic|TestRandomMutate|TestRandomMethodsV4|TestRandomFormatV4|TestRandomFarIfaceNES|TestMustError|TestMustWarn|TestConstFoldCases|TestTypeRuleMatrix", "回すテスト")
 	all := fs.Bool("all", true, "internal/driver の全テストを回し、-run 以外で失敗したテストを「その他」に出す (専用の単体テストや go の fuzz の入力があるか)")
 	fs.Parse(argv)
 
