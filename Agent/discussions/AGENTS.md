@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-08 [デバッグ用のゲームを 11 本作って見つかったこと](2026-10-08-debug-games-findings.md) — 条件式の枝の型名を省いた struct を直した。静的フレームの RAM の予約 512 バイト・ld65 の生のエラー・soa の @len など相談したいこと、NES の panic が見えない・書式に文字列の幅が無いなど fclib の不足、games/common に置いたライブラリ（gfx・text・bitmap）
 - 2026-10-08 [fc のデバッグを兼ねた小さなゲームと共通の CHR](2026-10-08-debug-games.md) — `games/` に置く、CHR の元はテキスト（tools/chrgen が chr・fc・png を作る）、スプライトは 8×8 と 8×16 のモードを混ぜられる並び、ゲームの候補 12 本、fclib の足りなそうな所の見込み
 - 2026-10-06 [ビルドと実行を分ける・基準ディレクトリの正規化](2026-10-06-build-run-split.md) — driver はビルドだけ、走らせるのは internal/runner（driver を使わない: nes のテストとの import の輪）、pkg/fc は Build と Run。基準ディレクトリは newCompilation で 1 度だけ正規化。fcc test に実行の上限
 - 2026-10-06 [struct のメソッドと interface の相談](2026-10-06-methods-interface.md) — メソッドが先（struct の外に書く、受け取り手の型を書く）、interface はタグ付きの共用体 + メソッドの表（`soa interface` と共存）、一般の埋め込みはやらない、ID は手動・自動と `@set_id`（ID は interface ごとの enum、0 は `.none`）、near / far は interface の宣言で（far は呼ぶたびに戻す）。far call でバンクを戻さない記法は候補。同じ日に 3 段とも実装（表の空きは止めずに何もしない・0 を返すに変えた）

@@ -83,6 +83,13 @@ go test ./...                                    # 全部 (golden + examples + N
     頭打ちに（`TestShiftCountBeyondWidth`）。fuzz の実行は差分 fuzz・FuzzCheck ともメモリの上限つき（systemd-run --scope）に
   - 常駐レジスタの自己修正（`ResidentFixes`）を「A のまま使う」(ResFriendly) 命令にも広げる案は、その命令が常駐の値を A に
     読み直すのも「A を書いた」と数えて収束しなかったので入れていない（2026-09-28）
+- **デバッグ用のゲーム**（2026-10-08、`games/`・`internal/nes/games_test.go`）: 11 本のゲームを `AUTO` で遊ばせ、進み具合（得点・
+  面・倒した敵）を変数で確かめる。`TestGamesSameAtTick` はメインループの手数（`end_frame` に `ticks == k` で入った所。
+  `nes.Machine.Stop` で命令ごとに止める）で -O 0 と -O 2 の main の変数（.map の `_main.o` の BSS）を比べる。AUTO の考える時間で
+  進むフレーム数が違っても、ゲームの論理は手数ごとに決まるので一致するはず。bugzoo の最適化のバグ 5 つは見つけなかった（fuzz の
+  作る特別な形）。panic で止まると `Machine.Output` の文言で落ちる。内蔵のランナーに足したもの: スプライト 0 の当たりの近似
+  （BG との重なりは見ない）、CHR RAM。見つかったことは [../discussions/2026-10-08-debug-games-findings.md](../discussions/2026-10-08-debug-games-findings.md)
+
 - **fc 4 の機能の生成器**（2026-10-08）: 期待値を生成器が Go で計算する形（sema の誤りも見える）で、-O 0 / -O 2 / インタプリタと比べる。
   `TestRandomMethodsV4`（randmethod_test.go。struct の値・`*P`・`*const P`・soa のハンドルのメソッド、P を返すメソッド、受け取り手は
   変数・配列の要素・ローカル変数・ポインタ・soa の要素・関数の戻り値・`P.m(x, …)`。soa / 普通の interface、2 つのモジュールの実装、
