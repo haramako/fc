@@ -6,6 +6,8 @@
 //   NAME_M8 は 8×8 のモードの oam.meta の表、NAME_M16 は 8×16 のモード (frame.ctrl に nes.CTRL_SPR_8X16) の表。
 //   NAME_T16 は 8×16 のモードのタイルの番号 (下位 1 ビットが $1000 を選ぶ。8×8 の絵は下が空白)。
 //   表の attr はパレットの番号だけ。
+// use すると CHR (同じディレクトリの .chr) も ROM に入る。
+@include("tiles.chr");
 
 // ---- BG ----
 public const BLANK = 0x00; // 8x8

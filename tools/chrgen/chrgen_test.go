@@ -52,7 +52,6 @@ use nes;
 use frame;
 use oam;
 use tiles;
-@include("tiles.chr");
 function main():void
 {
 	frame.init();

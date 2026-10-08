@@ -1,0 +1,262 @@
+#fc 4
+// スネーク (games/ のデバッグ用のゲーム)。十字キーで向きを変え、リンゴを食べると伸びる。壁か自分にぶつかると終わり (START でやり直し)。
+// 体と壁は BG、リンゴはスプライト。体は尾から頭への向きの 2 ビットのリングバッファ (256 マス分で 64 バイト。添字は u8 で
+// 折り返す)。
+//   fcc build -o snake.nes main.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use pad;
+use oam;
+use rand;
+use bits;
+use tiles;
+
+const AUTO = false @(build);   // リンゴへ向かって自分で動く (テストと見本)
+
+const PALETTE = [
+	0x0f, 0x09, 0x1a, 0x30,  0x0f, 0x09, 0x1a, 0x3a,  0x0f, 0x06, 0x16, 0x36,  0x0f, 0x00, 0x10, 0x30,   // BG: 0 体・壁 (緑) と文字 (白)
+	0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,
+];
+
+const X0 = 1;             // 動ける所 (タイル): x は 1〜30、y は 3〜28
+const X1 = 30;
+const Y0 = 3;
+const Y1 = 28;
+const W = X1 - X0 + 1;
+const H = Y1 - Y0 + 1;
+const START_LEN = 4;
+
+enum Dir:u8 {
+	Up,
+	Right,
+	Down,
+	Left,
+}
+
+const DX:[4]i8 = [0, 1, 0, -1];
+const DY:[4]i8 = [-1, 0, 1, 0];
+const HEAD = [tiles.SNAKE_U, tiles.SNAKE_R, tiles.SNAKE_D, tiles.SNAKE_L];
+
+var moves:[64]u8;         // 体のマスから次のマスへの向き (2 ビットずつ。tail から head - 1 まで)
+var head:u8;              // 次に書く moves の添字
+var tail:u8;              // 尾のマスの moves の添字
+var hx:u8;                // 頭
+var hy:u8;
+var tx:u8;                // 尾
+var ty:u8;
+var len:u8;
+var occ:[H][4]u8;         // 体のある所 (行ごとに 32 ビット)
+var dir:Dir;
+var next_dir:Dir;
+var ax:u8;                // リンゴ
+var ay:u8;
+var best:u8;
+var dead:bool;
+var tick:u8;
+var line:[32]u8;
+
+function get_move(i:u8):u8
+{
+	return bits.get2(moves[i >> 2], i & 3);
+}
+
+function set_move(i:u8, d:Dir):void
+{
+	moves[i >> 2] = bits.field2(moves[i >> 2], i & 3, d as u8);
+}
+
+function used(x:u8, y:u8):bool
+{
+	return bits.get(occ[y - Y0], x);
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 2, 1), @format(line, "SNAKE   LENGTH {:3}   BEST {:3}", len, best));
+}
+
+function walls():void
+{
+	vram.set(vram.addr(0, 0, 2), tiles.MAZE + (2 | 4));
+	vram.fill(vram.addr(0, 1, 2), tiles.MAZE + (2 | 8), 30);
+	vram.set(vram.addr(0, 31, 2), tiles.MAZE + (4 | 8));
+	for (var y:u8 = Y0; y <= Y1; y += 1) {
+		vram.set(vram.addr(0, 0, y), tiles.MAZE + (1 | 4));
+		vram.set(vram.addr(0, 31, y), tiles.MAZE + (1 | 4));
+	}
+	vram.set(vram.addr(0, 0, 29), tiles.MAZE + (1 | 2));
+	vram.fill(vram.addr(0, 1, 29), tiles.MAZE + (2 | 8), 30);
+	vram.set(vram.addr(0, 31, 29), tiles.MAZE + (1 | 8));
+	vram.fill(vram.attr_addr(0, 0, 0), 0x00, 64);
+}
+
+// 空いている所にリンゴを置く
+function place_apple():void
+{
+	while (true) {
+		var x = X0 + rand.below(W);
+		var y = Y0 + rand.below(H);
+		if (!used(x, y)) {
+			ax = x;
+			ay = y;
+			return;
+		}
+	}
+}
+
+function new_game():void
+{
+	frame.render_off();
+	for (var y:u8 = Y0; y <= Y1; y += 1) {
+		vram.fill(vram.addr(0, X0, y), tiles.BLANK, W);
+	}
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var i:u8 = 0; i < 4; i += 1) {
+			occ[y][i] = 0;
+		}
+	}
+	tail = 0;
+	head = START_LEN - 1;
+	len = START_LEN;
+	tx = 8;
+	ty = 15;
+	hx = 8 + START_LEN - 1;
+	hy = 15;
+	for (var i:u8 = 0; i < START_LEN; i += 1) {
+		if (i < START_LEN - 1) {
+			set_move(i, .Right);
+		}
+		bits.set(occ[15 - Y0], 8 + i);
+		vram.set(vram.addr(0, 8 + i, 15), i == START_LEN - 1 ? tiles.SNAKE_R : tiles.SNAKE_BODY);
+	}
+	dir = .Right;
+	next_dir = .Right;
+	dead = false;
+	place_apple();
+	hud();
+	frame.render_on();
+}
+
+// (x, y) へ進めるか (壁と体。尾は動くので、伸びないときは入れる)
+function free(x:u8, y:u8):bool
+{
+	if (x < X0 || x > X1 || y < Y0 || y > Y1) {
+		return false;
+	}
+	if (!used(x, y)) {
+		return true;
+	}
+	return x == tx && y == ty && !(x == ax && y == ay);
+}
+
+// AUTO: 安全な向きのうち、リンゴに近づくもの
+function think():void
+{
+	var best_d:u8 = 255;
+	for (var k:u8 = 0; k < 4; k += 1) {
+		var d = k as Dir;
+		if (((k + 2) & 3) == dir as u8) {
+			continue;   // 反対の向き
+		}
+		var x = hx +% DX[k];
+		var y = hy +% DY[k];
+		if (!free(x, y)) {
+			continue;
+		}
+		var dist = (x > ax ? x - ax : ax - x) + (y > ay ? y - ay : ay - y);
+		if (dist < best_d) {
+			best_d = dist;
+			next_dir = d;
+		}
+	}
+}
+
+function input():void
+{
+	var p = pad.p1.pressed;
+	var want = next_dir;
+	if ((p & pad.UP) != 0) {
+		want = .Up;
+	} else if ((p & pad.DOWN) != 0) {
+		want = .Down;
+	} else if ((p & pad.LEFT) != 0) {
+		want = .Left;
+	} else if ((p & pad.RIGHT) != 0) {
+		want = .Right;
+	}
+	if (((want as u8 + 2) & 3) != dir as u8) {
+		next_dir = want;
+	}
+}
+
+// 1 マス進む
+function step():void
+{
+	if (AUTO) {
+		think();
+	}
+	dir = next_dir;
+	var k = dir as u8;
+	var x = hx +% DX[k];
+	var y = hy +% DY[k];
+	if (!free(x, y)) {
+		dead = true;
+		return;
+	}
+	var eat = x == ax && y == ay;
+	if (!eat) {
+		// 尾を消して 1 マス進める
+		bits.clear(occ[ty - Y0], tx);
+		vram.set(vram.addr(0, tx, ty), tiles.BLANK);
+		var m = get_move(tail);
+		tx = tx +% DX[m];
+		ty = ty +% DY[m];
+		tail += 1;
+	} else if (len < 255) {
+		len += 1;
+		best = @max(best, len);
+	}
+	vram.set(vram.addr(0, hx, hy), tiles.SNAKE_BODY);
+	set_move(head, dir);
+	head += 1;
+	hx = x;
+	hy = y;
+	bits.set(occ[y - Y0], x);
+	vram.set(vram.addr(0, x, y), HEAD[k]);
+	if (eat) {
+		place_apple();
+		hud();
+	}
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	rand.seed(0x5eed);
+	walls();
+	best = START_LEN;
+	new_game();
+	while (true) {
+		pad.poll();
+		input();
+		tick += 1;
+		if (!dead && tick >= 6) {
+			tick = 0;
+			step();
+			if (dead) {
+				vram.put(vram.addr(0, 11, 14), "GAME OVER");
+			}
+		}
+		if (dead && (AUTO || (pad.p1.pressed & pad.START) != 0)) {
+			new_game();
+		}
+		oam.begin();
+		oam.spr(ax * 8, ay * 8 - 1, tiles.BALL, 0);   // リンゴ
+		oam.end();
+		frame.wait();
+	}
+}

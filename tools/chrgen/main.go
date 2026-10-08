@@ -497,7 +497,7 @@ func (s *sheet) chr() []byte {
 }
 
 // module はタイルの名前の fc のモジュール。
-func (s *sheet) module(srcName string) []byte {
+func (s *sheet) module(srcName, chrName string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "#fc 4\n// %s から tools/chrgen が作るタイルの番号 (手で書き換えない: go run ./tools/chrgen <%s のパス>)。\n", srcName, srcName)
 	b.WriteString(`//
@@ -506,7 +506,9 @@ func (s *sheet) module(srcName string) []byte {
 //   NAME_M8 は 8×8 のモードの oam.meta の表、NAME_M16 は 8×16 のモード (frame.ctrl に nes.CTRL_SPR_8X16) の表。
 //   NAME_T16 は 8×16 のモードのタイルの番号 (下位 1 ビットが $1000 を選ぶ。8×8 の絵は下が空白)。
 //   表の attr はパレットの番号だけ。
+// use すると CHR (同じディレクトリの .chr) も ROM に入る。
 `)
+	fmt.Fprintf(&b, "@include(%q);\n", chrName)
 	objs := append([]*object(nil), s.objs...)
 	sort.SliceStable(objs, func(i, j int) bool {
 		if objs[i].spr != objs[j].spr {
@@ -660,7 +662,7 @@ func outputs(src string) (map[string][]byte, error) {
 	base := strings.TrimSuffix(src, filepath.Ext(src))
 	return map[string][]byte{
 		base + ".chr": s.chr(),
-		base + ".fc":  s.module(filepath.Base(src)),
+		base + ".fc":  s.module(filepath.Base(src), filepath.Base(base)+".chr"),
 		base + ".png": s.png(),
 	}, nil
 }

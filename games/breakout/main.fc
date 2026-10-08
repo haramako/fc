@@ -1,0 +1,282 @@
+#fc 4
+// ブロック崩し (games/ のデバッグ用のゲーム)。十字キーでパドルを動かし、A で球を出す。ブロックを全部消すと次の面 (球が速くなる)。
+// 球を 3 つ落とすと GAME OVER (START でやり直し)。
+//   fcc build -o breakout.nes main.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use rand;
+use tiles;
+
+const AUTO = false @(build);   // パドルが球を追って自分で遊ぶ (テストと見本。-D main.AUTO=true)
+
+const PALETTE = [
+	0x0f, 0x00, 0x10, 0x30,  0x0f, 0x06, 0x16, 0x36,  0x0f, 0x09, 0x1a, 0x3a,  0x0f, 0x01, 0x12, 0x32,   // BG: 0 壁と文字, 1 赤, 2 緑, 3 青
+	0x0f, 0x0f, 0x12, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,   // スプライト: 0 パドル, 1 球
+];
+
+const LEFT = 16;          // 球が動ける範囲 (ピクセル。壁の内側)
+const RIGHT = 240;
+const TOP = 24;
+const BOTTOM = 232;       // ここより下に出たら落とした
+const BRICK_X = 2;        // ブロックの左上 (タイル)
+const BRICK_Y = 4;
+const COLS = 14;          // 1 つのブロックは横 2 タイル
+const ROWS = 6;
+const PADDLE_Y = 208;
+const PADDLE_W = 32;
+const EMPTY2 = [tiles.BLANK, tiles.BLANK];
+
+var bricks:[ROWS * COLS]bool;
+var left:u8;              // 残りのブロック
+var px:u8;                // パドルの左端
+var bx:u16;               // 球の左上 (1/16 ピクセル)
+var by:u16;
+var vx:i8;                // 球の速さ (1/16 ピクセル / フレーム)
+var vy:i8;
+var on_paddle:bool;       // 球がパドルに乗っている (A で出す)
+var aim:i8;               // AUTO: パドルの真ん中から球を当てる所のずれ
+var score:u16;
+var balls:u8;
+var stage:u8;
+var line:[32]u8;
+
+function ball_x():u8
+{
+	return (bx >> 4) as u8;
+}
+
+function ball_y():u8
+{
+	return (by >> 4) as u8;
+}
+
+// 上の文字の行
+function hud():void
+{
+	vram.put(vram.addr(0, 2, 1), @format(line, "SCORE {:05}   BALL {}   STAGE {}", score, balls, stage));
+}
+
+// 壁 (迷路の壁のタイル: 横 2|8、縦 1|4、角)
+function walls():void
+{
+	vram.set(vram.addr(0, 1, 2), tiles.MAZE + (2 | 4));
+	vram.fill(vram.addr(0, 2, 2), tiles.MAZE + (2 | 8), 28);
+	vram.set(vram.addr(0, 30, 2), tiles.MAZE + (4 | 8));
+	for (var y:u8 = 3; y < 30; y += 1) {
+		vram.set(vram.addr(0, 1, y), tiles.MAZE + (1 | 4));
+		vram.set(vram.addr(0, 30, y), tiles.MAZE + (1 | 4));
+	}
+}
+
+// ブロックを全部並べ直す (描画を止めている間に)
+function fill_bricks():void
+{
+	var row:[COLS * 2]u8;
+	for (var i:u8 = 0; i < COLS; i += 1) {
+		row[i * 2] = tiles.BRICK_L;
+		row[i * 2 + 1] = tiles.BRICK_R;
+	}
+	for (var r:u8 = 0; r < ROWS; r += 1) {
+		vram.put(vram.addr(0, BRICK_X, BRICK_Y + r), row);
+	}
+	for (var i:u8 = 0; i < ROWS * COLS; i += 1) {
+		bricks[i] = true;
+	}
+	left = ROWS * COLS;
+	// 色: 4〜5 行は赤、6〜7 行は緑、8〜9 行は青 (属性の 1 バイトは 4×4 タイル: 上の 2 行が下位 4 ビット)
+	vram.fill(vram.attr_addr(0, 0, 4), 0xa5, 8);
+	vram.fill(vram.attr_addr(0, 0, 8), 0x0f, 8);
+}
+
+// ピクセル (x, y) にブロックがあれば消して true
+function hit_brick(x:u8, y:u8):bool
+{
+	var tx = x >> 3;
+	var ty = y >> 3;
+	if (tx < BRICK_X || tx >= BRICK_X + COLS * 2 || ty < BRICK_Y || ty >= BRICK_Y + ROWS) {
+		return false;
+	}
+	var c = (tx - BRICK_X) >> 1;
+	var i = (ty - BRICK_Y) * COLS + c;
+	if (!bricks[i]) {
+		return false;
+	}
+	bricks[i] = false;
+	left -= 1;
+	score += (ROWS - (ty - BRICK_Y)) as u16 * 10;   // 上のブロックほど高い
+	vram.put(vram.addr(0, BRICK_X + c * 2, ty), EMPTY2);
+	hud();
+	return true;
+}
+
+// 球をパドルに乗せる
+function hold_ball():void
+{
+	on_paddle = true;
+	vx = 0;
+	vy = 0;
+}
+
+function speed():i8
+{
+	return 20 + @min(stage, 6) as i8 * 3;
+}
+
+function launch():void
+{
+	on_paddle = false;
+	vx = 12;
+	vy = -speed();
+}
+
+// 球を動かす。落としたら true
+function move_ball():bool
+{
+	if (on_paddle) {
+		bx = (px + PADDLE_W / 2 - 4) as u16 << 4;
+		by = (PADDLE_Y - 8) as u16 << 4;
+		return false;
+	}
+	// 横
+	var old = bx;
+	bx = bx +% vx;
+	var x = ball_x();
+	var y = ball_y();
+	if (x < LEFT || x > RIGHT - 8) {
+		bx = old;
+		vx = -vx;
+	} else if (hit_brick(vx < 0 ? x : x + 7, y + 4)) {
+		bx = old;
+		vx = -vx;
+	}
+	// 縦
+	old = by;
+	by = by +% vy;
+	x = ball_x();
+	y = ball_y();
+	if (y < TOP) {
+		by = old;
+		vy = -vy;
+	} else if (hit_brick(x + 4, vy < 0 ? y : y + 7)) {
+		by = old;
+		vy = -vy;
+	} else if (vy > 0 && y + 8 >= PADDLE_Y && y + 8 < PADDLE_Y + 6 && x + 8 > px && x < px + PADDLE_W) {
+		// パドルの真ん中からのずれで横の速さを決める
+		by = (PADDLE_Y - 8) as u16 << 4;
+		vy = -speed();
+		var d = (x + 4) as i16 - (px + PADDLE_W / 2) as i16;   // -20〜20
+		vx = @clamp(d * 2, -40, 40) as i8;
+		if (vx == 0) {
+			vx = 4;
+		}
+		aim = rand.below(25) as i8 - 12;
+	} else if (y > BOTTOM) {
+		return true;
+	}
+	return false;
+}
+
+function move_paddle():void
+{
+	var held = pad.p1.held;
+	if (AUTO) {
+		// 球の真ん中に、パドルの真ん中から aim ずらした所を合わせる
+		var target = ball_x() as i16 + 4 - PADDLE_W / 2 - aim as i16;
+		held = 0;
+		if (target < px as i16 - 1) {
+			held = pad.LEFT;
+		} else if (target > px as i16 + 1) {
+			held = pad.RIGHT;
+		}
+		if (on_paddle && (frame.count & 31) == 0) {
+			held |= pad.A;
+		}
+	}
+	if ((held & pad.LEFT) != 0 && px > LEFT + 2) {
+		px -= 3;
+	}
+	if ((held & pad.RIGHT) != 0 && px + PADDLE_W < RIGHT - 2) {
+		px += 3;
+	}
+	if (on_paddle && ((held & pad.A) != 0 || (pad.p1.pressed & pad.A) != 0)) {
+		launch();
+	}
+}
+
+function draw():void
+{
+	oam.begin();
+	oam.spr(px, PADDLE_Y - 1, tiles.PADDLE_L, 0);
+	oam.spr(px + 8, PADDLE_Y - 1, tiles.PADDLE_M, 0);
+	oam.spr(px + 16, PADDLE_Y - 1, tiles.PADDLE_M, 0);
+	oam.spr(px + 24, PADDLE_Y - 1, tiles.PADDLE_R, 0);
+	oam.spr(ball_x(), ball_y() - 1, tiles.BALL, 1);
+	oam.end();
+}
+
+// 描画を止めて面を作り直す
+function new_stage():void
+{
+	frame.render_off();
+	fill_bricks();
+	hud();
+	px = 112;
+	hold_ball();
+	frame.render_on();
+}
+
+function new_game():void
+{
+	score = 0;
+	balls = 3;
+	stage = 1;
+	new_stage();
+}
+
+function game_over():void
+{
+	vram.put(vram.addr(0, 11, 16), "GAME OVER");
+	draw();
+	frame.wait();
+	if (!AUTO) {
+		while ((pad.p1.pressed & pad.START) == 0) {
+			pad.poll();
+			frame.wait();
+		}
+	}
+	vram.put(vram.addr(0, 11, 16), "         ");
+	new_game();
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	rand.seed(0x1234);
+	walls();
+	new_game();
+	while (true) {
+		pad.poll();
+		move_paddle();
+		if (move_ball()) {
+			balls -= 1;
+			hud();
+			if (balls == 0) {
+				game_over();
+				continue;
+			}
+			hold_ball();
+		}
+		if (left == 0) {
+			stage += 1;
+			new_stage();
+		}
+		draw();
+		frame.wait();
+	}
+}

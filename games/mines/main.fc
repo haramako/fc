@@ -1,0 +1,353 @@
+#fc 4
+// マインスイーパー (games/ のデバッグ用のゲーム)。十字キーでカーソル、A で開く、B で旗。数字は周りの地雷の数。
+// 地雷でないマスを全部開けたら勝ち (START でやり直し)。最初に開けたマスの周りには地雷を置かない。
+// 盤は 24×20 = 480 マスで、添字は u16。0 のマスの周りを開くのは、変わらなくなるまで盤を見直す (再帰もスタックも使わない)。
+//   fcc build -o mines.nes main.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use rand;
+use tiles;
+
+const AUTO = false @(build);   // 確かなマスを開け・旗を立て、無ければ当てずっぽうで開ける (テストと見本)
+
+const PALETTE = [
+	0x0f, 0x00, 0x10, 0x30,  0x0f, 0x06, 0x16, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,
+	0x0f, 0x0f, 0x28, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,
+];
+
+const W = 24;
+const H = 20;
+const N = W * H;
+const MINES = 60;
+const BX = 4;             // 盤の左上 (タイル)
+const BY = 6;
+
+// マスの状態のビット
+const MINE = 0x80;
+const OPEN = 0x40;
+const FLAG = 0x20;
+const COUNT = 0x0f;
+
+enum State:u8 {
+	Ready,     // 最初に開けるまで (地雷はまだ無い)
+	Play,
+	Won,
+	Lost,
+}
+
+const NUM = [tiles.MS_OPEN, tiles.MS_1, tiles.MS_2, tiles.MS_3, tiles.MS_4, tiles.MS_5, tiles.MS_6, tiles.MS_7, tiles.MS_8];
+
+var cells:[N]u8;
+var state:State;
+var cx:u8;                // カーソル (マス)
+var cy:u8;
+var opened:u16;
+var flags:u8;
+var wins:u8;
+var losses:u8;
+var line:[32]u8;
+
+function at(x:u8, y:u8):u16
+{
+	return y as u16 * W + x;
+}
+
+function tile_of(c:u8):u8
+{
+	if ((c & OPEN) == 0) {
+		return (c & FLAG) != 0 ? tiles.MS_FLAG : tiles.MS_CLOSED;
+	}
+	if ((c & MINE) != 0) {
+		return tiles.MS_BOOM;
+	}
+	return NUM[c & COUNT];
+}
+
+function draw_cell(x:u8, y:u8):void
+{
+	vram.set(vram.addr(0, BX + x, BY + y), tile_of(cells[at(x, y)]));
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 1, 2), @format(line, "MINES {} FLAGS {:2} WIN {} LOSE {}", MINES, flags, wins, losses));
+}
+
+function message(s:[]const u8):void
+{
+	vram.put(vram.addr(0, 4, 4), s);
+}
+
+// 盤を閉じたマスだけにする (描画を止めて)
+function new_game():void
+{
+	frame.render_off();
+	for (var i:u16 = 0; i < N; i += 1) {
+		cells[i] = 0;
+	}
+	var row:[W]u8;
+	for (var x:u8 = 0; x < W; x += 1) {
+		row[x] = tiles.MS_CLOSED;
+	}
+	for (var y:u8 = 0; y < H; y += 1) {
+		vram.put(vram.addr(0, BX, BY + y), row);
+	}
+	state = .Ready;
+	opened = 0;
+	flags = 0;
+	cx = W / 2;
+	cy = H / 2;
+	hud();
+	message("                        ");
+	frame.render_on();
+}
+
+// (x, y) の周り 8 マスのうち、ビット bit の立っているマスの数
+function around(x:u8, y:u8, bit:u8):u8
+{
+	var n:u8 = 0;
+	for (var dy:i8 = -1; dy <= 1; dy += 1) {
+		for (var dx:i8 = -1; dx <= 1; dx += 1) {
+			var nx = x +% dx;
+			var ny = y +% dy;
+			if ((dx != 0 || dy != 0) && nx < W && ny < H && (cells[at(nx, ny)] & bit) != 0) {
+				n += 1;
+			}
+		}
+	}
+	return n;
+}
+
+// (sx, sy) とその周りを避けて地雷を置き、数を数える
+function place_mines(sx:u8, sy:u8):void
+{
+	var n:u8 = 0;
+	while (n < MINES) {
+		var x = rand.below(W);
+		var y = rand.below(H);
+		var i = at(x, y);
+		if ((cells[i] & MINE) != 0 || (x + 1 >= sx && x <= sx + 1 && y + 1 >= sy && y <= sy + 1)) {
+			continue;
+		}
+		cells[i] |= MINE;
+		n += 1;
+	}
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			cells[at(x, y)] |= around(x, y, MINE);
+		}
+	}
+}
+
+// 1 マスを開ける (旗と開いたマスはそのまま)。地雷なら true
+function open1(x:u8, y:u8):bool
+{
+	var i = at(x, y);
+	var c = cells[i];
+	if ((c & (OPEN | FLAG)) != 0) {
+		return false;
+	}
+	cells[i] = c | OPEN;
+	draw_cell(x, y);
+	if ((c & MINE) != 0) {
+		return true;
+	}
+	opened += 1;
+	return false;
+}
+
+// 0 のマスの周りを開ける。変わらなくなるまで盤を見直す
+function spread():void
+{
+	var changed = true;
+	while (changed) {
+		changed = false;
+		for (var y:u8 = 0; y < H; y += 1) {
+			for (var x:u8 = 0; x < W; x += 1) {
+				var c = cells[at(x, y)];
+				if ((c & OPEN) == 0 || (c & (MINE | COUNT)) != 0) {
+					continue;
+				}
+				for (var dy:i8 = -1; dy <= 1; dy += 1) {
+					for (var dx:i8 = -1; dx <= 1; dx += 1) {
+						var nx = x +% dx;
+						var ny = y +% dy;
+						if (nx < W && ny < H && (cells[at(nx, ny)] & OPEN) == 0) {
+							open1(nx, ny);
+							changed = true;
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+function reveal_mines():void
+{
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			var c = cells[at(x, y)];
+			if ((c & MINE) != 0 && (c & OPEN) == 0) {
+				vram.set(vram.addr(0, BX + x, BY + y), tiles.MS_MINE);
+			}
+		}
+	}
+}
+
+function open_at(x:u8, y:u8):void
+{
+	if (state == .Ready) {
+		place_mines(x, y);
+		state = .Play;
+	}
+	if (open1(x, y)) {
+		state = .Lost;
+		losses += 1;
+		reveal_mines();
+		message("BOOM!  PRESS START");
+		hud();
+		return;
+	}
+	spread();
+	if (opened == N - MINES) {
+		state = .Won;
+		wins += 1;
+		message("CLEAR! PRESS START");
+		hud();
+	}
+}
+
+function toggle_flag(x:u8, y:u8):void
+{
+	var i = at(x, y);
+	if ((cells[i] & OPEN) != 0) {
+		return;
+	}
+	cells[i] ^= FLAG;
+	if ((cells[i] & FLAG) != 0) {
+		flags += 1;
+	} else {
+		flags -= 1;
+	}
+	draw_cell(x, y);
+	hud();
+}
+
+// AUTO: 開いた数字のマスから確かなことを探して 1 手。無ければ当てずっぽう
+function think():void
+{
+	if (state == .Ready) {
+		open_at(W / 2, H / 2);
+		return;
+	}
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			var c = cells[at(x, y)];
+			if ((c & OPEN) == 0 || (c & COUNT) == 0) {
+				continue;
+			}
+			var closed = around(x, y, FLAG) + around_closed(x, y);
+			var flagged = around(x, y, FLAG);
+			var k = c & COUNT;
+			for (var dy:i8 = -1; dy <= 1; dy += 1) {
+				for (var dx:i8 = -1; dx <= 1; dx += 1) {
+					var nx = x +% dx;
+					var ny = y +% dy;
+					if (nx >= W || ny >= H || (cells[at(nx, ny)] & (OPEN | FLAG)) != 0) {
+						continue;
+					}
+					cx = nx;
+					cy = ny;
+					if (closed == k) {
+						toggle_flag(nx, ny);   // 閉じたマスが全部地雷
+						return;
+					}
+					if (flagged == k) {
+						open_at(nx, ny);       // 地雷は全部見つかっている
+						return;
+					}
+				}
+			}
+		}
+	}
+	// 確かなマスが無い: 閉じたマスを適当に開ける
+	while (true) {
+		var x = rand.below(W);
+		var y = rand.below(H);
+		if ((cells[at(x, y)] & (OPEN | FLAG)) == 0) {
+			cx = x;
+			cy = y;
+			open_at(x, y);
+			return;
+		}
+	}
+}
+
+// 周りの閉じた (旗も無い) マスの数
+function around_closed(x:u8, y:u8):u8
+{
+	var n:u8 = 0;
+	for (var dy:i8 = -1; dy <= 1; dy += 1) {
+		for (var dx:i8 = -1; dx <= 1; dx += 1) {
+			var nx = x +% dx;
+			var ny = y +% dy;
+			if ((dx != 0 || dy != 0) && nx < W && ny < H && (cells[at(nx, ny)] & (OPEN | FLAG)) == 0) {
+				n += 1;
+			}
+		}
+	}
+	return n;
+}
+
+function input():void
+{
+	var r = pad.p1.repeat;
+	if ((r & pad.LEFT) != 0 && cx > 0) {
+		cx -= 1;
+	}
+	if ((r & pad.RIGHT) != 0 && cx < W - 1) {
+		cx += 1;
+	}
+	if ((r & pad.UP) != 0 && cy > 0) {
+		cy -= 1;
+	}
+	if ((r & pad.DOWN) != 0 && cy < H - 1) {
+		cy += 1;
+	}
+	var p = pad.p1.pressed;
+	if ((p & pad.A) != 0) {
+		open_at(cx, cy);
+	} else if ((p & pad.B) != 0) {
+		toggle_flag(cx, cy);
+	}
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	rand.seed(0xbeef);
+	new_game();
+	while (true) {
+		pad.poll();
+		if (state == .Ready || state == .Play) {
+			if (AUTO) {
+				think();
+			} else {
+				input();
+			}
+		} else if (AUTO || (pad.p1.pressed & pad.START) != 0) {
+			new_game();
+		}
+		oam.begin();
+		oam.spr((BX + cx) * 8 + 4, (BY + cy) * 8 + 3, tiles.CURSOR, 0);
+		oam.end();
+		frame.wait();
+	}
+}
