@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-08 [2 次元の配列のループの最適化（強さの低減）](2026-10-08-strength-reduction.md) — fieldindex の 2 次元の添字・licm・strength の 3 段、強さの低減は毎周の命令が増えないときだけ、bench の grid −40.3%、TestRandomGridV4 と bugzoo 3 つ
 - 2026-10-08 [リンクの失敗を fc の言葉にする](2026-10-08-link-errors.md) — 区画があふれたら番地・大きさ・モジュールごとの量（.map から）、CHR RAM での .chr の @include は sema のエラー、失敗したビルドは ROM を残さない
 - 2026-10-08 [静的フレームの RAM の予約と、ゲームで見つかった小さな不足への対応](2026-10-08-static-ram-and-small-gaps.md) — static_ram を書かなければ使う分だけ（golden と比べるソースは 512 で固定、CLI のオプションは今は足さない）、soa の @len、slice を返すメソッドの既定、長さの決まった窓 a[x..x + K]
 - 2026-10-08 [デバッグ用のゲームを 11 本作って見つかったこと](2026-10-08-debug-games-findings.md) — 条件式の枝の型名を省いた struct を直した。静的フレームの RAM の予約 512 バイト・ld65 の生のエラー・soa の @len など相談したいこと、NES の panic が見えない・書式に文字列の幅が無いなど fclib の不足、games/common に置いたライブラリ（gfx・text・bitmap）

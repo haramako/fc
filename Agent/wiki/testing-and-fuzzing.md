@@ -107,7 +107,7 @@ go test ./...                                    # 全部 (golden + examples + N
   opt の 2 次元の添字（fieldindex）・licm・strength を狙う（[design/ssa.md](design/ssa.md) §12）。256 バイト以内 / 超える u8 と
   u16 の要素の配列、増える（歩幅 1〜3）・減る・while のループの 1〜3 重、添字は ループの変数 ± 1・定数・ループの前の変数・手で
   書いた `y * C + x`、continue / break、本体の途中でループの変数を進める（誘導変数でなくなる）。わざと壊した 3 つの段を 80〜100 本
-  見つけた。fuzzmeasure zoo の既定の `-run` に入れた
+  見つけた。bugzoo の strength-mul-step はこれだけが見つける（200 本の 1/4 の 50 本中 39 本）。fuzzmeasure zoo の既定の `-run` に入れた
 
 - **差分テストの判定の弱点と、足した検査**（2026-09-27）: TestRandomPrograms / TestRandomV3Programs の判定は -O 0・-O 2・
   最適化前の IR のインタプリタの 3 つで、どれも sema の作った同じ IR を実行するので **sema の誤りは 3 つとも同じように

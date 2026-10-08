@@ -259,7 +259,10 @@ break / return / asm が無い。lim はリテラルかループの中で定義�
   bgdecode −4.3%。castle の 1 フレームは変わらない（ROM は変わる）。games/blocks の思考は 3600 フレームで 415 → 533 手
 - fuzz: `TestRandomGridV4`（randgrid_test.go。期待値は Go で計算）。わざと壊すと落ちることを確かめた: strength の歩幅を 1 ずらす
   → 100 本中 80 本、licm がループの中で 1 度定義される変数も不変と見る → 100 本、2 次元の添字の加算で行を落とす → 100 本。
-  単体テストは strength_test.go（列のループ、安い置き換えはしない、定義が 2 つの変数、行の前出し、使用が定義より前の変数）
+  単体テストは strength_test.go（列のループ、安い置き換えはしない、定義が 2 つの変数、行の前出し、使用が定義より前の変数）。
+  bugzoo（fuzzmeasure zoo -randn 200）: strength-mul-step は TestRandomGridV4 だけが見つける（50 本中 39 本。既存の生成器は
+  2 のべきでない掛け算をループの誘導変数に掛ける形を作らない）、licm-loop-def は広く（TestRandomPrograms 137 本など）、
+  index2d-const-row は TestRandomV3Programs 23 本・TestRandomGridV4 11 本、作り直した fieldindex-offset は TestRandomGridV4 も 16 本
 - 次の候補: neighbors の形（`m[y-1][x] + m[y+1][x] + m[y][x-1] + m[y][x+1]`）は、どれも同じ `y * 16 + x` に定数のずれ
   （−16・+16・−1・+1）を足したものなので、1 つの添字と disp にできれば添字の加算が 1 つになる。ただし y * 16 + x そのものが
   0〜255 に収まること（支配する比較からの範囲）を示す必要がある
