@@ -6,8 +6,9 @@
 //   text.print("You are in a dusty hall.\n");
 use vram;
 
-public const MAX_W = 30;
-public const MAX_H = 16;
+// 窓の大きさの上限 (写しの RAM は MAX_W × MAX_H バイト。小さい窓だけ使うなら fc.toml の [define.text] で小さくする)
+public const MAX_W = 30 @(build);
+public const MAX_H = 16 @(build);
 
 var lines:[MAX_H][MAX_W]u8;
 var x0:u8;

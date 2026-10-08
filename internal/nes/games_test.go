@@ -270,6 +270,7 @@ func TestGamesSameAtTick(t *testing.T) {
 		{"chase", 2500, 8000},
 		{"adventure", 1500, 4000},
 		{"platform", 2500, 4000},
+		{"rogue", 2500, 6000},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -347,6 +348,24 @@ func TestGamePlatform(t *testing.T) {
 		p.checkVblank(t)
 		if level == 0 {
 			saveGame(t, p, "platform")
+		}
+	})
+}
+
+// TestGameRogue: 毎回作る階、ターン制の soa の interface の敵 (slice を返すメソッド)、幅優先の AUTO。階段を降りていく。
+func TestGameRogue(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "rogue", level, "main.AUTO=true")
+		p.play(t, 4000)
+		deepest := p.peek(t, "_main_deepest", 0)
+		t.Logf("一番深い階 %d, 倒した敵 %d, 倒れた %d, 今の階 %d", deepest, p.peek16(t, "_main_kills"), p.peek(t, "_main_deaths", 0), p.peek(t, "_main_depth", 0))
+		if deepest < 3 {
+			t.Errorf("3 階まで降りていない: %d", deepest)
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "rogue")
 		}
 	})
 }

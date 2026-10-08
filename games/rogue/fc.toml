@@ -1,0 +1,8 @@
+[target]
+mapper = "NROM"
+
+[lib.common]
+path = "../common"
+
+[define.text]
+MAX_H = 3

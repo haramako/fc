@@ -1,0 +1,534 @@
+#fc 4
+// ローグライク (games/ のデバッグ用のゲーム)。十字キーで 1 マス動き (敵にぶつかると攻撃)、B で薬を飲む。階段で次の階へ。
+// 階はそのたびに部屋と通路を作る。敵は soa の interface (スライム・コウモリ・おばけ) で、自分が 1 手動くと敵も 1 手ずつ動く。
+// 倒れると 1 階からやり直し。下の 3 行は文字の窓 (games/common/text.fc) のメッセージ。
+//   fcc build -o rogue.nes main.fc
+@(static_ram: 128);
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use rand;
+use tiles;
+use gfx;
+use text;
+
+const AUTO = false @(build);   // 近くの敵を倒し、いなければ階段へ (テストと見本)
+
+var ticks:u16;            // メインループを回った数
+
+const PALETTE = [
+	0x0f, 0x07, 0x17, 0x27,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,   // BG: 0 壁・床, 1 文字
+	0x0f, 0x0f, 0x27, 0x37,  0x0f, 0x0f, 0x1a, 0x30,  0x0f, 0x0f, 0x14, 0x30,  0x0f, 0x0f, 0x16, 0x30,   // 自分, スライム, コウモリ・おばけ, 物
+];
+
+const W = 16;             // 階の大きさ (マス)
+const H = 13;
+const DX:[4]i8 = [0, 1, 0, -1];
+const DY:[4]i8 = [-1, 0, 1, 0];
+const BUTTON:[4]u8 = [pad.UP, pad.RIGHT, pad.DOWN, pad.LEFT];
+
+// マス
+const FLOOR = 0;
+const WALL = 1;
+const STAIRS = 2;
+
+var map:[H][W]u8;
+var px:u8;
+var py:u8;
+var hp:i8;
+var max_hp:i8;
+var potions:u8;
+var gold:u16;
+var depth:u8;
+var deepest:u8;           // 着いた一番深い階 (テスト用)
+var kills:u16;
+var deaths:u8;
+var line:[32]u8;
+
+// ---- 敵 ----
+
+soa interface Monster {
+	x:u8;
+	y:u8;
+	hp:i8;
+	function act(self:*Monster):void;
+	function name(self:*Monster):[]const u8   // 値を返す slice は既定の本体が要る (.none のとき)
+	{
+		return "?";
+	}
+	function art(self:*Monster):u8;
+	function power(self:*Monster):u8
+	{
+		return 1;
+	}
+}
+
+const MONSTERS = 8;
+soa Mons:[MONSTERS]Monster;
+
+// 1 手おきに自分へ寄ってくる
+struct Slime: Monster {
+	rest:bool;
+}
+
+function Slime.act(self:*Slime):void
+{
+	self.rest = !self.rest;
+	if (!self.rest) {
+		chase(self.x, self.y, @bitcast(*Monster, self), false);
+	}
+}
+
+function Slime.name(self:*Slime):[]const u8
+{
+	return "slime";
+}
+
+function Slime.art(self:*Slime):u8
+{
+	return tiles.SLIME0;
+}
+
+// ふらふら飛ぶ (半分は自分へ)
+struct Bat: Monster {
+}
+
+function Bat.act(self:*Bat):void
+{
+	if (rand.chance(128)) {
+		chase(self.x, self.y, @bitcast(*Monster, self), false);
+	} else {
+		var d = rand.below(4);
+		step_to(@bitcast(*Monster, self), self.x +% DX[d], self.y +% DY[d], false);
+	}
+}
+
+function Bat.name(self:*Bat):[]const u8
+{
+	return "bat";
+}
+
+function Bat.art(self:*Bat):u8
+{
+	return tiles.BAT0;
+}
+
+// 壁を抜けて寄ってくる。強い
+struct Ghost: Monster {
+}
+
+function Ghost.act(self:*Ghost):void
+{
+	chase(self.x, self.y, @bitcast(*Monster, self), true);
+}
+
+function Ghost.name(self:*Ghost):[]const u8
+{
+	return "ghost";
+}
+
+function Ghost.art(self:*Ghost):u8
+{
+	return tiles.GHOST0;
+}
+
+function Ghost.power(self:*Ghost):u8
+{
+	return 2;
+}
+
+// (x, y) にいる敵の添字 (いなければ 255)
+function monster_at(x:u8, y:u8):u8
+{
+	for (var i:u8 = 0; i < MONSTERS; i += 1) {
+		var m = &Mons[i];
+		if (@id_of(m) != .none && m.x == x && m.y == y) {
+			return i;
+		}
+	}
+	return 255;
+}
+
+// 敵 m を (x, y) へ動かす。自分のいる所なら攻撃する
+function step_to(m:*Monster, x:u8, y:u8, through:bool):void
+{
+	if (x >= W || y >= H) {
+		return;
+	}
+	if (x == px && y == py) {
+		var d = rand.below(m.power() + 1) as i8 + m.power() as i8 - 1;
+		if (d > 0) {
+			hp -= d;
+			text.print("The ");
+			text.print(m.name());
+			text.println(@format(line, " hits you ({}).", d));
+		}
+		return;
+	}
+	if ((!through && map[y][x] == WALL) || monster_at(x, y) != 255) {
+		return;
+	}
+	m.x = x;
+	m.y = y;
+}
+
+// 自分へ近づく向きに 1 歩 (横か縦の遠いほう)
+function chase(x:u8, y:u8, m:*Monster, through:bool):void
+{
+	var dx = px as i16 - x as i16;
+	var dy = py as i16 - y as i16;
+	var nx = x;
+	var ny = y;
+	if ((dx < 0 ? -dx : dx) > (dy < 0 ? -dy : dy)) {
+		nx = dx < 0 ? x - 1 : x + 1;
+	} else if (dy != 0) {
+		ny = dy < 0 ? y - 1 : y + 1;
+	}
+	step_to(m, nx, ny, through);
+}
+
+// ---- 物 ----
+
+struct Item {
+	x:u8;
+	y:u8;
+	kind:u8;              // 0 無し, 1 薬, 2 金
+}
+
+var items:[4]Item;
+
+// ---- 階を作る ----
+
+function carve(x0:u8, y0:u8, x1:u8, y1:u8):void
+{
+	for (var y = @min(y0, y1); y <= @max(y0, y1); y += 1) {
+		for (var x = @min(x0, x1); x <= @max(x0, x1); x += 1) {
+			if (map[y][x] == WALL) {
+				map[y][x] = FLOOR;
+			}
+		}
+	}
+}
+
+// 空いている床のマス (自分から離れた所)
+function random_floor(x:*u8, y:*u8):void
+{
+	while (true) {
+		var cx = 1 + rand.below(W - 2);
+		var cy = 1 + rand.below(H - 2);
+		var far = (cx > px ? cx - px : px - cx) + (cy > py ? cy - py : py - cy);
+		if (map[cy][cx] == FLOOR && far > 3 && monster_at(cx, cy) == 255) {
+			*x = cx;
+			*y = cy;
+			return;
+		}
+	}
+}
+
+function new_floor():void
+{
+	frame.render_off();
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			map[y][x] = WALL;
+		}
+	}
+	// 部屋を作って、前の部屋の真ん中とつなぐ
+	var rooms = 3 + rand.below(3);
+	var lx:u8 = 0;
+	var ly:u8 = 0;
+	for (var r:u8 = 0; r < rooms; r += 1) {
+		var w = 3 + rand.below(3);
+		var h = 2 + rand.below(3);
+		var x = 1 + rand.below(W - w - 1);
+		var y = 1 + rand.below(H - h - 1);
+		carve(x, y, x + w - 1, y + h - 1);
+		var cx = x + w / 2;
+		var cy = y + h / 2;
+		if (r == 0) {
+			px = cx;
+			py = cy;
+		} else {
+			carve(lx, ly, cx, ly);
+			carve(cx, ly, cx, cy);
+		}
+		lx = cx;
+		ly = cy;
+	}
+	map[ly][lx] = STAIRS;
+	// 敵と物
+	for (var i:u8 = 0; i < MONSTERS; i += 1) {
+		@set_id(&Mons[i], .none);
+	}
+	var n = @min(2 + depth, MONSTERS);
+	for (var i:u8 = 0; i < n; i += 1) {
+		var x:u8 = 0;
+		var y:u8 = 0;
+		random_floor(&x, &y);
+		var k = rand.below(depth >= 3 ? 3 : 2);
+		if (k == 0) {
+			Mons[i] = Slime{x: x, y: y, hp: 3, rest: false};
+		} else if (k == 1) {
+			Mons[i] = Bat{x: x, y: y, hp: 2};
+		} else {
+			Mons[i] = Ghost{x: x, y: y, hp: 4};
+		}
+	}
+	for (var i:u8 = 0; i < @len(items); i += 1) {
+		random_floor(&items[i].x, &items[i].y);
+		items[i].kind = 1 + rand.below(2);
+	}
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			var t = map[y][x];
+			gfx.put16(0, x, y, t == WALL ? tiles.ROGUE_WALL : t == STAIRS ? tiles.STAIRS : tiles.ROGUE_FLOOR);
+		}
+	}
+	deepest = @max(deepest, depth);
+	status();
+	frame.render_on();
+}
+
+function status():void
+{
+	vram.put(vram.addr(0, 1, 26), @format(line, "DEPTH {:2} HP {:2}/{:2} POT {} G {:4}", depth, hp, max_hp, potions, gold));
+}
+
+function new_game():void
+{
+	hp = 10;
+	max_hp = 10;
+	potions = 1;
+	gold = 0;
+	depth = 1;
+	text.clear();
+	text.println("Welcome to the dungeon.");
+	new_floor();
+}
+
+// ---- 自分の手番 ----
+
+function attack(i:u8):void
+{
+	var m = &Mons[i];
+	var d = 1 + rand.below(3) as i8;
+	m.hp -= d;
+	if (m.hp <= 0) {
+		text.print("You kill the ");
+		text.print(m.name());
+		text.println(".");
+		@set_id(m, .none);
+		kills += 1;
+	} else {
+		text.print("You hit the ");
+		text.print(m.name());
+		text.println(".");
+	}
+}
+
+function drink():void
+{
+	if (potions == 0) {
+		text.println("You have no potion.");
+		return;
+	}
+	potions -= 1;
+	hp = max_hp;
+	text.println("You feel better.");
+}
+
+// 向き d へ 1 手 (攻撃・歩く・拾う・降りる)。手番を使ったら true
+function player_move(d:u8):bool
+{
+	var x = px +% DX[d];
+	var y = py +% DY[d];
+	if (x >= W || y >= H || map[y][x] == WALL) {
+		return false;
+	}
+	var i = monster_at(x, y);
+	if (i != 255) {
+		attack(i);
+		return true;
+	}
+	px = x;
+	py = y;
+	for (var k:u8 = 0; k < @len(items); k += 1) {
+		var it = &items[k];
+		if (it.kind != 0 && it.x == x && it.y == y) {
+			if (it.kind == 1) {
+				potions += 1;
+				text.println("You find a potion.");
+			} else {
+				var g = 5 + rand.below(10 * depth);
+				gold += g as u16;
+				text.println(@format(line, "You find {} gold.", g));
+			}
+			it.kind = 0;
+		}
+	}
+	if (map[y][x] == STAIRS) {
+		depth += 1;
+		max_hp += 1;
+		text.println(@format(line, "You go down to depth {}.", depth));
+		new_floor();
+		return false;
+	}
+	return true;
+}
+
+// 敵の手番
+function monsters_act():void
+{
+	for (var i:u8 = 0; i < MONSTERS; i += 1) {
+		var m = &Mons[i];
+		if (@id_of(m) != .none) {
+			m.act();
+		}
+	}
+	if (hp <= 0) {
+		deaths += 1;
+		text.println(@format(line, "You die on depth {}...", depth));
+		new_game();
+	}
+	status();
+}
+
+// AUTO: 薬を飲むか、近くの敵 (4 マス以内) か階段へ向かう向き (幅優先。壁を避ける)
+var came:[W * H]u8;
+var queue:[W * H]u8;
+
+function auto_action():u8
+{
+	if (hp <= 3 && potions > 0) {
+		return pad.B;
+	}
+	// 一番近い敵 (マンハッタン距離 4 以内) を狙う。いなければ階段
+	var tx:u8 = 255;
+	var ty:u8 = 0;
+	var best:u8 = 5;
+	for (var i:u8 = 0; i < MONSTERS; i += 1) {
+		var m = &Mons[i];
+		if (@id_of(m) == .none) {
+			continue;
+		}
+		var dist = (m.x > px ? m.x - px : px - m.x) + (m.y > py ? m.y - py : py - m.y);
+		if (dist < best) {
+			best = dist;
+			tx = m.x;
+			ty = m.y;
+		}
+	}
+	for (var i:u8 = 0; i < W * H; i += 1) {
+		came[i] = 0xff;
+	}
+	var start = py * W + px;
+	came[start] = 4;
+	var head:u8 = 0;
+	var tail:u8 = 1;
+	queue[0] = start;
+	while (head < tail) {
+		var c = queue[head];
+		head += 1;
+		var cx = c % W;
+		var cy = c / W;
+		var goal = tx == 255 ? map[cy][cx] == STAIRS : cx == tx && cy == ty;
+		if (goal && c != start) {
+			while (true) {
+				var d = came[c];
+				var p = c -% (DY[d] * W as i8 + DX[d]);
+				if (p == start) {
+					return BUTTON[d];
+				}
+				c = p;
+			}
+		}
+		for (var d:u8 = 0; d < 4; d += 1) {
+			var nx = cx +% DX[d];
+			var ny = cy +% DY[d];
+			if (nx >= W || ny >= H || map[ny][nx] == WALL) {
+				continue;
+			}
+			var n = ny * W + nx;
+			if (came[n] == 0xff) {
+				came[n] = d;
+				queue[tail] = n;
+				tail += 1;
+			}
+		}
+	}
+	return BUTTON[rand.below(4)];
+}
+
+function turn(b:u8):void
+{
+	var used = false;
+	if ((b & pad.UP) != 0) {
+		used = player_move(0);
+	} else if ((b & pad.RIGHT) != 0) {
+		used = player_move(1);
+	} else if ((b & pad.DOWN) != 0) {
+		used = player_move(2);
+	} else if ((b & pad.LEFT) != 0) {
+		used = player_move(3);
+	} else if ((b & pad.B) != 0) {
+		drink();
+		used = true;
+	}
+	if (used) {
+		monsters_act();
+	}
+}
+
+function draw():void
+{
+	oam.begin();
+	gfx.spr16(px << 4, (py << 4) - 1, tiles.HERO_D0 + ((ticks >> 4) as u8 & 1) * 4, 0);
+	for (var i:u8 = 0; i < MONSTERS; i += 1) {
+		var m = &Mons[i];
+		if (@id_of(m) != .none) {
+			gfx.spr16(m.x << 4, (m.y << 4) - 1, m.art() + ((ticks >> 4) as u8 & 1) * 4, @id_of(m) == .Slime ? 1 : 2);
+		}
+	}
+	for (var i:u8 = 0; i < @len(items); i += 1) {
+		var it = &items[i];
+		if (it.kind == 1) {
+			oam.meta((it.x << 4) as i16 + 4, (it.y << 4) as i16 - 1, tiles.POTION_M8, 3);
+		} else if (it.kind == 2) {
+			oam.spr((it.x << 4) + 4, (it.y << 4) + 3, tiles.GEM, 3);
+		}
+	}
+	oam.end();
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	rand.seed(0x9999);
+	vram.fill(vram.attr_addr(0, 0, 24), 0x55, 16);   // 下の文字の行はパレット 1
+	text.open(1, 27, 30, 3);
+	new_game();
+	while (true) {
+		pad.poll();
+		if (AUTO) {
+			if ((ticks & 7) == 0) {
+				turn(auto_action());
+			}
+		} else {
+			turn(pad.p1.repeat);
+		}
+		draw();
+		end_frame();
+	}
+}
