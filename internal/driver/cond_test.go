@@ -53,6 +53,39 @@ function main():void
 	}
 }
 
+// TestCondExprAnonStruct: 条件式の枝に型名を省いた struct のリテラル (`c ? {1, 2} : q`)。型は代入先・引数・戻り値から両方の枝に
+// 渡る (文法が枝に { } を書かせていなかった。games/chase で見つけた)。
+func TestCondExprAnonStruct(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+struct P { x:u8; y:u16; }
+function sum(p:P):u16 { return p.x + p.y; }
+function mk(c:bool, q:P):P { return c ? {1, 300} : q; }
+function main():void
+{
+	var c = true;
+	var q:P = {5, 6};
+	var a:P = c ? {1, 2} : q;
+	var b:P = !c ? q : {x: 3, y: 4};
+	var d:P = c ? {7, 8} : {9, 10};
+	q = !c ? {11, 12} : !c ? q : {13, 14};
+	var e = mk(false, a);
+	@printf("{} {} {} {} {} {} {} {}\n", a.y, b.x, d.y, q.x, q.y, e.x, sum(c ? {20, 1000} : q), mk(true, q).y);
+	console.exit(0);
+}
+`})
+	want := "2 3 8 13 14 1 1020 300\n"
+	if err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
+	}
+	if _, err := buildFiles(t, map[string]string{"t.fc": "#fc 4\nstruct P { x:u8; }\nfunction main():void { var c = true; var s = c ? {1} : {2}; }\n"}); err == nil {
+		t.Errorf("型の分からない枝の { } が通った")
+	} else {
+		t.Logf("型の分からない枝: %v", err)
+	}
+}
+
 // TestCondExprErrors: 条件式の型の誤り。
 func TestCondExprErrors(t *testing.T) {
 	t.Parallel()
