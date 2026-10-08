@@ -620,16 +620,19 @@ func (g *rmGen) stmt(sc *rmScope, depth int) *rmS {
 			sc.vars = sc.vars[:len(sc.vars)-1]
 			return s
 		default:
-			if !sc.write {
-				size := g.pick(2) + 1
-				if sc.locals >= 6 {
-					return &rmS{kind: rmIf, cond: g.cond(sc)} // 空の if
-				}
-				s := &rmS{kind: rmLocal, name: g.name("t"), size: size, e: g.expr(sc, size, 0)}
-				sc.vars = append(sc.vars, rmField{s.name, size})
-				sc.locals++
-				return s
+			// 書けるフィールドがあれば選び直す。無ければ (書けるが self にフィールドが無い、も) ローカル変数か空の if にする
+			// (前は書けてフィールドが無いとき、ローカル変数が上限で使える分岐が無いと選び直しが止まらなかった。種 62802000 台)
+			if sc.write && len(fields) > 0 {
+				continue
 			}
+			size := g.pick(2) + 1
+			if sc.locals >= 6 {
+				return &rmS{kind: rmIf, cond: g.cond(sc)} // 空の if
+			}
+			s := &rmS{kind: rmLocal, name: g.name("t"), size: size, e: g.expr(sc, size, 0)}
+			sc.vars = append(sc.vars, rmField{s.name, size})
+			sc.locals++
+			return s
 		}
 	}
 }
