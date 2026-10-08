@@ -10,8 +10,10 @@ import (
 //	index t = &a[i]; load_mem d = t, disp=k      →  mul j = i, #s; load_mem d = a, j, scale=1, disp=k     lda a+k,y
 //	index t = &a[i]; store_mem t, v, disp=k      →  mul j = i, #s; store_mem a, j, v, scale=1, disp=k     sta a+k,y
 //	(k = 0 なら先頭のフィールド・要素全体)
+//	index t = &a[i]; load_mem d = t, x, scale=1   →  mul j = i, #s; add k = j, x; load_mem d = a, k, scale=1      2 次元の配列
+//	                                                   (a[i][x]。定数の添字 i なら load_mem d = a, x, disp=i*s)
 //
-// s は要素の大きさ。j = i * s は mul の展開 (expandMul) でシフトと加算になる。配列全体が 256 バイト以内なら、範囲内の
+// s は要素の大きさ。j = i * s は strength (ループで進む i なら加算に) の後の mul の展開 (expandMul) でシフトと加算になる。配列全体が 256 バイト以内なら、範囲内の
 // 添字 i で i * s + k + フィールドの大きさ は 256 以下なので 1 バイトの Y に収まる (範囲外の添字は未定義)。
 // 今までは `&a[i]` を 16 ビットで組み立てて `sta (p),y` にしていた (要素 1 つで約 20 命令。読み出しは先頭のフィールド
 // だけが fusePointer の 添字付きの load_mem になっていた)。SoA (`soa`) はフィールドごとの配列なので最初から `sta a_f,y`。
@@ -27,6 +29,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 		es  int
 	}
 	shared := map[scaledKey]*ir.Value{}
+	before := map[int][]*ir.Op{}    // 命令の前に挿す命令 (2 次元の添字の加算。最後にまとめて挿す)
 	refered := map[*ir.Value]bool{} // アドレスを取られた変数 (ポインタ経由で書き換わりうるので使い回さない。sinkAddress と同じ)
 	for _, op := range ops {
 		if op != nil && op.Code == ir.OpRef {
@@ -76,6 +79,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			at    int
 			off   int
 			width int
+			inner ir.Operand // 内側の添字 (2 次元の配列 a[i][x] の x。無ければ nil)
 		}
 		var uses []use
 		for _, use0 := range tuses {
@@ -86,7 +90,12 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			}
 			m := use0.Mem()
 			p := m.Base
-			if ir.UnderlyingValue(p) != t || ir.ValOffset(p) != 0 || ir.ValType(p).Kind != types.Pointer || m.Index != nil {
+			if ir.UnderlyingValue(p) != t || ir.ValOffset(p) != 0 || ir.ValType(p).Kind != types.Pointer {
+				uses = nil
+				break
+			}
+			// 内側の添字は 1 バイトの要素の 1 バイトの添字だけ (要素の中の位置 x は 0〜s-1 なので i * s + x も 256 未満)
+			if m.Index != nil && (m.Scale != 1 || ir.ValType(m.Index).Kind != types.Int || ir.ValType(m.Index).Size != 1 || lmd.Cfg().Disabled("index2d")) {
 				uses = nil
 				break
 			}
@@ -99,7 +108,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 				uses = nil
 				break
 			}
-			uses = append(uses, use{at: k, off: m.Disp, width: m.Width})
+			uses = append(uses, use{at: k, off: m.Disp, width: m.Width, inner: m.Index})
 		}
 		if len(uses) != len(tuses) {
 			continue
@@ -111,10 +120,15 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 			for _, us := range uses {
 				use0 := ops[us.at]
 				var nop *ir.Op
+				var x ir.Operand
+				scale := 0
+				if us.inner != nil {
+					x, scale = asU8(us.inner, u8), 1
+				}
 				if use0.Code == ir.OpLoadMem {
-					nop = ir.NewLoadMem(use0.Dst, arr, nil, 0, k*es+us.off)
+					nop = ir.NewLoadMem(use0.Dst, arr, x, scale, k*es+us.off)
 				} else {
-					nop = ir.NewStoreMem(arr, nil, 0, k*es+us.off, us.width, use0.MemValue())
+					nop = ir.NewStoreMem(arr, x, scale, k*es+us.off, us.width, use0.MemValue())
 				}
 				nop.Pos = use0.Pos
 				ir.ReplaceOp(ops, us.at, nop)
@@ -146,11 +160,19 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 		}
 		for _, us := range uses {
 			use0 := ops[us.at]
+			jx := j
+			if us.inner != nil { // 2 次元: k = j + x (使用の直前に。x はその時点の値)
+				kv := ir.NewLocal(t.Name+"+", u8, ir.LTTemp)
+				lmd.Vars = append(lmd.Vars, kv)
+				add := &ir.Op{Code: ir.OpAdd, Dst: kv, Src: []ir.Operand{asU8(j, u8), asU8(us.inner, u8)}, Pos: use0.Pos}
+				before[us.at] = append(before[us.at], add)
+				jx = kv
+			}
 			var nop *ir.Op
 			if use0.Code == ir.OpLoadMem {
-				nop = ir.NewLoadMem(use0.Dst, arr, j, 1, us.off)
+				nop = ir.NewLoadMem(use0.Dst, arr, jx, 1, us.off)
 			} else {
-				nop = ir.NewStoreMem(arr, j, 1, us.off, us.width, use0.MemValue())
+				nop = ir.NewStoreMem(arr, jx, 1, us.off, us.width, use0.MemValue())
 			}
 			nop.Pos = use0.Pos
 			ir.ReplaceOp(ops, us.at, nop)
@@ -158,10 +180,15 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
 		}
 		changed = true
 	}
-	if changed {
-		expandMul(lmd) // mul j = i, #s をシフトと加算に
+	if len(before) > 0 {
+		out := make([]*ir.Op, 0, len(ops)+len(before))
+		for i, op := range ops {
+			out = append(out, before[i]...)
+			out = append(out, op)
+		}
+		lmd.Ops = out
 	}
-	return changed
+	return changed // mul j = i, #s のシフトと加算への展開は strength の後 (ループの中なら加算に置き換わる)
 }
 
 // asU8 は 1 バイトの添字を符号なしとして見る (i8 の添字も i * s はバイトの積で同じ)。

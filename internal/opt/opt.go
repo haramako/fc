@@ -121,7 +121,8 @@ func changes(f func(lmd *ir.Lambda) bool) func(*ir.Lambda, *types.Universe) bool
 }
 
 // Passes は Optimize が順に当てる段。順序の依存: sink は fuse の前 (アドレス計算を使用位置に寄せてから融合)、induction は
-// coalesce の後 (`i += s` が `add i = i, s` になってから)、ywalk は jumps (ループの回転) の後。
+// coalesce の後 (`i += s` が `add i = i, s` になってから)、ywalk は jumps (ループの回転) の後。licm / strength は unroll の後
+// (展開したループの定数は畳まれている)、fieldindex の mul j = i, #s の展開は strength の後 (掛け算の形のまま誘導変数を見る)。
 func Passes() []Pass {
 	return []Pass{
 		{Name: "aggcopy", Run: changes(propagateAggregateCopies)}, // インライン展開の引数の slice の写し
@@ -151,6 +152,13 @@ func Passes() []Pass {
 					fusePointer(lmd, u) // 添字が定数になった index + load_mem / store_mem (要素 2 バイトのポインタは定数の添字だけ融合できる)
 				}
 			}},
+		// ループ不変の計算をループの前へ (2 次元の配列の行 y * s など。unroll の後: 展開したループの定数は畳まれている)
+		{Name: "licm", Requires: []string{"ssa"}, Run: changes(hoistInvariants)},
+		// ループで進む変数の掛け算・加算を、その変数と一緒に進む変数に (y * 10 を毎周 10 足す)。置き換えた写しと、使われなく
+		// なった前の段の変数を畳む
+		{Name: "strength", Requires: []string{"ssa"}, Run: changes(reduceStrength),
+			Then: func(lmd *ir.Lambda, _ *types.Universe) { propagateSSA(lmd) }},
+		{Name: "mul", Run: always(expandMul)}, // fieldindex の mul j = i, #s (strength が置き換えなかったもの)
 		{Name: "narrow", Run: alwaysU(narrowBitTest)},
 		{Name: "scale", Run: alwaysU(scaleIndex)},
 		{Name: "commute", Run: always(commuteTemp)},

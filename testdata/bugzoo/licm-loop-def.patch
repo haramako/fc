@@ -1,0 +1,14 @@
+# ループ不変の計算を前へ出すとき、ループの中で定義される変数も不変と見る (わざと入れたバグ。licm の検査用)
+diff --git a/internal/opt/licm.go b/internal/opt/licm.go
+index 25f331b..1670ace 100644
+--- a/internal/opt/licm.go
++++ b/internal/opt/licm.go
+@@ -131,7 +131,7 @@ func (s *ssaForm) invariantOperands(op *ir.Op, defs map[*ir.Value][]int) bool {
+ 		if op.Code == ir.OpIndex && k == 0 && v.Kind == ir.KindGlobal && ir.ValType(src).Kind == types.Array {
+ 			continue // グローバルの配列の番地は動かない
+ 		}
+-		if !s.vars[v] || v.Volatile || len(defs[v]) > 0 {
++		if !s.vars[v] || v.Volatile {
+ 			return false
+ 		}
+ 	}

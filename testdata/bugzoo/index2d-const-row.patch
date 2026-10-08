@@ -1,0 +1,14 @@
+# 2 次元の配列の定数の行 a[K][x] で、内側の添字 x を落とす (わざと入れたバグ。fieldindex の 2 次元の添字の検査用)
+diff --git a/internal/opt/fieldindex.go b/internal/opt/fieldindex.go
+index c4e48cf..a3bef40 100644
+--- a/internal/opt/fieldindex.go
++++ b/internal/opt/fieldindex.go
+@@ -123,7 +123,7 @@ func foldFieldIndex(lmd *ir.Lambda, u *types.Universe) bool {
+ 				var x ir.Operand
+ 				scale := 0
+ 				if us.inner != nil {
+-					x, scale = asU8(us.inner, u8), 1
++					_ = us.inner
+ 				}
+ 				if use0.Code == ir.OpLoadMem {
+ 					nop = ir.NewLoadMem(use0.Dst, arr, x, scale, k*es+us.off)

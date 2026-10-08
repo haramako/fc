@@ -1,0 +1,14 @@
+# 強さの低減で、掛け算 i * c の進みを s * c でなく s にする (わざと入れたバグ。strength の検査用)
+diff --git a/internal/opt/strength.go b/internal/opt/strength.go
+index 2f44e75..1775def 100644
+--- a/internal/opt/strength.go
++++ b/internal/opt/strength.go
+@@ -168,7 +168,7 @@ func (s *ssaForm) strengthStep(op *ir.Op, d *ir.Value, ivs map[*ir.Value]*ivDef,
+ 		switch op.Code {
+ 		case ir.OpMul:
+ 			if stLit && cLit {
+-				return iv, lit(st * c)
++				return iv, lit(st)
+ 			}
+ 		case ir.OpShiftLeft:
+ 			if k == 0 && stLit && cLit && c >= 0 && c < 8*n {

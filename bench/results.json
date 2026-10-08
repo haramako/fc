@@ -1,7 +1,7 @@
 {
   "bgdecode": {
-    "cycles": 1322338,
-    "size": 707,
+    "cycles": 1265762,
+    "size": 709,
     "out": "sum=47712"
   },
   "calls": {
@@ -29,6 +29,11 @@
     "size": 204,
     "out": "fib=2584"
   },
+  "grid": {
+    "cycles": 1860921,
+    "size": 1001,
+    "out": "sum=33844"
+  },
   "linkedlist": {
     "cycles": 326274,
     "size": 546,
@@ -41,7 +46,7 @@
   },
   "oam": {
     "cycles": 2043156,
-    "size": 926,
+    "size": 918,
     "out": "sum=25008"
   },
   "plasma": {

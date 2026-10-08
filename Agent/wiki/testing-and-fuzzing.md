@@ -103,6 +103,11 @@ go test ./...                                    # 全部 (golden + examples + N
   24 本、0 埋めの符号の位置（formatConst）→ TestRandomFormatV4 が 14 本、fmt.fc の小文字の 16 進 → 78 本、`@clamp` の畳み込みを
   `max(min(x, hi), lo)` に → TestRandomConstFold が落ちる。同じ日に、TestRandomConstFold に `@clamp`、rpCondRewrite（fc 4 の差分）に
   `while (C) { S }` → `loop { if (!(C)) { break; } S }` を足した（100 本で 63 か所）。3 つとも fuzzmeasure zoo の既定の `-run` に入れた
+- **2 次元の配列とループの生成器**（2026-10-08）: `TestRandomGridV4`（randgrid_test.go。期待値は Go で計算。`-randn` の 1/4 本）。
+  opt の 2 次元の添字（fieldindex）・licm・strength を狙う（[design/ssa.md](design/ssa.md) §12）。256 バイト以内 / 超える u8 と
+  u16 の要素の配列、増える（歩幅 1〜3）・減る・while のループの 1〜3 重、添字は ループの変数 ± 1・定数・ループの前の変数・手で
+  書いた `y * C + x`、continue / break、本体の途中でループの変数を進める（誘導変数でなくなる）。わざと壊した 3 つの段を 80〜100 本
+  見つけた。fuzzmeasure zoo の既定の `-run` に入れた
 
 - **差分テストの判定の弱点と、足した検査**（2026-09-27）: TestRandomPrograms / TestRandomV3Programs の判定は -O 0・-O 2・
   最適化前の IR のインタプリタの 3 つで、どれも sema の作った同じ IR を実行するので **sema の誤りは 3 つとも同じように

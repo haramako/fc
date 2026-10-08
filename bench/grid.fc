@@ -1,0 +1,100 @@
+#fc 4
+// B: 2 次元配列の走査。落ちものパズルの盤の評価 (列ごとに上から見て高さと穴: 列の方向のループ)、そろった行の数 (行の方向)、
+// 16×16 のマップの上下左右の数え (ライフゲームの形)。盤を少しずつ変えながら 40 回。
+use console;
+
+const W = 10;
+const H = 20;
+const N = 16;
+
+var board:[H][W]u8;
+var map:[N][N]u8;
+var count:[N][N]u8;
+var seed:u8;
+
+// 線形合同 (x * 5 + 1 mod 256)
+function next():u8
+{
+	seed = seed * 5 + 1;
+	return seed;
+}
+
+// 列ごとの高さと穴 (blocks の evaluate と同じ形)
+function evaluate():u16
+{
+	var height:u16 = 0;
+	var holes:u16 = 0;
+	for (var x:u8 = 0; x < W; x += 1) {
+		var seen = false;
+		for (var y:u8 = 0; y < H; y += 1) {
+			if (board[y][x] != 0) {
+				if (!seen) {
+					height += (H - y) as u16;
+					seen = true;
+				}
+			} else if (seen) {
+				holes += 1;
+			}
+		}
+	}
+	return height * 3 + holes;
+}
+
+// 全部埋まった行の数
+function full_rows():u8
+{
+	var n:u8 = 0;
+	for (var y:u8 = 0; y < H; y += 1) {
+		var all = true;
+		for (var x:u8 = 0; x < W; x += 1) {
+			if (board[y][x] == 0) {
+				all = false;
+			}
+		}
+		if (all) {
+			n += 1;
+		}
+	}
+	return n;
+}
+
+// 上下左右の 1 の数 (端は数えない)
+function neighbors():u16
+{
+	var sum:u16 = 0;
+	for (var y:u8 = 1; y < N - 1; y += 1) {
+		for (var x:u8 = 1; x < N - 1; x += 1) {
+			var c = map[y - 1][x] + map[y + 1][x] + map[y][x - 1] + map[y][x + 1];
+			count[y][x] = c;
+			sum += c as u16;
+		}
+	}
+	return sum;
+}
+
+function main():void
+{
+	seed = 7;
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			board[y][x] = y >= 8 && (next() & 3) != 0 ? 1 : 0;
+		}
+	}
+	for (var y:u8 = 0; y < N; y += 1) {
+		for (var x:u8 = 0; x < N; x += 1) {
+			map[y][x] = next() & 1;
+		}
+	}
+	var sum:u16 = 0;
+	console.bench_start();
+	for (var k:u8 = 0; k < 40; k += 1) {
+		sum += evaluate();
+		sum += full_rows() as u16;
+		sum += neighbors();
+		board[next() % H][next() % W] ^= 1;
+		map[next() & 15][next() & 15] ^= 1;
+	}
+	console.bench_end();
+	@printf("sum={}\n", sum);
+	console.exit(0);
+}
