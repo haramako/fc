@@ -25,8 +25,6 @@ fclib の足りないところを見つける。`examples/`（実プロジェク
 - どのゲームも `const AUTO = false @(build);`（true で自分で遊ぶ。テストは `-D main.AUTO=true`）と、メインループの終わりに呼ぶ
   `function end_frame():void @(noinline) { ticks += 1; frame.wait(); }` を持つ（テストが手数 `ticks` で止めて -O 0 と -O 2 を比べる）。
   AUTO の判断もゲームの論理も手数ごとに決まるように書く（`frame.count` など、かかったフレーム数で変わるものを使わない）
-- 静的フレームの RAM の予約の既定 512 バイトでは RAM が足りないことが多い。`@(static_ram: N)` を main に書く（`fcc build -d` の
-  `FC_SRAM` が実際に使う量）
 - CHR RAM のゲーム（wire）は fc.toml に `chr = 0` と `[define.tiles] CHR_ROM = false`（tiles の定数だけ使い、絵は `@incbin` で写す）
 
 ## Work Guidance

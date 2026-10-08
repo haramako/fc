@@ -116,19 +116,20 @@ func NewCompiler(fcHome string) *Compiler {
 // 呼ぶたびに作る。
 type compilation struct {
 	*Compiler
-	ctx      context.Context
-	jobs     int                   // ca65 の並列数
-	libDirs  []string              // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
-	libs     []project.ResolvedLib // fc.toml の [lib.*] (fcc build -d の要約)
-	optLibs  []string              // BuildOptions.LibPath を絶対パスにしたもの
-	offline  bool                  // BuildOptions.Offline
-	target   string
-	dir      string // ソースの基準ディレクトリ (BuildOptions.Dir)
-	buildDir string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
-	prog     *sema.Program
-	layout   *project.BankLayout // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
-	hashes   *hashMemo           // このビルドの中のファイルのハッシュ (asmcache.go)
-	cfg      *ir.Config          // 調査用の設定 (BuildOptions.Config)
+	ctx           context.Context
+	jobs          int                   // ca65 の並列数
+	staticRamUsed int                   // 静的フレームが RAM に使う量 (frames の計画。base.s の FC_SRAM の大きさ)
+	libDirs       []string              // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
+	libs          []project.ResolvedLib // fc.toml の [lib.*] (fcc build -d の要約)
+	optLibs       []string              // BuildOptions.LibPath を絶対パスにしたもの
+	offline       bool                  // BuildOptions.Offline
+	target        string
+	dir           string // ソースの基準ディレクトリ (BuildOptions.Dir)
+	buildDir      string // 中間生成物ディレクトリ (BuildOptions.BuildDir)
+	prog          *sema.Program
+	layout        *project.BankLayout // fc.toml のバンクの表 (nil なら options(bank_count / bank) で配置する。layout.go)
+	hashes        *hashMemo           // このビルドの中のファイルのハッシュ (asmcache.go)
+	cfg           *ir.Config          // 調査用の設定 (BuildOptions.Config)
 	// globalInit は初期値のある変数があるビルド (runtime.asm を FC_GLOBAL_INIT つきでアセンブルする。globalInitTable)
 	globalInit bool
 	linkCfg    string // リンクに使ったリンカ設定のパス (--size-report のバンクの表)
@@ -269,6 +270,7 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 		return nil, err
 	}
 	result.StaticZp, result.StaticRam = plan.ZpUsed, plan.RamUsed
+	c.staticRamUsed = plan.RamUsed
 	result.Frames = plan.Report
 	for _, mod := range prog.Modules.List() {
 		asm, inc, lerr := llc.Compile(mod)
@@ -797,7 +799,7 @@ func (c *compilation) baseAsmTemplate(inesprg, ineschr, inesmir, inesmap int) st
 		"\t.export FC_SZP_SIZE : absolute\n" +
 		"\t.export FC_SRAM_SIZE : absolute\n" +
 		fmt.Sprintf("FC_SZP_SIZE = %d\n", validated(staticZpSize(c.prog))) +
-		fmt.Sprintf("FC_SRAM_SIZE = %d\n", validated(staticRamSize(c.prog))) +
+		fmt.Sprintf("FC_SRAM_SIZE = %d\n", c.staticRamReserve()) +
 		"\t.exportzp L \t\t\t\t\t; TODO: そのうち消すこと\n" +
 		"\t.exportzp reg\n" +
 		"\t.exportzp S\n" +

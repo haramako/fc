@@ -1,6 +1,7 @@
+(option static_ram 512)
 (option bank -1)
 (module test_basic
- (options {})
+ (options {static_ram 512})
  (include_asms ("test_basic.asm"))
  (include_chrs ("character.chr"))
  (modules (unittest mem))

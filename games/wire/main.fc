@@ -3,7 +3,6 @@
 // 透視・Bresenham の線を RAM のビットマップに描き、CHR RAM へ少しずつ送る: games/common/bitmap.fc)。十字キーで照準を動かし、
 // A で撃つ。当てると次の船 (速く・遠く) が来る。
 //   fcc build -o wire.nes main.fc
-@(static_ram: 96);
 use nes;
 use frame;
 use vram;

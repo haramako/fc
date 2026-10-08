@@ -228,7 +228,9 @@ static / entry: 戻り値・引数の後ろに、全ローカル（`L` に置い
 ### 6-3 配置（`_frames.inc`）
 
 - 衝突: f と g が同時に活性になりうる ⇔ 呼び出しグラフで一方から他方へ届く（推移閉包）。割り込み関数の部分木は全部と衝突
-- 領域は ZP（`FC_SZP`、`options(static_zp: N)`）と RAM（`FC_SRAM`、`options(static_ram: M)`）の 2 つ。ZP の候補は
+- 領域は ZP（`FC_SZP`、`options(static_zp: N)`）と RAM（`FC_SRAM`、`options(static_ram: M)`）の 2 つ。RAM は `static_ram` を書かなければ
+  計画の上限を 512 にして、base.s の `FC_SRAM` は実際に使った分（`plan.RamUsed`）だけ取る（2026-10-08。既定の 512 を丸ごと取ると
+  NES の RAM の 4 割が空いたままだった。golden で ROM を比べるソースは `static_ram: 512` を書いて番地を固定する）。ZP の候補は
   **深さ（根からの最長距離）の深い順**（葉に近いほど呼ばれる回数が多い、という近似）、同じ深さならフレームの小さい順。
   順に「衝突する配置済みの関数と重ならない最小のオフセット」に置き、ZP に入らなければ RAM。`options(zeropage: false)` で RAM を強制。
   ZP からあふれた関数があれば、フレームを参照するオペランドの数（ZP に置いたときに縮むバイト数の目安。`frameRefs`）の少ない

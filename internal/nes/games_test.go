@@ -129,10 +129,10 @@ func compareAtTick(t *testing.T, name string, k, maxFrames int) {
 		}
 		progs[i] = p
 	}
+	// 静的フレームの RAM は使う分だけ取るので、main の変数の番地はレベルで違う (中身の並びは同じ。番地を持つ変数は置かない)
 	lo, _ := progs[0].mainVars(t)
-	lo2, _ := progs[1].mainVars(t)
-	if len(states[0]) != len(states[1]) || lo != lo2 {
-		t.Fatalf("変数の配置が -O 0 と -O 2 で違う (%#x %d / %#x %d)", lo, len(states[0]), lo2, len(states[1]))
+	if len(states[0]) != len(states[1]) {
+		t.Fatalf("main の変数の大きさが -O 0 と -O 2 で違う (%d / %d)", len(states[0]), len(states[1]))
 	}
 	for i := range states[0] {
 		if states[0][i] != states[1][i] {

@@ -4,7 +4,6 @@
 // 面は横 64 マス (16×16) で、画面の右に入る列をネームテーブル 0 / 1 (左右に並ぶ: 縦のミラー) へ 1 列ずつ書き足す。
 // 上の文字の行は止めたまま、スプライト 0 の当たりから下だけ横にずらす。スライムは soa の struct のメソッド。
 //   fcc build -o platform.nes main.fc
-@(static_ram: 96);
 use nes;
 use frame;
 use vram;

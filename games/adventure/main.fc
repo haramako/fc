@@ -3,7 +3,6 @@
 // 消す、START で決める)。命令は「動詞 [名前]」: LOOK, N / S / E / W / U / D, GO <向き>, TAKE / GET <物>, DROP <物>, INV, OPEN <物>,
 // HELP。宝石をホールに置くと勝ち。出力は文字の窓 (games/common/text.fc。単語で折り返し、下まで行ったら上へずらす)。
 //   fcc build -o adventure.nes main.fc
-@(static_ram: 128);   // 静的フレームの RAM の予約 (既定の 512 では文字の窓の写しと合わせて RAM に入らない。使うのは 71 バイト)
 use nes;
 use frame;
 use vram;

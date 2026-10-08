@@ -29,7 +29,8 @@ NSD サウンドドライバを含む、コンパイラ機能をほぼ全部通�
 そのままコピーしている。取り込んだのは `src/main.fc` のビルドが参照するファイルだけで（`src/*.fc` / `*.asm`、
 `include` / `incbin` / `textmap` / `options(base / linker_config / link)` / asm の `.include` / `.incbin` の参照先）、
 1 つずつ抜いてビルドし、どれを抜いてもビルドが通らないか ROM が変わることを確かめてある（87 ファイル）。
-miku は 2026-09-14 に `fcc migrate` で文法 v2 に移行したもの（ROM はバイト一致）。
+miku は 2026-09-14 に `fcc migrate` で文法 v2 に移行したもの（ROM はバイト一致）。2026-10-08 に `miku.fc` に `@(static_ram: 512);` を
+足した（静的フレームの RAM の予約を書かなければ使う分だけ取るようになったので、golden と比べるために番地を固定する）。
 
 ## テスト
 

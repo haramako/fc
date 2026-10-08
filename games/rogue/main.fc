@@ -3,7 +3,6 @@
 // 階はそのたびに部屋と通路を作る。敵は soa の interface (スライム・コウモリ・おばけ) で、自分が 1 手動くと敵も 1 手ずつ動く。
 // 倒れると 1 階からやり直し。下の 3 行は文字の窓 (games/common/text.fc) のメッセージ。
 //   fcc build -o rogue.nes main.fc
-@(static_ram: 128);
 use nes;
 use frame;
 use vram;

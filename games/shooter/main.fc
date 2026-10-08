@@ -3,7 +3,6 @@
 // ID ごとの update / draw を呼び分ける。スプライトは 8×16 のモード (16×16 は 2 枚、8×8 の絵は下が空白の 8×16)。
 // 3 回当たると GAME OVER (START でやり直し)。
 //   fcc build -o shooter.nes main.fc
-@(static_ram: 64);
 use nes;
 use frame;
 use vram;

@@ -1,4 +1,6 @@
 #fc 3
+// golden と ROM を比べるので静的フレームの RAM の予約を固定する (書かなければ使う分だけ取り、使う量が変わると変数の番地がずれる)
+@(static_ram: 512);
 @(bank_count: 4);
 @(char_banks: 1);
 @(bank: -1);

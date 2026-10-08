@@ -3,7 +3,6 @@
 // 食べられる。おばけは普通の (soa でない) interface の配列で、行き先 (target。struct を返す) の決め方が 4 通り。
 // 3 回つかまると GAME OVER (START でやり直し)。マスは 16×16 (壁は 16×16 の石、点は左上の 8×8)。
 //   fcc build -o chase.nes main.fc
-@(static_ram: 64);
 use nes;
 use frame;
 use vram;

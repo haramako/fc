@@ -2,7 +2,6 @@
 // 倉庫番 (games/ のデバッグ用のゲーム)。十字キーで歩いて箱を押し、全部の箱を印の上に載せると次の面。B で 1 手戻す、SELECT で
 // 面をやり直す。面は 16×16 のメタタイル (gfx.put16) で描き、壁だけ属性でパレットを替える。
 //   fcc build -o sokoban.nes main.fc
-@(static_ram: 64);   // 静的フレームの RAM の予約 (既定の 512 では変数と合わせて RAM に入らない。使うのはゼロページだけ)
 use nes;
 use frame;
 use vram;

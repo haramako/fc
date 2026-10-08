@@ -150,6 +150,16 @@ func staticRamSize(prog *sema.Program) (int, error) {
 	return optionInt(prog, "static_ram", DefaultStaticRam, 0, 8192)
 }
 
+// staticRamReserve は base.s が FC_SRAM に取る大きさ。options(static_ram: N) を書けばその N (固定の配置)、書かなければ静的フレームが
+// 実際に使う分だけ (計画の上限は DefaultStaticRam。既定の 512 を丸ごと取ると、NES の変数に使える RAM の 4 割が空いたままだった:
+// Agent/discussions/2026-10-08-debug-games-findings.md)
+func (c *compilation) staticRamReserve() int {
+	if _, ok := c.prog.Options.Int("static_ram"); ok {
+		return validated(staticRamSize(c.prog))
+	}
+	return c.staticRamUsed
+}
+
 // fastcallRegSize は FC_FASTCALL_REG の大きさ (options(fastcall_reg: N)。既定は regalloc.DefaultLimits)。
 func fastcallRegSize(prog *sema.Program) (int, error) {
 	return optionInt(prog, "fastcall_reg", regalloc.DefaultLimits.FastcallReg, 16, 128)
