@@ -278,6 +278,58 @@ function main():void
 	}
 }
 
+// TestInterfaceBankOfIdDefault: @bank_of_id は実装が書いたメソッドのバンク。最初のメソッドを書かずに既定の本体 (固定の所) を使う
+// 実装でも、実装のバンクを返す (表の最初のメソッドの要素で決めていて、固定の所のバンクに切り替えて落ちた。TestRandomFarIfaceNES)。
+func TestInterfaceBankOfIdDefault(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{
+		"fc.toml": "[target]\nmapper = \"UxROM\"\nprg = \"64K\"\n[bank.a]\nslot = 0x8000\n[bank.b]\nslot = 0x8000\n",
+		"task.fc": `#fc 4
+public soa interface Task {
+	function first(self:*Task):u8 { return 7; }
+	function process(self:*Task):u8;
+}
+public soa Tasks:[4]Task;
+`,
+		"eb.fc": `#fc 4
+@(bank: "b");
+use task;
+const T:[2]u8 = [50, 60];
+public struct B: task.Task { m:u8; }
+public function B.process(self:*B):u8 { self.m += 2; return self.m + T[0]; }
+`,
+		"main.fc": `#fc 4
+use uxrom;
+use task;
+use eb;
+use Task from task;
+public var out:[16]u8;
+public var done:u8;
+function main():void
+{
+	uxrom.init();
+	uxrom.prg(@bank("a"));
+	@set_id(&task.Tasks[0], .B);
+	var e = &task.Tasks[0];
+	uxrom.prg(@bank_of_id(@id_of(e)));
+	out[0] = e.process();
+	out[1] = e.first();
+	uxrom.prg(@bank("a"));
+	out[2] = @bank_of_id(Task.Id.B);
+	done = 1;
+	while (true) {
+	}
+}
+`,
+	}
+	for _, level := range []int{-1, 0} {
+		out, done, _ := runNes(t, files, level, 3)
+		if got := strings.Trim(fmtInts(out), "[]"); done != 1 || got != "52 7 1" {
+			t.Errorf("-O %d: out=%s done=%d", level, got, done)
+		}
+	}
+}
+
 // TestInterfaceRecursive: 実装のメソッドから別の要素のメソッドを呼ぶ (振り分けの関数を通して呼び出しが輪になる: 再帰の関数として
 // スタックに置く)。
 func TestInterfaceRecursive(t *testing.T) {

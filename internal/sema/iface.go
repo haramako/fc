@@ -556,7 +556,17 @@ func (h *Hlc) buildDispatch(info *ifaceInfo) {
 		n = max(n, impl.id+1)
 		h.module.AddUse(impl.module.Id) // 表から実装の関数を参照する (.inc の .import。use はしていない)
 	}
-	var banks []ir.Operand // ID → 最初のメソッドの関数のバンク (@bank_of_id)
+	// ID → 実装のバンク (@bank_of_id): 実装が書いた最初のメソッドの関数のバンク。実装の無い ID と、メソッドを 1 つも書いていない
+	// 実装は最初のメソッドの表の要素 (既定の本体か何もしない関数) のバンク。表の要素で決めると、最初のメソッドを書かずに既定の
+	// 本体を使う実装が固定の所のバンクになっていた (fuzz の TestRandomFarIfaceNES)
+	banks := make([]ir.Operand, n)
+	var first []ir.Operand
+	var firstT *types.Type
+	u8 := h.prog.Types.IntType(1, false)
+	bankOf := func(e ir.Operand, dispT *types.Type) ir.Operand {
+		farT := h.prog.Types.FarFunc(dispT.Params, dispT.Base)
+		return ir.NewCastedValue(ir.NewSymbolLiteral("", farT, ir.ValLiteral(e).Symbol), u8, 2)
+	}
 	for _, im := range info.methods {
 		fd := im.fd
 		mname := name + "." + fd.Name.Name
@@ -605,6 +615,9 @@ func (h *Hlc) buildDispatch(info *ifaceInfo) {
 				panic(&diag.Error{Msg: fmt.Sprintf("method %s does not match %s: want %s, got %s", m.name(), mname, want, mt), Pos: syntax.At(m.module.Path, m.fd.Name.NamePos)})
 			}
 			elems[impl.id] = ir.NewSymbolLiteral("", elemT, m.val.Symbol)
+			if banks[impl.id] == nil {
+				banks[impl.id] = bankOf(elems[impl.id], dispT)
+			}
 		}
 		for i := range elems {
 			if elems[i] == nil {
@@ -615,12 +628,8 @@ func (h *Hlc) buildDispatch(info *ifaceInfo) {
 				elems[i] = hole(what)
 			}
 		}
-		if banks == nil {
-			u8 := h.prog.Types.IntType(1, false)
-			farT := h.prog.Types.FarFunc(dispT.Params, dispT.Base)
-			for _, e := range elems {
-				banks = append(banks, ir.NewCastedValue(ir.NewSymbolLiteral("", farT, ir.ValLiteral(e).Symbol), u8, 2))
-			}
+		if first == nil {
+			first, firstT = elems, dispT
 		}
 		at := h.prog.Types.ArrayOf(elemT, n)
 		tblName := fmt.Sprintf("$%s_%s", name, fd.Name.Name)
@@ -633,8 +642,13 @@ func (h *Hlc) buildDispatch(info *ifaceInfo) {
 		h.prog.bodies[im.lmd] = dispatchBody(fd, tblName)
 		im.lmd.Extern = false
 	}
-	if banks != nil {
-		at := h.prog.Types.ArrayOf(h.prog.Types.IntType(1, false), n)
+	if first != nil {
+		for i, b := range banks {
+			if b == nil {
+				banks[i] = bankOf(first[i], firstT)
+			}
+		}
+		at := h.prog.Types.ArrayOf(u8, n)
 		tblName := "$" + name + "_bank"
 		sym := h.addDef(tblName, &ir.Def{Kind: ir.DefBlock, Type: at, Elems: banks, Droppable: true})
 		info.bankTbl = ir.NewGlobal(tblName, at, sym)
