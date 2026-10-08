@@ -579,6 +579,33 @@ func (m *Machine) mmc3ClockScanline() {
 // 実行
 // ---------------------------------------------------------------
 
+// sprite0Line はスプライト 0 の当たりのフラグが立つ走査線 (BG とスプライトを出していて、スプライト 0 のタイルの一番上の不透明な
+// 行。無ければ -1)。BG の不透明なドットとの重なりは見ない近似 (ゲームはふつう重なる所に置く)
+func (m *Machine) sprite0Line() int {
+	if m.mask&0x18 != 0x18 || m.oam[0] >= 0xef {
+		return -1
+	}
+	tile := int(m.oam[1])
+	h := 8
+	base := tile * 16
+	if m.ctrl&0x20 != 0 {
+		h = 16
+		base = (tile&1)*0x1000 + (tile&^1)*16
+	} else if m.ctrl&0x08 != 0 {
+		base += 0x1000
+	}
+	for row := 0; row < h; row++ {
+		a := base + row
+		if row >= 8 {
+			a = base + 16 + row - 8
+		}
+		if m.chrAt(a)|m.chrAt(a+8) != 0 {
+			return int(m.oam[0]) + 1 + row
+		}
+	}
+	return -1
+}
+
 // RunFrames は n フレーム実行する。CPUが不正オペコードに当たった場合は
 // エラー (クラッシュ検出) を返す。
 func (m *Machine) RunFrames(n int) (err error) {
@@ -638,6 +665,9 @@ func (m *Machine) runFrame() {
 		if scanline < 240 && m.renderingEnabled() && m.mapper == 4 {
 			m.mmc3ClockScanline()
 		}
+		if scanline == m.sprite0Line() {
+			m.status |= 0x40 // スプライト 0 の当たり (近似: BG との重なりは見ない)
+		}
 		if scanline == vblankScanline-1 {
 			m.status |= 0x80
 			m.vblankAt = m.Cpu.Cycles
@@ -648,7 +678,7 @@ func (m *Machine) runFrame() {
 			}
 		}
 	}
-	m.status &= 0x7f
+	m.status &= 0x3f // vblank とスプライト 0 の当たりは描画の前の行で消える
 	m.vblankAt = -1
 	if m.IdleFlag != 0 {
 		m.FrameBusy = append(m.FrameBusy, m.Cpu.Cycles-frameStart-idle)

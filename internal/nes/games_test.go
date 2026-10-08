@@ -269,6 +269,7 @@ func TestGamesSameAtTick(t *testing.T) {
 		{"shooter", 2500, 6000},
 		{"chase", 2500, 8000},
 		{"adventure", 1500, 4000},
+		{"platform", 2500, 4000},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -327,6 +328,25 @@ func TestGameAdventure(t *testing.T) {
 		p.checkVblank(t)
 		if level == 0 {
 			saveGame(t, p, "adventure")
+		}
+	})
+}
+
+// TestGamePlatform: 横スクロール (列を 1 つずつ書き足す)、スプライト 0 の当たりで画面を分ける、soa の struct のメソッドのスライム。
+// AUTO で右へ進んでドアに着く。
+func TestGamePlatform(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "platform", level, "main.AUTO=true")
+		p.play(t, 3000)
+		clears := p.peek(t, "_main_clears", 0)
+		t.Logf("ドア %d, 倒れた %d, コイン %d, 画面の左 %d", clears, p.peek(t, "_main_deaths", 0), p.peek(t, "_main_coins", 0), p.peek16(t, "_main_cam"))
+		if clears == 0 {
+			t.Errorf("ドアに着いていない")
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "platform")
 		}
 	})
 }
