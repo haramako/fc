@@ -12,6 +12,7 @@ var DEBUG_EXIT:u8 @(address: 0x4019);
 // exit の終了コードと印 (テストのランナーが外から読むので volatile: 戻らない exit の中でレジスタに置いたままにならないように)
 public var exit_code:u8 @(volatile);
 public var exited:u8 @(volatile);
+var ready:bool;            // init の後
 
 // 描画と NMI を止め、パレットを置いて左上から書けるようにする
 public function init():void
@@ -25,6 +26,25 @@ public function init():void
 		nes.PPUDATA = c;
 	}
 	addr = 0x2000;
+	ready = true;
+}
+
+// panic の前に: init をまだ呼んでいなければ (描画中のゲーム)、描画と NMI を止めて init し、ネームテーブル 0 を空白にする
+// (描画中の PPU に書いても画面に出ない。ゲームの画面の上に重ねると読めない)
+public function claim():void
+{
+	if (ready) {
+		return;
+	}
+	init();
+	nes.PPUADDR = 0x20;
+	nes.PPUADDR = 0x00;
+	for (var i:u16 = 0; i < 960; i += 1) {
+		nes.PPUDATA = ' ';
+	}
+	for (var i:u8 = 0; i < 64; i += 1) {
+		nes.PPUDATA = 0;   // 属性
+	}
 }
 
 // s をそのまま書く ('\n' は次の行の頭へ)

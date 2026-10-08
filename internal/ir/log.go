@@ -41,6 +41,7 @@ type LogSpec struct {
 	Verb  byte // 0 (型に従う) / 'd' / 'x' / 'X' / 'b' / 'c'
 	Width int
 	Zero  bool // 0 で埋める
+	Align byte // 0 (数は右・文字列などは左に寄せる) / '<' (左) / '>' (右)。@format と printf だけ
 }
 
 // LogArg は @log の引数 1 つ。

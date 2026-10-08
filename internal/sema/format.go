@@ -47,6 +47,7 @@ const (
 	fmtMaxWidth = 0x1f
 	fmtZero     = 0x20
 	fmtLower    = 0x40
+	fmtLeft     = 0x80 // fmt.pad: 左に寄せる (空白を後ろに)
 )
 
 // fmtArgs は評価した書式の引数と分解した書式。
@@ -163,11 +164,38 @@ func (h *Hlc) setCodes(a *fmtArgs) {
 	h.emit(&ir.Op{Code: ir.OpLoad, Dst: codes, Src: []ir.Operand{ir.NewSymbolLiteral("", ir.ValType(codes), sym)}})
 }
 
-// noWidth は幅を持てない引数 (文字列・文字) に幅が付いていればエラー。
-func (a *fmtArgs) noWidth(p ir.LogPart, kind string) {
-	if p.Spec.Width != 0 || p.Spec.Zero {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s: a width is for numbers (argument %d is %s)", a.what, p.Arg, kind)})
+// padSpec は文字列・文字・true / false の幅を fmt.pad の spec にする (幅が無ければ 0。0 埋めはエラー)。寄せ方の既定は左。
+func (a *fmtArgs) padSpec(p ir.LogPart, kind string) int {
+	sp := p.Spec
+	if sp.Zero {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s: 0 fills numbers (argument %d is %s)", a.what, p.Arg, kind)})
 	}
+	if sp.Width > fmtMaxWidth {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s: the width is at most %d (argument %d)", a.what, fmtMaxWidth, p.Arg)})
+	}
+	if sp.Width == 0 {
+		return 0
+	}
+	if sp.Align == '>' {
+		return sp.Width
+	}
+	return sp.Width | fmtLeft
+}
+
+// padText は定数の文字 s を spec (padSpec) の幅にする (空白は文字表があればそのコード)。
+func (a *fmtArgs) padText(s string, spec int) string {
+	n := spec&fmtMaxWidth - len(s)
+	if n <= 0 {
+		return s
+	}
+	sp := " "
+	if a.codes != nil {
+		sp = string(a.codes[strings.IndexByte(fmtDigits, ' ')])
+	}
+	if spec&fmtLeft != 0 {
+		return s + strings.Repeat(sp, n)
+	}
+	return strings.Repeat(sp, n) + s
 }
 
 // constText は p がコンパイル時に文字にできるなら (文字の部分・定数の文字列・定数の整数 / bool) その文字を返す。
@@ -176,19 +204,29 @@ func (a *fmtArgs) constText(p ir.LogPart) (string, bool) {
 		return p.Text, true
 	}
 	if a.texts[p.Arg] != nil {
-		a.noWidth(p, "a string")
-		return *a.texts[p.Arg], true
+		return a.padText(*a.texts[p.Arg], a.padSpec(p, "a string")), true
 	}
 	v := a.vals[p.Arg]
 	t := ir.ValType(v)
 	if k, lit := ir.ValIntLiteral(v); lit && p.Spec.Verb != 'c' && (t.Kind == types.Int || t.Kind == types.Bool) {
-		s := formatConst(k, t, p.Spec)
+		if t.Kind == types.Bool && p.Spec.Verb == 0 {
+			return a.padText(strconv.FormatBool(k != 0), a.padSpec(p, "a bool")), true
+		}
+		sp := p.Spec
+		left := sp.Align == '<'
+		if left {
+			sp.Width = 0
+		}
+		s := formatConst(k, t, sp)
 		if a.codes != nil { // 数字などを文字表のコードに
 			b := []byte(s)
 			for i, c := range b {
 				b[i] = a.codes[strings.IndexByte(fmtDigits, c)]
 			}
 			s = string(b)
+		}
+		if left {
+			s = a.padText(s, p.Spec.Width|fmtLeft)
 		}
 		return s, true
 	}
@@ -231,6 +269,17 @@ func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 		text.Reset()
 	}
 	u8 := h.prog.Types.IntType(1, false)
+	// padded は write の書いたものを spec の幅にする (fmt.pad。spec が 0 なら幅なし)
+	padded := func(spec int, write func()) {
+		if spec == 0 {
+			write()
+			return
+		}
+		start := h.newTmp(u8)
+		h.emit(&ir.Op{Code: ir.OpLoad, Dst: start, Src: []ir.Operand{h.moduleFunc(fi, "at")}})
+		write()
+		call("pad", cv(start), cint(spec))
+	}
 	for _, p := range parts {
 		if s, ok := a.constText(p); ok {
 			text.WriteString(s)
@@ -241,19 +290,16 @@ func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 		flush()
 		switch {
 		case t.IsSlice() && t.SliceOf == u8:
-			a.noWidth(p, "a string")
-			call("str", cv(h.operandValue(v)))
+			padded(a.padSpec(p, "a string"), func() { call("str", cv(h.operandValue(v))) })
 		case t.Kind == types.Array && t.Base == u8:
-			a.noWidth(p, "a string")
-			call("str_z_in", cv(h.operandValue(v))) // 配列は中の最初の 0 まで (文字列で初期化した配列は終端の 0 を含む)
+			// 配列は中の最初の 0 まで (文字列で初期化した配列は終端の 0 を含む)
+			padded(a.padSpec(p, "a string"), func() { call("str_z_in", cv(h.operandValue(v))) })
 		case t.Kind == types.Pointer && t.Base == u8:
-			a.noWidth(p, "a string")
-			call("str_z", cv(h.operandValue(v)))
+			padded(a.padSpec(p, "a string"), func() { call("str_z", cv(h.operandValue(v))) })
 		case t.Kind == types.Bool && sp.Verb == 0:
-			call("boolean", cv(h.operandValue(v)))
+			padded(a.padSpec(p, "a bool"), func() { call("boolean", cv(h.operandValue(v))) })
 		case sp.Verb == 'c':
-			a.noWidth(p, "a character")
-			call("chr", cv(h.operandValue(v)))
+			padded(a.padSpec(p, "a character"), func() { call("chr", cv(h.operandValue(v))) })
 		case t.Kind == types.Int || t.Kind == types.Bool:
 			n := cv(h.operandValue(v))
 			size, signed := t.Size, t.Signed
@@ -266,7 +312,10 @@ func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 			if sp.Width > fmtMaxWidth {
 				panic(&diag.Error{Msg: fmt.Sprintf("%s: the width is at most %d (argument %d)", a.what, fmtMaxWidth, p.Arg)})
 			}
-			name, spec := "dec_", sp.Width
+			name, spec, pad := "dec_", sp.Width, 0
+			if sp.Align == '<' { // 幅なしで書いてから後ろを埋める
+				spec, pad = 0, sp.Width|fmtLeft
+			}
 			if sp.Zero {
 				spec |= fmtZero
 			}
@@ -284,7 +333,7 @@ func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 				name += "u"
 			}
 			name += strconv.Itoa(8 * size)
-			call(name, n, cint(spec))
+			padded(pad, func() { call(name, n, cint(spec)) })
 		default:
 			panic(&diag.Error{Msg: fmt.Sprintf("%s: cannot format a value of type %s (integers, bool, enums, []u8 / *u8 strings)", a.what, t)})
 		}
@@ -349,15 +398,28 @@ func (h *Hlc) printf4(args []*cexpr) {
 		v := a.vals[p.Arg]
 		t := ir.ValType(v)
 		flush()
+		isStr := (t.IsSlice() && t.SliceOf == u8) || (t.Kind == types.Pointer && t.Base == u8) || (t.Kind == types.Array && t.Base == u8)
+		if spec := 0; isStr {
+			spec = a.padSpec(p, "a string")
+			if spec != 0 { // 幅の付いた文字列: 長さを数えて、足りない分の空白を前か後ろに出す
+				fmtCall("begin_print")
+				h.setCodes(a)
+				name := "print_padded"
+				if t.Kind == types.Pointer {
+					name = "print_padded_z"
+				} else if t.Kind == types.Array {
+					name = "print_padded_z_in"
+				}
+				h.lval(ccall(cv(h.moduleFunc(fi, name)), cv(h.operandValue(v)), cint(spec)))
+				continue
+			}
+		}
 		switch {
 		case t.IsSlice() && t.SliceOf == u8:
-			a.noWidth(p, "a string")
 			write("write", cv(h.operandValue(v)))
 		case t.Kind == types.Pointer && t.Base == u8:
-			a.noWidth(p, "a string")
 			write("write_z", cv(h.operandValue(v)))
 		case t.Kind == types.Array && t.Base == u8:
-			a.noWidth(p, "a string")
 			write("write_z_in", cv(h.operandValue(v)))
 		default:
 			fmtCall("begin_print")

@@ -1,7 +1,7 @@
 package driver
 
-// fc 4 の書式のランダムテスト (TestRandomFormatV4)。@printf / @format / @try_format の書式 ({} / {0} / {:5} / {:05} / {:x} /
-// {:X} / {:b} / {:c} / {:d}、{{ / }}) と、整数 (u8 / i8 / u16 / i16)・bool・enum・文字列 (slice・配列・*u8) の引数を混ぜ、期待値は
+// fc 4 の書式のランダムテスト (TestRandomFormatV4)。@printf / @format / @try_format の書式 ({} / {0} / {:5} / {:05} / {:<5} /
+// {:>5} / {:x} / {:X} / {:b} / {:c} / {:d}、{{ / }}。文字列・bool・文字の幅も) と、整数 (u8 / i8 / u16 / i16)・bool・enum・文字列 (slice・配列・*u8) の引数を混ぜ、期待値は
 // 生成器が Go で計算する。同じ値を定数の引数 (`(200 as u8)`: コンパイル時に文字にする sema/format.go の formatConst) と実行時の
 // 値 (`id_u8(200)`: fclib/fmt.fc) の両方で書くので、2 つの経路の食い違いも見える。@format は書き先の長さを足りるだけに、
 // @try_format は足りないことがある長さにする (足りなければ長さ 0 の slice)。
@@ -59,10 +59,14 @@ type rfmSpec struct {
 	verb  byte
 	width int
 	zero  bool
+	align byte // 0 / '<' / '>'
 }
 
 func (s rfmSpec) text() string {
 	var b strings.Builder
+	if s.align != 0 {
+		b.WriteByte(s.align)
+	}
 	if s.zero {
 		b.WriteByte('0')
 	}
@@ -78,15 +82,28 @@ func (s rfmSpec) text() string {
 // rfmFormat は v (型 t) を spec で書いた文字 (fclib/fmt.fc と同じ規則: x / X / b は同じ大きさの符号なし、幅は右に寄せ、0 で
 // 埋めるときは符号の後ろに)。
 func rfmFormat(a rfmArg, sp rfmSpec) string {
+	// 文字列・true / false・文字は左に (`>` なら右に)、数は右に (`<` なら左に) 寄せる
+	text := func(s string, left bool) string {
+		n := max(sp.width-len(s), 0)
+		if left {
+			return s + strings.Repeat(" ", n)
+		}
+		return strings.Repeat(" ", n) + s
+	}
 	if a.isStr {
-		return string(a.str)
+		return text(string(a.str), sp.align != '>')
 	}
 	t := a.t
 	if t.bool && sp.verb == 0 {
-		return strconv.FormatBool(a.v != 0)
+		return text(strconv.FormatBool(a.v != 0), sp.align != '>')
 	}
 	if sp.verb == 'c' {
-		return string([]byte{byte(a.v)})
+		return text(string([]byte{byte(a.v)}), sp.align != '>')
+	}
+	if sp.align == '<' { // 幅なしで書いてから後ろを埋める
+		inner := sp
+		inner.width, inner.align = 0, 0
+		return text(rfmFormat(a, inner), true)
 	}
 	mask := 1<<(8*t.size) - 1
 	var digits string
@@ -189,19 +206,27 @@ func (g *rfmGen) arg() rfmArg {
 
 // spec は引数 a に使える書式。
 func (g *rfmGen) spec(a rfmArg) rfmSpec {
+	// textWidth は文字列・true / false・文字の幅と寄せ方
+	textWidth := func(sp rfmSpec) rfmSpec {
+		if g.chance(0.4) {
+			sp.width = 1 + g.pick(12)
+			sp.align = []byte{0, '<', '>'}[g.pick(3)]
+		}
+		return sp
+	}
 	if a.isStr {
-		return rfmSpec{}
+		return textWidth(rfmSpec{})
 	}
 	t := a.t
 	var sp rfmSpec
 	switch {
 	case t.bool:
 		if g.chance(0.5) {
-			return rfmSpec{} // true / false (幅は付けない)
+			return textWidth(rfmSpec{}) // true / false
 		}
 		sp.verb = 'd'
 	case t.size == 1 && !t.enum && g.chance(0.12) && a.v >= 0x20 && a.v < 0x7f:
-		return rfmSpec{verb: 'c'}
+		return textWidth(rfmSpec{verb: 'c'})
 	default:
 		sp.verb = []byte{0, 0, 'd', 'x', 'X', 'b'}[g.pick(6)]
 	}
@@ -211,6 +236,12 @@ func (g *rfmGen) spec(a rfmArg) rfmSpec {
 			sp.width = 9 + g.pick(23) // 31 まで
 		}
 		sp.zero = g.chance(0.4)
+		if g.chance(0.3) {
+			sp.align = '>'
+			if !sp.zero && g.chance(0.6) {
+				sp.align = '<'
+			}
+		}
 	}
 	return sp
 }

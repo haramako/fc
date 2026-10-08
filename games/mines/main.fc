@@ -79,9 +79,10 @@ function hud():void
 	vram.put(vram.addr(0, 1, 2), @format(line, "MINES {} FLAGS {:2} WIN {} LOSE {}", MINES, flags, wins, losses));
 }
 
+// 盤の上の文 (幅で後ろを空白で埋めて、前の文を消す)
 function message(s:[]const u8):void
 {
-	vram.put(vram.addr(0, 4, 4), s);
+	vram.put(vram.addr(0, 4, 4), @format(line, "{:24}", s));
 }
 
 // 盤を閉じたマスだけにする (描画を止めて)
@@ -104,7 +105,7 @@ function new_game():void
 	cx = W / 2;
 	cy = H / 2;
 	hud();
-	message("                        ");
+	message("");
 	frame.render_on();
 }
 

@@ -49,7 +49,7 @@ var hy:u8;
 var tx:u8;                // 尾
 var ty:u8;
 var len:u8;
-var occ:[H][4]u8;         // 体のある所 (行ごとに 32 ビット)
+var occ:[H * 4]u8;        // 体のある所 (1 マス 1 ビット。行ごとに 32 ビット: bits の添字が u16 の版)
 var dir:Dir;
 var next_dir:Dir;
 var ax:u8;                // リンゴ
@@ -69,9 +69,15 @@ function set_move(i:u8, d:Dir):void
 	moves[i >> 2] = bits.field2(moves[i >> 2], i & 3, d as u8);
 }
 
+// occ のビットの番号
+function cell(x:u8, y:u8):u16
+{
+	return (y - Y0) as u16 * 32 + x;
+}
+
 function used(x:u8, y:u8):bool
 {
-	return bits.get(occ[y - Y0], x);
+	return bits.get_w(occ, cell(x, y));
 }
 
 function hud():void
@@ -114,10 +120,8 @@ function new_game():void
 	for (var y:u8 = Y0; y <= Y1; y += 1) {
 		vram.fill(vram.addr(0, X0, y), tiles.BLANK, W);
 	}
-	for (var y:u8 = 0; y < H; y += 1) {
-		for (var i:u8 = 0; i < 4; i += 1) {
-			occ[y][i] = 0;
-		}
+	for (var i:u8 = 0; i < @len(occ); i += 1) {
+		occ[i] = 0;
 	}
 	tail = 0;
 	head = START_LEN - 1;
@@ -130,7 +134,7 @@ function new_game():void
 		if (i < START_LEN - 1) {
 			set_move(i, .Right);
 		}
-		bits.set(occ[15 - Y0], 8 + i);
+		bits.set_w(occ, cell(8 + i, 15));
 		vram.set(vram.addr(0, 8 + i, 15), i == START_LEN - 1 ? tiles.SNAKE_R : tiles.SNAKE_BODY);
 	}
 	dir = .Right;
@@ -210,7 +214,7 @@ function step():void
 	var eat = x == ax && y == ay;
 	if (!eat) {
 		// 尾を消して 1 マス進める
-		bits.clear(occ[ty - Y0], tx);
+		bits.clear_w(occ, cell(tx, ty));
 		vram.set(vram.addr(0, tx, ty), tiles.BLANK);
 		var m = get_move(tail);
 		tx = tx +% DX[m];
@@ -225,7 +229,7 @@ function step():void
 	head += 1;
 	hx = x;
 	hy = y;
-	bits.set(occ[y - Y0], x);
+	bits.set_w(occ, cell(x, y));
 	vram.set(vram.addr(0, x, y), HEAD[k]);
 	if (eat) {
 		place_apple();

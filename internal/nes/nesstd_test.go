@@ -254,6 +254,46 @@ function main():void
 	p.checkVblank(t)
 }
 
+// TestNesOamMetaTall: 8×16 のモードの meta の上下の反転は 16 ドットで折り返し、meta_pal はどの枚のパレットも変える (反転の
+// ビットは m の attr と flip の xor のまま)。
+func TestNesOamMetaTall(t *testing.T) {
+	t.Parallel()
+	p := buildNes(t, map[string]string{"t.fc": `#fc 4
+use nes;
+use frame;
+use oam;
+// 縦に 2 枚 (8×16 のモードで 16×32): (0, 0) と (0, 16)。下の枚は左右の反転とパレット 2
+const META = [0, 0, 0x11, 1, 0, 16, 0x13, 0x42];
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_8X16;
+	frame.render_on();
+	while (true) {
+		oam.begin();
+		oam.meta(100, 100, META, nes.ATTR_FLIP_V);
+		oam.meta_pal(50, 60, META, 0, 3);
+		oam.end();
+		frame.wait();
+	}
+}
+`})
+	p.run(t, 10)
+	oam := func(i int) [4]byte { return [4]byte{p.oam[i*4], p.oam[i*4+1], p.oam[i*4+2], p.oam[i*4+3]} }
+	// 上下の反転: dy は -0-16 = -16 → y 84、-16-16 = -32 → y 68
+	want := [][4]byte{
+		{84, 0x11, 1 ^ 0x80, 100},
+		{68, 0x13, 0x42 ^ 0x80, 100},
+		{60, 0x11, 3, 50},
+		{76, 0x13, 0x43, 50},
+	}
+	for i, w := range want {
+		if got := oam(i); got != w {
+			t.Errorf("%d 枚目: %v, want %v", i, got, w)
+		}
+	}
+}
+
 // TestNesPadRepeat: pad の repeat は押した瞬間と、押し続けて REPEAT_DELAY (16) フレーム後から REPEAT_RATE (4) フレームごとに立つ。
 // 押している途中で別のボタンを足すと、そのボタンだけが立って待ちが始めからになる。
 func TestNesPadRepeat(t *testing.T) {

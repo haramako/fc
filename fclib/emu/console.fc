@@ -10,6 +10,9 @@ var EMU_EXIT:u8 @(address: 0xffff);
 // 何もしない (NES の console と同じ呼び方にするため)
 public function init():void {}
 
+// 何もしない (NES の console と同じ呼び方にするため。NES は panic の前に画面を準備する)
+public function claim():void {}
+
 // s をそのまま出す (途中の 0 も)
 public function write(s:[:u16]const u8):void
 {

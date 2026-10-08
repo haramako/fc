@@ -47,6 +47,43 @@ function main():void
 	}
 }
 
+// TestFormatWidthText: 文字列・文字・true / false の幅 (既定は左に寄せる。`>` で右)、数の `<` (左に寄せる)。定数・実行時の値の
+// どちらも、@format と printf のどちらも。
+func TestFormatWidthText(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+var buf:[40]u8;
+var arr:[8]u8 = "arr";
+function main():void
+{
+	var sl:[]const u8 = "ab";
+	var p:*const u8 = "ptr\0";
+	var c:u8 = 'x';
+	var ok = true;
+	var n:i8 = -7;
+	var h:u8 = 0xab;
+	console.write(@format(buf, "[{:5}][{:>5}][{:4}][{:>4}]\n", sl, sl, p, arr));
+	console.write(@format(buf, "[{:3c}][{:>3c}][{:6}][{:<4}][{:<4x}][{:>4}]\n", c, c, ok, n, h, n));
+	console.write(@format(buf, "[{:5}][{:>5}][{:6}][{:<4}][{:>3}]\n", "cn", "cn", false, -3, 5));
+	console.write(@format(buf, "[{:2}][{:<1}]\n", "long", 123));
+	@printf("[{:5}][{:>5}][{:4}][{:>6}][{:<4}][{:3c}]\n", sl, sl, p, arr, n, c);
+	console.exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[ab   ][   ab][ptr ][ arr]\n" +
+		"[x  ][  x][true  ][-7  ][ab  ][  -7]\n" +
+		"[cn   ][   cn][false ][-3  ][  5]\n" +
+		"[long][123]\n" +
+		"[ab   ][   ab][ptr ][   arr][-7  ][x  ]\n"
+	if out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+}
+
 // TestTryFormat: @try_format は @format と同じに書き、書き先が足りなければ止まらずに長さ 0 の slice を返す (途中の数・文字列・
 // 1 文字のどこで足りなくなっても)。失敗の後の @format / printf は普通に動く (状態を begin が戻す)。
 func TestTryFormat(t *testing.T) {
@@ -167,7 +204,10 @@ func TestFormatErrors(t *testing.T) {
 	cases := []struct{ name, body, want string }{
 		{"引数が足りない", `console.write(@format(buf, "{} {}", 1));`, "there is no argument 1"},
 		{"使わない引数", `console.write(@format(buf, "x", 1));`, "is not used in the format"},
-		{"文字列に幅", `console.write(@format(buf, "{:5}", "ab"));`, "a width is for numbers"},
+		{"文字列に 0 埋め", `console.write(@format(buf, "{:05}", "ab"));`, "0 fills numbers"},
+		{"寄せ方に幅が無い", `console.write(@format(buf, "{:<}", 1));`, "needs a width"},
+		{"左寄せに 0 埋め", `console.write(@format(buf, "{:<05}", 1));`, "cannot be used with `<`"},
+		{"@log に寄せ方", `var x:u8 = 1; @log("{:<3}", x);`, "is for @format and printf"},
 		{"書き先が読み取り専用", `console.write(@format(RO, "x"));`, "the destination is read-only"},
 		{"書けない型", `var q:P; console.write(@format(buf, "{}", q));`, "cannot format a value of type"},
 		{"書式が定数でない", `var f:*const u8 = "{}\0"; console.write(@format(buf, f, 1));`, "the format must be a constant string"},

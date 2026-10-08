@@ -62,3 +62,20 @@ fclib の足りない所は、ユーザーの指示（2026-10-08）で `games/co
   `board[y][x]` を y で回すループで行の番地 `y * 10` を毎回計算し直して 1 マス約 50 サイクル。2 次元の添字の強さの低減は最適化の候補）
 - **platform の上の文字が読みにくい**: 属性を書いていないので文字もパレット 0（茶）。上の 4 タイルの属性をパレット 2（白）にした
 - adventure の「or opens.」の残りは、前に見たとおり文字の窓をずらして書き直している途中の画面（4〜5 フレームかけて送る）
+
+## fclib の不足を直した（2026-10-08、ユーザー「ゲームを作って不便だった所を改善して」）
+
+- **NES の panic が画面に出ない** → `sys.panic` が先に `console.claim()` を呼ぶ。NES は init をまだ呼んでいなければ描画と NMI を
+  止めて init し、ネームテーブル 0 を空白にしてから書く（emu は何もしない）。`TestNesPanicWhileRendering`
+- **書式に文字列の幅が無い** → `{:N}` を文字列・文字・true / false にも（既定は左寄せ）。`{:<N}` / `{:>N}` で寄せ方を選べる
+  （数の `<` も）。0 埋めは数だけ。実行時は書いてから `fmt.pad(start, spec)` で埋める（spec の 0x80 = LEFT）。printf の文字列は
+  `fmt.print_padded*`。@log は寄せ方をエラーにする（Mesen の Lua に無い）。`TestFormatWidthText`、`TestRandomFormatV4` の生成器も
+  幅・寄せ方を作る（pad を壊すと落ちることを確かめた）。adventure の `draw_cmd`・mines の `message` の空白埋めをこれで書き直した
+- **`bits` の添字が u8** → u16 の添字の版 `get_w` / `set_w` / `clear_w` / `flip_w`（集合は `[:u16]`）を足した。u8 の版は速いので
+  残す（examples/life が回すループで使う）。`count` は `[:u16]` を受ける。snake の盤を 1 つの配列にして使った
+- **`oam.meta` の上下の反転が 8×8 前提・パレットが表に固定** → 高さを `frame.ctrl` の `CTRL_SPR_8X16` で決める（16 で折り返す）。
+  `meta_pal(x, y, m, flip, pal)` でどの枚のパレットも変える。rogue は `meta` の flip にパレットのつもりで 3 を渡していた
+  （xor でたまたま合っていた）ので `meta_pal` にした。`TestNesOamMetaTall`
+
+残り（相談）: games/common（gfx・text・bitmap）とスプライト 0 で分ける処理を fclib に移すか、文字の窓のずらしを BG のスクロールで
+する形、2 次元の添字の強さの低減（blocks の思考が 1 手に約 8 フレーム）。

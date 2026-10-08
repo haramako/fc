@@ -10,7 +10,8 @@
 //
 // 書き先の状態はこのモジュールが持つ (呼び出しごとに書き先を渡すと @format の 1 回が 300 バイトを超えた)。割り込みの中では使わない。
 // spec: 最小の幅 (下位 5 ビット、0〜31。右に寄せて左を埋める) | ZERO (0 で埋める。符号の後ろに: `{:03}` の -5 は "-05"。無ければ
-// 空白で符号の前に: "  -5") | LOWER (16 進の小文字)。数字などの文字のコードは codes (0〜9・A〜F・a〜f・'-'・' ' の 24 文字)。
+// 空白で符号の前に: "  -5") | LOWER (16 進の小文字)。文字列などの幅は、書いてから pad で埋める (spec の幅 | LEFT)。
+// 数字などの文字のコードは codes (0〜9・A〜F・a〜f・'-'・' ' の 24 文字)。
 // begin が ASCII にする。独自のフォントなら begin の後に codes を @textmap で作った表にする (@format がする)。
 @(bank: -1);
 use sys;
@@ -19,6 +20,7 @@ use console;
 public const ASCII = "0123456789ABCDEFabcdef- ";
 public const ZERO = 0x20;
 public const LOWER = 0x40;
+public const LEFT = 0x80;     // pad: 左に寄せる (空白を後ろに足す)
 const WIDTH = 0x1f;
 const MINUS = 22;
 const SPACE = 23;
@@ -316,6 +318,72 @@ public function chr(c:u8):void
 	}
 	out[at] = c;
 	at += 1;
+}
+
+// start から書いたもの (str・chr など) を spec の幅にする: 足りない分の空白を、LEFT なら後ろに、無ければ前に足す
+// (`{:8}` の文字列は左、`{:>8}` は右に寄せる)
+public function pad(start:u8, spec:u8):void
+{
+	var w = spec & WIDTH;
+	if (failed || at - start >= w) {
+		return;
+	}
+	var k = w - (at - start);
+	if (!room(k)) {
+		return;
+	}
+	var i = at;
+	if ((spec & LEFT) == 0) {
+		// 書いたものを k だけ後ろへずらし、前を埋める
+		while (i > start) {
+			i -= 1;
+			out[i + k] = out[i];
+		}
+	}
+	for (var j:u8 = 0; j < k; j += 1) {
+		out[i + j] = codes[SPACE];
+	}
+	at += k;
+}
+
+// printf の幅の付いた文字列: s と、spec の幅に足りない分の空白 (LEFT なら後ろ、無ければ前) を console に出す (begin_print の後に)
+public function print_padded(s:[:u16]const u8, spec:u8):void
+{
+	var w = (spec & WIDTH) as u16;
+	var k:u8 = 0;
+	if (@len(s) < w) {
+		k = (w - @len(s)) as u8;
+	}
+	for (var i:u8 = 0; i < k; i += 1) {
+		pbuf[i] = codes[SPACE];
+	}
+	if ((spec & LEFT) != 0) {
+		console.write(s);
+		console.write(pbuf[..k]);
+	} else {
+		console.write(pbuf[..k]);
+		console.write(s);
+	}
+}
+
+// print_padded の終端 0 の文字列
+public function print_padded_z(p:*const u8, spec:u8):void
+{
+	var n:u16 = 0;
+	while (p[n] != 0) {
+		n += 1;
+	}
+	print_padded(@slice(p, n), spec);
+}
+
+// print_padded の、s の中の最初の 0 まで (u8 の配列)
+public function print_padded_z_in(s:[:u16]const u8, spec:u8):void
+{
+	var n:u16 = 0;
+	while (n < @len(s) && s[n] != 0) {
+		n += 1;
+	}
+	print_padded(s[..n], spec);
 }
 
 // true / false を書く (ASCII)

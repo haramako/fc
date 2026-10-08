@@ -494,7 +494,7 @@ function draw():void
 	for (var i:u8 = 0; i < @len(items); i += 1) {
 		var it = &items[i];
 		if (it.kind == 1) {
-			oam.meta((it.x << 4) as i16 + 4, (it.y << 4) as i16 - 1, tiles.POTION_M8, 3);
+			oam.meta_pal((it.x << 4) as i16 + 4, (it.y << 4) as i16 - 1, tiles.POTION_M8, 0, 3);
 		} else if (it.kind == 2) {
 			oam.spr((it.x << 4) + 4, (it.y << 4) + 3, tiles.GEM, 3);
 		}

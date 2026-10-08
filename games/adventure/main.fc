@@ -94,14 +94,12 @@ function draw_keyboard():void
 	vram.put(vram.addr(0, 3, 26), "SPACE   DEL   ENTER");
 }
 
-// 打っている命令 (書式には文字列の幅が無いので、残りは空白で埋める)
+// 打っている命令 (幅で後ろを空白で埋めて、前に打った長い命令を消す)
 function draw_cmd():void
 {
-	var a = vram.addr(0, 1, 21);
-	vram.put(a, "> ");
-	vram.put(a + 2, cmd[..cmd_len]);
-	vram.set(a + 2 + cmd_len, '_');
-	vram.fill(a + 3 + cmd_len, ' ', @len(cmd) - cmd_len);
+	var shown:[@len(cmd) + 1]u8;
+	var s = @format(shown, "{}_", cmd[..cmd_len]);
+	vram.put(vram.addr(0, 1, 21), @format(line, "> {:25}", s));
 }
 
 // ---- 物と部屋 ----

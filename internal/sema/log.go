@@ -41,6 +41,11 @@ func registerLogBuiltin(h *Hlc) {
 		if err != nil {
 			panic(&diag.Error{Msg: "@log: " + err.Error()})
 		}
+		for _, part := range parts {
+			if part.Spec.Align != 0 {
+				panic(&diag.Error{Msg: fmt.Sprintf("@log: `%c` is for @format and printf (argument %d)", part.Spec.Align, part.Arg)})
+			}
+		}
 		p.Parts = parts
 		if h.prog.LogEnabled {
 			h.prog.nextLogID++
@@ -211,9 +216,13 @@ func parseLogFormat(format string, args []*ir.LogArg) ([]ir.LogPart, error) {
 	return parts, nil
 }
 
-// parseLogSpec は `{:04x}` の `04x` (0 埋め・幅・種類)。
+// parseLogSpec は `{:<04x}` の `<04x` (寄せ方・0 埋め・幅・種類)。
 func parseLogSpec(s string) (ir.LogSpec, error) {
 	var sp ir.LogSpec
+	if strings.HasPrefix(s, "<") || strings.HasPrefix(s, ">") {
+		sp.Align = s[0]
+		s = s[1:]
+	}
 	if strings.HasPrefix(s, "0") && len(s) > 1 {
 		sp.Zero = true
 		s = s[1:]
@@ -231,6 +240,12 @@ func parseLogSpec(s string) (ir.LogSpec, error) {
 		sp.Verb = rest[0]
 	default:
 		return sp, fmt.Errorf("unknown format `%s` (use d, x, X, b or c, with an optional width like 04x)", rest)
+	}
+	if sp.Align != 0 && sp.Width == 0 {
+		return sp, fmt.Errorf("`%c` needs a width (like %c8)", sp.Align, sp.Align)
+	}
+	if sp.Align == '<' && sp.Zero {
+		return sp, fmt.Errorf("0 fills on the left; it cannot be used with `<`")
 	}
 	return sp, nil
 }
