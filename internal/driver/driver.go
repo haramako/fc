@@ -118,6 +118,7 @@ type compilation struct {
 	*Compiler
 	ctx           context.Context
 	jobs          int                   // ca65 の並列数
+	mainFile      string                // build の入口のソース (Dir 相対。リンクの失敗の報告の位置)
 	staticRamUsed int                   // 静的フレームが RAM に使う量 (frames の計画。base.s の FC_SRAM の大きさ)
 	libDirs       []string              // 追加のライブラリの探索先 (optLibs と fc.toml の [lib.*])
 	libs          []project.ResolvedLib // fc.toml の [lib.*] (fcc build -d の要約)
@@ -201,6 +202,7 @@ func (c *compilation) checkTarget() error {
 
 // build は BuildContext の本体。
 func (c *compilation) build(filename string, opt *BuildOptions) (result *Result, err error) {
+	c.mainFile = filename
 	defer recoverError(&err)
 	if err := c.checkTarget(); err != nil {
 		return nil, err
@@ -466,7 +468,9 @@ func (c *compilation) link(baseObj string, objs []string, opt *BuildOptions) (ma
 	c.linkCfg = cfgPath
 	stem := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out))
 	mapFile, dbgFile = stem+".map", stem+".dbg"
-	args := []string{"-m", mapFile, "--dbgfile", dbgFile, "-o", opt.Out, "-C", cfgPath,
+	// ROM はいったん別の名前に書き、成功したときだけ置き換える (ld65 は失敗しても壊れた出力を残すことがある)
+	part := opt.Out + ".part"
+	args := []string{"-m", mapFile, "--dbgfile", dbgFile, "-o", part, "-C", cfgPath,
 		baseObj, filepath.Join(c.buildDir, "runtime_init.o"), filepath.Join(c.buildDir, "runtime.o")}
 	if c.farcallAsm() != "" {
 		args = append(args, filepath.Join(c.buildDir, "farcall.o"))
@@ -478,7 +482,13 @@ func (c *compilation) link(baseObj string, objs []string, opt *BuildOptions) (ma
 			args = append(args, filepath.Join(c.dir, f))
 		}
 	}
-	c.sh("ld65", args...)
+	if err := c.run(c.ctx, "ld65", args...); err != nil {
+		os.Remove(part)
+		panic(c.linkError(err, cfgPath, mapFile))
+	}
+	if err := os.Rename(part, opt.Out); err != nil {
+		panic(err)
+	}
 	return mapFile, dbgFile
 }
 

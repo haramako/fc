@@ -218,6 +218,9 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 				}
 			}
 		case "chr":
+			if h.prog.ChrRAM {
+				panic(&diag.Error{Msg: fmt.Sprintf("@include(%q): the cartridge has CHR RAM (fc.toml [target] chr = 0), so there is no CHR ROM to put it in; read it with @incbin and copy it to the PPU (vram.write_now)", filename)})
+			}
 			ref, _ := h.resolveFile(filename)
 			h.module.IncludeChrs = append(h.module.IncludeChrs, ref)
 		default:

@@ -117,7 +117,7 @@ func TestRandomMigrate(t *testing.T) {
 						// あふれた (ほかの fuzz と同じくプログラムが大きすぎる扱い)
 						t.Skipf("fc 4 に migrate したプログラムのソフトウェアスタックがあふれた (seed %d)", seed)
 					}
-					if err != nil && strings.Contains(err.Error(), "memory area overflow") {
+					if err != nil && strings.Contains(err.Error(), "overflows memory area") {
 						// fc 4 の printf (書式文字列を fmt の呼び出しに展開する) は引数を並べる printf よりコードが大きく、-O 0 の
 						// 大きなプログラムが emu の ROM (28KB) からあふれた (プログラムが大きすぎる扱い)
 						t.Skipf("fc 4 に migrate したプログラムが ROM からあふれた (seed %d)", seed)

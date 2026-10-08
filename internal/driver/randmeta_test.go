@@ -73,7 +73,7 @@ func TestRandomMetamorphic(t *testing.T) {
 					// 決める前に上限を上げて走らせ直す (rpCheck の -O 0 と同じ)
 					got, err = metaRun(t, files, v, rpMaxCycles*50)
 				}
-				if err != nil && (strings.Contains(err.Error()+got, "frame size over") || strings.Contains(err.Error()+got, "memory area overflow") ||
+				if err != nil && (strings.Contains(err.Error()+got, "frame size over") || strings.Contains(err.Error()+got, "overflows memory area") ||
 					strings.Contains(err.Error()+got, "zero page index wrapped")) {
 					// 段を切ると大きくなって入らない (プログラムの問題)。ソフトウェアスタックも同じ: unroll を切ると再帰の
 					// 呼び出しの連なりにある関数のフレームが 2 バイト増え、128 バイトの FC_STACK からあふれた (seed 60204809)

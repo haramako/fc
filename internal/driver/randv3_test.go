@@ -277,7 +277,7 @@ func TestRandomV3Programs(t *testing.T) {
 			switch res.kind {
 			case "ok":
 			case "error":
-				for _, skip := range []string{"frame size over", "memory area overflow", "zero page index wrapped", "does not fit in the zero page", "static frames do not fit"} {
+				for _, skip := range []string{"frame size over", "overflows memory area", "zero page index wrapped", "does not fit in the zero page", "static frames do not fit"} {
 					if strings.Contains(res.detail, skip) {
 						t.Skipf("生成したプログラムが大きすぎる (seed %d): %s", seed, skip)
 					}

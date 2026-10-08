@@ -183,5 +183,6 @@ func (c *compilation) newProgram(macros []sema.MacroSource, defs map[string]*sem
 	}
 	prog.Defines = project.CopyDefines(defs)
 	prog.Banks = c.banks()
+	prog.ChrRAM = c.target == "nes" && c.layout != nil && c.layout.CHRSize == 0
 	return prog, nil
 }

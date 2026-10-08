@@ -98,7 +98,7 @@ func runRandomV4(t *testing.T, v3 bool) {
 			switch res.kind {
 			case "ok":
 			case "error":
-				for _, s := range []string{"frame size over", "memory area overflow", "zero page index wrapped", "does not fit in the zero page", "static frames do not fit"} {
+				for _, s := range []string{"frame size over", "overflows memory area", "zero page index wrapped", "does not fit in the zero page", "static frames do not fit"} {
 					if strings.Contains(res.detail, s) {
 						t.Skipf("プログラムが大きすぎる (seed %d): %s", seed, s)
 					}

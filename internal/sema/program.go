@@ -82,6 +82,8 @@ type Program struct {
 	// Banks は fc.toml のバンクの表 (名前 → 番号とスロット。"fixed" は常に見えている領域)。nil なら名前でのバンクの指定は無い
 	// (project/layout.go。Agent/discussions/2026-09-20-v3-plan.md §3)
 	Banks map[string]BankRef
+	// ChrRAM はカートリッジの CHR が RAM (fc.toml の [target] で chr = 0)。.chr を @include できない (ROM に CHR の領域が無い)
+	ChrRAM bool
 	// Config は調査用の設定 (パスの入れ切り・トレース。ir/config.go)。driver が BuildOptions から渡し、各モジュールに写す
 	Config *ir.Config
 	// LogEnabled なら @log を注釈として命令に付ける (fcc build -g。無ければ @log は検査だけで何も残さない)

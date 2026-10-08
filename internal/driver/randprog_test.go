@@ -1966,7 +1966,7 @@ func TestRandomPrograms(t *testing.T) {
 					// driver が展開を止めてやり直すので、ここに来るのは展開を止めても (-O 0 でも) 超える大きすぎるプログラム
 					t.Skipf("フレームが大きすぎる (seed %d)", seed)
 				}
-				if strings.Contains(res.detail, "memory area overflow") {
+				if strings.Contains(res.detail, "overflows memory area") {
 					t.Skipf("プログラムが大きすぎて ROM に入らない (seed %d)", seed)
 				}
 				if strings.Contains(res.detail, "static frames do not fit") || strings.Contains(res.detail, "does not fit in the zero page") {
