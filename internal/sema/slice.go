@@ -142,9 +142,42 @@ func (h *Hlc) toSlice(c *cexpr, st *types.Type) ir.Operand {
 	return h.newSlice(p.elem, p.ptr, p.len, p.ro, t.IsWideSlice()) // 普通 → 広いは長さを広げて作り直す
 }
 
+// fixedSliceLen は a[x..x + K] / a[x..=x + K] (x は同じ変数、K は定数) の長さ K / K + 1 (その形でなければ false)。長さが u8 に
+// 入れば、長さが u16 の配列・slice から切っても普通の slice になる (`bits[i..i + 8]`、i は u16: games の bitmap)。
+func (h *Hlc) fixedSliceLen(lo, hi *cexpr, incl bool) (int, bool) {
+	if lo == nil || hi == nil {
+		return 0, false
+	}
+	l, r := h.constEval(lo), h.constEval(hi)
+	if r.kind != cOp || r.op != opAdd || len(r.args) != 2 || l.kind != cValue || l.val.Kind == ir.KindLiteral {
+		return 0, false
+	}
+	x, k := r.args[0], r.args[1]
+	if k.kind == cValue && k.val == l.val {
+		x, k = k, x
+	}
+	if x.kind != cValue || x.val != l.val || !k.isLiteralInt() {
+		return 0, false
+	}
+	n := k.val.Int
+	if incl {
+		n++
+	}
+	return n, n >= 0 && n <= maxSliceLen(false)
+}
+
 // sliceRange は a[lo..hi] (lo / hi は省けば nil)。
 func (h *Hlc) sliceRange(a, lo, hi *cexpr, incl bool) ir.Operand {
 	p := h.sliceParts(a, "a[lo..hi]")
+	if k, ok := h.fixedSliceLen(lo, hi, incl); ok && p.wide {
+		// 長さの決まった窓: 先頭だけ計算して、長さは定数の普通の slice
+		loV := h.rval(lo)
+		planSliceBound(h.planInfo(lo, loV), "lo")
+		t := h.newTmp(h.prog.Types.PointerTo(p.elem))
+		h.markReadOnly(t, p.ro)
+		h.emit(&ir.Op{Code: ir.OpIndex, Dst: t, Src: []ir.Operand{p.base, loV}})
+		return h.newSlice(p.elem, t, ir.NewIntLiteral("", h.prog.Types.IntType(1, false), k), p.ro, false)
+	}
 	u8 := h.prog.Types.IntType(1, false)
 	intOf := func(c *cexpr, what string) ir.Operand {
 		v := h.rval(c)
@@ -216,7 +249,7 @@ func (h *Hlc) sliceRange(a, lo, hi *cexpr, incl bool) ir.Operand {
 
 // registerSliceBuiltins は @len / @slice / @ptr / @copy を登録する (fc 3 だけ: `@` の名前は fc 3 の字句)。
 func registerSliceBuiltins(h *Hlc) {
-	// @len(x): 配列は長さ (定数)、enum の型名はメンバーの数、slice は長さ (u8)
+	// @len(x): 配列と soa は要素の数 (定数)、enum の型名はメンバーの数、slice は長さ (u8)
 	h.defconstmacro("@len", func(h *Hlc, args []*cexpr) *cexpr {
 		if len(args) != 1 {
 			panic(&diag.Error{Msg: "@len takes 1 argument (an array, a slice or an enum type)"})
@@ -227,6 +260,10 @@ func registerSliceBuiltins(h *Hlc) {
 				panic(&diag.Error{Msg: fmt.Sprintf("@len(%s): a type has no length (only enum types)", t)})
 			}
 			return cv(h.IntValue(len(t.Enum.Members)))
+		}
+		if a.kind == cValue && a.val.Type.Kind == types.Soa {
+			h.soaOf(a.val.Type) // 宣言を解決して要素の数を決める (宣言より前の const からも)
+			return cv(h.IntValue(a.val.Type.Length))
 		}
 		if a.kind == cValue {
 			if t := a.val.Type; t.Kind == types.Array && t.Length >= 0 {

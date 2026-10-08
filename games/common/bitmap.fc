@@ -113,7 +113,7 @@ public function step():void
 	}
 	for (var k:u8 = 0; k < PER_FRAME && sending < TW * TH; k += 1) {
 		var i = sending as u16 * 8;
-		vram.put(back + (FIRST + sending) as u16 * 16, @slice(&bits[i], 8));   // 長さが u16 の slice は []const u8 にならないので
+		vram.put(back + (FIRST + sending) as u16 * 16, bits[i..i + 8]);   // 長さの決まった窓は普通の slice
 		sending += 1;
 		if (sending == TW * TH) {
 			flip = true;

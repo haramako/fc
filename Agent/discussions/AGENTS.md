@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-08 [静的フレームの RAM の予約と、ゲームで見つかった小さな不足への対応](2026-10-08-static-ram-and-small-gaps.md) — static_ram を書かなければ使う分だけ（golden と比べるソースは 512 で固定、CLI のオプションは今は足さない）、soa の @len、slice を返すメソッドの既定、長さの決まった窓 a[x..x + K]
 - 2026-10-08 [デバッグ用のゲームを 11 本作って見つかったこと](2026-10-08-debug-games-findings.md) — 条件式の枝の型名を省いた struct を直した。静的フレームの RAM の予約 512 バイト・ld65 の生のエラー・soa の @len など相談したいこと、NES の panic が見えない・書式に文字列の幅が無いなど fclib の不足、games/common に置いたライブラリ（gfx・text・bitmap）
 - 2026-10-08 [fc のデバッグを兼ねた小さなゲームと共通の CHR](2026-10-08-debug-games.md) — `games/` に置く、CHR の元はテキスト（tools/chrgen が chr・fc・png を作る）、スプライトは 8×8 と 8×16 のモードを混ぜられる並び、ゲームの候補 12 本、fclib の足りなそうな所の見込み
 - 2026-10-06 [ビルドと実行を分ける・基準ディレクトリの正規化](2026-10-06-build-run-split.md) — driver はビルドだけ、走らせるのは internal/runner（driver を使わない: nes のテストとの import の輪）、pkg/fc は Build と Run。基準ディレクトリは newCompilation で 1 度だけ正規化。fcc test に実行の上限

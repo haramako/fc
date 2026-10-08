@@ -330,6 +330,44 @@ function main():void
 	}
 }
 
+// TestInterfaceZeroSlice: 実装も既定の本体も無いメソッドは、slice なら長さ 0 の slice、配列なら全部 0 を返す (書き換えられる slice
+// にも警告を出さない)。
+func TestInterfaceZeroSlice(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+soa interface T {
+	y:u8;
+	function name(self:*T):[]const u8;
+	function buf(self:*T):[:u16]u8;
+	function arr(self:*T):[3]u8;
+}
+soa Ts:[4]T;
+struct A: T { }
+function A.name(self:*A):[]const u8 { return "aa"; }
+function main():void
+{
+	@set_id(&Ts[0], .A);
+	@set_id(&Ts[1], .none);
+	var a = Ts[1].arr();
+	@printf("[{}] [{}] {} {} {}\n", Ts[0].name(), Ts[1].name(), @len(Ts[1].name()), @len(Ts[0].buf()), a[0] + a[1] + a[2]);
+	console.exit(0);
+}
+`})
+	if want := "[aa] [] 0 0 0\n"; err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
+	}
+	_, res, err := buildFilesDefs(t, map[string]string{"t.fc": `#fc 4
+soa interface T { y:u8; function buf(self:*T):[:u16]u8; }
+soa Ts:[4]T;
+struct A: T { }
+function main():void { var b = Ts[0].buf(); }
+`}, nil)
+	if err != nil || len(res.Warnings) != 0 {
+		t.Errorf("警告 %+v, %v", res.Warnings, err)
+	}
+}
+
 // TestInterfaceRecursive: 実装のメソッドから別の要素のメソッドを呼ぶ (振り分けの関数を通して呼び出しが輪になる: 再帰の関数として
 // スタックに置く)。
 func TestInterfaceRecursive(t *testing.T) {

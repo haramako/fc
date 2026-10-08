@@ -580,9 +580,23 @@ func (h *Hlc) buildDispatch(info *ifaceInfo) {
 				return ir.NewSymbolLiteral("", elemT, im.def.Symbol)
 			}
 			if im.none == nil {
-				// 既定の本体が無ければ、何もしない (値を返すメソッドは 0・null・すべて 0 の struct を返す) 関数
+				// 既定の本体が無ければ、何もしない (値を返すメソッドは 0・null・すべて 0 の struct・長さ 0 の slice を返す) 関数
 				body := &syntax.Block{Lbrace: fd.Name.NamePos, Rbrace: fd.Name.NamePos}
-				if z := zeroExpr(dispT.Base, fd.Result, fd.Name.NamePos); z != nil {
+				z := zeroExpr(dispT.Base, fd.Result, fd.Name.NamePos)
+				if z == nil && (dispT.Base.Kind == types.Struct || dispT.Base.Kind == types.Array) {
+					// slice (長さ 0) と配列: 0 の値を隠した名前で置いて返す (構文の木では書けない)。slice は起動のときに 0 の RAM の
+					// 変数 (書き換えられる slice に ROM の定数を渡すと警告になる)、配列は定数
+					zname := "$zero_" + im.lmd.Id
+					if dispT.Base.IsSlice() {
+						h.addVar(ir.NewGlobal(zname, dispT.Base, h.addDef(zname, &ir.Def{Kind: ir.DefBss, Type: dispT.Base})))
+					} else {
+						zv := h.zeroLiteral(dispT.Base)
+						zv.Name = zname
+						h.scope.Declare(zv)
+					}
+					z = &syntax.Ident{NamePos: fd.Name.NamePos, Name: zname}
+				}
+				if z != nil {
 					body.Stmts = []syntax.Stmt{&syntax.ReturnStmt{Return: fd.Name.NamePos, Value: z, Semi: fd.Name.NamePos}}
 				} else if dispT.Base.Kind != types.Void {
 					panic(&diag.Error{Msg: fmt.Sprintf("method %s returns %s: write its default body in interface %s (it runs for %s)", mname, dispT.Base, name, what), Pos: syntax.At(info.module.Path, fd.Name.NamePos)})

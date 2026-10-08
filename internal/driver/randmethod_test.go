@@ -1144,6 +1144,18 @@ func (mn *rmMain) structStmt() {
 		}
 	case x < 11 && st.soa:
 		i := g.pick(4)
+		if g.chance(0.15) {
+			// soa を @len(Ps) で回して、あるフィールドを足す (u16 で)
+			f := st.fields[g.pick(len(st.fields))]
+			lv := g.name("j")
+			mn.line(fmt.Sprintf("{ var sum:u16 = 0; for (var %s:u8 = 0; %s < @len(Ps); %s++) { sum += Ps[%s].%s; } @printf(\"{}\\n\", sum); }", lv, lv, lv, lv, f.name))
+			sum := 0
+			for _, o := range mn.ps {
+				sum += o.f[f.name]
+			}
+			fmt.Fprintf(&g.prog.out, "%d\n", sum&0xffff)
+			return
+		}
 		if len(st.hs) > 0 && g.chance(0.6) {
 			m := st.hs[g.pick(len(st.hs))]
 			es, vs := mn.args(m.params)

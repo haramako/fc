@@ -417,6 +417,9 @@ func (h *Hlc) sliceRangeType(e *cexpr) (exprInfo, bool) {
 			}
 		}
 	}
+	if _, fixed := h.fixedSliceLen(e.args[1], e.args[2], e.incl); fixed {
+		p.wide = false // 長さの決まった窓は普通の slice (sliceRange)
+	}
 	return exprInfo{t: h.sliceType(p)}, true
 }
 

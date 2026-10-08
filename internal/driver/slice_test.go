@@ -397,3 +397,28 @@ function main():void
 		t.Errorf("got %q", out)
 	}
 }
+
+// TestSliceFixedWindow: a[x..x + K] / a[x..=x + K] (x は同じ変数、K は定数) は長さ K の普通の slice (長さが u16 の配列からでも)。
+// 長さの決まらない切り方は今までどおり広い slice (games/common/bitmap.fc で見つけた)。
+func TestSliceFixedWindow(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+var big:[600]u8;
+function sum(s:[]const u8):u16 { var t:u16 = 0; for (var c in s) { t += c; } return t; }
+function main():void
+{
+	for (var i:u16 = 0; i < 600; i += 1) { big[i] = (i & 0xff) as u8; }
+	var j:u16 = 500;
+	var w = big[j..j + 8];
+	var x:[]u8 = big[j..=3 + j];
+	x[0] = 1;
+	var wide = big[j..600];
+	@printf("{} {} {} {} {}\n", sum(w), @len(w), @len(x), big[500], @len(wide));
+	console.exit(0);
+}
+`})
+	if want := "1737 8 4 1 100\n"; err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
+	}
+}

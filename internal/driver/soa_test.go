@@ -90,3 +90,26 @@ func TestSoaErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestSoaLen: @len(soa) は要素の数 (定数。soa interface の置き場所も)。
+func TestSoaLen(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+const N = @len(Es) * 2;
+struct E { x:u8; }
+soa Es:[12]E;
+soa interface T { y:u8; function f(self:*T):void; }
+soa Ts:[7]T;
+function main():void
+{
+	var n:u8 = 0;
+	for (var i:u8 = 0; i < @len(Es); i += 1) { Es[i].x = i; n += Es[i].x; }
+	@printf("{} {} {} {}\n", @len(Es), @len(Ts), N, n);
+	console.exit(0);
+}
+`})
+	if want := "12 7 24 66\n"; err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
+	}
+}
