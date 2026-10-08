@@ -1,0 +1,304 @@
+#fc 4
+// 倉庫番 (games/ のデバッグ用のゲーム)。十字キーで歩いて箱を押し、全部の箱を印の上に載せると次の面。B で 1 手戻す、SELECT で
+// 面をやり直す。面は 16×16 のメタタイル (gfx.put16) で描き、壁だけ属性でパレットを替える。
+//   fcc build -o sokoban.nes main.fc
+@(static_ram: 64);   // 静的フレームの RAM の予約 (既定の 512 では変数と合わせて RAM に入らない。使うのはゼロページだけ)
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use tiles;
+use gfx;
+
+const AUTO = false @(build);   // 面ごとの解き方をなぞる (U D L R が動き、B が 1 手戻す。テストと見本)
+
+const PALETTE = [
+	0x0f, 0x00, 0x10, 0x30,  0x0f, 0x07, 0x17, 0x27,  0x0f, 0x08, 0x18, 0x38,  0x0f, 0x00, 0x10, 0x30,   // BG: 0 文字, 1 壁, 2 床・箱・印
+	0x0f, 0x0f, 0x16, 0x37,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,   // スプライト: 0 自分
+];
+
+// 面 (# 壁、. 印、$ 箱、* 印の上の箱、@ 自分、+ 印の上の自分。横 16・縦 12 まで)
+const LEVELS = [
+	"#######\n#     #\n# .$@ #\n#     #\n#######",
+	"########\n#      #\n#.$  $.#\n#  @   #\n########",
+	"#######\n#.   .#\n# $ $ #\n#  @  #\n#######",
+	"########\n#  .   #\n# $##$ #\n#  @ . #\n########",
+	"  #####\n###   #\n#   $ #\n# #.# #\n# $.@ #\n#######",
+];
+const SOLUTIONS = [
+	"L",
+	"ULRRR",
+	"RBULDLURRRDRU",
+	"RRRUULDULLLLDDRULUR",
+	"RBRUUULLDLLDDRLUURRURRDLULD",
+];
+
+const MW = 16;            // マップの大きさ (メタタイル)
+const MH = 13;
+const TOP = 2;            // マップの上の行 (メタタイル。上の 2 行は文字)
+
+// マスのビット
+const WALL = 1;
+const GOAL = 2;
+const BOX = 4;
+
+const DX:[4]i8 = [0, 1, 0, -1];   // U R D L
+const DY:[4]i8 = [-1, 0, 1, 0];
+const FACE = [tiles.HERO_U0, tiles.HERO_R0, tiles.HERO_D0, tiles.HERO_R0];
+
+var map:[MH][MW]u8;
+var attrs:[64]u8;         // 属性の写し (vram.set_meta_attr が書き換える)
+var level:u8;
+var px:u8;                // 自分 (マス)
+var py:u8;
+var face:u8;              // 向き (0〜3)
+var boxes_left:u8;        // 印の上に無い箱
+var moves:u16;
+var history:[255]u8;      // 1 手ごとの向き (押したら + 4)
+var hlen:u8;
+var cleared:u8;           // 解いた面の数 (AUTO のテスト用)
+var step:u8;              // AUTO: 解き方の次の文字
+var line:[32]u8;
+
+function tile_of(c:u8):u8
+{
+	if ((c & WALL) != 0) {
+		return tiles.SOKO_WALL;
+	}
+	if ((c & BOX) != 0) {
+		return (c & GOAL) != 0 ? tiles.SOKO_BOX_GOAL : tiles.SOKO_BOX;
+	}
+	return (c & GOAL) != 0 ? tiles.SOKO_GOAL : tiles.SOKO_FLOOR;
+}
+
+function draw(x:u8, y:u8):void
+{
+	gfx.put16(0, x, y + TOP, tile_of(map[y][x]));
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 2, 1), @format(line, "LEVEL {}/{}  MOVES {:4}  B:UNDO", level + 1, @len(LEVELS), moves));
+}
+
+// 面 level を読んで描く (描画を止めて)
+function load():void
+{
+	frame.render_off();
+	for (var y:u8 = 0; y < MH; y += 1) {
+		for (var x:u8 = 0; x < MW; x += 1) {
+			map[y][x] = 0;
+		}
+	}
+	for (var i:u8 = 0; i < 64; i += 1) {
+		attrs[i] = 0xaa;   // パレット 2
+	}
+	// 大きさを数えて、真ん中に置く
+	var src = LEVELS[level];
+	var w:u8 = 0;
+	var h:u8 = 1;
+	var cw:u8 = 0;
+	for (var c in src) {
+		if (c == '\n') {
+			h += 1;
+			cw = 0;
+		} else {
+			cw += 1;
+			w = @max(w, cw);
+		}
+	}
+	var ox = (MW - w) / 2;
+	var oy = (MH - h) / 2;
+	var x = ox;
+	var y = oy;
+	boxes_left = 0;
+	for (var c in src) {
+		var m:u8 = 0;
+		switch (c) {
+		case '\n':
+			x = ox;
+			y += 1;
+			continue;
+		case '#':
+			m = WALL;
+		case '.':
+			m = GOAL;
+		case '$':
+			m = BOX;
+		case '*':
+			m = BOX | GOAL;
+		case '@', '+':
+			px = x;
+			py = y;
+			m = c == '+' ? GOAL : 0;
+		}
+		if ((m & (BOX | GOAL)) == BOX) {
+			boxes_left += 1;
+		}
+		map[y][x] = m;
+		x += 1;
+	}
+	vram.fill(vram.addr(0, 0, 0), tiles.BLANK, 128);
+	for (var yy:u8 = 0; yy < MH; yy += 1) {
+		for (var xx:u8 = 0; xx < MW; xx += 1) {
+			draw(xx, yy);
+			if ((map[yy][xx] & WALL) != 0) {
+				vram.set_meta_attr(0, xx, yy + TOP, attrs, 1);
+			}
+		}
+	}
+	// 文字の行 (メタタイルの 0〜1 行目) はパレット 0
+	for (var i:u8 = 0; i < 8; i += 1) {
+		attrs[i] = 0x00;
+	}
+	vram.put(0x23c0, attrs);
+	face = 2;
+	moves = 0;
+	hlen = 0;
+	step = 0;
+	hud();
+	frame.render_on();
+}
+
+// 向き d へ 1 歩 (押せれば箱を押す)。動いたら true
+function walk(d:u8):bool
+{
+	face = d;
+	var x = px +% DX[d];
+	var y = py +% DY[d];
+	var c = map[y][x];
+	if ((c & WALL) != 0) {
+		return false;
+	}
+	var pushed:u8 = 0;
+	if ((c & BOX) != 0) {
+		var bx = x +% DX[d];
+		var by = y +% DY[d];
+		if ((map[by][bx] & (WALL | BOX)) != 0) {
+			return false;
+		}
+		move_box(x, y, bx, by);
+		pushed = 4;
+	}
+	px = x;
+	py = y;
+	moves += 1;
+	if (hlen < 255) {
+		history[hlen] = d | pushed;
+		hlen += 1;
+	}
+	hud();
+	return true;
+}
+
+function move_box(x:u8, y:u8, nx:u8, ny:u8):void
+{
+	map[y][x] &= ~BOX;
+	map[ny][nx] |= BOX;
+	if ((map[y][x] & GOAL) != 0) {
+		boxes_left += 1;
+	}
+	if ((map[ny][nx] & GOAL) != 0) {
+		boxes_left -= 1;
+	}
+	draw(x, y);
+	draw(nx, ny);
+}
+
+// 1 手戻す
+function undo():void
+{
+	if (hlen == 0) {
+		return;
+	}
+	hlen -= 1;
+	var h = history[hlen];
+	var d = h & 3;
+	var bx = px +% DX[d];   // 押した箱は自分の前にある
+	var by = py +% DY[d];
+	px = px -% DX[d];
+	py = py -% DY[d];
+	if ((h & 4) != 0) {
+		move_box(bx, by, bx -% DX[d], by -% DY[d]);
+	}
+	face = d;
+	moves -= 1;
+	hud();
+}
+
+function control(b:u8):void
+{
+	if ((b & pad.UP) != 0) {
+		walk(0);
+	} else if ((b & pad.RIGHT) != 0) {
+		walk(1);
+	} else if ((b & pad.DOWN) != 0) {
+		walk(2);
+	} else if ((b & pad.LEFT) != 0) {
+		walk(3);
+	} else if ((b & pad.B) != 0) {
+		undo();
+	} else if ((b & pad.SELECT) != 0) {
+		load();
+	}
+}
+
+// AUTO: 解き方の次の 1 文字をボタンにする
+function auto_button():u8
+{
+	var s = SOLUTIONS[level];
+	if (step >= @len(s)) {
+		return 0;
+	}
+	var c = s[step];
+	step += 1;
+	switch (c) {
+	case 'U':
+		return pad.UP;
+	case 'R':
+		return pad.RIGHT;
+	case 'D':
+		return pad.DOWN;
+	case 'L':
+		return pad.LEFT;
+	default:
+		return pad.B;
+	}
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	load();
+	var wait:u8 = 0;
+	while (true) {
+		pad.poll();
+		if (boxes_left == 0) {
+			// 解けた: 少し待って次の面
+			wait += 1;
+			if (wait == 60) {
+				wait = 0;
+				cleared += 1;
+				level = (level + 1) % @len(LEVELS);
+				load();
+			}
+		} else if (AUTO) {
+			wait += 1;
+			if (wait == 8) {
+				wait = 0;
+				control(auto_button());
+			}
+		} else {
+			control(pad.p1.repeat);
+		}
+		oam.begin();
+		var attr:u8 = face == 3 ? nes.ATTR_FLIP_H : 0;
+		gfx.spr16(px * 16, (py + TOP) * 16 - 1, FACE[face] + ((moves as u8 & 1) << 2), attr);
+		oam.end();
+		frame.wait();
+	}
+}

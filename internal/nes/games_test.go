@@ -117,3 +117,21 @@ func TestGameMines(t *testing.T) {
 		}
 	})
 }
+
+// TestGameSokoban: 面ごとの解き方をなぞって (1 手戻すのも混ぜて) 全部の面を解く。16×16 のメタタイルと属性。
+func TestGameSokoban(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "sokoban", level, "main.AUTO=true")
+		p.run(t, 2400)
+		cleared := p.peek(t, "_main_cleared", 0)
+		t.Logf("解いた面 %d, 今の面 %d, 残りの箱 %d", cleared, p.peek(t, "_main_level", 0), p.peek(t, "_main_boxes_left", 0))
+		if cleared < 5 {
+			t.Errorf("5 面を解いていない: %d", cleared)
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "sokoban")
+		}
+	})
+}

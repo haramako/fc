@@ -1,0 +1,49 @@
+#fc 4
+// games/ の共通の描画の補助 (fclib に入れるかを決める前の置き場)。tiles の並び (BG の 16×16 は n, n+1, n+16, n+17、スプライトの
+// 16×16 は左上・左下・右上・右下の n..n+3) に合わせて置く。
+use nes;
+use vram;
+use oam;
+
+// BG の 16×16 の絵 n をメタタイル (mx, my) に置く (描画を止めていればその場で、出していればキューに)
+public function put16(nt:u8, mx:u8, my:u8, n:u8):void
+{
+	var t:[4]u8 = [n, n + 1, n + 16, n + 17];
+	vram.put_meta(nt, mx, my, t);
+}
+
+// 16×16 のスプライト n を 8×8 のモードで (x, y) に置く (4 枚)。attr はパレットと反転 (nes.ATTR_FLIP_H / ATTR_FLIP_V)。
+// 全部置けたら true
+public function spr16(x:u8, y:u8, n:u8, attr:u8):bool
+{
+	var l = n;
+	var r = n + 2;
+	if ((attr & nes.ATTR_FLIP_H) != 0) {
+		l = n + 2;
+		r = n;
+	}
+	var top:u8 = 0;
+	var bottom:u8 = 1;
+	if ((attr & nes.ATTR_FLIP_V) != 0) {
+		top = 1;
+		bottom = 0;
+	}
+	var ok = oam.spr(x, y, l + top, attr);
+	ok = oam.spr(x, y + 8, l + bottom, attr) && ok;
+	ok = oam.spr(x + 8, y, r + top, attr) && ok;
+	return oam.spr(x + 8, y + 8, r + bottom, attr) && ok;
+}
+
+// 8×16 のモード (frame.ctrl に nes.CTRL_SPR_8X16) で 16×16 のスプライト n を置く (2 枚。上下の反転は 8×16 のまま PPU が
+// する)。全部置けたら true
+public function spr16_tall(x:u8, y:u8, n:u8, attr:u8):bool
+{
+	var l = n | 1;
+	var r = (n + 2) | 1;
+	if ((attr & nes.ATTR_FLIP_H) != 0) {
+		l = r;
+		r = n | 1;
+	}
+	var ok = oam.spr(x, y, l, attr);
+	return oam.spr(x + 8, y, r, attr) && ok;
+}
