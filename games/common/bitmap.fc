@@ -1,0 +1,122 @@
+#fc 4
+// games/ の共通の線画 (CHR RAM のビットマップ。fclib に入れるかを決める前の置き場)。fc.toml の [target] で chr = 0 (CHR RAM)。
+// RAM に (TW × 8) × (TH × 8) ドットの 1 ビットの絵 (プレーン 0 = 色 1) を持って線を描き、BG のタイル FIRST.. へ 1 フレームに
+// PER_FRAME 枚ずつ送る。パターン表を 2 つ ($0000 / $1000) 交互に使う: 見せていないほうへ送り終えたら、BG の表を切り替える
+// (描きかけが見えない)。
+//
+//   bitmap.init(0, 12, 11);      // 描画を止めて: 名前表の (12, 11) から TW × TH のタイルを並べる
+//   if (!bitmap.busy()) { bitmap.clear(); bitmap.line(0, 0, 63, 63); bitmap.present(); }
+//   bitmap.step();               // 毎フレーム (frame.wait の前)
+use nes;
+use frame;
+use vram;
+
+public const TW = 8 @(build);          // タイルの数 (横・縦)
+public const TH = 8 @(build);
+public const W = TW * 8;               // ドット
+public const H = TH * 8;
+public const FIRST = 0x80;             // 絵のタイルの番号 (FIRST から TW × TH 枚。両方の表で同じ番号)
+public const PER_FRAME = 6 @(build);   // 1 フレームに送るタイル (1 枚 8 バイト。frame の手間 18)
+
+var bits:[TW * TH * 8]u8;   // タイルの順 ((ty * TW + tx) * 8 + 行)
+var sending:u8;             // 次に送るタイル (TW * TH なら送っていない)
+var flip:bool;              // 送り終えた: 次の step で表を切り替える
+var back:u16;               // 送っている表 (0x0000 か 0x1000)
+public var frames:u16;      // 見せた絵の数
+
+// 描画を止めている間に: 名前表 nt の (x, y) から TW × TH のタイルを並べ、両方の表の絵のタイルを空にする
+public function init(nt:u8, x:u8, y:u8):void
+{
+	for (var ty:u8 = 0; ty < TH; ty += 1) {
+		var row:[TW]u8;
+		for (var tx:u8 = 0; tx < TW; tx += 1) {
+			row[tx] = FIRST + ty * TW + tx;
+		}
+		vram.write_now(vram.addr(nt, x, y + ty), row);
+	}
+	vram.fill_now(FIRST as u16 * 16, 0, TW * TH * 16);
+	vram.fill_now(0x1000 + FIRST as u16 * 16, 0, TW * TH * 16);
+	sending = TW * TH;
+	flip = false;
+	clear();
+}
+
+// 送っている途中か (途中なら描かない: 送っている絵が変わる)
+public function busy():bool
+{
+	return sending < TW * TH || flip;
+}
+
+public function clear():void
+{
+	for (var i:u16 = 0; i < @len(bits); i += 1) {
+		bits[i] = 0;
+	}
+}
+
+// 1 ドット (外なら何もしない)
+public function pset(x:i16, y:i16):void
+{
+	if (x < 0 || y < 0 || x >= W || y >= H) {
+		return;
+	}
+	var xx = x as u8;
+	var yy = y as u8;
+	var i = ((yy >> 3) as u16 * TW + (xx >> 3)) * 8 + (yy & 7);
+	bits[i] |= 0x80 >> (xx & 7);
+}
+
+// 線 (Bresenham。はみ出す所は描かない)
+public function line(x0:i16, y0:i16, x1:i16, y1:i16):void
+{
+	var dx = x1 > x0 ? x1 - x0 : x0 - x1;
+	var dy = y1 > y0 ? y0 - y1 : y1 - y0;   // 負
+	var sx:i16 = x0 < x1 ? 1 : -1;
+	var sy:i16 = y0 < y1 ? 1 : -1;
+	var err = dx + dy;
+	var x = x0;
+	var y = y0;
+	var n:u16 = 0;
+	while (n < 512) {   // 念のための上限 (画面より長い線は無い)
+		pset(x, y);
+		if (x == x1 && y == y1) {
+			break;
+		}
+		var e2 = err * 2;
+		if (e2 >= dy) {
+			err += dy;
+			x += sx;
+		}
+		if (e2 <= dx) {
+			err += dx;
+			y += sy;
+		}
+		n += 1;
+	}
+}
+
+// 描き終えた絵を送り始める (見せていない表へ)
+public function present():void
+{
+	back = (frame.ctrl & nes.CTRL_BG_1000) != 0 ? 0x0000 : 0x1000;
+	sending = 0;
+}
+
+// 毎フレーム: 送る。送り終えたら次のフレームで表を切り替える
+public function step():void
+{
+	if (flip) {
+		frame.ctrl ^= nes.CTRL_BG_1000;
+		flip = false;
+		frames += 1;
+		return;
+	}
+	for (var k:u8 = 0; k < PER_FRAME && sending < TW * TH; k += 1) {
+		var i = sending as u16 * 8;
+		vram.put(back + (FIRST + sending) as u16 * 16, @slice(&bits[i], 8));   // 長さが u16 の slice は []const u8 にならないので
+		sending += 1;
+		if (sending == TW * TH) {
+			flip = true;
+		}
+	}
+}

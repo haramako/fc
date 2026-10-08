@@ -271,6 +271,7 @@ func TestGamesSameAtTick(t *testing.T) {
 		{"adventure", 1500, 4000},
 		{"platform", 2500, 4000},
 		{"rogue", 2500, 6000},
+		{"wire", 1500, 4000},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -366,6 +367,38 @@ func TestGameRogue(t *testing.T) {
 		p.checkVblank(t)
 		if level == 0 {
 			saveGame(t, p, "rogue")
+		}
+	})
+}
+
+// TestGameWire: 3D の回転・透視・線を RAM のビットマップに描いて CHR RAM へ送り、パターン表を切り替える。照準を寄せて撃つ。
+func TestGameWire(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "wire", level, "main.AUTO=true")
+		p.play(t, 2400)
+		hits, frames := p.peek(t, "_main_hits", 0), p.peek16(t, "_bitmap_frames")
+		t.Logf("当てた %d, 撃った %d, 見せた絵 %d", hits, p.peek16(t, "_main_shots"), frames)
+		if hits == 0 || frames < 50 {
+			t.Errorf("当てていないか、絵を見せていない: 当てた %d, 絵 %d", hits, frames)
+		}
+		// 窓のタイルの CHR RAM に線がある (見せている表)
+		base := 0
+		if p.ctrl&0x10 != 0 {
+			base = 0x1000
+		}
+		dots := 0
+		for a := base + 0x800; a < base+0xc00; a++ {
+			if p.chrAt(a) != 0 {
+				dots++
+			}
+		}
+		if dots == 0 {
+			t.Errorf("窓の絵が空")
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "wire")
 		}
 	})
 }

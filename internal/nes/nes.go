@@ -77,6 +77,7 @@ type Machine struct {
 	// 決まった手数の所で状態を比べる)。Stopped は止めたか
 	Stop    func() bool
 	Stopped bool
+	chrRAM  bool // CHR が RAM (書ける)
 
 	// 関数ごとのプロファイル (ProfileSymbols の区間 (ROM ファイル内のオフセット) に命令のサイクルを積む。
 	// バンク切り替えで同じアドレスに別の関数が来るので、PC でなく現在のバンクを反映した ROM オフセットで引く)
@@ -155,6 +156,10 @@ func New(rom []byte) (*Machine, error) {
 		chr:            rom[16+prgSize : 16+prgSize+chrSize],
 		mapper:         mapper,
 		mirrorVertical: rom[6]&1 != 0,
+	}
+	if chrSize == 0 {
+		m.chr = make([]byte, 0x2000) // CHR RAM (iNES の CHR が 0 バンク)
+		m.chrRAM = true
 	}
 	switch mapper {
 	case 4:
@@ -413,6 +418,9 @@ func (m *Machine) readVram(addr int) byte {
 func (m *Machine) writeVram(addr int, v byte) {
 	switch {
 	case addr < 0x2000:
+		if m.chrRAM {
+			m.chr[addr] = v
+		}
 		// CHR ROM: 書き込み無視
 	case addr < 0x3f00:
 		m.nt[m.ntIndex(addr)] = v

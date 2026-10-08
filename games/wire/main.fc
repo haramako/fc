@@ -1,0 +1,237 @@
+#fc 4
+// ワイヤーフレームの宇宙船シューティング (games/ のデバッグ用のゲーム)。真ん中の窓に、回りながら飛ぶ宇宙船を線で描く (3D の回転・
+// 透視・Bresenham の線を RAM のビットマップに描き、CHR RAM へ少しずつ送る: games/common/bitmap.fc)。十字キーで照準を動かし、
+// A で撃つ。当てると次の船 (速く・遠く) が来る。
+//   fcc build -o wire.nes main.fc
+@(static_ram: 96);
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use math;
+use rand;
+use tiles;
+use gfx;
+use bitmap;
+
+const AUTO = false @(build);   // 照準を船へ寄せて撃つ (テストと見本)
+
+var ticks:u16;            // メインループを回った数
+
+const CHR = @incbin("../common/tiles.chr");   // CHR RAM へ写す絵 (文字と照準)
+const CROSS = 0xc0;       // 照準のタイル ($0000 の表に写す。左上・左下・右上・右下)
+const SPARK = 0xc4;
+
+const PALETTE = [
+	0x0f, 0x2a, 0x1a, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,   // BG: 線 (緑) と文字
+	0x0f, 0x16, 0x26, 0x30,  0x0f, 0x28, 0x38, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,   // 照準, 火花
+];
+
+const WX = 12;            // 窓の左上 (タイル)
+const WY = 11;
+const SX = WX * 8;        // 窓の左上 (ドット)
+const SY = WY * 8;
+
+// 船の形 (機首・主翼の端・尾翼・後ろ・腹)
+const VX:[6]i8 = [0, -22, 22, 0, 0, 0];
+const VY:[6]i8 = [0, 0, 0, 12, 0, -5];
+const VZ:[6]i8 = [26, -10, -10, -12, -12, -2];
+const EDGES:[20]u8 = [0, 1, 0, 2, 1, 4, 2, 4, 0, 3, 3, 4, 0, 5, 1, 5, 2, 5, 4, 5];
+
+var yaw:u8;
+var pitch:u8;
+var spin:u8;              // 1 枚ごとに回す角度
+var dist:i16;             // 船までの遠さ (大きいほど小さく見える)
+var drift:u8;             // 窓の中を漂う位相
+var sx:[6]i16;            // 描いた点 (窓のドット)
+var sy:[6]i16;
+var min_x:i16;            // 描いた船の囲み
+var max_x:i16;
+var min_y:i16;
+var max_y:i16;
+var cx:u8;                // 照準の真ん中 (窓のドット)
+var cy:u8;
+var cool:u8;              // 撃ってからのフレーム
+var spark:u8;             // 当てた火花の残りのフレーム
+var spark_x:u8;
+var spark_y:u8;
+var hits:u8;
+var shots:u16;
+var line:[32]u8;
+
+// 船を回して窓に写し、線で描く
+function render():void
+{
+	var cy_ = math.cos(yaw) as i16;
+	var sy_ = math.sin(yaw) as i16;
+	var cp = math.cos(pitch) as i16;
+	var sp = math.sin(pitch) as i16;
+	var ox = 32 + (math.sin(drift) as i16 >> 3);
+	var oy = 32 + (math.cos(drift + drift) as i16 >> 4);
+	min_x = 127;
+	max_x = -128;
+	min_y = 127;
+	max_y = -128;
+	for (var i:u8 = 0; i < 6; i += 1) {
+		var x = VX[i] as i16;
+		var y = VY[i] as i16;
+		var z = VZ[i] as i16;
+		var x1 = (x * cy_ - z * sy_) >> 7;
+		var z1 = (x * sy_ + z * cy_) >> 7;
+		var y2 = (y * cp - z1 * sp) >> 7;
+		var z2 = (y * sp + z1 * cp) >> 7;
+		var d = z2 + dist;
+		sx[i] = ox + x1 * 64 / d;
+		sy[i] = oy - y2 * 64 / d;
+		min_x = @min(min_x, sx[i]);
+		max_x = @max(max_x, sx[i]);
+		min_y = @min(min_y, sy[i]);
+		max_y = @max(max_y, sy[i]);
+	}
+	bitmap.clear();
+	for (var e:u8 = 0; e < @len(EDGES); e += 2) {
+		var a = EDGES[e];
+		var b = EDGES[e + 1];
+		bitmap.line(sx[a], sy[a], sx[b], sy[b]);
+	}
+	bitmap.present();
+	yaw += spin;
+	pitch += spin >> 1;
+	drift += 3;
+}
+
+function new_ship():void
+{
+	spin = 4 + rand.below(6);
+	dist = 56 + rand.below(30) as i16 + @min(hits, 10) as i16 * 4;
+	yaw = rand.next_u8();
+	pitch = rand.next_u8();
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 4, 3), @format(line, "HITS {:3}   SHOTS {:4}", hits, shots));
+}
+
+function fire():void
+{
+	shots += 1;
+	cool = 12;
+	if (cx as i16 >= min_x - 2 && cx as i16 <= max_x + 2 && cy as i16 >= min_y - 2 && cy as i16 <= max_y + 2) {
+		hits += 1;
+		spark = 20;
+		spark_x = cx;
+		spark_y = cy;
+		new_ship();
+	}
+	hud();
+}
+
+function control():void
+{
+	var b = pad.p1.held;
+	var shoot = (pad.p1.pressed & pad.A) != 0;
+	if (AUTO) {
+		// 船の囲みの真ん中へ
+		var tx = (min_x + max_x) / 2;
+		var ty = (min_y + max_y) / 2;
+		b = 0;
+		if (tx < cx as i16) {
+			b |= pad.LEFT;
+		} else if (tx > cx as i16) {
+			b |= pad.RIGHT;
+		}
+		if (ty < cy as i16) {
+			b |= pad.UP;
+		} else if (ty > cy as i16) {
+			b |= pad.DOWN;
+		}
+		var dx = tx - cx as i16;
+		var dy = ty - cy as i16;
+		shoot = dx * dx + dy * dy < 16;
+	}
+	if ((b & pad.LEFT) != 0 && cx > 0) {
+		cx -= 1;
+	}
+	if ((b & pad.RIGHT) != 0 && cx < bitmap.W - 1) {
+		cx += 1;
+	}
+	if ((b & pad.UP) != 0 && cy > 0) {
+		cy -= 1;
+	}
+	if ((b & pad.DOWN) != 0 && cy < bitmap.H - 1) {
+		cy += 1;
+	}
+	if (cool > 0) {
+		cool -= 1;
+	} else if (shoot) {
+		fire();
+	}
+}
+
+function draw():void
+{
+	oam.begin();
+	gfx.spr16(SX + cx - 8, SY + cy - 8 - 1, CROSS, 0);
+	if (spark > 0) {
+		spark -= 1;
+		oam.spr(SX + spark_x - 4, SY + spark_y - 4 - 1, SPARK, 1);
+	}
+	oam.end();
+}
+
+// 描画を止めて、文字 (BG の $00〜$7F) を両方の表に、照準と火花を $0000 の表に写す
+function load_chr():void
+{
+	vram.write_now(0x0000, CHR[..0x800]);
+	vram.write_now(0x1000, CHR[..0x800]);
+	var c = 0x1000 + tiles.CROSSHAIR as u16 * 16;
+	vram.write_now(CROSS as u16 * 16, CHR[c..c + 64]);
+	var s = 0x1000 + tiles.SPARK as u16 * 16;
+	vram.write_now(SPARK as u16 * 16, CHR[s..s + 16]);
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	pal.set_all(PALETTE);
+	load_chr();
+	bitmap.init(0, WX, WY);
+	// 窓の枠
+	vram.write_now(vram.addr(0, WX - 1, WY - 1), [tiles.FRAME_TL]);
+	vram.fill_now(vram.addr(0, WX, WY - 1), tiles.FRAME_T, bitmap.TW);
+	vram.write_now(vram.addr(0, WX + bitmap.TW, WY - 1), [tiles.FRAME_TR]);
+	for (var y:u8 = 0; y < bitmap.TH; y += 1) {
+		vram.write_now(vram.addr(0, WX - 1, WY + y), [tiles.FRAME_L]);
+		vram.write_now(vram.addr(0, WX + bitmap.TW, WY + y), [tiles.FRAME_R]);
+	}
+	vram.write_now(vram.addr(0, WX - 1, WY + bitmap.TH), [tiles.FRAME_BL]);
+	vram.fill_now(vram.addr(0, WX, WY + bitmap.TH), tiles.FRAME_B, bitmap.TW);
+	vram.write_now(vram.addr(0, WX + bitmap.TW, WY + bitmap.TH), [tiles.FRAME_BR]);
+	vram.write_now(vram.addr(0, 9, 24), "WIREFRAME SHOOTER");
+	rand.seed(0x3d3d);
+	cx = 32;
+	cy = 32;
+	new_ship();
+	hud();
+	frame.render_on();
+	while (true) {
+		pad.poll();
+		if (!bitmap.busy()) {
+			render();
+		}
+		control();
+		bitmap.step();
+		draw();
+		end_frame();
+	}
+}

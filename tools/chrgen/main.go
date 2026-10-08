@@ -506,9 +506,10 @@ func (s *sheet) module(srcName, chrName string) []byte {
 //   NAME_M8 は 8×8 のモードの oam.meta の表、NAME_M16 は 8×16 のモード (frame.ctrl に nes.CTRL_SPR_8X16) の表。
 //   NAME_T16 は 8×16 のモードのタイルの番号 (下位 1 ビットが $1000 を選ぶ。8×8 の絵は下が空白)。
 //   表の attr はパレットの番号だけ。
-// use すると CHR (同じディレクトリの .chr) も ROM に入る。
+// use すると CHR (同じディレクトリの .chr) も ROM に入る (CHR RAM のゲームは fc.toml の [define.tiles] で CHR_ROM = false にして
+// 定数だけ使い、絵は @incbin で読んで送る)。
 `)
-	fmt.Fprintf(&b, "@include(%q);\n", chrName)
+	fmt.Fprintf(&b, "public const CHR_ROM = true @(build);\n@if (CHR_ROM) {\n\t@include(%q);\n}\n", chrName)
 	objs := append([]*object(nil), s.objs...)
 	sort.SliceStable(objs, func(i, j int) bool {
 		if objs[i].spr != objs[j].spr {

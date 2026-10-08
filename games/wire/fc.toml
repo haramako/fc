@@ -1,0 +1,9 @@
+[target]
+mapper = "NROM"
+chr = 0
+
+[lib.common]
+path = "../common"
+
+[define.tiles]
+CHR_ROM = false
