@@ -253,10 +253,29 @@ func TestGamesSameAtTick(t *testing.T) {
 		{"mines", 300, 20000},
 		{"sokoban", 2000, 4000},
 		{"blocks", 300, 8000},
+		{"shooter", 2500, 6000},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			compareAtTick(t, c.name, c.tick, c.frames)
 		})
 	}
+}
+
+// TestGameShooter: soa の interface のタスク (敵・敵の弾・爆発) と 8×16 のスプライト。撃って敵を倒す。
+func TestGameShooter(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "shooter", level, "main.AUTO=true")
+		p.run(t, 3600)
+		kills := p.peek16(t, "_main_kills")
+		t.Logf("倒した敵 %d, 得点 %d, 残り %d, 終わった回数 %d", kills, p.peek16(t, "_main_score"), p.peek(t, "_main_lives", 0), p.peek(t, "_main_games", 0))
+		if kills < 5 {
+			t.Errorf("敵を倒していない: %d", kills)
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "shooter")
+		}
+	})
 }
