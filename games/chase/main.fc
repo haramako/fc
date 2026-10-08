@@ -1,0 +1,428 @@
+#fc 4
+// ドットイートの迷路 (games/ のデバッグ用のゲーム)。十字キーで進み、点を全部食べると次の面。大きい点を食べるとしばらくおばけを
+// 食べられる。おばけは普通の (soa でない) interface の配列で、行き先 (target。struct を返す) の決め方が 4 通り。
+// 3 回つかまると GAME OVER (START でやり直し)。マスは 16×16 (壁は 16×16 の石、点は左上の 8×8)。
+//   fcc build -o chase.nes main.fc
+@(static_ram: 64);
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use rand;
+use tiles;
+use gfx;
+
+const AUTO = false @(build);   // 一番近い点へ、おばけを避けて進む (テストと見本)
+
+var ticks:u16;            // メインループを回った数
+
+const PALETTE = [
+	0x0f, 0x01, 0x11, 0x21,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,   // BG: 0 壁・点
+	0x0f, 0x0f, 0x27, 0x37,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x24, 0x30,  0x0f, 0x0f, 0x12, 0x30,   // 自分, おばけ 2 色, 逃げるおばけ
+];
+
+const MAZE = "#################..............##.##.#.##.#.##.##o#..#....#..#o##.#.###..###.#.##..............####.#.####.#.####...#..GG..#...##.#.##.##.##.#.##.#.....P....#.##.###.#..#.###.##o....#..#....o#################";
+const W = 16;
+const H = 13;
+const TOP = 1;            // 迷路の上の行 (メタタイル。上の 1 行は文字)
+
+// マス
+const WALL = 1;
+const DOT = 2;
+const POWER = 3;
+
+const DX:[4]i8 = [0, 1, 0, -1];   // 上 右 下 左
+const DY:[4]i8 = [-1, 0, 1, 0];
+
+struct Cell {
+	x:u8;
+	y:u8;
+}
+
+// ---- おばけ ----
+
+interface Ghost {
+	x:u8;                 // ピクセル (迷路の左上から)
+	y:u8;
+	dir:u8;
+	scared:bool;
+	function target(self:*Ghost):Cell;   // 曲がり角で向かうマス
+}
+
+// 自分を追う
+struct Chaser: Ghost {
+}
+
+function Chaser.target(self:*Chaser):Cell
+{
+	return {px >> 4, py >> 4};
+}
+
+// 自分の 4 マス先を狙う
+struct Ambusher: Ghost {
+}
+
+function Ambusher.target(self:*Ambusher):Cell
+{
+	return {(px >> 4) +% DX[pdir] * 4, (py >> 4) +% DY[pdir] * 4};
+}
+
+// 曲がり角ごとに行き先を変える
+struct Wanderer: Ghost {
+	seed:u8;
+}
+
+function Wanderer.target(self:*Wanderer):Cell
+{
+	self.seed = self.seed * 5 + 17;
+	return {self.seed & 15, (self.seed >> 4) % H};
+}
+
+// 近づくと自分の隅へ逃げる
+struct Shy: Ghost {
+	corner:Cell;
+}
+
+function Shy.target(self:*Shy):Cell
+{
+	if (dist2(self.x >> 4, self.y >> 4, px >> 4, py >> 4) < 16) {
+		return self.corner;
+	}
+	return {px >> 4, py >> 4};
+}
+
+var ghosts:[4]Ghost;
+
+// ---- 迷路と自分 ----
+
+var map:[H][W]u8;
+var dots:u8;
+var px:u8;
+var py:u8;
+var pdir:u8;
+var want:u8;              // 次に曲がりたい向き
+var scared:u8;            // おばけが逃げる残りの手数
+var lives:u8;
+var score:u16;
+var eaten:u16;            // 食べた点の数 (テスト用)
+var stages:u8;
+var games:u8;
+var line:[32]u8;
+
+function cell_at(x:u8, y:u8):u8
+{
+	if (x >= W || y >= H) {
+		return WALL;
+	}
+	return map[y][x];
+}
+
+function draw_cell(x:u8, y:u8):void
+{
+	var c = map[y][x];
+	if (c == WALL) {
+		gfx.put16(0, x, y + TOP, tiles.STONE);
+		return;
+	}
+	var t:[4]u8 = [tiles.BLANK, tiles.BLANK, tiles.BLANK, tiles.BLANK];
+	if (c == DOT) {
+		t[0] = tiles.DOT;
+	} else if (c == POWER) {
+		t[0] = tiles.POWER;
+	}
+	vram.put_meta(0, x, y + TOP, t);
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 1, 0), @format(line, "SCORE {:5}  LIVES {}  STAGE {}", score, lives, stages + 1));
+}
+
+function reset_actors():void
+{
+	px = 8 * 16;
+	py = 9 * 16;
+	pdir = 3;
+	want = 3;
+	ghosts[0] = Chaser{x: 7 * 16, y: 7 * 16, dir: 0, scared: false};
+	ghosts[1] = Ambusher{x: 8 * 16, y: 7 * 16, dir: 0, scared: false};
+	ghosts[2] = Wanderer{x: 7 * 16, y: 7 * 16, dir: 2, scared: false, seed: 3};
+	ghosts[3] = Shy{x: 8 * 16, y: 7 * 16, dir: 2, scared: false, corner: {1, 11}};
+	scared = 0;
+}
+
+// 迷路を読み直して描く (描画を止めて)
+function new_stage():void
+{
+	frame.render_off();
+	dots = 0;
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			var c:u8 = 0;
+			switch (MAZE[y * W + x]) {
+			case '#':
+				c = WALL;
+			case '.':
+				c = DOT;
+				dots += 1;
+			case 'o':
+				c = POWER;
+				dots += 1;
+			}
+			map[y][x] = c;
+			draw_cell(x, y);
+		}
+	}
+	reset_actors();
+	hud();
+	frame.render_on();
+}
+
+function new_game():void
+{
+	lives = 3;
+	score = 0;
+	stages = 0;
+	new_stage();
+}
+
+// (x, y) のマスから向き d へ進めるか
+function open(x:u8, y:u8, d:u8):bool
+{
+	return cell_at(x +% DX[d], y +% DY[d]) != WALL;
+}
+
+function dist2(ax:u8, ay:u8, bx:u8, by:u8):u16
+{
+	var dx = (ax as i16 - bx as i16);
+	var dy = (ay as i16 - by as i16);
+	return (dx * dx + dy * dy) as u16;
+}
+
+// おばけを 1 ピクセル進める (マスの真ん中で向きを選ぶ: 戻らず、行き先に一番近い向き)
+function move_ghost(g:*Ghost):void
+{
+	if (g.scared && (ticks & 1) != 0) {
+		return;   // 逃げている間は半分の速さ
+	}
+	if ((g.x & 15) == 0 && (g.y & 15) == 0) {
+		var cx = g.x >> 4;
+		var cy = g.y >> 4;
+		var t:Cell = g.scared ? {rand.below(W), rand.below(H)} : g.target();
+		var best:u16 = 0xffff;
+		var bd = g.dir;
+		for (var d:u8 = 0; d < 4; d += 1) {
+			if (d == ((g.dir + 2) & 3) || !open(cx, cy, d)) {
+				continue;
+			}
+			var e = dist2(cx +% DX[d], cy +% DY[d], t.x, t.y);
+			if (e < best) {
+				best = e;
+				bd = d;
+			}
+		}
+		if (best == 0xffff) {
+			bd = (g.dir + 2) & 3;   // 行き止まり
+		}
+		g.dir = bd;
+	}
+	g.x = g.x +% DX[g.dir];
+	g.y = g.y +% DY[g.dir];
+}
+
+// AUTO: 一番近い点へ向かう最初の向き (幅優先。おばけのいるマスとその隣は通らない)
+var queue:[W * H]u8;
+var came:[W * H]u8;
+
+function think():void
+{
+	var start = (py >> 4) * W + (px >> 4);
+	for (var i:u8 = 0; i < W * H; i += 1) {
+		came[i] = 0xff;
+	}
+	for (var k:u8 = 0; k < 4; k += 1) {
+		var g = &ghosts[k];
+		if (g.scared) {
+			continue;
+		}
+		var gi = (g.y >> 4) * W + (g.x >> 4);
+		came[gi] = 0xfe;
+		for (var d:u8 = 0; d < 4; d += 1) {
+			var n = gi +% (DY[d] * W as i8 + DX[d]);
+			if (n < W * H && n != start) {
+				came[n] = 0xfe;
+			}
+		}
+	}
+	var head:u8 = 0;
+	var tail:u8 = 0;
+	queue[tail] = start;
+	tail += 1;
+	came[start] = 4;
+	while (head < tail) {
+		var c = queue[head];
+		head += 1;
+		var cx = c % W;
+		var cy = c / W;
+		if (c != start && map[cy][cx] >= DOT) {
+			// 来た向きを start までたどる
+			while (true) {
+				var d = came[c];
+				var p = c -% (DY[d] * W as i8 + DX[d]);
+				if (p == start) {
+					want = d;
+					return;
+				}
+				c = p;
+			}
+		}
+		for (var d:u8 = 0; d < 4; d += 1) {
+			if (!open(cx, cy, d)) {
+				continue;
+			}
+			var n = c +% (DY[d] * W as i8 + DX[d]);
+			if (came[n] == 0xff) {
+				came[n] = d;
+				queue[tail] = n;
+				tail += 1;
+			}
+		}
+	}
+}
+
+function move_player():void
+{
+	if (!AUTO) {
+		var b = pad.p1.held;
+		if ((b & pad.UP) != 0) {
+			want = 0;
+		} else if ((b & pad.RIGHT) != 0) {
+			want = 1;
+		} else if ((b & pad.DOWN) != 0) {
+			want = 2;
+		} else if ((b & pad.LEFT) != 0) {
+			want = 3;
+		}
+	}
+	if ((px & 15) == 0 && (py & 15) == 0) {
+		var cx = px >> 4;
+		var cy = py >> 4;
+		// 点を食べる
+		var c = map[cy][cx];
+		if (c >= DOT) {
+			map[cy][cx] = 0;
+			draw_cell(cx, cy);
+			dots -= 1;
+			eaten += 1;
+			score += c == POWER ? 50 : 10;
+			if (c == POWER) {
+				scared = 240;
+				for (var k:u8 = 0; k < 4; k += 1) {
+					ghosts[k].scared = true;
+				}
+			}
+			hud();
+		}
+		if (AUTO) {
+			think();
+		}
+		if (open(cx, cy, want)) {
+			pdir = want;
+		} else if (!open(cx, cy, pdir)) {
+			return;   // 止まる
+		}
+	}
+	px = px +% DX[pdir];
+	py = py +% DY[pdir];
+}
+
+// おばけとぶつかったか
+function collide():void
+{
+	for (var k:u8 = 0; k < 4; k += 1) {
+		var g = &ghosts[k];
+		var dx = g.x - px;
+		var dy = g.y - py;
+		if ((dx < 10 || dx > 246) && (dy < 10 || dy > 246)) {
+			if (g.scared) {
+				score += 200;
+				g.scared = false;
+				g.x = 7 * 16;
+				g.y = 7 * 16;
+				hud();
+			} else {
+				lives -= 1;
+				hud();
+				reset_actors();
+				return;
+			}
+		}
+	}
+}
+
+function draw():void
+{
+	oam.begin();
+	var face:[4]u8 = [tiles.HERO_U0, tiles.HERO_R0, tiles.HERO_D0, tiles.HERO_R0];
+	var step = ((px ^ py) >> 3) & 1;
+	gfx.spr16(px, py + TOP * 16 - 1, face[pdir] + step * 4, pdir == 3 ? nes.ATTR_FLIP_H : 0);
+	for (var k:u8 = 0; k < 4; k += 1) {
+		var g = &ghosts[k];
+		var p:u8 = g.scared ? 3 : 1 + (k & 1);
+		gfx.spr16(g.x, g.y + TOP * 16 - 1, tiles.GHOST0 + ((ticks >> 4) as u8 & 1) * 4, p);
+	}
+	oam.end();
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	rand.seed(0xc4a5);
+	new_game();
+	while (true) {
+		pad.poll();
+		move_player();
+		for (var k:u8 = 0; k < 4; k += 1) {
+			move_ghost(&ghosts[k]);
+		}
+		collide();
+		if (scared > 0) {
+			scared -= 1;
+			if (scared == 0) {
+				for (var k:u8 = 0; k < 4; k += 1) {
+					ghosts[k].scared = false;
+				}
+			}
+		}
+		if (dots == 0) {
+			stages += 1;
+			new_stage();
+		}
+		if (lives == 0) {
+			games += 1;
+			vram.put(vram.addr(0, 11, 14), "GAME OVER");
+			draw();
+			end_frame();
+			if (!AUTO) {
+				while ((pad.p1.pressed & pad.START) == 0) {
+					pad.poll();
+					frame.wait();
+				}
+			}
+			new_game();
+		}
+		draw();
+		end_frame();
+	}
+}

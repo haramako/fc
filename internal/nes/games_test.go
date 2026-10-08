@@ -254,6 +254,7 @@ func TestGamesSameAtTick(t *testing.T) {
 		{"sokoban", 2000, 4000},
 		{"blocks", 300, 8000},
 		{"shooter", 2500, 6000},
+		{"chase", 2500, 8000},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -276,6 +277,24 @@ func TestGameShooter(t *testing.T) {
 		p.checkVblank(t)
 		if level == 0 {
 			saveGame(t, p, "shooter")
+		}
+	})
+}
+
+// TestGameChase: 普通の interface の配列 (struct を返すメソッドを ID で振り分ける) のおばけと、幅優先で点へ向かう自分。
+func TestGameChase(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "chase", level, "main.AUTO=true")
+		p.run(t, 3600)
+		eaten := p.peek16(t, "_main_eaten")
+		t.Logf("食べた点 %d, 得点 %d, 残り %d, 面 %d, 終わった回数 %d", eaten, p.peek16(t, "_main_score"), p.peek(t, "_main_lives", 0), p.peek(t, "_main_stages", 0), p.peek(t, "_main_games", 0))
+		if eaten < 30 {
+			t.Errorf("点を食べていない: %d", eaten)
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "chase")
 		}
 	})
 }
