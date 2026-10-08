@@ -14,6 +14,8 @@ use tiles;
 
 const AUTO = false @(build);   // 確かなマスを開け・旗を立て、無ければ当てずっぽうで開ける (テストと見本)
 
+var ticks:u16;            // メインループを回った数
+
 const PALETTE = [
 	0x0f, 0x00, 0x10, 0x30,  0x0f, 0x06, 0x16, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,
 	0x0f, 0x0f, 0x28, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,
@@ -327,6 +329,13 @@ function input():void
 	}
 }
 
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
 function main():void
 {
 	frame.init();
@@ -348,6 +357,6 @@ function main():void
 		oam.begin();
 		oam.spr((BX + cx) * 8 + 4, (BY + cy) * 8 + 3, tiles.CURSOR, 0);
 		oam.end();
-		frame.wait();
+		end_frame();
 	}
 }

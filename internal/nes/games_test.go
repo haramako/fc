@@ -5,8 +5,12 @@ package nes
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -49,6 +53,88 @@ func saveGame(t *testing.T, p *nesProg, name string) {
 func (p *nesProg) peek16(t *testing.T, sym string) int {
 	t.Helper()
 	return p.peek(t, sym, 0) | p.peek(t, sym, 1)<<8
+}
+
+// runToTick は main の end_frame に手数 ticks == k で入るまで (最大 maxFrames フレーム) 走らせる。
+func (p *nesProg) runToTick(t *testing.T, k, maxFrames int) {
+	t.Helper()
+	entry, ok := p.syms["_main_end_frame"]
+	if !ok {
+		t.Fatal("_main_end_frame が無い (@(noinline) の end_frame)")
+	}
+	p.Stop = func() bool { return p.Cpu.Pc == entry && p.peek16(t, "_main_ticks") == k }
+	defer func() { p.Stop = nil }()
+	if err := p.RunFrames(maxFrames); err != nil {
+		t.Fatal(err)
+	}
+	if !p.Stopped {
+		t.Fatalf("%d フレームで手数 %d に届かない (今 %d)", maxFrames, k, p.peek16(t, "_main_ticks"))
+	}
+}
+
+var mapBSS = regexp.MustCompile(`(?m)^_main\.o:\n(?:    .*\n)*?    BSS\s+Offs=([0-9A-F]+)\s+Size=([0-9A-F]+)`)
+var mapSeg = regexp.MustCompile(`(?m)^BSS\s+([0-9A-F]+)\s`)
+
+// mainVars は main のモジュールの変数 (BSS) の番地の範囲 (ld65 の .map から)。
+func (p *nesProg) mainVars(t *testing.T) (int, int) {
+	t.Helper()
+	b, err := os.ReadFile(strings.TrimSuffix(p.rom, ".nes") + ".map")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, seg := mapBSS.FindSubmatch(b), mapSeg.FindSubmatch(b)
+	if m == nil || seg == nil {
+		t.Fatalf("map に _main.o の BSS が無い")
+	}
+	off, _ := strconv.ParseInt(string(m[1]), 16, 32)
+	size, _ := strconv.ParseInt(string(m[2]), 16, 32)
+	start, _ := strconv.ParseInt(string(seg[1]), 16, 32)
+	return int(start + off), int(start + off + size)
+}
+
+// symbolOf は番地 a を含む main の変数の名前 (a 以下で一番近いシンボル)。
+func (p *nesProg) symbolOf(a int) string {
+	var names []string
+	for n := range p.syms {
+		if strings.HasPrefix(n, "_main_") {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	best, bestAt := "?", -1
+	for _, n := range names {
+		if v := p.syms[n]; v <= a && v > bestAt {
+			best, bestAt = n, v
+		}
+	}
+	return fmt.Sprintf("%s+%d", best, a-bestAt)
+}
+
+// compareAtTick は name を -O 0 と -O 2 でビルドし、手数 k の所の main の変数 (BSS) が同じかを見る。AUTO の考える時間で
+// 進むフレームは違っても、ゲームの論理 (乱数も) は手数ごとに決まるので、違えばコンパイラのバグ。
+func compareAtTick(t *testing.T, name string, k, maxFrames int) {
+	t.Helper()
+	var states [2][]byte
+	var progs [2]*nesProg
+	for i, level := range []int{-1, 0} {
+		p := buildGame(t, name, level, "main.AUTO=true")
+		p.runToTick(t, k, maxFrames)
+		lo, hi := p.mainVars(t)
+		for a := lo; a < hi; a++ {
+			states[i] = append(states[i], byte(p.Get(a)))
+		}
+		progs[i] = p
+	}
+	lo, _ := progs[0].mainVars(t)
+	lo2, _ := progs[1].mainVars(t)
+	if len(states[0]) != len(states[1]) || lo != lo2 {
+		t.Fatalf("変数の配置が -O 0 と -O 2 で違う (%#x %d / %#x %d)", lo, len(states[0]), lo2, len(states[1]))
+	}
+	for i := range states[0] {
+		if states[0][i] != states[1][i] {
+			t.Fatalf("手数 %d で %s が違う: -O 0 は %d、-O 2 は %d", k, progs[0].symbolOf(lo+i), states[0][i], states[1][i])
+		}
+	}
 }
 
 // forLevels は -O 0 と -O 2 で f を走らせる。
@@ -134,4 +220,43 @@ func TestGameSokoban(t *testing.T) {
 			saveGame(t, p, "sokoban")
 		}
 	})
+}
+
+// TestGameBlocks: 置ける所を全部試して落とし、行を消す (2 次元配列の行の写し、i8 の座標)。
+func TestGameBlocks(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "blocks", level, "main.AUTO=true")
+		p.run(t, 3600)
+		lines := p.peek16(t, "_main_lines")
+		t.Logf("消した行 %d, 得点 %d, 終わった回数 %d", lines, p.peek16(t, "_main_score"), p.peek(t, "_main_games", 0))
+		if lines == 0 && p.peek(t, "_main_games", 0) == 0 {
+			t.Errorf("行を消していない")
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "blocks")
+		}
+	})
+}
+
+// TestGamesSameAtTick: どのゲームも、手数を決めた所の main の変数が -O 0 と -O 2 で同じ。
+func TestGamesSameAtTick(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name   string
+		tick   int
+		frames int
+	}{
+		{"breakout", 2500, 4000},
+		{"snake", 2500, 4000},
+		{"mines", 300, 20000},
+		{"sokoban", 2000, 4000},
+		{"blocks", 300, 8000},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			compareAtTick(t, c.name, c.tick, c.frames)
+		})
+	}
 }

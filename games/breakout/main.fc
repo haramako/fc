@@ -13,6 +13,8 @@ use tiles;
 
 const AUTO = false @(build);   // パドルが球を追って自分で遊ぶ (テストと見本。-D main.AUTO=true)
 
+var ticks:u16;            // メインループを回った数
+
 const PALETTE = [
 	0x0f, 0x00, 0x10, 0x30,  0x0f, 0x06, 0x16, 0x36,  0x0f, 0x09, 0x1a, 0x3a,  0x0f, 0x01, 0x12, 0x32,   // BG: 0 壁と文字, 1 赤, 2 緑, 3 青
 	0x0f, 0x0f, 0x12, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,   // スプライト: 0 パドル, 1 球
@@ -192,7 +194,7 @@ function move_paddle():void
 		} else if (target > px as i16 + 1) {
 			held = pad.RIGHT;
 		}
-		if (on_paddle && (frame.count & 31) == 0) {
+		if (on_paddle && (ticks & 31) == 0) {
 			held |= pad.A;
 		}
 	}
@@ -252,6 +254,13 @@ function game_over():void
 	new_game();
 }
 
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
 function main():void
 {
 	frame.init();
@@ -277,6 +286,6 @@ function main():void
 			new_stage();
 		}
 		draw();
-		frame.wait();
+		end_frame();
 	}
 }

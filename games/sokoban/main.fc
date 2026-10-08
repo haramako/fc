@@ -14,6 +14,8 @@ use gfx;
 
 const AUTO = false @(build);   // 面ごとの解き方をなぞる (U D L R が動き、B が 1 手戻す。テストと見本)
 
+var ticks:u16;            // メインループを回った数
+
 const PALETTE = [
 	0x0f, 0x00, 0x10, 0x30,  0x0f, 0x07, 0x17, 0x27,  0x0f, 0x08, 0x18, 0x38,  0x0f, 0x00, 0x10, 0x30,   // BG: 0 文字, 1 壁, 2 床・箱・印
 	0x0f, 0x0f, 0x16, 0x37,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,   // スプライト: 0 自分
@@ -268,6 +270,13 @@ function auto_button():u8
 	}
 }
 
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
 function main():void
 {
 	frame.init();
@@ -299,6 +308,6 @@ function main():void
 		var attr:u8 = face == 3 ? nes.ATTR_FLIP_H : 0;
 		gfx.spr16(px * 16, (py + TOP) * 16 - 1, FACE[face] + ((moves as u8 & 1) << 2), attr);
 		oam.end();
-		frame.wait();
+		end_frame();
 	}
 }

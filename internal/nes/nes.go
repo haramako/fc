@@ -73,6 +73,10 @@ type Machine struct {
 	FrameBusy []int64
 	// FrameWaited は今のフレームで IdleFlag が非 0 のまま読まれた (= 待ちに入った) か。runFrame の頭で消す
 	FrameWaited bool
+	// Stop が nil でなければ命令ごとに呼び、true ならその命令の後で RunFrames を止める (フレームの途中でも。テストがゲームの
+	// 決まった手数の所で状態を比べる)。Stopped は止めたか
+	Stop    func() bool
+	Stopped bool
 
 	// 関数ごとのプロファイル (ProfileSymbols の区間 (ROM ファイル内のオフセット) に命令のサイクルを積む。
 	// バンク切り替えで同じアドレスに別の関数が来るので、PC でなく現在のバンクを反映した ROM オフセットで引く)
@@ -583,7 +587,8 @@ func (m *Machine) RunFrames(n int) (err error) {
 			err = fmt.Errorf("crashed at frame %d pc=$%04x: %v", m.Stats.Frames, m.Cpu.Pc, r)
 		}
 	}()
-	for i := 0; i < n; i++ {
+	m.Stopped = false
+	for i := 0; i < n && !m.Stopped; i++ {
 		m.runFrame()
 	}
 	return nil
@@ -624,6 +629,10 @@ func (m *Machine) runFrame() {
 				if k := m.symbolAt(m.RomOffset(pc)); k >= 0 {
 					m.ProfileCycles[k] += m.Cpu.Cycles - before
 				}
+			}
+			if m.Stop != nil && m.Stop() {
+				m.Stopped = true
+				return
 			}
 		}
 		if scanline < 240 && m.renderingEnabled() && m.mapper == 4 {

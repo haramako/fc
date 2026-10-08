@@ -1,0 +1,388 @@
+#fc 4
+// 落ちものパズル (games/ のデバッグ用のゲーム)。左右で動かし、A / B で回し、下で速く落とし、上で一気に落とす。横 1 列がそろうと
+// 消える。積み上がって次が出せなくなると終わり (START でやり直し)。落ちている途中の形も BG に描く (消してから描き直す)。
+//   fcc build -o blocks.nes main.fc
+@(static_ram: 64);   // 静的フレームの RAM の予約 (既定の 512 では変数と合わせて RAM に入らない)
+use nes;
+use frame;
+use vram;
+use pal;
+use pad;
+use rand;
+use tiles;
+
+const AUTO = false @(build);   // 置ける所を全部試して一番よい所へ落とす (テストと見本)
+
+var ticks:u16;            // メインループを回った数
+
+const PALETTE = [
+	0x0f, 0x01, 0x21, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,  0x0f, 0x00, 0x10, 0x30,
+	0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,  0x0f, 0x0f, 0x16, 0x30,
+];
+
+const W = 10;
+const H = 20;
+const WX = 11;            // 井戸の左上 (タイル)
+const WY = 5;
+const KINDS = 7;
+
+// 形 (I O T S Z J L) の 4 マス (x, y) と、回す箱の大きさ
+const BASE_X:[KINDS][4]u8 = [[0, 1, 2, 3], [0, 1, 0, 1], [1, 0, 1, 2], [1, 2, 0, 1], [0, 1, 1, 2], [0, 0, 1, 2], [2, 0, 1, 2]];
+const BASE_Y:[KINDS][4]u8 = [[1, 1, 1, 1], [0, 0, 1, 1], [0, 1, 1, 1], [0, 0, 1, 1], [0, 0, 1, 1], [0, 1, 1, 1], [0, 1, 1, 1]];
+const SIZE:[KINDS]u8 = [4, 2, 3, 3, 3, 3, 3];
+const TILE = [tiles.BOX_A, tiles.BOX_B, tiles.BOX_C, tiles.BOX_D, tiles.BOX_E, tiles.BOX_F, tiles.BOX_G];
+const POINTS:[5]u16 = [0, 100, 300, 500, 800];
+
+var sx:[KINDS][4][4]u8;   // 回した形 [種類][向き][マス]
+var sy:[KINDS][4][4]u8;
+var board:[H][W]u8;       // 0 か、積んだマスのタイル
+var kind:u8;
+var rot:u8;
+var px:i8;
+var py:i8;
+var next:u8;
+var timer:u8;
+var level:u8;
+var lines:u16;
+var score:u16;
+var games:u8;
+var target_x:i8;          // AUTO: 落とす所
+var target_rot:u8;
+var line:[32]u8;
+
+// 回した形を作る (時計回り: (x, y) → (n - 1 - y, x))
+function make_shapes():void
+{
+	for (var k:u8 = 0; k < KINDS; k += 1) {
+		var n = SIZE[k];
+		for (var i:u8 = 0; i < 4; i += 1) {
+			sx[k][0][i] = BASE_X[k][i];
+			sy[k][0][i] = BASE_Y[k][i];
+		}
+		for (var r:u8 = 1; r < 4; r += 1) {
+			for (var i:u8 = 0; i < 4; i += 1) {
+				sx[k][r][i] = n - 1 - sy[k][r - 1][i];
+				sy[k][r][i] = sx[k][r - 1][i];
+			}
+		}
+	}
+}
+
+// 形が (x, y) に置けるか
+function fits(k:u8, r:u8, x:i8, y:i8):bool
+{
+	for (var i:u8 = 0; i < 4; i += 1) {
+		var cx = x + sx[k][r][i] as i8;
+		var cy = y + sy[k][r][i] as i8;
+		if (cx < 0 || cx >= W || cy >= H) {
+			return false;
+		}
+		if (cy >= 0 && board[cy as u8][cx as u8] != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function draw_piece(t:u8):void
+{
+	for (var i:u8 = 0; i < 4; i += 1) {
+		var cy = py + sy[kind][rot][i] as i8;
+		if (cy >= 0) {
+			vram.set(vram.addr(0, WX + (px as u8 +% sx[kind][rot][i]), WY + cy as u8), t);
+		}
+	}
+}
+
+// 動かせたら動かして描き直す
+function try_move(r:u8, x:i8, y:i8):bool
+{
+	if (!fits(kind, r, x, y)) {
+		return false;
+	}
+	draw_piece(tiles.BLANK);
+	rot = r;
+	px = x;
+	py = y;
+	draw_piece(TILE[kind]);
+	return true;
+}
+
+function draw_row(y:u8):void
+{
+	var row:[W]u8;
+	for (var x:u8 = 0; x < W; x += 1) {
+		row[x] = board[y][x] == 0 ? tiles.BLANK : board[y][x];
+	}
+	vram.put(vram.addr(0, WX, WY + y), row);
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 1, 6), "SCORE");
+	vram.put(vram.addr(0, 1, 7), @format(line, "{:5}", score));
+	vram.put(vram.addr(0, 1, 9), "LINES");
+	vram.put(vram.addr(0, 1, 10), @format(line, "{:5}", lines));
+	vram.put(vram.addr(0, 1, 12), "LEVEL");
+	vram.put(vram.addr(0, 1, 13), @format(line, "{:5}", level));
+}
+
+// 次の形を右に描く
+function draw_next():void
+{
+	for (var y:u8 = 0; y < 4; y += 1) {
+		vram.fill(vram.addr(0, 24, 7 + y), tiles.BLANK, 4);
+	}
+	for (var i:u8 = 0; i < 4; i += 1) {
+		vram.set(vram.addr(0, 24 + sx[next][0][i], 7 + sy[next][0][i]), TILE[next]);
+	}
+}
+
+// そろった行を消して詰める。消した行の数
+function clear_lines():u8
+{
+	var n:u8 = 0;
+	var y:u8 = H;
+	while (y > 0) {
+		y -= 1;
+		var full = true;
+		for (var x:u8 = 0; x < W; x += 1) {
+			if (board[y][x] == 0) {
+				full = false;
+				break;
+			}
+		}
+		if (!full) {
+			continue;
+		}
+		n += 1;
+		for (var yy = y; yy > 0; yy -= 1) {
+			board[yy] = board[yy - 1];
+		}
+		for (var x:u8 = 0; x < W; x += 1) {
+			board[0][x] = 0;
+		}
+		y += 1;   // 同じ行をもう一度見る
+	}
+	if (n > 0) {
+		for (var yy:u8 = 0; yy < H; yy += 1) {
+			draw_row(yy);
+		}
+	}
+	return n;
+}
+
+// 盤の良さ (消える行・高さ・穴・でこぼこ)。大きいほどよい
+function evaluate(cleared:u8):i16
+{
+	var height:i16 = 0;
+	var holes:i16 = 0;
+	var bump:i16 = 0;
+	var prev:i16 = -1;
+	for (var x:u8 = 0; x < W; x += 1) {
+		var h:i16 = 0;
+		var seen = false;
+		for (var y:u8 = 0; y < H; y += 1) {
+			if (board[y][x] != 0) {
+				if (!seen) {
+					h = (H - y) as i16;
+					seen = true;
+				}
+			} else if (seen) {
+				holes += 1;
+			}
+		}
+		height += h;
+		if (prev >= 0) {
+			bump += h > prev ? h - prev : prev - h;
+		}
+		prev = h;
+	}
+	return cleared as i16 * 76 - height * 5 - holes * 36 - bump * 2;
+}
+
+// 形を盤に書いて (or 消して) 埋まった行を数える
+function stamp(k:u8, r:u8, x:i8, y:i8, t:u8):u8
+{
+	var full:u8 = 0;
+	for (var i:u8 = 0; i < 4; i += 1) {
+		var cy = y + sy[k][r][i] as i8;
+		if (cy >= 0) {
+			board[cy as u8][(x + sx[k][r][i] as i8) as u8] = t;
+		}
+	}
+	if (t == 0) {
+		return 0;
+	}
+	for (var yy:u8 = 0; yy < H; yy += 1) {
+		var all = true;
+		for (var xx:u8 = 0; xx < W; xx += 1) {
+			all = all && board[yy][xx] != 0;
+		}
+		if (all) {
+			full += 1;
+		}
+	}
+	return full;
+}
+
+// AUTO: 置ける所 (向きと x) を全部試す
+function plan():void
+{
+	var best:i16 = -32000;
+	target_x = px;
+	target_rot = rot;
+	for (var r:u8 = 0; r < 4; r += 1) {
+		for (var x:i8 = -2; x < W; x += 1) {
+			if (!fits(kind, r, x, 0)) {
+				continue;
+			}
+			var y:i8 = 0;
+			while (fits(kind, r, x, y + 1)) {
+				y += 1;
+			}
+			var e = evaluate(stamp(kind, r, x, y, 1));
+			stamp(kind, r, x, y, 0);
+			if (e > best) {
+				best = e;
+				target_x = x;
+				target_rot = r;
+			}
+		}
+	}
+}
+
+// 次の形を出す。出せなければ false
+function spawn():bool
+{
+	kind = next;
+	next = rand.below(KINDS);
+	rot = 0;
+	px = 3;
+	py = 0;
+	timer = 0;
+	draw_next();
+	if (!fits(kind, rot, px, py)) {
+		return false;
+	}
+	draw_piece(TILE[kind]);
+	if (AUTO) {
+		plan();
+	}
+	return true;
+}
+
+function new_game():void
+{
+	frame.render_off();
+	for (var y:u8 = 0; y < H; y += 1) {
+		for (var x:u8 = 0; x < W; x += 1) {
+			board[y][x] = 0;
+		}
+		draw_row(y);
+	}
+	// 井戸の枠
+	for (var y:u8 = WY; y < WY + H; y += 1) {
+		vram.set(vram.addr(0, WX - 1, y), tiles.MAZE + (1 | 4));
+		vram.set(vram.addr(0, WX + W, y), tiles.MAZE + (1 | 4));
+	}
+	vram.set(vram.addr(0, WX - 1, WY + H), tiles.MAZE + (1 | 2));
+	vram.fill(vram.addr(0, WX, WY + H), tiles.MAZE + (2 | 8), W);
+	vram.set(vram.addr(0, WX + W, WY + H), tiles.MAZE + (1 | 8));
+	vram.put(vram.addr(0, 24, 5), "NEXT");
+	vram.put(vram.addr(0, 11, 2), "            ");
+	score = 0;
+	lines = 0;
+	level = 0;
+	next = rand.below(KINDS);
+	hud();
+	spawn();
+	frame.render_on();
+}
+
+// 落ちきった: 盤に積んで、行を消して、次を出す
+function lock():void
+{
+	stamp(kind, rot, px, py, TILE[kind]);
+	var n = clear_lines();
+	if (n > 0) {
+		lines += n as u16;
+		score += POINTS[n] * (level as u16 + 1);
+		level = (lines / 10) as u8;
+		hud();
+	}
+	if (!spawn()) {
+		vram.put(vram.addr(0, 11, 2), "GAME OVER");
+		games += 1;
+		if (!AUTO) {
+			while ((pad.p1.pressed & pad.START) == 0) {
+				pad.poll();
+				frame.wait();
+			}
+		}
+		new_game();
+	}
+}
+
+function input():u8
+{
+	if (!AUTO) {
+		return pad.p1.repeat | (pad.p1.held & pad.DOWN);
+	}
+	// AUTO: 向きを合わせ、x を合わせてから落とす
+	if (rot != target_rot) {
+		return pad.A;
+	}
+	if (px < target_x) {
+		return pad.RIGHT;
+	}
+	if (px > target_x) {
+		return pad.LEFT;
+	}
+	return pad.UP;
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	pal.set_all(PALETTE);
+	rand.seed(0x7e7e);
+	make_shapes();
+	new_game();
+	while (true) {
+		pad.poll();
+		var b = input();
+		if ((b & pad.LEFT) != 0) {
+			try_move(rot, px - 1, py);
+		} else if ((b & pad.RIGHT) != 0) {
+			try_move(rot, px + 1, py);
+		}
+		if ((b & pad.A) != 0) {
+			try_move((rot + 1) & 3, px, py);
+		} else if ((b & pad.B) != 0) {
+			try_move((rot + 3) & 3, px, py);
+		}
+		if ((b & pad.UP) != 0) {
+			while (try_move(rot, px, py + 1)) {
+			}
+			lock();
+		} else {
+			timer += 1;
+			var interval = (b & pad.DOWN) != 0 ? 2 : 40 - @min(level, 9) * 4;
+			if (timer >= interval) {
+				timer = 0;
+				if (!try_move(rot, px, py + 1)) {
+					lock();
+				}
+			}
+		}
+		end_frame();
+	}
+}
