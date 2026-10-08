@@ -440,6 +440,7 @@ function main():void
 	frame.ctrl |= nes.CTRL_SPR_1000;
 	pal.set_all(PALETTE);
 	vram.fill(vram.addr(0, 0, 3), tiles.FRAME_B, 32);   // 文字の行の下の線 (スプライト 0 がここに重なる)
+	vram.fill(vram.attr_addr(0, 0, 0), 0xaa, 8);         // 文字の行 (上の 4 タイル) はパレット 2 (白)。面はパレット 0
 	oam.reserve(1);
 	oam.set(0, 248, 25, tiles.BULLET, nes.ATTR_BEHIND);
 	lives = 3;

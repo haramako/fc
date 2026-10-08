@@ -47,6 +47,8 @@ var score:u16;
 var games:u8;
 var target_x:i8;          // AUTO: 落とす所
 var target_rot:u8;
+var plan_rot:u8;          // AUTO: 次に試す向き (4 なら考え終えた)
+var plan_best:i16;
 var line:[32]u8;
 
 // 回した形を作る (時計回り: (x, y) → (n - 1 - y, x))
@@ -225,28 +227,25 @@ function stamp(k:u8, r:u8, x:i8, y:i8, t:u8):u8
 	return full;
 }
 
-// AUTO: 置ける所 (向きと x) を全部試す
-function plan():void
+// AUTO: 置ける所を試す。1 手に 1 つの向き (x を全部) ずつ (全部を 1 手で試すと十数フレームかかり、その間は描いたものが画面に出ない)
+function plan_step():void
 {
-	var best:i16 = -32000;
-	target_x = px;
-	target_rot = rot;
-	for (var r:u8 = 0; r < 4; r += 1) {
-		for (var x:i8 = -2; x < W; x += 1) {
-			if (!fits(kind, r, x, 0)) {
-				continue;
-			}
-			var y:i8 = 0;
-			while (fits(kind, r, x, y + 1)) {
-				y += 1;
-			}
-			var e = evaluate(stamp(kind, r, x, y, 1));
-			stamp(kind, r, x, y, 0);
-			if (e > best) {
-				best = e;
-				target_x = x;
-				target_rot = r;
-			}
+	var r = plan_rot;
+	plan_rot += 1;
+	for (var x:i8 = -2; x < W; x += 1) {
+		if (!fits(kind, r, x, py)) {
+			continue;
+		}
+		var y = py;
+		while (fits(kind, r, x, y + 1)) {
+			y += 1;
+		}
+		var e = evaluate(stamp(kind, r, x, y, 1));
+		stamp(kind, r, x, y, 0);
+		if (e > plan_best) {
+			plan_best = e;
+			target_x = x;
+			target_rot = r;
 		}
 	}
 }
@@ -265,9 +264,10 @@ function spawn():bool
 		return false;
 	}
 	draw_piece(TILE[kind]);
-	if (AUTO) {
-		plan();
-	}
+	target_x = px;
+	target_rot = rot;
+	plan_rot = 0;
+	plan_best = -32000;
 	return true;
 }
 
@@ -328,7 +328,11 @@ function input():u8
 	if (!AUTO) {
 		return pad.p1.repeat | (pad.p1.held & pad.DOWN);
 	}
-	// AUTO: 向きを合わせ、x を合わせてから落とす
+	// AUTO: 考え終えたら、向きを合わせ、x を合わせてから落とす
+	if (plan_rot < 4) {
+		plan_step();
+		return 0;
+	}
 	if (rot != target_rot) {
 		return pad.A;
 	}
