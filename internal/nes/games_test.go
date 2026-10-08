@@ -36,6 +36,7 @@ func buildGame(t *testing.T, name string, level int, defines ...string) *nesProg
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.Output = &strings.Builder{} // panic の文言 (console)
 	return &nesProg{Machine: m, syms: parseLd65MapAll(t, strings.TrimSuffix(rom, ".nes")+".dbg"), rom: rom}
 }
 
@@ -66,6 +67,9 @@ func (p *nesProg) runToTick(t *testing.T, k, maxFrames int) {
 	defer func() { p.Stop = nil }()
 	if err := p.RunFrames(maxFrames); err != nil {
 		t.Fatal(err)
+	}
+	if p.Exited {
+		t.Fatalf("止まった (panic か exit): %q", p.Output.(*strings.Builder).String())
 	}
 	if !p.Stopped {
 		t.Fatalf("%d フレームで手数 %d に届かない (今 %d)", maxFrames, k, p.peek16(t, "_main_ticks"))
@@ -137,6 +141,15 @@ func compareAtTick(t *testing.T, name string, k, maxFrames int) {
 	}
 }
 
+// play は frames フレーム走らせる。panic (console.exit) で止まっていたら、その出力で落ちる。
+func (p *nesProg) play(t *testing.T, frames int) {
+	t.Helper()
+	p.run(t, frames)
+	if p.Exited {
+		t.Fatalf("止まった (panic か exit): %q", p.Output.(*strings.Builder).String())
+	}
+}
+
 // forLevels は -O 0 と -O 2 で f を走らせる。
 func forLevels(t *testing.T, f func(t *testing.T, level int)) {
 	for _, level := range []int{-1, 0} {
@@ -152,7 +165,7 @@ func TestGameBreakout(t *testing.T) {
 	t.Parallel()
 	forLevels(t, func(t *testing.T, level int) {
 		p := buildGame(t, "breakout", level, "main.AUTO=true")
-		p.run(t, 3000)
+		p.play(t, 3000)
 		score, left := p.peek16(t, "_main_score"), p.peek(t, "_main_left", 0)
 		t.Logf("score %d, 残り %d, 面 %d, 球 %d", score, left, p.peek(t, "_main_stage", 0), p.peek(t, "_main_balls", 0))
 		if score == 0 || left >= 84 && p.peek(t, "_main_stage", 0) == 1 {
@@ -173,7 +186,7 @@ func TestGameSnake(t *testing.T) {
 	t.Parallel()
 	forLevels(t, func(t *testing.T, level int) {
 		p := buildGame(t, "snake", level, "main.AUTO=true")
-		p.run(t, 3000)
+		p.play(t, 3000)
 		best := p.peek(t, "_main_best", 0)
 		t.Logf("長さ %d, 最長 %d", p.peek(t, "_main_len", 0), best)
 		if best <= 4 {
@@ -191,7 +204,7 @@ func TestGameMines(t *testing.T) {
 	t.Parallel()
 	forLevels(t, func(t *testing.T, level int) {
 		p := buildGame(t, "mines", level, "main.AUTO=true")
-		p.run(t, 12000) // AUTO は 1 手ごとに盤を見直すので、-O 0 では 1 手に数十フレームかかる
+		p.play(t, 12000) // AUTO は 1 手ごとに盤を見直すので、-O 0 では 1 手に数十フレームかかる
 		wins, losses := p.peek(t, "_main_wins", 0), p.peek(t, "_main_losses", 0)
 		t.Logf("勝ち %d, 負け %d, 開けた %d, 旗 %d", wins, losses, p.peek16(t, "_main_opened"), p.peek(t, "_main_flags", 0))
 		if wins+losses == 0 {
@@ -209,7 +222,7 @@ func TestGameSokoban(t *testing.T) {
 	t.Parallel()
 	forLevels(t, func(t *testing.T, level int) {
 		p := buildGame(t, "sokoban", level, "main.AUTO=true")
-		p.run(t, 2400)
+		p.play(t, 2400)
 		cleared := p.peek(t, "_main_cleared", 0)
 		t.Logf("解いた面 %d, 今の面 %d, 残りの箱 %d", cleared, p.peek(t, "_main_level", 0), p.peek(t, "_main_boxes_left", 0))
 		if cleared < 5 {
@@ -227,7 +240,7 @@ func TestGameBlocks(t *testing.T) {
 	t.Parallel()
 	forLevels(t, func(t *testing.T, level int) {
 		p := buildGame(t, "blocks", level, "main.AUTO=true")
-		p.run(t, 3600)
+		p.play(t, 3600)
 		lines := p.peek16(t, "_main_lines")
 		t.Logf("消した行 %d, 得点 %d, 終わった回数 %d", lines, p.peek16(t, "_main_score"), p.peek(t, "_main_games", 0))
 		if lines == 0 && p.peek(t, "_main_games", 0) == 0 {
@@ -255,6 +268,7 @@ func TestGamesSameAtTick(t *testing.T) {
 		{"blocks", 300, 8000},
 		{"shooter", 2500, 6000},
 		{"chase", 2500, 8000},
+		{"adventure", 1500, 4000},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -268,7 +282,7 @@ func TestGameShooter(t *testing.T) {
 	t.Parallel()
 	forLevels(t, func(t *testing.T, level int) {
 		p := buildGame(t, "shooter", level, "main.AUTO=true")
-		p.run(t, 3600)
+		p.play(t, 3600)
 		kills := p.peek16(t, "_main_kills")
 		t.Logf("倒した敵 %d, 得点 %d, 残り %d, 終わった回数 %d", kills, p.peek16(t, "_main_score"), p.peek(t, "_main_lives", 0), p.peek(t, "_main_games", 0))
 		if kills < 5 {
@@ -286,7 +300,7 @@ func TestGameChase(t *testing.T) {
 	t.Parallel()
 	forLevels(t, func(t *testing.T, level int) {
 		p := buildGame(t, "chase", level, "main.AUTO=true")
-		p.run(t, 3600)
+		p.play(t, 3600)
 		eaten := p.peek16(t, "_main_eaten")
 		t.Logf("食べた点 %d, 得点 %d, 残り %d, 面 %d, 終わった回数 %d", eaten, p.peek16(t, "_main_score"), p.peek(t, "_main_lives", 0), p.peek(t, "_main_stages", 0), p.peek(t, "_main_games", 0))
 		if eaten < 30 {
@@ -295,6 +309,24 @@ func TestGameChase(t *testing.T) {
 		p.checkVblank(t)
 		if level == 0 {
 			saveGame(t, p, "chase")
+		}
+	})
+}
+
+// TestGameAdventure: 画面のキーボードで命令を打ち、単語に分けて照合して、宝石を持ち帰る (str・slice の配列・文字の窓)。
+func TestGameAdventure(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "adventure", level, "main.AUTO=true")
+		p.play(t, 1200)
+		wins := p.peek(t, "_main_wins", 0)
+		t.Logf("勝った回数 %d, 手数 %d", wins, p.peek(t, "_main_moves", 0))
+		if wins == 0 {
+			t.Errorf("勝っていない")
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "adventure")
 		}
 	})
 }

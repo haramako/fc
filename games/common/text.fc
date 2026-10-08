@@ -1,0 +1,115 @@
+#fc 4
+// games/ の共通の文字の窓 (fclib に入れるかを決める前の置き場)。画面の矩形に文字を単語の切れ目で折り返して出し、下まで行ったら
+// 1 行上へずらす (窓の中身の写しを RAM に持ち、ずらしたら全部の行を書き直す)。文字のタイルは ASCII (tiles の $20〜$7F)。
+//
+//   text.open(1, 2, 30, 18);
+//   text.print("You are in a dusty hall.\n");
+use vram;
+
+public const MAX_W = 30;
+public const MAX_H = 16;
+
+var lines:[MAX_H][MAX_W]u8;
+var x0:u8;
+var y0:u8;
+var w:u8;
+var h:u8;
+var row:u8;               // 書いている行
+var col:u8;               // 次に書く桁
+
+// 窓を (x, y) から w × h タイルにして空にする (w は MAX_W、h は MAX_H まで)
+public function open(x:u8, y:u8, width:u8, height:u8):void
+{
+	x0 = x;
+	y0 = y;
+	w = @min(width, MAX_W);
+	h = @min(height, MAX_H);
+	clear();
+}
+
+// 窓を空にする
+public function clear():void
+{
+	for (var r:u8 = 0; r < h; r += 1) {
+		for (var c:u8 = 0; c < w; c += 1) {
+			lines[r][c] = ' ';
+		}
+		redraw(r);
+	}
+	row = 0;
+	col = 0;
+}
+
+function redraw(r:u8):void
+{
+	vram.put(vram.addr(0, x0, y0 + r), lines[r][..w]);
+}
+
+// 次の行へ (下まで行っていたら全体を 1 行上へずらす)
+public function newline():void
+{
+	col = 0;
+	if (row + 1 < h) {
+		row += 1;
+		return;
+	}
+	for (var r:u8 = 1; r < h; r += 1) {
+		lines[r - 1] = lines[r];
+	}
+	for (var c:u8 = 0; c < w; c += 1) {
+		lines[h - 1][c] = ' ';
+	}
+	for (var r:u8 = 0; r < h; r += 1) {
+		redraw(r);
+	}
+}
+
+// s を出す。単語 (空白・改行で区切る) が行に入らなければ次の行へ送る ('\n' は改行。窓より長い単語は途中で切る)
+public function print(s:[]const u8):void
+{
+	var i:u8 = 0;
+	var n = @len(s);
+	while (i < n) {
+		var c = s[i];
+		if (c == '\n') {
+			newline();
+			i += 1;
+			continue;
+		}
+		if (c == ' ') {
+			if (col > 0 && col < w) {
+				lines[row][col] = ' ';
+				col += 1;
+			}
+			i += 1;
+			continue;
+		}
+		// 単語の長さ
+		var j = i;
+		while (j < n && s[j] != ' ' && s[j] != '\n') {
+			j += 1;
+		}
+		if (col > 0 && col + (j - i) > w) {
+			newline();
+		}
+		var start = col;
+		while (i < j) {
+			if (col == w) {
+				vram.put(vram.addr(0, x0 + start, y0 + row), lines[row][start..col]);
+				newline();
+				start = 0;
+			}
+			lines[row][col] = s[i];
+			col += 1;
+			i += 1;
+		}
+		vram.put(vram.addr(0, x0 + start, y0 + row), lines[row][start..col]);
+	}
+}
+
+// s を出して改行する
+public function println(s:[]const u8):void
+{
+	print(s);
+	newline();
+}
