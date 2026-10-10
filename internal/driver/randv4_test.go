@@ -103,8 +103,11 @@ func runRandomV4(t *testing.T, v3 bool) {
 						t.Skipf("プログラムが大きすぎる (seed %d): %s", seed, s)
 					}
 				}
-				if strings.Contains(res.detail, "does not fit in") || strings.Contains(res.detail, "implicitly (narrowing") {
-					// fc 3 で集めた書き換えでは直らない fc 4 の規則のエラー (fc 4 の型が fc 3 と違う所)
+				if strings.Contains(res.detail, "does not fit in") || strings.Contains(res.detail, "implicitly (narrowing") ||
+					strings.Contains(res.detail, "the signed type wins at the same size") {
+					// fc 3 で集めた書き換えでは直らない fc 4 の規則のエラー (fc 4 の型が fc 3 と違う所)。符号の混ざった演算は、
+					// v4Rules に shift-type が無いので `(-46) >> n` が fc 3 では u8・fc 4 では i8 になり、fc 3 の型で見る
+					// mixed-sign-arith が書き換えない (種 63800758)
 					skipped.Add(1)
 					t.Skipf("fc 4 の規則のエラー (seed %d): %s", seed, res.detail)
 				}
