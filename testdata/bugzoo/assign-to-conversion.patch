@@ -1,0 +1,15 @@
+# sema: 変換 (as / bitcast) の結果への代入を通す (一時変数に書いて消える・codegen の store_a で落ちる。FuzzCheck)
+diff --git b/internal/sema/typeplan.go a/internal/sema/typeplan.go
+index 217c472..2bd4e08 100644
+--- b/internal/sema/typeplan.go
++++ a/internal/sema/typeplan.go
+@@ -431,9 +431,4 @@ func planAssignTarget(lhs *cexpr) {
+ 		// 呼び出しの結果は一時変数なので、そのまま進むと `g() = 0` が黙って通り、void なら nil 参照で落ちる (fuzz で発覚)
+ 		panic(&diag.Error{Msg: "cannot assign to the result of a function call"})
+ 	}
+-	if lhs.kind == cCast {
+-		// 変換の結果は値 (配列の要素・フィールドは一時変数への写し) なので、`a[0] as u16 = y` は書き込みが一時変数に
+-		// 消え、`!(… as T = …)` では幅の違う一時変数に書いて codegen が落ちた (FuzzCheck で発覚)
+-		panic(&diag.Error{Msg: "cannot assign to the result of a conversion (`as` / bitcast)"})
+-	}
+ }

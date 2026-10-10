@@ -67,6 +67,11 @@ func TestMustError(t *testing.T) {
 		{"モジュールを呼ぶ", "use math; function f():void { math(1); }", "math is a module, not a value"},
 		{"型名を値に", "function f():void { var v = S; }", "S is a type, not a value"},
 		{"モジュールを const に", "use math; const X = math;", "math is a module, not a value"},
+		// 変換の結果への代入 (配列の要素は一時変数への写しに書いて消え、`!(… as u16 = …)` は codegen が落ちた。FuzzCheck)
+		{"変換の結果に代入 (要素)", "function f(y:u16):void { A[0] as u16 = y; }", "cannot assign to the result of a conversion"},
+		{"変換の結果に代入 (変数)", "function f():void { g as u16 = 770; }", "cannot assign to the result of a conversion"},
+		{"変換の結果に代入 (式の中)", "function f(y:u16):bool { return !(A[0] as u16 = y); }", "cannot assign to the result of a conversion"},
+		{"変換の結果に複合代入", "function f():void { g as u16 += 1; }", "cannot assign to the result of a conversion"},
 	}
 	for i, c := range cases {
 		c := c

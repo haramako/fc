@@ -431,4 +431,9 @@ func planAssignTarget(lhs *cexpr) {
 		// 呼び出しの結果は一時変数なので、そのまま進むと `g() = 0` が黙って通り、void なら nil 参照で落ちる (fuzz で発覚)
 		panic(&diag.Error{Msg: "cannot assign to the result of a function call"})
 	}
+	if lhs.kind == cCast {
+		// 変換の結果は値 (配列の要素・フィールドは一時変数への写し) なので、`a[0] as u16 = y` は書き込みが一時変数に
+		// 消え、`!(… as T = …)` では幅の違う一時変数に書いて codegen が落ちた (FuzzCheck で発覚)
+		panic(&diag.Error{Msg: "cannot assign to the result of a conversion (`as` / bitcast)"})
+	}
 }
