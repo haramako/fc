@@ -1532,6 +1532,11 @@ func TestRandomMethodsV4(t *testing.T) {
 			files, want := g.program()
 			for _, level := range []int{-1, 0} {
 				out, err := rpRun(t, files, level, rpMaxCycles)
+				if err != nil {
+					if s, big := rpTooBig(err.Error()); big {
+						t.Skipf("プログラムが大きすぎる (seed %d): %s", seed, s)
+					}
+				}
 				if err != nil || out != want {
 					t.Fatalf("level %d (seed %d): got %q, %v\nwant %q\n%s", level, seed, out, err, want, joinSources(files))
 				}

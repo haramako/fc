@@ -23,6 +23,16 @@ import (
 // sema/format.go、0 終端でない文字列をポインタにする所・文字列の定数と配列: sema/strconst.go、符号の混ざった演算の結果を解釈する所: sema/mixedarith.go)。
 var v4Rules = []string{"constant-range", "narrowing", "sign-compare", "printf-format", "string-terminator", "string-length", "string-rows", "mixed-sign-arith"}
 
+// rpTooBig はビルドのエラーが「プログラムが大きすぎる」(fuzz では飛ばす) ものならその文言を返す。
+func rpTooBig(detail string) (string, bool) {
+	for _, s := range []string{"frame size over", "overflows memory area", "zero page index wrapped", "does not fit in the zero page", "static frames do not fit"} {
+		if strings.Contains(detail, s) {
+			return s, true
+		}
+	}
+	return "", false
+}
+
 // migrateRules は files を一時ディレクトリに書き、Compiler.Migrate で rules の書き換えだけを当てて最新の版にした内容を返す。
 func migrateRules(t *testing.T, files map[string]string, rules []string) (map[string]string, error) {
 	t.Helper()
@@ -98,10 +108,8 @@ func runRandomV4(t *testing.T, v3 bool) {
 			switch res.kind {
 			case "ok":
 			case "error":
-				for _, s := range []string{"frame size over", "overflows memory area", "zero page index wrapped", "does not fit in the zero page", "static frames do not fit"} {
-					if strings.Contains(res.detail, s) {
-						t.Skipf("プログラムが大きすぎる (seed %d): %s", seed, s)
-					}
+				if s, big := rpTooBig(res.detail); big {
+					t.Skipf("プログラムが大きすぎる (seed %d): %s", seed, s)
 				}
 				if strings.Contains(res.detail, "does not fit in") || strings.Contains(res.detail, "implicitly (narrowing") ||
 					strings.Contains(res.detail, "the signed type wins at the same size") {
