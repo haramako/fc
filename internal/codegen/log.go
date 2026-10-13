@@ -57,7 +57,9 @@ func (l *Llc) logMarkers(lmd *ir.Lambda, opNo int, op *ir.Op, live func() *ir.Li
 		}
 		for k, a := range p.Args {
 			var loc LogLoc
-			if len(a.Bytes) > 0 {
+			if a.Stale {
+				loc = LogLoc{Kind: "none", Why: "optimized out"} // この地点で読む版の代入が消えている
+			} else if len(a.Bytes) > 0 {
 				// バイトごとの変数に分けた 2 バイトの値 (opt.splitWords)
 				loc = LogLoc{Kind: "bytes"}
 				for j, b := range a.Bytes {

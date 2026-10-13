@@ -69,6 +69,9 @@ type LogFileSite struct {
 	// (nil なら毎回。空なら出さない)
 	Prevs  []int          `json:"prevs"`
 	Values []LogFileValue `json:"values"`
+	// Approx は地点が元の文の位置からずれうる (丸ごと展開したループの中・ループの回転で付け替えた注釈。ir.LogPoint の
+	// Unrolled / Moved): 別の周の値を出すことがある
+	Approx bool `json:"approx,omitempty"`
 }
 
 // LogFileValue は引数 1 つの所在。
@@ -104,7 +107,7 @@ func Build(sites []*codegen.LogSite, dbg *cc65.DbgFile, target string, rel func(
 		if !ok {
 			continue // 出力されなかった関数 (どこからも呼ばれない)
 		}
-		site := LogFileSite{Func: s.Func, Seq: seq, PC: lab.Val, Prg: -1}
+		site := LogFileSite{Func: s.Func, Seq: seq, PC: lab.Val, Prg: -1, Approx: s.Point.Unrolled || s.Point.Moved}
 		if s.Prevs != nil {
 			site.Prevs = []int{}
 			for _, name := range s.Prevs {

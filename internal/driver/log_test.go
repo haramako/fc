@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
+
+	"github.com/haramako/fc/internal/fclog"
 )
 
 // logBuild は files を -g (Debug) でビルドして走らせ、(ROM、printf の出力、@log の出力、結果) を返す。
@@ -187,20 +189,14 @@ function main():void
 }
 
 // TestLogZeroCost: fuzz のプログラムの全部の文の前に、見えている変数を全部出す @log を置いても、ROM とプログラムの出力が
-// 変わらない (-O 0 / -O 2)。@log の値は、両方のレベルで取れた値を比べる。食い違いは種ごとにはログに出すだけ (丸ごと
-// 畳まれたループの写しが同じ命令に集まる形などで、-O 2 の地点が元の地点からずれることがある。Agent/discussions/2026-09-20-v3-plan.md §9) だが、
-// 食い違った種が比べた種の logValueDiffLimit を超えたら失敗 (最適化のパスの変更で注釈の扱いが崩れたことに気づくため。
-// 2026-09-26 の時点で 1816 個中 12 個 (0.7%)。fuzz の 1 周の 200 個前後では 1% だと 1 個しか許さず、偶然の 2〜4 個で
-// 落ちていたので、logValueDiffSlack 個の余裕を足す)。
+// 変わらない (-O 0 / -O 2)。@log の値は、両方のレベルで取れた値を比べ、1 つでも食い違えば失敗。ただし -O 2 で地点がずれうる
+// @log (logImprecise: 合流点の地点、丸ごと展開したループの見出しと最後のブロック、ループの回転で付け替えた地点。2026-10-13 に
+// 200 本の種で測って地点の約 32%) は比べない。@log は命令を持たない注釈なので、展開したループの写しや回転したループの入口の
+// 注釈がジャンプの整理で合流点や出口へ寄り、別の周の値を出すことがある (Agent/wiki/log-annotation-rules.md)。
+// 以前は全部を比べて「食い違った種が 1% + 3 個まで」としていて、その中に本物の不具合 (消した代入の古い値を出す。
+// TestLogDeadDefCopy) が埋もれていた (2026-10-13。食い違った 29 件を分けると、28 件がずれうる地点だった)。
 func TestLogZeroCost(t *testing.T) {
 	t.Parallel()
-	var compared, differed atomic.Int32
-	t.Cleanup(func() { // 並列の子のテストが全部終わった後
-		n, d := compared.Load(), differed.Load()
-		if float64(d) > float64(n)*logValueDiffLimit+logValueDiffSlack {
-			t.Errorf("@log の値が -O 0 と -O 2 で食い違った種が多すぎる: %d / %d (上限 %.0f%% + %d 個)。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue) が崩れていないか (Agent/wiki/log-annotation-rules.md)", d, n, logValueDiffLimit*100, logValueDiffSlack)
-		}
-	})
 	n := 20
 	if *randN > 30 {
 		n = *randN / 10
@@ -217,12 +213,13 @@ func TestLogZeroCost(t *testing.T) {
 			g.genProgram()
 			files := g.sources()
 			var logsByLevel []string
+			var skip map[int]bool
 			for _, level := range []int{-1, 0} {
 				plain, out, _, _, err := logBuild(t, files, level, false, false)
 				if err != nil {
 					t.Skipf("生成したプログラムがビルド・実行できない (seed %d): %v", seed, err)
 				}
-				rom, outLog, logs, _, err := logBuild(t, files, level, true, true)
+				rom, outLog, logs, res, err := logBuild(t, files, level, true, true)
 				if err != nil {
 					t.Fatalf("-O %d: @log 入りのビルドが失敗 (seed %d): %v\n%s", level, seed, err, g.allSource())
 				}
@@ -233,12 +230,13 @@ func TestLogZeroCost(t *testing.T) {
 					t.Fatalf("-O %d: @log で出力が変わった (seed %d)\n%s\n%s", level, seed, out, outLog)
 				}
 				logsByLevel = append(logsByLevel, logs)
+				if level == 0 {
+					skip = logImprecise(res.Log)
+				}
 			}
-			bad, diffs := compareLogValues(logsByLevel[0], logsByLevel[1])
-			compared.Add(1)
+			bad, diffs := compareLogValues(logsByLevel[0], logsByLevel[1], skip)
 			if bad != "" {
-				differed.Add(1)
-				t.Logf("-O 0 と -O 2 で @log の値が違う (seed %d): %s", seed, bad)
+				t.Errorf("-O 0 と -O 2 で @log の値が違う (seed %d): %s。最適化のパスの変更で注釈の引き継ぎ・値の印 (LogStale / LogNoValue / LogArg.Stale) が崩れていないか (Agent/wiki/log-annotation-rules.md)\n%s", seed, bad, g.allSource())
 			}
 			if diffs > 0 {
 				t.Logf("実行回数が -O 0 と -O 2 で違う地点: %d (最適化で地点が動いたもの。値は比べない)", diffs)
@@ -247,19 +245,31 @@ func TestLogZeroCost(t *testing.T) {
 	}
 }
 
-// logValueDiffLimit は TestLogZeroCost の、@log の値が食い違ってよい種の割合の上限。
-const logValueDiffLimit = 0.01
-
-// logValueDiffSlack は logValueDiffLimit に足す、食い違ってよい種の個数 (少ない種数での偶然のばらつきの分)。
-const logValueDiffSlack = 3
+// logImprecise は -O 2 で地点がずれうる @log の ID: 合流点の地点 (Prevs がある: ほかの経路からも来るラベルに寄った) と、
+// 地点の情報が approx のもの (丸ごと展開したループの見出しと最後のブロック・ループの回転で付け替えた注釈。ジャンプの整理で
+// 合流点や出口へ寄る)。回転で付け替えた地点を比べると、1 万 2 千本で 4 本食い違った (どれも jumps を切ると消える)。
+func logImprecise(lf *fclog.LogFile) map[int]bool {
+	r := map[int]bool{}
+	if lf == nil {
+		return r
+	}
+	for _, p := range lf.Points {
+		for _, s := range p.Sites {
+			if s.Prevs != nil || s.Approx {
+				r[p.ID] = true
+			}
+		}
+	}
+	return r
+}
 
 var reLogField = regexp.MustCompile(` (\S+)=(\S+)`)
 
 // compareLogValues は -O 0 / -O 2 の @log の出力 (文ごとの `file:line#id a=1 b=?`) を地点ごとに比べる。-O 2 は地点が
 // 最適化で動く (回転したループの条件は 1 回ずれる、丸ごと畳まれたループの写しは 1 つの命令に集まって順番が崩れる) ので、
-// 実行回数が同じ地点だけ、両方で取れた値 (「?」でなく、番地がレベルで違うポインタ `$...` でない) の組を多重集合として
-// 比べる (順番は比べない)。回数の違いの数も返す。
-func compareLogValues(o0, o2 string) (bad string, countDiffs int) {
+// 実行回数が同じ地点だけ、その地点のどの回でも両方で取れた変数の値の組を多重集合として比べる (順番は比べない)。
+// skip の ID の地点は比べない。回数の違いの数も返す。
+func compareLogValues(o0, o2 string, skip map[int]bool) (bad string, countDiffs int) {
 	parse := func(s string) map[string][]map[string]string {
 		r := map[string][]map[string]string{}
 		for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
@@ -276,31 +286,46 @@ func compareLogValues(o0, o2 string) (bad string, countDiffs int) {
 		return r
 	}
 	a, b := parse(o0), parse(o2)
-	// key は両方で取れた変数の値の組 (変数の名前順)
-	key := func(x, y map[string]string) string {
-		var names []string
-		for name, v := range x {
-			if w, ok := y[name]; ok && v != "?" && w != "?" && !strings.HasPrefix(v, "$") {
-				names = append(names, name)
+	for loc, as := range a {
+		if i := strings.LastIndexByte(loc, '#'); i >= 0 {
+			if id, err := strconv.Atoi(loc[i+1:]); err == nil && skip[id] {
+				continue
 			}
 		}
-		sort.Strings(names)
-		var s strings.Builder
-		for _, n := range names {
-			s.WriteString(n + "=" + x[n] + " ")
-		}
-		return s.String()
-	}
-	for loc, as := range a {
 		bs := b[loc]
 		if len(as) != len(bs) {
 			countDiffs++
 			continue
 		}
+		// 比べる変数: この地点のどの回でも、両方のレベルで値が取れたもの (「?」でなく、番地がレベルで違うポインタ `$...` でない)。
+		// 回ごとに組にすると、回転したループで出る順が入れ替わり、片方だけ「?」の変数があるときに別の回どうしを比べていた
+		names := map[string]bool{}
+		for name := range as[0] {
+			names[name] = true
+		}
+		for _, m := range append(append([]map[string]string{}, as...), bs...) {
+			for name := range names {
+				if v, ok := m[name]; !ok || v == "?" || strings.HasPrefix(v, "$") {
+					delete(names, name)
+				}
+			}
+		}
+		var keys []string
+		for name := range names {
+			keys = append(keys, name)
+		}
+		sort.Strings(keys)
+		key := func(m map[string]string) string {
+			var s strings.Builder
+			for _, n := range keys {
+				s.WriteString(n + "=" + m[n] + " ")
+			}
+			return s.String()
+		}
 		count := map[string]int{}
 		for i := range as {
-			count[key(as[i], bs[i])]++
-			count[key(bs[i], as[i])]--
+			count[key(as[i])]++
+			count[key(bs[i])]--
 		}
 		for k, n := range count {
 			if n != 0 {
@@ -309,6 +334,43 @@ func compareLogValues(o0, o2 string) (bad string, countDiffs int) {
 		}
 	}
 	return "", countDiffs
+}
+
+// TestLogDeadDefCopy: 使われない代入を消した後、写しの伝播で同じ変数が別の値 (前の版) の置き場所として生きている地点の @log は、
+// 消した代入の値ではなく前の版を出していた (`p0 = l0; l0 = (l0 + p0) % 327; return p0` が return l0 になる。fuzz の
+// TestLogZeroCost の種 66600070)。-O 2 では「?」(LogArg.Stale)、-O 0 では代入した値。
+func TestLogDeadDefCopy(t *testing.T) {
+	t.Parallel()
+	src := `#fc 4
+use console;
+var g:i16;
+function f(p0:i16):i16 @(noinline)
+{
+	var l0:i16 = g;
+	p0 = l0;
+	l0 = (l0 + p0) % 327;
+	@log("l0={}", l0);
+	return p0;
+}
+function main():void
+{
+	g = 31773;
+	@printf("{}\n", f(1));
+	console.exit(0);
+}
+`
+	for _, c := range []struct {
+		level int
+		want  string
+	}{{-1, "l0=299"}, {0, "l0=?"}} {
+		_, out, logs, _, err := logBuild(t, map[string]string{"t.fc": src}, c.level, true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != "31773\n" || !strings.Contains(logs, c.want) {
+			t.Errorf("level %d: out %q, logs %q (want %q)", c.level, out, logs, c.want)
+		}
+	}
 }
 
 // TestLogResidentHomeAtEntry: 常駐 (l1@A) のメモリ側 (Home) は書き戻しが IR の定義に見えず、関数の入口から生きて見える。
@@ -325,7 +387,7 @@ func TestLogResidentHomeAtEntry(t *testing.T) {
 		}
 		logs = append(logs, l)
 	}
-	if bad, _ := compareLogValues(logs[0], logs[1]); bad != "" {
+	if bad, _ := compareLogValues(logs[0], logs[1], nil); bad != "" {
 		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
 	}
 }
@@ -344,7 +406,7 @@ func TestLogLitpropHome(t *testing.T) {
 		}
 		logs = append(logs, l)
 	}
-	if bad, _ := compareLogValues(logs[0], logs[1]); bad != "" {
+	if bad, _ := compareLogValues(logs[0], logs[1], nil); bad != "" {
 		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
 	}
 }

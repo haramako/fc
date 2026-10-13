@@ -27,6 +27,10 @@ type LogPoint struct {
 	// Moved は最適化で元の命令から別の命令へ付け替えた注釈。コード生成は、その地点で生きている値だけを読む (「直前に
 	// 触った」の規則は元の命令の地点でしか確かでない)
 	Moved bool
+	// Unrolled は丸ごと展開したループの見出し (判定) と最後のブロック (変数を進める所。continue の飛び先) の注釈 (写しも)。展開の後の
+	// ジャンプの整理で、写しの注釈が合流点やループの出口へ寄り、別の周の値を出すことがある (地点の情報の approx。
+	// TestLogZeroCost はこの地点の値を比べない)
+	Unrolled bool
 }
 
 // LogPart は書式の 1 片: 文字列 (Arg < 0) か、引数の表示 (Arg 番目を Spec で)。
@@ -51,6 +55,9 @@ type LogArg struct {
 	Val  Operand     // 値 (弱い参照。定数ならリテラル)
 	// Bytes は 2 バイトの変数がバイトごとの変数に分けられたとき (opt.splitWords) の、下位・上位の値。あれば Val より優先
 	Bytes []Operand
+	// Stale はこの地点で読む版の代入を消した (opt.ssa の eliminateDead)。変数が生きていても (写しの伝播で別の版の値の
+	// 置き場所として読まれる) 元の地点の値ではないので「?」にする
+	Stale bool
 }
 
 // cloneLog は写した命令用に LogPoint を写す (引数の値は mapOperand で付け替える)。

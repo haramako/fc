@@ -259,6 +259,13 @@ func (s *ssaForm) unrollOne() bool {
 				if op.Dst != nil {
 					no.Dst = mapOperand(op.Dst)
 				}
+				if n == 0 && (i < h.End || i >= last.Start) {
+					// 見出し (ループの判定) と最後のブロック (変数を進める所。continue の飛び先) の注釈は、展開の後のジャンプの
+					// 整理で合流点や出口へ寄り、別の周の値を出すことがある。写しは CloneLogs がこの印ごと写す
+					for _, p := range op.Logs {
+						p.Unrolled = true
+					}
+				}
 				if n > 0 {
 					no.UnrollCopy = true
 					// 最初の写しは元の注釈のまま (ir.KeepLogs が付け替えない)。ヘッダの先頭のラベルの注釈はループに入る前の

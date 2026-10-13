@@ -1124,6 +1124,38 @@ func (s *ssaForm) untouched(g *ir.Value, def, i int) bool {
 	return true
 }
 
+// markStaleLogs は、消す版 (dead) を読む @log の引数に Stale の印を付ける。変数の LogStale は「生きている地点の値だけ正しい」
+// だが、写しの伝播で別の版の値の置き場所として読まれると、消した代入の後でも生きていて古い値を出していた
+// (`p0 = l0; l0 = (l0 + p0) % 327; return p0` の return が l0 を読む形になり、return の前の @log が l0 に代入前の値を出した。
+// fuzz の TestLogZeroCost の種 66600070)。合流で消す版が混ざる地点も印を付ける (どの経路から来たか分からない)。
+func (s *ssaForm) markStaleLogs(dead map[*ssaVal]bool) {
+	for i, op := range s.lmd.Ops {
+		if op == nil || len(op.Logs) == 0 || s.blockOf[i] == nil {
+			continue
+		}
+		for _, p := range op.Logs {
+			for _, a := range p.Args {
+				if a.Stale {
+					continue
+				}
+				vals := []ir.Operand{a.Val}
+				if len(a.Bytes) > 0 {
+					vals = a.Bytes
+				}
+				for _, o := range vals {
+					u := ir.UnderlyingValue(o)
+					if u == nil || !s.vars[u] {
+						continue
+					}
+					if dependsOn(s.valueAt(u, i), dead, map[*ssaVal]bool{}) {
+						a.Stale = true
+					}
+				}
+			}
+		}
+	}
+}
+
 // eliminateDead は使われない版の定義 (副作用の無い命令) を消す。
 func (s *ssaForm) eliminateDead() bool {
 	live := map[*ssaVal]bool{}
@@ -1157,6 +1189,18 @@ func (s *ssaForm) eliminateDead() bool {
 				}
 			}
 		}
+	}
+	dead := map[*ssaVal]bool{}
+	for i, op := range s.lmd.Ops {
+		if op == nil {
+			continue
+		}
+		if d := s.defAt[i]; d != nil && op.Code.IsPure() && !live[d] && !ir.FeedsCarry(s.lmd.Ops, i) {
+			dead[d] = true
+		}
+	}
+	if len(dead) > 0 {
+		s.markStaleLogs(dead)
 	}
 	changed := false
 	for i, op := range s.lmd.Ops {
