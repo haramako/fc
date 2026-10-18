@@ -50,7 +50,7 @@
 ### plans/（進行中の計画）
 
 - [plans/bug-hunt.md](plans/bug-hunt.md) — コンパイラのバグ調査の計画（今のオークルの穴、フェーズ、判定の受け入れ条件）
-- [plans/a1-const-width.md](plans/a1-const-width.md) — 定数も上から決めた幅で畳む（A1 の印 (taint) の仕組みをやめ、定数と実行時の計算を 1 つの規則に）
+- [plans/a1-const-width.md](plans/a1-const-width.md) — 定数も上から決めた幅で畳む（fc 4 は済み。残りは fc 3 → 4 の migrate が使う印 (taint)）
 - [plans/v4-plan.md](plans/v4-plan.md) — fc 4 の言語の変更（版と migrate を含む）
 - [plans/v4-stdlib.md](plans/v4-stdlib.md) — fc 4 の標準ライブラリ（fclib）の作り直し
 - [plans/roadmap.md](plans/roadmap.md) — 未着手・未決の項目（最適化・言語機能・ツール）

@@ -181,6 +181,12 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 	defer h.enterExpr(c.pos)()
 	leftValue := false
 	e := h.constEval(c)
+	if h.v4() && hint > 0 && e.kind == cValue && e.src != nil && e.val.Type.Size < hint {
+		// A1: 区切りにならない演算を畳んだ定数は、上から来た幅で元の式から畳み直す (Agent/wiki/plans/a1-const-width.md)
+		if w := h.foldAtWidth(e.src, hint); w != nil {
+			e = w
+		}
+	}
 	var r ir.Operand
 
 	switch e.kind {

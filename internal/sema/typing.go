@@ -437,8 +437,9 @@ func (h *Hlc) preConvert(c *cexpr, to *types.Type) bool {
 	from, k, isConst := info.t, info.n, info.untyped
 	if e := h.constEval(c); !isConst && e.isLiteralInt() {
 		k, isConst = e.val.Int, true
-		if tc := h.taint[e.val]; tc != nil && h.v4() && to.Kind == types.Int && to.Size > e.val.Type.Size {
-			if r := h.foldAtWidth(tc, to.Size); r != nil {
+		if e.src != nil && h.v4() && to.Kind == types.Int && to.Size > e.val.Type.Size {
+			// 区切りにならない演算を畳んだ定数は、代入先の幅で元の式から畳み直した値 (lvalIn の入口と同じ)
+			if r := h.foldAtWidth(e.src, to.Size); r != nil {
 				k = wrapInt(r.val.Int, to) // widenArith と同じ値
 			}
 		}

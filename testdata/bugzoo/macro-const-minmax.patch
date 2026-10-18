@@ -1,21 +1,9 @@
 # 純粋マクロ (@min / @max / @clamp) を定数式で展開しない (8c3f111。const D = @min(3, 5) が must be constant、[@min(4, 8)]u8 が array size must be constant)
-commit 8c3f1110ee767839790adb50fe4f69b2eed4c3cc
-Author: HARADA Makoto <haramako@gmail.com>
-Date:   Sun Oct 18 07:21:19 2026 +0000
-
-    sema: 純粋マクロを定数式でも展開して畳む (@min / @max / @clamp)
-    
-    `const D = @min(3, 5);` が「const D must be constant」、`var arr:[@min(4, 8)]u8;` が「array size must be constant」に
-    なっていた。@min / @max / @clamp は展開が IR を出さない純粋マクロなので、定数式でも展開して畳める (fc 3 から同じ)。
-    textmap の変換器は展開すると変換器でなくなる (@format が書式を textmap から探す) ので対象外。
-    
-    driver: TestRandomArithV4 に @min / @max と 2 バイトの値の 8〜15 のシフト (上位バイトの抽出) を追加
-
-diff --git b/internal/sema/consteval.go a/internal/sema/consteval.go
-index bcc5113..d991d62 100644
---- b/internal/sema/consteval.go
-+++ a/internal/sema/consteval.go
-@@ -407,17 +407,6 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
+diff --git a/internal/sema/consteval.go b/internal/sema/consteval.go
+index 2c364a3..fea7744 100644
+--- a/internal/sema/consteval.go
++++ b/internal/sema/consteval.go
+@@ -411,17 +411,6 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
  			if m := args[0].macroOf(); m != nil && m.constFn != nil {
  				return m.constFn(h, args[1:])
  			}
@@ -33,16 +21,3 @@ index bcc5113..d991d62 100644
  			call := &cexpr{kind: cOp, op: opCall, args: args, block: c.block, pos: c.pos}
  			if mc := h.methodCall(call); mc != nil {
  				return mc // `x.m(args)` → `T.m(受け取り手, args)` (method.go)
-diff --git b/internal/sema/hlc.go a/internal/sema/hlc.go
-index 1eb1fd5..0b121d6 100644
---- b/internal/sema/hlc.go
-+++ a/internal/sema/hlc.go
-@@ -33,8 +33,6 @@ type Hlc struct {
- 	// constIndex は const の宣言の初期値を評価中 (fc 4): 定数の配列 (文字列) を定数の添字で引く式を畳む (`const C = "#"[0];`)。
- 	// 関数の中の式では畳まない (生成コードが変わる。fc 3 → 4 の migrate は ROM を変えない)
- 	constIndex bool
--	// 純粋マクロ (@min / @max など) を定数式で展開する深さ (再帰の保険: consteval.go)
--	constMacro int
- 	// 型付きの定数の畳み込みと A1 (widen.go): 折り返した畳み込みの結果の定数 → 元の式。const の値として文・関数をまたいで
- 	// 使われるのでモジュールの間持つ
- 	taint  map[*ir.Value]*cexpr

@@ -1,9 +1,9 @@
 # sema: @min / @max / @clamp が A1 の幅を受け取らない (var v:i16 = @max(a + a, 0) が 144。定数と実行時もずれる)
 diff --git a/internal/sema/consteval.go b/internal/sema/consteval.go
-index df6c12e..bcc5113 100644
+index 2c364a3..f6fc8cc 100644
 --- a/internal/sema/consteval.go
 +++ b/internal/sema/consteval.go
-@@ -440,17 +440,6 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
+@@ -444,17 +444,6 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
  			if allLit {
  				// 型付きの定数があれば、実行時と同じく互換型の値にして比べる (数学の値で比べていた)。型は比較の規則
  				t := h.foldType(args, true)
@@ -21,13 +21,13 @@ index df6c12e..bcc5113 100644
  				val := func(i int) int {
  					if t != nil {
  						return wrapInt(args[i].val.Int, t)
-@@ -467,11 +456,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
+@@ -471,11 +460,7 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
  					v = min(max(v, val(1)), val(2))
  				}
  				if t != nil {
 -					lit := ir.NewIntLiteral("", t, v)
--					if tainted && (h.v4() || h.rewriting()) {
--						h.markTaint(lit, c)
+-					if tainted && h.rewriting() {
+-						h.markTaint(lit, c) // fc 3: migrate に報告する印 (fc 4 は src から畳み直す)
 -					}
 -					return cv(lit)
 +					return cv(ir.NewIntLiteral("", t, v))
@@ -35,10 +35,10 @@ index df6c12e..bcc5113 100644
  				return cv(h.IntValue(v))
  			}
 diff --git a/internal/sema/expr.go b/internal/sema/expr.go
-index e8803cd..9266b9c 100644
+index cd17bec..9eeb8cb 100644
 --- a/internal/sema/expr.go
 +++ b/internal/sema/expr.go
-@@ -513,7 +513,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
+@@ -519,7 +519,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
  						h.lval(st)
  					}
  				} else if x.expr != nil {
@@ -47,7 +47,7 @@ index e8803cd..9266b9c 100644
  				}
  			} else {
  				// 普通の関数コール
-@@ -618,42 +618,15 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
+@@ -624,42 +624,15 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
  			// 組み込みの min / max / clamp: 互換型の一時変数に入れて、比較して入れ替える
  			//   min: t = a; if (b < a) t = b     max: t = a; if (a < b) t = b
  			//   clamp: t = x; if (t < lo) t = lo; if (hi < t) t = hi
@@ -93,30 +93,10 @@ index e8803cd..9266b9c 100644
  			tmp := h.newTmp(typ)
  			h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{vals[0]}})
 diff --git a/internal/sema/widen.go b/internal/sema/widen.go
-index cc16090..7b9d684 100644
+index 50a95b7..e25916c 100644
 --- a/internal/sema/widen.go
 +++ b/internal/sema/widen.go
-@@ -101,7 +101,6 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
- // 算術の演算でない式 (`as`・比較・名前・組み込み。区切り)、型のない定数だけの式 (任意精度で計算し、代入先との適合を見る)、
- // すでに十分広い式は nil (そのまま)。
- func (h *Hlc) widenConstAt(c *cexpr, typ *types.Type) *cexpr {
--	c = h.pureExpansion(c)
- 	if !h.v4() || typ == nil || typ.Kind != types.Int || typ.Enum != nil || !isArithNode(c) {
- 		return nil
- 	}
-@@ -192,11 +191,6 @@ func (h *Hlc) foldAtWidth(c *cexpr, size int) *cexpr {
- // 畳み込んだときの型の符号のまま size バイトで計算し、算術でない式 (`as`・比較・組み込み・名前など。区切り) は元の幅の値、
- // 型のない定数は元の値から。シフト量は元の値。型のない値 (オペランドが全部型のない定数) なら t は nil。
- func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
--	c = h.pureExpansion(c)
--	if tc := h.taintOf(c); tc != nil {
--		// 印の付いた定数は元の式で (定数式の中の純粋マクロは評価した引数で展開するので、`@max` の引数が畳んだ値になっている)
--		c = tc
--	}
- 	narrow := h.constEval(c)
- 	if !narrow.isLiteralInt() {
- 		return 0, nil, false
-@@ -224,14 +218,6 @@ func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
+@@ -226,14 +226,6 @@ func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
  		}
  		vals[i] = wrapInt(x, tw) // 型付きの値はその型の値を、型のない定数は元の値を広い型で読む
  	}
@@ -131,7 +111,7 @@ index cc16090..7b9d684 100644
  	v1, v2 := vals[0], 0
  	if len(vals) > 1 {
  		v2 = vals[1]
-@@ -273,7 +259,7 @@ var a1Roles = map[cop]a1Role{
+@@ -275,7 +267,7 @@ var a1Roles = map[cop]a1Role{
  	opAnd: a1Through, opOr: a1Through, opXor: a1Through, opShiftLeft: a1Through, opShiftRight: a1Through,
  	opUminus: a1Through, opBitNot: a1Through,
  	// `a < b ? a : b` と同じ組み込み (2026-10-18 まで区切りとして扱われ、8 ビットで折り返していた)

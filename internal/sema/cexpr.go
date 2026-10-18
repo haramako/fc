@@ -159,6 +159,9 @@ type cexpr struct {
 	// compoundCall は x に呼び出しがある (先に 1 回だけ評価する: 文ごとの書き換えは呼び出しを 2 回にするので自動ではできない)
 	compound     *syntax.AssignExpr
 	compoundCall bool
+	// src は畳んだ定数 (cValue) の元の式。A1 で区切りにならない演算 (a1Through。純粋マクロの呼び出しも) を畳んだときだけ
+	// constEval が付ける。広い幅と出会った所で元の式からその幅で畳み直す (constEvalAt。Agent/wiki/plans/a1-const-width.md)
+	src *cexpr
 }
 
 // ---------------------------------------------------------------

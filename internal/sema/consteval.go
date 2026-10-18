@@ -31,6 +31,10 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 	if c.compound != nil {
 		r.compound = c.compound
 	}
+	if r != c && r.kind == cValue && r.src == nil && r.val != nil && r.val.Kind == ir.KindLiteral && r.val.IsInt && !r.val.Untyped &&
+		isArithNode(h.pureExpansion(c)) {
+		r.src = c // 広い幅で畳み直すための元の式 (constEvalAt)
+	}
 	h.cmemo[c] = r
 	// 評価した結果をもう一度評価しても同じ (compileCond は結果の項を渡し直す)。覚えないと `!!!…!x` の深さ n で n² になった
 	// (FuzzCheck の worker が止まったと見なされた)
@@ -468,8 +472,8 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				}
 				if t != nil {
 					lit := ir.NewIntLiteral("", t, v)
-					if tainted && (h.v4() || h.rewriting()) {
-						h.markTaint(lit, c)
+					if tainted && h.rewriting() {
+						h.markTaint(lit, c) // fc 3: migrate に報告する印 (fc 4 は src から畳み直す)
 					}
 					return cv(lit)
 				}

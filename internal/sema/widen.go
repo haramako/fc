@@ -57,15 +57,9 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 		return v
 	}
 	if tc := h.taint[tv]; tc != nil && tv.Type.Size < typ.Size {
-		// 折り返した型付きの定数の演算 (下の「型付きの定数の演算と A1」)
-		switch {
-		case h.v4():
-			if r := h.foldAtWidth(tc, typ.Size); r != nil {
-				return ir.NewIntLiteral("", typ, wrapInt(r.val.Int, typ)) // 揃える先の型の値 (符号の読み替え: 下の widen の後と同じ)
-			}
-		case h.rewriting():
-			h.rewriteAs("widen", tc, tv.Type.String())
-		}
+		// fc 3 のモジュールの折り返した型付きの定数の演算: fc 4 では広い幅で畳むので migrate に `as` を報告する (下の
+		// 「型付きの定数の演算と A1」。fc 4 の定数は上から来た幅で畳み直してからここに来る: lvalIn の入口)
+		h.rewriteAs("widen", tc, tv.Type.String())
 		return v
 	}
 	if h.arith == nil {
@@ -87,11 +81,14 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 }
 
 // 型付きの定数の演算と A1: sema は型付きの定数の演算を畳み込む (`(200 as u8) + (100 as u8)` は u8 の 44)。fc 4 で代入先や
-// 16 ビットの値に広がる式なら、広い幅で計算した値 (300) でなければならない。畳み込みの時点では広がるか分からないので、
-// 折り返しや型のない定数の切り詰めで値が変わった畳み込みの結果に元の式の印 (taint) を付けておき、広い型と出会ったら
-// (定数の畳み込みの中の演算 foldWidenArgs、実行時の式の widenArith)、fc 4 では元の式をその幅で畳み込み直す (foldAtWidth)。
-// 広がらなければ畳み込んだ定数のままで IR は fc 3 と同じ。fc 3 のモジュールでは `(元の式) as T` を migrate に報告する。
-// `as` は外からの広がりを止めるだけで、中の式にも「式の中の一番広い型」の規則は効く (印は `as` の中でも付ける)。
+// 16 ビットの値に広がる式なら、広い幅で計算した値 (300) でなければならない。constEval は幅を知らずに畳むので、区切りに
+// ならない演算 (a1Roles の a1Through。純粋マクロの呼び出しも) を畳んだ定数には元の式 (cexpr.src) を残し、幅が決まる所で
+// 元の式からその幅で畳み直す (foldAtWidth / wideValue): 実行時の式は lvalIn の入口 (上から来た幅)、定数の畳み込みの中の
+// 演算は foldWidenArgs (演算の型の幅)、代入先の型は widenConstAt と preConvert。広がらなければ畳み込んだ定数のままで IR は
+// fc 3 と同じ。名前 (const) は区切り: 値に src は残らない。`as` は外からの広がりを止めるだけで、中の式にも「式の中の一番
+// 広い型」の規則は効く。
+// fc 3 のモジュールで書き換えを集めるとき (rewriting) だけ、折り返した畳み込みの結果に印 (Hlc.taint) を付け、広い型と
+// 出会った所 (foldWidenArgs・widenArith) で migrate に `(元の式) as T` を報告する。
 
 // widenConstAt は、定数の式 c を「代入先の型 typ の幅で畳み込んだ値」に置き換える (fc 4 の A1。初期化・引数・配列や struct の
 // 要素など、代入先の型が決まる所から呼ぶ)。実行時の式は上から幅を決めて命令を出す (rvalWide / widenArith) が、定数は
@@ -134,7 +131,7 @@ func (h *Hlc) taintOf(c *cexpr) *cexpr {
 // foldWidenArgs は、畳み込もうとしている演算 c の型 t より狭い、印の付いたオペランドを、fc 4 では元の式を t の幅で畳み込み
 // 直した定数に置き換える (置き換えたら true)。fc 3 のモジュールでは migrate にそのオペランドの `as` を報告する。
 func (h *Hlc) foldWidenArgs(c *cexpr, args []*cexpr, t *types.Type) bool {
-	if !(h.v4() || h.rewriting()) || h.taint == nil {
+	if !h.v4() && !h.rewriting() {
 		return false
 	}
 	changed := false
@@ -142,7 +139,13 @@ func (h *Hlc) foldWidenArgs(c *cexpr, args []*cexpr, t *types.Type) bool {
 		if i == 1 && (c.op == opShiftLeft || c.op == opShiftRight) {
 			continue
 		}
-		tc := h.taintOf(a)
+		var tc *cexpr
+		switch {
+		case h.v4() && a.kind == cValue:
+			tc = a.src // 区切りにならない演算を畳んだ定数は元の式から (constEvalAt)
+		case h.rewriting():
+			tc = h.taintOf(a) // fc 3: 折り返した所だけ migrate に報告する
+		}
 		if tc == nil || a.val.Type.Size >= t.Size {
 			continue
 		}
@@ -162,8 +165,8 @@ func (h *Hlc) foldWidenArgs(c *cexpr, args []*cexpr, t *types.Type) bool {
 // foldOverflows は型付きの定数の演算 c の畳み込みで、結果に印を付けるか: 折り返して値が変わった (over)、オペランドを t に
 // 読み替えて値が変わった (広い幅では元の値のまま計算する)、または同じ幅のオペランドに印がある。fc 4 か書き換えを集めているときだけ。
 func (h *Hlc) foldOverflows(c *cexpr, args []*cexpr, t *types.Type, over bool) bool {
-	if !(h.v4() || h.rewriting()) {
-		return false
+	if !h.rewriting() {
+		return false // fc 4 は印を使わない (畳んだ定数の src から畳み直す)
 	}
 	for i, a := range args {
 		if i == 1 && (c.op == opShiftLeft || c.op == opShiftRight) {
@@ -193,9 +196,8 @@ func (h *Hlc) foldAtWidth(c *cexpr, size int) *cexpr {
 // 型のない定数は元の値から。シフト量は元の値。型のない値 (オペランドが全部型のない定数) なら t は nil。
 func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
 	c = h.pureExpansion(c)
-	if tc := h.taintOf(c); tc != nil {
-		// 印の付いた定数は元の式で (定数式の中の純粋マクロは評価した引数で展開するので、`@max` の引数が畳んだ値になっている)
-		c = tc
+	if c.kind == cValue && c.src != nil {
+		c = h.pureExpansion(c.src) // 畳んだ定数は元の式で (定数式の中の純粋マクロは評価した引数で展開するので、引数が畳んだ値になっている)
 	}
 	narrow := h.constEval(c)
 	if !narrow.isLiteralInt() {
@@ -338,11 +340,6 @@ func (h *Hlc) rvalWide(c *cexpr, typ *types.Type) ir.Operand {
 // widenOperand は算術の項 src を t の幅の計算に合わせる (widen の項の扱いと同じ)。
 func (h *Hlc) widenOperand(src ir.Operand, t *types.Type) ir.Operand {
 	if sv, ok := src.(*ir.Value); ok {
-		if tc := h.taint[sv]; tc != nil && sv.Type.Size < t.Size {
-			if r := h.foldAtWidth(tc, t.Size); r != nil {
-				return r.val // 折り返した型付きの定数の演算は元の式を広い幅で畳み込み直す
-			}
-		}
 		if sv.Kind == ir.KindLiteral && sv.IsInt && sv.Untyped {
 			return ir.NewIntLiteral("", t, wrapInt(sv.Int, t)) // 型のない定数は元の値から (`x + -1` は x + 65535)
 		}

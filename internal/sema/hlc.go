@@ -35,8 +35,8 @@ type Hlc struct {
 	constIndex bool
 	// 純粋マクロ (@min / @max など) を定数式で展開する深さ (再帰の保険: consteval.go)
 	constMacro int
-	// 型付きの定数の畳み込みと A1 (widen.go): 折り返した畳み込みの結果の定数 → 元の式。const の値として文・関数をまたいで
-	// 使われるのでモジュールの間持つ
+	// fc 3 → 4 の migrate (rewriting) で、折り返した型付きの定数の畳み込みの結果 → 元の式 (widen.go)。fc 4 は使わない
+	// (畳んだ定数の cexpr.src から畳み直す)。const の値として文・関数をまたいで使われるのでモジュールの間持つ
 	taint  map[*ir.Value]*cexpr
 	curPos syntax.Position // 処理中の文/式の位置 (CompileError に位置が無いとき補完する)
 
