@@ -165,8 +165,10 @@ func arAdaptLit(a, b *arNode, cmp bool) (arTy, bool) {
 	}
 	if lt.w > other.w || n < -32768 || n > 65535 {
 		// 定数のほうが大きい型: 広いほうで計算する。比較で相手が符号付きなら符号つき 16 ビット (`s < 300` (s:i8))
-		if cmp && other.s && !lt.s && n <= 32767 {
-			return arTy{2, true}, false
+		if cmp && other.s && !lt.s {
+			// 符号つき 16 ビットに入らない定数 (32768 以上) はエラー (`x == 37440` (x:i8) は「37440 does not fit in i16」。
+			// 2026-10-19 に種 20261019517 で模型とコンパイラが食い違った)
+			return arTy{2, true}, n > 32767
 		}
 		return lt, false
 	}
