@@ -21,6 +21,14 @@ go test ./...                                    # 全部 (golden + examples + N
 | 差分テスト | TestRandomPrograms（internal/driver） | 〜20秒 | ランダムな小プログラムを -O 0 / -O 2 で走らせて出力が一致 |
 | 畳み込みの差分 | TestRandomConstFold（internal/driver） | 〜5秒 | 同じ式を型付きの定数と変数の 2 通りに書いて結果が一致（sema の誤りを見る） |
 | 通ってはいけない | TestMustError / TestMustWarn（internal/driver） | 〜1秒 | エラー・警告になるべきプログラムの表（検査が緩む退行） |
+| 6502 の実行系 | internal/r6502・internal/m6502 の単体テスト | 〜4秒 | r6502 が公式の 151 命令の表（長さ・サイクル・ページまたぎ・分岐）と命令の定義（ALU とシフトの全入力・スタック・`jmp ($xxFF)`・brk）どおり、m6502 の表のモード・サイクル・書くレジスタ・N/Z が r6502 と一致。期待値は r6502 のコードを引かずに書いている（2026-10-18） |
+| ビルドの決定性 | TestBuildDeterministic*（internal/driver） | 〜4秒 | castle を ca65 の並列数・作り直し・相対の基準ディレクトリを変えても同じ ROM、ソースを変えて戻すと最初と同じ ROM（2026-10-18） |
+
+- **asm のフラグの検査**（`FC_VERIFY_REGS`。テストと fuzz で有効。`internal/codegen/verify.go` の `verifyCompareFlags`、2026-10-18）:
+  比較のフラグがまだ読まれないうちに上書きされ、比較の結果を入力にする IR の命令の分岐がそれを読む形（`cmp; ldx; bne`）を
+  コンパイルエラーにする。分岐がどの値を見るかは codegen が命令ごとに出す IR のコメントで見る（asm の形だけだと、
+  使われない比較の後の `dec; beq` を誤検出した）。結果を使わない比較が残るだけの形は `-O 2` の fuzz 4000 本に 37 本あり、
+  出力は正しいのでエラーにしない（`../issues/local-2026-10-18-dead-compare.md`）。bugzoo の `cond-restore-flags` で効くことを見る
 
 - **カバレッジ**（2026-09-28）: `go test ./... -coverpkg=./... -coverprofile=cover.out` で、どのテストが通したかを問わず
   全パッケージの通過を取る（パッケージごとの表示の % は「そのテストがモジュール全体の何 % を通ったか」なので、block ごとに
