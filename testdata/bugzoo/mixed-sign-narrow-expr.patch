@@ -1,0 +1,14 @@
+# 符号の混ざり (F6) の起点を広げた後の IR の型で判定する (a - (b >> 2) が mixes i16 and u16 のエラーに。TestBugMixedSignNarrowExpr)
+diff --git a/internal/sema/mixedarith.go b/internal/sema/mixedarith.go
+index 54395c9..4911464 100644
+--- a/internal/sema/mixedarith.go
++++ b/internal/sema/mixedarith.go
+@@ -34,7 +34,7 @@ func (h *Hlc) mixedOf(tmp *ir.Value, op *ir.Op, n *arithNode, lits []ir.Operand)
+ 	switch op.Code {
+ 	case ir.OpAdd, ir.OpSub, ir.OpMul:
+ 		if len(lits) == 2 && n.lits[0] == nil && n.lits[1] == nil {
+-			lt, rt := h.mixedOperandType(n.c, 0, lits[0]), h.mixedOperandType(n.c, 1, lits[1])
++			lt, rt := ir.ValType(lits[0]), ir.ValType(lits[1])
+ 			if isPlainInt(lt) && isPlainInt(rt) && lt.Size == rt.Size && lt.Signed != rt.Signed && tmp.Type.Size == lt.Size {
+ 				return &mixedArith{origin: n, lt: lt, rt: rt}
+ 			}
