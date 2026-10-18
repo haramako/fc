@@ -1,0 +1,14 @@
+# ssa: x & 0 / x * 0 / x | ~0 を片方だけで畳まない (fp0[(a <= b) & 0]() が比較・and #0・ジャンプテーブルのまま。TestBugAndZeroDeadCompare)
+diff --git a/internal/opt/ssa.go b/internal/opt/ssa.go
+index 9737d99..ab6683a 100644
+--- a/internal/opt/ssa.go
++++ b/internal/opt/ssa.go
+@@ -480,7 +480,7 @@ func (s *ssaForm) evalConst(val *ssaVal) (int, bool) {
+ 	}
+ 	size := val.v.Type.Size
+ 	t0 := ir.ValType(op.Src[0])
+-	if len(op.Src) == 2 && (op.Code == ir.OpAnd || op.Code == ir.OpMul || op.Code == ir.OpOr) {
++	if false && len(op.Src) == 2 && (op.Code == ir.OpAnd || op.Code == ir.OpMul || op.Code == ir.OpOr) {
+ 		// 片方だけで結果が決まる: `x & 0` と `x * 0` は 0、`x | ~0` は ~0 (もう片方が定数でなくてよい。以前は畳まず、
+ 		// `fp0[(a <= b) & 0]()` が比較・真偽値・and #0・ジャンプテーブルのまま出ていた。Agent/issues/local-2026-10-18-dead-compare.md)
+ 		all := bitsOf(-1, size)

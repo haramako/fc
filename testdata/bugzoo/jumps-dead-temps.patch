@@ -1,0 +1,13 @@
+# jumps: 分岐を消して使われなくなった比較などの一時の値の命令を消さない (使われない cmp が残る。fuzz の verifyCompareFlags、castle の ROM)
+diff --git a/internal/opt/jumps.go b/internal/opt/jumps.go
+index 06276c0..a32ffe0 100644
+--- a/internal/opt/jumps.go
++++ b/internal/opt/jumps.go
+@@ -29,7 +29,6 @@ func simplifyJumps(lmd *ir.Lambda) {
+ 	if jumpsToReturn(lmd) {
+ 		removeUnreachable(lmd)
+ 	}
+-	dropDeadTemps(lmd)
+ }
+ 
+ // jumpsToReturn は 7: 残った jump の飛び先が値の無い return だけのブロックなら、その場で return する (関数の終わりへ抜ける
