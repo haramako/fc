@@ -141,10 +141,20 @@ func rpCondRewrite(files map[string]string, seed int64) map[string]string {
 func isConstExpr(e syntax.Expr) bool {
 	c := true
 	syntax.Inspect(e, func(n syntax.Node) bool {
-		switch n.(type) {
+		switch n := n.(type) {
 		case syntax.TypeExpr:
 			return false // `as u8` の型名は値の名前でない
-		case *syntax.Ident, *syntax.CallExpr:
+		case *syntax.CallExpr:
+			// 組み込みの @min / @max / @clamp は引数が定数なら定数 (`if (-@max(33783, 16981))` を包んで ?: の枝が型に
+			// 入らなくなっていた: seed 61290015)。引数だけを見る
+			if f, ok := n.Fun.(*syntax.Ident); ok && (f.Name == "@min" || f.Name == "@max" || f.Name == "@clamp") {
+				for _, a := range n.Args {
+					c = c && isConstExpr(a)
+				}
+				return false
+			}
+			c = false
+		case *syntax.Ident:
 			c = false
 		}
 		return c
