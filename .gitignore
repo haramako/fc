@@ -17,6 +17,7 @@ a.*
 y.output
 fcc.exe
 /fcc
+/fuzzmeasure
 dist-cc65/
 dist/
 *.map
