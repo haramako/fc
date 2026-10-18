@@ -215,3 +215,34 @@ function main():void
 		}
 	}
 }
+
+// TestBugConstMinMax は組み込みの @min / @max / @clamp を定数式で畳む (fc 3 と fc 4)。
+// 純粋マクロ (展開が IR を出さない) は constEval が展開しなかったので、`const D = @min(3, 5);` が
+// 「const D must be constant」、配列の大きさ `[@min(4, 8)]u8` が「array size must be constant」になっていた
+// (bug hunt 2026-10-18。TestRandomArithV4 の @min / @max で発覚)。
+func TestBugConstMinMax(t *testing.T) {
+	t.Parallel()
+	src := `#fc 4
+use console;
+const D = @min(3, 5);
+const E:u16 = @max((200 as u8), (100 as u8));
+const F = @clamp((300 as u8), (20 as u8), (170 as u8));
+var arr:[@min(4, 8)]u8;
+function main():void
+{
+	var v:u8 = 200;
+	arr[0] = D + E + F;
+	@printf("{} {} {} {}\n", D, E, F, @sizeof(arr));
+	console.exit(0);
+}
+`
+	for _, level := range []int{0, -1} {
+		r := testBuild(t, buildSpec{Files: map[string]string{"t.fc": src}, Level: level, Run: true})
+		if r.Err != nil {
+			t.Fatalf("level %d: ビルド失敗: %v", level, r.Err)
+		}
+		if want := "3 200 44 4\n"; r.Stdout != want {
+			t.Errorf("level %d: 出力 %q、want %q", level, r.Stdout, want)
+		}
+	}
+}

@@ -1,13 +1,13 @@
-# `f() == .A` の f() を 2 回評価する (4f47fc4。enum の短い名前の型を知るために出した IR を捨てていた。TestV3EnumShortCallOnce)
+# 型が決まっている側を resolveEnumShortPair で型を知るために 2 回評価する (4f47fc4 のバグの今の形。型を決める段が決めるので evalOnce は通らない。TestV3EnumShortCallOnce)
 diff --git a/internal/sema/enum.go b/internal/sema/enum.go
-index 9b63960..3e44a36 100644
+index 1583f77..7e4a1ab 100644
 --- a/internal/sema/enum.go
 +++ b/internal/sema/enum.go
-@@ -105,6 +105,7 @@ func (h *Hlc) evalOnce(c *cexpr) *cexpr {
- 	if e.kind == cValue || e.kind == cOperand {
- 		return e
+@@ -94,6 +94,7 @@ func (h *Hlc) resolveEnumShortPair(a, b *cexpr) (*cexpr, *cexpr) {
  	}
-+	h.rval(e) // 型を知るために IR を出して捨てる
- 	return &cexpr{kind: cOperand, opnd: h.rval(e), pos: c.pos}
- }
- 
+ 	if b.kind == cEnumShort && a.kind != cEnumShort {
+ 		if at, ok := h.exprType(a); ok && !at.untyped {
++			h.rval(a) // 型を知るために IR を出して捨てる
+ 			return a, h.enumShort(b, at.t)
+ 		}
+ 		aa := h.evalOnce(a)

@@ -33,6 +33,8 @@ type Hlc struct {
 	// constIndex は const の宣言の初期値を評価中 (fc 4): 定数の配列 (文字列) を定数の添字で引く式を畳む (`const C = "#"[0];`)。
 	// 関数の中の式では畳まない (生成コードが変わる。fc 3 → 4 の migrate は ROM を変えない)
 	constIndex bool
+	// 純粋マクロ (@min / @max など) を定数式で展開する深さ (再帰の保険: consteval.go)
+	constMacro int
 	// 型付きの定数の畳み込みと A1 (widen.go): 折り返した畳み込みの結果の定数 → 元の式。const の値として文・関数をまたいで
 	// 使われるのでモジュールの間持つ
 	taint  map[*ir.Value]*cexpr

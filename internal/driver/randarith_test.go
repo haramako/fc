@@ -81,7 +81,8 @@ func arMinType(v int64) arTy {
 		return arU8
 	case v >= -128 && v <= 127:
 		return arI8
-	case v >= 0 && v <= 65535:
+	}
+	if v >= 0 {
 		return arU16
 	}
 	return arI16
@@ -131,7 +132,7 @@ type arNode struct {
 	srcConst string
 	n        arTy // 自分の領域の計算の型 (代入先を含まない)
 
-	shift    int  // 1 ならシフトの量 (必ず 0〜7 の定数)
+	shift int // 1 ならシフトの量 (必ず 0〜7 の定数)
 	// pure は型のない定数だけの式。そこは任意精度で計算して代入先との適合を見る (`var b:u8 = 200 + 100;` は 44 ではなく
 	// 「300 does not fit in u8」)。型が決まっている値が 1 つでも入ればその幅で折り返す (`var b:u8 = (200 as u8) + 100;` は 44)。
 	pure  bool
@@ -140,9 +141,6 @@ type arNode struct {
 
 // regionTy は領域の計算の型 (代入先の幅 targetW を含める。代入先は幅だけ効くので符号は式の値のまま)。
 func (x *arNode) regionTy(targetW int) arTy { return arTy{max(x.n.w, targetW), x.n.s} }
-
-// setNat は領域の計算の型 (代入先を含まない) を作る。
-func (x *arNode) setNat() { x.n = x.regionTy(0) }
 
 // join2 は 2 つの子から親の領域の型を作る (型のない定数を相手に合わせた型の互換型。sema/typeplan.go planArith)。
 func (x *arNode) join2(a, b *arNode) {
@@ -154,11 +152,14 @@ func (x *arNode) join2(a, b *arNode) {
 // arAdaptLit は節点 a の型への寄与。a が型のない定数のリテラルのときだけ、相手 b の型に合わせる (sema/literal.go の
 // literalRule)。返す bool は比較で相手の型に入らない定数 (エラーになるので生成側で避ける)。
 func arAdaptLit(a, b *arNode, cmp bool) (arTy, bool) {
-	if a.kind != 0 || !a.un {
-		return a.n, false
+	if !a.pure {
+		return a.n, false // 型が決まっている値 (畳み込んだ式も定数として相手に合わせる)
 	}
-	n, lt := a.val, a.n
-	other, otherUntyped := b.n, b.kind == 0 && b.un
+	n, lt := a.exact, a.n
+	if a.kind == 0 {
+		n = a.val
+	}
+	other, otherUntyped := b.n, b.pure
 	if otherUntyped {
 		return lt, false // 定数どうし (普通は畳み込まれている)
 	}
@@ -179,7 +180,6 @@ func arAdaptLit(a, b *arNode, cmp bool) (arTy, bool) {
 }
 
 // arMinType は型のない定数の式への寄与 (入るいちばん小さい型)。
-
 
 // arGen は 1 つのプログラム。
 type arGen struct {
@@ -248,8 +248,8 @@ func (g *arGen) expr(depth int) *arNode {
 		a := g.expr(depth - 1)
 		var b *arNode
 		if op == "<<" || op == ">>" {
-			// シフトの量は型の幅未満の定数 (実測で 0 と負の量が実装依存になるので使わない)
-			b = arLit(int64(g.pick(8)))
+			// シフトの量は型の幅未満の定数 (実測で負の量が実装依存になるので使わない)。2 バイトの値には 8〜15 (上位バイトの抽出)
+			b = arLit(int64(g.pick(8 * a.n.w)))
 		} else {
 			b = g.expr(depth - 1)
 			if op == "/" || op == "%" {
@@ -304,7 +304,7 @@ func (g *arGen) expr(depth int) *arNode {
 	case k == 7: // +% (左の項の型で計算してその幅で折り返す区切り)
 		vs := g.varLeaf(g.signed)
 		a := vs[g.pick(len(vs))] // 左の項に型が要る (型のない定数は書けない)
-		l := a.n                  // 結果の型は左の項の型
+		l := a.n                 // 結果の型は左の項の型
 		b := g.leaf(l.s)
 		if g.chance(0.3) { // 右を符号違いにもできる (+% の使いどころ)
 			b = g.leaf(!l.s)
@@ -320,6 +320,30 @@ func (g *arGen) expr(depth int) *arNode {
 		return x
 	case k == 8:
 		return g.expr(depth - 1)
+	case k == 9, k == 10: // @min / @max (型は両辺の互換型。型のない定数は比較と同じ規則で、相手の型に入らなければエラー)
+		a := g.expr(depth - 1)
+		b := g.expr(depth - 1)
+		ta, ea := arAdaptLit(a, b, true)
+		tb, eb := arAdaptLit(b, a, true)
+		if ea || eb || ta.s != tb.s {
+			return a // 相手の型に入らない定数と、符号の違う両辺は作らない (中の比較がエラー)
+		}
+		op := "@min"
+		if k == 10 {
+			op = "@max"
+		}
+		x := &arNode{kind: 5, op: op, a: a, b: b,
+			src:      fmt.Sprintf("%s(%s, %s)", op, a.src, b.src),
+			srcConst: fmt.Sprintf("%s(%s, %s)", op, a.srcConst, b.srcConst)}
+		if a.pure && b.pure {
+			x.pure = true
+			x.exact = arMinMax(op, a.exact, b.exact)
+			x.n = arMinType(x.exact)
+		} else {
+			x.n = arCombine(ta, tb)
+		}
+		x.val = arValue(x, 0)
+		return x
 	}
 	return g.leaf(g.signed)
 }
@@ -389,32 +413,19 @@ func arValue(x *arNode, W int) int64 {
 	case 4:
 		t := x.typ // +% は左の項の型で計算してその幅で折り返す区切り
 		return t.wrap(arApply(x.op, t.wrap(arValue(x.a, t.w)), t.wrap(arValue(x.b, t.w))))
+	case 5:
+		t := arTy{max(W, x.n.w), x.n.s}
+		return t.wrap(arMinMax(x.op, t.wrap(arValue(x.a, t.w)), t.wrap(arValue(x.b, t.w))))
 	}
 	panic("不明な節点")
 }
 
-// mixed は型が決まっている値が同じ幅で符号を混ぜているか (符号つきの意味で読む所でエラーになる形)。
-func (x *arNode) mixed() bool { return arMixed(x, x.n) }
-
-func arMixed(x *arNode, n arTy) bool {
-	switch x.kind {
-	case 0:
-		if x.un {
-			return false
-		}
-		return x.typ.w == n.w && x.typ.s != n.s
-	case 1:
-		if arMixed(x.a, n) || arMixed(x.b, n) {
-			return true
-		}
-		a, b := x.a, x.b
-		if x.shift != 0 {
-			return false
-		}
-		return !a.un && !b.un && a.n.w == n.w && b.n.w == n.w && a.n.s != b.n.s
-	default: // 2 as、3 id、4 +% は区切り
-		return false
+// arMinMax は @min / @max (引数は計算の型で読んだ後なので、そのまま比べる)。
+func arMinMax(op string, a, b int64) int64 {
+	if (op == "@min") == (a < b) {
+		return a
 	}
+	return b
 }
 
 // arCmp は比較 (計算の型の解釈で)。
@@ -434,11 +445,11 @@ func arCmp(op string, a, b int64) bool {
 	return a >= b
 }
 
-// stmtExpr は文に使う式 (mixed になるものは作り直す)。
+// stmtExpr は文に使う式 (16 ビットに収まらない定数や符号を混ぜる式は作り直す。使う所ごとの検査は文の側でやる)。
 func (g *arGen) stmtExpr() *arNode {
 	for range 8 {
 		x := g.expr(1 + g.pick(3))
-		if !x.mixed() {
+		if !arTooWide(x) && !arMixed(x, 0) {
 			return x
 		}
 	}
@@ -474,6 +485,67 @@ func (g *arGen) placeTy(x *arNode) *arTy {
 	return nil
 }
 
+// arTooWide は型のない定数だけの式に 16 ビットに収まらない値があるか (foldBeyond16 など別経路になるので生成しない)。
+func arTooWide(x *arNode) bool {
+	if x.pure {
+		return x.exact < -32768 || x.exact > 65535
+	}
+	if x.kind == 1 || x.kind == 5 {
+		return arTooWide(x.a) || arTooWide(x.b)
+	}
+	if x.kind == 2 || x.kind == 3 {
+		return arTooWide(x.a)
+	}
+	if x.kind == 4 {
+		return arTooWide(x.a) || arTooWide(x.b)
+	}
+	return false
+}
+
+// arMixed は式に符号の混ざった演算の印が付くか (sema/mixedarith.go)。同じ大きさで符号の違う型が決まっている値の + - * が起点
+// で、A1 で広い幅で計算する所は付かない。印は + - * & | ^ << と単項の - ~ で引き継がり、使う所 (大小の比較、/ % >>、
+// @printf の引数) でエラーになる。生成側は式全体で見て避ける (呼ぶ所ごとに分けるほど値がない)。
+func arMixed(x *arNode, W int) bool {
+	if x.pure {
+		return false
+	}
+	switch x.kind {
+	case 5:
+		return arMixed(x.a, max(W, x.n.w)) || arMixed(x.b, max(W, x.n.w))
+	case 1:
+		t := arTy{max(W, x.n.w), x.n.s}
+		at, _ := arAdaptLit(x.a, x.b, false)
+		bt, _ := arAdaptLit(x.b, x.a, false)
+		if !x.a.pure && !x.b.pure && at.w == bt.w && at.s != bt.s && x.n.w == at.w && t.w == x.n.w {
+			switch x.op {
+			case "+", "-", "*":
+				return true
+			}
+		}
+		switch x.op {
+		case "/", "%":
+			return arMixed(x.a, t.w) || arMixed(x.b, t.w)
+		case "@min", "@max": // 中で比較する (印を使う所)
+			return arMixed(x.a, t.w) || arMixed(x.b, t.w)
+		case ">>":
+			return arMixed(x.a, t.w)
+		case "+", "-", "*", "&", "|", "^", "<<":
+			if arMixed(x.a, t.w) {
+				return true
+			}
+			if x.op == "<<" {
+				return false
+			}
+			return arMixed(x.b, t.w)
+		}
+	case 2: // as で 16 ビットに広げる所は印を使う所
+		return x.typ.w > x.a.n.w && arMixed(x.a, 0)
+	case 4:
+		return arMixed(x.a, x.typ.w) || arMixed(x.b, x.typ.w)
+	}
+	return false
+}
+
 // program は 1 つのプログラム (ソースと期待する出力) を作る。
 func (g *arGen) program() (map[string]string, string) {
 	var b strings.Builder
@@ -507,7 +579,7 @@ func (g *arGen) program() (map[string]string, string) {
 	for k := 0; k < g.limit; k++ {
 		g.signed = g.chance(0.5)
 		x := g.stmtExpr()
-		if x == nil {
+		if x == nil || arTooWide(x) || arMixed(x, 0) {
 			continue
 		}
 		g.nstmt++
@@ -556,12 +628,12 @@ func (g *arGen) program() (map[string]string, string) {
 		}
 		// 比較 (if の形。hits に積む)
 		a := g.stmtExpr()
-		if a == nil {
+		if a == nil || arTooWide(a) {
 			continue
 		}
 		g.signed = a.n.s
 		bb := g.stmtExpr()
-		if bb == nil {
+		if bb == nil || arTooWide(bb) {
 			continue
 		}
 		op := []string{"==", "!=", "<", "<=", ">", ">="}[g.pick(6)]
@@ -571,10 +643,13 @@ func (g *arGen) program() (map[string]string, string) {
 		if ea || eb {
 			continue
 		}
+		w := max(ta.w, tb.w)
+		if arMixed(a, w) || arMixed(bb, w) {
+			continue // 印を使う所 (大小の比較)
+		}
 		if ta.s != tb.s && op != "==" && op != "!=" {
 			continue // 符号の違う値の大小の比較はエラー (F6)
 		}
-		w := max(ta.w, tb.w)
 		e := arCombine(ta, tb)
 		if !e.s {
 			// == / != の符号違いはビットで比べる (広い幅で無符号として読む)

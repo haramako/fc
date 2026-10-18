@@ -407,6 +407,17 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			if m := args[0].macroOf(); m != nil && m.constFn != nil {
 				return m.constFn(h, args[1:])
 			}
+			if m := args[0].macroOf(); m != nil && m.typing != nil && m.typing.pure && m.fn != nil && m.textmap == nil && h.constMacro < 8 {
+				// 純粋マクロ (@min / @max / @clamp、cos、@id_of) は展開が IR を出さないので、定数式でも展開して畳む。
+				// textmap の変換器は展開すると変換器でなくなる (@format が書式を textmap から探す) で対象外
+				// (`const D = @min(3, 5);` が「must be constant」で通らなかった)
+				h.constMacro++
+				r := m.fn(h, args[1:], c.block)
+				h.constMacro--
+				if r.expr != nil {
+					return h.constEval(r.expr)
+				}
+			}
 			call := &cexpr{kind: cOp, op: opCall, args: args, block: c.block, pos: c.pos}
 			if mc := h.methodCall(call); mc != nil {
 				return mc // `x.m(args)` → `T.m(受け取り手, args)` (method.go)

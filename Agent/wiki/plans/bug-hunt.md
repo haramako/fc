@@ -112,7 +112,38 @@ fc 4 の migrate（ROM バイト一致が要求される）、interface / soa / 
 
 ## 4. 結果（追記）
 
-（Phase 0 から追記する）
+### Phase 0（2026-10-18）
+
+**カバレッジ**（`go test ./... -coverpkg=./...`、全体で block の 88.3%）。通っていない block の上位は
+`internal/syntax/ast.go`（77）・`internal/interp/interp.go`（65）・`internal/fcdoc/fcdoc.go`（49）・
+`internal/extmacro/extmacro.go`（46）・`internal/starmacro/starmacro.go`（39）・`internal/ir/verify.go`（30、56.5%）。
+`fcdoc` とマクロの 2 つは「テストが薄い」より「fuzz がマクロを触らない」が原因（穴 C と同じ）。`ir/verify.go` は検査器そのもので、
+検査している式の種類が足りない。
+
+**bugzoo**（`go run ./tools/fuzzmeasure zoo -randn 300 -foldn 150`、34 patch + 当てない基準。2026-09-30 の 16/22 空振りから大きく改善）:
+
+| 状態 | 数 | patch |
+|---|---|---|
+| ランダム生成器が見つける | 26 | （それ以外） |
+| 文字列の生成器だけが見つける（zoo の `-run` の名前に無いので「その他」に出る） | 3 | `interp-array-eq`、`string-signed-bytes`、`zero-size-eq` |
+| 決まった単体テストだけが見つける | 4 | `fwdmem-disp-after-replace`（TestForwardFields）、`memshift-narrow`（TestMemShiftNarrowCast）、`migrate-conv-order`（TestV4MigrateWidenThenConvert）、`wrap-untyped-operand`（TestWrapOps） |
+| **誰も見つけられない** | 1 | `enum-short-twice` |
+
+`enum-short-twice` は、直した場所（`evalOnce`）が fc 4 では型を決める段（`resolveEnumShortPair` の `exprType`）に置き換わって
+通らない経路になっていた。同じバグの今の形（型が決まっている側を型を知るために評価して捨てる）を当てる patch に**書き換えた**
+（当てると `TestV3EnumShortCallOnce` が `b5` になって落ちることを確認）。**教訓: patch は「その規則が生きている所」を壊さないと
+死にます**（コードの作り直しのたびに `fuzzmeasure zoo` で確認する）。
+
+**見つけたバグ**: 定数の式を代入先の幅で畳み込んでいなかった（A1 の抜け。`const C:u16 = (128 as u8) + (200 as u8)` が 72）。
+`TestRandomArithV4`（Phase 2 の 1 番）の種 1。詳細と規則は [2026-10-18 の記録](../../discussions/2026-10-18-arith-model-and-const-widen.md)。
+
+### Phase 2 の 1（TestRandomArithV4、2026-10-18）
+
+`internal/driver/randarith_test.go`。fc 4 の式の型と値の Go 模型を作り、生成した式の実行結果（-O 0 / -O 2）と
+同じ式の型つき定数の形（畳み込み）を同時に比べる。15,000 プログラムで通っている。
+受け入れ条件の「bugzoo の `untyped-cast` / `fold-typed` / `valint-width` / `cmp-fold-mixed` を newly 見つける」は
+これから測る（`fuzzmeasure zoo -bugs untyped-cast,fold-typed,valint-width,cmp-fold-mixed`）。
+
 
 ## 5. やらないこと
 
