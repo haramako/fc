@@ -171,3 +171,47 @@ func TestCheckWarnings(t *testing.T) {
 		t.Errorf("build warnings: %+v", res.Warnings)
 	}
 }
+
+// TestBugConstWidenA1 は、型付きの定数の式を広い型に初期化するときの A1 の広げ (fc 4)。
+// 実行時の式は代入先まで含めて広い幅で計算するが、定数は畳み込んだ時点で幅が決まるので、初期化・引数・配列や struct の要素で
+// 広い型と出会ったときに畳み込み直す必要がある。const 宣言・グローバルの変数の初期値・配列と struct リテラルの要素では
+// 広げ直しておらず、var と const で値が変わっていた (bug hunt 2026-10-18。TestRandomArithV4 の種 1 が見つけた)。
+func TestBugConstWidenA1(t *testing.T) {
+	t.Parallel()
+	src := `#fc 4
+use console;
+struct P { x:u16; }
+const E = (128 as u8) + (200 as u8);
+const C1:u16 = (128 as u8) + (200 as u8);
+const C2:u16 = (50 as u8) - (128 as u8);
+const CARR:[2]u16 = [(128 as u8) + (200 as u8), 5];
+var GV:u16 = (128 as u8) + (200 as u8);
+var ARR:[2]u16 = [(128 as u8) + (200 as u8), 5];
+var SP:P = P{x: (128 as u8) + (200 as u8)};
+function f(v:u16):u16 { return v; }
+function h():u16 { return (128 as u8) + (200 as u8); }
+function main():void
+{
+	var v:u16 = (128 as u8) + (200 as u8);
+	var lp:P = P{x: (128 as u8) + (200 as u8)};
+	var larr:[2]u16 = [(128 as u8) + (200 as u8), 5];
+	// as は区切り (内側は u8 のまま)
+	var sep:u16 = ((128 as u8) + (200 as u8)) as u8;
+	// 型のない定数だけの式は任意精度で、代入先の型に入ることを確かめる
+	var exact:u16 = 200 + 100;
+	@printf("{}\n{}\n{}\n{}\n{} {}\n{}\n{}\n{}\n{} {}\n{}\n{}\n{}\n{}\n",
+		E, C1, C2, GV, ARR[0], ARR[1], SP.x, v, lp.x, larr[0], larr[1], sep, exact, f((128 as u8) + (200 as u8)), h());
+	console.exit(0);
+}
+`
+	want := "72\n328\n65458\n328\n328 5\n328\n328\n328\n328 5\n72\n300\n328\n328\n"
+	for _, level := range []int{0, -1} {
+		r := testBuild(t, buildSpec{Files: map[string]string{"t.fc": src}, Level: level, Run: true})
+		if r.Err != nil {
+			t.Fatalf("level %d: ビルド失敗: %v", level, r.Err)
+		}
+		if r.Stdout != want {
+			t.Errorf("level %d: 出力\n%s\nwant\n%s", level, r.Stdout, want)
+		}
+	}
+}

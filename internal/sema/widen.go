@@ -93,6 +93,27 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 // 広がらなければ畳み込んだ定数のままで IR は fc 3 と同じ。fc 3 のモジュールでは `(元の式) as T` を migrate に報告する。
 // `as` は外からの広がりを止めるだけで、中の式にも「式の中の一番広い型」の規則は効く (印は `as` の中でも付ける)。
 
+// widenConstAt は、定数の式 c を「代入先の型 typ の幅で畳み込んだ値」に置き換える (fc 4 の A1。初期化・引数・配列や struct の
+// 要素など、代入先の型が決まる所から呼ぶ)。実行時の式は上から幅を決めて命令を出す (rvalWide / widenArith) が、定数は
+// 畳み込んだ時点で幅が決まってしまうので、広い型と出会うここで畳み込み直す。
+// `const C:u16 = (128 as u8) + (200 as u8);` は u8 で折り返した 72 ではなく 328 でなければならない (var と const で
+// 値が変わっていた。bug hunt 2026-10-18)。
+// 算術の演算でない式 (`as`・比較・名前・組み込み。区切り)、型のない定数だけの式 (任意精度で計算し、代入先との適合を見る)、
+// すでに十分広い式は nil (そのまま)。
+func (h *Hlc) widenConstAt(c *cexpr, typ *types.Type) *cexpr {
+	if !h.v4() || typ == nil || typ.Kind != types.Int || typ.Enum != nil || !isArithNode(c) {
+		return nil
+	}
+	narrow := h.constEval(c)
+	if !narrow.isLiteralInt() || narrow.val.Untyped || narrow.val.Type == nil || narrow.val.Type.Kind != types.Int {
+		return nil
+	}
+	if narrow.val.Type.Size >= typ.Size {
+		return nil
+	}
+	return h.foldAtWidth(c, typ.Size)
+}
+
 // markTaint は折り返した畳み込みの結果 lit に元の式 c を記録する。
 func (h *Hlc) markTaint(lit *ir.Value, c *cexpr) {
 	if h.taint == nil {

@@ -49,6 +49,9 @@ func (h *Hlc) needsExpected(c *cexpr) bool {
 // farfn values from function symbols. A runtime near pointer cannot supply a bank.
 // 元の式は変更しない (constEval のメモは cexpr のポインタで引くため、新しいノードを作る)。t が nil ならそのまま。
 func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
+	if r := h.widenConstAt(c, t); r != nil {
+		return r
+	}
 	if t != nil && c.kind == cOp && c.op == opCond {
 		// 条件式: 文脈の型を両方の枝に渡す (枝ごとに slice にする・`.A` を決める…)
 		r := *c
