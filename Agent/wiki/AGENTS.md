@@ -49,6 +49,7 @@
 
 ### plans/（進行中の計画）
 
+- [plans/bug-hunt.md](plans/bug-hunt.md) — コンパイラのバグ調査の計画（今のオークルの穴、フェーズ、判定の受け入れ条件）
 - [plans/v4-plan.md](plans/v4-plan.md) — fc 4 の言語の変更（版と migrate を含む）
 - [plans/v4-stdlib.md](plans/v4-stdlib.md) — fc 4 の標準ライブラリ（fclib）の作り直し
 - [plans/roadmap.md](plans/roadmap.md) — 未着手・未決の項目（最適化・言語機能・ツール）
