@@ -34,7 +34,7 @@ func (h *Hlc) mixedOf(tmp *ir.Value, op *ir.Op, n *arithNode, lits []ir.Operand)
 	switch op.Code {
 	case ir.OpAdd, ir.OpSub, ir.OpMul:
 		if len(lits) == 2 && n.lits[0] == nil && n.lits[1] == nil {
-			lt, rt := ir.ValType(lits[0]), ir.ValType(lits[1])
+			lt, rt := h.mixedOperandType(n.c, 0, lits[0]), h.mixedOperandType(n.c, 1, lits[1])
 			if isPlainInt(lt) && isPlainInt(rt) && lt.Size == rt.Size && lt.Signed != rt.Signed && tmp.Type.Size == lt.Size {
 				return &mixedArith{origin: n, lt: lt, rt: rt}
 			}
@@ -58,6 +58,19 @@ func (h *Hlc) mixedOf(tmp *ir.Value, op *ir.Op, n *arithNode, lits []ir.Operand)
 }
 
 func isPlainInt(t *types.Type) bool { return t != nil && t.Kind == types.Int && t.Enum == nil }
+
+// mixedOperandType は符号の混ざりを見る、演算 c の i 番目の項の型。式の型 (広げる前の型) で、取れなければ (複合代入など)
+// IR のオペランド v の型。A1 で広げた後の IR の型で見ると、16 ビットの命令にした狭い式の項 (`b >> 2` (b:u8) は u16 の
+// 命令) が同じ大きさの符号違いに見えて、`a - (b >> 2)` (a:i16) を誤ってエラーにしていた (変数の `a - b` は通る。
+// Agent/issues/local-2026-10-18-mixed-sign-false-error.md)。
+func (h *Hlc) mixedOperandType(c *cexpr, i int, v ir.Operand) *types.Type {
+	if c != nil && c.kind == cOp && c.compound == nil && len(c.args) == 2 {
+		if info, ok := h.exprType(c.args[i]); ok && !info.untyped && isPlainInt(info.t) {
+			return info.t
+		}
+	}
+	return ir.ValType(v)
+}
 
 // checkMixedUse は v が符号の混ざった演算の結果なら、解釈する所 what として、fc 4 ではエラー、fc 3 → 4 の書き換えでは起点の
 // 演算の書き換えにする。A1 で広い幅で計算する式 (`var t:u16 = (y + dy) / 16`: 葉を自分の符号で広げるので値は正しい) は、

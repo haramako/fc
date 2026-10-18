@@ -525,15 +525,6 @@ func arMixed(x *arNode, W int) bool {
 				return true
 			}
 		}
-		if !x.a.pure && !x.b.pure && t.w == x.n.w && (x.op == "+" || x.op == "-" || x.op == "*") {
-			// F6 の誤検出 (Agent/issues/local-2026-10-18-mixed-sign-false-error.md): コンパイラは A1 で広げた後の項の型で
-			// 印を付けるので、狭い式の項は節点の幅に広がって (符号はそのまま) 同じ大きさの符号違いに見える
-			// (`a - (b >> 2)` (a:i16, b:u8) がエラー)。変数と `as` の項は狭いまま渡る。直ったら外す
-			wa, wb := arMarkTy(x.a, at, x.n.w), arMarkTy(x.b, bt, x.n.w)
-			if wa.w == wb.w && wa.s != wb.s {
-				return true
-			}
-		}
 		switch x.op {
 		case "/", "%":
 			return arMixed(x.a, t.w) || arMixed(x.b, t.w)
@@ -558,15 +549,6 @@ func arMixed(x *arNode, W int) bool {
 		return arMixed(x.a, x.typ.w) || arMixed(x.b, x.typ.w)
 	}
 	return false
-}
-
-// arMarkTy は符号の混ざりの印を付けるときにコンパイラが見る項の型 (幅 w の節点の項。arMixed の F6 の誤検出の所)。
-// 変数と `as` は自分の型のまま、それ以外の式は w に広げて符号はそのまま。
-func arMarkTy(y *arNode, t arTy, w int) arTy {
-	if y.kind == 0 || y.kind == 2 {
-		return t
-	}
-	return arTy{max(t.w, w), t.s}
 }
 
 // program は 1 つのプログラム (ソースと期待する出力) を作る。

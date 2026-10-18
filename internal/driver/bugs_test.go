@@ -246,3 +246,44 @@ function main():void
 		}
 	}
 }
+
+// TestBugMixedSignNarrowExpr は、符号の混ざり (F6) の印を、A1 で広げた後の IR の型でなく式の型で付けること。
+// 16 ビットの命令にした狭い式の項 (`b >> 2` (b:u8) は u16 の命令) を同じ大きさの符号違いと見て、`a - (b >> 2)` (a:i16) を
+// 誤ってエラーにしていた (変数の `a - b` は通る。Agent/issues/local-2026-10-18-mixed-sign-false-error.md。2026-10-19 に直した)。
+// 本当に同じ大きさで符号が違う項 (`as i16`・同じ 8 ビット) は今までどおりエラー。
+func TestBugMixedSignNarrowExpr(t *testing.T) {
+	t.Parallel()
+	const head = `#fc 4
+use console;
+var a:i16 = 100;
+var b:u8 = 200;
+var c:u8 = 3;
+var gi80:i8 = -128;
+var gi84:i8 = 0;
+var gi87:i8 = 127;
+var gu:u16 = 40000;
+function id_u16(v:u16):u16 @(noinline) { return v; }
+function main():void
+{
+`
+	src := head + `	@printf("{} {} {} {}\n", a - (b >> 2), a - (b + c), gu + (gi84 ^ gi84), (284 * gi87) + (gi84 ^ gi84));
+	@printf("{}\n", (gi80 << 3) * id_u16(293));
+	console.exit(0);
+}
+`
+	for _, level := range []int{0, -1} {
+		r := testBuild(t, buildSpec{Files: map[string]string{"t.fc": src}, Level: level, Run: true})
+		if r.Err != nil {
+			t.Fatalf("level %d: ビルド失敗: %v", level, r.Err)
+		}
+		if want := "50 -103 40000 36068\n27648\n"; r.Stdout != want {
+			t.Errorf("level %d: 出力 %q、want %q", level, r.Stdout, want)
+		}
+	}
+	for _, e := range []string{"gu + (gi84 as i16)", "b + gi84", "(b + c) + gi84"} {
+		r := testBuild(t, buildSpec{Files: map[string]string{"t.fc": head + "\t@printf(\"{}\\n\", " + e + ");\n}\n"}})
+		if r.Err == nil || !strings.Contains(r.Err.Error(), "mixes") {
+			t.Errorf("%s: 符号の混ざりのエラーにならない (err %v)", e, r.Err)
+		}
+	}
+}
