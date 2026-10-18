@@ -1,0 +1,14 @@
+# 常駐の復帰の lda / ldy / ldx を php / plp で挟まない (ddd944b。castle の踏むスイッチ: cmp; ldx; bne で Z が消える。verifyCompareFlags が止める)
+diff --git a/internal/codegen/llc.go b/internal/codegen/llc.go
+index 9990b73..2398691 100644
+--- a/internal/codegen/llc.go
++++ b/internal/codegen/llc.go
+@@ -720,7 +720,7 @@ func (l *funcGen) compileOp(opNo int, op *ir.Op, forced regsKept, verify bool) r
+ 		// 結果がコンディションレジスタ (次の if が見るフラグ) なら、復帰の lda / ldy / ldx で N / Z を壊さないように
+ 		// php / plp で挟む (castle の `on_idx == i` で i@X の復帰 ldx が Z を消して踏むスイッチが効かなかった)。
+ 		// C (符号なしの lt) はロードで変わらないので挟まない
+-		cond := ir.CondRestoreNeedsFlags(op)
++		cond := false && ir.CondRestoreNeedsFlags(op)
+ 		if cond {
+ 			r.push("php")
+ 		}
