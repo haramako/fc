@@ -1,22 +1,12 @@
-# ir: ValIntLiteral はリテラルの一部を読む cast をそのバイトの値にする (d643a74 と、それを広げた 46f335d の逆)
+# ir: ValIntLiteral は cast のオフセットと幅を無視してリテラルの値そのものを返す (d643a74 のバグそのもの。split が 65535 の上位を 255 でなく 65535 にしていた)
 diff --git a/internal/ir/value.go b/internal/ir/value.go
-index 37e84ef..eeb8704 100644
+index c85fa36..eb982cb 100644
 --- a/internal/ir/value.go
 +++ b/internal/ir/value.go
-@@ -347,23 +347,11 @@ func ValLiteral(v Operand) *Value {
- }
- 
- // ValIntLiteral は v が整数リテラルならその値を返す。
--// リテラルの一部を読む cast (オフセットがある、または Width で切り詰めた `cast<u16, 0/1>(65535)`) はそのバイトの値
--// (codegen の byte と同じ。リテラルの値そのものを返していて、split が 65535 の上位を 255 にしていた。fuzz で発覚)。
- func ValIntLiteral(v Operand) (int, bool) {
--	lv := ValLiteral(v)
--	if lv == nil || lv.Kind != KindLiteral || !lv.IsInt {
--		return 0, false
-+	if lv := ValLiteral(v); lv != nil && lv.Kind == KindLiteral && lv.IsInt {
-+		return lv.Int, true
+@@ -341,14 +341,6 @@ func ValIntLiteral(v Operand) (int, bool) {
+ 		return 0, false
  	}
--	n := lv.Int
+ 	n := lv.Int
 -	// 元のリテラルの型より狭い cast (`cast<u8, 0>(65534 as u16)`)、符号の違う型への cast (`cast<u8>(-47)` は 209) も同じ
 -	// (split が上位を 255 にしていた。fuzz で発覚)
 -	if cv, ok := v.(*CastedValue); ok && cv.Type.Kind == types.Int {
@@ -25,8 +15,6 @@ index 37e84ef..eeb8704 100644
 -			n -= 1 << (8 * cv.Width)
 -		}
 -	}
--	return n, true
-+	return 0, false
+ 	return n, true
  }
  
- // ValAssignable は v.assignable?

@@ -101,6 +101,29 @@ func runTests(dir string, args []string, statsPath string) (map[string]int, map[
 		}
 	}
 	feats := map[string]int{}
+	// internal/driver 以外のコンパイラのパッケージも見る。ヘルパーの契約を見る単体テストが bugzoo の見張りに
+	// なっていることがある (-randn などを受け取れないので別の呼び出しで回す)
+	unit := exec.Command("go", "test", "./internal/ir", "./internal/sema", "./internal/opt",
+		"./internal/regalloc", "./internal/codegen", "./internal/syntax", "./internal/types", "./internal/interp",
+		"-count=1", "-json", "-timeout", "30m")
+	unit.Dir = dir
+	out2, _ := unit.CombinedOutput()
+	if true {
+		sc2 := bufio.NewScanner(bytes.NewReader(out2))
+		sc2.Buffer(make([]byte, 1<<20), 1<<26)
+		for sc2.Scan() {
+			var e testEvent
+			if json.Unmarshal(sc2.Bytes(), &e) != nil || e.Action != "fail" || e.Test == "" {
+				continue
+			}
+			top, _, sub := strings.Cut(e.Test, "/")
+			if sub {
+				fails[top]++
+			} else if fails[top] == 0 {
+				fails[top] = 1
+			}
+		}
+	}
 	if b, err := os.ReadFile(statsPath); err == nil {
 		for _, line := range strings.Split(string(b), "\n") {
 			var s stat
