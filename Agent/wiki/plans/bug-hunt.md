@@ -144,6 +144,14 @@ fc 4 の migrate（ROM バイト一致が要求される）、interface / soa / 
 受け入れ条件の「bugzoo の `untyped-cast` / `fold-typed` / `valint-width` / `cmp-fold-mixed` を newly 見つける」は
 これから測る（`fuzzmeasure zoo -bugs untyped-cast,fold-typed,valint-width,cmp-fold-mixed`）。
 
+**測った結果（2026-10-18）**:`fold-typed` は TestRandomArithV4 も見つける（他に TestRandomConstFoldV4 139 件と単体テスト）。
+`valint-width` は **@min / @max と 2 バイトの値の 8〜15 のシフト（上位バイトの抽出）を生むようにしたら newly 見つかった**
+（それまでは `TestConstFoldCases` の 1 件だけ）。`untyped-cast` と `cmp-fold-mixed` は今までどおり他の生成器が見つける。
+
+**この生成器が見つけたバグその 2**: `@min` / `@max` / `@clamp` が定数式で畳めず、`const D = @min(3, 5);` が
+「const D must be constant」、`var arr:[@min(4, 8)]u8;` が「array size must be constant」になっていた（fc 3 から同じ。
+純粋マクロを `constEval` が展開していなかった）。回帰テスト `TestBugConstMinMax`、bugzoo は `macro-const-minmax`。
+
 
 ## 5. やらないこと
 

@@ -22,6 +22,7 @@ fc 4 の言語の仕様の正は `docs/reference/language.md`（例は `internal
   `console.init()` を書くなら `use console;`
 - asm から見える名前は `_モジュール名_名前`（`score.best` は `_score_best`）。固定するなら `@(symbol: "名前")`
 - 添字は `u16` も書ける（256 要素を超える配列）
+- `@min` / `@max` / `@clamp` は定数式でも畳む（2026-10-18 から。それ以前は `const D = @min(3, 5);` が「must be constant」で通らなかった）。型は両辺の互換型で、型のない定数は**比較と同じ規則**（相手の型に入らなければエラー。算術のように切り詰めない）。textmap の変換器は定数式でも展開しない（`@format` が書式を変換器から探すため）
 - enum の基になる型は省くと `u8`。型の分かる所で `.NAME` と書ける。`@len(Enum)` はメンバーの数
 
 ## 整数（v4 の規則。`plans/v4-plan.md` の「整数の規則」で決めたもの）

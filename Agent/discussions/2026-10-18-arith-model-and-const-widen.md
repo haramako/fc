@@ -57,3 +57,24 @@ bug hunt（`../wiki/plans/bug-hunt.md`）の Phase 2 の一番目の生成器と
 **現在の生成器が検出できないパッチ**（全項目 0）: `enum-short-twice`、`fwdmem-disp-after-replace`、
 `interp-array-eq`、`memshift-narrow`、`migrate-conv-order`（+ 終了後に追記）。
 それぞれを捕まえる機能を生むのが Phase 1 の作業。
+
+## その 2: @min / @max / @clamp が定数式で畳めなかった
+
+生成器に `@min` / `@max` を入れたら、型つき定数の形のほうが `const c0 must be constant` で通らない。最小にすると
+`const D = @min(3, 5);`（fc 3 でも同じ）と `var arr:[@min(4, 8)]u8;`（「array size must be constant」）。
+
+`@min` は「展開が IR を出さない純粋マクロ」で、`constEval` はマクロを展開しない（`sema/typing.go` のコメントに
+「constEval はマクロを展開しない」と書いてある通り）ので、畳み込みの `case opMin, opMax, opClamp` に到達していなかった。
+`constEval` の `opCall` で、`constFn` の他に **純粋マクロを展開して畳む**ようにした。textmap の変換器は純粋マクロだが、
+展開すると「変換器」でなくなる（`@format` が書式を textmap のまま探す）ので除外した（当て忘れると
+`TestFormatTextmap` / `TestFormatTextmapPO` が落ちる）。
+
+`TestBugConstMinMax` と bugzoo の `macro-const-minmax` を追加。生成器は `@min` / `@max` を両辺の型が符号違いのものは
+作らない（中の比較で F6 のエラーになる）。
+
+## その 3: 2 バイトの値の 8〜15 のシフトを生むと `valint-width` が見えるようになった
+
+`valint-width`（`ValIntLiteral` がリテラルの一部を読む cast をそのバイトの値にしない）は、これまで
+`TestConstFoldCases` の 1 件しか見つけていなかった。TestRandomArithV4 のシフトの量を「型の幅未満」まで広して
+（2 バイトの値には 8〜15 = 上位バイトの抽出）、`@min` / `@max` を足すと、ランダム生成でも落ちるようになった。
+**教訓: 「1 件の単体テストだけが見ている」規則は、生成器の値の範囲・演算の幅が足りないことが多い**
