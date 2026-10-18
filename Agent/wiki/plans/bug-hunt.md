@@ -153,6 +153,16 @@ fc 4 の migrate（ROM バイト一致が要求される）、interface / soa / 
 純粋マクロを `constEval` が展開していなかった）。回帰テスト `TestBugConstMinMax`、bugzoo は `macro-const-minmax`。
 
 
+### Phase 2 の 2（volatile、2026-10-18 に途中まで）
+
+生成器に機能 `volatile` を追加（グローバルのいくつかを `options(volatile: true)` にし、その読み・書き込み・呼び出しを混ぜた
+ループ `volPress`）。**ただし `Volatile` のフラグを外しても出力が変わらなかった**（手書きの `poke()` を挟むループでも同じ）。
+`Volatile` を見る規則（`opt/licm.go`・`regalloc/resident.go`・`opt/litprop.go` など）は、呼び越しの不変量として読みを
+持ち上げたり、常駐レジスタに置いたりする形でしか効かず、**emu には外部の書き手が無いので値がずれない**。
+volatile が本当に効くのは「割り込み・asm が同じ場所を書く」形で、それには NES ターゲットで NMI を扱うか `@asm` の書き手が要る
+（`pipeline.markVolatile` は asm が参照するシンボルを勝手に volatile にするので、`markVolatile` を外す patch を見張る形にすると
+テストできる）。NMI 側は引き続き Phase 2 の 2 のまま残す。
+
 ## 5. やらないこと
 
 - **未定義動作の自動検出（範囲外添字の trap など）は作らない**。仕様決定が必要なので、見つかったら Issue にして「診断を出す」側に寄せる
