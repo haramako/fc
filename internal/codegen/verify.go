@@ -158,8 +158,9 @@ func opReads(c, name string) bool {
 // TestIfCallResultFlags・TestResidentCondRestore の系統)。直線の範囲だけ見て、ラベル・jsr / jmp / rts / rti / brk / plp・
 // 知らない命令 (マクロ) で止める (読まれるとみなす)。
 //
-// フラグが 1 つも読まれずに全部上書きされる比較 (使われない比較) はエラーにしない: 比較の結果を使う命令が後の段で畳まれて
-// 比較だけが残る最適化の取りこぼしで、出力は正しい (fuzz の 4000 本で 37 本。Agent/issues/local-2026-10-18-dead-compare.md)。
+// フラグが 1 つも読まれずに全部上書きされる比較 (使われない比較) もエラーにする: 比較の結果を使う命令が畳まれて比較だけが
+// 残る最適化の取りこぼしで、出力は正しいが無駄 (2026-10-18 は fuzz の 4000 本で 37 本あり、ssa の `x & 0` の畳み込みと
+// jumps の dropDeadTemps で 0 本にしてからエラーにした。Agent/issues/local-2026-10-18-dead-compare.md)。
 func verifyCompareFlags(fn string, lines []string) {
 	for i, line := range lines {
 		a := parseAsmLine(line)
@@ -199,7 +200,8 @@ func verifyCompareFlags(fn string, lines []string) {
 			}
 			killed |= live & writes
 			if live &^= writes; live == 0 {
-				break // 使われない比較 (エラーにしない)
+				panic(&diag.Error{Msg: fmt.Sprintf("internal: flag verify: the flags of `%s` are all overwritten before any use (by `%s`) in %s",
+					strings.TrimSpace(a.Text), strings.TrimSpace(b.Text), fn)})
 			}
 		}
 	}

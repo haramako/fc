@@ -73,7 +73,8 @@ func TestAsmLineKinds(t *testing.T) {
 }
 
 // TestVerifyCompareFlags: 比較のフラグがまだ読まれないうちに上書きされ、比較の結果を入力にする IR の命令の分岐がそれを読む形
-// (`cmp; ldx; bne`) はコンパイルエラー、読まれる形・使われない比較・上書きした命令の結果を読む分岐・途中で止める形は通す。
+// (`cmp; ldx; bne`) と、フラグが 1 つも読まれない比較はコンパイルエラー、読まれる形・上書きした命令の結果を読む分岐・途中で
+// 止める形は通す。
 func TestVerifyCompareFlags(t *testing.T) {
 	const eq = "; 0001: (:eq {l? $c #\"ubool8\"} {g on #\"u8\"} {l? i #\"u8\"})\n"
 	const ifc = "; 0002: (:if {l? $c #\"ubool8\"} \"L\")\n"
@@ -81,13 +82,13 @@ func TestVerifyCompareFlags(t *testing.T) {
 		"復帰の ldx が Z を消す (踏むスイッチ)": eq + "\tcmp _on\n\tldx _i\n" + ifc + "\tbne L",
 		"cpx の後の ldx":       eq + "\tcpx #3\n\tldx #0\n" + ifc + "\tbne L\n\tsec",
 		"lda の後の bmi":       eq + "\tcmp #1\n\tlda _x\n" + ifc + "\tbmi L",
+		"使われない比較":           eq + "\tcmp #1\n\tlda _x\n\tclc\n" + ifc + "\tbne L",
 		"bit の後の clv と bvs": eq + "\tbit _x\n\tclv\n" + ifc + "\tbvs L",
 	}
 	ok := map[string]string{
 		"分岐が読む":               eq + "\tcmp #1\n" + ifc + "\tbeq L\n\tlda #0",
 		"lda の後の bcc (C は残る)": eq + "\tcmp #1\n\tlda _x\n" + ifc + "\tbcc L\n\tclc",
 		"adc が C を読む":         eq + "\tcmp #1\n\tlda _x\n\tadc #0",
-		"使われない比較":             eq + "\tcmp #1\n\tlda _x\n\tclc\n" + ifc + "\tbne L",
 		"上書きした dec の結果を読む分岐":  eq + "\tcmp #1\n\tlda _x\n; 0003: (:sub {l? l1 #\"u8\"} {l? l1 #\"u8\"} {lit nil 1 #\"u8\"})\n\tdec _l1\n; 0004: (:if_true {l? l1 #\"u8\"} \"L\")\n\tbeq L",
 		"php / plp で挟む":       eq + "\tcmp _on\n\tphp\n\tldx _i\n\tplp\n" + ifc + "\tbne L",
 		"ラベルで止める":             eq + "\tcmp #1\nL:\n\tlda _x\n" + ifc + "\tbne L",

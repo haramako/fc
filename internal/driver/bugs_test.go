@@ -287,3 +287,41 @@ function main():void
 		}
 	}
 }
+
+// TestBugAndZeroDeadCompare は、片方だけで結果が決まる `x & 0` を畳み、使われなくなった比較を残さないこと。関数ポインタの表を
+// `(a <= b) & 0` で引くと、比較・真偽値・`and #0`・ジャンプテーブルがそのまま出ていた (fuzz の -O 2 で 4000 本に 37 本の
+// 使われない cmp。Agent/issues/local-2026-10-18-dead-compare.md。2026-10-19 に直した)。テストでは codegen のフラグの検査が
+// 使われない比較をエラーにする。
+func TestBugAndZeroDeadCompare(t *testing.T) {
+	t.Parallel()
+	out, asm := buildShape(t, `#fc 4
+use console;
+var a0:[16]u8;
+var n:u8;
+function f():void @(noinline) { n = n + 1; }
+function g():void @(noinline) { n = n + 2; }
+const fp0:[2]fn():void = [f, g];
+function t(l1:u8):void @(noinline)
+{
+	fp0[((a0[7] <= l1) as u8) & 0]();
+}
+function main():void
+{
+	a0[7] = 3;
+	t(5);
+	t(1);
+	@printf("{}\n", n);
+	console.exit(0);
+}
+`)
+	if out != "2\n" {
+		t.Errorf("出力 %q、want %q", out, "2\n")
+	}
+	body := asm[strings.Index(asm, ".proc _t_t\n"):]
+	body = body[:strings.Index(body, ".endproc")]
+	for _, bad := range []string{"\tcmp ", "\tand #0", "\tpha"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("t に %q が残っている:\n%s", strings.TrimSpace(bad), body)
+		}
+	}
+}

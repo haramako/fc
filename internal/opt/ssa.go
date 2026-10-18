@@ -480,6 +480,21 @@ func (s *ssaForm) evalConst(val *ssaVal) (int, bool) {
 	}
 	size := val.v.Type.Size
 	t0 := ir.ValType(op.Src[0])
+	if len(op.Src) == 2 && (op.Code == ir.OpAnd || op.Code == ir.OpMul || op.Code == ir.OpOr) {
+		// 片方だけで結果が決まる: `x & 0` と `x * 0` は 0、`x | ~0` は ~0 (もう片方が定数でなくてよい。以前は畳まず、
+		// `fp0[(a <= b) & 0]()` が比較・真偽値・and #0・ジャンプテーブルのまま出ていた。Agent/issues/local-2026-10-18-dead-compare.md)
+		all := bitsOf(-1, size)
+		for k := range 2 {
+			if x, ok := s.operandBits(val.def, k); ok {
+				switch x = bitsOf(x, size); {
+				case x == 0 && op.Code != ir.OpOr:
+					return 0, true
+				case x == all && op.Code == ir.OpOr:
+					return all, true
+				}
+			}
+		}
+	}
 	a, ok := s.operandBits(val.def, 0)
 	if !ok {
 		return 0, false

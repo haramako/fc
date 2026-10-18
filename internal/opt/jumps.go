@@ -16,8 +16,9 @@ import (
 //  6. ループの回転: 先頭で条件を見て末尾で先頭に戻る形を、末尾で条件を見て本体の先頭へ戻る形にする
 //     (1 周あたり jmp 1 つ = 3 サイクル減り、分岐が短くなる)
 //  7. 最後に、飛び先が値の無い return だけの jump をその場の return にする
+//  8. 分岐を消して使われなくなった条件 (比較など) の一時の値の命令を消す (dropDeadTemps)
 //
-// 変化がなくなるまで繰り返す。
+// 1〜6 は変化がなくなるまで繰り返す。
 func simplifyJumps(lmd *ir.Lambda) {
 	untilFixed(lmd, "jumps", func() bool {
 		changed := threadJumps(lmd)
@@ -28,6 +29,7 @@ func simplifyJumps(lmd *ir.Lambda) {
 	if jumpsToReturn(lmd) {
 		removeUnreachable(lmd)
 	}
+	dropDeadTemps(lmd)
 }
 
 // jumpsToReturn は 7: 残った jump の飛び先が値の無い return だけのブロックなら、その場で return する (関数の終わりへ抜ける
@@ -183,6 +185,51 @@ func threadJumps(lmd *ir.Lambda) bool {
 		}
 	}
 	return changed
+}
+
+// dropDeadTemps は、結果がもう誰にも使われない一時の値の純粋な命令を消す (消えた命令の入力も、使われなくなれば続けて消す)。
+// 分岐を消すと、その条件を作る比較 (と真偽値にする not など) が使われずに残る。使われない値にも定義の所だけの生存範囲が
+// あって割付の DeleteUnuse は消さないので、結果を使わない cmp が出ていた (fuzz の -O 2 で 4000 本に 37 本。
+// Agent/issues/local-2026-10-18-dead-compare.md)。@log の注釈が読む値は残す (注釈は弱い参照で、消すと「?」になる)。
+func dropDeadTemps(lmd *ir.Lambda) bool {
+	logged := map[*ir.Value]bool{}
+	for _, op := range lmd.Ops {
+		if op == nil {
+			continue
+		}
+		for _, p := range op.Logs {
+			for _, a := range p.Args {
+				for _, o := range append([]ir.Operand{a.Val}, a.Bytes...) {
+					if v := ir.UnderlyingValue(o); v != nil {
+						logged[v] = true
+					}
+				}
+			}
+		}
+	}
+	changed := false
+	for {
+		ud := ir.BuildUseDef(lmd)
+		dropped := false
+		for i, op := range lmd.Ops {
+			if op == nil || !op.Code.IsPure() {
+				continue
+			}
+			v, ok := op.Dst.(*ir.Value)
+			if !ok || v.Kind != ir.KindLocal || v.LocalType != ir.LTTemp || logged[v] || ud.NumUses(v) != 0 {
+				continue
+			}
+			if next := ir.NextOpOf(lmd.Ops, i); next != nil && next.Code.UsesCarry() {
+				continue // 値は使われなくても、残した C を次の rol / ror / if_carry が読む (2 バイトのシフトの下位: TestSplitShiftCarry)
+			}
+			ir.DropOp(lmd.Ops, i)
+			dropped = true
+		}
+		if !dropped {
+			return changed
+		}
+		changed = true
+	}
 }
 
 // returnAt はラベル label へ飛んで入ったブロックが return だけ (ラベルを除く) なら、その return と、飛んで入った後に通る注釈
