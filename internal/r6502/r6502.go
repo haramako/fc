@@ -114,6 +114,18 @@ const (
 	INVALID
 )
 
+var instrNames = [...]string{
+	ADC: "adc", AND: "and", ASL: "asl", BIT: "bit", BPL: "bpl", BMI: "bmi", BVC: "bvc", BVS: "bvs", BCC: "bcc", BCS: "bcs",
+	BNE: "bne", BEQ: "beq", BRK: "brk", CMP: "cmp", CPX: "cpx", CPY: "cpy", DEC: "dec", EOR: "eor", CLC: "clc", SEC: "sec",
+	CLI: "cli", SEI: "sei", CLV: "clv", CLD: "cld", SED: "sed", INC: "inc", JMP: "jmp", JSR: "jsr", LDA: "lda", LDX: "ldx",
+	LDY: "ldy", LSR: "lsr", NOP: "nop", ORA: "ora", TAX: "tax", TXA: "txa", DEX: "dex", INX: "inx", TAY: "tay", TYA: "tya",
+	DEY: "dey", INY: "iny", ROL: "rol", ROR: "ror", RTI: "rti", RTS: "rts", SBC: "sbc", STA: "sta", TXS: "txs", TSX: "tsx",
+	PHA: "pha", PLA: "pla", PHP: "php", PLP: "plp", STX: "stx", STY: "sty", INVALID: "invalid",
+}
+
+// String は小文字のニーモニック (m6502 の表の鍵と同じ)。
+func (i Instr) String() string { return instrNames[i] }
+
 type instrMode struct {
 	instr Instr
 	mode  Mode
@@ -256,12 +268,15 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 	case Abs:
 		return (thdWord << 8) + secWord
 	case Absx:
-		return (thdWord << 8) + secWord + c.X
+		return 0xffff & ((thdWord << 8) + secWord + c.X)
 	case Absy:
-		return (thdWord << 8) + secWord + c.Y
+		return 0xffff & ((thdWord << 8) + secWord + c.Y)
 	case Ind:
+		// 実機の不具合: 番地の下位が $FF だと上位は同じページの $xx00 から読む (`jmp ($03FF)` は $0300 と $03FF)。
+		// fc のランタイムはこれを避けて書いている (fclib/nes/frame.asm)。エミュレータが正しい番地へ飛ぶと、置き場所が
+		// $xxFF になったときの誤りが隠れる
 		lb := c.Mem.Get((thdWord << 8) + secWord)
-		hb := c.Mem.Get((thdWord << 8) + secWord + 1)
+		hb := c.Mem.Get((thdWord << 8) + (0xff & (secWord + 1)))
 		return (hb << 8) + lb
 	case Indx:
 		lb := c.Mem.Get(0xff & (c.X + secWord))
@@ -271,7 +286,7 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
 		lb := c.Mem.Get(0xff & secWord)
 		hb := c.Mem.Get(0xff & (secWord + 1))
 		addr := (hb << 8) + lb
-		return addr + c.Y
+		return 0xffff & (addr + c.Y)
 	}
 	return 0
 }
@@ -391,10 +406,8 @@ func (c *Cpu) IRQ() {
 }
 
 func (c *Cpu) interrupt(vector int) {
-	c.Mem.Set(0x0100+(0xff&c.S), (c.Pc>>8)&0xff)
-	c.S--
-	c.Mem.Set(0x0100+(0xff&c.S), c.Pc&0xff)
-	c.S--
+	c.push((c.Pc >> 8) & 0xff)
+	c.push(c.Pc & 0xff)
 	val := c.N             // bit 7
 	val = (val << 1) + c.V // bit 6
 	val = (val << 1) + 1   // bit 5
@@ -403,11 +416,23 @@ func (c *Cpu) interrupt(vector int) {
 	val = (val << 1) + c.I // bit 2
 	val = (val << 1) + c.Z // bit 1
 	val = (val << 1) + c.C // bit 0
-	c.Mem.Set(0x0100+(0xff&c.S), val)
-	c.S--
+	c.push(val)
 	c.I = 1
 	c.Cycles += 7
 	c.Pc = c.Mem.Get(vector) + (c.Mem.Get(vector+1) << 8)
+}
+
+// push はスタックに積む。S はページ 1 の中で回る ($00 の次は $FF。以前は S が負や 256 になり、tsx がその値を X に
+// 入れ、jsr / rts / brk / rti はページ 1 の外を読み書きしていた)。
+func (c *Cpu) push(v int) {
+	c.Mem.Set(0x0100|c.S, v)
+	c.S = 0xff & (c.S - 1)
+}
+
+// pull はスタックから降ろす。
+func (c *Cpu) pull() int {
+	c.S = 0xff & (c.S + 1)
+	return c.Mem.Get(0x0100 | c.S)
 }
 
 func b2i(b bool) int {
@@ -490,10 +515,12 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 			c.N = c.A >> 7
 			c.C = b2i(r > 0xff)
 		} else {
+			// N / Z は書いた 8 ビットから ($80 は 0 になって Z。折り返す前の値で見ていて Z=0、$C0 では N=3 で
+			// bmi も bpl も分岐しなかった。r6502_test.go の TestShiftsExhaustive)
 			r := m.Get(arg) << 1
 			m.Set(arg, r&0xff)
-			c.Z = b2i(r == 0)
-			c.N = r >> 7
+			c.Z = b2i(r&0xff == 0)
+			c.N = (r & 0x80) >> 7
 			c.C = b2i(r > 0xff)
 		}
 		c.incPcByMode(mode)
@@ -751,36 +778,29 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		c.incPcByMode(mode)
 
 	case PHA:
-		addr := 0x0100 + (0xff & c.S)
-		m.Set(addr, c.A)
-		c.S -= 1
+		c.push(c.A)
 		c.incPcByMode(mode)
 
 	case PLA:
-		addr := 0x0100 + (0xff & (c.S + 1))
-		c.A = m.Get(addr)
-		c.S += 1
+		c.A = c.pull()
 		c.Z = b2i(c.A == 0)
 		c.N = (0x80 & c.A) >> 7
 		c.incPcByMode(mode)
 
 	case PHP:
-		addr := 0x0100 + (0xff & c.S)
 		val := c.N             // bit 7
 		val = (val << 1) + c.V // bit 6
 		val = (val << 1) + 1   // bit 5
-		val = (val << 1) + c.B // bit 4
+		val = (val << 1) + 1   // bit 4 (B。php と brk は 1 を積む)
 		val = (val << 1) + c.D // bit 3
 		val = (val << 1) + c.I // bit 2
 		val = (val << 1) + c.Z // bit 1
 		val = (val << 1) + c.C // bit 0
-		m.Set(addr, val)
-		c.S -= 1
+		c.push(val)
 		c.incPcByMode(mode)
 
 	case PLP:
-		addr := 0x0100 + (0xff & (c.S + 1))
-		val := m.Get(addr)
+		val := c.pull()
 		c.C = 0x1 & val
 		c.Z = 0x1 & (val >> 1)
 		c.I = 0x1 & (val >> 2)
@@ -789,7 +809,6 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		// bit 5
 		c.V = 0x1 & (val >> 6)
 		c.N = 0x1 & (val >> 7)
-		c.S += 1
 		c.incPcByMode(mode)
 
 	case STA:
@@ -832,10 +851,10 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		c.incPcByMode(mode)
 
 	case BRK:
-		m.Set(0x0100+c.S, c.Pc>>8)
-		c.S -= 1
-		m.Set(0x0100+c.S, 0xff&c.Pc)
-		c.S -= 1
+		// brk の番地 + 2 を積み (brk の次の 1 バイトは飛ばされる)、I を立てる
+		ret := 0xffff & (c.Pc + 2)
+		c.push(ret >> 8)
+		c.push(0xff & ret)
 		val := c.N             // bit 7
 		val = (val << 1) + c.V // bit 6
 		val = (val << 1) + 1   // bit 5
@@ -844,15 +863,14 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		val = (val << 1) + c.I // bit 2
 		val = (val << 1) + c.Z // bit 1
 		val = (val << 1) + c.C // bit 0
-		m.Set(0x0100+c.S, val)
-		c.S -= 1
+		c.push(val)
+		c.I = 1
 		lo := m.Get(0xfffe)
 		hi := m.Get(0xffff)
 		c.Pc = (hi << 8) + lo
 
 	case RTI:
-		flags := m.Get(0x0100 + c.S + 1)
-		c.S += 1
+		flags := c.pull()
 		c.C = 0x1 & flags
 		c.Z = 0x1 & (flags >> 1)
 		c.I = 0x1 & (flags >> 2)
@@ -861,24 +879,18 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
 		// bit 5
 		c.V = 0x1 & (flags >> 6)
 		c.N = 0x1 & (flags >> 7)
-		lo := m.Get(0x0100 + c.S + 1)
-		c.S += 1
-		hi := m.Get(0x0100 + c.S + 1)
-		c.S += 1
+		lo := c.pull()
+		hi := c.pull()
 		c.Pc = 0xffff & ((hi << 8) + lo)
 
 	case JSR:
-		m.Set(0x0100+c.S, (c.Pc+2)>>8)
-		c.S -= 1
-		m.Set(0x0100+c.S, 0xff&(c.Pc+2))
-		c.S -= 1
+		c.push(0xff & ((c.Pc + 2) >> 8))
+		c.push(0xff & (c.Pc + 2))
 		c.Pc = arg
 
 	case RTS:
-		lo := m.Get(0x0100 + c.S + 1)
-		c.S += 1
-		hi := m.Get(0x0100 + c.S + 1)
-		c.S += 1
+		lo := c.pull()
+		hi := c.pull()
 		c.Pc = 0xffff & ((hi << 8) + lo + 1)
 
 	default:
