@@ -5,6 +5,11 @@ Windows でパスを検査するときは `filepath.Join` / `filepath.FromSlash`
 2026-10-03 に `TestMacroServers`・`TestStarlarkMacros`・`TestSizeHTML` の失敗を Windows で再現して確認した。
 実行ログと再現コマンドは [Actions の失敗調査](../discussions/2026-10-03-actions-failures.md)。
 
+macOS（Apple Silicon）でも `brew install go cc65` だけでビルドと `go test ./...` が通る（2026-10-18 に Go 1.27.2 darwin/arm64・Homebrew の cc65 2.19（`ca65 --version` は V2.18）で確認。全パッケージ ok）。
+Mac で飛ぶテスト: MesenCE を使うもの（`TestMesenLog` / `TestMesenPlayCastle`。`FC_MESEN` を設定しなければ Windows の既定パスを探して Skip）、
+QuickNES の画面比較（`TestExampleWave` など。`internal/quicknes` は Windows の DLL 読み込みしか無く、他の OS では常に Skip）、
+環境変数で動かす調査用のもの（`TestProbe*`・`TestSampleScreens`）。fuzz の種ごとの「ROM に入らない」Skip は OS に関係なく出る。
+
 `go test ./...` の中身、差分 fuzz / Go native fuzz / バンク切替 fuzz の回し方、失敗した種と実プロジェクトの退行の調べ方、ベンチ。fuzz で見つかったバグの時系列は [../discussions/2026-09-19-fuzz-findings-log.md](../discussions/2026-09-19-fuzz-findings-log.md)。
 
 ```bash
