@@ -140,6 +140,10 @@ bugzoo に `r6502-asl-mem-flags`・`r6502-jmp-ind-page`・`r6502-stack-wrap` を
   `-randseed 20261018000` で）では誤ったコードは 0 本。途中で、結果を使わない比較が残るだけの取りこぼしを 37 本
   （`Agent/issues/local-2026-10-18-dead-compare.md`）、asm の形だけで判定した版の誤検出を 5 本見つけ、IR のコメントで
   分岐の入力を見る形に直してから 0 本
+- 2026-10-19: 見つかった 2 つを直した。F6 の誤検出（`Agent/issues/local-2026-10-18-mixed-sign-false-error.md`。
+  `known_bugs_test.go` が「直った」と知らせ、生成器の回避を外した）と、使われない比較の取りこぼし（`x & 0` を ssa で畳み、
+  jumps の `dropDeadTemps` で分岐を消した後の比較を消す。`Agent/issues/local-2026-10-18-dead-compare.md`）。
+  使われない比較もフラグの検査のエラーにした
 
 ### Phase 1（2026-10-18、差分 fuzz を増やした分まわした）
 

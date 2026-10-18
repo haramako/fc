@@ -14,5 +14,5 @@ multica（エージェント向け Issue トラッキングシステム）や Gi
 ## Index
 
 - [`local-2026-10-18-minmax-a1-width.md`](local-2026-10-18-minmax-a1-width.md) — `@min` / `@max` / `@clamp` が A1 の幅を受け取らず 8 ビットで折り返す — **修正済み**
-- [`local-2026-10-18-dead-compare.md`](local-2026-10-18-dead-compare.md) — 結果を使わない比較が残る・`x & 0` と定数の switch を畳まない（最適化の取りこぼし。出力は正しい） — **未修正**
+- [`local-2026-10-18-dead-compare.md`](local-2026-10-18-dead-compare.md) — 結果を使わない比較が残る・`x & 0` と定数の switch を畳まない（最適化の取りこぼし。出力は正しい） — **修正済み**
 - [`local-2026-10-18-mixed-sign-false-error.md`](local-2026-10-18-mixed-sign-false-error.md) — F6 の符号の混ざりのエラーが 8 ビットの式に対して誤検出する（`a - (b >> 2)` が通らない） — **修正済み**

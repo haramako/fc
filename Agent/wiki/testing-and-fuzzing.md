@@ -32,8 +32,9 @@ go test ./...                                    # 全部 (golden + examples + N
 - **asm のフラグの検査**（`FC_VERIFY_REGS`。テストと fuzz で有効。`internal/codegen/verify.go` の `verifyCompareFlags`、2026-10-18）:
   比較のフラグがまだ読まれないうちに上書きされ、比較の結果を入力にする IR の命令の分岐がそれを読む形（`cmp; ldx; bne`）を
   コンパイルエラーにする。分岐がどの値を見るかは codegen が命令ごとに出す IR のコメントで見る（asm の形だけだと、
-  使われない比較の後の `dec; beq` を誤検出した）。結果を使わない比較が残るだけの形は `-O 2` の fuzz 4000 本に 37 本あり、
-  出力は正しいのでエラーにしない（`../issues/local-2026-10-18-dead-compare.md`）。bugzoo の `cond-restore-flags` で効くことを見る
+  使われない比較の後の `dec; beq` を誤検出した）。フラグが 1 つも読まれない比較（使われない比較）もエラー（2026-10-19。
+  `-O 2` の fuzz 4000 本に 37 本あった取りこぼしを直してから: `../issues/local-2026-10-18-dead-compare.md`）。
+  bugzoo の `cond-restore-flags` と `jumps-dead-temps` で効くことを見る
 
 - **カバレッジ**（2026-09-28）: `go test ./... -coverpkg=./... -coverprofile=cover.out` で、どのテストが通したかを問わず
   全パッケージの通過を取る（パッケージごとの表示の % は「そのテストがモジュール全体の何 % を通ったか」なので、block ごとに
