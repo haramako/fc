@@ -1,0 +1,58 @@
+# 定数の初期値・引数・配列や struct の要素を代入先の幅で畳み込まない (f61e7b7。const C:u16 = (128 as u8) + (200 as u8) が 72 になり、var と違う)
+commit f61e7b79405ec8b425134d4d94b1f4dc9f45b9e2
+Author: HARADA Makoto <haramako@gmail.com>
+Date:   Sun Oct 18 06:43:42 2026 +0000
+
+    sema: 定数の初期値・引数・配列や struct の要素を代入先の幅で畳み込み直す
+    
+    実行時の式は代入先まで含めて広い幅で計算する (A1) が、定数は畳み込んだ時点で幅が決まるため、const 宣言・グローバルの変数の
+    初期値・配列と struct リテラルの要素で広い型と出会っても広げ直しておらず、var と const で値が変わっていた
+    (const C:u16 = (128 as u8) + (200 as u8); は 328 でなく 72)。withExpected の先で widenConstAt を呼び、畳み込み直す。
+    TestRandomArithV4 (fc 4 の整数の規則の Go モデルとの差分) の種 1 が見つけた。
+
+diff --git b/internal/sema/struct.go a/internal/sema/struct.go
+index 8f57956..bee341d 100644
+--- b/internal/sema/struct.go
++++ a/internal/sema/struct.go
+@@ -49,9 +49,6 @@ func (h *Hlc) needsExpected(c *cexpr) bool {
+ // farfn values from function symbols. A runtime near pointer cannot supply a bank.
+ // 元の式は変更しない (constEval のメモは cexpr のポインタで引くため、新しいノードを作る)。t が nil ならそのまま。
+ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
+-	if r := h.widenConstAt(c, t); r != nil {
+-		return r
+-	}
+ 	if t != nil && c.kind == cOp && c.op == opCond {
+ 		// 条件式: 文脈の型を両方の枝に渡す (枝ごとに slice にする・`.A` を決める…)
+ 		r := *c
+diff --git b/internal/sema/widen.go a/internal/sema/widen.go
+index 2ef241d..4c4cb7a 100644
+--- b/internal/sema/widen.go
++++ a/internal/sema/widen.go
+@@ -93,27 +93,6 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
+ // 広がらなければ畳み込んだ定数のままで IR は fc 3 と同じ。fc 3 のモジュールでは `(元の式) as T` を migrate に報告する。
+ // `as` は外からの広がりを止めるだけで、中の式にも「式の中の一番広い型」の規則は効く (印は `as` の中でも付ける)。
+ 
+-// widenConstAt は、定数の式 c を「代入先の型 typ の幅で畳み込んだ値」に置き換える (fc 4 の A1。初期化・引数・配列や struct の
+-// 要素など、代入先の型が決まる所から呼ぶ)。実行時の式は上から幅を決めて命令を出す (rvalWide / widenArith) が、定数は
+-// 畳み込んだ時点で幅が決まってしまうので、広い型と出会うここで畳み込み直す。
+-// `const C:u16 = (128 as u8) + (200 as u8);` は u8 で折り返した 72 ではなく 328 でなければならない (var と const で
+-// 値が変わっていた。bug hunt 2026-10-18)。
+-// 算術の演算でない式 (`as`・比較・名前・組み込み。区切り)、型のない定数だけの式 (任意精度で計算し、代入先との適合を見る)、
+-// すでに十分広い式は nil (そのまま)。
+-func (h *Hlc) widenConstAt(c *cexpr, typ *types.Type) *cexpr {
+-	if !h.v4() || typ == nil || typ.Kind != types.Int || typ.Enum != nil || !isArithNode(c) {
+-		return nil
+-	}
+-	narrow := h.constEval(c)
+-	if !narrow.isLiteralInt() || narrow.val.Untyped || narrow.val.Type == nil || narrow.val.Type.Kind != types.Int {
+-		return nil
+-	}
+-	if narrow.val.Type.Size >= typ.Size {
+-		return nil
+-	}
+-	return h.foldAtWidth(c, typ.Size)
+-}
+-
+ // markTaint は折り返した畳み込みの結果 lit に元の式 c を記録する。
+ func (h *Hlc) markTaint(lit *ir.Value, c *cexpr) {
+ 	if h.taint == nil {
