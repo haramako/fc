@@ -48,9 +48,14 @@ func cyc(pairs ...int) [numModes]uint8 {
 }
 
 var (
-	load   = cyc(int(Imm), 2, int(ZP), 3, int(ZPX), 4, int(ZPY), 4, int(Abs), 4, int(AbsX), 4, int(AbsY), 4, int(IndX), 6, int(IndY), 5)
-	alu    = load
-	store  = cyc(int(ZP), 3, int(ZPX), 4, int(ZPY), 4, int(Abs), 4, int(AbsX), 5, int(AbsY), 5, int(IndX), 6, int(IndY), 6)
+	// モードは実機に在るものだけ (以前は lda / adc の zp,y、ldx の abs,x、stx の abs,x などの無いモードも載っていた。
+	// m6502_test.go が r6502 と突き合わせる)
+	alu    = cyc(int(Imm), 2, int(ZP), 3, int(ZPX), 4, int(Abs), 4, int(AbsX), 4, int(AbsY), 4, int(IndX), 6, int(IndY), 5)
+	ldx    = cyc(int(Imm), 2, int(ZP), 3, int(ZPY), 4, int(Abs), 4, int(AbsY), 4)
+	ldy    = cyc(int(Imm), 2, int(ZP), 3, int(ZPX), 4, int(Abs), 4, int(AbsX), 4)
+	sta    = cyc(int(ZP), 3, int(ZPX), 4, int(Abs), 4, int(AbsX), 5, int(AbsY), 5, int(IndX), 6, int(IndY), 6)
+	stx    = cyc(int(ZP), 3, int(ZPY), 4, int(Abs), 4)
+	sty    = cyc(int(ZP), 3, int(ZPX), 4, int(Abs), 4)
 	cmpXY  = cyc(int(Imm), 2, int(ZP), 3, int(Abs), 4)
 	rmw    = cyc(int(Imp), 2, int(ZP), 5, int(ZPX), 6, int(Abs), 6, int(AbsX), 7) // asl / lsr / rol / ror (Imp = accumulator)
 	incdec = cyc(int(ZP), 5, int(ZPX), 6, int(Abs), 6, int(AbsX), 7)
@@ -60,8 +65,8 @@ var (
 
 // Table はニーモニック (小文字) → 性質。ca65 のマクロ (call など) は載っていない (知らない命令として扱う)。
 var Table = map[string]Info{
-	"lda": {WA: true, NZ: true, cycles: load}, "ldx": {WX: true, NZ: true, cycles: load}, "ldy": {WY: true, NZ: true, cycles: load},
-	"sta": {KeepsNZ: true, cycles: store}, "stx": {KeepsNZ: true, cycles: store}, "sty": {KeepsNZ: true, cycles: store},
+	"lda": {WA: true, NZ: true, cycles: alu}, "ldx": {WX: true, NZ: true, cycles: ldx}, "ldy": {WY: true, NZ: true, cycles: ldy},
+	"sta": {KeepsNZ: true, cycles: sta}, "stx": {KeepsNZ: true, cycles: stx}, "sty": {KeepsNZ: true, cycles: sty},
 	"adc": {WA: true, NZ: true, cycles: alu}, "sbc": {WA: true, NZ: true, cycles: alu}, "and": {WA: true, NZ: true, cycles: alu},
 	"ora": {WA: true, NZ: true, cycles: alu}, "eor": {WA: true, NZ: true, cycles: alu},
 	"cmp": {NZ: true, cycles: alu}, "cpx": {NZ: true, cycles: cmpXY}, "cpy": {NZ: true, cycles: cmpXY},
