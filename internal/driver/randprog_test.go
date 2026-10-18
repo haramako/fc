@@ -774,6 +774,11 @@ func (g *rpGen) stmt(depth int) *rpStmt {
 		k = 0 // 切った機能の文は代入にする
 	}
 	switch k {
+	case 20:
+		if g.want("volatile", 0.35) {
+			return g.volPress(depth) // options(volatile: true) のグローバルに負荷をかけるループ
+		}
+		break // 機能を入れていないときは下の default (代入など) に落とす
 	case 18, 19:
 		// 初期値なしで宣言した変数に、必ず 1 回以上回るループ (本体の先頭) か if / else の両方で代入してから、後ろで読む
 		// (SSA の φ(未定義, v) を v にして -O 2 でループの後の値が壊れていた。2026-09-27 の調査)

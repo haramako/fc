@@ -328,6 +328,11 @@ func (g *arGen) expr(depth int) *arNode {
 		if ea || eb || ta.s != tb.s {
 			return a // 相手の型に入らない定数と、符号の違う両辺は作らない (中の比較がエラー)
 		}
+		if ta.w < 2 || tb.w < 2 {
+			// 引数が 8 ビットの式だと、上の幅 (A1) を @min / @max が引数に流さないバグを踏む (Agent/issues/
+			// local-2026-10-18-minmax-a1-width.md)。バグが直ったら外す。それまでは 16 ビットの引数だけ作る
+			return a
+		}
 		op := "@min"
 		if k == 10 {
 			op = "@max"

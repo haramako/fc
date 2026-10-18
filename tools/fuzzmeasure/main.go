@@ -136,9 +136,16 @@ func zoo(argv []string) {
 	}
 	if *bugs != "" {
 		names = strings.Split(*bugs, ",")
-	} else {
-		names = append([]string{"none"}, names...) // パッチを当てない (誤検出が 0 のはず)
 	}
+	// パッチを当てない行 (none) を必ず最初に回す。none でも落ちるテストは誤検出なので、表で分けて出す
+	// (2026-10-18 に、常に落ちる生成器の列を「その patch を見つけた」と読んでしまった教訓)
+	var rest []string
+	for _, n := range names {
+		if n != "none" {
+			rest = append(rest, n)
+		}
+	}
+	names = append([]string{"none"}, rest...)
 	goRun := *run
 	if *all {
 		goRun = "."
@@ -149,7 +156,9 @@ func zoo(argv []string) {
 	}
 	tests := strings.Split(*run, "|")
 	fmt.Printf("# bugzoo (randn %d, foldn %d, metan %d, mutn %d, seed %d, off %q)\n\n", *randn, *foldn, *metan, *mutn, *seed, *off)
+	fmt.Printf("`N?` は **パッチを当てなくても落ちる** (その列は見つけたことに数えない)。none 行が 0 でない列は、その生成器がそもそも赤い\n\n")
 	fmt.Printf("| バグ | %s | その他 | 時間 | 失敗した種で使っていた機能 (多い順) |\n|---|%s---|---|---|\n", strings.Join(tests, " | "), strings.Repeat("---|", len(tests)))
+	var baseFails map[string]int
 	for _, name := range names {
 		dir, err := os.MkdirTemp("", "fuzzmeasure-")
 		if err != nil {
@@ -169,16 +178,27 @@ func zoo(argv []string) {
 			}
 		}
 		fails, feats, took := runTests(wt, args, filepath.Join(dir, "stats.jsonl"))
+		if name == "none" {
+			baseFails = fails
+		}
 		var cells []string
 		listed := map[string]bool{}
 		for _, t := range tests {
-			cells = append(cells, fmt.Sprint(fails[t]))
+			cell := fmt.Sprint(fails[t])
+			if name != "none" && fails[t] > 0 && baseFails[t] > 0 {
+				cell = fmt.Sprintf("%d?", fails[t]) // パッチ無しでも落ちる (見つけたことにしない)
+			}
+			cells = append(cells, cell)
 			listed[t] = true
 		}
 		var others []string
 		for t := range fails {
 			if !listed[t] {
-				others = append(others, t)
+				if name != "none" && baseFails[t] > 0 {
+					others = append(others, t+"?") // パッチ無しでも落ちる
+				} else {
+					others = append(others, t)
+				}
 			}
 		}
 		sort.Strings(others)
