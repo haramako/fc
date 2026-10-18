@@ -513,7 +513,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 						h.lval(st)
 					}
 				} else if x.expr != nil {
-					r = h.rval(x.expr)
+					r = h.rvalIn(x.expr, hint) // 展開した式も上から来た幅で (A1。マクロは区切りではない)
 				}
 			} else {
 				// 普通の関数コール
@@ -618,15 +618,42 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			// 組み込みの min / max / clamp: 互換型の一時変数に入れて、比較して入れ替える
 			//   min: t = a; if (b < a) t = b     max: t = a; if (a < b) t = b
 			//   clamp: t = x; if (t < lo) t = lo; if (hi < t) t = hi
+			// A1 (fc 4): 区切りではない (`a < b ? a : b` と同じ)。上から来た幅と自分の型の広いほうで引数を計算して比べる
+			// (8 ビットで折り返していた: `var v:i16 = @max(a + a, 0)` が 144。Agent/issues/local-2026-10-18-minmax-a1-width.md)
+			w, nt0 := h.wideWidth(e, hint)
 			vals := make([]ir.Operand, len(e.args))
 			infos := make([]exprInfo, len(e.args))
 			for i, a := range e.args {
-				vals[i] = h.rval(a)
+				vals[i] = h.rvalIn(a, w)
 				infos[i] = h.planInfo(a, vals[i])
 			}
 			typ, adapted := h.planMinMax(e.op, infos) // 型を決める段の計画 (typeplan.go)
+			wide := w > 0 && w > nt0.Size
+			for i, a := range e.args {
+				wide = wide || w > 0 && h.widened(a, vals[i])
+			}
+			if wide {
+				// 符号は揃える型 (計画) の符号 (広げない形と同じ比べ方。項は広げる前の型の符号のまま広げる: widenOperand)
+				typ = h.prog.Types.IntType(w, typ.Signed)
+			}
 			for i := range vals {
-				vals[i] = h.cast(adapted[i].apply(vals[i]), typ)
+				if wide {
+					v := h.widenOperand(h.widenArith(vals[i], typ), typ)
+					// 広い幅で計算した引数は自分の符号の型 (`u8 ^ i8` は i16) なので、比べる前に揃える型として読む (u16 と
+					// i16 のまま比べると符号付きの比較になっていた)。狭い符号なしの値はそのまま (上位は 0 で読む)
+					if vt := ir.ValType(v); vt != typ && vt.Size == typ.Size {
+						if k, ok := ir.ValIntLiteral(v); ok {
+							v = ir.NewIntLiteral("", typ, wrapInt(k, typ))
+						} else {
+							v = ir.NewCastedValue(v, typ, 0)
+						}
+					}
+					vals[i] = v
+					continue
+				}
+				// 狭い幅で折り返した定数の引数は元の式をこの幅で畳み直す (算術の項と同じ: widenArith。定数の畳み込みの
+				// foldWidenArgs と揃える)
+				vals[i] = h.cast(h.widenArith(adapted[i].apply(vals[i]), typ), typ)
 			}
 			tmp := h.newTmp(typ)
 			h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{vals[0]}})

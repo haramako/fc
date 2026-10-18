@@ -440,6 +440,17 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			if allLit {
 				// 型付きの定数があれば、実行時と同じく互換型の値にして比べる (数学の値で比べていた)。型は比較の規則
 				t := h.foldType(args, true)
+				tainted := false
+				if t != nil {
+					// A1: 実行時は引数をこの型の幅で計算する (区切りではない)。狭い幅で折り返した引数は元の式をこの幅で
+					// 畳み直し、印のある引数があれば結果にも印を付ける (外の広い幅で畳み直す: widenConstAt / widenOperand)
+					for _, a := range args {
+						// 印のある引数と、この型に読み替えて値が変わった引数 (符号の混ざった `@min((108 as i8), (142 as u8))`
+						// の 142 → -114。広い幅では元の値のまま比べる: foldOverflows と同じ)
+						tainted = tainted || h.taintOf(a) != nil || wrapInt(a.val.Int, t) != a.val.Int
+					}
+					h.foldWidenArgs(c, args, t)
+				}
 				val := func(i int) int {
 					if t != nil {
 						return wrapInt(args[i].val.Int, t)
@@ -456,7 +467,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 					v = min(max(v, val(1)), val(2))
 				}
 				if t != nil {
-					return cv(ir.NewIntLiteral("", t, v))
+					lit := ir.NewIntLiteral("", t, v)
+					if tainted && (h.v4() || h.rewriting()) {
+						h.markTaint(lit, c)
+					}
+					return cv(lit)
 				}
 				return cv(h.IntValue(v))
 			}

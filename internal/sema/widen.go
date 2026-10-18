@@ -101,6 +101,7 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 // 算術の演算でない式 (`as`・比較・名前・組み込み。区切り)、型のない定数だけの式 (任意精度で計算し、代入先との適合を見る)、
 // すでに十分広い式は nil (そのまま)。
 func (h *Hlc) widenConstAt(c *cexpr, typ *types.Type) *cexpr {
+	c = h.pureExpansion(c)
 	if !h.v4() || typ == nil || typ.Kind != types.Int || typ.Enum != nil || !isArithNode(c) {
 		return nil
 	}
@@ -191,6 +192,11 @@ func (h *Hlc) foldAtWidth(c *cexpr, size int) *cexpr {
 // 畳み込んだときの型の符号のまま size バイトで計算し、算術でない式 (`as`・比較・組み込み・名前など。区切り) は元の幅の値、
 // 型のない定数は元の値から。シフト量は元の値。型のない値 (オペランドが全部型のない定数) なら t は nil。
 func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
+	c = h.pureExpansion(c)
+	if tc := h.taintOf(c); tc != nil {
+		// 印の付いた定数は元の式で (定数式の中の純粋マクロは評価した引数で展開するので、`@max` の引数が畳んだ値になっている)
+		c = tc
+	}
 	narrow := h.constEval(c)
 	if !narrow.isLiteralInt() {
 		return 0, nil, false
@@ -218,6 +224,14 @@ func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
 		}
 		vals[i] = wrapInt(x, tw) // 型付きの値はその型の値を、型のない定数は元の値を広い型で読む
 	}
+	switch c.op {
+	case opMin:
+		return min(vals[0], vals[1]), tw, true
+	case opMax:
+		return max(vals[0], vals[1]), tw, true
+	case opClamp:
+		return min(max(vals[0], vals[1]), vals[2]), tw, true
+	}
 	v1, v2 := vals[0], 0
 	if len(vals) > 1 {
 		v2 = vals[1]
@@ -225,13 +239,32 @@ func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
 	return wrapInt(foldIntOp(c.op, v1, v2), tw), tw, true
 }
 
-// isArithNode は c が算術の演算 (+ - * / % & | ^ << >> 単項の - ~) か。
+// pureExpansion は c が純粋マクロの呼び出し (`@min(a, b)` など) なら展開した式、そうでなければ c。純粋マクロは区切りではない
+// (実行時は展開した式を上から来た幅で計算する: lvalIn の opCall) ので、畳み直しも展開した式で行う。
+func (h *Hlc) pureExpansion(c *cexpr) *cexpr {
+	for c.kind == cOp && c.op == opCall && len(c.args) > 0 {
+		m := h.constEval(c.args[0]).macroOf()
+		if m == nil || m.typing == nil || !m.typing.pure {
+			break
+		}
+		x := h.expandMacro(c, m)
+		if x.expr == nil || x.stmts != nil {
+			break
+		}
+		c = x.expr
+	}
+	return c
+}
+
+// isArithNode は c が A1 の区切りにならない演算 (算術の + - * / % & | ^ << >> 単項の - ~ と、`a < b ? a : b` と同じ
+// @min / @max / @clamp) か。
 func isArithNode(c *cexpr) bool {
 	if c.kind != cOp {
 		return false
 	}
 	switch c.op {
-	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight, opUminus, opBitNot:
+	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight, opUminus, opBitNot,
+		opMin, opMax, opClamp:
 		return true
 	}
 	return false

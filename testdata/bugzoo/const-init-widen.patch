@@ -28,7 +28,7 @@ diff --git b/internal/sema/widen.go a/internal/sema/widen.go
 index 2ef241d..4c4cb7a 100644
 --- b/internal/sema/widen.go
 +++ a/internal/sema/widen.go
-@@ -93,27 +93,6 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
+@@ -93,28 +93,6 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
  // 広がらなければ畳み込んだ定数のままで IR は fc 3 と同じ。fc 3 のモジュールでは `(元の式) as T` を migrate に報告する。
  // `as` は外からの広がりを止めるだけで、中の式にも「式の中の一番広い型」の規則は効く (印は `as` の中でも付ける)。
  
@@ -40,6 +40,7 @@ index 2ef241d..4c4cb7a 100644
 -// 算術の演算でない式 (`as`・比較・名前・組み込み。区切り)、型のない定数だけの式 (任意精度で計算し、代入先との適合を見る)、
 -// すでに十分広い式は nil (そのまま)。
 -func (h *Hlc) widenConstAt(c *cexpr, typ *types.Type) *cexpr {
+-	c = h.pureExpansion(c)
 -	if !h.v4() || typ == nil || typ.Kind != types.Int || typ.Enum != nil || !isArithNode(c) {
 -		return nil
 -	}
