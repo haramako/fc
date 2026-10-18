@@ -71,8 +71,9 @@ function main():void
 
 `TestRandomArithV4` は大きな種（1000000〜、毎晩の fuzz の `date +%Y%m%d000` の形）で、この誤検出を 1000 本中 3 本踏んでいた
 （`(284 * gi87) + (gi84 ^ gi84)`（gi87, gi84:i8）、`(gi80 << 3) * id_u16(293)` など。広げた i8 の式が i16 に見える）。
-`randarith_test.go` の `arMixed` / `arMarkTy` でこの形を作らないようにしている。直したら `arMarkTy` の分岐を外して、
-同じ種で落ちなくなることを確かめる。
+`randarith_test.go` の `arMixed` / `arMarkTy` でこの形を作らないようにしている。まだ再現することは
+`known_bugs_test.go` の `TestKnownBugF6FalseError` が見ていて、直るとそのテストが落ちる。そうしたら `arMarkTy` の分岐を
+外して同じ種で落ちなくなることを確かめ、そのテストを「通る」回帰テストに直す。
 
 ## 影響
 
