@@ -1,0 +1,24 @@
+# r6502: S をページ 1 の中で回さない (dc59c3b。pha / jsr で負、pla で 256 になり tsx がその値を X に入れる。TestStack)
+diff --git a/internal/r6502/r6502.go b/internal/r6502/r6502.go
+index 4868ee9..ce89cff 100644
+--- a/internal/r6502/r6502.go
++++ b/internal/r6502/r6502.go
+@@ -425,14 +425,14 @@ func (c *Cpu) interrupt(vector int) {
+ // push はスタックに積む。S はページ 1 の中で回る ($00 の次は $FF。以前は S が負や 256 になり、tsx がその値を X に
+ // 入れ、jsr / rts / brk / rti はページ 1 の外を読み書きしていた)。
+ func (c *Cpu) push(v int) {
+-	c.Mem.Set(0x0100|c.S, v)
+-	c.S = 0xff & (c.S - 1)
++	c.Mem.Set(0x0100+c.S, v)
++	c.S = c.S - 1
+ }
+ 
+ // pull はスタックから降ろす。
+ func (c *Cpu) pull() int {
+-	c.S = 0xff & (c.S + 1)
+-	return c.Mem.Get(0x0100 | c.S)
++	c.S = c.S + 1
++	return c.Mem.Get(0x0100 + c.S)
+ }
+ 
+ func b2i(b bool) int {

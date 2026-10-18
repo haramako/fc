@@ -105,7 +105,7 @@ func runTests(dir string, args []string, statsPath string) (map[string]int, map[
 	// なっていることがある (-randn などを受け取れないので別の呼び出しで回す)
 	unit := exec.Command("go", "test", "./internal/ir", "./internal/sema", "./internal/opt",
 		"./internal/regalloc", "./internal/codegen", "./internal/syntax", "./internal/types", "./internal/interp",
-		"-count=1", "-json", "-timeout", "30m")
+		"./internal/r6502", "./internal/m6502", "-count=1", "-json", "-timeout", "30m")
 	unit.Dir = dir
 	out2, _ := unit.CombinedOutput()
 	if true {

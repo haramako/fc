@@ -1,0 +1,14 @@
+# r6502: jmp ($xxFF) が上位を次のページから読む (実機は同じページの $xx00。dc59c3b。TestJmpIndirectPageBug)
+diff --git a/internal/r6502/r6502.go b/internal/r6502/r6502.go
+index 4868ee9..004b9e3 100644
+--- a/internal/r6502/r6502.go
++++ b/internal/r6502/r6502.go
+@@ -276,7 +276,7 @@ func (c *Cpu) decodeArg(mode Mode, secWord, thdWord int) int {
+ 		// fc のランタイムはこれを避けて書いている (fclib/nes/frame.asm)。エミュレータが正しい番地へ飛ぶと、置き場所が
+ 		// $xxFF になったときの誤りが隠れる
+ 		lb := c.Mem.Get((thdWord << 8) + secWord)
+-		hb := c.Mem.Get((thdWord << 8) + (0xff & (secWord + 1)))
++		hb := c.Mem.Get((thdWord << 8) + secWord + 1)
+ 		return (hb << 8) + lb
+ 	case Indx:
+ 		lb := c.Mem.Get(0xff & (c.X + secWord))

@@ -1,0 +1,16 @@
+# r6502: asl のメモリ版の N / Z を折り返す前の値で作る (dc59c3b。$80 で Z=0、$C0 で N=3。TestShiftsExhaustive)
+diff --git a/internal/r6502/r6502.go b/internal/r6502/r6502.go
+index 4868ee9..bdedcfe 100644
+--- a/internal/r6502/r6502.go
++++ b/internal/r6502/r6502.go
+@@ -519,8 +519,8 @@ func (c *Cpu) exec(instr Instr, arg int, mode Mode) {
+ 			// bmi も bpl も分岐しなかった。r6502_test.go の TestShiftsExhaustive)
+ 			r := m.Get(arg) << 1
+ 			m.Set(arg, r&0xff)
+-			c.Z = b2i(r&0xff == 0)
+-			c.N = (r & 0x80) >> 7
++			c.Z = b2i(r == 0)
++			c.N = r >> 7
+ 			c.C = b2i(r > 0xff)
+ 		}
+ 		c.incPcByMode(mode)
