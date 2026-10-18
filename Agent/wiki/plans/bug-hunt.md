@@ -119,8 +119,10 @@ fc 4 の migrate（ROM バイト一致が要求される）、interface / soa / 
 
 - `TestRandomV3ProgramsV4` 1 件（seed 4000146）: 生成した fc 3 プログラムが fc 4 で `?:` の両方の枝が -61624（16 ビットに収まらない）
   で弾かれる。**コンパイラは正しく、生成器が範囲外の定数式を出す**（低優先）
-- `TestRandomArithV4` は 1000 本中 5 件に落ち、**そのうち 3 件が `@min` / `@max` の A1 のバグ**（`Agent/issues/local-2026-10-18-minmax-a1-width.md`）。
-  残りは生成器の模型の穴（`mixes u16 and i16` を 4 件出す規則を `arMixed` が拾いきれていない）
+- `TestRandomArithV4` は**既定の種（1〜7）は緑だがその外で落ちた**（種 8 から。1000 本で 11 件）。原因はすべて
+  `@min` / `@max` が 8 ビットの引数に A1 の幅を流さないバグ（`Agent/issues/local-2026-10-18-minmax-a1-width.md`）。
+  生成器が 16 ビットの引数の `@min` / `@max` を作るようにして 0 本にした（バグが直ったら戻す）。
+  **毎晩の fuzz（`-randn 1500`）が赤くなる状態をコミットしていた**（レビューで指摘）
 
 ### Phase 0（2026-10-18）
 
@@ -155,8 +157,22 @@ fc 4 の migrate（ROM バイト一致が要求される）、interface / soa / 
 これから測る（`fuzzmeasure zoo -bugs untyped-cast,fold-typed,valint-width,cmp-fold-mixed`）。
 
 **測った結果（2026-10-18）**:`fold-typed` は TestRandomArithV4 も見つける（他に TestRandomConstFoldV4 139 件と単体テスト）。
-`valint-width` は **@min / @max と 2 バイトの値の 8〜15 のシフト（上位バイトの抽出）を生むようにしたら newly 見つかった**
-（それまでは `TestConstFoldCases` の 1 件だけ）。`untyped-cast` と `cmp-fold-mixed` は今までどおり他の生成器が見つける。
+`fold-typed` は TestRandomArithV4 も見つける。**`valint-width` を見つけたのは誤り**で、その種でパッチ無しでも
+落ちていただけだった（詳しくは `Agent/discussions/2026-10-18-arith-model-and-const-widen.md` の その 3）。
+`valint-width` は経路を持つプログラムが今のテストに 1 つも無かったので、`internal/ir/value_test.go` の契約の単体テストで
+見張るようにした。`untyped-cast` と `cmp-fold-mixed` は今までどおり他の生成器が見つける。
+
+受け入れ条件の「`fuzzmeasure zoo` の既定の `-run` に入る」は `TestRandomArithV4` を追加した（2026-10-18）。
+
+### レビュー（2026-10-18、他のエージェント）で出て直したもの
+
+- TestRandomArithV4 が既定の種の外で落ちていた（上の通り。毎晩の fuzz が赤い）→ 直した
+- `volPress`（volatile の文）を**どこからも呼んでいなかった**（`stmt` の `pick(21)` に対応する `case` が無く、
+  `k=20` が `default` の代入に落ちていた）→ `case 20` を追加
+- bugzoo の測り方に誤検出の穴（`none` 行を見ない / `internal/driver` 以外を見ない）→ 両方ふさいだ
+- 「生成器の模型の穴」と分類した `mixes i16 and u16` は、**コンパイラの誤検出**だった
+  （`a - (b >> 2)` が通らない。`Agent/issues/local-2026-10-18-mixed-sign-false-error.md`）
+- 挙動の変更（`const C2:i16 = -(100 as u8);` が通らなくなった）を記録していなかった → `fc4-facts.md` に足した
 
 **この生成器が見つけたバグその 2**: `@min` / `@max` / `@clamp` が定数式で畳めず、`const D = @min(3, 5);` が
 「const D must be constant」、`var arr:[@min(4, 8)]u8;` が「array size must be constant」になっていた（fc 3 から同じ。

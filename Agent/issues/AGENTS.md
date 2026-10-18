@@ -14,3 +14,4 @@ multica（エージェント向け Issue トラッキングシステム）や Gi
 ## Index
 
 - [`local-2026-10-18-minmax-a1-width.md`](local-2026-10-18-minmax-a1-width.md) — `@min` / `@max` / `@clamp` が A1 の幅を受け取らず 8 ビットで折り返す — **未修正**
+- [`local-2026-10-18-mixed-sign-false-error.md`](local-2026-10-18-mixed-sign-false-error.md) — F6 の符号の混ざりのエラーが 8 ビットの式に対して誤検出する（`a - (b >> 2)` が通らない） — **未修正**

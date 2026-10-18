@@ -41,7 +41,7 @@ bug hunt（`../wiki/plans/bug-hunt.md`）の Phase 2 の一番目の生成器と
 
 ## TestRandomArithV4 の中身
 
-- 境界値のグローバル（u8/i8/u16/i16 × 0, 1, 0x7F, 0x80, 0xFF, 0x7FFF, 0x8000, 0xFFFF, -128, -1 …）と
+- 境界値のグローバル（u8/i8/u16/i16 すべてに同じ表 `arBoundary` = 符号なし `0, 1, 2, 127, 128, 200, 254, 255` / 符号あり `-128, -127, -6, -1, 0, 1, 63, 127`）と
   `id_T()`（呼ぶと区切り、`as` と同じで型を決める。畳み込みの形では `(x as T)` になる）を種に、
   二項演算・`as`・`+%`・シフト・`(<式> | 1)`（0 で割らない）を深さ 3 まで。
 - 期待する値は Go のモデル（`arTy` と `arValue`）。**領域の計算の型**が肝で、
@@ -72,9 +72,21 @@ bug hunt（`../wiki/plans/bug-hunt.md`）の Phase 2 の一番目の生成器と
 `TestBugConstMinMax` と bugzoo の `macro-const-minmax` を追加。生成器は `@min` / `@max` を両辺の型が符号違いのものは
 作らない（中の比較で F6 のエラーになる）。
 
-## その 3: 2 バイトの値の 8〜15 のシフトを生むと `valint-width` が見えるようになった
+## その 3: `valint-width` の「見えるようになった」は誤りだった（レビューで指摘）
 
-`valint-width`（`ValIntLiteral` がリテラルの一部を読む cast をそのバイトの値にしない）は、これまで
-`TestConstFoldCases` の 1 件しか見つけていなかった。TestRandomArithV4 のシフトの量を「型の幅未満」まで広して
-（2 バイトの値には 8〜15 = 上位バイトの抽出）、`@min` / `@max` を足すと、ランダム生成でも落ちるようになった。
-**教訓: 「1 件の単体テストだけが見ている」規則は、生成器の値の範囲・演算の幅が足りないことが多い**
+`valint-width`（`ValIntLiteral` がリテラルの一部を読む cast をそのバイトの値にしない）を、TestRandomArithV4 が
+ランダム生成で見つける、と書いたが**誤り**。TestRandomArithV4 はその種でパッチ無しでも落ちていて、
+`fuzzmeasure zoo` の「その他」の列にどのパッチでも出ていた（`-bugs X` 単独だと `none` 行が出ないので気付けなかった）。
+
+調べた結果:
+
+- `valint-width.patch` は `ValIntLiteral` を**保守側に**直すだけで、直したはずのバグ（リテラルの値そのものを返す）を
+  再現していなかった。パッチを元のバグの形に書き直した
+- 書き直したパッチも、golden + examples で `ValIntLiteral` が「リテラルの部分を読む cast」を呼ぶ回数が **0 回**
+  = 今のテストにも fuzz にも経路が無い
+- そこで `internal/ir/value_test.go` にヘルパーの契約の単体テストを書いた（パッチで 5 項目が落ちる）
+- `fuzzmeasure zoo` は (1) `none` 行を必ず最初に回して、`none` でも落ちるテストに `?` を付ける、
+  (2) `internal/driver` 以外（ir / sema / opt / regalloc / codegen / syntax / types / interp）の単体テストも数える、
+  ようにした
+
+**教訓: bugzoo の「見つけた」は、同じ種でパッチ無しでも落ちていないかを見てから数える**

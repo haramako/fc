@@ -45,5 +45,5 @@ function main():void
   `planMinMax` の符号の決め方の差が怪しい
 - 変更を全部戻して `go test ./...` は緑
 
-関連: `Agent/issues/2026-10-18-minmax-a1-width.md`、`Agent/wiki/fc4-facts.md`（A1 と区切りになるもの）、
+関連: `Agent/issues/local-2026-10-18-minmax-a1-width.md`、`Agent/wiki/fc4-facts.md`（A1 と区切りになるもの）、
 `Agent/discussions/2026-10-18-arith-model-and-const-widen.md`（型のない定数の規則の実測）。
