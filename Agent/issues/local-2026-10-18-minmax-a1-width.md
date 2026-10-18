@@ -43,4 +43,4 @@
   呼び出しを展開して見る（`pureExpansion`）。`wideValue` は印の付いた定数を元の式で計算する（定数式の中の純粋マクロは評価した
   引数で展開するので、引数が畳んだ値になっている）
 - 回帰テスト `TestMinMaxWidth`、bugzoo `minmax-a1-width`。`TestRandomArithV4` の生成器の回避（8 ビットの引数を作らない）は外した
-- 根本の対策（A1 の区切りの一覧を 1 つにし、定数も上から決めた幅で畳む）は `Agent/wiki/plans/` に計画を置いて進める
+- 根本の対策: 演算ごとの A1 の役割の表 `a1Roles` と `TestA1RolesComplete` は済み。定数も上から決めた幅で畳む計画は `Agent/wiki/plans/a1-const-width.md`
