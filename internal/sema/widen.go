@@ -256,18 +256,38 @@ func (h *Hlc) pureExpansion(c *cexpr) *cexpr {
 	return c
 }
 
-// isArithNode は c が A1 の区切りにならない演算 (算術の + - * / % & | ^ << >> 単項の - ~ と、`a < b ? a : b` と同じ
-// @min / @max / @clamp) か。
+// a1Role は演算の A1 での役割 (上から来た幅を中に渡すか)。全部の演算 (cop) を a1Roles に書く (TestA1RolesComplete が
+// cexpr.go の定数と照らす)。演算を足したら役割を決め、通すなら実行時 (lvalIn の case で wideWidth の幅を子に渡す) と
+// 畳み込み (consteval の foldWidenArgs と印、wideValue の計算) の両方に入れる。
+type a1Role int
+
+const (
+	a1Through  a1Role = iota + 1 // 区切りではない: 上から来た幅と自分の型の広いほうで計算する (isArithNode)
+	a1Branch                     // 条件式: 上から来た幅を両方の枝に渡す (cond.go の condWidth、畳み込みは constEvalCond)
+	a1Boundary                   // 区切り: 中は自分の型で計算する (比較は compareWidth で両辺を揃える)
+)
+
+var a1Roles = map[cop]a1Role{
+	// 算術 (シフト量は区切り: lvalIn・wideValue が 2 つ目の項を広げない)
+	opAdd: a1Through, opSub: a1Through, opMul: a1Through, opDiv: a1Through, opMod: a1Through,
+	opAnd: a1Through, opOr: a1Through, opXor: a1Through, opShiftLeft: a1Through, opShiftRight: a1Through,
+	opUminus: a1Through, opBitNot: a1Through,
+	// `a < b ? a : b` と同じ組み込み (2026-10-18 まで区切りとして扱われ、8 ビットで折り返していた)
+	opMin: a1Through, opMax: a1Through, opClamp: a1Through,
+	opCond: a1Branch,
+	// 比較・論理 (結果は bool)
+	opEq: a1Boundary, opNe: a1Boundary, opLt: a1Boundary, opGt: a1Boundary, opLe: a1Boundary, opGe: a1Boundary,
+	opLand: a1Boundary, opLor: a1Boundary, opNot: a1Boundary,
+	// `+%` は左の項の型で折り返す (wrap.go)
+	opAddWrap: a1Boundary, opSubWrap: a1Boundary, opMulWrap: a1Boundary,
+	// 呼び出し (引数は仮引数の型。純粋マクロは展開した式で見る: pureExpansion)・読み書き・番地・slice
+	opCall: a1Boundary, opLoad: a1Boundary, opIndex: a1Boundary, opRef: a1Boundary, opDeref: a1Boundary,
+	opField: a1Boundary, opSlice: a1Boundary, opToSlice: a1Boundary, opLen: a1Boundary,
+}
+
+// isArithNode は c が A1 の区切りにならない演算 (a1Through) か。
 func isArithNode(c *cexpr) bool {
-	if c.kind != cOp {
-		return false
-	}
-	switch c.op {
-	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight, opUminus, opBitNot,
-		opMin, opMax, opClamp:
-		return true
-	}
-	return false
+	return c.kind == cOp && a1Roles[c.op] == a1Through
 }
 
 // 上から決める A1 (fc 4): 式を IR にする前に、算術の部分木を計算する幅を決めて (代入先・比較の相手・親の算術の幅と、

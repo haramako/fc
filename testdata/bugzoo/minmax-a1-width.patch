@@ -1,8 +1,8 @@
 # sema: @min / @max / @clamp が A1 の幅を受け取らない (var v:i16 = @max(a + a, 0) が 144。定数と実行時もずれる)
-diff --git b/internal/sema/consteval.go a/internal/sema/consteval.go
+diff --git a/internal/sema/consteval.go b/internal/sema/consteval.go
 index df6c12e..bcc5113 100644
---- b/internal/sema/consteval.go
-+++ a/internal/sema/consteval.go
+--- a/internal/sema/consteval.go
++++ b/internal/sema/consteval.go
 @@ -440,17 +440,6 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
  			if allLit {
  				// 型付きの定数があれば、実行時と同じく互換型の値にして比べる (数学の値で比べていた)。型は比較の規則
@@ -34,10 +34,10 @@ index df6c12e..bcc5113 100644
  				}
  				return cv(h.IntValue(v))
  			}
-diff --git b/internal/sema/expr.go a/internal/sema/expr.go
+diff --git a/internal/sema/expr.go b/internal/sema/expr.go
 index e8803cd..9266b9c 100644
---- b/internal/sema/expr.go
-+++ a/internal/sema/expr.go
+--- a/internal/sema/expr.go
++++ b/internal/sema/expr.go
 @@ -513,7 +513,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
  						h.lval(st)
  					}
@@ -92,10 +92,10 @@ index e8803cd..9266b9c 100644
  			}
  			tmp := h.newTmp(typ)
  			h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{vals[0]}})
-diff --git b/internal/sema/widen.go a/internal/sema/widen.go
-index 4900bcc..2ef241d 100644
---- b/internal/sema/widen.go
-+++ a/internal/sema/widen.go
+diff --git a/internal/sema/widen.go b/internal/sema/widen.go
+index cc16090..7b9d684 100644
+--- a/internal/sema/widen.go
++++ b/internal/sema/widen.go
 @@ -101,7 +101,6 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
  // 算術の演算でない式 (`as`・比較・名前・組み込み。区切り)、型のない定数だけの式 (任意精度で計算し、代入先との適合を見る)、
  // すでに十分広い式は nil (そのまま)。
@@ -131,38 +131,12 @@ index 4900bcc..2ef241d 100644
  	v1, v2 := vals[0], 0
  	if len(vals) > 1 {
  		v2 = vals[1]
-@@ -239,32 +225,13 @@ func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {
- 	return wrapInt(foldIntOp(c.op, v1, v2), tw), tw, true
- }
- 
--// pureExpansion は c が純粋マクロの呼び出し (`@min(a, b)` など) なら展開した式、そうでなければ c。純粋マクロは区切りではない
--// (実行時は展開した式を上から来た幅で計算する: lvalIn の opCall) ので、畳み直しも展開した式で行う。
--func (h *Hlc) pureExpansion(c *cexpr) *cexpr {
--	for c.kind == cOp && c.op == opCall && len(c.args) > 0 {
--		m := h.constEval(c.args[0]).macroOf()
--		if m == nil || m.typing == nil || !m.typing.pure {
--			break
--		}
--		x := h.expandMacro(c, m)
--		if x.expr == nil || x.stmts != nil {
--			break
--		}
--		c = x.expr
--	}
--	return c
--}
--
--// isArithNode は c が A1 の区切りにならない演算 (算術の + - * / % & | ^ << >> 単項の - ~ と、`a < b ? a : b` と同じ
--// @min / @max / @clamp) か。
-+// isArithNode は c が算術の演算 (+ - * / % & | ^ << >> 単項の - ~) か。
- func isArithNode(c *cexpr) bool {
- 	if c.kind != cOp {
- 		return false
- 	}
- 	switch c.op {
--	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight, opUminus, opBitNot,
--		opMin, opMax, opClamp:
-+	case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight, opUminus, opBitNot:
- 		return true
- 	}
- 	return false
+@@ -273,7 +259,7 @@ var a1Roles = map[cop]a1Role{
+ 	opAnd: a1Through, opOr: a1Through, opXor: a1Through, opShiftLeft: a1Through, opShiftRight: a1Through,
+ 	opUminus: a1Through, opBitNot: a1Through,
+ 	// `a < b ? a : b` と同じ組み込み (2026-10-18 まで区切りとして扱われ、8 ビットで折り返していた)
+-	opMin: a1Through, opMax: a1Through, opClamp: a1Through,
++	opMin: a1Boundary, opMax: a1Boundary, opClamp: a1Boundary,
+ 	opCond: a1Branch,
+ 	// 比較・論理 (結果は bool)
+ 	opEq: a1Boundary, opNe: a1Boundary, opLt: a1Boundary, opGt: a1Boundary, opLe: a1Boundary, opGe: a1Boundary,
