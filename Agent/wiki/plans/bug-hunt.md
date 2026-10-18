@@ -112,6 +112,16 @@ fc 4 の migrate（ROM バイト一致が要求される）、interface / soa / 
 
 ## 4. 結果（追記）
 
+### Phase 1（2026-10-18、差分 fuzz を増やした分まわした）
+
+`TestRandomPrograms / V3 / V4 / Grid / Strings` を 4 プロセス・シードを 100 万ずらして `randn=2000`（約 8,000 プログラム × 5 生成器）。
+**3-way 差分（-O0 / -O2 / 解釈系）のバグは 0 件**（実行系は堅い）。落ちたのは:
+
+- `TestRandomV3ProgramsV4` 1 件（seed 4000146）: 生成した fc 3 プログラムが fc 4 で `?:` の両方の枝が -61624（16 ビットに収まらない）
+  で弾かれる。**コンパイラは正しく、生成器が範囲外の定数式を出す**（低優先）
+- `TestRandomArithV4` は 1000 本中 5 件に落ち、**そのうち 3 件が `@min` / `@max` の A1 のバグ**（`Agent/issues/local-2026-10-18-minmax-a1-width.md`）。
+  残りは生成器の模型の穴（`mixes u16 and i16` を 4 件出す規則を `arMixed` が拾いきれていない）
+
 ### Phase 0（2026-10-18）
 
 **カバレッジ**（`go test ./... -coverpkg=./...`、全体で block の 88.3%）。通っていない block の上位は

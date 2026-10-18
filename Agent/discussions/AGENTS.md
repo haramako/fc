@@ -16,6 +16,7 @@
 ## Log
 
 - 2026-10-18 [fc 4 の整数の規則の Go モデルと、定数の A1 の広げのバグ](2026-10-18-arith-model-and-const-widen.md) — `const C:u16 = (128 as u8) + (200 as u8)` が 72（var は 328）。型のない定数は相手の型に切り詰め、A1 で広がると元の値を読む、など規則の落とし穴と TestRandomArithV4
+- 2026-10-18 [`@min` / `@max` / `@clamp` は A1 の幅を受け取らない](2026-10-18-minmax-a1-width.md) — `var v:i16 = @max(a + a, 0)` が 144（同じ式を条件式にすると 400）。実行時側だけ直すと畳み込みとずれるので、Issue に記録して変更は戻した
 - 2026-10-18 [コンパイラのバグ調査の計画](2026-10-18-bug-hunt-plan.md) — 主役は「今のオークルの穴を塞ぐ」（本数を増やすだけでは実行系が 1 系統・sema の誤り・fc 4 の整数の模型の無さを埋められない）。優先 1 は fc 4 の式の型と値の Go 模型、Mesen / QuickNES が Linux で Skip で実機系が暗い、bugzoo の空振りを先に測る。計画は wiki/plans/bug-hunt.md
 - 2026-10-13 [TestLogZeroCost の食い違いの調査と対応](2026-10-13-log-zero-cost.md) — 29 件中 28 件は展開・回転の後のジャンプの整理による地点のずれ、1 件は消した代入の古い値を出す本物の不具合（LogArg.Stale で直した）。ずれうる地点（prevs・approx）は比べず、残りは上限なしで失敗に。nop の案は採らない
 - 2026-10-08 [2 次元の配列のループの最適化（強さの低減）](2026-10-08-strength-reduction.md) — fieldindex の 2 次元の添字・licm・strength の 3 段、強さの低減は毎周の命令が増えないときだけ、bench の grid −40.3%、TestRandomGridV4 と bugzoo 3 つ

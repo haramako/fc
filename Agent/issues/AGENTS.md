@@ -13,4 +13,4 @@ multica（エージェント向け Issue トラッキングシステム）や Gi
 
 ## Index
 
-（まだ記録はありません。追加したらここに `<source>-<id> <タイトル> — <状態>` でリンクを並べる）
+- [`local-2026-10-18-minmax-a1-width.md`](local-2026-10-18-minmax-a1-width.md) — `@min` / `@max` / `@clamp` が A1 の幅を受け取らず 8 ビットで折り返す — **未修正**
