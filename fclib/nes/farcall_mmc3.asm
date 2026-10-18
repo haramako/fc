@@ -13,6 +13,7 @@
 ;;; 今のバンク・スロットをハードウェアスタックに退避して切り替え、戻ってから復帰する。入れ子も可。
 
 	.import FC_FARCALL
+	.assert <FC_FARCALL <> $FF, lderror, "FC_FARCALL must not be at $xxFF: jmp (FC_FARCALL) would read the high byte from $xx00 (6502 indirect jump bug)"
 	.importzp FC_SP
 	.global _mmc3_pbank_bak         ; mmc3 モジュールから include するので .import でなく .global (定義側なら export になる)
 	.global farcall_ay

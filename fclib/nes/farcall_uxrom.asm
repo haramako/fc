@@ -12,6 +12,7 @@
 ;;; UxROM は書き込みが ROM の出力とぶつかる (バスの衝突) ので、書く値と同じ値の入った表 (uxrom_banks) に書く。
 
 	.import FC_FARCALL
+	.assert <FC_FARCALL <> $FF, lderror, "FC_FARCALL must not be at $xxFF: jmp (FC_FARCALL) would read the high byte from $xx00 (6502 indirect jump bug)"
 	.importzp FC_SP
 	.global _uxrom_bank
 	.global farcall_ay

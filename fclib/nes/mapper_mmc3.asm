@@ -11,6 +11,7 @@
 ;;; 注意: .segment は書かない (mmc3 モジュールの固定のバンクに置かれる)。
 
 	.import FC_FARCALL
+	.assert <FC_FARCALL <> $FF, lderror, "FC_FARCALL must not be at $xxFF: jmp (FC_FARCALL) would read the high byte from $xx00 (6502 indirect jump bug)"
 	.importzp FC_SP
 	.global farcall_ay
 	.export _interrupt_irq
