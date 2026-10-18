@@ -49,6 +49,7 @@ var rpTypes = []rpType{{"int", 1, false}, {"sint", 1, true}, {"int16", 2, false}
 type rpVar struct {
 	name     string
 	typ      rpType
+	volatile bool // options(volatile: true) (読み書きのたびにメモリを見る)
 	readOnly bool // ループ変数 (本体で書き換えると回数が保証できない)、ループでずらしているポインタ
 	ptr      bool
 	fresh    bool
@@ -765,7 +766,7 @@ func (g *rpGen) walkLoop() *rpStmt {
 
 // stmt は文 1 つ (複数行のこともある)。depth はブロックの入れ子の残り。
 func (g *rpGen) stmt(depth int) *rpStmt {
-	k := g.pick(20)
+	k := g.pick(21)
 	if depth <= 0 && k >= 7 {
 		k = g.pick(7)
 	}
@@ -1104,7 +1105,7 @@ func (g *rpGen) reachableLabels() []string {
 }
 
 // rpStmtFeat は文の種類 (stmt の k) の機能の名前 (切ったら代入にする)。
-var rpStmtFeat = map[int]string{11: "while", 12: "switch", 15: "walk", 16: "unroll", 17: "structcopy", 18: "uninit", 19: "uninit"}
+var rpStmtFeat = map[int]string{11: "while", 12: "switch", 15: "walk", 16: "unroll", 17: "structcopy", 18: "uninit", 19: "uninit", 20: "volatile"}
 
 // narrower は t より狭い整数型 (暗黙に広げて代入・初期化できる。無ければ false)。
 func (g *rpGen) narrower(t rpType) (rpType, bool) {
@@ -1318,7 +1319,8 @@ func (g *rpGen) genProgram() {
 		g.genV3() // 先に作る (後の関数と main から呼べるように)
 	}
 	for i := 0; i < g.pick(4)+3; i++ {
-		g.globals = append(g.globals, rpVar{name: fmt.Sprintf("g%d", i), typ: g.typ()})
+		g.globals = append(g.globals, rpVar{name: fmt.Sprintf("g%d", i), typ: g.typ(),
+			volatile: g.feat("volatile") && g.chance(0.4)})
 	}
 	for i, t := range rpTypes { // 全ての型の配列を 1 つずつ (ポインタの引数の相手)
 		g.arrays = append(g.arrays, rpVar{name: fmt.Sprintf("a%d", i), typ: t})
@@ -1512,7 +1514,11 @@ func (g *rpGen) source() string {
 		b.WriteString("use v3m;\n")
 	}
 	for _, v := range g.globals {
-		fmt.Fprintf(&b, "var %s:%s;\n", v.name, v.typ.name)
+		opt := ""
+		if v.volatile {
+			opt = " options(volatile: true)"
+		}
+		fmt.Fprintf(&b, "var %s:%s%s;\n", v.name, v.typ.name, opt)
 	}
 	for k := range g.consts {
 		c := &g.consts[k]
@@ -1993,6 +1999,56 @@ func TestRandomPrograms(t *testing.T) {
 			}
 		})
 	}
+}
+
+// volPress は options(volatile: true) のグローバルに負荷をかけるループ (機能 volatile)。ループの不変として読みを外に
+// 出す (licm)、常駐レジスタに置いてほかの経路の書き込みとずれる (resident)、古い定数に置き換える (litprop) といった
+// 「volatile の読み書きを消す・動かす」バグの形: ループの中で volatile の変数を読み、書き、関数を呼ぶ (関数の中も
+// グローバルを書く)。ループのあとに volatile の変数へ書き戻して、効果をプログラムの最後に残す。
+func (g *rpGen) volPress(depth int) *rpStmt {
+	var vols []rpVar
+	for _, v := range g.globals {
+		if v.volatile {
+			vols = append(vols, v)
+		}
+	}
+	if len(vols) == 0 {
+		return g.regPress(depth)
+	}
+	v := vols[g.pick(len(vols))]
+	acc := g.newLocal(v.typ)
+	c := g.newLocal(rpTypes[0])
+	g.scope[len(g.scope)-1].readOnly = true
+	n := 2 + g.pick(4)
+	label := g.pushLabel()
+	g.loops++
+	var body []*rpStmt
+	for k := 0; k < 2+g.pick(3); k++ {
+		switch g.pick(5) {
+		case 0:
+			body = append(body, rpSimple(fmt.Sprintf("%s += %s;", acc.name, v.name)))
+		case 1:
+			body = append(body, rpSimple(fmt.Sprintf("%s = %s ^ %s;", v.name, v.name, acc.name)))
+		case 2:
+			if fs := g.callables(); len(fs) > 0 {
+				f := fs[g.pick(len(fs))]
+				body = append(body, rpSimple(fmt.Sprintf("if ((%s(%s) as sint16) < 0) {\n%s += %s;\n}\n%s += %s;",
+					g.callName(f), g.args(f, 1), acc.name, v.name, acc.name, v.name)))
+			}
+		case 3:
+			body = append(body, rpSimple(fmt.Sprintf("if (%s != %s) {\n%s = %s;\n}", v.name, acc.name, acc.name, v.name)))
+		default:
+			body = append(body, rpSimple(fmt.Sprintf("%s = %s;\n%s = %s ^ %s;", v.name, acc.name, acc.name, v.name, g.lit(v.typ))))
+		}
+	}
+	g.loops--
+	g.popLabel(label)
+	s := &rpStmt{parts: []string{fmt.Sprintf("var %s:%s = 0;\n%sfor (var %s:int = 0; %s < %d; %s++) {\n",
+		acc.name, v.typ.name, label, c.name, c.name, n, c.name), "}"}, kids: [][]*rpStmt{body}}
+	g.scope = g.scope[:len(g.scope)-1] // acc
+	g.scope = g.scope[:len(g.scope)-1] // c
+	return &rpStmt{parts: []string{"{\n" + s.parts[0], fmt.Sprintf("}\n%s = %s ^ %s;\n}", v.name, v.name, acc.name)},
+		kids: s.kids}
 }
 
 // regPress は常駐レジスタに負荷をかけるループ (機能 regpress)。過去の常駐のバグの形を集めたもの: 1 バイトのカウンタを
