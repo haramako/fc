@@ -160,8 +160,10 @@ func opReads(c, name string) bool {
 //
 // フラグが 1 つも読まれずに全部上書きされる比較 (使われない比較) もエラーにする: 比較の結果を使う命令が畳まれて比較だけが
 // 残る最適化の取りこぼしで、出力は正しいが無駄 (2026-10-18 は fuzz の 4000 本で 37 本あり、ssa の `x & 0` の畳み込みと
-// jumps の dropDeadTemps で 0 本にしてからエラーにした。Agent/issues/local-2026-10-18-dead-compare.md)。
-func verifyCompareFlags(fn string, lines []string) {
+// jumps の dropDeadTemps で 0 本にしてからエラーにした。Agent/issues/local-2026-10-18-dead-compare.md)。それを消す段が走らない
+// とき (-O 0、ssa / jumps を切ったとき) は残って当然なので、deadIsError を false にして通す (-O 0 の `(65536 == (242 <= x) as u8)`
+// で fuzz が見つけた。TestBugDeadCompareO0)。
+func verifyCompareFlags(fn string, lines []string, deadIsError bool) {
 	for i, line := range lines {
 		a := parseAsmLine(line)
 		if a.Kind != lkInstr || (a.Mnem != "cmp" && a.Mnem != "cpx" && a.Mnem != "cpy" && a.Mnem != "bit") {
@@ -200,6 +202,9 @@ func verifyCompareFlags(fn string, lines []string) {
 			}
 			killed |= live & writes
 			if live &^= writes; live == 0 {
+				if !deadIsError {
+					break
+				}
 				panic(&diag.Error{Msg: fmt.Sprintf("internal: flag verify: the flags of `%s` are all overwritten before any use (by `%s`) in %s",
 					strings.TrimSpace(a.Text), strings.TrimSpace(b.Text), fn)})
 			}

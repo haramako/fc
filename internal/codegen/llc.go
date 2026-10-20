@@ -568,7 +568,8 @@ func (l *funcGen) compileLambda(sym string, lmd *ir.Lambda) []string {
 	lines = stripTestMarks(lines)
 	lines = l.extendJump(lines)
 	if verify {
-		verifyCompareFlags(lmd.Id, lines)
+		cfg := lmd.Cfg()
+		verifyCompareFlags(lmd.Id, lines, l.OptimizeLevel > 0 && !cfg.Disabled("ssa") && !cfg.Disabled("jumps"))
 	}
 	if len(l.LogSites) > siteStart {
 		lines = l.placeLogLabels(lines, l.LogSites[siteStart:])

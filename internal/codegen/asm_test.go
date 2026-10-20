@@ -95,18 +95,24 @@ func TestVerifyCompareFlags(t *testing.T) {
 		"jsr で止める":            eq + "\tcmp #1\n\tjsr f\n" + ifc + "\tbne L",
 		"マクロで止める":             eq + "\tcmp #1\n\tcall f\n" + ifc + "\tbne L",
 	}
-	run := func(src string) (failed bool) {
+	run := func(src string, deadIsError bool) (failed bool) {
 		defer func() { failed = recover() != nil }()
-		verifyCompareFlags("f", strings.Split(src, "\n"))
+		verifyCompareFlags("f", strings.Split(src, "\n"), deadIsError)
 		return false
 	}
 	for name, src := range bad {
-		if !run(src) {
+		if !run(src, true) {
 			t.Errorf("%s: 通ってしまった", name)
 		}
 	}
+	// 使われない比較を消す段が走らないとき (-O 0 など) は、使われない比較だけを通す
+	for name, src := range bad {
+		if got, want := run(src, false), name != "使われない比較"; got != want {
+			t.Errorf("%s (deadIsError=false): エラー %v、want %v", name, got, want)
+		}
+	}
 	for name, src := range ok {
-		if run(src) {
+		if run(src, true) {
 			t.Errorf("%s: エラーになった", name)
 		}
 	}

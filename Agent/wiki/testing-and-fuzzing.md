@@ -33,7 +33,8 @@ go test ./...                                    # 全部 (golden + examples + N
   比較のフラグがまだ読まれないうちに上書きされ、比較の結果を入力にする IR の命令の分岐がそれを読む形（`cmp; ldx; bne`）を
   コンパイルエラーにする。分岐がどの値を見るかは codegen が命令ごとに出す IR のコメントで見る（asm の形だけだと、
   使われない比較の後の `dec; beq` を誤検出した）。フラグが 1 つも読まれない比較（使われない比較）もエラー（2026-10-19。
-  `-O 2` の fuzz 4000 本に 37 本あった取りこぼしを直してから: `../issues/local-2026-10-18-dead-compare.md`）。
+  `-O 2` の fuzz 4000 本に 37 本あった取りこぼしを直してから: `../issues/local-2026-10-18-dead-compare.md`）。ただし
+  使われない比較のエラーは `-O 2` で ssa と jumps の段を切っていないときだけ（消す段が走らない `-O 0` では残って当然。2026-10-20）。
   bugzoo の `cond-restore-flags` と `jumps-dead-temps` で効くことを見る
 
 - **カバレッジ**（2026-09-28）: `go test ./... -coverpkg=./... -coverprofile=cover.out` で、どのテストが通したかを問わず
@@ -217,7 +218,8 @@ go test ./...                                    # 全部 (golden + examples + N
   速度の目安: N100（4 コア）で FuzzParse 約 2 万実行/秒、TestRandomPrograms 約 5 本/秒（200 本 41 秒。
   16 コア機の記録 6 万本 ≈ 2 時間 ≈ 8 本/秒の 6 割ほど）。Apple M1（4+4 コア、16GB）は約 7 本/秒（2026-10-19、同じ
   `-randn 200 -randseed 5000` で 29 秒。生成器は当時より育っているので目安）。M1 で夜間と同じ `TestRandom*` 一式を
-  `-randn 4000 -foldn 1000 -metan 400 -mutn 600` で回すと約 1 時間 40 分
+  `-randn 4000 -foldn 1000 -metan 400 -mutn 600` で回すと約 1 時間 40 分。手元の機械で origin/main の最新を回し続けるには
+  `Agent/scripts/fuzz-loop/fuzz-loop.sh`（失敗で止まる。README に使い方）
   続けて FuzzCheck 3 ワーカー + FuzzFormat 1 ワーカーで回して 5 件（どれも数分以内）: トップレベルのブロックの中の
   `return`（emit より前に `h.lmd` を読む。`requireFunction` を切り出して return でも呼ぶ）、呼び出しの結果への代入
   （`f() = 0` / `f()++` が void なら nil 参照、値を返す関数なら一時変数への代入として**黙って通っていた**。代入の左辺が

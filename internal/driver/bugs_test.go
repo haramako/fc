@@ -325,3 +325,28 @@ function main():void
 		}
 	}
 }
+
+// TestBugDeadCompareO0 は、使われない比較を消す段 (ssa の畳み込み・jumps の dropDeadTemps) が走らない -O 0 では、使われない
+// 比較をフラグの検査がエラーにしないこと。`65536 == (u8 の値)` を sema が偽に畳み、中の `242 <= id_u8(255)` の比較だけが
+// `cmp #242` のまま残って `asl a` に上書きされていた (出力は正しい。2026-10-20 に fuzz-loop の TestRandomConstFold
+// -randseed 2026102012040002 が見つけた)。
+func TestBugDeadCompareO0(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 3
+use * from stdio;
+function id_u8(x:u8):u8 @(noinline) { return x; }
+var gv_u8:u8;
+function main():void
+{
+	gv_u8 = (((65536 == ((242 <= id_u8(255)) as u8)) as u8) << 6);
+	printf(gv_u8 as i16, "\n");
+	exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "0\n" {
+		t.Errorf("出力 %q、want %q", out, "0\n")
+	}
+}

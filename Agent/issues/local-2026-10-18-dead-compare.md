@@ -58,6 +58,16 @@ function t(l1:u8):void @(noinline)
   （rol / ror / if_carry）ときは残す（最初は 2 バイトのシフトの下位を消して `TestSplitShiftCarry` が誤った値になった）。
   `@log` の注釈が読む値も残す
 - `verifyCompareFlags` の「使われない比較」もエラーにした
+
+## 追記: -O 0 での誤検出（2026-10-20）
+
+上のエラー化は `-O 2` だけで確かめていた。`-O 0` では ssa の畳み込みも `dropDeadTemps` も走らないので使われない比較は
+残って当然で、`fuzz-loop`（`Agent/scripts/fuzz-loop/`）の `TestRandomConstFold -randseed 2026102012040002` の `-O 0` が
+`internal: flag verify: the flags of cmp #242 are all overwritten before any use (by asl a)` で落ちた。再現は
+`gv_u8 = (((65536 == ((242 <= id_u8(255)) as u8)) as u8) << 6);`（sema が `65536 == u8` を偽に畳み、中の比較だけ残る。
+出力は -O 0 / -O 2 とも正しい 0）。使われない比較をエラーにするのは、`-O 2` で ssa と jumps の段を切っていないときだけにした
+（`verifyCompareFlags` の `deadIsError`。段を切る `TestRandomMetamorphic` の形も同じ理由で対象外）。回帰は
+`TestBugDeadCompareO0`、`TestVerifyCompareFlags` に `deadIsError=false` の場合を足した
 - 確かめたこと: 37 本のうちビルドできる組で使われない比較 8 → 0、`-O 0` / `-O 2` の出力は全部一致。fuzz の
   `TestRandom*`（`-randn 2000` を既定の種と `-randseed 20261018000`）で使われない比較も誤ったコードも 0 本。
   castle の ROM は en3 / en4 だけ変わり（en4 の使われない `anim % 4` が消え、en3 は一時の値が減って `rest` が A に常駐）、
