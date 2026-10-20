@@ -35,10 +35,10 @@ index 2c364a3..f6fc8cc 100644
  				return cv(h.IntValue(v))
  			}
 diff --git a/internal/sema/expr.go b/internal/sema/expr.go
-index cd17bec..9eeb8cb 100644
+index 5be9271..10bff15 100644
 --- a/internal/sema/expr.go
 +++ b/internal/sema/expr.go
-@@ -519,7 +519,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
+@@ -536,7 +536,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
  						h.lval(st)
  					}
  				} else if x.expr != nil {
@@ -47,7 +47,7 @@ index cd17bec..9eeb8cb 100644
  				}
  			} else {
  				// 普通の関数コール
-@@ -624,42 +624,15 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
+@@ -641,34 +641,15 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
  			// 組み込みの min / max / clamp: 互換型の一時変数に入れて、比較して入れ替える
  			//   min: t = a; if (b < a) t = b     max: t = a; if (a < b) t = b
  			//   clamp: t = x; if (t < lo) t = lo; if (hi < t) t = hi
@@ -72,17 +72,9 @@ index cd17bec..9eeb8cb 100644
 -			}
  			for i := range vals {
 -				if wide {
--					v := h.widenOperand(h.widenArith(vals[i], typ), typ)
 -					// 広い幅で計算した引数は自分の符号の型 (`u8 ^ i8` は i16) なので、比べる前に揃える型として読む (u16 と
--					// i16 のまま比べると符号付きの比較になっていた)。狭い符号なしの値はそのまま (上位は 0 で読む)
--					if vt := ir.ValType(v); vt != typ && vt.Size == typ.Size {
--						if k, ok := ir.ValIntLiteral(v); ok {
--							v = ir.NewIntLiteral("", typ, wrapInt(k, typ))
--						} else {
--							v = ir.NewCastedValue(v, typ, 0)
--						}
--					}
--					vals[i] = v
+-					// i16 のまま比べると符号付きの比較になっていた)
+-					vals[i] = h.retypeInt(h.widenOperand(h.widenArith(vals[i], typ), typ), typ)
 -					continue
 -				}
 -				// 狭い幅で折り返した定数の引数は元の式をこの幅で畳み直す (算術の項と同じ: widenArith。定数の畳み込みの
@@ -93,7 +85,7 @@ index cd17bec..9eeb8cb 100644
  			tmp := h.newTmp(typ)
  			h.emit(&ir.Op{Code: ir.OpLoad, Dst: tmp, Src: []ir.Operand{vals[0]}})
 diff --git a/internal/sema/widen.go b/internal/sema/widen.go
-index 50a95b7..e25916c 100644
+index 8b52c06..69644d8 100644
 --- a/internal/sema/widen.go
 +++ b/internal/sema/widen.go
 @@ -226,14 +226,6 @@ func (h *Hlc) wideValue(c *cexpr, size int) (v int, t *types.Type, ok bool) {

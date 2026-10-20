@@ -450,13 +450,30 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			if v, ok := left.(*ir.Value); ok && ir.ValType(right).IsFarFunc() {
 				left = h.rval(h.withExpected(cv(v), ir.ValType(right)))
 			}
-			typ, swap := h.compareType(e.op, ir.ValType(left), ir.ValType(right))
+			lt, rt := ir.ValType(left), ir.ValType(right)
+			retype := false // 広げた項と定数の比較で、比べる型を広げる前の型で決めた
+			if h.v4() && (ni.untyped != nr.untyped) && lt.Kind == types.Int && rt.Kind == types.Int {
+				// A1 で広げた 8 ビットの式と型のない定数の比較: 比べる型は広げる前の型で決めて幅だけ広げる (変数と同じ規則。
+				// 広げた型 (i16) と u16 の定数は同じ大きさで符号付きが勝ち、`(x ^ 48) >= 65535` (x:i8) が 65535 を -1 と読んでいた)
+				if !ni.untyped && wi.t.Size > ni.t.Size && ni.t.Kind == types.Int {
+					lt, retype = ni.t, true
+				} else if !nr.untyped && wr.t.Size > nr.t.Size && nr.t.Kind == types.Int {
+					rt, retype = nr.t, true
+				}
+			}
+			typ, swap := h.compareType(e.op, lt, rt)
+			if w := max(ir.ValType(left).Size, ir.ValType(right).Size); typ.Kind == types.Int && typ.Enum == nil && typ.Size < w {
+				typ = h.prog.Types.IntType(w, typ.Signed) // 項は計算した幅のまま
+			}
 			if swap {
 				left, right = right, left
 			}
 			l0, r0 := left, right
 			left, right = h.widenArith(left, typ), h.widenArith(right, typ) // A1: fc 3 の書き換え・折り返した定数 (widen.go)
 			left, right = h.cast(left, typ), h.cast(right, typ)
+			if retype {
+				left, right = h.retypeInt(left, typ), h.retypeInt(right, typ) // 広げた項 (i16) を u16 で比べるときなど
+			}
 			if p.mixed && h.rewriting() {
 				// 互換型に揃える (A1 の書き換え) の後に報告する: 同じ式に両方が付くとき `((x + vx) as i8) as u16` の順に当たる
 				h.rewriteMixedSign(l0, r0, [2]*cexpr{a0, a1})
@@ -644,17 +661,9 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			}
 			for i := range vals {
 				if wide {
-					v := h.widenOperand(h.widenArith(vals[i], typ), typ)
 					// 広い幅で計算した引数は自分の符号の型 (`u8 ^ i8` は i16) なので、比べる前に揃える型として読む (u16 と
-					// i16 のまま比べると符号付きの比較になっていた)。狭い符号なしの値はそのまま (上位は 0 で読む)
-					if vt := ir.ValType(v); vt != typ && vt.Size == typ.Size {
-						if k, ok := ir.ValIntLiteral(v); ok {
-							v = ir.NewIntLiteral("", typ, wrapInt(k, typ))
-						} else {
-							v = ir.NewCastedValue(v, typ, 0)
-						}
-					}
-					vals[i] = v
+					// i16 のまま比べると符号付きの比較になっていた)
+					vals[i] = h.retypeInt(h.widenOperand(h.widenArith(vals[i], typ), typ), typ)
 					continue
 				}
 				// 狭い幅で折り返した定数の引数は元の式をこの幅で畳み直す (算術の項と同じ: widenArith。定数の畳み込みの

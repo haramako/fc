@@ -356,6 +356,19 @@ func (h *Hlc) widenOperand(src ir.Operand, t *types.Type) ir.Operand {
 	return ext
 }
 
+// retypeInt は同じ大きさで型 (符号) の違う整数の値 v を t として読む (比較の命令は項の型で符号付きか決まる: 広い幅で
+// 計算した項 (広げる前の型の符号) を、揃えた型で比べる)。大きさが違う値 (狭い符号なしは上位を 0 で読む) はそのまま。
+func (h *Hlc) retypeInt(v ir.Operand, t *types.Type) ir.Operand {
+	vt := ir.ValType(v)
+	if t.Kind != types.Int || t.Enum != nil || vt.Kind != types.Int || vt.Enum != nil || vt == t || vt.Size != t.Size {
+		return v
+	}
+	if k, ok := ir.ValIntLiteral(v); ok {
+		return ir.NewIntLiteral("", t, wrapInt(k, t))
+	}
+	return ir.NewCastedValue(v, t, 0)
+}
+
 // widened は式 c の値 v を、A1 で広げる前の型より広い幅で計算したか。
 func (h *Hlc) widened(c *cexpr, v ir.Operand) bool {
 	info, ok := h.exprType(c)

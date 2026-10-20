@@ -141,7 +141,10 @@ func (h *Hlc) planCompare(op cop, a, b, wa, wb exprInfo) cmpPlan {
 	if p.mixed && h.v4() {
 		panic(h.mixedSignError(a.t, b.t))
 	}
-	p.args = [2]adaptedLit{h.adaptLit(wa, wb, true), h.adaptLit(wb, wa, true)}
+	// 型のない定数を合わせる規則は相手の広げる前の型で決める (A1 で 16 ビットに広げた 8 ビットの式も、変数と同じ規則。
+	// `(x << 4) != -176` (x:u8) が「-176 does not fit in u16」になり、`x != -176` は i16 で比べて通っていた: seed 61340040)。
+	// 型付きの項は計算した幅の型 (wa / wb) のまま
+	p.args = [2]adaptedLit{h.adaptLit(wa, b, true), h.adaptLit(wb, a, true)}
 	return p
 }
 
