@@ -1,0 +1,14 @@
+# regalloc: 常駐の写しだけのブロックを入る辺の数で見分けない (ループの頭に置いた書き戻しを戻りの辺でも通り、外側のループが終わらない。TestResidentExitToLoopHeadCopyBlock)
+diff --git a/internal/regalloc/resident.go b/internal/regalloc/resident.go
+index b9b7a21..59a98a7 100644
+--- a/internal/regalloc/resident.go
++++ b/internal/regalloc/resident.go
+@@ -722,7 +722,7 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
+ 	// 頭が内側の入口の写しと jmp だけになったもの) に写しを置くと、ほかの辺 (戻りの辺) でも通る (TestResidentExitToLoopHeadCopyBlock)
+ 	copyBlock := func(b *ir.Block) (first, jump int, ok bool) {
+ 		o := cfg.Ops(b)
+-		if len(b.Preds) != 1 || len(o) < 2 || ops[o[len(o)-1]].Code != ir.OpJump {
++		if len(o) < 2 || ops[o[len(o)-1]].Code != ir.OpJump {
+ 			return 0, 0, false
+ 		}
+ 		first, firstLoad := -1, -1
