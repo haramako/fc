@@ -825,6 +825,38 @@ function main():void
 	}
 }
 
+// 常駐の出口の辺の先が、ループの頭なのに「ラベル; 写し; jmp」だけのブロック: 外側のループの頭 (@body) が、内側の while の
+// 入口の写し (l5@Y) と jmp だけになった (中の l3 のループの使われない比較を jumps の dropDeadTemps が消したため)。onEdge が
+// それを辺を分割した写しだけのブロックと見て、関数全体の領域 (Y = l2) の書き戻し `l2 = Y` をラベルの後に置き、戻りの辺でも
+// 通って Y (= l5) を l2 に書いていた (外側のループが終わらない。fuzz-loop の TestRandomV3Programs、種 2026102012190700)。
+func TestResidentExitToLoopHeadCopyBlock(t *testing.T) {
+	t.Parallel()
+	src := `function ff0(p0:sint):sint
+{
+var l5:int = 0;
+for (var l2:int = 0; l2 < 2; l2++) {
+for (var l3:sint16 = 0; l3 < 3; l3++) {
+var l4:sint16 = min((((l3 + 5) - l3) as sint16), ((p0 == p0) as sint16));
+}
+while (5 < (p0 as sint16) && l5 < 5) {
+l5++;
+}
+}
+return p0;
+}
+function main():void
+{
+	printf(ff0(-57) as sint16, "\n");
+	exit(0);
+}
+`
+	for _, level := range []int{-1, 0} {
+		if got := runEmuLevel(t, src, level); got != "-57\n" {
+			t.Errorf("level %d: got %q", level, got)
+		}
+	}
+}
+
 // splitWords の後の定数 / コピーの伝播 (propagateBytes) は、置き換える一時変数の型を保つ: sint8 の一時変数 (l0 * 0) を
 // uint8 のリテラル 0 に置き換えて、`(7 << l4) >= (l0 * 0)` (1 バイトの符号付きの比較。224 は -32) が符号なしの比較に
 // なり、l4 = 5 で a1[3] に書いていた (-O 2 だけ。広げた生成器の fuzz、種 3253765)。

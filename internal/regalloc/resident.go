@@ -718,10 +718,11 @@ func makeResident(lmd *ir.Lambda, cfg *ir.CFG, r region, lv *ir.Liveness, vA, vY
 	// 同じ辺に内側のループの写しがすでにあれば、退避 (spill) はその前、復帰はその後に置く
 	// (内側に入る辺: この領域を退避してから内側を復帰、内側から出る辺: 内側を退避してからこの領域を復帰)
 	// copyBlock は b が「ラベル; 常駐の写しだけ; jmp」のブロック (先の領域が辺を分割して作ったもの) なら、
-	// 最初の写しと jmp の位置を返す。
+	// 最初の写しと jmp の位置を返す。辺を分割したブロックは入る辺が 1 つだけ: 同じ形でも入る辺が複数あるブロック (ループの
+	// 頭が内側の入口の写しと jmp だけになったもの) に写しを置くと、ほかの辺 (戻りの辺) でも通る (TestResidentExitToLoopHeadCopyBlock)
 	copyBlock := func(b *ir.Block) (first, jump int, ok bool) {
 		o := cfg.Ops(b)
-		if len(o) < 2 || ops[o[len(o)-1]].Code != ir.OpJump {
+		if len(b.Preds) != 1 || len(o) < 2 || ops[o[len(o)-1]].Code != ir.OpJump {
 			return 0, 0, false
 		}
 		first, firstLoad := -1, -1
