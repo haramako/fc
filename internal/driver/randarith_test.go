@@ -541,8 +541,12 @@ func arMixed(x *arNode, W int) bool {
 			}
 			return arMixed(x.b, t.w)
 		}
-	case 2: // as で 16 ビットに広げる所は印を使う所
-		return x.typ.w > x.a.n.w && arMixed(x.a, 0)
+	case 2: // as で 16 ビットに広げる所は印を使う所。広げない as は代入と同じ区切りで、中 (広げる as など) を見る
+		// (`(id_i16((u8 + i8) as i16)) as i16` の外の as で止めて、中の広げる as を見落としていた。種 2026102201430635)
+		if x.typ.w > x.a.n.w {
+			return arMixed(x.a, 0)
+		}
+		return arMixed(x.a, x.typ.w)
 	case 3: // 呼び出しの引数は代入と同じ区切り (中の `as` で広げる所などを見る)
 		return arMixed(x.a, x.typ.w)
 	case 4:
