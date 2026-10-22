@@ -665,7 +665,12 @@ func (g *arGen) program() (map[string]string, string) {
 			e = arTy{w, false}
 		}
 		fmt.Fprintf(&body, "\tif (%s %s %s) {\n\t\thits = hits + 1;\n\t}\n", arRender(a, false), op, arRender(bb, false))
-		if arCmp(op, e.wrap(arValue(a, w)), e.wrap(arValue(bb, w))) {
+		va, vb := e.wrap(arValue(a, w)), e.wrap(arValue(bb, w))
+		if a.pure && bb.pure {
+			// 型のない定数どうしは数として比べる (折り返さない。`(-81) != 175` は真: i8 に折り返すと両方 -81。seed 61437275)
+			va, vb = a.exact, bb.exact
+		}
+		if arCmp(op, va, vb) {
 			g.hits++
 		}
 	}
