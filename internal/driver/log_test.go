@@ -270,33 +270,51 @@ var reLogField = regexp.MustCompile(` (\S+)=(\S+)`)
 // 実行回数が同じ地点だけ、その地点のどの回でも両方で取れた変数の値の組を多重集合として比べる (順番は比べない)。
 // skip の ID の地点は比べない。回数の違いの数も返す。
 func compareLogValues(o0, o2 string, skip map[int]bool) (bad string, countDiffs int) {
-	parse := func(s string) map[string][]map[string]string {
-		r := map[string][]map[string]string{}
-		for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
-			if line == "" {
+	// 行は元の文字列の部分文字列のまま地点ごとにまとめ (写さない)、名前と値は地点ごとに比べるときだけ取り出す。全部の行を先に
+	// map にすると、@log を 58 万行出す種 (長いループ) で 1GB を超え、nomad-lab の 2GB の上限で fuzz が落ちていた (2026-10-22)
+	group := func(s string) map[string][]string {
+		r := map[string][]string{}
+		for s != "" {
+			line := s
+			if i := strings.IndexByte(s, '\n'); i >= 0 {
+				line, s = s[:i], s[i+1:]
+			} else {
+				s = ""
+			}
+			if line = strings.TrimSpace(line); line == "" {
 				continue
 			}
 			loc, rest, _ := strings.Cut(line, " ")
-			m := map[string]string{}
-			for _, f := range reLogField.FindAllStringSubmatch(" "+rest, -1) {
-				m[f[1]] = f[2]
-			}
-			r[loc] = append(r[loc], m)
+			r[loc] = append(r[loc], rest)
 		}
 		return r
 	}
-	a, b := parse(o0), parse(o2)
-	for loc, as := range a {
+	// fields は `a=1 b=?` の名前と値 (reLogField と同じく最後の = で分ける)
+	fields := func(lines []string) []map[string]string {
+		ms := make([]map[string]string, len(lines))
+		for i, rest := range lines {
+			m := map[string]string{}
+			for _, f := range strings.Fields(rest) {
+				if k := strings.LastIndexByte(f, '='); k > 0 && k < len(f)-1 {
+					m[f[:k]] = f[k+1:]
+				}
+			}
+			ms[i] = m
+		}
+		return ms
+	}
+	a, b := group(o0), group(o2)
+	for loc, aLines := range a {
 		if i := strings.LastIndexByte(loc, '#'); i >= 0 {
 			if id, err := strconv.Atoi(loc[i+1:]); err == nil && skip[id] {
 				continue
 			}
 		}
-		bs := b[loc]
-		if len(as) != len(bs) {
+		if len(aLines) != len(b[loc]) {
 			countDiffs++
 			continue
 		}
+		as, bs := fields(aLines), fields(b[loc])
 		// 比べる変数: この地点のどの回でも、両方のレベルで値が取れたもの (「?」でなく、番地がレベルで違うポインタ `$...` でない)。
 		// 回ごとに組にすると、回転したループで出る順が入れ替わり、片方だけ「?」の変数があるときに別の回どうしを比べていた
 		names := map[string]bool{}
