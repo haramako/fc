@@ -74,6 +74,16 @@ function t(l1:u8):void @(noinline)
   `TestCastleFrameCycles` は同じ
 - 回帰テスト `TestBugAndZeroDeadCompare`、bugzoo の `ssa-and-zero` と `jumps-dead-temps`
 
+## 追記 2026-10-23: 元の値のどのバイトも読まない cast で残る形
+
+- nomad-lab の fuzz（`TestRandomConstFoldV4 -randseed 20261049578000 -foldn 2500`、種 20261049579941、fc@13e65e07）で
+  フラグの検査のエラー: `the flags of cmp #40 are all overwritten before any use`
+- 形: `((((x != 40) as u8) as u16) >> 8) as i8`。ssa の畳み込みが `cast<i8, 1>(真偽値)`（1 バイトの値の 2 バイト目 = いつも 0）に
+  するが、cast のままだと真偽値を使っている扱いで、`not` と比較が消えない。0 にするのは pipeline の `ZeroEmptyCasts`（最適化の
+  後）で、その後に使われない定義を消す段が無い
+- 対応: ssa の段（propagateSSA）で、畳み込みの後に `ZeroEmptyCasts` を呼んでから使われない定義を消す。回帰は
+  `TestBugEmptyCastDeadCompare`（直す前は同じエラーで落ちる）、bugzoo の `ssa-empty-cast`
+
 ## 関連
 
 - `internal/codegen/verify.go` の `verifyCompareFlags`

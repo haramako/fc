@@ -73,6 +73,12 @@ func propagateSSA(lmd *ir.Lambda) {
 		if s.simplify() {
 			changed = true
 		}
+		// 畳み込みが作った、元の値のどのバイトも読まない cast (`((b as u16) >> 8) as i8` の `cast<i8, 1>(b)`。b は 1 バイト) は
+		// 0 にする。cast のままだと b を使っていることになり、b を作る比較などが消えずに残っていた (後の pipeline の
+		// ZeroEmptyCasts で 0 になった後は消す段が無い。fuzz の TestRandomConstFoldV4 の種 20261049579941)
+		if ZeroEmptyCasts(lmd) {
+			changed = true
+		}
 		s = buildSSA(lmd)
 		if s == nil {
 			return false

@@ -326,6 +326,35 @@ function main():void
 	}
 }
 
+// TestBugEmptyCastDeadCompare は、ssa の畳み込みが作った「元の値のどのバイトも読まない cast」で、使われなくなった比較が残らない
+// こと。`((x != 40) as u8 as u16 >> 8) as i8` は `cast<i8, 1>(真偽値)` (1 バイトの値の 2 バイト目 = いつも 0) に畳まれるが、cast の
+// ままだと真偽値を使っている扱いで、比較 (`cmp #40`) が残っていた。0 にするのは後の pipeline の ZeroEmptyCasts で、その後は
+// 消す段が無い (2026-10-23 に nomad-lab の fuzz の TestRandomConstFoldV4 -randseed 20261049578000 (種 20261049579941) が見つけた)。
+// テストではフラグの検査が使われない比較をエラーにする。
+func TestBugEmptyCastDeadCompare(t *testing.T) {
+	t.Parallel()
+	out, asm := buildShape(t, `#fc 4
+use console;
+function id_i8(x:i8):i8 @(noinline) { return x; }
+var ga_i8:[3]i8;
+function main():void
+{
+	ga_i8[1] = (((((((id_i8(127) != 40) as u8)) as u16) >> 8)) as i8);
+	var w:i16 = ga_i8[1];
+	@printf("{}\n", w);
+	console.exit(0);
+}
+`)
+	if out != "0\n" {
+		t.Errorf("出力 %q、want %q", out, "0\n")
+	}
+	body := asm[strings.Index(asm, ".proc _main\n"):]
+	body = body[:strings.Index(body, ".endproc")]
+	if strings.Contains(body, "\tcmp #40") {
+		t.Errorf("main に使われない cmp #40 が残っている:\n%s", body)
+	}
+}
+
 // TestBugDeadCompareO0 は、使われない比較を消す段 (ssa の畳み込み・jumps の dropDeadTemps) が走らない -O 0 では、使われない
 // 比較をフラグの検査がエラーにしないこと。`65536 == (u8 の値)` を sema が偽に畳み、中の `242 <= id_u8(255)` の比較だけが
 // `cmp #242` のまま残って `asl a` に上書きされていた (出力は正しい。2026-10-20 に fuzz-loop の TestRandomConstFold

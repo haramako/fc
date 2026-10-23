@@ -109,3 +109,7 @@
   （固定の所）のバンクを返して違うバンクに切り替わり、実装のメソッドが別のバンクの中身を実行して止まった。`$Task_bank` を最初の
   メソッドの振り分けの表の要素から作っていた（実装が書いた最初のメソッドのバンクに。`TestInterfaceBankOfIdDefault`、bugzoo の
   bank-of-id-default）。TestRandomMethodsV4 と TestRandomFormatV4 は 2000 本ずつ通った
+- 2026-10-23、nomad-lab の fuzz（TestRandomConstFoldV4、`-randseed 20261049578000 -foldn 2500`、種 20261049579941）で使われない比較の
+  取りこぼしを 1 件: `((x != 40) as u8 as u16 >> 8) as i8` を ssa が「1 バイトの値の 2 バイト目」の cast に畳み、cast のまま真偽値を
+  使う扱いで比較が残った。ssa の段で元の値のどのバイトも読まない cast を 0 にしてから使われない定義を消す（`TestBugEmptyCastDeadCompare`、
+  bugzoo の ssa-empty-cast。Agent/issues/local-2026-10-18-dead-compare.md の追記）
