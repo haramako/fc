@@ -70,7 +70,7 @@
 ### 段 3: 出力
 
 - fclib/fmt.fc に `dec_u24` / `dec_i24` / `dec_u32` / `dec_i32`（10 の累乗の引き算を 10 桁に）、`hex_u24` / `hex_u32`、`bin_u24` / `bin_u32`。
-  `pbuf:[32]u8` の大きさの約束を見直す（32 桁の 2 進数）。`@(test)` を足す。docs/reference/std/fmt.md は `fcc doc -md` で作り直す
+  `pbuf:[32]u8` の大きさの約束を見直す（32 桁の 2 進数）。`@(test)` を足す。docs のサイトの fmt のページは `fcc doc -md` の生成物なので fmt.fc のコメントを書く
 
 ### 段 4: テストと fuzz
 
