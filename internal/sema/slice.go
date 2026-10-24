@@ -294,7 +294,10 @@ func registerSliceBuiltins(h *Hlc) {
 		if nt := ir.ValType(n); nt.Kind != types.Int || nt.Enum != nil {
 			panic(&diag.Error{Msg: fmt.Sprintf("@slice: the length must be an integer (got %s)", nt)})
 		}
-		// 長さが u16 (の値) なら広い slice
+		// 長さが u16 (の値) なら広い slice。3・4 バイトの長さはエラー (番地は 16 ビット。Agent/wiki/plans/wide-int.md)
+		if nt := ir.ValType(n); nt.Size > 2 {
+			panic(&diag.Error{Msg: fmt.Sprintf("@slice: the length must be u8 or u16 (got %s; write `n as u16`)", nt)})
+		}
 		wide := ir.ValType(n).Size == 2
 		if k, lit := ir.ValIntLiteral(n); lit && (k < 0 || k > maxSliceLen(wide)) {
 			panic(&diag.Error{Msg: fmt.Sprintf("@slice: length %d is out of range (0..%d)", k, maxSliceLen(wide))})

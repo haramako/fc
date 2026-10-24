@@ -87,7 +87,7 @@ func (h *Hlc) warnBranchEndLog() {
 // checkLogType は @log で表示できる型か ("" なら表示できる)。
 func checkLogType(t *types.Type) string {
 	switch {
-	case t.Kind == types.Int && t.Size <= 2, t.Kind == types.Bool:
+	case t.Kind == types.Int && t.Size <= maxIntBytes, t.Kind == types.Bool:
 		return ""
 	case t.Kind == types.Pointer, t.Kind == types.Func && !t.IsFarFunc():
 		return ""

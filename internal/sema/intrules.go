@@ -69,7 +69,7 @@ func (h *Hlc) checkShifts(mark int) {
 // 式 (書き換えの位置)。report が偽なら fc 3 のモジュールでも書き換えを報告しない (実行時に組み立てる配列は、要素の変換 convert が
 // 範囲外の定数を E として報告する)。
 func (h *Hlc) arrayElemType(typ *types.Type, vals []ir.Operand, args []*cexpr, report bool) *types.Type {
-	if typ == nil || typ.Kind != types.Int || typ.Enum != nil || typ.Size > 2 || !(h.v4() || h.rewriting()) {
+	if typ == nil || typ.Kind != types.Int || typ.Enum != nil || typ.Size > maxIntBytes || !(h.v4() || h.rewriting()) {
 		return typ
 	}
 	tlo, thi := intRange(typ)
@@ -99,13 +99,13 @@ func (h *Hlc) arrayElemType(typ *types.Type, vals []ir.Operand, args []*cexpr, r
 		return typ
 	}
 	// 変数の要素が符号付きなら符号付きのまま (実行時に負の値がありうる)
-	for size := typ.Size; size <= 2; size++ {
+	for size := typ.Size; size <= h.maxIntSize(); size++ {
 		t := h.prog.Types.IntType(size, typ.Signed || lo < 0)
 		if l, u := intRange(t); lo >= l && hi <= u {
 			return t
 		}
 	}
-	panic(&diag.Error{Msg: fmt.Sprintf("the constants in the array literal (%d to %d) do not fit in one integer type of 16 bits; write the element type", lo, hi)})
+	panic(&diag.Error{Msg: fmt.Sprintf("the constants in the array literal (%d to %d) do not fit in one integer type of %d bits; write the element type", lo, hi, 8*h.maxIntSize())})
 }
 
 // mixedSign は大小の比較の両辺 l, r が、互換型で比べると片方の値が読み替えられる整数か (F6)。
@@ -129,11 +129,9 @@ func mixedSign(l, r ir.Operand) bool {
 // mixedSignError は F6 のエラー (fc 4)。
 func (h *Hlc) mixedSignError(lt, rt *types.Type) *diag.Error {
 	ct := h.prog.Types.CommonType(lt, rt)
-	why := "an unsigned value of 128 or more reads as negative"
+	why := fmt.Sprintf("an unsigned value of %d or more reads as negative", 1<<(8*ct.Size-1))
 	if !ct.Signed {
 		why = "a negative value reads as a large unsigned one"
-	} else if ct.Size == 2 {
-		why = "an unsigned value of 32768 or more reads as negative"
 	}
 	if !lt.Signed {
 		lt, rt = rt, lt // 符号付きを先に (`a > b` は `b < a` にしてから来るので、書いた順とは限らない)

@@ -74,13 +74,13 @@ func (h *Hlc) callExternalMacro(pool MacroSource, name string, args []*cexpr) *c
 	return h.constEval(cstr(r.Str)) // 文字列のリテラルと同じ (fc 4 は 0 終端にしない [N]u8)
 }
 
-// externalIntType は結果の型の名前 (u8 / i8 / u16 / i16) の型。
+// externalIntType は結果の型の名前 (u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32。3・4 バイトは fc 4 のモジュールだけ) の型。
 func (h *Hlc) externalIntType(name string) *types.Type {
-	size, signed := 1, name[0] == 'i'
-	if name[1:] == "16" {
-		size = 2
+	if types.WideIntTypeNames[name] && !h.v4() {
+		panic(&diag.Error{Msg: fmt.Sprintf("the macro result type %s is a type of fc 4 only (24 / 32-bit integers)", name)})
 	}
-	return h.prog.Types.IntType(size, signed)
+	t, _ := h.prog.Types.Named(name) // extmacro.Result.Validate が名前を確かめている
+	return t
 }
 
 // externalArg は評価済みの定数 c をマクロの引数 (int / string / []byte / []int) にする。

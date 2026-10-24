@@ -18,6 +18,11 @@
 	.import __mod_8s
 	.import __mod_16
 	.import __mod_16s
+	.import __mul_32
+	.import __div_32
+	.import __div_32s
+	.import __mod_32
+	.import __mod_32s
 	
 	
 ;;; call subroutine

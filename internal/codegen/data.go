@@ -225,13 +225,17 @@ func (l *Llc) dataBytes(t *types.Type, v ir.Operand, out *[]string) {
 	}
 }
 
-// dataDirective は大きさ size (1 / 2 バイト) の要素の疑似命令と、整数を折り返す幅。
+// dataDirective は大きさ size (1〜4 バイト) の要素の疑似命令と、整数を折り返す幅。
 func dataDirective(size int) (op string, limit int) {
 	switch size {
 	case 1:
 		return ".byte", 256
 	case 2:
 		return ".word", 65536
+	case 3:
+		return ".faraddr", 1 << 24
+	case 4:
+		return ".dword", 1 << 32
 	}
 	panic(fmt.Sprintf("invalid data element size %d", size))
 }

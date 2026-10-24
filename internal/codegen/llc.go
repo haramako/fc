@@ -24,6 +24,8 @@ type Llc struct {
 	Limits        regalloc.Limits // レジスタ領域の大きさ (base.asm と一致させる)
 	FarCall       bool            // far call が有効 (各モジュールに farcall / FC_FARCALL の import を出す)
 	labelCount    int
+	// WideRuntime は 3・4 バイトの mul / div / mod を出した (share/runtime_wide.asm をリンクする。driver)
+	WideRuntime   bool
 	ResidentFixes int // 常駐を触らないはずの命令が書いていて、退避 / 復帰に直した数 (regalloc の見積もりの外れ。CompileLambda)
 	// MisclassifyResident はテスト用: 常駐レジスタを退避する (ResClobber) と見積もった命令を「触らない」(ResFree) に
 	// する。本体がそのレジスタを書いていれば CompileLambda が見つけて退避 / 復帰に直す (自己修正が働くことを確かめる。

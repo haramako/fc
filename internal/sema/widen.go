@@ -303,7 +303,7 @@ func (h *Hlc) wideWidth(e *cexpr, hint int) (int, *types.Type) {
 		return 0, nil
 	}
 	info, ok := h.exprType(e)
-	if !ok || info.untyped || info.t.Kind != types.Int || info.t.Enum != nil || info.t.Size > 2 {
+	if !ok || info.untyped || info.t.Kind != types.Int || info.t.Enum != nil || info.t.Size > maxIntBytes {
 		return 0, nil
 	}
 	return max(hint, info.t.Size), info.t
@@ -322,7 +322,7 @@ func (h *Hlc) compareWidth(a, b *cexpr) int {
 	}
 	w := 0
 	for _, t := range []*types.Type{h.literalType(ai, bi, true), h.literalType(bi, ai, true)} {
-		if t.Kind == types.Int && t.Enum == nil && t.Size <= 2 {
+		if t.Kind == types.Int && t.Enum == nil && t.Size <= maxIntBytes {
 			w = max(w, t.Size)
 		}
 	}
@@ -331,7 +331,7 @@ func (h *Hlc) compareWidth(a, b *cexpr) int {
 
 // rvalWide は代入先の型 typ の幅で式 c を計算する rval (A1)。
 func (h *Hlc) rvalWide(c *cexpr, typ *types.Type) ir.Operand {
-	if h.v4() && typ != nil && typ.Kind == types.Int && typ.Enum == nil && typ.Size <= 2 {
+	if h.v4() && typ != nil && typ.Kind == types.Int && typ.Enum == nil && typ.Size <= maxIntBytes {
 		return h.rvalIn(c, typ.Size)
 	}
 	return h.rval(c)

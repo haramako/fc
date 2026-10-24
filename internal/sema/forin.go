@@ -352,7 +352,7 @@ func (h *Hlc) caseRange(r *syntax.RangeExpr, t *types.Type) caseItem {
 	if last < lo {
 		panic(&diag.Error{Msg: fmt.Sprintf("case range %s is empty", rangeText(lo, hi, r.Inclusive)), Pos: syntax.At(h.module.Path, r.Op)})
 	}
-	if t.Kind == types.Int && t.Size <= 2 {
+	if t.Kind == types.Int && t.Size <= maxIntBytes {
 		if a, b := intRange(t); lo < a || last > b {
 			panic(&diag.Error{Msg: fmt.Sprintf("case range %s does not fit in %s", rangeText(lo, hi, r.Inclusive), t), Pos: syntax.At(h.module.Path, r.Op)})
 		}

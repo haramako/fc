@@ -234,11 +234,11 @@ func (h *Hlc) literalType(x, other exprInfo, cmp bool) *types.Type {
 	if !x.untyped {
 		return x.t
 	}
-	switch literalRule(x.t, x.n, other.untyped, other.t, cmp) {
+	switch literalRule(x.t, x.n, other.untyped, other.t, cmp, h.maxIntSize()) {
 	case litFits, litTruncate, litCmpError:
 		return other.t
-	case litSigned16:
-		return h.prog.Types.IntType(2, true)
+	case litSignedWide:
+		return h.prog.Types.IntType(x.t.Size, true)
 	}
 	return x.t
 }
@@ -325,7 +325,7 @@ var sliceMacro = macroTyping{typ: func(h *Hlc, args []*cexpr) (exprInfo, bool) {
 	}
 	p, ok := h.exprType(args[0])
 	n, nok := h.exprType(args[1])
-	if !ok || !nok || p.untyped || n.t.Kind != types.Int || n.t.Enum != nil {
+	if !ok || !nok || p.untyped || n.t.Kind != types.Int || n.t.Enum != nil || n.t.Size > 2 {
 		return exprInfo{}, false
 	}
 	t := p.t

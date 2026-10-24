@@ -305,6 +305,12 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 	if fc := c.farcallAsm(); fc != "" {
 		sources = append(sources, fc)
 	}
+	if llc.WideRuntime {
+		// 3・4 バイトの mul / div / mod を使ったビルドだけ (使わないビルドの ROM を変えない)
+		src := c.findShare("runtime_wide.asm")
+		sources = append(sources, src)
+		objs = append(objs, c.objPath(src))
+	}
 	if src, err := c.globalInitTable(prog.Modules.List()); err != nil {
 		return nil, err
 	} else if src != "" {

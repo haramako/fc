@@ -83,6 +83,9 @@ func registerBuiltins(p *Program) {
 				} else {
 					r.stmts = append(r.stmts, ccall(cv(printInt16), n))
 				}
+			case typ.Kind == types.Int && typ.Size > 2:
+				// print_int16 に渡すと黙って下位 16 ビットになる (fc 4 の型。fc 4 のモジュールの関数の戻り値など)
+				panic(&diag.Error{Msg: fmt.Sprintf("printf cannot print a value of type %s (24 / 32-bit integers are printed by @printf of fc 4)", typ)})
 			case typ.Kind == types.Int && typ.Signed:
 				// 符号付きは符号付きで (符号なしで 65531 と出ていた)
 				r.stmts = append(r.stmts, ccall(cv(h.moduleFunc(stdio, "print_sint16")), arg))

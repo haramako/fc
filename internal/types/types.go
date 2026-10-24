@@ -215,7 +215,12 @@ type intSpec struct {
 // IntTypeNames は整数型の名前 (fc 3 の正式名。fc 2 でも使える) → (サイズ, 符号)。Agent/discussions/2026-09-20-v3-plan.md §7。
 var IntTypeNames = map[string]intSpec{
 	"u8": {1, false}, "i8": {1, true}, "u16": {2, false}, "i16": {2, true},
+	"u24": {3, false}, "i24": {3, true}, "u32": {4, false}, "i32": {4, true},
 }
+
+// WideIntTypeNames は fc 4 だけの整数型 (3・4 バイト。Agent/wiki/plans/wide-int.md)。fc 2 / 3 のモジュールでは型にならない
+// (sema の basicType がエラーにする)。
+var WideIntTypeNames = map[string]bool{"u24": true, "i24": true, "u32": true, "i32": true}
 
 // V2IntTypeNames は fc 2 だけの整数型の名前 → fc 3 の名前 (sema が fc 2 のモジュールの型名を読み替える。`fcc migrate` の
 // 書き換えと fc 3 での案内にも使う)。
@@ -227,7 +232,7 @@ var V2IntTypeNames = map[string]string{
 	"sint16": "i16",
 }
 
-// Named は基本型の名前 (void・bool・u8 / i8 / u16 / i16) から型を返す。未知の名前なら ok=false。fc 2 だけの名前 (int など)
+// Named は基本型の名前 (void・bool・u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32) から型を返す。未知の名前なら ok=false。fc 2 だけの名前 (int など)
 // は引かない (文法の版は types の外: sema が V2IntTypeNames で fc 3 の名前に読み替えてから引く。2026-10-05 までは NamedIn が
 // 版番号を受け取っていた)。
 func (u *Universe) Named(name string) (t *Type, ok bool) {

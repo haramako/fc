@@ -500,7 +500,7 @@ func (h *Hlc) compileStatement(s syntax.Stmt) {
 					panic(&diag.Error{Msg: msg, Pos: syntax.At(h.module.Path, v.Pos())})
 				}
 				if k, ok := ir.ValIntLiteral(cv); ok {
-					if ct := ir.ValType(cond); ct.Kind == types.Int && ct.Enum == nil && ct.Size <= 2 {
+					if ct := ir.ValType(cond); ct.Kind == types.Int && ct.Enum == nil && ct.Size <= maxIntBytes {
 						// case の値も比較と同じく、タグの型に収まらなければエラー (u8 の `case 300:` が黙って一度も一致せず、
 						// `case -1:` が 255 に一致していた。survey 2026-09-27、`case -1:` のエラーは 2026-09-27 決定)
 						if lo, hi := intRange(ct); k < lo || k > hi {

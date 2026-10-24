@@ -338,6 +338,9 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			right := h.rvalIn(e.args[1], rw)
 			// 型・項の変換・型の誤りは型を決める段の計画 (typeplan.go)。A1 で広い幅で計算した項も計画は広げる前の型で決める
 			p := h.planArith(e.op, h.planInfo(e.args[0], left), h.planInfo(e.args[1], right))
+			if h.rewriting() {
+				h.rewriteBeyond16(e, left, right)
+			}
 			switch e.op {
 			case opDiv, opMod:
 				h.checkMixedUse(left, "`"+opSymbol(e.op)+"`")
@@ -443,7 +446,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			p := h.planCompare(e.op, ni, nr, wi, wr)
 			left, right = p.args[0].apply(left), p.args[1].apply(right)
 			h.warnConstCompare(e.op, left, right)
-			if k, ok := h.foldBeyond16(e.op, left, right); ok {
+			if k, ok := h.foldBeyond(e.op, left, right); ok {
 				r = ir.NewIntLiteral("", h.prog.Types.Bool(), k)
 				break
 			}

@@ -27,7 +27,7 @@ func (h *Hlc) convert(v ir.Operand, typ *types.Type, c *cexpr) ir.Operand {
 // convertValue は convert の本体。checked なら E・D の判定は評価の前に済んでいる (preConvert)。
 func (h *Hlc) convertValue(v ir.Operand, typ *types.Type, c *cexpr, checked bool) ir.Operand {
 	vt := ir.ValType(v)
-	if typ.Kind == types.Int && typ.Enum == nil && (vt.Kind == types.Int || vt.Kind == types.Bool) && vt.Enum == nil && typ.Size <= 2 {
+	if typ.Kind == types.Int && typ.Enum == nil && (vt.Kind == types.Int || vt.Kind == types.Bool) && vt.Enum == nil && typ.Size <= maxIntBytes {
 		if typ.Size > vt.Size {
 			v = h.widenArith(v, typ) // A1: 代入先が広ければ代入先の幅の値 (折り返した型付きの定数。widen.go)
 			vt = ir.ValType(v)
@@ -58,7 +58,7 @@ const (
 // convRule は型 from (定数なら値 k) を代入のような変換で to にするときの E・D の判定 (IR を出さない。実行時の値の convert・
 // 評価の前の preConvert・const の宣言の checkConstRange が使う)。
 func convRule(from *types.Type, k int, isConst bool, to *types.Type) convKind {
-	if to.Kind != types.Int || to.Enum != nil || to.Size > 2 || from.Kind != types.Int && from.Kind != types.Bool || from.Enum != nil {
+	if to.Kind != types.Int || to.Enum != nil || to.Size > maxIntBytes || from.Kind != types.Int && from.Kind != types.Bool || from.Enum != nil {
 		return convOK
 	}
 	if isConst {

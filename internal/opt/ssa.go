@@ -509,7 +509,7 @@ func (s *ssaForm) evalConst(val *ssaVal) (int, bool) {
 	case ir.OpLoad:
 		return bitsOf(a, size), true
 	case ir.OpSignExtension:
-		return bitsOf(normBits(a, 1, true), size), true // 下位 1 バイトの符号拡張 (codegen・interp と同じく入力の型を見ない)
+		return bitsOf(normBits(a, ir.SignExtensionWidth(op), true), size), true // 入力の幅の符号拡張 (codegen・interp と同じ)
 	case ir.OpNot:
 		return bitsOf(b2i(bitsOf(a, t0.Size) == 0), size), true
 	case ir.OpBitNot:

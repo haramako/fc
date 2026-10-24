@@ -24,7 +24,7 @@ import (
 
 // isSmallInt は t が 1〜2 バイトの整数型 (enum でない) か。
 func isSmallInt(t *types.Type) bool {
-	return isPlainInt(t) && t.Size >= 1 && t.Size <= 2
+	return isPlainInt(t) && t.Size >= 1 && t.Size <= maxIntBytes
 }
 
 // condJoin は条件式の枝の型 a, b から条件式の型を決める (expected は文脈の型、無ければ nil)。合わなければ診断の panic。
@@ -41,9 +41,11 @@ func (h *Hlc) condJoin(a, b exprInfo, expected *types.Type) exprInfo {
 			return exprInfo{t: expected}
 		}
 		lo, hi := min(a.n, b.n), max(a.n, b.n)
-		for _, t := range []*types.Type{u.IntType(1, false), u.IntType(1, true), u.IntType(2, false), u.IntType(2, true)} {
-			if l, hh := intRange(t); lo >= l && hi <= hh {
-				return exprInfo{t: t}
+		for size := 1; size <= h.maxIntSize(); size++ {
+			for _, t := range []*types.Type{u.IntType(size, false), u.IntType(size, true)} {
+				if l, hh := intRange(t); lo >= l && hi <= hh {
+					return exprInfo{t: t}
+				}
 			}
 		}
 		panic(&diag.Error{Msg: fmt.Sprintf("the branches of `?:` (%d and %d) do not fit in one integer type", a.n, b.n)})
@@ -52,11 +54,11 @@ func (h *Hlc) condJoin(a, b exprInfo, expected *types.Type) exprInfo {
 		if b.untyped {
 			lit, other = b, a
 		}
-		switch literalRule(lit.t, lit.n, false, other.t, true) {
+		switch literalRule(lit.t, lit.n, false, other.t, true, h.maxIntSize()) {
 		case litFits:
 			return exprInfo{t: other.t}
-		case litSigned16:
-			return exprInfo{t: u.IntType(2, true)}
+		case litSignedWide:
+			return exprInfo{t: u.IntType(lit.t.Size, true)}
 		case litCmpError:
 			if isSmallInt(expected) && isSmallInt(other.t) && other.t.Size <= expected.Size {
 				if lo, hi := intRange(expected); lit.n >= lo && lit.n <= hi {

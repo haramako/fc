@@ -102,6 +102,11 @@ func verifyOp(op *Op, labels map[string]int) error {
 			return fmt.Errorf("displacement %d + width %d through a pointer does not fit in Y", m.Disp, m.Width)
 		}
 	}
+	if op.Code == OpSignExtension {
+		if w, n := ValType(op.Src[0]).Size, ValType(op.Dst).Size; w < 1 || w >= n {
+			return fmt.Errorf("sign_extension from %d bytes to %d bytes", w, n)
+		}
+	}
 	// 幅と符号 (sign.go)
 	switch {
 	case op.Code.IsCompare() && op.Width <= 0:

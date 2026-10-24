@@ -41,7 +41,7 @@ func valueInfo(v ir.Operand) exprInfo {
 // adaptedLit は literalRule で相手に合わせた後の項 (型のない定数の値を作り直すときは changed)。
 type adaptedLit struct {
 	t       *types.Type // 合わせた後の型 (互換型を決める型)
-	changed bool        // 値を t の定数に作り直す (切り詰め・符号付きの 16 ビット)。false なら項はそのまま
+	changed bool        // 値を t の定数に作り直す (切り詰め・符号付きの広い型)。false なら項はそのまま
 	n       int         // 作り直した定数の値
 }
 
@@ -51,11 +51,13 @@ func (h *Hlc) adaptLit(x, other exprInfo, cmp bool) adaptedLit {
 		return adaptedLit{t: x.t}
 	}
 	t := other.t
-	switch literalRule(x.t, x.n, other.untyped, t, cmp) {
+	switch literalRule(x.t, x.n, other.untyped, t, cmp, h.maxIntSize()) {
+	case litTooWide:
+		panic(&diag.Error{Msg: fmt.Sprintf("%s does not fit in any integer type (32 bits); write `%d as %s` to truncate", describeInt(x), x.n, t)})
 	case litCmpError:
 		panic(&diag.Error{Msg: fmt.Sprintf("%s does not fit in %s, the type of the other operand (a constant in a comparison takes that type; convert the other operand with `as` to compare in another type)", describeInt(x), t)})
-	case litSigned16:
-		return adaptedLit{t: h.prog.Types.IntType(2, true), changed: true, n: x.n}
+	case litSignedWide:
+		return adaptedLit{t: h.prog.Types.IntType(x.t.Size, true), changed: true, n: x.n}
 	case litTruncate:
 		return adaptedLit{t: t, changed: true, n: wrapInt(x.n, t)}
 	case litFits:
@@ -118,6 +120,9 @@ func (h *Hlc) planArith(op cop, a, b exprInfo) arithPlan {
 	if (op == opAdd || op == opSub) && (at.Kind == types.Pointer || at.Kind == types.SoaRef) && bt.Kind == types.Int {
 		if at.IsVoidPtr() {
 			panic(&diag.Error{Msg: "no arithmetic on *void"})
+		}
+		if bt.Size > 2 {
+			panic(&diag.Error{Msg: fmt.Sprintf("an offset added to a pointer must be at most 16 bits (got %s; write `n as u16`)", bt)})
 		}
 		return arithPlan{kind: arithPtrAdd, t: at, args: p.args}
 	}
@@ -244,6 +249,10 @@ func (h *Hlc) planIndex(a exprInfo, idx *exprInfo, desc func() string) *types.Ty
 	}
 	if idx != nil && idx.t.Kind != types.Int && idx.t.Kind != types.Bool {
 		panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", idx.t)})
+	}
+	if idx != nil && idx.t.Size > 2 {
+		// 番地は 16 ビットなので、黙って切ると気づけない (Agent/wiki/plans/wide-int.md)
+		panic(&diag.Error{Msg: fmt.Sprintf("an index must be u8, i8, u16 or i16 (got %s; write `i as u16`)", idx.t)})
 	}
 	return t.Base
 }

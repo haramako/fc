@@ -93,7 +93,7 @@ func TestCondExprErrors(t *testing.T) {
 		{"var x:i8 = 0; var y = a > 0 ? x : 200;", "200 does not fit in i8, the type of the other branch of `?:`"},
 		{"var y:u8 = a > 0 ? -1 : 2;", "-1 does not fit in u8 (a branch of `?:`"},
 		{"var p:*u8 = null; var y = a > 0 ? p : a;", "the branches of `?:` have incompatible types"},
-		{"var y = a > 0 ? 1 : 70000;", "do not fit in one integer type"},
+		{"var y = a > 0 ? 1 : 5000000000;", "do not fit in one integer type"},
 		{"var y:u8 = a > 0 ? a : 300 as u16;", "narrowing"},
 		{"var y = a > 0 ? 1;", "parse error"},
 	} {

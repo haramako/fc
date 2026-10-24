@@ -25,13 +25,14 @@ const WIDTH = 0x1f;
 const MINUS = 22;
 const SPACE = 23;
 const POW10 = [10000, 1000, 100, 10];
+const POW10_32:[9]u32 = [1000000000, 100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10];
 
 var out:[]u8;
 public var codes:*const u8;   // 数字などの文字のコード (begin が ASCII にする)
 public var at:u8;             // 次に書く位置 (= 書いた長さ)
 var trying:bool;              // begin_try の後 (足りなくても止まらない)
 var failed:bool;              // begin_try の後で足りなかった (以後は何も書かない)
-var pbuf:[32]u8;              // printf の数などの部分 (begin_print / print。幅の上限 31 と 16 桁の 2 進が入る)
+var pbuf:[32]u8;              // printf の数などの部分 (begin_print / print。幅の上限 31 と 32 桁の 2 進が入る)
 
 // 書き先を dst にして、先頭から書く
 public function begin(dst:[]u8):void
@@ -265,6 +266,99 @@ public function bin_u16(n:u16, spec:u8):void
 public function bin_u8(n:u8, spec:u8):void
 {
 	bin_u16(n, spec);
+}
+
+// n の 10 進の桁を tmp に上位から書き、桁数を返す (32 ビット)
+function dec32(tmp:*u8, n:u32):u8
+{
+	var len:u8 = 0;
+	for (var p in POW10_32) {
+		var d:u8 = 0;
+		while (n >= p) {
+			n -= p;
+			d += 1;
+		}
+		if (d != 0 || len != 0) {
+			tmp[len] = d;
+			len += 1;
+		}
+	}
+	tmp[len] = n as u8;
+	return len + 1;
+}
+
+// 10 進で書く (spec は幅と ZERO)
+public function dec_u32(n:u32, spec:u8):void
+{
+	var tmp:[10]u8;
+	put(&tmp[0], dec32(&tmp[0], n), false, spec);
+}
+
+// 10 進で書く (spec は幅と ZERO)
+public function dec_u24(n:u24, spec:u8):void
+{
+	dec_u32(n, spec);
+}
+
+// 符号付きの 10 進で書く (負なら -。spec は幅と ZERO)
+public function dec_i32(n:i32, spec:u8):void
+{
+	var tmp:[10]u8;
+	var u = @bitcast(u32, n);
+	if (n < 0) {
+		u = 0 - u;
+	}
+	put(&tmp[0], dec32(&tmp[0], u), n < 0, spec);
+}
+
+// 符号付きの 10 進で書く (負なら -。spec は幅と ZERO)
+public function dec_i24(n:i24, spec:u8):void
+{
+	dec_i32(n, spec);
+}
+
+// 16 進で書く (0 を詰めて最低 1 桁。spec は幅と ZERO・LOWER)
+public function hex_u32(n:u32, spec:u8):void
+{
+	var tmp:[8]u8;
+	var len:u8 = 0;
+	for (var i:u8 = 0; i < 8; i += 1) {
+		var d = ((n >> 28) as u8) & 15;
+		if (d != 0 || len != 0 || i == 7) {
+			tmp[len] = d;
+			len += 1;
+		}
+		n = n << 4;
+	}
+	put(&tmp[0], len, false, spec);
+}
+
+// 16 進で書く (spec は幅と ZERO・LOWER)
+public function hex_u24(n:u24, spec:u8):void
+{
+	hex_u32(n, spec);
+}
+
+// 2 進で書く (0 を詰めて最低 1 桁。spec は幅と ZERO)
+public function bin_u32(n:u32, spec:u8):void
+{
+	var tmp:[32]u8;
+	var len:u8 = 0;
+	for (var i:u8 = 0; i < 32; i += 1) {
+		var b = ((n >> 31) as u8) & 1;
+		if (b != 0 || len != 0 || i == 31) {
+			tmp[len] = b;
+			len += 1;
+		}
+		n = n << 1;
+	}
+	put(&tmp[0], len, false, spec);
+}
+
+// 2 進で書く (spec は幅と ZERO)
+public function bin_u24(n:u24, spec:u8):void
+{
+	bin_u32(n, spec);
 }
 
 // s をそのまま書く

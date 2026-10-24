@@ -160,6 +160,32 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		// 足し算より 1 桁速い)
 		r = append(r, l.loadA(s0, 0), "sta <reg+0", l.loadA(s1, 0), "sta <reg+2", "jsr __mul_8t16",
 			"lda <reg+4", l.storeA(dst, 0), "lda <reg+5", l.storeA(dst, 1))
+	} else if size := ir.ValType(dst).Size; size > 2 {
+		// 3・4 バイト: share/runtime_wide.asm の 32 ビットの関数 (3 バイトは 4 バイトに広げて渡し、下位 3 バイトを使う)。
+		// 入力は reg(0..3) と reg(4..7)、結果は reg(8..11)
+		l.WideRuntime = true
+		for k, s := range []ir.Operand{s0, s1} {
+			for i := 0; i < size; i++ {
+				r = append(r, l.loadA(s, i), fmt.Sprintf("sta <reg+%d", 4*k+i))
+			}
+			if size == 3 {
+				if op.IsSigned() {
+					// 符号拡張: 最上位のビットを C に出して 0 / $FF を作る (A は最上位のバイトのまま)
+					r = append(r, "asl a", "lda #0", "adc #255", "eor #255")
+				} else {
+					r = append(r, "lda #0")
+				}
+				r = append(r, fmt.Sprintf("sta <reg+%d", 4*k+3))
+			}
+		}
+		suffix := "32"
+		if op.IsSigned() {
+			suffix += "s"
+		}
+		r = append(r, fmt.Sprintf("jsr __%s_%s", op.Code.String(), suffix))
+		for i := 0; i < size; i++ {
+			r = append(r, fmt.Sprintf("lda <reg+%d", 8+i), l.storeA(dst, i))
+		}
 	} else {
 		// 定数でない場合
 		for i := 0; i < ir.ValType(dst).Size; i++ {

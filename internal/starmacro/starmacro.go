@@ -329,13 +329,26 @@ func intList(it starlark.Iterable) ([]int, error) {
 	defer iter.Done()
 	var x starlark.Value
 	for iter.Next(&x) {
-		n, err := starlark.AsInt32(x)
+		n, err := asInt(x)
 		if err != nil {
 			return nil, fmt.Errorf("element %d: %v", len(r), err)
 		}
 		r = append(r, n)
 	}
 	return r, nil
+}
+
+// asInt は Starlark の整数を int にする (64 ビットに入らなければエラー。u32 の値も入る)。
+func asInt(x starlark.Value) (int, error) {
+	i, ok := x.(starlark.Int)
+	if !ok {
+		return 0, fmt.Errorf("got %s, want int", x.Type())
+	}
+	n, ok := i.Int64()
+	if !ok {
+		return 0, fmt.Errorf("%s is too large", x)
+	}
+	return int(n), nil
 }
 
 // toResult はマクロの戻り値を結果にする。
@@ -349,7 +362,7 @@ func toResult(v starlark.Value) (*extmacro.Result, error) {
 			r = &extmacro.Result{Kind: "int", Type: x.typ, Int: x.n}
 		}
 	case starlark.Int:
-		n, err := starlark.AsInt32(x)
+		n, err := asInt(x)
 		if err != nil {
 			return nil, fmt.Errorf("the result %s is too large", x)
 		}

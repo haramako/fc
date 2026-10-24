@@ -1,0 +1,83 @@
+#fc 4
+use console;
+struct P {
+	x:u24;
+	y:i32;
+	n:u8;
+}
+const TAB:[4]u32 = [1, 0x10000, 0x12345678, 0xffffffff];
+const STAB:[3]i24 = [-1, 8388607, -8388608];
+var ga:[4]u32;
+var gp:P;
+function id32(x:u32):u32 @(noinline) { return x; }
+function ids32(x:i32):i32 @(noinline) { return x; }
+function id24(x:u24):u24 @(noinline) { return x; }
+function ids24(x:i24):i24 @(noinline) { return x; }
+function id8(x:i8):i8 @(noinline) { return x; }
+function id16(x:i16):i16 @(noinline) { return x; }
+function sum(a:u32, b:u24, c:i32):i32 @(noinline)
+{
+	return (a as i32) + b + c;
+}
+function fact(n:u8):u32
+{
+	var r:u32 = 1;
+	for (var i:u8 = 2; i <= n; i += 1) {
+		r *= i;
+	}
+	return r;
+}
+function main():void
+{
+	var a = id32(0xfffffff0);
+	var b = id32(0x20);
+	@printf("{:x} {:x} {:x}\n", a + b, a - b, b - a);
+	var s = ids32(-5);
+	var t = ids32(3);
+	@printf("{} {} {} {}\n", s < t, s > t, a > b, a < b);
+	@printf("{} {} {}\n", s == -5, a == 0xfffffff0, a != 4294967280);
+	@printf("{} {} {} {}\n", s / t, s % t, s * t, -s / t);
+	@printf("{} {}\n", a / 3, a % 1000);
+	@printf("{:x} {:x} {:x}\n", a >> 4, a << 4, s >> 1);
+	var k:u8 = 13;
+	@printf("{:x} {:x}\n", a >> k, b << k);
+	@printf("{} {} {}\n", ids32(id8(-3)), ids32(id16(-30000)), ids32(ids24(-70000)));
+	@printf("{} {}\n", id32(id24(0xabcdef)), (a as u16) + (s as i8));
+	var c = id24(0x800000);
+	var d = ids24(-2);
+	@printf("{} {} {} {}\n", c, d, c + 1, d * d * d);
+	@printf("{} {} {}\n", c / 7, d / 3, d % 3);
+	@printf("{} {}\n", c >> 23, d >> 1);
+	var x:u16 = 60000;
+	var y:u16 = 7;
+	var w:u32 = x * y + 100000;
+	@printf("{} {}\n", w, x * y);
+	@printf("{} {} {}\n", 70000, -40000, 16777216);
+	for (var i:u8 = 0; i < 4; i += 1) {
+		ga[i] = TAB[i] + i;
+	}
+	@printf("{:x} {:x} {:x} {:x}\n", ga[0], ga[1], ga[2], ga[3]);
+	@printf("{} {} {}\n", STAB[0], STAB[1], STAB[2]);
+	gp.x = 0x123456;
+	gp.y = -123456789;
+	gp.n = 9;
+	gp.x += 1;
+	gp.y -= 1;
+	@printf("{:x} {} {}\n", gp.x, gp.y, gp.n);
+	@printf("{}\n", sum(4000000000, 16000000, -100));
+	@printf("{} {}\n", fact(12), fact(13));
+	var cnt:u32 = 0xffff;
+	cnt += 1;
+	cnt++;
+	@printf("{:x}\n", cnt);
+	cnt--;
+	cnt--;
+	@printf("{:x} {:b}\n", cnt, cnt);
+	var big:u32 = 4294967295;
+	big += 1;
+	@printf("{}\n", big);
+	var m = id32(0x12345678);
+	@printf("{:x} {:x} {:x} {:x}\n", m & 0xff00ff00, m | 0x0f, m ^ 0xffffffff, ~m);
+	@printf("{} {}\n", m * 256, m / 65536);
+	console.exit(0);
+}

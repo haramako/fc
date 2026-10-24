@@ -99,10 +99,7 @@ func (h *Hlc) mixedArithError(m *mixedArith, what string) *diag.Error {
 	if !strings.HasPrefix(paren, "(") || !strings.HasSuffix(paren, ")") {
 		paren = "(" + paren + ")"
 	}
-	limit := "128"
-	if m.lt.Size == 2 {
-		limit = "32768"
-	}
+	limit := fmt.Sprint(1 << (8*m.lt.Size - 1))
 	msg := fmt.Sprintf("%s mixes %s and %s, so it is %s (the signed type wins at the same size); %s reads a value of %s or more as negative. Choose the type: `a +%% b` / `a -%% b` / `a *%% b` compute in the type of the left operand, or write `%s as T`",
 		text, m.lt, m.rt, m.origin.op.Dst.(*ir.Value).Type, what, limit, paren)
 	return &diag.Error{Msg: msg, Pos: syntax.At(h.module.Path, m.origin.c.pos)}

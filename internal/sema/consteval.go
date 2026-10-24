@@ -335,10 +335,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				case t == nil || c.op == opLand || c.op == opLor || c.op == opNot:
 				case c.op == opEq || c.op == opNe || c.op == opLt || c.op == opGt || c.op == opLe || c.op == opGe:
 					// 比較: 型付きの定数だけを互換型の値にする。型のない定数は実行時も相手に合わせる / 広げる / 16 ビットを
-					// 超えれば数学の値で比べる (foldBeyond16) ので、そのまま
+					// 超えれば数学の値で比べる (foldBeyond) ので、そのまま
 					// 片方が型のない定数でも、16 ビットに収まるなら両方を互換型の値にする (実行時は型のない定数を相手に合わせるか
 					// 広げた型で比べる: `65533 > ((-81 as i8) >> 9)` は i16 で -3 > -1。数学の値で比べて 1 になっていた。
-					// TestRandomConstFold)。16 ビットを超える型のない定数は実行時も数学の値で比べる (foldBeyond16)
+					// TestRandomConstFold)。どの整数型にも入らない型のない定数は実行時も数学の値で比べる (foldBeyond)
 					if len(args) > 1 {
 						u0, u1 := args[0].val.Untyped, args[1].val.Untyped
 						switch {
@@ -362,10 +362,16 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 							if u0 {
 								typed, uv, tv = args[1], &v1, &v2
 							}
-							if *uv >= -32768 && *uv <= 65535 { // 16 ビットを超える型のない定数は数学の値のまま (foldBeyond16)
+							// どの整数型にも入らない型のない定数は数学の値のまま (foldBeyond)
+							if lo, hi := anyIntRange(h.maxIntSize()); *uv >= lo && *uv <= hi {
 								if tt := typed.val.Type; tt.Kind == types.Int && tt.Signed {
 									*tv = wrapInt(*tv, tt)
-									if *uv >= 32768 {
+									// 定数が自分の大きさ (16 ビット以上) の符号付きに入らなければ互換型 (符号なし) で比べる (literalRule)
+									ut := args[1].val.Type
+									if u0 {
+										ut = args[0].val.Type
+									}
+									if *uv > 1<<(8*max(2, ut.Size)-1)-1 {
 										*tv, *uv = wrapInt(*tv, t), wrapInt(*uv, t)
 									}
 								} else {
@@ -584,19 +590,17 @@ func (h *Hlc) constAggregate(c *cexpr) *ir.Value {
 	return nil
 }
 
-// IntValue は値から型を推定した整数リテラル: 0〜255 → uint8、256 以上 → uint16、-128〜-1 → sint8、-129 以下 → sint16。
+// IntValue は値から型を推定した整数リテラル: 値が入るいちばん狭い型 (0〜255 → u8、256 以上 → u16、-128〜-1 → i8、-129 以下 →
+// i16。fc 4 はさらに 65536 以上 → u24、16777216 以上 → u32、-32769 以下 → i24、-8388609 以下 → i32)。いちばん広い型に入らない値は
+// その型のまま値を持つ (実行時の値にする所がエラーにする: literalRule・convRule)。
 func (h *Hlc) IntValue(n int) *ir.Value {
-	var t *types.Type
-	switch {
-	case n >= 256:
-		t = h.prog.Types.IntType(2, false)
-	case n < -128:
-		t = h.prog.Types.IntType(2, true)
-	case n < 0:
-		t = h.prog.Types.IntType(1, true)
-	default:
-		t = h.prog.Types.IntType(1, false)
+	size, signed := 1, n < 0
+	for ; size < h.maxIntSize(); size++ {
+		if lo, hi := intRange(h.prog.Types.IntType(size, signed)); n >= lo && n <= hi {
+			break
+		}
 	}
+	t := h.prog.Types.IntType(size, signed)
 	v := ir.NewIntLiteral("", t, n)
 	v.Untyped = true
 	return v

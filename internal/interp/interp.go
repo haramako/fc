@@ -647,13 +647,10 @@ func (m *machine) run(f *frame) {
 			}
 			m.writeBytes(f, op.Dst, m.bytesOf(f, op.Src[0], size(op.Dst)))
 		case ir.OpSignExtension:
-			n := size(op.Dst)
-			if n > 2 {
-				unsupported("sign_extension to %d bytes", n)
-			}
-			b := uint64(m.byteOf(f, op.Src[0], 0))
-			if b&0x80 != 0 {
-				b |= 0xff00
+			n, w := size(op.Dst), ir.SignExtensionWidth(op)
+			b := m.read(f, op.Src[0], w)
+			if b>>(8*w-1)&1 != 0 {
+				b |= ^uint64(0) << (8 * w)
 			}
 			m.write(f, op.Dst, b, n)
 		case ir.OpAdd, ir.OpSub, ir.OpAnd, ir.OpOr, ir.OpXor:
@@ -792,10 +789,7 @@ func (m *machine) shift(f *frame, op *ir.Op) uint64 {
 	sgn := ir.ValType(op.Src[0]).Signed
 	count, lit := ir.ValIntLiteral(op.Src[1])
 	if !lit {
-		if n != 1 {
-			unsupported("variable shift of %d bytes", n)
-		}
-		count = int(m.byteOf(f, op.Src[1], 0))
+		count = int(m.byteOf(f, op.Src[1], 0)) // codegen と同じく回数の下位 1 バイトの回数だけ 1 ビットずつ
 	}
 	for k := 0; k < count; k++ {
 		if op.Code == ir.OpShiftLeft {
@@ -816,9 +810,6 @@ func (m *machine) shift(f *frame, op *ir.Op) uint64 {
 // mulDivMod は mul / div / mod (Dst の幅と符号で。除算は床除算、剰余は割る数の符号)。
 func (m *machine) mulDivMod(f *frame, op *ir.Op) uint64 {
 	n := size(op.Dst)
-	if n > 2 {
-		unsupported("%s of %d bytes", op.Code, n)
-	}
 	a, b := m.read(f, op.Src[0], n), m.read(f, op.Src[1], n)
 	if op.Code == ir.OpMul {
 		return a * b & mask(n)

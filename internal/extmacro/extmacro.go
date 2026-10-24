@@ -10,7 +10,7 @@
 //	                           {"id": 1, "error": "..."}
 //
 // 引数は整数・文字列・バイト列 ({"bytes": "<base64>"})・整数の配列。結果は {"int": n} / {"type": "i8", "data": [...]} /
-// {"bytes": "<base64>"} / {"string": "..."} のどれか (type は u8 / i8 / u16 / i16。int に付ければ型付きの定数)。deps は
+// {"bytes": "<base64>"} / {"string": "..."} のどれか (type は u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32。int に付ければ型付きの定数)。deps は
 // マクロが読んだファイル (作業ディレクトリ = fc.toml のあるディレクトリからの相対)。マクロのログは stderr (fcc がそのまま流す)。
 //
 // キャッシュ: 同じビルドの中の同じ要求はメモリで覚える。fc.toml に inputs (マクロのコマンド自身のソースの glob) を書いたときだけ、
@@ -47,7 +47,7 @@ type Server struct {
 // Result はマクロの結果。Kind で中身が決まる。
 type Result struct {
 	Kind  string // "int" / "data" / "bytes" / "string"
-	Type  string // 整数の型 (u8 / i8 / u16 / i16)。int では "" なら型のない定数、data では必須
+	Type  string // 整数の型 (u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32)。int では "" なら型のない定数、data では必須
 	Int   int
 	Data  []int
 	Bytes []byte
@@ -334,7 +334,8 @@ func encodeArgs(args []any) ([]any, error) {
 }
 
 // intRange は結果の整数の型の範囲。
-var intRange = map[string][2]int{"u8": {0, 255}, "i8": {-128, 127}, "u16": {0, 65535}, "i16": {-32768, 32767}}
+var intRange = map[string][2]int{"u8": {0, 255}, "i8": {-128, 127}, "u16": {0, 65535}, "i16": {-32768, 32767},
+	"u24": {0, 1<<24 - 1}, "i24": {-1 << 23, 1<<23 - 1}, "u32": {0, 1<<32 - 1}, "i32": {-1 << 31, 1<<31 - 1}}
 
 func decodeResult(raw json.RawMessage) (*Result, error) {
 	if len(raw) == 0 || string(raw) == "null" {
@@ -383,7 +384,7 @@ func decodeResult(raw json.RawMessage) (*Result, error) {
 func (r *Result) Validate() error {
 	rg, typed := intRange[r.Type]
 	if r.Type != "" && !typed {
-		return fmt.Errorf("unknown result type %q (u8 / i8 / u16 / i16)", r.Type)
+		return fmt.Errorf("unknown result type %q (u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32)", r.Type)
 	}
 	switch r.Kind {
 	case "int":
@@ -392,7 +393,7 @@ func (r *Result) Validate() error {
 		}
 	case "data":
 		if !typed {
-			return fmt.Errorf("an integer array result needs a type (u8 / i8 / u16 / i16)")
+			return fmt.Errorf("an integer array result needs a type (u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32)")
 		}
 		for i, v := range r.Data {
 			if v < rg[0] || v > rg[1] {

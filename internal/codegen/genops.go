@@ -374,21 +374,26 @@ func (l *funcGen) genSignExtension() {
 	r, op := l.r, l.op
 	labels := l.newLabels(2)
 	plsLabel, endLabel := labels[0], labels[1]
-	// TODO: サイズ1->2以上の場合を実装すること、いまはそれしかないから十分だけど
-	r.push(l.loadA(op.In(0), 0))
-	if l.inA(op.In(0)) {
-		// 入力が A にある (呼び出しの戻り値など) と lda が出ず、N が A を反映しているとは限らない
-		// (常駐 Y の復帰の ldy の後だった。fuzz で発覚)。直前が A の演算ならピープホールが消す
-		r.push("cmp #0")
+	// 入力の w バイトを写し、最後に読んだ最上位のバイトの N で残りを埋める
+	w := ir.SignExtensionWidth(op)
+	for i := 0; i < w; i++ {
+		r.push(l.loadA(op.In(0), i))
+		if w == 1 && l.inA(op.In(0)) {
+			// 入力が A にある (呼び出しの戻り値など) と lda が出ず、N が A を反映しているとは限らない
+			// (常駐 Y の復帰の ldy の後だった。fuzz で発覚)。直前が A の演算ならピープホールが消す
+			r.push("cmp #0")
+		}
+		r.push(l.storeA(op.Dst, i))
 	}
-	r.push(l.storeA(op.Dst, 0))
 	r.push(fmt.Sprintf("bpl %s", plsLabel))
 	r.push("lda #255")
 	r.push(fmt.Sprintf("jmp %s", endLabel))
 	r.push(plsLabel + ":")
 	r.push("lda #0")
 	r.push(endLabel + ":")
-	r.push(l.storeA(op.Dst, 1))
+	for i := w; i < ir.ValType(op.Dst).Size; i++ {
+		r.push(l.storeA(op.Dst, i))
+	}
 }
 
 // genAddSub は Add / Sub のコード生成。
