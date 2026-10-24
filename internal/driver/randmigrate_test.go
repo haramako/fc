@@ -171,3 +171,36 @@ func joinSources(files map[string]string) string {
 	}
 	return b.String()
 }
+
+// TestMigrateBeyond16Folded: 型付きの定数と 16 ビットに入らない型のない定数の算術 (畳み込みに来る形) も、fc 4 への migrate が
+// `as` を足して fc 2 と同じ値になる (fc 2 / 3 は 16 ビットで折り返す。fc 4 では -50172 が i24 のまま u16 に入らないエラーだった。
+// TestRandomMigrate の種 20261191179568)。
+func TestMigrateBeyond16Folded(t *testing.T) {
+	t.Parallel()
+	v2 := map[string]string{"t.fc": `#fc 2
+use * from stdio;
+var g:int16;
+var h:sint16;
+function main():void
+{
+	g = ((((-123) || 7) as int16) ^ (-50172));
+	h = ((5 as sint16) + 70000);
+	printf(g, " ", h);
+	exit(0);
+}
+`}
+	v4, err := migrateToLatest(t, v2)
+	if err != nil {
+		t.Fatalf("fc 4 への migrate が失敗: %v", err)
+	}
+	for _, level := range []int{-1, 0} {
+		want, err := rpRun(t, v2, level, rpMaxCycles)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := rpRun(t, v4, level, rpMaxCycles)
+		if err != nil || got != want {
+			t.Fatalf("-O %d: 出力が変わった: %v\n元: %q\n後: %q\n%s", level, err, want, got, joinSources(v4))
+		}
+	}
+}

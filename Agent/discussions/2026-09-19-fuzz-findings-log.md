@@ -133,3 +133,8 @@
   の asm、引数の式が下ろすと呼び出しになる形を -O 0 で積みながら評価して静的フレームが壊れる（billiards が TestGamesSameAtTick で
   -O 0 / -O 2 の違いを出した。i16f16 の掛け算を引数に書く形は 5eed801 から）。回帰は testdata/floating_init.fc・floating_args.fc と
   TestFloatErrors。生成器の穴（小さい型への `as`・呼び出しでない葉）も直した
+- 2026-10-24、Nomad の試しの TestRandomMigrate（種 20261191179500 から、fc@521d94c）で 1 件（種 20261191179568）: 型付きの定数と
+  16 ビットに入らない型のない定数の算術（`((x || 7) as int16) ^ (-50172)`、両方が定数）は畳み込みに来るので、fc 3 → 4 の migrate の
+  `as`（rewriteBeyond16）が expr.go の実行時の形でしか報告されず、fc 4 では -50172 が i24 のまま u16 に入らないエラーになった。
+  24 / 32 ビット整数を入れた 502db9d から（その前は 16 ビットで折り返して同じ値だった）。consteval の畳み込みでも報告する
+  （TestMigrateBeyond16Folded。戻すと落ちることを確かめた）

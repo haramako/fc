@@ -321,6 +321,15 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				// (`(0 as u8) + 242` と `(-5 as i8)` の剰余は i8 の -14 % -5。畳み込みが 242 のまま計算して実行時と違っていた。
 				// TestRandomConstFold で発覚)。シフトの量はそのまま
 				t := h.foldType(args, false)
+				if h.rewriting() && len(args) == 2 && args[0].val.Untyped != args[1].val.Untyped {
+					switch c.op {
+					case opAdd, opSub, opMul, opDiv, opMod, opAnd, opOr, opXor, opShiftLeft, opShiftRight:
+						// 型付きの定数と 16 ビットに入らない型のない定数の算術も、実行時の形と同じく migrate に `as` を報告する
+						// (`((x || 7) as int16) ^ (-50172)` は畳み込みに来るので expr.go の rewriteBeyond16 を通らず、fc 4 では
+						// -50172 が i24 のまま u16 に入らないエラーになっていた。TestRandomMigrate の種 20261191179568)
+						h.rewriteBeyond16(c, args[0].val, args[1].val)
+					}
+				}
 				if c.op == opShiftLeft || c.op == opShiftRight {
 					// F1: fc 4 のシフトの結果は左辺の型 (型のない左辺なら型のない値)。fc 3 は両辺で決めるので、違えば
 					// migrate に左辺を今の型の `as` にする書き換えを報告する (`32 << (6 as u8)` は fc 3 では u8 の 0)
