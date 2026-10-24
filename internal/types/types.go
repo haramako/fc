@@ -218,7 +218,7 @@ var IntTypeNames = map[string]intSpec{
 	"u24": {3, false}, "i24": {3, true}, "u32": {4, false}, "i32": {4, true},
 }
 
-// WideIntTypeNames は fc 4 だけの整数型 (3・4 バイト。Agent/wiki/plans/wide-int.md)。fc 2 / 3 のモジュールでは型にならない
+// WideIntTypeNames は fc 4 だけの整数型 (3・4 バイト。Agent/wiki/design/wide-int.md)。fc 2 / 3 のモジュールでは型にならない
 // (sema の basicType がエラーにする)。
 var WideIntTypeNames = map[string]bool{"u24": true, "i24": true, "u32": true, "i32": true}
 

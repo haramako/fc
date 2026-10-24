@@ -334,7 +334,7 @@ func (l *Llc) shiftZeroExt(op *ir.Op, n int) ([]any, bool) {
 	return append(r, "sta "+lo), true
 }
 
-// shiftWide は 3・4 バイトの値の定数シフトをメモリ上で行う (Agent/wiki/plans/wide-int.md)。8 ビットごとはバイトの移動
+// shiftWide は 3・4 バイトの値の定数シフトをメモリ上で行う (Agent/wiki/design/wide-int.md)。8 ビットごとはバイトの移動
 // (u32 の `x >> 24` を 1 ビットずつ回すと 24 回 × 4 バイト)、残りの 1〜7 ビットは動いたバイトだけ回す:
 //
 //	<< 8k+m:       dst[i] = dst[i-k] (上から)、下の k バイトは 0、asl dst[k]; rol dst[k+1] ...

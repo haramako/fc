@@ -1,6 +1,6 @@
 package driver
 
-// 24 / 32 ビットの整数 (u24 / i24 / u32 / i32。fc 4 だけ。Agent/wiki/plans/wide-int.md) のテスト。
+// 24 / 32 ビットの整数 (u24 / i24 / u32 / i32。fc 4 だけ。Agent/wiki/design/wide-int.md) のテスト。
 
 import (
 	"context"
@@ -38,6 +38,47 @@ func TestWideIntRun(t *testing.T) {
 	}
 	if iout != string(want) {
 		t.Errorf("インタプリタの出力が違う:\n got: %q\nwant: %q", iout, want)
+	}
+}
+
+// TestWideIntCalls: スタックで渡す関数 (再帰) と関数ポインタの 3・4 バイトの引数・戻り値。
+func TestWideIntCalls(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{"t.fc": `#fc 4
+use console;
+function fib(n:u8, acc:u32):u32
+{
+	if (n == 0) {
+		return acc;
+	}
+	return fib(n - 1, acc * 3 + n);
+}
+function tri(n:i32):i32
+{
+	if (n <= 0) {
+		return 0;
+	}
+	return n + tri(n - 1);
+}
+function twice(x:u24):u24 { return x + x; }
+var fp:fn(u24):u24;
+function main():void
+{
+	fp = twice;
+	@printf("{} {} {}\n", fib(5, 1), tri(6), fp(5000000));
+	console.exit(0);
+}
+`}
+	const want = "790 21 10000000\n"
+	out, err := buildBothLevels(t, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+	if iout, ok, err := rpInterp(t, files); err != nil || !ok || iout != want {
+		t.Errorf("インタプリタ: %q ok=%v err=%v", iout, ok, err)
 	}
 }
 

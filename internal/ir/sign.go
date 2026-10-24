@@ -67,7 +67,7 @@ func (op *Op) IsSigned() bool { return op.Sign == Signed }
 func isSignedInt(t *types.Type) bool { return t != nil && t.Signed }
 
 // SignExtensionWidth は sign_extension の入力の幅 (バイト数): 入力の型の大きさ (1〜Dst の大きさ - 1)。入力の上から 1 ビット目を
-// Dst の残りのバイトに広げる (i8 / i16 / i24 → 2〜4 バイト。Agent/wiki/plans/wide-int.md)。Verify が 1 以上 Dst 未満を見る。
+// Dst の残りのバイトに広げる (i8 / i16 / i24 → 2〜4 バイト。Agent/wiki/design/wide-int.md)。Verify が 1 以上 Dst 未満を見る。
 func SignExtensionWidth(op *Op) int {
 	w, n := ValType(op.Src[0]).Size, ValType(op.Dst).Size
 	if w < 1 {

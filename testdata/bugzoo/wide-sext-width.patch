@@ -4,7 +4,7 @@ diff --git a/internal/ir/sign.go b/internal/ir/sign.go
 +++ b/internal/ir/sign.go
 @@ -69,6 +69,9 @@
  // SignExtensionWidth は sign_extension の入力の幅 (バイト数): 入力の型の大きさ (1〜Dst の大きさ - 1)。入力の上から 1 ビット目を
- // Dst の残りのバイトに広げる (i8 / i16 / i24 → 2〜4 バイト。Agent/wiki/plans/wide-int.md)。Verify が 1 以上 Dst 未満を見る。
+ // Dst の残りのバイトに広げる (i8 / i16 / i24 → 2〜4 バイト。Agent/wiki/design/wide-int.md)。Verify が 1 以上 Dst 未満を見る。
  func SignExtensionWidth(op *Op) int {
 +	if true {
 +		return 1

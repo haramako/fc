@@ -34,7 +34,7 @@ const (
 	litTooWide                       // fc 4 の演算で、定数がどの整数型 (32 ビット) にも入らない: エラー
 )
 
-// maxIntBytes は整数型のいちばん大きいバイト数 (u32 / i32。fc 4 だけ。Agent/wiki/plans/wide-int.md)。
+// maxIntBytes は整数型のいちばん大きいバイト数 (u32 / i32。fc 4 だけ。Agent/wiki/design/wide-int.md)。
 const maxIntBytes = 4
 
 // maxIntSize はコンパイル中のモジュールで使える整数型のいちばん大きいバイト数 (fc 4 は 4、fc 2 / 3 は 2)。型のない定数の型
@@ -157,7 +157,7 @@ func (h *Hlc) adaptLiteralNoErr(a, b ir.Operand, cmp bool) (ra, rb ir.Operand) {
 
 // rewriteBeyond16 は fc 3 のモジュールの二項の算術 e (項の値 left, right) で、16 ビットに入らない型のない定数が型付きの整数と
 // 計算されるとき、migrate に `as` (fc 3 の定数の型 u16 / i16) を報告する。fc 3 は定数を 16 ビットの型にして実行時に折り返すが、
-// fc 4 は u24 / u32 で計算するので、そのまま移すと結果が変わる (fuzz の TestRandomMigrate。Agent/wiki/plans/wide-int.md)。
+// fc 4 は u24 / u32 で計算するので、そのまま移すと結果が変わる (fuzz の TestRandomMigrate。Agent/wiki/design/wide-int.md)。
 func (h *Hlc) rewriteBeyond16(e *cexpr, left, right ir.Operand) {
 	vals := [2]ir.Operand{left, right}
 	for i, v := range vals {

@@ -1,4 +1,4 @@
-;;; 24 / 32 ビットの掛け算・割り算・余り (Agent/wiki/plans/wide-int.md)。
+;;; 24 / 32 ビットの掛け算・割り算・余り (Agent/wiki/design/wide-int.md)。
 ;;; codegen が 3・4 バイトの mul / div / mod を出したビルドだけリンクする (driver。使わないビルドの ROM は変わらない)。
 ;;; 3 バイトの値は codegen が 4 バイトに広げて渡し、下位 3 バイトを使う。
 ;;; 入力: a = reg(0..3)、b = reg(4..7)。結果: reg(8..11)。割り算の余りは reg(12..15)。どれも A・Y と reg を壊し、X は保つ

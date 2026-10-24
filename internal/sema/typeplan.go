@@ -251,7 +251,7 @@ func (h *Hlc) planIndex(a exprInfo, idx *exprInfo, desc func() string) *types.Ty
 		panic(&diag.Error{Msg: fmt.Sprintf("index must be an integer (got %s)", idx.t)})
 	}
 	if idx != nil && idx.t.Size > 2 {
-		// 番地は 16 ビットなので、黙って切ると気づけない (Agent/wiki/plans/wide-int.md)
+		// 番地は 16 ビットなので、黙って切ると気づけない (Agent/wiki/design/wide-int.md)
 		panic(&diag.Error{Msg: fmt.Sprintf("an index must be u8, i8, u16 or i16 (got %s; write `i as u16`)", idx.t)})
 	}
 	return t.Base
