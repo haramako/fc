@@ -371,58 +371,51 @@ public function sqrt32(a:u32):u32
 	return round_pack(0, (ex >> 1) + 127, res);
 }
 
-// 大小の比較の鍵 (0 でも NaN でもない x。大きいほど大きい符号なしの値)
+// 大小の比較の鍵 (NaN でない x。大きいほど大きい符号なしの値。-0 は +0 と同じ鍵)
 function key(x:u32):u32
 {
+	if ((x << 1) == 0) {
+		return SIGN;
+	}
 	if ((x & SIGN) != 0) {
 		return ~x;
 	}
 	return x | SIGN;
 }
 
+// a と b の比較: 0 = 小さい、1 = 等しい、2 = 大きい、3 = 順序が無い (どちらかが NaN)
+function cmp32(a:u32, b:u32):u8
+{
+	if (isnan(a) || isnan(b)) {
+		return 3;
+	}
+	var ka = key(a);
+	var kb = key(b);
+	if (ka < kb) {
+		return 0;
+	}
+	if (ka == kb) {
+		return 1;
+	}
+	return 2;
+}
+
 // a == b (NaN はどれとも等しくない、+0 と -0 は等しい)
 public function eq32(a:u32, b:u32):bool
 {
-	if (isnan(a) || isnan(b)) {
-		return false;
-	}
-	if (((a | b) << 1) == 0) {
-		return true;
-	}
-	return a == b;
+	return cmp32(a, b) == 1;
 }
 
 // a < b (NaN との比較は偽)
 public function lt32(a:u32, b:u32):bool
 {
-	if (isnan(a) || isnan(b) || ((a | b) << 1) == 0) {
-		return false;
-	}
-	if ((a << 1) == 0) {
-		a = 0;
-	}
-	if ((b << 1) == 0) {
-		b = 0;
-	}
-	return key(a) < key(b);
+	return cmp32(a, b) == 0;
 }
 
 // a <= b (NaN との比較は偽)
 public function le32(a:u32, b:u32):bool
 {
-	if (isnan(a) || isnan(b)) {
-		return false;
-	}
-	if (((a | b) << 1) == 0) {
-		return true;
-	}
-	if ((a << 1) == 0) {
-		a = 0;
-	}
-	if ((b << 1) == 0) {
-		b = 0;
-	}
-	return key(a) <= key(b);
+	return cmp32(a, b) <= 1;
 }
 
 // 絶対値 mag (0 でない) と符号の f32 (最近接偶数に丸める)
@@ -517,6 +510,44 @@ public function to_u32(x:u32):u32
 	return int_mag(x, ex);
 }
 
+// x × 2^n を整数にして (rnd なら最近接偶数、でなければ 0 へ切り捨て)、符号付きの bits ビットの範囲に飽和させる (NaN は 0)。
+// f32 → 整数 (n = 0) ・固定小数 (n は小数のビット数) の `as` (sema が呼ぶ所に 1 つの呼び出しで済むように)
+public function to_sat_i(x:u32, n:i16, rnd:bool, bits:u8):i32
+{
+	if (n != 0) {
+		x = ldexp32(x, n);
+	}
+	if (rnd) {
+		x = rint32(x);
+	}
+	var v = to_i32(x);
+	var hi = @bitcast(i32, shl(1, bits - 1) - 1);
+	if (v > hi) {
+		return hi;
+	}
+	if (v < -hi - 1) {
+		return -hi - 1;
+	}
+	return v;
+}
+
+// to_sat_i の符号なし (0〜2^bits - 1 に飽和)
+public function to_sat_u(x:u32, n:i16, rnd:bool, bits:u8):u32
+{
+	if (n != 0) {
+		x = ldexp32(x, n);
+	}
+	if (rnd) {
+		x = rint32(x);
+	}
+	var v = to_u32(x);
+	var hi = shl(1, bits) - 1;
+	if (v > hi) {   // bits が 32 なら hi は 0xffffffff
+		return hi;
+	}
+	return v;
+}
+
 // 整数への丸め (mode 0 = 最近接偶数、1 = 負の無限大へ、2 = 正の無限大へ、3 = 0 へ、4 = 四捨五入 (0 から遠い向き))
 function round_int(x:u32, mode:u8):u32
 {
@@ -536,39 +567,28 @@ function round_int(x:u32, mode:u8):u32
 	if ((x << 1) == 0) {
 		return x;
 	}
-	var ip:u32;
+	// 整数の部分 ip と小数の部分 frac (半分は halfv)。|x| < 1 は sh = 24 (ip は 0) にし、|x| < 0.5 は仮数を 1 にする
+	// (0 でなく半分より小さい小数として同じ式で扱う)
+	var m = (x & 0x7fffff) | 0x800000;
+	var sh:u8 = 24;
+	if (ex >= 0) {
+		sh = (23 - ex) as u8;
+	} else if (ex < -1) {
+		m = 1;
+	}
+	var ip = shr(m, sh);
+	var frac = m - shl(ip, sh);
+	var halfv = shl(1, sh - 1);
 	var inc = false;
-	if (ex < 0) {
-		// |x| < 1: 0 か 1
-		ip = 0;
-		var half = ex == -1;            // |x| >= 0.5
-		var over = half && (x & 0x7fffff) != 0; // |x| > 0.5
-		switch (mode) {
-		case 0:
-			inc = over;
-		case 1:
-			inc = neg;
-		case 2:
-			inc = !neg;
-		case 4:
-			inc = half;
-		}
-	} else {
-		var m = (x & 0x7fffff) | 0x800000;
-		var sh = (23 - ex) as u8;
-		ip = shr(m, sh);
-		var frac = m - shl(ip, sh);
-		var halfv = shl(1, sh - 1);
-		switch (mode) {
-		case 0:
-			inc = frac > halfv || (frac == halfv && (ip & 1) != 0);
-		case 1:
-			inc = neg && frac != 0;
-		case 2:
-			inc = !neg && frac != 0;
-		case 4:
-			inc = frac >= halfv;
-		}
+	switch (mode) {
+	case 0:
+		inc = frac > halfv || (frac == halfv && (ip & 1) != 0);
+	case 1:
+		inc = neg && frac != 0;
+	case 2:
+		inc = !neg && frac != 0;
+	case 4:
+		inc = frac >= halfv;
 	}
 	if (inc) {
 		ip += 1;

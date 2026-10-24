@@ -100,10 +100,25 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 		r.args = make([]*cexpr, len(c.args))
 		for i, e := range c.args {
 			r.args[i] = h.withExpected(e, t.Base)
+			if isRealish(t.Base) && t.Base.Size > 0 {
+				r.args[i] = h.realElem(r.args[i], t.Base)
+			}
 		}
 		return &r
 	}
 	return c
+}
+
+// realElem は固定小数・浮動小数の配列の要素 e: 型のない定数 (`0.5`・`2`・`-0.25`) なら base の定数にする (配列の要素の型は
+// 要素どうしの共通の型で決まるので、合わせないと `[0.5, 2]` が「untyped float と u8」になる。real.go の convertNumeric)。
+func (h *Hlc) realElem(e *cexpr, base *types.Type) *cexpr {
+	x := h.constEval(e)
+	if x.kind != cValue || x.val.Kind != ir.KindLiteral || !x.val.Untyped || !(x.val.IsInt || x.val.Real != nil) {
+		return e
+	}
+	defer h.enterExpr(e.pos)()
+	r, _ := h.convertNumeric(x.val, base)
+	return cv(r.(*ir.Value))
 }
 
 // litFieldType はリテラルの i 番目の項目 (キー付きなら名前で、なければ位置で) に対応するフィールドの型。
@@ -197,6 +212,9 @@ func (h *Hlc) constEvalStructLit(c *cexpr) *cexpr {
 			et = h.prog.Types.ArrayOf(et.Base, -1) // `{p: [{1, 2}]}`: 型名を省いた要素はポインタの先の型
 		}
 		fv := h.namedConstValue(h.constEval(h.constSlice(h.withExpected(f.val, et))), fd.Type)
+		if isRealish(fd.Type) && fd.Type.Size > 0 {
+			fv = h.realElem(fv, fd.Type) // 固定小数・浮動小数のフィールドの型のない定数 (`P{x: 1.5}`)
+		}
 		if fd.Type.Kind == types.Pointer {
 			if fv.kind == cValue {
 				// アドレスの定数にすると読み取り専用か分からなくなるので、その前に (rvalAssign と同じ警告)

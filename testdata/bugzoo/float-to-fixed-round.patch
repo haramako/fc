@@ -1,13 +1,13 @@
-# 浮動小数 → 固定小数を最近接でなく 0 へ切り捨てる
-diff --git a/internal/sema/float.go b/internal/sema/float.go
---- a/internal/sema/float.go
-+++ b/internal/sema/float.go
-@@ -299,7 +299,7 @@
- 	f := h.to32(v)
- 	raw := to
- 	if to.IsFixed() {
--		f = h.floatCall("rint32", h.floatCall("ldexp32", f, ir.NewIntLiteral("", u.IntType(2, true), to.Frac)))
-+		f = h.floatCall("trunc32", h.floatCall("ldexp32", f, ir.NewIntLiteral("", u.IntType(2, true), to.Frac)))
- 		raw = h.fixedRaw(to)
+# 浮動小数 → 符号付きの固定小数を最近接でなく 0 へ切り捨てる
+diff --git a/fclib/float.fc b/fclib/float.fc
+--- a/fclib/float.fc
++++ b/fclib/float.fc
+@@ -518,7 +518,7 @@
+ 		x = ldexp32(x, n);
  	}
- 	var n ir.Operand
+ 	if (rnd) {
+-		x = rint32(x);
++		x = trunc32(x);
+ 	}
+ 	var v = to_i32(x);
+ 	var hi = @bitcast(i32, shl(1, bits - 1) - 1);

@@ -192,6 +192,9 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 	for _, d := range mod.Defs {
 		switch d.Kind {
 		case ir.DefEqu:
+			if d.Equ.Real != nil {
+				continue // 型のない実数の定数 (`const H = 0.5`) は asm の値にならない (使う所で型に合わせて畳む)
+			}
 			var val string
 			if d.Equ.IsInt {
 				val = strconv.Itoa(d.Equ.Int)

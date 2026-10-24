@@ -54,6 +54,13 @@ docs/reference/language.md の「固定小数」と「浮動小数」。どち�
   （`isFloatCompare` で expr.go と compileCond の書き換えを止める）。浮動小数を条件に使うのはエラー（-0.0 が真になる）
 - **定数の畳み込み**: Go の float32（f16 は `ratToFloatBitsAbs` で自前に丸める）。型のない定数から: 正確な有理数を最近接に（範囲の外は
   エラー、`as` は無限大）。`as` の規則は実行時と同じ（整数へは 0 へ切り捨てて飽和、固定小数へは `ldexp32` の後に最近接、NaN は 0）
+- **`as` の下ろし方**（`floatCast`）: 浮動小数 → 整数・固定小数は float.fc の `to_sat_i` / `to_sat_u`（`ldexp32`・`rint32`・`to_i32` と
+  飽和をまとめた 1 回の呼び出し。呼ぶ所のコードを小さく）。整数・固定小数 → 浮動小数は中身の整数を `explicitCast` で 4 バイトに
+  してから（整数の `as` と同じく自分の型で計算した値。符号の混ざった式は同じエラー）
+- **引数**: 浮動小数の演算・比較・`as` と 3・4 バイトの固定小数の `*` `/` は下ろすと呼び出しになるので、引数の式にあれば全部評価して
+  から積む（expr.go の `lowersToCall`。積み始めた引数を後の引数の呼び出しの静的フレームが壊す）
+- **初期値**: グローバル変数・配列・struct のフィールドの型のない定数は型に合わせる（decl.go の `globalInit`・struct.go の `realElem`）。
+  型のない実数の定数の名前は asm に書かない（codegen の `DefEqu`）
 - **数学の組み込み**: `@sqrt` `@floor` `@ceil` `@trunc` `@round`（`registerFloatBuiltins`。f16 / f32、型のない実数の定数は f32）
 - **出力**: `ir.FormatFloat`（sema の定数・fclog の `@log`・テストの模型）と fmt.fc の `f32` が同じ手順: 正確な 10 進の桁を作り
   （整数の部分はバイトの列を 10 で割り、小数の部分は 10 倍する）、`{}` は C の %g と同じく 7 桁に丸めた指数が -4〜8 なら小数点以下
@@ -66,12 +73,17 @@ docs/reference/language.md の「固定小数」と「浮動小数」。どち�
 ## テスト（浮動小数）
 
 - `TestFloatLib`（float.fc の各関数の結果のビットを Go の float32 と。端の値・中くらいの値を多めに）・`TestFloatRun`（testdata/floating.fc・
-  floating_fmt.fc）・`TestFloatErrors`・ir の `TestFormatFloat`
+  floating_fmt.fc・floating_init.fc（初期値と整数の式の `as`）・floating_args.fc（下ろすと呼び出しになる引数））・`TestFloatErrors`・
+  ir の `TestFormatFloat`
 - 模型の fuzz `TestRandomFloatV4`（変数の形・定数の形・Go の模型: 四則・単項・型のない定数・f16 ↔ f32・整数と i8f8 から・数学の組み込み、
-  出力の書式・比較・整数へ・i16f16 へ）。bugzoo の float-rne-tie / float-le / float-to-fixed-round が落ちることを確かめた
+  引数 3 つの関数、グローバル変数の葉、出力の書式・比較・整数へ・i16f16 へ・小さい整数と固定小数の型へ（飽和））。bugzoo の
+  float-rne-tie / float-le / float-to-fixed-round が落ちることを確かめた
+- games/ の lander・artillery・billiards・orbit（AUTO の -O 0 / -O 2 の比較）
 
 ## 残り（必要になったら）
 
 - 速さ: float.fc の中の変数の量のシフト（1 ビットずつ回す）を減らす・asm に、u8f8 の掛け算を 16×16 の表引きの積に、i16f16 の割り算を
   32 ビットの引き放しに
-- `f16` の演算の専用の関数（f32 に広げない）、三角関数
+- `f16` の演算の専用の関数（f32 に広げない）、三角関数、`@min` / `@max` / `@clamp` の浮動小数（NaN の扱いを決める）
+- 大きさ: float.fc は -O 0 で 11〜13 KB・-O 2 で約 10 KB（使う関数だけリンク）。f32 を多く使うプログラムは -O 0 で NROM に入りにくい
+  （相談は ../../discussions/2026-10-24-float-games.md）

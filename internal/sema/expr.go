@@ -587,7 +587,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				// (FC_FASTCALL_REG や、静的フレームなら呼び先と重なりうる兄弟のフレーム) が壊れるので。後ろの引数に
 				// 呼び出しがあるときは、先に評価した値を一時変数に写して左から右の評価順を保つ。
 				// 呼び出しを含まなければ評価しながら積む (`sub t; push_arg t` が隣り合い、t が A に割り付く)
-				pre := containsCallAny(args)
+				pre := h.lowersToCallAny(args)
 				evalArg := func(i int) ir.Operand {
 					pt := lmdType.Params[i]
 					return h.rvalAssign(h.withExpected(args[i], pt), pt, fmt.Sprintf("argument %d of %s", i+1, describe(lmdV)), nil)
@@ -596,7 +596,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				if pre {
 					for i := range args {
 						v := evalArg(i)
-						if containsCallAny(args[i+1:]) {
+						if h.lowersToCallAny(args[i+1:]) {
 							v = h.freeze(v)
 						}
 						argVals[i] = v
@@ -874,6 +874,55 @@ func containsCall(c *cexpr) bool {
 func containsCallAny(cs []*cexpr) bool {
 	for _, c := range cs {
 		if containsCall(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// lowersToCallAny は式のどれかが、関数呼び出しか、下ろすとライブラリの関数の呼び出しになる式を含むか: 浮動小数の演算・比較・
+// `as` (float.go。fclib/float.fc を呼ぶ) と、3・4 バイトの固定小数の `*` `/` (real.go。fclib/fixed.fc を呼ぶ)。引数を積み
+// 始めてから呼ぶと呼び先の引数領域が壊れるので、引数ではこれも呼び出しと数える (構文の呼び出しだけを見ていたときは、
+// `unit(dx as f32, dy as f32, 1.0)` の -O 0 で、2 つ目の変換が呼ぶ from_mag の静的フレーム (unit と兄弟で重なる) が積んだ
+// 1 つ目の引数を壊していた。games/billiards で発覚)。
+func (h *Hlc) lowersToCallAny(cs []*cexpr) bool {
+	for _, c := range cs {
+		if h.lowersToCall(c) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hlc) lowersToCall(c *cexpr) bool {
+	if c == nil {
+		return false
+	}
+	if c.kind == cOp && c.op == opCall {
+		return true
+	}
+	if c.kind == cOp || c.kind == cCast {
+		if info, ok := h.exprType(c); ok && info.t != nil {
+			if info.t.IsFloat() || info.t.IsFixed() && info.t.Size >= 3 && (c.op == opMul || c.op == opDiv) {
+				return true
+			}
+		}
+		for _, a := range c.args {
+			if a == nil {
+				continue
+			}
+			if info, ok := h.exprType(a); ok && info.t != nil && info.t.IsFloat() {
+				return true // 浮動小数の比較・浮動小数からの `as`
+			}
+		}
+	}
+	for _, a := range c.args {
+		if h.lowersToCall(a) {
+			return true
+		}
+	}
+	for _, f := range c.flds {
+		if h.lowersToCall(f.val) {
 			return true
 		}
 	}

@@ -848,57 +848,43 @@ public function f32(x:u32, prec:u8, chars:[]const u8, spec:u8):void
 			fixed = k6 >= -4 && k6 <= 8;
 		}
 	}
-	var len:u8 = 0;
+	// 桁を dig に作る: 整数の部分が dig[0..ci]、小数の部分が dig[ci..ci + n] (指数の形は整数の部分が 1 桁)
+	var ci:u8 = 1;
+	var ke:i16 = 0;
 	if (fixed) {
-		var ci = fint(m, q, &ib[0], &dig[0]);
+		ci = fint(m, q, &ib[0], &dig[0]);
 		var nb = ffrac(m, q, &fb[0]);
 		for (var k:u8 = 0; k <= n; k += 1) {
 			dig[ci + k] = fnext(&fb[0], nb);
 		}
-		var all = ci + n; // 整数部と小数部の桁 (dig[all] が次の桁)
-		var carry = fround(&dig[0], all - 1);
-		if (carry) {
+		if (fround(&dig[0], ci + n - 1)) {
 			// 整数部の桁が 1 つ増える (先頭に 1、ほかは 0 になっている)
-			dig[all] = 0;
+			dig[ci + n] = 0;
 			ci += 1;
-			all += 1;
-		}
-		for (var k:u8 = 0; k < ci; k += 1) {
-			tmp[len] = dig[k];
-			len += 1;
-		}
-		var fl = n;
-		if (trim) {
-			while (fl > 0 && dig[ci + fl - 1] == 0) {
-				fl -= 1;
-			}
-		}
-		if (fl > 0) {
-			tmp[len] = FC_POINT;
-			len += 1;
-			for (var k:u8 = 0; k < fl; k += 1) {
-				tmp[len] = dig[ci + k];
-				len += 1;
-			}
 		}
 	} else {
-		var ke = fsci(m, q, n, &dig[0], &ib[0], &fb[0]);
-		tmp[0] = dig[0];
-		len = 1;
-		var fl = n;
-		if (trim) {
-			while (fl > 0 && dig[fl] == 0) {
-				fl -= 1;
-			}
+		ke = fsci(m, q, n, &dig[0], &ib[0], &fb[0]);
+	}
+	var len:u8 = 0;
+	for (var k:u8 = 0; k < ci; k += 1) {
+		tmp[len] = dig[k];
+		len += 1;
+	}
+	var fl = n;
+	if (trim) {
+		while (fl > 0 && dig[ci + fl - 1] == 0) {
+			fl -= 1;
 		}
-		if (fl > 0) {
-			tmp[len] = FC_POINT;
+	}
+	if (fl > 0) {
+		tmp[len] = FC_POINT;
+		len += 1;
+		for (var k:u8 = 0; k < fl; k += 1) {
+			tmp[len] = dig[ci + k];
 			len += 1;
-			for (var k:u8 = 1; k <= fl; k += 1) {
-				tmp[len] = dig[k];
-				len += 1;
-			}
 		}
+	}
+	if (!fixed) {
 		tmp[len] = FC_E;
 		tmp[len + 1] = FC_PLUS;
 		if (ke < 0) {

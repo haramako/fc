@@ -265,6 +265,14 @@ func (h *Hlc) globalInit(name string, sp *syntax.VarSpec, typ *types.Type, opt i
 		v = h.pointerElems(name, v, typ.Base) // `var ps:[2]*u8 = ["ab", &g];` (const の表と同じ)
 	}
 	checkRaggedLiteral(v)
+	if typ == nil && v.Real != nil {
+		typ = h.untypedRealType(v.Real) // `var g = 1.5;` は f32 (関数の中と同じ)
+	}
+	if typ != nil && (isRealish(typ) || v.Real != nil) {
+		if r, ok := h.convertNumeric(v, typ); ok {
+			v = r.(*ir.Value) // 固定小数・浮動小数の初期値 (型のない定数は合わせる。const と同じ。real.go)
+		}
+	}
 	t := h.guessType(name, typ, v)
 	h.checkConstRange(name, sp.Type, typ, v, t, val)
 	if typ != nil && v.Kind != ir.KindArrayLiteral {

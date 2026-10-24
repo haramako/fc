@@ -286,45 +286,34 @@ func (h *Hlc) floatCast(v ir.Operand, to *types.Type) ir.Operand {
 		w := u.IntType(4, from.Signed)
 		var f ir.Operand
 		if from.Signed {
-			f = h.floatCall("from_i32", h.cast(x, w))
+			f = h.floatCall("from_i32", h.explicitCast(syntax.CastAs, x, w))
 		} else {
-			f = h.floatCall("from_u32", h.cast(x, w))
+			f = h.floatCall("from_u32", h.explicitCast(syntax.CastAs, x, w))
 		}
 		if frac != 0 {
 			f = h.floatCall("ldexp32", f, ir.NewIntLiteral("", u.IntType(2, true), -frac))
 		}
 		return h.from32(f, to)
 	}
-	// 浮動小数 → 整数 (0 へ切り捨て) / 固定小数 (最近接偶数)。範囲の外は端に飽和、NaN は 0
-	f := h.to32(v)
-	raw := to
+	// 浮動小数 → 整数 (0 へ切り捨て) / 固定小数 (2^小数のビット数 倍して最近接偶数)。範囲の外は端に飽和、NaN は 0。
+	// float.fc の to_sat_i / to_sat_u が 1 回の呼び出しでする (呼ぶ所のコードを小さく)
+	raw, frac, rnd := to, 0, 0
 	if to.IsFixed() {
-		f = h.floatCall("rint32", h.floatCall("ldexp32", f, ir.NewIntLiteral("", u.IntType(2, true), to.Frac)))
-		raw = h.fixedRaw(to)
+		raw, frac, rnd = h.fixedRaw(to), to.Frac, 1
 	}
-	var n ir.Operand
+	fn := "to_sat_u"
 	if raw.Signed {
-		n = h.floatCall("to_i32", f)
-	} else {
-		n = h.floatCall("to_u32", f)
+		fn = "to_sat_i"
 	}
-	n = h.saturate(n, raw)
+	n := h.floatCall(fn, h.to32(v), ir.NewIntLiteral("", u.IntType(2, true), frac),
+		ir.NewIntLiteral("", u.Bool(), rnd), ir.NewIntLiteral("", u.IntType(1, false), raw.Size*8))
+	if raw.Size < 4 {
+		n = ir.NewCastedValue(n, raw, 0) // 飽和させてあるので下位のバイトが値
+	}
 	if to.IsFixed() {
 		return ir.NewCastedValue(n, to, 0)
 	}
 	return n
-}
-
-// saturate は 4 バイトの整数の値 n を整数の型 t の範囲に飽和させた値 (t が 4 バイトならそのまま)。
-func (h *Hlc) saturate(n ir.Operand, t *types.Type) ir.Operand {
-	if t.Size >= 4 {
-		return n
-	}
-	lo, hi := intRange(t)
-	w := ir.ValType(n)
-	c := &cexpr{kind: cOperand, opnd: n}
-	r := h.rval(cop2(opClamp, c, cv(ir.NewIntLiteral("", w, lo)), cv(ir.NewIntLiteral("", w, hi))))
-	return ir.NewCastedValue(r, t, 0)
 }
 
 // ---------------------------------------------------------------

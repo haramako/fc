@@ -56,7 +56,10 @@ go test ./...                                    # 全部 (golden + examples + N
     rpGen は fc 2 のソースなので作らない（Agent/wiki/design/wide-int.md の「テスト」）
   - 固定小数・浮動小数（fc 4 だけ）は専用の模型の fuzz（TestRandomFixedV4・TestRandomFloatV4）と、float.fc の関数を Go の float32 と
     ビットで比べる TestFloatLib が見る（Agent/wiki/design/float-fixed.md の「テスト」）。浮動小数の生成器は乱数のビットだけだと丸めの
-    差が出にくいので、中くらいの大きさの小数の値を混ぜる（混ぜる前は float → 固定小数の丸めを壊しても 0 本しか落ちなかった。2026-10-24）
+    差が出にくいので、中くらいの大きさの小数の値を混ぜる（混ぜる前は float → 固定小数の丸めを壊しても 0 本しか落ちなかった。2026-10-24）。
+    `as` の先は小さい型も作る（i32 / i16f16 だけでは飽和の比較が通らず、負の側の飽和を壊しても 0 本だった）。葉は `id_f32(…)` の
+    呼び出しのほかにグローバル変数も（引数の式が構文の呼び出しを含まない形）。引数を積む途中で静的フレームが壊れる形は、フレームの
+    置き方がたまたま重なるときだけ出るので模型の fuzz では見つからない（testdata/floating_args.fc と games の TestGamesSameAtTick が見る）
   - bugzoo（testdata/bugzoo/*.patch）: 直したバグをわざと戻すパッチ。先頭の `#` の行が説明。`go run ./tools/fuzzmeasure zoo`
     が 1 つずつ HEAD の一時的な作業ツリー（git worktree。コミットしていない変更は入らない）に当ててテストを回し、テストごとに
     失敗した数と、失敗した種で使っていた機能を表にする（`none` はパッチ無しで、誤検出が 0 のはず）。`-off 機能` で機能を切って

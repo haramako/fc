@@ -15,7 +15,7 @@ import (
 // (floating_fmt.fc: `{}` の決め方・`{:.N}`・nan / inf・幅と 0 埋め・f16) を -O 0 / -O 2 とインタプリタで走らせて比べる。
 func TestFloatRun(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"floating", "floating_fmt"} {
+	for _, name := range []string{"floating", "floating_fmt", "floating_init", "floating_args"} {
 		src, err := os.ReadFile(filepath.Join("testdata", name+".fc"))
 		if err != nil {
 			t.Fatal(err)
@@ -59,6 +59,9 @@ func TestFloatErrors(t *testing.T) {
 		{"範囲の外の定数", pre + "function body():void { h = 70000.0; }", "70000 does not fit in f16"},
 		{"大きな整数のリテラル", pre + "function body():void { var x:u32 = 100000000000000000000; g = x as u8; }", "100000000000000000000 does not fit in u32"},
 		{"書式の x", pre + "use console;\nfunction body():void { @printf(\"{:x}\", f); }", "`x` cannot be used for f32"},
+		// 整数の式の `as` は整数の `as` と同じく自分の型の値を変換する (符号の混ざった結果はエラー。floating_init.fc)
+		{"符号の混ざった式 → f32", pre + "var s:i8;\nfunction body():void { f = (g + s) as f32; }", "mixes u8 and i8"},
+		{"符号の混ざった式 → 固定小数", pre + "var s:i8;\nvar w:i16f8;\nfunction body():void { w = (g + s) as i16f8; }", "mixes u8 and i8"},
 	}
 	for i, c := range cases {
 		c := c

@@ -1,0 +1,46 @@
+#fc 4
+// 固定小数・浮動小数の初期値と `as` (games/ を作って見つけた形。TestFloatRun)
+//   - グローバル変数・配列・struct のフィールドの型のない定数を型に合わせる (前は asm が壊れる・型が合わないエラー・codegen の panic)
+//   - 整数の式の `as` は自分の型で計算した値を変換する (前は A1 の内部エラー)
+use console;
+
+struct P {
+	x:u8f8;
+	y:f32;
+}
+
+var a:u8 = 250;
+var b:i8 = -100;
+var q:u4f4 = 15.5;
+var f:f32 = 0.1;
+var h:f16 = 2;
+var g = 1.25;
+var n:i8f8 = -3;
+const T:[3]u8f8 = [0.5, 1.5, 2];
+var arr:[2]i8f8 = [-0.25, 3.75];
+var fa:[2]f32 = [1.5, -2];
+const C = P{x: 1.5, y: 2};
+const K = 0.75; // 型のない実数の定数の名前 (前は asm に値の無い `_t_K =` を書いていた)
+public const PK = 2.5;
+var gp:P = P{x: 0.25, y: -1.5};
+
+function half(v:u8f8):u8f8
+{
+	return v / 2;
+}
+
+function main():void
+{
+	console.init();
+	@printf("{} {} {} {} {}\n", q, f, h, g, n);
+	@printf("{} {} {} {} {} {}\n", T[0], T[2], arr[0], arr[1], fa[0], fa[1]);
+	var la:[3]u8f8 = [q as u8f8, 0.5, 2];
+	var lb:[2]f32 = [1.5, -2];
+	var lp = P{x: 3, y: 0.5};
+	@printf("{} {} {} {} {}\n", la[0], la[1], la[2], lb[0], lb[1]);
+	@printf("{} {} {} {} {} {} {}\n", C.x, C.y, gp.x, gp.y, lp.x, lp.y, half(5.5));
+	@printf("{} {} {} {}\n", (a + 8) as f32, (a + 8) as u8f8, (b - 100) as i16f16, (b - 100) as f32);
+	@printf("{} {} {} {}\n", (q + q) as u8f8, (q + q) as f32, (a + 8) as f16, (a + 8) as u16);
+	@printf("{} {}\n", f * K, gp.x * PK);
+	console.exit(0);
+}

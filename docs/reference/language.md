@@ -1023,7 +1023,7 @@ function main():void
 | `@sizeof(T)` / `@sizeof(x)` | 型・変数の大きさ（バイト） |
 | `@ptr(s)` / `@slice(p, n)` | slice の先頭のポインタ / ポインタと長さからの slice |
 | `@bitcast(T, x)` | ビットの読み替え |
-| `@min(a, b)` / `@max(a, b)` / `@clamp(x, lo, hi)` | 小さいほう・大きいほう・範囲に収めた値（その場に比べるコードを出す） |
+| `@min(a, b)` / `@max(a, b)` / `@clamp(x, lo, hi)` | 小さいほう・大きいほう・範囲に収めた値（その場に比べるコードを出す。整数と固定小数。浮動小数には使えない） |
 | `@copy(dst, src)` | 短いほうの長さだけ写して、写した数を返す |
 | `@format(dst, "書式", …)` | `dst` に書式どおりに書き、書いた部分の slice を返す |
 | `@try_format(dst, "書式", …)` | `@format` と同じだが、足りなければ止まらずに長さ 0 の slice を返す |

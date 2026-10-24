@@ -595,7 +595,7 @@ func (h *Hlc) numericCast(v ir.Operand, to *types.Type) (ir.Operand, bool) {
 		src = h.asRaw(v)
 	}
 	w := u.IntType(max(from.Size, to.Size), from.Signed)
-	x := h.cast(src, w)
+	x := h.explicitCast(syntax.CastAs, src, w) // 整数の `as` と同じく、src は自分の型で計算した値 (A1 で広げない)
 	if d := toFrac - fromFrac; d > 0 {
 		t := h.newTmp(w)
 		h.emit(&ir.Op{Code: ir.OpShiftLeft, Dst: t, Src: []ir.Operand{x, ir.NewIntLiteral("", u.IntType(1, false), d)}})

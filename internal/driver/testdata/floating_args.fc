@@ -1,0 +1,53 @@
+#fc 4
+// 引数の式が、下ろすとライブラリの呼び出しになる形 (浮動小数の演算・`as`、3・4 バイトの固定小数の `*` `/`)。積み始めた
+// 引数を、後の引数の呼び出しが静的フレームで壊さない (前は -O 0 で、unit の 1 つ目の引数を from_mag のフレームが壊していた。
+// games/billiards で発覚。TestFloatRun)
+use console;
+
+struct Ball {
+	x:i12f12;
+	y:i12f12;
+}
+
+var balls:[2]Ball;
+var ux:f32;
+var uy:f32;
+
+function unit(x:f32, y:f32, len:f32):void
+{
+	var k = len / @sqrt(x * x + y * y);
+	ux = x * k;
+	uy = y * k;
+}
+
+function show(a:*Ball, b:*Ball):void
+{
+	unit((b.x - a.x) as f32, (b.y - a.y) as f32, 1.0);
+}
+
+function sum3(a:i16f16, b:i16f16, c:i16f16):i16f16
+{
+	return a + b + c;
+}
+
+function sum2(a:f32, b:f32):f32
+{
+	return a + b;
+}
+
+function main():void
+{
+	console.init();
+	balls[0].x = 152.4197;
+	balls[0].y = 134.1096;
+	balls[1].x = 160;
+	balls[1].y = 136;
+	show(&balls[0], &balls[1]);
+	@printf("{:.4} {:.4}\n", ux, uy);
+	var p:i16f16 = 1.5;
+	var q:i16f16 = -2.25;
+	@printf("{}\n", sum3(p * q, q / p, p * p));
+	var f:f32 = 0.5;
+	@printf("{} {}\n", sum2(f * 3, f / 4), sum2(@sqrt(f * 8), (p * q) as f32));
+	console.exit(0);
+}

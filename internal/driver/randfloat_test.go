@@ -47,7 +47,10 @@ func flTypeName(f16 bool) string {
 	return "f32"
 }
 
-type flGen struct{ r *rand.Rand }
+type flGen struct {
+	r     *rand.Rand
+	decls []string // 変数の形のグローバル変数の宣言
+}
 
 func (g *flGen) pick(n int) int { return g.r.Intn(n) }
 
@@ -84,6 +87,12 @@ func (g *flGen) leaf(f16 bool) flNode {
 			continue
 		}
 		t := flTypeName(f16)
+		if g.pick(3) == 0 {
+			// グローバル変数 (初期値はリテラル): 構文の呼び出しを含まない葉 (引数の式が、下ろした呼び出しだけを含む形になる)
+			name := fmt.Sprintf("g%d", len(g.decls))
+			g.decls = append(g.decls, fmt.Sprintf("var %s:%s = %s;\n", name, t, s))
+			return flNode{v: name, c: fmt.Sprintf("(%s as %s)", s, t), bits: bits, f16: f16}
+		}
 		return flNode{v: fmt.Sprintf("id_%s(%s)", t, s), c: fmt.Sprintf("(%s as %s)", s, t), bits: bits, f16: f16}
 	}
 }
@@ -93,7 +102,13 @@ func (g *flGen) expr(f16 bool, depth int) flNode {
 		return g.leaf(f16)
 	}
 	t := flTypeName(f16)
-	switch k := g.pick(9); {
+	switch k := g.pick(10); {
+	case k == 9: // 引数 3 つの関数 (引数の式が下ろすと呼び出しになる: 積み始めた引数を後の引数の呼び出しが壊さない)。
+		// 呼び先は浮動小数の関数を呼ばない (引数の式が呼ぶ関数と呼び先のフレームが兄弟になって重なりうる形)
+		args := []flNode{g.expr(f16, depth-1), g.expr(f16, depth-1), g.expr(f16, depth-1)}
+		n := g.pick(3)
+		return flNode{v: fmt.Sprintf("pick3_%s(%s, %s, %s, %d)", t, args[0].v, args[1].v, args[2].v, n),
+			c: fmt.Sprintf("pick3_%s(%s, %s, %s, %d)", t, args[0].c, args[1].c, args[2].c, n), bits: args[n].bits, f16: f16}
 	case k < 4:
 		a, b := g.expr(f16, depth-1), g.expr(f16, depth-1)
 		op := []string{"+", "-", "*", "/"}[g.pick(4)]
@@ -157,12 +172,27 @@ func (g *flGen) expr(f16 bool, depth int) flNode {
 	return flNode{v: fmt.Sprintf("(id_i32(%d) as %s)", n, t), c: fmt.Sprintf("((%d as i32) as %s)", n, t), bits: flBits(float32(n), f16), f16: f16}
 }
 
+// flSmallTargets は浮動小数から `as` する小さい型 (raw は固定小数の中身の整数の型)。
+var flSmallTargets = []struct {
+	name, raw  string
+	bits, frac int
+	signed     bool
+}{
+	{"i8", "", 8, 0, true}, {"u8", "", 8, 0, false}, {"i16", "", 16, 0, true}, {"u16", "", 16, 0, false},
+	{"i24", "", 24, 0, true}, {"u32", "", 32, 0, false},
+	{"i8f8", "i16", 16, 8, true}, {"u8f8", "u16", 16, 8, false}, {"i4f12", "i16", 16, 12, true}, {"u0f16", "u16", 16, 16, false},
+	{"i4f4", "i8", 8, 4, true}, {"i12f4", "i16", 16, 4, true}, {"i16f8", "i24", 24, 8, true}, {"u16f16", "u32", 32, 16, false},
+}
+
 // program は 2 つの形のプログラムと模型の出力。
 func (g *flGen) program(n int) (vsrc, csrc, want string) {
 	var head strings.Builder
 	head.WriteString("#fc 4\nuse console;\n")
 	for _, t := range []string{"f32", "f16", "i32", "i8f8"} {
 		fmt.Fprintf(&head, "function id_%s(x:%s):%s @(noinline) { return x; }\n", t, t, t)
+	}
+	for _, t := range []string{"f32", "f16"} {
+		fmt.Fprintf(&head, "function pick3_%s(a:%s, b:%s, c:%s, k:u8):%s @(noinline) { if (k == 0) { return a; } if (k == 1) { return b; } return c; }\n", t, t, t, t, t)
 	}
 	var vb, cb, wb strings.Builder
 	for i := 0; i < n; i++ {
@@ -171,7 +201,29 @@ func (g *flGen) program(n int) (vsrc, csrc, want string) {
 		t := flTypeName(f16)
 		bt := map[bool]string{true: "u16", false: "u32"}[f16]
 		size := map[bool]int{true: 2, false: 4}[f16]
-		switch g.pick(5) {
+		switch g.pick(6) {
+		case 5: // 小さい整数・固定小数の型へ (範囲の外は型の端に飽和。i32 / i16f16 だけでは飽和の比較が通らない)
+			c := flSmallTargets[g.pick(len(flSmallTargets))]
+			x := 0.0
+			if f := e.val(); f == f {
+				if c.frac == 0 {
+					x = math.Trunc(float64(f))
+				} else {
+					x = math.RoundToEven(float64(float32(math.Ldexp(float64(f), c.frac))))
+				}
+			}
+			lo, hi := 0.0, math.Ldexp(1, c.bits)-1
+			if c.signed {
+				lo, hi = -math.Ldexp(1, c.bits-1), math.Ldexp(1, c.bits-1)-1
+			}
+			want := int64(math.Max(lo, math.Min(hi, x)))
+			conv := fmt.Sprintf("(%%s) as %s", c.name)
+			if c.frac != 0 {
+				conv = fmt.Sprintf("@bitcast(%s, (%%s) as %s)", c.raw, c.name) // 中身の整数で比べる
+			}
+			fmt.Fprintf(&vb, "\t@printf(\"{}\\n\", "+conv+");\n", e.v)
+			fmt.Fprintf(&cb, "\t@printf(\"{}\\n\", "+conv+");\n", e.c)
+			fmt.Fprintf(&wb, "%d\n", want)
 		case 4: // 固定小数へ (最近接偶数、範囲の外は飽和、NaN は 0)
 			want := 0
 			if f := e.val(); f == f {
@@ -217,7 +269,8 @@ func (g *flGen) program(n int) (vsrc, csrc, want string) {
 		_ = t
 	}
 	tail := "\tconsole.exit(0);\n}\n"
-	return head.String() + "function main():void\n{\n" + vb.String() + tail, head.String() + "function main():void\n{\n" + cb.String() + tail, wb.String()
+	decls := strings.Join(g.decls, "")
+	return head.String() + decls + "function main():void\n{\n" + vb.String() + tail, head.String() + "function main():void\n{\n" + cb.String() + tail, wb.String()
 }
 
 func TestRandomFloatV4(t *testing.T) {
