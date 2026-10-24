@@ -25,6 +25,7 @@
 ## Articles
 
 - [testing-and-fuzzing.md](testing-and-fuzzing.md) — `go test ./...` の層、差分 fuzz・Go native fuzz・バンク切替 fuzz の回し方、失敗した種と実プロジェクトの退行の調べ方、ベンチ
+- [fuzz-notifications.md](fuzz-notifications.md) — Nomad の試しの fuzz の失敗の通知（Slack の #自動通知）の確かめ方と、対応した通知の一覧（どこまで見たか。✅ を付ける）
 - [code-structure.md](code-structure.md) — パッケージの地図（syntax → sema → opt → regalloc → codegen → driver）と IR の約束（命令の性質・幅と符号・常駐の印・opt の段・検証器）
 - [implementation-notes.md](implementation-notes.md) — 機能別の実装の要点とハマりどころ（常駐の正しさ、cast の正規形、far call、エラー報告、ツールの探索、CI、フレームの静的割付、最適化のパイプライン、インライン展開、ca65 の再利用）
 - [log-annotation-rules.md](log-annotation-rules.md) — `@log` の注釈を最適化のパスで落とさないための規則
