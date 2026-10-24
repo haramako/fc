@@ -20,6 +20,7 @@
 	.export __mul_8s
 	.export __mul_8t16
 	.export __mul_16
+	.export __mul_tbl_l0, __mul_tbl_l1, __mul_tbl_h0, __mul_tbl_h1	; f(n) = n² / 4 の表 (fclib/float.asm の掛け算も引く)
 	.export __fc_null_fn
 	.export __div_8
 	.export __div_8s

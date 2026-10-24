@@ -1,13 +1,13 @@
-# f32 の丸めでちょうど中間を偶数でなく上へ丸める (round_pack)
-diff --git a/fclib/float.fc b/fclib/float.fc
---- a/fclib/float.fc
-+++ b/fclib/float.fc
-@@ -97,7 +97,7 @@
- 	}
- 	var low = (m & 7) as u8;
- 	m = m >> 3;
--	if (low > 4 || (low == 4 && (m & 1) != 0)) {
-+	if (low >= 4 || (low == 4 && (m & 1) != 0)) {
- 		m += 1;
- 	}
- 	if (m >= 0x1000000) {
+# f32 の丸めでちょうど中間を偶数でなく上へ丸める (float.asm の fl_pack)
+diff --git a/fclib/float.asm b/fclib/float.asm
+--- a/fclib/float.asm
++++ b/fclib/float.asm
+@@ -307,7 +307,7 @@
+ 	dey
+ 	bne @sh
+ 	lda ft
+-	cmp #5
++	cmp #4
+ 	bcs @inc
+ 	cmp #4
+ 	bne @noinc

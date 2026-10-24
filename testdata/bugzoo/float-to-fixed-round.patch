@@ -1,13 +1,13 @@
-# 浮動小数 → 符号付きの固定小数を最近接でなく 0 へ切り捨てる
-diff --git a/fclib/float.fc b/fclib/float.fc
---- a/fclib/float.fc
-+++ b/fclib/float.fc
-@@ -518,7 +518,7 @@
- 		x = ldexp32(x, n);
- 	}
- 	if (rnd) {
--		x = rint32(x);
-+		x = trunc32(x);
- 	}
- 	var v = to_i32(x);
- 	var hi = @bitcast(i32, shl(1, bits - 1) - 1);
+# 浮動小数 → 固定小数を最近接でなく 0 へ切り捨てる (float.asm の fl_to_sat)
+diff --git a/fclib/float.asm b/fclib/float.asm
+--- a/fclib/float.asm
++++ b/fclib/float.asm
+@@ -1172,7 +1172,7 @@
+ 	sta ts_r
+ 	lda #1
+ 	sta ts_k
+-@rnd:	lda ts_rnd
++@rnd:	lda #0
+ 	beq @range
+ 	lda ts_r
+ 	beq @range

@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-var floatLibN = flag.Int("floatn", 6, "TestFloatLib のプログラム数 (1 本 60 式)")
+var floatLibN = flag.Int("floatn", 40, "TestFloatLib のプログラム数 (1 本 60 式。6 本では asm の掛け算の繰り上がりの誤りを見逃した)")
 
 const goNaN32 = 0x7fc00000
 

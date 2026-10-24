@@ -31,9 +31,8 @@ fclib の足りないところを見つける。`examples/`（実プロジェク
 
 - 候補は `Agent/discussions/2026-10-08-debug-games.md`、作って見つかったことは `Agent/discussions/2026-10-08-debug-games-findings.md`
 - ゲームを足したら `internal/nes/games_test.go` に AUTO のテストと `TestGamesSameAtTick` の行を足す
-- f32 を使うゲームは -O 0 で NROM の 32 KB にぎりぎり（float.fc だけで -O 0 で 11〜13 KB。テストは AUTO=true の -O 0 もビルドする）。
-  毎フレームの動きは固定小数にし、f32 はたまの出来事の計算と出力に絞る（f32 の 1 回は数千サイクル）。残りと経緯は
-  `Agent/discussions/2026-10-24-float-games.md`
+- f32 の 1 回は 1000〜6000 サイクル（1 フレームは約 29800）。毎フレームの動きは固定小数にし、f32 はたまの出来事の計算と出力に絞る。
+  浮動小数のライブラリ（float.asm）は使えば 4 KB ほど ROM に入る（テストは AUTO=true の -O 0 もビルドするので、-O 0 で入ること）
 
 ## Verification
 
