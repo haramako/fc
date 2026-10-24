@@ -1,0 +1,311 @@
+#fc 4
+// 月着陸 (games/ のデバッグ用のゲーム。固定小数と浮動小数の見本)。左右で機体を傾け、A で噴射して、光る着陸台にゆっくり降ろす。
+// 毎フレームの動き (位置・速度・重力・噴射) は固定小数、着陸した時の点数 (接地の速さの @sqrt) と合計は f32。
+//   fcc build -o lander.nes main.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use rand;
+use math;
+use tiles;
+use gfx;
+
+const AUTO = false @(build); // 着陸台の上へ寄せてゆっくり降りる (テストと見本。-D main.AUTO=true)
+
+var ticks:u16; // メインループを回った数
+
+const PALETTE = [
+	0x0f, 0x00, 0x10, 0x30, 0x0f, 0x00, 0x10, 0x30, 0x0f, 0x00, 0x10, 0x30, 0x0f, 0x00, 0x10, 0x30, // BG: 地面と文字
+	0x0f, 0x00, 0x10, 0x30, 0x0f, 0x06, 0x16, 0x38, 0x0f, 0x0f, 0x16, 0x30, 0x0f, 0x0f, 0x16, 0x30, // スプライト: 0 船, 1 炎
+];
+
+const COLS = 32; // 地面の列 (8 ドットずつ)
+const PAD_W = 4; // 着陸台の列の数
+const FUEL = 700;
+const GRAVITY:i8f8 = 0.016;
+const THRUST:i8f8 = 0.04; // 噴射の加速度 (重力の 2.5 倍)
+const UP = 192; // 上向きの角度 (math の 256 段)
+const TILT = 32; // 傾けられる角度
+const GROUND = [
+	tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2,
+	tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2,
+];
+const PAD = [tiles.FILL3, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2,
+	tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2, tiles.FILL2];
+
+var height:[COLS]u8; // 列ごとの地面の高さ (タイル)
+var pad_col:u8; // 着陸台の左の列
+var peak:u8; // 一番高い地面の y
+var px:i16f8; // 船の左上 (ドット)
+var py:i16f8;
+var vx:i8f8; // 速さ (ドット / フレーム)
+var vy:i8f8;
+var angle:u8; // 噴射の向き (UP がまっすぐ上)
+var fuel:u16;
+var burning:bool; // このフレームに噴射した
+var wait:u8; // 0 でなければ結果を見せている (残りの手数)
+
+var landings:u8;
+var crashes:u8;
+var total:f32; // 点数の合計
+var best:f32; // 一番やさしく降りた速さ
+var last_speed:f32;
+var line:[32]u8;
+
+// 列 c の地面の上の y (ドット)
+function surface(c:u8):u8
+{
+	return (30 - height[c]) << 3;
+}
+
+// 船の足の下で一番高い地面の y
+function ground_under(x:u8):u8
+{
+	var lo = (x + 2) >> 3;
+	var hi = (x + 13) >> 3;
+	var y:u8 = 240;
+	for (var c = lo; c <= hi && c < COLS; c += 1) {
+		y = @min(y, surface(c));
+	}
+	return y;
+}
+
+// 足が全部着陸台の上
+function on_pad(x:u8):bool
+{
+	return (x + 2) >> 3 >= pad_col && (x + 13) >> 3 < pad_col + PAD_W;
+}
+
+function hud():void
+{
+	var alt = (ground_under(px as u8) as i16 as i16f8) - py - 16;
+	vram.put(vram.addr(0, 1, 1), @format(line, "FUEL {:3}  ALT {:5.1}  VX {:5.2}  ", fuel, alt, vx));
+	vram.put(vram.addr(0, 1, 2), @format(line, "VY {:5.2}  LAND {}  CRASH {}  ", vy, landings, crashes));
+}
+
+// 点数の行 (f32 の出力は重いので、変わった時だけ)
+function score_line():void
+{
+	vram.put(vram.addr(0, 1, 3), @format(line, "SCORE {:.1}  BEST {:.2}    ", total, best));
+}
+
+function message(s:[]const u8):void
+{
+	vram.put(vram.addr(0, 2, 6), s);
+}
+
+// 地面を作り直す (描画を止めている間に)
+function new_ground():void
+{
+	pad_col = 4 + rand.below(COLS - PAD_W - 8);
+	// 高さは 1 列ずつ ±1 で歩かせる (台は平ら)
+	var h = 2 + rand.below(9);
+	peak = 240;
+	for (var c:u8 = 0; c < COLS; c += 1) {
+		if (c < pad_col || c >= pad_col + PAD_W) {
+			var r = rand.below(4);
+			if (r == 0 && h > 2) {
+				h -= 1;
+			} else if (r == 1 && h < 12) {
+				h += 1;
+			} else if (r == 2 && h < 11) {
+				h += 2;
+			} else if (h > 3) {
+				h -= 2;
+			}
+		}
+		height[c] = h;
+		peak = @min(peak, surface(c));
+	}
+	for (var y:u8 = 4; y < 30; y += 1) {
+		vram.fill(vram.addr(0, 0, y), tiles.BLANK, 32);
+	}
+	for (var c:u8 = 0; c < COLS; c += 1) {
+		var top = 30 - height[c];
+		if (c >= pad_col && c < pad_col + PAD_W) {
+			vram.put_v(vram.addr(0, c, top), PAD[..height[c]]);
+		} else {
+			vram.put_v(vram.addr(0, c, top), GROUND[..height[c]]);
+		}
+	}
+}
+
+function new_round():void
+{
+	frame.render_off();
+	new_ground();
+	message("                            ");
+	px = (16 + rand.below(200)) as i16f8;
+	py = 40;
+	vx = (rand.below(64) as i8 - 32) as i8f8 / 32; // -1〜1
+	vy = 0;
+	angle = UP;
+	fuel = FUEL;
+	hud();
+	score_line();
+	frame.render_on();
+}
+
+// 着地した。速さと燃料から点数を f32 で
+function touch_down(ok:bool):void
+{
+	var fx = vx as f32;
+	var fy = vy as f32;
+	last_speed = @sqrt(fx * fx + fy * fy);
+	if (ok) {
+		var pts = (fuel as f32) * 0.25 + (1.0 - last_speed) * 200.0;
+		total = total + pts;
+		if (landings == 0 || last_speed < best) {
+			best = last_speed;
+		}
+		landings += 1;
+		message(@format(line, "LANDED  SPEED {:.2}  +{:.1}", last_speed, pts));
+	} else {
+		crashes += 1;
+		message(@format(line, "CRASHED  SPEED {:.2}", last_speed));
+	}
+	vx = 0;
+	vy = 0;
+	burning = false;
+	wait = 90;
+	hud();
+	score_line();
+}
+
+// AUTO: 着陸台の上へ寄せ (横の速さの目標)、高さに合わせて落ちる速さを決めて噴射する
+function auto_pad():u8
+{
+	var x = px as i16;
+	var target = (pad_col as i16 << 3) + PAD_W * 4 - 8;
+	var d = @clamp(target - x, -48, 48) as i8;
+	var want_vx = (d as i8f8) / 40;
+	var held:u8 = 0;
+	if (vx < want_vx - 0.1) {
+		held |= pad.RIGHT;
+	} else if (vx > want_vx + 0.1) {
+		held |= pad.LEFT;
+	}
+	var alt = ground_under(px as u8) as i16 - (py as i16) - 16;
+	var want_vy:i8f8 = 0.3;
+	if (alt > 60) {
+		want_vy = 1.2;
+	} else if (alt > 24) {
+		want_vy = 0.6;
+	}
+	if (d > 10 || d < -10) {
+		// 台の上に着くまで、一番高い山より上を保つ
+		want_vy = 0;
+		if ((py as i16) + 16 > peak as i16 - 12) {
+			want_vy = -0.3;
+		}
+	}
+	if (vy > want_vy) {
+		held |= pad.A;
+	}
+	return held;
+}
+
+function steer(held:u8):void
+{
+	// 押していない向きはまっすぐに戻す
+	var want = UP;
+	if ((held & pad.LEFT) != 0) {
+		want = UP - TILT;
+	} else if ((held & pad.RIGHT) != 0) {
+		want = UP + TILT;
+	}
+	if (angle < want) {
+		angle += 2;
+	} else if (angle > want) {
+		angle -= 2;
+	}
+	burning = (held & pad.A) != 0 && fuel > 0;
+	vy = vy + GRAVITY;
+	if (burning) {
+		fuel -= 1;
+		// 推力の向きの成分: cos / sin は ±127 なので、THRUST を掛けてから 127 で割る
+		vx = vx + (math.cos(angle) as i8f8) * THRUST / 127;
+		vy = vy + (math.sin(angle) as i8f8) * THRUST / 127;
+	}
+	px = px + (vx as i16f8);
+	py = py + (vy as i16f8);
+	if (px < 0) {
+		px = 0;
+		vx = 0;
+	} else if (px > 240) {
+		px = 240;
+		vx = 0;
+	}
+	if (py < 32) {
+		py = 32;
+		vy = 0;
+	}
+}
+
+// 地面に着いたかを見る
+function check_ground():void
+{
+	var x = px as u8;
+	var g = ground_under(x);
+	if ((py as i16) + 16 < g as i16) {
+		return;
+	}
+	py = (g - 16) as i16f8;
+	var ok = on_pad(x) && vy <= 0.8 && vx <= 0.4 && vx >= -0.4 && angle >= UP - 8 && angle <= UP + 8;
+	touch_down(ok);
+}
+
+function draw():void
+{
+	oam.begin();
+	var x = px as u8;
+	var y = py as u8;
+	gfx.spr16(x, y - 1, tiles.LANDER, 0);
+	if (burning) {
+		// 炎は噴射と逆の向きに
+		var fx = (x as i16 + 4 - math.cos(angle) as i16 / 12) as u8;
+		var fy = (y as i16 + 8 - math.sin(angle) as i16 / 12) as u8;
+		oam.spr(fx, fy, tiles.FLAME, 1);
+	}
+	oam.end();
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	rand.seed(0x5eed);
+	new_round();
+	while (true) {
+		pad.poll();
+		if (wait > 0) {
+			wait -= 1;
+			if (wait == 0) {
+				new_round();
+			}
+		} else {
+			var held = pad.p1.held;
+			if (AUTO) {
+				held = auto_pad();
+			}
+			steer(held);
+			check_ground();
+			if ((ticks & 3) == 0 && wait == 0) {
+				hud();
+			}
+		}
+		draw();
+		end_frame();
+	}
+}

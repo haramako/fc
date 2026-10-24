@@ -1,0 +1,377 @@
+#fc 4
+// 砲撃 (games/ のデバッグ用のゲーム。固定小数と浮動小数の見本)。上下で角度、左右で強さを決めて A で撃ち、風のある中で
+// 山の向こうの敵の砲台に当てる。敵も撃ち返してくる。
+// 撃つ時の初速 (角度の sin / cos を f32 のテイラー展開で)・外れた距離 (@sqrt)・狙いの直し方 (割線法) は f32、
+// 飛んでいる弾 (位置・速さ・重力・風) は毎フレーム固定小数。
+//   fcc build -o artillery.nes main.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use rand;
+use math;
+use tiles;
+use gfx;
+
+const AUTO = false @(build); // 自分の砲台も敵と同じ狙い方で撃つ (テストと見本。-D main.AUTO=true)
+
+var ticks:u16; // メインループを回った数
+
+const PALETTE = [
+	0x0f, 0x09, 0x19, 0x30, 0x0f, 0x09, 0x19, 0x30, 0x0f, 0x09, 0x19, 0x30, 0x0f, 0x09, 0x19, 0x30, // BG: 山と文字
+	0x0f, 0x01, 0x21, 0x30, 0x0f, 0x06, 0x16, 0x36, 0x0f, 0x00, 0x10, 0x30, 0x0f, 0x06, 0x27, 0x38, // スプライト: 0 自分, 1 敵, 2 弾と照準, 3 爆発
+];
+
+const COLS = 32;
+const TOP_ROW = 5; // 山を描く一番上の行
+const GRAVITY:i8f8 = 0.05;
+const BLAST = 12.0; // この距離 (ドット) より近くに落ちれば当たり
+const DEG = 0.017453292; // 1 度 (ラジアン)
+const PLAYER = 0;
+const ENEMY = 1;
+
+// 状態
+const AIM = 0; // 狙っている
+const FLY = 1; // 弾が飛んでいる
+const BOOM = 2; // 爆発を見せている
+
+var height:[COLS]u8; // 列ごとの山の高さ (タイル)
+var col_buf:[30 - TOP_ROW]u8;
+var tank_col:[2]u8; // 砲台の左の列 (2 列の幅)
+var angle:[2]u8; // 角度 (度。0 = 水平、90 = 真上)
+var power:[2]u8; // 強さ (10〜99)
+var hits:[2]u8;
+var shots:[2]u16;
+var turn:u8; // 撃つ番
+var state:u8;
+var timer:u8;
+var wind:i8f8; // 風 (ドット / フレーム² の横の加速度)
+
+var sx:i16f8; // 弾の左上 (ドット)
+var sy:i16f8;
+var svx:i8f8;
+var svy:i8f8;
+var boom_x:u8;
+var boom_y:u8;
+var last_miss:f32; // 外れた距離
+var scored:bool; // 今の爆発は当たり (終わったら次の面)
+
+// 割線法で強さを直すための、前の回の (強さ, 横のずれ)
+var tries:[2]u8;
+var last_p:[2]f32;
+var last_m:[2]f32;
+var line:[32]u8;
+
+function surface(c:u8):u8
+{
+	return (30 - height[c]) << 3;
+}
+
+function tank_x(who:u8):u8
+{
+	return tank_col[who] << 3;
+}
+
+function tank_y(who:u8):u8
+{
+	return surface(tank_col[who]) - 16;
+}
+
+// sin (x は 0〜π/2 のラジアン。7 次のテイラー展開を f32 で)
+function sinf(x:f32):f32
+{
+	var x2 = x * x;
+	return x * (1.0 + x2 * (-1.0 / 6.0 + x2 * (1.0 / 120.0 - x2 * (1.0 / 5040.0))));
+}
+
+// 列 c を描き直す (空の所と山)
+function draw_col(c:u8):void
+{
+	var top = 30 - height[c];
+	for (var y:u8 = TOP_ROW; y < 30; y += 1) {
+		var t = tiles.BLANK;
+		if (y == top) {
+			t = tiles.FILL3;
+		} else if (y > top) {
+			t = tiles.FILL2;
+		}
+		col_buf[y - TOP_ROW] = t;
+	}
+	vram.put_v(vram.addr(0, c, TOP_ROW), col_buf);
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 1, 1), @format(line, "YOU {}  ANGLE {:2}  POWER {:2}   ", hits[PLAYER], angle[PLAYER], power[PLAYER]));
+	vram.put(vram.addr(0, 1, 2), @format(line, "CPU {}  ANGLE {:2}  POWER {:2}   ", hits[ENEMY], angle[ENEMY], power[ENEMY]));
+}
+
+function wind_line():void
+{
+	vram.put(vram.addr(0, 1, 3), @format(line, "WIND {:6.3}  ", wind as f32));
+}
+
+function message(s:[]const u8):void
+{
+	vram.put(vram.addr(0, 14, 3), s);
+}
+
+// 山と砲台の位置と風を作り直す (描画を止めている間に)
+function new_round():void
+{
+	frame.render_off();
+	var h = 4 + rand.below(5);
+	for (var c:u8 = 0; c < COLS; c += 1) {
+		var r = rand.below(3);
+		if (c >= 10 && c < 22) {
+			// 真ん中は山になりやすく
+			if (r != 0 && h < 15) {
+				h += 1;
+			} else if (h > 4) {
+				h -= 1;
+			}
+			if (c >= 16 && h > 4) {
+				h -= 2;
+			}
+		} else if (r == 0 && h > 3) {
+			h -= 1;
+		} else if (r == 1 && h < 9) {
+			h += 1;
+		}
+		height[c] = @clamp(h, 3, 16);
+	}
+	tank_col[PLAYER] = 2 + rand.below(5);
+	tank_col[ENEMY] = 25 + rand.below(5);
+	for (var who:u8 = 0; who < 2; who += 1) {
+		var c = tank_col[who];
+		height[c + 1] = height[c]; // 砲台の下は平ら
+		tries[who] = 0;
+		angle[who] = 40 + who * 10;
+		power[who] = 55;
+	}
+	for (var c:u8 = 0; c < COLS; c += 1) {
+		draw_col(c);
+	}
+	wind = (rand.below(17) as i8 - 8) as i8f8 / 256; // -0.03〜0.03
+	hud();
+	wind_line();
+	message("                ");
+	state = AIM;
+	timer = 30;
+	frame.render_on();
+}
+
+// 撃つ: 角度と強さから初速を f32 で計算して、飛ぶ間の固定小数にする
+function fire(who:u8):void
+{
+	var rad = (angle[who] as f32) * DEG;
+	var s = sinf(rad);
+	var c = sinf(1.5707964 - rad);
+	var speed = (power[who] as f32) * 0.05;
+	var vx = c * speed;
+	if (who == ENEMY) {
+		vx = -vx;
+	}
+	svx = vx as i8f8;
+	svy = (-s * speed) as i8f8;
+	sx = (tank_x(who) + 4) as i16f8;
+	sy = (tank_y(who) + 2) as i16f8;
+	shots[who] += 1;
+	state = FLY;
+	message("                ");
+}
+
+// 狙いを直す: 前の回と今の回の (強さ, 横のずれ) を通る直線でずれが 0 になる強さ (割線法)。1 回目 (とずれが変わらなかった時) は
+// ずれの向きだけで動かす
+function adjust(who:u8, miss_x:f32):void
+{
+	var p = power[who] as f32;
+	var dm = miss_x - last_m[who];
+	var np:f32;
+	if (tries[who] != 0 && (dm > 0.5 || dm < -0.5)) {
+		np = p - miss_x * (p - last_p[who]) / dm;
+	} else {
+		np = p + 5.0;
+		if ((miss_x > 0.0) != (who == ENEMY)) { // 自分は右へ、敵は左へ撃つ
+			np = p - 5.0;
+		}
+	}
+	tries[who] = 1;
+	last_p[who] = p;
+	last_m[who] = miss_x;
+	power[who] = @clamp(@round(np) as i8, 10, 99) as u8;
+}
+
+// 列 c が砲台の下 (砲台は 2 列。u8 の引き算の折り返しで 1 回の比較に)
+function under_tank(c:u8):bool
+{
+	return c - tank_col[0] < 2 || c - tank_col[1] < 2;
+}
+
+// 弾が (x, y) で止まった。当たりか外れか
+function explode(x:u8, y:u8):void
+{
+	boom_x = x;
+	boom_y = y;
+	var target = 1 - turn;
+	var dx = (x as i16 - (tank_x(target) + 8) as i16) as f32; // 差は整数で取ってから f32 に
+	var dy = (y as i16 - (tank_y(target) + 8) as i16) as f32;
+	last_miss = @sqrt(dx * dx + dy * dy);
+	scored = last_miss < BLAST;
+	timer = 24;
+	if (scored) {
+		hits[turn] += 1;
+		message("HIT!            ");
+		timer = 60;
+	} else {
+		message(@format(line, "MISS {:.1}     ", last_miss));
+		adjust(turn, dx);
+		// 山を削る
+		var c = x >> 3;
+		if (c < COLS && y >= surface(c) - 8) {
+			for (var cc = c - 1; cc != c + 2; cc += 1) {
+				if (cc < COLS && height[cc] > 2 && !under_tank(cc)) {
+					height[cc] -= 1;
+					draw_col(cc);
+				}
+			}
+		}
+	}
+	state = BOOM;
+	turn = target;
+	hud();
+}
+
+// 弾を 1 フレーム動かす
+function fly():void
+{
+	svx = svx + wind;
+	svy = svy + GRAVITY;
+	sx = sx + (svx as i16f8);
+	sy = sy + (svy as i16f8);
+	var x = sx as i16 + 4;
+	var y = sy as i16 + 4;
+	if (x < 0 || x >= 256 || y >= 240) {
+		// 画面の外: 落ちた所を端にして外れ
+		explode(@clamp(x, 0, 255) as u8, 232);
+		return;
+	}
+	if (y < 0) {
+		return; // 上の外は見えないだけ
+	}
+	var c = (x >> 3) as u8;
+	if (y as u8 >= surface(c)) {
+		explode(x as u8, y as u8);
+	}
+}
+
+// 狙う番 (AUTO でない自分は手で)
+function aim():void
+{
+	if (turn == PLAYER && !AUTO) {
+		var held = pad.p1.held;
+		if ((ticks & 3) == 0) {
+			if ((held & pad.UP) != 0 && angle[PLAYER] < 85) {
+				angle[PLAYER] += 1;
+				hud();
+			} else if ((held & pad.DOWN) != 0 && angle[PLAYER] > 5) {
+				angle[PLAYER] -= 1;
+				hud();
+			} else if ((held & pad.RIGHT) != 0 && power[PLAYER] < 99) {
+				power[PLAYER] += 1;
+				hud();
+			} else if ((held & pad.LEFT) != 0 && power[PLAYER] > 10) {
+				power[PLAYER] -= 1;
+				hud();
+			}
+		}
+		if ((pad.p1.pressed & pad.A) != 0) {
+			fire(PLAYER);
+		}
+		return;
+	}
+	// 狙いは adjust で決めてあるので、少し待って撃つ
+	if (timer > 0) {
+		timer -= 1;
+		return;
+	}
+	fire(turn);
+}
+
+function draw():void
+{
+	oam.begin();
+	gfx.spr16(tank_x(PLAYER), tank_y(PLAYER) - 1, tiles.TANK, 0);
+	gfx.spr16(tank_x(ENEMY), tank_y(ENEMY) - 1, tiles.TANK, 1 | nes.ATTR_FLIP_H);
+	if (state == AIM) {
+		// 照準: 撃つ向きに点を 3 つ (角度を math の 256 段に)
+		var who = turn;
+		var a = (angle[who] as u16 * 32 / 45) as u8;
+		var a256 = 0 - a; // 右上
+		if (who == ENEMY) {
+			a256 = 128 + a; // 左上
+		}
+		var cx = tank_x(who) as i16 + 4;
+		var cy = tank_y(who) as i16;
+		for (var k:i16 = 1; k <= 3; k += 1) {
+			var x = cx + math.cos(a256) as i16 * k / 16;
+			var y = cy + math.sin(a256) as i16 * k / 16;
+			if (y >= 0 && y < 240) {
+				oam.spr(x as u8, (y - 1) as u8, tiles.PIP, 2);
+			}
+		}
+	} else if (state == FLY) {
+		var y = sy as i16;
+		if (y >= 0 && y < 240) {
+			oam.spr(sx as u8, (y - 1) as u8, tiles.BALL, 2);
+		}
+	} else if (state == BOOM) {
+		var n = tiles.BOOM0;
+		if (timer < 16) {
+			n = tiles.BOOM1;
+		}
+		if (timer < 8) {
+			n = tiles.BOOM2;
+		}
+		gfx.spr16(boom_x - 8, boom_y - 9, n, 3);
+	}
+	oam.end();
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	rand.seed(0xa271);
+	new_round();
+	while (true) {
+		pad.poll();
+		if (state == AIM) {
+			aim();
+		} else if (state == FLY) {
+			fly();
+		} else {
+			timer -= 1;
+			if (timer == 0) {
+				if (scored) {
+					new_round();
+				} else {
+					state = AIM;
+					timer = 30;
+				}
+			}
+		}
+		draw();
+		end_frame();
+	}
+}

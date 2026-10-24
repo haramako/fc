@@ -1,0 +1,331 @@
+#fc 4
+// ビリヤード (games/ のデバッグ用のゲーム。固定小数と浮動小数の見本)。左右で向き、上下で強さを決めて A で白い玉を突き、色の玉を
+// 6 つのポケットに落とす。全部落とすと並べ直す。白い玉を落とすとファウル。
+// 毎フレームの玉の動き (位置 i12f12・速さ i4f12・摩擦の掛け算) は固定小数、玉どうしがぶつかった時の法線 (@sqrt と割り算) と
+// 速さのやりとり、突く速さは f32 (1 回の衝突で数フレームかかり、そこで少し止まる)。
+//   fcc build -o billiards.nes main.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use math;
+use tiles;
+
+const AUTO = false @(build); // 一番番号の小さい色の玉を狙って突く (テストと見本。-D main.AUTO=true)
+
+var ticks:u16; // メインループを回った数
+
+const PALETTE = [
+	0x0f, 0x1a, 0x07, 0x30, 0x0f, 0x1a, 0x07, 0x30, 0x0f, 0x1a, 0x07, 0x30, 0x0f, 0x1a, 0x07, 0x30, // BG: 0 黒 (ポケット), 1 台, 2 縁, 3 文字
+	0x0f, 0x00, 0x30, 0x30, 0x0f, 0x06, 0x16, 0x36, 0x0f, 0x07, 0x28, 0x38, 0x0f, 0x01, 0x12, 0x32, // スプライト: 白・赤・黄・青の玉
+];
+
+const BALLS = 4; // 0 が白い玉
+const LEFT = 28; // 玉の中心が動ける範囲 (ドット)
+const RIGHT = 228;
+const TOP = 60;
+const BOTTOM = 212;
+const FRICTION:i4f12 = 0.975;
+const STOP:i4f12 = 0.05; // これより遅ければ止める
+const POCKET_X = [20, 128, 236, 20, 128, 236];
+const POCKET_Y = [52, 48, 52, 220, 224, 220];
+const START_X = [72, 160, 168, 168];
+const START_Y = [136, 136, 131, 141];
+
+struct Ball {
+	x:i12f12; // 中心 (ドット)
+	y:i12f12;
+	vx:i4f12; // 速さ (ドット / フレーム)
+	vy:i4f12;
+	live:bool; // 台の上にある
+}
+
+var balls:[BALLS]Ball;
+var moving:bool; // どれかが動いている
+var aim:u8; // 突く向き (math の 256 段)
+var power:u8; // 強さ (1〜40)
+var shots:u16;
+var potted:u16;
+var fouls:u8;
+var racks:u8;
+var hits:u16; // 玉どうしの衝突 (f32 で解いた数)
+var wait:u8;
+var ux:f32; // unit の結果
+var uy:f32;
+var line:[32]u8;
+
+function hud():void
+{
+	vram.put(vram.addr(0, 2, 1), @format(line, "SHOTS {:3}  POTTED {:3}  FOUL {}", shots, potted, fouls));
+	var rate:f32 = 0;
+	if (shots != 0) {
+		rate = (potted as f32) / (shots as f32);
+	}
+	vram.put(vram.addr(0, 2, 2), @format(line, "RATE {:.2}  POWER {:2}  HITS {} ", rate, power, hits));
+}
+
+// 台 (描画を止めている間に): 縁と 6 つのポケット
+function table():void
+{
+	for (var y:u8 = 6; y < 28; y += 1) {
+		var t = tiles.FILL1;
+		if (y == 6 || y == 27) {
+			t = tiles.FILL2;
+		}
+		vram.fill(vram.addr(0, 2, y), t, 28);
+		vram.set(vram.addr(0, 2, y), tiles.FILL2);
+		vram.set(vram.addr(0, 29, y), tiles.FILL2);
+	}
+	for (var y:u8 = 6; y < 28; y += 21) {
+		vram.set(vram.addr(0, 2, y), tiles.BLANK);
+		vram.fill(vram.addr(0, 15, y), tiles.BLANK, 2);
+		vram.set(vram.addr(0, 29, y), tiles.BLANK);
+	}
+}
+
+function place(i:u8):void
+{
+	var b = &balls[i];
+	b.x = START_X[i] as i12f12;
+	b.y = START_Y[i] as i12f12;
+	b.vx = 0;
+	b.vy = 0;
+	b.live = true;
+}
+
+// (x, y) と同じ向きで長さ len のベクトルを (ux, uy) に (f32。x と y の両方が 0 でないこと)
+function unit(x:f32, y:f32, len:f32):void
+{
+	var k = len / @sqrt(x * x + y * y);
+	ux = x * k;
+	uy = y * k;
+}
+
+// a と b がぶつかっていれば、中心を結ぶ向き (法線) の速さを入れ替える (等しい重さの弾性衝突)。f32 で
+function collide(a:*Ball, b:*Ball):void
+{
+	var dx = b.x - a.x;
+	var dy = b.y - a.y;
+	var ix = dx as i16;
+	var iy = dy as i16;
+	if (ix >= 8 || ix < -8 || iy >= 8 || iy < -8 || ix * ix + iy * iy >= 64 || dx == 0 && dy == 0) {
+		return;
+	}
+	unit(dx as f32, dy as f32, 1.0);
+	// 近づく速さ (法線の向き)。離れていくなら何もしない (重なったまま貼り付かない)
+	var rv = ((a.vx - b.vx) as f32) * ux + ((a.vy - b.vy) as f32) * uy;
+	if (rv <= 0.0) {
+		return;
+	}
+	var px = (rv * ux) as i4f12;
+	var py = (rv * uy) as i4f12;
+	a.vx = a.vx - px;
+	a.vy = a.vy - py;
+	b.vx = b.vx + px;
+	b.vy = b.vy + py;
+	hits += 1;
+}
+
+// (x, y) がポケットに入ったか
+function in_pocket(x:i16, y:i16):bool
+{
+	for (var k:u8 = 0; k < 6; k += 1) {
+		var dx = x - POCKET_X[k] as i16;
+		var dy = y - POCKET_Y[k] as i16;
+		if (dx > -11 && dx < 11 && dy > -11 && dy < 11) { // ポケットは四角で見る
+			return true;
+		}
+	}
+	return false;
+}
+
+// 1 フレーム動かす (動いている玉があれば true)
+function step():bool
+{
+	var any = false;
+	for (var i:u8 = 0; i < BALLS; i += 1) {
+		var b = &balls[i];
+		if (!b.live) {
+			continue;
+		}
+		var u = b.vx;
+		var v = b.vy;
+		var x = b.x + (u as i12f12);
+		var y = b.y + (v as i12f12);
+		// 縁で跳ね返る (速さの向きを変えて、はみ出した分を折り返す)
+		if (x < LEFT || x > RIGHT) {
+			x = (@clamp(x as i16, LEFT, RIGHT) * 2) as i12f12 - x;
+			u = -u;
+		}
+		if (y < TOP || y > BOTTOM) {
+			y = (@clamp(y as i16, TOP, BOTTOM) * 2) as i12f12 - y;
+			v = -v;
+		}
+		b.x = x;
+		b.y = y;
+		u = u * FRICTION;
+		v = v * FRICTION;
+		if (u < STOP && u > -STOP && v < STOP && v > -STOP) {
+			u = 0;
+			v = 0;
+		} else {
+			any = true;
+		}
+		b.vx = u;
+		b.vy = v;
+		if (in_pocket(x as i16, y as i16)) {
+			b.live = false;
+			if (i == 0) {
+				fouls += 1;
+			} else {
+				potted += 1;
+			}
+			hud();
+		}
+	}
+	for (var i:u8 = 0; i < BALLS; i += 1) {
+		for (var j = i + 1; j < BALLS; j += 1) {
+			if (balls[i].live && balls[j].live) {
+				collide(&balls[i], &balls[j]);
+			}
+		}
+	}
+	return any;
+}
+
+// 白い玉を (dx, dy) の向きに速さ speed で突く (f32 の単位ベクトルを i4f12 に)
+function shoot(dx:f32, dy:f32, speed:f32):void
+{
+	unit(dx, dy, speed);
+	balls[0].vx = ux as i4f12;
+	balls[0].vy = uy as i4f12;
+	shots += 1;
+	moving = true;
+	hud();
+}
+
+// AUTO: 一番番号の小さい色の玉の中心を狙って突く (当てる所を突くたびに -2〜2 ドットずらす)
+function auto_shot():void
+{
+	var t:u8 = 1;
+	while (!balls[t].live) {
+		t += 1;
+	}
+	var cx = balls[t].x - balls[0].x;
+	var cy = balls[t].y - balls[0].y + (((shots % 5) as i8 - 2) as i12f12);
+	aim = math.atan2(cy as i16, cx as i16); // 見せるだけ
+	shoot(cx as f32, cy as f32, 3.0);
+}
+
+// 止まっている間: 向きと強さを決めて突く
+function aiming():void
+{
+	if (wait > 0) {
+		wait -= 1;
+		return;
+	}
+	if (AUTO) {
+		auto_shot();
+		return;
+	}
+	var held = pad.p1.held;
+	if ((held & pad.LEFT) != 0) {
+		aim -= 1;
+	} else if ((held & pad.RIGHT) != 0) {
+		aim += 1;
+	}
+	if ((ticks & 3) == 0) {
+		if ((held & pad.UP) != 0 && power < 40) {
+			power += 1;
+			hud();
+		} else if ((held & pad.DOWN) != 0 && power > 1) {
+			power -= 1;
+			hud();
+		}
+	}
+	if ((pad.p1.pressed & pad.A) != 0) {
+		shoot(math.cos(aim) as f32, math.sin(aim) as f32, (power as f32) * 0.125);
+	}
+}
+
+// 止まった: 白い玉を戻す・全部落ちたら並べ直す
+function settle():void
+{
+	if (!balls[0].live) {
+		place(0);
+	}
+	var left:u8 = 0;
+	for (var i:u8 = 1; i < BALLS; i += 1) {
+		if (balls[i].live) {
+			left += 1;
+		}
+	}
+	if (left == 0) {
+		for (var i:u8 = 0; i < BALLS; i += 1) {
+			place(i);
+		}
+		racks += 1;
+	}
+	wait = 20;
+}
+
+function draw():void
+{
+	oam.begin();
+	for (var i:u8 = 0; i < BALLS; i += 1) {
+		var b = &balls[i];
+		if (b.live) {
+			oam.spr((b.x as u8) - 4, (b.y as u8) - 5, tiles.BALL, i);
+		}
+	}
+	if (!moving) {
+		// 照準: 突く向きに 12 ドットおきに点を 4 つ (cos / sin は ±127 なので 1/8 で ±16 弱)
+		var cx = (balls[0].x as i16 - 4) as u8;
+		var cy = (balls[0].y as i16 - 5) as u8;
+		var sx = (math.cos(aim) >> 3) as u8;
+		var sy = (math.sin(aim) >> 3) as u8;
+		for (var k:u8 = 0; k < 4; k += 1) {
+			cx += sx;
+			cy += sy;
+			oam.spr(cx, cy, tiles.PIP, 0);
+		}
+	}
+	oam.end();
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	frame.render_off();
+	table();
+	for (var i:u8 = 0; i < BALLS; i += 1) {
+		place(i);
+	}
+	power = 20;
+	hud();
+	frame.render_on();
+	while (true) {
+		pad.poll();
+		if (moving) {
+			moving = step();
+			if (!moving) {
+				settle();
+			}
+		} else {
+			aiming();
+		}
+		draw();
+		end_frame();
+	}
+}

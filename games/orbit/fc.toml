@@ -1,0 +1,5 @@
+[target]
+mapper = "NROM"
+
+[lib.common]
+path = "../common"

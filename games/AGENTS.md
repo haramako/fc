@@ -11,7 +11,7 @@ fclib の足りないところを見つける。`examples/`（実プロジェク
   共通のライブラリ（fclib に足りない所を補うもの。終わってから fclib に移すかを決める）: `gfx.fc`（16×16 の BG・8×8 / 8×16 の
   モードの 16×16 のスプライト）、`text.fc`（文字の窓）、`bitmap.fc`（CHR RAM の線画）
 - `<名前>/` … ゲーム 1 本（`main.fc` と fc.toml。fc.toml は `[lib.common] path = "../common"`）: breakout・snake・mines・sokoban・
-  blocks・shooter・chase・adventure・platform・rogue・wire
+  blocks・shooter・chase・adventure・platform・rogue・wire、固定小数と浮動小数の見本の lander・artillery・billiards・orbit
 
 ## Local Contracts
 
@@ -31,6 +31,9 @@ fclib の足りないところを見つける。`examples/`（実プロジェク
 
 - 候補は `Agent/discussions/2026-10-08-debug-games.md`、作って見つかったことは `Agent/discussions/2026-10-08-debug-games-findings.md`
 - ゲームを足したら `internal/nes/games_test.go` に AUTO のテストと `TestGamesSameAtTick` の行を足す
+- f32 を使うゲームは -O 0 で NROM の 32 KB にぎりぎり（float.fc だけで -O 0 で 11〜13 KB。テストは AUTO=true の -O 0 もビルドする）。
+  毎フレームの動きは固定小数にし、f32 はたまの出来事の計算と出力に絞る（f32 の 1 回は数千サイクル）。残りと経緯は
+  `Agent/discussions/2026-10-24-float-games.md`
 
 ## Verification
 

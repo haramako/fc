@@ -272,6 +272,10 @@ func TestGamesSameAtTick(t *testing.T) {
 		{"platform", 2500, 4000},
 		{"rogue", 2500, 6000},
 		{"wire", 1500, 4000},
+		{"lander", 2000, 4000},
+		{"artillery", 3000, 5000},
+		{"billiards", 1500, 5000},
+		{"orbit", 2000, 6000},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -399,6 +403,81 @@ func TestGameWire(t *testing.T) {
 		p.checkVblank(t)
 		if level == 0 {
 			saveGame(t, p, "wire")
+		}
+	})
+}
+
+// TestGameLander: 固定小数 (i16f8 の位置・i8f8 の速さ) の物理と、着地の点数の f32 (@sqrt・{:.2})。AUTO で着陸台に降りる。
+func TestGameLander(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "lander", level, "main.AUTO=true")
+		p.play(t, 3000)
+		landings, crashes := p.peek(t, "_main_landings", 0), p.peek(t, "_main_crashes", 0)
+		t.Logf("着陸 %d, 墜落 %d, 手数 %d, 3 行目 %q, 結果 %q", landings, crashes, p.peek16(t, "_main_ticks"), p.ntRow(0x2000, 3), p.ntRow(0x2000, 6))
+		if landings == 0 {
+			t.Errorf("着陸していない")
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "lander")
+		}
+	})
+}
+
+// TestGameArtillery: 撃つ時の初速 (f32 のテイラー展開の sin / cos)・外れた距離 (@sqrt)・割線法の狙い直しと、飛ぶ弾の
+// 固定小数 (風・重力)。AUTO で自分も敵も撃ち合い、当てる。
+func TestGameArtillery(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "artillery", level, "main.AUTO=true")
+		p.play(t, 4000)
+		you, cpu := p.peek(t, "_main_hits", 0), p.peek(t, "_main_hits", 1)
+		t.Logf("当てた 自分 %d / 敵 %d, 撃った 自分 %d / 敵 %d, 手数 %d, %q", you, cpu, p.peek16(t, "_main_shots"), p.peek(t, "_main_shots", 2)|p.peek(t, "_main_shots", 3)<<8, p.peek16(t, "_main_ticks"), p.ntRow(0x2000, 3))
+		if you+cpu < 2 {
+			t.Errorf("当たっていない: 自分 %d, 敵 %d", you, cpu)
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "artillery")
+		}
+	})
+}
+
+// TestGameBilliards: 玉の動きと摩擦は固定小数 (i12f12・i4f12 の struct の配列)、衝突の法線と速さのやりとりは f32 (@sqrt・割り算)。
+// AUTO で突いて、玉どうしが当たり、ポケットに落ちる。
+func TestGameBilliards(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "billiards", level, "main.AUTO=true")
+		p.play(t, 4000)
+		shots, potted, hits := p.peek16(t, "_main_shots"), p.peek16(t, "_main_potted"), p.peek16(t, "_main_hits")
+		t.Logf("突いた %d, 落とした %d, 衝突 %d, ファウル %d, 並べ直し %d, 手数 %d, %q", shots, potted, hits, p.peek(t, "_main_fouls", 0), p.peek(t, "_main_racks", 0), p.peek16(t, "_main_ticks"), p.ntRow(0x2000, 2))
+		if hits < 5 || potted == 0 {
+			t.Errorf("当たっていないか落ちていない: 衝突 %d, 落とした %d", hits, potted)
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "billiards")
+		}
+	})
+}
+
+// TestGameOrbit: 船の位置・速さは i16f16、重力 (GM / r²) と軌道の要素 (近点・遠点) は f32 を 4 フレームに分けて計算する。
+// AUTO で噴射して目標の軌道に乗せる。
+func TestGameOrbit(t *testing.T) {
+	t.Parallel()
+	forLevels(t, func(t *testing.T, level int) {
+		p := buildGame(t, "orbit", level, "main.AUTO=true")
+		p.play(t, 6000)
+		orbits, lost := p.peek(t, "_main_orbits", 0), p.peek(t, "_main_lost", 0)
+		t.Logf("乗せた %d, やり直し %d, 手数 %d, %q / %q", orbits, lost, p.peek16(t, "_main_ticks"), p.ntRow(0x2000, 1), p.ntRow(0x2000, 2))
+		if orbits == 0 {
+			t.Errorf("目標の軌道に乗せていない (やり直し %d)", lost)
+		}
+		p.checkVblank(t)
+		if level == 0 {
+			saveGame(t, p, "orbit")
 		}
 	})
 }

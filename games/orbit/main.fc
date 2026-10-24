@@ -1,0 +1,271 @@
+#fc 4
+// 軌道 (games/ のデバッグ用のゲーム。固定小数と浮動小数の見本)。惑星の重力の中で、A で進む向きに、B で逆向きに噴射して、
+// 点線の輪 (目標の軌道) に近点も遠点も ±6 ドットで乗せる。乗せたまま保てば次の輪へ。惑星に落ちるか遠くへ飛ぶか燃料が尽きると
+// やり直し。
+// 船の位置・速さは i16f16 の固定小数で毎フレーム積み上げる。重力 (GM / r²) は f32 で、1 回の計算を 4 フレームに分ける
+// (2 乗の和 → @sqrt → 加速度 → 軌道の要素 (近点・遠点、8 フレームに 1 回)。f32 の演算は 1 回 数千サイクルなので)。
+//   fcc build -o orbit.nes main.fc
+use nes;
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use math;
+use tiles;
+
+const AUTO = false @(build); // 近点のあたりで遠点を、遠点のあたりで近点を目標に寄せる噴射 (テストと見本。-D main.AUTO=true)
+
+var ticks:u16; // メインループを回った数
+
+const PALETTE = [
+	0x0f, 0x00, 0x10, 0x30, 0x0f, 0x07, 0x17, 0x27, 0x0f, 0x00, 0x10, 0x30, 0x0f, 0x00, 0x10, 0x30, // BG: 0 文字と輪, 1 惑星
+	0x0f, 0x00, 0x21, 0x30, 0x0f, 0x06, 0x16, 0x27, 0x0f, 0x00, 0x10, 0x30, 0x0f, 0x00, 0x10, 0x30, // スプライト: 0 船, 1 炎と跡
+];
+
+const CX = 128; // 惑星の中心 (ドット)
+const CY = 128;
+const GM = 60.0; // 重力定数 × 惑星の質量 (ドット³ / フレーム²)
+const CRASH = 26.0; // これより近ければ落ちた
+const ESCAPE = 150.0; // これより遠ければ飛んでいった
+const TOL = 6.0; // 近点・遠点の許し
+const FUEL = 1200;
+const TARGETS = [56, 76, 96];
+const TRAIL = 8;
+
+var px:i16f16; // 船の位置 (惑星の中心から。ドット)
+var py:i16f16;
+var vx:i16f16; // 速さ (ドット / フレーム)
+var vy:i16f16;
+var ax:i16f16; // 重力の加速度 (4 フレームごとに f32 で計算し直す)
+var ay:i16f16;
+var fx:f32; // 重力の計算の途中 (4 フレームに分ける)
+var fy:f32;
+var r2:f32;
+var r:f32;
+var peri:f32; // 近点・遠点の距離
+var apo:f32;
+var burn:i8; // 噴射の向き (1 前・-1 後ろ・0 なし)
+var fuel:u16;
+var target:u8; // 目標の軌道の番号
+var held_ok:u8; // 目標に乗っている回数 (8 フレームごと)
+var orbits:u8; // 乗せた数
+var lost:u8; // やり直した数
+var trail_x:[TRAIL]u8;
+var trail_y:[TRAIL]u8;
+var line:[32]u8;
+
+function radius():u8
+{
+	return TARGETS[target];
+}
+
+function hud():void
+{
+	vram.put(vram.addr(0, 1, 1), @format(line, "PERI {:5.1}  APO {:5.1}  R {}  ", peri, apo, radius()));
+	vram.put(vram.addr(0, 1, 2), @format(line, "FUEL {:3}  ORBIT {}  LOST {}  ", fuel, orbits, lost));
+}
+
+// 惑星 (半径 3 タイルの丸) と目標の輪 (点) を描く (描画を止めている間に)
+function draw_field():void
+{
+	for (var y:u8 = 4; y < 30; y += 1) {
+		vram.fill(vram.addr(0, 0, y), tiles.BLANK, 32);
+	}
+	for (var ty:i8 = -3; ty < 3; ty += 1) {
+		for (var tx:i8 = -3; tx < 3; tx += 1) {
+			var d = (tx * 2 + 1) * (tx * 2 + 1) + (ty * 2 + 1) * (ty * 2 + 1); // 中心からの距離² (半タイル単位)
+			if (d <= 36) {
+				vram.set(vram.addr(0, (16 + tx) as u8, (16 + ty) as u8), tiles.FILL2);
+			}
+		}
+	}
+	vram.fill(vram.attr_addr(0, 12, 12), 0x55, 2); // 惑星の色 (パレット 1)
+	vram.fill(vram.attr_addr(0, 12, 16), 0x55, 2);
+	var rr = radius() as i16;
+	for (var a:u16 = 0; a < 256; a += 8) {
+		var x = CX + math.cos(a as u8) as i16 * rr / 127;
+		var y = CY + math.sin(a as u8) as i16 * rr / 127;
+		vram.set(vram.addr(0, (x >> 3) as u8, (y >> 3) as u8), tiles.DOT);
+	}
+}
+
+// 船を最初の軌道に (惑星の上 40 ドット、円軌道より 15% 速く右へ)
+function launch():void
+{
+	frame.render_off();
+	draw_field();
+	px = 0;
+	py = -40;
+	vx = (@sqrt(GM / 40.0) * 1.15) as i16f16;
+	vy = 0;
+	ax = 0;
+	ay = 0;
+	fuel = FUEL;
+	held_ok = 0;
+	burn = 0;
+	peri = 40;
+	apo = 40;
+	for (var i:u8 = 0; i < TRAIL; i += 1) {
+		trail_y[i] = 240; // 画面の外
+	}
+	hud();
+	frame.render_on();
+}
+
+// 重力と軌道の要素の計算 (手数 ticks の下の 2 ビットで 4 つに分ける)
+function gravity():void
+{
+	switch (ticks & 3) {
+	case 0:
+		fx = px as f32;
+		fy = py as f32;
+		r2 = fx * fx + fy * fy;
+	case 1:
+		r = @sqrt(r2);
+	case 2:
+		var k = -GM / (r2 * r);
+		ax = (fx * k) as i16f16;
+		ay = (fy * k) as i16f16;
+	case 3:
+		if ((ticks & 4) != 0) {
+			elements();
+		}
+	}
+}
+
+// 近点・遠点 (エネルギー E = v²/2 - GM/r、角運動量 h = x vy - y vx、離心率 e = √(1 + 2 E h² / GM²)、長半径 a = -GM / 2E)
+function elements():void
+{
+	var gx = vx as f32;
+	var gy = vy as f32;
+	var e = (gx * gx + gy * gy) * 0.5 - GM / r;
+	if (e >= 0.0) {
+		peri = r;
+		apo = 999; // 放物線・双曲線 (戻ってこない)
+		return;
+	}
+	var h = fx * gy - fy * gx;
+	var q = 1.0 + 2.0 * e * h * h / (GM * GM);
+	var ecc:f32 = 0;
+	if (q > 0.0) {
+		ecc = @sqrt(q);
+	}
+	var a = -GM / (2.0 * e);
+	peri = a * (1.0 - ecc);
+	apo = a * (1.0 + ecc);
+}
+
+// AUTO: 近点のあたり (長半径より内側) では遠点を、遠点のあたりでは近点を、目標の半径に寄せる向きに噴射する
+function auto_burn():void
+{
+	var t = radius() as f32;
+	var miss = apo - t;
+	if (r > (peri + apo) * 0.5) {
+		miss = peri - t;
+	}
+	burn = 0;
+	if (miss < -3.0) {
+		burn = 1;
+	} else if (miss > 3.0) {
+		burn = -1;
+	}
+}
+
+// 8 フレームごと: 目標に乗ったか・落ちたか・飛んでいったか
+function judge():void
+{
+	var t = radius() as f32;
+	if (r < CRASH || r > ESCAPE || fuel == 0) {
+		lost += 1;
+		launch();
+		return;
+	}
+	if (peri > t - TOL && apo < t + TOL) {
+		held_ok += 1;
+		if (held_ok >= 8) {
+			orbits += 1;
+			target = (target + 1) % 3;
+			launch();
+			return;
+		}
+	} else {
+		held_ok = 0;
+	}
+	if (AUTO) {
+		auto_burn();
+	}
+	hud();
+}
+
+// 1 フレーム動かす: 噴射 (速さの 1/256 を足す・引く)、重力、位置
+function move():void
+{
+	if (!AUTO) {
+		burn = 0;
+		if ((pad.p1.held & pad.A) != 0) {
+			burn = 1;
+		} else if ((pad.p1.held & pad.B) != 0) {
+			burn = -1;
+		}
+	}
+	if (burn != 0 && fuel > 0) {
+		fuel -= 1;
+		if (burn > 0) {
+			vx = vx + (vx >> 8);
+			vy = vy + (vy >> 8);
+		} else {
+			vx = vx - (vx >> 8);
+			vy = vy - (vy >> 8);
+		}
+	}
+	vx = vx + ax;
+	vy = vy + ay;
+	px = px + vx;
+	py = py + vy;
+}
+
+function draw():void
+{
+	oam.begin();
+	var sx = (CX + px as i16 - 4) as u8;
+	var sy = (CY + py as i16 - 5) as u8;
+	oam.spr(sx, sy, tiles.PROBE, 0);
+	if (burn != 0 && fuel > 0) {
+		oam.spr(sx + 4, sy + 4, tiles.SPARK, 1);
+	}
+	for (var i:u8 = 0; i < TRAIL; i += 1) {
+		oam.spr(trail_x[i], trail_y[i], tiles.PIP, 1);
+	}
+	if ((ticks & 15) == 0) {
+		var k = ((ticks >> 4) as u8) % TRAIL;
+		trail_x[k] = sx;
+		trail_y[k] = sy;
+	}
+	oam.end();
+}
+
+// メインループの 1 回の終わり: 手数を数えてフレームを待つ (テストは手数 ticks の決まった所で -O 0 と -O 2 の状態を比べる)
+function end_frame():void @(noinline)
+{
+	ticks += 1;
+	frame.wait();
+}
+
+function main():void
+{
+	frame.init();
+	frame.ctrl |= nes.CTRL_SPR_1000;
+	pal.set_all(PALETTE);
+	launch();
+	while (true) {
+		pad.poll();
+		move();
+		gravity();
+		if ((ticks & 7) == 7) {
+			judge();
+		}
+		draw();
+		end_frame();
+	}
+}

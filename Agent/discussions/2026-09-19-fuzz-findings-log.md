@@ -128,3 +128,8 @@
   `340282346638528859811704183484516925440`）を字句解析が黙って折り返し、値が 0 になっていた（前から。整数の型の所でもエラーにならず
   折り返した値を使った）。sema で綴りから正確な値を持ち（`bigIntLit`）、整数の所では「入らない」のエラーに（TestFloatErrors の
   「大きな整数のリテラル」）
+- 2026-10-24、固定小数・浮動小数を使うゲーム（games/lander・artillery・billiards・orbit）を作って 4 件（記録は
+  2026-10-24-float-games.md）: 整数の式の `as f32` の A1 の内部エラー、グローバル・配列・struct の型のない実数の初期値、`const K = 0.75`
+  の asm、引数の式が下ろすと呼び出しになる形を -O 0 で積みながら評価して静的フレームが壊れる（billiards が TestGamesSameAtTick で
+  -O 0 / -O 2 の違いを出した。i16f16 の掛け算を引数に書く形は 5eed801 から）。回帰は testdata/floating_init.fc・floating_args.fc と
+  TestFloatErrors。生成器の穴（小さい型への `as`・呼び出しでない葉）も直した
