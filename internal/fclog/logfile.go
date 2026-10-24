@@ -47,6 +47,7 @@ type LogFilePart struct {
 	Verb  string `json:"verb,omitempty"` // "" / d / x / X / b / c
 	Width int    `json:"width,omitempty"`
 	Zero  bool   `json:"zero,omitempty"`
+	Prec  int    `json:"prec,omitempty"` // 小数点以下の桁 + 1 (`{:.3}` は 4。0 なら指定なし)
 }
 
 // LogFileArg は引数の表示の仕方。
@@ -57,6 +58,7 @@ type LogFileArg struct {
 	Size   int            `json:"size"`
 	Signed bool           `json:"signed,omitempty"`
 	Enum   map[int]string `json:"enum,omitempty"`
+	Frac   int            `json:"frac,omitempty"` // 固定小数の小数のビット数
 }
 
 // LogFileSite は地点 1 つ (実行アドレスと、そこでの値の所在)。
@@ -162,7 +164,7 @@ func Build(sites []*codegen.LogSite, dbg *cc65.DbgFile, target string, rel func(
 func logFilePoint(p *ir.LogPoint, rel func(string) string) LogFilePoint {
 	fp := LogFilePoint{ID: p.ID, File: rel(p.Pos.Filename), Line: p.Pos.Line, Format: p.Format}
 	for _, part := range p.Parts {
-		lp := LogFilePart{Text: part.Text, Arg: part.Arg, Width: part.Spec.Width, Zero: part.Spec.Zero}
+		lp := LogFilePart{Text: part.Text, Arg: part.Arg, Width: part.Spec.Width, Zero: part.Spec.Zero, Prec: part.Spec.Prec}
 		if part.Spec.Verb != 0 {
 			lp.Verb = string(part.Spec.Verb)
 		}
@@ -186,6 +188,8 @@ func logFileArg(a *ir.LogArg) LogFileArg {
 				r.Enum[m.Value] = m.Name
 			}
 		}
+	case t.IsFixed():
+		r.Kind, r.Frac = "fixed", t.Frac
 	case t.Kind == types.Bool:
 		r.Kind = "bool"
 	case t.Kind == types.Pointer || t.Kind == types.Func:
@@ -316,6 +320,9 @@ func formatLogValue(a LogFileArg, part LogFilePart, v int) string {
 		s = string(rune(v))
 	case "d":
 		s = strconv.Itoa(signedV)
+		if a.Kind == "fixed" {
+			s = ir.FormatFixed(signedV, a.Frac, ir.LogSpec{Prec: part.Prec})
+		}
 	default:
 		switch a.Kind {
 		case "bool":
@@ -331,6 +338,8 @@ func formatLogValue(a LogFileArg, part LogFilePart, v int) string {
 			}
 		case "ptr":
 			s = fmt.Sprintf("$%04X", v)
+		case "fixed":
+			s = ir.FormatFixed(signedV, a.Frac, ir.LogSpec{Prec: part.Prec})
 		default:
 			s = strconv.Itoa(signedV)
 		}

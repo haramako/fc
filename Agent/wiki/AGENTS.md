@@ -47,6 +47,7 @@
 - [design/types-struct.md](design/types-struct.md) — 型構文（Go/Zig 順）と struct / soa
 - [design/methods-interface.md](design/methods-interface.md) — struct のメソッドと interface（ID で振り分ける表、soa の見方と共有の列、実装の一覧と ID を決める時期、far）
 - [design/wide-int.md](design/wide-int.md) — 24 / 32 ビットの整数（u24 / i24 / u32 / i32。fc 4 だけ、型のない定数の段、乗除算のランタイムを使う時だけリンク、速い形）
+- [design/float-fixed.md](design/float-fixed.md) — 固定小数（u8f8 の形。Kind は Int で Frac、enum と同じく整数の規則から外す、掛け算・割り算の下ろし方）と型のない実数の定数・浮動小数
 
 ### plans/（進行中の計画）
 

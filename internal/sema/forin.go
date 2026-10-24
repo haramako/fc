@@ -55,7 +55,7 @@ func (h *Hlc) forInRange(s *syntax.ForInStmt, r *syntax.RangeExpr) forInLoop {
 	lo := h.rval(toC(r.Lo))
 	hi := h.rval(toC(r.Hi))
 	for _, v := range []ir.Operand{lo, hi} {
-		if t := ir.ValType(v); t.Kind != types.Int || t.Enum != nil {
+		if t := ir.ValType(v); t.Kind != types.Int || t.Tagged() {
 			panic(&diag.Error{Msg: fmt.Sprintf("range bounds must be integers (got %s)", t)})
 		}
 	}
@@ -63,7 +63,7 @@ func (h *Hlc) forInRange(s *syntax.ForInStmt, r *syntax.RangeExpr) forInLoop {
 	var t *types.Type
 	if s.Type != nil {
 		t = h.typeEval(s.Type)
-		if t.Kind != types.Int || t.Enum != nil {
+		if t.Kind != types.Int || t.Tagged() {
 			panic(&diag.Error{Msg: fmt.Sprintf("the variable of a range must be an integer (got %s)", t)})
 		}
 	} else {

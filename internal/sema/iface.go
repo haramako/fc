@@ -116,7 +116,7 @@ func (h *Hlc) compileInterfaceDecl(info *ifaceInfo) {
 	base := u.IntType(1, false)
 	if s.Base != nil {
 		base = h.typeEval(s.Base)
-		if base.Kind != types.Int || base.Size != 1 || base.Signed || base.Enum != nil {
+		if base.Kind != types.Int || base.Size != 1 || base.Signed || base.Tagged() {
 			panic(&diag.Error{Msg: fmt.Sprintf("interface %s: the id type must be u8 (got %s)", name, base)})
 		}
 	}

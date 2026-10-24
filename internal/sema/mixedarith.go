@@ -57,7 +57,7 @@ func (h *Hlc) mixedOf(tmp *ir.Value, op *ir.Op, n *arithNode, lits []ir.Operand)
 	return nil
 }
 
-func isPlainInt(t *types.Type) bool { return t != nil && t.Kind == types.Int && t.Enum == nil }
+func isPlainInt(t *types.Type) bool { return t != nil && t.Kind == types.Int && !t.Tagged() }
 
 // mixedOperandType は符号の混ざりを見る、演算 c の i 番目の項の型。式の型 (広げる前の型) で、取れなければ (複合代入など)
 // IR のオペランド v の型。A1 で広げた後の IR の型で見ると、16 ビットの命令にした狭い式の項 (`b >> 2` (b:u8) は u16 の

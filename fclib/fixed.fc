@@ -1,0 +1,121 @@
+#fc 4
+// 3・4 バイトの固定小数 (`i16f16` など) の掛け算と割り算。sema が `*` / `/` から呼ぶ (直接呼ばなくてよい)。中身の整数を 4 バイトに
+// 広げて渡し、結果は負の無限大へ切り捨てる (1・2 バイトの固定小数は、2 倍の幅の整数の命令に下ろすのでこのモジュールを使わない)。
+// 64 ビットの積・被除数を 32 ビットの 2 つ (hi・lo) で持つ。
+@(bank: -1);
+
+var hi:u32;   // 64 ビットの値の上位 (umul64 の積・udiv64 の被除数)
+var lo:u32;   // 下位
+var rem:u32;  // udiv64 の余り
+
+// hi:lo = a × b (符号なし)。16 ビットずつに分けて 4 つの積を足す
+function umul64(a:u32, b:u32):void
+{
+	var al = a as u16;
+	var ah = (a >> 16) as u16;
+	var bl = b as u16;
+	var bh = (b >> 16) as u16;
+	var ll:u32 = al * bl;
+	var lh:u32 = al * bh;
+	var hl:u32 = ah * bl;
+	var hh:u32 = ah * bh;
+	var mid:u32 = (ll >> 16) + (lh & 0xffff) + (hl & 0xffff);
+	lo = (ll & 0xffff) | (mid << 16);
+	hi = hh + (lh >> 16) + (hl >> 16) + (mid >> 16);
+}
+
+// hi:lo を frac ビット右へずらした値の下位 32 ビット (frac は 1〜32)
+function shifted(frac:u8):u32
+{
+	if (frac >= 32) {
+		return hi;
+	}
+	return (lo >> frac) | (hi << (32 - frac));
+}
+
+// 符号なしの固定小数の掛け算 (a、b は中身の整数、frac は小数のビット数)
+public function mul_u(a:u32, b:u32, frac:u8):u32
+{
+	umul64(a, b);
+	return shifted(frac);
+}
+
+// 符号付きの固定小数の掛け算 (積の上位を符号で直してから算術右シフト)
+public function mul_i(a:i32, b:i32, frac:u8):i32
+{
+	var ua = @bitcast(u32, a);
+	var ub = @bitcast(u32, b);
+	umul64(ua, ub);
+	if (a < 0) {
+		hi -= ub;
+	}
+	if (b < 0) {
+		hi -= ua;
+	}
+	return @bitcast(i32, shifted(frac));
+}
+
+// 商の下位 32 ビット = (hi:lo) / d (符号なし)。余りは rem。1 ビットずつ引き放す
+function udiv64(d:u32):u32
+{
+	var r:u32 = 0;
+	var q:u32 = 0;
+	for (var i:u8 = 0; i < 64; i += 1) {
+		var top = r >> 31;   // 余りから押し出すビット (d が 2^31 以上のとき 33 ビットになる)
+		r = (r << 1) | (hi >> 31);
+		hi = (hi << 1) | (lo >> 31);
+		lo = lo << 1;
+		q = q << 1;
+		if (top != 0 || r >= d) {
+			r -= d;
+			q |= 1;
+		}
+	}
+	rem = r;
+	return q;
+}
+
+// a を frac ビット左へずらして hi:lo に置く (frac は 1〜32)
+function shiftin(a:u32, frac:u8):void
+{
+	if (frac >= 32) {
+		hi = a;
+		lo = 0;
+		return;
+	}
+	hi = a >> (32 - frac);
+	lo = a << frac;
+}
+
+// 符号なしの固定小数の割り算 ((a << frac) / b)
+public function div_u(a:u32, b:u32, frac:u8):u32
+{
+	shiftin(a, frac);
+	return udiv64(b);
+}
+
+// 符号付きの固定小数の割り算 (床除算: 商は負の無限大へ。絶対値で割ってから直す)
+public function div_i(a:i32, b:i32, frac:u8):i32
+{
+	var ua = @bitcast(u32, a);
+	var ub = @bitcast(u32, b);
+	var neg = false;
+	if (a < 0) {
+		ua = 0 - ua;
+		neg = true;
+	}
+	if (b < 0) {
+		ub = 0 - ub;
+		neg = !neg;
+	}
+	// a が負なら 64 ビットの被除数の上位は符号で埋まるので、絶対値をずらす
+	shiftin(ua, frac);
+	var q = udiv64(ub);
+	if (neg) {
+		q = 0 - q;
+		if (rem != 0) {
+			q -= 1;
+		}
+	}
+	return @bitcast(i32, q);
+}

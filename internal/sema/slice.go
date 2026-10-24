@@ -291,7 +291,7 @@ func registerSliceBuiltins(h *Hlc) {
 			panic(&diag.Error{Msg: fmt.Sprintf("@slice: the first argument must be a typed pointer (got %s)", t)})
 		}
 		n := h.rval(args[1])
-		if nt := ir.ValType(n); nt.Kind != types.Int || nt.Enum != nil {
+		if nt := ir.ValType(n); nt.Kind != types.Int || nt.Tagged() {
 			panic(&diag.Error{Msg: fmt.Sprintf("@slice: the length must be an integer (got %s)", nt)})
 		}
 		// 長さが u16 (の値) なら広い slice。3・4 バイトの長さはエラー (番地は 16 ビット。Agent/wiki/design/wide-int.md)

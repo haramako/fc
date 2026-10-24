@@ -1,0 +1,14 @@
+# 3・4 バイトの符号付きの固定小数の割り算で、商を負の無限大へ直さない (0 へ切り捨てになる)
+diff --git a/fclib/fixed.fc b/fclib/fixed.fc
+--- a/fclib/fixed.fc
++++ b/fclib/fixed.fc
+@@ -113,9 +113,6 @@
+ 	var q = udiv64(ub);
+ 	if (neg) {
+ 		q = 0 - q;
+-		if (rem != 0) {
+-			q -= 1;
+-		}
+ 	}
+ 	return @bitcast(i32, q);
+ }

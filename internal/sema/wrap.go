@@ -39,9 +39,9 @@ func (h *Hlc) wrapExpr(c *cexpr, a, b *cexpr) *cexpr {
 	switch {
 	case lUntyped:
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand decides the type, so it cannot be an untyped constant (write `(n as T) %s b`)", w.text, w.text)})
-	case lt.Kind != types.Int || lt.Enum != nil:
+	case lt.Kind != types.Int || lt.Tagged():
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand must be an integer (got %s)", w.text, lt)})
-	case rt.Kind != types.Int || rt.Enum != nil:
+	case rt.Kind != types.Int || rt.Tagged():
 		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the right operand must be an integer (got %s)", w.text, rt)})
 	case rUntyped:
 		// 型のない定数は T の大きさに入れば符号を問わない (`x +% -1`)

@@ -32,7 +32,7 @@ type arithNode struct {
 
 // recordArith は算術の命令 op の結果 tmp を記録する (fc 4 と、書き換えを集めるときだけ)。lits は型のない定数のオペランドの元の値。
 func (h *Hlc) recordArith(tmp *ir.Value, op *ir.Op, c *cexpr, lits ...ir.Operand) {
-	if !(h.v4() || h.rewriting()) || tmp.Type.Kind != types.Int || tmp.Type.Enum != nil {
+	if !(h.v4() || h.rewriting()) || tmp.Type.Kind != types.Int || tmp.Type.Tagged() {
 		return
 	}
 	n := &arithNode{op: op, c: c}
@@ -53,7 +53,7 @@ func (h *Hlc) recordArith(tmp *ir.Value, op *ir.Op, c *cexpr, lits ...ir.Operand
 // fc 3 では書き換えを報告する (算術の命令は fc 4 では上から幅を決めて出すので、ここに狭いまま来ない)。
 func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 	tv, ok := v.(*ir.Value)
-	if !ok || typ.Kind != types.Int {
+	if !ok || typ.Kind != types.Int || typ.Tagged() {
 		return v
 	}
 	if tc := h.taint[tv]; tc != nil && tv.Type.Size < typ.Size {
@@ -99,7 +99,7 @@ func (h *Hlc) widenArith(v ir.Operand, typ *types.Type) ir.Operand {
 // すでに十分広い式は nil (そのまま)。
 func (h *Hlc) widenConstAt(c *cexpr, typ *types.Type) *cexpr {
 	c = h.pureExpansion(c)
-	if !h.v4() || typ == nil || typ.Kind != types.Int || typ.Enum != nil || !isArithNode(c) {
+	if !h.v4() || typ == nil || typ.Kind != types.Int || typ.Tagged() || !isArithNode(c) {
 		return nil
 	}
 	narrow := h.constEval(c)
@@ -303,7 +303,7 @@ func (h *Hlc) wideWidth(e *cexpr, hint int) (int, *types.Type) {
 		return 0, nil
 	}
 	info, ok := h.exprType(e)
-	if !ok || info.untyped || info.t.Kind != types.Int || info.t.Enum != nil || info.t.Size > maxIntBytes {
+	if !ok || info.untyped || info.t.Kind != types.Int || info.t.Tagged() || info.t.Size > maxIntBytes {
 		return 0, nil
 	}
 	return max(hint, info.t.Size), info.t
@@ -322,7 +322,7 @@ func (h *Hlc) compareWidth(a, b *cexpr) int {
 	}
 	w := 0
 	for _, t := range []*types.Type{h.literalType(ai, bi, true), h.literalType(bi, ai, true)} {
-		if t.Kind == types.Int && t.Enum == nil && t.Size <= maxIntBytes {
+		if t.Kind == types.Int && !t.Tagged() && t.Size <= maxIntBytes {
 			w = max(w, t.Size)
 		}
 	}
@@ -331,7 +331,7 @@ func (h *Hlc) compareWidth(a, b *cexpr) int {
 
 // rvalWide は代入先の型 typ の幅で式 c を計算する rval (A1)。
 func (h *Hlc) rvalWide(c *cexpr, typ *types.Type) ir.Operand {
-	if h.v4() && typ != nil && typ.Kind == types.Int && typ.Enum == nil && typ.Size <= maxIntBytes {
+	if h.v4() && typ != nil && typ.Kind == types.Int && !typ.Tagged() && typ.Size <= maxIntBytes {
 		return h.rvalIn(c, typ.Size)
 	}
 	return h.rval(c)
@@ -360,7 +360,7 @@ func (h *Hlc) widenOperand(src ir.Operand, t *types.Type) ir.Operand {
 // 計算した項 (広げる前の型の符号) を、揃えた型で比べる)。大きさが違う値 (狭い符号なしは上位を 0 で読む) はそのまま。
 func (h *Hlc) retypeInt(v ir.Operand, t *types.Type) ir.Operand {
 	vt := ir.ValType(v)
-	if t.Kind != types.Int || t.Enum != nil || vt.Kind != types.Int || vt.Enum != nil || vt == t || vt.Size != t.Size {
+	if t.Kind != types.Int || t.Tagged() || vt.Kind != types.Int || vt.Tagged() || vt == t || vt.Size != t.Size {
 		return v
 	}
 	if k, ok := ir.ValIntLiteral(v); ok {

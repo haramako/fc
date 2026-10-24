@@ -1,0 +1,20 @@
+#fc 4
+use console;
+function id(x:u8f8):u8f8 @(noinline) { return x; }
+function ids(x:i8f8):i8f8 @(noinline) { return x; }
+function id32(x:i16f16):i16f16 @(noinline) { return x; }
+function main():void
+{
+	var a = id(1.5);
+	var b = id(0.00390625);
+	var c = ids(-12.75);
+	var d = id32(-3.14159);
+	@printf("{} {} {} {}\n", a, b, c, d);
+	@printf("{:.2} {:.3} {:.1} {:.4}\n", a, b, c, d);
+	@printf("[{:8.2}] [{:08.2}] [{:<8}]\n", c, c, a);
+	@printf("{:.0} {:.0} {}\n", id(2.5), id(3.5), id(255.99609375));
+	@printf("{:.2}\n", id(9.999));
+	const K:u8f8 = 2.75;
+	@printf("{} {:.1}\n", K, K);
+	console.exit(0);
+}

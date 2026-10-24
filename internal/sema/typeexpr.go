@@ -46,7 +46,7 @@ func (h *Hlc) typeOfRaw(t syntax.TypeExpr) *types.Type {
 			wide := false
 			if t.LenType != nil {
 				lt := h.typeOf(t.LenType)
-				if lt.Kind != types.Int || lt.Enum != nil || lt.Signed || lt.Size > 2 {
+				if lt.Kind != types.Int || lt.Tagged() || lt.Signed || lt.Size > 2 {
 					panic(&diag.Error{Msg: fmt.Sprintf("the length type of a slice must be u8 or u16 (got %s)", lt)})
 				}
 				wide = lt.Size == 2
@@ -106,8 +106,8 @@ func (h *Hlc) basicType(name string) (*types.Type, bool) {
 	if n, old := types.V2IntTypeNames[name]; old && h.version() < syntax.Version3 {
 		name = n
 	}
-	if types.WideIntTypeNames[name] && h.version() < syntax.Version4 {
-		panic(&diag.Error{Msg: fmt.Sprintf("%s is a type of fc 4 only (24 / 32-bit integers)", name)})
+	if types.V4OnlyTypeName(name) && h.version() < syntax.Version4 {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s is a type of fc 4 only", name)})
 	}
 	return h.prog.Types.Named(name)
 }

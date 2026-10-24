@@ -61,6 +61,12 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 	switch c.kind {
 
 	case cInt:
+		if c.s == "real" {
+			if !h.v4() {
+				panic(&diag.Error{Msg: fmt.Sprintf("real literal %s is fc 4 only", c.name)})
+			}
+			return cv(h.RealValue(realLit(c.name)))
+		}
 		if c.s == "bool" {
 			return cv(ir.NewIntLiteral("", h.prog.Types.Bool(), c.n))
 		}
@@ -231,6 +237,11 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 		if x.kind == cNull {
 			return cv(h.nullOf(ty).(*ir.Value)) // `null as *T`
 		}
+		if x.kind == cValue && x.val.Kind == ir.KindLiteral && (x.val.IsInt || x.val.Real != nil) && c.ck == syntax.CastAs {
+			if r, ok := h.constNumericCast(x.val, ty); ok {
+				return cv(r) // 固定小数・浮動小数・型のない実数の定数 (real.go)
+			}
+		}
 		if x.isLiteralInt() {
 			if ty.IsFarFunc() && !x.val.Type.IsFarFunc() {
 				panic(&diag.Error{Msg: "cannot construct farfn from an integer; assign a function symbol or null"})
@@ -296,6 +307,9 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 				default:
 					panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 				}
+			}
+			if r, ok := h.foldNumeric(c, args); ok {
+				return r // 固定小数・浮動小数・型のない実数の定数 (real.go)
 			}
 			if args[0].isLiteralInt() && (len(args) == 1 || args[1].isLiteralInt()) {
 				v1 := args[0].val.Int
@@ -697,7 +711,7 @@ func (h *Hlc) foldType(args []*cexpr, cmp bool) *types.Type {
 	typed := false
 	for _, a := range args {
 		v := a.val
-		if v.Type.Kind != types.Int || v.Type.Enum != nil {
+		if v.Type.Kind != types.Int || v.Type.Tagged() {
 			return nil // bool・enum・ポインタの定数は今までどおり
 		}
 		typed = typed || !v.Untyped

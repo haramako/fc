@@ -2,8 +2,8 @@
 diff --git a/internal/sema/stmt.go b/internal/sema/stmt.go
 --- a/internal/sema/stmt.go
 +++ b/internal/sema/stmt.go
-@@ -503,7 +503,7 @@
- 					if ct := ir.ValType(cond); ct.Kind == types.Int && ct.Enum == nil && ct.Size <= maxIntBytes {
+@@ -506,7 +506,7 @@
+ 					if ct := ir.ValType(cond); ct.Kind == types.Int && !ct.Tagged() && ct.Size <= maxIntBytes {
  						// case の値も比較と同じく、タグの型に収まらなければエラー (u8 の `case 300:` が黙って一度も一致せず、
  						// `case -1:` が 255 に一致していた。survey 2026-09-27、`case -1:` のエラーは 2026-09-27 決定)
 -						if lo, hi := intRange(ct); k < lo || k > hi {

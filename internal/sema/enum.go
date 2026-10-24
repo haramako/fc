@@ -21,7 +21,7 @@ func (h *Hlc) compileEnumDecl(s *syntax.EnumDecl) {
 	base := h.prog.Types.IntType(1, false)
 	if s.Base != nil {
 		base = h.typeEval(s.Base)
-		if base.Kind != types.Int || base.Enum != nil {
+		if base.Kind != types.Int || base.Tagged() {
 			panic(&diag.Error{Msg: fmt.Sprintf("enum %s: the base type must be an integer type (u8 / i8 / u16 / i16), not %s", name, base)})
 		}
 	}

@@ -35,6 +35,9 @@ func valueInfo(v ir.Operand) exprInfo {
 	if lv, ok := v.(*ir.Value); ok && lv.Kind == ir.KindLiteral && lv.IsInt && lv.Untyped {
 		return exprInfo{t: lv.Type, untyped: true, n: lv.Int, name: lv.Name}
 	}
+	if r := realOf(v); r != nil {
+		return exprInfo{t: ir.ValType(v), untyped: true, r: r, name: v.(*ir.Value).Name}
+	}
 	return exprInfo{t: ir.ValType(v)}
 }
 
@@ -49,6 +52,9 @@ type adaptedLit struct {
 func (h *Hlc) adaptLit(x, other exprInfo, cmp bool) adaptedLit {
 	if !x.untyped {
 		return adaptedLit{t: x.t}
+	}
+	if a, ok := h.adaptNumeric(x, other, cmp); ok {
+		return a // 固定小数・浮動小数・型のない実数の定数 (real.go)
 	}
 	t := other.t
 	switch literalRule(x.t, x.n, other.untyped, t, cmp, h.maxIntSize()) {
@@ -105,10 +111,13 @@ func (h *Hlc) planArith(op cop, a, b exprInfo) arithPlan {
 	}
 	checkEnumOp(op, lt, rt)
 	checkOperandKinds(op, lt, rt)
+	if p, ok := h.planNumeric(op, a, b); ok {
+		return p // 固定小数・浮動小数・型のない実数の定数 (real.go)
+	}
 	if op == opSub && lt.Kind == types.Pointer && rt.Kind == types.Pointer && lt.Base == rt.Base {
 		return arithPlan{kind: arithPtrDiff, t: h.prog.Types.IntType(2, false)} // p - q は要素数 (C と同じ)
 	}
-	isInt := func(t *types.Type) bool { return t.Kind == types.Int && t.Enum == nil }
+	isInt := func(t *types.Type) bool { return t.Kind == types.Int && !t.Tagged() }
 	if (op == opShiftLeft || op == opShiftRight) && h.v4() && isInt(lt) && (rt.Kind == types.Int || rt.Kind == types.Bool) {
 		return arithPlan{kind: arithShift, t: lt} // 左辺が型のない定数 (`1 << n`) なら、その値の型 (代入先が広ければ A1 で広がる)
 	}
@@ -179,7 +188,7 @@ func (h *Hlc) compareType(op cop, lt, rt *types.Type) (t *types.Type, swap bool)
 // mixedSignInfo は mixedSign の型を決める段の版 (型のない定数は相手の型になるので混ざらない)。
 func mixedSignInfo(a, b exprInfo) bool {
 	lt, rt := a.t, b.t
-	if lt.Kind != types.Int || rt.Kind != types.Int || lt.Enum != nil || rt.Enum != nil || lt.Signed == rt.Signed || a.untyped || b.untyped {
+	if lt.Kind != types.Int || rt.Kind != types.Int || lt.Tagged() || rt.Tagged() || lt.Signed == rt.Signed || a.untyped || b.untyped {
 		return false
 	}
 	u, s := lt, rt
@@ -339,7 +348,7 @@ func (h *Hlc) planSliceOf(a exprInfo, str bool, what string, desc func() string)
 
 // planSliceBound は a[lo..hi] の lo / hi (型 x。which は "lo" / "hi") の検査 (整数でなければ診断の panic)。
 func planSliceBound(x exprInfo, which string) {
-	if t := x.t; t.Kind != types.Int && t.Kind != types.Bool || t.Enum != nil {
+	if t := x.t; t.Kind != types.Int && t.Kind != types.Bool || t.Tagged() {
 		panic(&diag.Error{Msg: fmt.Sprintf("a[lo..hi]: %s must be an integer (got %s)", which, t)})
 	}
 }

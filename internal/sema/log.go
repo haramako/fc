@@ -234,6 +234,19 @@ func parseLogSpec(s string) (ir.LogSpec, error) {
 	if i > 0 {
 		sp.Width, _ = strconv.Atoi(s[:i])
 	}
+	if i < len(s) && s[i] == '.' {
+		// 小数点以下の桁 (固定小数・浮動小数)
+		j := i + 1
+		for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+			j++
+		}
+		n, err := strconv.Atoi(s[i+1 : j])
+		if err != nil || n > fmtMaxPrec {
+			return sp, fmt.Errorf("`.%s`: the digits after the point are 0 to %d", s[i+1:j], fmtMaxPrec)
+		}
+		sp.Prec = n + 1
+		i = j
+	}
 	switch rest := s[i:]; rest {
 	case "":
 	case "d", "x", "X", "b", "c":
@@ -252,7 +265,13 @@ func parseLogSpec(s string) (ir.LogSpec, error) {
 
 // checkLogSpec は見せ方の指定が型に合うか ("" なら合う)。
 func checkLogSpec(sp ir.LogSpec, t *types.Type) string {
-	if sp.Verb == 'c' && !(t.Kind == types.Int && t.Size == 1 && t.Enum == nil) {
+	if sp.Prec != 0 && !t.IsFixed() && !t.IsFloat() {
+		return "`.N` (digits after the point) is for fixed-point and floating-point values"
+	}
+	if (t.IsFixed() || t.IsFloat()) && sp.Verb != 0 && sp.Verb != 'd' {
+		return fmt.Sprintf("`%c` cannot be used for %s (write `{}` or `{:.3}`)", sp.Verb, t)
+	}
+	if sp.Verb == 'c' && !(t.Kind == types.Int && t.Size == 1 && !t.Tagged()) {
 		return "`c` shows a 1-byte integer as a character"
 	}
 	if sp.Verb != 0 && t.Kind == types.Bool && sp.Verb != 'd' {

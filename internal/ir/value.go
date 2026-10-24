@@ -4,6 +4,7 @@ package ir
 
 import (
 	"fmt"
+	"math/big"
 	"strconv"
 
 	"github.com/haramako/fc/internal/types"
@@ -50,7 +51,10 @@ type Value struct {
 	IsInt   bool
 	Int     int
 	Untyped bool // 型を書いていない整数定数 (リテラル・型を書かない const・sizeof)。演算・比較で相手の型に合わせる (sema.adaptLiteral)
-	Symbol  string
+	// Real は型のない実数の定数 (`1.5`。Type は types.UntypedReal、IsInt は偽) の正確な値。sema が相手の浮動小数・固定小数の値
+	// (IsInt の整数リテラル) にするので IR の命令には出ない
+	Real   *big.Rat
+	Symbol string
 	// SymOffset は KindLiteral のシンボル (アドレス) に足すバイト数。const の表に置くグローバル変数の要素・フィールドの
 	// アドレス (`[&g[1], &s.f]`。sema.constRefAddress) だけが使う (データの .word に `sym+N` と出る)
 	SymOffset int
@@ -119,6 +123,14 @@ func NewIntLiteral(name string, typ *types.Type, n int) *Value {
 	v := newValue(KindLiteral, name, typ)
 	v.IsInt = true
 	v.Int = n
+	return v
+}
+
+// NewRealLiteral は型のない実数の定数 (`1.5`) のリテラル (typ は types.UntypedReal)。
+func NewRealLiteral(name string, typ *types.Type, r *big.Rat) *Value {
+	v := newValue(KindLiteral, name, typ)
+	v.Real = r
+	v.Untyped = true
 	return v
 }
 

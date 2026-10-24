@@ -69,7 +69,7 @@ func (h *Hlc) checkShifts(mark int) {
 // 式 (書き換えの位置)。report が偽なら fc 3 のモジュールでも書き換えを報告しない (実行時に組み立てる配列は、要素の変換 convert が
 // 範囲外の定数を E として報告する)。
 func (h *Hlc) arrayElemType(typ *types.Type, vals []ir.Operand, args []*cexpr, report bool) *types.Type {
-	if typ == nil || typ.Kind != types.Int || typ.Enum != nil || typ.Size > maxIntBytes || !(h.v4() || h.rewriting()) {
+	if typ == nil || typ.Kind != types.Int || typ.Tagged() || typ.Size > maxIntBytes || !(h.v4() || h.rewriting()) {
 		return typ
 	}
 	tlo, thi := intRange(typ)
@@ -111,7 +111,7 @@ func (h *Hlc) arrayElemType(typ *types.Type, vals []ir.Operand, args []*cexpr, r
 // mixedSign は大小の比較の両辺 l, r が、互換型で比べると片方の値が読み替えられる整数か (F6)。
 func mixedSign(l, r ir.Operand) bool {
 	lt, rt := ir.ValType(l), ir.ValType(r)
-	if lt.Kind != types.Int || rt.Kind != types.Int || lt.Enum != nil || rt.Enum != nil || lt.Signed == rt.Signed {
+	if lt.Kind != types.Int || rt.Kind != types.Int || lt.Tagged() || rt.Tagged() || lt.Signed == rt.Signed {
 		return false
 	}
 	for _, v := range []ir.Operand{l, r} {

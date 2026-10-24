@@ -53,7 +53,7 @@ func anyIntRange(size int) (lo, hi int) { return -(1 << (8*size - 1)), 1<<(8*siz
 // otherUntyped は相手も型のない定数か。cmp は比較か。maxSize はその版の整数型のいちばん大きいバイト数 (maxIntSize)。
 // 値を作り直すのは adaptLiteral、型だけを決めるのは型を決める段 (typeplan.go の adaptLit) で、どちらもこの判断を使う。
 func literalRule(lt *types.Type, n int, otherUntyped bool, other *types.Type, cmp bool, maxSize int) litDecision {
-	if otherUntyped || other.Kind != types.Int || other.Enum != nil || other.Size < 1 || other.Size > maxSize {
+	if otherUntyped || other.Kind != types.Int || other.Tagged() || other.Size < 1 || other.Size > maxSize {
 		return litKeep // 定数同士 (普通は畳み込まれている) か、相手が整数でない
 	}
 	if lo, hi := anyIntRange(maxSize); n < lo || n > hi {
@@ -103,7 +103,7 @@ func (h *Hlc) foldBeyond(op cop, left, right ir.Operand) (int, bool) {
 	}
 	isInt := func(v ir.Operand) bool {
 		t := ir.ValType(v)
-		return t.Kind == types.Int && t.Enum == nil
+		return t.Kind == types.Int && !t.Tagged()
 	}
 	// 相手の値: リテラルなら自分の型で読んだ値 (両方とも定数のときも数学の値で比べる)、変数なら型の範囲のどこか
 	cmp := func(a, b int) int {
@@ -166,7 +166,7 @@ func (h *Hlc) rewriteBeyond16(e *cexpr, left, right ir.Operand) {
 		}
 		lv, ok := v.(*ir.Value)
 		other := ir.ValType(vals[1-i])
-		if !ok || lv.Kind != ir.KindLiteral || !lv.IsInt || !lv.Untyped || other.Kind != types.Int || other.Enum != nil {
+		if !ok || lv.Kind != ir.KindLiteral || !lv.IsInt || !lv.Untyped || other.Kind != types.Int || other.Tagged() {
 			continue
 		}
 		if lv.Int < -32768 || lv.Int > 65535 {

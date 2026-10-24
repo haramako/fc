@@ -24,6 +24,7 @@ package sema
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/haramako/fc/internal/diag"
 	"github.com/haramako/fc/internal/ir"
@@ -36,6 +37,7 @@ type exprInfo struct {
 	untyped bool
 	n       int
 	name    string
+	r       *big.Rat // 型のない実数の定数の値 (t は types.UntypedReal。real.go)
 }
 
 // typedMemo は型を決める段の、1 つの節点の結果 (stmtState.typed)。
@@ -325,7 +327,7 @@ var sliceMacro = macroTyping{typ: func(h *Hlc, args []*cexpr) (exprInfo, bool) {
 	}
 	p, ok := h.exprType(args[0])
 	n, nok := h.exprType(args[1])
-	if !ok || !nok || p.untyped || n.t.Kind != types.Int || n.t.Enum != nil || n.t.Size > 2 {
+	if !ok || !nok || p.untyped || n.t.Kind != types.Int || n.t.Tagged() || n.t.Size > 2 {
 		return exprInfo{}, false
 	}
 	t := p.t

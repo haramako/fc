@@ -57,6 +57,7 @@ type fmtArgs struct {
 	vals  []ir.Operand
 	texts []*string // 定数の文字列の引数はその綴り
 	codes []byte    // textmap の変換器の書式なら、fmtDigits の文字のコード (fmt.codes に置く。nil なら ASCII)
+	point byte      // 小数点の文字のコード (固定小数・浮動小数。textmap の変換器の書式なら "." を変換したもの)
 	tm    *textmapConv
 }
 
@@ -118,6 +119,9 @@ func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s: the character table must map each of %q to one code (for the digits)", what, fmtDigits)})
 		}
 		a.codes = codeBytes(what, dc)
+		if pc := a.tm.codes(h, "."); len(pc) == 1 {
+			a.point = codeBytes(what, pc)[0]
+		}
 		for i := range parts {
 			if parts[i].Arg < 0 {
 				parts[i].Text = string(codeBytes(what, a.tm.codes(h, parts[i].Text))) // 文字の部分だけを文字コードに
@@ -125,6 +129,9 @@ func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
 				panic(&diag.Error{Msg: fmt.Sprintf("%s: {} of a bool writes true / false in ASCII; use {:d} with a character table", what)})
 			}
 		}
+	}
+	if a.point == 0 {
+		a.point = '.'
 	}
 	a.parts = parts
 	return a
@@ -208,6 +215,28 @@ func (a *fmtArgs) constText(p ir.LogPart) (string, bool) {
 	}
 	v := a.vals[p.Arg]
 	t := ir.ValType(v)
+	if k, lit := ir.ValIntLiteral(v); lit && t.IsFixed() {
+		sp := p.Spec
+		left := sp.Align == '<'
+		if left {
+			sp.Width = 0
+		}
+		s := formatFixed(k, t, sp)
+		b := []byte(s)
+		for i, c := range b {
+			switch {
+			case c == '.':
+				b[i] = a.point
+			case a.codes != nil:
+				b[i] = a.codes[strings.IndexByte(fmtDigits, c)]
+			}
+		}
+		s = string(b)
+		if left {
+			s = a.padText(s, p.Spec.Width|fmtLeft)
+		}
+		return s, true
+	}
 	if k, lit := ir.ValIntLiteral(v); lit && p.Spec.Verb != 'c' && (t.Kind == types.Int || t.Kind == types.Bool) {
 		if t.Kind == types.Bool && p.Spec.Verb == 0 {
 			return a.padText(strconv.FormatBool(k != 0), a.padSpec(p, "a bool")), true
@@ -300,6 +329,24 @@ func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 			padded(a.padSpec(p, "a bool"), func() { call("boolean", cv(h.operandValue(v))) })
 		case sp.Verb == 'c':
 			padded(a.padSpec(p, "a character"), func() { call("chr", cv(h.operandValue(v))) })
+		case t.IsFixed():
+			// 固定小数: 中身の整数を 4 バイトに広げて fmt.fix_u / fix_i (小数のビット数・桁・小数点の文字のコード)
+			if t.Frac > fixMaxFrac {
+				panic(&diag.Error{Msg: fmt.Sprintf("%s: cannot print %s (at most %d fraction bits)", a.what, t, fixMaxFrac)})
+			}
+			spec, pad := sp.Width, 0
+			if sp.Width > fmtMaxWidth {
+				panic(&diag.Error{Msg: fmt.Sprintf("%s: the width is at most %d (argument %d)", a.what, fmtMaxWidth, p.Arg)})
+			}
+			if sp.Align == '<' {
+				spec, pad = 0, sp.Width|fmtLeft
+			}
+			if sp.Zero {
+				spec |= fmtZero
+			}
+			n := &cexpr{kind: cOperand, opnd: h.cast(h.asRaw(h.operandValue(v)), h.prog.Types.IntType(4, t.Signed))}
+			name := map[bool]string{true: "fix_i", false: "fix_u"}[t.Signed]
+			padded(pad, func() { call(name, n, cint(t.Frac), cint(sp.Prec), cint(int(a.point)), cint(spec)) })
 		case t.Kind == types.Int || t.Kind == types.Bool:
 			n := cv(h.operandValue(v))
 			size, signed := t.Size, t.Signed

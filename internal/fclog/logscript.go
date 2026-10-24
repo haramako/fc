@@ -53,12 +53,12 @@ local points = {
 			if part.Arg < 0 {
 				fmt.Fprintf(&b, " { text = %s },", luaString(part.Text))
 			} else {
-				fmt.Fprintf(&b, " { arg = %d, verb = %s, width = %d, zero = %t },", part.Arg+1, luaString(part.Verb), part.Width, part.Zero)
+				fmt.Fprintf(&b, " { arg = %d, verb = %s, width = %d, zero = %t, prec = %d },", part.Arg+1, luaString(part.Verb), part.Width, part.Zero, part.Prec)
 			}
 		}
 		b.WriteString(" },\n    args = {")
 		for _, a := range p.Args {
-			fmt.Fprintf(&b, " { kind = %s, size = %d, signed = %t", luaString(a.Kind), a.Size, a.Signed)
+			fmt.Fprintf(&b, " { kind = %s, size = %d, signed = %t, frac = %d", luaString(a.Kind), a.Size, a.Signed, a.Frac)
 			if len(a.Enum) > 0 {
 				keys := make([]int, 0, len(a.Enum))
 				for k := range a.Enum {
@@ -133,6 +133,38 @@ local function toBase(v, base, upper)
   return s
 end
 
+-- 固定小数 (中身 sv、小数のビット数 frac) の 10 進 (ir.FormatFixed と同じ: 桁の指定が無ければ正確な値、prec は桁 + 1 で四捨五入)
+local function fixedText(sv, frac, prec)
+  local neg = sv < 0
+  local mag = neg and -sv or sv
+  local one = 1 << frac
+  local ip = mag >> frac
+  local f = mag & (one - 1)
+  local digits = {}
+  local function digit()
+    f = f * 10
+    digits[#digits + 1] = f >> frac
+    f = f & (one - 1)
+  end
+  if prec == 0 then
+    while f ~= 0 do digit() end
+  else
+    for _ = 1, prec - 1 do digit() end
+    if f * 2 >= one then
+      local i = #digits
+      while i >= 1 and digits[i] == 9 do digits[i] = 0; i = i - 1 end
+      if i >= 1 then digits[i] = digits[i] + 1 else ip = ip + 1 end
+    end
+  end
+  local s = tostring(ip)
+  if #digits > 0 then
+    s = s .. "."
+    for _, d in ipairs(digits) do s = s .. tostring(d) end
+  end
+  if neg then s = "-" .. s end
+  return s
+end
+
 local function formatValue(a, part, v)
   local bits = 8 * a.size
   v = v & ((1 << bits) - 1)
@@ -143,6 +175,7 @@ local function formatValue(a, part, v)
   elseif part.verb == "X" then s = toBase(v, 16, true)
   elseif part.verb == "b" then s = toBase(v, 2, false)
   elseif part.verb == "c" then s = string.char(v)
+  elseif a.kind == "fixed" and (part.verb == "d" or part.verb == "") then s = fixedText(sv, a.frac, part.prec)
   elseif part.verb == "d" then s = tostring(sv)
   elseif a.kind == "bool" then s = (v ~= 0) and "true" or "false"
   elseif a.kind == "enum" then s = (a.enum and a.enum[sv]) or tostring(sv)

@@ -1,0 +1,41 @@
+#fc 4
+use console;
+function id(x:u8f8):u8f8 @(noinline) { return x; }
+function ids(x:i8f8):i8f8 @(noinline) { return x; }
+function id32(x:i16f16):i16f16 @(noinline) { return x; }
+function raw(x:u8f8):void @(noinline) { @printf("{}\n", @bitcast(u16, x)); }
+function raws(x:i8f8):void @(noinline) { @printf("{}\n", @bitcast(i16, x)); }
+function raw32(x:i16f16):void @(noinline) { @printf("{}\n", @bitcast(i32, x)); }
+function main():void
+{
+	var a:u8f8 = 1.5;
+	var b = id(2.25);
+	raw(a);
+	raw(a + b);
+	raw(b - a);
+	raw(a * b);
+	raw(b / a);
+	raw(a * 3);
+	raw(b / 2);
+	var n:u8 = 5;
+	raw(a * n);
+	raw(a + 1);
+	raw(a + 0.25);
+	var s = ids(-1.5);
+	raws(s * s);
+	raws(s / 2.0);
+	raws(-s);
+	raws(s * (-3));
+	@printf("{} {} {}\n", a < b, s < 0, a == 1.5);
+	@printf("{} {} {}\n", a as u8, s as i8, (s as i16f16) as i32);
+	raw((7 as u8) as u8f8);
+	var p = id32(-3.75);
+	var q = id32(2.5);
+	raw32(p * q);
+	raw32(p / q);
+	raw32(p + q);
+	const C:u8f8 = 1.5 * 2;
+	raw(C);
+	raw(C * 1.5);
+	console.exit(0);
+}

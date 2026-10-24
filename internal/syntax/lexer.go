@@ -255,6 +255,10 @@ func (l *Lexer) Next() (Token, error) {
 		if msg != "" {
 			return Token{}, &Error{Filename: l.filename, Pos: start, Msg: msg}
 		}
+		if r := scanReal(rest, n); r > n {
+			// 実数のリテラル `1.5` / `2e-3` (fc 4。値は綴りから sema が読む: IntLit.IsReal)
+			return tok(Number, r), nil
+		}
 		t := tok(Number, n)
 		t.Int = v
 		return t, nil
@@ -322,6 +326,37 @@ func (l *Lexer) Next() (Token, error) {
 	}
 
 	return Token{}, &Error{Filename: l.filename, Pos: start, Msg: fmt.Sprintf("invalid token at %d", start.Line)}
+}
+
+// scanReal は 10 進の整数の部分 s[:n] に続く小数部 `.[0-9_]+` と指数部 `[eE][+-]?[0-9]+` を読み、実数のリテラルの終わりを返す
+// (どちらも無ければ n)。`1..5` (範囲) と `1.x` は整数のまま。16 進・2 進は対象外。
+func scanReal(s []byte, n int) int {
+	if n >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X' || s[1] == 'b' || s[1] == 'B') {
+		return n
+	}
+	r := n
+	if r+1 < len(s) && s[r] == '.' && isDigit(s[r+1]) {
+		r++
+		for r < len(s) && (isDigit(s[r]) || s[r] == '_' && r+1 < len(s) && isDigit(s[r+1])) {
+			r++
+		}
+	}
+	if r < len(s) && (s[r] == 'e' || s[r] == 'E') {
+		e := r + 1
+		if e < len(s) && (s[e] == '+' || s[e] == '-') {
+			e++
+		}
+		if e < len(s) && isDigit(s[e]) {
+			for e < len(s) && isDigit(s[e]) {
+				e++
+			}
+			r = e
+		}
+	}
+	if r < len(s) && isWord(s[r]) {
+		return n // `1.5x` などは今までどおり (後ろの綴りでエラー)
+	}
+	return r
 }
 
 // scanNumber は数値リテラルを読む。返り値は消費バイト数と値 (msg が非空ならエラー)。

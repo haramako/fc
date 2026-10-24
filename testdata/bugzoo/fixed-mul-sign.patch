@@ -1,0 +1,13 @@
+# 符号付きの固定小数の掛け算・割り算で、2 倍の幅に符号で広げない (i8f8 などの負の値の積が違う)
+diff --git a/internal/sema/real.go b/internal/sema/real.go
+--- a/internal/sema/real.go
++++ b/internal/sema/real.go
+@@ -266,7 +266,7 @@
+ 		r := h.rval(ccall(cv(fn), &cexpr{kind: cOperand, opnd: h.cast(a, w)}, &cexpr{kind: cOperand, opnd: h.cast(b, w)}, cint(ft.Frac)))
+ 		return ir.NewCastedValue(r, ft, 0)
+ 	}
+-	w := h.prog.Types.IntType(2*ft.Size, ft.Signed)
++	w := h.prog.Types.IntType(2*ft.Size, false)
+ 	a, b = h.cast(a, w), h.cast(b, w)
+ 	frac := ir.NewIntLiteral("", h.prog.Types.IntType(1, false), ft.Frac)
+ 	if p.kind == arithFixMul {

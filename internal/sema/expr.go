@@ -59,7 +59,13 @@ func (h *Hlc) guessType(name string, typ *types.Type, val ir.Operand) *types.Typ
 	if typ != nil {
 		// 宣言の型と初期値の型の共通の型 (`[?]T` は初期値の長さ。整数は広いほう: 縮小・範囲外は checkConstRange が見る)
 		h.compatibleAssign("`"+name+"`", typ, ir.ValType(val))
+		if isRealish(typ) || isRealish(ir.ValType(val)) {
+			return typ // 固定小数・浮動小数は宣言の型 (値は convertNumeric が合わせる。real.go)
+		}
 		return h.prog.Types.CommonType(typ, ir.ValType(val))
+	}
+	if r := realOf(val); r != nil {
+		return h.untypedRealType(r)
 	}
 	return ir.ValType(val)
 }
@@ -352,6 +358,10 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				r = h.pointerDiff(left, right, ir.ValType(left).Base) // p - q は要素数 (C と同じ)
 				break
 			}
+			if p.kind >= arithFixMul {
+				r = h.emitNumericArith(e.op, p, left, right) // 固定小数の掛け算・割り算・浮動小数 (real.go)
+				break
+			}
 			if w > 0 && (w > nt0.Size || h.widened(e.args[0], left) || e.op != opShiftLeft && e.op != opShiftRight && h.widened(e.args[1], right)) {
 				// A1: 広い幅で計算する (項は広げる前の型の符号のまま広げる: widenOperand。シフト量は元のまま)。子を広い幅で
 				// 計算したときも、この節点の型は広げる前の型の符号 (子の広い型どうしで揃えると符号が変わる: `y + dy + w`)
@@ -465,7 +475,7 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				}
 			}
 			typ, swap := h.compareType(e.op, lt, rt)
-			if w := max(ir.ValType(left).Size, ir.ValType(right).Size); typ.Kind == types.Int && typ.Enum == nil && typ.Size < w {
+			if w := max(ir.ValType(left).Size, ir.ValType(right).Size); typ.Kind == types.Int && !typ.Tagged() && typ.Size < w {
 				typ = h.prog.Types.IntType(w, typ.Signed) // 項は計算した幅のまま
 			}
 			if swap {
@@ -949,7 +959,13 @@ func (h *Hlc) nullOf(t *types.Type) ir.Operand {
 func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 	switch kind {
 	case syntax.CastAs:
-		// 数値変換: 整数 → 整数、配列 → 同じ要素型のポインタ
+		// 数値変換: 整数 → 整数、配列 → 同じ要素型のポインタ。固定小数・浮動小数は numericCastable (real.go)
+		if isRealish(from) || isRealish(to) {
+			if numericCastable(from, to) {
+				return
+			}
+			panic(&diag.Error{Msg: fmt.Sprintf("cannot convert %s to %s with `as`", from, to)})
+		}
 		if (from.Kind == types.Int || from.Kind == types.Bool) && (to.Kind == types.Int || to.Kind == types.Bool) {
 			return
 		}
@@ -980,6 +996,11 @@ func (h *Hlc) checkCast(kind syntax.CastKind, from, to *types.Type) {
 //   - `x as T`: 数値変換。拡張は元が符号付きなら符号拡張、縮小は下位バイト、同サイズはビットそのまま
 func (h *Hlc) explicitCast(kind syntax.CastKind, v ir.Operand, to *types.Type) ir.Operand {
 	from := ir.ValType(v) // 型の検査は呼ぶ側 (lval) が型を決める段の計画 (planCast) でする
+	if kind == syntax.CastAs {
+		if r, ok := h.numericCast(v, to); ok {
+			return r // 固定小数・浮動小数・型のない実数の定数 (real.go)
+		}
+	}
 	if from.Kind == types.Array && to.Kind == types.Pointer {
 		h.strPtr(v)
 	}

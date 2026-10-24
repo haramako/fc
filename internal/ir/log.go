@@ -46,6 +46,7 @@ type LogSpec struct {
 	Width int
 	Zero  bool // 0 で埋める
 	Align byte // 0 (数は右・文字列などは左に寄せる) / '<' (左) / '>' (右)。@format と printf だけ
+	Prec  int  // 小数点以下の桁 (`{:.3}`) + 1。0 なら指定なし (固定小数・浮動小数だけ)
 }
 
 // LogArg は @log の引数 1 つ。

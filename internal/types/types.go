@@ -23,11 +23,12 @@ const (
 	Soa    // SoA コンテナ (soa 宣言。Base = 要素の struct、Length。要素はフィールドごとの配列に分かれる)
 	SoaRef // SoA コンテナの要素ハンドル (実体は uint8 のインデックス。Base = 要素の struct 型、Soa = コンテナ)
 	Bad    // エラーになった宣言の型 (これに触れるエラーは報告しない: 巻き添えの抑制)
+	Float  // 浮動小数 (f16 / f32 = IEEE 754 binary16 / binary32。値の中身はビットの並び)。Size 0 は型のない実数の定数 (UntypedReal)
 )
 
 var kindNames = [...]string{
 	Void: "void", Bool: "bool", Int: "int",
-	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", Soa: "soa", SoaRef: "soaref", Bad: "bad",
+	Pointer: "pointer", Array: "array", Func: "lambda", Struct: "struct", Soa: "soa", SoaRef: "soaref", Bad: "bad", Float: "float",
 }
 
 func (k Kind) String() string {
@@ -43,6 +44,7 @@ type Type struct {
 	Kind     Kind
 	Size     int   // バイト数。長さ省略配列は -1
 	Signed   bool  // Int のみ
+	Frac     int   // 固定小数 (Kind は Int のまま。中身は値 × 2^Frac の整数) の小数のビット数。0 なら整数
 	Base     *Type // Pointer / Array の要素型、Func の戻り値型
 	Length   int   // Array の要素数。省略時 -1
 	Params   []*Type
@@ -102,6 +104,18 @@ func (t *Type) Field(name string) (Field, bool) {
 	}
 	return Field{}, false
 }
+
+// IsFixed は固定小数 (`u8f8` など。Kind は Int で Frac が小数のビット数)。
+func (t *Type) IsFixed() bool { return t != nil && t.Kind == Int && t.Frac > 0 }
+
+// IsFloat は浮動小数の型 (f16 / f32)。型のない実数の定数 (IsUntypedReal) は含まない。
+func (t *Type) IsFloat() bool { return t != nil && t.Kind == Float && t.Size > 0 }
+
+// IsUntypedReal は型のない実数の定数 (`1.5`) の型。
+func (t *Type) IsUntypedReal() bool { return t != nil && t.Kind == Float && t.Size == 0 }
+
+// Tagged は Kind が Int でも整数の規則 (互換型・暗黙の変換・A1 の広げなど) に乗らない型 (enum と固定小数)。
+func (t *Type) Tagged() bool { return t != nil && (t.Enum != nil || t.Frac > 0) }
 
 // String は型の表示名 (`u8`, `i16`, `*u8`, `[4]u8`, `fastcall fn(u8):void` など。前置形。bool は `ubool8`)。
 func (t *Type) String() string { return t.str }
@@ -232,7 +246,64 @@ var V2IntTypeNames = map[string]string{
 	"sint16": "i16",
 }
 
-// Named は基本型の名前 (void・bool・u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32) から型を返す。未知の名前なら ok=false。fc 2 だけの名前 (int など)
+// FixedType は固定小数の型 (size バイト、小数のビット数 frac。名前は `u8f8` / `i12f4`)。
+func (u *Universe) FixedType(size, frac int, signed bool) *Type {
+	s := "u"
+	if signed {
+		s = "i"
+	}
+	return u.intern(&Type{Kind: Int, Size: size, Signed: signed, Frac: frac, Length: -1, str: fmt.Sprintf("%s%df%d", s, size*8-frac, frac)})
+}
+
+// FloatType は浮動小数の型 (size 2 = f16、4 = f32)。
+func (u *Universe) FloatType(size int) *Type {
+	return u.intern(&Type{Kind: Float, Size: size, Signed: true, Length: -1, str: fmt.Sprintf("f%d", size*8)})
+}
+
+// UntypedReal は型のない実数の定数 (`1.5`。値は ir.Value.Real) の型。相手の浮動小数・固定小数に合わせ、実行時の値にはならない。
+func (u *Universe) UntypedReal() *Type {
+	return u.intern(&Type{Kind: Float, Size: 0, Signed: true, Length: -1, str: "untyped float"})
+}
+
+// ParseFixedName は固定小数の型名 `[u|i]<整数のビット>f<小数のビット>` を読む (合計 8 / 16 / 24 / 32 ビット、小数は 1 ビット以上)。
+func ParseFixedName(name string) (size, frac int, signed, ok bool) {
+	if len(name) < 4 || (name[0] != 'u' && name[0] != 'i') {
+		return 0, 0, false, false
+	}
+	f := strings.IndexByte(name, 'f')
+	ib, okI := decimal(name[1:max(f, 1)])
+	fb, okF := decimal(name[f+1:])
+	if f < 2 || !okI || !okF || fb < 1 || (ib+fb)%8 != 0 || ib+fb < 8 || ib+fb > 32 {
+		return 0, 0, false, false
+	}
+	return (ib + fb) / 8, fb, name[0] == 'i', true
+}
+
+// decimal は先頭に 0 を付けない 10 進の数 ("0" は可)。
+func decimal(s string) (int, bool) {
+	if s == "" || len(s) > 2 || (len(s) > 1 && s[0] == '0') {
+		return 0, false
+	}
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
+}
+
+// V4OnlyTypeName は fc 4 だけの基本型の名前か (3・4 バイトの整数、固定小数、浮動小数)。
+func V4OnlyTypeName(name string) bool {
+	if WideIntTypeNames[name] || name == "f16" || name == "f32" {
+		return true
+	}
+	_, _, _, ok := ParseFixedName(name)
+	return ok
+}
+
+// Named は基本型の名前 (void・bool・u8 / i8 / u16 / i16 / u24 / i24 / u32 / i32・固定小数 `u8f8`・f16 / f32) から型を返す。未知の名前なら ok=false。fc 2 だけの名前 (int など)
 // は引かない (文法の版は types の外: sema が V2IntTypeNames で fc 3 の名前に読み替えてから引く。2026-10-05 までは NamedIn が
 // 版番号を受け取っていた)。
 func (u *Universe) Named(name string) (t *Type, ok bool) {
@@ -244,6 +315,15 @@ func (u *Universe) Named(name string) (t *Type, ok bool) {
 	}
 	if bt, ok := IntTypeNames[name]; ok {
 		return u.IntType(bt.size, bt.signed), true
+	}
+	switch name {
+	case "f16":
+		return u.FloatType(2), true
+	case "f32":
+		return u.FloatType(4), true
+	}
+	if size, frac, signed, ok := ParseFixedName(name); ok {
+		return u.FixedType(size, frac, signed), true
 	}
 	return nil, false
 }
@@ -347,6 +427,10 @@ func (u *Universe) FarFunc(params []*Type, result *Type) *Type {
 // AssignableTo は from の値を to に代入できるか。CommonType の規則のうち、向きのあるもの: *void からほかのポインタ・関数・
 // 配列へは代入できない (bitcast が要る。逆の *T → *void は暗黙)、ポインタは配列に代入できない (逆の配列 → ポインタは暗黙)。
 func (u *Universe) AssignableTo(to, from *Type) bool {
+	num := func(t *Type) bool { return t.Kind == Int && t.Enum == nil || t.Kind == Float }
+	if (to.IsFixed() || from.IsFixed() || to.Kind == Float || from.Kind == Float) && num(to) && num(from) {
+		return true // 固定小数・浮動小数の代入の規則 (型のない定数を合わせる・暗黙の変換はエラー) は sema が値で決める (real.go)
+	}
 	if to.Kind != Bad && from.Kind != Bad {
 		if from.IsVoidPtr() && !to.IsVoidPtr() && voidPtrPeer(to) {
 			return false
@@ -374,8 +458,8 @@ func (u *Universe) CommonType(a, b *Type) *Type {
 	if b.Kind == Bad {
 		return a
 	}
-	// enum は同じ enum とだけ互換 (整数・bool・別の enum とは `as` で変換する)
-	if a.Enum != nil || b.Enum != nil {
+	// enum・固定小数は同じ型とだけ互換 (整数・bool・別の enum・分け方の違う固定小数とは `as` で変換する)。浮動小数も同じ型だけ
+	if a.Tagged() || b.Tagged() || a.Kind == Float || b.Kind == Float {
 		return nil
 	}
 	// 同じ要素のポインタは const の有無によらず互換 (*T → *const T は暗黙。const を捨てる向きは sema が警告する)

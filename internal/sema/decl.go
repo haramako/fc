@@ -353,7 +353,15 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 			v = h.pointerElems(name, v, declType.Base)
 		}
 		checkRaggedLiteral(v)
-		t := h.guessType(name, declType, v)
+		if declType != nil && (isRealish(declType) || v.Real != nil) {
+			if r, ok := h.convertNumeric(v, declType); ok {
+				v = r.(*ir.Value) // 固定小数・浮動小数の定数 (型のない定数は合わせる。real.go)
+			}
+		}
+		t := v.Type // `const H = 0.5` は型のない実数の定数 (型を決めない)
+		if declType != nil || v.Real == nil {
+			t = h.guessType(name, declType, v)
+		}
 		h.checkConstRange(name, typ, declType, v, t, val)
 		if v.Kind == ir.KindArrayLiteral {
 			if t.Kind == types.Pointer {
@@ -388,7 +396,9 @@ func (h *Hlc) compileConstSpec(name string, nameEnd syntax.Pos, typ syntax.TypeE
 				panic(&diag.Error{Msg: fmt.Sprintf("`%s`: options(symbol:) needs an array constant (or no value to refer to an assembler symbol)", name)})
 			}
 			var lit *ir.Value
-			if v.IsInt {
+			if v.Real != nil {
+				lit = ir.NewRealLiteral(name, v.Type, v.Real) // `const H = 0.5` は型のない実数の定数
+			} else if v.IsInt {
 				lit = ir.NewIntLiteral(name, t, v.Int)
 				lit.Untyped = v.Untyped && declType == nil // `const N = 200` は型のない定数、`const N:u8 = 200` は型付き
 			} else {

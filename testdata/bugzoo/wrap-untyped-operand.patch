@@ -9,9 +9,9 @@ diff --git a/internal/sema/wrap.go b/internal/sema/wrap.go
 -	case lUntyped:
 +	case lUntyped && false:
  		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand decides the type, so it cannot be an untyped constant (write `(n as T) %s b`)", w.text, w.text)})
- 	case lt.Kind != types.Int || lt.Enum != nil:
+ 	case lt.Kind != types.Int || lt.Tagged():
  		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the left operand must be an integer (got %s)", w.text, lt)})
- 	case rt.Kind != types.Int || rt.Enum != nil:
+ 	case rt.Kind != types.Int || rt.Tagged():
  		panic(&diag.Error{Msg: fmt.Sprintf("`%s`: the right operand must be an integer (got %s)", w.text, rt)})
 -	case rUntyped:
 +	case rUntyped && false:

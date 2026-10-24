@@ -458,11 +458,26 @@ type Ident struct {
 	Name    string
 }
 
-// IntLit は整数リテラル。Text はソース上の綴り (`0x10` 等)。
+// IntLit は整数リテラル。Text はソース上の綴り (`0x10` 等)。実数のリテラル (`1.5` / `2e-3`。fc 4) も IntLit で、IsReal が真
+// (Value は 0、値は Text から読む)。
 type IntLit struct {
 	ValuePos Pos
 	Value    int
 	Text     string
+}
+
+// IsReal は実数のリテラル (`1.5` / `2e-3`) か。
+func (e *IntLit) IsReal() bool {
+	t := e.Text
+	if len(t) >= 2 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X' || t[1] == 'b' || t[1] == 'B') || len(t) == 0 || t[0] < '0' || t[0] > '9' {
+		return false
+	}
+	for i := 0; i < len(t); i++ {
+		if t[i] == '.' || t[i] == 'e' || t[i] == 'E' {
+			return true
+		}
+	}
+	return false
 }
 
 // BoolLit は `true` / `false` (v2)。型は bool。
