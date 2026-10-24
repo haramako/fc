@@ -3,6 +3,7 @@
 ## 大域変数: var v:%T;
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -20,6 +21,7 @@ void       E variable v cannot be void
 ## ローカル変数: function f():void { var v:%T; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -37,6 +39,7 @@ void       E variable v cannot be void
 ## 引数: function f(p:%T):void { }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -54,6 +57,7 @@ void       ok
 ## 戻り値: function f(p:%T):%T { return p; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -71,6 +75,7 @@ void       E can't return with value from void function f
 ## struct のフィールド: struct Q { f:%T; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -88,6 +93,7 @@ void       E field f cannot be void
 ## 配列の要素: var v:[2]%T;
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -105,6 +111,7 @@ void       ok
 ## ポインタ: var v:*%T;
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -122,6 +129,7 @@ void       ok
 ## u8 からの as: function f(x:u8):void { var v = x as %T; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          E cannot convert u8 to t.S with `as` (use bitcast for bit reinterpretation)
@@ -139,6 +147,7 @@ void       E cannot convert u8 to void with `as` (use bitcast for bit reinterpre
 ## u8 の代入: function f(x:u8, v:%T):void { v = x; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          E assignment to `v`: cannot assign u8 to t.E (not compatible types)
 S          E assignment to `v`: cannot assign u8 to t.S (not compatible types)
@@ -156,6 +165,7 @@ void       E assignment to `v`: cannot assign u8 to void (not compatible types)
 ## 加算: function f(a:%T, b:%T):void { var c = a + b; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          E cannot apply + to enum t.E (convert with `as` first)
 S          E cannot apply + to t.S (struct / array values have only == and !=)
@@ -173,6 +183,7 @@ void       ok
 ## ==: function f(a:%T, b:%T):bool { return a == b; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -190,6 +201,7 @@ void       ok
 ## <: function f(a:%T, b:%T):bool { return a < b; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          E cannot apply < to t.S (struct / array values have only == and !=)
@@ -207,6 +219,7 @@ void       ok
 ## 条件: function f(a:%T):void { if (a) { } }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          E a value of type t.S cannot be used as a condition (struct / array values have only == and !=)
@@ -224,6 +237,7 @@ void       ok
 ## for-each: function f(a:%T):void { for (var x in a) { } }
 u8         E cannot iterate over u8 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
 i16        E cannot iterate over i16 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       E cannot iterate over ubool8 (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
 E          E cannot iterate over t.E (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
 S          E cannot iterate over t.S (a for-each needs an array, a slice, a pointer to one of them, or a range `a..b`)
@@ -241,6 +255,7 @@ void       E cannot iterate over void (a for-each needs an array, a slice, a poi
 ## @sizeof: const N = @sizeof(%T);
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok
@@ -258,6 +273,7 @@ void       ok
 ## printf: function f(a:%T):void { printf(a); }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          E printf cannot print a value of type t.S (strings (*u8 / []u8), integers, bool and enums)
@@ -275,6 +291,7 @@ void       E printf cannot print a value of type void (strings (*u8 / []u8), int
 ## 値の初期化: function f():void { var v:%T = %Z; }
 u8         ok
 i16        ok
+u32        E u32 is a type of fc 4 only (24 / 32-bit integers)
 bool       ok
 E          ok
 S          ok

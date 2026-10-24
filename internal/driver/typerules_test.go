@@ -20,6 +20,7 @@ import (
 var trTypes = []struct{ name, zero string }{
 	{"u8", "0"},
 	{"i16", "0"},
+	{"u32", "0"}, // fc 4 だけの型 (この表は fc 3 なので、どこでもエラーになることを見る)
 	{"bool", "false"},
 	{"E", ".A"},
 	{"S", "S{1, 2}"},

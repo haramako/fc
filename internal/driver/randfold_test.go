@@ -33,6 +33,17 @@ type rfType struct {
 
 var rfTypes = []rfType{{"u8", 1, false}, {"i8", 1, true}, {"u16", 2, false}, {"i16", 2, true}}
 
+// rfTypesV4 は fc 4 の生成に使う整数型 (3・4 バイトも。並びは大きさごとに符号なし・符号付きの組: indexOfType の読み替えが使う)。
+var rfTypesV4 = append(append([]rfType{}, rfTypes...), rfType{"u24", 3, false}, rfType{"i24", 3, true}, rfType{"u32", 4, false}, rfType{"i32", 4, true})
+
+// rfTypesFor は版 ver の生成に使う整数型。
+func rfTypesFor(ver int) []rfType {
+	if ver >= 4 {
+		return rfTypesV4
+	}
+	return rfTypes
+}
+
 func (t rfType) lohi() (int, int) {
 	hi := 1<<(8*t.size) - 1
 	if t.signed {
@@ -53,6 +64,13 @@ func (g *rfGen) widen(e rfExpr) rfExpr {
 	}
 	t1 := rfTypes[g.pick(2)]   // u8 / i8
 	t2 := rfTypes[2+g.pick(2)] // u16 / i16
+	if g.v4 && g.chance(0.4) {
+		// 3・4 バイトへの拡張 (i8 / i16 / i24 → i32 の符号拡張の幅)
+		ts := g.types()
+		i := g.pick(len(ts) - 2)
+		t1 = ts[i]
+		t2 = ts[(i/2+1+g.pick(len(ts)/2-i/2-1))*2+g.pick(2)]
+	}
 	c := fmt.Sprintf("((((%s) as %s)) as %s)", e.c, t1.name, t2.name)
 	src := fmt.Sprintf("((%s) as %s)", e.v, t1.name)
 	var pre string
@@ -68,8 +86,9 @@ func (g *rfGen) widen(e rfExpr) rfExpr {
 		src = "gs.f_" + t1.name
 	}
 	// 定数の形も同じ文の形 (fc 4 では文でない式を 2 つの値を出す形に置くので、行ごとの値の数をそろえる)
-	c = fmt.Sprintf(`{ var w:%s = %s; %s((w) as i16)%s; }`, t2.name, c, rfPrintBegin, rfPrintEnd)
-	return rfExpr{c: c, v: fmt.Sprintf(`{ %svar w:%s = %s; %s((w) as i16)%s; }`, pre, t2.name, src, rfPrintBegin, rfPrintEnd)}
+	pt := g.printType()
+	c = fmt.Sprintf(`{ var w:%s = %s; %s((w) as %s)%s; }`, t2.name, c, rfPrintBegin, pt, rfPrintEnd)
+	return rfExpr{c: c, v: fmt.Sprintf(`{ %svar w:%s = %s; %s((w) as %s)%s; }`, pre, t2.name, src, rfPrintBegin, pt, rfPrintEnd)}
 }
 
 // rfN は TestRandomConstFold のプログラム数 (1 本で 3 回ビルドするので既定は少なめ。`-foldn 500 -randseed N` で増やす)。
@@ -80,8 +99,24 @@ type rfGen struct {
 	v4 bool // fc 4 の書き方も使う (+% -% *%)。fc 3 では乱数を余分に使わない (TestRandomConstFold の式は今までと同じ)
 }
 
-func (g *rfGen) pick(n int) int        { return g.r.Intn(n) }
-func (g *rfGen) typ() rfType           { return rfTypes[g.pick(len(rfTypes))] }
+func (g *rfGen) pick(n int) int { return g.r.Intn(n) }
+func (g *rfGen) typ() rfType    { ts := g.types(); return ts[g.pick(len(ts))] }
+
+// types は生成に使う整数型 (fc 4 は 3・4 バイトも)。
+func (g *rfGen) types() []rfType {
+	if g.v4 {
+		return rfTypesV4
+	}
+	return rfTypes
+}
+
+// printType は値を出す前に読み替える型 (fc 4 は 32 ビットの値も出す)。
+func (g *rfGen) printType() string {
+	if g.v4 {
+		return "i32"
+	}
+	return "i16"
+}
 func (g *rfGen) chance(p float64) bool { return g.r.Float64() < p }
 
 // value は型 t の値 (端の値を多めに)。
@@ -110,6 +145,10 @@ func (g *rfGen) leaf() rfExpr {
 			n = -g.pick(130)
 		case 1:
 			n = 65530 + g.pick(20)
+			if g.v4 && g.chance(0.5) {
+				// 3・4 バイトの型のない定数 (u24 / i24 / u32 / i32 になる)
+				n = []int{70000, 16777215, 16777216, 3000000000, 4294967295, -40000, -8388609, -2147483648}[g.pick(8)]
+			}
 		default:
 			n = g.pick(301)
 		}
@@ -145,12 +184,19 @@ func (g *rfGen) expr(depth int) rfExpr {
 	case 4:
 		op := []string{"<<", ">>"}[g.pick(2)]
 		n := g.pick(10)
+		if g.v4 && g.chance(0.3) {
+			n = g.pick(32)
+		}
 		return rfExpr{fmt.Sprintf("(%s %s %d)", a.c, op, n), fmt.Sprintf("(%s %s %d)", a.v, op, n)}
 	case 5:
 		b := g.expr(depth - 1)
 		if g.chance(0.4) {
 			// 片方を型のない定数に (型付きの値と型のない定数の比較の畳み込み: 相手の型に入らない大きな数・負の数。cmp-fold-mixed)
-			n := []int{-1, -129, -32769, 255, 256, 32768, 65533, 65535, 65536, 70000}[g.pick(10)]
+			cands := []int{-1, -129, -32769, 255, 256, 32768, 65533, 65535, 65536, 70000}
+			if g.v4 {
+				cands = append(cands, -8388608, -8388609, 8388608, 16777215, 16777216, -2147483648, 2147483647, 2147483648, 4294967295, 4294967296)
+			}
+			n := cands[g.pick(len(cands))]
 			lit := fmt.Sprint(n)
 			if n < 0 {
 				lit = "(" + lit + ")"
@@ -168,7 +214,7 @@ func (g *rfGen) expr(depth int) rfExpr {
 	case 7:
 		// ビットの読み替え (同じ大きさの型同士)
 		t := g.typ()
-		u := rfTypes[(indexOfType(t)+1)%2+(indexOfType(t)/2)*2] // 同じ大きさで符号だけ違う型
+		u := g.types()[(indexOfType(t)+1)%2+(indexOfType(t)/2)*2] // 同じ大きさで符号だけ違う型
 		return rfExpr{fmt.Sprintf("@bitcast(%s, ((%s) as %s))", u.name, a.c, t.name), fmt.Sprintf("@bitcast(%s, ((%s) as %s))", u.name, a.v, t.name)}
 	case 8:
 		b := g.expr(depth - 1)
@@ -195,8 +241,8 @@ func (g *rfGen) wrapOp(a, b rfExpr) rfExpr {
 	a = rfExpr{fmt.Sprintf("((%s) as %s)", a.c, t.name), fmt.Sprintf("((%s) as %s)", a.v, t.name)}
 	if g.chance(0.6) {
 		u := g.typ()
-		if u.size > t.size {
-			u = rfTypes[indexOfType(u)-2] // 同じ符号の狭い型
+		for u.size > t.size {
+			u = g.types()[indexOfType(u)-2] // 同じ符号の狭い型
 		}
 		b = rfExpr{fmt.Sprintf("((%s) as %s)", b.c, u.name), fmt.Sprintf("((%s) as %s)", b.v, u.name)}
 	}
@@ -204,7 +250,7 @@ func (g *rfGen) wrapOp(a, b rfExpr) rfExpr {
 }
 
 func indexOfType(t rfType) int {
-	for i, u := range rfTypes {
+	for i, u := range rfTypesV4 {
 		if u == t {
 			return i
 		}
@@ -215,8 +261,8 @@ func indexOfType(t rfType) int {
 // rfSource は式の並びのプログラム (fc 3。1 行 1 式。行番号 = 4 + 添字)。
 func rfSource(exprs []string) string { return rfSourceV(exprs, 3) }
 
-// rfSourceV は版 ver の rfSource。fc 4 では各式を 16 ビットの値と足す形 (`w = w + (式)`、w:u16) にも置いて、A1 (式を式の中の
-// 一番広い型で計算する) で広がる所の定数の畳み込みも比べる (Agent/wiki/plans/v4-plan.md §1.3 A)。
+// rfSourceV は版 ver の rfSource。fc 4 では各式を 16 ビット (奇数の行は 32 ビット) の値と足す形 (`w = w + (式)`) にも置いて、
+// A1 (式を式の中の一番広い型で計算する) で広がる所の定数の畳み込みも比べる (Agent/wiki/plans/v4-plan.md §1.3 A)。値は i32 で出す。
 // rfPrintBegin / rfPrintEnd は式の中に埋め込む 1 つの値の printf の印 (版で書き方が違う: fc 3 は `printf(値, "\n")`、fc 4 は
 // `@printf("{}\n", 値)`。rfSourceV が置き換える)。
 const (
@@ -227,11 +273,11 @@ const (
 func rfSourceV(exprs []string, ver int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "#fc %d\nuse * from stdio;\n", ver)
-	for _, t := range rfTypes {
+	for _, t := range rfTypesFor(ver) {
 		fmt.Fprintf(&b, "function id_%s(x:%s):%s @(noinline) { return x; } var gv_%s:%s; var ga_%s:[3]%s;\n", t.name, t.name, t.name, t.name, t.name, t.name, t.name)
 	}
 	b.WriteString("struct GS { a:u8; f_u8:u8; f_i8:i8; } var gs:GS; function main():void\n{\n")
-	for _, e := range exprs {
+	for i, e := range exprs {
 		if strings.HasPrefix(e, "{") {
 			// 文 (暗黙の拡張の初期化を通す形。1 行)。埋め込んだ printf の印を版の書き方に
 			if ver >= 4 {
@@ -243,7 +289,8 @@ func rfSourceV(exprs []string, ver int) string {
 			continue
 		}
 		if ver >= 4 {
-			fmt.Fprintf(&b, "\t{ var w:u16 = 1; w = w + (%s); @printf(\"{} {}\\n\", (w as i16), ((%s) as i16)); }\n", e, e)
+			wt := []string{"u16", "u32"}[i%2]
+			fmt.Fprintf(&b, "\t{ var w:%s = 1; w = w + (%s); @printf(\"{} {}\\n\", (w as i32), ((%s) as i32)); }\n", wt, e, e)
 			continue
 		}
 		fmt.Fprintf(&b, "\tprintf(((%s) as i16), \"\\n\");\n", e)
@@ -252,8 +299,8 @@ func rfSourceV(exprs []string, ver int) string {
 	return b.String()
 }
 
-// rfFirstLine はソースの main の最初の式の行番号。
-const rfFirstLine = 2 + 4 + 2 + 1
+// rfFirstLine は版 ver のソースの main の最初の式の行番号 (見出し 2 行、型ごとの 1 行、struct と main の 2 行)。
+func rfFirstLine(ver int) int { return 2 + len(rfTypesFor(ver)) + 2 + 1 }
 
 // TestRandomConstFold は定数の形と変数の形で同じ式の結果が同じかを比べる。
 func TestRandomConstFold(t *testing.T) { runConstFold(t, 3) }
@@ -306,7 +353,7 @@ func runConstFold(t *testing.T, ver int) {
 					list = diag.ErrorList{one}
 				}
 				for _, e := range list {
-					drop[e.Pos.Line-rfFirstLine] = true
+					drop[e.Pos.Line-rfFirstLine(ver)] = true
 				}
 				if len(drop) == 0 || try > 10 {
 					t.Fatalf("変数の形のビルド失敗 (seed %d):\n%s\n%v", seed, rfSourceV(vs, ver), err)

@@ -1,0 +1,13 @@
+# i24 の割り算・余りで、32 ビットの関数に渡す 4 バイト目を符号で埋めない (502db9d)
+diff --git a/internal/codegen/arith.go b/internal/codegen/arith.go
+--- a/internal/codegen/arith.go
++++ b/internal/codegen/arith.go
+@@ -169,7 +169,7 @@
+ 				r = append(r, l.loadA(s, i), fmt.Sprintf("sta <reg+%d", 4*k+i))
+ 			}
+ 			if size == 3 {
+-				if op.IsSigned() {
++				if false {
+ 					// 符号拡張: 最上位のビットを C に出して 0 / $FF を作る (A は最上位のバイトのまま)
+ 					r = append(r, "asl a", "lda #0", "adc #255", "eor #255")
+ 				} else {

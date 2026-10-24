@@ -43,20 +43,19 @@ var (
 	arI8  = arTy{1, true}
 	arU16 = arTy{2, false}
 	arI16 = arTy{2, true}
+	arU24 = arTy{3, false}
+	arI24 = arTy{3, true}
+	arU32 = arTy{4, false}
+	arI32 = arTy{4, true}
 )
 
-var arAllTy = []arTy{arU8, arI8, arU16, arI16}
+var arAllTy = []arTy{arU8, arI8, arU16, arI16, arU24, arI24, arU32, arI32}
 
 func (t arTy) name() string {
-	switch t {
-	case arU8:
-		return "u8"
-	case arI8:
-		return "i8"
-	case arU16:
-		return "u16"
+	if t.s {
+		return fmt.Sprintf("i%d", t.bits())
 	}
-	return "i16"
+	return fmt.Sprintf("u%d", t.bits())
 }
 
 func (t arTy) bits() int { return t.w * 8 }
@@ -74,19 +73,22 @@ func (t arTy) wrap(v int64) int64 {
 // fits は v が自分の範囲に入る値か (定数は型に入らないとエラーになる規則の方)。
 func (t arTy) fits(v int64) bool { return t.wrap(v) == v }
 
-// arMinType は型のない定数の式への寄与 (入るいちばん小さい型。負でなければ符号なし)。
+// arMinType は型のない定数の式への寄与 (入るいちばん小さい型。負でなければ符号なし。sema の IntValue)。32 ビットに入らない値は
+// 32 ビットの型 (生成しない: arTooWide)。
 func arMinType(v int64) arTy {
-	switch {
-	case v >= 0 && v <= 255:
-		return arU8
-	case v >= -128 && v <= 127:
-		return arI8
+	for w := 1; w < 4; w++ {
+		if t := (arTy{w, v < 0}); t.fits(v) {
+			return t
+		}
 	}
-	if v >= 0 {
-		return arU16
-	}
-	return arI16
+	return arTy{4, v < 0}
 }
+
+// arMaxExact は型のない定数だけの式の途中の値の上限 (超えたら作らない: int64 をはみ出さないように。sema も int で畳む)。
+const arMaxExact = int64(1) << 40
+
+// arBeyond は v がどの整数型 (32 ビット) にも入らないか (sema の anyIntRange)。
+func arBeyond(v int64) bool { return v < -(int64(1)<<31) || v > int64(1)<<32-1 }
 
 // arCombine は 2 つの値の演算の型 (大きいほう、同じ大きさなら符号つき)。
 func arCombine(a, b arTy) arTy {
@@ -132,7 +134,8 @@ type arNode struct {
 	srcConst string
 	n        arTy // 自分の領域の計算の型 (代入先を含まない)
 
-	shift int // 1 ならシフトの量 (必ず 0〜7 の定数)
+	shift int  // 1 ならシフトの量 (必ず型の幅未満の定数)
+	bad   bool // 型のない定数だけの式の途中の値が arMaxExact を超えた (作らない: arTooWide)
 	// pure は型のない定数だけの式。そこは任意精度で計算して代入先との適合を見る (`var b:u8 = 200 + 100;` は 44 ではなく
 	// 「300 does not fit in u8」)。型が決まっている値が 1 つでも入ればその幅で折り返す (`var b:u8 = (200 as u8) + 100;` は 44)。
 	pure  bool
@@ -163,10 +166,13 @@ func arAdaptLit(a, b *arNode, cmp bool) (arTy, bool) {
 	if otherUntyped {
 		return lt, false // 定数どうし (普通は畳み込まれている)
 	}
-	if lt.w > other.w || n < -32768 || n > 65535 {
-		// 定数のほうが大きい型: 広いほうで計算する。比較で相手が符号付きなら符号つき 16 ビット (`s < 300` (s:i8))
-		if cmp && other.s && !lt.s && n <= 32767 {
-			return arTy{2, true}, false
+	if arBeyond(n) {
+		return lt, false // どの整数型にも入らない定数 (生成しない: arTooWide)
+	}
+	if lt.w > other.w {
+		// 定数のほうが大きい型: 広いほうで計算する。比較で相手が符号付きなら定数の大きさの符号付き (`s < 300` (s:i8) は i16)
+		if cmp && other.s && !lt.s && n <= int64(1)<<(8*lt.w-1)-1 {
+			return arTy{lt.w, true}, false
 		}
 		// 32768 以上は定数の型 (u16) で比べる (`x == 37440` (x:i8) は u16 の比較。TestConstFoldCases の
 		// `(65533 > ((-81 as i8) >> 9))` と同じ)。2026-10-19 まで 8 ビットの式だけ「37440 does not fit in i16」になり (変数は
@@ -198,10 +204,22 @@ type arGen struct {
 func (g *arGen) pick(n int) int        { return g.r.Intn(n) }
 func (g *arGen) chance(p float64) bool { return g.r.Float64() < p }
 
-// arBoundary は折り返し・符号・桁上がりが狙える値。
+// arBoundary は折り返し・符号・桁上がりが狙える値 (どの幅の型にも入る値)。arWideBoundary はその幅から入る値。
 var arBoundary = map[bool][]int64{
 	false: {0, 1, 2, 127, 128, 200, 254, 255},
 	true:  {-128, -127, -6, -1, 0, 1, 63, 127},
+}
+
+var arWideBoundary = map[arTy][]int64{
+	arU24: {65535, 65536, 0x800000, 0xffffff},
+	arI24: {-8388608, -32769, 32768, 8388607},
+	arU32: {0xffffff, 0x1000000, 0x80000000, 0xffffffff},
+	arI32: {-2147483648, -8388609, 8388608, 2147483647},
+}
+
+// arBoundaryOf は型 t のグローバル変数の初期値。
+func arBoundaryOf(t arTy) []int64 {
+	return append(append([]int64{}, arBoundary[t.s]...), arWideBoundary[t]...)
 }
 
 // leaf は値の節点 (グローバル変数、型のない定数)。
@@ -215,7 +233,14 @@ func (g *arGen) leaf(signed bool) *arNode {
 	} else if g.chance(0.25) {
 		hi = 700 // 式を 2 バイトに広げる定数
 	}
-	return arLit(lo + int64(g.pick(int(hi-lo)+1)))
+	if g.chance(0.12) {
+		// 式を 3・4 バイトに広げる定数 (型のない定数は入るいちばん狭い型: u24 / i24 / u32 / i32)
+		hi = []int64{70000, 20000000, 3000000000}[g.pick(3)]
+		if signed {
+			lo = -hi / 2
+		}
+	}
+	return arLit(lo + g.r.Int63n(hi-lo+1))
 }
 
 // varLeaf はグローバル変数の節点だけ (%+ の左の項など、型が要る所)。
@@ -263,6 +288,7 @@ func (g *arGen) expr(depth int) *arNode {
 					srcConst: "(" + inner.srcConst + " | 1)"}
 				if inner.pure {
 					b.pure = true
+					b.bad = inner.bad
 					b.exact = inner.exact | 1
 					b.n = arMinType(b.exact)
 				} else {
@@ -279,7 +305,11 @@ func (g *arGen) expr(depth int) *arNode {
 		}
 		if a.pure && b.pure {
 			x.pure = true
-			x.exact = arApply(op, a.exact, b.exact)
+			x.bad = a.bad || b.bad || arAbs(a.exact) >= arMaxExact || arAbs(b.exact) >= arMaxExact || (op == "<<" && b.exact > 20)
+			if !x.bad {
+				x.exact = arApply(op, a.exact, b.exact)
+				x.bad = arAbs(x.exact) >= arMaxExact
+			}
 			x.n = arMinType(x.exact) // 型のない定数だけの式は、自分の値が入るいちばん小さい型が型 (シフトも同じ)
 		} else {
 			x.join2(a, b)
@@ -340,6 +370,7 @@ func (g *arGen) expr(depth int) *arNode {
 			srcConst: fmt.Sprintf("%s(%s, %s)", op, a.srcConst, b.srcConst)}
 		if a.pure && b.pure {
 			x.pure = true
+			x.bad = a.bad || b.bad
 			x.exact = arMinMax(op, a.exact, b.exact)
 			x.n = arMinType(x.exact)
 		} else {
@@ -354,18 +385,17 @@ func (g *arGen) expr(depth int) *arNode {
 // region は新しい領域 (as / id の内側)。自分の計算の型で計算される。領域の符号は引き継ぐ。
 func (g *arGen) region() *arNode { return g.expr(1 + g.pick(2)) }
 
-// tyOf は符号を固定した型の選び方。
+// tyOf は符号を固定した型の選び方 (1・2 バイトを多めに)。
 func (g *arGen) tyOf(signed bool) arTy {
-	if g.chance(0.5) {
-		if signed {
-			return arI8
-		}
-		return arU8
+	w := []int{1, 1, 1, 2, 2, 2, 3, 4}[g.pick(8)]
+	return arTy{w, signed}
+}
+
+func arAbs(v int64) int64 {
+	if v < 0 {
+		return -v
 	}
-	if signed {
-		return arI16
-	}
-	return arU16
+	return v
 }
 
 // arApply は二項演算の値 (計算の型での読み方は呼び出し側。折り返しも呼び出し側)。
@@ -488,10 +518,11 @@ func (g *arGen) placeTy(x *arNode) *arTy {
 	return nil
 }
 
-// arTooWide は型のない定数だけの式に 16 ビットに収まらない値があるか (foldBeyond16 など別経路になるので生成しない)。
+// arTooWide は型のない定数だけの式にどの整数型 (32 ビット) にも収まらない値があるか (foldBeyond など別経路になるので
+// 生成しない)。途中の値が大きすぎる式 (bad) も。
 func arTooWide(x *arNode) bool {
 	if x.pure {
-		return x.exact < -32768 || x.exact > 65535
+		return x.bad || arBeyond(x.exact)
 	}
 	if x.kind == 1 || x.kind == 5 {
 		return arTooWide(x.a) || arTooWide(x.b)
@@ -563,7 +594,7 @@ func (g *arGen) program() (map[string]string, string) {
 		fmt.Fprintf(&b, "function id_%s(v:%s):%s @(noinline) { return v; }\n", t.name(), t.name(), t.name())
 	}
 	for _, t := range arAllTy {
-		for i, v := range arBoundary[t.s] {
+		for i, v := range arBoundaryOf(t) {
 			if !t.fits(v) {
 				panic(fmt.Sprintf("生成器のバグ: %d が %s に入らない", v, t.name()))
 			}
@@ -592,6 +623,10 @@ func (g *arGen) program() (map[string]string, string) {
 			continue
 		}
 		g.nstmt++
+		if g.chance(0.2) {
+			g.loop(&body, k, x)
+			continue
+		}
 		switch g.pick(4) {
 		case 0, 1, 2: // var への初期化と、同じ式の型つき定数の形 (畳み込み)
 			t := g.placeTy(x)
@@ -679,6 +714,52 @@ func (g *arGen) program() (map[string]string, string) {
 	g.want = append(g.want, fmt.Sprint(arU8.wrap(g.hits)))
 	fmt.Fprintf(&b, "function main():void\n{\n%s}\n", body.String())
 	return map[string]string{"t.fc": b.String()}, strings.Join(g.want, "\n") + "\n"
+}
+
+// loop はループで局所変数を何度も更新する文 (3・4 バイトの局所変数が多め。展開・licm・強さの低減などの最適化を通る形)。
+// `var lK:T = 初期値; for (var iK:u8 = 0; iK < n; iK += 1) { lK = lK OP x; lK = lK + iK; }` の後に lK を出す。x はループの外の値
+// だけの式 (毎周同じ値)。模型は周ごとに lK の値を入れ直して同じ節点を評価する。
+func (g *arGen) loop(body *strings.Builder, k int, x *arNode) {
+	t := arTy{[]int{1, 2, 3, 3, 4, 4}[g.pick(6)], g.chance(0.5)}
+	init := arBoundaryOf(t)
+	cur := init[g.pick(len(init))]
+	lv := &arNode{kind: 0, typ: t, n: t, val: cur, src: fmt.Sprintf("loc%d", k)}
+	iv := &arNode{kind: 0, typ: arU8, n: arU8, src: fmt.Sprintf("it%d", k)}
+	op := []string{"+", "-", "^", "|", "&", "*"}[g.pick(6)]
+	upd := &arNode{kind: 1, op: op, a: lv, b: x, src: fmt.Sprintf("(%s %s %s)", lv.src, op, x.src)}
+	upd.join2(lv, x)
+	addI := g.chance(0.5)
+	inc := &arNode{kind: 1, op: "+", a: lv, b: iv, src: fmt.Sprintf("(%s + %s)", lv.src, iv.src)}
+	inc.join2(lv, iv)
+	// 代入先 (lK の型) より広い計算や符号の混ざった計算は作らない (暗黙の狭め・F6 のエラー)
+	for _, u := range []*arNode{upd, inc} {
+		if u.regionTy(t.w).w > t.w || arMixed(u, t.w) || arTooWide(u) {
+			return
+		}
+	}
+	n := 1 + g.pick(5)
+	lit := fmt.Sprint(cur)
+	if cur < 0 {
+		lit = fmt.Sprintf("(%s as %s)", lit, t.name())
+	}
+	fmt.Fprintf(body, "\tvar %s:%s = %s;\n", lv.src, t.name(), lit)
+	fmt.Fprintf(body, "\tfor (var %s:u8 = 0; %s < %d; %s += 1) {\n", iv.src, iv.src, n, iv.src)
+	fmt.Fprintf(body, "\t\t%s = %s;\n", lv.src, upd.src)
+	if addI {
+		fmt.Fprintf(body, "\t\t%s = %s;\n", lv.src, inc.src)
+	}
+	fmt.Fprintf(body, "\t}\n\t@printf(\"{}\\n\", %s);\n", lv.src)
+	for i := 0; i < n; i++ {
+		lv.val = cur
+		_, v := arPlace(upd, t)
+		cur = t.wrap(v)
+		if addI {
+			lv.val, iv.val = cur, int64(i)
+			_, v = arPlace(inc, t)
+			cur = t.wrap(v)
+		}
+	}
+	g.want = append(g.want, fmt.Sprint(cur))
 }
 
 // arRender は式を文字列にする (constForm なら型つき定数の形)。

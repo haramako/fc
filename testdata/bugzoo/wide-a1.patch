@@ -1,0 +1,13 @@
+# A1 の広げを 3・4 バイトの代入先に当てない (var w:u32 = a16 * b16 が 16 ビットで計算される。502db9d)
+diff --git a/internal/sema/widen.go b/internal/sema/widen.go
+--- a/internal/sema/widen.go
++++ b/internal/sema/widen.go
+@@ -331,7 +331,7 @@
+ 
+ // rvalWide は代入先の型 typ の幅で式 c を計算する rval (A1)。
+ func (h *Hlc) rvalWide(c *cexpr, typ *types.Type) ir.Operand {
+-	if h.v4() && typ != nil && typ.Kind == types.Int && typ.Enum == nil && typ.Size <= maxIntBytes {
++	if h.v4() && typ != nil && typ.Kind == types.Int && typ.Enum == nil && typ.Size <= 2 {
+ 		return h.rvalIn(c, typ.Size)
+ 	}
+ 	return h.rval(c)
