@@ -379,3 +379,29 @@ function main():void
 		t.Errorf("出力 %q、want %q", out, "0\n")
 	}
 }
+
+// TestBugSignedDivByMinPow2 は、符号付きの割り算・余りで型の符号付きの範囲を超える 2 のべきの定数 (i8 の 128、i24 の 8388608) を
+// 正の 2 のべきとしてシフト・マスクにしないこと。型のない定数は相手の型に合わせるので `x / 128` (x:i8) は x / -128 で、定数の
+// 畳み込みはそう計算するが、codegen は 128 を正の数としてシフトしていた (`id8(-128) / 128` が 1 でなく -1、`% 128` が -28 でなく
+// 100。2026-10-24 に TestRandomArithV4 -randseed 20261024000 (種 20261024045) が i24 の形で見つけた。1 バイトの形は前からあった)。
+func TestBugSignedDivByMinPow2(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+function id8(x:i8):i8 @(noinline) { return x; }
+function id24(x:i24):i24 @(noinline) { return x; }
+function main():void
+{
+	@printf("{} {}\n", id8(-128) / 128, (-128 as i8) / 128);
+	@printf("{} {}\n", id8(100) / 128, id8(100) % 128);
+	@printf("{} {}\n", id24(32768) / 8388608, id24(32768) % 8388608);
+	console.exit(0);
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "1 1\n-1 -28\n-1 -8355840\n"; out != want {
+		t.Errorf("出力 %q、want %q", out, want)
+	}
+}

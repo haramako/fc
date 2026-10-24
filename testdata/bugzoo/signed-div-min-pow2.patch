@@ -1,0 +1,13 @@
+# 符号付きの割り算・余りで、型の符号付きの範囲を超える 2 のべきの定数 (i8 の 128) を正の 2 のべきとしてシフトする
+diff --git a/internal/codegen/arith.go b/internal/codegen/arith.go
+--- a/internal/codegen/arith.go
++++ b/internal/codegen/arith.go
+@@ -81,7 +81,7 @@
+ 		// 符号付きの割り算・余りで型の符号付きの範囲を超える定数 (i8 の 128、i24 の 8388608) は、ビットとしては負の数
+ 		// (`x / 128` (x:i8) は x / -128。型のない定数は相手の型に合わせる)。正の 2 のべきとしてシフトすると違う
+ 		// (定数の畳み込みと食い違っていた。TestRandomArithV4 の種 20261024045)。割り算のランタイムに任せる
+-		isPow2, op3IsInt = false, false
++		isPow2, op3IsInt = isPow2, op3IsInt
+ 	}
+ 	if op3IsInt && op3int == 0 {
+ 		// 0の場合

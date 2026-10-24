@@ -77,6 +77,12 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 			isPow2 = true
 		}
 	}
+	if op3IsInt && op.IsSigned() && (op.Code == ir.OpDiv || op.Code == ir.OpMod) && op3int >= 1<<(8*ir.ValType(dst).Size-1) {
+		// 符号付きの割り算・余りで型の符号付きの範囲を超える定数 (i8 の 128、i24 の 8388608) は、ビットとしては負の数
+		// (`x / 128` (x:i8) は x / -128。型のない定数は相手の型に合わせる)。正の 2 のべきとしてシフトすると違う
+		// (定数の畳み込みと食い違っていた。TestRandomArithV4 の種 20261024045)。割り算のランタイムに任せる
+		isPow2, op3IsInt = false, false
+	}
 	if op3IsInt && op3int == 0 {
 		// 0の場合
 		switch op.Code {
