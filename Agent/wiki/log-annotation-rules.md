@@ -20,6 +20,8 @@ fc 3 の `@log` は命令を出さず、次の命令への注釈 `ir.Op.Logs` �
    `LogStale` は「生きている地点の値だけ正しい」だが、写しの伝播で同じ変数が別の版の値の置き場所として生き続けると足りない
    （`p0 = l0; l0 = (l0 + p0) % 327; return p0` が `return l0` になり、消した代入の後の `@log` が代入前の値を出した）。
    SSA の eliminateDead は、消す版を読む `@log` の引数に `LogArg.Stale` を付ける（codegen は「?」。2026-10-13、`TestLogDeadDefCopy`）
+   codegen の側: 常駐（`op.Res`）のメモリ側（Home）は、常駐の値が生きている間に壊れる命令の前でしか書き戻さないので、常駐の印が
+   あって `In` が偽の命令（常駐の値が死んでいる）ではメモリ側を出さず「?」（`logLoc`。2026-10-24、`TestLogDeadResidentHome`）
 4. **asm の後処理では制御の流れを変えない**（2026-09-29）。`@log` の地点のラベル（`__fclog_N`）は分岐の延長の後で置く
    （`placeLogLabels`）ので、asm の上で `jmp L` の飛び先を付け替えたり `jsr f; rts` を `jmp f`（末尾呼び出し）にしたりすると、
    飛び先のラベルの地点・呼び出しの直後の地点が消える。`-g` / `@log` のときだけやめると ROM が変わる（`TestLogZeroCost`）。

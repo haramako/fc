@@ -429,6 +429,25 @@ func TestLogLitpropHome(t *testing.T) {
 	}
 }
 
+// TestLogDeadResidentHome: 常駐 (l5@A) が死んでいる命令 (この後で上書きされる) の地点で、@log がメモリ側 (Home) を読んでいた。
+// 常駐の値は生きている間しか書き戻さないので、メモリ側には前の値 (ループの入口の 0) が残っていた (fuzz の種 20261079698865。
+// codegen の logLoc)。プログラムは testdata/regress/log20261079698865 (TestLogResidentHomeAtEntry と同じく固定した)。
+func TestLogDeadResidentHome(t *testing.T) {
+	t.Parallel()
+	files := regressFiles(t, "log20261079698865")
+	var logs []string
+	for _, level := range []int{-1, 0} {
+		_, _, l, _, err := logBuild(t, files, level, true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		logs = append(logs, l)
+	}
+	if bad, _ := compareLogValues(logs[0], logs[1], nil); bad != "" {
+		t.Errorf("-O 0 と -O 2 で @log の値が違う: %s", bad)
+	}
+}
+
 // regressFiles は testdata/regress/<name> の .fc を読む (ファイル名 → 中身)。fuzz で見つけたプログラムを、生成器が変わっても
 // 同じ形で試すために固定したもの。
 func regressFiles(t *testing.T, name string) map[string]string {

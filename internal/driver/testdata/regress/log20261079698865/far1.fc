@@ -1,0 +1,82 @@
+#fc 2
+options(bank: 1);
+public function ff0(p0:sint, p1:int16):sint16 options(fastcall: true)
+{
+var l0:sint16 = 7;
+for (var l1:int = 7; l1; l1--) {
+p0 = ((p1 || (((p1 / (p1 | 1)) & 15) & 15)) as sint);
+p0 ^= (p0 >> 6);
+}
+p1 = p1;
+switch ((((((((!p0) as int) as int) * (p0 as sint)) < 6) as int) & 7)) {
+case 1:
+l0 *= ((((p1 || p1) as int16) && l0) as sint16);
+switch (((((((l0 << 3) as sint16) + (p1 as int16)) >> 0) as int) & 7)) {
+case 0:
+var l2:int16 = (((((((-27) >> 3) as sint) - (((p1 as int) << 0) as int)) ^ 23) / 30) as int16);
+l2 = p1;
+case 7, 6:
+l0 = (p0 >> (((p1 as int) & 7) as int));
+case 5:
+l0++;
+p1 = (p1 << 1);
+p1 = ((p1 as int16) << ((((l0 as int) | (l0 as int)) & 15) as int));
+}
+l0 = max((((min(p1, p1) && (21 - (p1 as sint))) as sint16) as sint16), ((((p0 % (6 | 1)) && ((l0 && (l0 as int)) as sint16)) as sint16) as sint16));
+}
+return (-13980);
+}
+public function ff1():int options(fastcall: true)
+{
+var l0:int16 = 7;
+var l1:sint = 29;
+var l2:int16 = 5;
+var l6:int = 0;
+var l3:sint16;
+L0: for (var l4:int = 0; l4 < 2; l4++) {
+l3 = (~((l0 >= 4) as sint16));
+var l5:int = l4;
+L1: while ((((((!(l5 as sint16)) as int) | (l4 - l4)) as int) != l5) && l6 < 1) {
+l6++;
+l5 = (ff0(l1, 5) as int);
+l5 = (ff0((~((l5 || l1) as sint)), ((-l1) as int16)) as int);
+l5 += l5;
+}
+l1 -= ((!((!l1) as sint16)) as sint);
+}
+var l7:int16;
+if (((((l1 + (l1 | l1)) & l1) as sint) < ((ff0(((l3 as sint) ^ 0), (l0 >> 0)) as sint) as sint)) && (((l0 ^ l0) >> 0))) {
+l7 = (ff0(((l3 as int) as sint), (l1 as int16)) as int16);
+var l8:sint16;
+if (((max((((l3 as int) + (6 - 6)) as int), ((-(l3 as int)) as int)) as int) > (((((l0 as int) - (l0 as int)) + (l0 as int)) + (l0 as int)) as int)) || (max(l0, ((9215 | l0) as int16)))) {
+l8 = (((((l1 as int) as int) < ((l1 as int) as int)) as sint16) % ((l3 - 1) | 1));
+l0 <<= 2; l0 ^= 1;
+} else {
+l8 = ((l3 + l3) % (-5306));
+l1 |= (ff0((l2 as sint), ((l1 == l1) as int16)) as sint);
+}
+for (var l9:int = 2; l9; l9--) {
+l1 = min((((l1 & ((l1 <= l1) as sint)) - l1) as sint), ((l1 / 1) as sint));
+if ((ff0(((9466 && l1) as sint), ((!l1) as int16)) as sint16) < 0) {
+l8 ^= 1;
+}
+}
+} else {
+l7 = l0;
+switch (((((l0 as int) - (l2 as int)) * ((l3 as int) ^ (l0 as int))) & 7)) {
+case 3, 2:
+l1 ^= max((((l0 as int) as sint) as sint), (((!l1) as sint) as sint));
+l1 <<= 3; l1 ^= 92;
+l0 <<= 3; l0 ^= 3;
+case 4, 7:
+var l10:int16 = ((l0 << 6) % (((l1 > l1) as int16) | 1));
+l2 = (-(ff0(max(l1, l1), (l2 ^ l10)) as sint));
+default:
+l1 = (ff0(((((l1 as sint) - ((l0 as int) as int)) / 28) / 7), ((!l3) as int16)) as sint);
+l3 <<= 3; l3 ^= 2;
+var l11:int16 = l2;
+}
+}
+l2 += l0;
+return (min(l3, 7) as int);
+}

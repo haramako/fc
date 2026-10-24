@@ -113,3 +113,9 @@
   取りこぼしを 1 件: `((x != 40) as u8 as u16 >> 8) as i8` を ssa が「1 バイトの値の 2 バイト目」の cast に畳み、cast のまま真偽値を
   使う扱いで比較が残った。ssa の段で元の値のどのバイトも読まない cast を 0 にしてから使われない定義を消す（`TestBugEmptyCastDeadCompare`、
   bugzoo の ssa-empty-cast。Agent/issues/local-2026-10-18-dead-compare.md の追記）
+- 2026-10-24、nomad-lab の fuzz（TestLogZeroCost、`-randseed 20261079698500 -randn 6000`、種 20261079698865、a83d2ca）で @log の値の
+  誤りを 1 件: 2 回のループを丸ごと展開した初めの周で、変数 l5 が A に常駐（l5@A）していて、常駐の値が死んでいる命令（次の呼び出しの
+  結果で上書きされる）の地点の @log がメモリ側（Home）の番地を出し、ループの入口の 0 を表示した（正しくは呼び出しの結果 100）。
+  常駐の値は生きている間に壊れる命令の前でしか書き戻さないので、常駐の印があって `In` が偽の命令ではメモリ側は古いかもしれない
+  → 「?」にする（codegen の logLoc。`TestLogDeadResidentHome`、プログラムは testdata/regress/log20261079698865）。
+  bugzoo は zoo が TestLogZeroCost を回さないので足していない（前の @log の修正と同じ）

@@ -104,17 +104,30 @@ func (l *Llc) logLoc(lmd *ir.Lambda, opNo int, op *ir.Op, v ir.Operand, live fun
 		return LogLoc{Kind: "none", Why: "not a variable"}
 	}
 	// ループ内の常駐 (この命令の入口でレジスタにある。グローバルも、Home がそのグローバルの一時変数が常駐する)
+	deadResident := false
 	for reg, r := range op.Res {
-		if r.V == nil || !r.In || ir.ValOffset(v) != 0 {
+		if r.V == nil {
 			continue
 		}
-		if r.V == u || (r.V.Home != nil && ir.UnderlyingValue(r.V.Home) == u && ir.ValOffset(r.V.Home) == 0) {
+		if r.V != u && (r.V.Home == nil || ir.UnderlyingValue(r.V.Home) != u) {
+			continue
+		}
+		if !r.In {
+			deadResident = deadResident || r.V != u
+			continue
+		}
+		if ir.ValOffset(v) == 0 && (r.V == u || ir.ValOffset(r.V.Home) == 0) {
 			return LogLoc{Kind: "reg", Reg: ir.Reg(reg).String()}
 		}
 	}
 	// 常駐のメモリ側 (Home) の変数: 常駐の値がレジスタで更新され、死んだ後は書き戻されないので、メモリ側が正しいのは
 	// 常駐の値が生きていてここでは常駐していないとき (メモリ側に退避している) か、メモリ側の変数そのものが生きているとき
 	if rs := residentsOf(lmd, u); len(rs) > 0 {
+		if deadResident {
+			// この命令で常駐の値が死んでいる (この後で上書きされる): レジスタの最後の値はメモリ側に書き戻されていない
+			// (書き戻すのはメモリ側を読む命令の前だけ) ので、メモリ側は古いかもしれない (fuzz の TestLogZeroCost で発覚)
+			return LogLoc{Kind: "none", Why: "optimized out"}
+		}
 		if u.LogStale {
 			// メモリ側への代入が消えている (常駐の割付の後の litprop がループの変数の初期値の書き込みを消す): 常駐がレジスタに
 			// ない地点のメモリ側は初期値が入っていない (fuzz の TestLogZeroCost で食い違いが増えた)
