@@ -57,4 +57,5 @@
 - [plans/roadmap.md](plans/roadmap.md) — 未着手・未決の項目（最適化・言語機能・ツール）
 - [plans/language-feature-candidates.md](plans/language-feature-candidates.md) — 言語機能の追加候補
 - [plans/user-docs.md](plans/user-docs.md) — 利用者向けドキュメント（`docs/`、VitePress、GitHub Pages）の構成・仕組み・進め方と決めたこと
+- [plans/float-fixed.md](plans/float-fixed.md) — 浮動小数（f16 / f32、IEEE に完全に従う）と固定小数（u8f8 の形）の計画（決めたこと・作り方・段）
 - [plans/external-macros.md](plans/external-macros.md) — 外部コマンドの定数マクロ（fc.toml で宣言、常駐のプロセスと改行区切りの JSON、キャッシュ。textmap は後で検討）
