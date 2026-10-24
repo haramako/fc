@@ -54,6 +54,9 @@ go test ./...                                    # 全部 (golden + examples + N
     使った機能は失敗の報告（「使った機能:」）と `FUZZ_STATS=ファイル`（1 本 1 行の JSON。夜間の CI が artifact に残す）に出る
   - 24 / 32 ビットの整数（u24 / i24 / u32 / i32、fc 4 だけ）は模型のある生成器（TestRandomArithV4・ConstFoldV4・FormatV4）だけが作る。
     rpGen は fc 2 のソースなので作らない（Agent/wiki/design/wide-int.md の「テスト」）
+  - 固定小数・浮動小数（fc 4 だけ）は専用の模型の fuzz（TestRandomFixedV4・TestRandomFloatV4）と、float.fc の関数を Go の float32 と
+    ビットで比べる TestFloatLib が見る（Agent/wiki/design/float-fixed.md の「テスト」）。浮動小数の生成器は乱数のビットだけだと丸めの
+    差が出にくいので、中くらいの大きさの小数の値を混ぜる（混ぜる前は float → 固定小数の丸めを壊しても 0 本しか落ちなかった。2026-10-24）
   - bugzoo（testdata/bugzoo/*.patch）: 直したバグをわざと戻すパッチ。先頭の `#` の行が説明。`go run ./tools/fuzzmeasure zoo`
     が 1 つずつ HEAD の一時的な作業ツリー（git worktree。コミットしていない変更は入らない）に当ててテストを回し、テストごとに
     失敗した数と、失敗した種で使っていた機能を表にする（`none` はパッチ無しで、誤検出が 0 のはず）。`-off 機能` で機能を切って

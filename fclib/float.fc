@@ -1,0 +1,688 @@
+#fc 4
+// 浮動小数 (f32 = IEEE 754 binary32、f16 = binary16) の演算。sema が f32 / f16 の演算・比較・変換・数学の関数から呼ぶ (直接呼ばなくて
+// よい)。値はビットの並び (u32 / u16) で受け渡す。最近接偶数丸め・非正規化数・±0・±無限大・NaN に従い、NaN を作る演算の結果は
+// 0x7fc00000 (f16 は 0x7e00。sema の定数の畳み込みと同じ)。f16 の演算は f32 に広げて計算して丸め直す。
+//
+// 仮数は 27 ビット (上から 24 ビットが仮数、下の 3 ビットが丸めの印) で持ち、round_pack が丸めて詰め直す。
+@(bank: -1);
+
+const NAN = 0x7fc00000;
+const INF = 0x7f800000;
+const SIGN = 0x80000000;
+const ONE = 0x3f800000;
+
+var ue:i16;   // unpack の指数 (バイアス込み。非正規化数は 1 以下に正規化する)
+var um:u32;   // unpack の仮数 (24 ビット、隠れたビットは bit 23)
+var phi:u32;  // mul24 の積の上位 (bit 32〜47)
+var plo:u32;  // mul24 の積の下位
+
+// m を n ビット右へ (8 ビットごとはバイトの移動で)
+function shr(m:u32, n:u8):u32
+{
+	while (n >= 8) {
+		m = m >> 8;
+		n -= 8;
+	}
+	return m >> n;
+}
+
+// m を n ビット左へ
+function shl(m:u32, n:u8):u32
+{
+	while (n >= 8) {
+		m = m << 8;
+		n -= 8;
+	}
+	return m << n;
+}
+
+// m を n ビット右へ。消えたビットが 1 つでもあれば最下位を 1 にする (sticky)
+function shr_sticky(m:u32, n:i16):u32
+{
+	if (n <= 0) {
+		return m;
+	}
+	if (n >= 32) {
+		if (m != 0) {
+			return 1;
+		}
+		return 0;
+	}
+	var r = shr(m, n as u8);
+	if (shl(r, n as u8) != m) {
+		r |= 1;
+	}
+	return r;
+}
+
+function isnan(x:u32):bool
+{
+	return (x & 0x7fffffff) > INF;
+}
+
+function expo(x:u32):u8
+{
+	return ((x >> 23) as u8);
+}
+
+// 有限で 0 でない x の指数と仮数 (ue・um。非正規化数は隠れたビットが bit 23 に来るまでずらし、指数を減らす)
+function unpack(x:u32):void
+{
+	var e = ((x >> 23) & 0xff) as i16;
+	var m = x & 0x7fffff;
+	if (e == 0) {
+		e = 1;
+		while (m < 0x8000) {
+			m = m << 8;
+			e -= 8;
+		}
+		while ((m & 0x800000) == 0) {
+			m = m << 1;
+			e -= 1;
+		}
+	} else {
+		m |= 0x800000;
+	}
+	ue = e;
+	um = m;
+}
+
+// 符号 sign、指数 e (バイアス込み)、27 ビットの仮数 m (隠れたビットは bit 26、下の 3 ビットが丸めの印) を最近接偶数に丸めて詰める。
+// e が 1 より小さければ非正規化数にずらす。m は 0 でない
+function round_pack(sign:u32, e:i16, m:u32):u32
+{
+	if (e <= 0) {
+		m = shr_sticky(m, 1 - e);
+		e = 1;
+	}
+	var low = (m & 7) as u8;
+	m = m >> 3;
+	if (low > 4 || (low == 4 && (m & 1) != 0)) {
+		m += 1;
+	}
+	if (m >= 0x1000000) {
+		m = m >> 1;
+		e += 1;
+	}
+	if (e >= 255) {
+		return sign | INF;
+	}
+	if (m < 0x800000) {
+		return sign | m; // 非正規化数 (指数のビットは 0)
+	}
+	return sign | ((e as u32) << 23) | (m & 0x7fffff);
+}
+
+// a + b
+public function add32(a:u32, b:u32):u32
+{
+	if (isnan(a) || isnan(b)) {
+		return NAN;
+	}
+	var ea = expo(a) & 0xff;
+	var eb = expo(b) & 0xff;
+	if (ea == 255) {
+		if (eb == 255 && ((a ^ b) & SIGN) != 0) {
+			return NAN; // inf - inf
+		}
+		return a;
+	}
+	if (eb == 255) {
+		return b;
+	}
+	if ((a << 1) == 0) {
+		if ((b << 1) == 0) {
+			return a & b; // 0 + 0 は +0 (両方 -0 なら -0)
+		}
+		return b;
+	}
+	if ((b << 1) == 0) {
+		return a;
+	}
+	if ((a & 0x7fffffff) < (b & 0x7fffffff)) {
+		var t = a;
+		a = b;
+		b = t;
+	}
+	var sa = a & SIGN;
+	unpack(a);
+	var e = ue;
+	var m1 = um << 3;
+	unpack(b);
+	var m2 = shr_sticky(um << 3, e - ue);
+	var m:u32;
+	if (((a ^ b) & SIGN) == 0) {
+		m = m1 + m2;
+		if (m >= 0x8000000) {
+			m = shr_sticky(m, 1);
+			e += 1;
+		}
+	} else {
+		m = m1 - m2;
+		if (m == 0) {
+			return 0; // x - x は +0
+		}
+		while (m < 0x40000) {
+			m = m << 8;
+			e -= 8;
+		}
+		while (m < 0x4000000) {
+			m = m << 1;
+			e -= 1;
+		}
+	}
+	return round_pack(sa, e, m);
+}
+
+// a - b
+public function sub32(a:u32, b:u32):u32
+{
+	if (isnan(b)) {
+		return NAN;
+	}
+	return add32(a, b ^ SIGN);
+}
+
+// a (u16) × b (u16)
+function mul16(a:u16, b:u16):u32
+{
+	var a0 = a as u8;
+	var a1 = (a >> 8) as u8;
+	var b0 = b as u8;
+	var b1 = (b >> 8) as u8;
+	var p00:u16 = (a0 as u16) * b0;
+	var p01:u16 = (a0 as u16) * b1;
+	var p10:u16 = (a1 as u16) * b0;
+	var p11:u16 = (a1 as u16) * b1;
+	var mid:u32 = (p01 as u32) + p10;
+	return (p00 as u32) + (mid << 8) + ((p11 as u32) << 16);
+}
+
+// a (u8) × b (u16)
+function mul8x16(a:u8, b:u16):u32
+{
+	var p0:u16 = (a as u16) * (b as u8);
+	var p1:u16 = (a as u16) * ((b >> 8) as u8);
+	return (p0 as u32) + ((p1 as u32) << 8);
+}
+
+// phi:plo = a × b (24 ビットどうし、48 ビットの積)
+function mul24(a:u32, b:u32):void
+{
+	var al = a as u16;
+	var ah = (a >> 16) as u8;
+	var bl = b as u16;
+	var bh = (b >> 16) as u8;
+	var ll = mul16(al, bl);
+	var mid = mul8x16(ah, bl) + mul8x16(bh, al);
+	var hh:u16 = (ah as u16) * bh;
+	plo = ll + (mid << 16);
+	var carry:u32 = 0;
+	if (plo < ll) {
+		carry = 1;
+	}
+	phi = (hh as u32) + (mid >> 16) + carry;
+}
+
+// a × b
+public function mul32(a:u32, b:u32):u32
+{
+	if (isnan(a) || isnan(b)) {
+		return NAN;
+	}
+	var sign = (a ^ b) & SIGN;
+	var az = (a << 1) == 0;
+	var bz = (b << 1) == 0;
+	if (expo(a) == 255) {
+		if (bz) {
+			return NAN; // inf × 0
+		}
+		return sign | INF;
+	}
+	if (expo(b) == 255) {
+		if (az) {
+			return NAN;
+		}
+		return sign | INF;
+	}
+	if (az || bz) {
+		return sign;
+	}
+	unpack(a);
+	var e = ue;
+	var m1 = um;
+	unpack(b);
+	e = e + ue - 127;
+	mul24(m1, um);
+	// 積は [2^46, 2^48)。上のビットを 27 ビットの仮数の bit 26 に合わせる
+	var m:u32;
+	if (phi >= 0x8000) {
+		e += 1;
+		m = (plo >> 21) | (phi << 11);
+		if ((plo & 0x1fffff) != 0) {
+			m |= 1;
+		}
+	} else {
+		m = (plo >> 20) | (phi << 12);
+		if ((plo & 0xfffff) != 0) {
+			m |= 1;
+		}
+	}
+	return round_pack(sign, e, m);
+}
+
+// a ÷ b
+public function div32(a:u32, b:u32):u32
+{
+	if (isnan(a) || isnan(b)) {
+		return NAN;
+	}
+	var sign = (a ^ b) & SIGN;
+	var az = (a << 1) == 0;
+	var bz = (b << 1) == 0;
+	var ai = expo(a) == 255;
+	var bi = expo(b) == 255;
+	if (ai) {
+		if (bi) {
+			return NAN; // inf ÷ inf
+		}
+		return sign | INF;
+	}
+	if (bi) {
+		return sign;
+	}
+	if (bz) {
+		if (az) {
+			return NAN; // 0 ÷ 0
+		}
+		return sign | INF;
+	}
+	if (az) {
+		return sign;
+	}
+	unpack(a);
+	var e = ue;
+	var m1 = um;
+	unpack(b);
+	e = e - ue + 127;
+	var m2 = um;
+	if (m1 < m2) {
+		m1 = m1 << 1;
+		e -= 1;
+	}
+	// 商を 26 ビット (引き放し)
+	var q:u32 = 0;
+	for (var i:u8 = 0; i < 26; i += 1) {
+		q = q << 1;
+		if (m1 >= m2) {
+			m1 -= m2;
+			q |= 1;
+		}
+		m1 = m1 << 1;
+	}
+	q = q << 1;
+	if (m1 != 0) {
+		q |= 1;
+	}
+	return round_pack(sign, e, q);
+}
+
+// √a (正しく丸める)
+public function sqrt32(a:u32):u32
+{
+	if (isnan(a)) {
+		return NAN;
+	}
+	if ((a << 1) == 0) {
+		return a; // ±0
+	}
+	if ((a & SIGN) != 0) {
+		return NAN;
+	}
+	if (expo(a) == 255) {
+		return a; // +inf
+	}
+	unpack(a);
+	var ex = ue - 127;
+	var m = um;
+	if ((ex & 1) != 0) {
+		m = m << 1;
+		ex -= 1;
+	}
+	// 被開平数 m × 2^29 (54 ビット) を hi:lo に置き、上から 2 ビットずつ根を 27 ビット作る
+	var hi = m >> 3;
+	var lo = m << 29;
+	var res:u32 = 0;
+	var rem:u32 = 0;
+	for (var i:u8 = 0; i < 27; i += 1) {
+		rem = (rem << 2) | ((hi >> 20) & 3);
+		hi = (hi << 2) | (lo >> 30);
+		lo = lo << 2;
+		var trial = (res << 2) | 1;
+		res = res << 1;
+		if (rem >= trial) {
+			rem -= trial;
+			res |= 1;
+		}
+	}
+	if (rem != 0) {
+		res |= 1;
+	}
+	return round_pack(0, (ex >> 1) + 127, res);
+}
+
+// 大小の比較の鍵 (0 でも NaN でもない x。大きいほど大きい符号なしの値)
+function key(x:u32):u32
+{
+	if ((x & SIGN) != 0) {
+		return ~x;
+	}
+	return x | SIGN;
+}
+
+// a == b (NaN はどれとも等しくない、+0 と -0 は等しい)
+public function eq32(a:u32, b:u32):bool
+{
+	if (isnan(a) || isnan(b)) {
+		return false;
+	}
+	if (((a | b) << 1) == 0) {
+		return true;
+	}
+	return a == b;
+}
+
+// a < b (NaN との比較は偽)
+public function lt32(a:u32, b:u32):bool
+{
+	if (isnan(a) || isnan(b) || ((a | b) << 1) == 0) {
+		return false;
+	}
+	if ((a << 1) == 0) {
+		a = 0;
+	}
+	if ((b << 1) == 0) {
+		b = 0;
+	}
+	return key(a) < key(b);
+}
+
+// a <= b (NaN との比較は偽)
+public function le32(a:u32, b:u32):bool
+{
+	if (isnan(a) || isnan(b)) {
+		return false;
+	}
+	if (((a | b) << 1) == 0) {
+		return true;
+	}
+	if ((a << 1) == 0) {
+		a = 0;
+	}
+	if ((b << 1) == 0) {
+		b = 0;
+	}
+	return key(a) <= key(b);
+}
+
+// 絶対値 mag (0 でない) と符号の f32 (最近接偶数に丸める)
+function from_mag(sign:u32, mag:u32):u32
+{
+	var e:i16 = 153; // mag の最上位が bit 26 なら値は mag
+	var m = mag;
+	while (m >= 0x8000000) {
+		m = shr_sticky(m, 1);
+		e += 1;
+	}
+	while (m < 0x40000) {
+		m = m << 8;
+		e -= 8;
+	}
+	while (m < 0x4000000) {
+		m = m << 1;
+		e -= 1;
+	}
+	return round_pack(sign, e, m);
+}
+
+// 符号付きの整数 → f32
+public function from_i32(n:i32):u32
+{
+	if (n == 0) {
+		return 0;
+	}
+	var u = @bitcast(u32, n);
+	if (n < 0) {
+		return from_mag(SIGN, 0 - u);
+	}
+	return from_mag(0, u);
+}
+
+// 符号なしの整数 → f32
+public function from_u32(n:u32):u32
+{
+	if (n == 0) {
+		return 0;
+	}
+	return from_mag(0, n);
+}
+
+// f32 の整数の部分の絶対値 (0 へ切り捨て。指数 ex は 0〜31)
+function int_mag(x:u32, ex:i16):u32
+{
+	var m = (x & 0x7fffff) | 0x800000;
+	if (ex >= 23) {
+		return shl(m, (ex - 23) as u8);
+	}
+	return shr(m, (23 - ex) as u8);
+}
+
+// f32 → 符号付きの整数 (0 へ切り捨て、範囲の外は端に飽和、NaN は 0)
+public function to_i32(x:u32):i32
+{
+	if (isnan(x)) {
+		return 0;
+	}
+	var ex = (expo(x) & 0xff) as i16 - 127;
+	if (ex < 0) {
+		return 0;
+	}
+	var neg = (x & SIGN) != 0;
+	if (ex >= 31) {
+		if (neg) {
+			return -2147483648;
+		}
+		return 2147483647;
+	}
+	var mag = int_mag(x, ex);
+	if (neg) {
+		return @bitcast(i32, 0 - mag);
+	}
+	return @bitcast(i32, mag);
+}
+
+// f32 → 符号なしの整数 (0 へ切り捨て、範囲の外は端に飽和、NaN は 0)
+public function to_u32(x:u32):u32
+{
+	if (isnan(x)) {
+		return 0;
+	}
+	var ex = (expo(x) & 0xff) as i16 - 127;
+	if (ex < 0 || (x & SIGN) != 0) {
+		return 0;
+	}
+	if (ex >= 32) {
+		return 0xffffffff;
+	}
+	return int_mag(x, ex);
+}
+
+// 整数への丸め (mode 0 = 最近接偶数、1 = 負の無限大へ、2 = 正の無限大へ、3 = 0 へ、4 = 四捨五入 (0 から遠い向き))
+function round_int(x:u32, mode:u8):u32
+{
+	if (isnan(x)) {
+		return NAN;
+	}
+	var e = (expo(x) & 0xff) as i16;
+	if (e == 255) {
+		return x;
+	}
+	var ex = e - 127;
+	if (ex >= 23) {
+		return x; // もう整数
+	}
+	var sign = x & SIGN;
+	var neg = sign != 0;
+	if ((x << 1) == 0) {
+		return x;
+	}
+	var ip:u32;
+	var inc = false;
+	if (ex < 0) {
+		// |x| < 1: 0 か 1
+		ip = 0;
+		var half = ex == -1;            // |x| >= 0.5
+		var over = half && (x & 0x7fffff) != 0; // |x| > 0.5
+		switch (mode) {
+		case 0:
+			inc = over;
+		case 1:
+			inc = neg;
+		case 2:
+			inc = !neg;
+		case 4:
+			inc = half;
+		}
+	} else {
+		var m = (x & 0x7fffff) | 0x800000;
+		var sh = (23 - ex) as u8;
+		ip = shr(m, sh);
+		var frac = m - shl(ip, sh);
+		var halfv = shl(1, sh - 1);
+		switch (mode) {
+		case 0:
+			inc = frac > halfv || (frac == halfv && (ip & 1) != 0);
+		case 1:
+			inc = neg && frac != 0;
+		case 2:
+			inc = !neg && frac != 0;
+		case 4:
+			inc = frac >= halfv;
+		}
+	}
+	if (inc) {
+		ip += 1;
+	}
+	if (ip == 0) {
+		return sign; // 符号付きの 0
+	}
+	return from_mag(sign, ip);
+}
+
+// 最も近い整数 (ちょうど中間なら偶数)
+public function rint32(x:u32):u32
+{
+	return round_int(x, 0);
+}
+
+// 負の無限大の向きの整数 (floor)
+public function floor32(x:u32):u32
+{
+	return round_int(x, 1);
+}
+
+// 正の無限大の向きの整数 (ceil)
+public function ceil32(x:u32):u32
+{
+	return round_int(x, 2);
+}
+
+// 0 の向きの整数 (trunc)
+public function trunc32(x:u32):u32
+{
+	return round_int(x, 3);
+}
+
+// 四捨五入 (ちょうど中間なら 0 から遠い向き)
+public function round32(x:u32):u32
+{
+	return round_int(x, 4);
+}
+
+// x × 2^n (固定小数との変換。最近接偶数に丸める)
+public function ldexp32(x:u32, n:i16):u32
+{
+	if (isnan(x)) {
+		return NAN;
+	}
+	if ((x << 1) == 0 || expo(x) == 255) {
+		return x;
+	}
+	var sign = x & SIGN;
+	unpack(x);
+	return round_pack(sign, ue + n, um << 3);
+}
+
+// f16 → f32 (正確)
+public function from16(h:u16):u32
+{
+	var sign = ((h & 0x8000) as u32) << 16;
+	var e = ((h >> 10) & 31) as i16;
+	var m = (h & 0x3ff) as u32;
+	if (e == 31) {
+		if (m != 0) {
+			return NAN;
+		}
+		return sign | INF;
+	}
+	if (e == 0) {
+		if (m == 0) {
+			return sign;
+		}
+		e = 1;
+		while ((m & 0x400) == 0) {
+			m = m << 1;
+			e -= 1;
+		}
+		m &= 0x3ff;
+	}
+	return sign | (((e - 15 + 127) as u32) << 23) | (m << 13);
+}
+
+// f32 → f16 (最近接偶数に丸める。NaN は 0x7e00)
+public function to16(x:u32):u16
+{
+	var sign = ((x >> 16) & 0x8000) as u16;
+	if (isnan(x)) {
+		return 0x7e00;
+	}
+	if (expo(x) == 255) {
+		return sign | 0x7c00;
+	}
+	if ((x << 1) == 0) {
+		return sign;
+	}
+	unpack(x);
+	var e = ue - 127 + 15;
+	var m = shr_sticky(um, 10); // 14 ビット (隠れたビットは bit 13、下の 3 ビットが丸めの印)
+	if (e <= 0) {
+		m = shr_sticky(m, 1 - e);
+		e = 1;
+	}
+	var low = (m & 7) as u8;
+	m = m >> 3;
+	if (low > 4 || (low == 4 && (m & 1) != 0)) {
+		m += 1;
+	}
+	if (m >= 0x800) {
+		m = m >> 1;
+		e += 1;
+	}
+	if (e >= 31) {
+		return sign | 0x7c00;
+	}
+	if (m < 0x400) {
+		return sign | (m as u16);
+	}
+	return sign | (((e as u16) << 10) | ((m as u16) & 0x3ff));
+}

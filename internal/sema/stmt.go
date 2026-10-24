@@ -655,11 +655,15 @@ func (h *Hlc) compileCond(c *cexpr, label string, jumpIfTrue bool) {
 		case opCond:
 			h.compileCondCond(e, label, jumpIfTrue)
 			return
-		case opLe:
-			h.compileCond(cop2(opLt, e.args[1], e.args[0]), label, !jumpIfTrue)
-			return
-		case opGe:
-			h.compileCond(cop2(opLt, e.args[0], e.args[1]), label, !jumpIfTrue)
+		case opLe, opGe:
+			if h.isFloatCompare(e.args[0], e.args[1]) {
+				break // 浮動小数は NaN があるので !(b < a) にしない (値にして分岐する)
+			}
+			if e.op == opLe {
+				h.compileCond(cop2(opLt, e.args[1], e.args[0]), label, !jumpIfTrue)
+			} else {
+				h.compileCond(cop2(opLt, e.args[0], e.args[1]), label, !jumpIfTrue)
+			}
 			return
 		}
 	}
@@ -682,6 +686,9 @@ func (h *Hlc) compileCond(c *cexpr, label string, jumpIfTrue bool) {
 		}
 	}
 	v := h.rval(e)
+	if t := ir.ValType(v); t.IsFloat() {
+		panic(floatNotCond(t))
+	}
 	if isAggregate(ir.ValType(v)) {
 		panic(&diag.Error{Msg: fmt.Sprintf("a value of type %s cannot be used as a condition (struct / array values have only == and !=)", ir.ValType(v))})
 	}

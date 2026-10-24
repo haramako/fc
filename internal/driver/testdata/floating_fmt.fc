@@ -1,0 +1,15 @@
+#fc 4
+use console;
+function id(x:f32):f32 @(noinline) { return x; }
+function id16(x:f16):f16 @(noinline) { return x; }
+function main():void
+{
+	@printf("{} {} {} {}\n", id(1.5), id(0.1), id(100.0), id(-0.0));
+	@printf("{} {} {}\n", id(1e10), id(1.5e10), id(3.4028235e38));
+	@printf("{} {} {}\n", id(1e-5), id(0.0001), id(1e9));
+	@printf("{:.2} {:.3} {:.0} {:.3}\n", id(1.005), id(2.0), id(2.5), id(1e20));
+	@printf("[{:5}] {} [{:07.2}]\n", id(0.0) / id(0.0), id(-1.0) / id(0.0), id(-1.25));
+	@printf("{} {} {}\n", id(1.4e-45), id16(1.0), id16(65504.0));
+	@printf("{} {:.1}\n", 2.75 as f32, 0.05 as f32);
+	console.exit(0);
+}

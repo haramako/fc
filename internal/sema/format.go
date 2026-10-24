@@ -52,17 +52,20 @@ const (
 
 // fmtArgs は評価した書式の引数と分解した書式。
 type fmtArgs struct {
-	what  string
-	parts []ir.LogPart
-	vals  []ir.Operand
-	texts []*string // 定数の文字列の引数はその綴り
-	codes []byte    // textmap の変換器の書式なら、fmtDigits の文字のコード (fmt.codes に置く。nil なら ASCII)
-	point byte      // 小数点の文字のコード (固定小数・浮動小数。textmap の変換器の書式なら "." を変換したもの)
-	tm    *textmapConv
+	what   string
+	parts  []ir.LogPart
+	vals   []ir.Operand
+	texts  []*string // 定数の文字列の引数はその綴り
+	codes  []byte    // textmap の変換器の書式なら、fmtDigits の文字のコード (fmt.codes に置く。nil なら ASCII)
+	fchars []byte    // 固定小数・浮動小数の小数点・nan・inf・指数の文字のコード (fmtFChars の並び。textmap の変換器の書式なら変換したもの)
+	tm     *textmapConv
 }
 
 // fmtDigits は fmt.codes の表の文字の並び (fclib/fmt.fc の ASCII と同じ)。
 const fmtDigits = "0123456789ABCDEFabcdef- "
+
+// fmtFChars は固定小数・浮動小数の出力の文字の並び (fclib/fmt.fc の FCHARS と同じ)。
+const fmtFChars = ".naife+"
 
 // builtinModule は組み込みが使うモジュール (読み込んでいなければここで読み込む)。今のモジュールが use したことにする (asm が
 // そのモジュールの .inc を取り込み、シンボルを import するように)。
@@ -119,8 +122,8 @@ func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
 			panic(&diag.Error{Msg: fmt.Sprintf("%s: the character table must map each of %q to one code (for the digits)", what, fmtDigits)})
 		}
 		a.codes = codeBytes(what, dc)
-		if pc := a.tm.codes(h, "."); len(pc) == 1 {
-			a.point = codeBytes(what, pc)[0]
+		if fc := a.tm.codes(h, fmtFChars); len(fc) == len(fmtFChars) {
+			a.fchars = codeBytes(what, fc)
 		}
 		for i := range parts {
 			if parts[i].Arg < 0 {
@@ -130,8 +133,8 @@ func (h *Hlc) fmtPrepare(what string, format *cexpr, args []*cexpr) *fmtArgs {
 			}
 		}
 	}
-	if a.point == 0 {
-		a.point = '.'
+	if a.fchars == nil {
+		a.fchars = []byte(fmtFChars)
 	}
 	a.parts = parts
 	return a
@@ -215,19 +218,23 @@ func (a *fmtArgs) constText(p ir.LogPart) (string, bool) {
 	}
 	v := a.vals[p.Arg]
 	t := ir.ValType(v)
-	if k, lit := ir.ValIntLiteral(v); lit && t.IsFixed() {
+	if k, lit := ir.ValIntLiteral(v); lit && (t.IsFixed() || t.IsFloat()) {
 		sp := p.Spec
 		left := sp.Align == '<'
 		if left {
 			sp.Width = 0
 		}
-		s := formatFixed(k, t, sp)
+		var s string
+		if t.IsFixed() {
+			s = formatFixed(k, t, sp)
+		} else {
+			s = ir.FormatFloat(uint64(uint32(k)), t.Size, sp)
+		}
 		b := []byte(s)
 		for i, c := range b {
-			switch {
-			case c == '.':
-				b[i] = a.point
-			case a.codes != nil:
+			if j := strings.IndexByte(fmtFChars, c); j >= 0 {
+				b[i] = a.fchars[j]
+			} else if a.codes != nil {
 				b[i] = a.codes[strings.IndexByte(fmtDigits, c)]
 			}
 		}
@@ -346,7 +353,21 @@ func (h *Hlc) fmtEmitParts(a *fmtArgs, parts []ir.LogPart) {
 			}
 			n := &cexpr{kind: cOperand, opnd: h.cast(h.asRaw(h.operandValue(v)), h.prog.Types.IntType(4, t.Signed))}
 			name := map[bool]string{true: "fix_i", false: "fix_u"}[t.Signed]
-			padded(pad, func() { call(name, n, cint(t.Frac), cint(sp.Prec), cint(int(a.point)), cint(spec)) })
+			padded(pad, func() { call(name, n, cint(t.Frac), cint(sp.Prec), h.fcharsArg(a), cint(spec)) })
+		case t.IsFloat():
+			// 浮動小数: f32 のビット (f16 は正確に広げる) で fmt.f32
+			spec, pad := sp.Width, 0
+			if sp.Width > fmtMaxWidth {
+				panic(&diag.Error{Msg: fmt.Sprintf("%s: the width is at most %d (argument %d)", a.what, fmtMaxWidth, p.Arg)})
+			}
+			if sp.Align == '<' {
+				spec, pad = 0, sp.Width|fmtLeft
+			}
+			if sp.Zero {
+				spec |= fmtZero
+			}
+			n := &cexpr{kind: cOperand, opnd: h.to32(h.operandValue(v))}
+			padded(pad, func() { call("f32", n, cint(sp.Prec), h.fcharsArg(a), cint(spec)) })
 		case t.Kind == types.Int || t.Kind == types.Bool:
 			n := cv(h.operandValue(v))
 			size, signed := t.Size, t.Signed
@@ -593,4 +614,12 @@ func (h *Hlc) rewritePrintf(args []*cexpr, typs []*types.Type) {
 		}
 		prev = i
 	}
+}
+
+// fcharsArg は fmt.fix_u / fix_i / f32 に渡す文字の表 (ASCII なら fmt.FCHARS、textmap の変換器の書式なら変換したコードの定数)。
+func (h *Hlc) fcharsArg(a *fmtArgs) *cexpr {
+	if string(a.fchars) == fmtFChars {
+		return cv(h.moduleFunc(h.builtinModule("fmt"), "FCHARS"))
+	}
+	return cstr(string(a.fchars))
 }

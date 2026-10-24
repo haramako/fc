@@ -190,6 +190,8 @@ func logFileArg(a *ir.LogArg) LogFileArg {
 		}
 	case t.IsFixed():
 		r.Kind, r.Frac = "fixed", t.Frac
+	case t.IsFloat():
+		r.Kind = "float"
 	case t.Kind == types.Bool:
 		r.Kind = "bool"
 	case t.Kind == types.Pointer || t.Kind == types.Func:
@@ -302,6 +304,9 @@ func readLogValue(v LogFileValue, size int, r Reader) (int, bool) {
 
 // formatLogValue は値 1 つを書式どおりに。Lua 版 (mesenLogScript) と同じ規則。
 func formatLogValue(a LogFileArg, part LogFilePart, v int) string {
+	if a.Kind == "float" && (part.Verb == "" || part.Verb == "d") {
+		return ir.FormatFloat(uint64(v)&(1<<uint(8*a.Size)-1), a.Size, ir.LogSpec{Prec: part.Prec, Width: part.Width, Zero: part.Zero})
+	}
 	bits := 8 * a.Size
 	v &= 1<<bits - 1
 	signedV := v

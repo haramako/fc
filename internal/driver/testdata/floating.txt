@@ -1,0 +1,20 @@
+3fcccccd
+3e19999a
+3f000000
+bfc00000
+0
+false true false true
+false false true
+7fc00000
+40200000
+1 -2 255
+40e00000
+3fe00000
+589
+3f00
+4080
+40400000
+3e99999a
+3f666667
+gt
+nan

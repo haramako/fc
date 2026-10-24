@@ -221,6 +221,9 @@ func toC0(e syntax.Expr) *cexpr {
 		if e.IsReal() {
 			return &cexpr{kind: cInt, s: "real", name: e.Text} // 実数のリテラル (値は綴りから: real.go)
 		}
+		if t, big := bigIntLit(e.Text); big {
+			return &cexpr{kind: cInt, s: "real", name: t} // int64 に入らない整数のリテラルは正確な値のまま (整数の所ではエラー)
+		}
 		if strings.HasPrefix(e.Text, "'") {
 			// fc 4 の文字のリテラル (値は文字のコード。name に綴り: ASCII 以外は @textmap の変換器に渡すときだけ使える)
 			return &cexpr{kind: cInt, n: e.Value, s: "char", name: e.Text}

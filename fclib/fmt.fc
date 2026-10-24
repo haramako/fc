@@ -361,34 +361,42 @@ public function bin_u24(n:u24, spec:u8):void
 	bin_u32(n, spec);
 }
 
-const FIX_POINT = 255;   // fixdec の桁の並びの小数点の印
+// 固定小数・浮動小数の出力の文字の表 (小数点・nan・inf・指数の e と +)。textmap のフォントなら sema が同じ並びの表を渡す
+public const FCHARS = ".naife+";
+const FC_POINT = 249;  // 桁の並びの印 (249 + FCHARS の添字)
+const FC_N = 250;
+const FC_A = 251;
+const FC_I = 252;
+const FC_F = 253;
+const FC_E = 254;
+const FC_PLUS = 255;
 
 // 固定小数を 10 進で書く。n は中身の整数を 4 バイトに広げたもの、frac は小数のビット数 (1〜28)、prec は小数点以下の桁 + 1
-// (0 なら正確な値: 小数部の末尾の 0 を省き、小数部が 0 なら小数点も書かない)、point は小数点の文字のコード、spec は幅と ZERO。
-// 桁を指定すると絶対値で四捨五入する (@format / @printf の `{:.3}` が呼ぶ)
-public function fix_u(n:u32, frac:u8, prec:u8, point:u8, spec:u8):void
+// (0 なら正確な値: 小数部の末尾の 0 を省き、小数部が 0 なら小数点も書かない)、chars は FCHARS (か textmap の同じ並びの表)、
+// spec は幅と ZERO。桁を指定すると絶対値で四捨五入する (@format / @printf の `{:.3}` が呼ぶ)
+public function fix_u(n:u32, frac:u8, prec:u8, chars:[]const u8, spec:u8):void
 {
-	fixdec(n, frac, prec, point, false, spec);
+	fixdec(n, frac, prec, chars, false, spec);
 }
 
 // 符号付きの固定小数を 10 進で書く (負なら -。引数は fix_u と同じ)
-public function fix_i(n:i32, frac:u8, prec:u8, point:u8, spec:u8):void
+public function fix_i(n:i32, frac:u8, prec:u8, chars:[]const u8, spec:u8):void
 {
 	var u = @bitcast(u32, n);
 	if (n < 0) {
 		u = 0 - u;
 	}
-	fixdec(u, frac, prec, point, n < 0, spec);
+	fixdec(u, frac, prec, chars, n < 0, spec);
 }
 
-// fix_u / fix_i の本体 (n は絶対値)。整数部の桁・小数点 (FIX_POINT)・小数部の桁を tmp に並べてから putf で書く
-function fixdec(n:u32, frac:u8, prec:u8, point:u8, neg:bool, spec:u8):void
+// fix_u / fix_i の本体 (n は絶対値)。整数部の桁・小数点 (FC_POINT)・小数部の桁を tmp に並べてから putf で書く
+function fixdec(n:u32, frac:u8, prec:u8, chars:[]const u8, neg:bool, spec:u8):void
 {
 	var tmp:[32]u8;
 	var one:u32 = (1 as u32) << frac;
 	var f = n & (one - 1);
 	var len = dec32(&tmp[0], n >> frac);
-	tmp[len] = FIX_POINT;
+	tmp[len] = FC_POINT;
 	len += 1;
 	if (prec == 0) {
 		while (f != 0) {
@@ -410,7 +418,7 @@ function fixdec(n:u32, frac:u8, prec:u8, point:u8, neg:bool, spec:u8):void
 			var carry = true;
 			while (carry && i > 0) {
 				i -= 1;
-				if (tmp[i] != FIX_POINT) {
+				if (tmp[i] != FC_POINT) {
 					if (tmp[i] == 9) {
 						tmp[i] = 0;
 					} else {
@@ -430,14 +438,14 @@ function fixdec(n:u32, frac:u8, prec:u8, point:u8, neg:bool, spec:u8):void
 			}
 		}
 	}
-	if (tmp[len - 1] == FIX_POINT) {
+	if (tmp[len - 1] == FC_POINT) {
 		len -= 1; // 小数部が無い
 	}
-	putf(&tmp[0], len, neg, spec, point);
+	putf(&tmp[0], len, neg, spec, chars);
 }
 
-// put と同じだが、桁の並びの FIX_POINT を小数点の文字 point にする
-function putf(tmp:*const u8, len:u8, neg:bool, spec:u8, point:u8):void
+// put と同じだが、桁の並びの印 (FC_POINT〜FC_PLUS) を文字の表 chars の文字にする
+function putf(tmp:*const u8, len:u8, neg:bool, spec:u8, chars:[]const u8):void
 {
 	var body = len;
 	if (neg) {
@@ -468,8 +476,8 @@ function putf(tmp:*const u8, len:u8, neg:bool, spec:u8, point:u8):void
 	}
 	for (var k:u8 = 0; k < len; k += 1) {
 		var d = tmp[k];
-		if (d == FIX_POINT) {
-			out[i] = point;
+		if (d >= FC_POINT) {
+			out[i] = chars[d - FC_POINT];
 		} else {
 			out[i] = codes[d];
 		}
@@ -649,4 +657,258 @@ function test_direct():void @(test)
 	dec_u16(65535, 0);
 	chr(33);
 	@assert(same(buf[..at], "65535!"));
+}
+
+// f32 の整数の部分 (m × 2^q の整数の部分) の 10 進の桁を dig に上位から書き、桁数を返す (0 なら "0" の 1 桁)。ib は作業用 (17 バイト)
+function fint(m:u32, q:i16, ib:*u8, dig:*u8):u8
+{
+	for (var i:u8 = 0; i < 17; i += 1) {
+		ib[i] = 0;
+	}
+	if (q >= 0) {
+		var off = (q >> 3) as u8;
+		var v = m << ((q & 7) as u8);
+		ib[off] = v as u8;
+		ib[off + 1] = (v >> 8) as u8;
+		ib[off + 2] = (v >> 16) as u8;
+		ib[off + 3] = (v >> 24) as u8;
+	} else if (q > -24) {
+		var v = m >> ((0 - q) as u8);
+		ib[0] = v as u8;
+		ib[1] = (v >> 8) as u8;
+		ib[2] = (v >> 16) as u8;
+	}
+	// 10 で割り続けて下の桁から (逆順に dig へ)
+	var cnt:u8 = 0;
+	var top:u8 = 16;
+	while (true) {
+		while (top > 0 && ib[top] == 0) {
+			top -= 1;
+		}
+		var rem:u16 = 0;
+		var i = top + 1;
+		while (i > 0) {
+			i -= 1;
+			var cur = (rem << 8) | ib[i];
+			ib[i] = (cur / 10) as u8;
+			rem = cur % 10;
+		}
+		dig[cnt] = rem as u8;
+		cnt += 1;
+		if (top == 0 && ib[0] == 0) {
+			break;
+		}
+	}
+	// 上位からに並べ直す
+	var a:u8 = 0;
+	var b = cnt - 1;
+	while (a < b) {
+		var t = dig[a];
+		dig[a] = dig[b];
+		dig[b] = t;
+		a += 1;
+		b -= 1;
+	}
+	return cnt;
+}
+
+// f32 の小数の部分 (m × 2^q の 2^-q 未満) を fb に置き (小数点がバイトの列の上の端)、バイト数を返す (小数の部分が無ければ 0)
+function ffrac(m:u32, q:i16, fb:*u8):u8
+{
+	if (q >= 0) {
+		return 0;
+	}
+	var nf = (0 - q) as u8;
+	var f = m;
+	if (nf < 24) {
+		f = m & (((1 as u32) << nf) - 1);
+	}
+	var nb = (nf + 7) >> 3;
+	for (var i:u8 = 0; i < nb; i += 1) {
+		fb[i] = 0;
+	}
+	var sh = (nb << 3) - nf;  // 上の端に寄せるずらし (0〜7)
+	var off = sh >> 3;
+	var v = f << (sh & 7);
+	for (var k:u8 = 0; k < 4; k += 1) {
+		if (off + k < nb) {
+			fb[off + k] = (v >> (k << 3)) as u8;
+		}
+	}
+	return nb;
+}
+
+// fb の小数の部分を 10 倍し、整数に上がった桁を返す
+function fnext(fb:*u8, nb:u8):u8
+{
+	var carry:u16 = 0;
+	for (var i:u8 = 0; i < nb; i += 1) {
+		var t:u16 = ((fb[i] as u16) * 10) + carry;
+		fb[i] = t as u8;
+		carry = t >> 8;
+	}
+	return carry as u8;
+}
+
+// dig[0..n] を、次の桁 dig[n+1] で四捨五入する (繰り上がって桁が増えれば true。dig[0] が 1、残りは 0)
+function fround(dig:*u8, n:u8):bool
+{
+	if (dig[n + 1] < 5) {
+		return false;
+	}
+	var i = n + 1;
+	while (i > 0) {
+		i -= 1;
+		if (dig[i] == 9) {
+			dig[i] = 0;
+		} else {
+			dig[i] += 1;
+			return false;
+		}
+	}
+	dig[0] = 1;
+	return true;
+}
+
+// 指数の形の桁 dig[0..n] (四捨五入済み) と指数を返す
+function fsci(m:u32, q:i16, n:u8, dig:*u8, ib:*u8, fb:*u8):i16
+{
+	var ci = fint(m, q, ib, dig);
+	var nb = ffrac(m, q, fb);
+	var k:i16;
+	var cnt:u8;
+	if (ci > 1 || dig[0] != 0) {
+		k = (ci as i16) - 1;
+		cnt = ci;
+	} else {
+		k = -1;
+		var d = fnext(fb, nb);
+		while (d == 0) {
+			k -= 1;
+			d = fnext(fb, nb);
+		}
+		dig[0] = d;
+		cnt = 1;
+	}
+	while (cnt < n + 2) {
+		dig[cnt] = fnext(fb, nb);
+		cnt += 1;
+	}
+	if (fround(dig, n)) {
+		k += 1;
+	}
+	return k;
+}
+
+// f32 (ビットの並び x) を 10 進で書く。prec は小数点以下の桁 + 1: 0 なら `{}` (7 桁に四捨五入した指数の形の指数が -4〜8 なら
+// 小数点以下 6 桁に四捨五入して末尾の 0 を省き、ほかは指数の形で末尾の 0 を省く)、指定があれば 1e9 未満は小数点以下その桁、1e9 以上は
+// 指数の形。四捨五入は絶対値で。NaN は nan、無限大は inf。chars は FCHARS (か textmap の同じ並びの表)、spec は幅と ZERO
+// (@format / @printf の f32・f16 が呼ぶ)
+public function f32(x:u32, prec:u8, chars:[]const u8, spec:u8):void
+{
+	var tmp:[32]u8;
+	var dig:[44]u8;
+	var ib:[17]u8;
+	var fb:[20]u8;
+	var neg = (x & 0x80000000) != 0;
+	var e = ((x >> 23) & 0xff) as u8;
+	var man = x & 0x7fffff;
+	if (e == 255) {
+		tmp[1] = FC_N;
+		if (man != 0) {
+			tmp[0] = FC_N;
+			tmp[1] = FC_A;
+			tmp[2] = FC_N;
+			neg = false;
+		} else {
+			tmp[0] = FC_I;
+			tmp[2] = FC_F;
+		}
+		putf(&tmp[0], 3, neg, spec & WIDTH, chars);
+		return;
+	}
+	var m = man;
+	var q:i16 = -149;
+	if (e != 0) {
+		m = man | 0x800000;
+		q = (e as i16) - 150;
+	}
+	var n:u8 = 6;
+	var trim = true;
+	if (prec != 0) {
+		n = prec - 1;
+		trim = false;
+	}
+	var fixed = true;
+	if (m != 0) {
+		if (prec != 0) {
+			fixed = fint(m, q, &ib[0], &dig[0]) <= 9;
+		} else {
+			var k6 = fsci(m, q, 6, &dig[0], &ib[0], &fb[0]);
+			fixed = k6 >= -4 && k6 <= 8;
+		}
+	}
+	var len:u8 = 0;
+	if (fixed) {
+		var ci = fint(m, q, &ib[0], &dig[0]);
+		var nb = ffrac(m, q, &fb[0]);
+		for (var k:u8 = 0; k <= n; k += 1) {
+			dig[ci + k] = fnext(&fb[0], nb);
+		}
+		var all = ci + n; // 整数部と小数部の桁 (dig[all] が次の桁)
+		var carry = fround(&dig[0], all - 1);
+		if (carry) {
+			// 整数部の桁が 1 つ増える (先頭に 1、ほかは 0 になっている)
+			dig[all] = 0;
+			ci += 1;
+			all += 1;
+		}
+		for (var k:u8 = 0; k < ci; k += 1) {
+			tmp[len] = dig[k];
+			len += 1;
+		}
+		var fl = n;
+		if (trim) {
+			while (fl > 0 && dig[ci + fl - 1] == 0) {
+				fl -= 1;
+			}
+		}
+		if (fl > 0) {
+			tmp[len] = FC_POINT;
+			len += 1;
+			for (var k:u8 = 0; k < fl; k += 1) {
+				tmp[len] = dig[ci + k];
+				len += 1;
+			}
+		}
+	} else {
+		var ke = fsci(m, q, n, &dig[0], &ib[0], &fb[0]);
+		tmp[0] = dig[0];
+		len = 1;
+		var fl = n;
+		if (trim) {
+			while (fl > 0 && dig[fl] == 0) {
+				fl -= 1;
+			}
+		}
+		if (fl > 0) {
+			tmp[len] = FC_POINT;
+			len += 1;
+			for (var k:u8 = 1; k <= fl; k += 1) {
+				tmp[len] = dig[k];
+				len += 1;
+			}
+		}
+		tmp[len] = FC_E;
+		tmp[len + 1] = FC_PLUS;
+		if (ke < 0) {
+			tmp[len + 1] = MINUS;
+			ke = 0 - ke;
+		}
+		var ek = ke as u8;
+		tmp[len + 2] = ek / 10;
+		tmp[len + 3] = ek % 10;
+		len += 4;
+	}
+	putf(&tmp[0], len, neg, spec, chars);
 }

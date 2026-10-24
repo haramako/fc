@@ -165,6 +165,39 @@ local function fixedText(sv, frac, prec)
   return s
 end
 
+-- 浮動小数 (ビット v、大きさ size) の 10 進 (ir.FormatFloat に近い形。string.format を使うので、ちょうど中間の値の丸めが違うことがある)
+local function floatText(v, size, prec)
+  local x
+  if size == 2 then
+    local e = (v >> 10) & 31
+    local m = v & 0x3ff
+    local s = ((v & 0x8000) ~= 0) and -1 or 1
+    if e == 31 then
+      if m ~= 0 then return "nan" end
+      return (s < 0) and "-inf" or "inf"
+    end
+    if e == 0 then x = s * m * 2.0^-24 else x = s * (1024 + m) * 2.0^(e - 25) end
+    if v == 0x8000 then x = -0.0 end
+  else
+    x = string.unpack("<f", string.pack("<I4", v))
+  end
+  if x ~= x then return "nan" end
+  if x == math.huge then return "inf" end
+  if x == -math.huge then return "-inf" end
+  local a = math.abs(x)
+  if prec > 0 then
+    if a < 1e9 then return string.format("%." .. (prec - 1) .. "f", x) end
+    return string.format("%." .. (prec - 1) .. "e", x)
+  end
+  if a == 0 then return (1 / x < 0) and "-0" or "0" end
+  local e = string.format("%.6e", x)
+  local k = tonumber(string.match(e, "e([-+]%d+)$"))
+  local function trim(s) return (string.gsub(string.gsub(s, "0+$", ""), "%.$", "")) end
+  if k >= -4 and k <= 8 then return trim(string.format("%.6f", x)) end
+  local mant, ex = string.match(e, "^(.-)e(.*)$")
+  return trim(mant) .. "e" .. ex
+end
+
 local function formatValue(a, part, v)
   local bits = 8 * a.size
   v = v & ((1 << bits) - 1)
@@ -176,6 +209,7 @@ local function formatValue(a, part, v)
   elseif part.verb == "b" then s = toBase(v, 2, false)
   elseif part.verb == "c" then s = string.char(v)
   elseif a.kind == "fixed" and (part.verb == "d" or part.verb == "") then s = fixedText(sv, a.frac, part.prec)
+  elseif a.kind == "float" and (part.verb == "d" or part.verb == "") then s = floatText(v, a.size, part.prec)
   elseif part.verb == "d" then s = tostring(sv)
   elseif a.kind == "bool" then s = (v ~= 0) and "true" or "false"
   elseif a.kind == "enum" then s = (a.enum and a.enum[sv]) or tostring(sv)

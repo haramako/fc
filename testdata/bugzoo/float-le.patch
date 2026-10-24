@@ -1,0 +1,13 @@
+# 浮動小数の a <= b を a < b にする
+diff --git a/internal/sema/float.go b/internal/sema/float.go
+--- a/internal/sema/float.go
++++ b/internal/sema/float.go
+@@ -239,7 +239,7 @@
+ 
+ // emitFloatCompare は浮動小数の比較 (op は eq / lt / le。IEEE: NaN とはどれも偽、+0 と -0 は等しい) の bool。
+ func (h *Hlc) emitFloatCompare(op cop, left, right ir.Operand) ir.Operand {
+-	name := map[cop]string{opEq: "eq32", opLt: "lt32", opLe: "le32"}[op]
++	name := map[cop]string{opEq: "eq32", opLt: "lt32", opLe: "lt32"}[op]
+ 	return h.floatCall(name, h.to32(left), h.to32(right))
+ }
+ 

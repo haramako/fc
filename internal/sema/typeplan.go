@@ -213,6 +213,9 @@ func (h *Hlc) planUnary(op cop, a exprInfo) *types.Type {
 	if a.t.IsFarFunc() && op != opNot {
 		panic(&diag.Error{Msg: "arithmetic is not supported on farfn"})
 	}
+	if a.t.IsFloat() && op != opUminus {
+		panic(&diag.Error{Msg: fmt.Sprintf("%s is not defined on %s", opSymbol(op), a.t)})
+	}
 	if op == opNot {
 		return h.prog.Types.Bool() // `!x` は 0 / 1
 	}

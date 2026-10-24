@@ -47,7 +47,6 @@ func TestFixedErrors(t *testing.T) {
 		{"fc 3 では実数のリテラルが無い", "#fc 3\nvar g:u8;\nfunction body():void { g = 1.5 as u8; }\n", "real literal 1.5 is fc 4 only"},
 		{"整数と実数の定数", pre + "function body():void { g = g + 1.5; }", "1.5 is not an integer"},
 		{"整数に実数の定数", pre + "function body():void { var y:u8 = 2.0; g = y; }", "2 is not an integer, so it cannot be u8"},
-		{"型を書かない変数", pre + "function body():void { var x = 1.5; }", "the type of 1.5 is not decided"},
 		{"整数 → 固定小数は as", pre + "function body():void { f = g; }", "cannot convert u8 to u8f8 implicitly"},
 		{"固定小数 → 整数は as", pre + "function body():void { g = f; }", "cannot convert u8f8 to u8 implicitly"},
 		{"分け方の違う固定小数", pre + "function body():void { f = f + h; }", "cannot apply + to u8f8 and i12f4"},

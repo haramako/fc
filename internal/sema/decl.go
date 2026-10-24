@@ -145,6 +145,9 @@ func (h *Hlc) compileVarSpec(sp *syntax.VarSpec, publicPos syntax.Pos) {
 			if info := h.planInfo(initC, init); !(info.t.Kind == types.SoaRef && ir.ValType(init).Kind != types.SoaRef) {
 				typ = info.t
 			}
+			if r := realOf(init); r != nil {
+				typ = h.untypedRealType(r) // `var x = 1.5` は f32 (real.go)
+			}
 		}
 		inferRO = typ != nil && (typ.Kind == types.Pointer || typ.IsSlice()) && h.readOnly(init)
 		if init != nil && typ != nil {

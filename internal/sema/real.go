@@ -53,6 +53,23 @@ func realLit(text string) *big.Rat {
 	return r
 }
 
+// bigIntLit は整数のリテラルの綴り text が int64 に入らなければ、その 10 進の綴りと true (字句解析の値は折り返している)。
+func bigIntLit(text string) (string, bool) {
+	t := strings.ReplaceAll(text, "_", "")
+	if len(t) > 0 && (t[0] < '0' || t[0] > '9') {
+		return "", false // 文字のリテラル
+	}
+	base := 10
+	if len(t) > 2 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X' || t[1] == 'b' || t[1] == 'B') {
+		base, t = map[byte]int{'x': 16, 'X': 16, 'b': 2, 'B': 2}[t[1]], t[2:]
+	}
+	n, ok := new(big.Int).SetString(t, base)
+	if !ok || n.IsInt64() {
+		return "", false
+	}
+	return n.String(), true
+}
+
 // RealValue は型のない実数の定数。
 func (h *Hlc) RealValue(r *big.Rat) *ir.Value {
 	return ir.NewRealLiteral("", h.prog.Types.UntypedReal(), r)
@@ -118,6 +135,9 @@ func fixedRat(raw int, t *types.Type) *big.Rat {
 
 // realNotInt は型のない実数の定数を整数の所に使ったときのエラー。
 func realNotInt(r *big.Rat, t *types.Type) *diag.Error {
+	if r.IsInt() && !r.Num().IsInt64() {
+		return &diag.Error{Msg: fmt.Sprintf("%s does not fit in %s", r.Num(), t)} // int64 に入らない整数のリテラル
+	}
 	return &diag.Error{Msg: fmt.Sprintf("%s is not an integer, so it cannot be %s (write the type of the other side as a fixed-point or floating-point type, or convert with `as`)", ratText(r), t)}
 }
 
@@ -605,7 +625,5 @@ func formatFixed(raw int, t *types.Type, sp ir.LogSpec) string {
 	return ir.FormatFixed(raw, t.Frac, sp)
 }
 
-// untypedRealType は型を書かない変数・式の値になった型のない実数の定数 r の型 (`var x = 1.5`)。浮動小数ができるまではエラー。
-func (h *Hlc) untypedRealType(r *big.Rat) *types.Type {
-	panic(&diag.Error{Msg: fmt.Sprintf("the type of %s is not decided; write the type (`var x:u8f8 = %s`)", ratText(r), ratText(r))})
-}
+// untypedRealType は型を書かない変数の値になった型のない実数の定数 r の型 (`var x = 1.5` は f32)。
+func (h *Hlc) untypedRealType(r *big.Rat) *types.Type { return h.prog.Types.FloatType(4) }

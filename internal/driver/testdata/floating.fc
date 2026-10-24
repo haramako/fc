@@ -1,0 +1,37 @@
+#fc 4
+use console;
+function id(x:f32):f32 @(noinline) { return x; }
+function id16(x:f16):f16 @(noinline) { return x; }
+function b(x:f32):void @(noinline) { @printf("{:x}\n", @bitcast(u32, x)); }
+function b16(x:f16):void @(noinline) { @printf("{:x}\n", @bitcast(u16, x)); }
+function main():void
+{
+	var a = id(1.5);
+	var c:f32 = id(0.1);
+	b(a + c);
+	b(a * c);
+	b(a / 3);
+	b(-a);
+	b(a - 1.5);
+	@printf("{} {} {} {}\n", a < c, a <= 1.5, a >= 2, a == 1.5);
+	var n = id(0.0) / id(0.0);
+	@printf("{} {} {}\n", n == n, n <= n, n != n);
+	b(n);
+	var x = 2.5;
+	b(x);
+	@printf("{} {} {}\n", a as i32, (-2.7 as f32) as i8, id(300.0) as u8);
+	b((7 as u8) as f32);
+	var q:u8f8 = 1.75;
+	b(q as f32);
+	@printf("{}\n", @bitcast(u16, (id(2.3) as u8f8)));
+	var h = id16(1.5);
+	b16(h + id16(0.25));
+	b16(h * h);
+	b((h as f32) * 2);
+	const K:f32 = 0.1 + 0.2;
+	b(K);
+	b(K * 3);
+	if (a > 1.0) { @printf("gt\n"); }
+	if (n <= 1.0) { @printf("bad\n"); } else { @printf("nan\n"); }
+	console.exit(0);
+}

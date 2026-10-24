@@ -314,6 +314,10 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 				break
 			}
 			typ := h.planUnary(e.op, h.planInfo(e.args[0], left)) // 型を決める段の計画 (typeplan.go)
+			if typ.IsFloat() {
+				r = h.floatUnary(e.op, left) // 符号のビットの反転 (float.go)
+				break
+			}
 			tmp := h.newTmp(typ)
 			op := &ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left}}
 			h.emit(op)
@@ -503,6 +507,10 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 					break
 				}
 			}
+			if typ.IsFloat() {
+				r = h.emitFloatCompare(e.op, left, right) // IEEE の比較 (float.go)
+				break
+			}
 			tmp := h.newTmp(h.prog.Types.Bool()) // 比較の結果は bool (uint8 と互換。docs/reference/language.md の「型」)
 			h.emit(&ir.Op{Code: copToOpCode[e.op], Dst: tmp, Src: []ir.Operand{left, right}})
 			r = tmp
@@ -511,6 +519,10 @@ func (h *Hlc) lvalIn(c *cexpr, hint int) (ir.Operand, bool) {
 			// これらは、eq,lt の引数の順番とnotを組合せて合成する
 			left := e.args[0]
 			right := e.args[1]
+			if (e.op == opLe || e.op == opGe) && h.isFloatCompare(left, right) {
+				r = h.floatLe(e.op, left, right) // NaN があるので !(b < a) にしない (float.go)
+				break
+			}
 			switch e.op {
 			case opNe:
 				r = h.rval(cop2(opNot, cop2(opEq, left, right)))
