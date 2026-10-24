@@ -155,6 +155,14 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 				r = append(r, l.storeA(dst, i))
 			}
 		}
+	} else if n, ok := widePow2(op3int, op3IsInt, ir.ValType(dst).Size); ok && op.Code != ir.OpMod && l.memoryDst(dst) {
+		// 3・4 バイトの 2 のべき (256 以上も) の掛け算・割り算はシフト (割り算は床除算なので符号付きは算術シフト)
+		r = append(r, l.shiftWideOps(dst, s0, op.Code == ir.OpMul, op.IsSigned(), n)...)
+	} else if _, ok := widePow2(op3int, op3IsInt, ir.ValType(dst).Size); ok && op.Code == ir.OpMod {
+		// 余りは下位のビット (床除算の余りは割る数の符号なので、正の 2 のべきなら符号付きでも同じ)
+		for i := 0; i < ir.ValType(dst).Size; i++ {
+			r = append(r, l.loadA(s0, i), fmt.Sprintf("and #%d", ir.ByteOf(op3int-1, i)), l.storeA(dst, i))
+		}
 	} else if op.Code == ir.OpMul && ir.ValType(dst).Size == 2 && byteValue(s0) && byteValue(s1) {
 		// 0〜255 どうしの 16 ビットの掛け算 (`(a as u16) * b`): 8×8→16 の表引き (__mul_8t16。__mul_16 の 16 回の
 		// 足し算より 1 桁速い)
@@ -206,6 +214,19 @@ func (l *Llc) mulDivMod(op *ir.Op) []any {
 		}
 	}
 	return r
+}
+
+// widePow2 は 3・4 バイトの演算の定数 k (lit なら) が 2 のべき 2^n (n は 1 以上、型の幅未満) か。
+func widePow2(k int, lit bool, size int) (int, bool) {
+	if !lit || size < 3 || k < 2 || k&(k-1) != 0 || k >= 1<<(8*size) {
+		return 0, false
+	}
+	return log2(k), true
+}
+
+// memoryDst は dst がメモリにある値か (A / Y / X・コンディションでない。shiftWideOps がその場で回す)。
+func (l *Llc) memoryDst(dst ir.Operand) bool {
+	return isValueOrCasted(dst) && ir.ValKind(dst) != ir.KindLiteral && !l.inA(dst) && !l.inY(dst) && !l.inX(dst) && ir.ValLocation(dst) != ir.LocCond
 }
 
 // byteValue は o の値が 0〜255 か (1 バイトの値・1 バイトをゼロ拡張して読む cast (広い演算の狭いオペランドの上位は #0)、
@@ -311,6 +332,83 @@ func (l *Llc) shiftZeroExt(op *ir.Op, n int) ([]any, bool) {
 		r = append(r, "asl a")
 	}
 	return append(r, "sta "+lo), true
+}
+
+// shiftWide は 3・4 バイトの値の定数シフトをメモリ上で行う (Agent/wiki/plans/wide-int.md)。8 ビットごとはバイトの移動
+// (u32 の `x >> 24` を 1 ビットずつ回すと 24 回 × 4 バイト)、残りの 1〜7 ビットは動いたバイトだけ回す:
+//
+//	<< 8k+m:       dst[i] = dst[i-k] (上から)、下の k バイトは 0、asl dst[k]; rol dst[k+1] ...
+//	>> 8k+m:       dst[i] = dst[i+k] (下から)、上の k バイトは 0 (符号付きは符号: asl a; lda #0; sbc #0; eor #$ff)、
+//	               lsr dst[top] / (lda top; cmp #128; ror top); ror ... (top = 上から k バイト目の下)
+//
+// Dst がメモリにある (A / Y / X・コンディションでない) とき。In(0) が別の場所ならまず load で写す。
+func (l *Llc) shiftWide(op *ir.Op, n int, signed bool) ([]any, bool) {
+	size := ir.ValType(op.Dst).Size
+	if size < 3 || !isValueOrCasted(op.Dst) || ir.ValKind(op.Dst) == ir.KindLiteral {
+		return nil, false
+	}
+	if l.inA(op.Dst) || l.inY(op.Dst) || l.inX(op.Dst) || ir.ValLocation(op.Dst) == ir.LocCond {
+		return nil, false
+	}
+	return l.shiftWideOps(op.Dst, op.In(0), op.Code == ir.OpShiftLeft, signed, n), true
+}
+
+// shiftWideOps は shiftWide の本体 (dst = src を n ビット左 / 右にずらす。signed は算術右シフト)。2 のべきの乗除算も使う。
+func (l *Llc) shiftWideOps(dst, src ir.Operand, left, signed bool, n int) []any {
+	size := ir.ValType(dst).Size
+	arith := signed && !left
+	r := []any{l.load(dst, src)}
+	b := func(i int) string { return l.byte(dst, i) }
+	k, m := min(n/8, size), n%8
+	if n >= 8*size {
+		k, m = size, 0
+		if arith {
+			k, m = size-1, 7 // 符号で埋まる (最上位のバイトの符号を残す)
+		}
+	}
+	if k > 0 {
+		if left {
+			for i := size - 1; i >= k; i-- {
+				r = append(r, "lda "+b(i-k), "sta "+b(i))
+			}
+			r = append(r, "lda #0")
+			for i := 0; i < k; i++ {
+				r = append(r, "sta "+b(i))
+			}
+		} else {
+			for i := 0; i+k < size; i++ {
+				r = append(r, "lda "+b(i+k), "sta "+b(i))
+			}
+			if arith {
+				r = append(r, "asl a", "lda #0", "sbc #0", "eor #255") // A は元の最上位のバイト
+			} else {
+				r = append(r, "lda #0")
+			}
+			for i := size - k; i < size; i++ {
+				r = append(r, "sta "+b(i))
+			}
+		}
+	}
+	for j := 0; j < m; j++ {
+		switch {
+		case left:
+			r = append(r, "asl "+b(k))
+			for i := k + 1; i < size; i++ {
+				r = append(r, "rol "+b(i))
+			}
+		default:
+			top := size - 1 - k
+			if arith {
+				r = append(r, "lda "+b(top), "cmp #128", "ror "+b(top))
+			} else {
+				r = append(r, "lsr "+b(top))
+			}
+			for i := top - 1; i >= 0; i-- {
+				r = append(r, "ror "+b(i))
+			}
+		}
+	}
+	return r
 }
 
 // shiftInMemory は定数シフトをメモリ上で行う (Dst がメモリにある 1 / 2 バイトのとき)。

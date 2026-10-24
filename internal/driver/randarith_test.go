@@ -280,7 +280,10 @@ func (g *arGen) expr(depth int) *arNode {
 			b = arLit(int64(g.pick(8 * a.n.w)))
 		} else {
 			b = g.expr(depth - 1)
-			if op == "/" || op == "%" {
+			if (op == "/" || op == "%" || op == "*") && g.chance(0.25) {
+				// 2 のべきの定数 (codegen がシフト・マスクにする。256 以上は 3・4 バイトの形)
+				b = arLit(int64(1) << g.pick(8*a.n.w))
+			} else if op == "/" || op == "%" {
 				// 0 で割らない: どの幅でも奇数になる `(<式> | 1)` で包む
 				inner := b
 				b = &arNode{kind: 1, op: "|", a: inner, b: arLit(1),
@@ -737,6 +740,8 @@ func (g *arGen) loop(body *strings.Builder, k int, x *arNode) {
 			return
 		}
 	}
+	// ± 1 (メモリ上のその場の inc / dec の形。桁をまたぐ値は境目の初期値から)
+	step := []string{"", "+", "-"}[g.pick(3)]
 	n := 1 + g.pick(5)
 	lit := fmt.Sprint(cur)
 	if cur < 0 {
@@ -748,6 +753,9 @@ func (g *arGen) loop(body *strings.Builder, k int, x *arNode) {
 	if addI {
 		fmt.Fprintf(body, "\t\t%s = %s;\n", lv.src, inc.src)
 	}
+	if step != "" {
+		fmt.Fprintf(body, "\t\t%s = %s %s 1;\n", lv.src, lv.src, step)
+	}
 	fmt.Fprintf(body, "\t}\n\t@printf(\"{}\\n\", %s);\n", lv.src)
 	for i := 0; i < n; i++ {
 		lv.val = cur
@@ -757,6 +765,12 @@ func (g *arGen) loop(body *strings.Builder, k int, x *arNode) {
 			lv.val, iv.val = cur, int64(i)
 			_, v = arPlace(inc, t)
 			cur = t.wrap(v)
+		}
+		switch step {
+		case "+":
+			cur = t.wrap(cur + 1)
+		case "-":
+			cur = t.wrap(cur - 1)
 		}
 	}
 	g.want = append(g.want, fmt.Sprint(cur))

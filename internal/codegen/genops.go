@@ -479,6 +479,8 @@ func (l *funcGen) genShift() {
 			r.push(lines)
 		} else if lines, ok := l.shiftInMemory(op, n, signed); ok {
 			r.push(lines)
+		} else if lines, ok := l.shiftWide(op, n, signed); ok {
+			r.push(lines) // 3・4 バイト: 8 ビットごとはバイトの移動、残りをメモリ上で回す
 		} else if ir.ValType(op.Dst).Size == 1 {
 			// サイズが1
 			r.push(l.loadA(op.In(0), 0))

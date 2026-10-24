@@ -90,7 +90,7 @@ const (
 	// add / sub (x = x ± k)
 	FormStepY  // iny × k
 	FormStepX  // inx × k
-	FormIncMem // inc x / 2 バイトの inc・dec (メモリ上のその場の ± 1。1 バイトは inc x の 5 サイクルで clc; lda; adc #1; sta の 10 から。2 バイトの +1 は inc lo; bne; inc hi、-1 は lda lo; bne; dec hi; dec lo で A を使う。直後の検査 (dec x; lda x; bne) の lda はピープホールが消す)
+	FormIncMem // inc x / 2〜4 バイトの inc・dec (メモリ上のその場の ± 1。1 バイトは inc x の 5 サイクルで clc; lda; adc #1; sta の 10 から。2 バイトの +1 は inc lo; bne; inc hi、-1 は lda lo; bne; dec hi; dec lo で A を使う。直後の検査 (dec x; lda x; bne) の lda はピープホールが消す)
 
 	// shift_left / shift_right (定数)
 	FormShiftMem // asl x × n / asl lo; rol hi × n (メモリ上のその場のシフト)
@@ -212,7 +212,7 @@ func StepForm(op *ir.Op, p Placement, e Emitter, maxK int) (Form, bool) {
 	}
 	k, lit := ir.ValIntLiteral(op.In(1))
 	dst, src := op.Dst, op.In(0)
-	if !lit || k < 1 || ir.ValType(dst).Size > 2 || !valueOrCast(dst) || !valueOrCast(src) {
+	if !lit || k < 1 || ir.ValType(dst).Size > 4 || !valueOrCast(dst) || !valueOrCast(src) {
 		return Form{}, false
 	}
 	switch {
@@ -358,11 +358,28 @@ func (f Form) Emit(e Emitter) []Ins {
 			}
 			return []Ins{ins("dec", lo)}
 		}
-		hi, skip := e.Byte(op.Dst, 1), e.NewLabel()
+		// 2〜4 バイト: +1 は下から inc して 0 にならなければ終わり、-1 は下から 0 でないバイトを探してから上から dec する
+		// (2 バイトは inc lo; bne; inc hi / lda lo; bne; dec hi; dec lo)
+		n := ir.ValType(op.Dst).Size
 		if op.Code == ir.OpAdd {
-			return []Ins{ins("inc", lo), ins("bne", rel(skip)), ins("inc", hi), {Label: skip}}
+			skip := e.NewLabel()
+			var r []Ins
+			for i := 0; i < n-1; i++ {
+				r = append(r, ins("inc", e.Byte(op.Dst, i)), ins("bne", rel(skip)))
+			}
+			return append(r, ins("inc", e.Byte(op.Dst, n-1)), Ins{Label: skip})
 		}
-		return []Ins{ins("lda", lo), ins("bne", rel(skip)), ins("dec", hi), {Label: skip}, ins("dec", lo)}
+		skips := make([]string, n-1)
+		var r []Ins
+		for i := range skips {
+			skips[i] = e.NewLabel()
+			r = append(r, ins("lda", e.Byte(op.Dst, i)), ins("bne", rel(skips[i])))
+		}
+		r = append(r, ins("dec", e.Byte(op.Dst, n-1)))
+		for i := n - 2; i >= 0; i-- {
+			r = append(r, Ins{Label: skips[i]}, ins("dec", e.Byte(op.Dst, i)))
+		}
+		return r
 	case FormShiftMem:
 		left := op.Code == ir.OpShiftLeft
 		var r []Ins
