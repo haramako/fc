@@ -122,9 +122,11 @@ func (h *Hlc) opType(e *cexpr) (exprInfo, bool) {
 		// 項が型のない定数でもここに来るのは畳まれない形 (`~@max(-124, 57)`: constEval はマクロを展開しない) で、lval は定数の
 		// 型の実行時の命令を出す
 		a, ok := h.exprType(e.args[0])
-		if !ok || a.t.Kind != types.Int {
+		if !ok || a.t.Kind != types.Int && !(e.op == opUminus && a.t.IsFloat()) {
 			return exprInfo{}, false
 		}
+		// 浮動小数の `-x` も型が分かる (分からないと、比較の両辺が `-x` の `a >= b` を isFloatCompare が見落とし、NaN で違う
+		// `!(a < b)` にしていた。TestRandomFloatV4 の種 20261198352618)
 		return exprInfo{t: a.t}, true
 	case opAddWrap, opSubWrap, opMulWrap:
 		a, ok := h.exprType(e.args[0])

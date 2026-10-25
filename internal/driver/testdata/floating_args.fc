@@ -49,5 +49,9 @@ function main():void
 	@printf("{}\n", sum3(p * q, q / p, p * p));
 	var f:f32 = 0.5;
 	@printf("{} {}\n", sum2(f * 3, f / 4), sum2(@sqrt(f * 8), (p * q) as f32));
+	// 両辺が単項の `-` の `>=` / `<=` も NaN で偽 (型を決める段が浮動小数の `-x` の型を返さず、`!(a < b)` にしていた。
+	// TestRandomFloatV4 の種 20261198352618)
+	var n = @sqrt(-f);
+	@printf("{} {} {}\n", (-n) >= (-f), -(n * 2.0) <= -f, (-n) * 2.0 >= -(f + 1.0));
 	console.exit(0);
 }
