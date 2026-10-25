@@ -17,6 +17,9 @@ Nomad の試し（yuri の `~/nomad-lab`。仕組みは ../discussions/2026-10-2
 
 ## 対応した通知（新しい順）
 
+最後に確かめた: 2026-10-25 10:53 JST（新しい通知なし。前の通知の後の実行は 489 回で、失敗は下の表の 1 回だけ。
+`~/nomad-lab/results/results.jsonl` の `result.fail` で数えた）
+
 | 通知の時刻 (JST) | id | テスト | fc | 扱い |
 |---|---|---|---|---|
 | 2026-10-24 20:55 | 20261024T115237-7eb0 | TestRandomMigrate | 521d94c | **直した**（8c086ff）。種 20261191179568: 両方が定数の算術で migrate が `as` を足さない（502db9d からの退行）。TestMigrateBeyond16Folded |
