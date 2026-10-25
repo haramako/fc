@@ -80,7 +80,8 @@ docs/reference/language.md の「固定小数」と「浮動小数」。どち�
 
 ## テスト（浮動小数）
 
-- `TestFloatLib`（float.fc の各関数の結果のビットを Go の float32 と。端の値・中くらいの値を多めに）・`TestFloatRun`（testdata/floating.fc・
+- `TestFloatLib`（float.fc の各関数の結果のビットを Go の float32 と。端の値・中くらいの値を多めに。本数は `-floatn`、書かなければ
+  `-randn / 40` と 40 の大きいほう: Nomad の試しは `-randn` だけを渡す）・`TestFloatRun`（testdata/floating.fc・
   floating_fmt.fc・floating_init.fc（初期値と整数の式の `as`）・floating_args.fc（下ろすと呼び出しになる引数））・`TestFloatErrors`・
   ir の `TestFormatFloat`
 - 模型の fuzz `TestRandomFloatV4`（変数の形・定数の形・Go の模型: 四則・単項・型のない定数・f16 ↔ f32・整数と i8f8 から・数学の組み込み、
