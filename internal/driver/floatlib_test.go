@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-var floatLibN = flag.Int("floatn", 40, "TestFloatLib のプログラム数 (1 本 60 式。6 本では asm の掛け算の繰り上がりの誤りを見逃した)")
+var floatLibN = flag.Int("floatn", 0, "TestFloatLib のプログラム数 (1 本 60 式。0 なら randn / 40 と 40 の大きいほう: 6 本では asm の掛け算の繰り上がりの誤りを見逃した。Nomad の試しは -randn だけを渡す)")
 
 const goNaN32 = 0x7fc00000
 
@@ -239,7 +239,11 @@ func TestFloatLib(t *testing.T) {
 	if base == 0 {
 		base = 1
 	}
-	for k := 0; k < *floatLibN; k++ {
+	n := *floatLibN
+	if n == 0 {
+		n = max(40, *randN/40)
+	}
+	for k := 0; k < n; k++ {
 		seed := base + int64(k)
 		t.Run(fmt.Sprintf("seed%d", seed), func(t *testing.T) {
 			t.Parallel()
