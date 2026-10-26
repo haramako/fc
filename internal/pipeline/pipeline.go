@@ -2,7 +2,8 @@
 //
 //	インライン展開・関数ポインタ表の直接化 (opt) → asm から参照される変数を volatile に → 呼び出し規約の決定 (frames.Analyze)
 //	→ 関数ごとに 最適化 (opt.Optimize) → 引数の Y 渡しの印 (codegen) → 常駐レジスタ (regalloc.AllocateResident)
-//	→ 割付 (regalloc.AllocateRegister) → スタックの引数の検査 (codegen) → 静的フレームの配置 (frames.Place)
+//	→ 割付 (regalloc.AllocateRegister) → スタックの引数の検査 (codegen) → 使われない関数の決め直し (frames.Prune)
+//	→ 静的フレームの配置 (frames.Place)
 //
 // 以前はこの順序が codegen.Llc (PrepareProgram / Prepare) にあり、codegen が opt と frames に依存していた。
 // codegen が担うのは「引数を Y で渡せるか」と「積む引数が FC_STACK に収まるか」の呼び出しの計画だけで、Backend
@@ -89,6 +90,9 @@ func Prepare(mods []*ir.Module, o *Options) (*Result, error) {
 			}
 			return res, err
 		}
+	}
+	if o.OptimizeLevel > 0 {
+		graph.Prune() // 最適化で消えた呼び出しの先の関数を出さない
 	}
 	markUnusedGlobals(mods)
 	res.Plan, err = frames.Place(graph, o.StaticZp, o.StaticRam)

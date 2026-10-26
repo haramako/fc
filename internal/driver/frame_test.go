@@ -153,6 +153,51 @@ function main():void
 	}
 }
 
+// TestUnusedAfterOptimize: 定数で消える分岐の中からだけ呼ぶ関数は出力しない (最適化の後の frames.Prune)。@printf の呼び先の
+// fmt の関数も (切り替えるバンクのモジュールの `if (DEBUG) { @printf(…) }` で fmt が固定の所に入っていた。fc を使うエージェントの報告)
+func TestUnusedAfterOptimize(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := `#fc 4
+use stdio;
+const DEBUG = false;
+function dbg_only():void @(noinline) { }
+function live():void @(noinline) { }
+function show(v:u8):void @(noinline)
+{
+	if (DEBUG) {
+		dbg_only();
+		@printf("v {}\n", v);
+	} else {
+		live();
+	}
+}
+function main():void
+{
+	show(3);
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "t.fc"), []byte(src), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewCompiler(absRepoRoot).BuildContext(context.Background(), "t.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin"), CompileOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+	mod, _ := os.ReadFile(filepath.Join(dir, "b", "_t.s"))
+	fmtMod, _ := os.ReadFile(filepath.Join(dir, "b", "_fmt.s"))
+	for _, want := range []string{"_t_live", "_t_show"} {
+		if !strings.Contains(string(mod), ".proc "+want) {
+			t.Errorf("%s が出力されていない", want)
+		}
+	}
+	if strings.Contains(string(mod), ".proc _t_dbg_only") {
+		t.Errorf("_t_dbg_only が出力されている (定数で消える分岐からだけ呼ぶ)")
+	}
+	if strings.Contains(string(fmtMod), ".proc _fmt_") {
+		t.Errorf("fmt の関数が出力されている (@printf は定数で消える分岐の中だけ)")
+	}
+}
+
 // TestCc65Abi: options(abi: "cc65") の extern 関数 (cc65 の __fastcall__ 規約): 引数 0〜1 個を A (1 バイト) / A,X (2 バイト) で
 // 渡し、戻り値を A / A,X で受ける。呼び先は X / Y を壊す (static / stack の両方の呼び出し側から)。
 func TestCc65Abi(t *testing.T) {

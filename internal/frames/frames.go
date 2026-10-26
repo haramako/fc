@@ -24,6 +24,8 @@ type Graph struct {
 	depth   []int                 // 根からの最長距離 (static の部分グラフ上)
 	cycles  [][]int               // 再帰の連鎖 (閉路を含む強連結成分。Lambdas の添字)
 	hidden  []bool                // include した asm のファイルから呼ばれうる (呼び出し元がグラフに見えない) 関数
+	others  [][]int               // 直接呼び出し以外の辺 (インラインアセンブラの参照・間接呼び出しの飛び先。Prune が使う)
+	roots   []int                 // 使われない関数を決める根 (main・割り込み・アドレスを取られた関数など。Prune が使う)
 }
 
 // indexOf は関数のシンボル sym の関数と Lambdas の添字 (本体のある関数でなければ ok = false)。
@@ -111,6 +113,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 	hidden := make([]bool, n)
 	indirect := make([][]*ir.Op, n) // 関数ごとの間接呼び出し (飛び先は後で絞る)
 	g.callees = make([][]int, n)
+	g.others = make([][]int, n)
 	// 関数ポインタのグローバル変数に代入された関数と、関数ポインタの const 表の要素 (間接呼び出しの飛び先を絞るため)
 	assigned := map[string][]string{}  // 変数のシンボル → 代入された関数のシンボル
 	unknownAssign := map[string]bool{} // リテラル以外が代入された (何が入るか分からない)
@@ -151,6 +154,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 		switch {
 		case caller >= 0:
 			g.callees[caller] = append(g.callees[caller], j)
+			g.others[caller] = append(g.others[caller], j)
 		case !l.Extern || modOf[l] != m:
 			hidden[j] = true
 		}
@@ -288,6 +292,7 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 				for _, s := range syms {
 					if _, j, ok := g.indexOf(s); ok {
 						g.callees[i] = append(g.callees[i], j)
+						g.others[i] = append(g.others[i], j)
 					}
 				}
 				continue
@@ -296,39 +301,30 @@ func Analyze(mods []*ir.Module) (*Graph, error) {
 			for _, j := range entries {
 				if g.Lambdas[j].Type == t || (t.IsFarFunc() && types.SameFuncSignature(g.Lambdas[j].Type, t)) {
 					g.callees[i] = append(g.callees[i], j)
+					g.others[i] = append(g.others[i], j)
 				}
 			}
 		}
 	}
 
 	// 使われない関数 (tree shaking): main、割り込み、options(symbol:) (asm から呼ばれる名前)、アドレスを取られた /
-	// asm から参照される関数 (entry) から呼び出しの辺で届かない関数は出力しない (フレームも割り付けない)
-	reached := make([]bool, n)
-	var work []int
+	// asm から参照される関数 (entry) から呼び出しの辺で届かない関数は出力しない (フレームも割り付けない)。最適化の後に
+	// Prune でもう一度決める
 	hasMain := false
 	for i, lmd := range g.Lambdas {
 		if entry[i] || hidden[i] || lmd.Id == "_main" || (lmd.Options.Has("symbol") && !lmd.Extern) || aliased[lmd.Id] {
-			reached[i] = true
-			work = append(work, i)
+			g.roots = append(g.roots, i)
 		}
 		hasMain = hasMain || lmd.Id == "_main"
 	}
 	if !hasMain {
 		// main の無いプログラム (ライブラリだけの検査、frames の単体テスト) では何も削らない
-		for i := range reached {
-			reached[i] = true
+		g.roots = g.roots[:0]
+		for i := range g.Lambdas {
+			g.roots = append(g.roots, i)
 		}
 	}
-	for len(work) > 0 {
-		i := work[len(work)-1]
-		work = work[:len(work)-1]
-		for _, j := range g.callees[i] {
-			if !reached[j] {
-				reached[j] = true
-				work = append(work, j)
-			}
-		}
-	}
+	reached := reachFrom(g.roots, g.callees)
 	for i, lmd := range g.Lambdas {
 		lmd.Unused = !reached[i]
 	}
@@ -517,6 +513,53 @@ func checkCc65(lmd *ir.Lambda) error {
 		return bad(fmt.Sprintf("result must be void, 1 or 2 bytes (got %s)", lmd.Type.Base))
 	}
 	return nil
+}
+
+// Prune は最適化の後の命令で、使われない関数をもう一度決める。Analyze は最適化の前なので、定数で消える分岐
+// (`if (DEBUG) { @printf(…); }` の DEBUG が false) の中の呼び出しも辺に数え、呼び先 (fmt など) を ROM に入れていた。
+// 届かなくなった関数に Unused を付ける (外しはしない)。根とアドレスを取られた関数は Analyze のまま。呼び出し規約と
+// フレームの配置の辺 (callees) は変えない (多めのまま)。
+func (g *Graph) Prune() {
+	edges := make([][]int, len(g.Lambdas))
+	for i, lmd := range g.Lambdas {
+		edges[i] = append(edges[i], g.others[i]...)
+		for _, op := range lmd.Ops {
+			if op == nil || (op.Code != ir.OpCall && op.Code != ir.OpFastcall) {
+				continue
+			}
+			if v := ir.ValLiteral(op.Src[0]); v != nil && v.Kind == ir.KindLiteral && v.Symbol != "" {
+				if _, j, ok := g.indexOf(v.Symbol); ok {
+					edges[i] = append(edges[i], j)
+				}
+			}
+		}
+	}
+	reached := reachFrom(g.roots, edges)
+	for i, lmd := range g.Lambdas {
+		if !reached[i] {
+			lmd.Unused = true
+		}
+	}
+}
+
+// reachFrom は roots から edges の辺で届く関数 (roots を含む)。
+func reachFrom(roots []int, edges [][]int) []bool {
+	reached := make([]bool, len(edges))
+	work := append([]int(nil), roots...)
+	for _, i := range roots {
+		reached[i] = true
+	}
+	for len(work) > 0 {
+		i := work[len(work)-1]
+		work = work[:len(work)-1]
+		for _, j := range edges[i] {
+			if !reached[j] {
+				reached[j] = true
+				work = append(work, j)
+			}
+		}
+	}
+	return reached
 }
 
 // reachable は i から (0 回以上の辺で) 届く関数の添字 (i 自身は閉路があるときだけ含む)。
