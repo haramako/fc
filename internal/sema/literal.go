@@ -171,6 +171,17 @@ func (h *Hlc) rewriteBeyond16(e *cexpr, left, right ir.Operand) {
 		}
 		if lv.Int < -32768 || lv.Int > 65535 {
 			h.rewriteAs("constant-range", e.args[i], lv.Type.String())
+			// 相手が同じ大きさで符号の違う型付きの整数なら、fc 3 の結果は符号付きの型 (C0)。fc 4 では `u16 * ((-40807) as i16)` が
+			// 符号の混ざった式になり `/` などでエラーなので、式全体も fc 3 の型にする (mixed-sign-arith と同じ形。TestRandomMigrate の
+			// 種 20261207236303。fc 2 の `u * (-40807) / 7` は符号付きで割る)
+			if ov, ok := vals[1-i].(*ir.Value); !(ok && ov.Untyped) && other.Size == lv.Type.Size && other.Signed != lv.Type.Signed &&
+				(e.op == opAdd || e.op == opSub || e.op == opMul) {
+				st := other
+				if lv.Type.Signed {
+					st = lv.Type
+				}
+				h.rewriteAs("mixed-sign-arith", e, st.String())
+			}
 		}
 	}
 }

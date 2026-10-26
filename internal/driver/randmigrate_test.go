@@ -181,10 +181,19 @@ func TestMigrateBeyond16Folded(t *testing.T) {
 use * from stdio;
 var g:int16;
 var h:sint16;
+var u:int16;
+var s:sint16;
 function main():void
 {
+	u = 5;
+	s = -3;
 	g = ((((-123) || 7) as int16) ^ (-50172));
 	h = ((5 as sint16) + 70000);
+	printf(g, " ", h, " ");
+	// 実行時の値と: 定数は相手の型 (u16 / i16) になる。定数の型で as を付けると符号の混ざった式になり / がエラーだった
+	// (TestRandomMigrate の種 20261207236303)
+	g = ((u * (-40807)) / 7);
+	h = ((s * 70000) / 7);
 	printf(g, " ", h);
 	exit(0);
 }
