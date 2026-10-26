@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/haramako/fc/pkg/fc"
@@ -95,5 +97,61 @@ function main():void
 	defer c.Close()
 	if _, err := c.Build(context.Background(), "main.fc", fc.Options{Target: fc.TargetNES, Dir: dir, Out: filepath.Join(dir, "a.nes")}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestTallBG: 高さ 24 以上の BG の絵 (列ごとに 3 枚以上) を続けて置いても重ならず、どのタイルも絵のその所 (GitHub の Issue #6)。
+// 色 0 は . でも 0 でも書ける (Issue #7)。
+func TestTallBG(t *testing.T) {
+	var src strings.Builder
+	src.WriteString("at bg 0x80\n")
+	pic := func(name string, w, h, seed int) [][]byte {
+		fmt.Fprintf(&src, "== %s bg %dx%d\n", name, w, h)
+		pix := make([][]byte, h)
+		for y := range pix {
+			pix[y] = make([]byte, w)
+			for x := range pix[y] {
+				c := byte((x*7 + y*13 + seed) % 4)
+				pix[y][x] = c
+				ch := ".123"[c]
+				if c == 0 && (x+y)%2 == 0 {
+					ch = '0'
+				}
+				src.WriteByte(ch)
+			}
+			src.WriteByte('\n')
+		}
+		return pix
+	}
+	want := map[string][][]byte{
+		"ROCK_A": pic("ROCK_A", 32, 32, 0),
+		"ROCK_B": pic("ROCK_B", 32, 32, 1),
+		"TALL":   pic("TALL", 16, 24, 2),
+	}
+	path := filepath.Join(t.TempDir(), "t.txt")
+	if err := os.WriteFile(path, []byte(src.String()), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	s, err := parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, pix := range want {
+		o := s.byName[name]
+		for ty := 0; ty < len(pix)/8; ty++ {
+			for tx := 0; tx < len(pix[0])/8; tx++ {
+				i := o.index + ty*16 + tx
+				if s.used[0][i] != name {
+					t.Fatalf("%s のタイル (%d, %d) = %#02x の印が %q", name, tx, ty, i, s.used[0][i])
+				}
+				for y := 0; y < 8; y++ {
+					for x := 0; x < 8; x++ {
+						if got := s.tiles[0][i][y][x]; got != pix[ty*8+y][tx*8+x] {
+							t.Fatalf("%s のタイル (%d, %d) の (%d, %d) が %d (%d のはず)", name, tx, ty, x, y, got, pix[ty*8+y][tx*8+x])
+						}
+					}
+				}
+			}
+		}
 	}
 }

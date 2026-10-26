@@ -10,7 +10,7 @@
 //	at <bg|spr> <index>               // 次に置く場所を探し始める番号
 //	maze <NAME> <index>               // 迷路の壁 16 枚 (index + 隣の向き: 1 上・2 右・4 下・8 左)
 //	== <NAME> <bg|spr> <W>x<H> [pal=N] [= <op> ...]
-//	<H 行の W 文字: . 1 2 3 は色の番号>
+//	<H 行の W 文字: . (か 0) 1 2 3 は色の番号>
 //
 // op は flipx / flipy / rot (時計回りに 90 度。正方形だけ) / copy <NAME>、glyph <文字> <色> [on <NAME>] (8×8。font の文字を
 // 重ねる)。
@@ -126,9 +126,13 @@ func (s *sheet) place(o *object) error {
 		}
 		s.cursor[1] = p + 2*tw
 	}
+	rows := th // 列ごとに置くタイルの数 (スプライトは 8×16 の単位なので 2)
+	if o.spr {
+		rows = 2
+	}
 	k := 0
 	for x := 0; x < tw; x++ {
-		for y := 0; y < 2 && (y < th || o.spr); y++ {
+		for y := 0; y < rows; y++ {
 			i := at[k]
 			k++
 			if err := s.mark(t, i, o.name); err != nil {
@@ -407,11 +411,11 @@ func (s *sheet) entry(f []string, rest []string) (*object, int, error) {
 		row := make([]byte, o.w)
 		for x, ch := range []byte(line) {
 			switch ch {
-			case '.':
+			case '.', '0':
 			case '1', '2', '3':
 				row[x] = ch - '0'
 			default:
-				return nil, 0, fmt.Errorf("%s: 知らない文字 %q (. 1 2 3)", o.name, ch)
+				return nil, 0, fmt.Errorf("%s: 知らない文字 %q (色 0 は . か 0、ほかは 1 2 3)", o.name, ch)
 			}
 		}
 		o.pix = append(o.pix, row)
