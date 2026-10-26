@@ -60,6 +60,7 @@ export default defineConfig({
           { text: 'ターゲット', link: '/reference/targets' },
           { text: 'アセンブリとの連携', link: '/reference/assembly' },
           { text: 'バンクと far call', link: '/reference/banks' },
+          { text: '走査線の IRQ', link: '/reference/raster' },
           { text: 'メモリ配置', link: '/reference/memory' },
         ],
       },
@@ -94,6 +95,7 @@ export default defineConfig({
           items: [
             { text: 'アセンブリとの連携', link: '/reference/assembly' },
             { text: 'バンクと far call', link: '/reference/banks' },
+            { text: '走査線の IRQ', link: '/reference/raster' },
             { text: 'メモリ配置', link: '/reference/memory' },
           ],
         },

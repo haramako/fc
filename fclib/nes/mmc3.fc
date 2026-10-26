@@ -80,7 +80,8 @@ public function mirroring(m:u8):void
 	MIRRORING = m & 1;
 }
 
-// line 走査線ほど後 (描画中の走査線を数える) に IRQ。呼び出し口は irq_hook
+// line 走査線ほど後 (描画中の走査線を数える) に IRQ。呼び出し口は irq_hook。数え方・IRQ の中で次を仕掛けるときの数・縦の
+// スクロールの変え方の注意は docs の「走査線の IRQ」のページ
 public function irq(line:u8):void
 {
 	IRQ_DISABLE = 0;

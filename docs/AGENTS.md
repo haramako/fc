@@ -9,7 +9,7 @@
 
 - `*.md` … サイトのページ（`index.md`・`start/`・`samples/`・`reference/`。構成は計画の「サイトの構成」）
 - `reference/language.md` … 基本の言語仕様。ABI は `reference/assembly.md`、バンク切り替えは `reference/banks.md`、
-  初期化と領域の使い方は `reference/memory.md` に分け、言語仕様・ターゲット・設定からリンクする
+  初期化と領域の使い方は `reference/memory.md`、MMC3 の走査線の IRQ（画面の分割）は `reference/raster.md` に分け、言語仕様・ターゲット・設定からリンクする
 - `.vitepress/config.mts` … サイトの設定（`base: '/fc/'`、ナビとサイドバー、fc の色付け、日本語の検索、`srcExclude`）。
   ページを足したらサイドバーにも足す
 - `.vitepress/theme/` … 既定のテーマに足す CSS だけ（NES の画面を 2 倍にぼかさずに出す）
