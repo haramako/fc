@@ -5,6 +5,7 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -403,5 +404,82 @@ function main():void
 	}
 	if want := "1 1\n-1 -28\n-1 -8355840\n"; out != want {
 		t.Errorf("出力 %q、want %q", out, want)
+	}
+}
+
+// TestBugCmpResultReadTwice: 比べた結果を bool の変数に入れ、直後の if のほかでも読む (`var none = k == 4;` をループの中でも読む)。
+// 結果がフラグに乗ると見て k を Y に置き、A に読めずに codegen が落ちていた (GitHub の Issue #17。fc-gradius の地形の列)。
+func TestBugCmpResultReadTwice(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+const P = [1, 2, 3, 4];
+const T = [5, 6, 7, 8];
+var col_buf:[8]u8;
+
+function back_column(c:u16):void
+{
+	var h = ((c >> 2) as u8) *% 37 +% 5;
+	var w = 1 + ((h >> 3) & 1) + ((h >> 4) & 1);
+	var o = (c as u8) & 3;
+	var k:u8 = 4;
+	if ((h & 3) == 0 && o < w) {
+		k = w == 1 ? 3 : o == 0 ? 0 : o + 1 == w ? 2 : 1;
+	}
+	var g = (c as u8) *% 29 +% 3;
+	col_buf[0] = (g & 3) == 0 ? 9 : 0;
+	col_buf[1] = (g & 7) == 0 && k == 4 ? 10 : 0;
+	var none = k == 4;
+	col_buf[2] = none ? 0 : T[k];
+	for (var r:u8 = 4; r < 7; r += 1) {
+		col_buf[r] = none ? 0 : P[k];
+	}
+}
+
+function main():void
+{
+	for (var c:u16 = 0; c < 64; c += 1) {
+		back_column(c);
+		@printf("{}{}{}{} ", col_buf[0], col_buf[1], col_buf[2], col_buf[4]);
+	}
+	@printf("\n");
+}
+`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want strings.Builder
+	for c := 0; c < 64; c++ {
+		h := byte(c>>2)*37 + 5
+		w := 1 + (h>>3)&1 + (h>>4)&1
+		o := byte(c) & 3
+		k := byte(4)
+		if h&3 == 0 && o < w {
+			switch {
+			case w == 1:
+				k = 3
+			case o == 0:
+				k = 0
+			case o+1 == w:
+				k = 2
+			default:
+				k = 1
+			}
+		}
+		g := byte(c)*29 + 3
+		var b [8]byte
+		if g&3 == 0 {
+			b[0] = 9
+		}
+		if g&7 == 0 && k == 4 {
+			b[1] = 10
+		}
+		if k != 4 {
+			b[2] = []byte{5, 6, 7, 8}[k]
+			b[4] = []byte{1, 2, 3, 4}[k]
+		}
+		fmt.Fprintf(&want, "%d%d%d%d ", b[0], b[1], b[2], b[4])
+	}
+	if out != want.String()+"\n" {
+		t.Errorf("got  %q\nwant %q", out, want.String()+"\n")
 	}
 }

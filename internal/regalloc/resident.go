@@ -153,7 +153,24 @@ func condPredicted(lmd *ir.Lambda, i int) bool {
 		return false
 	}
 	t, ok := op.Dst.(*ir.Value)
-	return ok && t.LocalType == ir.LTTemp && next.Src[0] == ir.Operand(t)
+	if !ok || t.LocalType != ir.LTTemp || next.Src[0] != ir.Operand(t) {
+		return false
+	}
+	// 直後の if のほかにも読まれる一時の値はフラグに乗らない (allocateCond は生きている範囲が直後の命令までのものだけ)。
+	// 乗ると見て比べる値を Y / X に置くと、A に読む形が無くて codegen が落ちた (`var none = k == 4; … none ? 0 : T[k]` で
+	// none の一時の値をループの中でも読む。GitHub の Issue #17)
+	for _, o := range lmd.Ops {
+		if o == nil || o == next {
+			continue
+		}
+		_, uses := ir.DefUse(o)
+		for _, u := range uses {
+			if ir.UnderlyingValue(u) == t {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func isV(o ir.Operand, v *ir.Value) bool {
