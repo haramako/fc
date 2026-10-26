@@ -6,6 +6,7 @@ package driver
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -73,11 +74,7 @@ func (c *compilation) linkError(err error, cfgPath, mapFile string) error {
 	fmt.Fprintf(&b, "%s do not fit in %s: %d bytes over", kind, where, over)
 	if len(users) > 0 {
 		b.WriteString(" (used by")
-		for i, u := range users {
-			if i == 8 {
-				fmt.Fprintf(&b, ", … %d more", len(users)-i)
-				break
-			}
+		for i, u := range users { // 全部 (どれを別のバンクへ動かせば入るかを決める。GitHub の Issue #10)
 			sep := ","
 			if i == 0 {
 				sep = ""
@@ -88,7 +85,9 @@ func (c *compilation) linkError(err error, cfgPath, mapFile string) error {
 	}
 	switch {
 	case segs["BSS"]:
-		b.WriteString(". Make large arrays smaller, or put some variables in other RAM (fc.toml [ram.NAME] and @(segment: \"NAME\") on the variables)")
+		// カートリッジの RAM へ逃がす書き方を例で (GitHub の Issue #14)
+		b.WriteString(". Make large arrays smaller, or put some variables in other RAM: the cartridge RAM with fc.toml `[ram.wram]` " +
+			"`start = 0x6000` `size = 0x2000` and `var big:[512]u8 @(segment: \"wram\");` (MMC3: mmc3.init enables it; it is not cleared at power on)")
 		if _, fixed := c.prog.Options.Int("static_ram"); fixed {
 			b.WriteString(", or lower @(static_ram: N)")
 		}
@@ -96,9 +95,29 @@ func (c *compilation) linkError(err error, cfgPath, mapFile string) error {
 		b.WriteString(". Lower @(static_zp: N) or @(fastcall_reg: N), or move variables out of the zero page")
 	default:
 		b.WriteString(". Make the code or data smaller, or move modules to another bank (@(bank: …); fc.toml [target] prg / mapper for more banks)")
+		if area == "FIXED" {
+			b.WriteString("; modules marked (std) are the standard library and stay in FIXED")
+		}
 	}
 	fmt.Fprintf(&b, " [ld65: segment %s overflows memory area %s]", seg, area)
 	return &diag.Error{Msg: b.String(), Pos: syntax.Position{Filename: c.mainFile}}
+}
+
+// isStdModule は id のモジュールが標準ライブラリ (fclib) のものか。
+func (c *compilation) isStdModule(id string) bool {
+	if c.prog == nil {
+		return false
+	}
+	fclib, _ := filepath.Abs(filepath.Join(c.FCHome, "fclib"))
+	for _, m := range c.prog.Modules.List() {
+		if m.Id != id {
+			continue
+		}
+		p, _ := filepath.Abs(m.Path)
+		rel, err := filepath.Rel(fclib, p)
+		return err == nil && !strings.HasPrefix(rel, "..")
+	}
+	return false
 }
 
 // areaUsers は .map の "Modules list" から、segs のセグメントの量をオブジェクトごとに足して大きい順に返す (読めなければ nil)。
@@ -145,6 +164,9 @@ func (c *compilation) describeObject(obj, area string) string {
 	base = strings.TrimSuffix(base, ".o")
 	switch {
 	case strings.HasPrefix(base, "_"):
+		if c.isStdModule(base[1:]) {
+			return "module " + base[1:] + " (std)"
+		}
 		return "module " + base[1:]
 	case base == "base" && c.prog != nil:
 		if area == "SRAM" || area == "RAM" {

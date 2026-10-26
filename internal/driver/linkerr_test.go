@@ -25,7 +25,7 @@ func TestLinkOverflowMessage(t *testing.T) {
 	if !errors.As(r.Err, &de) || de.Pos.Filename != "t.fc" {
 		t.Errorf("位置が入口のソースでない: %+v", r.Err)
 	}
-	for _, want := range []string{"the variables do not fit in SRAM ($0200-$06FF, 1280 bytes)", "bytes over", "module t 1400", "module frame", "Make large arrays smaller"} {
+	for _, want := range []string{"the variables do not fit in SRAM ($0200-$06FF, 1280 bytes)", "bytes over", "module t 1400", "module frame", "Make large arrays smaller", "[ram.wram]", `@(segment: "wram")`} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("%q が無い: %s", want, msg)
 		}
@@ -34,6 +34,61 @@ func TestLinkOverflowMessage(t *testing.T) {
 		if _, err := os.Stat(p); err == nil {
 			t.Errorf("失敗したビルドの出力が残っている: %s", p)
 		}
+	}
+}
+
+// TestLinkOverflowFixed: 固定の所があふれたら、使うモジュールを省かずに全部出し、標準ライブラリのものに (std) の印 (GitHub の Issue #10)。
+func TestLinkOverflowFixed(t *testing.T) {
+	t.Parallel()
+	r := testBuild(t, buildSpec{Target: "nes", Files: map[string]string{
+		"fc.toml": "[target]\nmapper = \"NROM\"\n",
+		"t.fc": `#fc 4
+use frame;
+use vram;
+use pal;
+use oam;
+use pad;
+use rand;
+use math;
+use mem;
+use str;
+var big:[31000]u8 @(segment: "CODE");
+function main():void
+{
+	frame.init();
+	pal.set(0, 0x0f);
+	oam.begin();
+	pad.poll();
+	big[rand.next_u8()] = math.sin(rand.below(9)) as u8;
+	mem.fill(big[..10], 0);
+	if (str.starts_with(big[..4], "ab")) {
+		vram.put(0x2000, "A");
+	}
+	oam.end();
+	while (true) {
+		frame.wait();
+	}
+}
+`,
+	}})
+	if r.Err == nil {
+		t.Fatal("ビルドが通った")
+	}
+	msg := r.Err.Error()
+	if strings.Contains(msg, "… ") {
+		t.Errorf("モジュールを省いている: %s", msg)
+	}
+	n := strings.Count(msg, "module ")
+	if n <= 8 {
+		t.Errorf("モジュールが %d しか無い: %s", n, msg)
+	}
+	for _, want := range []string{"module t 3", "module frame (std)", "module vram (std)", "(std) are the standard library"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("%q が無い: %s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "module t (std)") {
+		t.Errorf("t に std の印: %s", msg)
 	}
 }
 
