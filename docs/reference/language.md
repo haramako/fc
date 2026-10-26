@@ -28,6 +28,15 @@ function main():void
 hello
 ```
 
+### 予約語 {#reserved-words}
+
+次の語は名前（変数・関数・型・フィールドなど）に使えない。
+
+`as` `break` `case` `const` `continue` `default` `do` `else` `elsif` `enum` `fallthrough` `false` `farfn` `fn` `for`
+`from` `function` `if` `in` `interface` `loop` `null` `public` `return` `soa` `struct` `switch` `true` `use` `var` `while`
+
+`options` は `options(` と続くときだけ予約語で（古い版の書き方。fc 4 では `@(...)` と書く）、ほかは名前に使える。
+
 ## リテラル
 
 | 書き方 | 意味 |

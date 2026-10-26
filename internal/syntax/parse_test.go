@@ -136,6 +136,21 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
+// TestOptionsAsName: fc 4 の `options` は `options(...)` のときだけ予約語で、ほかは名前に使える。名前の所の予約語はそう言う
+// (GitHub の Issue #2)。
+func TestOptionsAsName(t *testing.T) {
+	if _, err := Parse([]byte("#fc 4\npublic var options:u8;\nstruct S { options:u8; }\nfunction f(options:u8):void { options = 1; }\n"), "t.fc"); err != nil {
+		t.Errorf("fc 4 で options を名前に使えない: %v", err)
+	}
+	if _, err := Parse([]byte("#fc 3\nvar options:u8;\n"), "t.fc"); err == nil {
+		t.Errorf("fc 3 で options が名前に使えた (fc 3 は予約語のまま)")
+	}
+	_, err := Parse([]byte("#fc 4\nvar if:u8;\n"), "t.fc")
+	if err == nil || !strings.Contains(err.Error(), "`if` is a reserved word") {
+		t.Errorf("予約語を名前に使ったエラー: %v", err)
+	}
+}
+
 // TestParseShapes は代表的な構文の木の形を確認する (Lower の差分テストとは独立した直接検査)。
 func TestParseShapes(t *testing.T) {
 	src := `// c1

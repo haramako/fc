@@ -202,7 +202,21 @@ func (a *yyLexAdapter) Lex(lval *yySymType) int {
 	if atStatement && t.Kind == Identifier && t.Text == "block" && a.placementAhead() {
 		return kPLACEMENT
 	}
+	if t.Kind == KwOptions && a.lex.Version() >= Version4 && !a.lparenAhead() {
+		// fc 4 の `options` は `options(...)` (fc 2 の書き方。`@(...)` へ案内するエラーにする) のときだけ予約語で、ほかは名前
+		// (`var options:u8`。GitHub の Issue #2)
+		t.Kind = Identifier
+		a.last, lval.tok = t, t
+	}
 	return kindToYacc[t.Kind]
+}
+
+// lparenAhead は次のトークンが `(` か。
+func (a *yyLexAdapter) lparenAhead() bool {
+	look := *a.lex
+	look.comments = nil
+	t, err := look.Next()
+	return err == nil && t.Kind == LParen
 }
 
 // Recognize alias only before IDENT ':', preserving ordinary identifiers.
@@ -288,6 +302,10 @@ func (a *yyLexAdapter) Error(s string) {
 		// 識別子などは綴りも添える: unexpected identifier "fuga"
 		name := tokenDisplay[yyTokname(yyTokIndex(kindToYacc[a.last.Kind]))]
 		msg = strings.Replace(msg, "unexpected "+name, "unexpected "+name+" "+strconv.Quote(a.last.Text), 1)
+	}
+	if k, ok := keywords[a.last.Text]; ok && k == a.last.Kind && strings.Contains(msg, "expecting identifier") {
+		// 名前の所に予約語 (`var if:u8`)。一覧は docs/reference/language.md の「予約語」
+		msg += fmt.Sprintf(" (`%s` is a reserved word and cannot be used as a name)", a.last.Text)
 	}
 	a.parseErr = &Error{Filename: a.lex.Filename(), Pos: a.last.Pos, Msg: msg}
 }
