@@ -21,7 +21,8 @@ docs/reference/language.md の「24 / 32 ビットの整数」と「整数の規
 - **比較で相手が符号付き、定数が大きい型**（`litSignedWide`）は定数の大きさの符号付きの型（`s < 300` は i16、`s16 < 70000` は i24）
 - **fc 3 → 4 の migrate**: fc 3 は 16 ビットに入らない型のない定数を u16 / i16 の型で実行時に折り返すので、型付きの値との算術に
   `as` を報告する（`rewriteBeyond16`。TestRandomMigrate で見つかった）。両方が定数の形は畳み込み（consteval）で報告する
-  （型付きの定数と型のない定数のとき。TestMigrateBeyond16Folded）
+  （型付きの定数と型のない定数のとき。TestMigrateBeyond16Folded）。相手が同じ大きさで符号の違う整数なら、fc 3 の結果は符号付き
+  （C0）なので式全体にも `as` を付ける（`(u * ((-40807) as i16)) as i16`。付けないと fc 4 では符号の混ざった式で `/` などがエラー）
 - **sign_extension は入力の型の幅から広げる**（`ir.SignExtensionWidth`。1〜Dst − 1 バイト、`ir.Verify` が見る）。codegen は入力の w バイトを
   写して最上位のバイトの N で残りを埋める。ssa の畳み込み・interp も同じ幅
 - **乗除算**: 3・4 バイトは share/runtime_wide.asm の `__mul_32` / `__div_32(s)` / `__mod_32(s)`（a = reg 0..3、b = reg 4..7、結果 reg 8..11、
