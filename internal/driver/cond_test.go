@@ -86,6 +86,40 @@ function main():void
 	}
 }
 
+// TestCondExprSlice: 枝が slice と配列 (文字列リテラル) なら slice に揃える (GitHub の Issue #3:
+// `c ? LABELS[k] : "--- "` が []const u8 と [4]u8 で型が合わないエラーだった)。
+func TestCondExprSlice(t *testing.T) {
+	t.Parallel()
+	out, err := buildBothLevels(t, map[string]string{"t.fc": `#fc 4
+use console;
+const LABELS = ["SPD ", "MIS "];
+var k:u8 = 1;
+var c:bool = true;
+var buf:[3]u8 = [65, 66, 67];
+function show(s:[]const u8):void
+{
+	@printf("[{}]", s);
+}
+function main():void
+{
+	var label = c ? LABELS[k] : "--- ";
+	@printf("{} ", label);
+	c = false;
+	label = c ? LABELS[k] : "--- ";
+	@printf("{} ", label);
+	show(c ? "ab" : "cde");
+	show(!c ? buf : "xy");
+	show(c ? LABELS[0] : buf);
+	@printf("\n");
+	console.exit(0);
+}
+`})
+	want := "MIS  ---  [cde][ABC][ABC]\n"
+	if err != nil || out != want {
+		t.Errorf("got %q, %v\nwant %q", out, err, want)
+	}
+}
+
 // TestCondExprErrors: 条件式の型の誤り。
 func TestCondExprErrors(t *testing.T) {
 	t.Parallel()

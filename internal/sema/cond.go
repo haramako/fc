@@ -74,9 +74,27 @@ func (h *Hlc) condJoin(a, b exprInfo, expected *types.Type) exprInfo {
 	}
 	t := u.CommonType(a.t, b.t)
 	if t == nil {
+		t = condSlice(u, a.t, b.t)
+	}
+	if t == nil {
 		panic(&diag.Error{Msg: fmt.Sprintf("the branches of `?:` have incompatible types %s and %s", a.t, b.t)})
 	}
 	return exprInfo{t: t}
+}
+
+// condSlice は、slice にできる枝どうしの条件式の型: 片方が slice でもう片方が同じ要素の配列ならその slice、両方が同じ要素で長さの
+// 違う配列なら `[]const 要素` (`c ? LABELS[k] : "--- "` の []const u8 と [4]u8。型を書いた代入先と同じく、配列の枝は slice に
+// 変える: condEmit)。ほかは nil。
+func condSlice(u *types.Universe, a, b *types.Type) *types.Type {
+	switch {
+	case a.IsSlice() && b.Kind == types.Array && b.Base == a.SliceOf:
+		return a
+	case b.IsSlice() && a.Kind == types.Array && a.Base == b.SliceOf:
+		return b
+	case a.Kind == types.Array && b.Kind == types.Array && a.Base == b.Base && a.Length >= 0 && b.Length >= 0:
+		return u.Slice(a.Base, true, max(a.Length, b.Length) > 255)
+	}
+	return nil
 }
 
 // condType は条件式 e (評価済みの opCond) の型。枝の型を決められなければ ok = false (soa の要素は型を決める段ではハンドルで、
@@ -172,6 +190,9 @@ func (h *Hlc) condWidth(info exprInfo, hint int) (*types.Type, int) {
 func (h *Hlc) condEmit(e *cexpr, info exprInfo, hint int, sink func(v ir.Operand, branch *cexpr), terminal bool) {
 	t, w := h.condWidth(info, hint)
 	branch := func(c *cexpr) {
+		if t.IsSlice() {
+			c = h.withExpected(c, t) // 配列の枝を slice に (condSlice)
+		}
 		v := h.rvalIn(c, w)
 		if lv, ok := v.(*ir.Value); ok && lv.Kind == ir.KindLiteral && lv.IsInt && lv.Untyped {
 			v = ir.NewIntLiteral("", t, wrapInt(lv.Int, t)) // condJoin が収まることを確かめている
