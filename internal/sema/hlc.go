@@ -312,6 +312,10 @@ func (h *Hlc) compileLambda(lmd *ir.Lambda) {
 				hint := ""
 				if n := len(body.Stmts); n > 0 && h.switchWithoutDefault(body.Stmts[n-1]) {
 					hint = "; the switch has no default, so a value matching no case (even for an enum: `5 as E`) falls through: add `default:`"
+				} else if n > 0 {
+					if c := emptyCase(body.Stmts[n-1]); c != nil {
+						hint = fmt.Sprintf("; the case at line %d has no statements and does nothing (fc does not fall through to the next case): write `case a, b:` to share a body", c.Case.Line)
+					}
 				}
 				panic(&diag.Error{Msg: fmt.Sprintf("missing return at end of function %s (returns %s)%s", lmd.Name, lmd.Type.Base, hint),
 					Pos: syntax.Position{Filename: lmd.Pos.Filename, Line: body.Rbrace.Line, Col: body.Rbrace.Col}})

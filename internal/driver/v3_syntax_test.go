@@ -28,6 +28,8 @@ function main():void { printf(a(1), " ", b(1), " ", c(), " ", d(), "\n"); exit(0
 		{"function f():u8 { @if (false) { return 1; } }", "missing return at end of function f"},
 		{"function f(x:u8):u8 { while (true) { if (x > 3) { break; } x++; } }", "missing return at end of function f"},
 		{"enum D { Up, Down }\nfunction f(d:D):u8 { switch (d) { case .Up: return 1; case .Down: return 2; } }", "the switch has no default"},
+		// 文の無い case は次へ続かない (GitHub の Issue #9)
+		{"function f(k:u8):u8 {\nswitch (k) {\ncase 1: return 1;\ncase 2:\ncase 3: return 2;\ndefault: return 3; } }", "the case at line 5 has no statements and does nothing"},
 	} {
 		_, err := buildFiles(t, map[string]string{"t.fc": "#fc 3\n" + c.src + "\nfunction main():void { }\n"})
 		if err == nil || !strings.Contains(err.Error(), c.msg) {

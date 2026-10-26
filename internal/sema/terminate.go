@@ -121,6 +121,21 @@ func (h *Hlc) switchWithoutDefault(s syntax.Stmt) bool {
 	return true
 }
 
+// emptyCase は、s が switch なら、その文の無い case (後ろに case か default が続くもの。C の書き方で並べた `case 2: case 3:`)
+// の最初のもの (`missing return` で `case a, b:` を案内する。構文検査も警告するが、エラーで止まると警告は出ない。GitHub の Issue #9)。
+func emptyCase(s syntax.Stmt) *syntax.CaseClause {
+	sw, ok := s.(*syntax.SwitchStmt)
+	if !ok {
+		return nil
+	}
+	for i, c := range sw.Cases {
+		if len(c.Body) == 0 && (i+1 < len(sw.Cases) || sw.Default != nil) {
+			return c
+		}
+	}
+	return nil
+}
+
 // isTrueLiteral は 0 以外の整数リテラルか true (括弧付きも可) か。
 func isTrueLiteral(e syntax.Expr) bool {
 	for {
