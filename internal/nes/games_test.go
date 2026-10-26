@@ -4,6 +4,7 @@ package nes
 // 内蔵のランナーで走らせ、止まらずに進んでいることを変数で確かめる。FC_GAMES_PNG_DIR を与えると最後の画面を <名前>.png に書く。
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -86,6 +87,7 @@ func (p *nesProg) mainVars(t *testing.T) (int, int) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	b = bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")) // Windows の ld65 は CRLF で書く (正規表現は \n で行を見る)
 	m, seg := mapBSS.FindSubmatch(b), mapSeg.FindSubmatch(b)
 	if m == nil || seg == nil {
 		t.Fatalf("map に _main.o の BSS が無い")

@@ -44,19 +44,24 @@ func TestBuildDeterministicCastle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rel, err := filepath.Rel(cwd, src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct {
+	cases := []struct {
 		name string
 		opt  *BuildOptions
 	}{
 		{"並列 16", opt("j16", 16, filepath.Join(tmp, "b16"))},
 		{"同じビルドディレクトリで作り直す (キャッシュ)", opt("again", 1, filepath.Join(tmp, "b1"))},
 		{"並列の既定 (CPU 数)、既定のビルドディレクトリ", opt("default", 0, "")},
-		{"基準ディレクトリが相対", &BuildOptions{Target: "nes", Dir: rel, Out: filepath.Join(tmp, "rel.nes"), BuildDir: filepath.Join(tmp, "brel")}},
-	} {
+	}
+	if rel, err := filepath.Rel(cwd, src); err == nil {
+		cases = append(cases, struct {
+			name string
+			opt  *BuildOptions
+		}{"基準ディレクトリが相対", &BuildOptions{Target: "nes", Dir: rel, Out: filepath.Join(tmp, "rel.nes"), BuildDir: filepath.Join(tmp, "brel")}})
+	} else {
+		// Windows の CI は一時ディレクトリ (C:) とリポジトリ (D:) のドライブが違い、相対の道が作れない
+		t.Logf("基準ディレクトリが相対の場合は飛ばす: %v", err)
+	}
+	for _, c := range cases {
 		if got := buildROM(t, "main.fc", c.opt); !bytes.Equal(got, base) {
 			t.Errorf("%s: ROM が並列 1 のビルドと違う", c.name)
 		}

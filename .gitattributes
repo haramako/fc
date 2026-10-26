@@ -4,6 +4,10 @@
 # golden はチェックアウトでも LF に固定する
 # (Go のテストが -update で LF で書き出すので、Windows/Linux どちらでも diff ノイズを出さない)。
 testdata/golden/** text eol=lf
+# テストが期待値としてバイト単位で比べる (CRLF で取り出すと Windows で出力の LF と合わない: TestFloatRun・TestWideIntRun など)
+internal/driver/testdata/** text eol=lf
+# tools/chrgen の生成物 (TestCommonTiles が生成し直してバイト単位で比べる)
+games/common/tiles.fc text eol=lf
 
 # バイナリ (上の golden の指定より後に置いて text を打ち消す)
 *.bin binary

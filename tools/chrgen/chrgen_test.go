@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,10 +31,32 @@ func TestCommonTiles(t *testing.T) {
 			continue
 		}
 		got, err := os.ReadFile(path)
-		if err != nil || !bytes.Equal(got, want) {
+		same := err == nil && bytes.Equal(got, want)
+		if err == nil && !same && filepath.Ext(path) == ".png" {
+			same = samePixels(got, want) // 圧縮のバイト列は Go の版で変わる (CI は go.mod の 1.24、手元は新しい版)
+		}
+		if !same {
 			t.Errorf("%s が tiles.txt と違う (go test ./tools/chrgen -update か go run ./tools/chrgen games/common/tiles.txt)", path)
 		}
 	}
+}
+
+// samePixels は 2 つの PNG が同じ大きさで画素が全部同じか。
+func samePixels(a, b []byte) bool {
+	ia, err1 := png.Decode(bytes.NewReader(a))
+	ib, err2 := png.Decode(bytes.NewReader(b))
+	if err1 != nil || err2 != nil || ia.Bounds() != ib.Bounds() {
+		return false
+	}
+	r := ia.Bounds()
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			if color.NRGBAModel.Convert(ia.At(x, y)) != color.NRGBAModel.Convert(ib.At(x, y)) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // TestCommonTilesBuild: tiles.fc と tiles.chr を使うプログラムが NES の ROM にビルドできる (定数・メタスプライトの表)。
