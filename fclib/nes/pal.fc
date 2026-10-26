@@ -27,11 +27,28 @@ public function set_all(p:[]const u8):void
 	upload();
 }
 
-// i 番の色 (0〜31。16〜31 はスプライト。16 / 20 / 24 / 28 は PPU で 0 / 4 / 8 / 12 と同じ所なので、そちらの色が出る)
+// i 番の色 (0〜31。16〜31 はスプライト。16 / 20 / 24 / 28 は PPU で 0 / 4 / 8 / 12 と同じ所なので、そちらの色が出る)。
+// その 1 色だけを積む (vram のキューの 4 バイト)
 public function set(i:u8, c:u8):void
 {
-	colors[i & 31] = c;
-	upload();
+	i &= 31;
+	colors[i] = c;
+	upload_range(i, 1);
+}
+
+// i 番から続く色を p にする (32 番を超える分は捨てる)。まとめて 1 つの項目で積む (色回しで何色も変えるときに。set を色の数だけ
+// 呼ぶより軽い)
+public function set_range(i:u8, p:[]const u8):void
+{
+	i &= 31;
+	var n = @len(p);
+	if (n > 32 - i) {
+		n = 32 - i;
+	}
+	for (var k:u8 = 0; k < n; k += 1) {
+		colors[i + k] = p[k];
+	}
+	upload_range(i, n);
 }
 
 // i 番の元の色 (明るさを掛ける前)
@@ -78,16 +95,22 @@ public function shade(c:u8, d:i8):u8 @(abi: "frame");
 
 function upload():void
 {
-	var dst = vram.reserve(0x3f00, 32);
+	upload_range(0, 32);
+}
+
+// at 番から n 色を、明るさを掛けて 1 つの項目で積む
+function upload_range(at:u8, n:u8):void
+{
+	var dst = vram.reserve(0x3f00 + at, n);
 	var d = @bitcast(i8, level);
-	for (var i:u8 = 0; i < 32; i += 1) {
+	for (var k:u8 = 0; k < n; k += 1) {
 		// $3F10 / $3F14 / $3F18 / $3F1C は $3F00 / $3F04 / $3F08 / $3F0C と同じ所 (PPU の写し): 背景の色を書く (スプライトの色 0 は
 		// 透明なので使われない。colors[16] などに 0 が入っていても背景色を消さないように)
-		var j = i;
-		if ((i & 0x13) == 0x10) {
-			j = i & 0x0f;
+		var j = at + k;
+		if ((j & 0x13) == 0x10) {
+			j &= 0x0f;
 		}
-		dst[i] = shade(colors[j], d);
+		dst[k] = shade(colors[j], d);
 	}
 }
 
