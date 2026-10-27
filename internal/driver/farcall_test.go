@@ -117,6 +117,57 @@ func TestFarCallDisabled(t *testing.T) {
 	}
 }
 
+// TestFarCallSameBank: 同じ切替バンク (同じ番号) の別のモジュールへの呼び出しは near (呼ぶ側を実行している間は、そのバンクが
+// 入っている)。別のバンクへは far のまま。
+func TestFarCallSameBank(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"main.fc": `#fc 4
+@(farcall);
+use stdio;
+use bank1a;
+function main():void
+{
+	@printf("{}\n", bank1a.f(3));
+}
+`,
+		"bank1a.fc": `#fc 4
+@(bank: 1);
+use bank1b;
+use bank2;
+public function f(a:u8):u8 @(noinline) { return bank1b.g(a) + bank2.h(a); }
+`,
+		"bank1b.fc": `#fc 4
+@(bank: 1);
+public function g(a:u8):u8 @(noinline) { return a * 2; }
+`,
+		"bank2.fc": `#fc 4
+@(bank: 2);
+public function h(a:u8):u8 @(noinline) { return a + 10; }
+`,
+	})
+	var out strings.Builder
+	res, _, err := buildRun(t, NewCompiler(absRepoRoot), "main.fc", &BuildOptions{Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: filepath.Join(dir, "a.bin")}, &out)
+	if err != nil {
+		t.Fatalf("ビルド失敗: %v", err)
+	}
+	if out.String() != "19\n" {
+		t.Errorf("out=%q", out.String())
+	}
+	var names []string
+	for _, fc := range res.FarCalls {
+		names = append(names, fc.Caller+"->"+fc.Callee)
+	}
+	if got := strings.Join(names, " "); got != "_main->_bank1a_f _bank1a_f->_bank2_h" {
+		t.Errorf("FarCalls: %s", got)
+	}
+	a, _ := os.ReadFile(filepath.Join(dir, "b", "_bank1a.s"))
+	if !strings.Contains(string(a), "jsr _bank1b_g") {
+		t.Errorf("同じバンクの bank1b.g を直接呼んでいない\n%s", a)
+	}
+}
+
 func TestFarCallNesConfig(t *testing.T) {
 	t.Parallel()
 	// nes ターゲットで fc が生成する ld65.cfg には bank = N が付く

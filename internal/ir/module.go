@@ -290,6 +290,17 @@ func (m *Module) Switchable() bool {
 	return ok && b >= 0
 }
 
+// SameBank は a と b が同じ切替バンク (同じ番号) に載っているか。呼ぶ側を実行している間は呼ぶ側のバンクが入っているので、
+// 同じバンクの別のモジュールへの呼び出しは near でよい (Agent/wiki/design/farcall.md の「far か near かの判定」)。
+func SameBank(a, b *Module) bool {
+	if a == nil || b == nil || !a.Switchable() || !b.Switchable() {
+		return false
+	}
+	x, _ := a.Options.Int("bank")
+	y, _ := b.Options.Int("bank")
+	return x == y
+}
+
 // Segment は配置セグメント (options(segment:...))。"" なら既定。
 func (l *Lambda) Segment() string { return l.Options.Text("segment") }
 

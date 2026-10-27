@@ -208,7 +208,7 @@ func defOwners(mods []*ir.Module) map[string]defOwner {
 // dataReachable は callee の本体を caller (別のモジュール) に写しても、本体が触るデータが全部見えるか。
 //   - RAM (var = DefBss、数値の address: = DefEqu) はバンクに関係なく見える
 //   - ROM (const の表 = DefBlock、関数内の文字列などの Defs) は、その持ち主のモジュールが固定バンク (Switchable でない) か、
-//     写す先と同じモジュールのときだけ見える。segment: 指定の const は置き場所が分からないので不可
+//     写す先と同じモジュールか同じ切替バンクのときだけ見える。segment: 指定の const は置き場所が分からないので不可
 //   - asm のシンボルに束縛したもの (DefExtern、シンボルの address:) は置き場所が分からないので不可
 //   - 関数のアドレス (fn 型の値) は数値なので可。ポインタの指す先は呼び出しのままでも同じ条件なので見ない
 func dataReachable(callee, caller *ir.Lambda, owners map[string]defOwner) bool {
@@ -216,7 +216,7 @@ func dataReachable(callee, caller *ir.Lambda, owners map[string]defOwner) bool {
 	if caller.Options.Has("segment") {
 		at = nil // 置き場所が別 (sema の placementOf と同じく手動配置): 固定バンクのデータだけ
 	}
-	romOK := func(owner *ir.Module) bool { return !owner.Switchable() || owner == at }
+	romOK := func(owner *ir.Module) bool { return !owner.Switchable() || owner == at || ir.SameBank(owner, at) }
 	for _, d := range callee.Defs {
 		if d.Kind == ir.DefBlock && !romOK(callee.Module) {
 			return false

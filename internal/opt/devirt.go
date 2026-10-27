@@ -71,7 +71,7 @@ func DevirtualizeProgram(mods []*ir.Module, farEnabled bool) {
 			return false
 		}
 		at, from := placement(callee), placement(caller)
-		return at != nil && at != from && at.Switchable()
+		return at != nil && at != from && at.Switchable() && !ir.SameBank(at, from)
 	}
 	for _, m := range mods {
 		for _, d := range m.Defs {

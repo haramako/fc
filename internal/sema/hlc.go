@@ -381,7 +381,8 @@ func (h *Hlc) newTmp(typ *types.Type) *ir.Value {
 }
 
 // isFarCall は呼び先 fn (関数のシンボルリテラル) が far call (farcall トランポリン経由) になるか (Agent/wiki/design/farcall.md §3.2):
-// options(farcall: true) が有効で、呼び先が別モジュールの切替バンクの関数で、options(near: true) が付いていないとき。
+// options(farcall: true) が有効で、呼び先が別モジュールの切替バンクの関数で (呼ぶ側と同じバンクなら near)、options(near: true) が
+// 付いていないとき。
 // farfn は明示的に far call を選ぶ。通常の fn は呼ぶ側がバンクを管理する。
 func (h *Hlc) isFarCall(fn ir.Operand) bool {
 	if ir.ValType(fn).IsFarFunc() {
@@ -405,7 +406,7 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 	}
 	if callee.Options.Text("abi") == "cc65" {
 		// cc65 規約は A/X で引数を渡すが far call のトランポリンは A/Y を壊す。同じバンクに置くか near を付ける
-		if calleeAt, callerAt := h.placementOf(callee), h.placementOf(h.lmd); calleeAt != nil && calleeAt != callerAt && calleeAt.Switchable() {
+		if calleeAt, callerAt := h.placementOf(callee), h.placementOf(h.lmd); calleeAt != nil && calleeAt != callerAt && calleeAt.Switchable() && !ir.SameBank(calleeAt, callerAt) {
 			panic(&diag.Error{Msg: fmt.Sprintf("cannot call cc65 abi function %s across banks (declare it options(near: true) if it is always mapped, or call it from its module)", callee.Name)})
 		}
 		return false
@@ -414,7 +415,7 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 	// (X がモジュール名でなければ配置は手動なので near)
 	calleeAt := h.placementOf(callee)
 	callerAt := h.placementOf(h.lmd)
-	if calleeAt == nil || calleeAt == callerAt || !calleeAt.Switchable() {
+	if calleeAt == nil || calleeAt == callerAt || !calleeAt.Switchable() || ir.SameBank(calleeAt, callerAt) {
 		return false
 	}
 	h.prog.FarCalls = append(h.prog.FarCalls, FarCall{Pos: h.curPos, Caller: h.lmd.Id, Callee: callee.Id})
