@@ -9,12 +9,17 @@
 - 1トピックにつき1ファイル。ファイル名は `YYYY-MM-DD-<slug>.md`（`<slug>` は内容を表す kebab-case。例: `2026-06-21-dox-tree-bootstrap.md`）
 - 日付はその相談・決定が行われた日
 - 推奨内容: 背景／相談したこと／選択肢と検討／**決定事項**／理由
-- **追記型・不変**: 過去ログは原則書き換えない。方針が変わったら新しい日付のファイルを追加する
+- **追記型・不変**: 過去ログは原則書き換えない。方針が変わったら新しい日付のファイルを追加する。例外は、後の決定で覆った記録の冒頭に
+  `→ 後の決定: [題](YYYY-MM-DD-<slug>.md)` の 1 行を足すことだけ
+- **ファイルはこのフォルダに平らに置く**（月や年のフォルダに分けない。古い記録へのリンクが切れないように。新旧はファイル名の日付で分かる）
 - 決定がコードや運用の現在ルールに昇格する場合は、該当する `AGENTS.md`（または `../wiki/`）にも反映し、ここには経緯として残す
-- ファイルを追加したら、この `AGENTS.md` の **Log** インデックスを更新する（新しい順）
+- **索引**: ファイルを追加したら、この `AGENTS.md` の **Log** の先頭に 1 行足す（新しい順）。Log は直近の分だけを置く: このファイルが
+  大きさの目安（`internal/doccheck` の `TestAgentBudget` の表）を超えたら、古い行から `log-YYYY-MM.md`（その月の索引。新しい順）の
+  先頭へ移す。どの記録も Log か月の索引のどちらかにちょうど 1 回載る（`TestAgentIndex` が見る）
 
 ## Log
 
+- 2026-10-29 [Agent/ の文書の hot / cold と、索引・大きさの検査](2026-10-29-agent-docs-hot-cold.md) — ファイルは動かさず索引だけを分ける（Log は直近、古い行は log-YYYY-MM.md）、discussions は新しい順に見る、wiki に経緯を置かない。TestAgentIndex・TestAgentBudget。roadmap 92 → 10.5 KB
 - 2026-10-26 [fc を使うエージェントからの報告](2026-10-26-user-agent-report.md) — 定数で消える分岐の中の @printf でも fmt が固定の所に入った（使われない関数の判定が最適化の前だった → frames.Prune で決め直す）。fcc run -t nes の 3600 フレームは仕様、frame.wait は NMI と 1 対 1（ループの中の flush などで飛ぶ）
 - 2026-10-26 [GitHub の Issue #2〜#5 への対応](2026-10-26-github-issues.md) — #3 条件式の slice、#2 options を名前に・予約語の一覧、#5 v0.0.4（その前に 10/18 から赤だった CI を直した）。#4 oam.meta は 1 体 1524 サイクル（14 体で 1 フレームの 72 %）、判定を軽くしても 1 割なので asm にする価値が高い → asm で 817（見込みの 300 は外れた）
 - 2026-10-24 [fuzz の通知をどこまで見たかの記録](2026-10-24-fuzz-notification-tracking.md) — Slack の #自動通知 の通知ごとの扱いを wiki/fuzz-notifications.md の表に（正）、対応した通知に ✅（目印）
@@ -35,46 +40,3 @@
 - 2026-10-18 [A1 の定数と実行時のずれの根本の対策](2026-10-18-a1-root-fix.md) — A1 が 2 つの仕組み（実行時は上から幅を決める、定数は下から畳んで印で直す）で実装されていることが原因。第 1 段は演算の役割の表 a1Roles と網羅のテスト（済み）、第 2 段は定数も上から決めた幅で畳む（plans/a1-const-width.md）
 - 2026-10-18 [`@min` / `@max` / `@clamp` は A1 の幅を受け取らない](2026-10-18-minmax-a1-width.md) — `var v:i16 = @max(a + a, 0)` が 144（同じ式を条件式にすると 400）。実行時側だけ直すと畳み込みとずれるので、Issue に記録して変更は戻した
 - 2026-10-18 [コンパイラのバグ調査の計画](2026-10-18-bug-hunt-plan.md) — 主役は「今のオークルの穴を塞ぐ」（本数を増やすだけでは実行系が 1 系統・sema の誤り・fc 4 の整数の模型の無さを埋められない）。優先 1 は fc 4 の式の型と値の Go 模型、Mesen / QuickNES が Linux で Skip で実機系が暗い、bugzoo の空振りを先に測る。計画は wiki/plans/bug-hunt.md
-- 2026-10-13 [TestLogZeroCost の食い違いの調査と対応](2026-10-13-log-zero-cost.md) — 29 件中 28 件は展開・回転の後のジャンプの整理による地点のずれ、1 件は消した代入の古い値を出す本物の不具合（LogArg.Stale で直した）。ずれうる地点（prevs・approx）は比べず、残りは上限なしで失敗に。nop の案は採らない
-- 2026-10-08 [2 次元の配列のループの最適化（強さの低減）](2026-10-08-strength-reduction.md) — fieldindex の 2 次元の添字・licm・strength の 3 段、強さの低減は毎周の命令が増えないときだけ、bench の grid −40.3%、TestRandomGridV4 と bugzoo 3 つ
-- 2026-10-08 [リンクの失敗を fc の言葉にする](2026-10-08-link-errors.md) — 区画があふれたら番地・大きさ・モジュールごとの量（.map から）、CHR RAM での .chr の @include は sema のエラー、失敗したビルドは ROM を残さない
-- 2026-10-08 [静的フレームの RAM の予約と、ゲームで見つかった小さな不足への対応](2026-10-08-static-ram-and-small-gaps.md) — static_ram を書かなければ使う分だけ（golden と比べるソースは 512 で固定、CLI のオプションは今は足さない）、soa の @len、slice を返すメソッドの既定、長さの決まった窓 a[x..x + K]
-- 2026-10-08 [デバッグ用のゲームを 11 本作って見つかったこと](2026-10-08-debug-games-findings.md) — 条件式の枝の型名を省いた struct を直した。静的フレームの RAM の予約 512 バイト・ld65 の生のエラー・soa の @len など相談したいこと、NES の panic が見えない・書式に文字列の幅が無いなど fclib の不足、games/common に置いたライブラリ（gfx・text・bitmap）
-- 2026-10-08 [fc のデバッグを兼ねた小さなゲームと共通の CHR](2026-10-08-debug-games.md) — `games/` に置く、CHR の元はテキスト（tools/chrgen が chr・fc・png を作る）、スプライトは 8×8 と 8×16 のモードを混ぜられる並び、ゲームの候補 12 本、fclib の足りなそうな所の見込み
-- 2026-10-06 [ビルドと実行を分ける・基準ディレクトリの正規化](2026-10-06-build-run-split.md) — driver はビルドだけ、走らせるのは internal/runner（driver を使わない: nes のテストとの import の輪）、pkg/fc は Build と Run。基準ディレクトリは newCompilation で 1 度だけ正規化。fcc test に実行の上限
-- 2026-10-06 [struct のメソッドと interface の相談](2026-10-06-methods-interface.md) — メソッドが先（struct の外に書く、受け取り手の型を書く）、interface はタグ付きの共用体 + メソッドの表（`soa interface` と共存）、一般の埋め込みはやらない、ID は手動・自動と `@set_id`（ID は interface ごとの enum、0 は `.none`）、near / far は interface の宣言で（far は呼ぶたびに戻す）。far call でバンクを戻さない記法は候補。同じ日に 3 段とも実装（表の空きは止めずに何もしない・0 を返すに変えた）
-- 2026-10-06 [fcc のコマンドラインを kong に](2026-10-06-cli-kong.md) — 依存の無い kong で GNU の getopt の形に（オプションはソースの後ろにも）。今の書き方との互換は取らない（`-md` → `--md` など）。`-offline` のような `-` 1 つの長い名前はエラーに。zsh / bash / fish の補完 `fcc completion` は自前（候補は fcc __complete が返す）
-- 2026-10-05 [型を決める段の残り（3 回目）](2026-10-05-typing-stage-rest.md) — ir.Value の Public / Build / StrConst を sema へ、slice・リテラル・soa・代入の左辺の型と診断を typeplan の計画に、代入先・型を省いた変数・呼ぶ関数の型も型を決める段で、`var x = c ? …` は枝ごとに変数へ書く
-- 2026-10-05 [fclib の NES のモジュールの asm 化](2026-10-05-nes-asm.md) — pal.shade と vram の描画を止めて書く所を asm に。キューに積む put / fill は asm にすると大きくなるので fc のまま。ピープホールの lda と struct のポインタのフィールドの読み直し (fwdmem)
-- 2026-10-05 [far call のレジスタ渡し](2026-10-05-farcall-registers.md) — トランポリンを A / Y の引数と A の戻り値を通す `farcall_ay` に（名前を変えて前の規約のものはリンクで落とす）、FC_FARCALL は X で置く、MMC3 の切替の経路はスロットごと、割り込みから届く関数の far call を警告に
-- 2026-10-05 [型を決める段の残りと types の Kind の整理](2026-10-05-sema-types-cleanup.md) — 名前の表の項目を Symbol に（モジュール・型名・マクロは値でない。`var v = math;` がエラーに）、Compatible を AssignableTo / CommonType に、soa を Kind に。slice・enum・far は Kind に分けない
-- 2026-10-05 [IR の命令の同一性を `*Op` に](2026-10-05-op-identity.md) — UseDef / Liveness を *Op を鍵に（位置は Lambda.IndexOf）、隣接は NextOp、CFG の空のブロックをやめて使い回し、繰り返しの上限で黙って止めない（untilFixed）、compact は Pass.Apply だけ。SSA は添字のまま
-- 2026-10-05 [構造の整理の残り 4 項目を進める](2026-10-05-structure-cleanup.md) — `*Op`・ABI の一本化・types の Kind・driver の Compiler はどれも効果のある整理（大きい順に後回しにしていただけ）。型を決める段の後に進める
-- 2026-10-05 [型を決める段の計画](2026-10-05-typing-stage-plans.md) — 演算の型・項の変換・診断を typeplan.go の計画にし、型を決める段と lval が同じ関数を使う（lval は型を出し直さない）。モジュール・型名の束縛を ir.Value から sema へ
-- 2026-10-05 [型を決める段の続き](2026-10-05-typing-stage-continued.md) — 型を決める段を値の式の 99.9 % 以上に広げ全部の節点で照合、A1 の幅を引数に、Scope・ModuleInterface・関数の本体を ir から sema へ。次は暗黙の変換を型を決める段が節点に付ける形
-- 2026-10-05 [グローバル変数の初期値と、宣言・データの制限](2026-10-05-global-init.md) — 起動のときに写す (リンカ設定を変えず FC_RUNTIME の記録)、struct リテラル・const の表・2 次元配列の行
-- 2026-10-05 [条件式と do-while](2026-10-05-cond-expr-do-while.md) — fc 4 だけの構文。枝の型の決め方（互換型・型のない定数は比較の規則で相手に・文脈の型）、A1 では区切りにならない、return・代入は枝ごとに書く
-- 2026-10-05 [標準ライブラリの段 4・5 の残り](2026-10-05-stdlib-stage4-5.md) — lzw を slice の形に（作業域はフレーム、旧版は castle・test/ にコピー）。fc 3 の stdio / unittest は fc 3 のソースのために残す
-- 2026-10-03 [GitHub Actions の失敗調査](2026-10-03-actions-failures.md) — Windows のパス・CRLF 依存テスト3件を再現。docs の HTML 欠落は修正済みだが paths フィルタで再実行されていない
-
-- 2026-10-02 [Starlark のマクロ](2026-10-02-starlark-macros.md) — fcc 以外の依存 0 で書けるマクロとして Starlark だけ入れる（go 1.24 で使える版に固定）。read / glob でプロジェクトの中のファイルを入力に
-- 2026-10-02 [コード生成](2026-10-02-code-generation.md) — しばらくはツールで .fc を書き出す普通のコード生成でよい。やるなら fc の型・宣言をサーバーに渡して新しいモジュールを生成する形
-- 2026-10-02 [外部コマンドの定数マクロの実装で決めたこと](2026-10-02-external-macros-impl.md) — マクロの名前は fc.toml の `macros` に書く、ディスクのキャッシュは `inputs` を書いたときだけ、起動するのはプロジェクトの fc.toml のものだけ
-- 2026-10-01 [docs の事実関係と構成のレビュー](2026-10-01-docs-review.md) — 誤記・制約の修正、ABI・バンク・メモリの分離、旧仕様の参照移行と削除
-- 2026-10-01 [MMC3 の走査線 IRQ と 8×16 のスプライト](2026-10-01-mmc3-irq-8x16-sprites.md) — スプライトの有無で IRQ が横に数ドットずれる原因（A12 の立ち上がりの位置）と、スプライトを $1000 側に寄せる対策。castle は既にそうなっていたので、原因の候補を IRQ を受け付けるまでの遅れなど CPU の側に移した
-- 2026-10-01 [pal.fade を細かくする方法と強調ビット](2026-10-01-pal-fade-emphasis.md) — 強調ビット・色ごとに時刻をずらす・表の候補。強調ビットの使用例と注意点。テスト ROM（scripts/emphasis-fade-test）で、明るい側の半段が逆転することを確かめた
-- 2026-09-30 [VS Code 拡張を 1 つにする](2026-09-30-vscode-extension.md) — tools/vscode-fc に整形を移し、古い editors/vscode を消した
-- 2026-09-30 [開発を main に移す](2026-09-30-move-to-main.md) — 旧 main に v0.0.3 のタグ、feature/v4 を main にマージ。go install …@main が使える
-- 2026-09-30 [else if と elsif](2026-09-30-else-if-and-elsif.md) — `fcc fmt` が `else if` を続けて整形するようにした。elsif は fc 4 でなくす候補
-- 2026-09-30 [文書への参照の書き方](2026-09-30-doc-reference-style.md) — § の番号をやめ、ファイル名と見出しの言葉で指す。コードからは design/ か docs/ を指す
-- 2026-09-30 [利用者向けドキュメントの方針](2026-09-30-user-docs-direction.md) — docs/ に利用者向けを作り Pages で公開、fc 4 だけ書く、旧 language_reference は参考にして後で消す（計画は wiki/plans/user-docs.md）
-- 2026-09-30 [今のブランチへの直接コミット](2026-09-30-direct-commit-to-current-branch.md) — トピックブランチを切らず今のブランチ（feature/v4）に直接コミットしてよい
-- 2026-09-30 [Agent/ の導入と doc/ の振り分け](2026-09-30-agent-workspace-and-doc-split.md) — doc/ を人間向けに絞り、設計は wiki/design・計画は wiki/plans・過去の検討はここへ。development_notes を分割
-- 2026-09-21 [アクティベーション単位のグローバル領域](2026-09-21-activation-memory-ideas.md) — 検討メモ
-- 2026-09-20 [FC V3 検討メモ](2026-09-20-v3-plan.md) — v3 の言語変更の検討と実装記録（v3 は main にマージ済み）
-- 2026-09-20 [slice の長さ・ABI・sentinel・移行](2026-09-20-v3-slice-tradeoffs.md) / [slice・固定容量 vector の設計案](2026-09-20-v3-slices-vector.md) / [slice・vector を使う API の利用案](2026-09-20-v3-slices-api-examples.md)
-- 2026-09-19 [fuzz で見つかったバグと生成器の拡張の記録](2026-09-19-fuzz-findings-log.md) — 種の範囲ごとの発見と固定したテスト名（追記型）
-- 2026-09-14 [v2 のアイデアメモ](2026-09-14-v2-idea.md)
-- 2026-09-13 [文法 v2 設計メモ](2026-09-13-v2-grammar.md)
-- 2026-09-12 [v2 未決事項の検討](2026-09-12-v2-decisions.md) / [v2 作業計画（R0〜R3）](2026-09-12-v2-plan.md) / [ブランチ運用の経緯](2026-09-12-branch-history.md)
-- 2026-08-29 [Go 実装の進化計画（脱・厳密クローン）](2026-08-29-go-evolution-plan.md)（添付: [castle の符号付き比較の箇所](2026-08-29-castle-signed-compare-sites.txt)）

@@ -10,4 +10,7 @@
 
 ## Items
 
-（なし）
+- [ ] `plans/v4-plan.md`・`plans/v4-stdlib.md`・`discussions/2026-09-20-v3-plan.md` のいまも正しい仕様を `wiki/design/` に抜き出し、
+      コードからの参照を付け替える。済んだら `TestAgentBudget` の例外を消し、コードから `discussions/`・`plans/` を指したら落ちる
+      検査を足す（残りは例外として名前で表に）(2026-10-29)
+- [ ] `wiki/testing-and-fuzzing.md` を回し方と事例の記録に分け、`TestAgentBudget` の例外を消す (2026-10-29)

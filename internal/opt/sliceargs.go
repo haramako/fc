@@ -1,6 +1,6 @@
 package opt
 
-// slice の引数を部品のまま積む (Agent/wiki/plans/roadmap.md の「slice の引数の受け渡しを縮める」)。
+// slice の引数を部品のまま積む (一時変数に組み立ててから写す代わりに、ポインタと長さを 2 つの push_arg で直に積む)。
 
 import (
 	"github.com/haramako/fc/internal/ir"

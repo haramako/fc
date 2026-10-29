@@ -177,7 +177,7 @@ docs/
   - emu で `main` から戻ると `fcc run` が終わらなかった → 終了コード 0 で終わるようにした。例に `console.exit(0)` は要らない
     （NES では `main` から戻らない。`fcc run -t nes` は 3600 フレームで「終わらなかった」と止まる）
   - `else if` を `fcc fmt` が `else` の中の `if` として字下げしていた → `} else if (...) {` と続けるようにした。例は `else if` で書く
-    （`elsif` は fc 4 でなくす候補。`plans/roadmap.md` の v4）
+    （`elsif` は fc 4 でなくした）
 - VitePress 1.6.4 の依存の vite 5 に開発サーバーの脆弱性があるので、`overrides` で vite 6.4.3 以上にした（`docs/AGENTS.md`）
 
 ---

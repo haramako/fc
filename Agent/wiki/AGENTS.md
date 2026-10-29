@@ -16,11 +16,17 @@
 - 記事を追加・改名・削除したら、この `AGENTS.md` の **Articles** インデックスを更新する
 - 記事の内容が特定ディレクトリに帰属すると判明したら、その `AGENTS.md` へ移す
 - 記事がコードと矛盾していると気づいたら、記事側を直すか削除する（コードが常に正・古い記事を放置しない）
+- **wiki は「いまの正」だけを置く**（古い記録の置き場所・cold のフォルダを作らない）。記事の中に経緯（「以前は〜だった」「✅ 日付」の
+  済んだ記録）を書かない: いまの形だけを書き、経緯が要るなら `../discussions/` へのリンクにする。`plans/` の済んだ項目は消す
+- `design/` の記事は古くても、コードと合っていればいまの正。触ったときにコードと照らし、合っていることを確かめた日を記事の冒頭に書く
+- 大きい記事は、作業ごとに読む単位で分ける（例: 回し方と事例の記録）。大きさの目安と上限は `internal/doccheck` の `TestAgentBudget` の表
 
 ## Verification
 
 - `go test ./internal/doccheck`（`TestRepoDocRefs`）: 相対リンクの先、コメントや文書に書いた `Agent/`・`docs/` の `.md` のパス、その後の
   `§N`（N で始まる見出し）と「の「言葉」」（本文にその言葉）が在ること。`discussions/` は過去の記録なので見ない
+- `go test ./internal/doccheck`（`TestAgentIndex`）: wiki・discussions・issues のファイルが索引にちょうど 1 回載り、索引の行の先が在ること
+- `go test ./internal/doccheck`（`TestAgentBudget`）: 記事と索引の大きさが上限の内（`-v` で目安との一覧）
 
 ## Articles
 
