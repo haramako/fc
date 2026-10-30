@@ -29,7 +29,10 @@ func (h *Hlc) constEval(c *cexpr) *cexpr {
 	r := h.constEval0(c)
 	r.pos, r.end = c.pos, c.end // 位置 (エラー報告と fc 4 への書き換え: rewrite.go) は評価前の式のもの
 	if c.compound != nil {
-		r.compound = c.compound
+		// 複合代入の印。左辺に呼び出しがある印も写す (lval はこの結果で書き換えを報告するので、写さないと rewriteAs の見張りが
+		// 効かず `x = (x op y) as T` にして左辺の呼び出しを 2 回にする。TestRandomMigrate の種 20261237270324 は literal.go の
+		// mixed-sign-arith がこの形だった)
+		r.compound, r.compoundCall = c.compound, c.compoundCall
 	}
 	if r != c && r.kind == cValue && r.src == nil && r.val != nil && r.val.Kind == ir.KindLiteral && r.val.IsInt && !r.val.Untyped &&
 		isArithNode(h.pureExpansion(c)) {
@@ -734,7 +737,11 @@ func (h *Hlc) foldType(args []*cexpr, cmp bool) *types.Type {
 	}
 	var t *types.Type
 	for _, o := range ops[1:] {
+		// 実行時 (typeplan.go の planMinMax) と同じく、合わせて作り直した最初の項を次の相手と比べる (`@clamp(277, (-128 as i8),
+		// 65537)` の 277 は i8 と比べて i16 になり、65537 と i24 になる。元の型のない 277 と比べると u24 になり、-128 を
+		// 16777088 と比べていた。TestRandomConstFoldV4 の種 20261234867435)
 		a, b := h.adaptLiteralNoErr(ops[0], o, cmp)
+		ops[0] = a
 		ct := h.prog.Types.CommonType(ir.ValType(a), ir.ValType(b))
 		if ct == nil {
 			return nil

@@ -172,6 +172,34 @@ func joinSources(files map[string]string) string {
 	return b.String()
 }
 
+// TestMigrateCompoundCallGuard: 左辺に呼び出しのある複合代入で fc 4 の縮小の `as` が要る形は、自動では書き換えず
+// sema.CompoundCallMsg を返す (`x = (x op y) as T` にすると左辺の呼び出しが 2 回になる)。
+func TestMigrateCompoundCallGuard(t *testing.T) {
+	t.Parallel()
+	v2 := map[string]string{"t.fc": `#fc 2
+use * from stdio;
+var n:int;
+var b:[4]int;
+var w:int16;
+function f():int
+{
+	n += 1;
+	return 1;
+}
+function main():void
+{
+	w = 300;
+	b[f()] += w;
+	printf(n, " ", b[1]);
+	exit(0);
+}
+`}
+	v4, err := migrateToLatest(t, v2)
+	if err == nil || !strings.Contains(err.Error(), sema.CompoundCallMsg) {
+		t.Fatalf("CompoundCallMsg のエラーのはず: %v\n%s", err, joinSources(v4))
+	}
+}
+
 // TestMigrateBeyond16Folded: 型付きの定数と 16 ビットに入らない型のない定数の算術 (畳み込みに来る形) も、fc 4 への migrate が
 // `as` を足して fc 2 と同じ値になる (fc 2 / 3 は 16 ビットで折り返す。fc 4 では -50172 が i24 のまま u16 に入らないエラーだった。
 // TestRandomMigrate の種 20261191179568)。
@@ -183,6 +211,13 @@ var g:int16;
 var h:sint16;
 var u:int16;
 var s:sint16;
+var n:int;
+var a:[4]int16;
+function f():int
+{
+	n += 1;
+	return 1;
+}
 function main():void
 {
 	u = 5;
@@ -194,7 +229,11 @@ function main():void
 	// (TestRandomMigrate の種 20261207236303)
 	g = ((u * (-40807)) / 7);
 	h = ((s * 70000) / 7);
-	printf(g, " ", h);
+	printf(g, " ", h, " ");
+	// 左辺に呼び出しのある複合代入: 式全体を fc 3 の型にする書き換えで a[f()] = (a[f()] + …) as i16 になり f を 2 回呼んでいた
+	// (58910b6 から。TestRandomMigrate の種 20261237270324)
+	a[f()] += (-32931);
+	printf(n, " ", a[1]);
 	exit(0);
 }
 `}
