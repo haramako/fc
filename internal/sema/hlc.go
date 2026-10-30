@@ -401,7 +401,11 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 		return false
 	}
 	callee, ok := h.prog.lambdas[lit.Symbol]
-	if !ok || callee.Options.Flag("near") {
+	if !ok {
+		return false
+	}
+	if callee.Options.Flag("near") {
+		h.checkNearSlot(callee)
 		return false
 	}
 	if callee.Options.Text("abi") == "cc65" {
@@ -415,11 +419,45 @@ func (h *Hlc) isFarCall(fn ir.Operand) bool {
 	// (X がモジュール名でなければ配置は手動なので near)
 	calleeAt := h.placementOf(callee)
 	callerAt := h.placementOf(h.lmd)
+	if calleeAt != nil && calleeAt.Options.Flag("near") {
+		h.checkNearSlot(callee)
+	}
 	if calleeAt == nil || calleeAt == callerAt || !calleeAt.Switchable() || ir.SameBank(calleeAt, callerAt) {
 		return false
 	}
 	h.prog.FarCalls = append(h.prog.FarCalls, FarCall{Pos: h.curPos, Caller: h.lmd.Id, Callee: callee.Id})
 	return true
+}
+
+// checkNearSlot は @(near) (関数かモジュール) の callee を jsr で呼んでよいかを確かめる。callee のモジュールが呼ぶ側と同じスロットの
+// 別のバンクにあると、呼ぶ側を実行している間は決して入っていないので、黙って別の関数の途中へ飛ぶ (GitHub の Issue #18)。
+func (h *Hlc) checkNearSlot(callee *ir.Lambda) {
+	calleeAt, callerAt := h.placementOf(callee), h.placementOf(h.lmd)
+	if calleeAt == nil || callerAt == nil || calleeAt == callerAt || !callerAt.Switchable() {
+		return
+	}
+	cb, ok := calleeAt.Options.Int("bank")
+	ab, _ := callerAt.Options.Int("bank")
+	if !ok || cb < 0 || cb == ab {
+		return
+	}
+	cn, cs, ok1 := h.bankOf(cb)
+	an, as, ok2 := h.bankOf(ab)
+	if !ok1 || !ok2 || cs != as {
+		return
+	}
+	panic(&diag.Error{Msg: fmt.Sprintf("cannot call %s with jsr: it is @(near) but its module %s is in bank %q, which shares slot $%04X with bank %q of this module %s, so it is never mapped while this code runs (remove @(near) to make it a far call, or put one of the modules in another slot)",
+		callee.Name, calleeAt.Id, cn, cs, an, callerAt.Id)})
+}
+
+// bankOf は options の bank の番号 index の fc.toml のバンクの名前とスロット (fc.toml にバンクの表が無ければ ok は false)。
+func (h *Hlc) bankOf(index int) (name string, slot int, ok bool) {
+	for n, b := range h.prog.Banks {
+		if !b.Fixed && b.Index == index {
+			return n, b.Slot, true
+		}
+	}
+	return "", 0, false
 }
 
 // placementOf は関数が置かれるモジュール (= セグメント)。options(segment: X) があれば X という id のモジュール、
