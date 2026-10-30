@@ -1,13 +1,11 @@
 #fc 4
-// プログラムを止める (panic / assert)。console に出して終了コード 1 で終える (NES は画面を出して止まる。console.init を
-// 呼んでいなければ、描画を止めてネームテーブル 0 を空白にしてから書く: console.claim)。
+// プログラムを止める (panic / assert)。console に出して終了コード 1 で終える。
 @(bank: -1);
 use console;
 
 // "panic: " と msg を console に出して止まる (emu は終了コード 1 で終わる)
 public function panic(msg:[:u16]const u8):void
 {
-	console.claim();
 	console.write("panic: ");
 	console.write(msg);
 	console.newline();

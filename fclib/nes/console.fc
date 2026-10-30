@@ -1,6 +1,7 @@
 #fc 4
 // デバッグ出力 (NES: 描画を止めている間に、PPU のネームテーブル 0 へ直に書く。文字のコードをそのままタイルの番号にするので、
-// ASCII の並びのフォントの CHR が要る)。printf / @assert / sys.panic の出力先。ゲームの画面は vram (NMI で送るキュー) を使う。
+// ASCII の並びのフォントの CHR が要る)。printf の出力先。ゲームの画面は vram (NMI で送るキュー) を使う。sys.panic は console を
+// 使わない (fclib/nes/sys.fc)。
 @(bank: -1);
 use nes;
 
@@ -29,7 +30,7 @@ public function init():void
 	ready = true;
 }
 
-// panic の前に: init をまだ呼んでいなければ (描画中のゲーム)、描画と NMI を止めて init し、ネームテーブル 0 を空白にする
+// 描画中のゲームから書く前に: init をまだ呼んでいなければ、描画と NMI を止めて init し、ネームテーブル 0 を空白にする
 // (描画中の PPU に書いても画面に出ない。ゲームの画面の上に重ねると読めない)
 public function claim():void
 {

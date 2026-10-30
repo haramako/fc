@@ -1,0 +1,44 @@
+#fc 4
+// プログラムを止める (panic / assert)。NES では画面に出さず、理由を msg に残して NMI を止め、その場で止まる (画面はそのまま)。
+// console を使わないので、@format などがあふれたときのために console が固定の所に入らない。理由は Mesen などのデバッガで
+// msg を見る。fcc run / fcc test -t nes では理由を端末に出して終了コード 1 で終える。
+@(bank: -1);
+use nes;
+
+// fc の NES のランナー (internal/nes) への出力 (console と同じ CPU の試験用の番地。製品の NES では何も起きない)
+var DEBUG_OUT:u8 @(address: 0x4018);
+var DEBUG_EXIT:u8 @(address: 0x4019);
+
+// 最後の panic の理由 (デバッガで見る)
+public var msg:[:u16]const u8 @(volatile);
+
+// msg に理由を残して止まる (NMI を止め、画面はそのまま)
+public function panic(m:[:u16]const u8):void
+{
+	msg = m;
+	nes.PPUCTRL = 0;
+	out("panic: ");
+	out(m);
+	DEBUG_OUT = 10;
+	DEBUG_EXIT = 1;
+	while (true) {
+	}
+}
+
+// s をランナーに出す
+function out(s:[:u16]const u8):void @(noinline)
+{
+	var p = @ptr(s);
+	for (var n = @len(s); n != 0; n -= 1) {
+		DEBUG_OUT = *p;
+		p += 1;
+	}
+}
+
+// cond が偽なら panic
+public function assert(cond:bool, msg:[:u16]const u8):void
+{
+	if (!cond) {
+		panic(msg);
+	}
+}

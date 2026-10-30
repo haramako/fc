@@ -118,7 +118,7 @@ fc は静的フレーム・inline・asm の `abi: "frame"`・使わない関数�
 | `lzw` / `rle` | 展開。書き先の slice を受け取り、足りなければ止まる / `try_`。rle は NES Screen Tool の形式 | 今のものを slice に。inflate は外す（案） |
 | `console` | デバッグ出力（write / newline / exit）。emu はホスト、NES は描画を止めた画面に内蔵のフォントで。printf の先 | stdio を置き換え |
 | `test` | assert（`@format` の文言）、テストの実行（`@run_tests`） | unittest を置き換え |
-| `sys` | `panic(msg)` / `assert(cond, msg)`（emu は表示して終了、NES は console に出して止まる）、止める命令 | 新規（`@asm(".byte 2")` の置き換え） |
+| `sys` | `panic(msg)` / `assert(cond, msg)`（emu は表示して終了、NES は console を使わず理由を `sys.msg` に残して止まる: GitHub の Issue #19。ターゲットごとのファイル）、止める命令 | 新規（`@asm(".byte 2")` の置き換え） |
 
 API の素案（名前・引数は §8 で詰める）:
 

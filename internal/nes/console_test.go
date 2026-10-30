@@ -68,9 +68,9 @@ function main():void
 	}
 }
 
-// TestNesPanicWhileRendering: console.init を呼ばずに描画中のゲームが panic すると、描画と NMI を止めてネームテーブル 0 を
-// 空白にしてから文言を書く (console.claim。前は描画中の PPU に書いて画面に何も出なかった)。
-func TestNesPanicWhileRendering(t *testing.T) {
+// TestNesPanic: NES の sys.panic は console を使わない (固定の所に console が入らない。GitHub の Issue #19)。理由を sys.msg に
+// 残し、NMI を止めてその場で止まる (描画中のゲームの画面はそのまま)。ランナーには $4018 で "panic: 理由" を、$4019 で終了コード 1 を渡す。
+func TestNesPanic(t *testing.T) {
 	t.Parallel()
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -105,27 +105,33 @@ function main():void
 	if err != nil {
 		t.Fatal(err)
 	}
+	var out strings.Builder
+	m.Output = &out
 	if err := m.RunFrames(20); err != nil {
 		t.Fatal(err)
 	}
-	row := func(y int) string {
-		var b []byte
-		for a := 0x2000 + y*32; a < 0x2000+(y+1)*32; a++ {
-			b = append(b, m.readVram(a))
-		}
-		return string(b)
+	if out.String() != "panic: boom\n" || !m.Exited || m.ExitCode != 1 {
+		t.Errorf("ランナーへの出力 %q、exited = %v、exit code = %d", out.String(), m.Exited, m.ExitCode)
 	}
-	if got := strings.TrimRight(row(0), " "); got != "panic: boom" {
-		t.Errorf("1 行目: %q", got)
+	if m.ctrl&0x80 != 0 {
+		t.Errorf("NMI を止めていない: ctrl = %#x", m.ctrl)
 	}
-	if got := row(5); got != strings.Repeat(" ", 32) {
-		t.Errorf("ゲームの画面が残っている: %q", got)
+	var row []byte
+	for a := 0x2000 + 5*32; a < 0x2000+6*32; a++ {
+		row = append(row, m.readVram(a))
 	}
-	if m.mask&0x08 == 0 {
-		t.Errorf("背景を出していない: mask = %#x", m.mask)
+	if !strings.HasPrefix(string(row), "GAME SCREEN") {
+		t.Errorf("ゲームの画面が消えた: %q", row)
 	}
-	syms := parseLd65Map(t, strings.TrimSuffix(rom, ".nes")+".dbg", "_console_exited", "_console_exit_code")
-	if m.Get(syms["_console_exited"]) != 1 || m.Get(syms["_console_exit_code"]) != 1 {
-		t.Errorf("exited = %d, exit_code = %d", m.Get(syms["_console_exited"]), m.Get(syms["_console_exit_code"]))
+	syms := parseLd65Map(t, strings.TrimSuffix(rom, ".nes")+".dbg", "_sys_msg")
+	if n := m.Get(syms["_sys_msg"]+2) + m.Get(syms["_sys_msg"]+3)<<8; n != 4 {
+		t.Errorf("sys.msg の長さ = %d", n)
+	}
+	mp, err := os.ReadFile(strings.TrimSuffix(rom, ".nes") + ".map")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(mp, []byte("\nconsole ")) {
+		t.Errorf("console が入っている")
 	}
 }
