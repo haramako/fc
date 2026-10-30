@@ -108,13 +108,27 @@ func (s *Scope) hiddenHint(id string) string {
 	return ""
 }
 
+// globModule は id という名前のモジュールを `use * from` で取り込んでいれば、そのモジュール (スコープを親へ辿って探す)。
+func (s *Scope) globModule(id string) *ModuleInterface {
+	for x := s; x != nil; x = x.Parent {
+		for _, u := range x.uses {
+			if u.mi.Id == id {
+				return u.mi
+			}
+		}
+	}
+	return nil
+}
+
 // FindMust は Find と同じだが、見つからなければ CompileError。
 func (s *Scope) FindMust(id string, withPrivate bool) *Symbol {
 	if v := s.Find(id, withPrivate); v != nil {
 		return v
 	}
 	msg := fmt.Sprintf("%s not found", id)
-	if h := s.hiddenHint(id); h != "" {
+	if mi := s.globModule(id); mi != nil {
+		msg += fmt.Sprintf(" (`use * from %s` imports the names of module %s without the module name: write `name` instead of `%s.name`)", id, id, id)
+	} else if h := s.hiddenHint(id); h != "" {
 		msg += fmt.Sprintf(" (write %s in fc 3; `fcc migrate` rewrites fc 2 sources)", h)
 	} else if hint := s.Suggest(id); hint != "" {
 		msg += fmt.Sprintf(" (did you mean %s?)", hint)

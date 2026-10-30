@@ -345,7 +345,10 @@ func (h *Hlc) fieldRef(arg *cexpr, name string) fieldRef {
 		v, flv, split := h.soaField(left, t, name)
 		return fieldRef{v: v, lv: flv, split: split, soaConst: t.Soa.IsConst}
 	}
-	f, viaPtr := h.planField(t, name, func() string { return describe(left) }) // 型を決める段の計画 (typeplan.go)
+	f, viaPtr := func() (types.Field, bool) {
+		defer h.hintShadowedModule(left)
+		return h.planField(t, name, func() string { return describe(left) }) // 型を決める段の計画 (typeplan.go)
+	}()
 	switch {
 	case viaPtr:
 		// ポインタ経由 (自動で参照はがし)
@@ -359,6 +362,27 @@ func (h *Hlc) fieldRef(arg *cexpr, name string) fieldRef {
 		return fieldRef{v: h.fieldViaPointer(left, f), lv: true}
 	}
 	return fieldRef{v: ir.NewCastedValue(left, f.Type, f.Offset)}
+}
+
+// hintShadowedModule は fieldRef の `x.f` のエラーで、x の名前が外のスコープのモジュールを隠していれば、その旨をエラーに足す
+// (引数 `ship` がモジュール ship を隠すと「struct []u8 has no field objs」だけで分かりにくかった。GitHub の Issue #21)。
+// defer で呼ぶ。
+func (h *Hlc) hintShadowedModule(left ir.Operand) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	if e, ok := r.(*diag.Error); ok {
+		if v, ok := left.(*ir.Value); ok && v.Name != "" {
+			for s := h.scope; s != nil; s = s.Parent {
+				if sym := s.declares[v.Name]; sym != nil && sym.Module != "" {
+					e.Msg += fmt.Sprintf(" (%s here is the variable or parameter %s, which hides module %s; rename it to use the module)", v.Name, v.Name, sym.Module)
+					break
+				}
+			}
+		}
+	}
+	panic(r)
 }
 
 func (h *Hlc) fieldOf(st *types.Type, name string) types.Field {

@@ -280,6 +280,7 @@ func (md *moduleDecls) resolve() {
 		}
 		md.run(d.stmt, d.resolve)
 	}
+	md.warnHiddenGlob()
 	// Preserve module-wide BSS defaults, independent of declaration resolution order.
 	if bss, ok := md.h.module.Options.Get("bss"); ok {
 		for _, def := range md.h.module.Defs {
@@ -289,6 +290,27 @@ func (md *moduleDecls) resolve() {
 		}
 	}
 	md.state = resolutionComplete
+}
+
+// warnHiddenGlob は、モジュールの宣言が `use * from mod` で取り込んだ mod の public な名前を隠すときに警告する (この
+// モジュールの中ではその名前は自分の宣言を指す。共通のモジュールの変数を読むつもりで同じ名前の変数を作っても黙って通っていた。
+// GitHub の Issue #21)。
+func (md *moduleDecls) warnHiddenGlob() {
+	for _, d := range md.entries {
+		if d.use != nil || d.name == "" {
+			continue
+		}
+		own := md.h.scope.declares[d.name]
+		for _, u := range md.h.scope.uses {
+			// 取り込んだ先が自分の宣言を再輸出している (`public use * from` の循環) なら同じ宣言なので隠していない
+			if other := u.mi.Lookup(d.name); other != nil && other != own {
+				md.h.prog.Warnings = append(md.h.prog.Warnings, diag.Warning{
+					Msg: fmt.Sprintf("%s hides %s of module %s imported by `use * from %s` (%s here means this module's declaration; rename one of them)", d.name, d.name, u.mi.Id, u.mi.Id, d.name),
+					Pos: syntax.At(md.h.module.Path, d.stmt.Pos()),
+				})
+			}
+		}
+	}
 }
 
 // completeType requests layout only where it is actually required. A pointer
