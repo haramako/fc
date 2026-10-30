@@ -1,7 +1,9 @@
 ;;; vram.asm: 描画を止めている間に PPU へ直に書く write_raw / fill_raw (vram.fc の write_now / fill_now など。abi "frame")。
 ;;; 1 KB のネームテーブルを書くので速さを優先する (fc で書くと 1 バイト約 31 サイクル、ここでは 14〜16)。
 ;;; 注意: .segment は書かない (vram モジュールのセグメントに置かれる)。
+;;; 関数は `.if FC_USED_…` で包む: 使わない関数は ROM に入らない (コンパイラが置く印。GitHub の Issue #20)
 
+.if FC_USED_vram_write_raw
 ;;; write_raw(a:u16, p:*const u8, n:u16, flags:u8): 描画を止めている間に p から n バイトを a から書く (flags が 0 でなければ縦に
 ;;; +32 ずつ。PPUCTRL の +32 のビットは終わったら戻す)。1 バイト約 13 サイクル
 wr_a = F_vram_write_raw__a
@@ -47,7 +49,9 @@ _vram_write_raw:
 	and #<~_nes_CTRL_INC32
 	sta _nes_PPUCTRL
 :	rts
+.endif
 
+.if FC_USED_vram_fill_raw
 ;;; fill_raw(a:u16, v:u8, n:u16): 描画を止めている間に v を n 個、a から横に書く
 fr_a = F_vram_fill_raw__a
 fr_v = F_vram_fill_raw__v
@@ -80,3 +84,4 @@ _vram_fill_raw:
 	bne @page
 @end:
 	rts
+.endif

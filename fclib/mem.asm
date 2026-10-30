@@ -1,6 +1,8 @@
 ;;; mem.asm: mem.fc の fill / copy / move の本体 (abi "frame"、ほかの関数を呼ばない)。256 バイトずつのページは Y を一回りさせ、
 ;;; 端数は X で数える (1 バイトあたり fill 約 11、copy 約 16、後ろからの move 約 18 サイクル)。
+;;; 関数は `.if FC_USED_…` で包む: 使わない関数は ROM に入らない (コンパイラが置く印。GitHub の Issue #20)
 
+.if FC_USED_mem_fill_raw
 ;;; fill_raw(dst:*u8, n:u16, v:u8): dst から n バイトを v にする
 _mem_fill_raw:
 	lda F_mem_fill_raw__v
@@ -24,7 +26,9 @@ _mem_fill_raw:
 	bne @rest
 @done:
 	rts
+.endif
 
+.if FC_USED_mem_copy_raw
 ;;; copy_raw(dst:*u8, src:*const u8, n:u16): src から dst へ前から n バイト写す (dst が src より後ろで重なると壊れる)
 _mem_copy_raw:
 	ldy #0
@@ -50,7 +54,9 @@ _mem_copy_raw:
 	bne @rest
 @done:
 	rts
+.endif
 
+.if FC_USED_mem_move_back_raw
 ;;; move_back_raw(dst:*u8, src:*const u8, n:u16): 後ろから n バイト写す (dst が src より後ろで重なるとき)。
 ;;; 最後のページの端数を先に、残りのページを後ろから
 _mem_move_back_raw:
@@ -86,3 +92,4 @@ _mem_move_back_raw:
 	bne @page
 @done:
 	rts
+.endif

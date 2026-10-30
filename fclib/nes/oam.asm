@@ -2,7 +2,9 @@
 ;;; メタスプライトは 1 体で何枚も置くので速さを優先する (16×16 の 4 枚の 1 体で、fc で書いた版は約 1520 サイクル、これは約 820。GitHub の Issue #4)。
 ;;; 作業域は reg (掛け算・割り算のランタイムと同じく呼び出しをまたいで残さない。割り込みから保護しない)。
 ;;; 注意: .segment は書かない (oam モジュールのセグメントに置かれる)。
+;;; 関数は `.if FC_USED_…` で包む: 使わない関数は ROM に入らない (コンパイラが置く印。GitHub の Issue #20)
 
+.if FC_USED_oam_spr
 ;;; spr(x:u8, y:u8, tile:u8, attr:u8):bool — 満杯 (64 枚) なら false
 _oam_spr:
 	ldx _oam_n
@@ -27,6 +29,7 @@ _oam_spr:
 @full:	lda #0
 	sta F_oam_spr
 	rts
+.endif
 
 ;;; meta / meta_pal の作業域
 om_x = reg+0			; x (i16。左右の反転なら x - 7)
@@ -43,6 +46,7 @@ om_k = reg+13			; m の中の位置
 om_sx = reg+14			; 置く x
 om_sy = reg+15			; 置く y
 
+.if FC_USED_oam_meta
 ;;; meta(x:i16, y:i16, m:[]const u8, flip:u8):bool
 _oam_meta:
 	lda #$ff
@@ -56,7 +60,9 @@ _oam_meta:
 	jsr om_place
 	sta F_oam_meta
 	rts
+.endif
 
+.if FC_USED_oam_meta_pal
 ;;; meta_pal(x:i16, y:i16, m:[]const u8, flip:u8, pal:u8):bool
 _oam_meta_pal:
 	lda #$fc
@@ -71,7 +77,9 @@ _oam_meta_pal:
 	jsr om_place
 	sta F_oam_meta_pal
 	rts
+.endif
 
+.if FC_USED_oam_meta || FC_USED_oam_meta_pal
 ;;; m の {dx:i8, dy:i8, tile, attr} の並びを (x, y) からずらして置く。画面 (0〜255、0〜239) の外のものは置かない。
 ;;; flip の左右 ($40) は dx を -dx - 8 に、上下 ($80) は dy を -dy - h に (h はスプライトの高さ)。A = 全部置けたら 1
 ;;; 反転はループの前に済ませる: x + (-dx - 8) = (x - 7) + ~dx、y + (-dy - h) = (y + 1 - h) + ~dy
@@ -185,3 +193,4 @@ om_place:
 @full:	lda #0
 	sta om_ok
 	beq @next
+.endif

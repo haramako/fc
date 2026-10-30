@@ -5,6 +5,11 @@
 __MODULE_STDIO__ = 1
 .segment "stdio"
 	.include "_nes.inc"
+FC_USED_stdio_wait_vsync = 1
+FC_USED_stdio_print = 1
+FC_USED_stdio_ppu_put = 1
+FC_USED_interrupt = 1
+FC_USED_interrupt_irq = 1
 	.include "stdio.asm"
 	.export _stdio_vsync_flag
 .segment "BSS"

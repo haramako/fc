@@ -4,6 +4,10 @@
 	.importzp FC_SP
 __MODULE_LZW__ = 1
 .segment "lzw"
+FC_USED_lzw_read_bit = 1
+FC_USED_lzw_read_vln = 1
+FC_USED_lzw_read_vln16 = 1
+FC_USED_lzw_unpack = 1
 	.include "lzw.asm"
 _lzw_addr = 126
 _lzw_bpos = 125

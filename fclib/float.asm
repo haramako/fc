@@ -5,6 +5,8 @@
 ;;; 関数ごとのフレームの scratch。公開の関数どうしは呼び合わない (同じモジュールの abi "frame" の関数を呼ぶとフレームが重なる)。
 ;;; 中の処理は reg の 2 つの演算数 (a: X = 0、b: X = FB) を読み書きするラベル。
 ;;; 注意: .segment は書かない (float モジュールのセグメントに置かれる)。
+;;; 節は、その節に届く入口の `.if FC_USED_…` の論理和で包む: 使わない関数は ROM に入らない (コンパイラが置く印。GitHub の
+;;; Issue #20)。中の処理を呼ぶ・飛ぶ・落ちる先を変えたら、条件も直す (TestAsmUnusedFunctions が関数ごとに組み立てて確かめる)
 
 	.import __mul_tbl_l0, __mul_tbl_l1, __mul_tbl_h0, __mul_tbl_h1
 
@@ -49,6 +51,7 @@ FB = 7				; b の X の位置 (fb_s - fa_s)
 :
 .endmacro
 
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_eq32 || FC_USED_float_floor32 || FC_USED_float_ldexp32 || FC_USED_float_le32 || FC_USED_float_lt32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_to16 || FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32 || FC_USED_float_trunc32
 ;;; ---------------------------------------------------------------
 ;;; 分類 (X = 0 なら a、FB なら b のビットの並び)
 ;;; ---------------------------------------------------------------
@@ -64,7 +67,9 @@ fl_expmax:
 	rts
 @no:	clc
 	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_eq32 || FC_USED_float_floor32 || FC_USED_float_ldexp32 || FC_USED_float_le32 || FC_USED_float_lt32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_to16 || FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32 || FC_USED_float_trunc32
 ;;; NaN なら C = 1
 fl_isnan:
 	jsr fl_expmax
@@ -78,7 +83,9 @@ fl_isnan:
 @r:	rts
 @no:	clc
 	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_eq32 || FC_USED_float_floor32 || FC_USED_float_ldexp32 || FC_USED_float_le32 || FC_USED_float_lt32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_to16 || FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32 || FC_USED_float_trunc32
 ;;; ±0 なら Z = 1
 fl_iszero:
 	lda fa_m+3,x
@@ -87,18 +94,24 @@ fl_iszero:
 	ora fa_m+1,x
 	ora fa_m,x
 	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_floor32 || FC_USED_float_from16 || FC_USED_float_ldexp32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_trunc32
 ;;; a = NaN (0x7fc00000)
 fl_setnan:
 	lda #$c0
 	ldx #$7f
 	bne fl_set_hi
+.endif
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_floor32 || FC_USED_float_from16 || FC_USED_float_from_i32 || FC_USED_float_from_u32 || FC_USED_float_ldexp32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_trunc32
 ;;; a = 符号 ft の無限大
 fl_setinf:
 	lda ft
 	ora #$7f
 	tax
 	lda #$80
+.endif
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_floor32 || FC_USED_float_from16 || FC_USED_float_from_i32 || FC_USED_float_from_u32 || FC_USED_float_ldexp32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_trunc32
 fl_set_hi:
 	stx fa_m+3
 	sta fa_m+2
@@ -106,6 +119,8 @@ fl_set_hi:
 	sta fa_m+1
 	sta fa_m
 	rts
+.endif
+.if FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_floor32 || FC_USED_float_from16 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_trunc32
 ;;; a = 符号 ft の 0
 fl_setzero:
 	lda #0
@@ -115,12 +130,16 @@ fl_setzero:
 	lda ft
 	sta fa_m+3
 	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_sub32
 ;;; a = b
 fl_ret_b:
 	FL_LOAD fb_m, fa_m
 	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_div32 || FC_USED_float_ldexp32 || FC_USED_float_mul32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_to16 || FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32
 ;;; ---------------------------------------------------------------
 ;;; 取り出す・ずらす・詰める
 ;;; ---------------------------------------------------------------
@@ -178,7 +197,9 @@ fl_unpack:
 :	dec fa_e,x
 	jmp @n1
 @r:	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_ldexp32 || FC_USED_float_sub32
 ;;; 仮数 (X = 0 / FB) を 3 ビット左へ
 fl_shl3:
 	ldy #3
@@ -189,7 +210,9 @@ fl_shl3:
 	dey
 	bne @l
 	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_floor32 || FC_USED_float_from_i32 || FC_USED_float_from_u32 || FC_USED_float_ldexp32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_to16 || FC_USED_float_trunc32
 ;;; 仮数 (X = 0 / FB) を Y ビット (0〜31) 右へ。消えたビットが 1 つでもあれば最下位を 1 にする (sticky)。ft+1 を使う
 fl_shr_sticky:
 	lda #0
@@ -229,7 +252,9 @@ fl_shr_sticky:
 	ora #1
 	sta fa_m,x
 @r:	rts
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_floor32 || FC_USED_float_from_i32 || FC_USED_float_from_u32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sub32 || FC_USED_float_trunc32
 ;;; a の 0 でない仮数 (bit 26 未満) を bit 26 が立つまで左へずらしてから詰める (指数を減らす)
 fl_norm_pack:
 @n8:	lda fa_m+3		; m < 0x40000 の間は 8 ビットずつ
@@ -264,7 +289,9 @@ fl_norm_pack:
 	dec fa_e+1
 :	dec fa_e
 	jmp @n1
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_ceil32 || FC_USED_float_div32 || FC_USED_float_floor32 || FC_USED_float_from_i32 || FC_USED_float_from_u32 || FC_USED_float_ldexp32 || FC_USED_float_mul32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_sqrt32 || FC_USED_float_sub32 || FC_USED_float_trunc32
 ;;; a の符号・指数 (バイアス込み)・27 ビットの仮数 (隠れたビットは bit 26、0 でない) を最近接偶数に丸めて f32 のビットの並びを
 ;;; fa_m に詰める。指数が 1 より小さければ非正規化数にずらす
 fl_pack:
@@ -354,7 +381,9 @@ fl_pack:
 @inf:	lda fa_s
 	sta ft
 	jmp fl_setinf
+.endif
 
+.if FC_USED_float_add32 || FC_USED_float_sub32
 ;;; ---------------------------------------------------------------
 ;;; + - (a と b のビットの並びから。結果は fa_m)
 ;;; ---------------------------------------------------------------
@@ -493,7 +522,9 @@ fl_add:
 	bne :+
 	rts			; x - x は +0 (全部 0)
 :	jmp fl_norm_pack
+.endif
 
+.if FC_USED_float_mul32
 ;;; ---------------------------------------------------------------
 ;;; ×
 ;;; ---------------------------------------------------------------
@@ -538,7 +569,9 @@ fl_m8:
 	tax
 	lda ft
 	rts
+.endif
 
+.if FC_USED_float_mul32
 ;;; mp[Y..] に繰り上がりの 1 を足していく (FL_MULADD が 2 バイトを足して C が立ったとき)
 fl_carry:
 	cpy #6
@@ -568,7 +601,9 @@ fl_carry:
 	jsr fl_carry
 :
 .endmacro
+.endif
 
+.if FC_USED_float_mul32
 fl_mul:
 	lda fa_m+3
 	eor fb_m+3
@@ -664,7 +699,9 @@ fl_mul:
 :	ldx #0
 	jsr fl_shr_sticky
 	jmp fl_pack
+.endif
 
+.if FC_USED_float_div32
 ;;; ---------------------------------------------------------------
 ;;; ÷
 ;;; ---------------------------------------------------------------
@@ -808,7 +845,9 @@ fl_div:
 	inc dq
 :	FL_LOAD dq, fa_m
 	jmp fl_pack
+.endif
 
+.if FC_USED_float_sqrt32
 ;;; ---------------------------------------------------------------
 ;;; √ (正しく丸める)
 ;;; ---------------------------------------------------------------
@@ -955,7 +994,9 @@ fl_sqrt:
 	adc #0
 	sta fa_e+1
 	jmp fl_pack
+.endif
 
+.if FC_USED_float_eq32 || FC_USED_float_le32 || FC_USED_float_lt32
 ;;; ---------------------------------------------------------------
 ;;; 比較: A = 0 小さい / 1 等しい / 2 大きい / 3 順序が無い (NaN)
 ;;; ---------------------------------------------------------------
@@ -983,7 +1024,9 @@ fl_key:
 	dey
 	bpl @l
 	rts
+.endif
 
+.if FC_USED_float_eq32 || FC_USED_float_le32 || FC_USED_float_lt32
 fl_cmp:
 	ldx #0
 	jsr fl_isnan
@@ -1010,7 +1053,9 @@ fl_cmp:
 	rts
 @un:	lda #3
 	rts
+.endif
 
+.if FC_USED_float_ceil32 || FC_USED_float_floor32 || FC_USED_float_from_i32 || FC_USED_float_from_u32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_trunc32
 ;;; ---------------------------------------------------------------
 ;;; 整数との変換
 ;;; ---------------------------------------------------------------
@@ -1030,7 +1075,9 @@ fl_from_mag:
 	inc fa_e
 	jmp @r
 @l:	jmp fl_norm_pack
+.endif
 
+.if FC_USED_float_from_i32
 ;;; fa_m を 2 の補数で符号を反転する
 fl_neg:
 	sec
@@ -1043,7 +1090,9 @@ fl_neg:
 	dey
 	bne :-
 	rts
+.endif
 
+.if FC_USED_float_ceil32 || FC_USED_float_floor32 || FC_USED_float_from_i32 || FC_USED_float_from_u32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32 || FC_USED_float_trunc32
 ;;; 4 バイトの 0 か (Z = 1)
 fl_m_zero:
 	lda fa_m
@@ -1051,7 +1100,9 @@ fl_m_zero:
 	ora fa_m+2
 	ora fa_m+3
 	rts
+.endif
 
+.if FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32
 ;;; x × 2^n を整数にして (ts_rnd が 0 でなければ最近接偶数、0 なら 0 へ切り捨て)、ts_bits ビットの整数 (ts_sgn が 0 でなければ
 ;;; 符号付き) の範囲に飽和させる (NaN は 0)。f32 → 整数・固定小数の `as` (sema の floatCast) と to_i32 / to_u32。
 ;;; 仮数から直に丸める (ldexp32 → rint32 → to_i32 と同じ値: 2^n 倍を f32 に丸めて違うのは |値| < 2^-126 で、どちらも 0 になる)。
@@ -1231,7 +1282,9 @@ fl_to_sat:
 	lda fa_s
 	beq @r
 	;; (fl_not へ続く)
+.endif
 
+.if FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32
 ;;; fa_m のビットを反転する
 fl_not:
 	ldx #3
@@ -1241,7 +1294,9 @@ fl_not:
 	dex
 	bpl :-
 	rts
+.endif
 
+.if FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32
 ;;; fa_m から 1 を引く
 fl_dec:
 	ldx #0
@@ -1254,7 +1309,9 @@ fl_dec:
 	cpx #4
 	bne :-
 @r:	rts
+.endif
 
+.if FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32
 ;;; fa_m (符号なし) が 2^Y 以上なら C = 1 (Y は 0〜32)
 fl_over:
 	cpy #32
@@ -1283,7 +1340,9 @@ fl_over:
 	rts
 @no:	clc
 	rts
+.endif
 
+.if FC_USED_float_to_i32 || FC_USED_float_to_sat_i || FC_USED_float_to_sat_u || FC_USED_float_to_u32
 ;;; fa_m = 2^Y - 1 (Y は 0〜32)
 fl_ones:
 	ldx #0
@@ -1312,7 +1371,9 @@ fl_ones:
 	sta fa_m,x
 	jmp @z
 @r:	rts
+.endif
 
+.if FC_USED_float_ceil32 || FC_USED_float_floor32 || FC_USED_float_rint32 || FC_USED_float_round32 || FC_USED_float_trunc32
 ;;; ---------------------------------------------------------------
 ;;; 整数への丸め: A = 0 最近接偶数 / 1 負の無限大へ / 2 正の無限大へ / 3 0 へ / 4 四捨五入 (0 から遠い向き)
 ;;; ---------------------------------------------------------------
@@ -1441,7 +1502,9 @@ fl_round:
 	bne :+
 	jmp fl_setzero		; 符号付きの 0 (ft)
 :	jmp fl_from_mag
+.endif
 
+.if FC_USED_float_ldexp32
 ;;; ---------------------------------------------------------------
 ;;; x × 2^n (ft:ft+1 = n、符号付き)
 ;;; ---------------------------------------------------------------
@@ -1471,7 +1534,9 @@ fl_ldexp:
 	sta fa_e+1
 	jmp fl_pack
 @r:	rts
+.endif
 
+.if FC_USED_float_add32
 ;;; ---------------------------------------------------------------
 ;;; 公開の関数 (abi "frame": 戻り値が先頭、続いて引数)
 ;;; ---------------------------------------------------------------
@@ -1482,7 +1547,9 @@ _float_add32:
 	jsr fl_add
 	FL_LOAD fa_m, F_float_add32
 	rts
+.endif
 
+.if FC_USED_float_sub32
 _float_sub32:
 	FL_LOAD F_float_sub32__a, fa_m
 	FL_LOAD F_float_sub32__b, fb_m
@@ -1492,27 +1559,35 @@ _float_sub32:
 	jsr fl_add
 	FL_LOAD fa_m, F_float_sub32
 	rts
+.endif
 
+.if FC_USED_float_mul32
 _float_mul32:
 	FL_LOAD F_float_mul32__a, fa_m
 	FL_LOAD F_float_mul32__b, fb_m
 	jsr fl_mul
 	FL_LOAD fa_m, F_float_mul32
 	rts
+.endif
 
+.if FC_USED_float_div32
 _float_div32:
 	FL_LOAD F_float_div32__a, fa_m
 	FL_LOAD F_float_div32__b, fb_m
 	jsr fl_div
 	FL_LOAD fa_m, F_float_div32
 	rts
+.endif
 
+.if FC_USED_float_sqrt32
 _float_sqrt32:
 	FL_LOAD F_float_sqrt32__a, fa_m
 	jsr fl_sqrt
 	FL_LOAD fa_m, F_float_sqrt32
 	rts
+.endif
 
+.if FC_USED_float_eq32
 _float_eq32:
 	FL_LOAD F_float_eq32__a, fa_m
 	FL_LOAD F_float_eq32__b, fb_m
@@ -1523,7 +1598,9 @@ _float_eq32:
 	inx
 :	stx F_float_eq32
 	rts
+.endif
 
+.if FC_USED_float_lt32
 _float_lt32:
 	FL_LOAD F_float_lt32__a, fa_m
 	FL_LOAD F_float_lt32__b, fb_m
@@ -1534,7 +1611,9 @@ _float_lt32:
 	inx
 :	stx F_float_lt32
 	rts
+.endif
 
+.if FC_USED_float_le32
 _float_le32:
 	FL_LOAD F_float_le32__a, fa_m
 	FL_LOAD F_float_le32__b, fb_m
@@ -1545,7 +1624,9 @@ _float_le32:
 	inx
 :	stx F_float_le32
 	rts
+.endif
 
+.if FC_USED_float_from_i32
 _float_from_i32:
 	FL_LOAD F_float_from_i32__n, fa_m
 	lda #0
@@ -1561,7 +1642,9 @@ _float_from_i32:
 :	jsr fl_from_mag
 @ret:	FL_LOAD fa_m, F_float_from_i32
 	rts
+.endif
 
+.if FC_USED_float_from_u32
 _float_from_u32:
 	FL_LOAD F_float_from_u32__n, fa_m
 	lda #0
@@ -1571,21 +1654,27 @@ _float_from_u32:
 	jsr fl_from_mag
 :	FL_LOAD fa_m, F_float_from_u32
 	rts
+.endif
 
+.if FC_USED_float_to_i32
 _float_to_i32:
 	FL_LOAD F_float_to_i32__x, fa_m
 	ldy #1
 	jsr fl_to_int32
 	FL_LOAD fa_m, F_float_to_i32
 	rts
+.endif
 
+.if FC_USED_float_to_u32
 _float_to_u32:
 	FL_LOAD F_float_to_u32__x, fa_m
 	ldy #0
 	jsr fl_to_int32
 	FL_LOAD fa_m, F_float_to_u32
 	rts
+.endif
 
+.if FC_USED_float_to_i32 || FC_USED_float_to_u32
 ;;; 32 ビットの整数へ (0 へ切り捨て)。Y = 符号付きか
 fl_to_int32:
 	sty ts_sgn
@@ -1596,7 +1685,9 @@ fl_to_int32:
 	lda #32
 	sta ts_bits
 	jmp fl_to_sat
+.endif
 
+.if FC_USED_float_to_sat_i
 _float_to_sat_i:
 	FL_LOAD F_float_to_sat_i__x, fa_m
 	lda F_float_to_sat_i__n
@@ -1612,7 +1703,9 @@ _float_to_sat_i:
 	jsr fl_to_sat
 	FL_LOAD fa_m, F_float_to_sat_i
 	rts
+.endif
 
+.if FC_USED_float_to_sat_u
 _float_to_sat_u:
 	FL_LOAD F_float_to_sat_u__x, fa_m
 	lda F_float_to_sat_u__n
@@ -1628,42 +1721,54 @@ _float_to_sat_u:
 	jsr fl_to_sat
 	FL_LOAD fa_m, F_float_to_sat_u
 	rts
+.endif
 
+.if FC_USED_float_rint32
 _float_rint32:
 	FL_LOAD F_float_rint32__x, fa_m
 	lda #0
 	jsr fl_round
 	FL_LOAD fa_m, F_float_rint32
 	rts
+.endif
 
+.if FC_USED_float_floor32
 _float_floor32:
 	FL_LOAD F_float_floor32__x, fa_m
 	lda #1
 	jsr fl_round
 	FL_LOAD fa_m, F_float_floor32
 	rts
+.endif
 
+.if FC_USED_float_ceil32
 _float_ceil32:
 	FL_LOAD F_float_ceil32__x, fa_m
 	lda #2
 	jsr fl_round
 	FL_LOAD fa_m, F_float_ceil32
 	rts
+.endif
 
+.if FC_USED_float_trunc32
 _float_trunc32:
 	FL_LOAD F_float_trunc32__x, fa_m
 	lda #3
 	jsr fl_round
 	FL_LOAD fa_m, F_float_trunc32
 	rts
+.endif
 
+.if FC_USED_float_round32
 _float_round32:
 	FL_LOAD F_float_round32__x, fa_m
 	lda #4
 	jsr fl_round
 	FL_LOAD fa_m, F_float_round32
 	rts
+.endif
 
+.if FC_USED_float_ldexp32
 _float_ldexp32:
 	FL_LOAD F_float_ldexp32__x, fa_m
 	lda F_float_ldexp32__n
@@ -1673,7 +1778,9 @@ _float_ldexp32:
 	jsr fl_ldexp
 	FL_LOAD fa_m, F_float_ldexp32
 	rts
+.endif
 
+.if FC_USED_float_from16
 ;;; ---------------------------------------------------------------
 ;;; f16 との変換
 ;;; ---------------------------------------------------------------
@@ -1742,7 +1849,9 @@ fl_from16:
 	ora #$80
 	sta fa_m+2
 :	rts
+.endif
 
+.if FC_USED_float_to16
 ;;; f32 (fa_m) → f16 (fa_m の 2 バイト。最近接偶数に丸める、NaN は 0x7e00)
 fl_to16:
 	lda fa_m+3
@@ -1861,7 +1970,9 @@ fl_to16:
 	ora #$7c
 	sta fa_m+1
 	rts
+.endif
 
+.if FC_USED_float_from16
 _float_from16:
 	lda F_float_from16__h
 	sta fa_m
@@ -1870,7 +1981,9 @@ _float_from16:
 	jsr fl_from16
 	FL_LOAD fa_m, F_float_from16
 	rts
+.endif
 
+.if FC_USED_float_to16
 _float_to16:
 	FL_LOAD F_float_to16__x, fa_m
 	jsr fl_to16
@@ -1879,3 +1992,4 @@ _float_to16:
 	lda fa_m+1
 	sta F_float_to16+1
 	rts
+.endif

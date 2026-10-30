@@ -184,7 +184,20 @@ func (l *Llc) Compile(mod *ir.Module) (asmOut, incOut []string, err error) {
 		asm.push("\t.import FC_FARCALL")
 	}
 
-	// include(.asm)の処理
+	// include(.asm)の処理。その前に、このモジュールの本体のない (asm の) 関数ごとに、使うかの印 FC_USED<シンボル> (1 / 0) を
+	// 置く。include する asm は `.if FC_USED_mod_f` で関数を包めば、使わない関数を ROM に入れない (包まなければ全部入る。
+	// docs/reference/assembly.md の「使わない関数」。GitHub の Issue #20)
+	if len(mod.IncludeAsms) > 0 {
+		for _, d := range mod.Defs {
+			if d.Kind == ir.DefCode && d.Lambda.Extern {
+				used := 1
+				if d.Lambda.Unused {
+					used = 0
+				}
+				asm.push(fmt.Sprintf("FC_USED%s = %d", mangle(d.Sym), used))
+			}
+		}
+	}
 	for _, file := range mod.IncludeAsms {
 		asm.push(fmt.Sprintf("\t.include \"%s\"", file))
 	}

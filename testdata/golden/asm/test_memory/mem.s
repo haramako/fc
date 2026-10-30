@@ -4,6 +4,10 @@
 	.importzp FC_SP
 __MODULE_MEM__ = 1
 .segment "mem"
+FC_USED_mem_set = 1
+FC_USED_mem_zero = 0
+FC_USED_mem_copy = 1
+FC_USED_mem_compare = 1
 	.include "mem.asm"
 	.global _mem_set
 	.global _mem_copy

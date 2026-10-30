@@ -4,5 +4,6 @@
 	.importzp FC_SP
 __MODULE_RLE__ = 1
 .segment "rle"
+FC_USED_rle_unpack = 1
 	.include "rle.asm"
 	.global _rle_unpack
