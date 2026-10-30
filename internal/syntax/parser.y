@@ -153,6 +153,8 @@ statement: opt_scope kVAR var_decl_list ';'     { $$ = &VarDecl{PublicPos: optPo
          | kRETURN opt_exp ';'                  { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} }
          | kRETURN anon_struct_lit ';'          { $$ = &ReturnStmt{Return: $1.Pos, Value: $2, Semi: $3.Pos} } /* v2: 戻り値の型で決まる */
          | kSWITCH '(' exp ')' '{' switch_block opt_default_block '}' { $$ = &SwitchStmt{Switch: $1.Pos, Tag: $3, Lbrace: $5.Pos, Cases: $6, Default: $7, Rbrace: $8.Pos} }
+         | kSWITCH '(' exp ')' '{' kDEFAULT ':' opt_statement_list '}' /* default だけ (これから case を足す所) */
+                                                { $$ = &SwitchStmt{Switch: $1.Pos, Tag: $3, Lbrace: $5.Pos, Default: &DefaultClause{Default: $6.Pos, Colon: $7.Pos, Body: $8}, Rbrace: $9.Pos} }
          | exp ';'                              { $$ = &ExprStmt{X: $1, Semi: $2.Pos} }
          | opt_scope kFUNCTION IDENT '(' opt_var_decl_list ')' ':' type_decl opt_options function_block
                                                 { $$ = funcDecl($1, $2, $3, $5, $8, $9, $10) }

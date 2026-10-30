@@ -884,6 +884,7 @@ small mid other big other
 
 - `case` には値を並べられ、範囲（`a..b` は b を含まない、`a..=b` は含む）も書ける
 - case の終わりで switch を抜ける。`fallthrough;` を case の最後に書くと、次の case の本体へ進む
+- `default` は最後に 1 つだけ書ける（無くてもよい）。`default` だけの switch も書ける
 - case ごとにスコープがある
 - 整数の case が 10 個以上で密に並んでいれば、表で飛ぶ（case の数によらず約 33 サイクル）
 

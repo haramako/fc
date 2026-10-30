@@ -85,6 +85,24 @@ function main():void
 	if out != "99 10 10 30 99\n" {
 		t.Errorf("got %q", out)
 	}
+	// default だけの switch (これから case を足す所。構文エラーだった: GitHub の Issue #23)
+	out = runEmu(t, `function main():void
+{
+	var x:int = 3;
+	switch (x) {
+	default:
+		x = 7;
+	}
+	switch (x + 1) {
+	default:
+	}
+	printf(x, "\n");
+	exit(0);
+}
+`)
+	if out != "7\n" {
+		t.Errorf("default だけ: got %q", out)
+	}
 
 	got := compileErr(t, "function f(x:int):void { switch (x) { case 1: break; case 2, 1: break; } }\n")
 	if !strings.Contains(got, "duplicate case value 1") {
