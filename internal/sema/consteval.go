@@ -162,7 +162,14 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			}
 		}
 		if typ == nil {
-			panic(&diag.Error{Msg: "cannot infer the element type of an empty array literal"})
+			// 空の `[]`: 宣言の型 (`[?]Belt`・`[0]u8`・slice) があれば、その要素の型の長さ 0 の配列 (GitHub の Issue #22)
+			switch t := c.ty; {
+			case t != nil && t.Kind == types.Array:
+				return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(t.Base, 0), nil))
+			case t != nil && t.IsSlice():
+				return cv(ir.NewArrayLiteral(h.tmpName("$"), h.prog.Types.ArrayOf(t.SliceOf, 0), nil))
+			}
+			panic(&diag.Error{Msg: "cannot infer the element type of an empty array literal (write the type: `const A:[?]T = [];`)"})
 		}
 		if c.ty == nil || c.ty.Kind != types.Array {
 			typ = h.arrayElemType(typ, vals, c.args, true) // F4 (fc 4): 定数の要素の値を変えない型に (宣言の型があればそちらで作り直す)
@@ -435,6 +442,10 @@ func (h *Hlc) constEval0(c *cexpr) *cexpr {
 			for i, a := range c.args {
 				if i > 0 && a.kind == cInt && a.s == "char" && args[0].textmapOf() != nil {
 					args[i] = a // _T('あ'): 文字のリテラルのまま変換器に渡す (ASCII 以外の文字は評価するとエラー)
+					continue
+				}
+				if i > 0 && a.kind == cArray && len(a.args) == 0 && a.ty == nil {
+					args[i] = a // 空の `[]`: 要素の型は引数の型で決める (withExpected。GitHub の Issue #22)
 					continue
 				}
 				args[i] = h.constEval(a)

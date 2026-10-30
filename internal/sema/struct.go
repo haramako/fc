@@ -67,6 +67,12 @@ func (h *Hlc) withExpected(c *cexpr, t *types.Type) *cexpr {
 	}
 	if t.IsSlice() && !(c.kind == cOp && c.op == opToSlice) {
 		// 配列 (と slice) の値を slice にする (長さは配列の長さ。文字列リテラルは終端の 0 を含めない)
+		if c.kind == cArray && len(c.args) == 0 && c.ty == nil {
+			// 空の `[]` は slice の要素の型の長さ 0 の配列 (GitHub の Issue #22)
+			r := *c
+			r.ty = h.prog.Types.ArrayOf(t.SliceOf, 0)
+			c = &r
+		}
 		return &cexpr{kind: cOp, op: opToSlice, args: []*cexpr{c}, ty: t, pos: c.pos}
 	}
 	if t == nil || (!h.needsExpected(c) && c.kind != cArray) {

@@ -294,7 +294,12 @@ func (h *Hlc) emitForInLoop(s *syntax.ForInStmt, label *syntax.Ident, loop forIn
 		h.pushBreakable(breakable{continueLabel: stepLabel, breakLabel: labels[1]})
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: labels[0]})
 		ifl := h.newLabels("then", "else", "end")
-		h.compileCond(cop2(cond, cv(loop.i), cv(loop.end)), ifl[1], false)
+		if k, ok := ir.ValIntLiteral(loop.end); ok && k == 0 && cond == opLt {
+			// 長さ 0 の配列 (`const NONE:[?]T = [];`): 1 回も回らない。`i < 0` を比べると「いつも同じ結果」の警告になる
+			h.emit(&ir.Op{Code: ir.OpJump, Label: ifl[1]})
+		} else {
+			h.compileCond(cop2(cond, cv(loop.i), cv(loop.end)), ifl[1], false)
+		}
 		h.emit(&ir.Op{Code: ir.OpLabel, Label: ifl[0]})
 		h.inScope(func() {
 			body()
