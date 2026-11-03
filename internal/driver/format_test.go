@@ -204,6 +204,7 @@ func TestFormatErrors(t *testing.T) {
 	cases := []struct{ name, body, want string }{
 		{"引数が足りない", `console.write(@format(buf, "{} {}", 1));`, "there is no argument 1"},
 		{"使わない引数", `console.write(@format(buf, "x", 1));`, "is not used in the format"},
+		{"C の書式", `console.write(@format(buf, "C%02X", 1));`, `"%02X" looks like a C format: fc writes {} for each argument, e.g. {:02X} instead of %02X`},
 		{"文字列に 0 埋め", `console.write(@format(buf, "{:05}", "ab"));`, "0 fills numbers"},
 		{"寄せ方に幅が無い", `console.write(@format(buf, "{:<}", 1));`, "needs a width"},
 		{"左寄せに 0 埋め", `console.write(@format(buf, "{:<05}", 1));`, "cannot be used with `<`"},

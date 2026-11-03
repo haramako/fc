@@ -111,3 +111,11 @@ emu で測った（oam.fc を frame に頼らない写しにして同じ中身�
   節に届く入口をスクリプトで求めた（はじめの手書きの表は fl_round → fl_from_mag の飛び先と、マクロの中からだけ呼ぶ fl_m8 /
   fl_carry を落としていた）。oam 421 → 83、float の add32 だけで 4114 → 847 バイト
 - #24 比較の中の u8 の足し算の警告: 保留（警告の範囲が決まらない。`x + 8 < y` の当たり判定で多く出る）
+
+## Issue にしていない報告 2 件（2026-11-03。fc を使うエージェントから）
+
+- use の探す順が文書に無い → 実は language.md の「モジュール」と fc-toml.md の `[lib.名前]` に書いてあった。隣のフォルダの
+  モジュールは `[lib.gfx] path = "gfx"` で写さずに使える（確かめた）。足りなかったのはエラーの文言（`file tiles.fc not found`
+  だけ）なので、`module tiles not found: …`（探す所と `[lib.NAME]` の案内）にした。fc-toml.md に隣のフォルダの例を足した
+- @format の C の書式（`"C%02X"`）は「argument 0 is not used in the format」になる → 書式に C の `%…` があれば
+  「looks like a C format: … {:02X} instead of %02X」を足す。文書の書式の節に「C の書式は使えない（`%` はそのまま出る）」

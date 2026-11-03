@@ -76,7 +76,7 @@ func TestMultipleErrorsAcrossModules(t *testing.T) {
 		got = append(got, filepath.Base(e.Pos.Filename)+":"+e.Pos.String()[len(e.Pos.Filename)+1:]+" "+e.Msg)
 	}
 	joined := strings.Join(got, "\n")
-	for _, w := range []string{"main.fc:3:1 file nothere.fc not found", "broken.fc:3:1 parse error", "lib.fc:2:", "bad_name not found", "main.fc:5:", "zzz not found"} {
+	for _, w := range []string{"main.fc:3:1 module nothere not found", "broken.fc:3:1 parse error", "lib.fc:2:", "bad_name not found", "main.fc:5:", "zzz not found"} {
 		if !strings.Contains(joined, w) {
 			t.Errorf("missing %q in:\n%s", w, joined)
 		}

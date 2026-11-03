@@ -9,6 +9,7 @@ package sema
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -210,11 +211,19 @@ func parseLogFormat(format string, args []*ir.LogArg) ([]ir.LogPart, error) {
 	flush()
 	for i, u := range used {
 		if !u {
-			return nil, fmt.Errorf("argument %d (%s) is not used in the format", i, args[i].Expr)
+			hint := ""
+			if m := cFormatRe.FindString(format); m != "" {
+				// C の書式 (`%02X`) は使えない: 書式の {} の数より引数が多くなって、ここに来る
+				hint = fmt.Sprintf(" (%q looks like a C format: fc writes {} for each argument, e.g. {:02X} instead of %%02X)", m)
+			}
+			return nil, fmt.Errorf("argument %d (%s) is not used in the format%s", i, args[i].Expr, hint)
 		}
 	}
 	return parts, nil
 }
+
+// cFormatRe は C の printf の書式 (`%d`・`%02X`・`%s`)。
+var cFormatRe = regexp.MustCompile(`%[-+ #0]*[0-9]*(\.[0-9]+)?[diouxXcsfeEgGp]`)
 
 // parseLogSpec は `{:<04x}` の `<04x` (寄せ方・0 埋め・幅・種類)。
 func parseLogSpec(s string) (ir.LogSpec, error) {

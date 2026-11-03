@@ -395,6 +395,11 @@ func (l *Loader) Module(name string) (*ir.Module, error) {
 	if m, ok := l.prog.Modules.Get(name); ok {
 		return m, nil
 	}
+	if _, _, err := l.File(name + ".fc"); err != nil {
+		// 探す所と、別のフォルダのモジュールを使う方法 (fc.toml の [lib.*]) を書く (隣のフォルダに置いたモジュールで
+		// 「file tiles.fc not found」だけだった)
+		return nil, &diag.Error{Msg: fmt.Sprintf("module %s not found: %s.fc is not in the folder of the source, the [lib.*] folders of fc.toml, or the standard library (to use modules in another folder, add `[lib.NAME]` with `path = \"folder\"` to fc.toml)", name, name)}
+	}
 	return l.Load(name + ".fc")
 }
 
