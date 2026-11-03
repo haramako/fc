@@ -36,6 +36,20 @@ MesenCE の導入とハマりどころ、`fcc build -g` でのデバッグ、`fc
 シンボルアドレスは ld65 のマップファイル（`-m`）から取得する
 （`tools/` 相当の処理は `internal/nes/mesen_test.go` の `parseLd65Map`）。
 
+### Linux とヘッドレスの道具（`tools/nesrun`、2026-11-03 に Linux で確かめた）
+
+- MesenCE 2.2.1 の Linux x64 版（リリースの `Mesen_2.2.1_Linux_x64.zip`。中身は実行ファイル 1 つで、初回に `MesenCore.so` などを
+  隣に展開する）は、`DISPLAY` も Xvfb も無く、SDL2 を入れていない機械で `--testrunner` が動く（`print` が stdout、`emu.stop(n)`
+  が終了コード）。実行ファイルの隣に `settings.json` を置くとポータブル（`Saves/` なども隣）
+- Mesen 2 の Lua: `emu.addMemoryCallback(f, emu.callbackType.write, 0x4018)` で fc のランナーの番地への書き込みを拾える
+  （`f(addr, value)`）。入力は `emu.addEventCallback(f, emu.eventType.inputPolled)` の中の `emu.setInput({ right = true }, 0)`
+- libretro の QuickNES（Linux は `~/.local/lib/libretro/quicknes_libretro.so`）: `retro_get_memory_size(2)`（SYSTEM_RAM）が 2048。
+  種類の id を渡さずに呼ぶと 0 になる（fc-gradius の `tools/qnes/qnes.py` がこれで「RAM が見えない」と報告した）。
+  `SET_PIXEL_FORMAT`（環境の 10）に true を返さないと `retro_load_game` が失敗する。`GET_VARIABLE`（15）で
+  `quicknes_use_overscan_h` / `_v` を `enabled` にすると 256×240（返さないと 240×224）
+- `tools/nesrun/fcmesen.py`（@log・console・panic・入力・peek）と `fcretro.py`（画面・入力・RAM）は `internal/nes` の
+  `TestNesrunMesen` / `TestNesrunRetro` が見張る（`FC_MESEN` / `FC_QUICKNES` があるときだけ。CI では Skip）
+
 ### Mesen でのソースレベルデバッグ（`fcc build -g`、2026-09-19）
 
 `fcc build -t nes -g -o game.nes main.fc` は ROM の隣に **`game.dbg`**（ld65 の `--dbgfile`。fc のソース行を含む）と

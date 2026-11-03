@@ -19,6 +19,7 @@
 
 ## Log
 
+- 2026-11-03 [ROM を画面なしで動かす道具とデバッグのページ](2026-11-03-nesrun-tools.md) — tools/nesrun の fcmesen.py（ヘッドレス Mesen で @log・panic）と fcretro.py（QuickNES で画面・RAM）。「libretro で RAM が 0」は相手のスクリプトが id を渡していなかった
 - 2026-10-29 [Agent/ の文書の hot / cold と、索引・大きさの検査](2026-10-29-agent-docs-hot-cold.md) — ファイルは動かさず索引だけを分ける（Log は直近、古い行は log-YYYY-MM.md）、discussions は新しい順に見る、wiki に経緯を置かない。TestAgentIndex・TestAgentBudget。roadmap 92 → 10.5 KB
 - 2026-10-26 [fc を使うエージェントからの報告](2026-10-26-user-agent-report.md) — 定数で消える分岐の中の @printf でも fmt が固定の所に入った（使われない関数の判定が最適化の前だった → frames.Prune で決め直す）。fcc run -t nes の 3600 フレームは仕様、frame.wait は NMI と 1 対 1（ループの中の flush などで飛ぶ）
 - 2026-10-26 [GitHub の Issue #2〜#5 への対応](2026-10-26-github-issues.md) — #3 条件式の slice、#2 options を名前に・予約語の一覧、#5 v0.0.4（その前に 10/18 から赤だった CI を直した）。#4 oam.meta は 1 体 1524 サイクル（14 体で 1 フレームの 72 %）、判定を軽くしても 1 割なので asm にする価値が高い → asm で 817（見込みの 300 は外れた）

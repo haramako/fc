@@ -25,3 +25,4 @@ dist/
 *.mlb
 !testdata/golden/**
 fcc[0-9].exe
+__pycache__/
