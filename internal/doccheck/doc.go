@@ -5,4 +5,5 @@
 //     実在するものを指しているかを確かめる (Agent/wiki/AGENTS.md の「参照の書き方」)
 //   - TestAgentIndex: Agent/ の wiki・discussions・issues の記録と索引の行が 1 対 1 か
 //   - TestAgentBudget: Agent/ の毎回読むもの (AGENTS.md・索引・TODO.md) と wiki の記事の大きさが上限の内か (Agent/AGENTS.md の「大きさの予算」)
+//   - TestSkills: skills/ のスキルと docs/public/llms.txt の頭・参照する見出しの言葉・ページと道具の URL が今のものを指しているか
 package doccheck

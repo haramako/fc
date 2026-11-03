@@ -183,7 +183,7 @@ func (c *Compiler) Run(ctx context.Context, res *Result, opt RunOptions) (*RunRe
 	r, err := runner.Run(res.Target, res.Out, runner.Options{Stdout: stdout, Log: res.Log, MaxCycles: opt.MaxCycles, MaxFrames: opt.MaxFrames,
 		TracePC: ir.ConfigFromEnv().Trace("pc") != ""})
 	if err != nil && res.Target == TargetNES {
-		return nil, fmt.Errorf("%v: the built-in NES runner shows only console output (console.exit ends it); open the ROM in an emulator to see the screen", err)
+		return nil, fmt.Errorf("%v: the built-in NES runner shows only console output (console.exit ends it); open the ROM in an emulator to see the screen, or run it headless with tools/nesrun/fcmesen.py / fcretro.py for @log, the screen and variables (https://haramako.github.io/fc/reference/debug)", err)
 	}
 	return r, err
 }

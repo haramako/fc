@@ -35,6 +35,18 @@
 `.fc` の行でブレークポイントを置いてステップ実行できる。`.dbg` はソースの場所を ROM の隣からの相対のパスで持つので、ROM か
 ソースを動かしたら作り直す。
 
+## 道具の手に入れ方 {#get-tools}
+
+次の 2 つの道具は fc のリポジトリの `tools/nesrun/` にある（Python 3 の標準ライブラリだけで動く）。fc のリポジトリが手元に
+無ければ、プロジェクトに 3 つのファイルを取ってくる。
+
+```bash
+mkdir -p tools/nesrun
+for f in fcsym.py fcmesen.py fcretro.py; do
+  curl -fsSL -o tools/nesrun/$f https://raw.githubusercontent.com/haramako/fc/main/tools/nesrun/$f
+done
+```
+
 ## Mesen をヘッドレスで動かす {#mesen-headless}
 
 [tools/nesrun/fcmesen.py](https://github.com/haramako/fc/blob/main/tools/nesrun/fcmesen.py) は、Mesen を画面なしで動かし

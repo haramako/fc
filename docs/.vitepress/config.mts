@@ -78,6 +78,7 @@ export default defineConfig({
             { text: '小さなゲームを作る', link: '/start/first-game' },
             { text: 'プロジェクト', link: '/start/project' },
             { text: 'エディタ', link: '/start/editor' },
+            { text: 'AI エージェントで作る', link: '/start/agents' },
           ],
         },
         { text: 'サンプル集', link: '/samples/' },

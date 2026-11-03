@@ -1,0 +1,35 @@
+# fc
+
+> fc は NES（ファミコン）のゲームを作るための C 風の言語とコンパイラ（fcc）。fcc は ca65 / ld65（cc65）でリンクして .nes を作る。
+> 文書は日本語。fc 4（ソースの 1 行目 `#fc 4`）の仕様だけを書いている。
+
+エージェントへ: 作業を始める前に、スキル（下の Agent skill）を読み込むか、このファイルの「まちがえやすい所」と「デバッグ」のページを読む。
+標準ライブラリの API は手元の `fcc doc`（`fcc doc vram`、`fcc doc vram.put`）が、使っている fcc の版と一致する。
+
+## Start
+
+- [インストール](https://haramako.github.io/fc/start/install): fcc と cc65 の入れ方、エミュレータ
+- [NES で Hello](https://haramako.github.io/fc/start/hello-nes): NES の ROM の形（初期化・描画・毎フレームの処理）
+- [小さなゲームを作る](https://haramako.github.io/fc/start/first-game): スプライト・入力・当たり
+- [プロジェクト](https://haramako.github.io/fc/start/project): 複数のファイル、fc.toml
+- [AI エージェントで作る](https://haramako.github.io/fc/start/agents): スキルとデバッグの道具の入れ方
+
+## Reference
+
+- [言語仕様](https://haramako.github.io/fc/reference/language): 型・式・整数の規則（u8 の折り返し）・書式（`{}`、C の `%d` は不可）・モジュール
+- [デバッグ](https://haramako.github.io/fc/reference/debug): @log、Mesen をヘッドレスで動かす fcmesen.py、libretro の fcretro.py、画面の中身（ネームテーブル）の確かめ方、panic
+- [fcc コマンド](https://haramako.github.io/fc/reference/fcc): build / run / test / check / doc / fmt のオプション
+- [fc.toml](https://haramako.github.io/fc/reference/fc-toml): ターゲット・マッパー・バンク・`[lib.名前]`（別のフォルダのモジュール）
+- [バンクと far call](https://haramako.github.io/fc/reference/banks): 切り替えるバンク、別のバンクのデータは読めない
+- [走査線の IRQ](https://haramako.github.io/fc/reference/raster): MMC3 で画面を分ける
+- [アセンブリとの連携](https://haramako.github.io/fc/reference/assembly): 呼び出し規約、割り込みはアセンブリで書く
+- [メモリ配置](https://haramako.github.io/fc/reference/memory): RAM の使い方、初期化
+- [標準ライブラリ](https://haramako.github.io/fc/reference/std/): モジュールの一覧（手元では `fcc doc`）
+
+## Agent skill
+
+- [skills/fc-nes-game/SKILL.md](https://raw.githubusercontent.com/haramako/fc/main/skills/fc-nes-game/SKILL.md): fc でゲームを作るエージェント向けの手順書（Agent Skills の形。`.agents/skills/fc-nes-game/` か `.claude/skills/fc-nes-game/` に置く）
+
+## Tools
+
+- [tools/nesrun](https://github.com/haramako/fc/tree/main/tools/nesrun): fcmesen.py（Mesen で @log・ネームテーブル・panic）、fcretro.py（QuickNES で画面・RAM）。取り方はデバッグのページの「道具の手に入れ方」

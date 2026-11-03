@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -43,6 +44,9 @@ type runner interface{ run() int }
 // exitPanic は kong が --help などで終わるときの終了コード (run() で recover して返す。os.Exit はテストの邪魔)。
 type exitPanic int
 
+// docsURL は利用者向けの文書のサイト (ヘルプとメッセージから案内する)。
+const docsURL = "https://haramako.github.io/fc/"
+
 func main() {
 	os.Exit(run())
 }
@@ -56,7 +60,7 @@ func run() (code int) {
 	var c cli
 	parser, err := kong.New(&c,
 		kong.Name("fcc"),
-		kong.Description("NES Compiler"),
+		kong.Description("NES Compiler. Docs: "+docsURL+" (debugging: @log, headless Mesen / libretro tools: "+docsURL+"reference/debug)"),
 		kong.Writers(os.Stdout, os.Stderr),
 		kong.Exit(func(code int) { panic(exitPanic(code)) }),
 		kong.ConfigureHelp(kong.HelpOptions{Compact: true}),
@@ -139,7 +143,7 @@ type buildFlags struct {
 	targetFlags
 	Out     string `short:"o" placeholder:"FILE" help:"Output file."`
 	Opt     int    `short:"O" default:"2" placeholder:"LEVEL" complete:"0,1,2" help:"Optimize level (0-2, default ${default})."`
-	G       bool   `short:"g" name:"debug-info" help:"Emit debug info for Mesen (.dbg with fc source lines, .mlb labels next to the ROM)."`
+	G       bool   `short:"g" name:"debug-info" help:"Emit debug files next to the ROM: .mlb labels for Mesen, and .fclog.json / .fclog.lua when the program has @log."`
 	Offline bool   `help:"Do not fetch git libraries of fc.toml [lib.*] (use the cache only)."`
 }
 
@@ -196,6 +200,12 @@ func (c *buildArgs) build(opt fc.Options, run bool) int {
 		return 1
 	}
 	printWarnings(res.Warnings)
+	if !run && opt.Debug && res.Target == fc.TargetNES {
+		// @log の読み方を案内する (.fclog.lua を書いたときだけ)
+		if lua := strings.TrimSuffix(res.Out, filepath.Ext(res.Out)) + ".fclog.lua"; func() bool { _, err := os.Stat(lua); return err == nil }() {
+			fmt.Fprintf(os.Stderr, "@log: load %s in Mesen (Debug > Script Window), or run it headless with tools/nesrun/fcmesen.py (%sreference/debug#log)\n", lua, docsURL)
+		}
+	}
 	if c.Debug {
 		for _, line := range res.Frames {
 			fmt.Fprintln(os.Stderr, line)

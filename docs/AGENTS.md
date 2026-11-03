@@ -17,6 +17,8 @@
   `npm run dev` / `build` の前にも走る）。直すときは fclib のコメントを直す（約束は `internal/fcdoc` のパッケージのコメント）
 - `public/samples/*.png` … サンプルの画面。QuickNES の画面をテストが書く（Windows で QuickNES のコアがあるとき）。サンプルを変えたら撮り直す:
   `FC_SAMPLE_PNG_DIR=docs/public/samples go test ./internal/nes -run 'TestExample(Jump|Statusbar|Wave)$|TestSampleScreens'`
+- `public/llms.txt` … エージェント向けの目次（ページの一覧・スキル・道具の場所）。ページを足したらここにも足す（URL の先は `internal/doccheck` の `TestSkills` が見る）。
+  エージェント向けのスキルの入れ方は `start/agents.md`
 - `package.json` / `package-lock.json` … Node の依存（VitePress）。Node は `docs/` に閉じる（ルートは Go だけ）
 - 公開は `.github/workflows/docs.yml`（`main` への push でビルドして Pages へ）
 

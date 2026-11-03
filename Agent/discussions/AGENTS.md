@@ -19,6 +19,7 @@
 
 ## Log
 
+- 2026-11-03 [エージェント向けのスキルと、fcc・サイトからの導線](2026-11-03-agent-skill.md) — skills/fc-nes-game（1 ファイル、細かい所は fcc doc と公式のサイト）、start/agents の入れ方、llms.txt、fcc のヘルプとメッセージから案内、TestSkills。pi は信頼したプロジェクトの .agents/skills だけ読む
 - 2026-11-03 [VRAM キューの HUD の最後の 1 文字が出ない件の切り分け](2026-11-03-vram-queue-handoff.md) — fc-gradius の 520a009 でも作業ツリーでも再現せず、fclib の分ける経路は総当たり（対照つき）で正しい。後半の観察は描画中の read_row で無効。相手の qnes.py は上下左右 8 ドットを切り落とす
 - 2026-11-03 [ROM を画面なしで動かす道具とデバッグのページ](2026-11-03-nesrun-tools.md) — tools/nesrun の fcmesen.py（ヘッドレス Mesen で @log・panic）と fcretro.py（QuickNES で画面・RAM）。「libretro で RAM が 0」は相手のスクリプトが id を渡していなかった
 - 2026-10-29 [Agent/ の文書の hot / cold と、索引・大きさの検査](2026-10-29-agent-docs-hot-cold.md) — ファイルは動かさず索引だけを分ける（Log は直近、古い行は log-YYYY-MM.md）、discussions は新しい順に見る、wiki に経緯を置かない。TestAgentIndex・TestAgentBudget。roadmap 92 → 10.5 KB
