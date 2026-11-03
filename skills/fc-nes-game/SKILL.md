@@ -11,12 +11,25 @@ description: fc 言語 (fcc コンパイラ) で NES (ファミコン) のゲー
 - 言語仕様・使い方: https://haramako.github.io/fc/ （言語は reference/language、デバッグは reference/debug）
 - エージェント向けの目次: https://haramako.github.io/fc/llms.txt
 
+## 始めるとき
+
+- 最初のプログラムは https://haramako.github.io/fc/start/hello-nes の形を写して始める（初期化・描画・毎フレームの処理の順）
+- マッパーなし（NROM。PRG 32K・CHR 8K）なら fc.toml は要らない（`-t nes` でビルドする）。マッパーを使うときだけ fc.toml を書く:
+  ```toml
+  [target]
+  mapper = "MMC3"
+  prg = "32K"
+  chr = "8K"
+  ```
+
 ## 作業の手順（毎回この順で）
 
-1. 変更は小さく 1 つずつ。変えたらすぐ `fcc build -t nes -g -o build/game.nes src/main.fc` でビルドする
+1. 変更は小さく 1 つずつ。変えたらすぐ `fcc build -t nes -g -o build/game.nes src/main.fc` でビルドする（`-g` が無いと `@log` は
+   何も出さない。`-o` の先のフォルダは fcc が作る）
 2. エラーが出たら、エラーの文言をそのまま読む（多くは直し方が書いてある）。分からない関数は `fcc doc 名前` で引く
 3. 動きは「デバッグの手順」の道具で確かめる。画面を見ずに「直った」と言わない
 4. ロジックの単体テストは `@(test)` の関数を書いて `fcc test -t nes src/x.fc`
+5. 書式を整えるのは `fcc fmt -w src/main.fc`（`-w` が無いと整えた結果を表示するだけでファイルは変わらない）
 
 ## まちがえやすい所（先に読む）
 

@@ -474,6 +474,10 @@ func (c *compilation) link(baseObj string, objs []string, opt *BuildOptions) (ma
 	c.linkCfg = cfgPath
 	stem := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out))
 	mapFile, dbgFile = stem+".map", stem+".dbg"
+	// 出力先のディレクトリを作る (`-o build/game.nes` で build/ が無いと、ld65 が「Cannot open 'build/game.nes.part'」で落ちていた)
+	if err := os.MkdirAll(filepath.Dir(opt.Out), 0o777); err != nil {
+		panic(&diag.Error{Msg: fmt.Sprintf("cannot create the output directory: %v", err)})
+	}
 	// ROM はいったん別の名前に書き、成功したときだけ置き換える (ld65 は失敗しても壊れた出力を残すことがある)
 	part := opt.Out + ".part"
 	args := []string{"-m", mapFile, "--dbgfile", dbgFile, "-o", part, "-C", cfgPath,
