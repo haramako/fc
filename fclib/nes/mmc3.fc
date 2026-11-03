@@ -6,6 +6,7 @@
 //   mmc3.irq_hook = split;               // IRQ の呼び出し口 (asm で書く。frame の hook と同じ)
 //   mmc3.irq(120);                       // 120 走査線ほど後で IRQ
 // 切り替えは sei / cli で囲む。NMI (frame.hook) でバンクを切り替えるなら、終わりに BANK_SELECT ($8000) に mmc3.select を書き戻す。
+// 画面を横の帯に分けて帯ごとにスクロールを変えるだけなら raster モジュール (IRQ の中身を書かなくてよい)。
 @(bank: -1);
 
 var BANK_SELECT:u8 @(address: 0x8000);

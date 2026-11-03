@@ -1,13 +1,41 @@
 # 走査線の IRQ で画面を分ける
 
-MMC3 の走査線の IRQ（[mmc3.irq](./std/nes/mmc3)）で画面を横の帯に分け、帯ごとにスクロールなどを変えるときの決まりと注意。
-IRQ の中の処理はアセンブリで書く（[割り込みから呼ぶ関数](./assembly#interrupts)）。実例は
+MMC3 の走査線の IRQ で画面を横の帯に分け、帯ごとにスクロールを変える。帯ごとのスクロールを変えるだけなら
+[raster](./std/nes/raster) モジュールを使う（IRQ の中身を書かなくてよい。[次の節](#raster)）。帯ごとに CHR のバンクを替えるなど
+ほかのことをするときは、IRQ の中の処理をアセンブリで書く（[mmc3.irq](./std/nes/mmc3)、[割り込みから呼ぶ関数](./assembly#interrupts)。
+決まりは[走査線の数え方](#counter)から下）。自分で書く例は
 [statusbar](https://github.com/haramako/fc/tree/main/examples/statusbar)（上の帯を止めて下だけ横にスクロール）と
 [wave](https://github.com/haramako/fc/tree/main/examples/wave)（8 走査線ごとに横のスクロールを変える）。
 
 細かい仕組みは nesdev wiki の [MMC3 の IRQ](https://www.nesdev.org/wiki/MMC3#IRQ_Specifics) と
 [スクロールの分割](https://www.nesdev.org/wiki/PPU_scrolling#Split_X/Y_scroll)、走査線の中の時刻は
 [PPU の描画](https://www.nesdev.org/wiki/PPU_rendering) を参照。
+
+## raster モジュールで分ける {#raster}
+
+一番上の帯は `frame.scroll`、その下の境目を上から順に `raster.split(i, 走査線, x, y, ネームテーブル)` で決める。縦も横も変えられる。
+毎フレーム値を変えてよく、次の `frame.wait()` の後のフレームから効く。
+
+```fc
+frame.ctrl |= nes.CTRL_SPR_1000; // 背景 $0000・スプライト $1000 (MMC3 が走査線を数えるのに要る)
+frame.render_on();
+while (true) {
+	frame.scroll(0, 0, 0); // 上の帯 (HUD)
+	raster.split(0, 32, x, 0, 0); // 走査線 32 から下を横に x だけ
+	raster.split(1, 200, 0, 0, 2); // 走査線 200 から下をネームテーブル 2 で
+	frame.wait();
+}
+```
+
+- 境目は 4 つまで（`raster.SPLITS`）。走査線は 2〜239、上から順に並べ、間を 3 走査線以上空ける。外れた境目とその下は分けない。
+  `raster.off(i)` は i 番目から下の境目を消す
+- 境目の走査線から下に、`(x, y)` を左上とする画面がそのまま出る（y は 0〜239。境目の位置に関係なく、帯の一番上が y）
+- frame を使う（NMI の中、スクロールを書いた後で最初の境目の IRQ を仕掛け、境目の表を入れ替える。主の側が処理落ちしたフレームも
+  仕掛ける）。`mmc3.irq_hook` と `frame.raster` を使うので、自分の IRQ の呼び出し口とは一緒に使えない
+- NMI の中は IRQ が止まっている。`frame.hook`（音のドライバなど）が長く、NMI の終わりが最初の境目の走査線を過ぎると、その境目が
+  下にずれる。境目は画面の上のほうでも、NMI が vblank の中で終わっていれば合う
+- 境目の 1 本上の走査線の hblank で番地を入れ替える。主の側が長く割り込みを止める（`sei`）と、そのフレームは境目の付近が乱れることがある
+- 境目の前後の走査線が分割しない画面と画素まで同じになることを、Mesen と QuickNES で確かめてある
 
 ## 走査線の数え方 {#counter}
 

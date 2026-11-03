@@ -66,6 +66,7 @@ python3 tools/nesrun/fcmesen.py game.nes --frames 600 --input 60:start,120-180:r
 | `--peek mod.var` | 止めるときに変数の値を出す（大きさは `.dbg` から。`mod.var:バイト数` で変えられる。何度でも） |
 | `--nametable N` | 止めるときにネームテーブル N（0〜3）を 32×30 で出す（タイルの番号が ASCII の字なら字、ほかは `.`。`N:hex` で 16 進） |
 | `--palette` | 止めるときにパレット（$3F00〜$3F1F）を出す |
+| `--png ファイル` / `--shot フレーム:ファイル` | 止めるときの画面 / そのフレームの終わりの画面を PNG に書く（256×240） |
 | `--lua ファイル` | 後ろに足す Lua のスクリプト（Mesen の Lua の API が使える） |
 | `--mesen パス` | Mesen の実行ファイル（環境変数 `FC_MESEN` でもよい） |
 

@@ -9,6 +9,7 @@
   $4019 に書いたらその値で終わる (panic は 1)
 - 終わり方: --until の文字列を含む行が出たら 0、--frames のフレームを過ぎたら 0 (--until を書いたときは 2)、$4019 ならその値
 - --peek は終わるときに変数の値を出す (`mod.var`。大きさは .dbg から。`名前:バイト数` で変えられる)
+- --png / --shot フレーム:ファイル は画面を PNG に書く (Mesen の emu.takeScreenshot。256×240)
 - --nametable N / --palette は終わるときにネームテーブル (32×30) とパレットを出す (PPU を副作用なしに読むので、ゲームの側で
   描画中に PPUADDR / PPUDATA を触って読み戻す必要は無い)
 - Mesen は --mesen か環境変数 FC_MESEN (Windows は C:\\Applications\\MesenCE\\Mesen.exe も)。初めてのときは Mesen の隣に
@@ -35,6 +36,14 @@ local INPUT = { %(input)s }
 local PEEK = { %(peek)s }
 local NT = { %(nt)s }
 local PALETTE = %(palette)s
+local SHOTS = { %(shots)s }   -- フレーム → 1 (そのフレームの終わりの画面を PNG にして 16 進で出す。fcmesen.py がファイルに書く)
+
+local function shot(tag)
+  local png = emu.takeScreenshot()
+  local hex = {}
+  for i = 1, #png do hex[i] = string.format("%%02x", string.byte(png, i)) end
+  print("[png " .. tag .. "] " .. table.concat(hex))
+end
 local frame = 0
 
 local function peek()
@@ -78,6 +87,7 @@ local function peek()
 end
 local function stop(code)
   peek()
+  if SHOTS.last then shot("last") end
   emu.stop(code)
 end
 local function line(s)
@@ -96,6 +106,9 @@ emu.addMemoryCallback(function(addr, value)
   stop(value)
 end, emu.callbackType.write, 0x4019)
 
+emu.addEventCallback(function()
+  if SHOTS[frame] then shot(tostring(frame)) end
+end, emu.eventType.endFrame)
 emu.addEventCallback(function()
   frame = frame + 1
   if frame > FRAMES then
@@ -144,6 +157,8 @@ def main():
     ap.add_argument("--nametable", action="append", default=[], help="止めるときにネームテーブル N (0〜3) を出す (タイルの番号が ASCII の字なら字、"
                     "ほかは .。N:hex で 16 進)")
     ap.add_argument("--palette", action="store_true", help="止めるときにパレット ($3F00〜$3F1F) を出す")
+    ap.add_argument("--png", help="止めるときの画面を書く PNG")
+    ap.add_argument("--shot", action="append", default=[], help="フレーム:ファイル (そのフレームの終わりの画面を PNG に)")
     ap.add_argument("--lua", action="append", default=[], help="後ろに足す Lua のスクリプト")
     ap.add_argument("--mesen", help="Mesen の実行ファイル")
     ap.add_argument("--timeout", type=float, default=300, help="Mesen を待つ秒数")
@@ -159,6 +174,14 @@ def main():
         if num not in ("0", "1", "2", "3") or form not in ("", "hex"):
             raise SystemExit(f"--nametable は 0〜3 (16 進なら 0:hex): {spec}")
         nts.append("{ n = %s, hex = %s }" % (num, "true" if form else "false"))
+    shots = {}
+    for spec in a.shot:
+        f, _, path = spec.partition(":")
+        if not f.isdigit() or not path:
+            raise SystemExit(f"--shot はフレーム:ファイル: {spec}")
+        shots[f] = path
+    if a.png:
+        shots["last"] = a.png
     body = LUA % {
         "frames": a.frames,
         "until": lua_str(a.until),
@@ -166,6 +189,7 @@ def main():
         "peek": ", ".join("{ name = %s, addr = %d, size = %d }" % (lua_str(p.name), p.addr, p.size) for p in peeks),
         "nt": ", ".join(nts),
         "palette": "true" if a.palette else "false",
+        "shots": ", ".join(("last = 1" if k == "last" else "[%s] = 1" % k) for k in shots),
     }
     fclog = os.path.splitext(a.rom)[0] + ".fclog.lua"
     if os.path.exists(fclog):
@@ -195,7 +219,11 @@ def main():
         finally:
             drop_save()
     for l in p.stdout.decode("utf-8", "replace").replace("\r\n", "\n").split("\n"):
-        if l and not l.startswith("fc @log:"):
+        if l.startswith("[png "):
+            tag, _, data = l[5:].partition("] ")
+            with open(shots[tag], "wb") as f:
+                f.write(bytes.fromhex(data))
+        elif l and not l.startswith("fc @log:"):
             print(l)
     return p.returncode
 

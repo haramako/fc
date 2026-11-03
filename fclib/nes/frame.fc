@@ -30,6 +30,9 @@ public var mask:u8;             // NMI が PPUMASK に書く値 (render_on / ren
 public var scroll_x:u8;
 public var scroll_y:u8;
 public var hook:fn():void;      // NMI の最後に呼ぶ (null なら呼ばない)
+// NMI がスクロールを書いた後に呼ぶ (mmc3.split が画面を分ける IRQ を仕掛けるのに使う。asm。X = 主の側が wait まで済ませたフレームなら
+// bit 7 が 1)。利用者は hook を使う
+public var raster:fn():void;
 public var oam_page:u8;         // OAM の DMA のページ (oam が入れる。0 なら DMA しない)
 public var queue:[QUEUE_SIZE]u8;   // VRAM のキュー (vram が積む。[番地の上位 | 0x80 縦 | 0x40 埋める, 番地の下位, 長さ, データ…])
 public var queue_len:u8;

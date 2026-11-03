@@ -19,6 +19,7 @@
 
 ## Log
 
+- 2026-11-03 [MMC3 の画面分割を fclib の部品にする](2026-11-03-raster-split.md) — raster.split(i, 走査線, x, y, nt)。IRQ と時機は fclib の asm、frame の NMI がスクロールの後に仕掛ける。mmc3 と別のモジュール。Mesen と QuickNES の画素の比較で時機を決めた
 - 2026-11-03 [エージェント向けのスキルと、fcc・サイトからの導線](2026-11-03-agent-skill.md) — skills/fc-nes-game（1 ファイル、細かい所は fcc doc と公式のサイト）、start/agents の入れ方、llms.txt、fcc のヘルプとメッセージから案内、TestSkills。pi は信頼したプロジェクトの .agents/skills だけ読む
 - 2026-11-03 [VRAM キューの HUD の最後の 1 文字が出ない件の切り分け](2026-11-03-vram-queue-handoff.md) — fc-gradius の 520a009 でも作業ツリーでも再現せず、fclib の分ける経路は総当たり（対照つき）で正しい。後半の観察は描画中の read_row で無効。相手の qnes.py は上下左右 8 ドットを切り落とす
 - 2026-11-03 [ROM を画面なしで動かす道具とデバッグのページ](2026-11-03-nesrun-tools.md) — tools/nesrun の fcmesen.py（ヘッドレス Mesen で @log・panic）と fcretro.py（QuickNES で画面・RAM）。「libretro で RAM が 0」は相手のスクリプトが id を渡していなかった

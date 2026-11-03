@@ -21,7 +21,7 @@
 - [fcc コマンド](https://haramako.github.io/fc/reference/fcc): build / run / test / check / doc / fmt のオプション
 - [fc.toml](https://haramako.github.io/fc/reference/fc-toml): ターゲット・マッパー・バンク・`[lib.名前]`（別のフォルダのモジュール）
 - [バンクと far call](https://haramako.github.io/fc/reference/banks): 切り替えるバンク、別のバンクのデータは読めない
-- [走査線の IRQ](https://haramako.github.io/fc/reference/raster): MMC3 で画面を分ける
+- [走査線の IRQ](https://haramako.github.io/fc/reference/raster): MMC3 で画面を分ける（raster モジュールで HUD・帯ごとのスクロール。IRQ を書かなくてよい）
 - [アセンブリとの連携](https://haramako.github.io/fc/reference/assembly): 呼び出し規約、割り込みはアセンブリで書く
 - [メモリ配置](https://haramako.github.io/fc/reference/memory): RAM の使い方、初期化
 - [標準ライブラリ](https://haramako.github.io/fc/reference/std/): モジュールの一覧（手元では `fcc doc`）

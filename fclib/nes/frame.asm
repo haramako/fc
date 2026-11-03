@@ -3,7 +3,9 @@
 ;;; share/runtime.asm の interrupt が A / X / Y を積んでから jsr _interrupt する。順に:
 ;;;   1. 主の側が待っているとき (_frame_ready != 0) だけ: OAM の DMA (0x80 で、oam を使っていれば) → VRAM のキュー
 ;;;   2. PPUCTRL / スクロール / PPUMASK (描画を止めていて誰も待っていないときは触らない: 主の側が直に書いているかもしれない)
-;;;   3. フレームの数 → 呼び出し口 (_frame_hook)
+;;;   3. 走査線の呼び出し口 (_frame_raster。mmc3.split が画面を分ける IRQ を仕掛ける。描画の前の走査線より前に)。X = このフレームの
+;;;      ready ($80 なら主の側が wait まで済ませたフレーム。処理落ちのフレームは 0)
+;;;   4. フレームの数 → 呼び出し口 (_frame_hook)
 ;;; キューの項目: [番地の上位 | $80 縦 (+32 ずつ) | $40 埋める, 番地の下位, 長さ (1〜255), データ…] (埋めるならデータは 1 バイト)
 ;;; 注意: .segment は書かない (frame モジュールの固定のバンクに置かれる)。
 
@@ -18,6 +20,7 @@ _interrupt:
 	jmp @count
 @lag:
 	bit $2002			; (処理落ちのフレーム: レジスタだけ)
+	ldx #0				; (走査線の呼び出し口へ: 主の側は準備の途中)
 	jmp @regs
 @update:
 	bit $2002			; ラッチを戻し、vblank の印を消す (PPUCTRL の NMI のビットを立て直しても NMI が重ならない)
@@ -131,6 +134,7 @@ _interrupt:
 	beq @queue_end
 	jmp @entry
 @queue_end:
+	ldx _frame_ready		; (走査線の呼び出し口へ: $80 / $40)
 	lda #0
 	sta _frame_queue_len
 	sta _frame_queue_cost
@@ -147,6 +151,19 @@ _interrupt:
 	sta $2005
 	lda _frame_mask
 	sta $2001
+	lda _frame_raster+1
+	beq @count
+	;; 呼び出し口の rts で @count へ戻るように、戻り先を積んでから rti で飛ぶ (jmp () は $xxFF の不具合がある)
+	lda #>(@count-1)
+	pha
+	lda #<(@count-1)
+	pha
+	lda _frame_raster+1
+	pha
+	lda _frame_raster
+	pha
+	php
+	rti
 @count:
 	inc _frame_count
 	bne @hook

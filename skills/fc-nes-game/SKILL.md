@@ -33,6 +33,8 @@ description: fc 言語 (fcc コンパイラ) で NES (ファミコン) のゲー
   `vram.write_now` は描画を止めているときだけ
 - 1 フレームに送れる量には限りがある（キューと手間の予算）。大きな書き込みは何フレームかに分かれる
 - 割り込み（NMI・IRQ）の中身はアセンブリで書く（reference/assembly の「割り込みから呼ぶ関数」）
+- MMC3 で画面を横の帯に分けてスクロールを変える（HUD を止める・帯ごとに流す）なら、IRQ を自分で書かずに `raster` モジュールを使う
+  （`fcc doc raster`、reference/raster の「raster モジュールで分ける」）
 - 切り替えるバンクの `const` の表は、別のバンクからは読めない（reference/banks の「別のバンクのデータ」）
 
 ## デバッグの手順

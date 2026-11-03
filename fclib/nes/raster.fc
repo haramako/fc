@@ -1,0 +1,55 @@
+#fc 4
+// MMC3 の走査線の IRQ で画面を横の帯に分け、帯ごとにスクロールを変える (縦も横も)。IRQ の中身と時機合わせはこのモジュールの asm
+// (raster.asm) が持つので、利用者は asm を書かなくてよい。一番上の帯は frame.scroll、その下の境目を上から順に split で決める。
+//   frame.ctrl |= nes.CTRL_SPR_1000;      // MMC3 が走査線を数えるのに要る (背景 $0000・スプライト $1000)
+//   raster.split(0, 32, x, 0, 0);         // 走査線 32 から下を (x, 0)・ネームテーブル 0 で
+//   raster.split(1, 200, 0, 0, 2);        // 走査線 200 から下をネームテーブル 2 で
+//   frame.wait();                         // 次のフレームから効く (毎フレーム変えてよい)
+// 決まり: 境目は走査線 RASTER_MIN〜239、上から順に 3 走査線以上空ける (外れた境目とその下は分けない)。frame の NMI が仕掛けるので
+// frame を使う。IRQ の呼び出し口 (mmc3.irq_hook) と frame.raster を使う。frame.hook が長いと、最初の境目が NMI の終わる走査線より
+// 上なら下にずれる。仕組みと注意は docs の「走査線の IRQ」のページ
+@(bank: -1);
+use nes;
+use frame;
+use mmc3;
+
+// 境目の数
+public const SPLITS = 4;
+// 最初の境目の走査線の下限 (IRQ を 2 走査線前に起こすため)
+public const RASTER_MIN = 2;
+
+// 境目の表 (境目ごとに 5 バイト: 走査線、$2006 の 1 回目、$2005 の Y、$2005 の X、$2006 の 2 回目)。主の側は next に書き、NMI が
+// 主の側の wait の後のフレームで cur に写す (書きかけの表を使わないように)
+var next:[SPLITS * 5]u8;
+var cur:[SPLITS * 5]u8;
+var at:u8;   // IRQ が次に使う境目 (cur の添字)
+
+function nmi_arm():void @(abi: "stack", symbol: "_raster_nmi");   // raster.asm (frame.raster)
+function irq_split():void @(abi: "stack", symbol: "_raster_irq");   // raster.asm (mmc3.irq_hook)
+@include("raster.asm");
+
+// i 番目 (0〜SPLITS - 1。上から順) の境目: 走査線 line から下を、スクロール (x, y)・ネームテーブル nt (0〜3) で出す。y は 0〜239。
+// 次の frame.wait の後のフレームから効く
+public function split(i:u8, line:u8, x:u8, y:u8, nt:u8):void
+{
+	if (i >= SPLITS) {
+		return;
+	}
+	var o:u8 = i * 5;
+	next[o] = line;
+	next[o + 1] = (nt & 3) << 2;
+	next[o + 2] = y;
+	next[o + 3] = x;
+	next[o + 4] = ((y & 0xf8) << 2) | (x >> 3);
+	mmc3.irq_hook = irq_split;
+	frame.raster = nmi_arm;
+	@asm("cli");   // IRQ を受け付ける (起動のときは止めてある)
+}
+
+// i 番目から下の境目を消す (off(0) で分けない)
+public function off(i:u8):void
+{
+	if (i < SPLITS) {
+		next[i * 5] = 0;
+	}
+}
