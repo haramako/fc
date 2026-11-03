@@ -65,7 +65,7 @@ done
 
 | 知りたいこと | コマンド |
 |---|---|
-| 変数の値の移り変わり | ソースに `@log("x={} y={}", x, y);` を書き、`python3 tools/nesrun/fcmesen.py build/game.nes --frames 300` |
+| 変数の値の移り変わり | ソースに `@log("x={} y={}", x, y);` を書き（引数は変数・定数・フィールドだけ。式はいったん変数に入れる）、`python3 tools/nesrun/fcmesen.py build/game.nes --frames 300` |
 | 書いた文字が画面に入ったか | `python3 tools/nesrun/fcmesen.py build/game.nes --frames 300 --nametable 0` |
 | 止まった理由 (panic) | `fcmesen.py` が `panic: 理由` と `[exit 1]` を出す |
 | 終わりの時点の変数 | `--peek main.score`（`モジュール.変数`） |

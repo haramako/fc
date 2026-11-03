@@ -22,3 +22,14 @@
 - pi 1.5.0 はプロジェクトの `.agents/skills/` を、プロジェクトを信頼したときだけ読む（`pi -p` は `-a` が要る）。読む道具（read）を
   外すとスキルの一覧が出ない（`--no-tools` で「No skills」）
 - pi（qwen3.8-flash-next）に「16 進 2 桁で書く @format」を聞くと、指示しなくても SKILL.md を読み、`{:02X}` と答えた
+
+## pi での試し（2026-11-03）
+
+スキルだけを入れた空のプロジェクトで、pi（qwen3.8-flash-next）に「hello world・60 フレームごとの @log・画面の確認」をさせた
+（fcc は今の版、`FC_MESEN` あり、tools/nesrun は渡さない）。
+
+- 1 回目（約 5 分で完了）: 道具を curl で取り、fcmesen.py で @log とネームテーブル、fcmesen.py と fcretro.py の PNG で画面を確かめた。
+  つまずき: `-o build/game.nes` の build/ が無いと ld65 が `Cannot open 'build/game.nes.part'`（→ fcc が作るように直した）、
+  `fcc fmt` が書き換えない（-w）、`-g` が無いと @log が無音、fc.toml の最小の形が分からず examples を写した（→ スキルに足した）
+- 2 回目（直した後）: fc.toml を作らず、出力先の問題も無く完了。つまずき: @log の引数に式を書けない（仕様。文言は分かりやすい
+  → スキルと debug.md に書いた）、`--frames` と `frame.count` が起動の分ずれる（→ debug.md に書いた）
