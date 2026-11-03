@@ -43,7 +43,7 @@ fcc build [オプション] main.fc
 | `-t nes` / `-t emu`（`--target`） | ターゲット。省くと、fc.toml に `[target]` があれば nes、無ければ emu |
 | `-o FILE`（`--out`） | 出力のファイル（既定は `a.nes` か `a.bin`） |
 | `-O LEVEL`（`--opt`） | 最適化の段階（0〜2。既定は 2） |
-| `-g`（`--debug-info`） | Mesen 用のデバッグ情報（ROM の隣に `.dbg` と `.mlb`）を書く |
+| `-g`（`--debug-info`） | デバッグ用のファイルを ROM の隣に書く: NES は Mesen のラベル `.mlb`、`@log` があれば `.fclog.json` と `.fclog.lua`（[デバッグ](./debug)。`.dbg` は `-g` が無くても書く） |
 | `--size-report` | セグメントと関数ごとのコードの大きさ、ROM の領域（バンク）ごとの使用量と空き、モジュールの間の呼び出しの数を出す |
 | `--size-html FILE` | `--size-report` と同じ情報を HTML のページにして書く（バンクごとの帯、モジュールの間の呼び出しと関数の表。並べ替え・絞り込みができ、外のファイルを読まないのでそのまま開ける） |
 | `-D MOD.NAME=VAL`（`--define`） | モジュール MOD の `@(build)` の定数 NAME の値を変える（何度でも。fc.toml の `[define.MOD]` の後に当てる） |
