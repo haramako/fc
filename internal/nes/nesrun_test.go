@@ -21,10 +21,12 @@ const nesrunSrc = `#fc 4
 use sys;
 use pad;
 use frame;
+use vram;
 public var n:u8;
 function main():void
 {
 	frame.init();
+	vram.write_now(vram.addr(0, 1, 2), "HELLO");
 	frame.render_on();
 	while (true) {
 		frame.wait();
@@ -105,6 +107,13 @@ func TestNesrunMesen(t *testing.T) {
 	out, code = runNesrun(t, py, tool, rom, "--mesen", mesen, "--frames", "30", "--until", "never")
 	if out != "[frames 30]\n" || code != 2 {
 		t.Errorf("フレームが尽きる: code %d\n%s", code, out)
+	}
+	// ネームテーブルとパレット (PPU を副作用なしに読む)
+	out, _ = runNesrun(t, py, tool, rom, "--mesen", mesen, "--frames", "5", "--nametable", "0", "--nametable", "0:hex", "--palette")
+	for _, w := range []string{"[nt0 02] |.HELLO" + strings.Repeat(".", 26) + "|\n", "[nt0 02] 00 48 45 4c 4c 4f 00 ", "[palette] "} {
+		if !strings.Contains(out, w) {
+			t.Errorf("--nametable / --palette に %q が無い:\n%s", w, out)
+		}
 	}
 }
 

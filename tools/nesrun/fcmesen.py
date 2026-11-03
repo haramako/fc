@@ -9,6 +9,8 @@
   $4019 に書いたらその値で終わる (panic は 1)
 - 終わり方: --until の文字列を含む行が出たら 0、--frames のフレームを過ぎたら 0 (--until を書いたときは 2)、$4019 ならその値
 - --peek は終わるときに変数の値を出す (`mod.var`。大きさは .dbg から。`名前:バイト数` で変えられる)
+- --nametable N / --palette は終わるときにネームテーブル (32×30) とパレットを出す (PPU を副作用なしに読むので、ゲームの側で
+  描画中に PPUADDR / PPUDATA を触って読み戻す必要は無い)
 - Mesen は --mesen か環境変数 FC_MESEN (Windows は C:\\Applications\\MesenCE\\Mesen.exe も)。初めてのときは Mesen の隣に
   最小の settings.json を作る (無いと初回のダイアログで止まり、コントローラが無い扱いで入力が効かない)
 - Mesen は ROM の名前でセーブデータ (Saves/<名前>.sav) を残すので、ROM を fc_run_<名前> に写して動かし、そのセーブを前後で消す
@@ -31,6 +33,8 @@ LUA = r"""
 local FRAMES, UNTIL = %(frames)d, %(until)s
 local INPUT = { %(input)s }
 local PEEK = { %(peek)s }
+local NT = { %(nt)s }
+local PALETTE = %(palette)s
 local frame = 0
 
 local function peek()
@@ -42,6 +46,34 @@ local function peek()
       s[#s + 1] = string.format("%%02x", b)
     end
     print(string.format("[peek] %%s = %%d (0x%%s)", p.name, v, table.concat(s, " ")))
+  end
+  -- ネームテーブル (PPU の番地 $2000 + 0x400 * n を副作用なしに読む。ミラーはマッパーのとおり)
+  for _, t in ipairs(NT) do
+    for row = 0, 29 do
+      local s = {}
+      for col = 0, 31 do
+        local b = emu.read(0x2000 + 0x400 * t.n + row * 32 + col, emu.memType.nesPpuDebug, false)
+        if t.hex then
+          s[#s + 1] = string.format("%%02x", b)
+        elseif b >= 0x20 and b < 0x7f then
+          s[#s + 1] = string.char(b)
+        else
+          s[#s + 1] = "."
+        end
+      end
+      if t.hex then
+        print(string.format("[nt%%d %%02d] %%s", t.n, row, table.concat(s, " ")))
+      else
+        print(string.format("[nt%%d %%02d] |%%s|", t.n, row, table.concat(s)))
+      end
+    end
+  end
+  if PALETTE then
+    local s = {}
+    for i = 0, 31 do
+      s[#s + 1] = string.format("%%02x", emu.read(0x3f00 + i, emu.memType.nesPpuDebug, false))
+    end
+    print("[palette] " .. table.concat(s, " "))
   end
 end
 local function stop(code)
@@ -109,6 +141,9 @@ def main():
     ap.add_argument("--until", help="この文字列を含む行 (@log・console) が出たら止める")
     ap.add_argument("--input", default="", help="パッド 1 の入力: 10-12:right,30:start+a (フレームは 1 から)")
     ap.add_argument("--peek", action="append", default=[], help="終わるときに出す変数 (mod.var、mod.var:バイト数)")
+    ap.add_argument("--nametable", action="append", default=[], help="止めるときにネームテーブル N (0〜3) を出す (タイルの番号が ASCII の字なら字、"
+                    "ほかは .。N:hex で 16 進)")
+    ap.add_argument("--palette", action="store_true", help="止めるときにパレット ($3F00〜$3F1F) を出す")
     ap.add_argument("--lua", action="append", default=[], help="後ろに足す Lua のスクリプト")
     ap.add_argument("--mesen", help="Mesen の実行ファイル")
     ap.add_argument("--timeout", type=float, default=300, help="Mesen を待つ秒数")
@@ -118,11 +153,19 @@ def main():
     ensure_settings(mesen)
     script = fcsym.parse_input(a.input)
     peeks = fcsym.resolve(fcsym.load_symbols(a.rom), a.peek)
+    nts = []
+    for spec in a.nametable:
+        num, _, form = spec.partition(":")
+        if num not in ("0", "1", "2", "3") or form not in ("", "hex"):
+            raise SystemExit(f"--nametable は 0〜3 (16 進なら 0:hex): {spec}")
+        nts.append("{ n = %s, hex = %s }" % (num, "true" if form else "false"))
     body = LUA % {
         "frames": a.frames,
         "until": lua_str(a.until),
         "input": ", ".join("{ lo = %d, hi = %d, b = { %s } }" % (lo, hi, ", ".join(lua_str(b) for b in sorted(bs))) for lo, hi, bs in script),
         "peek": ", ".join("{ name = %s, addr = %d, size = %d }" % (lua_str(p.name), p.addr, p.size) for p in peeks),
+        "nt": ", ".join(nts),
+        "palette": "true" if a.palette else "false",
     }
     fclog = os.path.splitext(a.rom)[0] + ".fclog.lua"
     if os.path.exists(fclog):

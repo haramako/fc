@@ -43,6 +43,10 @@ MesenCE の導入とハマりどころ、`fcc build -g` でのデバッグ、`fc
   が終了コード）。実行ファイルの隣に `settings.json` を置くとポータブル（`Saves/` なども隣）
 - Mesen 2 の Lua: `emu.addMemoryCallback(f, emu.callbackType.write, 0x4018)` で fc のランナーの番地への書き込みを拾える
   （`f(addr, value)`）。入力は `emu.addEventCallback(f, emu.eventType.inputPolled)` の中の `emu.setInput({ right = true }, 0)`
+  PPU の番地の空間（ネームテーブル $2000〜、パレット $3F00〜。ミラーはマッパーのとおり）は `emu.read(a, emu.memType.nesPpuDebug, false)`
+  で副作用なしに読める（NES の種類は nesChrRam・nesChrRom・nesDebug・nesInternalRam・nesMapperRam・nesMemory・nesNametableRam・
+  nesPaletteRam・nesPpuDebug・nesPpuMemory・nesPrgRom・nesSaveRam・nesSecondarySpriteRam・nesSpriteRam・nesWorkRam）。
+  libretro の QuickNES は VIDEO_RAM（3）の大きさが 0 で、ネームテーブルは外から読めない
 - libretro の QuickNES（Linux は `~/.local/lib/libretro/quicknes_libretro.so`）: `retro_get_memory_size(2)`（SYSTEM_RAM）が 2048。
   種類の id を渡さずに呼ぶと 0 になる（fc-gradius の `tools/qnes/qnes.py` がこれで「RAM が見えない」と報告した）。
   `SET_PIXEL_FORMAT`（環境の 10）に true を返さないと `retro_load_game` が失敗する。`GET_VARIABLE`（15）で

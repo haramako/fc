@@ -52,6 +52,8 @@ python3 tools/nesrun/fcmesen.py game.nes --frames 600 --input 60:start,120-180:r
 | `--until 文字列` | その文字列を含む行（`@log`・console）が出たら止める |
 | `--input 台本` | パッド 1 の入力。`フレーム:ボタン` をコンマで並べる（`10-12:right`、`30:start+a`。フレームは 1 から） |
 | `--peek mod.var` | 止めるときに変数の値を出す（大きさは `.dbg` から。`mod.var:バイト数` で変えられる。何度でも） |
+| `--nametable N` | 止めるときにネームテーブル N（0〜3）を 32×30 で出す（タイルの番号が ASCII の字なら字、ほかは `.`。`N:hex` で 16 進） |
+| `--palette` | 止めるときにパレット（$3F00〜$3F1F）を出す |
 | `--lua ファイル` | 後ろに足す Lua のスクリプト（Mesen の Lua の API が使える） |
 | `--mesen パス` | Mesen の実行ファイル（環境変数 `FC_MESEN` でもよい） |
 
@@ -61,6 +63,29 @@ python3 tools/nesrun/fcmesen.py game.nes --frames 600 --input 60:start,120-180:r
 - 初めてのとき、Mesen の隣に最小の `settings.json` を作る（無いと初回のダイアログで止まり、コントローラが無い扱いで入力が効かない）
 - Mesen は ROM の名前でセーブデータを残すので、ROM を写した別の名前で動かし、そのセーブを前後で消す
 - Mesen はプロセスに 1 つだけ動く。手で動かしている Mesen があると（Windows）動かない
+
+## 画面の中身を確かめる {#screen}
+
+「書いたはずの文字が出ない」ときは、まず PPU に何が入っているかを外から見る。
+
+```bash
+python3 tools/nesrun/fcmesen.py game.nes --frames 300 --nametable 0
+```
+
+```text
+[nt0 01] |..SCORE 000000 HI 000000........|
+[nt0 02] |.SHIP 3 WPN 1...................|
+```
+
+ネームテーブルに入っていて画面に出ないなら、スクロール・属性・パレット・CHR の側を疑う。入っていなければ、書く側
+（`vram.put` の番地・長さ・呼ぶ時機）を疑う。Mesen の画面のあるデバッガでは、ネームテーブルのビューアでも同じものを見られる。
+
+- **描画中に `PPUADDR` / `PPUSCROLL` / `PPUDATA` をゲームの側から触らない**（読み戻しも）。PPU の番地とスクロールは同じ内部の
+  レジスタを使うので、描画中に触ると画面がずれ、書いていない所に文字が出る。調べるための読み戻しが、調べている症状を作って
+  しまう。PPU は `vram` と `frame`（NMI で送るキュー）を通して書き、中身は上のように外から読む
+- **エミュレータが画面の端を切り落としていないか確かめる**。libretro の QuickNES のコアは、既定で上下左右 8 ドットずつ切り落とす
+  （240×224）ので、行 0・行 29・列 0・列 31 は見えない。fcretro.py は切り落とさない（256×240）。自分で libretro を呼ぶときは、
+  コアの設定 `quicknes_use_overscan_h` と `quicknes_use_overscan_v` を `enabled` にする
 
 ## libretro で動かす {#libretro}
 
