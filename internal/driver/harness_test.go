@@ -38,6 +38,8 @@ type buildSpec struct {
 	// Recover はコンパイラや emu の panic をエラーとして返す (fuzz: 失敗として集めて最小化する)。普通のテストは panic のまま
 	// 落として場所を見る
 	Recover bool
+	// NoSan は実行のときの検査 (internal/san) をしない (既定は emu で走らせるビルドで有効: fuzz・golden・例の全部に掛かる)
+	NoSan bool
 }
 
 // buildResult はビルドの結果。
@@ -110,7 +112,7 @@ func testBuild(t *testing.T, s buildSpec) (r *buildResult) {
 	for retry := 0; ; retry++ {
 		opt := &BuildOptions{Target: s.Target, Dir: dir, BuildDir: filepath.Join(dir, "b"), Out: r.Out, OptimizeLevel: s.Level,
 			CompileOnly: s.CompileOnly, Debug: s.Debug, LogEveryStatement: s.LogEvery, MisclassifyResident: s.Misclassify,
-			Defines: s.Defines, Config: s.Config}
+			Defines: s.Defines, Config: s.Config, Sanitize: s.Run && !s.NoSan && os.Getenv("FC_NO_SAN") == ""}
 		r.Res, r.Err = NewCompiler(absRepoRoot).BuildContext(t.Context(), main, opt)
 		var ce *CommandError
 		if retry < 2 && errors.As(r.Err, &ce) && strings.TrimSpace(ce.Result) == "" {
@@ -129,6 +131,9 @@ func testBuild(t *testing.T, s buildSpec) (r *buildResult) {
 func runBuilt(res *Result, o runner.Options) (*runner.Result, error) {
 	if o.Log == nil {
 		o.Log = res.Log
+	}
+	if o.San == nil {
+		o.San = res.San
 	}
 	return runner.Run(res.Target, res.Out, o)
 }

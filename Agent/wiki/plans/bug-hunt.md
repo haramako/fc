@@ -29,6 +29,8 @@
 
 ### A. 実行オークルが 1 系統
 
+（出力に出ない誤りは、2026-11-15 から実行のときの検査 internal/san が見る: [../design/sanitizer.md](../design/sanitizer.md)。NES はまだ）
+
 `-O 0` / `-O 2` / IR インタプリタのうち 2 つが 6502 を走るが、その 6502 は内蔵の 1 実装だけ。**r6502 のバグは codegen のバグとして見え、逆に r6502 が間違っていると codegen の誤りが隠れる**（実際に `plp` が S を戻していなかった例がある）。QuickNES / Mesen は Windows のみ。
 
 ### B. fc 4 の整数規則に Go の模型が無い

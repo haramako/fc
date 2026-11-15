@@ -14,6 +14,7 @@ import (
 	"github.com/haramako/fc/internal/fclog"
 	"github.com/haramako/fc/internal/nes"
 	"github.com/haramako/fc/internal/r6502"
+	"github.com/haramako/fc/internal/san"
 )
 
 // DefaultFrames は nes で走らせるフレーム数の既定の上限 (60 フレームで 1 秒。1 分)。
@@ -27,6 +28,7 @@ type Options struct {
 	MaxCycles int64          // emu: サイクル数の上限 (0 なら無制限)。超えたらエラー
 	MaxFrames int            // nes: フレーム数の上限 (0 なら DefaultFrames)。console.exit まで走らせる
 	TracePC   bool           // emu: invalid opcode などの panic のとき、直近の PC を stderr に出す (FC_TRACE_PC)
+	San       *san.Info      // emu: 実行のときの検査 (driver.Result.San。nil ならしない)
 }
 
 // Result は走らせた結果。
@@ -51,7 +53,7 @@ func Run(target, path string, opt Options) (*Result, error) {
 		if logOut == nil {
 			logOut = out
 		}
-		o := emu.Options{Out: out, MaxCycles: opt.MaxCycles, TracePC: opt.TracePC}
+		o := emu.Options{Out: out, MaxCycles: opt.MaxCycles, TracePC: opt.TracePC, San: opt.San}
 		if step := fclog.Stepper(opt.Log, logOut); step != nil {
 			o.OnStep = func(pc, prevPC int, cpu *r6502.Cpu, mem *r6502.Memory) {
 				step(pc, prevPC, func() fclog.Reader { return fclog.Reader{Mem: mem.Get, A: cpu.A, X: cpu.X, Y: cpu.Y} })

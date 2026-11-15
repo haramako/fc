@@ -206,6 +206,8 @@ go test ./...                                    # 全部 (golden + examples + N
   2 つの関数（far call のレジスタ渡し: Y と A）と再帰する関数（stack の呼び先: X = FC_SP で入る）を足した（トランポリンの
   slot 0 の切替の経路で Y を壊すと 100 本中 20 本が落ちる）
 
+- **実行のときの検査**（`internal/san`、2026-11-15）: emu で走らせるテスト・fuzz の全部で、フレームの重なりと未初期化の値の使用を
+  見る（出力が同じでも落ちる。報告は `sanitizer: …`）。切るのは `FC_NO_SAN=1`。仕組みと対照は [design/sanitizer.md](design/sanitizer.md)
 - **IR インタプリタを 3 つ目の判定に**（2026-09-23、`internal/interp`）: -O 0 と -O 2 の差分だけでは、両方のレベルで同じように
   間違える codegen のバグ（符号付きの変数シフトなど）が見えない。sema の直後の IR を 6502 を介さずに実行し、emu の出力と
   比べる（`rpCheck` の失敗の種類 `interp`。`-randinterp=false` で切る）。各命令の意味は codegen の出すコードに合わせる

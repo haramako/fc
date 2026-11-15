@@ -37,7 +37,8 @@ func TestImportDirection(t *testing.T) {
 		"codegen":   {"ir", "types", "diag", "regalloc", "m6502"},
 		"pipeline":  {"ir", "types", "diag", "opt", "regalloc", "frames"},
 		"cc65":      {},
-		"emu":       {"r6502"},
+		"emu":       {"r6502", "san"},
+		"san":       {"r6502"},
 		"fchome":    {},
 		"project":   {"sema", "diag", "extmacro", "starmacro"},
 		"fclog":     {"codegen", "cc65", "ir", "diag", "types"},
@@ -54,9 +55,9 @@ func TestImportDirection(t *testing.T) {
 		"quicknes":  {}, // libretro の QuickNES のコア (画面を確かめるテスト用)
 		"doccheck":  {},
 		"fcdoc":     {"syntax"}, // fcc doc (モジュールのドキュメント) // 文書を確かめるテストだけ (テストは driver と syntax を使う)
-		"driver":    {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "frames", "cc65", "project", "fclog", "migrate", "extmacro", "starmacro", "sizehtml"},
+		"driver":    {"syntax", "types", "ir", "diag", "sema", "codegen", "pipeline", "regalloc", "opt", "frames", "cc65", "project", "fclog", "migrate", "extmacro", "starmacro", "sizehtml", "san"},
 		// runner は走らせるだけ (driver を使わない: internal/nes のテストが driver を使うので、輪になる)
-		"runner": {"emu", "nes", "fclog", "r6502"},
+		"runner": {"emu", "nes", "fclog", "r6502", "san"},
 	}
 	for pkg, ok := range allowed {
 		okSet := map[string]bool{}

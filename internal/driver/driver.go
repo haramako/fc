@@ -21,6 +21,7 @@ import (
 	"github.com/haramako/fc/internal/fclog"
 	"github.com/haramako/fc/internal/ir"
 	"github.com/haramako/fc/internal/project"
+	"github.com/haramako/fc/internal/san"
 	"github.com/haramako/fc/internal/sema"
 	"github.com/haramako/fc/internal/starmacro"
 	"github.com/haramako/fc/internal/syntax"
@@ -57,6 +58,8 @@ type BuildOptions struct {
 	OptimizeLevel int    // -O。0 は未指定 (既定の 2)、-1 は最適化なし (`fcc -O 0`)
 	CompileOnly   bool
 	Debug         bool // -g: fc のソース位置を .dbg line で埋め、ROM の隣に Mesen 用の .dbg / .mlb を書く (@log の地点: Result.Log)
+	// Sanitize は実行のときの検査 (internal/san) の情報を Result.San に作る (emu で走らせるときに runner.Options.San に渡す)
+	Sanitize bool
 	// LogEveryStatement はテスト用: 文ごとに変数を全部出す @log を置く (sema.Program.LogEveryStatement)
 	LogEveryStatement bool
 	// MisclassifyResident はテスト用: 常駐レジスタの見積もりをわざと外す (codegen.Llc.MisclassifyResident)
@@ -96,6 +99,7 @@ type Result struct {
 	Libs       []string         // fc.toml の [lib.*] の要約: ライブラリと、そこから使ったモジュール (fclib を置き換えたもの) (fcc build -d で表示)
 	Interfaces []string         // interface ごとの実装と ID (fcc build -d で表示)
 	Log        *fclog.LogFile   // @log の地点 (Debug のとき。emu で走らせるときに出す: runner.Options.Log)
+	San        *san.Info        // 実行のときの検査の情報 (BuildOptions.Sanitize のとき。runner.Options.San)
 	SizeReport []string         // 関数ごとのコードサイズ (fcc build --size-report で表示)
 	// ResidentFixes は常駐レジスタの見積もりが外れて、退避 / 復帰に直した命令の数 (codegen.Llc.ResidentFixes)
 	ResidentFixes int
@@ -343,6 +347,13 @@ func (c *compilation) build(filename string, opt *BuildOptions) (result *Result,
 	}
 	if err := c.checkAddressVars(loadDbg); err != nil {
 		return nil, err
+	}
+	if opt.Sanitize {
+		dbg, err := loadDbg()
+		if err != nil {
+			return nil, err
+		}
+		result.San = sanInfo(c.prog.Modules.List(), dbg)
 	}
 	var logFile *fclog.LogFile
 	stem := strings.TrimSuffix(opt.Out, filepath.Ext(opt.Out)) // ROM の隣のファイル (.fclog.json / .mlb)

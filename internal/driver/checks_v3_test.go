@@ -86,7 +86,8 @@ function main():void { a = 5; b = 3; t(a, b); t(0, 7); t(0, 0); exit(0); }
 // 変わっていた)。両方の枝で代入・アドレスを渡した変数・必ず通る loop の中の代入・配列は警告しない。
 func TestUninitializedLocal(t *testing.T) {
 	t.Parallel()
-	_, res, err := buildFilesDefs(t, map[string]string{"t.fc": `#fc 3
+	// わざと未初期化の値 (y・a・k[1]) を読んで出すプログラムなので、実行のときの検査 (internal/san) は切る
+	r := testBuild(t, buildSpec{Run: true, NoSan: true, Files: map[string]string{"t.fc": `#fc 3
 use * from stdio;
 function set(p:*u8):void { *p = 3; }
 function f(c:bool):u8
@@ -107,7 +108,8 @@ function f(c:bool):u8
 	return y + a + b + d + g + k[1] + m;
 }
 function main():void { printf(f(true), "\n"); exit(0); }
-`}, nil)
+`}})
+	res, err := r.Res, r.Err
 	if err != nil {
 		t.Fatal(err)
 	}

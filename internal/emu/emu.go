@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/haramako/fc/internal/r6502"
+	"github.com/haramako/fc/internal/san"
 )
 
 const (
@@ -35,6 +36,8 @@ type Options struct {
 	// OnStep は命令を実行する前に呼ぶ (nil なら呼ばない。@log の地点の出力)。prevPC は直前に実行した命令の番地
 	// (rts の後は戻り先の直前の jsr: 呼び出しの直後の合流点の地点の Prevs は jsr を指す)
 	OnStep func(pc, prevPC int, cpu *r6502.Cpu, mem *r6502.Memory)
+	// San は実行のときの検査 (internal/san。nil ならしない)。誤りを見つけたらそこで止めてエラーを返す
+	San *san.Info
 }
 
 // Result は実行の結果。
@@ -54,6 +57,11 @@ func Run(rom []byte, o Options) (Result, error) {
 		mem.Set(LoadAddr+i, int(b))
 	}
 	cpu := r6502.NewCpu(mem)
+	var chk *san.Checker
+	if o.San != nil {
+		chk = san.NewChecker(mem, o.San)
+		cpu.Mem = chk // CPU の読み書きだけを見る (下のホストとのやり取りは mem を直に読む)
+	}
 	cpu.Pc = LoadAddr
 	cpu.TrapZpWrap = true // FC_STACK (ZP 128 バイト) のあふれは S+k,x のページ越えとして見える
 	mem.Set(PortExit, 255)
@@ -90,7 +98,13 @@ func Run(rom []byte, o Options) (Result, error) {
 				prevPC = (ret - 2) & 0xffff
 			}
 		}
+		if chk != nil {
+			chk.Step(cpu)
+		}
 		cpu.StepSilent()
+		if chk != nil && chk.Err() != nil {
+			return Result{}, chk.Err()
+		}
 		if o.MaxCycles > 0 && cpu.Cycles > o.MaxCycles {
 			return Result{}, fmt.Errorf("cycle limit exceeded (%d cycles, pc=$%04x)", o.MaxCycles, cpu.Pc)
 		}
